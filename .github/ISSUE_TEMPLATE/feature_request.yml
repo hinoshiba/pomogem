@@ -1,0 +1,27 @@
+name: 機能提案 / Feature request
+description: 利用者の課題と、倫理・プライバシーを含む解決案を提案します
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 解決したい課題
+      description: 機能名より先に、勉強・資格・仕事で困る状況を説明してください。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 提案する動作
+    validations:
+      required: true
+  - type: textarea
+    id: fairness
+    attributes:
+      label: 時間価値・報酬・アクセシビリティへの影響
+      description: 10分と60分の公平性、強迫的な導線、VoiceOver、Reduce Motionへの影響を検討してください。
+  - type: textarea
+    id: privacy
+    attributes:
+      label: データ・権限・Apple API
+      description: 新しい保存、同期、通信、SDK、permissionがあれば、Apple公式資料と最小化方法を記載してください。

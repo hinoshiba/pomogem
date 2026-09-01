@@ -1,0 +1,166 @@
+name: iOS CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pinned XcodeGen
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error \
+            https://github.com/yonaskolb/XcodeGen/releases/download/2.45.4/xcodegen.zip \
+            --output "${RUNNER_TEMP}/xcodegen.zip"
+          echo "090ec29491aad50aec10631bf6e62253fed733c50f3aab0f5ffc86bc170bdbef  ${RUNNER_TEMP}/xcodegen.zip" \
+            | shasum -a 256 --check
+          unzip -q "${RUNNER_TEMP}/xcodegen.zip" -d "${RUNNER_TEMP}"
+          echo "${RUNNER_TEMP}/xcodegen/bin" >> "${GITHUB_PATH}"
+
+      - name: Tool versions
+        run: |
+          xcodebuild -version
+          swift --version
+          xcodegen --version
+
+      - name: Lint GitHub Actions workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=1.7.12
+          case "$(uname -m)" in
+            arm64)
+              asset="actionlint_${version}_darwin_arm64.tar.gz"
+              expected=aba9ced2dee8d27fecca3dc7feb1a7f9a52caefa1eb46f3271ea66b6e0e6953f
+              ;;
+            x86_64)
+              asset="actionlint_${version}_darwin_amd64.tar.gz"
+              expected=5b44c3bc2255115c9b69e30efc0fecdf498fdb63c5d58e17084fd5f16324c644
+              ;;
+            *)
+              echo "Unsupported runner architecture: $(uname -m)" >&2
+              exit 1
+              ;;
+          esac
+          archive="${RUNNER_TEMP}/${asset}"
+          curl --fail --location --silent --show-error \
+            "https://github.com/rhysd/actionlint/releases/download/v${version}/${asset}" \
+            --output "$archive"
+          echo "$expected  $archive" | shasum -a 256 --check
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -version
+          "$RUNNER_TEMP/actionlint" .github/workflows/*.yml
+
+      - name: OSS, privacy, Store, and Pages checks
+        run: ./Scripts/check-oss-readiness.sh
+
+      - name: Verify generated project is committed
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodegen generate
+          generated_state=$(git status --porcelain=v1 --untracked-files=all)
+          if [[ -n "$generated_state" ]]; then
+            git status --short --untracked-files=all
+            exit 1
+          fi
+
+      - name: Build Release app and Widget without signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_derived_data="${RUNNER_TEMP}/DerivedData-CI-Release"
+          xcodebuild \
+            -project Tsumiben.xcodeproj \
+            -scheme Tsumiben \
+            -configuration Release \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$release_derived_data" \
+            build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO
+
+          app_bundle="$release_derived_data/Build/Products/Release-iphonesimulator/Tsumiben.app"
+          widget_bundle="$app_bundle/PlugIns/TsumibenWidgets.appex"
+          main_binary="$app_bundle/Tsumiben"
+          widget_binary="$widget_bundle/TsumibenWidgets"
+
+          for required_path in \
+            "$app_bundle" \
+            "$widget_bundle" \
+            "$main_binary" \
+            "$widget_binary"
+          do
+            if [[ ! -e "$required_path" ]]; then
+              echo "Missing Release product: $required_path" >&2
+              exit 1
+            fi
+          done
+
+          for binary in "$main_binary" "$widget_binary"; do
+            file_description=$(file -b "$binary")
+            echo "$binary: $file_description"
+            if [[ "$file_description" != *Mach-O* ]]; then
+              echo "Release product is not a Mach-O binary: $binary" >&2
+              exit 1
+            fi
+          done
+
+      - name: Reject UI-test hooks in Release app
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_bundle="${RUNNER_TEMP}/DerivedData-CI-Release/Build/Products/Release-iphonesimulator/Tsumiben.app"
+          forbidden_release_tokens='TSUMIBEN_UI_TEST_|TSUMIBEN_LOCAL_PREVIEW|TSUMIBEN_RUN_40_YEAR_PERSISTENCE'
+
+          set +e
+          matches=$(LC_ALL=C grep -R -a -l -E "$forbidden_release_tokens" "$app_bundle")
+          grep_status=$?
+          set -e
+
+          if [[ $grep_status -eq 0 ]]; then
+            echo "Release app contains forbidden UI-test or Debug hook tokens:" >&2
+            printf '%s\n' "$matches" >&2
+            exit 1
+          fi
+          if [[ $grep_status -ne 1 ]]; then
+            echo "Failed to scan the Release app (grep status $grep_status)." >&2
+            exit "$grep_status"
+          fi
+
+          echo "Release app and embedded Widget contain no forbidden hook tokens."
+
+      - name: Unit tests
+        run: |
+          xcodebuild \
+            -project Tsumiben.xcodeproj \
+            -scheme Tsumiben \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -derivedDataPath DerivedData-CI-Tests \
+            test \
+            -only-testing:TsumibenTests \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO

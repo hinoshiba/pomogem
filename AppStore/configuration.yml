@@ -1,0 +1,20 @@
+platform: iOS
+primary_locale: ja-JP
+app_store_id: null
+website_host: tsumiben.hinoshiba.com
+app_bundle_id: com.hinoshiba.tsumiben
+widget_bundle_id: com.hinoshiba.tsumiben.widgets
+minimum_ios: "17.0"
+supports_ipad_ui: false
+supports_mac_catalyst: false
+offer_ios_app_on_apple_silicon_mac: false
+offer_ios_app_on_vision_pro: false
+i_cloud_container: iCloud.com.hinoshiba.tsumiben
+app_group: group.com.hinoshiba.tsumiben
+in_app_purchases:
+  - product_id: com.hinoshiba.tsumiben.pro.lifetime
+    type: non_consumable
+    reference_name: Tsumiben Pro Lifetime
+    japan_target_price_jpy: 100
+release_blockers:
+  - multi-device rare-reward ledger must become exactly-once, or the product contract must be explicitly revised and re-reviewed

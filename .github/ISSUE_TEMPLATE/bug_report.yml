@@ -1,0 +1,52 @@
+name: 不具合報告 / Bug report
+description: 再現できるつみべんの問題を報告します
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: 実際の集中テーマ、顧客名、案件名、CloudKit data、credentialを含めないでください。脆弱性はSECURITY.mdの非公開手順を使ってください。
+  - type: textarea
+    id: summary
+    attributes:
+      label: 問題の概要
+      description: 期待した動作と実際の動作を、個人情報を除いて説明してください。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: iPhone、iOS、つみべんversion/build
+    validations:
+      required: true
+  - type: dropdown
+    id: build_source
+    attributes:
+      label: Build
+      options:
+        - App Store / TestFlight
+        - mainを自分でbuild
+        - fork
+        - 不明
+    validations:
+      required: true
+  - type: dropdown
+    id: icloud
+    attributes:
+      label: iCloudが関係しますか
+      options:
+        - 関係しない
+        - 1台で発生
+        - 複数iPhoneの同期で発生
+        - 不明
+    validations:
+      required: true
