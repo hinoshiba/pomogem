@@ -181,13 +181,49 @@ jobs:
 
           echo "Release app and embedded Widget contain no forbidden hook tokens."
 
+      - name: Select an available iPhone Simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          simulator_udid=$(
+            xcrun simctl list devices available --json | python3 -c '
+          import json
+          import re
+          import sys
+
+          payload = json.load(sys.stdin)
+          candidates = []
+          for runtime, devices in payload.get("devices", {}).items():
+              match = re.search(r"\.iOS-(\d+)(?:-(\d+))?(?:-(\d+))?$", runtime)
+              if match is None:
+                  continue
+              version = tuple(int(value or 0) for value in match.groups())
+              for device in devices:
+                  name = device.get("name", "")
+                  udid = device.get("udid", "")
+                  if device.get("isAvailable") and name.startswith("iPhone"):
+                      candidates.append((version, name, udid))
+
+          if not candidates:
+              raise SystemExit("No available iPhone Simulator found")
+          _, _, selected_udid = max(candidates)
+          print(selected_udid)
+          '
+          )
+          if [[ ! "$simulator_udid" =~ ^[0-9A-Fa-f-]{36}$ ]]; then
+            echo "Invalid Simulator UDID: $simulator_udid" >&2
+            exit 1
+          fi
+          echo "Selected Simulator: $simulator_udid"
+          echo "TSUMIBEN_CI_SIMULATOR_UDID=$simulator_udid" >> "$GITHUB_ENV"
+
       - name: Unit tests
         run: |
           xcodebuild \
             -project Tsumiben.xcodeproj \
             -scheme Tsumiben \
             -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -destination "platform=iOS Simulator,id=${TSUMIBEN_CI_SIMULATOR_UDID}" \
             -derivedDataPath DerivedData-CI-Tests \
             test \
             -only-testing:TsumibenTests \
