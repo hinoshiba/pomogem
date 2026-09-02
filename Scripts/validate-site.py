@@ -214,7 +214,7 @@ for key, expected in expected_meta.items():
 not_found_refs = {value for _, value in parsed_pages[(ROOT / "404.html").resolve()].refs}
 required_not_found_refs = {
     "/",
-    "/styles.css?v=6",
+    "/styles.css?v=7",
     "/public/app-icon-focus-v4.png",
     "/public/apple-touch-icon.png",
     "/privacy/",
