@@ -5,23 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#141927">
   <meta name="description" content="つみべん — ページが見つかりません。">
+  <meta name="robots" content="noindex">
   <title>ページが見つかりません — つみべん</title>
   <link rel="icon" href="/public/app-icon-focus-v4.png">
   <link rel="apple-touch-icon" href="/public/apple-touch-icon.png">
-  <link rel="stylesheet" href="/styles.css?v=5">
+  <link rel="stylesheet" href="/styles.css?v=6">
   <style>
-    .not-found{min-height:100svh;display:grid;place-items:center;padding:96px 24px;text-align:center}.not-found-inner{max-width:620px}.not-found img{width:82px;height:82px;border-radius:22px;box-shadow:0 18px 55px rgba(0,0,0,.35)}.not-found h1{font-size:clamp(38px,9vw,72px);margin:26px 0 12px}.not-found p{color:var(--mute);margin:0 auto 28px}.not-found a{display:inline-flex;min-height:48px;align-items:center;padding:10px 20px;border-radius:14px;background:var(--coral);color:#fff;text-decoration:none;font-weight:900}
+    .not-found{min-height:100svh;display:grid;place-items:center;padding:150px 24px 96px;text-align:center}.not-found-inner{max-width:620px}.not-found img{width:82px;height:82px;border-radius:22px;box-shadow:0 18px 55px rgba(0,0,0,.35)}.not-found h1{font-size:clamp(38px,9vw,72px);margin:26px 0 12px}.not-found p{color:var(--mute);margin:0 auto 28px}.not-found .home-button{display:inline-flex;min-height:48px;align-items:center;padding:10px 20px;border-radius:14px;background:#ff907e;color:#170d13;text-decoration:none;font-weight:900}
   </style>
 </head>
 <body>
-  <main class="not-found">
+  <a class="skip-link" href="#not-found-main">本文へ移動</a>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="つみべん ホーム"><img src="/public/app-icon-focus-v4.png" alt="" width="38" height="38"><span>つみべん</span></a>
+    <nav aria-label="メインナビゲーション"><a href="/">ホーム</a><a href="/privacy/">プライバシー</a><a href="/support/">サポート</a></nav>
+    <a class="header-cta" href="/#download">近日公開</a>
+  </header>
+  <main class="not-found" id="not-found-main">
     <div class="not-found-inner">
       <img src="/public/app-icon-focus-v4.png" alt="">
       <p class="section-label">404 / NOT FOUND</p>
       <h1>この粒は、<br>見つかりません。</h1>
       <p>URLが変わったか、ページがまだ積まれていないようです。</p>
-      <a href="/">つみべんのホームへ</a>
+      <a class="home-button" href="/">つみべんのホームへ</a>
     </div>
   </main>
+  <footer class="site-footer">
+    <div class="footer-identity"><a class="brand" href="/"><img src="/public/app-icon-focus-v4.png" alt="" width="32" height="32"><span>つみべん</span></a><p>集中時間を、質量に。</p></div>
+    <nav aria-label="フッターナビゲーション"><a href="/support/">サポート</a><a href="mailto:support@hinoshiba.com">お問い合わせ</a><a href="/privacy/">プライバシー</a><a href="/terms/">利用条件</a><a href="/font-license.txt">フォントライセンス</a><a href="https://github.com/hinoshiba/Tumiben">ソースコード</a></nav>
+    <p class="footer-legal">© 2026 hinoshiba <span>ソースコードはMIT License。名称・ロゴ・ブランド素材は対象外です。</span></p>
+  </footer>
 </body>
 </html>

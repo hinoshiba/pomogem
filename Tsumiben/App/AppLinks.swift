@@ -15,6 +15,10 @@ enum AppLinks {
         string: "https://tumiben.hinoshiba.com/support/"
     )!
 
+    static let sourceCode = URL(
+        string: "https://github.com/hinoshiba/Tumiben"
+    )!
+
     static let standardEULA = URL(
         string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
     )!

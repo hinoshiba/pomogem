@@ -11,6 +11,9 @@
 - 下表で「All rights reserved」とした「つみべん」「Tsumiben」固有の視覚素材は
   MIT Licenseの対象外です。著作権とブランド上の権利はhinoshibaが留保します。
 
+この台帳の第三者向け限定許諾は、権利者であるhinoshiba自身による公式アプリ、公式Web、
+App Store素材の制作、公開、販売を制限するものではありません。
+
 ## 未改変素材の開発用限定許諾
 
 権利者は、下表で「All rights reserved」とした素材について、次の目的に限り、素材を
@@ -38,7 +41,10 @@
 | App Icon高解像度source | `Brand/AppIcon-FocusVessel-v4-source.png` | 上記の生成source | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `b60d2fe464f4460702be923976c5865dfca487b189072ac249638eac1e1ec1ca` |
 | 旧App Icon比較素材 | `Brand/AppIcon-Aurora-v3-legacy.png` | 本プロジェクト向けにAI支援で生成 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `30d8c4b856a46dc87a00c5c09861df6a008ffce8092a0a3f72bea4b074e3a4f8` |
 | Aurora背景 | `Tsumiben/Resources/Assets.xcassets/focus.aurora.imageset/focus-aurora.png` | 本プロジェクト向けにAI支援で生成し、人が選定・調整 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `b6a9e5e324e13978eeb0806ce051ca51304571d4fb22544916c55cc8350a8e66` |
-| Web/OG/icon派生画像 | `http_dists/`以下のPNG・WebP | 上記ブランド素材と実アプリ画面から作成 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | 個別ファイルはGitで追跡。公開検査で寸法と参照切れを確認 |
+| Web OG画像 | `http_dists/og-focus-v5.png` | 上記ブランド素材と実アプリ画面から作成 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `09e0544c3af28dec0b24b95b34503727357f7bf53e28d4d8697a2e876aa7896f` |
+| Webアプリ画面 | `http_dists/public/app-home-current.webp` | 実アプリ画面から作成 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `28a3a322c560fabbff571a3fb399346fbf8298120891f50f93f6a61f5df2df66` |
+| Web App Icon | `http_dists/public/app-icon-focus-v4.png` | App IconのWeb用派生画像 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `05ac0bbdc58cfa85d23d5b01cf2a3d38dc0d89016ee33fa1a940cef1e1a7c469` |
+| Apple Touch Icon | `http_dists/public/apple-touch-icon.png` | App IconのWeb用派生画像 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `e5bedfa914263e4794ec23ecaa649a65546d0d12250eeaea8d3cc6e9d506bb9a` |
 | Zen Maru Gothic Black | `Tsumiben/Resources/Fonts/ZenMaruGothic-Black.ttf`、`http_dists/public/ZenMaruGothic-Black.ttf` | Copyright 2021 The Zen Maru Gothic Project Authors | SIL Open Font License 1.1。`LICENSE-fonts.txt`参照 | `6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f` |
 
 生成経緯とpromptの要約は`Tsumiben/Resources/GENERATED-ASSETS.md`に記録しています。

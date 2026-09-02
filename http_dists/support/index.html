@@ -9,16 +9,17 @@
   <title>サポート — つみべん</title>
   <link rel="icon" href="../public/app-icon-focus-v4.png">
   <link rel="apple-touch-icon" href="../public/apple-touch-icon.png">
-  <link rel="stylesheet" href="../styles.css?v=5">
+  <link rel="stylesheet" href="../styles.css?v=6">
   <style>
-    .support-header{grid-template-columns:1fr auto}.support{max-width:760px;margin:0 auto;padding:140px 24px 120px}.support h1{font-size:clamp(38px,7vw,64px)}.support .lead{color:#b5bbca;font-size:17px}.support article{margin-top:48px;padding-top:32px;border-top:1px solid rgba(170,195,240,.12)}.support h2{font-size:24px;margin-bottom:14px}.support p,.support li{color:#b5bbca}.support a{color:var(--amber)}.support .contact{display:inline-flex;min-height:48px;align-items:center;padding:10px 18px;border:1px solid rgba(232,180,74,.4);border-radius:13px;text-decoration:none;font-weight:800}.support .back{display:inline-flex;margin-top:44px;text-decoration:none;font-weight:800}
+    .support{max-width:760px;margin:0 auto;padding:140px 24px 120px}.support h1{font-size:clamp(38px,7vw,64px)}.support .lead{color:#b5bbca;font-size:17px}.support article{margin-top:48px;padding-top:32px;border-top:1px solid rgba(170,195,240,.12)}.support h2{font-size:24px;margin-bottom:14px}.support p,.support li{color:#b5bbca}.support a{color:var(--amber)}.support .contact{display:inline-flex;min-height:48px;align-items:center;padding:10px 18px;border:1px solid rgba(232,180,74,.4);border-radius:13px;text-decoration:none;font-weight:800}.support .back{display:inline-flex;margin-top:44px;text-decoration:none;font-weight:800}
   </style>
 </head>
 <body>
   <a class="skip-link" href="#support-main">本文へ移動</a>
-  <header class="site-header support-header">
-    <a class="brand" href="../"><img src="../public/app-icon-focus-v4.png" alt="" width="38" height="38"><span>つみべん</span></a>
-    <a class="header-cta" href="../privacy/">プライバシー</a>
+  <header class="site-header">
+    <a class="brand" href="../" aria-label="つみべん ホーム"><img src="../public/app-icon-focus-v4.png" alt="" width="38" height="38"><span>つみべん</span></a>
+    <nav aria-label="メインナビゲーション"><a href="../">ホーム</a><a href="../privacy/">プライバシー</a><a href="./" aria-current="page">サポート</a></nav>
+    <a class="header-cta" href="../#download">近日公開</a>
   </header>
   <main class="support" id="support-main">
     <p class="section-label">SUPPORT</p>
@@ -27,8 +28,18 @@
 
     <article>
       <h2>メールで問い合わせる</h2>
-      <p>返信に必要な範囲で、端末機種、OSのバージョン、つみべんのバージョン、発生した状況をお知らせください。集中テーマ、顧客名、案件名、データ書き出しファイルなどの機微な内容を送る必要はありません。送信内容の利用目的・保持・削除は<a href="../privacy/">プライバシーポリシー</a>をご確認ください。</p>
+      <p>返信に必要な範囲で、端末機種、OSのバージョン、つみべんのバージョン、発生した状況をお知らせください。集中テーマ、顧客名、案件名、データ書き出しファイル、認証情報、秘密鍵、署名資材などの機微な内容を送る必要はありません。送信内容の利用目的・保持・削除は<a href="../privacy/">プライバシーポリシー</a>をご確認ください。</p>
       <a class="contact" href="mailto:support@hinoshiba.com?subject=%E3%81%A4%E3%81%BF%E3%81%B9%E3%82%93%E3%82%B5%E3%83%9D%E3%83%BC%E3%83%88">support@hinoshiba.com</a>
+    </article>
+
+    <article>
+      <h2>不具合・機能提案</h2>
+      <p>公開してよい内容は<a href="https://github.com/hinoshiba/Tumiben/issues/new/choose">GitHub Issues</a>でも受け付けます。実際の集中記録、顧客名、案件名、個人情報をIssueへ掲載しないでください。</p>
+    </article>
+
+    <article>
+      <h2>脆弱性・プライバシー漏えい</h2>
+      <p>セキュリティ上の問題は公開Issueへ書かず、<a href="https://github.com/hinoshiba/Tumiben/security/advisories/new">GitHub Private Vulnerability Reporting</a>をご利用ください。最初の報告には実データ、書き出しJSON、認証情報、秘密鍵、証明書、署名資材を添付せず、影響するバージョン・パス・再現条件を機微でない範囲でお知らせください。</p>
     </article>
 
     <article>
@@ -53,5 +64,10 @@
 
     <a class="back" href="../">← つみべんへ戻る</a>
   </main>
+  <footer class="site-footer">
+    <div class="footer-identity"><a class="brand" href="../"><img src="../public/app-icon-focus-v4.png" alt="" width="32" height="32"><span>つみべん</span></a><p>集中時間を、質量に。</p></div>
+    <nav aria-label="フッターナビゲーション"><a href="./">サポート</a><a href="mailto:support@hinoshiba.com">お問い合わせ</a><a href="../privacy/">プライバシー</a><a href="../terms/">利用条件</a><a href="../font-license.txt">フォントライセンス</a><a href="https://github.com/hinoshiba/Tumiben">ソースコード</a></nav>
+    <p class="footer-legal">© 2026 hinoshiba <span>ソースコードはMIT License。名称・ロゴ・ブランド素材は対象外です。</span></p>
+  </footer>
 </body>
 </html>

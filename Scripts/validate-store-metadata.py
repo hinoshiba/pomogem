@@ -81,6 +81,7 @@ configuration_lines = {
 required_lines = (
     "platform: iOS",
     "primary_locale: ja-JP",
+    'copyright: "2026 hinoshiba"',
     "website_host: tumiben.hinoshiba.com",
     "app_bundle_id: com.hinoshiba.tsumiben",
     "widget_bundle_id: com.hinoshiba.tsumiben.widgets",

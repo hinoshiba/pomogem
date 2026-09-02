@@ -1,6 +1,7 @@
 platform: iOS
 primary_locale: ja-JP
 app_store_id: null
+copyright: "2026 hinoshiba"
 website_host: tumiben.hinoshiba.com
 app_bundle_id: com.hinoshiba.tsumiben
 widget_bundle_id: com.hinoshiba.tsumiben.widgets

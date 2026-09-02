@@ -25,6 +25,7 @@ ASSET_LICENSES.md
 THIRD_PARTY_NOTICES.md
 Docs/RELEASING.md
 Docs/OSS_PUBLISHING.md
+Docs/LICENSE_AUDIT.md
 AppStore/README.md
 AppStore/configuration.yml
 AppStore/app-privacy.md
@@ -135,6 +136,10 @@ assert widget_manifest.get("NSPrivacyAccessedAPITypes") == []
 info = load("Tsumiben/Info.plist")
 assert info.get("ITSAppUsesNonExemptEncryption") is False
 assert info.get("TSUMIBEN_PRIVACY_POLICY_URL") == "https://tumiben.hinoshiba.com/privacy/"
+assert info.get("NSHumanReadableCopyright") == "Copyright © 2026 hinoshiba"
+
+widget_info = load("TsumibenWidgets/Info.plist")
+assert widget_info.get("NSHumanReadableCopyright") == "Copyright © 2026 hinoshiba"
 
 app_entitlements = load("Tsumiben/Tsumiben.entitlements")
 assert app_entitlements.get("aps-environment") == "$(APS_ENVIRONMENT)"
@@ -225,8 +230,20 @@ check_hash() {
 
 check_hash e5410573fe5e55df16e4aabc074a3502e35127e93a736f7635be33922bf7252e \
   Tsumiben/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusVessel-v4.png
+check_hash b60d2fe464f4460702be923976c5865dfca487b189072ac249638eac1e1ec1ca \
+  Brand/AppIcon-FocusVessel-v4-source.png
+check_hash 30d8c4b856a46dc87a00c5c09861df6a008ffce8092a0a3f72bea4b074e3a4f8 \
+  Brand/AppIcon-Aurora-v3-legacy.png
 check_hash b6a9e5e324e13978eeb0806ce051ca51304571d4fb22544916c55cc8350a8e66 \
   Tsumiben/Resources/Assets.xcassets/focus.aurora.imageset/focus-aurora.png
+check_hash 09e0544c3af28dec0b24b95b34503727357f7bf53e28d4d8697a2e876aa7896f \
+  http_dists/og-focus-v5.png
+check_hash 28a3a322c560fabbff571a3fb399346fbf8298120891f50f93f6a61f5df2df66 \
+  http_dists/public/app-home-current.webp
+check_hash 05ac0bbdc58cfa85d23d5b01cf2a3d38dc0d89016ee33fa1a940cef1e1a7c469 \
+  http_dists/public/app-icon-focus-v4.png
+check_hash e5bedfa914263e4794ec23ecaa649a65546d0d12250eeaea8d3cc6e9d506bb9a \
+  http_dists/public/apple-touch-icon.png
 check_hash 6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f \
   Tsumiben/Resources/Fonts/ZenMaruGothic-Black.ttf
 check_hash 6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f \

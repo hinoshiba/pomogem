@@ -106,6 +106,7 @@ URLを変える場合は、Webのcanonical/OG、`.github/workflows/pages.yml`、
 - コントリビューション: [CONTRIBUTING.md](CONTRIBUTING.md)
 - データフロー: [PRIVACY.md](PRIVACY.md)
 - 初回公開手順: [OSS_PUBLISHING.md](Docs/OSS_PUBLISHING.md)
+- 商用配布ライセンス監査: [LICENSE_AUDIT.md](Docs/LICENSE_AUDIT.md)
 
 ## ライセンス
 

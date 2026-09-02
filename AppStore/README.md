@@ -14,6 +14,9 @@ APIのcredentialやdownloadしたprofileは置きません。
 App Store IDはrecord作成後にこの文書へ追加します。ID未確定の間はSmart App BannerやApp Store
 download linkをWebへ掲載しません。
 
+App Store Connectのcopyright欄は`configuration.yml`の`2026 hinoshiba`を正本とし、アプリ内の
+表示、Info.plist、Web footer、repository licenseと一致させます。
+
 ## Screenshot
 
 初回提出用screenshotはまだ未配置です。実際のRelease candidateをiPhone 15以降のSimulatorまたは

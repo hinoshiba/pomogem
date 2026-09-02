@@ -6,6 +6,8 @@
   <meta name="theme-color" content="#090d1d">
   <meta name="description" content="1分を10gに。勉強も仕事も、集中時間が色鮮やかな粒になってガラスの瓶へ積もる基本無料のiPhoneアプリ「つみべん」。">
   <meta property="og:type" content="website">
+  <meta property="og:site_name" content="つみべん">
+  <meta property="og:locale" content="ja_JP">
   <meta property="og:url" content="https://tumiben.hinoshiba.com/">
   <meta property="og:title" content="つみべん — 集中時間を、質量に。">
   <meta property="og:description" content="1分は10g。集中時間を色鮮やかな粒に変えて、一生の瓶へ積み上げる基本無料のiPhoneアプリ。">
@@ -22,7 +24,7 @@
   <link rel="canonical" href="https://tumiben.hinoshiba.com/">
   <link rel="icon" href="public/app-icon-focus-v4.png">
   <link rel="apple-touch-icon" href="public/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="stylesheet" href="styles.css?v=6">
   <script src="app.js?v=5" defer></script>
 </head>
 <body>
@@ -34,9 +36,10 @@
     </a>
     <nav aria-label="メインナビゲーション">
       <a href="#experience">体験</a>
-      <a href="#fairness">公平さ</a>
+      <a href="#fairness">仕組み</a>
       <a href="#full-jar">満杯の先</a>
       <a href="#privacy">プライバシー</a>
+      <a href="support/">サポート</a>
     </nav>
     <a class="header-cta" href="#download">近日公開</a>
   </header>
@@ -198,10 +201,20 @@
     </section>
   </main>
 
-  <footer>
-    <a class="brand" href="#top"><img src="public/app-icon-focus-v4.png" alt="" width="32" height="32"><span>つみべん</span></a>
-    <p>集中時間を、質量に。</p>
-    <div style="flex-wrap:wrap"><a href="support/">サポート</a><a href="mailto:support@hinoshiba.com">メールで問い合わせ</a><a href="privacy/">プライバシー</a><a href="font-license.txt">フォントライセンス</a><a href="https://github.com/hinoshiba/Tumiben">ソースコード</a><span>© <span id="year">2026</span> Tsumiben</span></div>
+  <footer class="site-footer">
+    <div class="footer-identity">
+      <a class="brand" href="#top"><img src="public/app-icon-focus-v4.png" alt="" width="32" height="32"><span>つみべん</span></a>
+      <p>集中時間を、質量に。</p>
+    </div>
+    <nav aria-label="フッターナビゲーション">
+      <a href="support/">サポート</a>
+      <a href="mailto:support@hinoshiba.com">お問い合わせ</a>
+      <a href="privacy/">プライバシー</a>
+      <a href="terms/">利用条件</a>
+      <a href="font-license.txt">フォントライセンス</a>
+      <a href="https://github.com/hinoshiba/Tumiben">ソースコード</a>
+    </nav>
+    <p class="footer-legal">© <span id="year">2026</span> hinoshiba <span>ソースコードはMIT License。名称・ロゴ・ブランド素材は対象外です。</span></p>
   </footer>
 
   <div class="toast" id="toast" aria-hidden="true"></div>

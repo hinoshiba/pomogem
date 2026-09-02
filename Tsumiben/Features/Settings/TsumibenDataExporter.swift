@@ -178,7 +178,14 @@ actor TsumibenDataExportWorker {
             TsumibenDataExportPolicy.directoryPrefix + UUID().uuidString.lowercased(),
             isDirectory: true
         )
-        try manager.createDirectory(at: exportDirectory, withIntermediateDirectories: false)
+        let protectedAttributes: [FileAttributeKey: Any] = [
+            .protectionKey: FileProtectionType.complete
+        ]
+        try manager.createDirectory(
+            at: exportDirectory,
+            withIntermediateDirectories: false,
+            attributes: protectedAttributes
+        )
         let partialURL = exportDirectory.appendingPathComponent(
             TsumibenDataExportPolicy.partialFilename,
             isDirectory: false
@@ -188,7 +195,13 @@ actor TsumibenDataExportWorker {
             isDirectory: false
         )
 
-        manager.createFile(atPath: partialURL.path, contents: nil)
+        guard manager.createFile(
+            atPath: partialURL.path,
+            contents: nil,
+            attributes: protectedAttributes
+        ) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
         var handle: FileHandle?
         do {
             let openedHandle = try FileHandle(forWritingTo: partialURL)

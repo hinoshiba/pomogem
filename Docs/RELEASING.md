@@ -13,6 +13,7 @@
   `ExportOptions*.plist`、`.xcarchive`、`.ipa`をリポジトリ、issue、PR、GitHub Releaseへ置かない
 - App Store候補はGitの固定commitから作り、upload後に同じcommitへ不変tagを付ける
 - version/buildを再利用しない。修正uploadはbuild numberを増やす
+- `Docs/LICENSE_AUDIT.md`のrights／provenance確認とcommercial release gateを同じcommitで完了する
 
 Appleは2026年4月28日以降、App Store ConnectへuploadするappをXcode 26以降とiOS 26 SDKで
 buildするよう求めています。開始時に[Upcoming Requirements](https://developer.apple.com/news/upcoming-requirements/)

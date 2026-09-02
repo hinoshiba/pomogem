@@ -698,9 +698,17 @@ struct SettingsView: View {
     private var creditsSection: some View {
         Section("クレジット") {
             LabeledContent("バージョン", value: appVersionLabel)
+            LabeledContent("著作権", value: "© 2026 hinoshiba")
             LabeledContent("見出し書体", value: "Zen Maru Gothic")
             Button("SIL Open Font License 1.1を読む") {
                 showFontLicense = true
+            }
+            Link(destination: AppLinks.sourceCode) {
+                SettingLabel(
+                    title: "ソースコードとライセンス",
+                    subtitle: "MIT License・GitHub",
+                    symbol: "chevron.left.forwardslash.chevron.right"
+                )
             }
         }
     }

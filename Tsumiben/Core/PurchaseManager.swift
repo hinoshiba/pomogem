@@ -36,6 +36,26 @@ enum PurchaseManagerError: LocalizedError, Equatable {
     }
 }
 
+/// Applies a verified transaction before acknowledging it to StoreKit.
+/// Unknown product identifiers stay unfinished so the owning product handler
+/// can process them instead of this single-product facade consuming them.
+enum ProTransactionDelivery {
+    @discardableResult
+    static func process(
+        productID: String,
+        applyEntitlementChange: () async -> Void,
+        finish: () async -> Void
+    ) async -> Bool {
+        guard productID == IntegrationConstants.proProductID else {
+            return false
+        }
+
+        await applyEntitlementChange()
+        await finish()
+        return true
+    }
+}
+
 /// StoreKit 2 facade for the app's single non-consumable Pro purchase.
 /// `Transaction.currentEntitlements` is always the authority; no mutable Pro
 /// boolean is persisted locally or trusted as proof of purchase.
@@ -137,9 +157,29 @@ final class PurchaseManager {
             switch result {
             case let .success(verification):
                 let transaction = try verified(verification)
-                await transaction.finish()
-                await refreshEntitlements()
-                lastErrorDescription = nil
+                let grantsPro = transaction.revocationDate == nil
+                    && !transaction.isUpgraded
+                let processed = await ProTransactionDelivery.process(
+                    productID: transaction.productID,
+                    applyEntitlementChange: { [self] in
+                        if grantsPro {
+                            entitlement = .lifetime(productID: transaction.productID)
+                            lastErrorDescription = nil
+                        } else {
+                            await refreshEntitlements()
+                        }
+                    },
+                    finish: {
+                        await transaction.finish()
+                    }
+                )
+
+                guard processed else {
+                    throw PurchaseManagerError.productUnavailable(transaction.productID)
+                }
+                guard grantsPro else {
+                    throw PurchaseManagerError.failedVerification
+                }
                 return .purchased
 
             case .pending:
@@ -220,8 +260,22 @@ final class PurchaseManager {
 
                 switch result {
                 case let .verified(transaction):
-                    await transaction.finish()
-                    await self.refreshEntitlements()
+                    let grantsPro = transaction.revocationDate == nil
+                        && !transaction.isUpgraded
+                    await ProTransactionDelivery.process(
+                        productID: transaction.productID,
+                        applyEntitlementChange: { [self] in
+                            if grantsPro {
+                                entitlement = .lifetime(productID: transaction.productID)
+                                lastErrorDescription = nil
+                            } else {
+                                await refreshEntitlements()
+                            }
+                        },
+                        finish: {
+                            await transaction.finish()
+                        }
+                    )
                 case .unverified:
                     self.lastErrorDescription = PurchaseManagerError
                         .failedVerification

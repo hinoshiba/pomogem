@@ -18,6 +18,11 @@
 - StoreKit transactionは端末上でApple署名をverifyし、developer serverへ送らない
 - third-party SDKがない
 
+公開Support／Privacy／TermsはGitHub Pagesをorigin、CloudflareをCDN／reverse proxyとして配信し、
+接続情報とnetwork診断情報が各serviceで処理される場合があります。これらはapp binaryへ組み込んだ
+SDKやappからの自動送信ではありませんが、公開プライバシーポリシーとsupport mailのoptional
+disclosure判断には含めます。
+
 サポートメールがoptional disclosureの条件を満たさないと判断される場合は、少なくとも
 Email AddressとCustomer Supportを、目的App Functionality、trackingなしとして申告します。
 通常のメールは送信元と内容を結び付けられるため、匿名化していない限り「linked to user」

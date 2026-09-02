@@ -22,6 +22,7 @@ class PageParser(HTMLParser):
         self.meta: dict[str, str] = {}
         self.anchors: set[str] = set()
         self.title_parts: list[str] = []
+        self.text_parts: list[str] = []
         self.in_title = False
         self.html_lang: str | None = None
         self.errors: list[str] = []
@@ -54,6 +55,7 @@ class PageParser(HTMLParser):
             self.in_title = False
 
     def handle_data(self, data: str) -> None:
+        self.text_parts.append(data)
         if self.in_title:
             self.title_parts.append(data)
 
@@ -98,6 +100,7 @@ required = [
     ROOT / "404.html",
     ROOT / "privacy/index.html",
     ROOT / "support/index.html",
+    ROOT / "terms/index.html",
     ROOT / "robots.txt",
     ROOT / "sitemap.xml",
     ROOT / "styles.css",
@@ -117,6 +120,7 @@ expected_canonical = {
     ROOT / "index.html": PUBLIC_BASE,
     ROOT / "privacy/index.html": PUBLIC_BASE + "privacy/",
     ROOT / "support/index.html": PUBLIC_BASE + "support/",
+    ROOT / "terms/index.html": PUBLIC_BASE + "terms/",
 }
 
 parsed_pages: dict[Path, PageParser] = {}
@@ -128,7 +132,6 @@ for page in sorted(ROOT.rglob("*.html")):
         fail(f"exact IAP price must not be marketed on the website: {page.relative_to(ROOT)}")
     if any(term in source for term in ("Mac版", "Mac Catalyst", "macOS対応")):
         fail(f"unsupported Mac claim remains in {page.relative_to(ROOT)}")
-
     parser = PageParser()
     parser.feed(source)
     parsed_pages[page.resolve()] = parser
@@ -136,6 +139,9 @@ for page in sorted(ROOT.rglob("*.html")):
         fail(f"html lang must be ja: {page.relative_to(ROOT)}")
     if not "".join(parser.title_parts).strip():
         fail(f"title is empty: {page.relative_to(ROOT)}")
+    visible_text = " ".join(" ".join(parser.text_parts).split())
+    if "© 2026 hinoshiba" not in visible_text:
+        fail(f"hinoshiba copyright is missing: {page.relative_to(ROOT)}")
     if not parser.meta.get("description", "").strip():
         fail(f"meta description is empty: {page.relative_to(ROOT)}")
     for error in parser.errors:
@@ -172,6 +178,8 @@ index_meta = parsed_pages[(ROOT / "index.html").resolve()].meta
 required_meta = {
     "description",
     "og:type",
+    "og:site_name",
+    "og:locale",
     "og:url",
     "og:title",
     "og:description",
@@ -190,6 +198,8 @@ if missing_meta:
     fail(f"index metadata is missing: {', '.join(missing_meta)}")
 expected_meta = {
     "og:type": "website",
+    "og:site_name": "つみべん",
+    "og:locale": "ja_JP",
     "og:url": PUBLIC_BASE,
     "og:image": PUBLIC_BASE + "og-focus-v5.png",
     "og:image:width": "1200",
@@ -204,12 +214,39 @@ for key, expected in expected_meta.items():
 not_found_refs = {value for _, value in parsed_pages[(ROOT / "404.html").resolve()].refs}
 required_not_found_refs = {
     "/",
-    "/styles.css?v=5",
+    "/styles.css?v=6",
     "/public/app-icon-focus-v4.png",
     "/public/apple-touch-icon.png",
+    "/privacy/",
+    "/support/",
+    "/terms/",
 }
 if not required_not_found_refs.issubset(not_found_refs):
     fail("404.html must use custom-domain absolute paths so nested missing URLs still render")
+not_found_meta = parsed_pages[(ROOT / "404.html").resolve()].meta
+if not_found_meta.get("robots") != "noindex":
+    fail("404.html must be noindex")
+
+privacy = (ROOT / "privacy/index.html").read_text(encoding="utf-8")
+for required_privacy_term in (
+    "Cloudflare",
+    "GitHub Pages",
+    "メールアドレス保護用スクリプト",
+    "WidgetとLive Activity",
+    "運営者・開発者はhinoshiba",
+):
+    if required_privacy_term not in privacy:
+        fail(f"privacy policy is missing: {required_privacy_term}")
+
+terms = (ROOT / "terms/index.html").read_text(encoding="utf-8")
+for required_terms_term in (
+    "Apple標準EULA",
+    "1回限りの買い切り型アプリ内課金",
+    "サブスクリプション、無料トライアル、自動更新はありません",
+    "勤怠、給与、請求",
+):
+    if required_terms_term not in terms:
+        fail(f"terms page is missing: {required_terms_term}")
 
 robots = (ROOT / "robots.txt").read_text(encoding="utf-8")
 if "Allow: /" not in robots:
