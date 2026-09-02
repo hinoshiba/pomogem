@@ -88,13 +88,13 @@ forkを配布する場合は`project.yml`、`Shared/IntegrationConstants.swift`�
 
 ## GitHub Pages
 
-`http_dists/`はビルド不要の静的サイトです。Pagesの公開元をGitHub Actionsにしたうえで、
-公開直前の人手確認とDNS設定を終えたmaintainerがworkflowを手動実行すると、公開前検査後に
-そのフォルダだけを配信します。`main`へのpushだけでは公開されません。
+`http_dists/`はビルド不要の静的サイトです。Pagesの公開元をGitHub Actionsにすると、
+`main`へのサイト関連ファイルのpush時に公開前検査を行い、そのフォルダだけを自動配信します。
+必要に応じてActions画面から手動実行もできます。
 
-- 製品サイト: <https://tsumiben.hinoshiba.com/>
-- Privacy Policy: <https://tsumiben.hinoshiba.com/privacy/>
-- Support: <https://tsumiben.hinoshiba.com/support/>
+- 製品サイト: <https://tumiben.hinoshiba.com/>
+- Privacy Policy: <https://tumiben.hinoshiba.com/privacy/>
+- Support: <https://tumiben.hinoshiba.com/support/>
 
 URLを変える場合は、Webのcanonical/OG、`.github/workflows/pages.yml`、`project.yml`、
 `Tsumiben/App/AppLinks.swift`、App Store metadataを同時に更新してください。

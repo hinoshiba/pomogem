@@ -134,7 +134,7 @@ assert widget_manifest.get("NSPrivacyAccessedAPITypes") == []
 
 info = load("Tsumiben/Info.plist")
 assert info.get("ITSAppUsesNonExemptEncryption") is False
-assert info.get("TSUMIBEN_PRIVACY_POLICY_URL") == "https://tsumiben.hinoshiba.com/privacy/"
+assert info.get("TSUMIBEN_PRIVACY_POLICY_URL") == "https://tumiben.hinoshiba.com/privacy/"
 
 app_entitlements = load("Tsumiben/Tsumiben.entitlements")
 assert app_entitlements.get("aps-environment") == "$(APS_ENVIRONMENT)"
@@ -409,9 +409,9 @@ if [ "$MODE" = '--release' ]; then
   fi
 
   for url in \
-    https://tsumiben.hinoshiba.com/ \
-    https://tsumiben.hinoshiba.com/privacy/ \
-    https://tsumiben.hinoshiba.com/support/; do
+    https://tumiben.hinoshiba.com/ \
+    https://tumiben.hinoshiba.com/privacy/ \
+    https://tumiben.hinoshiba.com/support/; do
     status=$(curl --silent --show-error --max-time 20 --output /dev/null --write-out '%{http_code}' "$url" || true)
     if [ "$status" != 200 ]; then
       echo "error: release URL must return HTTPS 200 without redirect: $url ($status)" >&2

@@ -5,7 +5,7 @@
 - [ ] App Store Connect app recordとApp Store IDを作成
 - [ ] Agreements、tax、banking、EU trader statusなど対象地域のcomplianceを完了
 - [ ] Pages、Privacy、Supportが公開され、全URLがredirectなしHTTPS 200
-- [ ] `tsumiben.hinoshiba.com`のDNS CNAMEを検証し、GitHub Pagesの「Enforce HTTPS」を有効化
+- [ ] `tumiben.hinoshiba.com`のDNSを検証し、GitHub Pagesの「Enforce HTTPS」を有効化
 - [ ] 公開SupportメールアドレスとGitHub profileの掲載をmaintainerが明示承認
 - [ ] CloudKit development schemaを検証しproductionへdeploy
 - [ ] 完全offlineの2台で同時完走してもrare抽選ordinal・端数・gold保証がexactly-onceへ収束するV2台帳を実装し、分断・再接続testに合格（現行の既知blocker）

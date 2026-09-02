@@ -8,11 +8,11 @@ enum AppLinks {
            let url = URL(string: value) {
             return url
         }
-        return URL(string: "https://tsumiben.hinoshiba.com/privacy/")!
+        return URL(string: "https://tumiben.hinoshiba.com/privacy/")!
     }
 
     static let support = URL(
-        string: "https://tsumiben.hinoshiba.com/support/"
+        string: "https://tumiben.hinoshiba.com/support/"
     )!
 
     static let standardEULA = URL(

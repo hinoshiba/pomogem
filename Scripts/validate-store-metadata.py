@@ -45,14 +45,14 @@ for name, (limit, unit) in limits.items():
         fail(f"{name} exceeds {limit} {unit} ({length})")
 
 expected_urls = {
-    "support_url.txt": "https://tsumiben.hinoshiba.com/support/",
-    "marketing_url.txt": "https://tsumiben.hinoshiba.com/",
-    "privacy_url.txt": "https://tsumiben.hinoshiba.com/privacy/",
+    "support_url.txt": "https://tumiben.hinoshiba.com/support/",
+    "marketing_url.txt": "https://tumiben.hinoshiba.com/",
+    "privacy_url.txt": "https://tumiben.hinoshiba.com/privacy/",
 }
 for name, expected in expected_urls.items():
     value = read(name)
     parsed = urlsplit(value)
-    if parsed.scheme != "https" or parsed.netloc != "tsumiben.hinoshiba.com":
+    if parsed.scheme != "https" or parsed.netloc != "tumiben.hinoshiba.com":
         fail(f"{name} must use the canonical HTTPS host")
     if value != expected:
         fail(f"{name} must be exactly {expected}")
@@ -81,7 +81,7 @@ configuration_lines = {
 required_lines = (
     "platform: iOS",
     "primary_locale: ja-JP",
-    "website_host: tsumiben.hinoshiba.com",
+    "website_host: tumiben.hinoshiba.com",
     "app_bundle_id: com.hinoshiba.tsumiben",
     "widget_bundle_id: com.hinoshiba.tsumiben.widgets",
     'minimum_ios: "17.0"',

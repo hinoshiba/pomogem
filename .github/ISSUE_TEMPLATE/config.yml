@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/hinoshiba/Tumiben/security/advisories/new
     about: 脆弱性やプライバシー漏えいはpublic issueではなく、非公開で報告してください。
   - name: 利用者サポート
-    url: https://tsumiben.hinoshiba.com/support/
+    url: https://tumiben.hinoshiba.com/support/
     about: 購入復元や公開issueに適さない利用上の問い合わせはこちらです。

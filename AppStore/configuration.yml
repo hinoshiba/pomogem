@@ -1,7 +1,7 @@
 platform: iOS
 primary_locale: ja-JP
 app_store_id: null
-website_host: tsumiben.hinoshiba.com
+website_host: tumiben.hinoshiba.com
 app_bundle_id: com.hinoshiba.tsumiben
 widget_bundle_id: com.hinoshiba.tsumiben.widgets
 minimum_ios: "17.0"

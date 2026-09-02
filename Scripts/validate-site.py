@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1] / "http_dists"
-PUBLIC_BASE = "https://tsumiben.hinoshiba.com/"
+PUBLIC_BASE = "https://tumiben.hinoshiba.com/"
 
 
 class PageParser(HTMLParser):
@@ -217,7 +217,7 @@ if "Allow: /" not in robots:
 if f"Sitemap: {PUBLIC_BASE}sitemap.xml" not in robots:
     fail("robots.txt has a non-canonical sitemap URL")
 
-if (ROOT / "CNAME").read_text(encoding="utf-8").strip() != "tsumiben.hinoshiba.com":
+if (ROOT / "CNAME").read_text(encoding="utf-8").strip() != "tumiben.hinoshiba.com":
     fail("CNAME must match the canonical product host")
 
 try:

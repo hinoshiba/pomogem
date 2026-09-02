@@ -36,7 +36,7 @@ targets:
         NSSupportsLiveActivities: true
         NSSupportsLiveActivitiesFrequentUpdates: false
         ITSAppUsesNonExemptEncryption: false
-        TSUMIBEN_PRIVACY_POLICY_URL: "https://tsumiben.hinoshiba.com/privacy/"
+        TSUMIBEN_PRIVACY_POLICY_URL: "https://tumiben.hinoshiba.com/privacy/"
         UIAppFonts:
           - ZenMaruGothic-Black.ttf
         UIBackgroundModes:

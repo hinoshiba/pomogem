@@ -58,9 +58,8 @@ release blockerまで要求するため、初回OSS公開だけを目的にし�
 - `main`のforce pushとdeleteを禁止
 - PR、iOS CI、OSS readinessをrequired checkにする
 - Pages sourceをGitHub Actionsにする
-- Pages workflowは自動deployにせず、公開直前の人手確認とDNS設定を終えたmaintainerが
-  `confirm_publication`を`true`にして手動実行する
-- `http_dists/CNAME`の`tsumiben.hinoshiba.com`をcustom domainとして設定し、DNS検証後にHTTPSを強制する
+- `main`へのサイト関連ファイルのpushでPages workflowを自動実行し、手動実行も許可する
+- `http_dists/CNAME`の`tumiben.hinoshiba.com`をcustom domainとして設定し、DNS検証後にHTTPSを強制する
 - `github-pages` environmentを使い、deploy jobだけに`pages:write`と`id-token:write`を許可
 - CodeQLのSwift default setupが利用できる場合は有効化
 - DependabotのGitHub Actions updateを有効化

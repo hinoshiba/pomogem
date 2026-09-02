@@ -30,7 +30,7 @@ App Managerが最終決定・Publishします。
 
 ## Privacy Policy URL
 
-`https://tsumiben.hinoshiba.com/privacy/`
+`https://tumiben.hinoshiba.com/privacy/`
 
 ## Manifestとの整合
 

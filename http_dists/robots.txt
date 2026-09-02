@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://tsumiben.hinoshiba.com/sitemap.xml
+Sitemap: https://tumiben.hinoshiba.com/sitemap.xml

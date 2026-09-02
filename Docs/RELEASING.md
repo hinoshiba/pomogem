@@ -28,7 +28,7 @@ buildするよう求めています。開始時に[Upcoming Requirements](https:
 3. `com.hinoshiba.tsumiben.pro.lifetime`をNon-Consumableで1件だけ作り、日本の価格を100円にする
 4. IAPの日本語display name、説明、審査用screenshot、税区分、availabilityを完成させる
 5. 初回のNon-Consumableは新しいapp versionと同じsubmissionへ追加する
-6. `tsumiben.hinoshiba.com`のDNSをGitHub Pagesの指示どおり設定し、CNAME検証とHTTPS強制を有効化する
+6. `tumiben.hinoshiba.com`のDNSをGitHub Pagesの指示どおり設定し、custom domain検証とHTTPS強制を有効化する
 7. Privacy URLとSupport URLを公開し、redirectなしのHTTPS 200を確認する
 8. App Privacy、年齢区分、輸出コンプライアンス、accessibility回答を実装と照合する
 9. 「iPhone/iPad appをApple silicon Macで提供」とVision Proでの提供は、未検証のため無効にする

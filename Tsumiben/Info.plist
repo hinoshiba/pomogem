@@ -33,7 +33,7 @@
 	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
 	<false/>
 	<key>TSUMIBEN_PRIVACY_POLICY_URL</key>
-	<string>https://tsumiben.hinoshiba.com/privacy/</string>
+	<string>https://tumiben.hinoshiba.com/privacy/</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>ZenMaruGothic-Black.ttf</string>
