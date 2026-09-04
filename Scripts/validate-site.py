@@ -101,6 +101,7 @@ required = [
     ROOT / "privacy/index.html",
     ROOT / "support/index.html",
     ROOT / "terms/index.html",
+    ROOT / "commercial-transactions/index.html",
     ROOT / "robots.txt",
     ROOT / "sitemap.xml",
     ROOT / "styles.css",
@@ -121,6 +122,7 @@ expected_canonical = {
     ROOT / "privacy/index.html": PUBLIC_BASE + "privacy/",
     ROOT / "support/index.html": PUBLIC_BASE + "support/",
     ROOT / "terms/index.html": PUBLIC_BASE + "terms/",
+    ROOT / "commercial-transactions/index.html": PUBLIC_BASE + "commercial-transactions/",
 }
 
 parsed_pages: dict[Path, PageParser] = {}
@@ -128,10 +130,12 @@ for page in sorted(ROOT.rglob("*.html")):
     source = page.read_text(encoding="utf-8")
     if "file://" in source or "127.0.0.1" in source or "localhost" in source:
         fail(f"local-only URL remains in {page.relative_to(ROOT)}")
-    if "100円" in source:
+    if "100円" in source and page != ROOT / "commercial-transactions/index.html":
         fail(f"exact IAP price must not be marketed on the website: {page.relative_to(ROOT)}")
     if any(term in source for term in ("Mac版", "Mac Catalyst", "macOS対応")):
         fail(f"unsupported Mac claim remains in {page.relative_to(ROOT)}")
+    if any(term.lower() in source.lower() for term in ("レア粒", "レア抽選", "rare pebble", "rare reward")):
+        fail(f"disabled random-reward claim remains in {page.relative_to(ROOT)}")
     parser = PageParser()
     parser.feed(source)
     parsed_pages[page.resolve()] = parser
@@ -177,6 +181,7 @@ if "https://github.com/hinoshiba/Tumiben" not in index:
 index_meta = parsed_pages[(ROOT / "index.html").resolve()].meta
 required_meta = {
     "description",
+    "apple-itunes-app",
     "og:type",
     "og:site_name",
     "og:locale",
@@ -197,6 +202,7 @@ missing_meta = sorted(key for key in required_meta if not index_meta.get(key, ""
 if missing_meta:
     fail(f"index metadata is missing: {', '.join(missing_meta)}")
 expected_meta = {
+    "apple-itunes-app": "app-id=6806758060",
     "og:type": "website",
     "og:site_name": "つみべん",
     "og:locale": "ja_JP",
@@ -220,6 +226,7 @@ required_not_found_refs = {
     "/privacy/",
     "/support/",
     "/terms/",
+    "/commercial-transactions/",
 }
 if not required_not_found_refs.issubset(not_found_refs):
     fail("404.html must use custom-domain absolute paths so nested missing URLs still render")
@@ -229,10 +236,10 @@ if not_found_meta.get("robots") != "noindex":
 
 privacy = (ROOT / "privacy/index.html").read_text(encoding="utf-8")
 for required_privacy_term in (
-    "Cloudflare",
     "GitHub Pages",
-    "メールアドレス保護用スクリプト",
-    "WidgetとLive Activity",
+    "GitHubのプライバシーステートメント",
+    "IPアドレス",
+    "account-neutralな案内",
     "運営者・開発者はhinoshiba",
 ):
     if required_privacy_term not in privacy:
@@ -247,6 +254,17 @@ for required_terms_term in (
 ):
     if required_terms_term not in terms:
         fail(f"terms page is missing: {required_terms_term}")
+
+commercial = (ROOT / "commercial-transactions/index.html").read_text(encoding="utf-8")
+for required_commercial_term in (
+    "特定商取引法に基づく表記",
+    "100円",
+    "0.99米ドル",
+    "遅滞なく電子メールで開示",
+    "1回限りの非消費型アプリ内課金",
+):
+    if required_commercial_term not in commercial:
+        fail(f"commercial disclosure is missing: {required_commercial_term}")
 
 robots = (ROOT / "robots.txt").read_text(encoding="utf-8")
 if "Allow: /" not in robots:
@@ -281,6 +299,10 @@ for match in re.finditer(r"url\((['\"]?)([^)'\"]+)\1\)", css):
     target = resolve_local(ROOT / "styles.css", value)
     if target is not None and not target.exists():
         fail(f"broken CSS reference: {value}")
+
+site_script = (ROOT / "app.js").read_text(encoding="utf-8")
+if any(term.lower() in site_script.lower() for term in ("rare", "prism", "goldcount")):
+    fail("version 1.0 product-site script must not simulate disabled random rewards")
 
 font_hashes = {
     hashlib.sha256((ROOT / "public/ZenMaruGothic-Black.ttf").read_bytes()).hexdigest(),

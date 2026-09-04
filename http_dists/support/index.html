@@ -49,12 +49,12 @@
 
     <article>
       <h2>データと権限</h2>
-      <p>表示中の集中記録のリセットはアプリ内の「設定」から行えます。同じApple Accountの別のiPhoneには、そのiPhoneが次に接続した後に反映されます。リセット以前の旧世代は同期競合を防ぐため残る場合があり、完全な物理削除はAppleのiCloudデータ管理から行います。通知、写真への追加、モーションの許可は端末の「設定」からいつでも変更できます。詳しくは<a href="../privacy/">プライバシーポリシー</a>をご覧ください。</p>
+      <p>初回にiCloud同期またはこのiPhoneのみを選びます。Version 1.0では後から変更できず、このiPhoneのみのデータは自動でiCloudへ送られません。表示中の集中記録のリセットはアプリ内の「設定」から行えます。リセット以前の旧世代は同期競合を防ぐため残る場合があります。端末内の物理データはアプリの削除、iCloud側のアプリデータはAppleのiCloudストレージ管理から削除できます。別のオフライン端末は遠隔消去できないため、不要なインストールは各端末で削除してください。アプリのJSON書き出しは全11種類の出荷対象SwiftData保存データが対象ですが、再インポートできず、iCloud移行や機種変更時の記録継続には使えません。写真やFilesへ保存した書き出し、共有先へ渡した内容、送信済みメールは別途その保存先で削除してください。通知、写真への追加、モーションの許可は端末の「設定」からいつでも変更できます。詳しくは<a href="../privacy/">プライバシーポリシー</a>をご覧ください。</p>
     </article>
 
     <article>
       <h2>機種変更後に記録が見えない</h2>
-      <p>同じApple AccountでiCloud DriveとつみべんのiCloud利用が有効か確認し、通信できる状態でアプリを開いたまま少しお待ちください。iCloud同期は即時ではない場合があります。進行中タイマーを新しいiPhoneへ移すときは、表示される「このiPhoneで続ける」から引き継いでください。元のiPhoneがオフラインまたはロック中だと、古い終了通知が一度だけ届く場合があります。</p>
+      <p>初回に「iCloudで同期」を選んだ場合だけ、機種変更後も同じApple Accountで記録を続けられます。つみべんのiCloud利用が有効で通信できることを確認し、アプリを開いたまま少しお待ちください。起動・再開時のApple Account確認とiCloud同期には通信が必要で、同期は即時ではない場合があります。別のApple Accountや通信不可のときは安全のため記録領域を開きませんが、保存済みデータは削除しません。進行中タイマーを新しいiPhoneへ移すときは、表示される「このiPhoneで続ける」から引き継いでください。元のiPhoneがオフラインまたはロック中だと、古い終了通知が一度だけ届く場合があります。</p><p>初回に「このiPhoneのみ」を選んだ記録は別のiPhoneへ同期されません。Version 1.0のJSONは再インポートできないため、機種変更時の継続やiCloudへの移行には使えません。保存先を選び直すには、必要に応じて閲覧用にJSONを書き出した後、アプリを削除・再インストールします。削除すると以前のlocal記録は失われます。</p>
     </article>
 
     <article>
@@ -66,7 +66,7 @@
   </main>
   <footer class="site-footer">
     <div class="footer-identity"><a class="brand" href="../"><img src="../public/app-icon-focus-v4.png" alt="" width="32" height="32"><span>つみべん</span></a><p>集中時間を、質量に。</p></div>
-    <nav aria-label="フッターナビゲーション"><a href="./">サポート</a><a href="mailto:support@hinoshiba.com">お問い合わせ</a><a href="../privacy/">プライバシー</a><a href="../terms/">利用条件</a><a href="../font-license.txt">フォントライセンス</a><a href="https://github.com/hinoshiba/Tumiben">ソースコード</a></nav>
+    <nav aria-label="フッターナビゲーション"><a href="./">サポート</a><a href="mailto:support@hinoshiba.com">お問い合わせ</a><a href="../privacy/">プライバシー</a><a href="../terms/">利用条件</a><a href="../commercial-transactions/">販売条件</a><a href="../font-license.txt">フォントライセンス</a><a href="https://github.com/hinoshiba/Tumiben">ソースコード</a></nav>
     <p class="footer-legal">© 2026 hinoshiba <span>ソースコードはMIT License。名称・ロゴ・ブランド素材は対象外です。</span></p>
   </footer>
 </body>
