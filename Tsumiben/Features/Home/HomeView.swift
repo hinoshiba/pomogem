@@ -4,11 +4,48 @@ import StoreKit
 import SwiftData
 import SwiftUI
 
+struct HomeSceneSessionSnapshotGeneration: Equatable {
+    let cacheStamp: AggregateProjectionCacheStamp
+    let isCloudVerificationPending: Bool
+
+    init(_ presentation: AggregateProjectionPresentationContext) {
+        cacheStamp = presentation.currentCacheStamp
+        isCloudVerificationPending = presentation.isCloudVerificationPending
+    }
+}
+
+enum HomeSceneSessionSnapshotPolicy {
+    static func shouldRestoreSilently(
+        sceneIsInitialized: Bool,
+        appliedGeneration: HomeSceneSessionSnapshotGeneration?,
+        acceptedGeneration: HomeSceneSessionSnapshotGeneration
+    ) -> Bool {
+        !sceneIsInitialized || appliedGeneration != acceptedGeneration
+    }
+}
+
+enum LegacyStratumPresentationChangeFingerprint {
+    static func value(for stratum: Stratum) -> String {
+        [
+            stratum.id.uuidString,
+            stratum.dataEpochID?.uuidString ?? "legacy",
+            stratum.bakedAt.timeIntervalSinceReferenceDate.description,
+            stratum.sessionIDsJSON,
+            String(stratum.pebbleCount),
+            String(stratum.heightPt),
+            String(stratum.grams),
+            stratum.colorMixJSON,
+            stratum.monthLabel
+        ].joined(separator: "-")
+    }
+}
+
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppRouter.self) private var router
     @Environment(\.requestReview) private var requestReview
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.tsumibenReduceMotionOverride) private var reduceMotionOverride
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -24,6 +61,10 @@ struct HomeView: View {
     @Query private var storedStrata: [Stratum]
     @Query private var activityResetMarkers: [ActivityResetMarker]
     @Query private var preferences: [Prefs]
+
+    private var reduceMotion: Bool {
+        reduceMotionOverride ?? systemReduceMotion
+    }
 
     @AppStorage(AccountScopedLocalState.defaultsKey(base: "home.selected-subject"))
     private var selectedSubjectID = ""
@@ -45,6 +86,9 @@ struct HomeView: View {
         AggregateProjectionCacheStamp?
     @State private var sessionBackfillTask: Task<Void, Never>?
     @State private var sessionBackfillIsComplete = false
+    @State private var hasLoadedSceneSessionSnapshot = false
+    @State private var appliedSceneSessionSnapshotGeneration:
+        HomeSceneSessionSnapshotGeneration?
     @State private var resolvedAchievementStones: [AchievementStone] = []
     @State private var projectedAchievementCount = 0
     @State private var achievementCountIsLowerBound = false
@@ -60,6 +104,9 @@ struct HomeView: View {
     @State private var showHomeMenu = false
     @State private var showAccumulationOverview = false
     @State private var overviewInitialClusterID: UUID?
+    @State private var aggregateInspectionID: UUID?
+    @State private var selectedAggregateDetail: AccumulationClusterSummary?
+    @State private var aggregateInspectionTask: Task<Void, Never>?
     @State private var showManualEntry = false
     @State private var showAchievementEntry = false
     @State private var showCustomDuration = false
@@ -137,21 +184,22 @@ struct HomeView: View {
     private var currentActivityEpochID: UUID? {
         ActivityResetPolicy.currentEpochID(from: resetSnapshots)
     }
+    private var sceneSessionSnapshotIsCurrent: Bool {
+        guard hasLoadedSceneSessionSnapshot else { return false }
+        if aggregateProjectionPresentation.isCloudVerificationPending {
+            return aggregateProjectionPresentation.acceptsCurrentGenerationCache(
+                supportedSessionBackfillStamp
+            )
+        }
+        return aggregateProjectionPresentation.acceptsVerifiedAggregateCache(
+            supportedSessionBackfillVerifiedStamp
+        )
+    }
     private var sessions: [StudySession] {
         // The raw @Query exists only as a bounded change trigger. Rendering
         // waits for the exact-ID backfill so a losing physical prefix can
         // never become Home mass or a jar body, even transiently.
-        let cacheIsCurrent = if aggregateProjectionPresentation
-            .isCloudVerificationPending {
-            aggregateProjectionPresentation.acceptsCurrentGenerationCache(
-                supportedSessionBackfillStamp
-            )
-        } else {
-            aggregateProjectionPresentation.acceptsVerifiedAggregateCache(
-                supportedSessionBackfillVerifiedStamp
-            )
-        }
-        guard cacheIsCurrent else { return [] }
+        guard sceneSessionSnapshotIsCurrent else { return [] }
         return supportedSessionBackfill.filter {
             ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetSnapshots)
                 && StudySessionIntegrityPolicy.isSupported($0)
@@ -257,6 +305,29 @@ struct HomeView: View {
     private var activeLegacyStrata: [Stratum] {
         strata
     }
+    private var activeLegacyStratumVisuals: [JarStratumVisual] {
+        let modernIDs = Set(activeAggregateRoots.map(\.id))
+        return JarStratumVisual.normalized(
+            activeLegacyStrata.map(JarStratumVisual.init(stratum:))
+        ).filter { !modernIDs.contains($0.id) }
+    }
+    private var latestInspectableAggregateID: UUID? {
+        let candidates = activeAggregateRoots.map {
+            (id: $0.id, date: $0.createdAt)
+        } + activeLegacyStratumVisuals.map {
+            (id: $0.id, date: $0.bakedAt)
+        }
+        return candidates.max { lhs, rhs in
+            if lhs.date == rhs.date {
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+            return lhs.date < rhs.date
+        }?.id
+    }
+    private var aggregateInspectionSummary: AccumulationClusterSummary? {
+        guard let aggregateInspectionID else { return nil }
+        return inspectionSummary(for: aggregateInspectionID)
+    }
     private var visibleGoldPebbleCount: Int {
         guard RareRewardReleasePolicy.isEnabled else { return 0 }
         let loose = RareRewardCounts.total(looseSessions.map(\.rareRewardCounts))
@@ -327,16 +398,7 @@ struct HomeView: View {
         storedSessions.map(StudySessionSyncPolicy.changeToken(for:))
     }
     private var stratumChangeTokens: [String] {
-        storedStrata.map { stratum in
-            [
-                stratum.id.uuidString,
-                stratum.sessionIDsJSON,
-                String(stratum.pebbleCount),
-                String(stratum.heightPt),
-                stratum.colorMixJSON,
-                stratum.monthLabel
-            ].joined(separator: "-")
-        }
+        storedStrata.map(LegacyStratumPresentationChangeFingerprint.value(for:))
     }
     private var aggregateChangeTokens: [String] {
         storedAggregates.map(AggregateProjectionChangeFingerprint.value(for:))
@@ -366,6 +428,7 @@ struct HomeView: View {
         [
             showHomeMenu,
             showAccumulationOverview,
+            selectedAggregateDetail != nil,
             showManualEntry,
             showAchievementEntry,
             showCustomDuration,
@@ -402,6 +465,10 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     jarCard(height: homeJarHeight(availableHeight: proxy.size.height))
+                    if latestInspectableAggregateID != nil {
+                        aggregateInspectionSlot
+                            .padding(.top, 8)
+                    }
                     if let state = largeTextFusionProgressState {
                         Spacer(minLength: 12)
                         largeTextFusionProgressCard(state)
@@ -493,6 +560,10 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showAccumulationOverview) {
             accumulationOverviewSheet
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $selectedAggregateDetail) { cluster in
+            ClusterDetailSheet(cluster: cluster)
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showManualEntry) {
@@ -591,6 +662,9 @@ struct HomeView: View {
             breakOfferTask?.cancel()
             reviewRequestTask?.cancel()
             shareChipTask?.cancel()
+            aggregateInspectionTask?.cancel()
+            aggregateInspectionTask = nil
+            aggregateInspectionID = nil
             pendingCapacityCelebrations.removeAll()
             tiltHintTask?.cancel()
             tiltHintTask = nil
@@ -615,10 +689,12 @@ struct HomeView: View {
         .onChange(of: aggregateChangeTokens) { _, _ in
             refreshAcceptedAggregateRoots()
             syncScene()
+            reconcileAggregateInspection()
             scheduleTiltHintIfNeeded()
         }
         .onChange(of: aggregateProjectionPresentation) { _, presentation in
             if presentation.isCloudVerificationPending {
+                invalidateAggregateInspection()
                 deferPresentedStratumForCloudVerification()
                 discardAggregateCelebrationSnapshotsForInvalidation()
             }
@@ -631,7 +707,9 @@ struct HomeView: View {
             scheduleTiltHintIfNeeded()
         }
         .onChange(of: stratumChangeTokens) { _, _ in
+            refreshAcceptedAggregateRoots()
             syncScene()
+            reconcileAggregateInspection()
         }
         .onChange(of: purchase.isPro) { _, isPro in
             if isPro {
@@ -707,6 +785,7 @@ struct HomeView: View {
                 pebbleCount: looseSessions.count,
                 achievementCount: uniqueAchievementCount,
                 aggregateCount: activeAggregateRoots.count,
+                legacyAggregateCount: activeLegacyStratumVisuals.count,
                 representedPebbleCount: totalPebbles,
                 goldPebbleCount: visibleGoldPebbleCount,
                 prismPebbleCount: visiblePrismPebbleCount,
@@ -716,7 +795,11 @@ struct HomeView: View {
                 projectionIsUnverified:
                     aggregateProjectionPresentation.isCloudVerificationPending,
                 fusionProgressDescription: fusionAccessibilityDescription,
-                isMotionEnabled: homeJarMotionIsEnabled
+                isMotionEnabled: homeJarMotionIsEnabled,
+                inspectableAggregateID: latestInspectableAggregateID,
+                onJarTapAccepted: invalidateAggregateInspectionCard,
+                onAggregateTapped: revealAggregateInspection,
+                onAggregateAccessibilityAction: presentAggregateDetail
             )
                 .padding(.horizontal, 4)
 
@@ -782,7 +865,7 @@ struct HomeView: View {
                 .transition(.opacity)
             }
 
-            if showsTiltHint, !isJarEmpty {
+            if aggregateInspectionSummary == nil, showsTiltHint, !isJarEmpty {
                 VStack {
                     Spacer()
                     Label(
@@ -852,6 +935,7 @@ struct HomeView: View {
             && breakConfiguration == nil
             && !showHomeMenu
             && !showAccumulationOverview
+            && selectedAggregateDetail == nil
             && !showManualEntry
             && !showAchievementEntry
             && !showCustomDuration
@@ -2283,6 +2367,13 @@ struct HomeView: View {
     }
 
     private func syncScene() {
+        // `supportedSessionBackfill` is loaded asynchronously. Never initialize
+        // or diff the jar against its temporary empty/stale value: doing so
+        // makes restored sessions look newly inserted when the refresh lands and
+        // replays their drop, sound, haptic, and "+ng 積んだ" toast.
+        // Keep the last valid app/widget presentation until the accepted page
+        // arrives instead of transiently publishing an empty history.
+        guard sceneSessionSnapshotIsCurrent else { return }
         syncBaseLayers()
         let current = (
             looseSessions.map(PebbleDescriptor.init(session:))
@@ -2290,12 +2381,20 @@ struct HomeView: View {
         ).sorted { $0.createdAt < $1.createdAt }
         let currentIDs = Set(current.map(\.id))
 
-        if !sceneInitialized {
+        let snapshotGeneration = HomeSceneSessionSnapshotGeneration(
+            aggregateProjectionPresentation
+        )
+        if HomeSceneSessionSnapshotPolicy.shouldRestoreSilently(
+            sceneIsInitialized: sceneInitialized,
+            appliedGeneration: appliedSceneSessionSnapshotGeneration,
+            acceptedGeneration: snapshotGeneration
+        ) {
             let pendingCompletion = looseSessions.first(where: hasLocalCompletionMarker)
             let restored = current.filter { $0.id != pendingCompletion?.id }
             scene.restore(pebbles: restored)
             knownLooseIDs = currentIDs
             sceneInitialized = true
+            appliedSceneSessionSnapshotGeneration = snapshotGeneration
             if let pendingCompletion {
                 scene.drop([PebbleDescriptor(session: pendingCompletion)])
                 scheduleShareChipIfNeeded(for: [pendingCompletion])
@@ -2392,6 +2491,11 @@ struct HomeView: View {
                 supportedSessionBackfillStamp = cacheStamp
                 supportedSessionBackfillVerifiedStamp = verifiedCacheStamp
                 sessionBackfillIsComplete = page.isCompleteForHomeCandidates
+                hasLoadedSceneSessionSnapshot = true
+                // An empty successful page does not change sessionChangeTokens,
+                // so complete the initial scene sync explicitly as part of the
+                // same accepted snapshot.
+                syncScene()
                 if HomeProjectionPolicy.shouldRequestLocalSessionMaintenance(
                     trustedAggregateHorizon: trustedAggregateHorizon,
                     requestedLowerBound: queryPlan.lowerBound,
@@ -3299,13 +3403,17 @@ struct HomeView: View {
 
     private var jarInteractionHintText: String {
         if voiceOverEnabled {
-            return "瓶をダブルタップすると粒が跳ねます。VoiceOverのカスタムアクションで左右にも動かせます"
+            return reduceMotion
+                ? "瓶をダブルタップすると近くの粒が一方向に短く動いて戻ります"
+                : "瓶をダブルタップすると粒が跳ねます。VoiceOverのカスタムアクションで左右にも動かせます"
         }
 #if targetEnvironment(macCatalyst)
-        return "瓶をタップすると粒が跳ね、左右にドラッグすると転がります"
+        return reduceMotion
+            ? "瓶をタップすると近くの粒が一方向に短く動いて戻ります"
+            : "瓶をタップすると粒が跳ね、左右にドラッグすると転がります"
 #else
         if reduceMotion {
-            return "瓶をタップすると近くの粒が短く浮きます（動きを減らしています）"
+            return "瓶をタップすると近くの粒が一方向に動き、軽く振ると複数の粒が動きます"
         }
         return "瓶をタップすると粒が跳ね、iPhoneを傾けると転がります"
 #endif
@@ -3313,6 +3421,243 @@ struct HomeView: View {
 
     private var jarInteractionHintSymbol: String {
         "hand.tap"
+    }
+
+    private func revealAggregateInspection(_ aggregateID: UUID) {
+        guard inspectionSummary(for: aggregateID) != nil else { return }
+        cancelTiltHintPresentation()
+        aggregateInspectionTask?.cancel()
+        aggregateInspectionTask = nil
+
+        withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86)) {
+            aggregateInspectionID = aggregateID
+        }
+        aggregateInspectionTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(6))
+            } catch {
+                return
+            }
+            guard aggregateInspectionID == aggregateID else { return }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                aggregateInspectionID = nil
+            }
+            aggregateInspectionTask = nil
+        }
+    }
+
+    private func presentAggregateDetail(_ summary: AccumulationClusterSummary) {
+        cancelTiltHintPresentation()
+        aggregateInspectionTask?.cancel()
+        aggregateInspectionTask = nil
+        aggregateInspectionID = nil
+        selectedAggregateDetail = summary
+    }
+
+    private func presentAggregateDetail(_ aggregateID: UUID) {
+        guard let summary = inspectionSummary(for: aggregateID) else { return }
+        presentAggregateDetail(summary)
+    }
+
+    private func reconcileAggregateInspection() {
+        if let selectedAggregateDetail {
+            guard let refreshed = inspectionSummary(
+                for: selectedAggregateDetail.id
+            ) else {
+                self.selectedAggregateDetail = nil
+                invalidateAggregateInspectionCard()
+                return
+            }
+            if refreshed != selectedAggregateDetail {
+                self.selectedAggregateDetail = refreshed
+            }
+        }
+
+        guard let aggregateInspectionID,
+              inspectionSummary(for: aggregateInspectionID) == nil
+        else { return }
+        invalidateAggregateInspectionCard()
+    }
+
+    private func inspectionSummary(
+        for aggregateID: UUID
+    ) -> AccumulationClusterSummary? {
+        if let aggregate = activeAggregateRoots.first(where: {
+            $0.id == aggregateID
+        }) {
+            return AccumulationClusterSummary(
+                aggregate: aggregate,
+                sessionIDs: []
+            )
+        }
+        guard let legacy = activeLegacyStratumVisuals.first(where: {
+            $0.id == aggregateID
+        }) else { return nil }
+        return AccumulationClusterSummary(legacyStratum: legacy)
+    }
+
+    private func invalidateAggregateInspection() {
+        selectedAggregateDetail = nil
+        invalidateAggregateInspectionCard()
+    }
+
+    private func invalidateAggregateInspectionCard() {
+        aggregateInspectionTask?.cancel()
+        aggregateInspectionTask = nil
+        aggregateInspectionID = nil
+    }
+
+    private func aggregateInspectionButton(
+        _ summary: AccumulationClusterSummary
+    ) -> some View {
+        Button {
+            presentAggregateDetail(summary)
+        } label: {
+            aggregateInspectionCardLabel
+                .padding(.horizontal, 13)
+                .padding(.vertical, 10)
+                .frame(maxWidth: 350, minHeight: 52)
+                .background(
+                    .ultraThinMaterial,
+                    in: RoundedRectangle(cornerRadius: 18)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(TsumibenTheme.amber.opacity(0.34), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            "\(summary.pebbleCount.formatted())粒のまとまり、\(aggregateInspectionSubtitle(summary))"
+        )
+        .accessibilityHint(
+            summary.hasStrongPreservationEvidence
+                ? "色、テーマ、期間などの内訳を表示します"
+                : (summary.colorMix.isEmpty
+                    ? "保存されている粒数、質量などを表示します"
+                    : "保存されている色、粒数、質量などを表示します")
+        )
+        .accessibilityIdentifier("jar.aggregate.inspect")
+    }
+
+    @ViewBuilder
+    private var aggregateInspectionSlot: some View {
+        if let aggregateID = latestInspectableAggregateID,
+           let restingSummary = inspectionSummary(for: aggregateID) {
+            let presentedSummary = aggregateInspectionSummary ?? restingSummary
+            let isPresented = aggregateInspectionSummary != nil
+
+            ZStack {
+                // Keep the larger state in the layout even while hidden. That
+                // makes the launcher below the jar stay put without clipping
+                // this card at accessibility Dynamic Type sizes.
+                aggregateInspectionButton(presentedSummary)
+                    .opacity(isPresented ? 1 : 0)
+                    .allowsHitTesting(isPresented)
+                    .accessibilityHidden(!isPresented)
+
+                Label(
+                    "まとまり粒をタップすると、内訳を見られます",
+                    systemImage: "hand.tap"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TsumibenTheme.muted)
+                .multilineTextAlignment(.center)
+                .opacity(isPresented ? 0 : 1)
+                .accessibilityHidden(true)
+                .allowsHitTesting(false)
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private var aggregateInspectionCardLabel: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 9) {
+                    aggregateInspectionIcon
+                    Text("まとまり粒を見つけました")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(TsumibenTheme.text)
+                }
+                Text("保存されている粒数・質量などの内訳")
+                    .font(.caption2)
+                    .foregroundStyle(TsumibenTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 5) {
+                    Text("内訳を見る")
+                    Image(systemName: "chevron.right")
+                        .accessibilityHidden(true)
+                }
+                .font(.caption.weight(.bold))
+                .foregroundStyle(TsumibenTheme.amber)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(spacing: 11) {
+                aggregateInspectionIcon
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("まとまり粒を見つけました")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(TsumibenTheme.text)
+                    Text("保存されている粒数・質量などの内訳")
+                        .font(.caption2)
+                        .foregroundStyle(TsumibenTheme.muted)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 4)
+                Text("内訳を見る")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(TsumibenTheme.amber)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(TsumibenTheme.amber)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    private var aggregateInspectionIcon: some View {
+        Image(systemName: "circle.grid.3x3.fill")
+            .font(.title3.weight(.bold))
+            .foregroundStyle(TsumibenTheme.amber)
+            .frame(width: 32, height: 32)
+            .background(
+                TsumibenTheme.amber.opacity(0.12),
+                in: Circle()
+            )
+            .accessibilityHidden(true)
+    }
+
+    private func aggregateInspectionSubtitle(
+        _ summary: AccumulationClusterSummary
+    ) -> String {
+        if !summary.hasStrongPreservationEvidence {
+            return summary.colorMix.isEmpty
+                ? "粒数・質量など、保存済みの内訳"
+                : "色・粒数・質量など、保存済みの内訳"
+        }
+        let subjects = summary.subjectMix
+            .filter { $0.pebbleCount > 0 }
+            .sorted { lhs, rhs in
+                if lhs.pebbleCount == rhs.pebbleCount {
+                    return lhs.name.localizedStandardCompare(rhs.name)
+                        == .orderedAscending
+                }
+                return lhs.pebbleCount > rhs.pebbleCount
+            }
+        guard !subjects.isEmpty else {
+            return "色・粒数・質量など、保存済みの内訳"
+        }
+        var parts = subjects.prefix(2).map {
+            "\($0.name)\($0.pebbleCount.formatted())粒"
+        }
+        if subjects.count > 2 {
+            parts.append("ほか\(subjects.count - 2)件")
+        }
+        return parts.joined(separator: "・")
     }
 
     private func cancelTiltHintPresentation() {
@@ -4351,8 +4696,9 @@ private struct FortyYearPersistentFixtureProbe: View {
 /// A stateful, explicit-UI-test-only readout of the live SpriteKit
 /// presentation. XCUITest cannot reliably sample a transient position from a
 /// `TimelineView`: accessibility snapshots can be delivered after the pebble
-/// has already settled. This probe therefore retains the rise observed by the
-/// app's render loop. A no-op bounce cannot advance the sequence or its rise.
+/// has already settled. This probe therefore retains the two-dimensional
+/// displacement observed by the app's render loop. A no-op tap cannot advance
+/// the sequence or its displacement.
 ///
 /// It is compiled out of Release and is mounted only when both local-preview
 /// and UI-test launch flags are present, so ordinary VoiceOver users never see
@@ -4366,16 +4712,15 @@ private struct JarUITestPresentationProbe: View {
     @State private var records = ""
     @State private var trackedRecords: String?
     @State private var bounceSequence = 0
+    @State private var lastNormalSceneSequence = 0
     @State private var bounceRise: CGFloat = 0
-    @State private var bounceStartY: CGFloat?
+    @State private var bounceStartPosition: CGPoint?
     @State private var bounceLeaderID: UUID?
     @State private var isTrackingBounce = false
-    @State private var isTrackingReducedMotionLift = false
-    @State private var previousYByPebbleID: [UUID: CGFloat] = [:]
+    @State private var isTrackingReducedMotionRattle = false
+    @State private var previousPositionByPebbleID: [UUID: CGPoint] = [:]
     @State private var targetX: CGFloat = 0.5
     @State private var targetY: CGFloat = 0.88
-
-    private static let bounceVelocityThreshold: CGFloat = 30
 
     var body: some View {
         Text("Jar presentation probe")
@@ -4412,14 +4757,6 @@ private struct JarUITestPresentationProbe: View {
     }
 
     private func samplePresentation() {
-        // UI tests state their intended accessibility mode explicitly. This
-        // avoids silently masking the exact real-device setting that the
-        // reduced-motion regression test is meant to cover.
-        if let requestedReduceMotion = requestedReduceMotion,
-           scene.reduceMotion != requestedReduceMotion {
-            scene.reduceMotion = requestedReduceMotion
-        }
-
         var pebbles: [PebbleNode] = []
         collectPebbles(from: scene, into: &pebbles)
 
@@ -4439,18 +4776,21 @@ private struct JarUITestPresentationProbe: View {
 
         if trackedRecords != currentRecords {
             trackedRecords = currentRecords
+            lastNormalSceneSequence = Int(
+                truncatingIfNeeded: scene.tapPresentationSequence
+            )
             bounceRise = 0
-            bounceStartY = nil
+            bounceStartPosition = nil
             bounceLeaderID = nil
             isTrackingBounce = false
-            isTrackingReducedMotionLift = false
-            previousYByPebbleID = [:]
+            isTrackingReducedMotionRattle = false
+            previousPositionByPebbleID = [:]
         }
 
         defer {
-            previousYByPebbleID = Dictionary(
+            previousPositionByPebbleID = Dictionary(
                 uniqueKeysWithValues: pebbles.map {
-                    ($0.descriptor.id, $0.position.y)
+                    ($0.descriptor.id, $0.position)
                 }
             )
         }
@@ -4460,10 +4800,11 @@ private struct JarUITestPresentationProbe: View {
         // under UI automation and substantially under-report its displacement.
         if !scene.reduceMotion {
             let sceneSequence = Int(truncatingIfNeeded: scene.tapPresentationSequence)
-            if sceneSequence != bounceSequence {
-                bounceSequence = sceneSequence
+            if sceneSequence > lastNormalSceneSequence {
+                bounceSequence += sceneSequence - lastNormalSceneSequence
                 bounceRise = 0
             }
+            lastNormalSceneSequence = sceneSequence
             // Keep the legacy `bounceRise` wire key for existing UI tooling;
             // the physical path now validates total two-dimensional travel.
             bounceRise = max(
@@ -4471,68 +4812,45 @@ private struct JarUITestPresentationProbe: View {
                 scene.tapPresentationMaximumDisplacement
             )
             isTrackingBounce = false
-            isTrackingReducedMotionLift = false
-            bounceStartY = nil
+            isTrackingReducedMotionRattle = false
+            bounceStartPosition = nil
             bounceLeaderID = nil
             return
         }
 
-        let upwardLeader = pebbles.max { lhs, rhs in
-            (lhs.physicsBody?.velocity.dy ?? 0) < (rhs.physicsBody?.velocity.dy ?? 0)
-        }
-        let maximumUpwardVelocity = upwardLeader?.physicsBody?.velocity.dy ?? 0
-
         if !isTrackingBounce {
-            if scene.reduceMotion,
-               let liftedPebble = pebbles.first(where: {
-                   $0.action(forKey: "jar.reducedMotion.tapLift") != nil
-               }) {
+            if let rattledPebble = pebbles.first(where: {
+                $0.action(forKey: "jar.reducedMotion.tapRattle") != nil
+            }) {
                 bounceSequence += 1
-                bounceStartY = previousYByPebbleID[liftedPebble.descriptor.id]
-                    ?? liftedPebble.position.y
-                bounceLeaderID = liftedPebble.descriptor.id
+                bounceStartPosition = previousPositionByPebbleID[
+                    rattledPebble.descriptor.id
+                ] ?? rattledPebble.position
+                bounceLeaderID = rattledPebble.descriptor.id
                 bounceRise = 0
                 isTrackingBounce = true
-                isTrackingReducedMotionLift = true
-            } else if maximumUpwardVelocity >= Self.bounceVelocityThreshold,
-                      let upwardLeader {
-                bounceSequence += 1
-                bounceStartY = upwardLeader.position.y
-                bounceLeaderID = upwardLeader.descriptor.id
-                bounceRise = 0
-                isTrackingBounce = true
-                isTrackingReducedMotionLift = false
+                isTrackingReducedMotionRattle = true
             }
         }
 
         guard isTrackingBounce,
-              let bounceStartY,
+              let bounceStartPosition,
               let bounceLeaderID,
               let leader = pebbles.first(where: { $0.descriptor.id == bounceLeaderID })
         else { return }
 
-        let displacement = isTrackingReducedMotionLift
-            ? abs(leader.position.y - bounceStartY)
-            : leader.position.y - bounceStartY
+        let displacement = hypot(
+            leader.position.x - bounceStartPosition.x,
+            leader.position.y - bounceStartPosition.y
+        )
         bounceRise = max(bounceRise, displacement)
-        let presentationEnded = isTrackingReducedMotionLift
-            ? leader.action(forKey: "jar.reducedMotion.tapLift") == nil
-            : (leader.physicsBody?.velocity.dy ?? 0) <= 0
+        let presentationEnded = isTrackingReducedMotionRattle
+            && leader.action(forKey: "jar.reducedMotion.tapRattle") == nil
         if presentationEnded {
             isTrackingBounce = false
-            isTrackingReducedMotionLift = false
-            self.bounceStartY = nil
+            isTrackingReducedMotionRattle = false
+            self.bounceStartPosition = nil
             self.bounceLeaderID = nil
-        }
-    }
-
-    private var requestedReduceMotion: Bool? {
-        switch ProcessInfo.processInfo.environment[
-            "TSUMIBEN_UI_TEST_REDUCE_MOTION"
-        ] {
-        case "1": true
-        case "0": false
-        default: nil
         }
     }
 

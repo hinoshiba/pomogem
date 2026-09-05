@@ -60,7 +60,7 @@ CC BY-ND、SSPL、BUSL、Commons Clause、出所不明・scraped assetは配布�
 6. `AppStore/configuration.yml`の`release_blockers`を実装とtestで空にする。
 7. StoreKit Sandboxで購入、pending、cancel、復元、revocation、権利反映後のtransaction finishを確認する。
 8. `./Scripts/check-oss-readiness.sh --release`、Release build、unit／UI test、archive validationを通す。
-9. 公開Privacy／Support／Terms／販売条件、GitHub Pages公開状態、HTTPS redirectを実配信で照合する。
+9. 公開Privacy／Support／Termsと購入前案内専用の販売者情報URL、GitHub Pages公開状態、HTTPS redirectを実配信で照合する。
 10. App Storeへ送ったsource commitを固定tagにし、この監査を同じtagへ残す。
 
 ## Current no-go items

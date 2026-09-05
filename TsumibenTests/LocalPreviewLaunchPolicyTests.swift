@@ -92,6 +92,44 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
         )
     }
 
+    func testReduceMotionOverrideUsesTheRealEnvironmentOnlyInDebugUITestMode() {
+        let baseEnvironment = [
+            LocalPreviewLaunchPolicy.environmentKey: "1",
+            LocalPreviewLaunchPolicy.uiTestEnvironmentKey: "1"
+        ]
+        var enabledEnvironment = baseEnvironment
+        enabledEnvironment[LocalPreviewLaunchPolicy.reduceMotionEnvironmentKey] = "1"
+        var disabledEnvironment = baseEnvironment
+        disabledEnvironment[LocalPreviewLaunchPolicy.reduceMotionEnvironmentKey] = "0"
+
+        XCTAssertEqual(
+            LocalPreviewLaunchPolicy.forcedReduceMotion(
+                environment: enabledEnvironment,
+                isDebugBuild: true
+            ),
+            true
+        )
+        XCTAssertEqual(
+            LocalPreviewLaunchPolicy.forcedReduceMotion(
+                environment: disabledEnvironment,
+                isDebugBuild: true
+            ),
+            false
+        )
+        XCTAssertNil(LocalPreviewLaunchPolicy.forcedReduceMotion(
+            environment: baseEnvironment,
+            isDebugBuild: true
+        ))
+        XCTAssertNil(LocalPreviewLaunchPolicy.forcedReduceMotion(
+            environment: enabledEnvironment,
+            isDebugBuild: false
+        ))
+        XCTAssertNil(LocalPreviewLaunchPolicy.forcedReduceMotion(
+            environment: [LocalPreviewLaunchPolicy.reduceMotionEnvironmentKey: "1"],
+            isDebugBuild: true
+        ))
+    }
+
     func testRequiresExplicitOneValueAndDebugBuild() {
         XCTAssertTrue(
             LocalPreviewLaunchPolicy.isEnabled(

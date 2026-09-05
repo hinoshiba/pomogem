@@ -818,6 +818,8 @@ private struct PrefsExportRecord: Encodable {
     let keepScreenAwakeMutationID: UUID?
     let preferredFocusMinutesRevision: Int
     let preferredFocusMinutesMutationID: UUID?
+    let timerDisplayModeRevision: Int
+    let timerDisplayModeMutationID: UUID?
     let usagePurposeRevision: Int
     let usagePurposeMutationID: UUID?
     let activityEpochID: UUID?
@@ -838,6 +840,7 @@ private struct PrefsExportRecord: Encodable {
     let legacyIsProIgnored: Bool
     let keepScreenAwake: Bool
     let preferredFocusMinutes: Int
+    let timerDisplayModeRawValue: String
     let hasCompletedOnboarding: Bool
     let usagePurposeRawValue: String
     let usagePurposeUpdatedAt: Date?
@@ -870,6 +873,8 @@ private struct PrefsExportRecord: Encodable {
         keepScreenAwakeMutationID = value.keepScreenAwakeMutationID
         preferredFocusMinutesRevision = value.preferredFocusMinutesRevision
         preferredFocusMinutesMutationID = value.preferredFocusMinutesMutationID
+        timerDisplayModeRevision = value.timerDisplayModeRevision
+        timerDisplayModeMutationID = value.timerDisplayModeMutationID
         usagePurposeRevision = value.usagePurposeRevision
         usagePurposeMutationID = value.usagePurposeMutationID
         activityEpochID = value.activityEpochID
@@ -889,6 +894,7 @@ private struct PrefsExportRecord: Encodable {
         legacyIsProIgnored = false
         keepScreenAwake = value.keepScreenAwake
         preferredFocusMinutes = value.preferredFocusMinutes
+        timerDisplayModeRawValue = value.timerDisplayModeRawValue
         hasCompletedOnboarding = value.hasCompletedOnboarding
         usagePurposeRawValue = value.usagePurposeRawValue
         usagePurposeUpdatedAt = value.usagePurposeUpdatedAt

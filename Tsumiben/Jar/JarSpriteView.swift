@@ -2,6 +2,12 @@ import SpriteKit
 import SwiftUI
 import UIKit
 
+enum JarMotionSamplingMode: Equatable {
+    case stopped
+    case shakeOnly
+    case tiltAndShake
+}
+
 enum JarMotionActivationPolicy {
     static func shouldCaptureShake(
         isMotionEnabled: Bool,
@@ -17,11 +23,26 @@ enum JarMotionActivationPolicy {
         sceneIsActive: Bool,
         hasPhysicalContent: Bool
     ) -> Bool {
-        shouldCaptureShake(
+        mode(
+            isMotionEnabled: isMotionEnabled,
+            reduceMotion: reduceMotion,
+            sceneIsActive: sceneIsActive,
+            hasPhysicalContent: hasPhysicalContent
+        ) != .stopped
+    }
+
+    static func mode(
+        isMotionEnabled: Bool,
+        reduceMotion: Bool,
+        sceneIsActive: Bool,
+        hasPhysicalContent: Bool
+    ) -> JarMotionSamplingMode {
+        guard shouldCaptureShake(
             isMotionEnabled: isMotionEnabled,
             sceneIsActive: sceneIsActive,
             hasPhysicalContent: hasPhysicalContent
-        ) && !reduceMotion
+        ) else { return .stopped }
+        return reduceMotion ? .shakeOnly : .tiltAndShake
     }
 }
 
@@ -34,6 +55,7 @@ enum JarAccessibilityPresentation {
         pebbleCount rawPebbleCount: Int,
         achievementCount rawAchievementCount: Int,
         aggregateCount rawAggregateCount: Int,
+        legacyAggregateCount rawLegacyAggregateCount: Int = 0,
         representedPebbleCount rawRepresentedPebbleCount: Int,
         goldPebbleCount rawGoldPebbleCount: Int,
         prismPebbleCount rawPrismPebbleCount: Int,
@@ -45,6 +67,7 @@ enum JarAccessibilityPresentation {
         let pebbleCount = max(0, rawPebbleCount)
         let achievementCount = max(0, rawAchievementCount)
         let aggregateCount = max(0, rawAggregateCount)
+        let legacyAggregateCount = max(0, rawLegacyAggregateCount)
         let representedPebbleCount = max(0, rawRepresentedPebbleCount)
         let goldPebbleCount = RareRewardPresentationPolicy.goldCount(
             rawGoldPebbleCount
@@ -54,6 +77,9 @@ enum JarAccessibilityPresentation {
         )
         let aggregate = aggregateCount > 0
             ? "、まとまり粒\(aggregateCount)個、合計\(representedPebbleCount)粒分"
+            : ""
+        let legacyAggregate = legacyAggregateCount > 0
+            ? "、旧形式のまとまり粒\(legacyAggregateCount)個（保存済み情報を確認できます）"
             : ""
         let fusion = projectionIsUnverified
             ? ""
@@ -71,7 +97,7 @@ enum JarAccessibilityPresentation {
         } else {
             massDescription = "記録した集中時間の質量：\(formattedMass(totalGrams))"
         }
-        return "\(massDescription)。瓶の整理：\(pebbleCount)粒\(aggregate)\(rareSuffix)\(fusion)。記念石\(achievementCount)個"
+        return "\(massDescription)。瓶の整理：\(pebbleCount)粒\(aggregate)\(legacyAggregate)\(rareSuffix)\(fusion)。記念石\(achievementCount)個"
     }
 
     private static func formattedMass(_ grams: Int) -> String {
@@ -87,6 +113,7 @@ struct JarSpriteView: View {
     let pebbleCount: Int
     let achievementCount: Int
     let aggregateCount: Int
+    let legacyAggregateCount: Int
     let representedPebbleCount: Int
     let goldPebbleCount: Int
     let prismPebbleCount: Int
@@ -96,13 +123,22 @@ struct JarSpriteView: View {
     let projectionIsUnverified: Bool
     let fusionProgressDescription: String?
     let isMotionEnabled: Bool
+    let inspectableAggregateID: UUID?
+    let onJarTapAccepted: (() -> Void)?
+    let onAggregateTapped: ((UUID) -> Void)?
+    let onAggregateAccessibilityAction: ((UUID) -> Void)?
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.tsumibenReduceMotionOverride) private var reduceMotionOverride
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var motionObserver: JarMotionObserver
 #if targetEnvironment(macCatalyst)
     @State private var catalystGestureOwnership = JarDragGestureOwnership()
 #endif
+
+    private var reduceMotion: Bool {
+        reduceMotionOverride ?? systemReduceMotion
+    }
 
     init(
         scene: JarScene,
@@ -110,6 +146,7 @@ struct JarSpriteView: View {
         pebbleCount: Int,
         achievementCount: Int = 0,
         aggregateCount: Int = 0,
+        legacyAggregateCount: Int = 0,
         representedPebbleCount: Int? = nil,
         goldPebbleCount: Int = 0,
         prismPebbleCount: Int = 0,
@@ -118,13 +155,18 @@ struct JarSpriteView: View {
         projectionIsLowerBound: Bool = false,
         projectionIsUnverified: Bool = false,
         fusionProgressDescription: String? = nil,
-        isMotionEnabled: Bool = true
+        isMotionEnabled: Bool = true,
+        inspectableAggregateID: UUID? = nil,
+        onJarTapAccepted: (() -> Void)? = nil,
+        onAggregateTapped: ((UUID) -> Void)? = nil,
+        onAggregateAccessibilityAction: ((UUID) -> Void)? = nil
     ) {
         _scene = ObservedObject(wrappedValue: scene)
         self.totalGrams = totalGrams
         self.pebbleCount = pebbleCount
         self.achievementCount = achievementCount
         self.aggregateCount = aggregateCount
+        self.legacyAggregateCount = max(0, legacyAggregateCount)
         self.representedPebbleCount = representedPebbleCount ?? pebbleCount
         self.goldPebbleCount = RareRewardPresentationPolicy.goldCount(
             goldPebbleCount
@@ -138,6 +180,10 @@ struct JarSpriteView: View {
         self.projectionIsUnverified = projectionIsUnverified
         self.fusionProgressDescription = fusionProgressDescription
         self.isMotionEnabled = isMotionEnabled
+        self.inspectableAggregateID = inspectableAggregateID
+        self.onJarTapAccepted = onJarTapAccepted
+        self.onAggregateTapped = onAggregateTapped
+        self.onAggregateAccessibilityAction = onAggregateAccessibilityAction
         _motionObserver = StateObject(wrappedValue: JarMotionObserver(scene: scene))
     }
 
@@ -204,7 +250,7 @@ struct JarSpriteView: View {
                 .highPriorityGesture(
                     SpatialTapGesture(coordinateSpace: .local)
                         .onEnded { value in
-                            _ = scene.bouncePebbles(at: CGPoint(
+                            performSpatialTap(at: CGPoint(
                                 x: value.location.x,
                                 y: proxy.size.height - value.location.y
                             ))
@@ -227,7 +273,10 @@ struct JarSpriteView: View {
         .modifier(JarAccessibilityInteractionModifier(
             scene: scene,
             isInteractive: hasPhysicalContent,
-            reduceMotion: reduceMotion
+            reduceMotion: reduceMotion,
+            aggregateID: inspectableAggregateID,
+            onInspectAggregate:
+                onAggregateAccessibilityAction ?? onAggregateTapped
         ))
         .onChange(of: reduceMotion) { _, enabled in
             updateMotionBehavior(reduceMotion: enabled)
@@ -260,6 +309,7 @@ struct JarSpriteView: View {
         }
 #endif
         .onDisappear {
+            scene.cancelReducedMotionInteractionPresentation()
             motionObserver.stop()
         }
     }
@@ -270,6 +320,7 @@ struct JarSpriteView: View {
             pebbleCount: pebbleCount,
             achievementCount: achievementCount,
             aggregateCount: aggregateCount,
+            legacyAggregateCount: legacyAggregateCount,
             representedPebbleCount: representedPebbleCount,
             goldPebbleCount: goldPebbleCount,
             prismPebbleCount: prismPebbleCount,
@@ -284,13 +335,28 @@ struct JarSpriteView: View {
             return "まだ粒はありません。集中を完走するか成果を積むと、瓶に粒が入ります"
         }
 #if targetEnvironment(macCatalyst)
-        return "瓶をクリックすると粒が跳ねます。左右にドラッグするか、VoiceOverのカスタムアクションでも粒を動かせます"
+        let base = reduceMotion
+            ? "瓶をクリックすると近くの粒が一方向に短く動いて戻ります"
+            : "瓶をクリックすると粒が跳ねます。左右にドラッグするか、VoiceOverのカスタムアクションでも粒を動かせます"
 #else
+        let base: String
         if reduceMotion {
-            return "ダブルタップすると近くの1粒だけが短く浮いて戻ります。自動の転がりは停止しています"
+            base = "ダブルタップすると近くの粒が一方向に短く動いて戻ります。軽く振って動かすこともできます。自動で転がる動きはありません"
+        } else {
+            base = "瓶をタップすると数秒だけ1粒が大きく跳ね、ぶつかった周囲の粒も自然に動いて止まります。その間はiPhoneを傾けたり、軽く振ったりして動かせます"
         }
-        return "瓶をタップすると1粒が大きく跳ね、ぶつかった周囲の粒も動きます。iPhoneを傾けたり軽く振ったり、カスタムアクションでも粒を動かせます"
 #endif
+        guard inspectableAggregateID != nil else { return base }
+        return "\(base)。「最新のまとまり粒の内訳を見る」アクションで、保存されている粒数や質量などを確認できます"
+    }
+
+    private func performSpatialTap(at point: CGPoint) {
+        guard scene.bouncePebbles(at: point) else { return }
+        onJarTapAccepted?()
+        guard let aggregateID = scene.lastAcceptedTapSelection?
+            .inspectableAggregateID
+        else { return }
+        onAggregateTapped?(aggregateID)
     }
 
     /// One physical source of truth covers loose pebbles, aggregates,
@@ -302,24 +368,31 @@ struct JarSpriteView: View {
     @MainActor
     private func updateMotionBehavior(reduceMotion: Bool) {
         scene.reduceMotion = reduceMotion
+        if scenePhase != .active {
+            scene.cancelReducedMotionInteractionPresentation()
+        }
 #if targetEnvironment(macCatalyst)
         // Catalyst has no device tilt. Drag and accessibility actions are the
         // explicit input paths, while stop restores stable downward gravity.
         motionObserver.stop()
 #else
-        let shouldRun = JarMotionActivationPolicy.shouldRun(
+        let samplingMode = JarMotionActivationPolicy.mode(
             isMotionEnabled: isMotionEnabled,
             reduceMotion: reduceMotion,
             sceneIsActive: scenePhase == .active,
             hasPhysicalContent: hasPhysicalContent
         )
-        if !shouldRun {
+        switch samplingMode {
+        case .stopped:
+            scene.cancelReducedMotionInteractionPresentation()
             // `stop` also restores the scene's default downward gravity. This
             // matters when accessibility, app lifecycle, or an empty bottle no
             // longer needs the sensor while a prior tilt is still applied.
             motionObserver.stop()
-        } else {
-            motionObserver.start(scene: scene)
+        case .shakeOnly:
+            motionObserver.start(scene: scene, appliesGravity: false)
+        case .tiltAndShake:
+            motionObserver.start(scene: scene, appliesGravity: true)
         }
 #endif
     }
@@ -343,7 +416,8 @@ struct JarSpriteView: View {
                         dx: horizontalFraction * Constants.Jar.tiltGravityHorizontalScale,
                         dy: Constants.Jar.gravity
                     ),
-                    smoothing: false
+                    smoothing: false,
+                    wakesSimulation: true
                 )
             }
             .onEnded { value in
@@ -356,7 +430,7 @@ struct JarSpriteView: View {
                     // ever been crossed, even if the pointer returns to origin.
                     scene.resetGravity()
                 } else {
-                    _ = scene.bouncePebbles(at: CGPoint(
+                    performSpatialTap(at: CGPoint(
                         x: value.location.x,
                         y: height - value.location.y
                     ))
@@ -463,6 +537,8 @@ private struct JarAccessibilityInteractionModifier: ViewModifier {
     let scene: JarScene
     let isInteractive: Bool
     let reduceMotion: Bool
+    let aggregateID: UUID?
+    let onInspectAggregate: ((UUID) -> Void)?
 
     @ViewBuilder
     func body(content: Content) -> some View {
@@ -472,12 +548,16 @@ private struct JarAccessibilityInteractionModifier: ViewModifier {
                 .accessibilityAction {
                     performBounce()
                 }
-                .accessibilityAction(named: "瓶の粒を跳ねさせる") {
+                .accessibilityAction(named: "瓶の粒を動かす") {
                     performBounce()
                 }
                 .modifier(JarDirectionalAccessibilityModifier(
                     scene: scene,
                     enabled: !reduceMotion
+                ))
+                .modifier(JarAggregateAccessibilityModifier(
+                    aggregateID: aggregateID,
+                    onInspectAggregate: onInspectAggregate
                 ))
         } else {
             content
@@ -488,8 +568,25 @@ private struct JarAccessibilityInteractionModifier: ViewModifier {
         guard scene.bouncePebbles() else { return }
         UIAccessibility.post(
             notification: .announcement,
-            argument: reduceMotion ? "瓶の粒が短く動きました" : "瓶の粒が跳ねました"
+            argument: reduceMotion ? "近くの粒が短く動きました" : "瓶の粒が跳ねました"
         )
+    }
+}
+
+private struct JarAggregateAccessibilityModifier: ViewModifier {
+    let aggregateID: UUID?
+    let onInspectAggregate: ((UUID) -> Void)?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let aggregateID, let onInspectAggregate {
+            content
+                .accessibilityAction(named: "最新のまとまり粒の内訳を見る") {
+                    onInspectAggregate(aggregateID)
+                }
+        } else {
+            content
+        }
     }
 }
 

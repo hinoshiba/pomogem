@@ -635,6 +635,15 @@ final class BoundedLaunchPreparationTests: XCTestCase {
         assertObserved("focus-minutes stamp mutation") {
             prefs.preferredFocusMinutesMutationID = UUID()
         }
+        assertObserved("timer-display stamp revision") {
+            prefs.timerDisplayModeRevision += 1
+        }
+        assertObserved("timer-display stamp mutation") {
+            prefs.timerDisplayModeMutationID = UUID()
+        }
+        assertObserved("timer-display payload") {
+            prefs.timerDisplayModeRawValue = TimerDisplayMode.filledDial.rawValue
+        }
         assertObserved("usage-purpose stamp revision") {
             prefs.usagePurposeRevision += 1
         }
@@ -1115,6 +1124,62 @@ final class BoundedLaunchPreparationTests: XCTestCase {
         let reloadedStamp = try! XCTUnwrap(presentation.verifiedCacheStamp)
         XCTAssertTrue(presentation.acceptsVerifiedAggregateCache(reloadedStamp))
         XCTAssertNotEqual(preImportStamp, reloadedStamp)
+    }
+
+    func testHomeSceneRestoresSilentlyAcrossCloudSnapshotGenerations() {
+        var presentation = AggregateProjectionPresentationContext.initial(
+            for: .cloudKit
+        )
+        let pending = HomeSceneSessionSnapshotGeneration(presentation)
+
+        XCTAssertTrue(
+            HomeSceneSessionSnapshotPolicy.shouldRestoreSilently(
+                sceneIsInitialized: false,
+                appliedGeneration: nil,
+                acceptedGeneration: pending
+            )
+        )
+        XCTAssertFalse(
+            HomeSceneSessionSnapshotPolicy.shouldRestoreSilently(
+                sceneIsInitialized: true,
+                appliedGeneration: pending,
+                acceptedGeneration: pending
+            ),
+            "new rows in one accepted generation must retain incremental drop semantics"
+        )
+
+        presentation.markVerified()
+        let verified = HomeSceneSessionSnapshotGeneration(presentation)
+        XCTAssertTrue(
+            HomeSceneSessionSnapshotPolicy.shouldRestoreSilently(
+                sceneIsInitialized: true,
+                appliedGeneration: pending,
+                acceptedGeneration: verified
+            ),
+            "promoting aggregate trust can change which historical rows are loose"
+        )
+
+        presentation.invalidate()
+        let invalidated = HomeSceneSessionSnapshotGeneration(presentation)
+        XCTAssertTrue(
+            HomeSceneSessionSnapshotPolicy.shouldRestoreSilently(
+                sceneIsInitialized: true,
+                appliedGeneration: verified,
+                acceptedGeneration: invalidated
+            ),
+            "invalidation must not replay aggregate source rows as new rewards"
+        )
+
+        presentation.markVerified()
+        let reverified = HomeSceneSessionSnapshotGeneration(presentation)
+        XCTAssertTrue(
+            HomeSceneSessionSnapshotPolicy.shouldRestoreSilently(
+                sceneIsInitialized: true,
+                appliedGeneration: invalidated,
+                acceptedGeneration: reverified
+            )
+        )
+        XCTAssertNotEqual(verified, reverified)
     }
 
     func testProjectionCacheStampRotatesNamespaceAtEpochExhaustion() {

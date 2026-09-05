@@ -356,6 +356,17 @@ final class EngagementOverviewUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 12))
+        let replayedLandingToast = app.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "label CONTAINS %@ AND label CONTAINS %@",
+                "+250g",
+                "積んだ"
+            )
+        ).firstMatch
+        XCTAssertFalse(
+            replayedLandingToast.waitForExistence(timeout: 5),
+            "A restored pebble must not replay its landing toast on a later launch"
+        )
         XCTAssertFalse(
             app.descendants(matching: .any)["reward.bridge"].waitForExistence(timeout: 2),
             "An acknowledged receipt must not be presented twice"
@@ -369,6 +380,54 @@ final class EngagementOverviewUITests: XCTestCase {
             "Acknowledging the receipt must not delete or duplicate the study record"
         )
         app.terminate()
+    }
+
+    func testAggregateDetailMakesRetainedColorThemeAndAchievementSeparationExplicit() {
+        let app = XCUIApplication()
+        app.terminate()
+        app.launchEnvironment["TSUMIBEN_LOCAL_PREVIEW"] = "1"
+        app.launchEnvironment["TSUMIBEN_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["TSUMIBEN_UI_TEST_FORTY_YEAR_OVERVIEW"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
+        let lenses = app.segmentedControls["overview.lens"]
+        XCTAssertTrue(lenses.waitForExistence(timeout: 4))
+        if !lenses.buttons["結晶"].isSelected {
+            lenses.buttons["結晶"].tap()
+        }
+
+        let cluster = app.buttons.matching(
+            NSPredicate(
+                format: "label CONTAINS %@ AND label CONTAINS %@",
+                "まとまり粒",
+                "グラム"
+            )
+        ).firstMatch
+        XCTAssertTrue(
+            scrollUntilVisible(cluster, in: app),
+            "The crystal lens must expose an inspectable aggregate summary"
+        )
+        XCTAssertTrue(cluster.isHittable)
+        cluster.tap()
+
+        XCTAssertTrue(app.navigationBars["まとまり粒"].waitForExistence(timeout: 4))
+        let preservation = app.descendants(matching: .any)[
+            "overview.cluster.preservation"
+        ]
+        XCTAssertTrue(preservation.waitForExistence(timeout: 3))
+        XCTAssertTrue(preservation.label.contains("情報は削除されません"), preservation.label)
+        XCTAssertTrue(preservation.label.contains("記念石"), preservation.label)
+
+        let colorBreakdown = app.staticTexts["粒数による色の内訳"]
+        XCTAssertTrue(scrollUntilVisible(colorBreakdown, in: app))
+        XCTAssertTrue(app.staticTexts["テーマの内訳"].exists)
+
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "Aggregate detail — lossless color and theme breakdown"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     func testFortyYearProjectionRendersExactFusionHierarchy() {

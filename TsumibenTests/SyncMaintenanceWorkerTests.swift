@@ -1038,6 +1038,50 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         )
     }
 
+    func testTimerDisplayModeConvergesAndInvalidValuesFallBackSafely() throws {
+        let earlier = Prefs(
+            timerDisplayModeRawValue: TimerDisplayMode.timeOnly.rawValue
+        )
+        earlier.syncRecordID = orderedUUID(745)
+        earlier.timerDisplayModeRevision = 2
+        earlier.timerDisplayModeMutationID = orderedUUID(746)
+
+        let latest = Prefs(
+            timerDisplayModeRawValue: TimerDisplayMode.filledDial.rawValue
+        )
+        latest.syncRecordID = orderedUUID(747)
+        latest.timerDisplayModeRevision = 3
+        latest.timerDisplayModeMutationID = orderedUUID(748)
+
+        let invalidNewer = Prefs()
+        invalidNewer.syncRecordID = orderedUUID(749)
+        invalidNewer.timerDisplayModeRawValue = "not-a-timer-display-mode"
+        invalidNewer.timerDisplayModeRevision = 4
+        invalidNewer.timerDisplayModeMutationID = orderedUUID(750)
+
+        let forward = try PrefsSyncPolicy.resolvedState(
+            in: [earlier, invalidNewer, latest],
+            currentEpochID: nil
+        )
+        let reversed = try PrefsSyncPolicy.resolvedState(
+            in: [latest, invalidNewer, earlier],
+            currentEpochID: nil
+        )
+        XCTAssertEqual(forward.timerDisplayMode, .filledDial)
+        XCTAssertEqual(reversed.timerDisplayMode, .filledDial)
+        XCTAssertEqual(forward, reversed)
+
+        let allInvalid = try PrefsSyncPolicy.resolvedState(
+            in: [invalidNewer],
+            currentEpochID: nil
+        )
+        XCTAssertEqual(allInvalid.timerDisplayMode, .ringAndTime)
+        XCTAssertEqual(
+            TimerDisplayMode.resolved("not-a-timer-display-mode"),
+            .ringAndTime
+        )
+    }
+
     func testSensoryPreferenceResolutionIsolatesSoundAndHapticsFailures() {
         let sharedSoundStamp = orderedUUID(676)
         let soundA = Prefs(soundOn: true, hapticsOn: true)
@@ -4269,6 +4313,9 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
             String(value.preferredFocusMinutes),
             String(value.preferredFocusMinutesRevision),
             value.preferredFocusMinutesMutationID?.uuidString ?? "nil",
+            value.timerDisplayModeRawValue,
+            String(value.timerDisplayModeRevision),
+            value.timerDisplayModeMutationID?.uuidString ?? "nil",
             value.usagePurposeRawValue,
             String(value.usagePurposeRevision),
             value.usagePurposeMutationID?.uuidString ?? "nil"

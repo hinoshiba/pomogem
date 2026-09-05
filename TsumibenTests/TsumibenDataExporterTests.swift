@@ -192,6 +192,7 @@ final class TsumibenDataExporterTests: XCTestCase {
             isPro: true,
             keepScreenAwake: false,
             preferredFocusMinutes: 47,
+            timerDisplayModeRawValue: TimerDisplayMode.filledDial.rawValue,
             hasCompletedOnboarding: true,
             usagePurposeRawValue: UsagePurpose.work.rawValue,
             usagePurposeUpdatedAt: instant,
@@ -201,7 +202,7 @@ final class TsumibenDataExporterTests: XCTestCase {
             syncRecordID: prefsSyncRecordID,
             settingsWriterID: "account-device-writer"
         )
-        let preferenceMutationIDs = (1...12).map { index in
+        let preferenceMutationIDs = (1...13).map { index in
             UUID(uuidString: String(
                 format: "82000000-0000-0000-0000-%012d",
                 index
@@ -225,12 +226,14 @@ final class TsumibenDataExporterTests: XCTestCase {
         prefs.keepScreenAwakeMutationID = preferenceMutationIDs[7]
         prefs.preferredFocusMinutesRevision = 19
         prefs.preferredFocusMinutesMutationID = preferenceMutationIDs[8]
-        prefs.usagePurposeRevision = 20
-        prefs.usagePurposeMutationID = preferenceMutationIDs[9]
-        prefs.timerCompletionSoundRevision = 21
-        prefs.timerCompletionSoundMutationID = preferenceMutationIDs[10]
-        prefs.timerCompletionHapticRevision = 22
-        prefs.timerCompletionHapticMutationID = preferenceMutationIDs[11]
+        prefs.timerDisplayModeRevision = 20
+        prefs.timerDisplayModeMutationID = preferenceMutationIDs[9]
+        prefs.usagePurposeRevision = 21
+        prefs.usagePurposeMutationID = preferenceMutationIDs[10]
+        prefs.timerCompletionSoundRevision = 22
+        prefs.timerCompletionSoundMutationID = preferenceMutationIDs[11]
+        prefs.timerCompletionHapticRevision = 23
+        prefs.timerCompletionHapticMutationID = preferenceMutationIDs[12]
         context.insert(prefs)
         context.insert(ActivityResetMarker(
             id: UUID(uuidString: "90000000-0000-0000-0000-000000000001")!,
@@ -413,8 +416,8 @@ final class TsumibenDataExporterTests: XCTestCase {
         let stampKeys = [
             "sound", "haptics", "rareReward", "reminderEnabled", "reminderTime",
             "shareIncludesManual", "externalTheme", "keepScreenAwake",
-            "preferredFocusMinutes", "usagePurpose", "timerCompletionSound",
-            "timerCompletionHaptic"
+            "preferredFocusMinutes", "timerDisplayMode", "usagePurpose",
+            "timerCompletionSound", "timerCompletionHaptic"
         ]
         for (index, key) in stampKeys.enumerated() {
             XCTAssertEqual(exportedPrefs["\(key)Revision"] as? Int, index + 11, key)
@@ -431,6 +434,10 @@ final class TsumibenDataExporterTests: XCTestCase {
         XCTAssertEqual(
             exportedPrefs["timerCompletionHapticRawValue"] as? String,
             TimerCompletionHaptic.strong.rawValue
+        )
+        XCTAssertEqual(
+            exportedPrefs["timerDisplayModeRawValue"] as? String,
+            TimerDisplayMode.filledDial.rawValue
         )
         let timers = try XCTUnwrap(records["syncedFocusTimers"] as? [[String: Any]])
         XCTAssertFalse((timers.first?["payloadDataBase64"] as? String ?? "").isEmpty)

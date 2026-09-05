@@ -207,16 +207,19 @@ TestFlight外部配布／Review提出のbuildを選びません。
 | `Subject` | `syncRecordID`、`contentRevision`、`contentMutationID`、`deletedAt` |
 | `StudySession` | `syncRecordID` |
 | `AchievementStone` | `syncRecordID`、`deletionRevision`、`deletionMutationID`、`restoredDeletionMutationID`（revision／tombstoneと併用） |
-| `Prefs` | `syncRecordID`、`settingsWriterID`、`timerCompletionSoundRawValue`、`timerCompletionHapticRawValue`、12組の`<group>Revision`／`<group>MutationID` |
+| `Prefs` | `syncRecordID`、`settingsWriterID`、`timerCompletionSoundRawValue`、`timerCompletionHapticRawValue`、`timerDisplayModeRawValue`、13組の`<group>Revision`／`<group>MutationID` |
 | `ActivityResetMarker` | 追加なし |
 | `SyncedFocusTimer` | 追加なし |
 | `FocusTimerDeviceClaim` | `syncRecordID` |
 
-Prefsの12 groupは`sound`、`haptics`、`timerCompletionSound`、`timerCompletionHaptic`、`rareReward`、
+Prefsの13 groupは`sound`、`haptics`、`timerCompletionSound`、`timerCompletionHaptic`、`rareReward`、
 `reminderEnabled`、`reminderTime`、`shareIncludesManual`、`externalTheme`、`keepScreenAwake`、
-`preferredFocusMinutes`、`usagePurpose`です。追加するtimer完了設定fieldは
+`preferredFocusMinutes`、`timerDisplayMode`、`usagePurpose`です。追加するtimer完了設定fieldは
 `timerCompletionSoundRawValue`、`timerCompletionSoundRevision`、`timerCompletionSoundMutationID`、
 `timerCompletionHapticRawValue`、`timerCompletionHapticRevision`、`timerCompletionHapticMutationID`です。
+timer表示設定fieldは`timerDisplayModeRawValue`、`timerDisplayModeRevision`、
+`timerDisplayModeMutationID`です。既知raw valueは`ringAndTime`、`filledDial`、`timeOnly`、`ringOnly`で、
+既定値と未知値の表示fallbackは`ringAndTime`です。
 `usagePurpose`は既存CloudKit schema／JSON exportとの互換性のために残す履歴fieldであり、出荷UIは
 勉強・仕事共通の一つのテーマ一覧を使い、この値で表示や候補を分岐しません。
 各端末は自分の`settingsWriterID`に一致する1 physical rowだけを更新し、他端末のrowを変更しません。
@@ -227,8 +230,9 @@ restoreを書きます。legacy `deletedAt` rowは`(row.revision, deletionMutati
 合成します。後から届いた未観測の新しい削除eventを、高revision active rowだけで復活させません。
 
 Version 1.0はまだpublic buildがないため、最終archive前にCloudKit Consoleの**development environmentだけ**を
-clearし、最終RCから7 modelを再initializeします。上記fieldの名前・型・default、clean install、2台の
-offline変更、A/B→B/C→late Cのpartial delivery、foreign row不変、JSON raw exportをdevelopmentで検証し、
+clearし、最終RCから7 modelを再initializeします。上記fieldの名前・型・default、4種類のtimer表示選択、
+clean install、2台のoffline変更、A/B→B/C→late Cのpartial delivery、foreign row不変、JSON raw exportを
+developmentで検証し、
 同じschemaだけをproductionへdeployします。production environmentはclear／resetしません。schemaが異なる
 buildを先にTestFlightへ出さず、production deploy時刻と検証したcommit／buildを非公開release recordへ残します。
 
@@ -274,7 +278,8 @@ deployは未完了です。これはbuild選択・TestFlight配布より前のbl
 - App Privacyをproduction binaryと運用に照合して回答・公開
 - App Reviewの必須contact first name、last name、国際形式phone、emailを入力
   （個人情報のためrepositoryには置かず、提出画面だけで入力）
-- build 4と初回IAPを同じsubmissionへ追加し、release methodがautomaticであることを再確認
+- `timerDisplayMode`を含む最終候補を一意なbuild番号でArchive／Distributeし、そのbuildと初回IAPを
+  同じsubmissionへ追加して、release methodがautomaticであることを再確認
 - 最終CloudKit schema、signed-device／Sandbox QA、export compliance、accessibility回答を完了
 
 これらの入力はdraft保存であってもteam accountへ影響するため、ownerの実行確認後に行います。

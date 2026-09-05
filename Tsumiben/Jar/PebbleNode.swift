@@ -268,6 +268,25 @@ struct PebbleDescriptor: Identifiable {
     var participatesInAggregation: Bool { !isAchievement && !isTutorial }
     var participatesInBake: Bool { participatesInAggregation }
 
+    /// UUID identifies the stored row, not an immutable rendering snapshot.
+    /// Cloud reconciliation can legitimately update a row in place, so the
+    /// scene also compares every field that affects geometry, appearance or
+    /// accessibility before deciding an existing body is current.
+    func hasSamePresentation(as other: PebbleDescriptor) -> Bool {
+        id == other.id
+            && subjectName == other.subjectName
+            && colorHex == other.colorHex
+            && source.rawValue == other.source.rawValue
+            && kind.rawValue == other.kind.rawValue
+            && rareRewardCounts == other.rareRewardCounts
+            && achievementKind?.rawValue == other.achievementKind?.rawValue
+            && aggregate == other.aggregate
+            && grams == other.grams
+            && radius == other.radius
+            && createdAt == other.createdAt
+            && isTutorial == other.isTutorial
+    }
+
     /// Kept compact enough for the landing card and VoiceOver. This is only
     /// shown for a completion that consumed multiple 250g credits.
     var rewardBatchSummary: String? {

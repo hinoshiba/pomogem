@@ -170,8 +170,14 @@ enum Constants {
         static let interactionCollisionMaximumSounds = 2
         static let interactionCollisionMaximumHaptics = 1
 
+        /// A deliberate tap/shake opens a short-lived physical window. Gems
+        /// can collide and find a new resting arrangement during the first
+        /// three seconds, but sensor noise can never keep the jar awake
+        /// indefinitely.
         static let idleWindow: TimeInterval = 3
+        static let interactionHardStopDelay: TimeInterval = 5
         static let idleMovementThreshold: CGFloat = 0.5
+        static let interactionSettlingDamping: CGFloat = 0.72
         static let restingDamping: CGFloat = 0.997
 
         static let completionDropDelay: TimeInterval = 0.350

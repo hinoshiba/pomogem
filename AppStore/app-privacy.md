@@ -41,7 +41,7 @@ Apple teamの実際のaccess、mail運用を照合して最終回答します。
 - 1.0は独自accountを作らず、direct CloudKit一括削除UI／launch gateも出荷しない。端末側はapp削除、
   iCloud側はAppleのiCloudストレージ管理を案内し、offline別端末を遠隔消去できないことを公開policyへ明記
 
-公開Support／Privacy／Terms／販売条件はGitHub Pagesで配信し、接続情報とnetwork診断情報がGitHubで
+公開Support／Privacy／Termsと、購入前案内用の販売者情報URLはGitHub Pagesで配信し、接続情報とnetwork診断情報がGitHubで
 処理される場合があります。これはapp binaryへ組み込んだ
 SDKやappからの自動送信ではありませんが、公開プライバシーポリシーとsupport mailのoptional
 disclosure判断には含めます。

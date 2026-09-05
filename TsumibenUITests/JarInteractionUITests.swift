@@ -25,8 +25,8 @@ final class JarInteractionUITests: XCTestCase {
     func testReducedMotionTapStillMovesOnePebbleWithoutChangingTheRecord() throws {
         try verifyCompletedPebbleTap(
             reduceMotion: true,
-            minimumRise: 14,
-            attachmentName: "Aurora jar — reduced-motion tap lift"
+            minimumRise: 24,
+            attachmentName: "Aurora jar — reduced-motion one-axis contact"
         )
     }
 
@@ -111,7 +111,7 @@ final class JarInteractionUITests: XCTestCase {
             bounced.bounceRise,
             minimumRise,
             reduceMotion
-                ? "Reduce Motion must retain a compact but visible direct-tap response"
+                ? "Reduce Motion must retain an unmistakable, bounded direct-tap response"
                 : "An unobstructed tapped gem must travel about three of its own diameters"
         )
 

@@ -42,6 +42,25 @@ final class PostDropProgressAccessibilityPresentationTests: XCTestCase {
         XCTAssertFalse(message.hasPrefix("記録した集中時間の質量"))
     }
 
+    func testJarDisclosesLegacyAggregateWithoutAddingItToModernTotals() {
+        let message = JarAccessibilityPresentation.value(
+            totalGrams: 500,
+            pebbleCount: 2,
+            achievementCount: 0,
+            aggregateCount: 0,
+            legacyAggregateCount: 1,
+            representedPebbleCount: 2,
+            goldPebbleCount: 0,
+            prismPebbleCount: 0,
+            fusionProgressDescription: nil,
+            projectionIsLowerBound: false
+        )
+
+        XCTAssertTrue(message.contains("瓶の整理：2粒"))
+        XCTAssertTrue(message.contains("旧形式のまとまり粒1個"))
+        XCTAssertFalse(message.contains("合計2粒分"))
+    }
+
     func testMassReceiptAnnouncesEffortBeforeSecondaryJarOrganization() throws {
         let message = PostDropProgressAccessibilityPresentation.description(
             effortProgress: EffortProgressPolicy.snapshot(

@@ -381,8 +381,8 @@ struct SettingsView: View {
         Section("集中") {
             Toggle(isOn: $liveActivityEnabled) {
                 SettingLabel(
-                    title: "ロック画面にタイマーを表示",
-                    subtitle: "次回の集中から時間だけを表示",
+                    title: "画面を閉じてもタイマーを表示",
+                    subtitle: "ロック画面とDynamic Islandに残り時間・進捗を表示",
                     symbol: "lock.display"
                 )
             }
@@ -397,19 +397,44 @@ struct SettingsView: View {
                 }
             }
 
-            Text("iPhoneの設定でライブアクティビティが許可されている場合に表示します。")
+            Text("タイマーはバックグラウンドでも止まりません。iPhoneの設定でライブアクティビティが許可されている場合に表示します。")
                 .font(.caption)
                 .foregroundStyle(TsumibenTheme.muted)
 
             if let resolvedPreferences {
+                Picker(selection: timerDisplayModeBinding) {
+                    ForEach(TimerDisplayMode.allCases) { mode in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(mode.title)
+                            Text(mode.detail)
+                                .font(.caption)
+                                .foregroundStyle(TsumibenTheme.muted)
+                        }
+                        .tag(mode)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier(
+                            "settings.timer-display-mode.\(mode.rawValue)"
+                        )
+                    }
+                } label: {
+                    SettingLabel(
+                        title: "集中タイマーの表示",
+                        subtitle: resolvedPreferences.timerDisplayMode.detail,
+                        symbol: "circle.dotted"
+                    )
+                }
+                .pickerStyle(.navigationLink)
+                .accessibilityIdentifier("settings.timer-display-mode")
+                .accessibilityHint("集中と、その直後の休憩の見た目だけを変更します")
+
                 Toggle(isOn: settingBinding(
                     .keepScreenAwake,
                     currentValue: resolvedPreferences.keepScreenAwake,
                     update: { $0.keepScreenAwake = $1 }
                 )) {
                     SettingLabel(
-                        title: "集中中は画面をロックしない",
-                        subtitle: "集中画面を開いている間だけ有効",
+                        title: "タイマー中は画面をロックしない",
+                        subtitle: "集中・休憩のタイマー画面を開いている間だけ有効",
                         symbol: "sun.max"
                     )
                 }
@@ -1084,6 +1109,17 @@ struct SettingsView: View {
         )
     }
 
+    private var timerDisplayModeBinding: Binding<TimerDisplayMode> {
+        Binding(
+            get: {
+                resolvedPreferences?.timerDisplayMode ?? .ringAndTime
+            },
+            set: { mode in
+                updateTimerDisplayMode(mode)
+            }
+        )
+    }
+
     private var proAvailabilityLabel: some View {
         Text("利用可能")
             .font(.caption.weight(.bold))
@@ -1338,6 +1374,25 @@ struct SettingsView: View {
         } catch {
             modelContext.rollback()
             settingsError = "既定の集中時間を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+        }
+    }
+
+    private func updateTimerDisplayMode(_ mode: TimerDisplayMode) {
+        guard let resolvedPreferences,
+              resolvedPreferences.timerDisplayMode != mode else { return }
+        do {
+            try PrefsConsumerPolicy.mutate(
+                .timerDisplayMode,
+                context: modelContext,
+                markers: resetSnapshots
+            ) {
+                $0.timerDisplayModeRawValue = mode.rawValue
+            }
+            try modelContext.save()
+            booleanSettingsCommitGeneration &+= 1
+        } catch {
+            modelContext.rollback()
+            settingsError = "タイマーの表示を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
         }
     }
 

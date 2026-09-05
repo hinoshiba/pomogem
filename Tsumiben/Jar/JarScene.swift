@@ -9,6 +9,15 @@ struct JarLandingEvent {
     let position: CGPoint
 }
 
+/// The one physical gem accepted by the latest jar tap. Inspection is offered
+/// only when that same gem is an aggregate and the finger actually landed on
+/// its visible footprint; taps on sparse glass may still bounce the nearest
+/// gem without pretending that it was selected.
+struct JarAcceptedTapSelection: Equatable, Sendable {
+    let pebbleID: UUID
+    let inspectableAggregateID: UUID?
+}
+
 enum JarCapacityEvent {
     case approachingBake(
         physicalCount: Int,
@@ -70,6 +79,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     var reduceMotion: Bool = UIAccessibility.isReduceMotionEnabled {
         didSet {
             guard reduceMotion != oldValue else { return }
+            interactionMotionWindow = nil
+            finishReducedMotionRattle()
             allPebbleNodes.forEach { $0.setReduceMotion(reduceMotion) }
             if reduceMotion {
                 finishActiveTapMotion(forceReturn: false)
@@ -134,7 +145,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         static let cameraShake = "jar.cameraShake"
         static let tapCaustic = "jar.tapCaustic"
         static let tapSpecular = "jar.tapSpecular"
-        static let reducedMotionTapLift = "jar.reducedMotion.tapLift"
+        static let reducedMotionTapRattle = "jar.reducedMotion.tapRattle"
+        static let reducedMotionSecondaryRattle = "jar.reducedMotion.secondaryRattle"
+        static let reducedMotionRattleCompletion = "jar.reducedMotion.rattleCompletion"
         static let reducedMotionHighlight = "jar.reducedMotionHighlight"
     }
 
@@ -143,6 +156,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// avoids turning a full jar into an expensive all-body animation.
     private enum TapResponse {
         static let cooldown: TimeInterval = 0.68
+        static let aggregateInspectionHitPadding: CGFloat = 8
         static let minimumInfluenceRadius: CGFloat = 64
         static let maximumInfluenceRadius: CGFloat = 104
         static let influenceRadiusFraction: CGFloat = 0.28
@@ -172,20 +186,70 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         static let fullEnergyBodyCount: CGFloat = 18
         static let minimumCrowdEnergyScale: CGFloat = 0.55
         static let causticRadius: CGFloat = 28
-        /// Reduce Motion disables the physics cascade, tilt, and shake. A direct
-        /// tap still gets a short, local acknowledgement on exactly one gem so
-        /// the bottle never appears broken. Keep this well below the ordinary
-        /// hop and return to the exact resting position.
-        static let reducedMotionLiftFraction: CGFloat = 2
-        static let reducedMotionMinimumLift: CGFloat = 18
-        static let reducedMotionMaximumLift: CGFloat = 24
-        static let reducedMotionLiftDuration: TimeInterval = 0.12
-        static let reducedMotionReturnDuration: TimeInterval = 0.16
+        /// Reduce Motion disables continuous physics, tilt, and camera shake,
+        /// but a deliberate input must still have an unmistakable result. Use
+        /// one horizontal axis, no spin, and a bounded return instead of the
+        /// former tiny multi-axis oscillation.
+        static let reducedMotionTravelDuration: TimeInterval = 0.20
+        static let reducedMotionHoldDuration: TimeInterval = 0.05
+        static let reducedMotionReturnDuration: TimeInterval = 0.28
+        static let reducedMotionMaximumTapParticipants = 3
+        static let reducedMotionMaximumShakeParticipants = 4
+        static let reducedMotionTotalDuration = reducedMotionTravelDuration
+            + reducedMotionHoldDuration
+            + reducedMotionReturnDuration
     }
 
     private struct TapKick {
         let velocity: CGVector
         let angularVelocity: CGFloat
+    }
+
+    private final class ReducedMotionRattlePose {
+        weak var pebble: PebbleNode?
+        let position: CGPoint
+        let rotation: CGFloat
+        let actionKey: String
+
+        init(
+            pebble: PebbleNode,
+            position: CGPoint,
+            rotation: CGFloat,
+            actionKey: String
+        ) {
+            self.pebble = pebble
+            self.position = position
+            self.rotation = rotation
+            self.actionKey = actionKey
+        }
+    }
+
+    private final class ReducedMotionRattleState {
+        let token: UUID
+        let poses: [ReducedMotionRattlePose]
+        let sceneWasPaused: Bool
+        let idleWasPaused: Bool
+
+        init(
+            token: UUID,
+            poses: [ReducedMotionRattlePose],
+            sceneWasPaused: Bool,
+            idleWasPaused: Bool
+        ) {
+            self.token = token
+            self.poses = poses
+            self.sceneWasPaused = sceneWasPaused
+            self.idleWasPaused = idleWasPaused
+        }
+
+        var pebbleIDs: Set<UUID> {
+            Set(poses.compactMap { $0.pebble?.descriptor.id })
+        }
+    }
+
+    private struct ReducedMotionRattleParticipant {
+        let pebble: PebbleNode
+        let isPrimary: Bool
     }
 
     private struct LocalTapImpact {
@@ -244,7 +308,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var idleSampleStartedAt: TimeInterval?
     private var lastTwinkleUptime = ProcessInfo.processInfo.systemUptime
     private var lastTapBounceUptime = -Double.greatestFiniteMagnitude
+    private(set) var lastAcceptedTapSelection: JarAcceptedTapSelection?
     private var lastShakeUptime = -Double.greatestFiniteMagnitude
+    private var interactionMotionWindow: JarInteractionMotionWindow?
+    private var reducedMotionRattleState: ReducedMotionRattleState?
     private var pendingTapKick: PendingTapKick?
     private var activeTapMotion: ActiveTapMotion?
     private var tapPresentationStartPositions: [UUID: CGPoint] = [:]
@@ -357,6 +424,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// Other gems move only when SpriteKit resolves a real contact.
     var activeTapDrivenBodyCount: Int { pendingTapKick?.kicks.count ?? 0 }
     var activeTapMotionPebbleID: UUID? { activeTapMotion?.pebbleID }
+    var isInteractionMotionActive: Bool { interactionMotionWindow != nil }
     var snapshotRect: CGRect { outerJarRect }
 
     init(
@@ -409,6 +477,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     override func didChangeSize(_ oldSize: CGSize) {
         super.didChangeSize(oldSize)
+        finishReducedMotionRattle()
         rebuildGeometry()
     }
 
@@ -417,6 +486,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         bedrock: JarBedrockVisual?,
         showsMonthLabels: Bool
     ) {
+        finishReducedMotionRattle()
         let previouslyPersistedIDs = persistedBakedPebbleIDs
         visualStrata = JarStratumVisual.normalized(strata)
         persistedBakedPebbleIDs = Set(visualStrata.flatMap(\.sessionIDs))
@@ -449,6 +519,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         _ aggregates: [AggregatePebble],
         legacyStrata: [JarStratumVisual] = []
     ) {
+        finishReducedMotionRattle()
         let previouslyPersistedIDs = persistedBakedPebbleIDs
         let roots = AggregatePebblePolicy.visibleRoots(from: aggregates)
         let aggregateDescriptors = roots.map(PebbleDescriptor.init(aggregate:))
@@ -488,6 +559,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// Restores bodies without replaying the reward animation. They are shelf-packed and
     /// allowed to settle naturally, avoiding a noisy waterfall at every app launch.
     func restore(pebbles descriptors: [PebbleDescriptor]) {
+        interactionMotionWindow = nil
+        finishReducedMotionRattle()
         finishActiveTapMotion(forceReturn: false)
         transientMotionGate.invalidate()
         tapPresentationStartPositions.removeAll()
@@ -575,6 +648,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         guard suspendedAggregateIDs.remove(id) != nil,
               !isBakeInProgress
         else { return false }
+        // A retry is a state-changing transaction, so end any presentation-only
+        // Reduce Motion wake before the aggregation boundary is reopened.
+        finishReducedMotionRattle()
         resumeSimulation()
         let didBegin = beginBakeIfNeeded(force: true)
         if !didBegin {
@@ -595,6 +671,37 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             livePebbles
                 .filter { removedIDs.contains($0.descriptor.id) }
                 .forEach { $0.removeFromParent() }
+        }
+
+        // A synchronized row may be repaired in place while retaining its
+        // stable UUID. Identity alone therefore cannot prove that the SpriteKit
+        // snapshot still has the right color, count, mass or radius.
+        let replacements: [(PebbleNode, PebbleDescriptor)] = livePebbles.compactMap {
+            pebble in
+            guard let descriptor = wanted[pebble.descriptor.id],
+                  !pebble.descriptor.hasSamePresentation(as: descriptor)
+            else { return nil }
+            return (pebble, descriptor)
+        }
+        if !replacements.isEmpty {
+            finishActiveTapMotion(forceReturn: false)
+            transientMotionGate.invalidate()
+            for (pebble, descriptor) in replacements {
+                replaceHistoryBody(pebble, with: descriptor)
+            }
+        }
+
+        for index in dropQueue.indices {
+            let queued = dropQueue[index]
+            guard let descriptor = wanted[queued.descriptor.id],
+                  !queued.descriptor.hasSamePresentation(as: descriptor)
+            else { continue }
+            dropQueue[index] = QueuedDrop(
+                descriptor: descriptor,
+                horizontalUnit: queued.horizontalUnit,
+                readyUptime: queued.readyUptime,
+                needsSpecialAnticipation: queued.needsSpecialAnticipation
+            )
         }
 
         let existingIDs = Set(livePebbles.map { $0.descriptor.id })
@@ -628,8 +735,60 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             }
         }
         installedHistoryIDs = wantedIDs
-        publishPhysicalContentChangeIfNeeded()
+        publishPhysicalContentChangeIfNeeded(force: !replacements.isEmpty)
         resetIdleObservation()
+    }
+
+    private func replaceHistoryBody(
+        _ oldNode: PebbleNode,
+        with descriptor: PebbleDescriptor
+    ) {
+        let oldBody = oldNode.physicsBody
+        let oldPosition = oldNode.position
+        let oldRotation = oldNode.zRotation
+        let wasLanded = oldNode.hasLanded
+
+        let node = PebbleNode(
+            descriptor: descriptor,
+            reduceMotion: reduceMotion,
+            rareRewardMode: rareRewardMode
+        )
+        let minimumY = currentFloorY + node.radius
+        let maximumY = interiorRect.maxY - node.radius
+        let safeY = minimumY <= maximumY
+            ? min(max(oldPosition.y, minimumY), maximumY)
+            : interiorRect.midY
+        let horizontalRange = allowedHorizontalRange(
+            at: safeY,
+            radius: node.radius
+        )
+        node.position = CGPoint(
+            x: min(
+                max(oldPosition.x, horizontalRange.lowerBound),
+                horizontalRange.upperBound
+            ),
+            y: safeY
+        )
+        node.zRotation = oldRotation
+        if wasLanded {
+            node.markLanded()
+        }
+
+        oldNode.removeFromParent()
+        worldNode.addChild(node)
+        if reduceMotion {
+            freezeForReducedMotion(node)
+        } else if let oldBody, let body = node.physicsBody {
+            body.velocity = oldBody.velocity
+            body.angularVelocity = oldBody.angularVelocity
+            body.linearDamping = oldBody.linearDamping
+            body.angularDamping = oldBody.angularDamping
+            body.usesPreciseCollisionDetection = oldBody.usesPreciseCollisionDetection
+            body.isDynamic = oldBody.isDynamic
+            body.isResting = oldBody.isResting
+        }
+        node.rememberObservedPosition()
+        node.updatePresentationLighting(horizontal: opticalTiltFraction)
     }
 
     private func deterministicAngle(for id: UUID) -> CGFloat {
@@ -713,6 +872,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// allows an older stone to reappear if a newer synced record is removed.
     func removePebbles(withIDs ids: Set<UUID>) {
         guard !ids.isEmpty else { return }
+        if let rattledIDs = reducedMotionRattleState?.pebbleIDs,
+           !rattledIDs.isDisjoint(with: ids) {
+            finishReducedMotionRattle()
+        }
         dropQueue.removeAll { ids.contains($0.descriptor.id) }
         mutedLandingIDs.subtract(ids)
         acceptedPebbleIDs.subtract(ids)
@@ -722,6 +885,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         publishPhysicalContentChangeIfNeeded()
         resetIdleObservation()
         resumeSimulation()
+    }
+
+    /// Restores the exact resting pose when the SpriteKit surface is no longer
+    /// visible. Otherwise a paused SKView could resume a half-finished response
+    /// when the user later returns to Home.
+    func cancelReducedMotionInteractionPresentation() {
+        finishReducedMotionRattle()
     }
 
     /// Starts the complete reward beat: chime now, then the visual drop at t=350 ms.
@@ -760,7 +930,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
               !pebbles.isEmpty,
               nudgeRateLimiter.accepts(
                 uptime: uptime,
-                cooldown: Constants.Jar.nudgeCooldown
+                cooldown: reduceMotion
+                    ? max(
+                        Constants.Jar.nudgeCooldown,
+                        TapResponse.reducedMotionTotalDuration + 0.05
+                    )
+                    : Constants.Jar.nudgeCooldown
               )
         else { return }
         if reduceMotion {
@@ -771,9 +946,19 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                     / CGFloat(pebbles.count)
             )
             playTapCaustic(at: centroid, expands: false)
+            let movedPebbles = playReducedMotionPileRattle(
+                pebbles: pebbles,
+                horizontalDirection: safeDirection,
+                strength: 0.62,
+                maximumParticipants: TapResponse.reducedMotionMaximumShakeParticipants,
+                // A pile can be resting flush against the requested wall. In
+                // that case use the open side instead of acknowledging the
+                // VoiceOver action with no visible movement.
+                allowsDirectionFlip: true
+            )
             playSensoryFeedback(
                 trigger: .tap,
-                samples: pebbles.map {
+                samples: movedPebbles.map {
                     JarSensorySample(radius: Double($0.radius), coupling: 0.45)
                 },
                 strength: 0.55,
@@ -781,7 +966,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             )
             return
         }
-        resumeSimulation()
+        beginInteractionMotionWindow(uptime: uptime)
         for pebble in pebbles {
             pebble.physicsBody?.applyImpulse(CGVector(
                 dx: safeDirection * Constants.Jar.shakeHorizontalImpulse,
@@ -820,9 +1005,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
         if reduceMotion {
             playTapCaustic(at: centroid, expands: false)
+            let movedPebbles = playReducedMotionPileRattle(
+                pebbles: pebbles,
+                horizontalDirection: direction,
+                strength: strength,
+                maximumParticipants: TapResponse.reducedMotionMaximumShakeParticipants,
+                allowsDirectionFlip: true
+            )
             playSensoryFeedback(
                 trigger: .shake,
-                samples: pebbles.map {
+                samples: movedPebbles.map {
                     JarSensorySample(radius: Double($0.radius), coupling: 1)
                 },
                 strength: Double(strength),
@@ -831,7 +1023,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             return true
         }
 
-        resumeSimulation()
+        beginInteractionMotionWindow(uptime: now)
         finishActiveTapMotion(forceReturn: false)
         transientMotionGate.invalidate()
         let crowdScale = min(
@@ -896,6 +1088,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// lets accessibility callers use the exact same path as a touch.
     @discardableResult
     func bouncePebbles(at proposedPoint: CGPoint? = nil) -> Bool {
+        lastAcceptedTapSelection = nil
         let now = ProcessInfo.processInfo.systemUptime
         let pebbles = livePebbles
         guard !isBakeInProgress, !pebbles.isEmpty else { return false }
@@ -911,8 +1104,6 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
         let origin = proposedPoint ?? centroid
         guard makeJarPath(in: outerJarRect).contains(origin) else { return false }
-
-        resumeSimulation()
 
         let influenceRadius = min(
             TapResponse.maximumInfluenceRadius,
@@ -982,24 +1173,49 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         guard now - lastTapBounceUptime >= TapResponse.cooldown else { return false }
         lastTapBounceUptime = now
 
+        let directHitDistance = hypot(
+            primaryPebble.position.x - origin.x,
+            primaryPebble.position.y - origin.y
+        )
+        let inspectableAggregateID = proposedPoint != nil
+            && primaryPebble.descriptor.isAggregate
+            && directHitDistance
+                <= primaryPebble.radius + TapResponse.aggregateInspectionHitPadding
+            ? primaryPebble.descriptor.id
+            : nil
+        lastAcceptedTapSelection = JarAcceptedTapSelection(
+            pebbleID: primaryPebble.descriptor.id,
+            inspectableAggregateID: inspectableAggregateID
+        )
+
+        let horizontalDirection = tapLaunchHorizontalDirection(
+            for: primaryPebble,
+            origin: origin,
+            pileCentroid: centroid
+        )
+
         // Reduce Motion keeps the physical world frozen: no collision cascade,
-        // device-driven tilt, or camera movement. A deliberate tap still lifts
-        // the nearest rendered gem a few points and returns it immediately. This
-        // compact direct-manipulation acknowledgement is much smaller than the
-        // ordinary physics hop and cannot change persisted records.
+        // device-driven tilt, or camera movement. A deliberate tap still moves
+        // the selected gem and up to two nearby gems along one axis, then puts
+        // every node back at its exact resting pose. This cannot change records.
         if reduceMotion {
             playTapCaustic(at: origin, expands: false)
-            playReducedMotionTapLift(on: primaryPebble)
-            if impacts.isEmpty {
+            let movedPebbles = playReducedMotionTapRattle(
+                on: primaryPebble,
+                horizontalDirection: horizontalDirection
+            )
+            if movedPebbles.isEmpty {
                 soundSynth.playTick()
                 haptics.playSecondaryCollision()
             } else {
                 playSensoryFeedback(
                     trigger: .tap,
-                    samples: impacts.map {
+                    samples: movedPebbles.map {
                         JarSensorySample(
-                            radius: Double($0.pebble.radius),
-                            coupling: Double($0.strength)
+                            radius: Double($0.radius),
+                            coupling: $0.descriptor.id == primaryPebble.descriptor.id
+                                ? 1
+                                : 0.45
                         )
                     },
                     strength: 0.86,
@@ -1009,6 +1225,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             return true
         }
 
+        beginInteractionMotionWindow(uptime: now)
         finishActiveTapMotion(forceReturn: true)
         beginTapPresentationTracking(primary: primaryPebble)
         let activeTapSequence = transientMotionGate.begin()
@@ -1027,11 +1244,6 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             radius: primaryPebble.radius,
             strength: primaryImpact.strength,
             upwardRoom: upwardRoom
-        )
-        let horizontalDirection = tapLaunchHorizontalDirection(
-            for: primaryPebble,
-            origin: origin,
-            pileCentroid: centroid
         )
         let spinVariation = deterministicVariation(
             for: primaryPebble.descriptor.id,
@@ -1244,43 +1456,412 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         return direction
     }
 
-    private func playReducedMotionTapLift(on pebble: PebbleNode) {
-        let preferredLift = min(
-            TapResponse.reducedMotionMaximumLift,
+    private func playReducedMotionTapRattle(
+        on pebble: PebbleNode,
+        horizontalDirection: CGFloat
+    ) -> [PebbleNode] {
+        let maximumDistance = TapResponse.maximumInfluenceRadius
+            + pebble.radius
+        let direction: CGFloat = horizontalDirection >= 0 ? 1 : -1
+        let nearby = livePebbles
+            .filter { $0 !== pebble }
+            .compactMap { candidate -> (PebbleNode, CGFloat, Bool)? in
+                let dx = candidate.position.x - pebble.position.x
+                let dy = candidate.position.y - pebble.position.y
+                let distance = hypot(dx, dy)
+                guard distance <= maximumDistance + candidate.radius else {
+                    return nil
+                }
+                // Prefer stones in the swept path. If that side is empty, a
+                // nearby stone behind the primary may still show the contact.
+                let isAhead = dx * direction >= -candidate.radius * 0.35
+                return (candidate, distance, isAhead)
+            }
+            .sorted { lhs, rhs in
+                if lhs.2 != rhs.2 { return lhs.2 && !rhs.2 }
+                if abs(lhs.1 - rhs.1) > 0.001 { return lhs.1 < rhs.1 }
+                return lhs.0.descriptor.id.uuidString
+                    < rhs.0.descriptor.id.uuidString
+            }
+            .prefix(TapResponse.reducedMotionMaximumTapParticipants - 1)
+
+        var participants = [ReducedMotionRattleParticipant(
+            pebble: pebble,
+            isPrimary: true
+        )]
+        participants.append(contentsOf: nearby.map { entry in
+            return ReducedMotionRattleParticipant(
+                pebble: entry.0,
+                isPrimary: false
+            )
+        })
+        return playReducedMotionRattle(
+            participants: participants,
+            horizontalDirection: direction,
+            coupling: 1,
+            allowsDirectionFlip: true,
+            minimumTravel: 26
+        )
+    }
+
+    private func playReducedMotionPileRattle(
+        pebbles: [PebbleNode],
+        horizontalDirection: CGFloat,
+        strength: CGFloat,
+        maximumParticipants: Int,
+        allowsDirectionFlip: Bool
+    ) -> [PebbleNode] {
+        guard !pebbles.isEmpty, maximumParticipants > 0 else { return [] }
+        let safeStrength = strength.isFinite ? min(max(strength, 0), 1) : 0
+        guard safeStrength > 0 else { return [] }
+        let fallbackDirection = deterministicVariation(
+            for: pebbles[0].descriptor.id,
+            salt: 211
+        ) >= 0 ? CGFloat(1) : -1
+        let preferredDirection = horizontalDirection.isFinite
+            && abs(horizontalDirection) >= 0.05
+            ? (horizontalDirection >= 0 ? CGFloat(1) : -1)
+            : fallbackDirection
+
+        func leadingSelection(in direction: CGFloat) -> [PebbleNode] {
+            Array(pebbles.sorted {
+                let leftProjection = $0.position.x * direction
+                let rightProjection = $1.position.x * direction
+                if abs(leftProjection - rightProjection) > 0.001 {
+                    return leftProjection > rightProjection
+                }
+                if abs($0.position.y - $1.position.y) > 0.001 {
+                    // Prefer the exposed top of an equally leading column so
+                    // the one-axis upward fallback is not trapped under an
+                    // unselected stone.
+                    return $0.position.y > $1.position.y
+                }
+                return $0.descriptor.id.uuidString < $1.descriptor.id.uuidString
+            }.prefix(maximumParticipants))
+        }
+
+        func wallRoom(for selected: [PebbleNode], direction: CGFloat) -> CGFloat {
+            selected.reduce(CGFloat.greatestFiniteMagnitude) { available, pebble in
+                let range = reducedMotionRattleHorizontalRange(
+                    at: pebble.position.y,
+                    radius: pebble.radius
+                )
+                let room = direction >= 0
+                    ? range.upperBound - pebble.position.x
+                    : pebble.position.x - range.lowerBound
+                return min(available, max(0, room))
+            }
+        }
+
+        var direction = preferredDirection
+        var selected = leadingSelection(in: direction)
+        if allowsDirectionFlip {
+            let oppositeSelection = leadingSelection(in: -direction)
+            let preferredRoom = wallRoom(for: selected, direction: direction)
+            let oppositeRoom = wallRoom(
+                for: oppositeSelection,
+                direction: -direction
+            )
+            if oppositeRoom > preferredRoom,
+               preferredRoom < Constants.Jar.measuredRadius * 2 {
+                direction *= -1
+                selected = oppositeSelection
+            }
+        }
+
+        // Move a contiguous leading edge rather than points scattered across
+        // the bottle. Stationary gems then remain behind the swept path.
+        let crowdScale = min(
+            1,
             max(
-                TapResponse.reducedMotionMinimumLift,
-                pebble.radius * TapResponse.reducedMotionLiftFraction
+                TapResponse.minimumCrowdEnergyScale,
+                sqrt(
+                    CGFloat(TapResponse.reducedMotionMaximumShakeParticipants)
+                        / CGFloat(selected.count)
+                )
             )
         )
-        let upperY = interiorRect.maxY - pebble.radius
-        let lowerY = interiorRect.minY + pebble.radius
-        let upwardRoom = max(0, upperY - pebble.position.y)
-        let downwardRoom = max(0, pebble.position.y - lowerY)
-        let offset: CGFloat
-        if upwardRoom >= min(preferredLift, 2) || upwardRoom >= downwardRoom {
-            offset = min(preferredLift, upwardRoom)
-        } else {
-            offset = -min(preferredLift, downwardRoom)
+        let baseCoupling = (0.56 + safeStrength * 0.34) * crowdScale
+        let participants = selected.enumerated().map { index, pebble in
+            return ReducedMotionRattleParticipant(
+                pebble: pebble,
+                isPrimary: index == 0
+            )
         }
-        guard abs(offset) >= 1 else { return }
+        return playReducedMotionRattle(
+            participants: participants,
+            horizontalDirection: direction,
+            coupling: baseCoupling,
+            allowsDirectionFlip: false,
+            minimumTravel: 18
+        )
+    }
 
-        pebble.removeAction(forKey: ActionKey.reducedMotionTapLift)
-        let lift = SKAction.moveBy(
-            x: 0,
-            y: offset,
-            duration: TapResponse.reducedMotionLiftDuration
+    /// Runs only a bounded, input-tracked presentation. Physics remains frozen
+    /// for every frame, while the scene is temporarily unpaused solely so
+    /// SpriteKit can evaluate these keyed actions.
+    private func playReducedMotionRattle(
+        participants proposedParticipants: [ReducedMotionRattleParticipant],
+        horizontalDirection: CGFloat,
+        coupling: CGFloat,
+        allowsDirectionFlip: Bool,
+        minimumTravel: CGFloat
+    ) -> [PebbleNode] {
+        finishReducedMotionRattle()
+        let participants = proposedParticipants.filter {
+            $0.pebble.parent != nil && $0.pebble.physicsBody != nil
+        }
+        guard !participants.isEmpty else { return [] }
+
+        let token = UUID()
+        let sceneWasPaused = isPaused
+        let idleWasPaused = isIdlePaused
+        var poses: [ReducedMotionRattlePose] = []
+
+        guard let reference = participants.first(where: \.isPrimary)
+            ?? participants.first
+        else { return [] }
+        let variation = deterministicVariation(
+            for: reference.pebble.descriptor.id,
+            salt: 41
         )
-        lift.timingMode = .easeOut
-        let restore = SKAction.moveBy(
-            x: 0,
-            y: -offset,
-            duration: TapResponse.reducedMotionReturnDuration
+        let plan = JarReducedMotionRattlePolicy.plan(
+            radius: reference.pebble.radius,
+            horizontalDirection: horizontalDirection,
+            variation: variation,
+            coupling: coupling
         )
-        restore.timingMode = .easeInEaseOut
-        pebble.run(
-            .sequence([lift, restore]),
-            withKey: ActionKey.reducedMotionTapLift
+        let plannedTravel = abs(plan.horizontalOffset)
+        let preferredDirection: CGFloat = plan.horizontalOffset >= 0 ? 1 : -1
+
+        let participantIdentities = Set(participants.map {
+            ObjectIdentifier($0.pebble)
+        })
+        let obstacles = livePebbles.filter {
+            !participantIdentities.contains(ObjectIdentifier($0))
+        }
+
+        func upwardWallRoom(for pebble: PebbleNode) -> CGFloat {
+            let ceilingRoom = max(
+                0,
+                interiorRect.maxY - pebble.radius - pebble.position.y
+            )
+            guard ceilingRoom > 0 else { return 0 }
+
+            // The bottle narrows through its shoulder. Binary-search the
+            // highest point where this fixed X coordinate still fits inside
+            // the same radius-aware horizontal range.
+            var lower = CGFloat.zero
+            var upper = ceilingRoom
+            for _ in 0..<14 {
+                let candidate = (lower + upper) / 2
+                let range = reducedMotionRattleHorizontalRange(
+                    at: pebble.position.y + candidate,
+                    radius: pebble.radius
+                )
+                if range.contains(pebble.position.x) {
+                    lower = candidate
+                } else {
+                    upper = candidate
+                }
+            }
+            return lower
+        }
+
+        func availableTravel(along axis: CGVector) -> CGFloat {
+            participants.reduce(CGFloat.greatestFiniteMagnitude) { available, participant in
+                let pebble = participant.pebble
+                var room: CGFloat
+                if abs(axis.dx) > 0.5 {
+                    let horizontalRange = reducedMotionRattleHorizontalRange(
+                        at: pebble.position.y,
+                        radius: pebble.radius
+                    )
+                    room = axis.dx >= 0
+                        ? horizontalRange.upperBound - pebble.position.x
+                        : pebble.position.x - horizontalRange.lowerBound
+                } else {
+                    room = upwardWallRoom(for: pebble)
+                }
+                for obstacle in obstacles {
+                    let deltaX = obstacle.position.x - pebble.position.x
+                    let deltaY = obstacle.position.y - pebble.position.y
+                    let perpendicularDistance = abs(
+                        deltaX * axis.dy - deltaY * axis.dx
+                    )
+                    let combinedRadius = pebble.radius + obstacle.radius + 0.5
+                    guard perpendicularDistance < combinedRadius else { continue }
+                    let requiredAxialClearance = sqrt(max(
+                        combinedRadius * combinedRadius
+                            - perpendicularDistance * perpendicularDistance,
+                        0
+                    ))
+                    let projectedGap = deltaX * axis.dx + deltaY * axis.dy
+                    guard projectedGap > 0 else { continue }
+                    room = min(
+                        room,
+                        max(0, projectedGap - requiredAxialClearance)
+                    )
+                }
+                return min(available, max(0, room))
+            }
+        }
+
+        let preferredAxis = CGVector(dx: preferredDirection, dy: 0)
+        let oppositeAxis = CGVector(dx: -preferredDirection, dy: 0)
+        var chosenAxis = preferredAxis
+        var chosenRoom = availableTravel(along: preferredAxis)
+        if allowsDirectionFlip,
+           chosenRoom < plannedTravel {
+            let oppositeRoom = availableTravel(along: oppositeAxis)
+            if oppositeRoom > chosenRoom {
+                chosenAxis = oppositeAxis
+                chosenRoom = oppositeRoom
+            }
+        }
+
+        // A dense row can physically block both horizontal directions. Keep
+        // the promised visible acknowledgement by using one upward axis only
+        // when it offers materially more collision-free space.
+        let minimumVisibleTravel = min(CGFloat(12), plannedTravel)
+        if chosenRoom < minimumVisibleTravel {
+            let upwardAxis = CGVector(dx: 0, dy: 1)
+            let upwardRoom = availableTravel(along: upwardAxis)
+            if upwardRoom > chosenRoom {
+                chosenAxis = upwardAxis
+                chosenRoom = upwardRoom
+            }
+        }
+        let travel = min(plannedTravel, chosenRoom)
+        let requiredTravel = min(
+            max(1, minimumTravel),
+            plannedTravel
         )
+        if travel < requiredTravel,
+           participants.count > 1 {
+            // A blocked neighbour must never erase the primary response.
+            // Retry with the farthest secondary removed; that node becomes a
+            // stationary obstacle in the next clearance calculation.
+            return playReducedMotionRattle(
+                participants: Array(participants.dropLast()),
+                horizontalDirection: horizontalDirection,
+                coupling: coupling,
+                allowsDirectionFlip: allowsDirectionFlip,
+                minimumTravel: minimumTravel
+            )
+        }
+        guard travel >= 1 else { return [] }
+
+        for participant in participants {
+            let pebble = participant.pebble
+            freezeForReducedMotion(pebble)
+            let origin = pebble.position
+            let destination = CGPoint(
+                x: origin.x + chosenAxis.dx * travel,
+                y: origin.y + chosenAxis.dy * travel
+            )
+
+            let actionKey = participant.isPrimary
+                ? ActionKey.reducedMotionTapRattle
+                : ActionKey.reducedMotionSecondaryRattle
+            poses.append(ReducedMotionRattlePose(
+                pebble: pebble,
+                position: origin,
+                rotation: pebble.zRotation,
+                actionKey: actionKey
+            ))
+
+            let travel = SKAction.move(
+                to: destination,
+                duration: TapResponse.reducedMotionTravelDuration
+            )
+            travel.timingMode = .easeInEaseOut
+            let returnHome = SKAction.move(
+                to: origin,
+                duration: TapResponse.reducedMotionReturnDuration
+            )
+            returnHome.timingMode = .easeInEaseOut
+            let action = SKAction.sequence([
+                travel,
+                .wait(forDuration: TapResponse.reducedMotionHoldDuration),
+                returnHome
+            ])
+            pebble.run(action, withKey: actionKey)
+        }
+
+        guard !poses.isEmpty else { return [] }
+        reducedMotionRattleState = ReducedMotionRattleState(
+            token: token,
+            poses: poses,
+            sceneWasPaused: sceneWasPaused,
+            idleWasPaused: idleWasPaused
+        )
+        // Do not call resumeSimulation(): that path also wakes drop and
+        // aggregation processing. `update` recognizes this presentation-only
+        // state and keeps those state-changing paths suspended.
+        if isPaused { isPaused = false }
+        run(
+            .sequence([
+                .wait(forDuration: TapResponse.reducedMotionTotalDuration + 0.01),
+                .run { [weak self] in
+                    self?.completeReducedMotionRattle(token: token)
+                }
+            ]),
+            withKey: ActionKey.reducedMotionRattleCompletion
+        )
+        return poses.compactMap(\.pebble)
+    }
+
+    private func completeReducedMotionRattle(token: UUID) {
+        guard let state = reducedMotionRattleState,
+              state.token == token
+        else { return }
+        restoreReducedMotionRattlePoses(state, removesActions: true)
+        reducedMotionRattleState = nil
+        restoreScenePauseAfterReducedMotionRattle(state)
+    }
+
+    private func finishReducedMotionRattle() {
+        guard let state = reducedMotionRattleState else {
+            removeAction(forKey: ActionKey.reducedMotionRattleCompletion)
+            return
+        }
+        removeAction(forKey: ActionKey.reducedMotionRattleCompletion)
+        restoreReducedMotionRattlePoses(state, removesActions: true)
+        reducedMotionRattleState = nil
+        restoreScenePauseAfterReducedMotionRattle(state)
+    }
+
+    private func restoreReducedMotionRattlePoses(
+        _ state: ReducedMotionRattleState,
+        removesActions: Bool
+    ) {
+        for pose in state.poses {
+            guard let pebble = pose.pebble,
+                  pebble.parent != nil
+            else { continue }
+            if removesActions {
+                pebble.removeAction(forKey: pose.actionKey)
+            }
+            pebble.position = pose.position
+            pebble.zRotation = pose.rotation
+            freezeForReducedMotion(pebble)
+        }
+    }
+
+    private func restoreScenePauseAfterReducedMotionRattle(
+        _ state: ReducedMotionRattleState
+    ) {
+        if state.sceneWasPaused,
+           dropQueue.isEmpty,
+           !isBakeInProgress {
+            isPaused = true
+            // Presentation-only wake never changed this flag. Preserve it
+            // explicitly so future refactors cannot emit a false idle edge.
+            isIdlePaused = state.idleWasPaused
+        } else if !isPaused {
+            resetIdleObservation()
+        }
     }
 
     /// Starts the downward half only after SpriteKit has presented the compact
@@ -1397,8 +1978,21 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     /// Applies a safe gravity vector supplied by Core Motion. Invalid values
     /// are ignored and extreme inputs are clamped before reaching SpriteKit.
-    func setGravityVector(_ proposed: CGVector, smoothing: Bool = true) {
+    func setGravityVector(
+        _ proposed: CGVector,
+        smoothing: Bool = true,
+        wakesSimulation: Bool = false
+    ) {
         guard proposed.dx.isFinite, proposed.dy.isFinite else { return }
+        if reduceMotion {
+            // Motion sensing remains active so a deliberate shake can be
+            // recognized, but device tilt must never leak back into the frozen
+            // physical world from this or any future caller.
+            appliedGravityVector = Constants.Jar.gravityVector
+            physicsWorld.gravity = Constants.Jar.gravityVector
+            updateOpticalTilt(horizontal: 0)
+            return
+        }
         let magnitude = hypot(proposed.dx, proposed.dy)
         let maximum = max(Constants.Jar.maximumExternalGravityMagnitude, 0.1)
         let scale = magnitude > maximum ? maximum / magnitude : 1
@@ -1422,7 +2016,19 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         appliedGravityVector = next
         physicsWorld.gravity = next
         updateOpticalTilt(horizontal: next.dx)
-        resumeSimulation()
+        // Core Motion delivers up to 30 updates per second. Treating every
+        // sample as a new interaction used to reset both the three-second
+        // settling observation and the tapped gem's low damping, so a held
+        // phone could keep the jar alive forever. Sensor gravity now affects
+        // only an already-open interaction window. Catalyst's explicit drag
+        // opts into waking below.
+        if wakesSimulation {
+            continueInteractionMotionWindow(
+                uptime: ProcessInfo.processInfo.systemUptime
+            )
+        } else if interactionMotionWindow != nil, isPaused {
+            resumeSimulation()
+        }
     }
 
     func resetGravity() {
@@ -1455,21 +2061,50 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         resetIdleObservation()
     }
 
+    private func beginInteractionMotionWindow(uptime: TimeInterval) {
+        guard !reduceMotion else { return }
+        interactionMotionWindow = JarInteractionMotionWindow(openedAt: uptime)
+        resumeSimulation()
+    }
+
+    /// Continues an explicit pointer drag without resetting the settling
+    /// sample on every event. A new drag still opens a complete window and can
+    /// wake a previously settled Catalyst scene.
+    private func continueInteractionMotionWindow(uptime: TimeInterval) {
+        guard !reduceMotion else { return }
+        let wasActive = interactionMotionWindow != nil
+        interactionMotionWindow = JarInteractionMotionWindow(openedAt: uptime)
+        if isPaused || isIdlePaused {
+            resumeSimulation()
+        } else if !wasActive {
+            resetIdleObservation()
+        }
+    }
+
     override func update(_ currentTime: TimeInterval) {
         super.update(currentTime)
-        let capacity = StrataMath.capacityUnits(pebbleRadii: bakeEligibleRadii)
-        if capacity >= Constants.Jar.aggregateCapacityUnits {
-            isCapacityReliefActive = true
-        } else if capacity <= Constants.Jar.postAggregateCapacityUnits {
-            isCapacityReliefActive = false
+        // A Reduce Motion interaction may briefly unpause an otherwise-idle
+        // scene so keyed SKActions can render. Keep that wake strictly
+        // presentation-only: tapping or shaking the bottle must not become the
+        // trigger for a drop, aggregation transaction, or persistence callback.
+        if reducedMotionRattleState == nil {
+            let capacity = StrataMath.capacityUnits(pebbleRadii: bakeEligibleRadii)
+            if capacity >= Constants.Jar.aggregateCapacityUnits {
+                isCapacityReliefActive = true
+            } else if capacity <= Constants.Jar.postAggregateCapacityUnits {
+                isCapacityReliefActive = false
+            }
+            if !isBakeInProgress, needsAggregation {
+                _ = beginBakeIfNeeded(force: false)
+            }
+            processDropQueue()
         }
-        if !isBakeInProgress, needsAggregation {
-            _ = beginBakeIfNeeded(force: false)
-        }
-        processDropQueue()
         publishPhysicalContentChangeIfNeeded()
         updateRareTwinkles()
-        updateIdlePause(currentTime: currentTime)
+        updateIdlePause(
+            currentTime: currentTime,
+            uptime: ProcessInfo.processInfo.systemUptime
+        )
     }
 
     override func didSimulatePhysics() {
@@ -2748,15 +3383,33 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
     }
 
-    private func updateIdlePause(currentTime: TimeInterval) {
+    private func updateIdlePause(
+        currentTime: TimeInterval,
+        uptime: TimeInterval
+    ) {
+        guard reducedMotionRattleState == nil else { return }
         // A failed aggregate may leave persisted-but-not-yet-rendered drops in
         // the queue. Let the visible chamber settle and pause while the explicit
         // retry UI is waiting instead of burning frames forever.
         guard (dropQueue.isEmpty || !suspendedAggregateIDs.isEmpty),
               !isBakeInProgress
         else {
+            interactionMotionWindow = nil
             resetIdleObservation()
             return
+        }
+
+        if let interactionMotionWindow,
+           interactionMotionWindow.mustStop(at: uptime) {
+            if livePebbles.allSatisfy(\.hasLanded) {
+                pauseSettledSimulation()
+                return
+            }
+            // A newly earned gem can already be in the scene while its first
+            // landing callback is still pending. Never freeze that semantic
+            // transaction in mid-air; retire only the interaction deadline and
+            // hand it back to the ordinary landing/idle lifecycle.
+            self.interactionMotionWindow = nil
         }
         guard let started = idleSampleStartedAt else {
             idleSampleStartedAt = currentTime
@@ -2765,32 +3418,76 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         guard currentTime - started >= Constants.Jar.idleWindow else { return }
 
-        let movement = livePebbles.reduce(CGFloat.zero) { total, pebble in
-            total + hypot(
+        if let interactionMotionWindow,
+           !interactionMotionWindow.canSettle(at: uptime) {
+            return
+        }
+
+        // The old sum made a full jar progressively harder to settle: tiny
+        // harmless movement from 128 gems could outweigh a quiet single-gem
+        // jar. The maximum per-body displacement is independent of body count.
+        let movement = livePebbles.reduce(CGFloat.zero) { maximum, pebble in
+            max(maximum, hypot(
                 pebble.position.x - pebble.lastObservedPosition.x,
                 pebble.position.y - pebble.lastObservedPosition.y
-            )
+            ))
         }
         if movement < Constants.Jar.idleMovementThreshold {
-            livePebbles.forEach { pebble in
-                pebble.physicsBody?.linearDamping = Constants.Jar.restingDamping
-            }
-            isIdlePaused = true
-            onIdlePauseChanged?(true)
-            isPaused = true
+            pauseSettledSimulation()
         } else {
+            let isSettlingInteraction = interactionMotionWindow != nil
             livePebbles.forEach { pebble in
-                pebble.physicsBody?.linearDamping = Constants.Jar.linearDamping
+                pebble.physicsBody?.linearDamping = isSettlingInteraction
+                    ? Constants.Jar.interactionSettlingDamping
+                    : Constants.Jar.linearDamping
+                pebble.physicsBody?.angularDamping = isSettlingInteraction
+                    ? Constants.Jar.interactionSettlingDamping
+                    : Constants.Jar.angularDamping
                 pebble.rememberObservedPosition()
             }
             idleSampleStartedAt = currentTime
         }
     }
 
+#if DEBUG
+    /// Deterministic clock seam for regression tests. Release builds can only
+    /// advance this state from SpriteKit's render loop.
+    func evaluateInteractionMotionForTesting(
+        currentTime: TimeInterval,
+        uptime: TimeInterval
+    ) {
+        updateIdlePause(currentTime: currentTime, uptime: uptime)
+    }
+#endif
+
+    /// Freezes only presentation physics. Study records, aggregate membership,
+    /// mass, and cloud state live outside SpriteKit and are never touched.
+    private func pauseSettledSimulation() {
+        finishActiveTapMotion(forceReturn: false)
+        transientMotionGate.invalidate()
+        interactionMotionWindow = nil
+        interactionCollisionBudget.cancel()
+        livePebbles.forEach { pebble in
+            guard let body = pebble.physicsBody else { return }
+            body.velocity = .zero
+            body.angularVelocity = .zero
+            body.linearDamping = Constants.Jar.restingDamping
+            body.angularDamping = Constants.Jar.restingDamping
+            body.usesPreciseCollisionDetection = false
+            body.isResting = true
+        }
+        if !isIdlePaused {
+            isIdlePaused = true
+            onIdlePauseChanged?(true)
+        }
+        isPaused = true
+    }
+
     private func resetIdleObservation() {
         idleSampleStartedAt = nil
         livePebbles.forEach {
             $0.physicsBody?.linearDamping = Constants.Jar.linearDamping
+            $0.physicsBody?.angularDamping = Constants.Jar.angularDamping
             $0.rememberObservedPosition()
         }
     }
@@ -2798,10 +3495,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// Invalidates SwiftUI only when the live physics chamber transitions to a
     /// different body count. `physicalPebbleCount` itself remains computed from
     /// `livePebbles`, avoiding a second, potentially stale emptiness source.
-    private func publishPhysicalContentChangeIfNeeded() {
+    private func publishPhysicalContentChangeIfNeeded(force: Bool = false) {
         refreshEarlyEffortSpotlightsIfNeeded()
         let count = physicalPebbleCount
-        guard count != lastPublishedPhysicalPebbleCount else { return }
+        guard force || count != lastPublishedPhysicalPebbleCount else { return }
         lastPublishedPhysicalPebbleCount = count
         physicalContentRevision &+= 1
     }
@@ -2860,11 +3557,119 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         return center ... center
     }
 
+    /// Static Reduce Motion actions do not receive SpriteKit's collision
+    /// correction. Where a circular gem overlaps the diagonal shoulder, inset
+    /// its center by the wall-normal radius rather than only the horizontal
+    /// radius used by the general rescue approximation.
+    private func reducedMotionRattleHorizontalRange(
+        at verticalPosition: CGFloat,
+        radius: CGFloat
+    ) -> ClosedRange<CGFloat> {
+        let base = allowedHorizontalRange(
+            at: verticalPosition,
+            radius: radius
+        )
+        guard verticalPosition + radius >= shoulderStartY,
+              verticalPosition - radius <= neckBaseY
+        else { return base }
+
+        let shoulderRise = max(neckBaseY - shoulderStartY, 1)
+        let shoulderRun = max(neckInteriorMinX - interiorRect.minX, 0)
+        let normalHorizontalInset = radius
+            * hypot(shoulderRun, shoulderRise) / shoulderRise
+        let extraInset = max(0, normalHorizontalInset - radius)
+        let lower = base.lowerBound + extraInset
+        let upper = base.upperBound - extraInset
+        if lower <= upper { return lower ... upper }
+        let center = interiorRect.midX
+        return center ... center
+    }
+
     private func rescuePebblesBelowFloor() {
         for pebble in livePebbles where pebble.position.y - pebble.radius < currentFloorY {
             pebble.position.y = currentFloorY + pebble.radius
             pebble.physicsBody?.velocity.dy = max(pebble.physicsBody?.velocity.dy ?? .zero, .zero)
         }
+    }
+}
+
+/// Wall-clock policy for a deliberate physics interaction. SpriteKit's scene
+/// time stops while paused, so monotonic uptime keeps the maximum duration
+/// truthful across frame drops without scheduling stale callbacks.
+struct JarInteractionMotionWindow: Equatable {
+    let openedAt: TimeInterval
+    let settleAt: TimeInterval
+    let hardStopAt: TimeInterval
+
+    init(
+        openedAt: TimeInterval,
+        settleDelay: TimeInterval = Constants.Jar.idleWindow,
+        hardStopDelay: TimeInterval = Constants.Jar.interactionHardStopDelay
+    ) {
+        let safeOpenedAt = openedAt.isFinite ? openedAt : 0
+        let safeSettleDelay = settleDelay.isFinite ? max(0, settleDelay) : 0
+        let safeHardStopDelay = hardStopDelay.isFinite
+            ? max(safeSettleDelay, hardStopDelay)
+            : safeSettleDelay
+        self.openedAt = safeOpenedAt
+        settleAt = safeOpenedAt + safeSettleDelay
+        hardStopAt = safeOpenedAt + safeHardStopDelay
+    }
+
+    func canSettle(at uptime: TimeInterval) -> Bool {
+        uptime.isFinite && uptime >= settleAt
+    }
+
+    func mustStop(at uptime: TimeInterval) -> Bool {
+        uptime.isFinite && uptime >= hardStopAt
+    }
+}
+
+struct JarReducedMotionRattlePlan: Equatable {
+    let horizontalOffset: CGFloat
+    let verticalOffset: CGFloat
+    let rotationOffset: CGFloat
+}
+
+/// Reduce Motion keeps every physics body static while preserving a clear,
+/// user-initiated result. Motion stays on one horizontal axis without spin or
+/// overshoot. Aggregates travel a little farther in absolute points so they do
+/// not look stuck, but substantially less relative to their larger diameter.
+enum JarReducedMotionRattlePolicy {
+    static func plan(
+        radius proposedRadius: CGFloat,
+        horizontalDirection proposedDirection: CGFloat,
+        variation proposedVariation: CGFloat,
+        coupling proposedCoupling: CGFloat = 1
+    ) -> JarReducedMotionRattlePlan {
+        let radius = proposedRadius.isFinite
+            ? min(max(proposedRadius, 4), Constants.Jar.aggregateMaximumRadius)
+            : Constants.Jar.measuredRadius
+        let direction: CGFloat
+        if proposedDirection.isFinite, abs(proposedDirection) >= 0.05 {
+            direction = proposedDirection >= 0 ? 1 : -1
+        } else if proposedVariation.isFinite {
+            direction = proposedVariation >= 0 ? 1 : -1
+        } else {
+            direction = 1
+        }
+        let weightProgress = min(max(
+            (radius - Constants.Jar.measuredRadius)
+                / max(
+                    Constants.Jar.aggregateMaximumRadius - Constants.Jar.measuredRadius,
+                    1
+                ),
+            0
+        ), 1)
+        let coupling = proposedCoupling.isFinite
+            ? min(max(proposedCoupling, 0), 1)
+            : 1
+        let travel = (30 + weightProgress * 6) * coupling
+        return JarReducedMotionRattlePlan(
+            horizontalOffset: direction * travel,
+            verticalOffset: 0,
+            rotationOffset: 0
+        )
     }
 }
 
@@ -3077,9 +3882,9 @@ struct JarInteractionCollisionBudget {
     }
 }
 
-/// Turns device tilt into continuous SpriteKit gravity. There is no threshold
-/// gesture: small hand movements immediately make every loose and aggregate
-/// pebble shift, while the low-pass filter keeps the jar calm on a desk.
+/// Rejects callbacks from a stopped or superseded Core Motion run. Reduce
+/// Motion routing is intentionally handled after this gate: shake samples stay
+/// available while tilt/gravity samples are suppressed.
 struct JarMotionUpdateGate {
     private(set) var generation: UInt64 = 0
     private(set) var isActive = false
@@ -3095,8 +3900,12 @@ struct JarMotionUpdateGate {
         generation &+= 1
     }
 
-    func accepts(_ candidate: UInt64, reduceMotion: Bool) -> Bool {
-        isActive && generation == candidate && !reduceMotion
+    func accepts(_ candidate: UInt64) -> Bool {
+        isActive && generation == candidate
+    }
+
+    func acceptsGravity(_ candidate: UInt64, reduceMotion: Bool) -> Bool {
+        accepts(candidate) && !reduceMotion
     }
 }
 
@@ -3233,6 +4042,7 @@ final class JarMotionObserver: ObservableObject {
     private weak var scene: JarScene?
     private var updateGate = JarMotionUpdateGate()
     private var shakeDetector = JarShakeDetector()
+    private var appliesGravity = true
     private var hapticPlaybackObserver: NSObjectProtocol?
 
     init(scene: JarScene? = nil) {
@@ -3261,10 +4071,10 @@ final class JarMotionObserver: ObservableObject {
         }
     }
 
-    func start(scene: JarScene? = nil) {
+    func start(scene: JarScene? = nil, appliesGravity: Bool = true) {
         if let scene { self.scene = scene }
-        guard let targetScene = self.scene,
-              !targetScene.reduceMotion,
+        self.appliesGravity = appliesGravity
+        guard self.scene != nil,
               manager.isDeviceMotionAvailable
         else { return }
         if let previousOwner = Self.activeOwner, previousOwner !== self {
@@ -3289,14 +4099,17 @@ final class JarMotionObserver: ObservableObject {
             MainActor.assumeIsolated { [weak self] in
                 guard let self,
                       let scene = self.scene,
-                      self.updateGate.accepts(
-                        generation,
-                        reduceMotion: scene.reduceMotion
-                      )
+                      self.updateGate.accepts(generation)
                 else { return }
-                scene.setGravityVector(
-                    CGVector(dx: horizontal, dy: vertical)
-                )
+                if self.appliesGravity,
+                   self.updateGate.acceptsGravity(
+                    generation,
+                    reduceMotion: scene.reduceMotion
+                ) {
+                    scene.setGravityVector(
+                        CGVector(dx: horizontal, dy: vertical)
+                    )
+                }
                 if let shake = self.shakeDetector.ingest(
                     x: acceleration.x,
                     y: acceleration.y,
@@ -3316,6 +4129,7 @@ final class JarMotionObserver: ObservableObject {
         // Invalidate before stopping/resetting so a delivery already queued by
         // Core Motion cannot overwrite the stable downward gravity afterward.
         updateGate.invalidate()
+        appliesGravity = false
         manager.stopDeviceMotionUpdates()
         shakeDetector.reset()
         scene?.resetGravity()

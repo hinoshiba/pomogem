@@ -112,7 +112,6 @@ fail closedにします。「このiPhoneのみ」はiCloudへ自動switch／upl
 - 製品サイト: <https://tumiben.hinoshiba.com/>
 - Privacy Policy: <https://tumiben.hinoshiba.com/privacy/>
 - Support: <https://tumiben.hinoshiba.com/support/>
-- 販売条件: <https://tumiben.hinoshiba.com/commercial-transactions/>
 
 URLを変える場合は、Webのcanonical/OG、`.github/workflows/pages.yml`、`project.yml`、
 `Tsumiben/App/AppLinks.swift`、App Store metadataを同時に更新してください。

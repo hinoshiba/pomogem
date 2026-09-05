@@ -52,7 +52,7 @@ GIFの一時ファイルを安全に検証・消去するため、アプリの�
 
 ## 製品Webサイト
 
-製品サイト、プライバシーポリシー、サポート案内、利用条件、販売条件はGitHub Pagesで配信します。
+製品サイトで配信する各ページはGitHub Pagesで配信します。
 site source自身はcookie、広告、analytics、行動追跡を実装しません。通常のWeb配信に伴い、GitHubは
 IP address、User-Agent、access日時、request URL、security／network診断情報などをservice提供、
 安全性、可用性のために処理する場合があります。この処理をアプリの集中記録とは結び付けません。

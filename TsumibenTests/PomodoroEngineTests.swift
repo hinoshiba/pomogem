@@ -1,8 +1,108 @@
+import SwiftUI
 import XCTest
 @testable import Tsumiben
 
 final class PomodoroEngineTests: XCTestCase {
     private let referenceDate = Date(timeIntervalSince1970: 1_788_000_000)
+
+    func testScreenAwakePolicyCoversFocusAndBreakOnlyWhileRunningInForeground() {
+        for phase in [
+            PomodoroPhase.focusing,
+            .shortBreak,
+            .longBreak
+        ] {
+            XCTAssertTrue(
+                TimerScreenAwakePolicy.shouldKeepScreenAwake(
+                    preferenceEnabled: true,
+                    sceneIsActive: true,
+                    timerIsRunning: phase.isRunning,
+                    remainingSeconds: 1
+                ),
+                "\(phase) should keep the screen awake"
+            )
+        }
+
+        for phase in [
+            PomodoroPhase.idle,
+            .paused,
+            .focusCompleted,
+            .breakCompleted
+        ] {
+            XCTAssertFalse(
+                TimerScreenAwakePolicy.shouldKeepScreenAwake(
+                    preferenceEnabled: true,
+                    sceneIsActive: true,
+                    timerIsRunning: phase.isRunning,
+                    remainingSeconds: 1
+                ),
+                "\(phase) must allow automatic locking"
+            )
+        }
+
+        XCTAssertFalse(
+            TimerScreenAwakePolicy.shouldKeepScreenAwake(
+                preferenceEnabled: false,
+                sceneIsActive: true,
+                timerIsRunning: true,
+                remainingSeconds: 1
+            )
+        )
+        XCTAssertFalse(
+            TimerScreenAwakePolicy.shouldKeepScreenAwake(
+                preferenceEnabled: true,
+                sceneIsActive: false,
+                timerIsRunning: true,
+                remainingSeconds: 1
+            )
+        )
+        XCTAssertFalse(
+            TimerScreenAwakePolicy.shouldKeepScreenAwake(
+                preferenceEnabled: true,
+                sceneIsActive: true,
+                timerIsRunning: true,
+                remainingSeconds: 0
+            )
+        )
+    }
+
+    func testScreenAwakePolicyFollowsFocusAndBreakLifecycle() throws {
+        var engine = PomodoroEngine()
+
+        func keepsScreenAwake(at date: Date) -> Bool {
+            let snapshot = engine.snapshot(at: date)
+            return TimerScreenAwakePolicy.shouldKeepScreenAwake(
+                preferenceEnabled: true,
+                sceneIsActive: true,
+                timerIsRunning: snapshot.phase.isRunning,
+                remainingSeconds: snapshot.remainingSeconds
+            )
+        }
+
+        XCTAssertFalse(keepsScreenAwake(at: referenceDate))
+        try engine.startFocus(isPro: false, now: referenceDate)
+        XCTAssertTrue(keepsScreenAwake(at: referenceDate))
+
+        try engine.pause(at: referenceDate.addingTimeInterval(1))
+        XCTAssertFalse(keepsScreenAwake(at: referenceDate.addingTimeInterval(1)))
+        try engine.resume(at: referenceDate.addingTimeInterval(2))
+        XCTAssertTrue(keepsScreenAwake(at: referenceDate.addingTimeInterval(2)))
+
+        let focusEnd = try XCTUnwrap(engine.endDate)
+        XCTAssertFalse(keepsScreenAwake(at: focusEnd))
+        XCTAssertNotNil(engine.advance(at: focusEnd))
+        try engine.startBreak(now: focusEnd)
+        XCTAssertTrue(keepsScreenAwake(at: focusEnd))
+
+        try engine.pause(at: focusEnd.addingTimeInterval(1))
+        XCTAssertFalse(keepsScreenAwake(at: focusEnd.addingTimeInterval(1)))
+        try engine.resume(at: focusEnd.addingTimeInterval(2))
+        XCTAssertTrue(keepsScreenAwake(at: focusEnd.addingTimeInterval(2)))
+
+        let breakEnd = try XCTUnwrap(engine.endDate)
+        XCTAssertFalse(keepsScreenAwake(at: breakEnd))
+        XCTAssertNotNil(engine.advance(at: breakEnd))
+        XCTAssertFalse(keepsScreenAwake(at: breakEnd))
+    }
 
     func testTwentyFiveMinuteFocusUsesAbsoluteEndDate() throws {
         let sessionID = UUID()
@@ -114,6 +214,91 @@ final class PomodoroEngineTests: XCTestCase {
         XCTAssertEqual(FocusTimerLayoutPolicy.ringSize(in: CGSize(width: 64, height: 640)), 1)
         XCTAssertEqual(FocusTimerLayoutPolicy.ringSize(in: CGSize(width: 320, height: 640)), 214)
         XCTAssertEqual(FocusTimerLayoutPolicy.ringSize(in: CGSize(width: 402, height: 874)), 286)
+    }
+
+    func testTimerDisplayModeHasFourStableChoicesAndSafeFallback() {
+        XCTAssertEqual(
+            TimerDisplayMode.allCases,
+            [.ringAndTime, .filledDial, .timeOnly, .ringOnly]
+        )
+        XCTAssertEqual(
+            TimerDisplayMode.resolved("future-unknown-mode"),
+            .ringAndTime
+        )
+        XCTAssertEqual(Prefs().timerDisplayModeRawValue, "ringAndTime")
+    }
+
+    func testTimerDisplayProgressClampsAndFilledDialCountsDown() {
+        XCTAssertEqual(FocusTimerDisplayPolicy.normalizedProgress(-1), 0)
+        XCTAssertEqual(FocusTimerDisplayPolicy.normalizedProgress(0.25), 0.25)
+        XCTAssertEqual(FocusTimerDisplayPolicy.normalizedProgress(2), 1)
+        XCTAssertEqual(FocusTimerDisplayPolicy.normalizedProgress(.nan), 0)
+        XCTAssertEqual(FocusTimerDisplayPolicy.normalizedProgress(.infinity), 0)
+
+        XCTAssertEqual(FocusTimerDisplayPolicy.remainingFraction(for: -1), 1)
+        XCTAssertEqual(FocusTimerDisplayPolicy.remainingFraction(for: 0), 1)
+        XCTAssertEqual(FocusTimerDisplayPolicy.remainingFraction(for: 0.5), 0.5)
+        XCTAssertEqual(FocusTimerDisplayPolicy.remainingFraction(for: 1), 0)
+        XCTAssertEqual(FocusTimerDisplayPolicy.remainingFraction(for: 2), 0)
+    }
+
+    func testFilledDialRemovesElapsedAreaClockwiseFromTwelveOClock() {
+        let rect = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let full = FocusRemainingDialShape(elapsedProgress: 0).path(in: rect)
+        XCTAssertTrue(full.contains(CGPoint(x: 75, y: 25)))
+        XCTAssertTrue(full.contains(CGPoint(x: 25, y: 25)))
+
+        let quarterElapsed = FocusRemainingDialShape(
+            elapsedProgress: 0.25
+        ).path(in: rect)
+        XCTAssertFalse(quarterElapsed.contains(CGPoint(x: 75, y: 25)))
+        XCTAssertTrue(quarterElapsed.contains(CGPoint(x: 75, y: 75)))
+        XCTAssertTrue(quarterElapsed.contains(CGPoint(x: 25, y: 75)))
+        XCTAssertTrue(quarterElapsed.contains(CGPoint(x: 25, y: 25)))
+
+        let empty = FocusRemainingDialShape(elapsedProgress: 1).path(in: rect)
+        XCTAssertTrue(empty.isEmpty)
+    }
+
+    @MainActor
+    func testEveryTimerDisplayModeRendersAtPhoneScale() throws {
+        var renderedImages: [Data] = []
+
+        for mode in TimerDisplayMode.allCases {
+            let content = ZStack {
+                Color.black
+                FocusTimerDisplay(
+                    size: 240,
+                    progress: 0.25,
+                    remainingTime: "18:45",
+                    accessibleRemainingTime: "残り18分45秒",
+                    modeLabel: "FOCUS",
+                    displayMode: mode,
+                    isBreakMode: false,
+                    isPaused: false,
+                    accent: .red,
+                    reduceMotion: true
+                )
+            }
+            .frame(width: 260, height: 260)
+
+            let renderer = ImageRenderer(content: content)
+            renderer.scale = 2
+            let image = try XCTUnwrap(renderer.uiImage, mode.rawValue)
+            XCTAssertEqual(image.size, CGSize(width: 260, height: 260))
+            renderedImages.append(try XCTUnwrap(image.pngData(), mode.rawValue))
+
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "Timer display — \(mode.rawValue)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+
+        XCTAssertEqual(
+            Set(renderedImages).count,
+            TimerDisplayMode.allCases.count,
+            "Each timer mode must produce a distinct visual treatment"
+        )
     }
 
     func testInvalidCustomDurationsAreRejected() {

@@ -2430,6 +2430,43 @@ enum TimerCompletionHaptic: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// The visual treatment used while a focus or break countdown is running.
+/// Raw values are persisted and synchronized, so keep them stable.
+enum TimerDisplayMode: String, CaseIterable, Identifiable, Sendable {
+    case ringAndTime
+    case filledDial
+    case timeOnly
+    case ringOnly
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .ringAndTime: "標準（円と時間）"
+        case .filledDial: "色の円"
+        case .timeOnly: "時間のみ"
+        case .ringOnly: "外周のみ"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .ringAndTime:
+            "外周、残り時間、経過率を表示します"
+        case .filledDial:
+            "色の面が残り時間に合わせて減ります。数字は表示しません"
+        case .timeOnly:
+            "残り時間の数字だけを大きく表示します"
+        case .ringOnly:
+            "標準表示から残り時間の数字を隠します"
+        }
+    }
+
+    static func resolved(_ rawValue: String) -> Self {
+        Self(rawValue: rawValue) ?? .ringAndTime
+    }
+}
+
 @Model
 final class Prefs {
     var id: UUID = UUID()
@@ -2462,6 +2499,8 @@ final class Prefs {
     var keepScreenAwakeMutationID: UUID?
     var preferredFocusMinutesRevision: Int = 0
     var preferredFocusMinutesMutationID: UUID?
+    var timerDisplayModeRevision: Int = 0
+    var timerDisplayModeMutationID: UUID?
     var usagePurposeRevision: Int = 0
     var usagePurposeMutationID: UUID?
     /// Reset generation for activity-derived counters only. Settings and
@@ -2491,6 +2530,7 @@ final class Prefs {
     var isPro: Bool = false
     var keepScreenAwake: Bool = true
     var preferredFocusMinutes: Int = Constants.Timer.twentyFiveMinutes
+    var timerDisplayModeRawValue: String = TimerDisplayMode.ringAndTime.rawValue
     /// Synced user intent. Local AppStorage mirrors these values for fast UI
     /// startup, while CloudKit makes another or replacement iPhone reopen the
     /// same experience instead of showing first-run setup again.
@@ -2521,6 +2561,7 @@ final class Prefs {
         isPro: Bool = false,
         keepScreenAwake: Bool = true,
         preferredFocusMinutes: Int = Constants.Timer.twentyFiveMinutes,
+        timerDisplayModeRawValue: String = TimerDisplayMode.ringAndTime.rawValue,
         hasCompletedOnboarding: Bool = false,
         usagePurposeRawValue: String = UsagePurpose.study.rawValue,
         usagePurposeUpdatedAt: Date? = nil,
@@ -2558,6 +2599,9 @@ final class Prefs {
         self.isPro = false
         self.keepScreenAwake = keepScreenAwake
         self.preferredFocusMinutes = preferredFocusMinutes
+        self.timerDisplayModeRawValue = TimerDisplayMode.resolved(
+            timerDisplayModeRawValue
+        ).rawValue
         self.hasCompletedOnboarding = hasCompletedOnboarding
         self.usagePurposeRawValue = UsagePurpose(
             rawValue: usagePurposeRawValue
@@ -2603,6 +2647,7 @@ enum PrefsSyncPolicy {
         case externalTheme
         case keepScreenAwake
         case preferredFocusMinutes
+        case timerDisplayMode
         case usagePurpose
     }
 
@@ -2623,6 +2668,7 @@ enum PrefsSyncPolicy {
         let showsThemeNameExternally: Bool
         let keepScreenAwake: Bool
         let preferredFocusMinutes: Int
+        let timerDisplayMode: TimerDisplayMode
         let hasCompletedOnboarding: Bool
         let usagePurposeRawValue: String
         let usagePurposeUpdatedAt: Date?
@@ -2676,6 +2722,7 @@ enum PrefsSyncPolicy {
         let externalTheme = try winner(for: .externalTheme, in: values)
         let keepAwake = try winner(for: .keepScreenAwake, in: values)
         let focusMinutes = try winner(for: .preferredFocusMinutes, in: values)
+        let timerDisplay = try winner(for: .timerDisplayMode, in: values)
         let purpose = try winner(for: .usagePurpose, in: values)
         let currentValues = values.filter {
             $0.activityEpochID == currentEpochID
@@ -2703,6 +2750,10 @@ enum PrefsSyncPolicy {
             keepScreenAwake: keepAwake?.keepScreenAwake ?? true,
             preferredFocusMinutes: focusMinutes?.preferredFocusMinutes
                 ?? Constants.Timer.twentyFiveMinutes,
+            timerDisplayMode: TimerDisplayMode.resolved(
+                timerDisplay?.timerDisplayModeRawValue
+                    ?? TimerDisplayMode.ringAndTime.rawValue
+            ),
             hasCompletedOnboarding: values.contains(
                 where: \.hasCompletedOnboarding
             ),
@@ -3156,6 +3207,8 @@ enum PrefsSyncPolicy {
             return (Constants.Timer.customMinimumMinutes
                     ... Constants.Timer.customMaximumMinutes)
                 .contains(value.preferredFocusMinutes)
+        case .timerDisplayMode:
+            return TimerDisplayMode(rawValue: value.timerDisplayModeRawValue) != nil
         case .usagePurpose:
             return UsagePurpose(rawValue: value.usagePurposeRawValue) != nil
         }
@@ -3174,6 +3227,7 @@ enum PrefsSyncPolicy {
         case .externalTheme: Stamp(revision: value.externalThemeRevision, mutationID: value.externalThemeMutationID)
         case .keepScreenAwake: Stamp(revision: value.keepScreenAwakeRevision, mutationID: value.keepScreenAwakeMutationID)
         case .preferredFocusMinutes: Stamp(revision: value.preferredFocusMinutesRevision, mutationID: value.preferredFocusMinutesMutationID)
+        case .timerDisplayMode: Stamp(revision: value.timerDisplayModeRevision, mutationID: value.timerDisplayModeMutationID)
         case .usagePurpose: Stamp(revision: value.usagePurposeRevision, mutationID: value.usagePurposeMutationID)
         }
     }
@@ -3209,6 +3263,8 @@ enum PrefsSyncPolicy {
             value.keepScreenAwakeRevision = revision; value.keepScreenAwakeMutationID = mutationID
         case .preferredFocusMinutes:
             value.preferredFocusMinutesRevision = revision; value.preferredFocusMinutesMutationID = mutationID
+        case .timerDisplayMode:
+            value.timerDisplayModeRevision = revision; value.timerDisplayModeMutationID = mutationID
         case .usagePurpose:
             value.usagePurposeRevision = revision; value.usagePurposeMutationID = mutationID
         }
@@ -3262,6 +3318,10 @@ enum PrefsSyncPolicy {
             if target.preferredFocusMinutes != source.preferredFocusMinutes {
                 target.preferredFocusMinutes = source.preferredFocusMinutes
             }
+        case .timerDisplayMode:
+            if target.timerDisplayModeRawValue != source.timerDisplayModeRawValue {
+                target.timerDisplayModeRawValue = source.timerDisplayModeRawValue
+            }
         case .usagePurpose:
             if target.usagePurposeRawValue != source.usagePurposeRawValue {
                 target.usagePurposeRawValue = source.usagePurposeRawValue
@@ -3312,6 +3372,8 @@ enum PrefsSyncPolicy {
             lhs.keepScreenAwake == rhs.keepScreenAwake
         case .preferredFocusMinutes:
             lhs.preferredFocusMinutes == rhs.preferredFocusMinutes
+        case .timerDisplayMode:
+            lhs.timerDisplayModeRawValue == rhs.timerDisplayModeRawValue
         case .usagePurpose:
             lhs.usagePurposeRawValue == rhs.usagePurposeRawValue
                 && lhs.usagePurposeUpdatedAt == rhs.usagePurposeUpdatedAt
@@ -3331,7 +3393,7 @@ enum PrefsSyncPolicy {
         case .externalTheme: value.showsThemeNameExternally ? 0 : 1
         case .keepScreenAwake: value.keepScreenAwake ? 0 : 1
         case .timerCompletionSound, .timerCompletionHaptic,
-             .preferredFocusMinutes, .usagePurpose:
+             .preferredFocusMinutes, .timerDisplayMode, .usagePurpose:
             0
         }
     }

@@ -103,6 +103,20 @@ enum PomodoroPhase: String, Codable, Sendable {
     }
 }
 
+enum TimerScreenAwakePolicy {
+    static func shouldKeepScreenAwake(
+        preferenceEnabled: Bool,
+        sceneIsActive: Bool,
+        timerIsRunning: Bool,
+        remainingSeconds: Int
+    ) -> Bool {
+        preferenceEnabled
+            && sceneIsActive
+            && timerIsRunning
+            && remainingSeconds > 0
+    }
+}
+
 struct PomodoroSnapshot: Equatable, Sendable {
     let phase: PomodoroPhase
     let remainingSeconds: Int

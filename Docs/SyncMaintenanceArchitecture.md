@@ -75,16 +75,19 @@ Version 1.0はまだpublic buildがなく、既存production user dataをmigrati
 | `Subject` | `syncRecordID`、`contentRevision`、`contentMutationID`、`deletedAt` |
 | `StudySession` | `syncRecordID` |
 | `AchievementStone` | `syncRecordID`、`deletionRevision`、`deletionMutationID`、`restoredDeletionMutationID`（`revision`、`deletedAt`、`updatedAt`と併用） |
-| `Prefs` | `syncRecordID`、`settingsWriterID`、`timerCompletionSoundRawValue`、`timerCompletionHapticRawValue`、下記12 groupのrevision／mutation pair |
+| `Prefs` | `syncRecordID`、`settingsWriterID`、`timerCompletionSoundRawValue`、`timerCompletionHapticRawValue`、`timerDisplayModeRawValue`、下記13 groupのrevision／mutation pair |
 | `ActivityResetMarker` | 追加なし。既存の`id`／`epochID`／`sequence`を使用 |
 | `SyncedFocusTimer` | 追加なし。既存の`id`／`sessionID`／`revision`を使用 |
 | `FocusTimerDeviceClaim` | `syncRecordID` |
 
-`Prefs`の12 groupは`sound`、`haptics`、`timerCompletionSound`、`timerCompletionHaptic`、`rareReward`、
+`Prefs`の13 groupは`sound`、`haptics`、`timerCompletionSound`、`timerCompletionHaptic`、`rareReward`、
 `reminderEnabled`、`reminderTime`、`shareIncludesManual`、`externalTheme`、`keepScreenAwake`、
-`preferredFocusMinutes`、`usagePurpose`です。`timerCompletionSound`は`timerCompletionSoundRawValue`、
+`preferredFocusMinutes`、`timerDisplayMode`、`usagePurpose`です。`timerCompletionSound`は`timerCompletionSoundRawValue`、
 `timerCompletionSoundRevision`、`timerCompletionSoundMutationID`を持ち、`timerCompletionHaptic`は
 `timerCompletionHapticRawValue`、`timerCompletionHapticRevision`、`timerCompletionHapticMutationID`を持ちます。
+`timerDisplayMode`は`timerDisplayModeRawValue`、`timerDisplayModeRevision`、
+`timerDisplayModeMutationID`を持ち、`ringAndTime`、`filledDial`、`timeOnly`、`ringOnly`の4種類を独立して
+同期します。既定値と未知raw valueの表示fallbackは`ringAndTime`です。
 `usagePurpose`は既存CloudKit schemaとJSON exportとの互換性のために保持する履歴groupです。出荷UIは
 勉強・仕事共通の一つのテーマ一覧を使い、この値で候補、設定画面、onboardingを分岐しません。
 各groupは、たとえば`soundRevision`と`soundMutationID`のように、`<group>Revision`と
@@ -99,8 +102,9 @@ Version 1.0はまだpublic buildがなく、既存production user dataをmigrati
 未観測の新しい削除tokenをackしていなければ復活根拠にしません。
 
 productionへpromoteする前に、CloudKit Consoleの**development environmentだけ**をclearし、最終RCで
-7 modelを再initializeします。上記field名・型・defaultをdevelopment schemaで照合し、clean install、
-partial delivery、2台offline競合、exportを検証した同一schemaだけをproductionへdeployします。
+7 modelを再initializeします。上記field名・型・default（`timerDisplayModeRawValue = ringAndTime`を含む）を
+development schemaで照合し、clean install、4種類の表示選択、partial delivery、2台offline競合、exportを
+検証した同一schemaだけをproductionへdeployします。
 production environmentはclear／resetせず、schemaを再生成した別binaryを先に配布しません。public release
 後のfield変更は、このpre-release clear手順を再利用せず、released store fixtureとversioned migrationで
 別releaseとして扱います。
@@ -195,7 +199,7 @@ canonical rowへ統合する許可ではありません。
 `SyncMaintenanceSliceWorker`が後続sliceで実行します。
 
 - 既知の旧reset世代だけを対象にしたsource rowの物理削除
-- `Prefs`を12 field groupごとに、全物理rowを保持したまま論理解決
+- `Prefs`を13 field groupごとに、全物理rowを保持したまま論理解決
 - 同じlogical UUIDを持つ`StudySession`を、全物理rowを保持したまま論理解決
 - 同じsession UUIDを持つfocus完走／active recovery／claimを、全物理rowを保持したまま論理解決
 - materialized `StudySession`で閉じたことを証明したfocus active tailだけを別phaseで削除
@@ -446,7 +450,7 @@ markerが存在しないepochを削除queryの対象にしなければ、unknown
 
 ### Phase 1: singleton fast repair
 
-- `Prefs`を全物理row保持のまま12 field groupごとに決定論的解決
+- `Prefs`を全物理row保持のまま13 field groupごとに決定論的解決
 - `GachaState` singletonのcanonical確認
 - `Bedrock`の小さい統合
 - `localFocusAwaitingResetMarker`のexact marker再確認
@@ -766,7 +770,7 @@ wall-clockだけのperformance testは端末差で不安定です。構造budget
 
 次の正規化snapshotを比較します。
 
-- `Prefs`の12 field-group winner、writer ownership、revision／mutation stamp
+- `Prefs`の13 field-group winner、writer ownership、revision／mutation stamp
 - logical session数、質量、rare kind、source、`isBaked`、subject snapshot
 - achievement数、kind、note、日時、subject snapshot
 - stratum membership、grams、count
@@ -799,7 +803,7 @@ worker完了後に同じ全phaseをもう一度実行し、`writeCount == 0`か�
 さらにsource resolver単独の初回実行も`writeCount == 0`であり、foreign `Prefs` rowや同じlogical IDの
 別physical rowを変更しないことを検査します。
 
-`Prefs`は12 groupを個別に検査します。別端末が異なるgroupを同時変更した場合の合成、同じgroupの
+`Prefs`は13 groupを個別に検査します。別端末が異なるgroupを同時変更した場合の合成、同じgroupの
 false→true／true→false、legacy／stale copyの後着、reverse入力、同じrevisionで異なるmutation IDの
 stable tie、同一stampでpayloadが異なる場合のfail-closed、revision上限での新規変更拒否を含めます。
 `Subject`はrevision 0 tombstoneを含め削除が高revision offline renameで復活しないこと、
@@ -809,8 +813,9 @@ tokenを`restoredDeletionMutationID`でackした高revision restoreになるこ�
 `(row.revision, deletionMutationID ?? syncRecordID)`へ合成すること、未観測の新しい削除eventを復活させない
 ことも固定します。JSON exportには新しい`syncRecordID`、Subject revision／tombstone、Achievement
 `deletionRevision`／`deletionMutationID`／`restoredDeletionMutationID`、`settingsWriterID`、
-`timerCompletionSoundRawValue`、`timerCompletionHapticRawValue`、24個のPrefs stamp fieldを含め、raw evidenceを
-失わないことを固定します。
+`timerCompletionSoundRawValue`、`timerCompletionHapticRawValue`、`timerDisplayModeRawValue`、26個のPrefs
+stamp fieldを含め、raw evidenceを失わないことを固定します。`timerDisplayMode`は4つの既知raw valueが
+保存・復元・端末間同期され、未知raw valueを有効なwinnerとして採用しないことも検査します。
 
 ### 13.5 Historyとfallback
 

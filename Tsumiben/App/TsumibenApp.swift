@@ -42,12 +42,26 @@ enum PersistenceLaunchScenePolicy {
     }
 }
 
+private struct TsumibenReduceMotionOverrideKey: EnvironmentKey {
+    static let defaultValue: Bool? = nil
+}
+
+extension EnvironmentValues {
+    /// Test dependency seam. Production never supplies a value and continues
+    /// to follow SwiftUI's live accessibility environment.
+    var tsumibenReduceMotionOverride: Bool? {
+        get { self[TsumibenReduceMotionOverrideKey.self] }
+        set { self[TsumibenReduceMotionOverrideKey.self] = newValue }
+    }
+}
+
 enum LocalPreviewLaunchPolicy {
 #if DEBUG
     static let environmentKey = "TSUMIBEN_LOCAL_PREVIEW"
     static let uiTestEnvironmentKey = "TSUMIBEN_UI_TEST_MODE"
     static let persistentUITestStoreEnvironmentKey = "TSUMIBEN_UI_TEST_PERSISTENT_STORE"
     static let accessibility5EnvironmentKey = "TSUMIBEN_UI_TEST_AX5"
+    static let reduceMotionEnvironmentKey = "TSUMIBEN_UI_TEST_REDUCE_MOTION"
     static let unselectedRareRewardUITestEnvironmentKey = "TSUMIBEN_UI_TEST_RARE_REWARD_UNSELECTED"
     static let rareRewardOnboardingUITestEnvironmentKey = "TSUMIBEN_UI_TEST_RARE_REWARD_ONBOARDING"
 #else
@@ -57,6 +71,7 @@ enum LocalPreviewLaunchPolicy {
     static let uiTestEnvironmentKey = ""
     static let persistentUITestStoreEnvironmentKey = ""
     static let accessibility5EnvironmentKey = ""
+    static let reduceMotionEnvironmentKey = ""
     static let unselectedRareRewardUITestEnvironmentKey = ""
     static let rareRewardOnboardingUITestEnvironmentKey = ""
 #endif
@@ -91,6 +106,25 @@ enum LocalPreviewLaunchPolicy {
     ) -> Bool {
         isUITestMode(environment: environment, isDebugBuild: isDebugBuild)
             && environment[accessibility5EnvironmentKey] == "1"
+    }
+
+    /// Overrides the real SwiftUI accessibility environment only for an
+    /// explicitly opted-in Debug UI-test process. This exercises the same
+    /// production path as the device setting instead of mutating JarScene from
+    /// a test probe after the view has already appeared.
+    static func forcedReduceMotion(
+        environment: [String: String],
+        isDebugBuild: Bool
+    ) -> Bool? {
+        guard isUITestMode(
+            environment: environment,
+            isDebugBuild: isDebugBuild
+        ) else { return nil }
+        switch environment[reduceMotionEnvironmentKey] {
+        case "1": return true
+        case "0": return false
+        default: return nil
+        }
     }
 
     /// An unsigned Debug simulator app cannot open CloudKit: Core Data starts
@@ -330,12 +364,27 @@ private struct TsumibenPersistenceLaunchHost: View {
         _ session: TsumibenPersistenceSession
     ) -> some View {
 #if DEBUG && targetEnvironment(simulator)
-        if LocalPreviewLaunchPolicy.forcesAccessibility5(
-            environment: ProcessInfo.processInfo.environment,
+        let environment = ProcessInfo.processInfo.environment
+        let forcesAccessibility5 = LocalPreviewLaunchPolicy.forcesAccessibility5(
+            environment: environment,
             isDebugBuild: true
-        ) {
+        )
+        let forcedReduceMotion = LocalPreviewLaunchPolicy.forcedReduceMotion(
+            environment: environment,
+            isDebugBuild: true
+        )
+        if forcesAccessibility5 {
+            if let forcedReduceMotion {
+                baseRootContent(session)
+                    .environment(\.dynamicTypeSize, .accessibility5)
+                    .environment(\.tsumibenReduceMotionOverride, forcedReduceMotion)
+            } else {
+                baseRootContent(session)
+                    .environment(\.dynamicTypeSize, .accessibility5)
+            }
+        } else if let forcedReduceMotion {
             baseRootContent(session)
-                .environment(\.dynamicTypeSize, .accessibility5)
+                .environment(\.tsumibenReduceMotionOverride, forcedReduceMotion)
         } else {
             baseRootContent(session)
         }

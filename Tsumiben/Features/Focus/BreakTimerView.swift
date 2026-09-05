@@ -183,6 +183,7 @@ struct BreakTimerView: View {
         .task { await prepareBreak() }
         .onReceive(ticker) { date in
             now = date
+            updateIdleTimer(at: date)
             if remaining == 0,
                scenePhase == .active,
                notificationAuthorizationIsCurrent {
@@ -213,7 +214,11 @@ struct BreakTimerView: View {
                   notifications.isAuthorized else { return }
             scheduleBreakNotification(endDate: endDate)
         }
+        .onChange(of: resolvedPreferences?.keepScreenAwake) { _, _ in
+            updateIdleTimer()
+        }
         .onChange(of: scenePhase) { _, newPhase in
+            updateIdleTimer(sceneIsActive: newPhase == .active)
             if newPhase == .background {
                 didEnterBackgroundSinceLastActive = true
             }
@@ -237,6 +242,7 @@ struct BreakTimerView: View {
             }
         }
         .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
             // A CloudKit-backed RootView is intentionally torn down whenever
             // the app backgrounds. Invalidate only this view's async callbacks;
             // the explicit close/completion/account-boundary paths own the OS
@@ -356,6 +362,7 @@ struct BreakTimerView: View {
         endDate = resolvedEndDate
         clockAnchor = resolvedClockAnchor
         now = startedAt
+        updateIdleTimer()
         FocusPersistence.saveBreak(recovery, at: startedAt)
         guard !Task.isCancelled, isBreakActive else { return }
         await notifications.refreshAuthorizationStatus()
@@ -417,6 +424,7 @@ struct BreakTimerView: View {
         }
         completionAlert.stop(sessionID: sessionID)
         isBreakActive = false
+        UIApplication.shared.isIdleTimerDisabled = false
         FocusPersistence.clearBreak()
         stopNotificationScheduling(state: .idle)
         dismiss()
@@ -426,6 +434,7 @@ struct BreakTimerView: View {
     private func signalBreakCompletionIfNeeded(playsSensoryFeedback: Bool) {
         guard !didSignalCompletion else { return }
         didSignalCompletion = true
+        UIApplication.shared.isIdleTimerDisabled = false
         stopNotificationScheduling(state: .idle)
 
         let soundOn = sensoryPreferences.soundOn
@@ -455,6 +464,30 @@ struct BreakTimerView: View {
     private func configureSensoryPreferences() {
         SoundSynth.shared.isEnabled = sensoryPreferences.soundOn
         Haptics.shared.isEnabled = sensoryPreferences.hapticsOn
+    }
+
+    @MainActor
+    private func updateIdleTimer(
+        at date: Date = .now,
+        sceneIsActive: Bool? = nil
+    ) {
+        let currentRemainingSeconds = BreakRecoveryPolicy.remainingSeconds(
+            minutes: minutes,
+            endDate: endDate,
+            at: date
+        )
+        let shouldKeepScreenAwake =
+            TimerScreenAwakePolicy.shouldKeepScreenAwake(
+                preferenceEnabled:
+                    resolvedPreferences?.keepScreenAwake ?? false,
+                sceneIsActive: sceneIsActive ?? (scenePhase == .active),
+                timerIsRunning:
+                    isBreakActive && !didSignalCompletion,
+                remainingSeconds: currentRemainingSeconds
+            )
+        guard UIApplication.shared.isIdleTimerDisabled != shouldKeepScreenAwake
+        else { return }
+        UIApplication.shared.isIdleTimerDisabled = shouldKeepScreenAwake
     }
 
     @MainActor

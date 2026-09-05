@@ -1,6 +1,6 @@
 # つみべん公式版 — ローカルArchive／App Storeリリース手順
 
-更新日: 2026-09-03
+更新日: 2026-09-06
 
 この手順は、許可済みMacのXcode OrganizerからiPhone版をArchive、Validate、Uploadするための
 正本です。Xcode Cloudは現時点で前提にしません。Mac／Mac Catalyst版は作成しません。
@@ -35,7 +35,7 @@ buildするよう求めています。開始時に[Upcoming Requirements](https:
    availabilityを完成させる
 6. 初回のNon-Consumableは新しいapp versionと同じsubmissionへ追加する
 7. `tumiben.hinoshiba.com`のDNSをGitHub Pagesの指示どおり設定し、custom domain検証とHTTPS強制を有効化する
-8. Privacy、Support、Terms、販売条件URLを公開し、redirectなしのHTTPS 200を確認する
+8. Privacy、Support、Termsと購入前案内専用の販売者情報URLを公開し、redirectなしのHTTPS 200を確認する。販売者情報URLはPro案内とアプリの購入前案内からだけリンクし、グローバルheader／footer／sitemapへ掲載せず、`noindex`にする
 9. App Privacy、年齢区分、輸出コンプライアンス、accessibility回答を実装と照合する
 10. 「iPhone/iPad appをApple silicon Macで提供」とVision Proでの提供は、未検証のため無効にする
 11. Sign-in requiredはunchecked、Demo accountはnoneとする。Review Notesには、clean installで同格の
@@ -67,6 +67,9 @@ App Store版はproduction CloudKit environmentだけを利用します。SwiftDa
   再import／migration不可を画面と公開文面で確認すること
 - iCloudはtheme名、成果memo、記録、設定、進行中timerのprivate同期と、選択時・各launch／resumeの
   online account確認を選択確定前に表示すること
+- `timerDisplayModeRawValue`と対応するrevision／mutation pairが最終development schemaに存在し、4種類の
+  timer表示選択、既定値と未知値の`ringAndTime`へのfallback、offline競合、2台間同期、JSON raw exportを
+  検証できること
 - iCloud選択後、通信不可／account不明／A→Bではstoreを開かずdataを削除しないこと。Aへ戻ってonline
   確認できた場合だけ同じA namespaceを再び開くこと
 - schema migrationと古いversionからの起動
@@ -82,6 +85,7 @@ offlineで通常のSwiftData storeを開けるのはlocal-only選択時だけで
 online account確認に失敗すればfail closedにします。version 1.0のproduction gateに削除用zone／record
 schemaや削除transaction試験を含めません。
 
+Version 1.0の最終Prefs schemaは`timerDisplayMode`を含む13 group、26個のrevision／mutation stamp fieldです。
 production schemaは削除・rename前提で運用せず、後方互換なadditive changeを基本にします。
 詳細はAppleの[Deploying an iCloud Container’s Schema](https://developer.apple.com/documentation/cloudkit/deploying-an-icloud-container-s-schema)
 と`Docs/SyncMaintenanceArchitecture.md`を参照します。
@@ -102,7 +106,7 @@ xcodegen generate
 - App Iconが1024×1024、alphaなし
 - Release buildに`TSUMIBEN_UI_TEST_*`、`TSUMIBEN_LOCAL_PREVIEW`、
   `TSUMIBEN_RUN_40_YEAR_PERSISTENCE`のDebug補助が含まれない
-- Pages、Privacy、Support、Terms、販売条件、OG、font licenseが公開済み
+- Pages、Privacy、Support、Terms、OG、font licenseが公開済みで、購入前案内専用の販売者情報URLも直接HTTPS 200
 - screenshot 5枚はproduction UIをDebug-only fixtureでcapture済みで、UI test 1/1 pass、05に無効化した
   direct deletion rowが写っていない。署名済みRelease実機とのvisual parityを確認し、差があれば再captureする
 - App Store metadataと実画面に未実装・Mac対応・Web決済の記述がない
@@ -133,7 +137,9 @@ unit test、主要UI test、static analyzerを実行します。40年soakはrele
 - Home／Lock Screen Widgetが利用者dataを表示せずアプリを開くこと
 - Live Activityの開始、pause、resume、期限到達、cancel、完了後dismiss、手動dismiss後に再生成しないこと、
   SettingsでOFFにすると即終了すること。全状態でtheme名、memo、質量、account情報を表示しないこと
-- 画面をロックさせないoptionのON/OFFとbackground移行
+- 「タイマー中は画面をロックしない」のON/OFF。ONでは集中、集中直後の短い／長い休憩、Homeからの
+  単独休憩が前面で残時間のある間だけ点灯を維持し、pause、期限到達、skip／close、backgroundで
+  即座に通常の自動ロックへ戻ること
 - iPhoneの傾き、瓶のtap位置への局所衝撃、Reduce Motion
 - onboardingの任意のためし粒を「次へ」で省略でき、勉強／仕事の利用目的を選ばず最初のテーマ1件で完了すること
 - 勉強・仕事共通の一つのテーマ一覧での追加・編集・並べ替え・削除

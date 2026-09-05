@@ -44,6 +44,11 @@ enum AccumulationWeeklyPolicy {
     }
 }
 
+enum AccumulationClusterStorage: Equatable, Sendable {
+    case aggregate(hasStoredLineage: Bool)
+    case legacyStratum(hasSessionReferences: Bool)
+}
+
 struct AccumulationClusterSummary: Identifiable, Equatable, Sendable {
     let id: UUID
     let level: Int
@@ -59,9 +64,301 @@ struct AccumulationClusterSummary: Identifiable, Equatable, Sendable {
     let manualPebbleCount: Int
     let goldPebbleCount: Int
     let prismPebbleCount: Int
+    let storage: AccumulationClusterStorage
+
+    init(
+        id: UUID,
+        level: Int,
+        pebbleCount: Int,
+        grams: Int,
+        periodStart: Date,
+        periodEnd: Date,
+        colorMix: [StratumColorFraction],
+        subjectMix: [AggregateSubjectFraction],
+        childCount: Int,
+        sessionIDs: [UUID],
+        measuredPebbleCount: Int,
+        manualPebbleCount: Int,
+        goldPebbleCount: Int,
+        prismPebbleCount: Int,
+        storage: AccumulationClusterStorage = .aggregate(hasStoredLineage: true)
+    ) {
+        self.id = id
+        self.level = level
+        self.pebbleCount = pebbleCount
+        self.grams = grams
+        self.periodStart = periodStart
+        self.periodEnd = periodEnd
+        self.colorMix = Self.normalizedColorMix(colorMix)
+        // Compatibility aggregates may contain presentation labels synthesized
+        // from a legacy color mix (for example, "過去の集中"). Those labels are
+        // not evidence of the user's original themes, so never surface them as
+        // a stored theme breakdown.
+        switch storage {
+        case .aggregate(let hasStoredLineage) where hasStoredLineage:
+            self.subjectMix = Self.normalizedSubjectMix(subjectMix)
+        case .aggregate, .legacyStratum:
+            self.subjectMix = []
+        }
+        self.childCount = childCount
+        self.sessionIDs = sessionIDs
+        self.measuredPebbleCount = measuredPebbleCount
+        self.manualPebbleCount = manualPebbleCount
+        self.goldPebbleCount = goldPebbleCount
+        self.prismPebbleCount = prismPebbleCount
+        self.storage = storage
+    }
+
+    private static func normalizedColorMix(
+        _ values: [StratumColorFraction]
+    ) -> [StratumColorFraction] {
+        var totals: [String: Double] = [:]
+        for value in values
+        where value.fraction.isFinite && value.fraction > 0 {
+            let hex = value.hex.trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased()
+            guard !hex.isEmpty else { continue }
+            let combined = totals[hex, default: 0] + value.fraction
+            guard combined.isFinite else { continue }
+            totals[hex] = combined
+        }
+        let total = totals.values.reduce(0, +)
+        guard total.isFinite, total > 0 else { return [] }
+        let ordered = totals.sorted { lhs, rhs in
+            if lhs.value == rhs.value { return lhs.key < rhs.key }
+            return lhs.value > rhs.value
+        }
+        var accumulated = 0.0
+        return ordered.enumerated().map { index, item in
+            let fraction: Double
+            if index == ordered.indices.last {
+                fraction = max(0, 1 - accumulated)
+            } else {
+                fraction = item.value / total
+                accumulated += fraction
+            }
+            return StratumColorFraction(hex: item.key, fraction: fraction)
+        }
+    }
+
+    private static func normalizedSubjectMix(
+        _ values: [AggregateSubjectFraction]
+    ) -> [AggregateSubjectFraction] {
+        struct Key: Hashable {
+            let name: String
+            let colorHex: String
+        }
+
+        var counts: [Key: Int] = [:]
+        for value in values where value.pebbleCount > 0 {
+            let name = value.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let colorHex = value.colorHex
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased()
+            guard !name.isEmpty, !colorHex.isEmpty else { continue }
+            let key = Key(name: name, colorHex: colorHex)
+            counts[key] = NonnegativeIntPolicy.adding(
+                counts[key, default: 0],
+                value.pebbleCount
+            )
+        }
+        return counts.map {
+            AggregateSubjectFraction(
+                name: $0.key.name,
+                colorHex: $0.key.colorHex,
+                pebbleCount: $0.value
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.pebbleCount == rhs.pebbleCount {
+                if lhs.name == rhs.name { return lhs.colorHex < rhs.colorHex }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
+            return lhs.pebbleCount > rhs.pebbleCount
+        }
+    }
 
     var scaleLabel: String {
         pebbleCount > 1 ? AggregatePresentation.countLabel(pebbleCount) : "一粒"
+    }
+
+    var isLegacyStratum: Bool {
+        if case .legacyStratum = storage { return true }
+        return false
+    }
+
+    var usesCompatibilityPresentation: Bool {
+        switch storage {
+        case .aggregate(let hasStoredLineage):
+            return !hasStoredLineage
+        case .legacyStratum:
+            return true
+        }
+    }
+
+    var hasStrongPreservationEvidence: Bool {
+        guard case .aggregate(let hasStoredLineage) = storage else {
+            return false
+        }
+        return hasStoredLineage
+            && hasConsistentColorAndSubjectBreakdowns
+            && hasCompleteSourceBreakdown
+    }
+
+    var hasCompleteSubjectBreakdown: Bool {
+        guard case .aggregate(let hasStoredLineage) = storage,
+              hasStoredLineage,
+              !subjectMix.isEmpty else {
+            return false
+        }
+        return NonnegativeIntPolicy.sum(subjectMix.map(\.pebbleCount))
+            == pebbleCount
+    }
+
+    var hasConsistentColorAndSubjectBreakdowns: Bool {
+        guard hasCompleteSubjectBreakdown,
+              pebbleCount > 0,
+              !colorMix.isEmpty else {
+            return false
+        }
+        var expectedByColor: [String: Double] = [:]
+        for item in subjectMix {
+            expectedByColor[item.colorHex, default: 0] +=
+                Double(item.pebbleCount) / Double(pebbleCount)
+        }
+        let actualByColor = Dictionary(
+            uniqueKeysWithValues: colorMix.map { ($0.hex, $0.fraction) }
+        )
+        guard actualByColor.keys.sorted() == expectedByColor.keys.sorted() else {
+            return false
+        }
+        return actualByColor.allSatisfy { color, fraction in
+            guard let expected = expectedByColor[color] else { return false }
+            return abs(fraction - expected) <= 0.000_001
+        }
+    }
+
+    var hasCompleteSourceBreakdown: Bool {
+        guard case .aggregate(let hasStoredLineage) = storage,
+              hasStoredLineage else {
+            return false
+        }
+        return NonnegativeIntPolicy.adding(
+            measuredPebbleCount,
+            manualPebbleCount
+        ) == pebbleCount
+    }
+
+    var canPresentStoredPeriod: Bool {
+        switch storage {
+        case .aggregate(let hasStoredLineage):
+            return hasStoredLineage
+        case .legacyStratum:
+            return true
+        }
+    }
+
+    var detailSubtitle: String {
+        usesCompatibilityPresentation
+            ? "以前の形式で保存されたまとまり粒です。"
+            : "瓶の中では、ひとつの粒で表しています。"
+    }
+
+    var preservationTitle: String {
+        hasStrongPreservationEvidence
+            ? "まとまり化で情報は削除されません"
+            : "この粒に残っている情報"
+    }
+
+    var preservationMessage: String {
+        if hasStrongPreservationEvidence {
+            return "まとまり化では元の記録を削除せず、この粒にも色・テーマ・質量の内訳と元記録への参照を保存します。記念石はまとまり粒に含めず、別の石として残します。"
+        }
+        switch storage {
+        case .aggregate(let hasStoredLineage) where hasStoredLineage:
+            return "まとまり化では元の記録を削除しません。この粒には元記録への参照と、確認できる色・粒数・質量を保存しています。合計が一致しない内訳は表示していません。記念石は別の石として残します。"
+        case .aggregate:
+            return "以前の形式から引き継いだ粒です。保存済みの粒数・質量と、記録されている内訳を表示します。元記録への参照や一部の内訳がない場合があります。記念石は別の石として残します。"
+        case .legacyStratum(let hasSessionReferences):
+            let reference = hasSessionReferences
+                ? "元記録への参照は残っています。"
+                : "この粒には元記録への参照が保存されていません。"
+            let retained = colorMix.isEmpty
+                ? "粒数・質量と、まとめた日は残っています。"
+                : "色・粒数・質量と、まとめた日は残っています。"
+            return "\(retained)\(reference)旧形式のため、テーマ・入力方法・レアの内訳はこの粒自体には保存されていません。記念石は別の石として残します。"
+        }
+    }
+}
+
+extension AccumulationClusterSummary {
+    /// Keeps Home's direct jar inspection and the overview backed by the exact
+    /// same aggregate projection. Callers explicitly choose the locally trusted
+    /// descendant IDs because cloud reconciliation owns membership separately.
+    init(aggregate: AggregatePebble, sessionIDs: [UUID]) {
+        let directSessionCount = Set(aggregate.sessionIDs).count
+        let childAggregateCount = Set(aggregate.childAggregateIDs).count
+        let hasStoredLineage = aggregate.projectionValidationVersion
+            == AggregateProjectionValidation.currentVersion && (
+                (
+                    aggregate.level == 1
+                        && directSessionCount == aggregate.pebbleCount
+                        && directSessionCount > 0
+                ) || (
+                    aggregate.level > 1
+                        && directSessionCount == 0
+                        && childAggregateCount == aggregate.childAggregateCount
+                        && (1...Constants.Jar.aggregateFanIn).contains(childAggregateCount)
+                )
+            )
+        self.init(
+            id: aggregate.id,
+            level: aggregate.level,
+            pebbleCount: aggregate.pebbleCount,
+            grams: aggregate.grams,
+            periodStart: aggregate.periodStart,
+            periodEnd: aggregate.periodEnd,
+            colorMix: aggregate.colorMix,
+            subjectMix: hasStoredLineage ? aggregate.subjectMix : [],
+            childCount: aggregate.childAggregateCount,
+            sessionIDs: sessionIDs,
+            measuredPebbleCount: aggregate.measuredPebbleCount,
+            manualPebbleCount: aggregate.manualPebbleCount,
+            goldPebbleCount: aggregate.goldPebbleCount,
+            prismPebbleCount: aggregate.prismPebbleCount,
+            storage: .aggregate(hasStoredLineage: hasStoredLineage)
+        )
+    }
+
+    /// A retired Stratum stores a trustworthy color mix and mass, but it never
+    /// stored subject/source/rare composition or the represented time range.
+    /// Keep those fields empty instead of turning rendering-only labels such as
+    /// "過去の集中" into user data.
+    init(legacyStratum: JarStratumVisual) {
+        self.init(
+            id: legacyStratum.id,
+            level: max(
+                1,
+                StrataMath.decimalAggregateLevel(
+                    forPebbleCount: legacyStratum.pebbleCount
+                )
+            ),
+            pebbleCount: legacyStratum.pebbleCount,
+            grams: legacyStratum.grams,
+            periodStart: legacyStratum.bakedAt,
+            periodEnd: legacyStratum.bakedAt,
+            colorMix: legacyStratum.colorMix,
+            subjectMix: [],
+            childCount: 0,
+            sessionIDs: legacyStratum.sessionIDs,
+            measuredPebbleCount: 0,
+            manualPebbleCount: 0,
+            goldPebbleCount: 0,
+            prismPebbleCount: 0,
+            storage: .legacyStratum(
+                hasSessionReferences: !legacyStratum.sessionIDs.isEmpty
+            )
+        )
     }
 }
 
@@ -1576,9 +1873,11 @@ private struct ClusterSummaryCard: View {
                 Text("\(cluster.scaleLabel)のまとまり")
                     .font(.subheadline.weight(.bold))
                     .fixedSize(horizontal: false, vertical: true)
-                Text(cluster.periodEnd.formatted(.dateTime.year().month().day()))
-                    .font(.caption)
-                    .foregroundStyle(TsumibenTheme.muted)
+                if cluster.canPresentStoredPeriod {
+                    Text(cluster.periodEnd.formatted(.dateTime.year().month().day()))
+                        .font(.caption)
+                        .foregroundStyle(TsumibenTheme.muted)
+                }
             }
         }
         .padding(15)
@@ -1589,7 +1888,7 @@ private struct ClusterSummaryCard: View {
     }
 }
 
-private struct ClusterDetailSheet: View {
+struct ClusterDetailSheet: View {
     let cluster: AccumulationClusterSummary
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -1603,14 +1902,42 @@ private struct ClusterDetailSheet: View {
                         .frame(width: 132, height: 132)
                         .padding(.top, 8)
                     VStack(spacing: 6) {
-                        Text("\(cluster.pebbleCount)粒を含む、まとまり粒")
+                        Text("\(cluster.pebbleCount.formatted())粒分の積み重ね")
                             .font(TsumibenTheme.brand(24))
                             .multilineTextAlignment(.center)
-                        Text("元の一粒ずつの記録は、記録画面にそのまま残っています。")
+                        Text(cluster.detailSubtitle)
                             .font(.subheadline)
                             .foregroundStyle(TsumibenTheme.muted)
                             .multilineTextAlignment(.center)
                     }
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "checkmark.shield.fill")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(TsumibenTheme.amber)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(cluster.preservationTitle)
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(TsumibenTheme.text)
+                            Text(cluster.preservationMessage)
+                                .font(.caption)
+                                .foregroundStyle(TsumibenTheme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        TsumibenTheme.amber.opacity(0.09),
+                        in: RoundedRectangle(cornerRadius: 18)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18)
+                            .stroke(TsumibenTheme.amber.opacity(0.24), lineWidth: 1)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("overview.cluster.preservation")
                     Group {
                         if dynamicTypeSize.isAccessibilitySize {
                             VStack(spacing: 10) {
@@ -1623,7 +1950,11 @@ private struct ClusterDetailSheet: View {
                         }
                     }
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("色の内訳")
+                        Text(
+                            cluster.hasStrongPreservationEvidence
+                                ? "粒数による色の内訳"
+                                : "保存されている色の内訳"
+                        )
                             .font(.caption.weight(.bold))
                             .foregroundStyle(TsumibenTheme.muted)
                         GeometryReader { proxy in
@@ -1638,7 +1969,11 @@ private struct ClusterDetailSheet: View {
                         .frame(height: 12)
                         .accessibilityHidden(true)
                         if cluster.colorMix.isEmpty {
-                            Text("色の内訳は記録されていません")
+                            Text(
+                                cluster.usesCompatibilityPresentation
+                                    ? "色の内訳は保存されていません"
+                                    : "確認できる色の内訳はありません"
+                            )
                                 .font(.caption)
                                 .foregroundStyle(TsumibenTheme.muted)
                         } else {
@@ -1653,14 +1988,16 @@ private struct ClusterDetailSheet: View {
                                 }
                             }
                         }
-                        Text(periodText)
-                            .font(.caption)
-                            .foregroundStyle(TsumibenTheme.muted)
+                        if let periodText {
+                            Text(periodText)
+                                .font(.caption)
+                                .foregroundStyle(TsumibenTheme.muted)
+                        }
                     }
                     .padding(16)
                     .background(TsumibenTheme.card, in: RoundedRectangle(cornerRadius: 18))
 
-                    if !cluster.subjectMix.isEmpty {
+                    if cluster.hasCompleteSubjectBreakdown {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("テーマの内訳")
                                 .font(.caption.weight(.bold))
@@ -1670,8 +2007,8 @@ private struct ClusterDetailSheet: View {
                                 CompositionBreakdownRow(
                                     colorHex: item.colorHex,
                                     title: item.name,
-                                    value: "\(item.pebbleCount)粒・\(percentageText(percentage))",
-                                    accessibilityDescription: "\(item.name)、\(item.pebbleCount)粒、\(spokenPercentage(percentage))"
+                                    value: "\(item.pebbleCount.formatted())粒・\(percentageText(percentage))",
+                                    accessibilityDescription: "\(item.name)、\(item.pebbleCount.formatted())粒、\(spokenPercentage(percentage))"
                                 )
                             }
                             if cluster.subjectMix.count > 5 {
@@ -1697,9 +2034,11 @@ private struct ClusterDetailSheet: View {
                         .background(TsumibenTheme.card, in: RoundedRectangle(cornerRadius: 18))
                     }
 
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 10) { sourceStats }
-                        VStack(spacing: 10) { sourceStats }
+                    if showsSourceStats {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 10) { sourceStats }
+                            VStack(spacing: 10) { sourceStats }
+                        }
                     }
                 }
                 .padding(20)
@@ -1719,14 +2058,34 @@ private struct ClusterDetailSheet: View {
         }
     }
 
-    private var periodText: String {
+    private var periodText: String? {
+        guard cluster.canPresentStoredPeriod else {
+            // Compatibility aggregates can carry either a migration date or
+            // a partially reconstructed activity range. Without provenance we
+            // cannot label that value truthfully, so omit it.
+            return nil
+        }
         let start = cluster.periodStart.formatted(.dateTime.year().month().day())
         let end = cluster.periodEnd.formatted(.dateTime.year().month().day())
+        if cluster.isLegacyStratum {
+            let label = "まとめた日"
+            return start == end
+                ? "\(label)：\(end)"
+                : "\(label)：\(start) 〜 \(end)"
+        }
         return start == end ? start : "\(start) 〜 \(end)"
     }
 
     private func formattedMass(_ grams: Int) -> String {
-        grams >= 1_000 ? String(format: "%.1fkg", Double(grams) / 1_000) : "\(grams)g"
+        if grams >= 1_000 {
+            let kilograms = (Double(grams) / 1_000).formatted(
+                .number
+                    .grouping(.automatic)
+                    .precision(.fractionLength(1))
+            )
+            return "\(kilograms)kg"
+        }
+        return "\(grams.formatted())g"
     }
 
     private var visibleSubjectMix: [AggregateSubjectFraction] {
@@ -1789,22 +2148,46 @@ private struct ClusterDetailSheet: View {
         OverviewStat(title: "質量", value: formattedMass(cluster.grams))
     }
 
+    private var showsSourceStats: Bool {
+        guard case .aggregate(let hasStoredLineage) = cluster.storage,
+              hasStoredLineage else {
+            return false
+        }
+        return cluster.hasCompleteSourceBreakdown
+            || RareRewardPresentationPolicy.containsRare(
+                goldCount: cluster.goldPebbleCount,
+                prismCount: cluster.prismPebbleCount
+            )
+    }
+
     @ViewBuilder
     private var sourceStats: some View {
-        let rareCount = NonnegativeIntPolicy.adding(
-            cluster.goldPebbleCount,
-            cluster.prismPebbleCount
-        )
-        OverviewStat(title: "タイマー", value: "\(cluster.measuredPebbleCount)粒")
-        OverviewStat(title: "手動", value: "\(cluster.manualPebbleCount)粒")
+        if cluster.hasCompleteSourceBreakdown {
+            OverviewStat(
+                title: "タイマー",
+                value: "\(cluster.measuredPebbleCount.formatted())粒"
+            )
+            OverviewStat(
+                title: "手動",
+                value: "\(cluster.manualPebbleCount.formatted())粒"
+            )
+        }
         if RareRewardPresentationPolicy.containsRare(
             goldCount: cluster.goldPebbleCount,
             prismCount: cluster.prismPebbleCount
         ) {
-            OverviewStat(
-                title: "レア",
-                value: "\(rareCount)粒"
-            )
+            if cluster.goldPebbleCount > 0 {
+                OverviewStat(
+                    title: "金の粒",
+                    value: "\(cluster.goldPebbleCount.formatted())粒"
+                )
+            }
+            if cluster.prismPebbleCount > 0 {
+                OverviewStat(
+                    title: "虹の粒",
+                    value: "\(cluster.prismPebbleCount.formatted())粒"
+                )
+            }
         }
     }
 }

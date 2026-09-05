@@ -273,23 +273,11 @@ struct AccumulationOverviewLoader: View {
                 },
                 clusters: safeDisplayedAggregates.map {
                     AccumulationClusterSummary(
-                        id: $0.id,
-                        level: $0.level,
-                        pebbleCount: $0.pebbleCount,
-                        grams: $0.grams,
-                        periodStart: $0.periodStart,
-                        periodEnd: $0.periodEnd,
-                        colorMix: $0.colorMix,
-                        subjectMix: $0.subjectMix,
-                        childCount: $0.childAggregateCount,
+                        aggregate: $0,
                         // Descendant membership is intentionally not flattened
                         // into every root. The separate bounded local leaf
                         // lookup above owns record exclusion.
-                        sessionIDs: [],
-                        measuredPebbleCount: $0.measuredPebbleCount,
-                        manualPebbleCount: $0.manualPebbleCount,
-                        goldPebbleCount: $0.goldPebbleCount,
-                        prismPebbleCount: $0.prismPebbleCount
+                        sessionIDs: []
                     )
                 },
                 milestones: achievements.map {

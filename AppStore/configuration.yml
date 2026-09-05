@@ -132,8 +132,8 @@ i_cloud_sync:
       - restoredDeletionMutationID
       - updatedAt
     prefs_writer_field: settingsWriterID
-    prefs_revision_mutation_group_count: 12
-    prefs_stamp_field_count: 24
+    prefs_revision_mutation_group_count: 13
+    prefs_stamp_field_count: 26
     prefs_timer_completion_fields:
       - timerCompletionSoundRawValue
       - timerCompletionSoundRevision
@@ -141,6 +141,16 @@ i_cloud_sync:
       - timerCompletionHapticRawValue
       - timerCompletionHapticRevision
       - timerCompletionHapticMutationID
+    prefs_timer_display_fields:
+      - timerDisplayModeRawValue
+      - timerDisplayModeRevision
+      - timerDisplayModeMutationID
+    prefs_timer_display_default: ringAndTime
+    prefs_timer_display_allowed_raw_values:
+      - ringAndTime
+      - filledDial
+      - timeOnly
+      - ringOnly
     prefs_revision_mutation_groups:
       - sound
       - haptics
@@ -153,6 +163,7 @@ i_cloud_sync:
       - externalTheme
       - keepScreenAwake
       - preferredFocusMinutes
+      - timerDisplayMode
       # Historical CloudKit/export field retained for schema compatibility.
       # The shipping UI uses one study/work theme list and does not branch on this value.
       - usagePurpose
@@ -252,11 +263,11 @@ oss_publication:
   owner_decision_required: publish_as_mixed_license_or_relicense_and_replace_excluded_assets
 release_blockers:
   - signed clean-install testing must verify the equal first-launch choices, both confirmations, immutable selection, and the complete local-only basic experience without an Apple Account or network
-  - because 1.0 is unshipped, clear the CloudKit development schema, initialize it from the final release candidate including replica identity, Subject tombstone, Achievement deletion-event and restore-ack fields, the timer-completion raw selections, and all 24 preference stamp fields, validate it, then deploy that exact seven-model source schema to production without resetting production
+  - because 1.0 is unshipped, clear the CloudKit development schema, initialize it from the final release candidate including replica identity, Subject tombstone, Achievement deletion-event and restore-ack fields, the timer-completion and timer-display raw selections, and all 26 preference stamp fields, validate it, then deploy that exact seven-model source schema to production without resetting production
   - signed two-device testing must verify source synchronization, account A-to-B blocking and return-to-A remount, bounded reconciliation, timer handoff, and fail-closed network-loss recovery
   - owner must accept the focus partition trade-off that materialized completions survive delayed cancellation
   - owner must accept the fail-closed interactive recovery ceiling when more than 256 corrupt active logical timer sessions precede a valid session, or ship a versioned reversible quarantine design
   - Japan paid-IAP operator disclosure and pre-purchase legal presentation require owner or qualified legal determination
   - owner must choose mixed-license publication or relicense and replace the excluded brand assets
-  - publish and verify the Privacy, Support, Terms, and Commercial Transactions pages over canonical HTTPS
+  - publish and verify the Privacy, Support, and Terms pages plus the noindex seller-disclosure endpoint linked only beside the Pro offer and before the in-app purchase button over canonical HTTPS
   - complete StoreKit Sandbox, signed-device, TestFlight, App Store metadata, and distribution-signing verification

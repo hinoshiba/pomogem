@@ -537,15 +537,37 @@ struct TsumibenSheetCloseButton: View {
     let action: () -> Void
 
     var body: some View {
+        styledButton
+            .frame(minWidth: 68, minHeight: 44)
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityIdentifier(accessibilityIdentifier ?? "")
+    }
+
+    @ViewBuilder
+    private var styledButton: some View {
+        if #available(iOS 26.0, *) {
+            // Toolbars supply their own Liquid Glass surface on iOS 26.
+            // A custom filled background here would render as a second shape.
+            closeButton
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.roundedRectangle(radius: 12))
+                .tint(TsumibenTheme.amber)
+        } else {
+            closeButton
+                .buttonStyle(TsumibenSheetCloseButtonStyle())
+        }
+    }
+
+    private var closeButton: some View {
         Button(action: action) {
             Text("閉じる")
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
+                .foregroundStyle(TsumibenTheme.background)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .frame(minWidth: 42)
+                .frame(minWidth: 44, minHeight: 44)
         }
-        .buttonStyle(TsumibenSheetCloseButtonStyle())
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityIdentifier(accessibilityIdentifier ?? "")
     }
 }
 

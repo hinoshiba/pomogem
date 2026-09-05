@@ -535,6 +535,9 @@ struct FocusView: View {
     private var rareRewardMode: RareRewardMode {
         PrefsConsumerPolicy.rareRewardMode(from: resolvedPreferences)
     }
+    private var timerDisplayMode: TimerDisplayMode {
+        resolvedPreferences?.timerDisplayMode ?? .ringAndTime
+    }
     private var needsRareRewardChoice: Bool {
         RareRewardReleasePolicy.isEnabled
             && recoveryOrigin == .local
@@ -662,6 +665,7 @@ struct FocusView: View {
         .task { await beginActivation() }
         .onReceive(ticker) { date in
             displayNow = date
+            updateIdleTimer(at: date)
             // Absolute end dates keep advancing while locked/backgrounded. Do
             // not consume completion in the brief inactive run-loop window:
             // doing so can cancel the already-scheduled OS notification before
@@ -728,9 +732,7 @@ struct FocusView: View {
         }
         .onChange(of: preferencesFingerprint) { _, _ in
             configureSensoryPreferences()
-            UIApplication.shared.isIdleTimerDisabled =
-                engine.snapshot(at: .now).phase == .focusing
-                && (resolvedPreferences?.keepScreenAwake ?? false)
+            updateIdleTimer()
             guard ownsCurrentTimer else { return }
             Task { await refreshExternalTimerPresentation() }
         }
@@ -805,12 +807,13 @@ struct FocusView: View {
 
             Spacer(minLength: 18)
 
-            FocusTimerRing(
+            FocusTimerDisplay(
                 size: ringSize,
                 progress: snapshot.progress,
                 remainingTime: formattedTime(snapshot.remainingSeconds),
                 accessibleRemainingTime: accessibleTime(snapshot.remainingSeconds),
                 modeLabel: timerModeLabel,
+                displayMode: timerDisplayMode,
                 isBreakMode: snapshot.phase.isBreak || engine.containsRecoverableBreak,
                 isPaused: snapshot.phase == .paused,
                 accent: accent,
@@ -894,7 +897,7 @@ struct FocusView: View {
     private var completionNotificationStatus: some View {
         switch notificationScheduleState {
         case .scheduled where notifications.isAuthorized:
-            Label("ロック中もタイマーは進み、終了時に通知します", systemImage: "bell.badge.fill")
+            Label("画面を閉じてもタイマーは進み、終了時に通知します", systemImage: "bell.badge.fill")
                 .font(.caption)
                 .foregroundStyle(TsumibenTheme.muted)
         case .scheduling:
@@ -934,7 +937,7 @@ struct FocusView: View {
                 guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
                 UIApplication.shared.open(url)
             } label: {
-                Label("ロック中も進みます。終了通知は端末の設定から", systemImage: "bell.slash")
+                Label("画面を閉じても進みます。終了通知は端末の設定から", systemImage: "bell.slash")
                     .font(.caption.weight(.semibold))
             }
             .buttonStyle(TsumibenBareButtonStyle())
@@ -954,7 +957,7 @@ struct FocusView: View {
             Button {
                 Task { await enableCompletionNotification() }
             } label: {
-                Label("ロック中も進みます。終了通知を許可", systemImage: "bell")
+                Label("画面を閉じても進みます。終了通知を許可", systemImage: "bell")
                     .font(.caption.weight(.semibold))
             }
             .buttonStyle(TsumibenBareButtonStyle())
@@ -999,8 +1002,7 @@ struct FocusView: View {
             let now = Date.now
             let completionUptime = ContinuousUptime.now()
             displayNow = now
-            UIApplication.shared.isIdleTimerDisabled = snapshot.phase == .focusing
-                && (resolvedPreferences?.keepScreenAwake ?? false)
+            updateIdleTimer(at: now)
 
             if let pendingCompletion {
                 resumeCompletionAlertIfNeeded(pendingCompletion)
@@ -1077,8 +1079,7 @@ struct FocusView: View {
                 systemUptime: ContinuousUptime.now()
             )
             saveRecoveryState()
-            UIApplication.shared.isIdleTimerDisabled =
-                resolvedPreferences?.keepScreenAwake ?? false
+            updateIdleTimer(at: now)
 
             await scheduleCurrentCompletionNotification()
             guard !Task.isCancelled,
@@ -1346,6 +1347,23 @@ struct FocusView: View {
         Haptics.shared.isEnabled = sensoryPreferences.hapticsOn
     }
 
+    @MainActor
+    private func updateIdleTimer(at date: Date = .now) {
+        let currentSnapshot = engine.snapshot(at: date)
+        let shouldKeepScreenAwake =
+            TimerScreenAwakePolicy.shouldKeepScreenAwake(
+                preferenceEnabled:
+                    resolvedPreferences?.keepScreenAwake ?? false,
+                sceneIsActive: scenePhase == .active,
+                timerIsRunning:
+                    isViewActive && currentSnapshot.phase.isRunning,
+                remainingSeconds: currentSnapshot.remainingSeconds
+            )
+        guard UIApplication.shared.isIdleTimerDisabled != shouldKeepScreenAwake
+        else { return }
+        UIApplication.shared.isIdleTimerDisabled = shouldKeepScreenAwake
+    }
+
     private func advanceIfNeeded(
         at now: Date,
         uptime: TimeInterval,
@@ -1372,6 +1390,7 @@ struct FocusView: View {
             )
         case .breakCompleted:
             FocusPersistence.clear()
+            UIApplication.shared.isIdleTimerDisabled = false
             withAnimation { breakFinished = true }
         }
     }
@@ -2394,8 +2413,7 @@ struct FocusView: View {
                     }
                 }
             }
-            UIApplication.shared.isIdleTimerDisabled = engine.snapshot(at: now).phase == .focusing
-                && (resolvedPreferences?.keepScreenAwake ?? false)
+            updateIdleTimer(at: now)
             saveRecoveryState()
             displayNow = now
         } catch {
@@ -2409,7 +2427,7 @@ struct FocusView: View {
             completion = nil
             displayNow = .now
             saveRecoveryState()
-            UIApplication.shared.isIdleTimerDisabled = false
+            updateIdleTimer()
         } catch {
             operationErrorMessage = error.localizedDescription
         }
@@ -2418,6 +2436,7 @@ struct FocusView: View {
     private func skipBreak() {
         try? engine.skipBreak()
         FocusPersistence.clear()
+        UIApplication.shared.isIdleTimerDisabled = false
         breakFinished = true
     }
 
@@ -2599,8 +2618,7 @@ struct FocusView: View {
         }
         didEnterBackgroundSinceLastActive = false
         displayNow = returnDate
-        UIApplication.shared.isIdleTimerDisabled = engine.snapshot(at: returnDate).phase == .focusing
-            && (resolvedPreferences?.keepScreenAwake ?? false)
+        updateIdleTimer(at: returnDate)
         advanceIfNeeded(
             at: returnDate,
             uptime: returnUptime,
@@ -2729,15 +2747,27 @@ enum FocusTimerLayoutPolicy {
     }
 }
 
-/// A clockwise elapsed-time dial. The quiet full-circle track communicates the
-/// total interval, while the colored arc grows from twelve o'clock and its
-/// bright head marks the current position even in a still screenshot.
-private struct FocusTimerRing: View {
+enum FocusTimerDisplayPolicy {
+    static func normalizedProgress(_ progress: Double) -> Double {
+        guard progress.isFinite else { return 0 }
+        return min(1, max(0, progress))
+    }
+
+    static func remainingFraction(for progress: Double) -> Double {
+        1 - normalizedProgress(progress)
+    }
+}
+
+/// The selected countdown presentation. Ring modes preserve the original
+/// clockwise elapsed-time arc; the filled dial removes elapsed area clockwise
+/// from twelve o'clock, like a physical visual timer.
+struct FocusTimerDisplay: View {
     let size: CGFloat
     let progress: Double
     let remainingTime: String
     let accessibleRemainingTime: String
     let modeLabel: String
+    let displayMode: TimerDisplayMode
     let isBreakMode: Bool
     let isPaused: Bool
     let accent: Color
@@ -2747,7 +2777,7 @@ private struct FocusTimerRing: View {
     @ScaledMetric(relativeTo: .body) private var scaledLineWidth: CGFloat = 9
 
     private var normalizedProgress: Double {
-        min(1, max(0, progress))
+        FocusTimerDisplayPolicy.normalizedProgress(progress)
     }
 
     private var elapsedPercent: Int {
@@ -2777,6 +2807,35 @@ private struct FocusTimerRing: View {
 
     var body: some View {
         ZStack {
+            switch displayMode {
+            case .ringAndTime:
+                elapsedRing
+                currentLabels
+            case .filledDial:
+                remainingDial
+            case .timeOnly:
+                remainingTimeLabel
+                    .padding(max(24, lineWidth * 2.5))
+            case .ringOnly:
+                elapsedRing
+                statusLabel
+                    .padding(max(24, lineWidth * 2.5))
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityIdentifier("focus.timer-display")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibleMode)
+        .accessibilityValue(
+            "\(accessibleRemainingTime)、\(elapsedPercent)パーセント経過"
+                + (isPaused ? "、一時停止中" : "")
+        )
+        .accessibilityHint(isPaused ? "再開ボタンでタイマーを再開できます" : "一時停止ボタンでタイマーを止められます")
+        .accessibilityAddTraits(.updatesFrequently)
+    }
+
+    private var elapsedRing: some View {
+        ZStack {
             Circle()
                 .stroke(.white.opacity(0.09), lineWidth: lineWidth)
 
@@ -2796,7 +2855,10 @@ private struct FocusTimerRing: View {
             // A fixed origin and a moving head make direction unambiguous.
             Circle()
                 .fill(accent.opacity(normalizedProgress == 0 ? 0.58 : 0.9))
-                .frame(width: max(5, lineWidth * 0.58), height: max(5, lineWidth * 0.58))
+                .frame(
+                    width: max(5, lineWidth * 0.58),
+                    height: max(5, lineWidth * 0.58)
+                )
                 .offset(y: -(size - lineWidth) / 2)
                 .accessibilityHidden(true)
 
@@ -2815,34 +2877,101 @@ private struct FocusTimerRing: View {
                     )
                     .accessibilityHidden(true)
             }
-
-            VStack(spacing: 9) {
-                Text(remainingTime)
-                    .font(.system(size: timerSize, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.62)
-                    .lineLimit(1)
-                    .contentTransition(
-                        reduceMotion ? .identity : .numericText(countsDown: true)
-                    )
-                Text("\(modeLabel)  ·  \(elapsedPercent)% 経過")
-                    .font(.caption2.weight(.bold))
-                    .tracking(1.2)
-                    .foregroundStyle(isPaused ? TsumibenTheme.amber : TsumibenTheme.muted)
-                    .minimumScaleFactor(0.72)
-                    .lineLimit(1)
-            }
-            .padding(max(24, lineWidth * 2.5))
         }
-        .frame(width: size, height: size)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibleMode)
-        .accessibilityValue(
-            "\(accessibleRemainingTime)、\(elapsedPercent)パーセント経過"
-                + (isPaused ? "、一時停止中" : "")
+    }
+
+    private var remainingDial: some View {
+        ZStack {
+            Circle()
+                .fill(.white.opacity(0.055))
+
+            FocusRemainingDialShape(elapsedProgress: normalizedProgress)
+                .fill(accent.opacity(isPaused ? 0.72 : 0.92))
+                .shadow(color: accent.opacity(0.34), radius: 18)
+                .animation(
+                    reduceMotion ? nil : .linear(duration: 0.25),
+                    value: normalizedProgress
+                )
+
+            Circle()
+                .stroke(.white.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    private var currentLabels: some View {
+        VStack(spacing: 9) {
+            remainingTimeLabel
+            statusLabel
+        }
+        .padding(max(24, lineWidth * 2.5))
+    }
+
+    private var statusLabel: some View {
+        Text("\(modeLabel)  ·  \(elapsedPercent)% 経過")
+            .font(.caption2.weight(.bold))
+            .tracking(1.2)
+            .foregroundStyle(
+                isPaused ? TsumibenTheme.amber : TsumibenTheme.muted
+            )
+            .minimumScaleFactor(0.72)
+            .lineLimit(1)
+    }
+
+    private var remainingTimeLabel: some View {
+        Text(remainingTime)
+            .font(.system(size: timerSize, weight: .heavy, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(TsumibenTheme.text)
+            .minimumScaleFactor(0.62)
+            .lineLimit(1)
+            .contentTransition(
+                reduceMotion ? .identity : .numericText(countsDown: true)
+            )
+    }
+}
+
+struct FocusRemainingDialShape: Shape {
+    var elapsedProgress: Double
+
+    var animatableData: Double {
+        get { elapsedProgress }
+        set { elapsedProgress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let normalizedProgress = FocusTimerDisplayPolicy.normalizedProgress(
+            elapsedProgress
         )
-        .accessibilityHint(isPaused ? "再開ボタンでタイマーを再開できます" : "一時停止ボタンでタイマーを止められます")
-        .accessibilityAddTraits(.updatesFrequently)
+        let remaining = FocusTimerDisplayPolicy.remainingFraction(
+            for: normalizedProgress
+        )
+        guard remaining > 0 else { return Path() }
+
+        if remaining >= 1 {
+            var path = Path()
+            path.addEllipse(in: rect)
+            return path
+        }
+
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let radius = min(rect.width, rect.height) / 2
+        let startDegrees = -90 + (360 * normalizedProgress)
+        let startRadians = CGFloat(startDegrees * .pi / 180)
+        var path = Path()
+        path.move(to: center)
+        path.addLine(to: CGPoint(
+            x: center.x + (radius * cos(startRadians)),
+            y: center.y + (radius * sin(startRadians))
+        ))
+        path.addArc(
+            center: center,
+            radius: radius,
+            startAngle: .degrees(startDegrees),
+            endAngle: .degrees(270),
+            clockwise: false
+        )
+        path.closeSubpath()
+        return path
     }
 }
 

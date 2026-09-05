@@ -421,6 +421,7 @@ final class SoundSynth {
     private var timerCompletionPlayer = AVAudioPlayerNode()
     private let format: AVAudioFormat
     private var voices: [Voice] = []
+    private var isEngineConfigured = false
     private var nextImportantVoice = 0
     private var interruptionObserver: NSObjectProtocol?
     private var configurationObserver: NSObjectProtocol?
@@ -432,6 +433,7 @@ final class SoundSynth {
     private var resumeAfterInterruption = false
     private var isAudioInterrupted = false
     private var isApplicationInactive = true
+    private var isSessionActive = false
     private var playbackGeneration: UInt64 = 0
     private var idleShutdownGeneration: UInt64 = 0
     private var latestScheduledClinkUptime = -Double.greatestFiniteMagnitude
@@ -471,8 +473,6 @@ final class SoundSynth {
         prism = Self.makePrism()
 
         isApplicationInactive = UIApplication.shared.applicationState != .active
-        configureSession()
-        configureEngine()
         observeAudioLifecycle()
     }
 
@@ -489,10 +489,10 @@ final class SoundSynth {
     }
 
     func prepare() {
-        guard isEnabled else { return }
-        // Preallocate player resources without activating the process-wide
-        // audio session. The first explicit play request owns activation.
-        voices.forEach { $0.player.prepare(withFrameCount: AVAudioFrameCount(format.sampleRate)) }
+        // PCM buffers are generated in `init`, but touching `mainMixerNode`
+        // constructs and connects the hardware output node. Keep that graph
+        // lazy so merely opening Home cannot fail on an unavailable audio
+        // service; the first explicit play request owns activation and setup.
     }
 
     func playThud(impactSpeed: CGFloat) {
@@ -569,7 +569,7 @@ final class SoundSynth {
     func playTimerCompletion(_ style: TimerCompletionSound) {
         guard isEnabled, let buffer = timerCompletionSounds[style] else { return }
         requestEngineStart()
-        guard engine.isRunning else { return }
+        guard isEngineConfigured, engine.isRunning else { return }
 
         timerCompletionPlayer.stop()
         timerCompletionPlayer.volume = masterVolume
@@ -645,7 +645,7 @@ final class SoundSynth {
     ) {
         guard isEnabled else { return }
         requestEngineStart()
-        guard engine.isRunning, !voices.isEmpty else { return }
+        guard isEngineConfigured, engine.isRunning, !voices.isEmpty else { return }
 
         let now = ProcessInfo.processInfo.systemUptime
         let voice: Voice
@@ -669,6 +669,7 @@ final class SoundSynth {
     }
 
     private func configureSession() {
+        guard audioOutputIsAllowed else { return }
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(.ambient, mode: .default, options: [])
@@ -679,7 +680,7 @@ final class SoundSynth {
     }
 
     private func configureEngine() {
-        guard voices.isEmpty else { return }
+        guard !isEngineConfigured else { return }
         engine.attach(timerCompletionPlayer)
         engine.connect(
             timerCompletionPlayer,
@@ -696,10 +697,14 @@ final class SoundSynth {
         }
         engine.mainMixerNode.outputVolume = 1
         engine.prepare()
+        isEngineConfigured = true
     }
 
     private func requestEngineStart() {
-        guard isEnabled, !isAudioInterrupted, !isApplicationInactive else {
+        guard audioOutputIsAllowed,
+              isEnabled,
+              !isAudioInterrupted,
+              !isApplicationInactive else {
             // Enhancement requests that arrive while inactive/interrupted are
             // dropped, not queued for an unsolicited sound or engine start.
             engineRunRequested = false
@@ -710,17 +715,21 @@ final class SoundSynth {
     }
 
     private func startEngineIfNeeded() {
-        guard isEnabled,
+        guard audioOutputIsAllowed,
+              isEnabled,
               engineRunRequested,
               !isAudioInterrupted,
               !isApplicationInactive,
-              !engine.isRunning
+              (!isEngineConfigured || !engine.isRunning)
         else { return }
         let session = AVAudioSession.sharedInstance()
         var sessionWasActivated = false
         do {
+            configureSession()
             try session.setActive(true)
             sessionWasActivated = true
+            isSessionActive = true
+            configureEngine()
             try engine.start()
         } catch {
             // Activation can succeed before the engine fails. Roll it back so
@@ -729,6 +738,7 @@ final class SoundSynth {
             engineRunRequested = false
             if sessionWasActivated {
                 try? session.setActive(false, options: .notifyOthersOnDeactivation)
+                isSessionActive = false
             }
         }
     }
@@ -746,10 +756,12 @@ final class SoundSynth {
         }
         timerCompletionPlayer.stop()
         timerCompletionBusyUntilUptime = -Double.greatestFiniteMagnitude
-        if engine.isRunning {
+        if isEngineConfigured, engine.isRunning {
             engine.stop()
         }
-        guard deactivateSession else { return }
+        guard deactivateSession, isSessionActive else { return }
+        isSessionActive = false
+        guard audioOutputIsAllowed else { return }
         do {
             try AVAudioSession.sharedInstance().setActive(
                 false,
@@ -811,12 +823,13 @@ final class SoundSynth {
         engineRunRequested = false
         resumeAfterInterruption = false
         isAudioInterrupted = false
+        isSessionActive = false
         isApplicationInactive = UIApplication.shared.applicationState != .active
         for voice in voices {
             voice.player.stop()
         }
         timerCompletionPlayer.stop()
-        if engine.isRunning {
+        if isEngineConfigured, engine.isRunning {
             engine.stop()
         }
         if let configurationObserver {
@@ -829,8 +842,7 @@ final class SoundSynth {
         nextImportantVoice = 0
         lastTickUptime = -Double.greatestFiniteMagnitude
         engine = AVAudioEngine()
-        configureSession()
-        configureEngine()
+        isEngineConfigured = false
         observeEngineConfigurationChanges()
     }
 
@@ -848,7 +860,9 @@ final class SoundSynth {
                 switch type {
                 case .began:
                     self.isAudioInterrupted = true
+                    self.isSessionActive = false
                     self.resumeAfterInterruption = self.engineRunRequested
+                        && self.isEngineConfigured
                         && self.engine.isRunning
                     self.stopEngine(clearRunRequest: false, deactivateSession: false)
                 case .ended:
@@ -867,7 +881,7 @@ final class SoundSynth {
                         return
                     }
                     self.startEngineIfNeeded()
-                    if self.engine.isRunning {
+                    if self.isEngineConfigured, self.engine.isRunning {
                         // Stopped voices aren't replayed after an interruption;
                         // release the otherwise empty resumed engine promptly.
                         self.scheduleIdleShutdown(after: 0)
@@ -932,6 +946,16 @@ final class SoundSynth {
                 self.startEngineIfNeeded()
             }
         }
+    }
+
+    private var audioOutputIsAllowed: Bool {
+#if DEBUG && targetEnvironment(simulator)
+        // UI automation validates state and accessibility, not acoustic output.
+        // Avoid coupling deterministic tests to the host Mac's CoreAudio RPC.
+        return !LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess
+#else
+        return true
+#endif
     }
 }
 

@@ -12,6 +12,26 @@ from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1] / "http_dists"
 PUBLIC_BASE = "https://tumiben.hinoshiba.com/"
+INDEX_PAGE = ROOT / "index.html"
+COMMERCIAL_PAGE = ROOT / "commercial-transactions/index.html"
+COMMERCIAL_MARKERS = ("commercial-transactions", "販売条件", "販売者情報")
+EXACT_PRICE_PATTERNS = (
+    r"[¥￥$]\s*\d",
+    r"\b(?:USD|JPY)\s*\d",
+    r"\d[\d,]*(?:\.\d+)?\s*(?:円|米ドル|ドル)",
+)
+PUBLIC_CONTACT_PATTERNS = (
+    r"href\s*=\s*[\"']tel:",
+    r"〒\s*\d{3}-\d{4}",
+    r"\d{2,4}-\d{2,4}-\d{3,4}",
+)
+# Updating the seller disclosure requires an explicit privacy review and
+# replacement of this approved snapshot hash. This is the fail-closed guard
+# against accidentally publishing a real address or telephone number in an
+# otherwise hard-to-detect format.
+APPROVED_COMMERCIAL_DISCLOSURE_SHA256 = (
+    "7253e684d407c9e6cf21d78dfa1e7a398390b697798e63fa224122a8b08e74f9"
+)
 
 
 class PageParser(HTMLParser):
@@ -96,12 +116,12 @@ def resolve_local(page: Path, value: str) -> Path | None:
 required = [
     ROOT / ".nojekyll",
     ROOT / "CNAME",
-    ROOT / "index.html",
+    INDEX_PAGE,
     ROOT / "404.html",
     ROOT / "privacy/index.html",
     ROOT / "support/index.html",
     ROOT / "terms/index.html",
-    ROOT / "commercial-transactions/index.html",
+    COMMERCIAL_PAGE,
     ROOT / "robots.txt",
     ROOT / "sitemap.xml",
     ROOT / "styles.css",
@@ -119,11 +139,18 @@ for path in required:
         fail(f"required site file is missing: {path.relative_to(ROOT.parent)}")
 
 expected_canonical = {
-    ROOT / "index.html": PUBLIC_BASE,
+    INDEX_PAGE: PUBLIC_BASE,
     ROOT / "privacy/index.html": PUBLIC_BASE + "privacy/",
     ROOT / "support/index.html": PUBLIC_BASE + "support/",
     ROOT / "terms/index.html": PUBLIC_BASE + "terms/",
-    ROOT / "commercial-transactions/index.html": PUBLIC_BASE + "commercial-transactions/",
+    COMMERCIAL_PAGE: PUBLIC_BASE + "commercial-transactions/",
+}
+
+expected_sitemap_locations = {
+    PUBLIC_BASE,
+    PUBLIC_BASE + "privacy/",
+    PUBLIC_BASE + "support/",
+    PUBLIC_BASE + "terms/",
 }
 
 parsed_pages: dict[Path, PageParser] = {}
@@ -131,8 +158,19 @@ for page in sorted(ROOT.rglob("*.html")):
     source = page.read_text(encoding="utf-8")
     if "file://" in source or "127.0.0.1" in source or "localhost" in source:
         fail(f"local-only URL remains in {page.relative_to(ROOT)}")
-    if "100円" in source and page != ROOT / "commercial-transactions/index.html":
-        fail(f"exact IAP price must not be marketed on the website: {page.relative_to(ROOT)}")
+    if any(re.search(pattern, source, flags=re.IGNORECASE) for pattern in EXACT_PRICE_PATTERNS):
+        fail(f"exact monetary amount must not be published on the website: {page.relative_to(ROOT)}")
+    if any(re.search(pattern, source, flags=re.IGNORECASE) for pattern in PUBLIC_CONTACT_PATTERNS):
+        fail(f"public phone or postal address must not be embedded in the website: {page.relative_to(ROOT)}")
+    if page not in {INDEX_PAGE, COMMERCIAL_PAGE} and any(marker in source for marker in COMMERCIAL_MARKERS):
+        fail(f"commercial disclosure must not appear in general site navigation: {page.relative_to(ROOT)}")
+    if page == INDEX_PAGE:
+        if source.count('href="commercial-transactions/"') != 1:
+            fail("index must have exactly one relative purchase-disclosure link")
+        if source.count("commercial-transactions") != 1:
+            fail("index purchase-disclosure endpoint must appear exactly once")
+        if source.count("購入条件・販売者情報") != 1 or "販売条件" in source:
+            fail("index must use the scoped purchase-disclosure label")
     if any(term in source for term in ("Mac版", "Mac Catalyst", "macOS対応")):
         fail(f"unsupported Mac claim remains in {page.relative_to(ROOT)}")
     if any(term.lower() in source.lower() for term in ("レア粒", "レア抽選", "rare pebble", "rare reward")):
@@ -173,7 +211,28 @@ for page, parser in parsed_pages.items():
         if fragment not in target_parser.anchors:
             fail(f"missing fragment target in {page.relative_to(ROOT)}: {value}")
 
-index = (ROOT / "index.html").read_text(encoding="utf-8")
+commercial_page_resolved = COMMERCIAL_PAGE.resolve()
+index_page_resolved = INDEX_PAGE.resolve()
+index_commercial_link_count = 0
+for page, parser in parsed_pages.items():
+    if page == commercial_page_resolved:
+        continue
+    for attribute, value in parser.refs:
+        if attribute != "href":
+            continue
+        target = resolve_local(page, value)
+        if target == commercial_page_resolved:
+            if page == index_page_resolved and value == "commercial-transactions/":
+                index_commercial_link_count += 1
+            else:
+                fail(
+                    "commercial disclosure must only be linked from the Pro offer: "
+                    f"{page.relative_to(ROOT)}"
+                )
+if index_commercial_link_count != 1:
+    fail("index must link once from the Pro offer to the commercial disclosure")
+
+index = INDEX_PAGE.read_text(encoding="utf-8")
 if "基本無料" not in index or "iPhone" not in index:
     fail("index must state iPhone and 基本無料")
 if "https://github.com/hinoshiba/Tumiben" not in index:
@@ -241,7 +300,6 @@ required_not_found_refs = {
     "/privacy/",
     "/support/",
     "/terms/",
-    "/commercial-transactions/",
 }
 if not required_not_found_refs.issubset(not_found_refs):
     fail("404.html must use custom-domain absolute paths so nested missing URLs still render")
@@ -270,16 +328,26 @@ for required_terms_term in (
     if required_terms_term not in terms:
         fail(f"terms page is missing: {required_terms_term}")
 
-commercial = (ROOT / "commercial-transactions/index.html").read_text(encoding="utf-8")
+commercial = COMMERCIAL_PAGE.read_text(encoding="utf-8")
+commercial_hash = hashlib.sha256(COMMERCIAL_PAGE.read_bytes()).hexdigest()
+if commercial_hash != APPROVED_COMMERCIAL_DISCLOSURE_SHA256:
+    fail("commercial disclosure changed without updating its approved privacy-review hash")
 for required_commercial_term in (
     "特定商取引法に基づく表記",
-    "100円",
-    "0.99米ドル",
+    "販売事業者の氏名（名称）・所在地・電話番号",
+    "購入済みであることの証明は必要ありません",
+    "App Storeでの購入手続、決済、購入履歴、請求書・領収書および返金申請はAppleが取り扱います",
+    "購入手続の直前",
+    "StoreKit",
+    "本サイトには固定価格を掲載しません",
     "遅滞なく電子メールで開示",
     "1回限りの非消費型アプリ内課金",
 ):
     if required_commercial_term not in commercial:
         fail(f"commercial disclosure is missing: {required_commercial_term}")
+commercial_meta = parsed_pages[commercial_page_resolved].meta
+if commercial_meta.get("robots") != "noindex,follow":
+    fail("commercial disclosure must be noindex,follow")
 
 robots = (ROOT / "robots.txt").read_text(encoding="utf-8")
 if "Allow: /" not in robots:
@@ -296,8 +364,7 @@ except ET.ParseError as error:
     fail(f"sitemap.xml is invalid XML: {error}")
 namespace = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 sitemap_locations = {element.text for element in sitemap.findall("sm:url/sm:loc", namespace)}
-expected_locations = set(expected_canonical.values())
-if sitemap_locations != expected_locations:
+if sitemap_locations != expected_sitemap_locations:
     fail(f"sitemap locations mismatch: {sorted(sitemap_locations)}")
 
 og = ROOT / "og-focus-v7.png"
@@ -316,6 +383,10 @@ for match in re.finditer(r"url\((['\"]?)([^)'\"]+)\1\)", css):
         fail(f"broken CSS reference: {value}")
 
 site_script = (ROOT / "app.js").read_text(encoding="utf-8")
+if any(marker in site_script for marker in COMMERCIAL_MARKERS):
+    fail("site script must not create a hidden commercial-disclosure route")
+if any(re.search(pattern, site_script, flags=re.IGNORECASE) for pattern in EXACT_PRICE_PATTERNS):
+    fail("site script must not inject a fixed monetary amount")
 if any(term.lower() in site_script.lower() for term in ("rare", "prism", "goldcount")):
     fail("version 1.0 product-site script must not simulate disabled random rewards")
 

@@ -143,6 +143,34 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             "The next reachable crystal must remain explicit beside the long horizon: \(jarValue)"
         )
 
+        let jar = app.buttons["瓶"]
+        jar.coordinate(withNormalizedOffset: CGVector(
+            dx: CGFloat(fused.targetX),
+            dy: CGFloat(fused.targetY)
+        )).tap()
+        let inspectAggregate = app.buttons["jar.aggregate.inspect"]
+        XCTAssertTrue(
+            inspectAggregate.waitForExistence(timeout: 3),
+            "Tapping the physical aggregate must reveal its non-obstructing detail affordance"
+        )
+        inspectAggregate.tap()
+        XCTAssertTrue(app.navigationBars["まとまり粒"].waitForExistence(timeout: 4))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["overview.cluster.preservation"]
+                .waitForExistence(timeout: 3)
+        )
+        XCTAssertTrue(app.staticTexts["10粒分の積み重ね"].exists)
+        app.buttons["overview.cluster.close"].tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
+
+        let afterDirectInspection = try waitForPresentationCount(
+            1,
+            from: presentationProbe,
+            timeout: 3
+        )
+        XCTAssertEqual(afterDirectInspection.rawRecords, fused.rawRecords)
+        XCTAssertEqual(afterDirectInspection.recordEntries.first?.grams, 2_500)
+
         openMenuAction(containing: "積み上がりを見る")
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
         let lenses = app.segmentedControls["overview.lens"]
@@ -182,7 +210,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         aggregateSummary.tap()
 
         XCTAssertTrue(app.navigationBars["まとまり粒"].waitForExistence(timeout: 6))
-        XCTAssertTrue(app.staticTexts["10粒を含む、まとまり粒"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["10粒分の積み重ね"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.staticTexts["2.5kg"].exists)
         XCTAssertTrue(app.staticTexts["タイマー"].exists)
         XCTAssertTrue(app.staticTexts["手動"].exists)
@@ -224,6 +252,12 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             "Each deterministic seed focus must commit, land and return Home"
         )
         dismissBreak.tap()
+        if !demoLauncher.waitForExistence(timeout: 2) {
+            // The debug-only duration menu intentionally isn't a persisted
+            // product preference. Re-select it after a process/UI refresh so
+            // this end-to-end test remains about aggregation, not demo state.
+            selectDemoDuration()
+        }
         XCTAssertTrue(demoLauncher.waitForExistence(timeout: 5))
     }
 
@@ -324,7 +358,11 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         })
         guard let countRaw = fields["count"],
               let count = Int(countRaw),
-              let rawRecords = fields["records"]
+              let rawRecords = fields["records"],
+              let targetXRaw = fields["targetX"],
+              let targetX = Double(targetXRaw),
+              let targetYRaw = fields["targetY"],
+              let targetY = Double(targetYRaw)
         else {
             throw PresentationProbeError.malformedValue(rawValue)
         }
@@ -336,7 +374,13 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             }
             return RecordEntry(id: pieces[0], grams: grams)
         }
-        return PresentationSample(count: count, rawRecords: rawRecords, recordEntries: entries)
+        return PresentationSample(
+            count: count,
+            rawRecords: rawRecords,
+            recordEntries: entries,
+            targetX: targetX,
+            targetY: targetY
+        )
     }
 }
 
@@ -344,6 +388,8 @@ private struct PresentationSample {
     let count: Int
     let rawRecords: String
     let recordEntries: [RecordEntry]
+    let targetX: Double
+    let targetY: Double
 }
 
 private struct RecordEntry: Hashable {

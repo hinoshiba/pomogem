@@ -27,6 +27,7 @@ Docs/RELEASING.md
 Docs/OSS_PUBLISHING.md
 Docs/LICENSE_AUDIT.md
 Scripts/check-git-public-metadata.py
+Scripts/check-published-site-policy.sh
 AppStore/README.md
 AppStore/configuration.yml
 AppStore/app-privacy.md
@@ -694,6 +695,8 @@ if [ "$MODE" = '--release' ]; then
       exit 1
     fi
   done
+
+  ./Scripts/check-published-site-policy.sh https://tumiben.hinoshiba.com/
 
   http_status=$(curl --silent --show-error --max-time 20 \
     --output /dev/null --write-out '%{http_code}' http://tumiben.hinoshiba.com/ || true)
