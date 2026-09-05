@@ -232,6 +232,8 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             confirm.tap()
         }
 
+        stopCompletionAlertIfPresented(in: app)
+
         let dismiss = app.buttons["reward.dismiss"]
         XCTAssertTrue(dismiss.waitForExistence(timeout: 28))
         XCTAssertTrue(
@@ -530,6 +532,19 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             components.month ?? 0,
             components.day ?? 0
         )
+    }
+
+    @discardableResult
+    private func stopCompletionAlertIfPresented(
+        in app: XCUIApplication,
+        timeout: TimeInterval = 25
+    ) -> Bool {
+        let stop = app.buttons["focus.completion-alert.stop"]
+        guard stop.waitForExistence(timeout: timeout) else { return false }
+        XCTAssertEqual(stop.label, "終了アラートを止める")
+        XCTAssertTrue(stop.isHittable)
+        stop.tap()
+        return true
     }
 }
 

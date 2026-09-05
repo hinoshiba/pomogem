@@ -52,6 +52,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         XCTAssertTrue((app.buttons["瓶"].value as? String)?.contains("9粒") == true)
 
         startDemoFocus()
+        stopCompletionAlertIfPresented(in: app)
         let celebrationTitle = app.staticTexts["10粒を、ひとつに整理した"]
         let dismissBreak = app.buttons["休憩の提案を閉じる"]
 
@@ -216,6 +217,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
 
     private func completeDemoFocusAndDismissBreak() {
         startDemoFocus()
+        stopCompletionAlertIfPresented(in: app)
         let dismissBreak = app.buttons["休憩の提案を閉じる"]
         XCTAssertTrue(
             dismissBreak.waitForExistence(timeout: 25),
@@ -223,6 +225,19 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         )
         dismissBreak.tap()
         XCTAssertTrue(demoLauncher.waitForExistence(timeout: 5))
+    }
+
+    @discardableResult
+    private func stopCompletionAlertIfPresented(
+        in app: XCUIApplication,
+        timeout: TimeInterval = 25
+    ) -> Bool {
+        let stop = app.buttons["focus.completion-alert.stop"]
+        guard stop.waitForExistence(timeout: timeout) else { return false }
+        XCTAssertEqual(stop.label, "終了アラートを止める")
+        XCTAssertTrue(stop.isHittable)
+        stop.tap()
+        return true
     }
 
     private func dismissBreakOfferIfPresent() {

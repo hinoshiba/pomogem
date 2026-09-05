@@ -549,7 +549,7 @@ struct SettingsView: View {
         } header: {
             Text("音と触覚")
         } footer: {
-            Text("終了音の種類はアプリ内とロック中の通知に反映します（アプリ内ではサイレントスイッチに従います）。触覚のオン・オフと種類はアプリ内だけに適用され、ロック中はiPhoneの通知設定に従います。")
+            Text("アプリが前面にある間は、終了音と触覚を停止操作まで繰り返します。音はサイレントモードに従います。通知を許可している場合、ロック中は1回の通知となり、音と触覚はiPhoneの通知設定に従います。")
         }
     }
 
@@ -1437,6 +1437,8 @@ struct SettingsView: View {
             return
         }
 
+        TimerCompletionAlertController.shared.stop()
+        TimerCompletionAlertAcknowledgementStore.removeAll()
         FocusPersistence.clear()
         FocusPersistence.clearBreak()
         PendingStratumCelebrationStore.removeAll()

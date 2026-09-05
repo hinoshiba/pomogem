@@ -169,6 +169,10 @@ struct FocusView: View {
     @State private var didStart = false
     @State private var didActivate = false
     @State private var didSignalCompletion = false
+    @State private var completionAlert = TimerCompletionAlertController.shared
+    @State private var completionAlertWasAcknowledged = false
+    @State private var completionPersistenceSucceeded = false
+    @State private var isFinishingCompletion = false
     @State private var clockAnchor: ClockAnchor?
     @State private var completion: CompletedDrop?
     @State private var pendingCompletion: PomodoroCompletion?
@@ -251,6 +255,13 @@ struct FocusView: View {
         _pendingCompletion = State(initialValue: request.pendingCompletion)
         _dataEpochID = State(initialValue: request.dataEpochID)
         _didSignalCompletion = State(initialValue: request.pendingCompletion != nil)
+        _completionAlertWasAcknowledged = State(
+            initialValue: request.pendingCompletion.map {
+                TimerCompletionAlertAcknowledgementStore.contains(
+                    sessionID: $0.sessionID
+                )
+            } ?? false
+        )
         _isAwaitingRecoveryActivation = State(initialValue: true)
         _scheduledCompletionNotificationDeliveryDate = State(
             initialValue: request.scheduledCompletionNotificationDeliveryDate
@@ -992,6 +1003,7 @@ struct FocusView: View {
                 && (resolvedPreferences?.keepScreenAwake ?? false)
 
             if let pendingCompletion {
+                resumeCompletionAlertIfNeeded(pendingCompletion)
                 await commitCompletion(pendingCompletion)
                 return
             }
@@ -1452,13 +1464,10 @@ struct FocusView: View {
             return
         }
 
-        FocusPersistence.clear()
-        DeferredFocusCompletionStore.clear(sessionID: result.sessionID)
-        if router.deferredFocusRecovery?.id == result.sessionID {
-            router.deferredFocusRecovery = nil
-        }
         if persistenceResult == .cancelledBeforeCompletion
             || persistenceResult == .discardedByReset {
+            retireCompletionRecovery(result)
+            completionAlert.stop(sessionID: result.sessionID)
             NotificationManager.shared.cancelFocusCompletion(
                 sessionID: result.sessionID
             )
@@ -1481,11 +1490,44 @@ struct FocusView: View {
         await FocusActivityManager.shared.complete(
             sessionID: result.sessionID
         )
+        completionPersistenceSucceeded = true
+        guard completionAlertWasAcknowledged
+                || !completionAlert.isActive(sessionID: result.sessionID)
+        else { return }
+        await finishCommittedCompletion(result)
+    }
+
+    @MainActor
+    private func finishCommittedCompletion(
+        _ result: PomodoroCompletion
+    ) async {
+        guard !isFinishingCompletion else { return }
+        isFinishingCompletion = true
+        retireCompletionRecovery(result)
         try? await Task.sleep(for: .seconds(Constants.Jar.completionDropDelay))
         // Home is still mounted behind this cover. Dismissing now reveals the
         // real SpriteKit drop; its contact callback owns the synchronized
         // thud, landing haptic, dust and camera shake.
         dismiss()
+    }
+
+    private func retireCompletionRecovery(_ result: PomodoroCompletion) {
+        FocusPersistence.clear()
+        DeferredFocusCompletionStore.clear(sessionID: result.sessionID)
+        if router.deferredFocusRecovery?.id == result.sessionID {
+            router.deferredFocusRecovery = nil
+        }
+    }
+
+    @MainActor
+    private func acknowledgeCompletionAlert(_ result: PomodoroCompletion) {
+        TimerCompletionAlertAcknowledgementStore.mark(
+            sessionID: result.sessionID
+        )
+        completionAlertWasAcknowledged = true
+        completionAlert.stop(sessionID: result.sessionID)
+        guard completionPersistenceSucceeded else { return }
+        Task { await finishCommittedCompletion(result) }
     }
 
     @MainActor
@@ -2035,14 +2077,22 @@ struct FocusView: View {
         let hapticsOn = sensoryPreferences.hapticsOn
         SoundSynth.shared.isEnabled = soundOn
         Haptics.shared.isEnabled = hapticsOn
-        if playsSensoryFeedback, soundOn {
-            SoundSynth.shared.playTimerCompletion(
-                sensoryPreferences.timerCompletionSound
+        completionAlertWasAcknowledged =
+            TimerCompletionAlertAcknowledgementStore.contains(
+                sessionID: result.sessionID
             )
-        }
-        if playsSensoryFeedback, hapticsOn {
-            Haptics.shared.playTimerCompletion(
-                sensoryPreferences.timerCompletionHaptic
+        if !completionAlertWasAcknowledged {
+            completionAlert.start(
+                TimerCompletionAlertConfiguration(
+                    sessionID: result.sessionID,
+                    sound: soundOn
+                        ? sensoryPreferences.timerCompletionSound
+                        : nil,
+                    haptic: hapticsOn
+                        ? sensoryPreferences.timerCompletionHaptic
+                        : nil
+                ),
+                playsImmediately: playsSensoryFeedback
             )
         }
         UIApplication.shared.isIdleTimerDisabled = false
@@ -2052,6 +2102,37 @@ struct FocusView: View {
                 argument: "集中が完了しました。\(subjectSnapshot.name)、\(result.grams)グラムを保存しています"
             )
         }
+    }
+
+    private func resumeCompletionAlertIfNeeded(
+        _ result: PomodoroCompletion
+    ) {
+        completionAlertWasAcknowledged =
+            TimerCompletionAlertAcknowledgementStore.contains(
+                sessionID: result.sessionID
+            )
+        guard !completionAlertWasAcknowledged,
+              !completionAlert.isActive(sessionID: result.sessionID)
+        else { return }
+        let soundOn = sensoryPreferences.soundOn
+        let hapticsOn = sensoryPreferences.hapticsOn
+        SoundSynth.shared.isEnabled = soundOn
+        Haptics.shared.isEnabled = hapticsOn
+        completionAlert.start(
+            TimerCompletionAlertConfiguration(
+                sessionID: result.sessionID,
+                sound: soundOn
+                    ? sensoryPreferences.timerCompletionSound
+                    : nil,
+                haptic: hapticsOn
+                    ? sensoryPreferences.timerCompletionHaptic
+                    : nil
+            ),
+            // A recovered local notification may have sounded immediately
+            // before launch. Resume the repeating in-app cue after one interval
+            // instead of stacking two completion tones.
+            playsImmediately: false
+        )
     }
 
     /// A failed commit replaces a passive progress state with recovery
@@ -2149,14 +2230,25 @@ struct FocusView: View {
     }
 
     private func completionCommitView(_ result: PomodoroCompletion) -> some View {
-        ScrollView {
+        let isAlerting = completionAlert.isActive(sessionID: result.sessionID)
+        let completionIcon = if completionSaveError != nil {
+            "exclamationmark.arrow.triangle.2.circlepath"
+        } else if isAlerting {
+            "bell.and.waves.left.and.right.fill"
+        } else if completionPersistenceSucceeded {
+            "checkmark.circle.fill"
+        } else {
+            "arrow.down.to.line.compact"
+        }
+
+        return ScrollView {
             VStack(spacing: 22) {
-                Spacer(minLength: 70)
+                Spacer(minLength: 42)
                 ZStack {
                     Circle()
                         .fill(accent.opacity(0.16))
                         .frame(width: 116, height: 116)
-                    Image(systemName: completionSaveError == nil ? "arrow.down.to.line.compact" : "exclamationmark.arrow.triangle.2.circlepath")
+                    Image(systemName: completionIcon)
                         .font(.system(size: 42, weight: .semibold))
                         .foregroundStyle(completionSaveError == nil ? accent : TsumibenTheme.amber)
                 }
@@ -2167,6 +2259,32 @@ struct FocusView: View {
                     Text("\(subjectSnapshot.name)  +\(result.grams)g")
                         .font(.system(.headline, design: .rounded, weight: .bold))
                         .foregroundStyle(TsumibenTheme.muted)
+                }
+
+                if isAlerting {
+                    VStack(spacing: 8) {
+                        Label(
+                            "終了アラート中",
+                            systemImage: "bell.and.waves.left.and.right.fill"
+                        )
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(TsumibenTheme.amber)
+                        Text("アプリが前面にある間、有効な音と触覚を停止するまで繰り返します")
+                            .font(.caption)
+                            .foregroundStyle(TsumibenTheme.muted)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.horizontal, 24)
+
+                    Button {
+                        acknowledgeCompletionAlert(result)
+                    } label: {
+                        Label("終了アラートを止める", systemImage: "stop.fill")
+                    }
+                    .buttonStyle(TsumibenPrimaryButtonStyle())
+                    .padding(.horizontal, 24)
+                    .accessibilityHint("音と触覚を止めます。記録の保存中でも操作できます")
+                    .accessibilityIdentifier("focus.completion-alert.stop")
                 }
 
                 if let completionSaveError {
@@ -2203,11 +2321,16 @@ struct FocusView: View {
                     .padding(.horizontal, 24)
                     .accessibilityHint("完走は端末に残り、ホームから保存を再試行できます")
                     .accessibilityIdentifier("focus.completion-save.protect")
-                } else {
+                } else if !completionPersistenceSucceeded {
                     ProgressView()
                         .tint(accent)
                         .controlSize(.large)
                         .accessibilityLabel("記録を保存中")
+                } else if !isAlerting {
+                    ProgressView()
+                        .tint(accent)
+                        .controlSize(.large)
+                        .accessibilityLabel("瓶へ戻ります")
                 }
                 Spacer(minLength: 40)
             }
@@ -2218,6 +2341,11 @@ struct FocusView: View {
     }
 
     private func returnHomeKeepingCompletion(_ result: PomodoroCompletion) {
+        TimerCompletionAlertAcknowledgementStore.mark(
+            sessionID: result.sessionID
+        )
+        completionAlertWasAcknowledged = true
+        completionAlert.stop(sessionID: result.sessionID)
         saveRecoveryState(pendingCompletion: result)
         DeferredFocusCompletionStore.mark(sessionID: result.sessionID)
         router.deferredFocusRecovery = RecoveredFocusRequest(
@@ -2399,6 +2527,7 @@ struct FocusView: View {
         guard lostOwnership || superseded else { return false }
 
         NotificationManager.shared.cancelFocusCompletion(sessionID: sessionID)
+        completionAlert.stop(sessionID: sessionID)
         scheduledCompletionNotificationDeliveryDate = nil
         notificationScheduleState = .idle
         FocusPersistence.clear()
@@ -2421,6 +2550,7 @@ struct FocusView: View {
         ) != .current else { return }
         if let sessionID = currentSessionID {
             NotificationManager.shared.cancelFocusCompletion(sessionID: sessionID)
+            completionAlert.stop(sessionID: sessionID)
             scheduledCompletionNotificationDeliveryDate = nil
             Task { await FocusActivityManager.shared.cancel(sessionID: sessionID) }
         }

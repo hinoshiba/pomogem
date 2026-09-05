@@ -46,6 +46,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         XCTAssertEqual(firstNineIDs.count, 9)
 
         startDemoFocus(in: app)
+        stopCompletionAlertIfPresented(in: app)
         let dismissReward = app.buttons["休憩の提案を閉じる"]
         XCTAssertTrue(
             dismissReward.waitForExistence(timeout: 60),
@@ -244,6 +245,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
 
     private func completeDemoFocusAndDismissReward(in app: XCUIApplication) {
         startDemoFocus(in: app)
+        stopCompletionAlertIfPresented(in: app)
         let dismissReward = app.buttons["休憩の提案を閉じる"]
         XCTAssertTrue(
             dismissReward.waitForExistence(timeout: 60),
@@ -251,6 +253,19 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         )
         dismissReward.tap()
         XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 6))
+    }
+
+    @discardableResult
+    private func stopCompletionAlertIfPresented(
+        in app: XCUIApplication,
+        timeout: TimeInterval = 25
+    ) -> Bool {
+        let stop = app.buttons["focus.completion-alert.stop"]
+        guard stop.waitForExistence(timeout: timeout) else { return false }
+        XCTAssertEqual(stop.label, "終了アラートを止める")
+        XCTAssertTrue(stop.isHittable)
+        stop.tap()
+        return true
     }
 
     private func dismissStaleRewardReceiptsIfNeeded(in app: XCUIApplication) {

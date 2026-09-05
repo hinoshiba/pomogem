@@ -1447,6 +1447,8 @@ struct RootView: View {
 
     @MainActor
     private func quiesceForCompleteDataDeletion() async {
+        TimerCompletionAlertController.shared.stop()
+        TimerCompletionAlertAcknowledgementStore.removeAll()
         isDataDeletionQuiesced = true
         maintenanceIdleGraceTask?.cancel()
         maintenanceIdleGraceTask = nil
@@ -1611,6 +1613,31 @@ struct RootView: View {
 
         let epochKey = marker.epochID.uuidString.lowercased()
         guard lastAppliedResetEpoch != epochKey else { return false }
+
+        // This is the first local application of this reset generation. A
+        // completion already created inside that same generation is valid and
+        // must retain its Stop UI contract. An unknown future generation stays
+        // quarantined, but keeps a prior acknowledgement so delayed marker
+        // delivery cannot make an already-stopped completion sound again.
+        let preservesLocalFocus = localEnvelope != nil
+            && localFocusEpochState != .stale
+        let retainedCompletionID = preservesLocalFocus
+            ? localEnvelope?.pendingCompletion?.sessionID
+            : nil
+        let retainedCompletionWasAcknowledged = retainedCompletionID.map {
+            TimerCompletionAlertAcknowledgementStore.contains(sessionID: $0)
+        } ?? false
+        let retainsActiveCompletionAlert = retainedCompletionID.map {
+            localFocusEpochState == .current
+                && !retainedCompletionWasAcknowledged
+                && TimerCompletionAlertController.shared.isActive(sessionID: $0)
+        } ?? false
+        if !retainsActiveCompletionAlert {
+            TimerCompletionAlertController.shared.stop()
+        }
+        // Keep the bounded acknowledgement list intact here: deleting and
+        // recreating one retained ID would introduce a crash window that could
+        // re-alert after Stop. Explicit on-device reset/deletion clears it.
 
         FocusPersistence.clearBreak()
         DeferredFocusCompletionStore.clear()
@@ -2032,7 +2059,22 @@ struct RootView: View {
             )
         case let .retireMaterialized(sessionID):
             // Exact current-epoch materialization is the one bounded condition
-            // that permits retiring the last local completion envelope.
+            // that permits retiring the last local completion envelope, but
+            // persistence and acknowledgement are separate events. Until the
+            // person presses Stop, keep presenting the recovered completion so
+            // a foreground alert can never outlive its only stop control.
+            guard TimerCompletionAlertAcknowledgementStore.contains(
+                sessionID: sessionID
+            ) else {
+                await presentLocalRecovery(envelope)
+                let durableEnvelope = FocusPersistence.load()
+                await FocusActivityManager.shared.reconcileWithDurableSession(
+                    durableEnvelope?.pendingCompletion?.sessionID
+                        ?? durableEnvelope?.engine.currentSessionID
+                )
+                return
+            }
+            TimerCompletionAlertController.shared.stop(sessionID: sessionID)
             NotificationManager.shared.cancelFocusCompletion(sessionID: sessionID)
             FocusPersistence.clear()
             DeferredFocusCompletionStore.clear(sessionID: sessionID)
@@ -2209,8 +2251,10 @@ struct RootView: View {
             // Payloads from versions that did not persist a subject cannot be
             // committed into a trustworthy StudySession. Retire only those
             // legacy bytes; current envelopes below retain their session.
-            if let sessionID = envelope.engine.currentSessionID {
+            if let sessionID = envelope.pendingCompletion?.sessionID
+                ?? envelope.engine.currentSessionID {
                 NotificationManager.shared.cancelFocusCompletion(sessionID: sessionID)
+                TimerCompletionAlertController.shared.stop(sessionID: sessionID)
                 await FocusActivityManager.shared.cancel(sessionID: sessionID)
             }
             FocusPersistence.clear()
@@ -2219,8 +2263,10 @@ struct RootView: View {
 
         let relaunchAction = FocusPersistence.relaunchAction(for: envelope, at: .now)
         guard relaunchAction.restoresFocusView else {
-            if let sessionID = envelope.engine.currentSessionID {
+            if let sessionID = envelope.pendingCompletion?.sessionID
+                ?? envelope.engine.currentSessionID {
                 NotificationManager.shared.cancelFocusCompletion(sessionID: sessionID)
+                TimerCompletionAlertController.shared.stop(sessionID: sessionID)
                 await FocusActivityManager.shared.cancel(sessionID: sessionID)
             }
             FocusPersistence.clear()
@@ -2274,6 +2320,7 @@ struct RootView: View {
         if let sessionID = envelope?.pendingCompletion?.sessionID
             ?? envelope?.engine.currentSessionID {
             NotificationManager.shared.cancelFocusCompletion(sessionID: sessionID)
+            TimerCompletionAlertController.shared.stop(sessionID: sessionID)
             Task { await FocusActivityManager.shared.cancel(sessionID: sessionID) }
         }
         FocusPersistence.clear()

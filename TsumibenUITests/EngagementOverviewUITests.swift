@@ -39,6 +39,8 @@ final class EngagementOverviewUITests: XCTestCase {
         XCTAssertTrue(launcher.waitForExistence(timeout: 4))
         launcher.tap()
 
+        stopCompletionAlertIfPresented(in: app)
+
         let weeklyCompletion = app.descendants(matching: .any)["reward.heading"]
         XCTAssertTrue(
             weeklyCompletion.waitForExistence(timeout: 20),
@@ -314,6 +316,8 @@ final class EngagementOverviewUITests: XCTestCase {
         XCTAssertTrue(launcher.waitForExistence(timeout: 5))
         launcher.tap()
 
+        stopCompletionAlertIfPresented(in: app)
+
         let firstBridge = app.descendants(matching: .any)["reward.bridge"]
         XCTAssertTrue(firstBridge.waitForExistence(timeout: 25))
         let firstProgress = app.descendants(matching: .any)["reward.fusion-progress"]
@@ -419,6 +423,19 @@ final class EngagementOverviewUITests: XCTestCase {
         lower.name = "40-year fusion hierarchy — lower levels"
         lower.lifetime = .keepAlways
         add(lower)
+    }
+
+    @discardableResult
+    private func stopCompletionAlertIfPresented(
+        in app: XCUIApplication,
+        timeout: TimeInterval = 25
+    ) -> Bool {
+        let stop = app.buttons["focus.completion-alert.stop"]
+        guard stop.waitForExistence(timeout: timeout) else { return false }
+        XCTAssertEqual(stop.label, "終了アラートを止める")
+        XCTAssertTrue(stop.isHittable)
+        stop.tap()
+        return true
     }
 
     private func scrollUntilVisible(

@@ -1023,6 +1023,11 @@ private struct TsumibenPersistenceLaunchHost: View {
     }
 
     private func beginContainerRetirement() {
+        // Cloud-backed RootView is absent while the account is revalidated.
+        // Pause any process-local completion loop so it cannot resume on the
+        // foreground edge without its Stop UI. Durable recovery restarts an
+        // unacknowledged alert after the verified container remounts.
+        TimerCompletionAlertController.shared.stop()
         if let container = session?.container {
             retiringContainer = RetiringPersistenceContainerReference(container)
         }
@@ -1030,6 +1035,7 @@ private struct TsumibenPersistenceLaunchHost: View {
     }
 
     private func retireExternalTimerState() async {
+        TimerCompletionAlertController.shared.stop()
         if let namespace = suspendedAccountBinding?.namespace {
             FocusPersistence.clearScheduledCompletionNotificationWitness(
                 namespace: namespace

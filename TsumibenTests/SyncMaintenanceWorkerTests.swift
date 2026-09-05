@@ -1489,6 +1489,122 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         XCTAssertEqual(spy.configurations, [current])
     }
 
+    func testTimerCompletionAlertRepeatsUntilMatchingSessionStopsIt() async {
+        let gate = TimerCompletionAlertSleepGate()
+        let spy = TimerCompletionAlertPlaybackSpy()
+        let controller = TimerCompletionAlertController(
+            sleeper: { try await gate.sleep() },
+            playback: { spy.configurations.append($0) },
+            stopPlayback: { spy.stopCount += 1 },
+            applicationIsActive: { spy.applicationIsActive }
+        )
+        let sessionID = UUID()
+        let configuration = TimerCompletionAlertConfiguration(
+            sessionID: sessionID,
+            sound: .bright,
+            haptic: .strong
+        )
+
+        controller.start(configuration)
+        XCTAssertTrue(controller.isActive(sessionID: sessionID))
+        XCTAssertEqual(spy.configurations, [configuration])
+        await waitForCompletionAlertSleep(gate, count: 1)
+
+        await gate.resumeNext()
+        await waitForCompletionAlertPlayback(spy, count: 2)
+        await waitForCompletionAlertSleep(gate, count: 1)
+
+        controller.stop(sessionID: UUID())
+        XCTAssertTrue(controller.isActive(sessionID: sessionID))
+        XCTAssertEqual(spy.stopCount, 0)
+
+        controller.stop(sessionID: sessionID)
+        XCTAssertFalse(controller.isActive(sessionID: sessionID))
+        XCTAssertEqual(spy.stopCount, 1)
+        await gate.resumeNext()
+        await Task.yield()
+        XCTAssertEqual(spy.configurations, [configuration, configuration])
+    }
+
+    func testTimerCompletionAlertDelaysReturnCueAndSkipsInactiveCycles() async {
+        let gate = TimerCompletionAlertSleepGate()
+        let spy = TimerCompletionAlertPlaybackSpy()
+        spy.applicationIsActive = false
+        let controller = TimerCompletionAlertController(
+            sleeper: { try await gate.sleep() },
+            playback: { spy.configurations.append($0) },
+            stopPlayback: { spy.stopCount += 1 },
+            applicationIsActive: { spy.applicationIsActive }
+        )
+        let configuration = TimerCompletionAlertConfiguration(
+            sessionID: UUID(),
+            sound: .soft,
+            haptic: nil
+        )
+
+        controller.start(configuration, playsImmediately: false)
+        XCTAssertTrue(controller.isActive(sessionID: configuration.sessionID))
+        XCTAssertTrue(spy.configurations.isEmpty)
+        await waitForCompletionAlertSleep(gate, count: 1)
+        await gate.resumeNext()
+        await waitForCompletionAlertSleep(gate, count: 1)
+        XCTAssertTrue(spy.configurations.isEmpty)
+
+        spy.applicationIsActive = true
+        await gate.resumeNext()
+        await waitForCompletionAlertPlayback(spy, count: 1)
+        await waitForCompletionAlertSleep(gate, count: 1)
+        controller.stop(sessionID: configuration.sessionID)
+        await gate.resumeNext()
+        await Task.yield()
+        XCTAssertEqual(spy.configurations, [configuration])
+    }
+
+    func testTimerCompletionAlertIsSilentOnlyWhenBothChannelsAreOff() {
+        let spy = TimerCompletionAlertPlaybackSpy()
+        let controller = TimerCompletionAlertController(
+            sleeper: { try await Task.sleep(for: .seconds(60)) },
+            playback: { spy.configurations.append($0) },
+            stopPlayback: { spy.stopCount += 1 },
+            applicationIsActive: { true }
+        )
+        let silent = TimerCompletionAlertConfiguration(
+            sessionID: UUID(),
+            sound: nil,
+            haptic: nil
+        )
+
+        controller.start(silent)
+        XCTAssertFalse(controller.isActive(sessionID: silent.sessionID))
+        XCTAssertTrue(spy.configurations.isEmpty)
+
+        let hapticOnly = TimerCompletionAlertConfiguration(
+            sessionID: UUID(),
+            sound: nil,
+            haptic: .standard
+        )
+        controller.start(hapticOnly)
+        XCTAssertEqual(spy.configurations, [hapticOnly])
+
+        let staleSilent = TimerCompletionAlertConfiguration(
+            sessionID: UUID(),
+            sound: nil,
+            haptic: nil
+        )
+        controller.start(staleSilent)
+        XCTAssertTrue(controller.isActive(sessionID: hapticOnly.sessionID))
+        XCTAssertEqual(spy.stopCount, 0)
+
+        let matchingSilent = TimerCompletionAlertConfiguration(
+            sessionID: hapticOnly.sessionID,
+            sound: nil,
+            haptic: nil
+        )
+        controller.start(matchingSilent)
+        XCTAssertFalse(controller.isActive(sessionID: hapticOnly.sessionID))
+        XCTAssertEqual(spy.stopCount, 1)
+    }
+
     func testPreferenceSafetyTieAndExactStampConflictFailClosed() throws {
         let sharedStamp = orderedUUID(680)
         let active = Prefs(
@@ -4187,6 +4303,36 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         XCTFail("Timed out waiting for preview state \(state)", line: line)
     }
 
+    private func waitForCompletionAlertSleep(
+        _ gate: TimerCompletionAlertSleepGate,
+        count: Int,
+        line: UInt = #line
+    ) async {
+        for _ in 0..<1_000 {
+            if await gate.pendingCount == count { return }
+            await Task.yield()
+        }
+        XCTFail(
+            "Timed out waiting for \(count) completion-alert sleep(s)",
+            line: line
+        )
+    }
+
+    private func waitForCompletionAlertPlayback(
+        _ spy: TimerCompletionAlertPlaybackSpy,
+        count: Int,
+        line: UInt = #line
+    ) async {
+        for _ in 0..<1_000 {
+            if spy.configurations.count == count { return }
+            await Task.yield()
+        }
+        XCTFail(
+            "Timed out waiting for \(count) completion-alert playback(s)",
+            line: line
+        )
+    }
+
     private func claimFingerprint(_ value: FocusTimerDeviceClaim) -> String {
         [
             value.id.uuidString,
@@ -4226,7 +4372,32 @@ private actor TimerCompletionPreviewSleepGate {
     }
 }
 
+private actor TimerCompletionAlertSleepGate {
+    private var continuations: [CheckedContinuation<Void, Error>] = []
+
+    var pendingCount: Int { continuations.count }
+
+    func sleep() async throws {
+        try Task.checkCancellation()
+        try await withCheckedThrowingContinuation { continuation in
+            continuations.append(continuation)
+        }
+    }
+
+    func resumeNext() {
+        guard !continuations.isEmpty else { return }
+        continuations.removeFirst().resume()
+    }
+}
+
 @MainActor
 private final class TimerCompletionPreviewPlaybackSpy {
     var configurations: [TimerCompletionPreviewConfiguration] = []
+}
+
+@MainActor
+private final class TimerCompletionAlertPlaybackSpy {
+    var configurations: [TimerCompletionAlertConfiguration] = []
+    var stopCount = 0
+    var applicationIsActive = true
 }

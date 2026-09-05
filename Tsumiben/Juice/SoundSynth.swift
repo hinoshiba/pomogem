@@ -1,4 +1,5 @@
 import AVFoundation
+import Observation
 import UIKit
 import UserNotifications
 
@@ -216,6 +217,179 @@ private extension Int {
     }
 }
 
+struct TimerCompletionAlertConfiguration: Equatable, Sendable {
+    let sessionID: UUID
+    let sound: TimerCompletionSound?
+    let haptic: TimerCompletionHaptic?
+
+    var isSilent: Bool { sound == nil && haptic == nil }
+}
+
+/// Repeats a short, bounded completion cue while the app is in the foreground.
+///
+/// iOS suspends ordinary apps in the background, where the scheduled local
+/// notification remains the only supported completion cue. Keeping the
+/// logical alert alive while inactive lets it resume after the app becomes
+/// active without requesting background audio or bypassing the silent switch.
+/// Generation fencing protects a newer timer from a late, non-cooperative
+/// cancellation or stop action owned by an older session.
+@MainActor
+@Observable
+final class TimerCompletionAlertController {
+    typealias Sleeper = @Sendable () async throws -> Void
+    typealias Playback = @MainActor @Sendable (
+        TimerCompletionAlertConfiguration
+    ) -> Void
+    typealias StopPlayback = @MainActor @Sendable () -> Void
+    typealias ApplicationIsActive = @MainActor @Sendable () -> Bool
+
+    static let shared = TimerCompletionAlertController()
+
+    private(set) var activeConfiguration: TimerCompletionAlertConfiguration?
+
+    private let sleeper: Sleeper
+    private let playback: Playback
+    private let stopPlayback: StopPlayback
+    private let applicationIsActive: ApplicationIsActive
+    private var task: Task<Void, Never>?
+    private var generation: UInt64 = 0
+
+    init(
+        sleeper: @escaping Sleeper = {
+            try await Task.sleep(for: .milliseconds(1_300))
+        },
+        playback: @escaping Playback = { configuration in
+            if let sound = configuration.sound {
+                SoundSynth.shared.playTimerCompletion(sound)
+            }
+            if let haptic = configuration.haptic {
+                Haptics.shared.playTimerCompletion(haptic)
+            }
+        },
+        stopPlayback: @escaping StopPlayback = {
+            SoundSynth.shared.stopTimerCompletion()
+            Haptics.shared.stopTimerCompletion()
+        },
+        applicationIsActive: @escaping ApplicationIsActive = {
+            UIApplication.shared.applicationState == .active
+        }
+    ) {
+        self.sleeper = sleeper
+        self.playback = playback
+        self.stopPlayback = stopPlayback
+        self.applicationIsActive = applicationIsActive
+    }
+
+    func isActive(sessionID: UUID) -> Bool {
+        activeConfiguration?.sessionID == sessionID
+    }
+
+    func start(
+        _ configuration: TimerCompletionAlertConfiguration,
+        playsImmediately: Bool = true
+    ) {
+        guard !configuration.isSilent else {
+            // A stale completion whose two channels are disabled must never
+            // acknowledge or stop a newer session's audible alert.
+            stop(sessionID: configuration.sessionID)
+            return
+        }
+        guard activeConfiguration != configuration else { return }
+
+        generation &+= 1
+        let alertGeneration = generation
+        task?.cancel()
+        if activeConfiguration != nil {
+            stopPlayback()
+        }
+        activeConfiguration = configuration
+
+        if playsImmediately, applicationIsActive() {
+            playback(configuration)
+        }
+
+        let sleeper = self.sleeper
+        let playback = self.playback
+        let applicationIsActive = self.applicationIsActive
+        task = Task { @MainActor [weak self] in
+            while true {
+                do {
+                    try await sleeper()
+                } catch {
+                    return
+                }
+                guard let self,
+                      !Task.isCancelled,
+                      self.generation == alertGeneration,
+                      self.activeConfiguration == configuration
+                else { return }
+                if applicationIsActive() {
+                    playback(configuration)
+                }
+            }
+        }
+    }
+
+    func stop(sessionID: UUID? = nil) {
+        guard let activeConfiguration else { return }
+        if let sessionID, activeConfiguration.sessionID != sessionID { return }
+
+        generation &+= 1
+        task?.cancel()
+        task = nil
+        self.activeConfiguration = nil
+        stopPlayback()
+    }
+}
+
+/// A bounded, account-scoped acknowledgement prevents a recovered failed save
+/// from sounding again after the person already pressed Stop. UUIDs contain no
+/// activity content, and old entries are harmlessly evicted.
+enum TimerCompletionAlertAcknowledgementStore {
+    static let defaultsKey = "timer.completion-alert.acknowledged.v1"
+    private static let maximumCount = 16
+
+    static func contains(
+        sessionID: UUID,
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        acknowledgedIDs(defaults: defaults).contains(
+            sessionID.uuidString.lowercased()
+        )
+    }
+
+    static func mark(
+        sessionID: UUID,
+        defaults: UserDefaults = .standard
+    ) {
+        let value = sessionID.uuidString.lowercased()
+        var values = acknowledgedIDs(defaults: defaults)
+        values.removeAll { $0 == value }
+        values.append(value)
+        defaults.set(
+            Array(values.suffix(maximumCount)),
+            forKey: AccountScopedLocalState.defaultsKey(
+                base: defaultsKey,
+                defaults: defaults
+            )
+        )
+    }
+
+    static func removeAll(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: AccountScopedLocalState.defaultsKey(
+            base: defaultsKey,
+            defaults: defaults
+        ))
+    }
+
+    private static func acknowledgedIDs(defaults: UserDefaults) -> [String] {
+        defaults.stringArray(forKey: AccountScopedLocalState.defaultsKey(
+            base: defaultsKey,
+            defaults: defaults
+        )) ?? []
+    }
+}
+
 /// Runtime-only sound design for the jar and timer. No third-party or bundled
 /// audio samples are used.
 @MainActor
@@ -244,6 +418,7 @@ final class SoundSynth {
     }
 
     private var engine = AVAudioEngine()
+    private var timerCompletionPlayer = AVAudioPlayerNode()
     private let format: AVAudioFormat
     private var voices: [Voice] = []
     private var nextImportantVoice = 0
@@ -260,6 +435,7 @@ final class SoundSynth {
     private var playbackGeneration: UInt64 = 0
     private var idleShutdownGeneration: UInt64 = 0
     private var latestScheduledClinkUptime = -Double.greatestFiniteMagnitude
+    private var timerCompletionBusyUntilUptime = -Double.greatestFiniteMagnitude
 
     /// Leave a little room for the output render pipeline to consume the final
     /// scheduled frame, then release the audio session. Jar sounds are short
@@ -383,12 +559,34 @@ final class SoundSynth {
     }
 
     func playCompletionChime() {
-        playTimerCompletion(.standard)
+        guard let buffer = timerCompletionSounds[.standard] else { return }
+        // Reward/Jar chimes use the ordinary voice pool. The dedicated timer
+        // player is reserved for the repeat-until-acknowledged alert so the
+        // Stop button cannot cut off an unrelated achievement sound.
+        play(buffer, volume: 1, priority: .important)
     }
 
     func playTimerCompletion(_ style: TimerCompletionSound) {
         guard isEnabled, let buffer = timerCompletionSounds[style] else { return }
-        play(buffer, volume: 1, priority: .important)
+        requestEngineStart()
+        guard engine.isRunning else { return }
+
+        timerCompletionPlayer.stop()
+        timerCompletionPlayer.volume = masterVolume
+        let duration = Double(buffer.frameLength) / buffer.format.sampleRate
+        timerCompletionBusyUntilUptime = ProcessInfo.processInfo.systemUptime
+            + duration
+        timerCompletionPlayer.scheduleBuffer(buffer, at: nil, options: .interrupts)
+        timerCompletionPlayer.play()
+        scheduleIdleShutdown(after: duration)
+    }
+
+    /// Stops an in-app completion cue without mutating the person's sound
+    /// preference or interrupting a gem/drop sound that happens to overlap it.
+    func stopTimerCompletion() {
+        timerCompletionPlayer.stop()
+        timerCompletionBusyUntilUptime = -Double.greatestFiniteMagnitude
+        scheduleIdleShutdown(after: 0)
     }
 
     /// Shared deterministic source for foreground playback and the short CAF
@@ -482,6 +680,12 @@ final class SoundSynth {
 
     private func configureEngine() {
         guard voices.isEmpty else { return }
+        engine.attach(timerCompletionPlayer)
+        engine.connect(
+            timerCompletionPlayer,
+            to: engine.mainMixerNode,
+            format: format
+        )
         for _ in 0..<Constants.Sound.maxVoices {
             let voice = Voice()
             engine.attach(voice.player)
@@ -540,6 +744,8 @@ final class SoundSynth {
             voice.player.stop()
             voice.busyUntilUptime = -Double.greatestFiniteMagnitude
         }
+        timerCompletionPlayer.stop()
+        timerCompletionBusyUntilUptime = -Double.greatestFiniteMagnitude
         if engine.isRunning {
             engine.stop()
         }
@@ -579,7 +785,11 @@ final class SoundSynth {
                 max(remaining, voice.busyUntilUptime - now)
             }
             let remainingScheduledClinks = self.latestScheduledClinkUptime - now
-            let remainingActivity = max(remainingPlayback, remainingScheduledClinks)
+            let remainingActivity = max(
+                remainingPlayback,
+                remainingScheduledClinks,
+                self.timerCompletionBusyUntilUptime - now
+            )
             if remainingActivity > 0 {
                 self.scheduleIdleShutdownCheck(
                     generation: generation,
@@ -605,6 +815,7 @@ final class SoundSynth {
         for voice in voices {
             voice.player.stop()
         }
+        timerCompletionPlayer.stop()
         if engine.isRunning {
             engine.stop()
         }
@@ -613,6 +824,8 @@ final class SoundSynth {
             self.configurationObserver = nil
         }
         voices.removeAll(keepingCapacity: false)
+        timerCompletionPlayer = AVAudioPlayerNode()
+        timerCompletionBusyUntilUptime = -Double.greatestFiniteMagnitude
         nextImportantVoice = 0
         lastTickUptime = -Double.greatestFiniteMagnitude
         engine = AVAudioEngine()

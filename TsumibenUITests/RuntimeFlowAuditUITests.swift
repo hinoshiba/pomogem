@@ -348,6 +348,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         // picker is closed before any image is retained.
         selectDemoDurationForVisualAudit()
         startDemoFocusForVisualAudit()
+        stopCompletionAlertIfPresented(in: app)
         let dismissBridge = app.buttons["休憩の提案を閉じる"]
         XCTAssertTrue(dismissBridge.waitForExistence(timeout: 30))
         XCTAssertTrue(
@@ -441,6 +442,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         }
 
         startDemoFocusForVisualAudit()
+        stopCompletionAlertIfPresented(in: app)
         let dismissBridge = app.buttons["休憩の提案を閉じる"]
         XCTAssertTrue(dismissBridge.waitForExistence(timeout: 28))
         XCTAssertTrue(
@@ -469,6 +471,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         retainScreenshot(named: "Nine measured particles — pre-fusion Home rail")
 
         startDemoFocusForVisualAudit()
+        stopCompletionAlertIfPresented(in: app)
         XCTAssertTrue(dismissBridge.waitForExistence(timeout: 28))
         let tenthProgress = app.descendants(matching: .any)["reward.fusion-progress"]
         XCTAssertTrue(tenthProgress.waitForExistence(timeout: 4))
@@ -715,6 +718,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         presentationProbe: XCUIElement
     ) {
         startDemoFocusForVisualAudit()
+        stopCompletionAlertIfPresented(in: app)
         let dismiss = app.buttons["休憩の提案を閉じる"]
         XCTAssertTrue(dismiss.waitForExistence(timeout: 28))
         XCTAssertTrue(
@@ -734,6 +738,19 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             waitForHittable(demoLauncherForVisualAudit, timeout: 6),
             "The launcher must become operable after Reward Bridge \(expectedPresentationCount) closes"
         )
+    }
+
+    @discardableResult
+    private func stopCompletionAlertIfPresented(
+        in app: XCUIApplication,
+        timeout: TimeInterval = 25
+    ) -> Bool {
+        let stop = app.buttons["focus.completion-alert.stop"]
+        guard stop.waitForExistence(timeout: timeout) else { return false }
+        XCTAssertEqual(stop.label, "終了アラートを止める")
+        XCTAssertTrue(stop.isHittable)
+        stop.tap()
+        return true
     }
 
     private func retainScreenshot(named name: String) {

@@ -52,6 +52,21 @@ final class FocusCompletionFailureRecoveryUITests: XCTestCase {
         XCTAssertTrue(retryInFocus.exists)
         XCTAssertTrue(protect.exists)
         XCTAssertTrue(protect.isHittable)
+        XCTAssertTrue(
+            stopCompletionAlertIfPresented(in: app, timeout: 3),
+            "A failed save must not make the foreground completion alert impossible to stop"
+        )
+        XCTAssertTrue(
+            waitForNonExistence(
+                app.buttons["focus.completion-alert.stop"],
+                timeout: 3
+            ),
+            "Stopping the alert must retire its control"
+        )
+        XCTAssertTrue(saveError.exists)
+        XCTAssertTrue(retryInFocus.exists)
+        XCTAssertTrue(protect.exists)
+        XCTAssertTrue(protect.isHittable)
 
         let failureAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         failureAttachment.name = "Injected completion save failure — recoverable"
@@ -172,6 +187,19 @@ final class FocusCompletionFailureRecoveryUITests: XCTestCase {
         let close = app.buttons["home.menu.close"]
         XCTAssertTrue(close.waitForExistence(timeout: 4))
         close.tap()
+    }
+
+    @discardableResult
+    private func stopCompletionAlertIfPresented(
+        in app: XCUIApplication,
+        timeout: TimeInterval = 25
+    ) -> Bool {
+        let stop = app.buttons["focus.completion-alert.stop"]
+        guard stop.waitForExistence(timeout: timeout) else { return false }
+        XCTAssertEqual(stop.label, "終了アラートを止める")
+        XCTAssertTrue(stop.isHittable)
+        stop.tap()
+        return true
     }
 
     private func dismissStaleRewardReceiptsIfNeeded(in app: XCUIApplication) {

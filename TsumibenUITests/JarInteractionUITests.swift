@@ -64,6 +64,8 @@ final class JarInteractionUITests: XCTestCase {
         XCTAssertTrue(launcher.waitForExistence(timeout: 3))
         launcher.tap()
 
+        stopCompletionAlertIfPresented(in: app)
+
         let dismissBreakOffer = app.buttons["休憩の提案を閉じる"]
         XCTAssertTrue(
             dismissBreakOffer.waitForExistence(timeout: 60),
@@ -128,6 +130,19 @@ final class JarInteractionUITests: XCTestCase {
         )
         XCTAssertTrue((jar.value as? String)?.contains("1粒") == true)
         XCTAssertTrue((jar.value as? String)?.contains("250グラム") == true)
+    }
+
+    @discardableResult
+    private func stopCompletionAlertIfPresented(
+        in app: XCUIApplication,
+        timeout: TimeInterval = 25
+    ) -> Bool {
+        let stop = app.buttons["focus.completion-alert.stop"]
+        guard stop.waitForExistence(timeout: timeout) else { return false }
+        XCTAssertEqual(stop.label, "終了アラートを止める")
+        XCTAssertTrue(stop.isHittable)
+        stop.tap()
+        return true
     }
 
     private func dismissStaleRewardReceiptsIfNeeded(in app: XCUIApplication) {

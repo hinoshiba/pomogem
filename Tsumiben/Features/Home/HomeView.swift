@@ -2094,6 +2094,10 @@ struct HomeView: View {
 
     private func startBreakButton(_ offer: BreakOffer) -> some View {
         Button("\(offer.minutes)分休憩") {
+            TimerCompletionAlertAcknowledgementStore.mark(
+                sessionID: offer.id
+            )
+            TimerCompletionAlertController.shared.stop(sessionID: offer.id)
             breakOfferTask?.cancel()
             shareChipTask?.cancel()
             shareChipTask = nil
@@ -2115,7 +2119,15 @@ struct HomeView: View {
             // this blocker, the 180ms hand-off can let a celebration sheet win
             // the presentation race before the GIF studio opens.
             isDeferringCelebrationsForShare = true
-            if let offer = breakOffer { retireRewardReceipt(offer) }
+            if let offer = breakOffer {
+                TimerCompletionAlertAcknowledgementStore.mark(
+                    sessionID: offer.id
+                )
+                TimerCompletionAlertController.shared.stop(
+                    sessionID: offer.id
+                )
+                retireRewardReceipt(offer)
+            }
             breakOffer = nil
             showShareChip = false
             Task { @MainActor in
@@ -2143,6 +2155,10 @@ struct HomeView: View {
 
     private func dismissBreakOfferButton(_ offer: BreakOffer, showsText: Bool) -> some View {
         Button {
+            TimerCompletionAlertAcknowledgementStore.mark(
+                sessionID: offer.id
+            )
+            TimerCompletionAlertController.shared.stop(sessionID: offer.id)
             breakOfferTask?.cancel()
             shareChipTask?.cancel()
             shareChipTask = nil

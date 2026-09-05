@@ -24,6 +24,7 @@ final class Haptics {
     private let supportsCoreHaptics: Bool
     private var engine: CHHapticEngine?
     private var engineIsRunning = false
+    private var timerCompletionPlayer: CHHapticPatternPlayer?
     private let lightFallback = UIImpactFeedbackGenerator(style: .light)
     private let mediumFallback = UIImpactFeedbackGenerator(style: .medium)
     private let heavyFallback = UIImpactFeedbackGenerator(style: .heavy)
@@ -115,7 +116,7 @@ final class Haptics {
     func playTimerCompletion(_ style: TimerCompletionHaptic = .standard) {
         switch style {
         case .standard:
-            play(
+            playTimerCompletion(
                 events: [
                     transient(intensity: 0.72, sharpness: 0.82),
                     transient(intensity: 0.92, sharpness: 0.48, relativeTime: 0.14)
@@ -123,13 +124,13 @@ final class Haptics {
                 fallbackIntensity: 0.9
             )
         case .gentle:
-            play(
+            playTimerCompletion(
                 events: [transient(intensity: 0.42, sharpness: 0.30)],
                 fallbackIntensity: 0.42,
                 fallbackSharpness: 0.30
             )
         case .strong:
-            play(
+            playTimerCompletion(
                 events: [
                     transient(intensity: 0.78, sharpness: 0.74),
                     transient(intensity: 0.94, sharpness: 0.54, relativeTime: 0.11),
@@ -139,6 +140,13 @@ final class Haptics {
                 fallbackSharpness: 0.45
             )
         }
+    }
+
+    /// Stops only the retained completion pattern. Jar/drop haptics use their
+    /// own short players and must not be interrupted by acknowledging a timer.
+    func stopTimerCompletion() {
+        try? timerCompletionPlayer?.stop(atTime: CHHapticTimeImmediate)
+        timerCompletionPlayer = nil
     }
 
     func playGold() {
@@ -253,6 +261,47 @@ final class Haptics {
         playFallback(intensity: fallbackIntensity, sharpness: fallbackSharpness)
     }
 
+    private func playTimerCompletion(
+        events: [CHHapticEvent],
+        fallbackIntensity: CGFloat,
+        fallbackSharpness: CGFloat = 0.5
+    ) {
+        guard isEnabled, !events.isEmpty else { return }
+        let duration = playbackDuration(for: events)
+        guard supportsCoreHaptics else {
+            postWillPlay(duration: duration)
+            playFallback(intensity: fallbackIntensity, sharpness: fallbackSharpness)
+            return
+        }
+
+        if startEngine(), let engine {
+            do {
+                let pattern = try CHHapticPattern(events: events, parameters: [])
+                let player = try engine.makePlayer(with: pattern)
+                try? timerCompletionPlayer?.stop(atTime: CHHapticTimeImmediate)
+                timerCompletionPlayer = player
+                postWillPlay(duration: duration)
+                do {
+                    try player.start(atTime: CHHapticTimeImmediate)
+                } catch {
+                    timerCompletionPlayer = nil
+                    engineIsRunning = false
+                    playFallback(
+                        intensity: fallbackIntensity,
+                        sharpness: fallbackSharpness
+                    )
+                }
+                return
+            } catch {
+                timerCompletionPlayer = nil
+                engineIsRunning = false
+            }
+        }
+
+        postWillPlay(duration: duration)
+        playFallback(intensity: fallbackIntensity, sharpness: fallbackSharpness)
+    }
+
     private func configureEngineIfSupported() {
         guard supportsCoreHaptics else { return }
         do {
@@ -265,6 +314,7 @@ final class Haptics {
                     // here can form a reset/start loop; the next play/prepare
                     // is the intentional, on-demand retry boundary.
                     self?.engineIsRunning = false
+                    self?.timerCompletionPlayer = nil
                 }
             }
             hapticEngine.stoppedHandler = { [weak self] _ in
@@ -273,6 +323,7 @@ final class Haptics {
                     // to restart while suspended/interrupted. Every stopped
                     // reason is safely retried by the next play/prepare call.
                     self?.engineIsRunning = false
+                    self?.timerCompletionPlayer = nil
                 }
             }
             engine = hapticEngine
@@ -298,6 +349,7 @@ final class Haptics {
 
     private func stopEngine() {
         engineIsRunning = false
+        timerCompletionPlayer = nil
         engine?.stop(completionHandler: nil)
     }
 

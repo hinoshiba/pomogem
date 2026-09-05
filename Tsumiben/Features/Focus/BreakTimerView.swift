@@ -18,6 +18,7 @@ struct BreakTimerView: View {
     @State private var clockAnchor: ClockAnchor?
     @State private var now = Date.now
     @State private var didSignalCompletion = false
+    @State private var completionAlert = TimerCompletionAlertController.shared
     @State private var notifications = NotificationManager.shared
     @State private var notificationScheduleState: BreakNotificationScheduleState = .idle
     @State private var notificationSchedulingTask: Task<Void, Never>?
@@ -98,7 +99,11 @@ struct BreakTimerView: View {
                                 Image(systemName: "xmark")
                             }
                             .buttonStyle(TsumibenIconButtonStyle())
-                            .accessibilityLabel("休憩をスキップ")
+                            .accessibilityLabel(
+                                remaining == 0
+                                    ? "終了アラートを停止して瓶へ戻る"
+                                    : "休憩をスキップ"
+                            )
                         }
 
                         Spacer(minLength: 8)
@@ -132,9 +137,35 @@ struct BreakTimerView: View {
                         Spacer(minLength: 8)
 
                         if remaining == 0 {
-                            Button("瓶へ戻る") { closeBreak() }
+                            if completionAlert.isActive(sessionID: sessionID) {
+                                VStack(spacing: 7) {
+                                    Label(
+                                        "休憩終了のアラート中",
+                                        systemImage: "bell.and.waves.left.and.right.fill"
+                                    )
+                                    .font(.headline.weight(.bold))
+                                    .foregroundStyle(TsumibenTheme.amber)
+                                    Text("アプリが前面にある間、有効な音と触覚を停止するまで繰り返します")
+                                        .font(.caption)
+                                        .foregroundStyle(TsumibenTheme.muted)
+                                        .multilineTextAlignment(.center)
+                                }
+                            }
+                            Button {
+                                closeBreak()
+                            } label: {
+                                Label(
+                                    completionAlert.isActive(sessionID: sessionID)
+                                        ? "停止して瓶へ戻る"
+                                        : "瓶へ戻る",
+                                    systemImage: completionAlert.isActive(sessionID: sessionID)
+                                        ? "stop.fill"
+                                        : "arrow.backward"
+                                )
+                            }
                                 .buttonStyle(TsumibenPrimaryButtonStyle())
                                 .frame(minHeight: 44)
+                                .accessibilityIdentifier("break.completion-alert.stop")
                         } else {
                             Button("休憩をスキップ") { closeBreak() }
                                 .buttonStyle(TsumibenSecondaryButtonStyle())
@@ -379,6 +410,12 @@ struct BreakTimerView: View {
 
     @MainActor
     private func closeBreak() {
+        if didSignalCompletion || completionAlert.isActive(sessionID: sessionID) {
+            TimerCompletionAlertAcknowledgementStore.mark(
+                sessionID: sessionID
+            )
+        }
+        completionAlert.stop(sessionID: sessionID)
         isBreakActive = false
         FocusPersistence.clearBreak()
         stopNotificationScheduling(state: .idle)
@@ -389,22 +426,26 @@ struct BreakTimerView: View {
     private func signalBreakCompletionIfNeeded(playsSensoryFeedback: Bool) {
         guard !didSignalCompletion else { return }
         didSignalCompletion = true
-        isBreakActive = false
-        FocusPersistence.clearBreak()
         stopNotificationScheduling(state: .idle)
 
         let soundOn = sensoryPreferences.soundOn
         let hapticsOn = sensoryPreferences.hapticsOn
         SoundSynth.shared.isEnabled = soundOn
         Haptics.shared.isEnabled = hapticsOn
-        if playsSensoryFeedback, soundOn {
-            SoundSynth.shared.playTimerCompletion(
-                sensoryPreferences.timerCompletionSound
-            )
-        }
-        if playsSensoryFeedback, hapticsOn {
-            Haptics.shared.playTimerCompletion(
-                sensoryPreferences.timerCompletionHaptic
+        if !TimerCompletionAlertAcknowledgementStore.contains(
+            sessionID: sessionID
+        ) {
+            completionAlert.start(
+                TimerCompletionAlertConfiguration(
+                    sessionID: sessionID,
+                    sound: soundOn
+                        ? sensoryPreferences.timerCompletionSound
+                        : nil,
+                    haptic: hapticsOn
+                        ? sensoryPreferences.timerCompletionHaptic
+                        : nil
+                ),
+                playsImmediately: playsSensoryFeedback
             )
         }
         UIAccessibility.post(notification: .announcement, argument: "休憩が終わりました")
