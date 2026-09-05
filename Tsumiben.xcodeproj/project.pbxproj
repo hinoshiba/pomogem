@@ -7,8 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		015A1C0A7ACD4E859A6C1001 /* FocusLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 015A1C0A7ACD4E859A6C1004 /* FocusLiveActivityWidget.swift */; };
-		015A1C0A7ACD4E859A6C1002 /* FocusActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD382E4EC4F91B19DBAAEBE9 /* FocusActivityAttributes.swift */; };
 		023A05EB55F55F79D54F90CE /* LICENSE-fonts.txt in Resources */ = {isa = PBXBuildFile; fileRef = 85209F3782FB0725D10573E4 /* LICENSE-fonts.txt */; };
 		0541AF535E379A7DEFFAA022 /* RareRewardLedgerV2Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB5F1784DDABB999A89E1089 /* RareRewardLedgerV2Tests.swift */; };
 		06F42572A5C014FB4D4E14E2 /* ShareComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0AC4CADB3DFF6C13A05574F /* ShareComposerView.swift */; };
@@ -23,6 +21,7 @@
 		146E69E947720D3D60158AF9 /* CompleteDataDeletionFileStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ED7E4A326B82DBD568454B5 /* CompleteDataDeletionFileStateStore.swift */; };
 		15ABA41107A98AB410E87F9D /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 089CB939C5D625A11474D3DE /* PaywallView.swift */; };
 		178660AD846DAB2B85188A67 /* JarSnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B44F80B38C86954A4CB2CEB /* JarSnapshotter.swift */; };
+		18309801C745425E473B5306 /* FocusActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD382E4EC4F91B19DBAAEBE9 /* FocusActivityAttributes.swift */; };
 		1F41663A150CD6AFC189B350 /* FocusCloudSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740011241ECC8D078F7C1BB4 /* FocusCloudSyncTests.swift */; };
 		21E633BD69FCD55785C4D3DC /* PebbleRadiusPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F39439D47563884196D662B /* PebbleRadiusPolicyTests.swift */; };
 		22C382A06A98D3F062782EE7 /* AnimatedShareExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0811719F6DEC4A7B667D176 /* AnimatedShareExporter.swift */; };
@@ -77,6 +76,7 @@
 		84BCDF5358940D7CD6033D69 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33DB2C23B9C263BB72EFAFD7 /* Constants.swift */; };
 		87530C4372925313438B8C9E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = BC9FCBBBB5ADD572A120887F /* PrivacyInfo.xcprivacy */; };
 		8A43DAA2AE7E45DAC2B57137 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B57E2A51F8D9B3BCAC0AD3 /* RootView.swift */; };
+		8DC6264B19A04538C4F76190 /* FocusLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FEA2932011F2AC6F96FA9CD /* FocusLiveActivityWidget.swift */; };
 		8E6DE98D0C70E5E5F7E69853 /* TsumibenLogo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3547404A69ECEC83D6633098 /* TsumibenLogo.swift */; };
 		8F5EBD5EA2651C0DD53A8ADF /* Analytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = B77FA0E576927411295B49F6 /* Analytics.swift */; };
 		91CA6EC076144C0D78BB06F3 /* TsumibenWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EA503DBE4FE49A7DE5429C1 /* TsumibenWidgetsBundle.swift */; };
@@ -170,7 +170,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		015A1C0A7ACD4E859A6C1004 /* FocusLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusLiveActivityWidget.swift; sourceTree = "<group>"; };
 		00B9604400D63561A2AE6576 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		02055FE9589A94DEB2ECCEFA /* AccumulationPlanProjectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationPlanProjectionTests.swift; sourceTree = "<group>"; };
 		05520DCF0A7CE695D6DD90C2 /* RuntimeFlowAuditUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeFlowAuditUITests.swift; sourceTree = "<group>"; };
@@ -195,6 +194,7 @@
 		229AACD1A9C3128089054506 /* CriticalFlowAdversarialUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CriticalFlowAdversarialUITests.swift; sourceTree = "<group>"; };
 		26DFBB8269420354C3AB660A /* AccumulationTimelineRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationTimelineRepository.swift; sourceTree = "<group>"; };
 		2A60BEDD0A2FC5DE74C58538 /* GachaHistoryReconciliationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GachaHistoryReconciliationTests.swift; sourceTree = "<group>"; };
+		2FEA2932011F2AC6F96FA9CD /* FocusLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusLiveActivityWidget.swift; sourceTree = "<group>"; };
 		30478FF59FA45F9118BC5427 /* AppLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLinks.swift; sourceTree = "<group>"; };
 		313E57CBBFED1C76AFE39CA1 /* FairnessPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FairnessPolicy.swift; sourceTree = "<group>"; };
 		327F07464356FBA486575D85 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
@@ -460,7 +460,7 @@
 		7820FA6A7D29ECA1EC64D545 /* TsumibenWidgets */ = {
 			isa = PBXGroup;
 			children = (
-				015A1C0A7ACD4E859A6C1004 /* FocusLiveActivityWidget.swift */,
+				2FEA2932011F2AC6F96FA9CD /* FocusLiveActivityWidget.swift */,
 				F0F73229283FB90B2F0E3CB9 /* Info.plist */,
 				42DC738956E57636BC2CDC72 /* JarWidgets.swift */,
 				57F7E49A768D959A39FCC0BE /* PrivacyInfo.xcprivacy */,
@@ -928,8 +928,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				015A1C0A7ACD4E859A6C1001 /* FocusLiveActivityWidget.swift in Sources */,
-				015A1C0A7ACD4E859A6C1002 /* FocusActivityAttributes.swift in Sources */,
+				18309801C745425E473B5306 /* FocusActivityAttributes.swift in Sources */,
+				8DC6264B19A04538C4F76190 /* FocusLiveActivityWidget.swift in Sources */,
 				EBF632EDE955E1C91ADCAD25 /* JarWidgets.swift in Sources */,
 				91CA6EC076144C0D78BB06F3 /* TsumibenWidgetsBundle.swift in Sources */,
 			);
