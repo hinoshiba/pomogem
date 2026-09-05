@@ -2,6 +2,32 @@ import Foundation
 import Observation
 import UserNotifications
 
+enum TimerCompletionNotificationTiming {
+    static func deliveryDelay(endDate: Date, requestCreatedAt: Date) -> TimeInterval {
+        max(
+            IntegrationConstants.notificationMinimumDelay,
+            endDate.timeIntervalSince(requestCreatedAt)
+        )
+    }
+
+    /// `UNTimeIntervalNotificationTrigger` starts when Notification Center
+    /// accepts the request, not when this process constructs it. Using the
+    /// completion side of `await add` gives a conservative witness: it may
+    /// cause a harmless duplicate cue, but cannot cancel a still-pending alert
+    /// under the mistaken belief that it already fired.
+    static func conservativeDeliveryDate(
+        delay: TimeInterval,
+        registrationCompletedAt: Date
+    ) -> Date {
+        registrationCompletedAt.addingTimeInterval(delay)
+    }
+}
+
+enum TimerCompletionNotificationScheduleResult: Equatable, Sendable {
+    case accepted(deliveryDate: Date)
+    case superseded
+}
+
 /// Owns every local notification emitted by the app.
 ///
 /// Passive reminders are materialized as one-shot requests so the monthly
@@ -17,6 +43,25 @@ final class NotificationManager {
     private(set) var lastErrorDescription: String?
 
     private let center: UNUserNotificationCenter
+    private var authorizationRefreshGeneration: UInt64 = 0
+    private var latestAuthorizationRefresh: AuthorizationRefreshIntent?
+    private var focusNotificationGeneration: UInt64 = 0
+    private var focusNotificationIntents: [UUID: UInt64] = [:]
+    private var focusNotificationOperations: [UUID: NotificationScheduleOperation] = [:]
+    private var breakNotificationGeneration: UInt64 = 0
+    private var breakNotificationIntents: [UUID: UInt64] = [:]
+    private var breakNotificationOperations: [UUID: NotificationScheduleOperation] = [:]
+    private var timerSchedulingIsSuspendedForAccountBoundary = false
+
+    private struct AuthorizationRefreshIntent {
+        let generation: UInt64
+        let task: Task<UNAuthorizationStatus, Never>
+    }
+
+    private struct NotificationScheduleOperation {
+        let generation: UInt64
+        let task: Task<TimerCompletionNotificationScheduleResult, Error>
+    }
 
     private enum Identifier {
         static let completionPrefix = "tsumiben.focus.complete."
@@ -72,52 +117,93 @@ final class NotificationManager {
         }
     }
 
-    func refreshAuthorizationStatus() async {
-        let settings = await center.notificationSettings()
-        authorizationStatus = settings.authorizationStatus
+    @discardableResult
+    func refreshAuthorizationStatus() async -> UNAuthorizationStatus {
+        authorizationRefreshGeneration &+= 1
+        let generation = authorizationRefreshGeneration
+        let center = center
+        var intent = AuthorizationRefreshIntent(
+            generation: generation,
+            task: Task { @MainActor in
+                await center.notificationSettings().authorizationStatus
+            }
+        )
+        latestAuthorizationRefresh = intent
+
+        // An older query is allowed to finish, but every waiter follows the
+        // newest in-flight query before returning. Thus a late `authorized`
+        // result can never overwrite a newer `denied` snapshot.
+        while true {
+            let status = await intent.task.value
+            guard let latestAuthorizationRefresh else {
+                authorizationStatus = status
+                return status
+            }
+            guard latestAuthorizationRefresh.generation
+                    == intent.generation else {
+                intent = latestAuthorizationRefresh
+                continue
+            }
+            authorizationStatus = status
+            return status
+        }
     }
 
     /// Schedules the background completion alert. Reusing a session ID is
     /// idempotent because Notification Center replaces the existing request.
     func scheduleFocusCompletion(
         sessionID: UUID,
-        subjectName: String,
-        showsSubjectName: Bool,
         endDate: Date,
         playsSound: Bool = true,
-        now: Date = .now
-    ) async throws {
-        let safeSubjectName = SubjectNamePolicy.displayName(subjectName)
-        let content = notificationContent(
-            body: showsSubjectName
-                ? "\(safeSubjectName)の集中時間が終わりました。アプリを開いて状態を確認してください。"
-                : "集中時間が終わりました。アプリを開いて状態を確認してください。",
-            playsSound: playsSound
-        )
-        let delay = max(
-            IntegrationConstants.notificationMinimumDelay,
-            endDate.timeIntervalSince(now)
-        )
-        let trigger = UNTimeIntervalNotificationTrigger(
-            timeInterval: delay,
-            repeats: false
-        )
-        let request = UNNotificationRequest(
-            identifier: Identifier.completion(sessionID: sessionID),
-            content: content,
-            trigger: trigger
-        )
-
-        do {
-            try await center.add(request)
-            lastErrorDescription = nil
-        } catch {
-            lastErrorDescription = error.localizedDescription
-            throw error
+        completionSound: TimerCompletionSound = .standard
+    ) async throws -> TimerCompletionNotificationScheduleResult {
+        guard !timerSchedulingIsSuspendedForAccountBoundary else {
+            return .superseded
         }
+        let content = notificationContent(
+            // Notification Center can deliver a request while this process is
+            // suspended and therefore cannot re-check the active iCloud
+            // account. Keep the immutable payload account-neutral. Live
+            // Activity content is gated independently by account identity.
+            body: "集中時間が終わりました。アプリを開いて状態を確認してください。",
+            playsSound: playsSound,
+            timerCompletionSound: completionSound
+        )
+        focusNotificationGeneration &+= 1
+        let generation = focusNotificationGeneration
+        focusNotificationIntents[sessionID] = generation
+        let previousTask = focusNotificationOperations[sessionID]?.task
+        let operationTask = Task<TimerCompletionNotificationScheduleResult, Error> {
+            @MainActor [self] in
+            if let previousTask {
+                _ = try? await previousTask.value
+            }
+            guard focusNotificationIntents[sessionID] == generation else {
+                return .superseded
+            }
+            return try await performTimerNotificationAdd(
+                identifier: Identifier.completion(sessionID: sessionID),
+                endDate: endDate,
+                content: content,
+                intentIsCurrent: {
+                    self.focusNotificationIntents[sessionID] == generation
+                }
+            )
+        }
+        focusNotificationOperations[sessionID] = NotificationScheduleOperation(
+            generation: generation,
+            task: operationTask
+        )
+        defer {
+            if focusNotificationOperations[sessionID]?.generation == generation {
+                focusNotificationOperations.removeValue(forKey: sessionID)
+            }
+        }
+        return try await operationTask.value
     }
 
     func cancelFocusCompletion(sessionID: UUID) {
+        focusNotificationIntents.removeValue(forKey: sessionID)
         center.removePendingNotificationRequests(
             withIdentifiers: [Identifier.completion(sessionID: sessionID)]
         )
@@ -127,40 +213,79 @@ final class NotificationManager {
         id: UUID,
         endDate: Date,
         playsSound: Bool = true,
-        now: Date = .now
-    ) async throws {
+        completionSound: TimerCompletionSound = .standard
+    ) async throws -> TimerCompletionNotificationScheduleResult {
+        guard !timerSchedulingIsSuspendedForAccountBoundary else {
+            return .superseded
+        }
         let content = notificationContent(
             body: "休憩はここまで。次の一粒へ、ゆっくり戻りましょう。",
-            playsSound: playsSound
+            playsSound: playsSound,
+            timerCompletionSound: completionSound
         )
-        let delay = max(
-            IntegrationConstants.notificationMinimumDelay,
-            endDate.timeIntervalSince(now)
-        )
-        let request = UNNotificationRequest(
-            identifier: Identifier.breakCompletion(id: id),
-            content: content,
-            trigger: UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false)
-        )
-        do {
-            try await center.add(request)
-            lastErrorDescription = nil
-        } catch {
-            lastErrorDescription = error.localizedDescription
-            throw error
+        breakNotificationGeneration &+= 1
+        let generation = breakNotificationGeneration
+        breakNotificationIntents[id] = generation
+        let previousTask = breakNotificationOperations[id]?.task
+        let operationTask = Task<TimerCompletionNotificationScheduleResult, Error> {
+            @MainActor [self] in
+            if let previousTask {
+                _ = try? await previousTask.value
+            }
+            guard breakNotificationIntents[id] == generation else {
+                return .superseded
+            }
+            return try await performTimerNotificationAdd(
+                identifier: Identifier.breakCompletion(id: id),
+                endDate: endDate,
+                content: content,
+                intentIsCurrent: {
+                    self.breakNotificationIntents[id] == generation
+                }
+            )
         }
+        breakNotificationOperations[id] = NotificationScheduleOperation(
+            generation: generation,
+            task: operationTask
+        )
+        defer {
+            if breakNotificationOperations[id]?.generation == generation {
+                breakNotificationOperations.removeValue(forKey: id)
+            }
+        }
+        return try await operationTask.value
     }
 
     func cancelBreakCompletion(id: UUID) {
+        breakNotificationIntents.removeValue(forKey: id)
         center.removePendingNotificationRequests(
             withIdentifiers: [Identifier.breakCompletion(id: id)]
         )
+    }
+
+    /// Blocks timer requests from views owned by an Apple Account that is
+    /// being retired. Normal backgrounding deliberately does not call this:
+    /// its accepted lock-screen notifications must remain scheduled.
+    func suspendTimerSchedulingForAccountBoundary() {
+        timerSchedulingIsSuspendedForAccountBoundary = true
+        focusNotificationIntents.removeAll()
+        focusNotificationGeneration &+= 1
+        breakNotificationIntents.removeAll()
+        breakNotificationGeneration &+= 1
+    }
+
+    func resumeTimerSchedulingAfterAccountBoundary() {
+        timerSchedulingIsSuspendedForAccountBoundary = false
     }
 
     /// Reset recovery cannot rely on synchronized timer rows still being
     /// present, so it removes every locally scheduled transient request by the
     /// app-owned identifier prefixes.
     func cancelAllTimerNotifications() async {
+        focusNotificationIntents.removeAll()
+        focusNotificationGeneration &+= 1
+        breakNotificationIntents.removeAll()
+        breakNotificationGeneration &+= 1
         await removePendingRequests(withPrefix: Identifier.completionPrefix)
         await removePendingRequests(withPrefix: Identifier.breakPrefix)
     }
@@ -261,14 +386,74 @@ final class NotificationManager {
 
     private func notificationContent(
         body: String,
-        playsSound: Bool
+        playsSound: Bool,
+        timerCompletionSound: TimerCompletionSound? = nil
     ) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
         content.title = "つみべん"
         content.body = body
-        content.sound = playsSound ? .default : nil
+        if playsSound {
+            content.sound = timerCompletionSound.map {
+                TimerCompletionSoundLibrary.notificationSound(for: $0)
+            } ?? .default
+        } else {
+            content.sound = nil
+        }
         content.badge = nil
         return content
+    }
+
+    /// Adds for one logical timer are chained by the caller before entering
+    /// here. Consequently an older relative trigger can never complete after a
+    /// newer one and restart its interval. If cancellation/rescheduling wins
+    /// during `await add`, this operation removes only its own just-added
+    /// request before the next serialized operation begins.
+    private func performTimerNotificationAdd(
+        identifier: String,
+        endDate: Date,
+        content: UNNotificationContent,
+        intentIsCurrent: @MainActor () -> Bool
+    ) async throws -> TimerCompletionNotificationScheduleResult {
+        guard intentIsCurrent() else { return .superseded }
+        let requestCreatedAt = Date.now
+        let delay = TimerCompletionNotificationTiming.deliveryDelay(
+            endDate: endDate,
+            requestCreatedAt: requestCreatedAt
+        )
+        let request = UNNotificationRequest(
+            identifier: identifier,
+            content: content,
+            trigger: UNTimeIntervalNotificationTrigger(
+                timeInterval: delay,
+                repeats: false
+            )
+        )
+        do {
+            try await center.add(request)
+        } catch {
+            guard intentIsCurrent() else {
+                center.removePendingNotificationRequests(
+                    withIdentifiers: [identifier]
+                )
+                return .superseded
+            }
+            lastErrorDescription = error.localizedDescription
+            throw error
+        }
+        guard intentIsCurrent() else {
+            center.removePendingNotificationRequests(
+                withIdentifiers: [identifier]
+            )
+            return .superseded
+        }
+        lastErrorDescription = nil
+        return .accepted(
+            deliveryDate: TimerCompletionNotificationTiming
+                .conservativeDeliveryDate(
+                    delay: delay,
+                    registrationCompletedAt: .now
+                )
+        )
     }
 
     private func removePendingRequests(withPrefix prefix: String) async {

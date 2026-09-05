@@ -77,7 +77,7 @@ enum RareRewardMode: String, CaseIterable, Codable, Identifiable, Sendable {
                 if leftMode.autonomyRank != rightMode.autonomyRank {
                     return leftMode.autonomyRank < rightMode.autonomyRank
                 }
-                return lhs.id.uuidString < rhs.id.uuidString
+                return lhs.syncRecordID.uuidString < rhs.syncRecordID.uuidString
             })
     }
 

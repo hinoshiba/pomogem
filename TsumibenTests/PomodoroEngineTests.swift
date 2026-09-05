@@ -28,20 +28,30 @@ final class PomodoroEngineTests: XCTestCase {
         XCTAssertEqual(engine.snapshot(at: referenceDate).sessionID, sessionID)
     }
 
-    func testSixtyMinutesIsFreeAndCustomRequiresPro() throws {
-        var sixtyMinuteEngine = PomodoroEngine()
-        XCTAssertNoThrow(
-            try sixtyMinuteEngine.startFocus(
-                duration: .sixtyMinutes,
-                isPro: false,
-                now: referenceDate
-            )
+    func testEveryFreePresetStartsWithoutProAndOtherCustomTimesRequirePro() throws {
+        XCTAssertEqual(
+            PomodoroDuration.freePresets.compactMap(\.minutes),
+            [25, 45, 60, 90]
         )
-        XCTAssertEqual(sixtyMinuteEngine.snapshot(at: referenceDate).remainingSeconds, 3_600)
 
-        var freeEngine = PomodoroEngine()
+        for duration in PomodoroDuration.freePresets {
+            var freePresetEngine = PomodoroEngine()
+            XCTAssertNoThrow(
+                try freePresetEngine.startFocus(
+                    duration: duration,
+                    isPro: false,
+                    now: referenceDate
+                )
+            )
+            XCTAssertEqual(
+                freePresetEngine.snapshot(at: referenceDate).remainingSeconds,
+                duration.seconds
+            )
+        }
+
+        var customEngine = PomodoroEngine()
         XCTAssertThrowsError(
-            try freeEngine.startFocus(
+            try customEngine.startFocus(
                 duration: .custom(minutes: 40),
                 isPro: false,
                 now: referenceDate
@@ -62,7 +72,12 @@ final class PomodoroEngineTests: XCTestCase {
     }
 
     func testCustomValuesMatchingFreePresetsAreNormalizedAndFree() throws {
-        for minutes in [Constants.Timer.twentyFiveMinutes, Constants.Timer.sixtyMinutes] {
+        for minutes in [
+            Constants.Timer.twentyFiveMinutes,
+            Constants.Timer.fortyFiveMinutes,
+            Constants.Timer.sixtyMinutes,
+            Constants.Timer.ninetyMinutes
+        ] {
             var engine = PomodoroEngine()
             try engine.startFocus(
                 duration: .custom(minutes: minutes),
@@ -72,6 +87,13 @@ final class PomodoroEngineTests: XCTestCase {
             XCTAssertFalse(engine.selectedDuration.requiresPro)
             XCTAssertEqual(engine.selectedDuration, PomodoroDuration(minutes: minutes))
         }
+    }
+
+    func testSharedFreeDurationContractMatchesEnginePresets() {
+        XCTAssertEqual(
+            Set(PomodoroDuration.freePresets.map(\.seconds)),
+            IntegrationConstants.freeFocusDurations
+        )
     }
 
     func testFocusTimerRingSizeIsAlwaysFiniteAndPositive() {
@@ -196,6 +218,33 @@ final class PomodoroEngineTests: XCTestCase {
         XCTAssertNotNil(engine.advance(at: expectedEnd))
     }
 
+    func testBackwardClockWhilePausedRebasesAndDemotesCompletion() throws {
+        var engine = PomodoroEngine()
+        try engine.startFocus(
+            duration: .twentyFiveMinutes,
+            isPro: false,
+            now: referenceDate
+        )
+        try engine.pause(at: referenceDate.addingTimeInterval(300))
+
+        let resumedAt = referenceDate.addingTimeInterval(-3_600)
+        try engine.resume(at: resumedAt)
+        let resumedEnd = try XCTUnwrap(engine.endDate)
+        XCTAssertEqual(resumedEnd, resumedAt.addingTimeInterval(1_200))
+        XCTAssertEqual(engine.currentSource, .timerDemoted)
+
+        guard case let .focusCompleted(completion) = engine.advance(at: resumedEnd) else {
+            return XCTFail("Expected a demoted completion")
+        }
+        XCTAssertEqual(completion.source, .timerDemoted)
+        XCTAssertEqual(
+            completion.endedAt.timeIntervalSince(completion.startedAt),
+            1_500,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(completion.observedAt, completion.endedAt)
+    }
+
     func testDateLineAndDSTDoNotChangeAbsoluteCountdown() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
@@ -297,6 +346,58 @@ final class PomodoroEngineTests: XCTestCase {
         )
         XCTAssertNil(restoredCompleted.advance(at: end.addingTimeInterval(1)))
         XCTAssertEqual(restoredCompleted.phase, .focusCompleted)
+    }
+
+    func testSnapshotClampsDecodedUnboundedRemainingWithoutTrapping() throws {
+        var engine = PomodoroEngine()
+        try engine.startFocus(
+            isPro: false,
+            now: referenceDate,
+            sessionID: UUID()
+        )
+        var encoded = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(engine))
+                as? [String: Any]
+        )
+        encoded["endDate"] = Double.greatestFiniteMagnitude / 4
+        let hostile = try JSONDecoder().decode(
+            PomodoroEngine.self,
+            from: JSONSerialization.data(withJSONObject: encoded)
+        )
+
+        let snapshot = hostile.snapshot(at: referenceDate)
+        XCTAssertEqual(
+            snapshot.remainingSeconds,
+            PomodoroEngine.maximumSupportedRemainingSeconds
+        )
+        XCTAssertTrue(snapshot.progress.isFinite)
+        XCTAssertTrue((0 ... 1).contains(snapshot.progress))
+    }
+
+    func testCompletionCountSaturatesAtProductCeilingWithoutOverflow() throws {
+        let sessionID = UUID()
+        var engine = PomodoroEngine(
+            completedFocusCount: PomodoroEngine.maximumSupportedCompletedFocusCount
+        )
+        try engine.startFocus(
+            isPro: false,
+            now: referenceDate,
+            sessionID: sessionID
+        )
+
+        guard case .focusCompleted = engine.advance(
+            at: referenceDate.addingTimeInterval(1_500)
+        ) else {
+            return XCTFail("Expected bounded completion")
+        }
+        XCTAssertEqual(
+            engine.completedFocusCount,
+            PomodoroEngine.maximumSupportedCompletedFocusCount
+        )
+        XCTAssertEqual(
+            PomodoroEngine(completedFocusCount: Int.max).completedFocusCount,
+            PomodoroEngine.maximumSupportedCompletedFocusCount
+        )
     }
 
 #if DEBUG

@@ -18,17 +18,48 @@ enum BoundedHistoryPolicy {
     static let legacyAggregateLimit = 16
     static let shareLooseSessionLimit = 256
     static let aggregateMemberSessionLimit = 64
+    /// Session maintenance also refuses to reason about a larger physical
+    /// replica set in one slice. Read paths use the same ceiling and fail
+    /// closed instead of selecting a winner from an arbitrary prefix.
+    static let maximumPhysicalRowsPerLogicalSession = 256
+    static let finiteIntervalSessionRowLimit = 100_000
+    static let weeklySessionRowLimit = 16_384
 
-    static func latestResetMarkerDescriptor() -> FetchDescriptor<ActivityResetMarker> {
-        var descriptor = FetchDescriptor<ActivityResetMarker>(sortBy: [
-            SortDescriptor(\ActivityResetMarker.resetAt, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.sequence, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.writerDeviceID, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.epochID, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.id, order: .reverse)
-        ])
-        descriptor.fetchLimit = 1
-        return descriptor
+    struct ResolvedSessionPage {
+        let sessions: [StudySession]
+        let isPartial: Bool
+        let scannedPhysicalRowCount: Int
+        let boundaryIsProven: Bool
+    }
+
+    enum SessionPageResolutionMode: Equatable {
+        case failClosed
+        /// Home may present a clearly disclosed lower bound while maintenance
+        /// retries. Oversized groups are omitted rather than guessed.
+        case lowerBound
+    }
+
+    enum SessionResolutionError: Error, LocalizedError, Equatable {
+        case candidateScanLimitExceeded
+        case logicalReplicaLimitExceeded
+        case unsupportedInterval
+
+        var errorDescription: String? {
+            switch self {
+            case .candidateScanLimitExceeded:
+                "同期中の記録が多いため、安全な表示範囲を確定できませんでした。"
+            case .logicalReplicaLimitExceeded:
+                "同じ記録の同期コピーが多いため、安全な内容を確定できませんでした。"
+            case .unsupportedInterval:
+                "一度に確認できる記録期間を超えています。"
+            }
+        }
+    }
+
+    static func latestResetMarkerDescriptor(
+        now: Date = .now
+    ) -> FetchDescriptor<ActivityResetMarker> {
+        ActivityResetPolicy.currentMarkerDescriptor(now: now)
     }
 
     static func sessionDescriptor(
@@ -54,9 +85,12 @@ enum BoundedHistoryPolicy {
         case let (.none, .some(start), .none, false):
             predicate = #Predicate { $0.dataEpochID == nil && $0.endAt >= start }
         case let (.some(epoch), .none, .none, true):
-            predicate = #Predicate { $0.dataEpochID == epoch && $0.isBaked == false }
+            // `onlyUnbaked` is retained as a source-compatible request for a
+            // bounded loose *candidate* page. Exact exclusion is performed
+            // against local AggregatePebble membership after this fetch.
+            predicate = #Predicate { $0.dataEpochID == epoch }
         case (.none, .none, .none, true):
-            predicate = #Predicate { $0.dataEpochID == nil && $0.isBaked == false }
+            predicate = #Predicate { $0.dataEpochID == nil }
         case let (.some(epoch), .none, .none, false):
             predicate = #Predicate { $0.dataEpochID == epoch }
         case (.none, .none, .none, false):
@@ -69,7 +103,11 @@ enum BoundedHistoryPolicy {
         }
         var descriptor = FetchDescriptor<StudySession>(
             predicate: predicate,
-            sortBy: [SortDescriptor(\StudySession.endAt, order: order)]
+            sortBy: [
+                SortDescriptor(\StudySession.endAt, order: order),
+                SortDescriptor(\StudySession.id, order: order),
+                SortDescriptor(\StudySession.syncRecordID, order: order)
+            ]
         )
         descriptor.fetchLimit = max(1, limit)
         return descriptor
@@ -91,7 +129,7 @@ enum BoundedHistoryPolicy {
     static func sessionDescriptor(
         id: UUID,
         epochID: UUID?,
-        limit: Int = 4
+        limit: Int = maximumPhysicalRowsPerLogicalSession + 1
     ) -> FetchDescriptor<StudySession> {
         let predicate: Predicate<StudySession>
         if let epochID {
@@ -105,6 +143,586 @@ enum BoundedHistoryPolicy {
         )
         descriptor.fetchLimit = max(1, limit)
         return descriptor
+    }
+
+    /// Resolves every supported physical copy for one logical completion.
+    /// The extra row is a sentinel; reaching it means that choosing any value
+    /// would depend on an unseen copy, so the caller must fail closed.
+    static func resolvedSession(
+        id: UUID,
+        epochID: UUID?,
+        context: ModelContext
+    ) throws -> StudySession? {
+        let rows = try context.fetch(sessionDescriptor(id: id, epochID: epochID))
+        guard rows.count <= maximumPhysicalRowsPerLogicalSession else {
+            throw SessionResolutionError.logicalReplicaLimitExceeded
+        }
+        return StudySessionSyncPolicy.canonicalSession(from: rows)
+    }
+
+    /// Returns a logical page, not a physical-row page. Candidate overfetch is
+    /// deliberately large enough for one maximum-sized duplicate run and for
+    /// ordinary two-copy convergence. Every candidate ID is then exact-read
+    /// before date membership and the logical limit are applied.
+    static func resolvedSessionPage(
+        context: ModelContext,
+        epochID: UUID?,
+        start: Date? = nil,
+        end: Date? = nil,
+        onlyUnbaked: Bool = false,
+        order: SortOrder = .reverse,
+        logicalLimit: Int,
+        maximumCandidateRows: Int? = nil,
+        mode: SessionPageResolutionMode = .failClosed
+    ) throws -> ResolvedSessionPage {
+        let limit = max(1, logicalLimit)
+        let scanLimit = max(
+            1,
+            maximumCandidateRows
+                ?? maximumSessionCandidateRows(forLogicalLimit: limit)
+        )
+        let pageSize = min(256, scanLimit)
+        var cursor: SessionPhysicalCursor?
+        var scanned = 0
+        var reachedRawEnd = false
+        var exactResolvedIDs = Set<UUID>()
+        var unsupportedOnlyCandidateIDs = Set<UUID>()
+        var oversizedLogicalGroupIDs = Set<UUID>()
+        var resolvedByID: [UUID: StudySession] = [:]
+
+        while scanned < scanLimit {
+            try Task.checkCancellation()
+            let fetchLimit = min(pageSize, scanLimit - scanned)
+            let descriptor: FetchDescriptor<StudySession>
+            if let cursor {
+                descriptor = sessionDescriptor(
+                    epochID: epochID,
+                    start: start,
+                    end: end,
+                    order: order,
+                    after: cursor,
+                    limit: fetchLimit
+                )
+            } else {
+                descriptor = sessionDescriptor(
+                    epochID: epochID,
+                    start: start,
+                    end: end,
+                    onlyUnbaked: onlyUnbaked,
+                    order: order,
+                    limit: fetchLimit
+                )
+            }
+            let physicalPage = try context.fetch(descriptor)
+            reachedRawEnd = physicalPage.count < fetchLimit
+            scanned = NonnegativeIntPolicy.adding(
+                scanned,
+                physicalPage.count,
+                maximum: scanLimit
+            )
+            var newlySupportedCandidateIDs = Set<UUID>()
+            for row in physicalPage {
+                guard StudySessionIntegrityPolicy.isSupported(row) else {
+                    if !exactResolvedIDs.contains(row.id) {
+                        unsupportedOnlyCandidateIDs.insert(row.id)
+                    }
+                    continue
+                }
+                unsupportedOnlyCandidateIDs.remove(row.id)
+                guard exactResolvedIDs.insert(row.id).inserted else { continue }
+                newlySupportedCandidateIDs.insert(row.id)
+            }
+            let batch = try resolvedSessionBatch(
+                candidateIDs: newlySupportedCandidateIDs,
+                epochID: epochID,
+                context: context
+            )
+            if !batch.oversizedLogicalGroupIDs.isEmpty,
+               mode == .failClosed {
+                throw SessionResolutionError.logicalReplicaLimitExceeded
+            }
+            resolvedByID.merge(batch.sessionsByID) { _, newest in newest }
+            oversizedLogicalGroupIDs.formUnion(
+                batch.oversizedLogicalGroupIDs
+            )
+
+            if reachedRawEnd {
+                // With the entire physical predicate exhausted, IDs observed
+                // only as unsupported rows cannot have an eligible canonical
+                // copy in this window. No exact lookup is needed for them.
+                unsupportedOnlyCandidateIDs.removeAll()
+            }
+            let hasUnresolvedLogicalGroup = !unsupportedOnlyCandidateIDs.isEmpty
+                || !oversizedLogicalGroupIDs.isEmpty
+
+            let resolved = resolvedByID.values
+                .filter { isInsideRequestedWindow($0, start: start, end: end) }
+                .sorted { isPresentedBefore($0, $1, order: order) }
+            if reachedRawEnd {
+                return ResolvedSessionPage(
+                    sessions: Array(resolved.prefix(limit)),
+                    isPartial: hasUnresolvedLogicalGroup || resolved.count > limit,
+                    scannedPhysicalRowCount: scanned,
+                    boundaryIsProven: !hasUnresolvedLogicalGroup
+                )
+            }
+            guard let edge = physicalPage.last else {
+                return ResolvedSessionPage(
+                    sessions: Array(resolved.prefix(limit)),
+                    isPartial: hasUnresolvedLogicalGroup || resolved.count > limit,
+                    scannedPhysicalRowCount: scanned,
+                    boundaryIsProven: !hasUnresolvedLogicalGroup
+                )
+            }
+            if !hasUnresolvedLogicalGroup,
+               resolved.count >= limit,
+               rawEdgeHasPassed(
+                    edge,
+                    canonicalBoundary: resolved[limit - 1],
+                    order: order
+               ) {
+                return ResolvedSessionPage(
+                    sessions: Array(resolved.prefix(limit)),
+                    // Unscanned physical rows might all be redundant or
+                    // unsupported, so this is intentionally conservative.
+                    isPartial: true,
+                    scannedPhysicalRowCount: scanned,
+                    boundaryIsProven: true
+                )
+            }
+            cursor = SessionPhysicalCursor(edge)
+        }
+
+        // Distinguish an exact raw end at the cap from one more unseen row
+        // without widening the accepted scan. A non-empty sentinel cannot be
+        // interpreted safely and therefore remains fail-closed.
+        if let cursor {
+            let sentinel = try context.fetch(sessionDescriptor(
+                epochID: epochID,
+                start: start,
+                end: end,
+                order: order,
+                after: cursor,
+                limit: 1
+            ))
+            if sentinel.isEmpty {
+                unsupportedOnlyCandidateIDs.removeAll()
+                let hasUnresolvedLogicalGroup = !oversizedLogicalGroupIDs.isEmpty
+                let resolved = resolvedByID.values
+                    .filter { isInsideRequestedWindow($0, start: start, end: end) }
+                    .sorted { isPresentedBefore($0, $1, order: order) }
+                return ResolvedSessionPage(
+                    sessions: Array(resolved.prefix(limit)),
+                    isPartial: hasUnresolvedLogicalGroup || resolved.count > limit,
+                    scannedPhysicalRowCount: scanned,
+                    boundaryIsProven: !hasUnresolvedLogicalGroup
+                )
+            }
+        }
+        if mode == .lowerBound {
+            let resolved = resolvedByID.values
+                .filter { isInsideRequestedWindow($0, start: start, end: end) }
+                .sorted { isPresentedBefore($0, $1, order: order) }
+            return ResolvedSessionPage(
+                sessions: Array(resolved.prefix(limit)),
+                isPartial: true,
+                scannedPhysicalRowCount: scanned,
+                boundaryIsProven: false
+            )
+        }
+        throw SessionResolutionError.candidateScanLimitExceeded
+    }
+
+    /// Exact finite-period accounting. Only logical IDs discovered in the
+    /// requested week/month/year are expanded beyond its date boundary; the
+    /// canonical winner is then tested against the interval. This fixes a
+    /// loser-inside/winner-outside copy without scanning lifetime history.
+    static func resolvedSessionsInFiniteInterval(
+        context: ModelContext,
+        epochID: UUID?,
+        interval: DateInterval,
+        maximumPhysicalRows: Int
+    ) throws -> [StudySession] {
+        let maximumDuration: TimeInterval = 370 * 24 * 60 * 60
+        guard interval.duration > 0,
+              interval.duration <= maximumDuration,
+              maximumPhysicalRows > 0
+        else { throw SessionResolutionError.unsupportedInterval }
+
+        let descriptor = sessionDescriptor(
+            epochID: epochID,
+            start: interval.start,
+            end: interval.end,
+            order: .forward,
+            limit: NonnegativeIntPolicy.adding(maximumPhysicalRows, 1)
+        )
+        var scanned = 0
+        var candidateIDs = Set<UUID>()
+        try context.enumerate(descriptor, batchSize: min(256, maximumPhysicalRows)) {
+            session in
+            try Task.checkCancellation()
+            scanned = NonnegativeIntPolicy.adding(scanned, 1)
+            guard scanned <= maximumPhysicalRows else {
+                throw SessionResolutionError.candidateScanLimitExceeded
+            }
+            // With the whole finite predicate scanned, an ID observed only as
+            // unsupported cannot have an eligible in-window canonical row.
+            if StudySessionIntegrityPolicy.isSupported(session) {
+                candidateIDs.insert(session.id)
+            }
+        }
+        return try resolvedSessions(
+            candidateIDs: candidateIDs,
+            epochID: epochID,
+            context: context
+        )
+        .filter {
+            $0.endAt >= interval.start && $0.endAt < interval.end
+        }
+        .sorted { isPresentedBefore($0, $1, order: .forward) }
+    }
+
+    static func maximumSessionCandidateRows(forLogicalLimit rawLimit: Int) -> Int {
+        let limit = max(1, rawLimit)
+        let duplicateRunCapacity = NonnegativeIntPolicy.adding(
+            limit,
+            maximumPhysicalRowsPerLogicalSession
+        )
+        let ordinaryReplicaCapacity = NonnegativeIntPolicy.adding(
+            NonnegativeIntPolicy.multiplying(limit, 2),
+            1
+        )
+        return max(duplicateRunCapacity, ordinaryReplicaCapacity)
+    }
+
+    private struct SessionPhysicalCursor {
+        let endAt: Date
+        let id: UUID
+        let syncRecordID: UUID
+
+        init(_ session: StudySession) {
+            endAt = session.endAt
+            id = session.id
+            syncRecordID = session.syncRecordID
+        }
+    }
+
+    private static func sessionDescriptor(
+        epochID: UUID?,
+        start: Date?,
+        end: Date?,
+        order: SortOrder,
+        after cursor: SessionPhysicalCursor,
+        limit: Int
+    ) -> FetchDescriptor<StudySession> {
+        let cursorEnd = cursor.endAt
+        let cursorID = cursor.id
+        let cursorRecordID = cursor.syncRecordID
+        let predicate: Predicate<StudySession>
+
+        if let epochID {
+            if let start, let end {
+                if order == .forward {
+                    predicate = #Predicate {
+                        $0.dataEpochID == epochID
+                            && $0.endAt >= start && $0.endAt < end
+                            && ($0.endAt > cursorEnd
+                                || ($0.endAt == cursorEnd && $0.id > cursorID)
+                                || ($0.endAt == cursorEnd && $0.id == cursorID
+                                    && $0.syncRecordID > cursorRecordID))
+                    }
+                } else {
+                    predicate = #Predicate {
+                        $0.dataEpochID == epochID
+                            && $0.endAt >= start && $0.endAt < end
+                            && ($0.endAt < cursorEnd
+                                || ($0.endAt == cursorEnd && $0.id < cursorID)
+                                || ($0.endAt == cursorEnd && $0.id == cursorID
+                                    && $0.syncRecordID < cursorRecordID))
+                    }
+                }
+            } else if let start {
+                if order == .forward {
+                    predicate = #Predicate {
+                        $0.dataEpochID == epochID && $0.endAt >= start
+                            && ($0.endAt > cursorEnd
+                                || ($0.endAt == cursorEnd && $0.id > cursorID)
+                                || ($0.endAt == cursorEnd && $0.id == cursorID
+                                    && $0.syncRecordID > cursorRecordID))
+                    }
+                } else {
+                    predicate = #Predicate {
+                        $0.dataEpochID == epochID && $0.endAt >= start
+                            && ($0.endAt < cursorEnd
+                                || ($0.endAt == cursorEnd && $0.id < cursorID)
+                                || ($0.endAt == cursorEnd && $0.id == cursorID
+                                    && $0.syncRecordID < cursorRecordID))
+                    }
+                }
+            } else if end == nil {
+                if order == .forward {
+                    predicate = #Predicate {
+                        $0.dataEpochID == epochID
+                            && ($0.endAt > cursorEnd
+                                || ($0.endAt == cursorEnd && $0.id > cursorID)
+                                || ($0.endAt == cursorEnd && $0.id == cursorID
+                                    && $0.syncRecordID > cursorRecordID))
+                    }
+                } else {
+                    predicate = #Predicate {
+                        $0.dataEpochID == epochID
+                            && ($0.endAt < cursorEnd
+                                || ($0.endAt == cursorEnd && $0.id < cursorID)
+                                || ($0.endAt == cursorEnd && $0.id == cursorID
+                                    && $0.syncRecordID < cursorRecordID))
+                    }
+                }
+            } else {
+                predicate = #Predicate { _ in false }
+            }
+        } else if let start, let end {
+            if order == .forward {
+                predicate = #Predicate {
+                    $0.dataEpochID == nil
+                        && $0.endAt >= start && $0.endAt < end
+                        && ($0.endAt > cursorEnd
+                            || ($0.endAt == cursorEnd && $0.id > cursorID)
+                            || ($0.endAt == cursorEnd && $0.id == cursorID
+                                && $0.syncRecordID > cursorRecordID))
+                }
+            } else {
+                predicate = #Predicate {
+                    $0.dataEpochID == nil
+                        && $0.endAt >= start && $0.endAt < end
+                        && ($0.endAt < cursorEnd
+                            || ($0.endAt == cursorEnd && $0.id < cursorID)
+                            || ($0.endAt == cursorEnd && $0.id == cursorID
+                                && $0.syncRecordID < cursorRecordID))
+                }
+            }
+        } else if let start {
+            if order == .forward {
+                predicate = #Predicate {
+                    $0.dataEpochID == nil && $0.endAt >= start
+                        && ($0.endAt > cursorEnd
+                            || ($0.endAt == cursorEnd && $0.id > cursorID)
+                            || ($0.endAt == cursorEnd && $0.id == cursorID
+                                && $0.syncRecordID > cursorRecordID))
+                }
+            } else {
+                predicate = #Predicate {
+                    $0.dataEpochID == nil && $0.endAt >= start
+                        && ($0.endAt < cursorEnd
+                            || ($0.endAt == cursorEnd && $0.id < cursorID)
+                            || ($0.endAt == cursorEnd && $0.id == cursorID
+                                && $0.syncRecordID < cursorRecordID))
+                }
+            }
+        } else if end == nil {
+            if order == .forward {
+                predicate = #Predicate {
+                    $0.dataEpochID == nil
+                        && ($0.endAt > cursorEnd
+                            || ($0.endAt == cursorEnd && $0.id > cursorID)
+                            || ($0.endAt == cursorEnd && $0.id == cursorID
+                                && $0.syncRecordID > cursorRecordID))
+                }
+            } else {
+                predicate = #Predicate {
+                    $0.dataEpochID == nil
+                        && ($0.endAt < cursorEnd
+                            || ($0.endAt == cursorEnd && $0.id < cursorID)
+                            || ($0.endAt == cursorEnd && $0.id == cursorID
+                                && $0.syncRecordID < cursorRecordID))
+                }
+            }
+        } else {
+            predicate = #Predicate { _ in false }
+        }
+
+        var descriptor = FetchDescriptor<StudySession>(
+            predicate: predicate,
+            sortBy: [
+                SortDescriptor(\StudySession.endAt, order: order),
+                SortDescriptor(\StudySession.id, order: order),
+                SortDescriptor(\StudySession.syncRecordID, order: order)
+            ]
+        )
+        descriptor.fetchLimit = max(1, limit)
+        return descriptor
+    }
+
+    private static func resolvedSessions(
+        candidateIDs: Set<UUID>,
+        epochID: UUID?,
+        context: ModelContext
+    ) throws -> [StudySession] {
+        let batch = try resolvedSessionBatch(
+            candidateIDs: candidateIDs,
+            epochID: epochID,
+            context: context
+        )
+        guard batch.oversizedLogicalGroupIDs.isEmpty else {
+            throw SessionResolutionError.logicalReplicaLimitExceeded
+        }
+        return Array(batch.sessionsByID.values)
+    }
+
+    private struct SessionBatchResolution {
+        var sessionsByID: [UUID: StudySession] = [:]
+        var oversizedLogicalGroupIDs = Set<UUID>()
+
+        mutating func merge(_ other: SessionBatchResolution) {
+            sessionsByID.merge(other.sessionsByID) { _, newest in newest }
+            oversizedLogicalGroupIDs.formUnion(
+                other.oversizedLogicalGroupIDs
+            )
+        }
+    }
+
+    /// Exact-resolves a candidate set with one store scan in the ordinary
+    /// case. `StudySession.id` is intentionally not unique because CloudKit
+    /// replicas are retained, and the iOS 17 SwiftData schema has no supported
+    /// compound-index declaration. Issuing one exact fetch per logical ID
+    /// therefore turns a 256-row Home page into 256 lifetime table scans.
+    ///
+    /// The aggregate sentinel preserves the per-ID 256-copy trust boundary.
+    /// If it fires, recursively splitting the finite ID set isolates only the
+    /// oversized groups; valid neighbours remain available in lower-bound
+    /// mode without ever accepting an arbitrary physical prefix.
+    private static func resolvedSessionBatch(
+        candidateIDs: Set<UUID>,
+        epochID: UUID?,
+        context: ModelContext
+    ) throws -> SessionBatchResolution {
+        let orderedIDs = candidateIDs.sorted {
+            $0.uuidString < $1.uuidString
+        }
+        var result = SessionBatchResolution()
+        // Keep the ordinary-case materialization ceiling at 8,193 rows even
+        // when a caller supplies the full 256-ID history page.
+        let maximumIDsPerBatch = 32
+        for offset in stride(
+            from: 0,
+            to: orderedIDs.count,
+            by: maximumIDsPerBatch
+        ) {
+            let end = min(offset + maximumIDsPerBatch, orderedIDs.count)
+            result.merge(try resolvedSessionBatch(
+                orderedCandidateIDs: Array(orderedIDs[offset..<end]),
+                epochID: epochID,
+                context: context
+            ))
+        }
+        return result
+    }
+
+    private static func resolvedSessionBatch(
+        orderedCandidateIDs: [UUID],
+        epochID: UUID?,
+        context: ModelContext
+    ) throws -> SessionBatchResolution {
+        try Task.checkCancellation()
+        guard !orderedCandidateIDs.isEmpty else {
+            return SessionBatchResolution()
+        }
+
+        let candidateIDs = orderedCandidateIDs
+        let predicate: Predicate<StudySession>
+        if let epochID {
+            predicate = #Predicate {
+                candidateIDs.contains($0.id) && $0.dataEpochID == epochID
+            }
+        } else {
+            predicate = #Predicate {
+                candidateIDs.contains($0.id) && $0.dataEpochID == nil
+            }
+        }
+        let maximumAcceptedRows = NonnegativeIntPolicy.multiplying(
+            candidateIDs.count,
+            maximumPhysicalRowsPerLogicalSession
+        )
+        var descriptor = FetchDescriptor<StudySession>(predicate: predicate)
+        descriptor.fetchLimit = NonnegativeIntPolicy.adding(
+            maximumAcceptedRows,
+            1
+        )
+        let rows = try context.fetch(descriptor)
+
+        if rows.count > maximumAcceptedRows {
+            guard candidateIDs.count > 1 else {
+                return SessionBatchResolution(
+                    oversizedLogicalGroupIDs: Set(candidateIDs)
+                )
+            }
+            let midpoint = candidateIDs.count / 2
+            var result = try resolvedSessionBatch(
+                orderedCandidateIDs: Array(candidateIDs[..<midpoint]),
+                epochID: epochID,
+                context: context
+            )
+            result.merge(try resolvedSessionBatch(
+                orderedCandidateIDs: Array(candidateIDs[midpoint...]),
+                epochID: epochID,
+                context: context
+            ))
+            return result
+        }
+
+        let groups = Dictionary(grouping: rows, by: \.id)
+        var result = SessionBatchResolution()
+        result.sessionsByID.reserveCapacity(candidateIDs.count)
+        for id in candidateIDs {
+            let group = groups[id] ?? []
+            guard group.count <= maximumPhysicalRowsPerLogicalSession else {
+                result.oversizedLogicalGroupIDs.insert(id)
+                continue
+            }
+            if let canonical = StudySessionSyncPolicy.canonicalSession(
+                from: group
+            ) {
+                result.sessionsByID[id] = canonical
+            }
+        }
+        return result
+    }
+
+    private static func isInsideRequestedWindow(
+        _ session: StudySession,
+        start: Date?,
+        end: Date?
+    ) -> Bool {
+        if let start, session.endAt < start { return false }
+        if let end, session.endAt >= end { return false }
+        return true
+    }
+
+    private static func isPresentedBefore(
+        _ lhs: StudySession,
+        _ rhs: StudySession,
+        order: SortOrder
+    ) -> Bool {
+        if lhs.endAt != rhs.endAt {
+            return order == .forward
+                ? lhs.endAt < rhs.endAt
+                : lhs.endAt > rhs.endAt
+        }
+        if lhs.id != rhs.id {
+            return order == .forward
+                ? lhs.id.uuidString < rhs.id.uuidString
+                : lhs.id.uuidString > rhs.id.uuidString
+        }
+        return order == .forward
+            ? lhs.syncRecordID.uuidString < rhs.syncRecordID.uuidString
+            : lhs.syncRecordID.uuidString > rhs.syncRecordID.uuidString
+    }
+
+    private static func rawEdgeHasPassed(
+        _ edge: StudySession,
+        canonicalBoundary: StudySession,
+        order: SortOrder
+    ) -> Bool {
+        !isPresentedBefore(edge, canonicalBoundary, order: order)
     }
 
     /// Returns a bounded page of active candidates. Callers must pass the page
@@ -149,12 +767,12 @@ enum BoundedHistoryPolicy {
         return descriptor
     }
 
-    /// Includes tombstones so edit/delete/Undo can advance every local logical
-    /// duplicate to one revision without widening the read to history.
+    /// Includes tombstones so edit/delete/Undo can choose one mutation target
+    /// without rewriting the other synchronized source replicas.
     static func achievementRevisionDescriptor(
         id: UUID,
         epochID: UUID?,
-        limit: Int = 16
+        limit: Int = AchievementStonePolicy.maximumPhysicalRowsPerLogicalStone + 1
     ) -> FetchDescriptor<AchievementStone> {
         let predicate: Predicate<AchievementStone>
         if let epochID {
@@ -170,11 +788,13 @@ enum BoundedHistoryPolicy {
             sortBy: [
                 SortDescriptor(\AchievementStone.revision, order: .reverse),
                 SortDescriptor(\AchievementStone.deletedAt, order: .reverse),
+                SortDescriptor(\AchievementStone.deletionMutationID, order: .reverse),
                 SortDescriptor(\AchievementStone.updatedAt, order: .reverse),
                 SortDescriptor(\AchievementStone.createdAt, order: .reverse),
                 SortDescriptor(\AchievementStone.achievedAt, order: .reverse),
                 SortDescriptor(\AchievementStone.note, order: .reverse),
-                SortDescriptor(\AchievementStone.subjectNameSnapshot, order: .reverse)
+                SortDescriptor(\AchievementStone.subjectNameSnapshot, order: .reverse),
+                SortDescriptor(\AchievementStone.syncRecordID, order: .reverse)
             ]
         )
         descriptor.fetchLimit = max(1, limit)
@@ -269,8 +889,10 @@ struct LogView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.aggregateProjectionPresentation)
+    private var aggregateProjectionPresentation
     @Query private var activityResetMarkers: [ActivityResetMarker]
-    @Query(sort: \Subject.sortOrder) private var subjects: [Subject]
+    @Query(sort: \Subject.sortOrder) private var storedSubjects: [Subject]
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var period: Period = .week
     @State private var selectedWrappedMonth: WrappedMonth?
@@ -289,14 +911,23 @@ struct LogView: View {
     @State private var pendingAchievementUndo: AchievementStoneRevisionSnapshot?
 
     init() {
+        var subjectDescriptor = FetchDescriptor<Subject>(sortBy: [
+            SortDescriptor(\Subject.sortOrder),
+            SortDescriptor(\Subject.syncRecordID)
+        ])
+        subjectDescriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
+        _storedSubjects = Query(subjectDescriptor)
         _activityResetMarkers = Query(BoundedHistoryPolicy.latestResetMarkerDescriptor())
     }
 
     private var resetSnapshots: [ActivityResetSnapshot] {
         activityResetMarkers.map(\.policySnapshot)
     }
+    private var subjects: [Subject] {
+        SubjectSyncPolicy.presentationSubjects(from: storedSubjects)
+    }
     private var filteredSessions: [StudySession] {
-        periodSessions
+        StudySessionSyncPolicy.canonicalSessions(from: periodSessions)
     }
 
     var body: some View {
@@ -336,7 +967,9 @@ struct LogView: View {
                 achievementArchive
                 massChart
                 subjectComposition
-                rarePebbles
+                if RareRewardReleasePolicy.isEnabled {
+                    rarePebbles
+                }
                 wrappedArchive
                 aggregateArchive
                 recentHistory
@@ -383,7 +1016,9 @@ struct LogView: View {
 
     private var summaryGrid: some View {
         let measured = filteredSessions.filter { $0.source == .timer }
-        let totalMinutes = filteredSessions.reduce(0) { $0 + $1.seconds } / 60
+        let totalMinutes = NonnegativeIntPolicy.sum(
+            filteredSessions.map(\.seconds)
+        ) / 60
         return Group {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: 10) {
@@ -403,7 +1038,7 @@ struct LogView: View {
         SummaryTile(label: periodPageIsPartial ? "表示分の完走" : "完走ポモ", value: "\(measuredCount)", symbol: "checkmark.circle")
         SummaryTile(
             label: periodPageIsPartial ? "表示分の質量" : "今期の質量",
-            value: formatMass(filteredSessions.reduce(0) { $0 + $1.grams }),
+            value: formatMass(NonnegativeIntPolicy.sum(filteredSessions.map(\.grams))),
             symbol: "scalemass"
         )
     }
@@ -478,7 +1113,9 @@ struct LogView: View {
                                 RoundedRectangle(cornerRadius: 4)
                                     .fill(Color(hex: item.colorHex))
                                     .frame(width: max(4, proxy.size.width * item.fraction))
-                                    .accessibilityLabel("\(item.name)、\(Int(item.fraction * 100))パーセント")
+                                    .accessibilityLabel(
+                                        "\(item.name)、\(NonnegativeIntPolicy.clamped(item.fraction * 100, maximum: 100))パーセント"
+                                    )
                             }
                         }
                     }
@@ -661,7 +1298,17 @@ struct LogView: View {
     @ViewBuilder
     private var aggregateArchive: some View {
         let items = aggregateArchiveItems
-        if !items.isEmpty {
+        if aggregateProjectionPresentation.isCloudVerificationPending {
+            TsumibenCard {
+                Label(
+                    "iCloudのまとまり粒を再集計中です。この端末で確認できた個別記録は引き続き表示しています。",
+                    systemImage: "icloud.and.arrow.down"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TsumibenTheme.muted)
+                .accessibilityIdentifier("log.aggregate-verification-pending")
+            }
+        } else if !items.isEmpty {
             TsumibenCard {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -695,6 +1342,9 @@ struct LogView: View {
     /// Only roots are shown. A ×100 parent already contains its ten ×10
     /// children, so showing both as peers would visually double-count history.
     private var aggregateArchiveItems: [AggregateArchiveItem] {
+        guard aggregateProjectionPresentation.allowsAggregateSummaries else {
+            return []
+        }
         let roots = AggregatePebblePolicy.disjointRootSummaries(from: aggregatePebbles)
         let allAggregateIDs = Set(aggregatePebbles.map(\.id))
         let modern = roots.map(AggregateArchiveItem.init(aggregate:))
@@ -714,9 +1364,9 @@ struct LogView: View {
     }
 
     private var uniqueSessions: [StudySession] {
-        Dictionary(grouping: periodSessions + recentSessions, by: \.id).values.compactMap { duplicates in
-            duplicates.max { lhs, rhs in lhs.grams < rhs.grams }
-        }
+        StudySessionSyncPolicy.canonicalSessions(
+            from: periodSessions + recentSessions
+        )
     }
 
     private var recentHistory: some View {
@@ -758,14 +1408,18 @@ struct LogView: View {
         return days.map { day in
             DailyMass(
                 date: day,
-                grams: filteredSessions.filter { calendar.isDate($0.endAt, inSameDayAs: day) }.reduce(0) { $0 + $1.grams }
+                grams: NonnegativeIntPolicy.sum(
+                    filteredSessions
+                        .filter { calendar.isDate($0.endAt, inSameDayAs: day) }
+                        .map(\.grams)
+                )
             )
         }
     }
 
     private var subjectMass: [SubjectMass] {
         let grouped = Dictionary(grouping: filteredSessions) { session in
-            session.subject?.id.uuidString
+            session.subjectIDSnapshot?.uuidString
                 ?? "deleted:\(session.subjectNameSnapshot):\(session.subjectColorHexSnapshot)"
         }
         let values = grouped.compactMap { identity, sessions -> (String, String, String, Int)? in
@@ -774,10 +1428,10 @@ struct LogView: View {
                 identity,
                 first.displaySubjectName,
                 first.displaySubjectColorHex,
-                sessions.reduce(0) { $0 + $1.grams }
+                NonnegativeIntPolicy.sum(sessions.map(\.grams))
             )
         }
-        let total = max(1, values.reduce(0) { $0 + $1.3 })
+        let total = max(1, NonnegativeIntPolicy.sum(values.map(\.3)))
         return values
             .map {
                 SubjectMass(
@@ -793,7 +1447,7 @@ struct LogView: View {
 
     private var loadKey: String {
         let epoch = ActivityResetPolicy.currentEpochID(from: resetSnapshots)?.uuidString ?? "pre-reset"
-        return "\(epoch)|\(period.rawValue)|\(scenePhase == .active)"
+        return "\(epoch)|\(period.rawValue)|\(scenePhase == .active)|\(aggregateProjectionPresentation.isCloudVerificationPending)"
     }
 
     @MainActor
@@ -815,25 +1469,23 @@ struct LogView: View {
         }
 
         do {
-            let periodRaw = try modelContext.fetch(BoundedHistoryPolicy.sessionDescriptor(
+            let periodPage = try BoundedHistoryPolicy.resolvedSessionPage(
+                context: modelContext,
                 epochID: epochID,
                 start: periodStart,
                 order: .reverse,
-                limit: BoundedHistoryPolicy.periodSessionLimit + 1
-            ))
-            periodPageIsPartial = periodRaw.count > BoundedHistoryPolicy.periodSessionLimit
-            periodSessions = uniqueSessions(
-                Array(periodRaw.prefix(BoundedHistoryPolicy.periodSessionLimit))
+                logicalLimit: BoundedHistoryPolicy.periodSessionLimit
             )
+            periodPageIsPartial = periodPage.isPartial
+            periodSessions = periodPage.sessions
 
-            let recentRaw = try modelContext.fetch(BoundedHistoryPolicy.sessionDescriptor(
+            let recentPage = try BoundedHistoryPolicy.resolvedSessionPage(
+                context: modelContext,
                 epochID: epochID,
                 order: .reverse,
-                limit: BoundedHistoryPolicy.recentSessionLimit * 2
-            ))
-            recentSessions = Array(uniqueSessions(recentRaw)
-                .sorted { $0.endAt > $1.endAt }
-                .prefix(BoundedHistoryPolicy.recentSessionLimit))
+                logicalLimit: BoundedHistoryPolicy.recentSessionLimit
+            )
+            recentSessions = recentPage.sessions
 
             let achievementRaw = try modelContext.fetch(BoundedHistoryPolicy.achievementCandidateDescriptor(
                 epochID: epochID,
@@ -846,16 +1498,22 @@ struct LogView: View {
                 context: modelContext
             )
 
-            let aggregateRaw = try modelContext.fetch(BoundedHistoryPolicy.rootAggregateDescriptor(
-                epochID: epochID,
-                limit: BoundedHistoryPolicy.aggregateRootLimit + 1
-            ))
-            aggregatePageIsPartial = aggregateRaw.count > BoundedHistoryPolicy.aggregateRootLimit
-            aggregatePebbles = Array(aggregateRaw.prefix(BoundedHistoryPolicy.aggregateRootLimit))
-            strata = try modelContext.fetch(BoundedHistoryPolicy.legacyAggregateDescriptor(
-                epochID: epochID,
-                limit: BoundedHistoryPolicy.legacyAggregateLimit
-            ))
+            if aggregateProjectionPresentation.allowsAggregateSummaries {
+                let aggregateRaw = try modelContext.fetch(BoundedHistoryPolicy.rootAggregateDescriptor(
+                    epochID: epochID,
+                    limit: BoundedHistoryPolicy.aggregateRootLimit + 1
+                ))
+                aggregatePageIsPartial = aggregateRaw.count > BoundedHistoryPolicy.aggregateRootLimit
+                aggregatePebbles = Array(aggregateRaw.prefix(BoundedHistoryPolicy.aggregateRootLimit))
+                strata = try modelContext.fetch(BoundedHistoryPolicy.legacyAggregateDescriptor(
+                    epochID: epochID,
+                    limit: BoundedHistoryPolicy.legacyAggregateLimit
+                ))
+            } else {
+                aggregatePageIsPartial = false
+                aggregatePebbles = []
+                strata = []
+            }
 
             monthSummaries = try loadMonthSummaries(epochID: epochID, now: now, calendar: calendar)
             loadError = nil
@@ -878,41 +1536,29 @@ struct LogView: View {
             guard let start = calendar.date(byAdding: .month, value: -offset, to: currentStart),
                   let end = calendar.date(byAdding: .month, value: 1, to: start)
             else { continue }
-            let raw = try modelContext.fetch(BoundedHistoryPolicy.sessionDescriptor(
+            let page = try BoundedHistoryPolicy.resolvedSessionPage(
+                context: modelContext,
                 epochID: epochID,
                 start: start,
                 end: end,
                 order: .reverse,
-                limit: BoundedHistoryPolicy.periodSessionLimit + 1
-            ))
-            guard !raw.isEmpty else { continue }
-            let isPartial = raw.count > BoundedHistoryPolicy.periodSessionLimit
-            let values = uniqueSessions(Array(raw.prefix(BoundedHistoryPolicy.periodSessionLimit)))
+                logicalLimit: BoundedHistoryPolicy.periodSessionLimit
+            )
+            guard !page.sessions.isEmpty else { continue }
             summaries.append(LogMonthSummary(
                 month: WrappedMonth(containing: start, calendar: calendar),
-                minutes: values.reduce(0) { $0 + max(0, $1.seconds) } / 60,
-                pebbleCount: values.count,
-                isPartial: isPartial
+                minutes: NonnegativeIntPolicy.sum(page.sessions.map(\.seconds)) / 60,
+                pebbleCount: page.sessions.count,
+                isPartial: page.isPartial
             ))
         }
         return summaries
     }
 
-    private func uniqueSessions(_ values: [StudySession]) -> [StudySession] {
-        Dictionary(grouping: values, by: \.id).values.compactMap { duplicates in
-            duplicates.max { lhs, rhs in
-                if lhs.grams == rhs.grams { return lhs.endAt < rhs.endAt }
-                return lhs.grams < rhs.grams
-            }
-        }
-    }
-
     private func editableSubjects(
         for selection: AchievementEditSelection
     ) -> [Subject] {
-        Dictionary(grouping: subjects, by: \.id).values.compactMap { duplicates in
-            duplicates.min { lhs, rhs in lhs.createdAt < rhs.createdAt }
-        }
+        SubjectSyncPolicy.canonicalSubjects(from: subjects)
         .filter { !$0.isArchived || $0.id == selection.subjectID }
         .sorted { lhs, rhs in
             if lhs.sortOrder == rhs.sortOrder { return lhs.id.uuidString < rhs.id.uuidString }
@@ -935,13 +1581,15 @@ struct LogView: View {
             guard let subject = subjects.first(where: { $0.id == draft.subjectID }) else {
                 return "選んだテーマが見つかりません。テーマを選び直してください。"
             }
-            AchievementStoneRevisionPolicy.edit(
+            guard AchievementStoneRevisionPolicy.edit(
                 values,
                 subject: subject,
                 kind: draft.kind,
                 note: draft.note,
                 achievedAt: draft.achievedAt
-            )
+            ) == .applied else {
+                return "この記念石の編集履歴が上限に達したため、編集できませんでした。"
+            }
             try modelContext.save()
             loadBoundedHistory()
             return nil
@@ -966,7 +1614,9 @@ struct LogView: View {
                 return "この記念石は別の端末ですでに削除されています。"
             }
             let snapshot = AchievementStoneRevisionSnapshot(canonical)
-            AchievementStoneRevisionPolicy.delete(values)
+            guard AchievementStoneRevisionPolicy.delete(values) == .applied else {
+                return "この記念石の編集履歴が上限に達したため、削除できませんでした。"
+            }
             try modelContext.save()
             pendingAchievementUndo = snapshot
             loadBoundedHistory()
@@ -999,11 +1649,14 @@ struct LogView: View {
             let subject = snapshot.subjectID.flatMap { subjectID in
                 subjects.first { $0.id == subjectID }
             }
-            AchievementStoneRevisionPolicy.restore(
+            guard AchievementStoneRevisionPolicy.restore(
                 values,
                 snapshot: snapshot,
                 subject: subject
-            )
+            ) == .applied else {
+                mutationError = "この記念石の編集履歴が上限に達したため、元に戻せませんでした。"
+                return
+            }
             try modelContext.save()
             pendingAchievementUndo = nil
             loadBoundedHistory()
@@ -1019,10 +1672,14 @@ struct LogView: View {
         for id: UUID,
         epochID: UUID?
     ) throws -> [AchievementStone] {
-        try modelContext.fetch(BoundedHistoryPolicy.achievementRevisionDescriptor(
+        let rows = try modelContext.fetch(BoundedHistoryPolicy.achievementRevisionDescriptor(
             id: id,
             epochID: epochID
         ))
+        guard rows.count <= AchievementStonePolicy.maximumPhysicalRowsPerLogicalStone else {
+            throw AchievementMutationError.replicaSetOverflow
+        }
+        return rows
     }
 
     private func achievementArchiveDescription(count: Int) -> String {
@@ -1039,6 +1696,10 @@ struct LogView: View {
     private func formatMinutes(_ minutes: Int) -> String {
         minutes >= 60 ? String(format: "%.1fh", Double(minutes) / 60) : "\(minutes)m"
     }
+}
+
+private enum AchievementMutationError: Error {
+    case replicaSetOverflow
 }
 
 private struct LogMonthSummary: Identifiable {
@@ -1070,7 +1731,7 @@ private struct DailyMassChartDescriptor: AXChartDescriptorRepresentable {
 
     var accessibilitySummary: String {
         let safeValues = values.map { max(0, $0.grams) }
-        let total = safeValues.reduce(0, +)
+        let total = NonnegativeIntPolicy.sum(safeValues)
         guard !values.isEmpty else {
             return "\(periodTitle)の質量の推移。日ごとのデータはありません。\(totalLabel)0グラム。"
         }
@@ -1100,7 +1761,7 @@ private struct DailyMassChartDescriptor: AXChartDescriptorRepresentable {
             range: 0 ... upperBound,
             gridlinePositions: maximum > 0 ? [0, upperBound] : [0]
         ) { value in
-            "\(Int(value.rounded()))グラム"
+            "\(NonnegativeIntPolicy.clamped(value.rounded()))グラム"
         }
         let points = values.map { item in
             let date = spokenDate(item.date)
@@ -1268,17 +1929,23 @@ private struct AggregateArchiveRow: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            "\(item.pebbleCount)粒のまとまり、\(item.formattedMass)、\(item.periodLabel)、実測\(item.measuredPebbleCount)粒、手動\(item.manualPebbleCount)粒、金\(item.goldPebbleCount)粒、虹\(item.prismPebbleCount)粒"
-        )
+        .accessibilityLabel(accessibilityDescription)
+    }
+
+    private var accessibilityDescription: String {
+        let base = "\(item.pebbleCount)粒のまとまり、\(item.formattedMass)、\(item.periodLabel)、実測\(item.measuredPebbleCount)粒、手動\(item.manualPebbleCount)粒"
+        guard RareRewardReleasePolicy.isEnabled else { return base }
+        return "\(base)、金\(item.goldPebbleCount)粒、虹\(item.prismPebbleCount)粒"
     }
 
     @ViewBuilder
     private var compositionBadges: some View {
         AggregateStatBadge(symbol: "timer", text: "実測 \(item.measuredPebbleCount)")
         AggregateStatBadge(symbol: "hand.tap", text: "手動 \(item.manualPebbleCount)")
-        AggregateStatBadge(symbol: "sparkles", text: "金 \(item.goldPebbleCount)")
-        AggregateStatBadge(symbol: "rainbow", text: "虹 \(item.prismPebbleCount)")
+        if RareRewardReleasePolicy.isEnabled {
+            AggregateStatBadge(symbol: "sparkles", text: "金 \(item.goldPebbleCount)")
+            AggregateStatBadge(symbol: "rainbow", text: "虹 \(item.prismPebbleCount)")
+        }
     }
 }
 
@@ -1517,6 +2184,7 @@ private struct AchievementEditorSheet: View {
                 }
                 .padding(20)
             }
+            .scrollDismissesKeyboard(.immediately)
             .scrollBounceBehavior(.basedOnSize)
             .background(NightBackground())
             .navigationTitle("成果を編集")
@@ -1778,7 +2446,8 @@ private struct HistoryRow: View {
                 Text(session.endAt.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption2)
                     .foregroundStyle(TsumibenTheme.muted)
-                if let batch = session.rareRewardCounts.multiDrawSummary {
+                if let batch = RareRewardPresentationPolicy
+                    .counts(session.rareRewardCounts).multiDrawSummary {
                     Text(batch)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(TsumibenTheme.muted)
@@ -1801,12 +2470,15 @@ private struct HistoryRow: View {
     private var historyAccessibilityLabel: String {
         let source = session.source == .timer ? "実測" : "自己申告"
         let date = session.endAt.formatted(date: .long, time: .shortened)
-        let batch = session.rareRewardCounts.multiDrawSummary.map { "、\($0)" } ?? ""
+        let batch = RareRewardPresentationPolicy
+            .counts(session.rareRewardCounts)
+            .multiDrawSummary
+            .map { "、\($0)" } ?? ""
         return "\(session.displaySubjectName)、\(pebbleKindLabel)、\(source)、プラス\(session.grams)グラム\(batch)、\(date)"
     }
 
     private var pebbleKindLabel: String {
-        switch session.pebbleKind {
+        switch RareRewardPresentationPolicy.kind(session.pebbleKind) {
         case .normal: "通常の粒"
         case .gold: "金の粒"
         case .prism: "虹の粒"
@@ -1814,7 +2486,7 @@ private struct HistoryRow: View {
     }
 
     private var pebbleColor: AnyShapeStyle {
-        switch session.pebbleKind {
+        switch RareRewardPresentationPolicy.kind(session.pebbleKind) {
         case .normal: AnyShapeStyle(Color(hex: session.displaySubjectColorHex))
         case .gold: AnyShapeStyle(Color("pebble.gold"))
         case .prism: AnyShapeStyle(AngularGradient(colors: [.red, .yellow, .green, .blue, .purple], center: .center))

@@ -122,7 +122,10 @@ struct AccumulationTimelineBrowser: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                SectionEyebrow(text: "TIME ARCHIVE")
+                SectionEyebrow(
+                    text: "TIME ARCHIVE",
+                    foreground: TsumibenTheme.text
+                )
                 Text("年月をたどる")
                     .font(TsumibenTheme.brand(20))
             }
@@ -144,18 +147,20 @@ struct AccumulationTimelineBrowser: View {
     }
 
     private var localCoverageNotice: some View {
-        Label(
-            "この端末に届いている範囲を表示しています。iCloud同期中は年や合計が増えることがあります。",
-            systemImage: "icloud.and.arrow.down"
-        )
-        .font(.caption)
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "icloud.and.arrow.down")
+                .accessibilityHidden(true)
+            Text("この端末に届いている範囲を表示しています。保存領域の反映中は年や合計が増えることがあります。")
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier(
+                    AccumulationTimelineAccessibilityID.coverageNotice
+                )
+        }
+        .font(.caption.weight(.semibold))
         .foregroundStyle(TsumibenTheme.text)
-        .fixedSize(horizontal: false, vertical: true)
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(TsumibenTheme.raised.opacity(0.64), in: RoundedRectangle(cornerRadius: 14))
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier(AccumulationTimelineAccessibilityID.coverageNotice)
+        .background(TsumibenTheme.raised, in: RoundedRectangle(cornerRadius: 14))
     }
 
     @ViewBuilder
@@ -499,7 +504,7 @@ private struct AccumulationTimelineMonthSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     Label(
-                        "この端末に届いている範囲です。iCloud同期中は合計が増えることがあります。",
+                        "この端末に届いている範囲です。保存領域の反映中は合計が増えることがあります。",
                         systemImage: "icloud.and.arrow.down"
                     )
                     .font(.caption)

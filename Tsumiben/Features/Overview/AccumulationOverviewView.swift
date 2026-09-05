@@ -11,7 +11,9 @@ struct AccumulationRecord: Identifiable, Equatable, Sendable {
     let colorHex: String
     let grams: Int
     let isMeasured: Bool
-    let isBaked: Bool
+    /// Derived exclusively from this device's local AggregatePebble/Stratum
+    /// membership. It is never copied from StudySession.isBaked.
+    let isRepresentedByLocalAggregate: Bool
 }
 
 struct AccumulationWeeklySummary: Equatable, Sendable {
@@ -100,6 +102,8 @@ struct AccumulationOverviewLayoutPolicy: Equatable {
 struct AccumulationOverviewPageScope: Equatable, Sendable {
     let totalSessionCount: Int
     let displayedSessionCount: Int
+    let totalSessionCountIsLowerBound: Bool
+    let totalSessionCountIsCloudUnverified: Bool
     let totalAchievementCount: Int
     let displayedAchievementCount: Int
     let totalAchievementCountIsLowerBound: Bool
@@ -107,6 +111,8 @@ struct AccumulationOverviewPageScope: Equatable, Sendable {
     init(
         totalSessionCount: Int,
         displayedSessionCount: Int,
+        totalSessionCountIsLowerBound: Bool = false,
+        totalSessionCountIsCloudUnverified: Bool = false,
         totalAchievementCount: Int,
         displayedAchievementCount: Int,
         totalAchievementCountIsLowerBound: Bool = false
@@ -115,13 +121,18 @@ struct AccumulationOverviewPageScope: Equatable, Sendable {
         let visibleAchievements = max(0, displayedAchievementCount)
         self.displayedSessionCount = visibleSessions
         self.totalSessionCount = max(visibleSessions, totalSessionCount)
+        self.totalSessionCountIsLowerBound = totalSessionCountIsLowerBound
+        self.totalSessionCountIsCloudUnverified =
+            totalSessionCountIsCloudUnverified
         self.displayedAchievementCount = visibleAchievements
         self.totalAchievementCount = max(visibleAchievements, totalAchievementCount)
         self.totalAchievementCountIsLowerBound = totalAchievementCountIsLowerBound
     }
 
     var historyPageIsPartial: Bool {
-        displayedSessionCount < totalSessionCount
+        totalSessionCountIsCloudUnverified
+            || totalSessionCountIsLowerBound
+            || displayedSessionCount < totalSessionCount
     }
 
     var achievementPageIsPartial: Bool {
@@ -130,16 +141,31 @@ struct AccumulationOverviewPageScope: Equatable, Sendable {
     }
 
     var timelineDetail: String {
-        "生涯瓶は代表表示のまま、年と月を選ぶと、この端末に届いた範囲を正確に集計します。"
+        if totalSessionCountIsCloudUnverified {
+            return "iCloudを再集計中です。年と月の表示には、この端末で確認できた記録だけを使います。"
+        }
+        return "生涯瓶は代表表示のまま、年と月を選ぶと、この端末に届いた範囲を正確に集計します。"
     }
 
     var shelfScopeLabel: String {
+        if totalSessionCountIsCloudUnverified {
+            guard displayedSessionCount > 0 else {
+                return "iCloudを再集計中・確認済み記録なし"
+            }
+            return "iCloudを再集計中・この端末で確認済みの直近\(displayedSessionCount.formatted())件"
+        }
         guard historyPageIsPartial else { return "月ごと・全\(totalSessionCount.formatted())件" }
         guard displayedSessionCount > 0 else { return "月別履歴は未読み込み" }
+        if totalSessionCountIsLowerBound {
+            return "\(totalSessionCount.formatted())件以上のうち直近\(displayedSessionCount.formatted())件から"
+        }
         return "全\(totalSessionCount.formatted())件のうち直近\(displayedSessionCount.formatted())件から"
     }
 
     var emptyShelfMessage: String {
+        if totalSessionCountIsCloudUnverified {
+            return "iCloudを再集計中です。この端末で確認できた月別記録だけを表示しています。"
+        }
         if totalSessionCount > 0 {
             return "生涯記録は保存されていますが、この表示では月別履歴を読み込んでいません。"
         }
@@ -193,6 +219,7 @@ struct AccumulationOverviewView: View {
     let lifetimePebbleCount: Int
     let pageScope: AccumulationOverviewPageScope
     let lifetimeIsLowerBound: Bool
+    let lifetimeIsCloudUnverified: Bool
     let initialClusterID: UUID?
 
     @Environment(\.dismiss) private var dismiss
@@ -207,6 +234,14 @@ struct AccumulationOverviewView: View {
         .resolve(isAccessibilitySize: dynamicTypeSize.isAccessibilitySize)
     }
 
+    private var lifetimePresentationContext:
+        AggregateProjectionPresentationContext {
+        AggregateProjectionPresentationContext(
+            usesCloudPersistence: lifetimeIsCloudUnverified,
+            isVerified: !lifetimeIsCloudUnverified
+        )
+    }
+
     private var bottleShelfColumns: [GridItem] {
         Array(
             repeating: GridItem(.flexible(), spacing: 12),
@@ -217,7 +252,10 @@ struct AccumulationOverviewView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 24) {
+                // These are only three bounded sections. A lazy outer stack can
+                // enter a LazyLayout cache-update loop after changing lenses
+                // and then scrolling, leaving the app's main thread busy.
+                VStack(alignment: .leading, spacing: 24) {
                     introduction
                     scaleGuide
                     lensContent
@@ -229,6 +267,12 @@ struct AccumulationOverviewView: View {
             .background(NightBackground())
             .navigationTitle("積み上がり")
             .navigationBarTitleDisplayMode(.inline)
+            // The scroll view extends beneath navigation chrome. Keep that
+            // chrome opaque so large Dynamic Type rows cannot remain legible
+            // through the sheet header and create a real contrast collision.
+            .toolbarBackground(TsumibenTheme.background, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     TsumibenSheetCloseButton(
@@ -243,6 +287,9 @@ struct AccumulationOverviewView: View {
                 ClusterDetailSheet(cluster: cluster)
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
+            }
+            .onChange(of: lifetimeIsCloudUnverified) { _, isUnverified in
+                if isUnverified { selectedCluster = nil }
             }
             .onAppear { applyInitialFocusIfNeeded() }
         }
@@ -272,7 +319,7 @@ struct AccumulationOverviewView: View {
     private var currentRecords: [AccumulationRecord] {
         let representedIDs = Set(clusters.flatMap(\.sessionIDs))
         return uniqueRecords.filter {
-            !representedIDs.contains($0.id) && !$0.isBaked
+            !representedIDs.contains($0.id) && !$0.isRepresentedByLocalAggregate
         }
     }
 
@@ -343,7 +390,10 @@ struct AccumulationOverviewView: View {
                 colorHex: dominantColor,
                 colorMix: cluster.colorMix,
                 periodEnd: cluster.periodEnd,
-                containsRare: cluster.goldPebbleCount + cluster.prismPebbleCount > 0
+                containsRare: RareRewardPresentationPolicy.containsRare(
+                    goldCount: cluster.goldPebbleCount,
+                    prismCount: cluster.prismPebbleCount
+                )
             )
         }
     }
@@ -355,12 +405,8 @@ struct AccumulationOverviewView: View {
     /// counters rather than the bounded history page, so a long-lived account
     /// does not appear to lose its oldest ungrouped effort.
     private var fusionHierarchyLevels: [FusionHierarchyLevelSummary] {
-        let clusteredPebbles = clusters.reduce(0) { partial, cluster in
-            partial + max(0, cluster.pebbleCount)
-        }
-        let clusteredGrams = clusters.reduce(0) { partial, cluster in
-            partial + max(0, cluster.grams)
-        }
+        let clusteredPebbles = NonnegativeIntPolicy.sum(clusters.map(\.pebbleCount))
+        let clusteredGrams = NonnegativeIntPolicy.sum(clusters.map(\.grams))
         let loosePebbles = max(0, lifetimePebbleCount - clusteredPebbles)
         let looseGrams = max(0, lifetimeGrams - clusteredGrams)
 
@@ -377,16 +423,21 @@ struct AccumulationOverviewView: View {
         }
 
         for (level, values) in Dictionary(grouping: clusters, by: { max(1, $0.level) }) {
-            let representedPebbles = values.reduce(0) { $0 + max(0, $1.pebbleCount) }
+            let representedPebbles = NonnegativeIntPolicy.sum(
+                values.map(\.pebbleCount)
+            )
             let fallbackUnit = values.map(\.pebbleCount).filter { $0 > 0 }.min() ?? 1
             levels.append(FusionHierarchyLevelSummary(
                 level: level,
                 unitCount: values.count,
                 unitPebbleCount: decimalUnit(for: level, fallback: fallbackUnit),
                 representedPebbleCount: representedPebbles,
-                grams: values.reduce(0) { $0 + max(0, $1.grams) },
+                grams: NonnegativeIntPolicy.sum(values.map(\.grams)),
                 containsRare: values.contains {
-                    $0.goldPebbleCount + $0.prismPebbleCount > 0
+                    RareRewardPresentationPolicy.containsRare(
+                        goldCount: $0.goldPebbleCount,
+                        prismCount: $0.prismPebbleCount
+                    )
                 }
             ))
         }
@@ -417,12 +468,21 @@ struct AccumulationOverviewView: View {
                 .font(TsumibenTheme.brand(32))
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(pageScope.historyPageIsPartial
-                ? "今週育つ結晶、瓶で動くまとまり、直近の年月。古い一回ごとの記録も消えず、必要な範囲だけ読み込みます。"
-                : "今週育つ結晶、瓶で動くまとまり、年月の棚。距離を変えても、一回ごとの集中と質量はそのまま残ります。")
+            Text(lifetimeIsCloudUnverified
+                ? AggregateProjectionPresentationPolicy.cloudPendingNotice
+                : (pageScope.historyPageIsPartial
+                    ? "今週育つ結晶、瓶で動くまとまり、直近の年月。古い一回ごとの記録も消えず、必要な範囲だけ読み込みます。"
+                    : "今週育つ結晶、瓶で動くまとまり、年月の棚。距離を変えても、一回ごとの集中と質量はそのまま残ります。"))
                 .font(.subheadline)
-                .foregroundStyle(TsumibenTheme.muted)
+                .foregroundStyle(TsumibenTheme.text)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    TsumibenTheme.card,
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                )
+                .accessibilityIdentifier("overview.introduction")
         }
     }
 
@@ -614,9 +674,7 @@ struct AccumulationOverviewView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("生涯の瓶")
-        .accessibilityValue(
-            "集中\(formattedMass(lifetimeGrams))\(lifetimeIsLowerBound ? "以上" : "")、\(EffortProgressPresentation.formattedStandardUnits(grams: lifetimeGrams))、物理履歴\(lifetimePebbleCount)粒、表示中のまとまり粒\(clusters.count)個、\(pageScope.achievementAccessibilitySummary)。\(pageScope.bottleRepresentativeDisclosure(displayedRecordCount: bottleGraphicRecords.count, displayedClusterCount: bottleGraphicClusters.count, displayedAchievementCount: bottleGraphicMilestones.count))"
-        )
+        .accessibilityValue(lifetimeBottleAccessibilityValue)
     }
 
     private var lifetimeConstellation: some View {
@@ -637,15 +695,25 @@ struct AccumulationOverviewView: View {
                         .accessibilityHidden(true)
                 }
 
-                EffortConstellationView(
-                    nodes: constellationNodes,
-                    totalGrams: lifetimeGrams,
-                    totalPebbleCount: lifetimePebbleCount,
-                    projectionIsLowerBound: lifetimeIsLowerBound
-                ) { id in
-                    selectedCluster = clusters.first { $0.id == id }
+                if lifetimeIsCloudUnverified {
+                    Label(
+                        "iCloudの集計を再確認中です",
+                        systemImage: "arrow.triangle.2.circlepath.icloud"
+                    )
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(TsumibenTheme.muted)
+                    .frame(maxWidth: .infinity, minHeight: 180)
+                } else {
+                    EffortConstellationView(
+                        nodes: constellationNodes,
+                        totalGrams: lifetimeGrams,
+                        totalPebbleCount: lifetimePebbleCount,
+                        projectionIsLowerBound: lifetimeIsLowerBound
+                    ) { id in
+                        selectedCluster = clusters.first { $0.id == id }
+                    }
+                    .frame(height: dynamicTypeSize.isAccessibilitySize ? 360 : 320)
                 }
-                .frame(height: dynamicTypeSize.isAccessibilitySize ? 360 : 320)
 
                 Text(pageScope.constellationRepresentativeDisclosure(
                     displayedClusterCount: clusters.count,
@@ -661,22 +729,38 @@ struct AccumulationOverviewView: View {
                     VStack(spacing: 10) { lifetimeStats }
                 }
 
-                HStack(spacing: 7) {
-                    fusionStep("10分 = 0.4")
-                    fusionArrow
-                    fusionStep("25分 = 1.0")
-                    fusionArrow
-                    fusionStep("60分 = 2.4")
-                    fusionArrow
-                    fusionStep("時間の核")
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(spacing: 7) {
+                            fusionStep("10分 = 0.4")
+                            fusionArrow
+                            fusionStep("25分 = 1.0")
+                            fusionArrow
+                            fusionStep("60分 = 2.4")
+                            fusionArrow
+                            fusionStep("時間の核")
+                        }
+                    } else {
+                        HStack(spacing: 7) {
+                            fusionStep("10分 = 0.4")
+                            fusionArrow
+                            fusionStep("25分 = 1.0")
+                            fusionArrow
+                            fusionStep("60分 = 2.4")
+                            fusionArrow
+                            fusionStep("時間の核")
+                        }
+                    }
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("時間の核は集中時間で進みます。10分は0.4標準単位、25分は1.0標準単位、60分は2.4標準単位です")
+                .accessibilityIdentifier("overview.fusion-legend")
 
                 Text("1完走につき粒は1つ。10粒→1の階層は瓶の整理で、時間の価値は変えません。まとまりをタップすると内訳を確認できます。")
                     .font(.caption)
-                    .foregroundStyle(TsumibenTheme.muted)
+                    .foregroundStyle(TsumibenTheme.text)
                     .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("overview.fusion-disclosure")
             }
         }
         .accessibilityElement(children: .contain)
@@ -686,28 +770,25 @@ struct AccumulationOverviewView: View {
     private var fusionHierarchyCard: some View {
         TsumibenCard {
             VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        SectionEyebrow(text: "STORAGE HIERARCHY")
-                        Text("瓶の整理階層")
-                            .font(TsumibenTheme.brand(22))
-                        Text("10粒をひとつの表示へ圧縮します。これは価値の段階ではなく、記録と質量を失わず瓶を保つ仕組みです。")
-                            .font(.caption)
-                            .foregroundStyle(TsumibenTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 12) {
+                            fusionHierarchyHeading
+                            fusionHierarchyLevelCount
+                        }
+                    } else {
+                        HStack(alignment: .top, spacing: 12) {
+                            fusionHierarchyHeading
+                            Spacer(minLength: 8)
+                            fusionHierarchyLevelCount
+                        }
                     }
-                    Spacer(minLength: 8)
-                    Text("\(fusionHierarchyLevels.count)段")
-                        .font(.caption.weight(.black))
-                        .monospacedDigit()
-                        .foregroundStyle(TsumibenTheme.text)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(TsumibenTheme.raised, in: Capsule())
                 }
 
                 if fusionHierarchyLevels.isEmpty {
-                    Text("最初の一粒から、ここに結晶の階段が育ちます。")
+                    Text(lifetimeIsCloudUnverified
+                        ? "iCloudを再集計中です。確認が終わるまで古い階層は表示しません。"
+                        : "最初の一粒から、ここに結晶の階段が育ちます。")
                         .font(.subheadline)
                         .foregroundStyle(TsumibenTheme.muted)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -719,9 +800,11 @@ struct AccumulationOverviewView: View {
                     }
                 }
 
-                Text(lifetimeIsLowerBound
-                    ? "同期できた範囲の階層です。整理が終わるまで、生涯値は減らさず「以上」で扱います。"
-                    : "段の個数は保存上のまとまりです。10個そろうと次へ圧縮しますが、時間の核はグラムから独立に計算します。")
+                Text(lifetimeIsCloudUnverified
+                    ? "iCloudの再集計が終わるまで、古い階層は表示しません。この端末で確認できた記録だけを年月の棚に表示します。"
+                    : (lifetimeIsLowerBound
+                        ? "保存領域から確認できた範囲の階層です。整理が終わるまで、生涯値は減らさず「以上」で扱います。"
+                        : "段の個数は保存上のまとまりです。10個そろうと次へ圧縮しますが、時間の核はグラムから独立に計算します。"))
                     .font(.caption2)
                     .foregroundStyle(TsumibenTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -729,6 +812,30 @@ struct AccumulationOverviewView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("overview.fusion-hierarchy")
+    }
+
+    private var fusionHierarchyHeading: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            SectionEyebrow(text: "STORAGE HIERARCHY")
+            Text("瓶の整理階層")
+                .font(TsumibenTheme.brand(22))
+            Text("10粒をひとつの表示へ圧縮します。これは価値の段階ではなく、記録と質量を失わず瓶を保つ仕組みです。")
+                .font(.caption)
+                .foregroundStyle(TsumibenTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("overview.fusion-hierarchy.explanation")
+        }
+    }
+
+    private var fusionHierarchyLevelCount: some View {
+        Text("\(fusionHierarchyLevels.count)段")
+            .font(.caption.weight(.black))
+            .monospacedDigit()
+            .foregroundStyle(TsumibenTheme.text)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(TsumibenTheme.raised, in: Capsule())
+            .accessibilityIdentifier("overview.fusion-hierarchy.level-count")
     }
 
     private func fusionStep(_ title: String) -> some View {
@@ -739,14 +846,17 @@ struct AccumulationOverviewView: View {
             .padding(.vertical, 6)
             .background(
                 Capsule()
-                    .fill(TsumibenTheme.card.opacity(0.72))
+                    .fill(TsumibenTheme.card)
                     .overlay(Capsule().stroke(TsumibenTheme.glassEdge.opacity(0.22)))
             )
             .frame(maxWidth: .infinity)
+            .accessibilityIdentifier("overview.fusion-step.\(title)")
     }
 
     private var fusionArrow: some View {
-        Image(systemName: "chevron.right")
+        Image(systemName: dynamicTypeSize.isAccessibilitySize
+            ? "chevron.down"
+            : "chevron.right")
             .font(.caption2.weight(.black))
             .foregroundStyle(TsumibenTheme.amber)
             .accessibilityHidden(true)
@@ -755,23 +865,44 @@ struct AccumulationOverviewView: View {
     @ViewBuilder
     private var lifetimeStats: some View {
         OverviewStat(
-            title: lifetimeIsLowerBound ? "集中（同期整理中）" : "集中",
-            value: formattedMass(lifetimeGrams) + (lifetimeIsLowerBound ? "以上" : "")
+            title: lifetimeIsCloudUnverified
+                ? "集中（iCloud再集計中）"
+                : (lifetimeIsLowerBound ? "集中（集計整理中）" : "集中"),
+            value: AggregateProjectionPresentationPolicy.overviewLifetimeValue(
+                verifiedValue: formattedMass(lifetimeGrams),
+                isLocalLowerBound: lifetimeIsLowerBound,
+                context: lifetimePresentationContext
+            )
         )
         OverviewStat(
             title: "標準換算",
-            value: EffortProgressPresentation.formattedStandardUnits(
-                grams: lifetimeGrams
-            ) + (lifetimeIsLowerBound ? "以上" : "")
+            value: AggregateProjectionPresentationPolicy.overviewLifetimeValue(
+                verifiedValue: EffortProgressPresentation.formattedStandardUnits(
+                    grams: lifetimeGrams
+                ),
+                isLocalLowerBound: lifetimeIsLowerBound,
+                context: lifetimePresentationContext
+            )
         )
         OverviewStat(
-            title: "物理粒（履歴）",
-            value: lifetimePebbleCount.formatted(.number.grouping(.automatic))
+            title: lifetimeIsCloudUnverified
+                ? "この端末で確認済み"
+                : "物理粒（履歴）",
+            value: lifetimeIsCloudUnverified
+                ? "\(lifetimePebbleCount.formatted(.number.grouping(.automatic)))粒"
+                : lifetimePebbleCount.formatted(.number.grouping(.automatic))
         )
         OverviewStat(
             title: "表示中のまとまり",
             value: clusters.count.formatted(.number.grouping(.automatic))
         )
+    }
+
+    private var lifetimeBottleAccessibilityValue: String {
+        if lifetimeIsCloudUnverified {
+            return "iCloudの集計を再確認中。この端末で確認済みの記録は\(lifetimePebbleCount)粒。古いまとまりは表示していません。\(pageScope.achievementAccessibilitySummary)"
+        }
+        return "集中\(formattedMass(lifetimeGrams))\(lifetimeIsLowerBound ? "以上" : "")、\(EffortProgressPresentation.formattedStandardUnits(grams: lifetimeGrams))、物理履歴\(lifetimePebbleCount)粒、表示中のまとまり粒\(clusters.count)個、\(pageScope.achievementAccessibilitySummary)。\(pageScope.bottleRepresentativeDisclosure(displayedRecordCount: bottleGraphicRecords.count, displayedClusterCount: bottleGraphicClusters.count, displayedAchievementCount: bottleGraphicMilestones.count))"
     }
 
     private var scaleGuide: some View {
@@ -887,9 +1018,13 @@ struct AccumulationOverviewView: View {
                 TsumibenCard {
                     Label {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("10粒ごとに生まれます")
+                            Text(lifetimeIsCloudUnverified
+                                ? "iCloudを再集計中"
+                                : "10粒ごとに生まれます")
                                 .font(.subheadline.weight(.bold))
-                            Text("粒の色と数を内側に残したまま、大きな一粒になります。")
+                            Text(lifetimeIsCloudUnverified
+                                ? "確認が終わるまで古いまとまり粒は表示しません。"
+                                : "粒の色と数を内側に残したまま、大きな一粒になります。")
                                 .font(.caption)
                                 .foregroundStyle(TsumibenTheme.muted)
                         }
@@ -1368,11 +1503,12 @@ private struct OverviewStat: View {
             Text(value)
                 .font(.system(.headline, design: .rounded, weight: .heavy))
                 .monospacedDigit()
+                .foregroundStyle(TsumibenTheme.text)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(TsumibenTheme.raised.opacity(0.88), in: RoundedRectangle(cornerRadius: 14))
+        .background(TsumibenTheme.raised, in: RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -1602,7 +1738,7 @@ private struct ClusterDetailSheet: View {
     }
 
     private var subjectPebbleTotal: Int {
-        max(1, cluster.subjectMix.reduce(0) { $0 + max(0, $1.pebbleCount) })
+        max(1, NonnegativeIntPolicy.sum(cluster.subjectMix.map(\.pebbleCount)))
     }
 
     private func subjectPercentage(_ count: Int) -> Double {
@@ -1633,13 +1769,13 @@ private struct ClusterDetailSheet: View {
     private func percentageText(_ fraction: Double) -> String {
         let percentage = normalizedFraction(fraction) * 100
         if percentage > 0, percentage < 1 { return "1%未満" }
-        return "\(Int(percentage.rounded()))%"
+        return "\(NonnegativeIntPolicy.clamped(percentage.rounded()))%"
     }
 
     private func spokenPercentage(_ fraction: Double) -> String {
         let percentage = normalizedFraction(fraction) * 100
         if percentage > 0, percentage < 1 { return "1パーセント未満" }
-        return "\(Int(percentage.rounded()))パーセント"
+        return "\(NonnegativeIntPolicy.clamped(percentage.rounded()))パーセント"
     }
 
     private func normalizedFraction(_ fraction: Double) -> Double {
@@ -1655,12 +1791,19 @@ private struct ClusterDetailSheet: View {
 
     @ViewBuilder
     private var sourceStats: some View {
+        let rareCount = NonnegativeIntPolicy.adding(
+            cluster.goldPebbleCount,
+            cluster.prismPebbleCount
+        )
         OverviewStat(title: "タイマー", value: "\(cluster.measuredPebbleCount)粒")
         OverviewStat(title: "手動", value: "\(cluster.manualPebbleCount)粒")
-        if cluster.goldPebbleCount + cluster.prismPebbleCount > 0 {
+        if RareRewardPresentationPolicy.containsRare(
+            goldCount: cluster.goldPebbleCount,
+            prismCount: cluster.prismPebbleCount
+        ) {
             OverviewStat(
                 title: "レア",
-                value: "\(cluster.goldPebbleCount + cluster.prismPebbleCount)粒"
+                value: "\(rareCount)粒"
             )
         }
     }
@@ -1752,7 +1895,7 @@ private struct MonthBottleSummary: Identifiable {
     let records: [AccumulationRecord]
 
     var id: Date { month }
-    var grams: Int { records.reduce(0) { $0 + max(0, $1.grams) } }
+    var grams: Int { NonnegativeIntPolicy.sum(records.map(\.grams)) }
 }
 
 private struct MonthBottleCard: View {

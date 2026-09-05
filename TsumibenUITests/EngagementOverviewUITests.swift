@@ -89,6 +89,22 @@ final class EngagementOverviewUITests: XCTestCase {
         )
         XCTAssertFalse(dismiss.frame.intersects(share.frame))
         XCTAssertFalse(dismiss.frame.intersects(rest.frame))
+        XCTAssertLessThan(
+            dismiss.frame.midX,
+            share.frame.midX,
+            "The completion actions must read left-to-right as close, GIF, then rest"
+        )
+        XCTAssertLessThan(
+            share.frame.midX,
+            rest.frame.midX,
+            "The rest CTA must remain the rightmost completion action"
+        )
+        XCTAssertEqual(
+            share.frame.midX - dismiss.frame.midX,
+            rest.frame.midX - share.frame.midX,
+            accuracy: 12,
+            "The three completion actions must be distributed evenly instead of packed to one side"
+        )
         let geometry = XCTAttachment(
             string: "dismiss=\(dismiss.frame)\nshare=\(share.frame)\nrest=\(rest.frame)"
         )

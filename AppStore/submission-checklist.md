@@ -2,27 +2,132 @@
 
 ## 未完了なら提出しない項目
 
-- [ ] App Store Connect app recordとApp Store IDを作成
-- [ ] Agreements、tax、banking、EU trader statusなど対象地域のcomplianceを完了
-- [ ] Pages、Privacy、Supportが公開され、全URLがredirectなしHTTPS 200
+- [x] App Store Connect app record（Apple ID `6806758060`、`com.hinoshiba.tumiben`）を確認
+- [x] Free／Paid Apps Agreement、tax、bankingがactiveであることを確認（2026-09-03）
+- [x] App Store Connect上のDSA statusがnon-trader表示であることを確認（2026-09-04）
+- [ ] Pages、Privacy、Support、Terms、販売条件が公開され、全URLがredirectなしHTTPS 200
 - [ ] `tumiben.hinoshiba.com`のDNSを検証し、GitHub Pagesの「Enforce HTTPS」を有効化
 - [ ] 公開SupportメールアドレスとGitHub profileの掲載をmaintainerが明示承認
-- [ ] CloudKit development schemaを検証しproductionへdeploy
-- [ ] 完全offlineの2台で同時完走してもrare抽選ordinal・端数・gold保証がexactly-onceへ収束するV2台帳を実装し、分断・再接続testに合格（現行の既知blocker）
-- [ ] App Group、iCloud、Push Notifications、IAPのdistribution provisioningが有効
-- [ ] Non-Consumable `com.hinoshiba.tsumiben.pro.lifetime`を作成し、日本の価格を100円に設定
-- [ ] IAP localization、review screenshot、tax、availabilityを完成
+- [ ] 1.0は未出荷なので`iCloud.com.hinoshiba.tumiben`のdevelopment schemaだけをclearし、最終RCから
+  replica identity／Subject tombstone／Achievement deletion revision・token・restore ack／Prefs stampを含む7種類の同期元modelを
+  再initialize・検証して、同一schemaをproductionへdeployする。production environmentはclearしない
+- [x] 初回に「iCloudで同期」と「このiPhoneのみ」を同格で提示し、どちらも推奨扱いにせず、確認後に
+  一方を確定するVersion 1.0仕様へ実装／listing／Privacy／Review Notesを統一。iCloudの選択説明から
+  Privacy Policyを開ける
+- [x] 「このiPhoneのみ」はApple Account／networkなしで全基本機能を利用でき、専用random namespaceの
+  local storeだけへ保存し、iCloudへ自動切替／uploadしない。Version 1.0の選択は変更不可で、app削除・
+  再installはlocal dataを消去し、JSONは再import／iCloud移行／機種変更時の継続に使えないことを明記
+- [x] cloud modeで`ModelContainer`作成前にApple Accountをfail closedで解決し、cloud cache／local
+  projection／focus state／maintenance checkpointをrandom namespaceへ分離する実装と
+  pure unit testを追加
+- [ ] 不変profileの欠落・破損、存在する旧registryの破損またはprofileとの不整合、source／projectionの片側だけ、sidecarだけ、複数namespace、symlink、
+  matching unknown artifactがあるclean-installでない状態はfresh choiceへ戻さずrecovery gateになり、
+  既存artifactを削除／上書きしないことをRelease candidateで確認。選択profile
+  確定済みでstore fileが0件の一度限りのcommit／mount crash境界だけは正しく再開する。旧registryが
+  存在しないこと自体は正常とし、Version 1.0はregistryを新規作成・更新・保存しない
+- [x] account-neutral Widgetが利用者dataを共有しないため、host／Widget双方からApp Group entitlement、
+  production suite defaults／container access、privacy reason `1C8F.1`を除去
+- [ ] 署名済みclean install実機で、二つの初回選択が同格で各確認後だけ確定し、local-onlyは
+  Apple Account／networkなしで全基本機能が動き、再起動後もlocal-onlyのままで自動uploadしないことを確認
+- [ ] 署名済み実機でiCloud選択時のprivate database全zone read-only fetch、各launch／resume、A→B block→A復帰、background中account切替、
+  通信断を試す。別account／通信不可では保存領域を開かずdataを削除しないこと、Aへ戻ると元のnamespaceを
+  開くことを確認。Widgetは常にaccount-neutral、Live Activityは時間／状態以外を表示せず、旧timerの
+  共通通知が一度届き得ることも記録する
+- [ ] 署名済み実機でLive Activityの開始、pause、resume、期限到達、cancel、完了後のdismiss、手動dismiss後に
+  勝手に再生成しないこと、SettingsでOFFにすると即終了し再起動後もOFFであることを確認。theme名、memo、
+  質量、Apple Account／CloudKit情報がロック画面へ出ないことをA→B block中も確認
+- [x] Apple Account切替時の混線リスクが残るrare reward台帳、pending outbox、operations containerを1.0のRelease経路・shipping schema・entitlementから無効化
+- [x] bounded／checkpointed maintenance workerを実装し、page境界duplicate、世代変更、local projection失敗後の再開をunit testで検証
+- [x] Achievementの削除event `(deletionRevision, deletionMutationID)`を通常編集／in-place restore後も保持し、
+  explicit Undoだけが観測tokenを`restoredDeletionMutationID`でackする。legacy `deletedAt` rowは
+  `(row.revision, deletionMutationID ?? syncRecordID)`へ合成し、未観測の後着削除を復活させない
+- [x] reset winnerをLamport sequence 0...1,000,000で決め、`resetAt`をmetadataだけにし、範囲外sequenceと
+  counter上限をfail closedで扱う実装／test sourceを追加
+- [x] 620 session／empty local projection fixtureで、Homeの512件windowより古い履歴を有界sliceで
+  level-1 leaf化し10進rollupする再構築test sourceを追加
+- [ ] `projectionValidationVersion`未達のaggregateが一つでもある間は全rootを会計から除外し、leafの
+  全memberの固定長digestをdurable cursorで収集し、昇格sliceでmember 0からexact再読した後だけ昇格する。
+  最終一巡が1,024-row budgetへ入らない異常密度はv0のまま抑止する。late winner、2×256 dense member、
+  count→fetch間変更、kill／checkpoint replay、ancestor全field再導出の回帰testを最新RCで合格する
+- [ ] cloud modeは起動直後を未検証とし、source／reset save、remote-store change、初回60秒、真正な
+  foreground復帰、active継続15分ごとにsessions verificationを要求する。pending中は生涯正確値、`+`、
+  `以上`を表示せず「再集計中」「この端末で確認済み」とするfocused testを合格する
+- [x] 同一focus sessionのterminal／active／claim duplicateを全物理row保持のままread-onlyで論理解決し、
+  異なるsession UUIDを破壊的にcancelしない実装を追加。materialized `StudySession`で閉じたことをexact確認した
+  active tailだけを別cleanupとして削除可能
+- [x] hostile／破損timer payloadをsnapshot前に検証し、remaining／cycle countを飽和。invalid cloud rowは
+  非破壊fail closed、invalid local recovery bytesは削除する回帰testを追加
+- [x] clock変更／reboot／cross-device adoptionを`timerDemoted`へfail closedにし、break recoveryの
+  minutes／Date／整数変換を有界化するunit testを追加
+- [ ] invalid active logical sessionが先頭から257件以上ある場合、interactive recoveryは256件で
+  fail closedする既知上限をownerが受け入れる。解消する場合はraw payloadを保持する可逆quarantineを
+  versioned CloudKit schemaとして設計・実機検証する
+- [x] 最新Release candidateでaccount境界、Lamport reset、620件projection rebuild、256件超focusの
+  read-only resolution、partial delivery、foreign row不変、duplicate maintenanceのsource write／delete 0を含む
+  全test／build／analyzeを完走。2026-09-05に595件中594件成功、40年soak 1件は明示opt-inのためskip、
+  失敗0件。Release Archive成功、Release Analyzeはerror／warning／analyzer warningすべて0件
+- [x] 最新Release candidateで、onboardingの任意のためし粒を「次へ」で省略し、勉強／仕事を分けない
+  共通候補から最初のテーマ1件だけで完了できることを確認。Settingsも一つのテーマ一覧だけを表示し、
+  Home開始buttonはtapで集中開始、長押しで開始せずテーマ変更、既存の履歴と互換性用`usagePurpose`値は保持する。
+  2026-09-05のfocused unit 9件とUI 4件で失敗0件
+- [ ] partition中は、commit前に見えたscheduled-end前cancelを尊重する一方、先にmaterializeした
+  `StudySession`は遅延cancelで削除／demoteしないCAP trade-offをownerが承認し、署名済み2台で両順序を確認
+- [x] account切替・複数worker競合が未解決のdirect CloudKit一括削除は1.0のUI／launch pathから無効化し、通常reset、app削除、AppleのiCloudストレージ管理だけを案内
+- [ ] 署名済み実機2台でmaintenance、foreground復帰、15分以上のactive継続中に相手端末から追加・更新した
+  古い日時のsession、remote import通知、再集計中表示、timer引き継ぎと同期を検証し、Release buildに
+  rare reward UI／operations entitlement／direct CloudKit一括削除UI／削除用launch preflight gateがないことを確認
+- [x] host App IDのiCloud／CloudKit、Push Notifications、IAP、hostだけへの
+  `iCloud.com.hinoshiba.tumiben`割当、Widget App IDの追加capabilityなしでの登録を完了。2026-09-04の
+  upload用配布copyで、両targetの明示bundle ID、Apple Distribution profile、`get-task-allow = false`、
+  hostのCloudKit Production／APNs ProductionをApp Store ConnectとXcode配布logの双方で確認
+- [x] Non-Consumable `com.hinoshiba.tumiben.pro.lifetime`を作成し、米国USD 0.99を基準価格、日本をJPY 100のcustom price、その他の配信地域をAppleの現地相当額に設定
+- [ ] 日本向け有料IAPについて販売主体と特商法上の表示要否を確認し、必要な事業者情報・価格・支払／提供時期・返品等を購入前に表示。氏名／住所／電話を省略する場合は請求時に遅滞なく提供できる実運用を確認（現行の既知blocker）
+- [ ] `Docs/COMMERCIAL_DISCLOSURE_OPERATIONS.md`に従い、非公開の法定情報正本、開示請求メール、担当者不在時の代替手順を実地確認
+- [x] IAPのja-JP（`つみべんPro`）／en-US（`Tumiben Pro`）説明を「任意時間・月刻印」の2機能へ更新し、IAP review notesも同じ提供内容へ更新。2026-09-05に同じIAPをdraft submissionへ再追加し、reload後の完全一致を確認。Product ID、tax、price、availability、Family Sharingは変更なし
+- [ ] IAP review screenshotを「任意時間・月刻印」の2機能とStoreKitの実価格だけを示す現行paywallへ差し替え、reload確認
+- [x] App本体をFree、Public、148／175 Countries or Regionsへ設定。現行EU 27を除外し、United Kingdom、Norway、Switzerlandは含め、今後追加されるstorefrontの自動追加を有効化
+- [x] IAPをApp本体と同じ148／175 Countries or Regionsへ設定。現行EU 27を除外し、United Kingdom、Norway、Switzerlandは含め、今後追加されるstorefrontの自動追加を有効化
+- [x] App本体とIAPのEU 27での提供を外し、Version 1.0のEU DSA release blockerを配信範囲で解消。これはtrader該当性についての法律判断ではなく、将来EU提供を有効にする場合はAccount Holderが再評価
+- [ ] `ja-JP`と`en-US`のlistingを入力し、英語listingでApp UI／supportが日本語であることを明示
+- [x] version 1.0のja-JP／en-US descriptionとApp Review notesをsource-of-truthどおり保存し、2026-09-05のreload後に完全一致を確認
+- [ ] App Review contactのfirst name、last name、国際形式電話番号、emailをApp Store Connectだけに入力し、保存後にreloadして確認
 - [ ] Sandboxでpurchase、pending、cancel、restore、revocationを確認
-- [ ] App Privacy draftをproduction実装と照合しPublish
-- [ ] 2026年版age rating質問へ回答
+- [ ] App Privacy draftをproduction archive、private CloudKit access権限、support mailの実運用と照合。
+  運営者がiCloud dataを取得・閲覧・保持せずoptional disclosure条件も満たす場合だけData Not Collectedを
+  Publishし、満たさなければEmail Address等を実態どおり申告
+- [x] privacy manifestでhostのFile Timestamp `C617.1`、System Boot Time `35F9.1`、standard defaults
+  `CA92.1`と、Widgetのrequired-reason API宣言が空であることをRelease archiveに照合
+- [x] `AppStore/age-rating.md`の全descriptorを2026年版age rating質問へ入力し、生成結果4+を保存後にreloadして確認
 - [ ] Export complianceを現行質問で確認
-- [ ] iPhone screenshotを実Release candidateから作成し、個人情報・placeholder・誤訴求なし
+- [x] 現行`1.0 (3)`のiPhone screenshot 5枚を2026-09-05にproduction UIのDebug-only fixtureで再captureし、
+  UI test 1/1 pass、1284×2778 RGB／alphaなし、個人情報・placeholder・誤訴求なし、03の初回250g完走は
+  「閉じる」左／空のGIF中央列／「5分休憩」右が均衡し、05は`1.0 (3)`かつdirect deletion rowなしを目視確認
+- [ ] 上記5枚を署名済みRelease実機と比較し、visual parityがない画像は再capture
 - [ ] metadataのname、subtitle、description、keywords、URLs、review notesを入力
 - [ ] Accessibility Nutrition Labelsを実機評価に基づき回答
-- [ ] Apple silicon MacとVision ProでのiOS app提供を無効化
+- [x] Apple silicon MacとVision ProでのiOS app提供を無効化
+- [x] Apple School Manager reduced priceをenabledとして保存
+- [ ] OSS公開方式をownerが選択: source／通常文書MIT、font OFL、名称／logo／icon／生成背景／Store・Web
+  画像rights-reservedのmixed-licenseとして公開するか、除外assetを再license／置換して全体OSS化する
+- [ ] 選択したlicense境界を`LICENSE`、`ASSET_LICENSES.md`、`TRADEMARKS.md`、README、release tagで一致させ、
+  rights／商標／AI reference inputのowner sign-offを記録
+- [ ] Public化前に全Git historyのsecret／個人情報／署名資材を再監査し、Public化後に匿名access、branch
+  protection、required checks、secret scanning、private vulnerability reportingを確認。2026-09-05時点では
+  reachable commit `ed7f63b`のauthor／committer identityが公開承認allowlist外のためreadiness checkは失敗
 - [ ] `./Scripts/check-oss-readiness.sh --release`、site validation、build、test、analyzeが成功
-- [ ] 全11モデルのversioned JSON exportを40年相当の保存データで実行し、件数・内容・Files保存・一時ファイル削除を確認
-- [ ] 2台の実機でiCloud、offline、timer引き継ぎ、resetを確認
-- [ ] Archive → Validate App → Upload → internal TestFlight QAを完了
+- [ ] 全11出荷対象モデルのversioned JSON exportを40年相当の保存データで実行し、件数・内容・Files保存・一時ファイル削除を確認
+- [ ] local-only実機でofflineの基本機能、削除前のJSON書き出しと再import不可を確認し、iCloud実機2台で
+  online account確認、同期、timer引き継ぎ、reset、通信断時fail-closedと非破壊性を確認
+- [x] Xcode CLI Archiveとraw development署名検証、Organizerの`Distribute App`表示、owner本人による
+  Distribute／Uploadを2026-09-04に完了。Xcode側はerror／warning 0、App Store Connect側はTumiben
+  `1.0 (1)`をValidated／Ready to Submitとして受領。ただしこれはLive Activityと45／90分無料枠を含まない
+- [x] 現行仕様を含む`1.0 (3)`を2026-09-05に新規Archiveし、raw development署名、host／Widget、
+  CloudKit／APNs development環境、Privacy Manifest、arm64、Release debug-gate scanを検証。
+  Organizer archiveは`~/Library/Developer/Xcode/Archives/2026-09-05/Tsumiben 2026-09-05, 00.49.00.xcarchive`
+- [ ] 上記Release appをNoe’s iPhone 14へ既存dataを消さずinstall済み。端末lockによりCLI起動要求が
+  iOSから拒否されたため、unlock状態での起動と今回のテーマUIの実機smokeを完了する
+- [ ] 検証済み`1.0 (3)`をDistributeし、distribution署名／production CloudKit・APNsを再検証して、
+  App Store Connectでbuild 4を提出対象へ選択
+- [ ] `1.0 (3)`をDistribute後、internal TestFlightまたは同一署名候補相当の実機QAを完了
 - [ ] 初回IAPとapp versionを同じsubmissionへ追加
 - [ ] version/build/commit/tag/CloudKit deploy日時をrelease記録へ保存

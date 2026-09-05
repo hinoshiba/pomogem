@@ -70,10 +70,20 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     var reduceMotion: Bool = UIAccessibility.isReduceMotionEnabled {
         didSet {
             guard reduceMotion != oldValue else { return }
-            livePebbles.forEach { $0.setReduceMotion(reduceMotion) }
+            allPebbleNodes.forEach { $0.setReduceMotion(reduceMotion) }
             if reduceMotion {
-                pendingTapKick = nil
+                finishActiveTapMotion(forceReturn: false)
+                transientMotionGate.invalidate()
+                interactionCollisionBudget.cancel()
                 resetGravity()
+                livePebbles.forEach(freezeForReducedMotion)
+                // Aggregation source nodes leave `livePebbles` before their
+                // move/fade starts. Complete that already-owned transaction now
+                // so enabling Reduce Motion cannot leave excluded nodes moving.
+                // The token check also makes the old deadline a harmless no-op.
+                if let activeBakeToken = activeBake?.token {
+                    completeActiveBake(token: activeBakeToken)
+                }
                 updateOpticalTilt(horizontal: 0)
                 cameraNode.removeAction(forKey: ActionKey.cameraShake)
                 cameraNode.position = cameraRestPosition
@@ -90,6 +100,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                         node.removeFromParent()
                     }
                 }
+            } else {
+                livePebbles.forEach(thawAfterReducedMotion)
+                resumeSimulation()
             }
         }
     }
@@ -108,6 +121,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private struct ActiveBake {
         let token: UUID
         let request: JarBakeRequest
+        let sourceNodes: [PebbleNode]
+        let formationPoint: CGPoint
         /// Capture the owner at the transaction boundary. Home may disappear
         /// and clear the public callback while the formation animation is
         /// running; resolving the property again at completion would silently
@@ -119,42 +134,53 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         static let cameraShake = "jar.cameraShake"
         static let tapCaustic = "jar.tapCaustic"
         static let tapSpecular = "jar.tapSpecular"
+        static let reducedMotionTapLift = "jar.reducedMotion.tapLift"
         static let reducedMotionHighlight = "jar.reducedMotionHighlight"
     }
 
-    /// Interaction values are intentionally expressed as velocity changes, then
-    /// converted to impulses using each body's mass. A large aggregate and a
-    /// small study pebble therefore make the same readable hop without giving
-    /// either one unbounded kinetic energy.
+    /// A tap launches one primary gem and lets SpriteKit transfer that motion
+    /// through real body-to-body contacts. Keeping the launch bounded here
+    /// avoids turning a full jar into an expensive all-body animation.
     private enum TapResponse {
         static let cooldown: TimeInterval = 0.68
         static let minimumInfluenceRadius: CGFloat = 64
         static let maximumInfluenceRadius: CGFloat = 104
         static let influenceRadiusFraction: CGFloat = 0.28
         static let minimumLocalStrength: CGFloat = 0.04
-        static let peakVerticalVelocity: CGFloat = 112
-        static let peakRadialVelocity: CGFloat = 42
-        static let verticalVariation: CGFloat = 7
-        static let maximumVerticalVelocity: CGFloat = 120
-        static let returnDelay: TimeInterval = 0.32
-        static let baseReturnVelocity: CGFloat = 92
-        static let localReturnVelocity: CGFloat = 14
-        static let flightDamping: CGFloat = 0.03
+        /// The closest physical gem must always own a readable response. This
+        /// also makes taps on sparse glass tolerant of small view/scene drift.
+        static let minimumPrimaryStrength: CGFloat = 0.78
+        static let maximumVerticalVelocity = JarTapLaunchPolicy.maximumVerticalVelocity
+        static let maximumHorizontalVelocity = JarTapLaunchPolicy.maximumHorizontalVelocity
+        static let maximumAngularVelocity: CGFloat = 5.4
+        static let maximumLaunchClearance: CGFloat = 3
+        static let launchClearanceRadiusFraction: CGFloat = 0.22
+        static let returnDelay = JarTapLaunchPolicy.flightDuration
+        static let flightDamping: CGFloat = 0.025
         static let settlingDamping: CGFloat = 0.16
         static let restoreDampingDelay: TimeInterval = 0.30
-        // A return scheduled by wall-clock time can otherwise win a race with
-        // SpriteKit after a short main-thread hitch (including VoiceOver and
-        // UI automation). Keep enough simulated frames to make the response
-        // visibly travel before the downward beat is allowed to begin.
-        static let reinforcementFrameCount = 12
+        // A floor contact can consume the first assigned velocity. Reassert it
+        // only long enough to wake the primary body; after that, never overwrite
+        // SpriteKit's collision result.
+        static let reinforcementFrameCount = 3
+        /// Wall-clock timers advance even when a busy main thread presents
+        /// fewer physics frames. Keep the upward phase open for enough actual
+        /// simulated frames to cover the three-diameter free-flight target.
+        static let minimumFlightFrameCount = 20
         static let returnFrameRetryDelay: TimeInterval = 0.05
-        static let maximumReturnFrameDeferrals = 12
-        static let horizontalVariation: CGFloat = 3
-        static let maximumHorizontalVelocity: CGFloat = 34
-        static let maximumAngularVelocity: CGFloat = 4.2
+        static let maximumReturnFrameDeferrals = 20
         static let fullEnergyBodyCount: CGFloat = 18
         static let minimumCrowdEnergyScale: CGFloat = 0.55
         static let causticRadius: CGFloat = 28
+        /// Reduce Motion disables the physics cascade, tilt, and shake. A direct
+        /// tap still gets a short, local acknowledgement on exactly one gem so
+        /// the bottle never appears broken. Keep this well below the ordinary
+        /// hop and return to the exact resting position.
+        static let reducedMotionLiftFraction: CGFloat = 2
+        static let reducedMotionMinimumLift: CGFloat = 18
+        static let reducedMotionMaximumLift: CGFloat = 24
+        static let reducedMotionLiftDuration: TimeInterval = 0.12
+        static let reducedMotionReturnDuration: TimeInterval = 0.16
     }
 
     private struct TapKick {
@@ -171,7 +197,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private struct PendingTapKick {
         let sequence: UInt64
         let kicks: [UUID: TapKick]
-        var remainingFrames: Int
+        var remainingReinforcementFrames: Int
+        var remainingFlightFrames: Int
+    }
+
+    private struct ActiveTapMotion {
+        let sequence: UInt64
+        let pebbleID: UUID
     }
 
     private let soundSynth: SoundSynth
@@ -212,9 +244,19 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var idleSampleStartedAt: TimeInterval?
     private var lastTwinkleUptime = ProcessInfo.processInfo.systemUptime
     private var lastTapBounceUptime = -Double.greatestFiniteMagnitude
+    private var lastShakeUptime = -Double.greatestFiniteMagnitude
     private var pendingTapKick: PendingTapKick?
-    private var lastSecondaryFeedbackUptime = -Double.greatestFiniteMagnitude
-    private var suppressIncidentalFeedbackUntilUptime = -Double.greatestFiniteMagnitude
+    private var activeTapMotion: ActiveTapMotion?
+    private var tapPresentationStartPositions: [UUID: CGPoint] = [:]
+    private var tapPresentationPrimaryID: UUID?
+    private(set) var tapPresentationSequence: UInt64 = 0
+    private(set) var tapPresentationMaximumRise: CGFloat = 0
+    private(set) var tapPresentationMaximumDisplacement: CGFloat = 0
+    private(set) var tapPresentationMovedSecondaryCount = 0
+    private var lastSecondarySoundUptime = -Double.greatestFiniteMagnitude
+    private var lastSecondaryHapticUptime = -Double.greatestFiniteMagnitude
+    private var nudgeRateLimiter = JarGestureRateLimiter()
+    private var interactionCollisionBudget = JarInteractionCollisionBudget()
     private var mutedLandingIDs = Set<UUID>()
     private var acceptedPebbleIDs = Set<UUID>()
     private var persistedBakedPebbleIDs = Set<UUID>()
@@ -227,7 +269,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var suspendedAggregateIDs = Set<UUID>()
     private var hasReportedHardLimit = false
     private var reduceMotionObserver: NSObjectProtocol?
-    private var tapSequence: UInt64 = 0
+    private var transientMotionGate = JarTransientMotionGate()
+    private var sensorySequence: UInt64 = 0
     private var opticalTiltFraction: CGFloat = 0
     private var lastPublishedPhysicalPebbleCount = 0
     private var earlyEffortSpotlightIDs = Set<UUID>()
@@ -285,7 +328,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     private var livePebbles: [PebbleNode] {
-        worldNode.children.compactMap { $0 as? PebbleNode }.filter { !$0.isRemovedForBake }
+        allPebbleNodes.filter { !$0.isRemovedForBake }
+    }
+
+    /// Includes source stones that have crossed the aggregation transaction
+    /// boundary and no longer participate in live counts or physics.
+    private var allPebbleNodes: [PebbleNode] {
+        worldNode.children.compactMap { $0 as? PebbleNode }
     }
 
     private var bakeEligiblePebbles: [PebbleNode] {
@@ -304,6 +353,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
     }
     var queuedDropCount: Int { dropQueue.count }
+    /// Observation-only test seam: a tap must actively drive exactly one body.
+    /// Other gems move only when SpriteKit resolves a real contact.
+    var activeTapDrivenBodyCount: Int { pendingTapKick?.kicks.count ?? 0 }
+    var activeTapMotionPebbleID: UUID? { activeTapMotion?.pebbleID }
     var snapshotRect: CGRect { outerJarRect }
 
     init(
@@ -435,13 +488,19 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// Restores bodies without replaying the reward animation. They are shelf-packed and
     /// allowed to settle naturally, avoiding a noisy waterfall at every app launch.
     func restore(pebbles descriptors: [PebbleDescriptor]) {
+        finishActiveTapMotion(forceReturn: false)
+        transientMotionGate.invalidate()
+        tapPresentationStartPositions.removeAll()
+        tapPresentationPrimaryID = nil
+        tapPresentationMaximumRise = 0
+        tapPresentationMaximumDisplacement = 0
+        tapPresentationMovedSecondaryCount = 0
         cancelActiveBakeForRestore()
         dropQueue.removeAll()
         mutedLandingIDs.removeAll()
         acceptedPebbleIDs.removeAll()
         acceptedPebbleIDs.formUnion(persistedBakedPebbleIDs)
-        suppressIncidentalFeedbackUntilUptime = ProcessInfo.processInfo.systemUptime
-            + Constants.Jar.idleWindow
+        interactionCollisionBudget.cancel()
         worldNode.children
             .compactMap { $0 as? PebbleNode }
             .forEach { $0.removeFromParent() }
@@ -476,6 +535,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             node.zRotation = CGFloat.random(in: -.pi ... .pi)
             node.markLanded()
             worldNode.addChild(node)
+            if reduceMotion {
+                freezeForReducedMotion(node)
+            }
             cursorX += node.radius * 2
         }
         let overflow = uniqueDescriptors.dropFirst(initiallyVisible.count)
@@ -561,6 +623,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             node.zRotation = deterministicAngle(for: descriptor.id)
             node.markLanded()
             worldNode.addChild(node)
+            if reduceMotion {
+                freezeForReducedMotion(node)
+            }
         }
         installedHistoryIDs = wantedIDs
         publishPhysicalContentChangeIfNeeded()
@@ -588,10 +653,36 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
         pebble.zRotation = angle
         pebble.markLanded()
+        freezeForReducedMotion(pebble)
+    }
+
+    /// Reduce Motion freezes the physical simulation itself, not just its
+    /// presentation. Clearing every kinetic field before disabling dynamics
+    /// also prevents a queued tap return from becoming visible later.
+    private func freezeForReducedMotion(_ pebble: PebbleNode) {
         guard let body = pebble.physicsBody else { return }
         body.velocity = .zero
         body.angularVelocity = .zero
+        body.linearDamping = Constants.Jar.linearDamping
+        body.usesPreciseCollisionDetection = false
+        body.isDynamic = false
+        // SpriteKit clears `isResting` when dynamics are disabled, so apply
+        // the explicit sleeping marker after static conversion. This keeps
+        // the state truthful for diagnostics and for a later safe thaw.
         body.isResting = true
+    }
+
+    /// Bodies rejoin physics without inheriting velocity, low tap damping, or
+    /// stale CCD state. Existing landed bodies no longer need CCD; an unlanded
+    /// body frozen mid-drop retains it until its first genuine contact.
+    private func thawAfterReducedMotion(_ pebble: PebbleNode) {
+        guard let body = pebble.physicsBody else { return }
+        body.velocity = .zero
+        body.angularVelocity = .zero
+        body.linearDamping = Constants.Jar.linearDamping
+        body.usesPreciseCollisionDetection = !pebble.hasLanded
+        body.isDynamic = true
+        body.isResting = false
     }
 
     /// Preserve the semantic landing boundary while omitting its moving
@@ -658,33 +749,146 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// Directional VoiceOver fallback for an interaction that is normally
     /// driven by physical tilt. It remains deterministic and never randomizes
     /// the vertical component.
-    func nudge(horizontal direction: CGFloat) {
+    func nudge(
+        horizontal direction: CGFloat,
+        uptime: TimeInterval = ProcessInfo.processInfo.systemUptime
+    ) {
+        guard direction.isFinite else { return }
         let safeDirection = min(max(direction, -1), 1)
-        guard abs(safeDirection) > 0.01, !livePebbles.isEmpty else { return }
+        let pebbles = livePebbles
+        guard abs(safeDirection) > 0.01,
+              !pebbles.isEmpty,
+              nudgeRateLimiter.accepts(
+                uptime: uptime,
+                cooldown: Constants.Jar.nudgeCooldown
+              )
+        else { return }
         if reduceMotion {
             let centroid = CGPoint(
-                x: livePebbles.reduce(CGFloat.zero) { $0 + $1.position.x }
-                    / CGFloat(livePebbles.count),
-                y: livePebbles.reduce(CGFloat.zero) { $0 + $1.position.y }
-                    / CGFloat(livePebbles.count)
+                x: pebbles.reduce(CGFloat.zero) { $0 + $1.position.x }
+                    / CGFloat(pebbles.count),
+                y: pebbles.reduce(CGFloat.zero) { $0 + $1.position.y }
+                    / CGFloat(pebbles.count)
             )
             playTapCaustic(at: centroid, expands: false)
-            soundSynth.playTick()
-            haptics.playSecondaryCollision()
+            playSensoryFeedback(
+                trigger: .tap,
+                samples: pebbles.map {
+                    JarSensorySample(radius: Double($0.radius), coupling: 0.45)
+                },
+                strength: 0.55,
+                userInitiated: true
+            )
             return
         }
         resumeSimulation()
-        for pebble in livePebbles {
+        for pebble in pebbles {
             pebble.physicsBody?.applyImpulse(CGVector(
                 dx: safeDirection * Constants.Jar.shakeHorizontalImpulse,
                 dy: Constants.Jar.shakeVerticalImpulseMin * 0.25
             ))
         }
-        soundSynth.playTick()
-        haptics.playSecondaryCollision()
+        playSensoryFeedback(
+            trigger: .tap,
+            samples: pebbles.map {
+                JarSensorySample(radius: Double($0.radius), coupling: 0.45)
+            },
+            strength: 0.55,
+            userInitiated: true
+        )
     }
 
-    /// Sends a compact upward wave through the existing physical bodies.
+    /// Turns one deliberate, rate-limited device shake into a bounded impulse
+    /// across the live stones. Equal impulses let SpriteKit's radius-derived
+    /// body mass make large aggregates visibly lag behind smaller gems.
+    @discardableResult
+    func shakePebbles(strength proposedStrength: CGFloat, horizontal direction: CGFloat) -> Bool {
+        guard proposedStrength.isFinite, direction.isFinite else { return false }
+        let strength = min(max(proposedStrength, 0), 1)
+        let pebbles = livePebbles
+        guard strength > 0, !isBakeInProgress, !pebbles.isEmpty else { return false }
+
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastShakeUptime >= Constants.Jar.deviceShakeCooldown else { return false }
+        lastShakeUptime = now
+
+        let centroid = CGPoint(
+            x: pebbles.reduce(CGFloat.zero) { $0 + $1.position.x }
+                / CGFloat(pebbles.count),
+            y: pebbles.reduce(CGFloat.zero) { $0 + $1.position.y }
+                / CGFloat(pebbles.count)
+        )
+        if reduceMotion {
+            playTapCaustic(at: centroid, expands: false)
+            playSensoryFeedback(
+                trigger: .shake,
+                samples: pebbles.map {
+                    JarSensorySample(radius: Double($0.radius), coupling: 1)
+                },
+                strength: Double(strength),
+                userInitiated: true
+            )
+            return true
+        }
+
+        resumeSimulation()
+        finishActiveTapMotion(forceReturn: false)
+        transientMotionGate.invalidate()
+        let crowdScale = min(
+            1,
+            max(
+                TapResponse.minimumCrowdEnergyScale,
+                sqrt(TapResponse.fullEnergyBodyCount / CGFloat(pebbles.count))
+            )
+        )
+        let safeDirection = min(max(direction, -1), 1)
+        let horizontalImpulse = Constants.Jar.shakeHorizontalImpulse
+            * (0.78 + strength * 0.72) * crowdScale
+        let verticalImpulse = (
+            Constants.Jar.shakeVerticalImpulseMin
+                + (Constants.Jar.shakeVerticalImpulseMax
+                    - Constants.Jar.shakeVerticalImpulseMin) * strength
+        ) * crowdScale
+        for (index, pebble) in pebbles.enumerated() {
+            guard let body = pebble.physicsBody else { continue }
+            let variation = deterministicVariation(
+                for: pebble.descriptor.id,
+                salt: index &+ 97
+            )
+            let fallbackDirection: CGFloat = variation >= 0 ? 1 : -1
+            let primaryDirection = abs(safeDirection) >= 0.12
+                ? safeDirection
+                : fallbackDirection
+            let localDirection = min(
+                max(primaryDirection * 0.86 + variation * 0.24, -1),
+                1
+            )
+            body.isResting = false
+            body.linearDamping = Constants.Jar.linearDamping
+            body.usesPreciseCollisionDetection = !pebble.hasLanded
+            body.velocity = JarShakeVelocityPolicy.velocity(
+                current: body.velocity,
+                impulse: CGVector(
+                    dx: localDirection * horizontalImpulse,
+                    dy: verticalImpulse * (0.86 + abs(variation) * 0.14)
+                ),
+                mass: CGFloat(body.mass)
+            )
+        }
+        playTapCaustic(at: centroid)
+        playSensoryFeedback(
+            trigger: .shake,
+            samples: pebbles.map {
+                JarSensorySample(radius: Double($0.radius), coupling: 1)
+            },
+            strength: Double(strength),
+            userInitiated: true
+        )
+        return true
+    }
+
+    /// Launches the nearest gem and lets its contacts send a physical ripple
+    /// through the rest of the pile.
     ///
     /// This is deliberately a presentation-only interaction: it does not add,
     /// remove, land, aggregate, or otherwise mutate the study records represented
@@ -710,15 +914,6 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
         resumeSimulation()
 
-        // Reduce Motion keeps feedback pinned to the activation point. No body
-        // is displaced and the whole bottle does not flash.
-        if reduceMotion {
-            playTapCaustic(at: origin, expands: false)
-            soundSynth.playTick()
-            haptics.playSecondaryCollision()
-            return true
-        }
-
         let influenceRadius = min(
             TapResponse.maximumInfluenceRadius,
             max(
@@ -726,7 +921,23 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 interiorRect.width * TapResponse.influenceRadiusFraction
             )
         )
-        let impacts: [LocalTapImpact] = pebbles.compactMap { pebble in
+        let physicalPebbles = pebbles.filter { $0.physicsBody != nil }
+        guard let primaryPebble = physicalPebbles.min(by: { lhs, rhs in
+            let lhsDistance = hypot(
+                lhs.position.x - origin.x,
+                lhs.position.y - origin.y
+            ) - lhs.radius
+            let rhsDistance = hypot(
+                rhs.position.x - origin.x,
+                rhs.position.y - origin.y
+            ) - rhs.radius
+            if abs(lhsDistance - rhsDistance) > 0.001 {
+                return lhsDistance < rhsDistance
+            }
+            return lhs.descriptor.id.uuidString < rhs.descriptor.id.uuidString
+        }) else { return false }
+
+        var impacts: [LocalTapImpact] = physicalPebbles.compactMap { pebble in
             guard pebble.physicsBody != nil else { return nil }
             let dx = pebble.position.x - origin.x
             let dy = pebble.position.y - origin.y
@@ -743,122 +954,333 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             )
         }
 
-        // An empty patch of glass still acknowledges the exact touch, but must
-        // not cancel a previous pebble's scheduled return-to-rest sequence.
-        guard !impacts.isEmpty else {
-            playTapCaustic(at: origin)
-            soundSynth.playTick()
-            haptics.playSecondaryCollision()
+        // The bottle is presented as one interactive object. A tap inside it
+        // must therefore never acknowledge success while leaving every gem
+        // still. Promote the nearest physical gem to a readable minimum even
+        // when the tap landed on sparse glass or a non-physical backdrop.
+        let primaryDX = primaryPebble.position.x - origin.x
+        let primaryDY = primaryPebble.position.y - origin.y
+        let primaryDistance = hypot(primaryDX, primaryDY)
+        let primaryDirection = primaryDistance > 0.001 ? primaryDX / primaryDistance : 0
+        if let primaryIndex = impacts.firstIndex(where: {
+            $0.pebble.descriptor.id == primaryPebble.descriptor.id
+        }) {
+            let current = impacts[primaryIndex]
+            impacts[primaryIndex] = LocalTapImpact(
+                pebble: current.pebble,
+                strength: max(current.strength, TapResponse.minimumPrimaryStrength),
+                horizontalDirection: current.horizontalDirection
+            )
+        } else {
+            impacts.append(LocalTapImpact(
+                pebble: primaryPebble,
+                strength: TapResponse.minimumPrimaryStrength,
+                horizontalDirection: primaryDirection
+            ))
+        }
+
+        guard now - lastTapBounceUptime >= TapResponse.cooldown else { return false }
+        lastTapBounceUptime = now
+
+        // Reduce Motion keeps the physical world frozen: no collision cascade,
+        // device-driven tilt, or camera movement. A deliberate tap still lifts
+        // the nearest rendered gem a few points and returns it immediately. This
+        // compact direct-manipulation acknowledgement is much smaller than the
+        // ordinary physics hop and cannot change persisted records.
+        if reduceMotion {
+            playTapCaustic(at: origin, expands: false)
+            playReducedMotionTapLift(on: primaryPebble)
+            if impacts.isEmpty {
+                soundSynth.playTick()
+                haptics.playSecondaryCollision()
+            } else {
+                playSensoryFeedback(
+                    trigger: .tap,
+                    samples: impacts.map {
+                        JarSensorySample(
+                            radius: Double($0.pebble.radius),
+                            coupling: Double($0.strength)
+                        )
+                    },
+                    strength: 0.86,
+                    userInitiated: true
+                )
+            }
             return true
         }
-        guard now - lastTapBounceUptime >= TapResponse.cooldown else { return false }
 
-        lastTapBounceUptime = now
-        tapSequence &+= 1
-        let activeTapSequence = tapSequence
-        let bodyCount = CGFloat(impacts.count)
-        let crowdScale = min(
-            1,
-            max(
-                TapResponse.minimumCrowdEnergyScale,
-                sqrt(TapResponse.fullEnergyBodyCount / bodyCount)
-            )
+        finishActiveTapMotion(forceReturn: true)
+        beginTapPresentationTracking(primary: primaryPebble)
+        let activeTapSequence = transientMotionGate.begin()
+        guard let primaryImpact = impacts.first(where: {
+            $0.pebble.descriptor.id == primaryPebble.descriptor.id
+        }), let primaryBody = primaryPebble.physicsBody else {
+            transientMotionGate.invalidate()
+            return false
+        }
+
+        let upwardRoom = max(
+            0,
+            interiorRect.maxY - primaryPebble.radius - primaryPebble.position.y
         )
-        var tapKicks: [UUID: TapKick] = [:]
-
-        for (index, impact) in impacts.enumerated() {
-            let pebble = impact.pebble
-            guard let body = pebble.physicsBody else { continue }
-            let localStrength = impact.strength
-            let verticalJitter = deterministicVariation(
-                for: pebble.descriptor.id,
-                salt: index &* 2
-            )
-            let horizontalJitter = deterministicVariation(
-                for: pebble.descriptor.id,
-                salt: index &* 2 &+ 1
-            )
-            let desiredVerticalChange = max(
-                0,
-                (
-                    TapResponse.peakVerticalVelocity
-                        + TapResponse.verticalVariation * verticalJitter
-                ) * crowdScale
-                    * localStrength
-            )
-            let desiredVerticalVelocity = min(
-                TapResponse.maximumVerticalVelocity,
-                max(body.velocity.dy, 0) + desiredVerticalChange
-            )
-            let desiredHorizontalChange = (
-                impact.horizontalDirection * TapResponse.peakRadialVelocity
-                    + horizontalJitter * TapResponse.horizontalVariation
-            ) * crowdScale * localStrength
-            let desiredHorizontalVelocity = min(
+        let launchPlan = JarTapLaunchPolicy.plan(
+            radius: primaryPebble.radius,
+            strength: primaryImpact.strength,
+            upwardRoom: upwardRoom
+        )
+        let horizontalDirection = tapLaunchHorizontalDirection(
+            for: primaryPebble,
+            origin: origin,
+            pileCentroid: centroid
+        )
+        let spinVariation = deterministicVariation(
+            for: primaryPebble.descriptor.id,
+            salt: 1
+        )
+        let desiredVelocity = CGVector(
+            dx: min(
                 TapResponse.maximumHorizontalVelocity,
                 max(
                     -TapResponse.maximumHorizontalVelocity,
-                    body.velocity.dx + desiredHorizontalChange
+                    launchPlan.horizontalVelocity * horizontalDirection
                 )
+            ),
+            dy: min(
+                TapResponse.maximumVerticalVelocity,
+                launchPlan.verticalVelocity
             )
-            let desiredAngularVelocity = min(
-                TapResponse.maximumAngularVelocity,
-                max(
-                    -TapResponse.maximumAngularVelocity,
-                    body.angularVelocity + horizontalJitter * 1.8
-                )
+        )
+        let desiredAngularVelocity = min(
+            TapResponse.maximumAngularVelocity,
+            max(
+                -TapResponse.maximumAngularVelocity,
+                spinVariation * TapResponse.maximumAngularVelocity
             )
+        )
 
-            // SpriteKit can defer an impulse queued while an idle-paused scene
-            // wakes up. Assigning the bounded velocity and clearing `isResting`
-            // makes the first post-tap physics frame deterministic; collisions,
-            // gravity, damping, and tilt still own every subsequent frame.
-            body.isResting = false
-            // The jar normally uses strong damping so hundreds of bodies settle
-            // cheaply. Lower it only for this compact presentation arc; leaving
-            // the resting value in place turns an 80 pt/s kick into a barely
-            // perceptible two-point twitch on a real SpriteKit render loop.
-            body.linearDamping = TapResponse.flightDamping
-            body.usesPreciseCollisionDetection = true
-            body.velocity = CGVector(
-                dx: desiredHorizontalVelocity,
-                dy: desiredVerticalVelocity
-            )
-            body.angularVelocity = desiredAngularVelocity
-            tapKicks[pebble.descriptor.id] = TapKick(
-                velocity: CGVector(
-                    dx: desiredHorizontalVelocity,
-                    dy: desiredVerticalVelocity
-                ),
+        // Only the selected gem receives a launch. Neighbours keep their own
+        // velocities and are woken naturally by SpriteKit contacts, producing
+        // the visible chain reaction instead of a synchronized scripted wave.
+        let launchClearance = min(
+            upwardRoom,
+            TapResponse.maximumLaunchClearance,
+            primaryPebble.radius * TapResponse.launchClearanceRadiusFraction
+        )
+        primaryPebble.position.y += launchClearance
+        primaryBody.isDynamic = true
+        primaryBody.isResting = false
+        primaryBody.linearDamping = TapResponse.flightDamping
+        primaryBody.usesPreciseCollisionDetection = true
+        primaryBody.velocity = desiredVelocity
+        primaryBody.angularVelocity = desiredAngularVelocity
+        activeTapMotion = ActiveTapMotion(
+            sequence: activeTapSequence,
+            pebbleID: primaryPebble.descriptor.id
+        )
+
+        let tapKicks = [
+            primaryPebble.descriptor.id: TapKick(
+                velocity: desiredVelocity,
                 angularVelocity: desiredAngularVelocity
             )
+        ]
 
-            // SpriteKit's intentionally gentle jar gravity would otherwise let
-            // even a modest hop float for several seconds. A delayed physical
-            // return impulse makes a compact trampoline arc: roughly a third
-            // second up, then a decisive fall and settle, without teleporting.
-            let returnSpeed = (
-                TapResponse.baseReturnVelocity
-                    + TapResponse.localReturnVelocity * localStrength
-            ) * max(crowdScale, 0.72)
-            scheduleTapReturn(
-                for: pebble,
-                sequence: activeTapSequence,
-                returnSpeed: returnSpeed,
-                delay: TapResponse.returnDelay,
-                remainingFrameDeferrals: TapResponse.maximumReturnFrameDeferrals
-            )
-        }
+        // The jar's intentionally gentle gravity would otherwise let the gem
+        // float. Start a decisive return after the readable launch window; any
+        // collisions before then remain entirely owned by SpriteKit.
+        scheduleTapReturn(
+            for: primaryPebble,
+            sequence: activeTapSequence,
+            returnSpeed: launchPlan.returnVelocity,
+            delay: TapResponse.returnDelay,
+            remainingFrameDeferrals: TapResponse.maximumReturnFrameDeferrals
+        )
 
-        pendingTapKick = tapKicks.isEmpty ? nil : PendingTapKick(
+        pendingTapKick = PendingTapKick(
             sequence: activeTapSequence,
             kicks: tapKicks,
-            remainingFrames: TapResponse.reinforcementFrameCount
+            remainingReinforcementFrames: TapResponse.reinforcementFrameCount,
+            remainingFlightFrames: TapResponse.minimumFlightFrameCount
         )
         playTapCaustic(at: origin)
-        soundSynth.playTick()
-        haptics.playSecondaryCollision()
+        playSensoryFeedback(
+            trigger: .tap,
+            samples: impacts.map {
+                JarSensorySample(
+                    radius: Double($0.pebble.radius),
+                    coupling: Double($0.strength)
+                )
+            },
+            strength: 0.86,
+            userInitiated: true
+        )
         return true
+    }
+
+    /// Ends the temporary low-damping/CCD state synchronously. Delayed return
+    /// callbacks are generation-fenced, so every path that supersedes a tap
+    /// must normalize its body before changing that generation.
+    private func finishActiveTapMotion(
+        expectedSequence: UInt64? = nil,
+        forceReturn: Bool
+    ) {
+        guard let activeTapMotion else {
+            if expectedSequence == nil { pendingTapKick = nil }
+            return
+        }
+        if let expectedSequence,
+           expectedSequence != activeTapMotion.sequence {
+            return
+        }
+
+        if let pebble = livePebbles.first(where: {
+            $0.descriptor.id == activeTapMotion.pebbleID
+        }), let body = pebble.physicsBody {
+            body.linearDamping = Constants.Jar.linearDamping
+            body.usesPreciseCollisionDetection = !pebble.hasLanded
+            if forceReturn {
+                let returnSpeed = min(
+                    TapResponse.maximumVerticalVelocity,
+                    max(abs(body.velocity.dy), 130)
+                )
+                if body.velocity.dy > -returnSpeed {
+                    body.velocity.dy = -returnSpeed
+                }
+                body.isResting = false
+            }
+        }
+        if pendingTapKick?.sequence == activeTapMotion.sequence {
+            pendingTapKick = nil
+        }
+        self.activeTapMotion = nil
+    }
+
+    private func beginTapPresentationTracking(primary: PebbleNode) {
+        tapPresentationSequence &+= 1
+        tapPresentationPrimaryID = primary.descriptor.id
+        tapPresentationMaximumRise = 0
+        tapPresentationMaximumDisplacement = 0
+        tapPresentationMovedSecondaryCount = 0
+        tapPresentationStartPositions = Dictionary(
+            uniqueKeysWithValues: livePebbles.map {
+                ($0.descriptor.id, $0.position)
+            }
+        )
+    }
+
+    /// Capture physics-frame positions inside SpriteKit itself. A SwiftUI task
+    /// can sample too late when a high-velocity gem already crossed much of its
+    /// arc, which made the UI regression test under-report visible travel.
+    private func updateTapPresentationTrackingIfNeeded() {
+        guard pendingTapKick != nil,
+              let primaryID = tapPresentationPrimaryID,
+              let primaryStart = tapPresentationStartPositions[primaryID]
+        else { return }
+
+        var movedSecondaryCount = 0
+        for pebble in livePebbles {
+            guard let start = tapPresentationStartPositions[pebble.descriptor.id]
+            else { continue }
+            if pebble.descriptor.id == primaryID {
+                tapPresentationMaximumRise = max(
+                    tapPresentationMaximumRise,
+                    pebble.position.y - primaryStart.y
+                )
+                tapPresentationMaximumDisplacement = max(
+                    tapPresentationMaximumDisplacement,
+                    hypot(
+                        pebble.position.x - primaryStart.x,
+                        pebble.position.y - primaryStart.y
+                    )
+                )
+            } else if hypot(
+                pebble.position.x - start.x,
+                pebble.position.y - start.y
+            ) >= 1.5 {
+                movedSecondaryCount += 1
+            }
+        }
+        tapPresentationMovedSecondaryCount = max(
+            tapPresentationMovedSecondaryCount,
+            movedSecondaryCount
+        )
+    }
+
+    /// Aim through the pile when possible so the primary body meets another
+    /// gem instead of travelling into empty glass. An edge tap still pushes
+    /// away from the finger, and available wall room always wins as a safety
+    /// fallback.
+    private func tapLaunchHorizontalDirection(
+        for pebble: PebbleNode,
+        origin: CGPoint,
+        pileCentroid: CGPoint
+    ) -> CGFloat {
+        let touchOffset = pebble.position.x - origin.x
+        let pileOffset = pileCentroid.x - pebble.position.x
+        let meaningfulOffset = max(pebble.radius * 0.18, 2)
+        var direction: CGFloat
+        if abs(touchOffset) >= meaningfulOffset {
+            direction = touchOffset >= 0 ? 1 : -1
+        } else if abs(pileOffset) >= meaningfulOffset {
+            direction = pileOffset >= 0 ? 1 : -1
+        } else {
+            direction = deterministicVariation(
+                for: pebble.descriptor.id,
+                salt: 0
+            ) >= 0 ? 1 : -1
+        }
+
+        let horizontalRange = allowedHorizontalRange(
+            at: pebble.position.y,
+            radius: pebble.radius
+        )
+        let leftRoom = max(0, pebble.position.x - horizontalRange.lowerBound)
+        let rightRoom = max(0, horizontalRange.upperBound - pebble.position.x)
+        let preferredRoom = direction > 0 ? rightRoom : leftRoom
+        let oppositeRoom = direction > 0 ? leftRoom : rightRoom
+        if preferredRoom < min(pebble.radius * 2, oppositeRoom * 0.45) {
+            direction *= -1
+        }
+        return direction
+    }
+
+    private func playReducedMotionTapLift(on pebble: PebbleNode) {
+        let preferredLift = min(
+            TapResponse.reducedMotionMaximumLift,
+            max(
+                TapResponse.reducedMotionMinimumLift,
+                pebble.radius * TapResponse.reducedMotionLiftFraction
+            )
+        )
+        let upperY = interiorRect.maxY - pebble.radius
+        let lowerY = interiorRect.minY + pebble.radius
+        let upwardRoom = max(0, upperY - pebble.position.y)
+        let downwardRoom = max(0, pebble.position.y - lowerY)
+        let offset: CGFloat
+        if upwardRoom >= min(preferredLift, 2) || upwardRoom >= downwardRoom {
+            offset = min(preferredLift, upwardRoom)
+        } else {
+            offset = -min(preferredLift, downwardRoom)
+        }
+        guard abs(offset) >= 1 else { return }
+
+        pebble.removeAction(forKey: ActionKey.reducedMotionTapLift)
+        let lift = SKAction.moveBy(
+            x: 0,
+            y: offset,
+            duration: TapResponse.reducedMotionLiftDuration
+        )
+        lift.timingMode = .easeOut
+        let restore = SKAction.moveBy(
+            x: 0,
+            y: -offset,
+            duration: TapResponse.reducedMotionReturnDuration
+        )
+        restore.timingMode = .easeInEaseOut
+        pebble.run(
+            .sequence([lift, restore]),
+            withKey: ActionKey.reducedMotionTapLift
+        )
     }
 
     /// Starts the downward half only after SpriteKit has presented the compact
@@ -876,7 +1298,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             [weak self, weak pebble] in
             guard let self,
-                  self.tapSequence == sequence,
+                  self.transientMotionGate.accepts(sequence),
                   let pebble,
                   pebble.parent != nil,
                   !pebble.isRemovedForBake,
@@ -886,7 +1308,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             if remainingFrameDeferrals > 0,
                let pendingTapKick = self.pendingTapKick,
                pendingTapKick.sequence == sequence,
-               pendingTapKick.remainingFrames > 0,
+               pendingTapKick.remainingFlightFrames > 0,
                pendingTapKick.kicks[pebbleID] != nil {
                 self.scheduleTapReturn(
                     for: pebble,
@@ -898,6 +1320,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 return
             }
 
+            if self.pendingTapKick?.sequence == sequence {
+                self.pendingTapKick = nil
+            }
             let desiredReturnVelocity = -returnSpeed
             if body.velocity.dy > desiredReturnVelocity {
                 body.isResting = false
@@ -907,15 +1332,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
             DispatchQueue.main.asyncAfter(
                 deadline: .now() + TapResponse.restoreDampingDelay
-            ) { [weak self, weak pebble] in
+            ) { [weak self] in
                 guard let self,
-                      self.tapSequence == sequence,
-                      let pebble,
-                      pebble.parent != nil,
-                      let body = pebble.physicsBody
+                      self.transientMotionGate.accepts(sequence)
                 else { return }
-                body.linearDamping = Constants.Jar.linearDamping
-                body.usesPreciseCollisionDetection = !pebble.hasLanded
+                self.finishActiveTapMotion(
+                    expectedSequence: sequence,
+                    forceReturn: false
+                )
             }
         }
     }
@@ -926,7 +1350,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             hash ^= UInt64(byte)
             hash &*= 1_099_511_628_211
         }
-        hash ^= tapSequence &* 0x9E37_79B9_7F4A_7C15
+        hash ^= transientMotionGate.generation &* 0x9E37_79B9_7F4A_7C15
         hash ^= UInt64(truncatingIfNeeded: salt) &* 0xBF58_476D_1CE4_E5B9
         return CGFloat(hash % 2_001) / 1_000 - 1
     }
@@ -1050,40 +1474,46 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     override func didSimulatePhysics() {
         super.didSimulatePhysics()
-        reinforcePendingTapKickIfNeeded()
+        updateTapPresentationTrackingIfNeeded()
+        advancePendingTapLaunchIfNeeded()
         livePebbles.forEach {
             $0.updatePresentationLighting(horizontal: opticalTiltFraction)
         }
     }
 
     /// A sleeping floor contact can consume a newly assigned upward velocity
-    /// during the same SpriteKit step. Reassert the same bounded velocity for a
-    /// handful of rendered frames so the tap reads as a hop instead of a twitch.
-    /// The sequence is short, deterministic, and never mutates study records.
-    private func reinforcePendingTapKickIfNeeded() {
+    /// during the same SpriteKit step. Reassert it for three frames, then retain
+    /// only a frame-counted flight gate while SpriteKit owns every collision.
+    /// This prevents a slow render loop from shortening the visible trajectory.
+    private func advancePendingTapLaunchIfNeeded() {
         guard var pendingTapKick,
-              pendingTapKick.sequence == tapSequence,
+              transientMotionGate.accepts(pendingTapKick.sequence),
               !reduceMotion,
-              pendingTapKick.remainingFrames > 0
+              pendingTapKick.remainingFlightFrames > 0,
+              let driven = pendingTapKick.kicks.first,
+              let pebble = livePebbles.first(where: {
+                  $0.descriptor.id == driven.key
+              }),
+              !pebble.isRemovedForBake,
+              let body = pebble.physicsBody
         else {
             self.pendingTapKick = nil
             return
         }
 
-        for pebble in livePebbles {
-            guard let kick = pendingTapKick.kicks[pebble.descriptor.id],
-                  !pebble.isRemovedForBake,
-                  let body = pebble.physicsBody
-            else { continue }
+        if pendingTapKick.remainingReinforcementFrames > 0 {
+            let kick = driven.value
+            body.isDynamic = true
             body.isResting = false
             body.usesPreciseCollisionDetection = true
             body.linearDamping = TapResponse.flightDamping
             body.velocity = kick.velocity
             body.angularVelocity = kick.angularVelocity
+            pendingTapKick.remainingReinforcementFrames -= 1
         }
 
-        pendingTapKick.remainingFrames -= 1
-        self.pendingTapKick = pendingTapKick.remainingFrames > 0
+        pendingTapKick.remainingFlightFrames -= 1
+        self.pendingTapKick = pendingTapKick.remainingFlightFrames > 0
             ? pendingTapKick
             : nil
     }
@@ -1124,7 +1554,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             deliveredLanding = true
         }
 
-        if !deliveredLanding, mutedLandingIDs.isEmpty { secondaryFeedback() }
+        let contactContainsMutedPebble = candidates.contains {
+            mutedLandingIDs.contains($0.descriptor.id)
+        }
+        if !deliveredLanding, !contactContainsMutedPebble {
+            secondaryFeedback(for: contact, pebbles: candidates)
+        }
     }
 
     private func installSceneGraph() {
@@ -1658,7 +2093,15 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private func shouldShowSpecialAnticipation(for descriptor: PebbleDescriptor) -> Bool {
         if descriptor.isAchievement { return true }
         guard rareRewardMode.usesEnhancedPresentation else { return false }
-        return descriptor.kind != .normal
+        return presentationKind(for: descriptor) != .normal
+    }
+
+    /// Keep retained reward metadata testable without letting a caller that
+    /// bypasses Home's projection re-enable the unreleased visual treatment.
+    private func presentationKind(for descriptor: PebbleDescriptor) -> PebbleKind {
+        RareRewardReleasePolicy.permitsInternalTestOverride(true)
+            ? descriptor.kind
+            : .normal
     }
 
     private func processDropQueue() {
@@ -1791,77 +2234,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         activeBake = ActiveBake(
             token: bakeToken,
             request: request,
+            sourceNodes: selected,
+            formationPoint: formationPoint,
             persistenceHandler: persistenceHandler
         )
         selected.forEach { $0.markForBake() }
         publishPhysicalContentChangeIfNeeded()
         onCapacityEvent?(.bakeStarted(request))
 
-        let finish: @MainActor @Sendable () -> Void = { [weak self] in
-            guard let self, self.activeBake?.token == bakeToken else { return }
-            selected.forEach { $0.removeFromParent() }
-            let descriptor = request.outputDescriptor
-            if !self.livePebbles.contains(where: { $0.descriptor.id == descriptor.id }) {
-                _ = self.acceptedPebbleIDs.insert(descriptor.id)
-                let aggregateNode = PebbleNode(
-                    descriptor: descriptor,
-                    reduceMotion: reduceMotion,
-                    rareRewardMode: rareRewardMode
-                )
-                if !self.reduceMotion {
-                    aggregateNode.position = CGPoint(
-                        x: min(
-                            max(
-                                formationPoint.x,
-                                self.interiorRect.minX + aggregateNode.radius
-                            ),
-                            self.interiorRect.maxX - aggregateNode.radius
-                        ),
-                        y: min(
-                            max(
-                                formationPoint.y,
-                                self.currentFloorY + aggregateNode.radius
-                            ),
-                            self.interiorRect.maxY - aggregateNode.radius
-                        )
-                    )
-                    aggregateNode.setScale(0.38)
-                    aggregateNode.alpha = 0.25
-                    aggregateNode.physicsBody?.velocity = CGVector(
-                        dx: 0,
-                        dy: Constants.Jar.aggregateBirthImpulse
-                    )
-                }
-                self.worldNode.addChild(aggregateNode)
-                if self.reduceMotion {
-                    // As with a loose drop, scene insertion itself wakes the
-                    // body. Settle only after the node belongs to the world.
-                    self.settleForReduceMotion(aggregateNode)
-                    self.deliverReducedMotionLandingIfNeeded(for: aggregateNode)
-                } else {
-                    aggregateNode.run(.group([
-                        .scale(to: 1, duration: Constants.Jar.aggregateFormationDuration * 0.55),
-                        .fadeIn(withDuration: Constants.Jar.aggregateFormationDuration * 0.55)
-                    ]))
-                    self.spawnSparks(
-                        at: aggregateNode.position,
-                        color: aggregateNode.subjectColor,
-                        mark: "✦"
-                    )
-                }
-            }
-            self.publishPhysicalContentChangeIfNeeded()
-            let persistenceHandler = self.activeBake?.persistenceHandler
-            self.activeBake = nil
-            self.isBakeInProgress = false
-            persistenceHandler?(request)
-            self.onCapacityEvent?(.bakeCompleted(request))
-            self.resetIdleObservation()
-            self.resumeSimulation()
-        }
-
         if reduceMotion {
-            finish()
+            completeActiveBake(token: bakeToken)
         } else {
             selected.forEach { pebble in
                 pebble.run(
@@ -1876,11 +2258,84 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 )
             }
             DispatchQueue.main.asyncAfter(
-                deadline: .now() + Constants.Jar.aggregateFormationDuration,
-                execute: finish
-            )
+                deadline: .now() + Constants.Jar.aggregateFormationDuration
+            ) { [weak self] in
+                self?.completeActiveBake(token: bakeToken)
+            }
         }
         return true
+    }
+
+    /// Commits exactly the aggregation transaction captured before source nodes
+    /// were removed from physics. The normal deadline and a mid-animation
+    /// Reduce Motion change share this token-guarded completion path.
+    private func completeActiveBake(token: UUID) {
+        guard let activeBake, activeBake.token == token else { return }
+        let request = activeBake.request
+        let formationPoint = activeBake.formationPoint
+        activeBake.sourceNodes.forEach { source in
+            source.removeAllActions()
+            source.removeFromParent()
+        }
+
+        let descriptor = request.outputDescriptor
+        if !livePebbles.contains(where: { $0.descriptor.id == descriptor.id }) {
+            _ = acceptedPebbleIDs.insert(descriptor.id)
+            let aggregateNode = PebbleNode(
+                descriptor: descriptor,
+                reduceMotion: reduceMotion,
+                rareRewardMode: rareRewardMode
+            )
+            if !reduceMotion {
+                aggregateNode.position = CGPoint(
+                    x: min(
+                        max(
+                            formationPoint.x,
+                            interiorRect.minX + aggregateNode.radius
+                        ),
+                        interiorRect.maxX - aggregateNode.radius
+                    ),
+                    y: min(
+                        max(
+                            formationPoint.y,
+                            currentFloorY + aggregateNode.radius
+                        ),
+                        interiorRect.maxY - aggregateNode.radius
+                    )
+                )
+                aggregateNode.setScale(0.38)
+                aggregateNode.alpha = 0.25
+                aggregateNode.physicsBody?.velocity = CGVector(
+                    dx: 0,
+                    dy: Constants.Jar.aggregateBirthImpulse
+                )
+            }
+            worldNode.addChild(aggregateNode)
+            if reduceMotion {
+                // Scene insertion wakes the body. Settle only after the node
+                // belongs to the world so it cannot render one moving frame.
+                settleForReduceMotion(aggregateNode)
+                deliverReducedMotionLandingIfNeeded(for: aggregateNode)
+            } else {
+                aggregateNode.run(.group([
+                    .scale(to: 1, duration: Constants.Jar.aggregateFormationDuration * 0.55),
+                    .fadeIn(withDuration: Constants.Jar.aggregateFormationDuration * 0.55)
+                ]))
+                spawnSparks(
+                    at: aggregateNode.position,
+                    color: aggregateNode.subjectColor,
+                    mark: "✦"
+                )
+            }
+        }
+        publishPhysicalContentChangeIfNeeded()
+        let persistenceHandler = activeBake.persistenceHandler
+        self.activeBake = nil
+        isBakeInProgress = false
+        persistenceHandler(request)
+        onCapacityEvent?(.bakeCompleted(request))
+        resetIdleObservation()
+        resumeSimulation()
     }
 
     private var needsAggregation: Bool {
@@ -1951,7 +2406,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         spawnDust(at: point, color: pebble.subjectColor)
         shakeCamera(impactSpeed: speed)
 
-        switch pebble.descriptor.kind {
+        switch presentationKind(for: pebble.descriptor) {
         case .normal:
             if pebble.descriptor.isAchievement {
                 soundSynth.playGold()
@@ -1986,14 +2441,86 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         resetIdleObservation()
     }
 
-    private func secondaryFeedback() {
+    private func playSensoryFeedback(
+        trigger: JarSensoryTrigger,
+        samples: [JarSensorySample],
+        strength: Double,
+        userInitiated: Bool
+    ) {
+        sensorySequence &+= 1
+        let plan = JarSensoryPolicy.plan(
+            trigger: trigger,
+            samples: samples,
+            gestureStrength: strength,
+            abundanceCount: physicalPebbleCount,
+            seed: sensorySequence
+        )
+        soundSynth.playClinks(plan.clinks, userInitiated: userInitiated)
+        haptics.playJarFeedback(plan)
+
+        guard userInitiated else { return }
+        interactionCollisionBudget.begin(
+            uptime: ProcessInfo.processInfo.systemUptime,
+            muteDuration: Constants.Jar.interactionCollisionMuteDuration,
+            followUpDuration: Constants.Jar.interactionCollisionFollowUpDuration,
+            soundLimit: Constants.Jar.interactionCollisionMaximumSounds,
+            hapticLimit: Constants.Jar.interactionCollisionMaximumHaptics
+        )
+    }
+
+    private func secondaryFeedback(
+        for contact: SKPhysicsContact,
+        pebbles: [PebbleNode]
+    ) {
         let now = ProcessInfo.processInfo.systemUptime
-        guard now >= suppressIncidentalFeedbackUntilUptime,
-              now - lastSecondaryFeedbackUptime
-                >= Constants.Sound.secondaryCollisionCooldown else { return }
-        lastSecondaryFeedbackUptime = now
-        soundSynth.playTick()
-        haptics.playSecondaryCollision()
+        guard interactionCollisionBudget.isOpen(uptime: now) else { return }
+
+        let velocities = pebbles.compactMap { $0.physicsBody?.velocity }
+        let relativeSpeed: CGFloat
+        if velocities.count >= 2 {
+            relativeSpeed = hypot(
+                velocities[0].dx - velocities[1].dx,
+                velocities[0].dy - velocities[1].dy
+            )
+        } else if let velocity = velocities.first {
+            relativeSpeed = hypot(velocity.dx, velocity.dy)
+        } else {
+            relativeSpeed = 0
+        }
+        let impulseSpeed = pebbles.compactMap { pebble -> CGFloat? in
+            guard let mass = pebble.physicsBody?.mass, mass.isFinite, mass > 0 else {
+                return nil
+            }
+            return contact.collisionImpulse / CGFloat(mass)
+        }.max() ?? 0
+        let impactSpeed = max(relativeSpeed, impulseSpeed)
+        guard impactSpeed.isFinite,
+              impactSpeed >= Constants.Sound.gemMinimumCollisionSpeed
+        else { return }
+
+        sensorySequence &+= 1
+        let plan = JarSensoryPolicy.plan(
+            trigger: .collision,
+            samples: pebbles.map {
+                JarSensorySample(radius: Double($0.radius), coupling: 1)
+            },
+            gestureStrength: Double(min(max(impactSpeed / 8, 0.08), 1)),
+            abundanceCount: physicalPebbleCount,
+            seed: sensorySequence
+        )
+        let decision = interactionCollisionBudget.consume(
+            uptime: now,
+            soundReady: now - lastSecondarySoundUptime >= plan.soundCooldown,
+            hapticReady: now - lastSecondaryHapticUptime >= plan.hapticCooldown
+        )
+        if decision.playSound {
+            lastSecondarySoundUptime = now
+            soundSynth.playClinks(plan.clinks, userInitiated: false)
+        }
+        if decision.playHaptic {
+            lastSecondaryHapticUptime = now
+            haptics.playJarFeedback(plan)
+        }
     }
 
     private func spawnDust(at point: CGPoint, color: UIColor) {
@@ -2086,7 +2613,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         if descriptor.isAchievement {
             color = JarPalette.goldHighlight
         } else {
-            switch descriptor.kind {
+            switch presentationKind(for: descriptor) {
             case .normal: return
             case .gold: color = JarPalette.gold
             case .prism: color = .white
@@ -2099,7 +2626,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
         let herald = SKLabelNode(fontNamed: "AvenirNext-Bold")
         herald.name = effectName
-        herald.text = descriptor.kind == .prism ? "◇" : "✦"
+        herald.text = presentationKind(for: descriptor) == .prism ? "◇" : "✦"
         herald.fontSize = Constants.Jar.measuredRadius * 1.15
         herald.fontColor = color
         herald.alpha = 0.24
@@ -2184,7 +2711,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             let probability: Double
             let mark: String
             let color: UIColor
-            switch pebble.descriptor.kind {
+            switch presentationKind(for: pebble.descriptor) {
             case .normal:
                 continue
             case .gold:
@@ -2341,6 +2868,215 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 }
 
+/// Invalidates delayed tap work without relying on cancellation timing from
+/// `DispatchQueue`. Reduce Motion and a later shake both end the active tap
+/// generation synchronously before either can mutate body state.
+struct JarTransientMotionGate {
+    private(set) var generation: UInt64 = 0
+    private(set) var isActive = false
+
+    mutating func begin() -> UInt64 {
+        generation &+= 1
+        isActive = true
+        return generation
+    }
+
+    mutating func invalidate() {
+        isActive = false
+        generation &+= 1
+    }
+
+    func accepts(_ candidate: UInt64) -> Bool {
+        isActive && generation == candidate
+    }
+}
+
+struct JarTapLaunchPlan: Equatable {
+    let targetTravel: CGFloat
+    let verticalVelocity: CGFloat
+    let horizontalVelocity: CGFloat
+    let returnVelocity: CGFloat
+}
+
+/// Radius-aware launch tuning for the directly tapped gem. A normal 23-point
+/// gem targets about 69 points of travel (three diameters), while larger
+/// aggregate gems are capped so their visual weight remains believable and a
+/// single interaction cannot cross most of the bottle.
+enum JarTapLaunchPolicy {
+    static let targetDiameterMultiplier: CGFloat = 3
+    static let maximumTargetTravel: CGFloat = 96
+    static let maximumVerticalVelocity: CGFloat = 320
+    static let maximumHorizontalVelocity: CGFloat = 160
+    static let flightDuration: TimeInterval = 0.38
+
+    private static let minimumStrengthScale: CGFloat = 0.82
+    // Calibrated against SpriteKit's real floor-contact solver rather than a
+    // frictionless ballistic equation. The extra launch energy is bounded by
+    // the explicit component ceilings below.
+    private static let horizontalTravelFraction: CGFloat = 0.80
+    private static let estimatedVelocityRetention: CGFloat = 0.58
+
+    static func plan(
+        radius proposedRadius: CGFloat,
+        strength proposedStrength: CGFloat,
+        upwardRoom proposedUpwardRoom: CGFloat
+    ) -> JarTapLaunchPlan {
+        let radius = proposedRadius.isFinite ? max(0, proposedRadius) : 0
+        let strength = proposedStrength.isFinite
+            ? min(max(proposedStrength, 0), 1)
+            : 0
+        let upwardRoom = proposedUpwardRoom.isFinite
+            ? max(0, proposedUpwardRoom)
+            : 0
+        let nominalTravel = min(
+            radius * 2 * targetDiameterMultiplier,
+            maximumTargetTravel
+        )
+        let strengthScale = minimumStrengthScale
+            + (1 - minimumStrengthScale) * strength
+        let targetTravel = min(nominalTravel * strengthScale, upwardRoom)
+        let safeDuration = max(CGFloat(flightDuration), 0.001)
+        let verticalVelocity = min(
+            maximumVerticalVelocity,
+            targetTravel / (safeDuration * estimatedVelocityRetention)
+        )
+        let horizontalVelocity = min(
+            maximumHorizontalVelocity,
+            nominalTravel * strengthScale
+                * horizontalTravelFraction / safeDuration
+        )
+        let returnVelocity = targetTravel > 0
+            ? max(130, verticalVelocity * 0.92)
+            : 0
+        return JarTapLaunchPlan(
+            targetTravel: targetTravel,
+            verticalVelocity: verticalVelocity,
+            horizontalVelocity: horizontalVelocity,
+            returnVelocity: returnVelocity
+        )
+    }
+}
+
+/// Converts the same physical impulse to a mass-aware velocity change, then
+/// applies an explicit component-wise ceiling. This keeps tiny bodies stable
+/// without flattening the slower response of a larger aggregate.
+enum JarShakeVelocityPolicy {
+    static func velocity(
+        current: CGVector,
+        impulse: CGVector,
+        mass: CGFloat,
+        maximumHorizontalVelocity: CGFloat = Constants.Jar.shakeMaximumHorizontalVelocity,
+        maximumVerticalVelocity: CGFloat = Constants.Jar.shakeMaximumVerticalVelocity
+    ) -> CGVector {
+        let horizontalLimit = max(0, maximumHorizontalVelocity.isFinite
+            ? maximumHorizontalVelocity
+            : 0)
+        let verticalLimit = max(0, maximumVerticalVelocity.isFinite
+            ? maximumVerticalVelocity
+            : 0)
+        let currentDX = current.dx.isFinite ? current.dx : 0
+        let currentDY = current.dy.isFinite ? current.dy : 0
+        guard impulse.dx.isFinite,
+              impulse.dy.isFinite,
+              mass.isFinite,
+              mass > 0
+        else {
+            return CGVector(
+                dx: min(max(currentDX, -horizontalLimit), horizontalLimit),
+                dy: min(max(currentDY, -verticalLimit), verticalLimit)
+            )
+        }
+        return CGVector(
+            dx: min(max(currentDX + impulse.dx / mass, -horizontalLimit), horizontalLimit),
+            dy: min(max(currentDY + impulse.dy / mass, -verticalLimit), verticalLimit)
+        )
+    }
+}
+
+/// A deterministic monotonic-time gate shared by pointer and accessibility
+/// nudge entry points, preventing key repeat or gesture duplication from
+/// stacking an unbounded series of impulses.
+struct JarGestureRateLimiter {
+    private(set) var lastAcceptedUptime = -Double.greatestFiniteMagnitude
+
+    mutating func accepts(uptime: TimeInterval, cooldown: TimeInterval) -> Bool {
+        guard uptime.isFinite, cooldown.isFinite else { return false }
+        let safeCooldown = max(0, cooldown)
+        guard uptime >= lastAcceptedUptime,
+              uptime - lastAcceptedUptime >= safeCooldown
+        else { return false }
+        lastAcceptedUptime = uptime
+        return true
+    }
+}
+
+struct JarInteractionCollisionDecision: Equatable {
+    let playSound: Bool
+    let playHaptic: Bool
+}
+
+/// Follow-up collisions are feedback from one explicit gesture, not a general
+/// microphone for a constantly settling physics world. Each gesture opens one
+/// short window with independent sound and haptic budgets.
+struct JarInteractionCollisionBudget {
+    private(set) var opensAtUptime = Double.greatestFiniteMagnitude
+    private(set) var closesAtUptime = -Double.greatestFiniteMagnitude
+    private(set) var remainingSounds = 0
+    private(set) var remainingHaptics = 0
+
+    mutating func begin(
+        uptime: TimeInterval,
+        muteDuration: TimeInterval,
+        followUpDuration: TimeInterval,
+        soundLimit: Int,
+        hapticLimit: Int
+    ) {
+        guard uptime.isFinite,
+              muteDuration.isFinite,
+              followUpDuration.isFinite
+        else {
+            cancel()
+            return
+        }
+        opensAtUptime = uptime + max(0, muteDuration)
+        closesAtUptime = uptime + max(0, followUpDuration)
+        remainingSounds = max(0, soundLimit)
+        remainingHaptics = max(0, hapticLimit)
+    }
+
+    mutating func cancel() {
+        opensAtUptime = Double.greatestFiniteMagnitude
+        closesAtUptime = -Double.greatestFiniteMagnitude
+        remainingSounds = 0
+        remainingHaptics = 0
+    }
+
+    func isOpen(uptime: TimeInterval) -> Bool {
+        uptime.isFinite
+            && uptime >= opensAtUptime
+            && uptime <= closesAtUptime
+            && (remainingSounds > 0 || remainingHaptics > 0)
+    }
+
+    mutating func consume(
+        uptime: TimeInterval,
+        soundReady: Bool,
+        hapticReady: Bool
+    ) -> JarInteractionCollisionDecision {
+        guard isOpen(uptime: uptime) else {
+            return JarInteractionCollisionDecision(playSound: false, playHaptic: false)
+        }
+        let playSound = soundReady && remainingSounds > 0
+        let playHaptic = hapticReady && remainingHaptics > 0
+        if playSound { remainingSounds -= 1 }
+        if playHaptic { remainingHaptics -= 1 }
+        return JarInteractionCollisionDecision(
+            playSound: playSound,
+            playHaptic: playHaptic
+        )
+    }
+}
+
 /// Turns device tilt into continuous SpriteKit gravity. There is no threshold
 /// gesture: small hand movements immediately make every loose and aggregate
 /// pebble shift, while the low-pass filter keeps the jar calm on a desk.
@@ -2364,31 +3100,193 @@ struct JarMotionUpdateGate {
     }
 }
 
+struct JarShakeEvent: Equatable, Sendable {
+    let strength: Double
+    let horizontalDirection: Double
+}
+
+/// Recognizes a deliberate back-and-forth shake from gravity-free device
+/// acceleration. A single bump, ordinary tilt, and the app's own haptic pulse
+/// cannot independently satisfy the two opposing peaks plus rearm window.
+struct JarShakeDetector {
+    private struct Peak {
+        let timestamp: TimeInterval
+        let magnitude: Double
+        let x: Double
+        let y: Double
+        let z: Double
+    }
+
+    private var firstPeak: Peak?
+    private var belowRearmSince: TimeInterval?
+    private var lastTriggerUptime = -Double.greatestFiniteMagnitude
+    private var selfFeedbackIgnoreUntilUptime = -Double.greatestFiniteMagnitude
+    /// Unlike detector state, an app-originated haptic can outlive a stop/start
+    /// boundary. `reset()` intentionally preserves this monotonic deadline.
+    private var externalSuppressUntilUptime = -Double.greatestFiniteMagnitude
+    private(set) var isArmed = true
+
+    mutating func reset() {
+        firstPeak = nil
+        belowRearmSince = nil
+        lastTriggerUptime = -Double.greatestFiniteMagnitude
+        selfFeedbackIgnoreUntilUptime = -Double.greatestFiniteMagnitude
+        isArmed = true
+    }
+
+    mutating func suppress(until uptime: TimeInterval) {
+        guard uptime.isFinite else { return }
+        externalSuppressUntilUptime = max(externalSuppressUntilUptime, uptime)
+        // A peak sampled before our own haptic must never pair with a peak
+        // sampled after it, even when the advertised pattern is very short.
+        firstPeak = nil
+        belowRearmSince = nil
+    }
+
+    mutating func ingest(
+        x: Double,
+        y: Double,
+        z: Double,
+        uptime: TimeInterval
+    ) -> JarShakeEvent? {
+        guard x.isFinite, y.isFinite, z.isFinite, uptime.isFinite else { return nil }
+        let magnitude = sqrt(x * x + y * y + z * z)
+        guard magnitude.isFinite else { return nil }
+        let ignoreUntilUptime = max(
+            selfFeedbackIgnoreUntilUptime,
+            externalSuppressUntilUptime
+        )
+
+        if magnitude <= Constants.Jar.deviceShakeRearmThreshold {
+            if belowRearmSince == nil { belowRearmSince = uptime }
+            if let belowRearmSince,
+               uptime - belowRearmSince >= Constants.Jar.deviceShakeRearmDuration,
+               uptime >= ignoreUntilUptime,
+               uptime - lastTriggerUptime >= Constants.Jar.deviceShakeCooldown {
+                isArmed = true
+                firstPeak = nil
+            }
+            return nil
+        }
+        belowRearmSince = nil
+
+        guard isArmed,
+              uptime >= ignoreUntilUptime,
+              uptime - lastTriggerUptime >= Constants.Jar.deviceShakeCooldown,
+              magnitude >= Constants.Jar.deviceShakeThreshold
+        else { return nil }
+
+        let current = Peak(
+            timestamp: uptime,
+            magnitude: magnitude,
+            x: x / magnitude,
+            y: y / magnitude,
+            z: z / magnitude
+        )
+        guard let firstPeak else {
+            self.firstPeak = current
+            return nil
+        }
+        guard uptime >= firstPeak.timestamp else {
+            self.firstPeak = current
+            return nil
+        }
+        guard uptime - firstPeak.timestamp <= Constants.Jar.deviceShakeReversalWindow else {
+            self.firstPeak = current
+            return nil
+        }
+
+        let directionDot = firstPeak.x * current.x
+            + firstPeak.y * current.y
+            + firstPeak.z * current.z
+        guard directionDot <= Constants.Jar.deviceShakeReversalDotMaximum else {
+            if current.magnitude > firstPeak.magnitude {
+                self.firstPeak = current
+            }
+            return nil
+        }
+
+        let strongestMagnitude = max(firstPeak.magnitude, current.magnitude)
+        let normalizedStrength = (
+            strongestMagnitude - Constants.Jar.deviceShakeThreshold
+        ) / max(3.2 - Constants.Jar.deviceShakeThreshold, 0.1)
+        let strength = min(max(0.35 + normalizedStrength * 0.65, 0.35), 1)
+        let horizontalDelta = current.x - firstPeak.x
+        let horizontalDirection = min(max(horizontalDelta, -1), 1)
+
+        self.firstPeak = nil
+        isArmed = false
+        lastTriggerUptime = uptime
+        selfFeedbackIgnoreUntilUptime = uptime + Constants.Jar.deviceShakeHapticGuard
+        return JarShakeEvent(
+            strength: strength,
+            horizontalDirection: horizontalDirection
+        )
+    }
+}
+
 @MainActor
 final class JarMotionObserver: ObservableObject {
+    private static weak var activeOwner: JarMotionObserver?
+
     private let manager = CMMotionManager()
     private weak var scene: JarScene?
     private var updateGate = JarMotionUpdateGate()
+    private var shakeDetector = JarShakeDetector()
+    private var hapticPlaybackObserver: NSObjectProtocol?
 
     init(scene: JarScene? = nil) {
         self.scene = scene
+        hapticPlaybackObserver = NotificationCenter.default.addObserver(
+            forName: HapticPlaybackNotification.willPlay,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let advertisedDuration = (
+                notification.userInfo?[HapticPlaybackNotification.durationKey] as? NSNumber
+            )?.doubleValue ?? 0
+            guard advertisedDuration.isFinite else { return }
+            let suppressUntil = ProcessInfo.processInfo.systemUptime
+                + max(0, advertisedDuration)
+                + Constants.Jar.deviceShakeHapticGuard
+            MainActor.assumeIsolated { [weak self] in
+                self?.shakeDetector.suppress(until: suppressUntil)
+            }
+        }
+    }
+
+    deinit {
+        if let hapticPlaybackObserver {
+            NotificationCenter.default.removeObserver(hapticPlaybackObserver)
+        }
     }
 
     func start(scene: JarScene? = nil) {
         if let scene { self.scene = scene }
         guard let targetScene = self.scene,
               !targetScene.reduceMotion,
-              manager.isDeviceMotionAvailable,
-              !manager.isDeviceMotionActive
+              manager.isDeviceMotionAvailable
         else { return }
+        if let previousOwner = Self.activeOwner, previousOwner !== self {
+            previousOwner.stop()
+        }
+        Self.activeOwner = self
+        guard !manager.isDeviceMotionActive else { return }
         let generation = updateGate.begin()
+        shakeDetector.reset()
         manager.deviceMotionUpdateInterval = 1 / TimeInterval(Constants.Jar.tiltUpdatesPerSecond)
         manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
-            guard let gravity = motion?.gravity else { return }
+            guard let motion else { return }
+            let gravity = motion.gravity
+            let acceleration = motion.userAcceleration
+            let timestamp = motion.timestamp
             let horizontal = CGFloat(gravity.x) * Constants.Jar.tiltGravityHorizontalScale
             let sensedVertical = CGFloat(gravity.y) * abs(Constants.Jar.gravity)
             let vertical = min(-Constants.Jar.tiltGravityMinimumDownward, sensedVertical)
-            Task { @MainActor [weak self] in
+            // OperationQueue.main is the delivery contract. Consume each sample
+            // synchronously so 30 Hz input cannot accumulate as unordered,
+            // stale unstructured tasks behind a busy SpriteKit frame.
+            MainActor.assumeIsolated { [weak self] in
                 guard let self,
                       let scene = self.scene,
                       self.updateGate.accepts(
@@ -2399,15 +3297,30 @@ final class JarMotionObserver: ObservableObject {
                 scene.setGravityVector(
                     CGVector(dx: horizontal, dy: vertical)
                 )
+                if let shake = self.shakeDetector.ingest(
+                    x: acceleration.x,
+                    y: acceleration.y,
+                    z: acceleration.z,
+                    uptime: timestamp
+                ) {
+                    _ = scene.shakePebbles(
+                        strength: CGFloat(shake.strength),
+                        horizontal: CGFloat(shake.horizontalDirection)
+                    )
+                }
             }
         }
     }
 
     func stop() {
-        // Invalidate before stopping/resetting so an update already queued on
-        // MainActor cannot overwrite the stable downward gravity afterward.
+        // Invalidate before stopping/resetting so a delivery already queued by
+        // Core Motion cannot overwrite the stable downward gravity afterward.
         updateGate.invalidate()
         manager.stopDeviceMotionUpdates()
+        shakeDetector.reset()
         scene?.resetGravity()
+        if Self.activeOwner === self {
+            Self.activeOwner = nil
+        }
     }
 }

@@ -8,12 +8,13 @@ enum Constants {
         static let maximumSubjects = 12
         static let subjectColorSaturation = 0.62
         static let subjectColorBrightness = 0.80
-        static let appGroupIdentifier = "group.com.hinoshiba.tsumiben"
     }
 
     enum Timer {
         static let twentyFiveMinutes = 25
+        static let fortyFiveMinutes = 45
         static let sixtyMinutes = 60
+        static let ninetyMinutes = 90
         static let shortBreakMinutes = 5
         static let longBreakMinutes = 15
         static let focusSetsBeforeLongBreak = 4
@@ -146,8 +147,28 @@ enum Constants {
         static let shakeHorizontalImpulse: CGFloat = 3.5
         static let shakeVerticalImpulseMin: CGFloat = 2
         static let shakeVerticalImpulseMax: CGFloat = 4.5
-        static let deviceShakeThreshold = 2.4
+        /// Hard velocity ceilings keep a shake bounded even when a very small
+        /// body already carries momentum. The impulse is still divided by
+        /// radius-derived mass before these limits are applied, preserving the
+        /// visibly heavier response of aggregate gems.
+        static let shakeMaximumHorizontalVelocity: CGFloat = 120
+        static let shakeMaximumVerticalVelocity: CGFloat = 140
+        static let nudgeCooldown: TimeInterval = 0.45
+        /// `CMDeviceMotion.userAcceleration` is expressed in g with gravity
+        /// removed. A direction reversal above this peak separates an
+        /// intentional jar shake from ordinary tilt or a single table bump.
+        static let deviceShakeThreshold = 0.90
+        static let deviceShakeReversalWindow: TimeInterval = 0.420
+        static let deviceShakeReversalDotMaximum = -0.05
+        static let deviceShakeRearmThreshold = 0.50
+        static let deviceShakeRearmDuration: TimeInterval = 0.150
         static let deviceShakeCooldown: TimeInterval = 0.8
+        static let deviceShakeHapticGuard: TimeInterval = 0.5
+        static let systemShakeFallbackStrength: CGFloat = 0.78
+        static let interactionCollisionMuteDuration: TimeInterval = 0.20
+        static let interactionCollisionFollowUpDuration: TimeInterval = 0.80
+        static let interactionCollisionMaximumSounds = 2
+        static let interactionCollisionMaximumHaptics = 1
 
         static let idleWindow: TimeInterval = 3
         static let idleMovementThreshold: CGFloat = 0.5
@@ -229,6 +250,17 @@ enum Constants {
         static let tickDuration: TimeInterval = 0.040
         static let tickVolume = 0.12
         static let tickDecayRate = 6.0
+
+        // A struck-glass/gem timbre synthesized at runtime. Pitch shifting the
+        // same bounded family keeps large stones low and small stones bright
+        // without shipping third-party recordings or generated audio assets.
+        static let gemClinkBaseFrequency = 1_100.0
+        static let gemClinkDuration: TimeInterval = 0.140
+        static let gemClinkVariantCount = 4
+        static let gemClinkModalRatios = [1.0, 2.17, 3.81, 5.43]
+        static let gemClinkModalAmplitudes = [1.0, 0.50, 0.23, 0.10]
+        static let gemClinkStrikeNoiseDuration: TimeInterval = 0.0025
+        static let gemMinimumCollisionSpeed: CGFloat = 0.32
 
         static let chimeE5 = 659.0
         static let chimeA5 = 880.0
@@ -350,7 +382,7 @@ enum Constants {
         static let jarEmptyBody = "25分の集中で、ここにひと粒落ちる。"
         static let goldToast = "✦ 金のつぶが出た！ +250g"
         static let prismToast = "❖ 虹のつぶ！！ +250g"
-        static let manualCapToast = "自己申告は1日3回まで(公平ルール)"
+        static let manualCapToast = "自己申告はこの端末で1日3回まで"
         static let fairnessNote = "自己申告のつぶは破線つき。総質量には入るが、シェアの既定は実測のみ。"
         static let interruptionNote = "画面を離れたので、この回は自己申告あつかいになった"
         static let processTerminatedNote = "アプリが終了したため、この回は積まれませんでした"

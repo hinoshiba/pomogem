@@ -56,6 +56,259 @@ final class HomeProjectionTests: XCTestCase {
         )
     }
 
+    func testResolvedHistoryPageIsNotStarvedBySixtyOnePhysicalDuplicates() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let epochID = UUID()
+        let duplicateID = UUID()
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+
+        for index in 0..<61 {
+            context.insert(StudySession(
+                id: duplicateID,
+                startAt: base.addingTimeInterval(-1_500),
+                endAt: base,
+                seconds: 1_500,
+                source: index == 60 ? .timerDemoted : .timer,
+                grams: 250,
+                deviceDayKey: "duplicate-starvation",
+                dataEpochID: epochID
+            ))
+        }
+        for index in 1...5 {
+            let endAt = base.addingTimeInterval(TimeInterval(-index))
+            context.insert(StudySession(
+                startAt: endAt.addingTimeInterval(-1_500),
+                endAt: endAt,
+                seconds: 1_500,
+                source: .timer,
+                grams: 250,
+                deviceDayKey: "duplicate-starvation",
+                dataEpochID: epochID
+            ))
+        }
+        try context.save()
+
+        let page = try BoundedHistoryPolicy.resolvedSessionPage(
+            context: context,
+            epochID: epochID,
+            order: .reverse,
+            logicalLimit: 5
+        )
+
+        XCTAssertEqual(page.sessions.count, 5)
+        XCTAssertEqual(Set(page.sessions.map(\.id)).count, 5)
+        XCTAssertEqual(page.sessions.first?.id, duplicateID)
+        XCTAssertEqual(page.sessions.first?.source, .timerDemoted)
+        XCTAssertEqual(page.sessions.last?.endAt, base.addingTimeInterval(-4))
+        XCTAssertTrue(page.isPartial)
+        XCTAssertEqual(page.scannedPhysicalRowCount, 66)
+    }
+
+    func testBatchedHistoryResolutionFindsCanonicalCopyOutsideCandidatePrefix() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let epochID = UUID()
+        let duplicatedID = UUID()
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+
+        for index in 0..<40 {
+            let endAt = base.addingTimeInterval(TimeInterval(-index))
+            context.insert(StudySession(
+                id: index == 0 ? duplicatedID : UUID(),
+                startAt: endAt.addingTimeInterval(-1_500),
+                endAt: endAt,
+                seconds: 1_500,
+                source: .timer,
+                grams: 250,
+                deviceDayKey: "batched-hidden-copy",
+                dataEpochID: epochID
+            ))
+        }
+        let hiddenWinnerEnd = base.addingTimeInterval(-100)
+        context.insert(StudySession(
+            id: duplicatedID,
+            startAt: hiddenWinnerEnd.addingTimeInterval(-1_500),
+            endAt: hiddenWinnerEnd,
+            seconds: 1_500,
+            source: .timerDemoted,
+            grams: 250,
+            deviceDayKey: "batched-hidden-copy",
+            dataEpochID: epochID
+        ))
+        try context.save()
+
+        let page = try BoundedHistoryPolicy.resolvedSessionPage(
+            context: context,
+            epochID: epochID,
+            order: .reverse,
+            logicalLimit: 40,
+            maximumCandidateRows: 40,
+            mode: .lowerBound
+        )
+
+        XCTAssertEqual(page.sessions.count, 40)
+        XCTAssertEqual(
+            page.sessions.first(where: { $0.id == duplicatedID })?.source,
+            .timerDemoted
+        )
+        XCTAssertEqual(
+            page.sessions.first(where: { $0.id == duplicatedID })?.endAt,
+            hiddenWinnerEnd
+        )
+        XCTAssertTrue(page.isPartial)
+        XCTAssertFalse(page.boundaryIsProven)
+    }
+
+    func testBatchedLowerBoundOmitsOnlyOversizedLogicalGroup() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let epochID = UUID()
+        let oversizedID = UUID()
+        let retainedID = UUID()
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+
+        context.insert(StudySession(
+            id: retainedID,
+            startAt: base.addingTimeInterval(-1_500),
+            endAt: base,
+            seconds: 1_500,
+            source: .timer,
+            grams: 250,
+            deviceDayKey: "batched-oversized",
+            dataEpochID: epochID
+        ))
+        let maximumCopies = BoundedHistoryPolicy
+            .maximumPhysicalRowsPerLogicalSession
+        for offset in 0...maximumCopies {
+            let endAt = base.addingTimeInterval(TimeInterval(-offset - 1))
+            context.insert(StudySession(
+                id: oversizedID,
+                startAt: endAt.addingTimeInterval(-1_500),
+                endAt: endAt,
+                seconds: 1_500,
+                source: .timer,
+                grams: 250,
+                deviceDayKey: "batched-oversized",
+                dataEpochID: epochID
+            ))
+        }
+        try context.save()
+
+        let page = try BoundedHistoryPolicy.resolvedSessionPage(
+            context: context,
+            epochID: epochID,
+            order: .reverse,
+            logicalLimit: 2,
+            maximumCandidateRows: 258,
+            mode: .lowerBound
+        )
+
+        XCTAssertEqual(page.sessions.map(\.id), [retainedID])
+        XCTAssertTrue(page.isPartial)
+        XCTAssertFalse(page.boundaryIsProven)
+    }
+
+    func testResolvedHistoryPageFailsClosedWhenRawEdgeHasNotPassedWinner() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let epochID = UUID()
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+
+        for groupOffset in 0..<3 {
+            let logicalID = UUID()
+            for index in 0..<99 {
+                let endAt = base.addingTimeInterval(
+                    TimeInterval(-(groupOffset * 100 + index))
+                )
+                context.insert(StudySession(
+                    id: logicalID,
+                    startAt: endAt.addingTimeInterval(-1_500),
+                    endAt: endAt,
+                    seconds: 1_500,
+                    source: .timer,
+                    grams: 250,
+                    deviceDayKey: "unproven-prefix",
+                    dataEpochID: epochID
+                ))
+            }
+            let demotedDate = base.addingTimeInterval(
+                TimeInterval(-1_000 - groupOffset)
+            )
+            context.insert(StudySession(
+                id: logicalID,
+                startAt: demotedDate.addingTimeInterval(-1_500),
+                endAt: demotedDate,
+                seconds: 1_500,
+                source: .timerDemoted,
+                grams: 250,
+                deviceDayKey: "unproven-prefix",
+                dataEpochID: epochID
+            ))
+        }
+
+        let actualNewestDate = base.addingTimeInterval(-500)
+        context.insert(StudySession(
+            startAt: actualNewestDate.addingTimeInterval(-1_500),
+            endAt: actualNewestDate,
+            seconds: 1_500,
+            source: .timer,
+            grams: 250,
+            deviceDayKey: "unproven-prefix",
+            dataEpochID: epochID
+        ))
+        try context.save()
+
+        XCTAssertThrowsError(try BoundedHistoryPolicy.resolvedSessionPage(
+            context: context,
+            epochID: epochID,
+            order: .reverse,
+            logicalLimit: 1
+        )) { error in
+            XCTAssertEqual(
+                error as? BoundedHistoryPolicy.SessionResolutionError,
+                .candidateScanLimitExceeded
+            )
+        }
+    }
+
+    func testExactHistoryResolutionIncludesCopyAfterLegacyFourRowPrefix() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let epochID = UUID()
+        let logicalID = UUID()
+        let endAt = Date(timeIntervalSince1970: 1_800_000_000)
+
+        for index in 0..<5 {
+            context.insert(StudySession(
+                id: logicalID,
+                startAt: endAt.addingTimeInterval(-1_500),
+                endAt: endAt,
+                seconds: 1_500,
+                source: index == 4 ? .timerDemoted : .timer,
+                grams: 250,
+                deviceDayKey: "exact-five",
+                dataEpochID: epochID
+            ))
+        }
+        try context.save()
+
+        let resolved = try XCTUnwrap(BoundedHistoryPolicy.resolvedSession(
+            id: logicalID,
+            epochID: epochID,
+            context: context
+        ))
+
+        XCTAssertEqual(resolved.source, .timerDemoted)
+        XCTAssertEqual(
+            BoundedHistoryPolicy.sessionDescriptor(
+                id: logicalID,
+                epochID: epochID
+            ).fetchLimit,
+            BoundedHistoryPolicy.maximumPhysicalRowsPerLogicalSession + 1
+        )
+    }
+
     func testShareAggregateSummaryIsSupplementalWithoutExpandingMembership() {
         let memberIDs = (0..<10).map { _ in UUID() }
         let aggregate = AggregatePebble(
@@ -206,6 +459,369 @@ final class HomeProjectionTests: XCTestCase {
         )
     }
 
+    func testHomeSessionChangeSentinelIsRecentAndHardBounded() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let reference = Date(timeIntervalSince1970: 1_800_000_000)
+        let inside = reference.addingTimeInterval(
+            -HomeProjectionPolicy.localSessionChangeWindow + 1
+        )
+        let outside = reference.addingTimeInterval(
+            -HomeProjectionPolicy.localSessionChangeWindow - 1
+        )
+        for endAt in [inside, outside] {
+            context.insert(StudySession(
+                startAt: endAt.addingTimeInterval(-1_500),
+                endAt: endAt,
+                seconds: 1_500,
+                source: .timer,
+                grams: 250,
+                deviceDayKey: "recent-sentinel"
+            ))
+        }
+        try context.save()
+
+        let descriptor = HomeProjectionPolicy.sessionChangeSentinelDescriptor(
+            relativeTo: reference,
+            limit: 1
+        )
+        let values = try context.fetch(descriptor)
+
+        XCTAssertEqual(descriptor.fetchLimit, 1)
+        XCTAssertEqual(values.map(\.endAt), [inside])
+    }
+
+    func testHomeLooseHorizonIsAlwaysIncompleteWithoutTypedCertificate() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        let horizon = base.addingTimeInterval(-10)
+        let older = base.addingTimeInterval(-100)
+        for endAt in [base, older] {
+            context.insert(StudySession(
+                startAt: endAt.addingTimeInterval(-1_500),
+                endAt: endAt,
+                seconds: 1_500,
+                source: .timer,
+                grams: 250,
+                deviceDayKey: "verified-horizon"
+            ))
+        }
+        try context.save()
+
+        let page = try HomeProjectionPolicy.supportedLooseSessionPage(
+            context: context,
+            resetMarkers: [],
+            startingAt: horizon
+        )
+
+        XCTAssertEqual(page.sessions.map(\.endAt), [base])
+        XCTAssertFalse(page.isCompleteForHomeCandidates)
+    }
+
+    func testSmallOldRootlessStoreUsesExactFullRange() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let reference = Date(timeIntervalSince1970: 1_800_000_000)
+        let oldEnd = reference.addingTimeInterval(
+            -HomeProjectionPolicy.localSessionChangeWindow - 86_400
+        )
+        let expectedIDs = (0..<3).map { index -> UUID in
+            let id = UUID()
+            let endAt = oldEnd.addingTimeInterval(TimeInterval(index))
+            context.insert(StudySession(
+                id: id,
+                startAt: endAt.addingTimeInterval(-1_500),
+                endAt: endAt,
+                seconds: 1_500,
+                source: .timer,
+                grams: 250,
+                deviceDayKey: "small-old-rootless"
+            ))
+            return id
+        }
+        try context.save()
+
+        let plan = HomeProjectionPolicy.initialLooseSessionQueryPlan(
+            physicalSessionRowCount: 3,
+            verifiedAggregateEnd: nil,
+            referenceDate: reference
+        )
+        let page = try HomeProjectionPolicy.supportedLooseSessionPage(
+            context: context,
+            resetMarkers: [],
+            startingAt: plan.lowerBound
+        )
+
+        XCTAssertNil(plan.lowerBound)
+        XCTAssertEqual(Set(page.sessions.map(\.id)), Set(expectedIDs))
+        XCTAssertTrue(page.isCompleteForHomeCandidates)
+        XCTAssertFalse(HomeProjectionPolicy.shouldRequestLocalSessionMaintenance(
+            trustedAggregateHorizon: nil,
+            requestedLowerBound: plan.lowerBound,
+            pageIsComplete: page.isCompleteForHomeCandidates
+        ))
+    }
+
+    func testRootless513SessionPageRequestsLocalMaintenance() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        let physicalRowCount = HomeProjectionPolicy.looseSessionQueryLimit + 1
+        for index in 0..<physicalRowCount {
+            let endAt = base.addingTimeInterval(TimeInterval(-index))
+            context.insert(StudySession(
+                startAt: endAt.addingTimeInterval(-1_500),
+                endAt: endAt,
+                seconds: 1_500,
+                source: .timer,
+                grams: 250,
+                deviceDayKey: "rootless-513"
+            ))
+        }
+        try context.save()
+
+        let plan = HomeProjectionPolicy.initialLooseSessionQueryPlan(
+            physicalSessionRowCount: physicalRowCount,
+            verifiedAggregateEnd: nil,
+            referenceDate: base
+        )
+        let page = try HomeProjectionPolicy.supportedLooseSessionPage(
+            context: context,
+            resetMarkers: [],
+            startingAt: plan.lowerBound
+        )
+
+        XCTAssertNil(plan.lowerBound)
+        XCTAssertEqual(
+            page.sessions.count,
+            HomeProjectionPolicy.looseSessionQueryLimit
+        )
+        XCTAssertFalse(page.isCompleteForHomeCandidates)
+        XCTAssertTrue(HomeProjectionPolicy.shouldRequestLocalSessionMaintenance(
+            trustedAggregateHorizon: nil,
+            requestedLowerBound: plan.lowerBound,
+            pageIsComplete: page.isCompleteForHomeCandidates
+        ))
+    }
+
+    func testLargeStoreAggregateHorizonRemainsExplicitLowerBound() {
+        let reference = Date(timeIntervalSince1970: 1_800_000_000)
+        let aggregateEnd = reference.addingTimeInterval(-86_400)
+
+        let plan = HomeProjectionPolicy.initialLooseSessionQueryPlan(
+            physicalSessionRowCount: HomeProjectionPolicy
+                .maximumLooseSessionScanRows + 1,
+            verifiedAggregateEnd: aggregateEnd,
+            referenceDate: reference
+        )
+
+        XCTAssertEqual(plan.lowerBound, aggregateEnd)
+        XCTAssertFalse(HomeProjectionPolicy.shouldRequestLocalSessionMaintenance(
+            trustedAggregateHorizon: aggregateEnd,
+            requestedLowerBound: plan.lowerBound,
+            pageIsComplete: false
+        ))
+    }
+
+    func testLargeOrUnknownStoreWithoutAggregateUsesRecentLowerBound() {
+        let reference = Date(timeIntervalSince1970: 1_800_000_000)
+        let expectedStart = reference.addingTimeInterval(
+            -HomeProjectionPolicy.localSessionChangeWindow
+        )
+
+        for rowCount in [
+            nil,
+            HomeProjectionPolicy.maximumLooseSessionScanRows + 1
+        ] as [Int?] {
+            let plan = HomeProjectionPolicy.initialLooseSessionQueryPlan(
+                physicalSessionRowCount: rowCount,
+                verifiedAggregateEnd: nil,
+                referenceDate: reference
+            )
+            XCTAssertEqual(plan.lowerBound, expectedStart)
+            XCTAssertTrue(HomeProjectionPolicy.shouldRequestLocalSessionMaintenance(
+                trustedAggregateHorizon: nil,
+                requestedLowerBound: plan.lowerBound,
+                pageIsComplete: false
+            ))
+        }
+    }
+
+    func testHomeLoosePageCannotBeStarvedByNewestUnsupportedRows() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let validCount = 12
+
+        let hostileCount = HomeProjectionPolicy.looseSessionQueryLimit * 2
+        for index in 0..<hostileCount {
+            let endAt = now.addingTimeInterval(Double(-index))
+            let hostile = StudySession(
+                startAt: endAt,
+                endAt: endAt,
+                seconds: 60,
+                source: .timer,
+                grams: 10,
+                deviceDayKey: "unsupported-newest"
+            )
+            hostile.seconds = Int.max
+            hostile.grams = Int.max
+            context.insert(hostile)
+        }
+        for index in 0..<validCount {
+            let endAt = now.addingTimeInterval(Double(-10_000 - index))
+            context.insert(StudySession(
+                startAt: endAt.addingTimeInterval(-1_500),
+                endAt: endAt,
+                seconds: 1_500,
+                source: .timer,
+                grams: 250,
+                deviceDayKey: "supported-older"
+            ))
+        }
+        try context.save()
+
+        let firstRawPage = try context.fetch(
+            HomeProjectionPolicy.looseSessionDescriptor()
+        )
+        XCTAssertEqual(firstRawPage.count, HomeProjectionPolicy.looseSessionQueryLimit)
+        XCTAssertTrue(firstRawPage.allSatisfy {
+            !StudySessionIntegrityPolicy.isSupported($0)
+        })
+
+        let scan = try HomeProjectionPolicy.supportedLooseSessionPage(
+            context: context,
+            resetMarkers: []
+        )
+        let fetched = scan.sessions
+        XCTAssertEqual(fetched.count, validCount)
+        XCTAssertTrue(scan.isCompleteForHomeCandidates)
+        XCTAssertEqual(scan.scannedRowCount, hostileCount + validCount)
+        XCTAssertTrue(fetched.allSatisfy {
+            StudySessionIntegrityPolicy.isSupported($0)
+        })
+        XCTAssertEqual(
+            try context.fetchCount(FetchDescriptor<StudySession>()),
+            hostileCount + validCount
+        )
+    }
+
+    func testHomeLoosePageUsesSharedSessionResolverForPhysicalDuplicates() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let logicalID = UUID()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let newerTimer = StudySession(
+            id: logicalID,
+            startAt: now.addingTimeInterval(-1_500),
+            endAt: now,
+            seconds: 1_500,
+            source: .timer,
+            grams: 250,
+            deviceDayKey: "shared-resolver",
+            syncRecordID: UUID(
+                uuidString: "A0000000-0000-0000-0000-000000000001"
+            )!
+        )
+        let earlierDemotion = StudySession(
+            id: logicalID,
+            startAt: now.addingTimeInterval(-11_500),
+            endAt: now.addingTimeInterval(-10_000),
+            seconds: 1_500,
+            source: .timerDemoted,
+            grams: 250,
+            deviceDayKey: "shared-resolver",
+            syncRecordID: UUID(
+                uuidString: "A0000000-0000-0000-0000-000000000002"
+            )!
+        )
+        context.insert(newerTimer)
+        for index in 1..<HomeProjectionPolicy.looseSessionQueryLimit {
+            let endAt = now.addingTimeInterval(Double(-index))
+            context.insert(StudySession(
+                startAt: endAt.addingTimeInterval(-1_500),
+                endAt: endAt,
+                seconds: 1_500,
+                source: .timer,
+                grams: 250,
+                deviceDayKey: "shared-resolver"
+            ))
+        }
+        context.insert(earlierDemotion)
+        try context.save()
+
+        let scan = try HomeProjectionPolicy.supportedLooseSessionPage(
+            context: context,
+            resetMarkers: []
+        )
+
+        XCTAssertEqual(
+            scan.sessions.count,
+            HomeProjectionPolicy.looseSessionQueryLimit
+        )
+        XCTAssertEqual(
+            scan.scannedRowCount,
+            HomeProjectionPolicy.looseSessionQueryLimit + 1
+        )
+        XCTAssertTrue(scan.sessions.contains { $0 === earlierDemotion })
+        XCTAssertFalse(scan.sessions.contains { $0 === newerTimer })
+        XCTAssertTrue(
+            StudySessionSyncPolicy.canonicalSession(
+                from: [earlierDemotion, newerTimer]
+            ) === earlierDemotion
+        )
+    }
+
+    func testHomeLoosePageStopsAtHardScanCapAndDisclosesLowerBound() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let rowCount = HomeProjectionPolicy.maximumLooseSessionScanRows + 1
+        let boundaryID = UUID()
+        for index in 0..<rowCount {
+            let endAt = now.addingTimeInterval(Double(-index))
+            if index == 0 || index == rowCount - 1 {
+                context.insert(StudySession(
+                    id: boundaryID,
+                    startAt: endAt.addingTimeInterval(-1_500),
+                    endAt: endAt,
+                    seconds: 1_500,
+                    source: index == 0 ? .timer : .timerDemoted,
+                    grams: 250,
+                    deviceDayKey: "late-demotion-at-cap"
+                ))
+            } else {
+                let hostile = StudySession(
+                    startAt: endAt,
+                    endAt: endAt,
+                    seconds: 60,
+                    source: .manual,
+                    grams: 10,
+                    deviceDayKey: "unsupported-cap"
+                )
+                context.insert(hostile)
+            }
+        }
+        try context.save()
+
+        let scan = try HomeProjectionPolicy.supportedLooseSessionPage(
+            context: context,
+            resetMarkers: []
+        )
+        XCTAssertEqual(scan.sessions.map(\.id), [boundaryID])
+        XCTAssertEqual(scan.sessions.first?.source, .timerDemoted)
+        XCTAssertEqual(
+            scan.scannedRowCount,
+            HomeProjectionPolicy.maximumLooseSessionScanRows
+        )
+        XCTAssertFalse(scan.isCompleteForHomeCandidates)
+        XCTAssertEqual(
+            try context.fetchCount(FetchDescriptor<StudySession>()),
+            rowCount
+        )
+    }
+
     func testFortyYearProjectionTotalsUseOnlyEighteenDecimalRoots() {
         let base = Date(timeIntervalSince1970: 20_000)
         let rootPebbleCounts = Array(repeating: 10, count: 4)
@@ -303,7 +919,7 @@ final class HomeProjectionTests: XCTestCase {
         XCTAssertEqual(metrics.completedFocusCount, Int.max)
     }
 
-    func testBoundedProjectionDoesNotSumFlattenedParentAndRootChild() throws {
+    func testBoundedProjectionRejectsUnverifiedFlattenedParent() throws {
         let container = try makeContainer()
         let context = container.mainContext
         let base = Date(timeIntervalSince1970: 25_000)
@@ -332,7 +948,8 @@ final class HomeProjectionTests: XCTestCase {
             periodStart: base,
             periodEnd: base.addingTimeInterval(2),
             sessionIDs: parentSessionIDs,
-            childAggregateIDs: [child.id]
+            childAggregateIDs: [child.id],
+            projectionValidationVersion: 0
         )
         context.insert(flattenedParent)
         context.insert(child)
@@ -351,9 +968,215 @@ final class HomeProjectionTests: XCTestCase {
             looseSessions: []
         )
 
-        XCTAssertEqual(acceptedIDs, [flattenedParent.id])
-        XCTAssertEqual(totals.pebbleCount, 100)
-        XCTAssertEqual(totals.grams, 25_000)
+        XCTAssertTrue(acceptedIDs.isEmpty)
+        XCTAssertEqual(totals.pebbleCount, 0)
+        XCTAssertEqual(totals.grams, 0)
+    }
+
+    func testRefreshedAggregatePageReloadsRegisteredPayloadAfterSecondaryContextSave() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let instant = Date(timeIntervalSince1970: 25_500)
+        let rootID = UUID()
+        let stratumID = UUID()
+        context.insert(AggregatePebble(
+            id: rootID,
+            createdAt: instant,
+            level: 1,
+            pebbleCount: 1,
+            grams: 250,
+            measuredPebbleCount: 1,
+            colorMixJSON: "[]",
+            periodStart: instant,
+            periodEnd: instant
+        ))
+        context.insert(Stratum(
+            id: stratumID,
+            bakedAt: instant,
+            pebbleCount: 1,
+            heightPt: 8,
+            colorMixJSON: "[]",
+            monthLabel: "before",
+            grams: 250
+        ))
+        try context.save()
+
+        var presentation = AggregateProjectionPresentationContext.initial(
+            for: .cloudKit
+        )
+        presentation.markVerified()
+        let stamp = try XCTUnwrap(presentation.verifiedCacheStamp)
+        let initialPage = try HomeProjectionPolicy
+            .refreshedAggregatePresentationPage(
+                context: context,
+                resetMarkers: [],
+                cacheStamp: stamp
+            )
+        let registeredRoot = try XCTUnwrap(initialPage.aggregateRoots.first)
+        let registeredStratum = try XCTUnwrap(initialPage.legacyStrata.first)
+        XCTAssertEqual(registeredRoot.grams, 250)
+        XCTAssertEqual(registeredStratum.grams, 250)
+
+        let writer = ModelContext(container)
+        let aggregateID = rootID
+        let stratumLogicalID = stratumID
+        let writerRoot = try XCTUnwrap(writer.fetch(
+            FetchDescriptor<AggregatePebble>(predicate: #Predicate {
+                $0.id == aggregateID
+            })
+        ).first)
+        let writerStratum = try XCTUnwrap(writer.fetch(
+            FetchDescriptor<Stratum>(predicate: #Predicate {
+                $0.id == stratumLogicalID
+            })
+        ).first)
+        writerRoot.grams = 900
+        writerRoot.pebbleCount = 3
+        writerStratum.grams = 700
+        writerStratum.monthLabel = "after"
+        try writer.save()
+
+        XCTAssertEqual(
+            try context.fetchCount(FetchDescriptor<AggregatePebble>()),
+            1
+        )
+        XCTAssertEqual(
+            registeredRoot.grams,
+            250,
+            "fetchCount must not be mistaken for a value-bearing refresh"
+        )
+        XCTAssertEqual(registeredStratum.monthLabel, "before")
+
+        let refreshedPage = try HomeProjectionPolicy
+            .refreshedAggregatePresentationPage(
+                context: context,
+                resetMarkers: [],
+                cacheStamp: stamp
+            )
+        XCTAssertEqual(refreshedPage.aggregateRoots.first?.grams, 900)
+        XCTAssertEqual(refreshedPage.aggregateRoots.first?.pebbleCount, 3)
+        XCTAssertEqual(refreshedPage.legacyStrata.first?.grams, 700)
+        XCTAssertEqual(refreshedPage.legacyStrata.first?.monthLabel, "after")
+    }
+
+    func testRefreshedAggregatePageNeedsNewLeaseAfterFalseTrueFalseTransition() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let instant = Date(timeIntervalSince1970: 25_750)
+        context.insert(AggregatePebble(
+            createdAt: instant,
+            level: 1,
+            pebbleCount: 2,
+            grams: 500,
+            measuredPebbleCount: 2,
+            colorMixJSON: "[]",
+            periodStart: instant,
+            periodEnd: instant
+        ))
+        try context.save()
+
+        var presentation = AggregateProjectionPresentationContext.initial(
+            for: .cloudKit
+        )
+        presentation.markVerified()
+        let preImportStamp = try XCTUnwrap(presentation.verifiedCacheStamp)
+        let preImportPage = try HomeProjectionPolicy
+            .refreshedAggregatePresentationPage(
+                context: context,
+                resetMarkers: [],
+                cacheStamp: preImportStamp
+            )
+        XCTAssertEqual(preImportPage.aggregateRoots.first?.grams, 500)
+        XCTAssertTrue(presentation.acceptsVerifiedAggregateCache(
+            preImportPage.cacheStamp
+        ))
+
+        presentation.invalidate()
+        XCTAssertFalse(presentation.acceptsVerifiedAggregateCache(
+            preImportPage.cacheStamp
+        ))
+        presentation.markVerified()
+        XCTAssertFalse(
+            presentation.acceptsVerifiedAggregateCache(preImportPage.cacheStamp),
+            "verification alone must not stamp an old exact Home page"
+        )
+
+        let postImportStamp = try XCTUnwrap(presentation.verifiedCacheStamp)
+        let postImportPage = try HomeProjectionPolicy
+            .refreshedAggregatePresentationPage(
+                context: context,
+                resetMarkers: [],
+                cacheStamp: postImportStamp
+            )
+        XCTAssertNotEqual(preImportPage.cacheStamp, postImportPage.cacheStamp)
+        XCTAssertTrue(presentation.acceptsVerifiedAggregateCache(
+            postImportPage.cacheStamp
+        ))
+    }
+
+    func testAcceptedRootRequiresCurrentValidationOnItsChildren() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let instant = Date(timeIntervalSince1970: 26_000)
+        let rootID = UUID()
+        let child = AggregatePebble(
+            level: 1,
+            pebbleCount: 1,
+            grams: 250,
+            colorMixJSON: "[]",
+            periodStart: instant,
+            periodEnd: instant,
+            sessionIDs: [UUID()],
+            parentAggregateID: rootID,
+            projectionValidationVersion: 0
+        )
+        let root = AggregatePebble(
+            id: rootID,
+            level: 2,
+            pebbleCount: 1,
+            childAggregateCount: 1,
+            grams: 250,
+            colorMixJSON: "[]",
+            periodStart: instant,
+            periodEnd: instant,
+            childAggregateIDs: [child.id]
+        )
+        context.insert(child)
+        context.insert(root)
+        try context.save()
+
+        let acceptedIDs = try HomeProjectionPolicy.acceptedRootSummaryIDs(
+            roots: [root],
+            context: context,
+            resetMarkers: []
+        )
+
+        XCTAssertTrue(acceptedIDs.isEmpty)
+    }
+
+    func testAcceptedRootRejectsCurrentHigherLevelDirectMembership() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let instant = Date(timeIntervalSince1970: 27_000)
+        let root = AggregatePebble(
+            level: 2,
+            pebbleCount: 2,
+            grams: 500,
+            colorMixJSON: "[]",
+            periodStart: instant,
+            periodEnd: instant,
+            sessionIDs: [UUID(), UUID()]
+        )
+        context.insert(root)
+        try context.save()
+
+        let acceptedIDs = try HomeProjectionPolicy.acceptedRootSummaryIDs(
+            roots: [root],
+            context: context,
+            resetMarkers: []
+        )
+
+        XCTAssertTrue(acceptedIDs.isEmpty)
     }
 
     func testAggregatePersistenceMissingLeafDoesNotMutateAnySource() throws {
@@ -381,7 +1204,7 @@ final class HomeProjectionTests: XCTestCase {
         XCTAssertTrue(try aggregateRows(id: fixture.request.id, context: context).isEmpty)
     }
 
-    func testAggregatePersistenceAlreadyBakedLeafDoesNotMutateSiblings() throws {
+    func testAggregatePersistenceIgnoresLegacyBakedBitWhenLocalMembershipIsAbsent() throws {
         let container = try makeContainer()
         let context = container.mainContext
         let fixture = try makeLeafAggregateFixture()
@@ -389,17 +1212,12 @@ final class HomeProjectionTests: XCTestCase {
         fixture.sessions.forEach { context.insert($0) }
         try context.save()
 
-        XCTAssertThrowsError(try HomeAggregatePersistence.persist(
+        try HomeAggregatePersistence.persist(
             fixture.request,
             context: context,
             dataEpochID: nil,
             resetMarkers: []
-        )) { error in
-            XCTAssertEqual(
-                error as? HomeAggregatePersistenceError,
-                .alreadyConsumedSource(fixture.sessions[3].id)
-            )
-        }
+        )
 
         XCTAssertTrue(fixture.sessions[3].isBaked)
         XCTAssertTrue(
@@ -407,7 +1225,7 @@ final class HomeProjectionTests: XCTestCase {
                 index == 3 || !session.isBaked
             }
         )
-        XCTAssertTrue(try aggregateRows(id: fixture.request.id, context: context).isEmpty)
+        XCTAssertEqual(try aggregateRows(id: fixture.request.id, context: context).count, 1)
     }
 
     func testAggregatePersistenceCompetingChildParentIsNeverOverwritten() throws {
@@ -443,13 +1261,14 @@ final class HomeProjectionTests: XCTestCase {
         XCTAssertTrue(try aggregateRows(id: fixture.request.id, context: context).isEmpty)
     }
 
-    func testExactExistingAggregateRequestIsIdempotentAndRepairsAvailableLeaves() throws {
+    func testExactExistingAggregateRequestFailsClosedWhenLeafIsMissing() throws {
         let container = try makeContainer()
         let context = container.mainContext
         let fixture = try makeLeafAggregateFixture()
-        // A CloudKit replay may deliver the deterministic aggregate before its
-        // final member. Existing materialization is authoritative; every member
-        // that is present is repaired without creating a duplicate aggregate.
+        // An existing aggregate is a local derived projection, not authority
+        // for a synchronized source that has disappeared. Even an idempotent
+        // replay must fail closed without mutating the remaining sources or
+        // creating a duplicate aggregate.
         for session in fixture.sessions.dropLast() {
             context.insert(session)
         }
@@ -457,15 +1276,328 @@ final class HomeProjectionTests: XCTestCase {
         context.insert(existing)
         try context.save()
 
-        try HomeAggregatePersistence.persist(
+        XCTAssertThrowsError(try HomeAggregatePersistence.persist(
             fixture.request,
             context: context,
             dataEpochID: nil,
             resetMarkers: []
+        )) { error in
+            XCTAssertEqual(
+                error as? HomeAggregatePersistenceError,
+                .missingCurrentSource(fixture.sessions.last!.id)
+            )
+        }
+
+        XCTAssertTrue(fixture.sessions.dropLast().allSatisfy { !$0.isBaked })
+        XCTAssertEqual(try aggregateRows(id: fixture.request.id, context: context).count, 1)
+    }
+
+    func testLocalMembershipProjectionFailsOpenWhenOnlyLegacyBakedBitExists() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let fixture = try makeLeafAggregateFixture()
+        fixture.sessions.forEach {
+            $0.isBaked = true
+            context.insert($0)
+        }
+        try context.save()
+
+        var projection = try HomeProjectionPolicy.localMembershipProjection(
+            for: fixture.sessions,
+            representedAggregateRoots: [],
+            context: context,
+            resetMarkers: []
+        )
+        XCTAssertTrue(projection.representedSessionIDs.isEmpty)
+
+        context.insert(fixture.request.makeAggregatePebble())
+        try context.save()
+        let root = try XCTUnwrap(context.fetch(FetchDescriptor<AggregatePebble>()).first)
+        projection = try HomeProjectionPolicy.localMembershipProjection(
+            for: fixture.sessions,
+            representedAggregateRoots: [root],
+            context: context,
+            resetMarkers: []
+        )
+        XCTAssertEqual(
+            projection.representedSessionIDs,
+            Set(fixture.sessions.map(\.id))
+        )
+        XCTAssertTrue(projection.isCompleteForCandidates)
+    }
+
+    func testLocalMembershipRequiresLineageToAPresentedRoot() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let instant = Date(timeIntervalSince1970: 80_000)
+        let session = StudySession(
+            startAt: instant.addingTimeInterval(-1_500),
+            endAt: instant,
+            seconds: 1_500,
+            source: .timer,
+            grams: 250,
+            deviceDayKey: "fixture"
+        )
+        let leaf = AggregatePebble(
+            level: 1,
+            pebbleCount: 1,
+            grams: 250,
+            colorMixJSON: "[]",
+            periodStart: session.startAt,
+            periodEnd: session.endAt,
+            sessionIDs: [session.id],
+            parentAggregateID: UUID()
+        )
+        let root = AggregatePebble(
+            level: 2,
+            pebbleCount: 1,
+            childAggregateCount: 1,
+            grams: 250,
+            colorMixJSON: "[]",
+            periodStart: session.startAt,
+            periodEnd: session.endAt
+        )
+        context.insert(session)
+        context.insert(leaf)
+        context.insert(root)
+        try context.save()
+
+        var projection = try HomeProjectionPolicy.localMembershipProjection(
+            for: [session],
+            representedAggregateRoots: [root],
+            context: context,
+            resetMarkers: []
+        )
+        XCTAssertTrue(projection.representedSessionIDs.isEmpty)
+        XCTAssertFalse(projection.isCompleteForCandidates)
+
+        leaf.parentAggregateID = root.id
+        root.replaceChildAggregateIDs([leaf.id])
+        try context.save()
+
+        projection = try HomeProjectionPolicy.localMembershipProjection(
+            for: [session],
+            representedAggregateRoots: [root],
+            context: context,
+            resetMarkers: []
+        )
+        XCTAssertEqual(projection.representedSessionIDs, [session.id])
+        XCTAssertTrue(projection.isCompleteForCandidates)
+    }
+
+    func testLocalMembershipUsesExactUUIDWhenCanonicalDateMovesOutsideLeafSpan() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let canonicalEnd = Date(timeIntervalSince1970: 800_000)
+        let staleProjectionEnd = Date(timeIntervalSince1970: 80_000)
+        let session = StudySession(
+            startAt: canonicalEnd.addingTimeInterval(-1_500),
+            endAt: canonicalEnd,
+            seconds: 1_500,
+            source: .timerDemoted,
+            grams: 250,
+            deviceDayKey: "late-canonical-winner"
+        )
+        let rootID = UUID()
+        let leaf = AggregatePebble(
+            level: 1,
+            pebbleCount: 1,
+            grams: 250,
+            colorMixJSON: "[]",
+            periodStart: staleProjectionEnd.addingTimeInterval(-1_500),
+            periodEnd: staleProjectionEnd,
+            sessionIDs: [session.id],
+            parentAggregateID: rootID
+        )
+        let root = AggregatePebble(
+            id: rootID,
+            level: 2,
+            pebbleCount: 1,
+            childAggregateCount: 1,
+            grams: 250,
+            colorMixJSON: "[]",
+            periodStart: staleProjectionEnd.addingTimeInterval(-1_500),
+            periodEnd: staleProjectionEnd,
+            childAggregateIDs: [leaf.id]
+        )
+        context.insert(session)
+        context.insert(leaf)
+        context.insert(root)
+        try context.save()
+
+        let projection = try HomeProjectionPolicy.localMembershipProjection(
+            for: [session],
+            representedAggregateRoots: [root],
+            context: context,
+            resetMarkers: []
         )
 
-        XCTAssertTrue(fixture.sessions.dropLast().allSatisfy(\.isBaked))
-        XCTAssertEqual(try aggregateRows(id: fixture.request.id, context: context).count, 1)
+        XCTAssertEqual(projection.representedSessionIDs, [session.id])
+        XCTAssertTrue(projection.isCompleteForCandidates)
+        XCTAssertTrue(projection.conflictedRootIDs.isEmpty)
+    }
+
+    func testLocalMembershipExcludesBothRootsForConflictingExactOwners() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let instant = Date(timeIntervalSince1970: 810_000)
+        let session = StudySession(
+            startAt: instant.addingTimeInterval(-1_500),
+            endAt: instant,
+            seconds: 1_500,
+            source: .timer,
+            grams: 250,
+            deviceDayKey: "conflicting-owners"
+        )
+        var roots: [AggregatePebble] = []
+        for offset in 0..<2 {
+            let rootID = UUID()
+            let leaf = AggregatePebble(
+                createdAt: instant.addingTimeInterval(Double(offset)),
+                level: 1,
+                pebbleCount: 1,
+                grams: 250,
+                colorMixJSON: "[]",
+                periodStart: session.startAt,
+                periodEnd: session.endAt,
+                sessionIDs: [session.id],
+                parentAggregateID: rootID
+            )
+            let root = AggregatePebble(
+                id: rootID,
+                createdAt: instant.addingTimeInterval(Double(offset)),
+                level: 2,
+                pebbleCount: 1,
+                childAggregateCount: 1,
+                grams: 250,
+                colorMixJSON: "[]",
+                periodStart: session.startAt,
+                periodEnd: session.endAt,
+                childAggregateIDs: [leaf.id]
+            )
+            context.insert(leaf)
+            context.insert(root)
+            roots.append(root)
+        }
+        context.insert(session)
+        try context.save()
+
+        let projection = try HomeProjectionPolicy.localMembershipProjection(
+            for: [session],
+            representedAggregateRoots: roots,
+            context: context,
+            resetMarkers: []
+        )
+
+        XCTAssertTrue(projection.representedSessionIDs.isEmpty)
+        XCTAssertFalse(projection.isCompleteForCandidates)
+        XCTAssertEqual(projection.conflictedRootIDs, Set(roots.map(\.id)))
+    }
+
+    func testLocalMembershipFailsClosedAt257StringMatchingLeaves() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let instant = Date(timeIntervalSince1970: 820_000)
+        let session = StudySession(
+            startAt: instant.addingTimeInterval(-1_500),
+            endAt: instant,
+            seconds: 1_500,
+            source: .timer,
+            grams: 250,
+            deviceDayKey: "membership-sentinel"
+        )
+        let root = AggregatePebble(
+            level: 2,
+            pebbleCount: 257,
+            grams: 64_250,
+            colorMixJSON: "[]",
+            periodStart: session.startAt,
+            periodEnd: session.endAt
+        )
+        context.insert(session)
+        context.insert(root)
+        for index in 0...HomeProjectionPolicy.maximumPhysicalAggregateRowsPerExactLookup {
+            context.insert(AggregatePebble(
+                createdAt: instant.addingTimeInterval(Double(index)),
+                level: 1,
+                pebbleCount: 1,
+                grams: 250,
+                colorMixJSON: "[]",
+                periodStart: session.startAt,
+                periodEnd: session.endAt,
+                sessionIDs: [session.id],
+                parentAggregateID: root.id
+            ))
+        }
+        try context.save()
+
+        let projection = try HomeProjectionPolicy.localMembershipProjection(
+            for: [session],
+            representedAggregateRoots: [root],
+            context: context,
+            resetMarkers: []
+        )
+
+        XCTAssertTrue(projection.representedSessionIDs.isEmpty)
+        XCTAssertFalse(projection.isCompleteForCandidates)
+        XCTAssertEqual(projection.conflictedRootIDs, [root.id])
+    }
+
+    func testLocalMembershipFailsClosedAt257CopiesInParentChain() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let instant = Date(timeIntervalSince1970: 830_000)
+        let session = StudySession(
+            startAt: instant.addingTimeInterval(-1_500),
+            endAt: instant,
+            seconds: 1_500,
+            source: .timer,
+            grams: 250,
+            deviceDayKey: "lineage-sentinel"
+        )
+        let rootID = UUID()
+        let leaf = AggregatePebble(
+            level: 1,
+            pebbleCount: 1,
+            grams: 250,
+            colorMixJSON: "[]",
+            periodStart: session.startAt,
+            periodEnd: session.endAt,
+            sessionIDs: [session.id],
+            parentAggregateID: rootID
+        )
+        var presentedRoot: AggregatePebble?
+        context.insert(session)
+        context.insert(leaf)
+        for _ in 0...HomeProjectionPolicy.maximumPhysicalAggregateRowsPerExactLookup {
+            let root = AggregatePebble(
+                id: rootID,
+                createdAt: instant,
+                level: 2,
+                pebbleCount: 1,
+                childAggregateCount: 1,
+                grams: 250,
+                colorMixJSON: "[]",
+                periodStart: session.startAt,
+                periodEnd: session.endAt,
+                childAggregateIDs: [leaf.id]
+            )
+            context.insert(root)
+            if presentedRoot == nil { presentedRoot = root }
+        }
+        try context.save()
+        let root = try XCTUnwrap(presentedRoot)
+
+        let projection = try HomeProjectionPolicy.localMembershipProjection(
+            for: [session],
+            representedAggregateRoots: [root],
+            context: context,
+            resetMarkers: []
+        )
+
+        XCTAssertTrue(projection.representedSessionIDs.isEmpty)
+        XCTAssertFalse(projection.isCompleteForCandidates)
+        XCTAssertEqual(projection.conflictedRootIDs, [rootID])
     }
 
     func testExactExistingHigherLevelRequestRepairsOnlyNilBacklinks() throws {
@@ -605,6 +1737,110 @@ final class HomeProjectionTests: XCTestCase {
         XCTAssertEqual(metrics.weeklyMeasuredGrams, 600)
     }
 
+    func testWeeklyMetricsResolveBoundaryCopyBeforeWeekMembership() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.firstWeekday = 2
+        let reference = calendar.date(from: DateComponents(
+            year: 2026,
+            month: 9,
+            day: 2,
+            hour: 12
+        ))!
+        let interval = try XCTUnwrap(
+            calendar.dateInterval(of: .weekOfYear, for: reference)
+        )
+        let boundaryID = UUID()
+        let retainedID = UUID()
+        let inside = reference
+        let outside = interval.end.addingTimeInterval(60)
+
+        context.insert(StudySession(
+            id: retainedID,
+            startAt: inside.addingTimeInterval(-600),
+            endAt: inside,
+            seconds: 600,
+            source: .timer,
+            grams: 100,
+            deviceDayKey: "weekly-boundary"
+        ))
+        context.insert(StudySession(
+            id: boundaryID,
+            startAt: inside.addingTimeInterval(-600),
+            endAt: inside,
+            seconds: 600,
+            source: .timer,
+            grams: 100,
+            deviceDayKey: "weekly-boundary"
+        ))
+        context.insert(StudySession(
+            id: boundaryID,
+            startAt: outside.addingTimeInterval(-600),
+            endAt: outside,
+            seconds: 600,
+            source: .timerDemoted,
+            grams: 100,
+            deviceDayKey: "weekly-boundary"
+        ))
+        try context.save()
+
+        let metrics = try HomeProjectionPolicy.completionMetrics(
+            context: context,
+            resetMarkers: [],
+            roots: [],
+            looseSessions: [],
+            at: reference,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(metrics.weeklyMeasuredSessionIDs, [retainedID])
+        XCTAssertEqual(metrics.weeklyMeasuredDates, [inside])
+        XCTAssertEqual(metrics.weeklyMeasuredGrams, 100)
+    }
+
+    func testWeeklyMetricsFailClosedAtDensePhysicalRowCap() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let reference = calendar.date(from: DateComponents(
+            year: 2026,
+            month: 9,
+            day: 2,
+            hour: 12
+        ))!
+
+        for index in 0..<4 {
+            let endAt = reference.addingTimeInterval(TimeInterval(index))
+            context.insert(StudySession(
+                startAt: endAt.addingTimeInterval(-600),
+                endAt: endAt,
+                seconds: 600,
+                source: .timer,
+                grams: 100,
+                deviceDayKey: "dense-week"
+            ))
+        }
+        try context.save()
+
+        XCTAssertThrowsError(try HomeProjectionPolicy.completionMetrics(
+            context: context,
+            resetMarkers: [],
+            roots: [],
+            looseSessions: [],
+            at: reference,
+            calendar: calendar,
+            maximumWeeklyPhysicalRows: 3
+        )) { error in
+            XCTAssertEqual(
+                error as? BoundedHistoryPolicy.SessionResolutionError,
+                .candidateScanLimitExceeded
+            )
+        }
+    }
+
     func testOverviewWeeklyLoaderReadsPastTheOrdinaryHistoryPage() throws {
         let container = try makeContainer()
         let context = container.mainContext
@@ -622,12 +1858,19 @@ final class HomeProjectionTests: XCTestCase {
 
         for index in 0 ..< 721 {
             let end = reference.addingTimeInterval(TimeInterval(index))
+            let source: SessionSource = index.isMultiple(of: 3) ? .manual : .timer
+            let seconds = source == .manual
+                ? ManualDuration.thirtyMinutes.seconds
+                : 600
+            let grams = source == .manual
+                ? ManualDuration.thirtyMinutes.grams
+                : 100
             context.insert(StudySession(
-                startAt: end.addingTimeInterval(-600),
+                startAt: end.addingTimeInterval(-TimeInterval(seconds)),
                 endAt: end,
-                seconds: 600,
-                source: index.isMultiple(of: 3) ? .manual : .timer,
-                grams: 100,
+                seconds: seconds,
+                source: source,
+                grams: grams,
                 deviceDayKey: "fixture",
                 dataEpochID: currentEpoch
             ))

@@ -30,24 +30,9 @@ enum AccumulationOverviewLoaderPolicy {
         return descriptor
     }
 
-    static func sessionCountDescriptor(
-        currentEpochID: UUID?
-    ) -> FetchDescriptor<StudySession> {
-        if let currentEpochID {
-            let epochID = currentEpochID
-            return FetchDescriptor<StudySession>(predicate: #Predicate { session in
-                session.dataEpochID == epochID
-            })
-        }
-        return FetchDescriptor<StudySession>(predicate: #Predicate { session in
-            session.dataEpochID == nil
-        })
-    }
-
-    /// Loads the complete finite calendar week in stable pages. The ordinary
-    /// history page remains bounded to 720 rows, but a dense week must not
-    /// understate the value-bearing measured mass merely because older rows
-    /// fell outside that presentation page.
+    /// Loads one finite week and exact-resolves every candidate logical ID
+    /// before testing week membership. The hard cap fails closed rather than
+    /// silently treating a physical duplicate prefix as complete history.
     @MainActor
     static func weeklySessions(
         context: ModelContext,
@@ -59,49 +44,12 @@ enum AccumulationOverviewLoaderPolicy {
             of: .weekOfYear,
             for: referenceDate
         ) else { return [] }
-        let start = interval.start
-        let end = interval.end
-        var offset = 0
-        var result: [StudySession] = []
-
-        while true {
-            var descriptor: FetchDescriptor<StudySession>
-            if let currentEpochID {
-                let epochID = currentEpochID
-                descriptor = FetchDescriptor<StudySession>(
-                    predicate: #Predicate { session in
-                        session.dataEpochID == epochID
-                            && session.endAt >= start
-                            && session.endAt < end
-                    },
-                    sortBy: [
-                        SortDescriptor(\StudySession.endAt, order: .reverse),
-                        SortDescriptor(\StudySession.id, order: .reverse)
-                    ]
-                )
-            } else {
-                descriptor = FetchDescriptor<StudySession>(
-                    predicate: #Predicate { session in
-                        session.dataEpochID == nil
-                            && session.endAt >= start
-                            && session.endAt < end
-                    },
-                    sortBy: [
-                        SortDescriptor(\StudySession.endAt, order: .reverse),
-                        SortDescriptor(\StudySession.id, order: .reverse)
-                    ]
-                )
-            }
-            descriptor.fetchLimit = weeklySessionPageLimit
-            descriptor.fetchOffset = offset
-            let page = try context.fetch(descriptor)
-            result.append(contentsOf: page)
-            guard page.count == weeklySessionPageLimit,
-                  offset <= Int.max - page.count
-            else { break }
-            offset += page.count
-        }
-        return result
+        return try BoundedHistoryPolicy.resolvedSessionsInFiniteInterval(
+            context: context,
+            epochID: currentEpochID,
+            interval: interval,
+            maximumPhysicalRows: BoundedHistoryPolicy.weeklySessionRowLimit
+        )
     }
 
     static func aggregatePageDescriptor(
@@ -178,23 +126,35 @@ struct AccumulationOverviewLoader: View {
     let lifetimeGrams: Int
     let lifetimePebbleCount: Int
     let lifetimeIsLowerBound: Bool
+    let projectionPresentation: AggregateProjectionPresentationContext
     let initialClusterID: UUID?
 
     @Environment(\.modelContext) private var modelContext
     @State private var page: Page?
     @State private var loadError: String?
 
+    private var lifetimeIsCloudUnverified: Bool {
+        projectionPresentation.isCloudVerificationPending
+    }
+
     var body: some View {
         Group {
-            if let page {
+            if let page,
+               projectionPresentation.acceptsVerifiedAggregateCache(
+                   page.projectionCacheStamp
+               ) {
                 AccumulationOverviewView(
                     records: page.records,
+                    // The whole page is lease-gated above. In particular,
+                    // record aggregate-membership flags and PageScope totals
+                    // are just as projection-dependent as visible clusters.
                     clusters: page.clusters,
                     milestones: page.milestones,
                     lifetimeGrams: lifetimeGrams,
                     lifetimePebbleCount: lifetimePebbleCount,
                     pageScope: page.scope,
                     lifetimeIsLowerBound: lifetimeIsLowerBound,
+                    lifetimeIsCloudUnverified: lifetimeIsCloudUnverified,
                     initialClusterID: initialClusterID
                 )
             } else if let loadError {
@@ -203,58 +163,83 @@ struct AccumulationOverviewLoader: View {
                     systemImage: "exclamationmark.triangle",
                     description: Text(loadError)
                 )
+            } else if lifetimeIsCloudUnverified {
+                ContentUnavailableView(
+                    "iCloudを再集計中",
+                    systemImage: "icloud.and.arrow.down",
+                    description: Text(
+                        "更新前の履歴ページは再利用せず、確認後に読み込み直します。"
+                    )
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(NightBackground())
             } else {
                 ProgressView("積み上がりを読み込み中")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(NightBackground())
             }
         }
-        .task { loadPage() }
+        .task(id: projectionPresentation) { loadPage() }
     }
 
     @MainActor
     private func loadPage() {
+        loadError = nil
+        let projectionCacheStamp = projectionPresentation.verifiedCacheStamp
         do {
             let currentEpochID = ActivityResetPolicy.currentEpochID(
                 from: resetMarkers
             )
-            let recentSessions = try modelContext.fetch(
-                AccumulationOverviewLoaderPolicy.sessionPageDescriptor(
-                    currentEpochID: currentEpochID
-                )
+            let recentPage = try BoundedHistoryPolicy.resolvedSessionPage(
+                context: modelContext,
+                epochID: currentEpochID,
+                order: .reverse,
+                logicalLimit: AccumulationOverviewLoaderPolicy.sessionPageLimit
             )
             let weeklySessions = try AccumulationOverviewLoaderPolicy.weeklySessions(
                 context: modelContext,
                 currentEpochID: currentEpochID
             )
-            let sessions = Dictionary(
-                grouping: recentSessions + weeklySessions,
-                by: \.id
-            ).values.compactMap { duplicates in
-                duplicates.max { lhs, rhs in
-                    if lhs.endAt == rhs.endAt {
-                        return lhs.id.uuidString < rhs.id.uuidString
-                    }
-                    return lhs.endAt < rhs.endAt
-                }
-            }
+            let sessions = StudySessionSyncPolicy.canonicalSessions(
+                from: recentPage.sessions + weeklySessions
+            )
             .sorted { lhs, rhs in
                 if lhs.endAt == rhs.endAt {
                     return lhs.id.uuidString > rhs.id.uuidString
                 }
                 return lhs.endAt > rhs.endAt
             }
-            let persistedSessionCount = try modelContext.fetchCount(
-                AccumulationOverviewLoaderPolicy.sessionCountDescriptor(
-                    currentEpochID: currentEpochID
+            let aggregates: [AggregatePebble]
+            if projectionCacheStamp == nil {
+                // A locally valid projection can become stale after another
+                // device edits a source row. Suppress every aggregate root
+                // until the current verification generation has drained.
+                aggregates = []
+            } else {
+                aggregates = try modelContext.fetch(
+                    AccumulationOverviewLoaderPolicy.aggregatePageDescriptor(
+                        currentEpochID: currentEpochID
+                    )
                 )
-            )
-
-            let aggregates = try modelContext.fetch(
-                AccumulationOverviewLoaderPolicy.aggregatePageDescriptor(
-                    currentEpochID: currentEpochID
+            }
+            let acceptedAggregateIDs = try HomeProjectionPolicy
+                .acceptedRootSummaryIDs(
+                    roots: aggregates,
+                    context: modelContext,
+                    resetMarkers: resetMarkers
                 )
+            let displayedAggregates = AggregatePebblePolicy.disjointRootSummaries(
+                from: aggregates.filter { acceptedAggregateIDs.contains($0.id) }
             )
+            let localMembership = try HomeProjectionPolicy.localMembershipProjection(
+                for: sessions,
+                representedAggregateRoots: displayedAggregates,
+                context: modelContext,
+                resetMarkers: resetMarkers
+            )
+            let safeDisplayedAggregates = displayedAggregates.filter {
+                !localMembership.conflictedRootIDs.contains($0.id)
+            }
 
             let achievementCandidates = try modelContext.fetch(
                 AccumulationOverviewLoaderPolicy.achievementCandidatePageDescriptor(
@@ -282,10 +267,11 @@ struct AccumulationOverviewLoader: View {
                         colorHex: $0.displaySubjectColorHex,
                         grams: $0.grams,
                         isMeasured: $0.source == .timer,
-                        isBaked: $0.isBaked
+                        isRepresentedByLocalAggregate: localMembership
+                            .representedSessionIDs.contains($0.id)
                     )
                 },
-                clusters: AggregatePebblePolicy.disjointRootSummaries(from: aggregates).map {
+                clusters: safeDisplayedAggregates.map {
                     AccumulationClusterSummary(
                         id: $0.id,
                         level: $0.level,
@@ -297,8 +283,8 @@ struct AccumulationOverviewLoader: View {
                         subjectMix: $0.subjectMix,
                         childCount: $0.childAggregateCount,
                         // Descendant membership is intentionally not flattened
-                        // for the overview page. The record page is bounded and
-                        // current loose rows already carry `isBaked == false`.
+                        // into every root. The separate bounded local leaf
+                        // lookup above owns record exclusion.
                         sessionIDs: [],
                         measuredPebbleCount: $0.measuredPebbleCount,
                         manualPebbleCount: $0.manualPebbleCount,
@@ -317,12 +303,19 @@ struct AccumulationOverviewLoader: View {
                     )
                 },
                 scope: AccumulationOverviewPageScope(
-                    totalSessionCount: persistedSessionCount,
+                    // Home's lifetime projection counts logical session IDs.
+                    // A raw SwiftData fetchCount would expose transient
+                    // CloudKit replica multiplicity as user history.
+                    totalSessionCount: lifetimePebbleCount,
                     displayedSessionCount: sessions.count,
+                    totalSessionCountIsLowerBound: lifetimeIsLowerBound,
+                    totalSessionCountIsCloudUnverified:
+                        lifetimeIsCloudUnverified,
                     totalAchievementCount: achievements.count,
                     displayedAchievementCount: achievements.count,
                     totalAchievementCountIsLowerBound: achievementCountIsLowerBound
-                )
+                ),
+                projectionCacheStamp: projectionCacheStamp
             )
         } catch {
             loadError = error.localizedDescription
@@ -334,5 +327,6 @@ struct AccumulationOverviewLoader: View {
         let clusters: [AccumulationClusterSummary]
         let milestones: [AccumulationMilestoneSummary]
         let scope: AccumulationOverviewPageScope
+        let projectionCacheStamp: AggregateProjectionCacheStamp?
     }
 }

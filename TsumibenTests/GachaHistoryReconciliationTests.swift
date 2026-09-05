@@ -16,7 +16,9 @@ final class GachaHistoryReconciliationTests: XCTestCase {
             Prefs.self,
             ActivityResetMarker.self,
             SyncedFocusTimer.self,
-            FocusTimerDeviceClaim.self
+            FocusTimerDeviceClaim.self,
+            RareRewardPendingCommit.self,
+            RareRewardLedgerCursor.self
         ])
         let configuration = ModelConfiguration(
             "GachaHistoryReconciliationTests",

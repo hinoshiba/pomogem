@@ -94,6 +94,15 @@ struct AnimatedShareExporterTests {
 
         #expect(caption.contains("1,250g"))
         #expect(ShareCopy.hashtags == ["#つみべん", "#ポモドーロ"])
+        #expect(
+            ShareCopy.websiteURL.absoluteString
+                == "https://tumiben.hinoshiba.com/"
+        )
+        #expect(
+            caption.components(
+                separatedBy: ShareCopy.websiteURL.absoluteString
+            ).count - 1 == 1
+        )
         for hashtag in ShareCopy.hashtags {
             #expect(caption.contains(hashtag))
         }
@@ -130,6 +139,11 @@ struct AnimatedShareExporterTests {
         )
         #expect(!none.contains("#"))
         #expect(!none.hasSuffix("\n"))
+        #expect(
+            none.components(
+                separatedBy: ShareCopy.websiteURL.absoluteString
+            ).count - 1 == 1
+        )
     }
 
     @Test func achievementDisclosureNeverClaimsMeasuredOnly() {
@@ -315,8 +329,14 @@ struct AnimatedShareExporterTests {
 
     @Test func shareRarePebbleIdentityDistinguishesGoldAndPrism() {
         let normal = SharePebbleRewardIdentity(kind: .normal)
-        let gold = SharePebbleRewardIdentity(kind: .gold)
-        let prism = SharePebbleRewardIdentity(kind: .prism)
+        let gold = SharePebbleRewardIdentity(
+            kind: .gold,
+            presentsRareRewards: true
+        )
+        let prism = SharePebbleRewardIdentity(
+            kind: .prism,
+            presentsRareRewards: true
+        )
 
         #expect(normal.mark == nil)
         #expect(gold.mark == "✦")
@@ -343,8 +363,16 @@ struct AnimatedShareExporterTests {
     }
 
     @Test func shareAggregateRewardIdentityCarriesGoldAndPrismSeparately() {
-        let combined = ShareAggregateRewardIdentity(goldCount: 2, prismCount: 1)
-        let none = ShareAggregateRewardIdentity(goldCount: 0, prismCount: 0)
+        let combined = ShareAggregateRewardIdentity(
+            goldCount: 2,
+            prismCount: 1,
+            presentsRareRewards: true
+        )
+        let none = ShareAggregateRewardIdentity(
+            goldCount: 0,
+            prismCount: 0,
+            presentsRareRewards: true
+        )
 
         #expect(combined.compactLabel == "金2 虹1")
         #expect(combined.accessibilityDetail == "金のレア粒2粒、虹のレア粒1粒")
@@ -356,7 +384,8 @@ struct AnimatedShareExporterTests {
         let semantics = ShareRewardSemantics(
             goldCount: 2,
             prismCount: 1,
-            achievementKinds: [.perfectScore, .examPass, .examPass, .workMilestone]
+            achievementKinds: [.perfectScore, .examPass, .examPass, .workMilestone],
+            presentsRareRewards: true
         )
         let hidden = ShareHiddenContent(
             loosePebbleCount: 4,
@@ -381,6 +410,35 @@ struct AnimatedShareExporterTests {
         #expect(caption.contains("報酬内訳"))
         #expect(caption.contains("瓶は代表表示"))
         #expect(caption.contains("記念石は自己申告"))
+    }
+
+    @Test func shippingShareSurfacesHideRetainedRareRewardData() {
+        let pebble = SharePebbleRewardIdentity(
+            kind: .prism,
+            rewardCounts: RareRewardCounts(
+                drawCount: Int.max,
+                goldCount: Int.max,
+                prismCount: Int.max
+            )
+        )
+        let aggregate = ShareAggregateRewardIdentity(
+            goldCount: Int.max,
+            prismCount: Int.max
+        )
+        let semantics = ShareRewardSemantics(
+            goldCount: Int.max,
+            prismCount: Int.max,
+            achievementKinds: []
+        )
+
+        #expect(pebble.mark == nil)
+        #expect(pebble.accessibilityName == "通常の集中粒")
+        #expect(aggregate.compactLabel == nil)
+        #expect(aggregate.accessibilityDetail == nil)
+        #expect(semantics.captionDetail == nil)
+        #expect(!semantics.accessibilityDetail.contains("レア"))
+        #expect(!semantics.accessibilityDetail.contains("金"))
+        #expect(!semantics.accessibilityDetail.contains("虹"))
     }
 
     @Test func staleCleanupOnlyRemovesOwnedExpiredGIFs() throws {
@@ -578,7 +636,6 @@ final class ShareVisualQAArtifactTests: XCTestCase {
             aggregates: [],
             achievements: achievements,
             includesSelfReportedFocus: false,
-            isPro: false,
             format: format,
             jarSnapshot: nil,
             periodLabel: "これまで",

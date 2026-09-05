@@ -493,6 +493,44 @@ struct TsumibenCompactButtonStyle: ButtonStyle {
 
 /// Every full-screen sheet uses this compact exit control. Work cancellation
 /// remains a separate action so “閉じる” never changes meaning while loading.
+private struct TsumibenSheetCloseButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.subheadline, design: .rounded, weight: .bold))
+            .foregroundStyle(TsumibenTheme.background)
+            .padding(.horizontal, 13)
+            .frame(minHeight: 44)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(TsumibenTheme.amber)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(
+                                TsumibenTheme.background.opacity(
+                                    configuration.isPressed ? 0.38 : 0.20
+                                ),
+                                lineWidth: configuration.isPressed ? 1.5 : 1
+                            )
+                    }
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .saturation(isEnabled ? 1 : 0.16)
+            .opacity(isEnabled ? 1 : 0.44)
+            .scaleEffect(
+                reduceMotion || !isEnabled
+                    ? 1
+                    : (configuration.isPressed ? 0.96 : 1)
+            )
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.10),
+                value: configuration.isPressed
+            )
+    }
+}
+
 struct TsumibenSheetCloseButton: View {
     var accessibilityLabel = "閉じる"
     var accessibilityIdentifier: String?
@@ -505,7 +543,7 @@ struct TsumibenSheetCloseButton: View {
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(minWidth: 42)
         }
-        .buttonStyle(TsumibenCompactButtonStyle())
+        .buttonStyle(TsumibenSheetCloseButtonStyle())
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(accessibilityIdentifier ?? "")
     }
@@ -601,13 +639,14 @@ struct TsumibenHeroButtonStyle: ButtonStyle {
 
 struct SectionEyebrow: View {
     let text: String
+    var foreground: Color = TsumibenTheme.amber
     @ScaledMetric(relativeTo: .caption2) private var fontSize: CGFloat = 10
 
     var body: some View {
         Text(text.uppercased())
             .font(.system(size: fontSize, weight: .bold, design: .monospaced))
             .tracking(1.5)
-            .foregroundStyle(TsumibenTheme.amber)
+            .foregroundStyle(foreground)
             .accessibilityHidden(true)
     }
 }
@@ -625,16 +664,17 @@ extension TsumibenTheme {
     private static func relativeLuminance(ofHex hex: String) -> Double? {
         let clean = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
         guard clean.count == 6, let value = UInt64(clean, radix: 16) else { return nil }
-        let components = [
-            Double((value >> 16) & 0xFF) / 255,
-            Double((value >> 8) & 0xFF) / 255,
-            Double(value & 0xFF) / 255
-        ].map { component in
-            component <= 0.04045
-                ? component / 12.92
-                : pow((component + 0.055) / 1.055, 2.4)
+        let red = linearizedSRGB(Double((value >> 16) & 0xFF) / 255.0)
+        let green = linearizedSRGB(Double((value >> 8) & 0xFF) / 255.0)
+        let blue = linearizedSRGB(Double(value & 0xFF) / 255.0)
+        return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+    }
+
+    private static func linearizedSRGB(_ component: Double) -> Double {
+        if component <= 0.04045 {
+            return component / 12.92
         }
-        return 0.2126 * components[0] + 0.7152 * components[1] + 0.0722 * components[2]
+        return pow((component + 0.055) / 1.055, 2.4)
     }
 }
 

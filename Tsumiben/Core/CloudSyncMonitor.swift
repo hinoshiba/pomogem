@@ -1,10 +1,222 @@
 import CloudKit
+import CryptoKit
 import Observation
 import SwiftUI
 import UIKit
 
 enum CloudSyncConfiguration {
-    static let containerIdentifier = "iCloud.com.hinoshiba.tsumiben"
+    /// SwiftData/Core Data exclusively owns this container and its generated
+    /// schema. Never create or mutate raw `CKRecord` types in it.
+    static let synchronizedDataContainerIdentifier =
+        "iCloud.com.hinoshiba.tumiben"
+
+    /// Direct CloudKit records that require compare-and-swap semantics live in
+    /// a separate container. Keeping this schema away from SwiftData follows
+    /// Core Data's requirement that its mirroring container remain framework-
+    /// managed, and also lets complete deletion address each store explicitly.
+    static let operationsContainerIdentifier =
+        "iCloud.com.hinoshiba.tumiben.operations"
+}
+
+enum CloudKitOnlineAccountVerifier {
+    static let requestTimeout: TimeInterval = 6
+    static let resourceTimeout: TimeInterval = 8
+
+    static func makePrivateDatabaseProbe() -> CKFetchRecordZonesOperation {
+        let operation = CKFetchRecordZonesOperation
+            .fetchAllRecordZonesOperation()
+        let configuration = CKOperation.Configuration()
+        configuration.qualityOfService = .userInitiated
+        configuration.timeoutIntervalForRequest = requestTimeout
+        configuration.timeoutIntervalForResource = resourceTimeout
+        operation.configuration = configuration
+        return operation
+    }
+
+    /// `accountStatus` and `userRecordID` may be satisfied from local account
+    /// state. Fetching the private database's zones is a read-only CloudKit
+    /// request whose documented failure cases include unavailable networking
+    /// and a missing active iCloud account. Requiring it keeps the storage
+    /// mount fail-closed without writing raw records into SwiftData's
+    /// framework-managed container. Explicit request/resource deadlines keep
+    /// launch on an actionable error screen instead of an indefinite spinner.
+    static func verifyFreshPrivateDatabaseAccess(
+        in container: CKContainer
+    ) async throws {
+        let database = container.privateCloudDatabase
+        let operation = makePrivateDatabaseProbe()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                operation.fetchRecordZonesResultBlock = { result in
+                    continuation.resume(with: result)
+                }
+                database.add(operation)
+            }
+        } onCancel: {
+            operation.cancel()
+        }
+        try Task.checkCancellation()
+    }
+}
+
+struct ResolvedAppleAccountBoundary: Equatable, Sendable {
+    let binding: ActiveAccountLocalBinding
+}
+
+enum AppleAccountBoundaryResolutionError: LocalizedError, Equatable {
+    case blocked(AppleAccountBoundaryBlockReason)
+
+    var errorDescription: String? {
+        switch self {
+        case .blocked(.identityUnavailable):
+            "Apple AccountとiCloudをオンラインで確認できません。サインインと通信状態を確認できるまで記録の保存領域は開きません。"
+        case .blocked(.accountMismatch):
+            "このインストールでiCloud保存を選んだApple Accountと一致しません。元のApple Accountへ戻すまで保存領域は開きません。"
+        case .blocked(.invalidVerifiedIdentity):
+            "Apple Accountの識別情報を安全に確認できませんでした。"
+        case .blocked(.invalidStoredRegistry):
+            "端末内のApple Account対応情報を安全に検証できません。記録を保護するため保存領域は開きません。"
+        }
+    }
+}
+
+/// Resolves the account boundary before SwiftData is allowed to construct its
+/// CloudKit-backed container. The immutable deployment profile contains only a
+/// SHA-256 account fingerprint and a random local namespace. A legacy registry,
+/// when present, is validated but resolution itself is side-effect free so a
+/// late verification result cannot mutate a local-only choice. Every shipping
+/// mount requires successful `accountStatus` and `userRecordID` lookups plus a
+/// read-only private-database zone fetch; a cached local binding never
+/// authorizes offline reuse.
+@MainActor
+struct AppleAccountBoundaryResolver {
+    private static let registryDefaultsKey =
+        "account-boundary.namespace-registry.v1"
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    static func hasPersistedRegistryHistory(
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        defaults.data(forKey: registryDefaultsKey) != nil
+    }
+
+    func resolve(
+        expectedBinding: ActiveAccountLocalBinding? = nil
+    ) async throws -> ResolvedAppleAccountBoundary {
+        let containerIdentifier = CloudSyncConfiguration
+            .synchronizedDataContainerIdentifier
+        let container = CKContainer(identifier: containerIdentifier)
+        let status: CKAccountStatus
+        do {
+            status = try await container.accountStatus()
+        } catch {
+            try Task.checkCancellation()
+            throw AppleAccountBoundaryResolutionError.blocked(
+                .identityUnavailable
+            )
+        }
+        try Task.checkCancellation()
+        guard status == .available else {
+            throw AppleAccountBoundaryResolutionError.blocked(
+                .identityUnavailable
+            )
+        }
+
+        let recordIDBeforeProbe: CKRecord.ID
+        do {
+            recordIDBeforeProbe = try await container.userRecordID()
+        } catch {
+            try Task.checkCancellation()
+            throw AppleAccountBoundaryResolutionError.blocked(
+                .identityUnavailable
+            )
+        }
+        try Task.checkCancellation()
+        do {
+            try await CloudKitOnlineAccountVerifier
+                .verifyFreshPrivateDatabaseAccess(in: container)
+        } catch {
+            try Task.checkCancellation()
+            throw AppleAccountBoundaryResolutionError.blocked(
+                .identityUnavailable
+            )
+        }
+        let recordID: CKRecord.ID
+        do {
+            recordID = try await container.userRecordID()
+        } catch {
+            try Task.checkCancellation()
+            throw AppleAccountBoundaryResolutionError.blocked(
+                .identityUnavailable
+            )
+        }
+        try Task.checkCancellation()
+        guard recordID == recordIDBeforeProbe else {
+            // The Apple Account changed while the network proof was in
+            // flight. Neither identity is safe to mount in this attempt.
+            throw AppleAccountBoundaryResolutionError.blocked(
+                .identityUnavailable
+            )
+        }
+        let fingerprint = Self.fingerprint(
+            containerIdentifier: containerIdentifier,
+            recordID: recordID
+        )
+        guard AppleAccountFingerprint.isValid(fingerprint) else {
+            throw AppleAccountBoundaryResolutionError.blocked(
+                .invalidVerifiedIdentity
+            )
+        }
+        var registry = try loadRegistry()
+        let decision = registry.resolve(
+            .verified(fingerprint: fingerprint),
+            expectedBinding: expectedBinding
+        )
+        switch decision {
+        case let .allow(binding):
+            try Task.checkCancellation()
+            return ResolvedAppleAccountBoundary(binding: binding)
+        case let .block(reason):
+            throw AppleAccountBoundaryResolutionError.blocked(reason)
+        }
+    }
+
+    private func loadRegistry() throws -> AppleAccountNamespaceRegistry {
+        guard let data = defaults.data(forKey: Self.registryDefaultsKey) else {
+            return AppleAccountNamespaceRegistry()
+        }
+        do {
+            return try JSONDecoder().decode(
+                AppleAccountNamespaceRegistry.self,
+                from: data
+            )
+        } catch {
+            throw AppleAccountBoundaryResolutionError.blocked(
+                .invalidStoredRegistry
+            )
+        }
+    }
+
+    private static func fingerprint(
+        containerIdentifier: String,
+        recordID: CKRecord.ID
+    ) -> String {
+        let source = [
+            containerIdentifier,
+            recordID.zoneID.ownerName,
+            recordID.zoneID.zoneName,
+            recordID.recordName
+        ].joined(separator: "\u{0}")
+        return SHA256.hash(data: Data(source.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
 }
 
 enum CloudAccountAvailability: Equatable, Sendable {
@@ -37,13 +249,13 @@ enum CloudAccountAvailability: Equatable, Sendable {
         case .simulator:
             "このSimulator専用の保存領域を使い、iPhone実機のiCloudデータとは同期しません"
         case .noAccount:
-            "同じApple Accountでサインインすると、機種変更後も続けられます"
+            "選択したiCloud保存を続けるには、Apple AccountへのサインインとiCloud接続が必要です"
         case .restricted:
-            "スクリーンタイムや管理端末の設定を確認してください"
+            "iCloud保存を続けるには、スクリーンタイムや管理端末のiCloud設定を確認してください"
         case .temporarilyUnavailable:
-            "端末内には保存済みです。通信回復後に自動で再試行します"
+            "起動・再開時の本人確認には通信が必要です。接続回復後に再試行してください"
         case .unavailable:
-            "端末内には保存済みです。iCloudと通信状態を確認してください"
+            "本人確認が完了するまで保存領域は開きません。iCloudと通信状態を確認してください"
         }
     }
 
@@ -93,16 +305,31 @@ final class CloudSyncMonitor {
         return
 #else
         do {
-            let status = try await CKContainer(
-                identifier: CloudSyncConfiguration.containerIdentifier
-            ).accountStatus()
-            availability = switch status {
-            case .available: .available
-            case .noAccount: .noAccount
-            case .restricted: .restricted
-            case .temporarilyUnavailable: .temporarilyUnavailable
-            case .couldNotDetermine: .unavailable
-            @unknown default: .unavailable
+            let container = CKContainer(
+                identifier: CloudSyncConfiguration
+                    .synchronizedDataContainerIdentifier
+            )
+            switch try await container.accountStatus() {
+            case .available:
+                let recordIDBeforeProbe = try await container.userRecordID()
+                try await CloudKitOnlineAccountVerifier
+                    .verifyFreshPrivateDatabaseAccess(in: container)
+                let recordIDAfterProbe = try await container.userRecordID()
+                guard recordIDBeforeProbe == recordIDAfterProbe else {
+                    availability = .unavailable
+                    return
+                }
+                availability = .available
+            case .noAccount:
+                availability = .noAccount
+            case .restricted:
+                availability = .restricted
+            case .temporarilyUnavailable:
+                availability = .temporarilyUnavailable
+            case .couldNotDetermine:
+                availability = .unavailable
+            @unknown default:
+                availability = .unavailable
             }
         } catch {
             availability = .unavailable
@@ -112,11 +339,48 @@ final class CloudSyncMonitor {
 }
 
 struct CloudSyncSettingsSection: View {
+    let persistenceMode: PersistenceLaunchMode
+
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @State private var monitor = CloudSyncMonitor()
 
+    @ViewBuilder
     var body: some View {
+        if persistenceMode == .localOnly {
+            localOnlySection
+        } else {
+            cloudSection
+        }
+    }
+
+    private var localOnlySection: some View {
+        Section {
+            Label {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("このiPhoneだけに保存")
+                        .font(.headline)
+                    Text("iCloudへの自動送信・自動切り替えはありません")
+                        .font(.caption)
+                        .foregroundStyle(TsumibenTheme.muted)
+                }
+            } icon: {
+                Image(systemName: "iphone")
+                    .foregroundStyle(TsumibenTheme.amber)
+            }
+
+            Text("Version 1では保存方式を変更できません。iCloud同期を新しく始めるには、必要なら先に設定の「データを書き出す」でJSONを外部へ保管し、アプリを削除して再インストールしてください。削除するとこのiPhone内の記録は消えます。JSONはアプリへ再読込できないため、新しいiCloudの記録には引き継がれません。")
+                .font(.caption)
+                .foregroundStyle(TsumibenTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        } header: {
+            Text("保存方式")
+        } footer: {
+            Text("この選択は、意図しないアカウントへの記録混入を避けるため、このインストール中は固定されます。")
+        }
+    }
+
+    private var cloudSection: some View {
         Section {
             HStack(alignment: .top, spacing: 13) {
                 Group {
@@ -150,7 +414,7 @@ struct CloudSyncSettingsSection: View {
             DisclosureGroup {
                 VStack(alignment: .leading, spacing: 10) {
                     syncStep(1, "同じApple Accountでサインイン")
-                    syncStep(2, "iCloud Driveと、つみべんのiCloud利用をオン")
+                    syncStep(2, "iCloudで、つみべんの利用をオン")
                     syncStep(3, "新しい端末でアプリを開き、同期を待つ")
                     syncStep(4, "進行中なら「この端末で続ける」を選ぶ")
                     Text("同期は即時でない場合があります。タイマーの通知は最後に引き継いだ端末が担当しますが、元の端末がオフラインの場合は古い通知が一度届くことがあります。")
@@ -192,7 +456,7 @@ struct CloudSyncSettingsSection: View {
                 if monitor.availability == .simulator {
                     Text("SimulatorではApple Accountの接続状態を確認できません。iCloud同期はiPhone実機で確認してください。")
                 } else {
-                    Text("この表示はApple Accountへの接続可否であり、すべての記録が反映済みであることを示すものではありません。自前サーバーは使わず、あなたのiCloudプライベートデータベースだけで同期します。")
+                    Text("このiCloud保存方式では、起動・再開時にApple Accountをオンラインで確認できることが必要です。この表示はすべての記録が反映済みであることを示すものではありません。自前サーバーは使わず、あなたのiCloudプライベートデータベースだけで同期します。")
                 }
             }
             // Native List footers lower opacity a second time. An explicit

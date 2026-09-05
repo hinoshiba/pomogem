@@ -27,7 +27,5 @@
 	</dict>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 hinoshiba</string>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
 </dict>
 </plist>

@@ -26,21 +26,30 @@ THIRD_PARTY_NOTICES.md
 Docs/RELEASING.md
 Docs/OSS_PUBLISHING.md
 Docs/LICENSE_AUDIT.md
+Scripts/check-git-public-metadata.py
 AppStore/README.md
 AppStore/configuration.yml
 AppStore/app-privacy.md
 AppStore/age-rating.md
 AppStore/export-compliance.md
 AppStore/submission-checklist.md
+AppStore/connect-entry-plan.md
+AppStore/screenshots/checksums.sha256
 project.yml
 Tsumiben.xcodeproj/project.pbxproj
 Tsumiben.xcodeproj/xcshareddata/xcschemes/Tsumiben.xcscheme
 Tsumiben/Resources/PrivacyInfo.xcprivacy
 TsumibenWidgets/PrivacyInfo.xcprivacy
-Tsumiben/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusVessel-v4.png
+Brand/AppIcon-FocusCycle-v5-source.png
+Tsumiben/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusCycle-v5.png
+http_dists/og-focus-v6.png
+http_dists/public/app-icon-focus-v5.png
+http_dists/public/apple-touch-icon.png
 http_dists/index.html
 http_dists/privacy/index.html
 http_dists/support/index.html
+http_dists/terms/index.html
+http_dists/commercial-transactions/index.html
 http_dists/CNAME
 http_dists/.nojekyll'
 
@@ -56,7 +65,17 @@ printf '%s\n' "$required_files" | while IFS= read -r path; do
 done
 
 if ! command -v rg >/dev/null 2>&1; then
-  echo "error: ripgrep is required for the OSS audit" >&2
+    echo "error: ripgrep is required for the OSS audit" >&2
+    exit 1
+fi
+
+# Jar sound is intentionally synthesized from MIT-licensed source at runtime.
+# Fail closed if a recording, stock sample, generated audio file, or AHAP asset
+# is later added without updating the commercial license/privacy audit.
+audio_assets=$(rg --files | rg -i '\.(wav|caf|mp3|aiff|aif|m4a|aac|ac3|eac3|flac|ogg|oga|opus|mid|midi|ahap)$' || true)
+if [ -n "$audio_assets" ]; then
+  echo "error: bundled audio or AHAP asset requires explicit license review" >&2
+  printf '%s\n' "$audio_assets" >&2
   exit 1
 fi
 
@@ -113,48 +132,78 @@ def load(path: str):
     with Path(path).open("rb") as handle:
         return plistlib.load(handle)
 
+def require(condition: bool, message: str):
+    if not condition:
+        raise SystemExit(f"error: {message}")
+
 main_manifest = load("Tsumiben/Resources/PrivacyInfo.xcprivacy")
-assert main_manifest.get("NSPrivacyTracking") is False
-assert main_manifest.get("NSPrivacyTrackingDomains") == []
-assert main_manifest.get("NSPrivacyCollectedDataTypes") == []
+require(main_manifest.get("NSPrivacyTracking") is False, "main privacy manifest must disable tracking")
+require(main_manifest.get("NSPrivacyTrackingDomains") == [], "main privacy manifest must not list tracking domains")
+require(main_manifest.get("NSPrivacyCollectedDataTypes") == [], "main privacy manifest must not declare collected data")
 required_reasons = {
     item["NSPrivacyAccessedAPIType"]: set(item["NSPrivacyAccessedAPITypeReasons"])
     for item in main_manifest.get("NSPrivacyAccessedAPITypes", [])
 }
-assert required_reasons == {
-    "NSPrivacyAccessedAPICategoryFileTimestamp": {"C617.1"},
-    "NSPrivacyAccessedAPICategorySystemBootTime": {"35F9.1"},
-    "NSPrivacyAccessedAPICategoryUserDefaults": {"CA92.1"},
-}
+require(
+    required_reasons == {
+        "NSPrivacyAccessedAPICategoryFileTimestamp": {"C617.1"},
+        "NSPrivacyAccessedAPICategorySystemBootTime": {"35F9.1"},
+        "NSPrivacyAccessedAPICategoryUserDefaults": {"CA92.1"},
+    },
+    "main privacy manifest required-reason declarations differ from the reviewed allowlist",
+)
 
 widget_manifest = load("TsumibenWidgets/PrivacyInfo.xcprivacy")
-assert widget_manifest.get("NSPrivacyTracking") is False
-assert widget_manifest.get("NSPrivacyTrackingDomains") == []
-assert widget_manifest.get("NSPrivacyCollectedDataTypes") == []
-assert widget_manifest.get("NSPrivacyAccessedAPITypes") == []
+require(widget_manifest.get("NSPrivacyTracking") is False, "widget privacy manifest must disable tracking")
+require(widget_manifest.get("NSPrivacyTrackingDomains") == [], "widget privacy manifest must not list tracking domains")
+require(widget_manifest.get("NSPrivacyCollectedDataTypes") == [], "widget privacy manifest must not declare collected data")
+widget_required_reasons = {
+    item["NSPrivacyAccessedAPIType"]: set(item["NSPrivacyAccessedAPITypeReasons"])
+    for item in widget_manifest.get("NSPrivacyAccessedAPITypes", [])
+}
+require(
+    widget_required_reasons == {},
+    "widget privacy manifest required-reason declarations differ from the reviewed allowlist",
+)
 
 info = load("Tsumiben/Info.plist")
-assert info.get("ITSAppUsesNonExemptEncryption") is False
-assert info.get("TSUMIBEN_PRIVACY_POLICY_URL") == "https://tumiben.hinoshiba.com/privacy/"
-assert info.get("NSHumanReadableCopyright") == "Copyright © 2026 hinoshiba"
+require(info.get("ITSAppUsesNonExemptEncryption") is False, "export-compliance declaration must remain false")
+require(info.get("TSUMIBEN_PRIVACY_POLICY_URL") == "https://tumiben.hinoshiba.com/privacy/", "privacy policy URL differs from the canonical URL")
+require(info.get("NSHumanReadableCopyright") == "Copyright © 2026 hinoshiba", "main bundle copyright differs from the release record")
+require(
+    info.get("NSMotionUsageDescription")
+    == "端末の傾きや振る操作に合わせて瓶の粒を動かすために使います。値は保存・送信しません。",
+    "motion purpose string differs from the reviewed on-device-only behavior",
+)
 
 widget_info = load("TsumibenWidgets/Info.plist")
-assert widget_info.get("NSHumanReadableCopyright") == "Copyright © 2026 hinoshiba"
+require(widget_info.get("NSHumanReadableCopyright") == "Copyright © 2026 hinoshiba", "widget bundle copyright differs from the release record")
+require(info.get("NSSupportsLiveActivities") is True, "main bundle must enable the reviewed account-neutral Live Activity")
+require(widget_info.get("NSSupportsLiveActivities") in (None, False), "widget bundle must not enable Live Activities for version 1")
 
 app_entitlements = load("Tsumiben/Tsumiben.entitlements")
-assert app_entitlements.get("aps-environment") == "$(APS_ENVIRONMENT)"
-assert app_entitlements.get("com.apple.developer.icloud-container-identifiers") == [
-    "iCloud.com.hinoshiba.tsumiben"
-]
-assert app_entitlements.get("com.apple.developer.icloud-services") == ["CloudKit"]
-assert app_entitlements.get("com.apple.security.application-groups") == [
-    "group.com.hinoshiba.tsumiben"
-]
+require(app_entitlements.get("aps-environment") == "$(APS_ENVIRONMENT)", "app APNs entitlement must use the reviewed build setting")
+require(
+    app_entitlements.get("com.apple.developer.icloud-container-identifiers") == [
+        "iCloud.com.hinoshiba.tumiben",
+    ],
+    "app iCloud container entitlement differs from the release identifier",
+)
+require(app_entitlements.get("com.apple.developer.icloud-services") == ["CloudKit"], "app iCloud services entitlement must contain only CloudKit")
+require(
+    "com.apple.security.application-groups" not in app_entitlements,
+    "main app must not retain the removed App Group entitlement",
+)
 
 widget_entitlements = load("TsumibenWidgets/TsumibenWidgets.entitlements")
-assert widget_entitlements.get("com.apple.security.application-groups") == [
-    "group.com.hinoshiba.tsumiben"
-]
+for forbidden in (
+    "aps-environment",
+    "com.apple.developer.icloud-container-identifiers",
+    "com.apple.developer.icloud-container-environment",
+    "com.apple.developer.icloud-services",
+    "com.apple.security.application-groups",
+):
+    require(forbidden not in widget_entitlements, f"neutral widget source entitlements contain {forbidden}")
 PY
 python3 Scripts/validate-site.py
 if [ "$MODE" = '--release' ]; then
@@ -166,6 +215,22 @@ fi
 grep -Fqx '        SUPPORTS_MACCATALYST: false' project.yml
 grep -Fqx '        CODE_SIGN_STYLE: Automatic' project.yml
 grep -Fq 'ITSAppUsesNonExemptEncryption: false' project.yml
+grep -Fq 'FocusLiveActivityWidget()' \
+  TsumibenWidgets/TsumibenWidgetsBundle.swift
+grep -Fq 'static let widgetKind = "TsumibenFocusLiveActivity"' \
+  Shared/FocusActivityAttributes.swift
+grep -Fq 'FocusLiveActivityWidget.swift in Sources' \
+  Tsumiben.xcodeproj/project.pbxproj
+grep -Fq 'FocusActivityManager.swift in Sources' \
+  Tsumiben.xcodeproj/project.pbxproj
+
+focus_attributes_source_entries=$(grep -Fc \
+  'FocusActivityAttributes.swift in Sources' \
+  Tsumiben.xcodeproj/project.pbxproj)
+if [ "$focus_attributes_source_entries" -lt 4 ]; then
+  echo "error: shared Live Activity attributes must belong to both app and Widget source phases" >&2
+  exit 1
+fi
 
 if rg -n 'macCatalyst|TsumibenCatalyst|sdk=macosx|SUPPORTS_MACCATALYST: true' project.yml; then
   echo "error: Mac Catalyst configuration remains in project.yml" >&2
@@ -176,6 +241,39 @@ if [ -e Tsumiben/TsumibenCatalyst.entitlements ]; then
   echo "error: obsolete Catalyst entitlement is present" >&2
   exit 1
 fi
+
+if rg -n 'iCloud\.com\.hinoshiba\.tumiben\.operations' \
+    project.yml Tsumiben/Tsumiben.entitlements Tsumiben.xcodeproj/project.pbxproj; then
+  echo "error: disabled rare-reward operations container remains in shipping configuration" >&2
+  exit 1
+fi
+
+grep -Fqx '    static let isEnabled = false' \
+  Tsumiben/Core/RareRewardLedgerLocalState.swift
+grep -Fqx '    static let isEnabled = false' \
+  Tsumiben/Core/DataDeletion/CompleteDataDeletionTypes.swift
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("Tsumiben/Core/PersistenceStoreTopology.swift").read_text()
+start = source.index("private static let cloudModelTypes")
+end = source.index("private static let localProjectionModelTypes", start)
+cloud_block = source[start:end]
+for forbidden in ("RareRewardPendingCommit.self", "RareRewardLedgerCursor.self"):
+    if forbidden in cloud_block:
+        raise SystemExit(f"error: shipping CloudKit schema includes {forbidden}")
+for required in (
+    "Subject.self",
+    "StudySession.self",
+    "AchievementStone.self",
+    "Prefs.self",
+    "ActivityResetMarker.self",
+    "SyncedFocusTimer.self",
+    "FocusTimerDeviceClaim.self",
+):
+    if required not in cloud_block:
+        raise SystemExit(f"error: shipping CloudKit schema omits {required}")
+PY
 
 if rg -n 'iPhoneとMac|iPhone・Mac|Mac版|Mac・機種変更' Tsumiben --glob '*.swift'; then
   echo "error: user-facing Mac support claim remains in the iPhone app" >&2
@@ -211,11 +309,15 @@ from pathlib import Path
 
 store = json.loads(Path("Tsumiben/Resources/Products.storekit").read_text())
 products = store.get("products", [])
-assert len(products) == 1, "exactly one StoreKit product is required"
+if len(products) != 1:
+    raise SystemExit("error: exactly one StoreKit product is required")
 product = products[0]
-assert product.get("productID") == "com.hinoshiba.tsumiben.pro.lifetime"
-assert product.get("type") == "NonConsumable"
-assert product.get("displayPrice") == "100"
+if product.get("productID") != "com.hinoshiba.tumiben.pro.lifetime":
+    raise SystemExit("error: StoreKit product identifier differs from the release identifier")
+if product.get("type") != "NonConsumable":
+    raise SystemExit("error: StoreKit product must remain NonConsumable")
+if product.get("displayPrice") != "100":
+    raise SystemExit("error: local StoreKit test price must remain JPY 100")
 PY
 
 check_hash() {
@@ -228,8 +330,16 @@ check_hash() {
   fi
 }
 
-check_hash e5410573fe5e55df16e4aabc074a3502e35127e93a736f7635be33922bf7252e \
-  Tsumiben/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusVessel-v4.png
+check_hash 9b83d0ac419add475e4e3cf4ff42dabb7bb7340a4a59eddfe6dcdeb2dd5859cc \
+  Brand/AppIcon-FocusCycle-v5-source.png
+check_hash 1c8c4ac81b99a2201fdaa3a723ca2e76ee08350970f3243053d0d8b4d37ae15e \
+  Tsumiben/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusCycle-v5.png
+check_hash a0ee59d504570ad0ce53c2710b2c2114a2518d7ee10e098d1e5787943d19add7 \
+  http_dists/public/app-icon-focus-v5.png
+check_hash 50dda39716f125b546d72f379192318530df845f4205fbdb240f55d5564a453a \
+  http_dists/public/apple-touch-icon.png
+check_hash ce639d897fe02d352118d09de83f66f334509e46dcea0ea451a0d873be6e4f7f \
+  http_dists/og-focus-v6.png
 check_hash b60d2fe464f4460702be923976c5865dfca487b189072ac249638eac1e1ec1ca \
   Brand/AppIcon-FocusVessel-v4-source.png
 check_hash 30d8c4b856a46dc87a00c5c09861df6a008ffce8092a0a3f72bea4b074e3a4f8 \
@@ -242,20 +352,90 @@ check_hash 28a3a322c560fabbff571a3fb399346fbf8298120891f50f93f6a61f5df2df66 \
   http_dists/public/app-home-current.webp
 check_hash 05ac0bbdc58cfa85d23d5b01cf2a3d38dc0d89016ee33fa1a940cef1e1a7c469 \
   http_dists/public/app-icon-focus-v4.png
-check_hash e5bedfa914263e4794ec23ecaa649a65546d0d12250eeaea8d3cc6e9d506bb9a \
-  http_dists/public/apple-touch-icon.png
 check_hash 6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f \
   Tsumiben/Resources/Fonts/ZenMaruGothic-Black.ttf
 check_hash 6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f \
   http_dists/public/ZenMaruGothic-Black.ttf
 
+shasum -a 256 -c AppStore/screenshots/checksums.sha256 >/dev/null
+python3 - <<'PY'
+import hashlib
+import re
+from pathlib import Path, PurePosixPath
+
+ledger_path = Path("ASSET_LICENSES.md")
+manifest_path = Path("AppStore/screenshots/checksums.sha256")
+expected_paths = {
+    "AppStore/screenshots/ja-JP/01-home-with-first-pebble.png",
+    "AppStore/screenshots/ja-JP/02-25-minute-focus.png",
+    "AppStore/screenshots/ja-JP/03-completion-reward.png",
+    "AppStore/screenshots/ja-JP/04-accumulation-overview.png",
+    "AppStore/screenshots/ja-JP/05-iCloud-and-privacy.png",
+}
+
+manifest_entries = {}
+for line_number, line in enumerate(manifest_path.read_text().splitlines(), start=1):
+    match = re.fullmatch(r"([0-9a-f]{64})  (AppStore/screenshots/[^\s]+)", line)
+    if match is None:
+        raise SystemExit(
+            f"error: invalid screenshot checksum entry at {manifest_path}:{line_number}"
+        )
+    digest, raw_path = match.groups()
+    if raw_path in manifest_entries:
+        raise SystemExit(f"error: duplicate screenshot checksum entry: {raw_path}")
+    manifest_entries[raw_path] = digest
+
+if set(manifest_entries) != expected_paths:
+    raise SystemExit("error: screenshot checksum manifest differs from the reviewed five-file allowlist")
+
+ledger_entries = {}
+for line_number, line in enumerate(ledger_path.read_text().splitlines(), start=1):
+    fields = re.findall(r"`([^`]+)`", line)
+    if not fields or not fields[0].startswith("AppStore/screenshots/"):
+        continue
+    if len(fields) != 2 or re.fullmatch(r"[0-9a-f]{64}", fields[1]) is None:
+        raise SystemExit(f"error: invalid screenshot asset row at {ledger_path}:{line_number}")
+    raw_path, digest = fields
+    if raw_path in ledger_entries:
+        raise SystemExit(f"error: duplicate screenshot asset row: {raw_path}")
+    ledger_entries[raw_path] = digest
+
+if set(ledger_entries) != expected_paths:
+    raise SystemExit("error: ASSET_LICENSES.md differs from the reviewed five-file screenshot allowlist")
+
+for raw_path in sorted(expected_paths):
+    path = PurePosixPath(raw_path)
+    if path.is_absolute() or ".." in path.parts:
+        raise SystemExit(f"error: unsafe screenshot asset path: {raw_path}")
+    actual = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    if manifest_entries[raw_path] != actual:
+        raise SystemExit(f"error: screenshot checksum manifest differs from file: {raw_path}")
+    if ledger_entries[raw_path] != actual:
+        raise SystemExit(f"error: ASSET_LICENSES.md hash differs from file: {raw_path}")
+PY
+
 if command -v sips >/dev/null 2>&1; then
-  icon=Tsumiben/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusVessel-v4.png
+  source_icon=Brand/AppIcon-FocusCycle-v5-source.png
+  source_width=$(sips -g pixelWidth "$source_icon" | awk '/pixelWidth/ {print $2}')
+  source_height=$(sips -g pixelHeight "$source_icon" | awk '/pixelHeight/ {print $2}')
+  source_alpha=$(sips -g hasAlpha "$source_icon" | awk '/hasAlpha/ {print $2}')
+  source_space=$(sips -g space "$source_icon" | awk '/space/ {print $2}')
+  source_profile=$(sips -g profile "$source_icon" | awk '/profile/ {print $2}')
+  if [ "$source_width" != 1254 ] || [ "$source_height" != 1254 ] \
+      || [ "$source_alpha" != no ] || [ "$source_space" != RGB ] \
+      || [ "$source_profile" != sRGB ]; then
+    echo "error: App Icon source must be 1254x1254 opaque sRGB RGB" >&2
+    exit 1
+  fi
+
+  icon=Tsumiben/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusCycle-v5.png
   width=$(sips -g pixelWidth "$icon" | awk '/pixelWidth/ {print $2}')
   height=$(sips -g pixelHeight "$icon" | awk '/pixelHeight/ {print $2}')
   alpha=$(sips -g hasAlpha "$icon" | awk '/hasAlpha/ {print $2}')
-  if [ "$width" != 1024 ] || [ "$height" != 1024 ] || [ "$alpha" != no ]; then
-    echo "error: App Icon must be 1024x1024 without alpha" >&2
+  profile=$(sips -g profile "$icon" | awk '/profile/ {print $2}')
+  if [ "$width" != 1024 ] || [ "$height" != 1024 ] \
+      || [ "$alpha" != no ] || [ "$profile" != sRGB ]; then
+    echo "error: shipping App Icon must be 1024x1024 opaque sRGB" >&2
     exit 1
   fi
 fi
@@ -264,7 +444,11 @@ scan_list=$(mktemp "${TMPDIR:-/tmp}/tsumiben-public-files.XXXXXX")
 scan_list_nul=$(mktemp "${TMPDIR:-/tmp}/tsumiben-public-files-nul.XXXXXX")
 scan_hits=$(mktemp "${TMPDIR:-/tmp}/tsumiben-scan-hits.XXXXXX")
 scan_errors=$(mktemp "${TMPDIR:-/tmp}/tsumiben-scan-errors.XXXXXX")
-trap 'rm -f "$scan_list" "$scan_list_nul" "$scan_hits" "$scan_errors"' EXIT HUP INT TERM
+history_inventory=$(mktemp "${TMPDIR:-/tmp}/tsumiben-history-inventory.XXXXXX")
+history_object_ids=$(mktemp "${TMPDIR:-/tmp}/tsumiben-history-object-ids.XXXXXX")
+history_object=$(mktemp "${TMPDIR:-/tmp}/tsumiben-history-object.XXXXXX")
+history_hits=$(mktemp "${TMPDIR:-/tmp}/tsumiben-history-hits.XXXXXX")
+trap 'rm -f "$scan_list" "$scan_list_nul" "$scan_hits" "$scan_errors" "$history_inventory" "$history_object_ids" "$history_object" "$history_hits"' EXIT HUP INT TERM
 
 find . \
   \( -path './.git' -o -path './DerivedData*' -o -path './Artifacts' \
@@ -296,9 +480,11 @@ scan_candidate_content() {
   : > "$scan_errors"
   set +e
   if [ "$scan_kind" = fixed ]; then
-    xargs -0 rg -IlF -- "$scan_pattern" < "$scan_list_nul" > "$scan_hits" 2> "$scan_errors"
+    xargs -0 rg -a -l -F -- "$scan_pattern" < "$scan_list_nul" > "$scan_hits" 2> "$scan_errors"
+  elif [ "$scan_kind" = regex_i ]; then
+    xargs -0 rg -a -l -i -- "$scan_pattern" < "$scan_list_nul" > "$scan_hits" 2> "$scan_errors"
   else
-    xargs -0 rg -Il -- "$scan_pattern" < "$scan_list_nul" > "$scan_hits" 2> "$scan_errors"
+    xargs -0 rg -a -l -- "$scan_pattern" < "$scan_list_nul" > "$scan_hits" 2> "$scan_errors"
   fi
   scanner_exit=$?
   set -e
@@ -334,11 +520,40 @@ if [ -s "$scan_hits" ]; then
   exit 1
 fi
 
-credential_value_pattern='github_pat_[[:alnum:]_]{20,}|gh[pousr]_[[:alnum:]]{20,}|(AKIA|ASIA)[[:upper:][:digit:]]{16}|Authorization[[:space:]]*:[[:space:]]*(Bearer|Basic)[[:space:]]+[[:alnum:]._~+/-]{16,}'
+credential_value_pattern='github_pat_[[:alnum:]_]{20,}|gh[pousr]_[[:alnum:]]{20,}|glpat-[[:alnum:]_-]{20,}|(AKIA|ASIA)[[:upper:][:digit:]]{16}|xox[baprs]-[[:alnum:]-]{10,}|(sk|rk)_(live|test)_[[:alnum:]]{16,}|whsec_[[:alnum:]]{16,}|npm_[[:alnum:]]{30,}|pypi-AgEIcHlwaS5vcmc[[:alnum:]_-]{20,}|AIza[[:alnum:]_-]{30,}|hf_[[:alnum:]]{30,}|sk-(proj|svcacct|ant)-[[:alnum:]_-]{20,}|eyJ[[:alnum:]_-]{8,}\.[[:alnum:]_-]{8,}\.[[:alnum:]_-]{8,}|Authorization[[:space:]]*:[[:space:]]*(Bearer|Basic)[[:space:]]+[[:alnum:]._~+/-]{16,}'
 scan_candidate_content regex "$credential_value_pattern" || exit 1
 if [ -s "$scan_hits" ]; then
   sed -n '1,20p' "$scan_hits" >&2
   echo "error: credential-like value found in a public candidate file" >&2
+  exit 1
+fi
+
+# Catch high-entropy values assigned to conventional secret variables without
+# rejecting ordinary public identifiers or documentation that merely names a
+# credential type. App Store Connect issuer/key IDs are not authentication by
+# themselves, but publishing an operator's account identifiers is unnecessary
+# and makes targeted credential attacks easier.
+credential_assignment_pattern="(password|passwd|client[_. -]*secret|api[_. -]*(key|token)|access[_. -]*token|refresh[_. -]*token|private[_. -]*token)[[:space:]]*[:=][[:space:]]*['\"]?[[:alnum:]_./+=~-]{16,}"
+scan_candidate_content regex_i "$credential_assignment_pattern" || exit 1
+if [ -s "$scan_hits" ]; then
+  sed -n '1,20p' "$scan_hits" >&2
+  echo "error: assigned credential-like value found in a public candidate file" >&2
+  exit 1
+fi
+
+asc_identifier_pattern="((app[_. -]*store[_. -]*connect|asc)[_. -]*(issuer|key)[_. -]*id[[:space:]]*[:=][[:space:]]*['\"]?([[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}|[[:upper:][:digit:]]{10})|issuer[_. -]*id[[:space:]]*[:=][[:space:]]*['\"]?[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12})"
+scan_candidate_content regex_i "$asc_identifier_pattern" || exit 1
+if [ -s "$scan_hits" ]; then
+  sed -n '1,20p' "$scan_hits" >&2
+  echo "error: App Store Connect issuer/key identifier found in a public candidate file" >&2
+  exit 1
+fi
+
+private_mailbox_pattern='[[:alnum:]._%+-]+@(gmail\.com|googlemail\.com|icloud\.com|me\.com|mac\.com|outlook\.com|hotmail\.com|live\.com|yahoo\.[[:alpha:].]+|proton(mail)?\.com)'
+scan_candidate_content regex_i "$private_mailbox_pattern" || exit 1
+if [ -s "$scan_hits" ]; then
+  sed -n '1,20p' "$scan_hits" >&2
+  echo "error: personal mailbox address found in a public candidate file" >&2
   exit 1
 fi
 
@@ -373,27 +588,61 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "error: full Git history is required for the release audit" >&2
     exit 1
   fi
-  if git log --all --name-only --format= | rg -ni "$forbidden_path_pattern"; then
+  # Ignore replace objects so a local refs/replace entry cannot hide the raw
+  # identity or content recorded by a public branch/tag tip.
+  git --no-replace-objects rev-list --objects --all > "$history_inventory"
+  if sed -n 's/^[^ ]* //p' "$history_inventory" | rg -ni "$forbidden_path_pattern"; then
     echo "error: forbidden filename exists in reachable Git history" >&2
     exit 1
   fi
-
-  history_hits=$(mktemp "${TMPDIR:-/tmp}/tsumiben-history-hits.XXXXXX")
-  history_revisions=$(mktemp "${TMPDIR:-/tmp}/tsumiben-history-revisions.XXXXXX")
-  git rev-list --all > "$history_revisions"
-  while IFS= read -r revision; do
-    git grep -I -l -F -- "$private_key_marker" "$revision" -- || true
-    git grep -I -l -E -- "$credential_value_pattern" "$revision" -- || true
-    git grep -I -l -E -- "$identity_output_pattern" "$revision" -- || true
-    git grep -I -l -E -- "$absolute_home_pattern" "$revision" -- || true
-  done < "$history_revisions" > "$history_hits"
-  if [ -s "$history_hits" ]; then
-    echo "error: secret, signing identity, or local home path exists in reachable Git blob history" >&2
-    sed -n '1,40p' "$history_hits" >&2
-    rm -f "$history_hits" "$history_revisions"
+  if sed -n 's/^[^ ]* //p' "$history_inventory" \
+    | rg -ni '\.(wav|caf|mp3|aiff|aif|m4a|aac|ac3|eac3|flac|ogg|oga|opus|mid|midi|ahap)$'; then
+    echo "error: audio or AHAP asset exists in reachable Git history; provenance review is required" >&2
     exit 1
   fi
-  rm -f "$history_hits" "$history_revisions"
+
+  # `git grep -I` silently omits binary files and a commit-only revision walk
+  # misses annotated-tag messages, notes blobs, and refs that directly name a
+  # tree or blob. Traverse every object reachable from every ref, add ref tips
+  # explicitly, then scan one raw batch stream. Commit/tag objects include
+  # author, committer, tagger and message metadata; notes are ordinary blobs.
+  awk '{print $1}' "$history_inventory" > "$history_object_ids"
+  git for-each-ref --format='%(objectname)' >> "$history_object_ids"
+  LC_ALL=C sort -u -o "$history_object_ids" "$history_object_ids"
+  : > "$history_hits"
+  : > "$history_object"
+  if [ -s "$history_object_ids" ]; then
+    python3 Scripts/check-git-public-metadata.py "$history_object_ids"
+    git --no-replace-objects cat-file --batch < "$history_object_ids" > "$history_object"
+  fi
+  git for-each-ref --format='%(refname)' >> "$history_object"
+
+  if rg -a -q -F -- "$private_key_marker" "$history_object"; then
+    printf '%s\n' 'private-key-marker' >> "$history_hits"
+  fi
+  if rg -a -q -- "$credential_value_pattern" "$history_object"; then
+    printf '%s\n' 'credential-value' >> "$history_hits"
+  fi
+  if rg -a -q -i -- "$credential_assignment_pattern" "$history_object"; then
+    printf '%s\n' 'credential-assignment' >> "$history_hits"
+  fi
+  if rg -a -q -i -- "$asc_identifier_pattern" "$history_object"; then
+    printf '%s\n' 'app-store-connect-identifier' >> "$history_hits"
+  fi
+  if rg -a -q -i -- "$private_mailbox_pattern" "$history_object"; then
+    printf '%s\n' 'personal-mailbox' >> "$history_hits"
+  fi
+  if rg -a -q -- "$identity_output_pattern" "$history_object"; then
+    printf '%s\n' 'signing-identity-output' >> "$history_hits"
+  fi
+  if rg -a -q -- "$absolute_home_pattern" "$history_object"; then
+    printf '%s\n' 'absolute-home-path' >> "$history_hits"
+  fi
+  if [ -s "$history_hits" ]; then
+    echo "error: secret, private identity, signing output, or local path exists in reachable Git history" >&2
+    sed -n '1,40p' "$history_hits" >&2
+    exit 1
+  fi
 else
   echo "note: no Git repository yet; reachable history could not be audited"
   if [ "$MODE" = '--release' ]; then
@@ -428,13 +677,31 @@ if [ "$MODE" = '--release' ]; then
   for url in \
     https://tumiben.hinoshiba.com/ \
     https://tumiben.hinoshiba.com/privacy/ \
-    https://tumiben.hinoshiba.com/support/; do
+    https://tumiben.hinoshiba.com/support/ \
+    https://tumiben.hinoshiba.com/terms/ \
+    https://tumiben.hinoshiba.com/commercial-transactions/; do
     status=$(curl --silent --show-error --max-time 20 --output /dev/null --write-out '%{http_code}' "$url" || true)
     if [ "$status" != 200 ]; then
       echo "error: release URL must return HTTPS 200 without redirect: $url ($status)" >&2
       exit 1
     fi
   done
+
+  http_status=$(curl --silent --show-error --max-time 20 \
+    --output /dev/null --write-out '%{http_code}' http://tumiben.hinoshiba.com/ || true)
+  case "$http_status" in
+    301|302|307|308) ;;
+    *)
+      echo "error: public HTTP endpoint must redirect to HTTPS (http://tumiben.hinoshiba.com/ returned $http_status)" >&2
+      exit 1
+      ;;
+  esac
+  final_url=$(curl --silent --show-error --location --max-time 20 \
+    --output /dev/null --write-out '%{url_effective}' http://tumiben.hinoshiba.com/ || true)
+  if [ "$final_url" != 'https://tumiben.hinoshiba.com/' ]; then
+    echo "error: public HTTP endpoint must end at the canonical HTTPS URL ($final_url)" >&2
+    exit 1
+  fi
 fi
 
 echo "OSS readiness checks passed ($MODE)."

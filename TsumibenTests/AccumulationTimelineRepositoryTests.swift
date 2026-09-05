@@ -33,6 +33,69 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
         XCTAssertEqual(extent.newestDate, newest)
     }
 
+    func testTimelineQuarantinesUnsupportedRowsFromExtentAndMetrics() async throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let epochID = UUID()
+        let validDate = date(year: 2024, month: 4, day: 15)
+        let valid = StudySession(
+            startAt: validDate.addingTimeInterval(-1_500),
+            endAt: validDate,
+            seconds: 1_500,
+            source: .timer,
+            grams: 250,
+            deviceDayKey: "timeline-integrity",
+            dataEpochID: epochID
+        )
+        let overflow = StudySession(
+            startAt: date(year: 1980, month: 1, day: 1),
+            endAt: date(year: 1980, month: 1, day: 2),
+            seconds: 1_500,
+            source: .timer,
+            grams: 250,
+            deviceDayKey: "timeline-integrity",
+            dataEpochID: epochID
+        )
+        overflow.seconds = Int.max
+        overflow.grams = Int.max
+        let incoherentMass = StudySession(
+            startAt: validDate.addingTimeInterval(-60),
+            endAt: validDate,
+            seconds: 60,
+            source: .timer,
+            grams: 600,
+            deviceDayKey: "timeline-integrity",
+            dataEpochID: epochID
+        )
+        let reversed = StudySession(
+            startAt: date(year: 2030, month: 1, day: 2),
+            endAt: date(year: 2030, month: 1, day: 1),
+            seconds: 1_500,
+            source: .timer,
+            grams: 250,
+            deviceDayKey: "timeline-integrity",
+            dataEpochID: epochID
+        )
+        [valid, overflow, incoherentMass, reversed].forEach(context.insert)
+        try context.save()
+
+        let repository = AccumulationTimelineRepository(modelContainer: container)
+        let extent = try await repository.extent(currentEpochID: epochID)
+        XCTAssertEqual(extent.oldestDate, validDate)
+        XCTAssertEqual(extent.newestDate, validDate)
+
+        let year = try XCTUnwrap(
+            AccumulationTimelineYearPolicy.years(in: extent, calendar: calendar).first
+        )
+        let summary = try await repository.yearSummary(
+            for: year,
+            currentEpochID: epochID,
+            calendar: calendar
+        )
+        XCTAssertEqual(summary.exactLocalCount, 1)
+        XCTAssertEqual(summary.exactLocalGrams, 250)
+    }
+
     func testYearSummaryDeduplicatesUUIDAcrossBatchBoundary() async throws {
         let container = try makeContainer()
         let context = container.mainContext
@@ -55,6 +118,7 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
             id: firstID,
             in: context,
             endAt: monthStart.addingTimeInterval(301 * 60),
+            seconds: 600,
             grams: 100,
             epochID: epochID
         )
@@ -67,9 +131,15 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
         try context.save()
 
         let repository = AccumulationTimelineRepository(modelContainer: container)
-        let extent = try await repository.extent(currentEpochID: epochID)
-        let year = try XCTUnwrap(
-            AccumulationTimelineYearPolicy.years(in: extent, calendar: calendar).first
+        // Extent discovery has its own deliberately smaller candidate bound.
+        // Construct the known year directly so this test does not also depend
+        // on public extent-to-year selection before exercising metric paging.
+        let year = AccumulationTimelineYear(
+            year: 2024,
+            interval: DateInterval(
+                start: monthStart,
+                end: date(year: 2025, month: 1, day: 1)
+            )
         )
         let summary = try await repository.yearSummary(
             for: year,
@@ -86,6 +156,60 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
         XCTAssertTrue(summary.coverage.isLocallyStable)
     }
 
+    func testMonthDetailAppliesDateMembershipAfterExactDuplicateResolution() async throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let epochID = UUID()
+        let boundaryID = UUID()
+        let retainedID = UUID()
+        let januaryStart = date(year: 2024, month: 1, day: 1)
+        let insideDate = date(year: 2024, month: 1, day: 20)
+        let outsideDate = date(year: 2024, month: 2, day: 1)
+
+        insertSession(
+            id: retainedID,
+            in: context,
+            endAt: date(year: 2024, month: 1, day: 10),
+            epochID: epochID
+        )
+        context.insert(StudySession(
+            id: boundaryID,
+            startAt: insideDate.addingTimeInterval(-1_500),
+            endAt: insideDate,
+            seconds: 1_500,
+            source: .timer,
+            grams: 250,
+            deviceDayKey: "boundary-copy",
+            dataEpochID: epochID
+        ))
+        // The conservative demotion wins for this logical completion. It is
+        // outside January, so the losing in-month physical copy must not be
+        // counted or presented as a January record.
+        context.insert(StudySession(
+            id: boundaryID,
+            startAt: outsideDate.addingTimeInterval(-1_500),
+            endAt: outsideDate,
+            seconds: 1_500,
+            source: .timerDemoted,
+            grams: 250,
+            deviceDayKey: "boundary-copy",
+            dataEpochID: epochID
+        ))
+        try context.save()
+
+        let detail = try await AccumulationTimelineRepository(
+            modelContainer: container
+        ).monthDetail(
+            monthStart: januaryStart,
+            currentEpochID: epochID,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(detail.summary.exactLocalCount, 1)
+        XCTAssertEqual(detail.summary.exactLocalGrams, 250)
+        XCTAssertEqual(detail.representativeRecords.map(\.id), [retainedID])
+    }
+
     func testMonthDetailKeepsExactTotalsAndBoundsRepresentativeBottleToLatest96() async throws {
         let container = try makeContainer()
         let context = container.mainContext
@@ -100,7 +224,7 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
                 id: id,
                 in: context,
                 endAt: monthStart.addingTimeInterval(Double(index * 60)),
-                grams: index + 1,
+                grams: Constants.Mass.measuredPebbleGrams,
                 epochID: epochID
             )
         }
@@ -111,7 +235,7 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
                 id: orderedIDs.last!,
                 in: context,
                 endAt: monthStart.addingTimeInterval(Double((1_000 + index) * 60)),
-                grams: 0,
+                grams: Constants.Mass.measuredPebbleGrams,
                 epochID: epochID
             )
         }
@@ -125,7 +249,10 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
         )
 
         XCTAssertEqual(detail.summary.exactLocalCount, 110)
-        XCTAssertEqual(detail.summary.exactLocalGrams, 6_105)
+        XCTAssertEqual(
+            detail.summary.exactLocalGrams,
+            Int64(110 * Constants.Mass.measuredPebbleGrams)
+        )
         XCTAssertEqual(detail.representativeRecords.count, 96)
         XCTAssertEqual(detail.representativeRecords.map(\.id), Array(orderedIDs.suffix(96)))
         XCTAssertTrue(detail.previewIsRepresentative)
@@ -224,14 +351,15 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
         id: UUID = UUID(),
         in context: ModelContext,
         endAt: Date,
+        seconds: Int = 1_500,
         grams: Int = 250,
         epochID: UUID?
     ) {
         context.insert(StudySession(
             id: id,
-            startAt: endAt.addingTimeInterval(-1_500),
+            startAt: endAt.addingTimeInterval(-TimeInterval(seconds)),
             endAt: endAt,
-            seconds: 1_500,
+            seconds: seconds,
             source: .timer,
             grams: grams,
             deviceDayKey: "timeline-fixture",

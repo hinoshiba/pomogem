@@ -41,11 +41,17 @@ enum AggregatePresentation {
     }
 
     static func facetCount(level: Int) -> Int {
-        min(4 + max(level, 1) * 2, 20)
+        min(
+            NonnegativeIntPolicy.adding(
+                4,
+                NonnegativeIntPolicy.multiplying(max(level, 1), 2)
+            ),
+            20
+        )
     }
 
     static func coreBlendAmount(level: Int) -> CGFloat {
-        max(0.07, 0.18 - CGFloat(max(level - 1, 0)) * 0.025)
+        max(0.07, 0.18 - CGFloat(max(level, 1) - 1) * 0.025)
     }
 
     static func glowScale(level: Int, containsRare: Bool) -> CGFloat {
@@ -249,10 +255,10 @@ enum FusionRewardBridgePresentation {
         return FusionRewardBridgeDisplayState(
             eyebrow: "CRYSTAL SYNC",
             progressLabel: "今回 +1粒",
-            nextStepLabel: "結晶進捗を同期中",
-            longTermContextLabel: "iCloudの読み込み後に正確な位置を表示します",
+            nextStepLabel: "結晶進捗を整理中",
+            longTermContextLabel: "保存データの読み込み後に正確な位置を表示します",
             litSlotCount: nil,
-            accessibilityLabel: "今回の完走で1粒追加。結晶進捗を同期中です"
+            accessibilityLabel: "今回の完走で1粒追加。結晶進捗を整理中です"
         )
     }
 
@@ -292,10 +298,10 @@ enum EffortProgressPresentation {
             return EffortProgressDisplayState(
                 eyebrow: "TIME CORE SYNC",
                 progressLabel: "今回 +\(contribution)",
-                nextStepLabel: "時間の核を同期中",
+                nextStepLabel: "時間の核を整理中",
                 longTermContextLabel: accountingDisclosure,
                 progressFraction: nil,
-                accessibilityLabel: "今回の完走で\(contribution)を追加。時間の核を同期中。\(accountingDisclosure)"
+                accessibilityLabel: "今回の完走で\(contribution)を追加。時間の核を整理中。\(accountingDisclosure)"
             )
         }
 
@@ -1702,7 +1708,7 @@ enum JarLifetimeCorePresentation {
                     "\(EffortProgressPresentation.formattedMass(grams: $0.totalGrams))以上"
                 } ?? "\(compactCount)以上",
                 nextFusionLabel: nil,
-                progressLabel: effortSnapshot == nil ? "結晶を同期中" : "時間の核を同期中"
+                progressLabel: effortSnapshot == nil ? "結晶を整理中" : "時間の核を整理中"
             )
         }
 
@@ -1978,7 +1984,9 @@ struct JarLifetimeCoreBackdrop: View {
 
     private func updateMotion() {
         breathing = false
-        guard !reduceMotion else { return }
+        guard !reduceMotion,
+              !LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess
+        else { return }
         withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
             breathing = true
         }
@@ -2336,7 +2344,9 @@ struct ProgressCrystalGlyph: View {
     }
 
     private func updateMotion() {
-        guard !reduceMotion else {
+        guard !reduceMotion,
+              !LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess
+        else {
             breath = false
             return
         }

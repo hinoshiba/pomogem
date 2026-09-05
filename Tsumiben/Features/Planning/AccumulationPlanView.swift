@@ -98,7 +98,7 @@ struct AccumulationPlanView: View {
                     SectionEyebrow(text: "SIMULATED · READ ONLY")
                     Text("これは予測です")
                         .font(TsumibenTheme.brand(21))
-                    Text("ここで動かす瓶や数値は、実際の学習記録・iCloud・ウィジェットには保存されません。画面を閉じると入力も消えます。")
+                    Text("ここで動かす瓶や数値は、実際の学習記録・保存領域・ウィジェットには保存されません。画面を閉じると入力も消えます。")
                         .font(.caption)
                         .foregroundStyle(TsumibenTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -393,7 +393,7 @@ struct AccumulationPlanView: View {
                 .frame(height: 260)
                 .accessibilityIdentifier("planning.accumulation.jar")
 
-                Text("星図と瓶は見え方の予測です。粒のまとまりは予定した完走リズムを、上の時間・質量は集中時間の累計を表します。レア抽選・成果石・実際の休止日は含めません。")
+                Text("星図と瓶は見え方の予測です。粒のまとまりは予定した完走リズムを、上の時間・質量は集中時間の累計を表します。成果石・実際の休止日は含めません。")
                     .font(.caption)
                     .foregroundStyle(TsumibenTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -431,7 +431,7 @@ struct AccumulationPlanView: View {
                     .font(.caption)
                     .foregroundStyle(TsumibenTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                Label("保存・同期・実績への反映はありません", systemImage: "icloud.slash.fill")
+                Label("保存領域・実績への反映はありません", systemImage: "externaldrive.badge.xmark")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(Color(hex: "#5DE0BD"))
             }

@@ -273,6 +273,9 @@ enum AnimatedShareExporter {
 
 enum ShareCopy {
     static let hashtags = ["#つみべん", "#ポモドーロ"]
+    static let websiteURL = AppLinks.marketingWebsite
+    static let websiteDisplayName = "tumiben.hinoshiba.com"
+    static let wordmark = "TSUMIBEN"
 
     static func caption(
         subject: String,
@@ -308,7 +311,8 @@ enum ShareCopy {
         let hashtagLine = uniqueHashtags.isEmpty
             ? ""
             : "\n\(uniqueHashtags.joined(separator: " "))"
-        return "\(subject)を \(grams) 積みました\(fairness)。\(detailLine)\(hashtagLine)"
+        let websiteLine = "\n\(websiteURL.absoluteString)"
+        return "\(subject)を \(grams) 積みました\(fairness)。\(detailLine)\(websiteLine)\(hashtagLine)"
     }
 }
 

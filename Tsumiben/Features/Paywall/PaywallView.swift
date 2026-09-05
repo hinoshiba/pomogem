@@ -5,7 +5,6 @@ import SwiftUI
 enum PaywallContext {
     case settings
     case customTimer
-    case shareWatermark
     case aggregateLabels
 }
 
@@ -99,8 +98,6 @@ struct PaywallView: View {
         switch context {
         case .customTimer:
             "任意の集中時間を選べます。"
-        case .shareWatermark:
-            "シェアカード右下の小さな透かしを外せます。"
         case .aggregateLabels:
             "まとまり粒に、積み上げた月を刻めます。"
         case .settings:
@@ -120,12 +117,6 @@ struct PaywallView: View {
                 symbol: "circle.hexagongrid.fill",
                 title: "まとまり粒の月刻印",
                 detail: "積み重ねた月を残す"
-            )
-            Divider().overlay(TsumibenTheme.glassEdge.opacity(0.08))
-            PaywallFeature(
-                symbol: "signature",
-                title: "右下の小さな透かしを非表示",
-                detail: "シェアカード"
             )
         }
         .background(TsumibenTheme.card, in: RoundedRectangle(cornerRadius: 18))
@@ -193,6 +184,11 @@ struct PaywallView: View {
                         .font(.subheadline)
                         .foregroundStyle(TsumibenTheme.muted)
                 }
+
+                legalLink(
+                    "価格・提供条件・販売者情報を確認",
+                    destination: AppLinks.commercialDisclosure
+                )
 
                 Button {
                     Task { await buy(product) }
@@ -326,11 +322,13 @@ struct PaywallView: View {
             VStack(spacing: 0) {
                 legalLink("利用規約", destination: AppLinks.standardEULA)
                 legalLink("プライバシー", destination: AppLinks.privacyPolicy)
+                legalLink("販売条件", destination: AppLinks.commercialDisclosure)
             }
         } else {
             HStack(spacing: 8) {
                 legalLink("利用規約", destination: AppLinks.standardEULA)
                 legalLink("プライバシー", destination: AppLinks.privacyPolicy)
+                legalLink("販売条件", destination: AppLinks.commercialDisclosure)
             }
         }
     }

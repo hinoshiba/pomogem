@@ -2,6 +2,325 @@ import XCTest
 @testable import Tsumiben
 
 final class ProgressPresentationTests: XCTestCase {
+    func testNonnegativeArithmeticSaturatesHostilePersistedValues() {
+        XCTAssertEqual(NonnegativeIntPolicy.clamped(-1), 0)
+        XCTAssertEqual(NonnegativeIntPolicy.clamped(.infinity), Int.max)
+        XCTAssertEqual(NonnegativeIntPolicy.clamped(.nan), 0)
+        XCTAssertEqual(NonnegativeIntPolicy.clamped(Double(Int.max)), Int.max)
+        XCTAssertEqual(NonnegativeIntPolicy.adding(Int.max, 1), Int.max)
+        XCTAssertEqual(NonnegativeIntPolicy.sum([Int.max, 1, -10]), Int.max)
+        XCTAssertEqual(NonnegativeIntPolicy.multiplying(Int.max, 2), Int.max)
+        XCTAssertEqual(NonnegativeIntPolicy.next(after: Int.max), Int.max)
+        XCTAssertEqual(NonnegativeIntPolicy.next(after: -10, minimum: 1), 1)
+
+        let int64Values: [Int64] = [.max, 1, -10]
+        XCTAssertEqual(NonnegativeIntPolicy.sum(int64Values), Int64.max)
+        XCTAssertEqual(
+            NonnegativeIntPolicy.adding(Int64.max, Int64.max),
+            Int64.max
+        )
+        XCTAssertEqual(
+            AggregatePresentation.facetCount(level: Int.max),
+            20
+        )
+
+        let legacy = Stratum(
+            pebbleCount: Int.max,
+            heightPt: 1,
+            colorMixJSON: StrataMath.encodeColorMix([
+                StratumColorFraction(hex: Constants.Color.english, fraction: 1)
+            ]),
+            monthLabel: "hostile"
+        )
+        XCTAssertEqual(legacy.grams, Int.max)
+        let visual = JarStratumVisual(stratum: legacy)
+        XCTAssertEqual(visual.aggregateDescriptor.aggregate?.pebbleCount, Int.max)
+        XCTAssertEqual(
+            visual.aggregateDescriptor.aggregate?.subjectMix.first?.pebbleCount,
+            Int.max
+        )
+    }
+
+    func testStudySessionIntegrityAcceptsOnlyProductBoundedCoherentCompletions() {
+        let end = Date(timeIntervalSince1970: 1_800_000_000)
+        func session(
+            seconds: Int,
+            source: SessionSource = .timer,
+            grams: Int
+        ) -> StudySession {
+            StudySession(
+                startAt: end.addingTimeInterval(-TimeInterval(seconds)),
+                endAt: end,
+                seconds: seconds,
+                source: source,
+                grams: grams,
+                deviceDayKey: "integrity"
+            )
+        }
+
+        XCTAssertEqual(StudySessionIntegrityPolicy.maximumSeconds, 10_800)
+        XCTAssertEqual(StudySessionIntegrityPolicy.maximumGrams, 1_800)
+        XCTAssertEqual(
+            StudySessionIntegrityPolicy.maximumFutureLead,
+            365 * 24 * 60 * 60
+        )
+        XCTAssertEqual(
+            StudySessionIntegrityPolicy.maximumCompletionWallSpan,
+            7 * 24 * 60 * 60
+        )
+        XCTAssertTrue(StudySessionIntegrityPolicy.isSupported(
+            session(seconds: 60, grams: 10)
+        ))
+        let paused = session(seconds: 1_500, source: .timerDemoted, grams: 250)
+        paused.startAt = end.addingTimeInterval(-86_400)
+        XCTAssertTrue(StudySessionIntegrityPolicy.isSupported(paused))
+        XCTAssertTrue(StudySessionIntegrityPolicy.isSupported(
+            session(seconds: 10_800, grams: 1_800)
+        ))
+        XCTAssertTrue(ManualDuration.allCases.allSatisfy { duration in
+            StudySessionIntegrityPolicy.isSupported(session(
+                seconds: duration.seconds,
+                source: .manual,
+                grams: duration.grams
+            ))
+        })
+
+        XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(
+            session(seconds: 59, grams: 0)
+        ))
+        XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(
+            session(seconds: 60, grams: 600)
+        ))
+        XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(
+            session(seconds: 10_801, grams: 1_800)
+        ))
+        XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(
+            session(seconds: ManualDuration.thirtyMinutes.seconds,
+                    source: .manual,
+                    grams: ManualDuration.sixtyMinutes.grams)
+        ))
+    }
+
+    func testStudySessionIntegrityBoundsFutureSkewAndPausedWallSpan() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func timerSession(endAt: Date, wallSpan: TimeInterval) -> StudySession {
+            StudySession(
+                startAt: endAt.addingTimeInterval(-wallSpan),
+                endAt: endAt,
+                seconds: 1_500,
+                source: .timerDemoted,
+                grams: 250,
+                deviceDayKey: "integrity-bounds"
+            )
+        }
+
+        let futureBoundary = now.addingTimeInterval(
+            StudySessionIntegrityPolicy.maximumFutureLead
+        )
+        XCTAssertTrue(StudySessionIntegrityPolicy.isSupported(
+            timerSession(endAt: futureBoundary, wallSpan: 1_500),
+            relativeTo: now
+        ))
+        XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(
+            timerSession(
+                endAt: futureBoundary.addingTimeInterval(1),
+                wallSpan: 1_500
+            ),
+            relativeTo: now
+        ))
+
+        XCTAssertTrue(StudySessionIntegrityPolicy.isSupported(
+            timerSession(
+                endAt: now,
+                wallSpan: StudySessionIntegrityPolicy.maximumCompletionWallSpan
+            ),
+            relativeTo: now
+        ))
+        XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(
+            timerSession(
+                endAt: now,
+                wallSpan: StudySessionIntegrityPolicy.maximumCompletionWallSpan + 1
+            ),
+            relativeTo: now
+        ))
+
+        // The release endurance fixture begins in 1985. Its ordinary
+        // 25-minute completions remain admissible when evaluated in 2026.
+        let historicalCompletion = timerSession(
+            endAt: Date(timeIntervalSince1970: 473_385_600),
+            wallSpan: 1_500
+        )
+        XCTAssertTrue(StudySessionIntegrityPolicy.isSupported(
+            historicalCompletion,
+            relativeTo: Date(timeIntervalSince1970: 1_788_336_000)
+        ))
+    }
+
+    func testStudySessionIntegrityQuarantinesMutatedLegacyExtremesAndBadDates() {
+        let end = Date(timeIntervalSince1970: 1_800_000_000)
+        func valid() -> StudySession {
+            StudySession(
+                startAt: end.addingTimeInterval(-1_500),
+                endAt: end,
+                seconds: 1_500,
+                source: .timer,
+                grams: 250,
+                deviceDayKey: "integrity"
+            )
+        }
+
+        let negative = valid()
+        negative.seconds = -1
+        negative.grams = -1
+        XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(negative))
+
+        let maximum = valid()
+        maximum.seconds = Int.max
+        maximum.grams = Int.max
+        XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(maximum))
+
+        let reversed = valid()
+        reversed.startAt = reversed.endAt.addingTimeInterval(1)
+        XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(reversed))
+
+        let shorterThanClaimedFocus = valid()
+        shorterThanClaimedFocus.startAt = shorterThanClaimedFocus.endAt
+        XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(shorterThanClaimedFocus))
+
+        let fractionalMinute = valid()
+        fractionalMinute.seconds = 61
+        fractionalMinute.grams = 10
+        fractionalMinute.startAt = fractionalMinute.endAt.addingTimeInterval(-61)
+        XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(fractionalMinute))
+
+        var farFutureCalendar = Calendar(identifier: .gregorian)
+        farFutureCalendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let farFuture = valid()
+        farFuture.endAt = farFutureCalendar.date(
+            from: DateComponents(year: 4_000, month: 1, day: 1)
+        )!
+        farFuture.startAt = farFuture.endAt.addingTimeInterval(-1_500)
+        XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(
+            farFuture,
+            relativeTo: end
+        ))
+
+        let notANumber = valid()
+        notANumber.endAt = Date(timeIntervalSinceReferenceDate: .nan)
+        XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(notANumber))
+
+        let infinite = valid()
+        infinite.startAt = Date(timeIntervalSinceReferenceDate: -.infinity)
+        XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(infinite))
+    }
+
+    func testAggregateMathSaturatesMaxValuesAndRejectsUnadvanceableLevel() throws {
+        func sources(level: Int) -> [AggregateSource] {
+            (0..<Constants.Jar.aggregateFanIn).map { index in
+                AggregateSource(
+                    id: UUID(uuidString: String(
+                        format: "51000000-0000-4000-8000-%012X",
+                        index + 1
+                    ))!,
+                    level: level,
+                    pebbleCount: .max,
+                    grams: .max,
+                    radius: 10,
+                    colorMix: [StratumColorFraction(hex: "#123456", fraction: 1)],
+                    subjectMix: [AggregateSubjectFraction(
+                        name: "同期データ",
+                        colorHex: "#123456",
+                        pebbleCount: .max
+                    )],
+                    periodStart: .distantPast,
+                    periodEnd: .distantFuture,
+                    sessionIDs: [UUID()],
+                    measuredPebbleCount: .max,
+                    manualPebbleCount: .max,
+                    goldPebbleCount: .max,
+                    prismPebbleCount: .max
+                )
+            }
+        }
+
+        let result = try XCTUnwrap(StrataMath.aggregate(sources: sources(level: 0)))
+        XCTAssertEqual(result.pebbleCount, Int.max)
+        XCTAssertEqual(result.grams, Int.max)
+        XCTAssertEqual(result.measuredPebbleCount, Int.max)
+        XCTAssertEqual(result.manualPebbleCount, Int.max)
+        XCTAssertEqual(result.goldPebbleCount, Int.max)
+        XCTAssertEqual(result.prismPebbleCount, Int.max)
+        XCTAssertNil(StrataMath.aggregate(sources: sources(level: Int.max)))
+    }
+
+    @MainActor
+    func testReleasePresentationHidesLegacyRareRewardDataWithoutErasingIt() {
+        XCTAssertFalse(RareRewardReleasePolicy.isEnabled)
+        let session = StudySession(
+            startAt: .distantPast,
+            endAt: .distantFuture,
+            seconds: Int.max,
+            source: .timer,
+            pebbleKind: .gold,
+            grams: Int.max,
+            deviceDayKey: "hostile-sync"
+        )
+        let descriptor = PebbleDescriptor(session: session)
+
+        XCTAssertEqual(session.rareRewardCounts.goldCount, 1)
+        XCTAssertEqual(descriptor.rareRewardCounts.goldCount, 1)
+        XCTAssertEqual(descriptor.kind, .normal)
+        XCTAssertFalse(descriptor.accessibilityDescription.contains("金"))
+        XCTAssertFalse(descriptor.accessibilityDescription.contains("虹"))
+        let node = PebbleNode(
+            descriptor: descriptor,
+            reduceMotion: true,
+            rareRewardMode: .standard
+        )
+        XCTAssertNil(node.childNode(withName: "rare.mark"))
+        XCTAssertNil(node.childNode(withName: "rare.innerRing"))
+
+        let jarDescription = JarAccessibilityPresentation.value(
+            totalGrams: Int.max,
+            pebbleCount: Int.max,
+            achievementCount: 0,
+            aggregateCount: 1,
+            representedPebbleCount: Int.max,
+            goldPebbleCount: Int.max,
+            prismPebbleCount: Int.max,
+            fusionProgressDescription: nil,
+            projectionIsLowerBound: false
+        )
+        XCTAssertFalse(jarDescription.contains("金"))
+        XCTAssertFalse(jarDescription.contains("虹"))
+        XCTAssertFalse(jarDescription.contains("レア"))
+    }
+
+    @MainActor
+    func testAchievementRevisionSaturatesAtIntegerMaximum() {
+        let stone = AchievementStone(
+            kind: .examPass,
+            revision: Int.max
+        )
+        stone.revision = Int.max
+
+        let result = AchievementStoneRevisionPolicy.delete([stone])
+
+        XCTAssertEqual(result, .applied)
+        XCTAssertEqual(stone.revision, 1)
+        XCTAssertNotNil(stone.deletedAt)
+
+        let capped = AchievementStone(
+            kind: .workMilestone,
+            revision: AchievementStonePolicy.maximumSupportedRevision
+        )
+        XCTAssertEqual(
+            AchievementStoneRevisionPolicy.delete([capped]),
+            .revisionLimitReached
+        )
+        XCTAssertNil(capped.deletedAt)
+    }
+
     func testEffortProgressWeightsOneTenTwentyFiveAndSixtyMinutesByMass() {
         let fixtures: [(minutes: Int, units: Double, fraction: Double)] = [
             (1, 0.04, 0.004),
@@ -174,6 +493,19 @@ final class ProgressPresentationTests: XCTestCase {
                 displayedAchievementCount: 8
             ),
             "瓶の中は、粒28個・表示中のまとまり16個・記念石8個の代表表示です。"
+        )
+
+        let synchronizedLowerBound = AccumulationOverviewPageScope(
+            totalSessionCount: 720,
+            displayedSessionCount: 720,
+            totalSessionCountIsLowerBound: true,
+            totalAchievementCount: 0,
+            displayedAchievementCount: 0
+        )
+        XCTAssertTrue(synchronizedLowerBound.historyPageIsPartial)
+        XCTAssertEqual(
+            synchronizedLowerBound.shelfScopeLabel,
+            "720件以上のうち直近720件から"
         )
 
         let complete = AccumulationOverviewPageScope(
@@ -457,7 +789,7 @@ final class ProgressPresentationTests: XCTestCase {
 
         XCTAssertEqual(
             label,
-            "時間の核、集中24.8kg以上、99.0標準単位以上、物理履歴99粒以上、進捗を同期中、表示中のまとまり結晶18個のうち代表8個を配置、瓶の物理整理：集中99粒"
+            "時間の核、集中24.8kg以上、99.0標準単位以上、物理履歴99粒以上、進捗を整理中、表示中のまとまり結晶18個のうち代表8個を配置、瓶の物理整理：集中99粒"
         )
         XCTAssertFalse(label.contains("×100へ"))
         XCTAssertFalse(label.contains("あと1粒"))
@@ -922,7 +1254,7 @@ final class ProgressPresentationTests: XCTestCase {
 
         XCTAssertNil(state.litOrbitSlotCount)
         XCTAssertNil(state.nextFusionLabel)
-        XCTAssertEqual(state.progressLabel, "結晶を同期中")
+        XCTAssertEqual(state.progressLabel, "結晶を整理中")
         XCTAssertEqual(state.countLabel, "35.1万粒以上")
     }
 
@@ -1002,7 +1334,7 @@ final class ProgressPresentationTests: XCTestCase {
                 colorHex: "#2457C5",
                 grams: 250,
                 isMeasured: true,
-                isBaked: false
+                isRepresentedByLocalAggregate: false
             ),
             AccumulationRecord(
                 id: UUID(),
@@ -1011,7 +1343,7 @@ final class ProgressPresentationTests: XCTestCase {
                 colorHex: "#E6A53A",
                 grams: 600,
                 isMeasured: true,
-                isBaked: false
+                isRepresentedByLocalAggregate: false
             ),
             AccumulationRecord(
                 id: UUID(),
@@ -1020,7 +1352,7 @@ final class ProgressPresentationTests: XCTestCase {
                 colorHex: "#FF00FF",
                 grams: Int.max,
                 isMeasured: false,
-                isBaked: false
+                isRepresentedByLocalAggregate: false
             )
         ]
 
@@ -1037,7 +1369,7 @@ final class ProgressPresentationTests: XCTestCase {
                 colorHex: "#2457C5",
                 grams: Int.max,
                 isMeasured: true,
-                isBaked: false
+                isRepresentedByLocalAggregate: false
             ),
             AccumulationRecord(
                 id: UUID(),
@@ -1046,7 +1378,7 @@ final class ProgressPresentationTests: XCTestCase {
                 colorHex: "#2457C5",
                 grams: 250,
                 isMeasured: true,
-                isBaked: false
+                isRepresentedByLocalAggregate: false
             )
         ])
         XCTAssertEqual(saturated.measuredGrams, Int.max)
@@ -1213,7 +1545,7 @@ final class ProgressPresentationTests: XCTestCase {
 
         XCTAssertEqual(display.eyebrow, "CRYSTAL SYNC")
         XCTAssertEqual(display.progressLabel, "今回 +1粒")
-        XCTAssertEqual(display.nextStepLabel, "結晶進捗を同期中")
+        XCTAssertEqual(display.nextStepLabel, "結晶進捗を整理中")
         XCTAssertNil(display.litSlotCount)
         XCTAssertFalse(display.accessibilityLabel.contains("10/10"))
         XCTAssertFalse(display.accessibilityLabel.contains("×10"))

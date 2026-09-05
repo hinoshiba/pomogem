@@ -23,8 +23,13 @@ struct JarStratumVisual: Identifiable, Equatable, Sendable {
     ) {
         self.id = id
         self.bakedAt = bakedAt
-        self.pebbleCount = pebbleCount
-        self.grams = max(0, grams ?? pebbleCount * Constants.Mass.measuredPebbleGrams)
+        self.pebbleCount = NonnegativeIntPolicy.clamped(pebbleCount)
+        self.grams = NonnegativeIntPolicy.clamped(
+            grams ?? NonnegativeIntPolicy.multiplying(
+                pebbleCount,
+                Constants.Mass.measuredPebbleGrams
+            )
+        )
         self.height = height
         self.colorMix = colorMix
         self.monthLabel = monthLabel
@@ -103,7 +108,7 @@ struct JarStratumVisual: Identifiable, Equatable, Sendable {
                     id: value.id,
                     bakedAt: value.bakedAt,
                     pebbleCount: uniqueMembership.count,
-                    grams: Int(
+                    grams: NonnegativeIntPolicy.clamped(
                         (Double(value.grams) * Double(uniqueMembership.count)
                             / Double(max(membership.count, 1))).rounded()
                     ),
@@ -124,7 +129,9 @@ struct JarStratumVisual: Identifiable, Equatable, Sendable {
             AggregateSubjectFraction(
                 name: index == 0 ? "過去の集中" : "過去の集中 \(index + 1)",
                 colorHex: item.hex,
-                pebbleCount: Int((item.fraction * Double(max(pebbleCount, 1))).rounded())
+                pebbleCount: NonnegativeIntPolicy.clamped(
+                    (item.fraction * Double(max(pebbleCount, 1))).rounded()
+                )
             )
         }
         let metadata = AggregateMetadata(

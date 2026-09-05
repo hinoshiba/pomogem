@@ -82,8 +82,9 @@ struct ClockAnchor: Equatable, Codable, Sendable {
         wallDate = try container.decode(Date.self, forKey: .wallDate)
         systemUptime = try container.decode(TimeInterval.self, forKey: .systemUptime)
         // Anchors written before the continuous-clock migration used
-        // ProcessInfo uptime. Trust those sessions, then re-anchor on restore;
-        // comparing the two clock bases could otherwise create a false tamper.
+        // ProcessInfo uptime. The two clock bases cannot be compared; active
+        // recovery therefore treats them as unverifiable and preserves the
+        // effort only as a self-reported completion.
         basis = try container.decodeIfPresent(ClockAnchorBasis.self, forKey: .basis)
             ?? .legacySystemUptime
     }
@@ -106,10 +107,8 @@ enum ClockIntegrity: Equatable, Sendable {
         switch self {
         case .valid:
             false
-        case .changed:
+        case .changed, .uptimeReset, .unverifiable:
             true
-        case .uptimeReset, .unverifiable:
-            false
         }
     }
 }

@@ -18,12 +18,17 @@
       "internalID" : "5453554D4C494645",
       "localizations" : [
         {
-          "description" : "つみべんProの全機能を買い切りで利用できます。",
+          "description" : "任意の集中時間とまとまり粒の月刻印を買い切りで追加。",
           "displayName" : "つみべんPro",
           "locale" : "ja_JP"
+        },
+        {
+          "description" : "Custom timers and month labels.",
+          "displayName" : "Tumiben Pro",
+          "locale" : "en_US"
         }
       ],
-      "productID" : "com.hinoshiba.tsumiben.pro.lifetime",
+      "productID" : "com.hinoshiba.tumiben.pro.lifetime",
       "referenceName" : "Tsumiben Pro Lifetime",
       "type" : "NonConsumable"
     }

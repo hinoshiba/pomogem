@@ -15,10 +15,31 @@ final class JarInteractionUITests: XCTestCase {
     }
 
     func testCompletedPebbleBouncesWithoutChangingTheRecord() throws {
+        try verifyCompletedPebbleTap(
+            reduceMotion: false,
+            minimumRise: 60,
+            attachmentName: "Aurora jar — three-diameter tap launch"
+        )
+    }
+
+    func testReducedMotionTapStillMovesOnePebbleWithoutChangingTheRecord() throws {
+        try verifyCompletedPebbleTap(
+            reduceMotion: true,
+            minimumRise: 14,
+            attachmentName: "Aurora jar — reduced-motion tap lift"
+        )
+    }
+
+    private func verifyCompletedPebbleTap(
+        reduceMotion: Bool,
+        minimumRise: Double,
+        attachmentName: String
+    ) throws {
         let app = XCUIApplication()
         activeApp = app
         app.launchEnvironment["TSUMIBEN_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["TSUMIBEN_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["TSUMIBEN_UI_TEST_REDUCE_MOTION"] = reduceMotion ? "1" : "0"
         app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
         app.launch()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
@@ -76,6 +97,7 @@ final class JarInteractionUITests: XCTestCase {
         let bounced = try waitForVisibleBounce(
             from: presentationProbe,
             after: beforeTap,
+            minimumRise: minimumRise,
             timeout: 1.2
         )
         XCTAssertGreaterThan(
@@ -85,12 +107,14 @@ final class JarInteractionUITests: XCTestCase {
         )
         XCTAssertGreaterThanOrEqual(
             bounced.bounceRise,
-            8,
-            "A successful jar tap must visibly lift the pebble, not merely keep the record unchanged"
+            minimumRise,
+            reduceMotion
+                ? "Reduce Motion must retain a compact but visible direct-tap response"
+                : "An unobstructed tapped gem must travel about three of its own diameters"
         )
 
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        attachment.name = "Aurora jar — visible tap bounce"
+        attachment.name = attachmentName
         attachment.lifetime = .keepAlways
         add(attachment)
 
@@ -136,6 +160,7 @@ final class JarInteractionUITests: XCTestCase {
     private func waitForVisibleBounce(
         from probe: XCUIElement,
         after baseline: PresentationSample,
+        minimumRise: Double,
         timeout: TimeInterval
     ) throws -> PresentationSample {
         let deadline = Date().addingTimeInterval(timeout)
@@ -143,7 +168,7 @@ final class JarInteractionUITests: XCTestCase {
         repeat {
             latest = try presentationSample(from: probe)
             if latest.bounceSequence > baseline.bounceSequence,
-               latest.bounceRise >= 8 {
+               latest.bounceRise >= minimumRise {
                 return latest
             }
             usleep(25_000)

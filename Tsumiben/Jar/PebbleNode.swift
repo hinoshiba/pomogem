@@ -68,7 +68,9 @@ struct AggregateMetadata: Equatable, Sendable {
         subjectMix.first?.name ?? "過去の集中"
     }
 
-    var accessibilityDescription: String {
+    func accessibilityDescription(
+        presentsRareRewards requestedPresentation: Bool
+    ) -> String {
         let subject = subjectMix.count > 1 ? "\(primarySubjectName)など" : primarySubjectName
         let hierarchy: String
         if level == 1 {
@@ -79,12 +81,22 @@ struct AggregateMetadata: Equatable, Sendable {
         let reporting = manualPebbleCount > 0
             ? "実測\(measuredPebbleCount)粒、自己申告\(manualPebbleCount)粒"
             : "実測\(measuredPebbleCount)粒"
-        let rare = [
-            goldPebbleCount > 0 ? "金\(goldPebbleCount)粒" : nil,
-            prismPebbleCount > 0 ? "虹\(prismPebbleCount)粒" : nil
-        ].compactMap { $0 }.joined(separator: "、")
+        let presentsRareRewards = RareRewardReleasePolicy
+            .permitsInternalTestOverride(requestedPresentation)
+        let rare = presentsRareRewards
+            ? [
+                goldPebbleCount > 0 ? "金\(goldPebbleCount)粒" : nil,
+                prismPebbleCount > 0 ? "虹\(prismPebbleCount)粒" : nil
+            ].compactMap { $0 }.joined(separator: "、")
+            : ""
         let rareSuffix = rare.isEmpty ? "" : "、\(rare)"
         return "\(subject)、\(hierarchy)、\(reporting)\(rareSuffix)"
+    }
+
+    var accessibilityDescription: String {
+        accessibilityDescription(
+            presentsRareRewards: RareRewardReleasePolicy.isEnabled
+        )
     }
 }
 
@@ -213,7 +225,7 @@ struct PebbleDescriptor: Identifiable {
             subjectName: session.displaySubjectName,
             colorHex: session.displaySubjectColorHex,
             source: session.source,
-            kind: session.pebbleKind,
+            kind: RareRewardPresentationPolicy.kind(session.pebbleKind),
             rareRewardCounts: session.rareRewardCounts,
             grams: session.grams,
             createdAt: session.endAt
@@ -262,6 +274,10 @@ struct PebbleDescriptor: Identifiable {
         rareRewardCounts.multiDrawSummary
     }
 
+    var presentationRewardBatchSummary: String? {
+        RareRewardPresentationPolicy.counts(rareRewardCounts).multiDrawSummary
+    }
+
     var isMeasured: Bool {
         return switch source {
         case .timer:
@@ -280,12 +296,13 @@ struct PebbleDescriptor: Identifiable {
         }
         let measurement = isMeasured ? "実測" : "自己申告"
         let material: String
-        switch kind {
+        let presentationKind = RareRewardPresentationPolicy.kind(kind)
+        switch presentationKind {
         case .normal: material = "つぶ"
         case .gold: material = "金のつぶ"
         case .prism: material = "虹のつぶ"
         }
-        let rewardDetail = rewardBatchSummary.map { "、\($0)" } ?? ""
+        let rewardDetail = presentationRewardBatchSummary.map { "、\($0)" } ?? ""
         return "\(subjectName)、\(measurement)の\(material)、\(grams)グラム\(rewardDetail)"
     }
 
@@ -381,6 +398,12 @@ final class PebbleNode: SKShapeNode {
     private var achievementMarkNode: SKLabelNode?
 
     var subjectColor: UIColor { JarPalette.color(hex: descriptor.colorHex) }
+    private var presentsRareRewardFeature: Bool {
+        RareRewardReleasePolicy.permitsInternalTestOverride(true)
+    }
+    private var presentationKind: PebbleKind {
+        presentsRareRewardFeature ? descriptor.kind : .normal
+    }
 
     init(
         descriptor: PebbleDescriptor,
@@ -433,7 +456,7 @@ final class PebbleNode: SKShapeNode {
         reducesVisualMotion = enabled
         configureAggregateAuraMotion()
         configureEarlyEffortAuraMotion()
-        guard descriptor.kind == .prism, !descriptor.isAggregate else { return }
+        guard presentationKind == .prism, !descriptor.isAggregate else { return }
         fillShader = rareRewardMode.usesEnhancedPresentation
             ? (enabled ? Self.staticPrismShader : Self.prismShader)
             : nil
@@ -450,7 +473,7 @@ final class PebbleNode: SKShapeNode {
             updateAggregateRarePresentation(aggregate)
             return
         }
-        guard !descriptor.isAchievement, descriptor.kind != .normal else { return }
+        guard !descriptor.isAchievement, presentationKind != .normal else { return }
         configureLooseGemMaterial(fill: baseLooseFill)
         updateRareMarkPresentation()
         contactCausticNode?.fillColor = visualAccentColor.withAlphaComponent(0.16)
@@ -625,7 +648,7 @@ final class PebbleNode: SKShapeNode {
 
         let fill = baseLooseFill
 
-        switch descriptor.kind {
+        switch presentationKind {
         case .normal:
             let crystalFill = fill.mixed(with: .white, amount: 0.025)
             fillColor = crystalFill.withAlphaComponent(descriptor.isTutorial ? 0.42 : 1)
@@ -660,7 +683,7 @@ final class PebbleNode: SKShapeNode {
 
     private func configureLooseGemMaterial(fill: UIColor) {
         let enhanced = rareRewardMode.usesEnhancedPresentation
-        switch descriptor.kind {
+        switch presentationKind {
         case .normal:
             return
         case .gold:
@@ -773,7 +796,7 @@ final class PebbleNode: SKShapeNode {
             return JarPalette.color(hex: aggregate.dominantColorHex)
                 .vivid(saturationFloor: 0.70, brightnessFloor: 0.82)
         }
-        switch descriptor.kind {
+        switch presentationKind {
         case .gold:
             return rareRewardMode.usesEnhancedPresentation
                 ? JarPalette.gold
@@ -789,7 +812,7 @@ final class PebbleNode: SKShapeNode {
 
     private func addRareMarkIfNeeded() {
         let markText: String
-        switch descriptor.kind {
+        switch presentationKind {
         case .normal:
             return
         case .gold:
@@ -809,7 +832,7 @@ final class PebbleNode: SKShapeNode {
         let mark = SKLabelNode(fontNamed: "AvenirNext-Bold")
         mark.name = "rare.mark"
         mark.text = markText
-        mark.fontSize = radius * (descriptor.kind == .gold ? 0.82 : 0.74)
+        mark.fontSize = radius * (presentationKind == .gold ? 0.82 : 0.74)
         mark.fontColor = UIColor.white.withAlphaComponent(0.94)
         mark.verticalAlignmentMode = .center
         mark.horizontalAlignmentMode = .center
@@ -827,7 +850,8 @@ final class PebbleNode: SKShapeNode {
     private func configureAggregateAppearance(_ aggregate: AggregateMetadata) {
         let dominant = JarPalette.color(hex: aggregate.dominantColorHex)
             .vivid(saturationFloor: 0.70, brightnessFloor: 0.82)
-        let containsRare = rareRewardMode.usesEnhancedPresentation
+        let containsRare = presentsRareRewardFeature
+            && rareRewardMode.usesEnhancedPresentation
             && (aggregate.goldPebbleCount > 0 || aggregate.prismPebbleCount > 0)
         fillColor = dominant.mixed(
             with: JarPalette.aggregateCore,
@@ -858,7 +882,12 @@ final class PebbleNode: SKShapeNode {
         configureAggregateAuraMotion()
 
         let composition = SKSpriteNode(
-            texture: Self.makeAggregateTexture(radius: radius, aggregate: aggregate),
+            texture: Self.makeAggregateTexture(
+                radius: radius,
+                aggregate: aggregate,
+                presentsRareRewards: presentsRareRewardFeature
+                    && rareRewardMode.usesEnhancedPresentation
+            ),
             size: CGSize(width: radius * 2, height: radius * 2)
         )
         composition.name = "aggregate.composition"
@@ -892,7 +921,8 @@ final class PebbleNode: SKShapeNode {
     }
 
     private func updateAggregateRarePresentation(_ aggregate: AggregateMetadata) {
-        let containsEnhancedRare = rareRewardMode.usesEnhancedPresentation
+        let containsEnhancedRare = presentsRareRewardFeature
+            && rareRewardMode.usesEnhancedPresentation
             && (aggregate.goldPebbleCount > 0 || aggregate.prismPebbleCount > 0)
         let glow = radius * AggregatePresentation.glowScale(
             level: aggregate.level,
@@ -928,7 +958,8 @@ final class PebbleNode: SKShapeNode {
 
     private static func makeAggregateTexture(
         radius: CGFloat,
-        aggregate: AggregateMetadata
+        aggregate: AggregateMetadata,
+        presentsRareRewards: Bool
     ) -> SKTexture {
         let size = CGSize(width: radius * 2, height: radius * 2)
         let format = UIGraphicsImageRendererFormat.preferred()
@@ -990,7 +1021,8 @@ final class PebbleNode: SKShapeNode {
                 context.setLineDash(phase: 0, lengths: [])
             }
 
-            if aggregate.goldPebbleCount > 0 {
+            if presentsRareRewards,
+               aggregate.goldPebbleCount > 0 {
                 context.setFillColor(JarPalette.gold.withAlphaComponent(0.95).cgColor)
                 drawAggregateFacet(
                     in: context,
@@ -998,7 +1030,8 @@ final class PebbleNode: SKShapeNode {
                     size: radius * 0.13
                 )
             }
-            if aggregate.prismPebbleCount > 0 {
+            if presentsRareRewards,
+               aggregate.prismPebbleCount > 0 {
                 context.setFillColor(UIColor.white.withAlphaComponent(0.95).cgColor)
                 drawAggregateFacet(
                     in: context,

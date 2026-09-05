@@ -7,16 +7,10 @@ enum AccumulationTimelineQueryPolicy {
     static let maximumBrowsableYearSpan = 200
     static let stabilityAttemptCount = 2
 
-    static func latestResetMarkerDescriptor() -> FetchDescriptor<ActivityResetMarker> {
-        var descriptor = FetchDescriptor<ActivityResetMarker>(sortBy: [
-            SortDescriptor(\ActivityResetMarker.resetAt, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.sequence, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.writerDeviceID, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.epochID, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.id, order: .reverse)
-        ])
-        descriptor.fetchLimit = 1
-        return descriptor
+    static func latestResetMarkerDescriptor(
+        now: Date = .now
+    ) -> FetchDescriptor<ActivityResetMarker> {
+        ActivityResetPolicy.currentMarkerDescriptor(now: now)
     }
 
     static func edgeSessionDescriptor(
@@ -289,7 +283,7 @@ actor AccumulationTimelineRepository {
             let summary = AccumulationTimelineMonthSummary(
                 monthStart: interval.start,
                 exactLocalCount: metrics.count,
-                exactLocalGrams: metrics.values.reduce(0) { $0 + $1.grams }
+                exactLocalGrams: NonnegativeIntPolicy.sum(metrics.values.map(\.grams))
             )
             let detail = AccumulationTimelineMonthDetail(
                 summary: summary,
@@ -306,52 +300,42 @@ actor AccumulationTimelineRepository {
     }
 
     private struct CanonicalMetric {
-        let id: UUID
-        let endAt: Date
-        let grams: Int64
-        let record: AccumulationRecord
+        let session: StudySession
 
-        func shouldReplace(_ existing: Self) -> Bool {
-            if grams == existing.grams { return endAt > existing.endAt }
-            return grams > existing.grams
+        var id: UUID { session.id }
+        var endAt: Date { session.endAt }
+        var grams: Int64 { Int64(max(0, session.grams)) }
+        var record: AccumulationRecord {
+            AccumulationRecord(
+                id: session.id,
+                date: session.endAt,
+                subjectName: session.displaySubjectName,
+                colorHex: session.displaySubjectColorHex,
+                grams: max(0, session.grams),
+                isMeasured: session.source == .timer,
+                // Timeline records are raw activity. A caller that also
+                // presents local aggregates resolves membership separately.
+                isRepresentedByLocalAggregate: false
+            )
         }
+
     }
 
     private func canonicalMetrics(
         currentEpochID: UUID?,
         interval: DateInterval
     ) throws -> [UUID: CanonicalMetric] {
-        let descriptor = AccumulationTimelineQueryPolicy.periodMetricDescriptor(
-            currentEpochID: currentEpochID,
-            interval: interval
+        let sessions = try BoundedHistoryPolicy.resolvedSessionsInFiniteInterval(
+            context: modelContext,
+            epochID: currentEpochID,
+            interval: interval,
+            maximumPhysicalRows: BoundedHistoryPolicy.finiteIntervalSessionRowLimit
         )
         var values: [UUID: CanonicalMetric] = [:]
-        try modelContext.enumerate(
-            descriptor,
-            batchSize: AccumulationTimelineQueryPolicy.metricBatchSize
-        ) { session in
+        values.reserveCapacity(sessions.count)
+        for session in sessions {
             try checkCancellation()
-            let candidate = CanonicalMetric(
-                id: session.id,
-                endAt: session.endAt,
-                grams: Int64(max(0, session.grams)),
-                record: AccumulationRecord(
-                    id: session.id,
-                    date: session.endAt,
-                    subjectName: session.displaySubjectName,
-                    colorHex: session.displaySubjectColorHex,
-                    grams: max(0, session.grams),
-                    isMeasured: session.source == .timer,
-                    isBaked: session.isBaked
-                )
-            )
-            if let existing = values[candidate.id] {
-                if candidate.shouldReplace(existing) {
-                    values[candidate.id] = candidate
-                }
-            } else {
-                values[candidate.id] = candidate
-            }
+            values[session.id] = CanonicalMetric(session: session)
         }
         return values
     }
@@ -368,7 +352,10 @@ actor AccumulationTimelineRepository {
                 throw AccumulationTimelineRepositoryError.invalidCalendarInterval
             }
             let current = grouped[monthStart] ?? (0, 0)
-            grouped[monthStart] = (current.count + 1, current.grams + metric.grams)
+            grouped[monthStart] = (
+                NonnegativeIntPolicy.adding(current.count, 1),
+                NonnegativeIntPolicy.adding(current.grams, metric.grams)
+            )
         }
         let months = grouped.map { monthStart, value in
             AccumulationTimelineMonthSummary(
@@ -382,7 +369,7 @@ actor AccumulationTimelineRepository {
             year: year,
             months: months,
             exactLocalCount: metrics.count,
-            exactLocalGrams: metrics.values.reduce(0) { $0 + $1.grams },
+            exactLocalGrams: NonnegativeIntPolicy.sum(metrics.values.map(\.grams)),
             coverage: coverage
         )
     }
@@ -404,23 +391,29 @@ actor AccumulationTimelineRepository {
         currentEpochID: UUID?
     ) throws -> AccumulationTimelineSnapshotStamp {
         let count = try modelContext.fetchCount(
-            AccumulationTimelineQueryPolicy.periodCountDescriptor(
-                currentEpochID: currentEpochID,
-                interval: DateInterval(start: .distantPast, end: .distantFuture)
-            )
+            BoundedHistoryPolicy.sessionCountDescriptor(epochID: currentEpochID)
         )
-        let oldest = try modelContext.fetch(
-            AccumulationTimelineQueryPolicy.edgeSessionDescriptor(
-                currentEpochID: currentEpochID,
-                order: .forward
-            )
-        ).first.map { AccumulationTimelineEdge(id: $0.id, date: $0.endAt) }
-        let newest = try modelContext.fetch(
-            AccumulationTimelineQueryPolicy.edgeSessionDescriptor(
-                currentEpochID: currentEpochID,
-                order: .reverse
-            )
-        ).first.map { AccumulationTimelineEdge(id: $0.id, date: $0.endAt) }
+        // Extent discovery must never instantiate lifetime history. Scan only
+        // bounded physical edge candidates, then exact-resolve their logical
+        // IDs so a malformed or losing edge row cannot define the browser.
+        let oldestPage = try BoundedHistoryPolicy.resolvedSessionPage(
+            context: modelContext,
+            epochID: currentEpochID,
+            order: .forward,
+            logicalLimit: 1
+        )
+        let newestPage = try BoundedHistoryPolicy.resolvedSessionPage(
+            context: modelContext,
+            epochID: currentEpochID,
+            order: .reverse,
+            logicalLimit: 1
+        )
+        let oldest = oldestPage.sessions.first.map {
+            AccumulationTimelineEdge(id: $0.id, date: $0.endAt)
+        }
+        let newest = newestPage.sessions.first.map {
+            AccumulationTimelineEdge(id: $0.id, date: $0.endAt)
+        }
         return AccumulationTimelineSnapshotStamp(
             rawRowCount: count,
             oldest: oldest,

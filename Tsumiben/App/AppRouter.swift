@@ -44,12 +44,23 @@ enum ShareScope: Equatable {
 @MainActor
 @Observable
 final class AppRouter {
-    var selectedTab: AppTab = .jar
+    var selectedTab: AppTab = .jar {
+        didSet {
+#if DEBUG
+            guard oldValue != .settings, selectedTab == .settings else { return }
+            beginSettingsRenderAuditIfNeeded()
+#endif
+        }
+    }
     var toast: ToastMessage?
     var paywallPresented = false
     var paywallContext: PaywallContext = .settings
     private(set) var pendingPaywallIntent: PaywallPendingIntent?
     private(set) var homeCustomDurationResumeRequested = false
+    /// Latches once for this process. Home can be recomputed many times while
+    /// maintenance saves projections; only the first incomplete rootless page
+    /// may ask Root to advance the durable sessions generation.
+    private(set) var localSessionMaintenanceRequestedThisProcess = false
     var sharePresented = false
     var shareScope: ShareScope = .all
     var recoveredFocus: RecoveredFocusRequest?
@@ -64,6 +75,40 @@ final class AppRouter {
 
     @ObservationIgnored
     private var toastTask: Task<Void, Never>?
+
+#if DEBUG
+    /// UI tests read the completed sample, rather than timing XCUI's element
+    /// lookup, synthesized tap, quiescence wait, and one-second polling cadence.
+    /// The start is captured inside the app when routing actually begins.
+    private(set) var settingsRenderAuditValue: String?
+
+    @ObservationIgnored
+    private var settingsRenderAuditStartedAt: TimeInterval?
+
+    private func beginSettingsRenderAuditIfNeeded() {
+        guard LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess else { return }
+        settingsRenderAuditValue = nil
+        settingsRenderAuditStartedAt = ProcessInfo.processInfo.systemUptime
+    }
+
+    func completeSettingsRenderAudit(
+        subjectCount: Int,
+        preferenceCount: Int,
+        resetMarkerCount: Int
+    ) {
+        guard settingsRenderAuditValue == nil,
+              let startedAt = settingsRenderAuditStartedAt else { return }
+        let elapsed = max(0, ProcessInfo.processInfo.systemUptime - startedAt)
+        let milliseconds = Int((elapsed * 1_000).rounded())
+        settingsRenderAuditStartedAt = nil
+        settingsRenderAuditValue = [
+            "milliseconds=\(milliseconds)",
+            "subjects=\(subjectCount)",
+            "preferences=\(preferenceCount)",
+            "resetMarkers=\(resetMarkerCount)"
+        ].joined(separator: ";")
+    }
+#endif
 
     func showToast(_ text: String, symbol: String? = nil, duration: Duration = .seconds(3)) {
         toastTask?.cancel()
@@ -104,6 +149,13 @@ final class AppRouter {
     func consumeHomeCustomDurationResumeRequest() -> Bool {
         guard homeCustomDurationResumeRequested else { return false }
         homeCustomDurationResumeRequested = false
+        return true
+    }
+
+    @discardableResult
+    func requestLocalSessionMaintenanceOnce() -> Bool {
+        guard !localSessionMaintenanceRequestedThisProcess else { return false }
+        localSessionMaintenanceRequestedThisProcess = true
         return true
     }
 
@@ -154,6 +206,7 @@ struct RecoveredFocusRequest: Identifiable {
     let engine: PomodoroEngine
     let clockAnchor: ClockAnchor?
     let pendingCompletion: PomodoroCompletion?
+    let scheduledCompletionNotificationDeliveryDate: Date?
     let dataEpochID: UUID?
     let origin: FocusRecoveryOrigin
     let allowsLocalNotifications: Bool
@@ -164,6 +217,7 @@ struct RecoveredFocusRequest: Identifiable {
         engine: PomodoroEngine,
         clockAnchor: ClockAnchor?,
         pendingCompletion: PomodoroCompletion? = nil,
+        scheduledCompletionNotificationDeliveryDate: Date? = nil,
         dataEpochID: UUID? = nil,
         origin: FocusRecoveryOrigin = .local,
         allowsLocalNotifications: Bool = true
@@ -174,6 +228,8 @@ struct RecoveredFocusRequest: Identifiable {
         self.engine = engine
         self.clockAnchor = clockAnchor
         self.pendingCompletion = pendingCompletion
+        self.scheduledCompletionNotificationDeliveryDate =
+            scheduledCompletionNotificationDeliveryDate
         self.dataEpochID = dataEpochID
         self.origin = origin
         self.allowsLocalNotifications = allowsLocalNotifications
@@ -188,9 +244,15 @@ enum FocusRecoveryOrigin: Equatable, Sendable {
 struct CloudFocusRecoveryOffer: Identifiable {
     let id: UUID
     let request: RecoveredFocusRequest
+    let sourceRecordID: UUID
+    let sourceRevision: Int
+    let sourceOwnershipSequence: Int
 
-    init(request: RecoveredFocusRequest) {
+    init(request: RecoveredFocusRequest, source: FocusSyncRecordSnapshot) {
         id = request.id
         self.request = request
+        sourceRecordID = source.recordID
+        sourceRevision = source.revision
+        sourceOwnershipSequence = source.ownershipSequence
     }
 }

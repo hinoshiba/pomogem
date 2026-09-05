@@ -149,7 +149,7 @@ final class FocusCompletionFailureRecoveryUITests: XCTestCase {
         app.launchArguments += [
             "-AppleLanguages", "(ja)",
             "-AppleLocale", "ja_JP",
-            "-review.requested-version", "1.0.0"
+            "-review.requested-version", "1.0"
         ]
         return app
     }

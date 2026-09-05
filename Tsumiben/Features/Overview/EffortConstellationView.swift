@@ -182,7 +182,7 @@ enum EffortConstellationPresentation {
         ]
 
         if projectionIsLowerBound {
-            components.append("進捗を同期中")
+            components.append("進捗を整理中")
         } else if let state = JarLifetimeCorePresentation.state(
             totalPebbleCount: totalPebbleCount,
             totalGrams: totalGrams,
@@ -366,7 +366,7 @@ struct EffortConstellationView: View {
                             + (projectionIsLowerBound ? "+" : "")
                         : (
                             projectionIsLowerBound
-                                ? "同期中"
+                                ? "整理中"
                                 : EffortProgressPresentation.formattedStandardUnits(
                                     grams: totalGrams
                                 )
@@ -410,7 +410,7 @@ struct EffortConstellationView: View {
                 )
                 : (
                     projectionIsLowerBound
-                        ? "最初の結晶までの進捗を同期しています"
+                        ? "最初の結晶までの進捗を整理しています"
                         : "\(EffortProgressPresentation.formattedStandardUnits(grams: totalGrams))、\(EffortProgressPresentation.formattedDuration(grams: totalGrams))。最初の結晶まで、あと\(max(0, 10 - min(9, max(0, totalPebbleCount))))粒です"
                 )
         )
@@ -460,7 +460,12 @@ struct EffortConstellationView: View {
     }
 
     private func updateMotion() {
-        guard !reduceMotion else {
+        // A repeat-forever animation prevents XCTest from receiving an idle
+        // notification before its next gesture. Disable only in the explicit
+        // Debug UI-test protocol; Release always keeps the production motion.
+        guard !reduceMotion,
+              !LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess
+        else {
             auraExpanded = false
             return
         }

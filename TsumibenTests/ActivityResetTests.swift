@@ -16,7 +16,9 @@ final class ActivityResetTests: XCTestCase {
             Prefs.self,
             ActivityResetMarker.self,
             SyncedFocusTimer.self,
-            FocusTimerDeviceClaim.self
+            FocusTimerDeviceClaim.self,
+            RareRewardPendingCommit.self,
+            RareRewardLedgerCursor.self
         ])
         let configuration = ModelConfiguration(
             "ActivityResetTests",
@@ -27,29 +29,40 @@ final class ActivityResetTests: XCTestCase {
         return try ModelContainer(for: schema, configurations: [configuration])
     }
 
-    func testLaterOfflineResetWinsEvenWithLowerUnawareSequence() {
-        let older = ActivityResetSnapshot(
+    func testObservedLamportWinnerDoesNotFlipWithWallClock() {
+        let now = Date(timeIntervalSince1970: 1_800_000_120)
+        let observedWinner = ActivityResetSnapshot(
             id: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!,
             epochID: UUID(uuidString: "20000000-0000-0000-0000-000000000001")!,
             sequence: 9,
             resetAt: Date(timeIntervalSince1970: 1_800_000_000),
             writerDeviceID: "iphone"
         )
-        let laterOffline = ActivityResetSnapshot(
+        let unawareOffline = ActivityResetSnapshot(
             id: UUID(uuidString: "10000000-0000-0000-0000-000000000002")!,
             epochID: UUID(uuidString: "20000000-0000-0000-0000-000000000002")!,
             sequence: 0,
-            resetAt: older.resetAt.addingTimeInterval(60),
+            resetAt: observedWinner.resetAt.addingTimeInterval(60),
             writerDeviceID: "offline-mac"
         )
 
         XCTAssertEqual(
-            ActivityResetPolicy.currentMarker(from: [laterOffline, older]),
-            laterOffline
+            ActivityResetPolicy.currentMarker(
+                from: [unawareOffline, observedWinner],
+                now: now
+            ),
+            observedWinner
         )
         XCTAssertEqual(
-            ActivityResetPolicy.currentMarker(from: [older, laterOffline]),
-            laterOffline
+            ActivityResetPolicy.currentMarker(
+                from: [observedWinner, unawareOffline],
+                now: now.addingTimeInterval(60 * 60 * 24 * 365 * 100)
+            ),
+            observedWinner
+        )
+        XCTAssertEqual(
+            ActivityResetPolicy.nextSequence(from: [unawareOffline, observedWinner]),
+            10
         )
     }
 
@@ -71,12 +84,78 @@ final class ActivityResetTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            ActivityResetPolicy.currentMarker(from: [alpha, beta]),
+            ActivityResetPolicy.currentMarker(from: [alpha, beta], now: instant),
             beta
         )
         XCTAssertEqual(
-            ActivityResetPolicy.currentMarker(from: [beta, alpha]),
+            ActivityResetPolicy.currentMarker(from: [beta, alpha], now: instant),
             beta
+        )
+    }
+
+    func testFutureWallClockCannotOverrideHigherLamportSequence() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let valid = ActivityResetSnapshot(
+            id: UUID(),
+            epochID: UUID(),
+            sequence: 7,
+            resetAt: now.addingTimeInterval(-60),
+            writerDeviceID: "valid-device"
+        )
+        let farFuture = ActivityResetSnapshot(
+            id: UUID(),
+            epochID: UUID(),
+            sequence: 6,
+            resetAt: now.addingTimeInterval(60 * 60 * 24 * 365 * 100),
+            writerDeviceID: "bad-clock"
+        )
+        let markers = [farFuture, valid]
+
+        XCTAssertEqual(
+            ActivityResetPolicy.currentMarker(from: markers, now: now),
+            valid
+        )
+        XCTAssertEqual(
+            ActivityResetPolicy.state(of: valid.epochID, markers: markers, now: now),
+            .current
+        )
+        XCTAssertEqual(
+            ActivityResetPolicy.state(
+                of: farFuture.epochID,
+                markers: markers,
+                now: now
+            ),
+                .stale
+        )
+        XCTAssertEqual(
+            ActivityResetPolicy.nextSequence(from: markers, now: now),
+            8,
+            "wall-clock metadata must not alter the Lamport sequence"
+        )
+    }
+
+    func testUnsupportedSequenceIsQuarantinedInsteadOfPinningResetOrder() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let corrupt = ActivityResetSnapshot(
+            id: UUID(),
+            epochID: UUID(),
+            sequence: ActivityResetPolicy.maximumSupportedSequence + 1,
+            resetAt: now,
+            writerDeviceID: "corrupt"
+        )
+
+        XCTAssertNil(ActivityResetPolicy.currentMarker(from: [corrupt], now: now))
+        XCTAssertEqual(
+            ActivityResetPolicy.state(
+                of: corrupt.epochID,
+                markers: [corrupt],
+                now: now
+            ),
+            .awaitingMarker
+        )
+        XCTAssertEqual(
+            ActivityResetPolicy.state(of: nil, markers: [corrupt], now: now),
+            .current
         )
     }
 
@@ -87,7 +166,7 @@ final class ActivityResetTests: XCTestCase {
         let first = try ActivityResetStore.beginReset(
             context: context,
             deviceID: "iphone",
-            now: Date(timeIntervalSince1970: 1_800_100_000)
+            now: Date.now.addingTimeInterval(-3_600)
         )
         try context.save()
         try SeedData.bootstrap(context: context)
@@ -145,7 +224,7 @@ final class ActivityResetTests: XCTestCase {
         try SeedData.bootstrap(context: context)
 
         let logicalID = UUID()
-        let start = Date(timeIntervalSince1970: 1_800_200_000)
+        let start = Date.now.addingTimeInterval(-10_000)
         let legacy = StudySession(
             id: logicalID,
             startAt: start,
@@ -264,9 +343,19 @@ final class ActivityResetTests: XCTestCase {
         XCTAssertEqual(sessions.first?.dataEpochID, marker.epochID)
         XCTAssertEqual(sessions.first?.grams, 250)
         XCTAssertEqual(sessions.first?.pebbleKind, .normal)
-        let prefs = try XCTUnwrap(context.fetch(FetchDescriptor<Prefs>()).first)
-        XCTAssertEqual(prefs.activityEpochID, marker.epochID)
-        XCTAssertEqual(prefs.manualUsedToday, 0)
+        let currentWriter = try XCTUnwrap(
+            PrefsSyncPolicy.fetchOwnedWriterRows(
+                from: context,
+                currentEpochID: marker.epochID
+            ).first
+        )
+        XCTAssertEqual(currentWriter.activityEpochID, marker.epochID)
+        XCTAssertEqual(currentWriter.manualUsedToday, 0)
+        let resolvedPrefs = try PrefsSyncPolicy.resolvedState(
+            in: PrefsSyncPolicy.fetchBounded(from: context),
+            currentEpochID: marker.epochID
+        )
+        XCTAssertEqual(resolvedPrefs.manualUsedToday, 0)
         let gacha = try XCTUnwrap(context.fetch(FetchDescriptor<GachaState>()).first)
         XCTAssertEqual(gacha.dataEpochID, marker.epochID)
         XCTAssertEqual(gacha.sinceLastGold, 1)

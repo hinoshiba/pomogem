@@ -5,21 +5,43 @@
 
 ## 保存するデータ
 
-集中テーマ、完了セッション、進行中タイマー、自己申告時間、成果の石、瓶・結晶の状態、
-設定をSwiftDataへ保存します。iCloudが利用できる実機では、private CloudKit databaseへ
-同期します。運営者が管理する独自サーバーへ集中記録を送信しません。
+最初の保存領域を作る前に、「iCloudで同期」と「このiPhoneのみ」を同格で提示します。どちらも
+推奨扱いにせず、それぞれの説明を確認した利用者が一方を選びます。Version 1.0では選択後に保存先を
+変更できません。
 
-WidgetとLive Activityには、App Group経由で必要最小限の集計値と瓶画像を渡します。
-ホーム画面やロック画面に置いた内容は、端末の画面を見ることのできる人の目に触れる場合が
-あります。ロック画面・通知にテーマ名を表示する設定は既定でオフです。
+「このiPhoneのみ」は、Apple Accountやnetwork接続なしで全ての基本機能を利用でき、専用のrandom
+namespaceを持つ端末内storeへだけ保存します。iCloudへ自動で切り替えたり、uploadしたりしません。
+
+「iCloudで同期」を選んで確認した場合は、テーマ名、成果メモ、完了セッションと自己申告時間を含む
+記録、設定、進行中タイマーを、端末と利用者のApple Accountにあるprivate CloudKit databaseへ保存・
+同期します。選択時と各launch／resumeで、`CKContainer.accountStatus`と`userRecordID`を確認し、private
+databaseのrecord zoneをread-only取得して同じApple Accountへのonline accessを確認します。通信できない、accountを確認できない、別accountへ切り替わっている場合は、
+保存領域を開かないfail-closed状態にしますが、保存済みdataを削除しません。瓶・結晶などの表示用集約は
+端末ごとのlocal storeで同期元記録から再構築し、CloudKitへuploadしません。運営者が管理する独自
+サーバーへ集中記録を送信しません。
+
+Version 1.0のホーム／ロック画面Widgetは、アプリを開くためのaccount-neutralな案内だけを表示し、
+記録、質量、テーマ名、瓶画像を読み取りません。集中を明示的に開始したときのLive Activityも
+account-neutralで、アプリ名、選択時間、残り時間、実行状態だけを表示します。ActivityKitへ渡す属性は
+ランダムなセッションUUIDと秒数だけで、テーマ名、メモ、質量、Apple Account identifier、CloudKit
+dataを含めません。Live Activityは端末内で更新し、独自serverやActivityKit pushへ送信しません。
+設定から端末ごとに無効化でき、OS側の許可も尊重します。終了通知も同じ境界に従い、設定にかかわらず
+テーマ名を含まない共通文面です。
 
 ## 外部処理と権限
 
 - StoreKit: 商品情報、購入、復元、現在の権利をAppleへ確認
-- CloudKit: 同じApple AccountのiPhone間でprivate dataを同期
-- Notifications / ActivityKit: タイマー終了を端末上で通知
+- CloudKit: iCloudを選び確認した場合だけ、同じApple Accountの対応iPhone間で同期元データを一つの
+  private databaseに保存・同期
+- Notifications: タイマー終了を端末上で通知
+- ActivityKit: 明示的に開始した集中の残り時間と状態だけを端末のロック画面へ表示。端末内で更新し、
+  独自server、push、アカウント由来dataを使用しない。アプリ内設定をオフにすると既存表示も終了
 - Photos: 利用者が選んだときだけ生成済み静止画を追加
-- Core Motion: 瓶の重力計算にその場で利用し、値を保存・送信しない
+- Core Motion: 瓶を端末の傾きや軽い振る操作に合わせて動かすため、その場で利用する。iOSが利用許可を
+  求める場合は目的を表示し、許可しなくてもtapと他の集中機能を利用できる。値、tap、判定結果を
+  保存・送信せず、アプリがinactive／backgroundの間は更新を停止
+- AVFoundation／Core Haptics: 瓶の粒に対する操作を音と触覚で返すため端末内だけで利用する。
+  録音、音声取得、操作履歴の保存・送信は行わず、音と触覚は設定から個別に停止可能
 - System share sheet / pasteboard: 利用者の明示操作時だけ共有物または定型本文を渡す
 
 GIFの一時ファイルを安全に検証・消去するため、アプリのコンテナ内に作成したファイルの
@@ -30,12 +52,10 @@ GIFの一時ファイルを安全に検証・消去するため、アプリの�
 
 ## 製品Webサイト
 
-製品サイト、プライバシーポリシー、サポート案内はGitHub Pagesをorigin、CloudflareをCDN／
-reverse proxyとして配信します。site source自身はcookie、広告、analytics、行動追跡を実装しません。
-通常のWeb配信に伴い、GitHubとCloudflareはIP address、User-Agent、access日時、request URL、
-security／network診断情報などをservice提供、安全性、可用性のために処理する場合があります。
-CloudflareはEmail Address Obfuscationのscriptを配信HTMLへ挿入し、Network Error Loggingの
-reportを受け取る場合があります。この処理をアプリの集中記録とは結び付けません。
+製品サイト、プライバシーポリシー、サポート案内、利用条件、販売条件はGitHub Pagesで配信します。
+site source自身はcookie、広告、analytics、行動追跡を実装しません。通常のWeb配信に伴い、GitHubは
+IP address、User-Agent、access日時、request URL、security／network診断情報などをservice提供、
+安全性、可用性のために処理する場合があります。この処理をアプリの集中記録とは結び付けません。
 
 App Store、GitHub、Appleの購入履歴や規約などへの外部linkは、利用者が選んだ場合だけsystem
 browserで開きます。遷移先には通常のWeb通信としてIP address、User-Agent、referrerなどが
@@ -50,7 +70,7 @@ browserで開きます。遷移先には通常のWeb通信としてIP address、
 従います。
 
 「データを書き出す」はSNS向け共有とは異なり、利用者が自分のSwiftData保存データを取得する
-ための手動操作です。端末で利用可能なカテゴリ、全記録（リセット以前の旧世代、削除済み成果の
+ための手動操作です。端末で利用可能なテーマ、全記録（リセット以前の旧世代、削除済み成果の
 tombstone、旧形式を含む）、
 成果メモ、設定、同期用のランダムな端末識別子をversioned JSONへ保存し、system share sheetへ
 渡します。アプリが送信先を自動選択したり、運営者へ送信したりすることはありません。
@@ -58,6 +78,11 @@ tombstone、旧形式を含む）、
 一時書き出しdirectoryとfileには、端末lock中のaccessを防ぐcomplete data protectionを指定します。
 画面のヒント表示済み状態、審査依頼の回数、実行中処理の一時cacheなど、同期対象ではない端末内の
 UI／runtime状態は書き出し対象に含めません。
+
+このJSON書き出しは、選択した保存先で端末から利用できる全11種類の出荷対象SwiftData保存データを
+対象とします。Version 1.0にはJSONを再importする機能がなく、local-only dataをiCloudへ移行したり、
+別端末で記録を継続したりするためには使えません。iCloud側の当該app dataはAppleのiCloudストレージ
+管理の対象です。
 
 ## サポートへのお問い合わせ
 
@@ -76,12 +101,25 @@ Webのサポートページからメールを送る場合、送信元メール�
 
 ## 保持、リセット、物理的な削除
 
-記録と設定は端末と、有効な場合はprivate CloudKitに保持されます。アプリ内の「表示中の記録を
-リセット」は同期対象のreset markerを作り、以前の世代を表示と集計から除外して、遅れて届く
-旧データを再表示しない設計です。完全オフライン端末へ反映されるのは、その端末が次に同期した
-後です。競合防止のため旧世代の物理行は端末とiCloudに残る場合があり、データ書き出しにも含まれ
-ます。端末内の物理データはアプリ削除で消去でき、iCloud側の物理データはAppleが提供するiCloud
-データ管理から削除できます。運営者はprivate CloudKitの利用者データを保持・代行削除しません。
+記録・設定・進行中タイマーなどの同期元データは、local-only選択時はこのiPhoneだけに、iCloud選択時は
+端末とprivate CloudKitに保持されます。瓶・結晶などの表示用集約は端末内に保持し、同期元記録から
+再構築します。
+アプリ内の「表示中の記録をリセット」は同期対象のreset markerを作り、以前の世代を表示と集計から
+除外します。この通常のリセットでは、競合防止のため旧世代の物理行が端末とiCloudに残る場合が
+あり、データ書き出しにも含まれます。
+
+1.0は独自の利用者accountを作成せず、private CloudKitのzoneをアプリから直接一括削除する機能も
+提供しません。端末内の物理データはアプリを削除すると消去されます。local-onlyを選んだ場合、削除・
+再install後は保存先を選び直せますが、以前のlocal記録は失われ、書き出したJSONからも復元・移行
+できません。iCloud側のアプリデータはAppleが
+提供するiCloudストレージ管理から削除できます。別のoffline端末に残るcopyは遠隔消去できないため、
+不要なinstallationは各端末で削除してください。Appleが管理する購入履歴はこれらの削除対象外です。
+運営者はprivate CloudKitの利用者データを保持せず、利用者に代わって閲覧・削除できません。
+
+写真ライブラリへ追加した画像、Filesなどへ保存した書き出し、共有先へ渡した内容、clipboardへ
+コピーした本文、送信済みのsupport mailは、アプリとiCloudの保存領域の外にあります。通常reset、
+アプリ削除、AppleのiCloudストレージ管理では消えないため、必要に応じて各保存先・共有先で削除
+してください。
 
 ## 運営者と変更
 

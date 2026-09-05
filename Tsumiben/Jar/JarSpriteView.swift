@@ -2,6 +2,29 @@ import SpriteKit
 import SwiftUI
 import UIKit
 
+enum JarMotionActivationPolicy {
+    static func shouldCaptureShake(
+        isMotionEnabled: Bool,
+        sceneIsActive: Bool,
+        hasPhysicalContent: Bool
+    ) -> Bool {
+        isMotionEnabled && sceneIsActive && hasPhysicalContent
+    }
+
+    static func shouldRun(
+        isMotionEnabled: Bool,
+        reduceMotion: Bool,
+        sceneIsActive: Bool,
+        hasPhysicalContent: Bool
+    ) -> Bool {
+        shouldCaptureShake(
+            isMotionEnabled: isMotionEnabled,
+            sceneIsActive: sceneIsActive,
+            hasPhysicalContent: hasPhysicalContent
+        ) && !reduceMotion
+    }
+}
+
 /// Keeps the jar's spoken hierarchy aligned with the visible value hierarchy:
 /// elapsed mass first, count-based storage second, and zero-mass achievements
 /// as a separate record. This is pure so the ordering can be regression tested.
@@ -15,27 +38,39 @@ enum JarAccessibilityPresentation {
         goldPebbleCount rawGoldPebbleCount: Int,
         prismPebbleCount rawPrismPebbleCount: Int,
         fusionProgressDescription: String?,
-        projectionIsLowerBound: Bool
+        projectionIsLowerBound: Bool,
+        projectionIsUnverified: Bool = false
     ) -> String {
         let totalGrams = max(0, rawTotalGrams)
         let pebbleCount = max(0, rawPebbleCount)
         let achievementCount = max(0, rawAchievementCount)
         let aggregateCount = max(0, rawAggregateCount)
         let representedPebbleCount = max(0, rawRepresentedPebbleCount)
-        let goldPebbleCount = max(0, rawGoldPebbleCount)
-        let prismPebbleCount = max(0, rawPrismPebbleCount)
+        let goldPebbleCount = RareRewardPresentationPolicy.goldCount(
+            rawGoldPebbleCount
+        )
+        let prismPebbleCount = RareRewardPresentationPolicy.prismCount(
+            rawPrismPebbleCount
+        )
         let aggregate = aggregateCount > 0
             ? "、まとまり粒\(aggregateCount)個、合計\(representedPebbleCount)粒分"
             : ""
-        let fusion = fusionProgressDescription.map { "、\($0)" } ?? ""
+        let fusion = projectionIsUnverified
+            ? ""
+            : (fusionProgressDescription.map { "、\($0)" } ?? "")
         let rare = [
             goldPebbleCount > 0 ? "金\(goldPebbleCount)粒" : nil,
             prismPebbleCount > 0 ? "虹\(prismPebbleCount)粒" : nil
         ].compactMap { $0 }.joined(separator: "、")
         let rareSuffix = rare.isEmpty ? "" : "、\(rare)"
-        let massDescription = projectionIsLowerBound
-            ? "現在確認できた集中時間の質量：\(formattedMass(totalGrams))以上、同期中"
-            : "記録した集中時間の質量：\(formattedMass(totalGrams))"
+        let massDescription: String
+        if projectionIsUnverified {
+            massDescription = "iCloudの集計を再確認中。この端末で確認できた粒を表示"
+        } else if projectionIsLowerBound {
+            massDescription = "現在確認できた集中時間の質量：\(formattedMass(totalGrams))以上、集計整理中"
+        } else {
+            massDescription = "記録した集中時間の質量：\(formattedMass(totalGrams))"
+        }
         return "\(massDescription)。瓶の整理：\(pebbleCount)粒\(aggregate)\(rareSuffix)\(fusion)。記念石\(achievementCount)個"
     }
 
@@ -58,9 +93,12 @@ struct JarSpriteView: View {
     let accentHex: String
     let lifetimeCoreColorHex: String
     let projectionIsLowerBound: Bool
+    let projectionIsUnverified: Bool
     let fusionProgressDescription: String?
+    let isMotionEnabled: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var motionObserver: JarMotionObserver
 #if targetEnvironment(macCatalyst)
     @State private var catalystGestureOwnership = JarDragGestureOwnership()
@@ -78,7 +116,9 @@ struct JarSpriteView: View {
         accentHex: String = Constants.Color.amberLamp,
         lifetimeCoreColorHex: String? = nil,
         projectionIsLowerBound: Bool = false,
-        fusionProgressDescription: String? = nil
+        projectionIsUnverified: Bool = false,
+        fusionProgressDescription: String? = nil,
+        isMotionEnabled: Bool = true
     ) {
         _scene = ObservedObject(wrappedValue: scene)
         self.totalGrams = totalGrams
@@ -86,12 +126,18 @@ struct JarSpriteView: View {
         self.achievementCount = achievementCount
         self.aggregateCount = aggregateCount
         self.representedPebbleCount = representedPebbleCount ?? pebbleCount
-        self.goldPebbleCount = max(0, goldPebbleCount)
-        self.prismPebbleCount = max(0, prismPebbleCount)
+        self.goldPebbleCount = RareRewardPresentationPolicy.goldCount(
+            goldPebbleCount
+        )
+        self.prismPebbleCount = RareRewardPresentationPolicy.prismCount(
+            prismPebbleCount
+        )
         self.accentHex = accentHex
         self.lifetimeCoreColorHex = lifetimeCoreColorHex ?? accentHex
         self.projectionIsLowerBound = projectionIsLowerBound
+        self.projectionIsUnverified = projectionIsUnverified
         self.fusionProgressDescription = fusionProgressDescription
+        self.isMotionEnabled = isMotionEnabled
         _motionObserver = StateObject(wrappedValue: JarMotionObserver(scene: scene))
     }
 
@@ -154,7 +200,8 @@ struct JarSpriteView: View {
                 // element can occasionally lose the touch end during a view
                 // update. SpatialTapGesture preserves the exact local point
                 // and gives the scene one deterministic input path.
-                .gesture(
+                .contentShape(Rectangle())
+                .highPriorityGesture(
                     SpatialTapGesture(coordinateSpace: .local)
                         .onEnded { value in
                             _ = scene.bouncePebbles(at: CGPoint(
@@ -185,6 +232,33 @@ struct JarSpriteView: View {
         .onChange(of: reduceMotion) { _, enabled in
             updateMotionBehavior(reduceMotion: enabled)
         }
+        .onChange(of: scenePhase) { _, _ in
+            updateMotionBehavior(reduceMotion: reduceMotion)
+        }
+        .onChange(of: scene.physicalContentRevision) { _, _ in
+            updateMotionBehavior(reduceMotion: reduceMotion)
+        }
+        .onChange(of: isMotionEnabled) { _, _ in
+            updateMotionBehavior(reduceMotion: reduceMotion)
+        }
+#if !targetEnvironment(macCatalyst)
+        .background {
+            JarSystemShakeCapture(
+                isEnabled: JarMotionActivationPolicy.shouldCaptureShake(
+                    isMotionEnabled: isMotionEnabled,
+                    sceneIsActive: scenePhase == .active,
+                    hasPhysicalContent: hasPhysicalContent
+                )
+            ) {
+                _ = scene.shakePebbles(
+                    strength: Constants.Jar.systemShakeFallbackStrength,
+                    horizontal: 0
+                )
+            }
+            .frame(width: 1, height: 1)
+            .accessibilityHidden(true)
+        }
+#endif
         .onDisappear {
             motionObserver.stop()
         }
@@ -200,7 +274,8 @@ struct JarSpriteView: View {
             goldPebbleCount: goldPebbleCount,
             prismPebbleCount: prismPebbleCount,
             fusionProgressDescription: fusionProgressDescription,
-            projectionIsLowerBound: projectionIsLowerBound
+            projectionIsLowerBound: projectionIsLowerBound,
+            projectionIsUnverified: projectionIsUnverified
         )
     }
 
@@ -212,9 +287,9 @@ struct JarSpriteView: View {
         return "瓶をクリックすると粒が跳ねます。左右にドラッグするか、VoiceOverのカスタムアクションでも粒を動かせます"
 #else
         if reduceMotion {
-            return "ダブルタップした位置が短く光ります。粒は移動しません"
+            return "ダブルタップすると近くの1粒だけが短く浮いて戻ります。自動の転がりは停止しています"
         }
-        return "瓶をタップすると近くの粒が跳ねます。iPhoneを傾けるか、カスタムアクションでも粒を動かせます"
+        return "瓶をタップすると1粒が大きく跳ね、ぶつかった周囲の粒も動きます。iPhoneを傾けたり軽く振ったり、カスタムアクションでも粒を動かせます"
 #endif
     }
 
@@ -232,10 +307,16 @@ struct JarSpriteView: View {
         // explicit input paths, while stop restores stable downward gravity.
         motionObserver.stop()
 #else
-        if reduceMotion {
+        let shouldRun = JarMotionActivationPolicy.shouldRun(
+            isMotionEnabled: isMotionEnabled,
+            reduceMotion: reduceMotion,
+            sceneIsActive: scenePhase == .active,
+            hasPhysicalContent: hasPhysicalContent
+        )
+        if !shouldRun {
             // `stop` also restores the scene's default downward gravity. This
-            // matters when Reduce Motion is enabled while an already-mounted
-            // bottle is responding to device tilt.
+            // matters when accessibility, app lifecycle, or an empty bottle no
+            // longer needs the sensor while a prior tilt is still applied.
             motionObserver.stop()
         } else {
             motionObserver.start(scene: scene)
@@ -284,6 +365,77 @@ struct JarSpriteView: View {
     }
 #endif
 }
+
+#if !targetEnvironment(macCatalyst)
+/// UIKit's system shake event is a resilient fallback for short acceleration
+/// peaks that Core Motion sampling can miss under a busy SpriteKit frame. The
+/// system path fires at motion-begin (not motion-end) to keep both detections
+/// inside JarScene's shared cooldown in normal use.
+private struct JarSystemShakeCapture: UIViewRepresentable {
+    let isEnabled: Bool
+    let onShake: @MainActor () -> Void
+
+    func makeUIView(context: Context) -> ShakeResponderView {
+        ShakeResponderView()
+    }
+
+    func updateUIView(_ uiView: ShakeResponderView, context: Context) {
+        uiView.onShake = onShake
+        uiView.acceptsShake = isEnabled
+        uiView.refreshFirstResponderStatus()
+    }
+
+    static func dismantleUIView(_ uiView: ShakeResponderView, coordinator: ()) {
+        uiView.acceptsShake = false
+        uiView.onShake = nil
+    }
+
+    @MainActor
+    final class ShakeResponderView: UIView {
+        var onShake: (@MainActor () -> Void)?
+        private var retryIsScheduled = false
+        var acceptsShake = false {
+            didSet {
+                guard acceptsShake != oldValue else { return }
+                refreshFirstResponderStatus()
+            }
+        }
+
+        override var canBecomeFirstResponder: Bool { acceptsShake }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            refreshFirstResponderStatus()
+        }
+
+        override func motionBegan(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+            guard acceptsShake, motion == .motionShake else {
+                super.motionBegan(motion, with: event)
+                return
+            }
+            onShake?()
+        }
+
+        func refreshFirstResponderStatus() {
+            if acceptsShake, window != nil {
+                guard !isFirstResponder, !retryIsScheduled else { return }
+                guard !becomeFirstResponder() else { return }
+                retryIsScheduled = true
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.retryIsScheduled = false
+                    guard self.acceptsShake,
+                          self.window != nil,
+                          !self.isFirstResponder else { return }
+                    self.becomeFirstResponder()
+                }
+            } else if isFirstResponder {
+                resignFirstResponder()
+            }
+        }
+    }
+}
+#endif
 
 /// Monotonic gesture ownership shared with focused tests. Once a pointer has
 /// crossed the drag threshold, travelling back cannot turn that gesture into a
@@ -336,7 +488,7 @@ private struct JarAccessibilityInteractionModifier: ViewModifier {
         guard scene.bouncePebbles() else { return }
         UIAccessibility.post(
             notification: .announcement,
-            argument: reduceMotion ? "瓶が光りました" : "瓶の粒が跳ねました"
+            argument: reduceMotion ? "瓶の粒が短く動きました" : "瓶の粒が跳ねました"
         )
     }
 }

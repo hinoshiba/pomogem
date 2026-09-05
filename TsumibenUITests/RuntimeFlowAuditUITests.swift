@@ -1,9 +1,9 @@
 import XCTest
 
-/// Exercises the two free timer choices and the complete theme lifecycle.
+/// Exercises the four free timer choices and the complete theme lifecycle.
 ///
 /// These paths are intentionally kept separate from the fast 12-second demo:
-/// a production regression can otherwise leave the real 25/60-minute controls
+/// a production regression can otherwise leave the real preset controls
 /// or a destructive theme action unusable while every completion test passes.
 @MainActor
 final class RuntimeFlowAuditUITests: XCTestCase {
@@ -56,6 +56,18 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         )
 
         try exerciseInterruptibleFocus(
+            durationButtonPrefix: "45分",
+            launcherFragment: "45分集中する",
+            expectedRemainingMinute: "44分",
+            attachmentName: "45-minute focus — paused and reversible"
+        )
+        XCTAssertEqual(
+            presentationValue(from: presentationProbe),
+            initialPresentation,
+            "Cancelling 45 minutes must not invent a study pebble"
+        )
+
+        try exerciseInterruptibleFocus(
             durationButtonPrefix: "60分",
             launcherFragment: "60分集中する",
             expectedRemainingMinute: "59分",
@@ -66,6 +78,62 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             initialPresentation,
             "Cancelling 60 minutes must not invent a study pebble"
         )
+
+        try exerciseInterruptibleFocus(
+            durationButtonPrefix: "90分",
+            launcherFragment: "90分集中する",
+            expectedRemainingMinute: "89分",
+            attachmentName: "90-minute focus — paused and reversible"
+        )
+        XCTAssertEqual(
+            presentationValue(from: presentationProbe),
+            initialPresentation,
+            "Cancelling 90 minutes must not invent a study pebble"
+        )
+    }
+
+    func testLongPressLauncherChangesThemeWithoutStartingTimer() {
+        let alternateTheme = "長押しテーマ"
+
+        openMenuAction(containing: "設定")
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        let addTheme = app.buttons["テーマを追加"]
+        XCTAssertTrue(scrollUntilHittable(addTheme))
+        addTheme.tap()
+        XCTAssertTrue(app.navigationBars["テーマを追加"].waitForExistence(timeout: 5))
+        let nameField = app.textFields.firstMatch
+        XCTAssertTrue(nameField.waitForExistence(timeout: 4))
+        nameField.tap()
+        nameField.typeText(alternateTheme)
+        app.navigationBars["テーマを追加"].buttons["保存"].tap()
+        XCTAssertTrue(waitForAbsence(app.navigationBars["テーマを追加"]))
+        tapNavigationBack(from: "設定")
+
+        let launcher = app.descendants(matching: .any)["home.focus-launcher"]
+        XCTAssertTrue(waitForHittable(launcher, timeout: 6))
+        launcher.press(forDuration: 0.9)
+
+        let alternateChoice = app.buttons[alternateTheme]
+        XCTAssertTrue(
+            alternateChoice.waitForExistence(timeout: 5),
+            "A long press must reveal the active theme choices"
+        )
+        alternateChoice.tap()
+
+        XCTAssertFalse(
+            app.buttons["一時停止"].exists,
+            "Choosing a theme from the long-press menu must not start focus"
+        )
+        XCTAssertTrue(
+            launcher.label.contains(alternateTheme),
+            "The launcher must immediately reflect the selected theme"
+        )
+
+        launcher.tap()
+        let focusSubject = app.staticTexts["focus.subject"]
+        XCTAssertTrue(focusSubject.waitForExistence(timeout: 6))
+        XCTAssertEqual(focusSubject.label, alternateTheme)
+        XCTAssertTrue(app.buttons["一時停止"].waitForExistence(timeout: 4))
     }
 
     func testThemeCanBeAddedEditedHiddenRestoredSelectedAndDeleted() {
@@ -75,11 +143,11 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
 
-        let addTheme = app.buttons["教科・資格を追加"]
+        let addTheme = app.buttons["テーマを追加"]
         XCTAssertTrue(scrollUntilHittable(addTheme), "Settings must expose theme creation")
         addTheme.tap()
 
-        XCTAssertTrue(app.navigationBars["教科・資格を追加"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["テーマを追加"].waitForExistence(timeout: 5))
         let nameField = app.textFields.firstMatch
         XCTAssertTrue(nameField.waitForExistence(timeout: 4))
         nameField.tap()
@@ -87,23 +155,24 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         let color = app.buttons["色候補2、瑠璃"]
         XCTAssertTrue(scrollUntilHittable(color))
         color.tap()
-        app.navigationBars["教科・資格を追加"].buttons["保存"].tap()
-        XCTAssertTrue(waitForAbsence(app.navigationBars["教科・資格を追加"]))
+        app.navigationBars["テーマを追加"].buttons["保存"].tap()
+        XCTAssertTrue(waitForAbsence(app.navigationBars["テーマを追加"]))
         waitForUISettle()
 
         let createdRow = button(containing: originalName)
         XCTAssertTrue(waitForHittable(createdRow, timeout: 6))
         createdRow.tap()
 
-        XCTAssertTrue(app.navigationBars["カテゴリを編集"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["テーマを編集"].waitForExistence(timeout: 5))
         replaceText(in: app.textFields.firstMatch, with: editedName)
+        dismissKeyboard(from: app.textFields.firstMatch)
         let visibility = app.switches["ホームの選択肢に表示"]
         XCTAssertTrue(scrollUntilHittable(visibility))
         XCTAssertTrue(waitForSwitch(visibility, value: "1"))
         tapSwitch(visibility)
         XCTAssertTrue(waitForSwitch(visibility, value: "0"))
-        app.navigationBars["カテゴリを編集"].buttons["保存"].tap()
-        XCTAssertTrue(waitForAbsence(app.navigationBars["カテゴリを編集"]))
+        app.navigationBars["テーマを編集"].buttons["保存"].tap()
+        XCTAssertTrue(waitForAbsence(app.navigationBars["テーマを編集"]))
         waitForUISettle()
 
         var editedRow = button(containing: editedName)
@@ -111,14 +180,14 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(editedRow.label.contains("非表示"), editedRow.label)
         editedRow.tap()
 
-        XCTAssertTrue(app.navigationBars["カテゴリを編集"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["テーマを編集"].waitForExistence(timeout: 5))
         let restoredVisibility = app.switches["ホームの選択肢に表示"]
         XCTAssertTrue(scrollUntilHittable(restoredVisibility))
         XCTAssertTrue(waitForSwitch(restoredVisibility, value: "0"))
         tapSwitch(restoredVisibility)
         XCTAssertTrue(waitForSwitch(restoredVisibility, value: "1"))
-        app.navigationBars["カテゴリを編集"].buttons["保存"].tap()
-        XCTAssertTrue(waitForAbsence(app.navigationBars["カテゴリを編集"]))
+        app.navigationBars["テーマを編集"].buttons["保存"].tap()
+        XCTAssertTrue(waitForAbsence(app.navigationBars["テーマを編集"]))
         waitForUISettle()
 
         editedRow = button(containing: editedName)
@@ -159,7 +228,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
 
         // Assert the destructive alert's visible contract and its explicit,
         // reversible cancel action before exercising deletion.
-        let confirmationTitle = app.staticTexts["カテゴリを削除"]
+        let confirmationTitle = app.staticTexts["テーマを削除"]
         XCTAssertTrue(confirmationTitle.waitForExistence(timeout: 5))
         XCTAssertTrue(
             app.staticTexts.matching(
@@ -220,6 +289,141 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         )
     }
 
+    /// Captures the unretouched Japanese UI used for the App Store product page.
+    ///
+    /// The disposable Debug fixture is only a way to reach deterministic states:
+    /// no screenshot includes its 12-second launcher, accessibility probes, fault
+    /// controls, personal text, or a simulated Pro entitlement. Export the five
+    /// named attachments from the xcresult instead of taking ad-hoc Simulator
+    /// captures so the set remains reproducible.
+    func testAppStoreScreenshotSetJapaneseReleaseCandidate() {
+        // Relaunch the disposable store. Release 1.0 has no rare-reward draw or
+        // opt-in surface, keeping this product-page set deterministic.
+        app.terminate()
+        // The in-memory SwiftData fixture intentionally survives no records,
+        // while UserDefaults normally retains the optional-rest cadence between
+        // UI-test runs. An invalid argument-domain value makes the typed Data
+        // lookup start from zero without deleting any simulator or app data.
+        app.launchArguments += ["-focus.rest-cadence.v2", "screenshot-fixture-reset"]
+        app.launch()
+        let interruptedReward = app.buttons["休憩の提案を閉じる"]
+        if interruptedReward.waitForExistence(timeout: 1) {
+            interruptedReward.tap()
+            XCTAssertTrue(waitForAbsence(interruptedReward, timeout: 5))
+        }
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 10))
+
+        // 1. Show the real free 25-minute timer, never the test-only duration.
+        app.buttons["メニュー"].tap()
+        let productionDuration = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "25分")
+        ).firstMatch
+        XCTAssertTrue(productionDuration.waitForExistence(timeout: 4))
+        productionDuration.tap()
+        app.buttons["home.menu.close"].tap()
+
+        let productionLauncher = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "25分集中する")
+        ).firstMatch
+        XCTAssertTrue(waitForHittable(productionLauncher, timeout: 5))
+        productionLauncher.tap()
+        let rareRewardChoice = app.descendants(matching: .any)["focus.rare-reward-choice"]
+        XCTAssertFalse(rareRewardChoice.waitForExistence(timeout: 1))
+        let focusTimer = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@", "集中タイマー")
+        ).firstMatch
+        XCTAssertTrue(focusTimer.waitForExistence(timeout: 6))
+        XCTAssertTrue(app.buttons["一時停止"].waitForExistence(timeout: 4))
+        waitForUISettle()
+        retainScreenshot(named: "ASC_02_25-minute-focus")
+
+        app.buttons["今日はここまで"].tap()
+        let giveUpConfirmation = app.alerts["今日はここまで"]
+        XCTAssertTrue(giveUpConfirmation.waitForExistence(timeout: 4))
+        giveUpConfirmation.buttons["今日はここまで"].tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+
+        // 2. Create one deterministic 250g completion. The Debug-only duration
+        // picker is closed before any image is retained.
+        selectDemoDurationForVisualAudit()
+        startDemoFocusForVisualAudit()
+        let dismissBridge = app.buttons["休憩の提案を閉じる"]
+        XCTAssertTrue(dismissBridge.waitForExistence(timeout: 30))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["reward.fusion-progress"]
+                .waitForExistence(timeout: 5)
+        )
+        XCTAssertTrue(
+            app.buttons["5分休憩する"].waitForExistence(timeout: 4),
+            "The 250g screenshot fixture must match a first 25-minute completion"
+        )
+        waitForUISettle()
+        retainScreenshot(named: "ASC_03_completion-reward")
+        dismissBridge.tap()
+        XCTAssertTrue(waitForAbsence(dismissBridge, timeout: 5))
+
+        // Restore the real release duration before showing Home.
+        app.buttons["メニュー"].tap()
+        XCTAssertTrue(productionDuration.waitForExistence(timeout: 4))
+        productionDuration.tap()
+        app.buttons["home.menu.close"].tap()
+        XCTAssertTrue(waitForHittable(productionLauncher, timeout: 6))
+        let jar = app.buttons["瓶"]
+        XCTAssertTrue(jar.waitForExistence(timeout: 5))
+        XCTAssertTrue(((jar.value as? String) ?? "").contains("1粒"), String(describing: jar.value))
+        waitForUISettle()
+        retainScreenshot(named: "ASC_01_home-with-first-pebble")
+
+        // 4. Show exact, current accumulation values from the same fixture.
+        openMenuAction(containing: "積み上がりを見る")
+        XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 6))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["overview.weekly-crystal"]
+                .waitForExistence(timeout: 5)
+        )
+        waitForUISettle()
+        retainScreenshot(named: "ASC_04_accumulation-overview")
+
+        app.buttons["overview.close"].tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
+
+        // 5. Finish with the shipped privacy/storage explanation. This avoids
+        // showing the shortened fixture duration in History and directly
+        // documents the selected storage contract promised by the product page.
+        openMenuAction(containing: "設定")
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        let cloudStorage = app.staticTexts["iCloud"]
+        let localStorage = app.staticTexts["このiPhoneのみ"]
+        XCTAssertTrue(
+            scrollUntilVisible(cloudStorage) || scrollUntilVisible(localStorage)
+        )
+        let selectedStorage: XCUIElement
+        if cloudStorage.exists {
+            selectedStorage = cloudStorage
+            XCTAssertTrue(app.staticTexts[
+                "あなたのプライベートデータベースのみ"
+            ].exists)
+        } else {
+            selectedStorage = localStorage
+            XCTAssertTrue(app.staticTexts[
+                "iCloudへ送信しない端末内の専用領域"
+            ].exists)
+        }
+        XCTAssertFalse(
+            app.buttons.matching(
+                NSPredicate(format: "label CONTAINS %@", "ユーザー内容を削除")
+            ).firstMatch.exists,
+            "Version 1.0 must not expose the experimental cross-container deletion transaction"
+        )
+        // Keep the storage row and its privacy explanation together. The
+        // visibility helper already positions this section; another upward
+        // drag can hide the iCloud/local-only label below the navigation bar.
+        XCTAssertTrue(selectedStorage.waitForExistence(timeout: 3))
+        waitForUISettle()
+        retainScreenshot(named: "ASC_05_iCloud-and-privacy")
+    }
+
     /// Retains visual evidence around the first exact decimal carry. The
     /// screenshots make the pre-fusion rail, completed Reward Bridge, fusion
     /// celebration, and newly born lifetime core reviewable together.
@@ -273,7 +477,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         retainScreenshot(named: "Tenth Reward Bridge — exact completed orbit")
 
         dismissBridge.tap()
-        let celebration = app.staticTexts["10粒が、ひとつの結晶になった"]
+        let celebration = app.staticTexts["10粒を、ひとつに整理した"]
         XCTAssertTrue(celebration.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["2.5kg"].waitForExistence(timeout: 4))
         waitForUISettle()
@@ -314,11 +518,13 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(scrollUntilVisible(constellation))
         let core = app.descendants(matching: .any)["overview.constellation.core"]
         XCTAssertTrue(scrollUntilVisible(core))
+        XCTAssertEqual(core.label, "時間の核")
+        let coreValue = (core.value as? String) ?? ""
         XCTAssertTrue(
-            core.label.replacingOccurrences(of: ",", with: "").contains("350640粒"),
-            core.label
+            coreValue.replacingOccurrences(of: ",", with: "").contains("350640粒"),
+            coreValue
         )
-        XCTAssertTrue(core.label.contains("87.66t"), core.label)
+        XCTAssertTrue(coreValue.contains("87.66t"), coreValue)
         waitForUISettle()
         retainScreenshot(named: "Forty-year lifetime constellation — exact 87.66t")
     }
@@ -338,19 +544,28 @@ final class RuntimeFlowAuditUITests: XCTestCase {
 
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["fixture.40y.timeline-ready"].waitForExistence(timeout: 10))
-        let lenses = app.segmentedControls["overview.lens"]
-        XCTAssertTrue(scrollUntilVisible(lenses))
-        if !lenses.buttons["結晶"].isSelected {
-            lenses.buttons["結晶"].tap()
-        }
+        let lensMenu = app.buttons["overview.lens"]
+        XCTAssertTrue(scrollUntilVisible(lensMenu))
+        lensMenu.tap()
+        let crystal = app.buttons.matching(
+            NSPredicate(
+                format: "label == %@ AND identifier != %@",
+                "結晶",
+                "overview.lens"
+            )
+        ).firstMatch
+        XCTAssertTrue(crystal.waitForExistence(timeout: 4))
+        crystal.tap()
 
         let core = app.descendants(matching: .any)["overview.constellation.core"]
         XCTAssertTrue(scrollUntilVisible(core))
+        XCTAssertEqual(core.label, "時間の核")
+        let coreValue = (core.value as? String) ?? ""
         XCTAssertTrue(
-            core.label.replacingOccurrences(of: ",", with: "").contains("350640粒"),
-            core.label
+            coreValue.replacingOccurrences(of: ",", with: "").contains("350640粒"),
+            coreValue
         )
-        XCTAssertTrue(core.label.contains("87.66t"), core.label)
+        XCTAssertTrue(coreValue.contains("87.66t"), coreValue)
         waitForUISettle()
         retainScreenshot(named: "Forty-year lifetime constellation — AX5 geometry")
     }
@@ -366,6 +581,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             NSPredicate(format: "label BEGINSWITH %@", durationButtonPrefix)
         ).firstMatch
         XCTAssertTrue(duration.waitForExistence(timeout: 4))
+        XCTAssertTrue(scrollUntilHittable(duration))
         duration.tap()
         app.buttons["home.menu.close"].tap()
 
@@ -581,6 +797,16 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         let current = (field.value as? String) ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
         field.typeText(replacement)
+    }
+
+    private func dismissKeyboard(from field: XCUIElement) {
+        let keyboard = app.keyboards.firstMatch
+        guard keyboard.exists else { return }
+        field.typeText(XCUIKeyboardKey.return.rawValue)
+        XCTAssertTrue(
+            waitForAbsence(keyboard, timeout: 3),
+            "The subject-name keyboard must dismiss before operating the visibility switch"
+        )
     }
 
     private func tapSwitch(_ element: XCUIElement) {

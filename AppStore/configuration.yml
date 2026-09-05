@@ -1,21 +1,262 @@
 platform: iOS
 primary_locale: ja-JP
-app_store_id: null
+primary_category: Productivity
+secondary_category: Education
+store_localizations:
+  - ja-JP
+  - en-US
+app_store_id: 6806758060
+marketing_version: "1.0"
+build_number: "4"
 copyright: "2026 hinoshiba"
 website_host: tumiben.hinoshiba.com
-app_bundle_id: com.hinoshiba.tsumiben
-widget_bundle_id: com.hinoshiba.tsumiben.widgets
+app_bundle_id: com.hinoshiba.tumiben
+widget_bundle_id: com.hinoshiba.tumiben.widgets
 minimum_ios: "17.0"
 supports_ipad_ui: false
 supports_mac_catalyst: false
 offer_ios_app_on_apple_silicon_mac: false
 offer_ios_app_on_vision_pro: false
-i_cloud_container: iCloud.com.hinoshiba.tsumiben
-app_group: group.com.hinoshiba.tsumiben
+app_price: free
+release_method: automatic_after_approval
+availability: non_eu_148_of_175_countries_and_regions
+automatically_available_in_new_countries_or_regions: true
+storefront_availability:
+  total_current_storefronts: 175
+  app_available_storefronts: 148
+  iap_available_storefronts: 148
+  excluded_current_eu_27:
+    - Austria
+    - Belgium
+    - Bulgaria
+    - Croatia
+    - Cyprus
+    - Czech Republic
+    - Denmark
+    - Estonia
+    - Finland
+    - France
+    - Germany
+    - Greece
+    - Hungary
+    - Ireland
+    - Italy
+    - Latvia
+    - Lithuania
+    - Luxembourg
+    - Malta
+    - Netherlands
+    - Poland
+    - Portugal
+    - Romania
+    - Slovakia
+    - Slovenia
+    - Spain
+    - Sweden
+  explicitly_included_non_eu_neighbors:
+    - United Kingdom
+    - Norway
+    - Switzerland
+eu_dsa:
+  app_store_connect_status: non_trader
+  release_blocker: resolved_by_excluding_current_eu_27_from_app_and_iap
+  legal_advice: false
+apple_school_manager_reduced_price: true
+i_cloud_containers:
+  synchronized_data: iCloud.com.hinoshiba.tumiben
+target_capabilities:
+  app:
+    - icloud_cloudkit
+    - push_notifications
+    - in_app_purchase
+  widget: []
+i_cloud_sync:
+  database_scope: private
+  first_launch_choices:
+    presentation: equal_neither_recommended
+    options:
+      - icloud_sync_after_confirmation
+      - this_iphone_only
+    immutable_in_version_1: true
+  access_without_icloud: all_basic_features_via_explicit_this_iphone_only_choice
+  local_only:
+    requires_apple_account: false
+    requires_network: false
+    storage: random_namespaced_device_only_store
+    automatic_cloud_switch_or_upload: false
+    app_deletion_erases_data: true
+    json_export_can_be_reimported: false
+    json_export_is_migration: false
+  cloud_confirmation_disclosure:
+    - theme_names
+    - achievement_memos
+    - records
+    - settings
+    - active_timer
+  account_verification: account_status_pre_and_post_probe_user_record_id_match_and_read_only_private_zone_fetch_at_selection_and_each_launch_or_resume
+  developer_access_assumption: no_access_or_retention_by_developer
+  source_models:
+    - Subject
+    - StudySession
+    - AchievementStone
+    - Prefs
+    - ActivityResetMarker
+    - SyncedFocusTimer
+    - FocusTimerDeviceClaim
+  source_replica_policy:
+    current_or_awaiting_epoch_physical_rows: retained
+    background_maintenance: read_only_logical_resolution
+    duplicate_physical_compaction: disabled
+    fan_out_writes_across_observed_copies: disabled
+    allowed_source_deletions:
+      - rows_in_an_explicitly_proven_stale_epoch
+      - closed_focus_active_tail_after_a_materialized_study_session
+  final_source_schema_gate:
+    first_public_release: true
+    development_environment: clear_and_reinitialize_from_final_release_candidate
+    physical_identity_fields:
+      Subject: syncRecordID
+      StudySession: syncRecordID
+      AchievementStone: syncRecordID
+      Prefs: syncRecordID
+      FocusTimerDeviceClaim: syncRecordID
+    subject_revision_fields:
+      - contentRevision
+      - contentMutationID
+      - deletedAt
+    achievement_revision_fields:
+      - revision
+      - deletedAt
+      - deletionRevision
+      - deletionMutationID
+      - restoredDeletionMutationID
+      - updatedAt
+    prefs_writer_field: settingsWriterID
+    prefs_revision_mutation_group_count: 12
+    prefs_stamp_field_count: 24
+    prefs_timer_completion_fields:
+      - timerCompletionSoundRawValue
+      - timerCompletionSoundRevision
+      - timerCompletionSoundMutationID
+      - timerCompletionHapticRawValue
+      - timerCompletionHapticRevision
+      - timerCompletionHapticMutationID
+    prefs_revision_mutation_groups:
+      - sound
+      - haptics
+      - timerCompletionSound
+      - timerCompletionHaptic
+      - rareReward
+      - reminderEnabled
+      - reminderTime
+      - shareIncludesManual
+      - externalTheme
+      - keepScreenAwake
+      - preferredFocusMinutes
+      # Historical CloudKit/export field retained for schema compatibility.
+      # The shipping UI uses one study/work theme list and does not branch on this value.
+      - usagePurpose
+    promotion: validate_final_development_schema_then_deploy_unchanged_to_production
+    production_environment_reset: prohibited
+  local_projection_models:
+    - AggregatePebble
+    - Stratum
+    - Bedrock
+    - GachaState
+  manual_entry_limit:
+    count: 3
+    day_boundary_local_hour: 4
+    scope: per_device
+    offline_multi_device_global_hard_cap: false
+    disclosure: app_ui_and_review_notes
+  account_boundary:
+    identity_resolution: fail_closed_before_model_container
+    local_namespace: random_bound_to_initial_verified_apple_account
+    identity_evidence:
+      - ckcontainer_account_status
+      - ckcontainer_user_record_id
+    persisted_binding: initial_sha256_fingerprint_and_random_namespace
+    remount_rule: exact_fingerprint_and_namespace_match_only
+    offline_reuse: disabled
+    different_account_behavior: fail_closed_without_deleting_data
+    missing_network_behavior: fail_closed_without_deleting_data
+    inconsistent_persistence_history_behavior: recovery_gate_without_fresh_choice_or_overwrite
+    committed_selection_with_zero_store_files: valid_one_time_mount_crash_boundary
+    widget_surface: account_neutral_launcher_without_user_data
+    widget_reads_app_group_or_icloud: false
+    live_activities: account_neutral_timer_only_without_user_authored_or_account_data
+    local_notification_payload: account_neutral_without_subject_name
+    suspended_account_change_notification_residual: stale_generic_completion_may_arrive_once
+    widget_uses_synchronized_data_container: false
+  reset_ordering:
+    primary: lamport_sequence
+    supported_sequence_range: 0...1000000
+    wall_clock_role: display_and_audit_metadata_only
+  maintenance:
+    projection_rebuild_beyond_home_512_row_window: true
+    local_projection_compaction: allowed_rebuildable_device_only_data
+    focus_terminal_compaction: disabled_source_rows_retained
+    materialized_session_closed_focus_tail_cleanup: allowed
+app_privacy:
+  proposed_answer: data_not_collected
+  status: draft_requires_production_and_operations_verification
+  assumption: private_cloudkit_data_is_not_accessed_or_retained_by_developer
+  required_reason_apis:
+    app:
+      - "File Timestamp C617.1"
+      - "System Boot Time 35F9.1"
+      - "Standard User Defaults CA92.1"
+    widget: []
+  support_email_fallback:
+    data_type: email_address
+    purpose: app_functionality
+    context: customer_support
+    linked_to_user: true
+    tracking: false
 in_app_purchases:
-  - product_id: com.hinoshiba.tsumiben.pro.lifetime
+  - product_id: com.hinoshiba.tumiben.pro.lifetime
     type: non_consumable
     reference_name: Tsumiben Pro Lifetime
+    family_sharing: false
+    availability: non_eu_148_of_175_countries_and_regions
+    automatically_available_in_new_countries_or_regions: true
+    base_country_or_region: United States
+    united_states_target_price_usd: 0.99
     japan_target_price_jpy: 100
+    localizations:
+      ja-JP:
+        display_name: つみべんPro
+        description: 任意の集中時間とまとまり粒の月刻印を買い切りで追加。
+      en-US:
+        display_name: Tumiben Pro
+        description: Custom timers and month labels.
+    price_management: automatic_equivalent_except_japan_override
+version_1_feature_gates:
+  rare_rewards: disabled
+  in_app_direct_cloudkit_zone_deletion: disabled
+version_1_data_deletion:
+  local_only_data_deletion: uninstall_app
+  local_only_reinstall_effect: records_are_erased_and_storage_choice_can_be_made_again
+  cloud_data_deletion: apple_icloud_storage_management
+  json_export_import: unsupported
+  json_export_migration: unsupported
+oss_publication:
+  repository_license_model: mixed_license
+  source_code_and_ordinary_docs: MIT
+  bundled_font: OFL-1.1
+  rights_reserved_assets:
+    - product_names_and_trademarks
+    - logos_and_app_icons
+    - generated_backgrounds
+    - store_and_web_marketing_images
+  owner_decision_required: publish_as_mixed_license_or_relicense_and_replace_excluded_assets
 release_blockers:
-  - multi-device rare-reward ledger must become exactly-once, or the product contract must be explicitly revised and re-reviewed
+  - signed clean-install testing must verify the equal first-launch choices, both confirmations, immutable selection, and the complete local-only basic experience without an Apple Account or network
+  - because 1.0 is unshipped, clear the CloudKit development schema, initialize it from the final release candidate including replica identity, Subject tombstone, Achievement deletion-event and restore-ack fields, the timer-completion raw selections, and all 24 preference stamp fields, validate it, then deploy that exact seven-model source schema to production without resetting production
+  - signed two-device testing must verify source synchronization, account A-to-B blocking and return-to-A remount, bounded reconciliation, timer handoff, and fail-closed network-loss recovery
+  - owner must accept the focus partition trade-off that materialized completions survive delayed cancellation
+  - owner must accept the fail-closed interactive recovery ceiling when more than 256 corrupt active logical timer sessions precede a valid session, or ship a versioned reversible quarantine design
+  - Japan paid-IAP operator disclosure and pre-purchase legal presentation require owner or qualified legal determination
+  - owner must choose mixed-license publication or relicense and replace the excluded brand assets
+  - publish and verify the Privacy, Support, Terms, and Commercial Transactions pages over canonical HTTPS
+  - complete StoreKit Sandbox, signed-device, TestFlight, App Store metadata, and distribution-signing verification

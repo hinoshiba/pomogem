@@ -276,11 +276,12 @@ enum FortyYearPersistentUITestFixture {
         let rootCount = try context.fetchCount(FetchDescriptor<AggregatePebble>(
             predicate: #Predicate { aggregate in aggregate.parentAggregateID == nil }
         ))
-        let looseCount = try context.fetchCount(FetchDescriptor<StudySession>(
-            predicate: #Predicate { session in session.isBaked == false }
-        ))
         let roots = try context.fetch(FetchDescriptor<AggregatePebble>(
             predicate: #Predicate { aggregate in aggregate.parentAggregateID == nil }
+        ))
+        let newestRootEnd = roots.map(\.periodEnd).max() ?? .distantPast
+        let looseCount = try context.fetchCount(FetchDescriptor<StudySession>(
+            predicate: #Predicate { session in session.endAt > newestRootEnd }
         ))
         let aggregates = try context.fetch(FetchDescriptor<AggregatePebble>())
         let aggregateGroups = Dictionary(grouping: aggregates, by: \.id)
@@ -295,7 +296,7 @@ enum FortyYearPersistentUITestFixture {
                 }
             }
         var looseDescriptor = FetchDescriptor<StudySession>(
-            predicate: #Predicate { session in session.isBaked == false }
+            predicate: #Predicate { session in session.endAt > newestRootEnd }
         )
         looseDescriptor.fetchLimit = Expected.looseSessionCount + 1
         let loose = try context.fetch(looseDescriptor)
@@ -558,6 +559,7 @@ struct FortyYearOverviewFixtureLaunchView: View {
                     displayedAchievementCount: 0
                 ),
                 lifetimeIsLowerBound: false,
+                lifetimeIsCloudUnverified: false,
                 initialClusterID: nil
             )
 

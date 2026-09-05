@@ -75,6 +75,11 @@ final class GIFShareLifecycleUITests: XCTestCase {
             "1",
             "The preview/export snapshot and shared caption must use the exact current tag selection"
         )
+        XCTAssertEqual(
+            fields["captionURLExact"],
+            "1",
+            "The shared caption must carry exactly one canonical product URL"
+        )
         XCTAssertTrue(
             app.descendants(matching: .any)["share.primary-action"].exists,
             "Cancelling must keep the share composer reversible"
@@ -90,8 +95,25 @@ final class GIFShareLifecycleUITests: XCTestCase {
 
         let stillImage = app.buttons["静止画"]
         XCTAssertTrue(stillImage.waitForExistence(timeout: 5))
-        XCTAssertTrue(stillImage.isHittable)
+        let primaryShare = app.descendants(matching: .any)["share.primary-action"]
+        XCTAssertTrue(primaryShare.waitForExistence(timeout: 5))
+        // The fixed share CTA can overlap this segment while XCTest still
+        // reports the underlying control as hittable. Move the picker into
+        // the unobscured scroll region before tapping it.
+        app.swipeUp()
+        XCTAssertTrue(
+            scrollUntilHittable(stillImage, avoiding: primaryShare),
+            "The still-image segment must be visible above the persistent share CTA"
+        )
+        XCTAssertFalse(
+            stillImage.frame.intersects(primaryShare.frame),
+            "The persistent share CTA must not intercept the still-image selection"
+        )
         stillImage.tap()
+        XCTAssertTrue(
+            waitUntilSelected(stillImage, timeout: 5),
+            "The still-image selection must settle before exercising the copy CTA"
+        )
 
         let copyCaption = app.buttons["share.copy-caption"]
         XCTAssertTrue(
@@ -154,59 +176,26 @@ final class GIFShareLifecycleUITests: XCTestCase {
         )
     }
 
-    func testWatermarkPaywallDismissKeepsTheSameComposerDraft() {
+    func testBrandAndWebsiteRemainPermanentShareAttribution() {
+        addShareableSession()
         openMenuAction(containing: "動く瓶をシェア")
         XCTAssertTrue(app.navigationBars["カードにする"].waitForExistence(timeout: 8))
+        includeSelfReportedDirectlyIfOffered()
+
+        let card = app.descendants(matching: .any)["share.card"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+        XCTAssertTrue(card.label.contains("つみべんシェアカード"), card.label)
+        XCTAssertTrue(card.label.contains("tumiben.hinoshiba.com"), card.label)
+
         expandAdjustmentsIfNeeded()
-
-        let stillImage = app.buttons["静止画"]
-        XCTAssertTrue(stillImage.waitForExistence(timeout: 5))
-        stillImage.tap()
-        XCTAssertTrue(stillImage.isSelected)
-
-        let format = app.segmentedControls["share.format"]
-        XCTAssertTrue(format.waitForExistence(timeout: 5))
-        let story = format.buttons["ストーリー 9:16"]
-        // A persistent bottom CTA can overlap the segment while XCTest still
-        // reports it as hittable. Move the picker into the unobscured region
-        // before tapping so the format change reaches SwiftUI reliably.
-        app.swipeUp()
+        let branding = app.descendants(matching: .any)["share.branding"]
         XCTAssertTrue(
-            scrollUntilHittable(story),
-            "The story format segment must be visible above the persistent share CTA"
+            scrollUntilHittable(branding),
+            "Permanent share attribution must be disclosed in the composer"
         )
-        story.tap()
-        XCTAssertTrue(
-            waitUntilSelected(story, timeout: 5),
-            "The format selection must settle before the Paywall draft is captured"
-        )
-
-        let watermarkPro = app.buttons["share.watermark-pro"]
-        XCTAssertTrue(
-            scrollUntilHittable(watermarkPro),
-            "The watermark upgrade action must remain reachable in the composer"
-        )
-        watermarkPro.tap()
-
-        XCTAssertTrue(
-            app.staticTexts["シェアカード右下の小さな透かしを外せます。"]
-                .waitForExistence(timeout: 8),
-            "The share-specific Paywall must appear without destroying the composer"
-        )
-        let closePaywall = app.buttons["閉じる"].firstMatch
-        XCTAssertTrue(closePaywall.waitForExistence(timeout: 5))
-        closePaywall.tap()
-
-        XCTAssertTrue(
-            app.navigationBars["カードにする"].waitForExistence(timeout: 5),
-            "Closing the Paywall must return to the existing composer"
-        )
-        XCTAssertTrue(stillImage.isSelected, "The selected media kind must survive the Paywall")
-        XCTAssertTrue(story.isSelected, "The selected card format must survive the Paywall")
-        XCTAssertTrue(
-            app.buttons["share.watermark-pro"].exists,
-            "Closing without an entitlement must keep the upgrade action available"
-        )
+        XCTAssertTrue(branding.label.contains("つみべんロゴと公式サイト"), branding.label)
+        XCTAssertTrue(branding.label.contains("常に表示"), branding.label)
+        XCTAssertFalse(app.buttons["share.watermark-pro"].exists)
     }
 
     func testManualOnlyShareExplainsTheExcludedParticleAndOffersDirectInclusion() {
@@ -374,6 +363,26 @@ final class GIFShareLifecycleUITests: XCTestCase {
             app.swipeUp()
         }
         return element.exists && element.isHittable
+    }
+
+    private func scrollUntilHittable(
+        _ element: XCUIElement,
+        avoiding obstruction: XCUIElement,
+        attempts: Int = 8
+    ) -> Bool {
+        for _ in 0..<attempts {
+            if element.exists,
+               obstruction.exists,
+               element.isHittable,
+               !element.frame.intersects(obstruction.frame) {
+                return true
+            }
+            app.swipeUp()
+        }
+        return element.exists
+            && obstruction.exists
+            && element.isHittable
+            && !element.frame.intersects(obstruction.frame)
     }
 
     private func expandAdjustmentsIfNeeded() {

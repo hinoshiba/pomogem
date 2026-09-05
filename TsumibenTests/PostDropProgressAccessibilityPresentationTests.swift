@@ -21,7 +21,7 @@ final class PostDropProgressAccessibilityPresentationTests: XCTestCase {
         XCTAssertLessThan(massRange.lowerBound, organizationRange.lowerBound)
         XCTAssertLessThan(organizationRange.lowerBound, achievementRange.lowerBound)
         XCTAssertTrue(message.contains("合計12粒分"))
-        XCTAssertTrue(message.contains("金1粒"))
+        XCTAssertFalse(message.contains("金1粒"))
         XCTAssertTrue(message.contains("×100へ 1/10"))
     }
 
@@ -38,7 +38,7 @@ final class PostDropProgressAccessibilityPresentationTests: XCTestCase {
             projectionIsLowerBound: true
         )
 
-        XCTAssertTrue(message.hasPrefix("現在確認できた集中時間の質量：600グラム以上、同期中"))
+        XCTAssertTrue(message.hasPrefix("現在確認できた集中時間の質量：600グラム以上、集計整理中"))
         XCTAssertFalse(message.hasPrefix("記録した集中時間の質量"))
     }
 
@@ -70,9 +70,9 @@ final class PostDropProgressAccessibilityPresentationTests: XCTestCase {
         )
 
         XCTAssertTrue(message.hasPrefix("今回の完走で1時間を追加"))
-        XCTAssertTrue(message.contains("時間の核を同期中"))
+        XCTAssertTrue(message.contains("時間の核を整理中"))
         XCTAssertTrue(message.contains("瓶の整理"))
-        XCTAssertTrue(message.contains("結晶進捗を同期中"))
+        XCTAssertTrue(message.contains("結晶進捗を整理中"))
     }
 
     func testLegacyReceiptKeepsCountCompatibilityPresentation() {

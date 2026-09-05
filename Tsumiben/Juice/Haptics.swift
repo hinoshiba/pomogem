@@ -1,16 +1,32 @@
 import CoreHaptics
 import UIKit
 
+/// In-process signal emitted immediately before this app asks the hardware to
+/// play a haptic. Motion input can use the advertised duration to ignore the
+/// phone movement produced by our own feedback without persisting sensor data.
+enum HapticPlaybackNotification {
+    static let willPlay = Notification.Name("com.hinoshiba.tumiben.hapticWillPlay")
+    static let durationKey = "duration"
+}
+
 /// Core Haptics patterns for the drop, with a UIKit fallback on unsupported hardware.
 @MainActor
 final class Haptics {
     static let shared = Haptics()
 
-    var isEnabled = true
+    var isEnabled = true {
+        didSet {
+            guard isEnabled != oldValue, !isEnabled else { return }
+            stopEngine()
+        }
+    }
 
     private let supportsCoreHaptics: Bool
     private var engine: CHHapticEngine?
-    private let fallback = UIImpactFeedbackGenerator(style: .heavy)
+    private var engineIsRunning = false
+    private let lightFallback = UIImpactFeedbackGenerator(style: .light)
+    private let mediumFallback = UIImpactFeedbackGenerator(style: .medium)
+    private let heavyFallback = UIImpactFeedbackGenerator(style: .heavy)
 
     private init() {
         supportsCoreHaptics = CHHapticEngine.capabilitiesForHardware().supportsHaptics
@@ -19,7 +35,9 @@ final class Haptics {
 
     func prepare() {
         guard isEnabled else { return }
-        fallback.prepare()
+        lightFallback.prepare()
+        mediumFallback.prepare()
+        heavyFallback.prepare()
         startEngine()
     }
 
@@ -53,20 +71,74 @@ final class Haptics {
         )
     }
 
-    /// A crisp two-beat cue at the exact timer boundary. The heavier jar
-    /// landing remains separate so the completion and the physical drop are
-    /// distinguishable even when the screen is not being watched.
-    func playTimerCompletion() {
-        let first = transient(intensity: 0.72, sharpness: 0.82)
-        let second = CHHapticEvent(
-            eventType: .hapticTransient,
-            parameters: [
-                CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.92),
-                CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.48)
-            ],
-            relativeTime: 0.14
+    /// Plays the exact bounded pulse plan shared with the procedural clinks.
+    /// A large gem adds a short, soft rumble while a pile produces at most four
+    /// decaying taps, avoiding one haptic event per physics body/contact.
+    func playJarFeedback(_ plan: JarSensoryPlan) {
+        guard isEnabled, !plan.hapticPulses.isEmpty else { return }
+        var events = plan.hapticPulses.map { pulse in
+            transient(
+                intensity: min(max(pulse.intensity, 0), 1),
+                sharpness: min(max(pulse.sharpness, 0), 1),
+                relativeTime: max(pulse.delay, 0)
+            )
+        }
+        if let rumble = plan.rumble,
+           rumble.duration > 0,
+           rumble.intensity > 0 {
+            events.append(CHHapticEvent(
+                eventType: .hapticContinuous,
+                parameters: [
+                    CHHapticEventParameter(
+                        parameterID: .hapticIntensity,
+                        value: min(max(rumble.intensity, 0), 1)
+                    ),
+                    CHHapticEventParameter(
+                        parameterID: .hapticSharpness,
+                        value: min(max(rumble.sharpness, 0), 1)
+                    )
+                ],
+                relativeTime: 0,
+                duration: min(max(rumble.duration, 0.01), 0.20)
+            ))
+        }
+        let strongest = plan.hapticPulses.max { $0.intensity < $1.intensity }
+        play(
+            events: events,
+            fallbackIntensity: CGFloat(strongest?.intensity ?? 0.2),
+            fallbackSharpness: CGFloat(strongest?.sharpness ?? 0.5)
         )
-        play(events: [first, second], fallbackIntensity: 0.9)
+    }
+
+    /// A bounded timer-only cue. Jar landing feedback remains separate so the
+    /// completion and the physical drop are distinguishable without looking.
+    func playTimerCompletion(_ style: TimerCompletionHaptic = .standard) {
+        switch style {
+        case .standard:
+            play(
+                events: [
+                    transient(intensity: 0.72, sharpness: 0.82),
+                    transient(intensity: 0.92, sharpness: 0.48, relativeTime: 0.14)
+                ],
+                fallbackIntensity: 0.9
+            )
+        case .gentle:
+            play(
+                events: [transient(intensity: 0.42, sharpness: 0.30)],
+                fallbackIntensity: 0.42,
+                fallbackSharpness: 0.30
+            )
+        case .strong:
+            play(
+                events: [
+                    transient(intensity: 0.78, sharpness: 0.74),
+                    transient(intensity: 0.94, sharpness: 0.54, relativeTime: 0.11),
+                    transient(intensity: 1.00, sharpness: 0.36, relativeTime: 0.24)
+                ],
+                fallbackIntensity: 1,
+                fallbackSharpness: 0.45
+            )
+        }
     }
 
     func playGold() {
@@ -143,25 +215,42 @@ final class Haptics {
         )
     }
 
-    private func play(events: [CHHapticEvent], fallbackIntensity: CGFloat) {
-        guard isEnabled else { return }
+    private func play(
+        events: [CHHapticEvent],
+        fallbackIntensity: CGFloat,
+        fallbackSharpness: CGFloat = 0.5
+    ) {
+        guard isEnabled, !events.isEmpty else { return }
+        let duration = playbackDuration(for: events)
         guard supportsCoreHaptics else {
-            playFallback(intensity: fallbackIntensity)
+            postWillPlay(duration: duration)
+            playFallback(intensity: fallbackIntensity, sharpness: fallbackSharpness)
             return
         }
 
-        do {
-            startEngine()
-            guard let engine else {
-                playFallback(intensity: fallbackIntensity)
+        if startEngine(), let engine {
+            do {
+                let pattern = try CHHapticPattern(events: events, parameters: [])
+                let player = try engine.makePlayer(with: pattern)
+                postWillPlay(duration: duration)
+                do {
+                    try player.start(atTime: CHHapticTimeImmediate)
+                } catch {
+                    // The notification was already emitted for this physical
+                    // attempt, so the fallback must not emit a duplicate.
+                    engineIsRunning = false
+                    playFallback(intensity: fallbackIntensity, sharpness: fallbackSharpness)
+                }
                 return
+            } catch {
+                // Pattern/player construction did not reach hardware. Fall
+                // through to one announced UIKit impact.
+                engineIsRunning = false
             }
-            let pattern = try CHHapticPattern(events: events, parameters: [])
-            let player = try engine.makePlayer(with: pattern)
-            try player.start(atTime: CHHapticTimeImmediate)
-        } catch {
-            playFallback(intensity: fallbackIntensity)
         }
+
+        postWillPlay(duration: duration)
+        playFallback(intensity: fallbackIntensity, sharpness: fallbackSharpness)
     }
 
     private func configureEngineIfSupported() {
@@ -171,32 +260,76 @@ final class Haptics {
             hapticEngine.playsHapticsOnly = true
             hapticEngine.isAutoShutdownEnabled = true
             hapticEngine.resetHandler = { [weak self] in
-                Task { @MainActor [weak self] in self?.startEngine() }
+                Task { @MainActor [weak self] in
+                    // A reset invalidates the prior running state. Retrying
+                    // here can form a reset/start loop; the next play/prepare
+                    // is the intentional, on-demand retry boundary.
+                    self?.engineIsRunning = false
+                }
             }
             hapticEngine.stoppedHandler = { [weak self] _ in
                 Task { @MainActor [weak self] in
-                    guard self?.isEnabled == true else { return }
-                    self?.startEngine()
+                    // In particular, do not defeat idle auto-shutdown or try
+                    // to restart while suspended/interrupted. Every stopped
+                    // reason is safely retried by the next play/prepare call.
+                    self?.engineIsRunning = false
                 }
             }
             engine = hapticEngine
-            startEngine()
         } catch {
             engine = nil
         }
     }
 
-    private func startEngine() {
-        guard isEnabled, supportsCoreHaptics, let engine else { return }
+    @discardableResult
+    private func startEngine() -> Bool {
+        guard isEnabled, supportsCoreHaptics, let engine else { return false }
+        if engineIsRunning { return true }
         do {
             try engine.start()
+            engineIsRunning = true
+            return true
         } catch {
             // A UIKit impact remains available when the server is interrupted or reset.
+            engineIsRunning = false
+            return false
         }
     }
 
-    private func playFallback(intensity: CGFloat) {
-        fallback.prepare()
-        fallback.impactOccurred(intensity: min(max(intensity, 0), 1))
+    private func stopEngine() {
+        engineIsRunning = false
+        engine?.stop(completionHandler: nil)
+    }
+
+    private func playbackDuration(for events: [CHHapticEvent]) -> TimeInterval {
+        events.reduce(0.06) { duration, event in
+            max(
+                duration,
+                max(event.relativeTime, 0) + max(event.duration, 0.06)
+            )
+        }
+    }
+
+    private func postWillPlay(duration: TimeInterval) {
+        NotificationCenter.default.post(
+            name: HapticPlaybackNotification.willPlay,
+            object: nil,
+            userInfo: [
+                HapticPlaybackNotification.durationKey: max(duration, 0.06)
+            ]
+        )
+    }
+
+    private func playFallback(intensity: CGFloat, sharpness: CGFloat) {
+        let generator: UIImpactFeedbackGenerator
+        if intensity >= 0.68 {
+            generator = heavyFallback
+        } else if sharpness >= 0.68 {
+            generator = lightFallback
+        } else {
+            generator = mediumFallback
+        }
+        generator.prepare()
+        generator.impactOccurred(intensity: min(max(intensity, 0), 1))
     }
 }

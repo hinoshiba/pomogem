@@ -100,6 +100,7 @@ final class JarSnapshotter {
         of scene: JarScene,
         metadata: WidgetSnapshotMetadata
     ) async throws {
+        guard ReleaseExternalSurfacePolicy.showsAccountDataInWidgets else { return }
         let snapshot = try image(of: scene, options: .widget)
         let previous = widgetPublication
         let publication = Task { @MainActor in

@@ -8,11 +8,11 @@ import SwiftData
 /// object graph in memory would make the user-facing export action unreliable.
 enum TsumibenDataExportPolicy {
     static let format = "jp.hinoshiba.tsumiben.user-data"
-    static let schemaVersion = 1
+    static let schemaVersion = 3
     static let batchSize = 256
     static let staleFileAge: TimeInterval = 24 * 60 * 60
 
-    fileprivate static let directoryPrefix = "tsumiben-data-export-"
+    static let directoryPrefix = "tsumiben-data-export-"
     fileprivate static let partialFilename = "tsumiben-data.partial"
 }
 
@@ -33,6 +33,8 @@ struct TsumibenDataExportRecordCounts: Codable, Equatable, Sendable {
     let activityResetMarkers: Int
     let syncedFocusTimers: Int
     let focusTimerDeviceClaims: Int
+    let rareRewardPendingCommits: Int
+    let rareRewardLedgerCursors: Int
 
     var total: Int {
         subjects
@@ -46,6 +48,8 @@ struct TsumibenDataExportRecordCounts: Codable, Equatable, Sendable {
             + activityResetMarkers
             + syncedFocusTimers
             + focusTimerDeviceClaims
+            + rareRewardPendingCommits
+            + rareRewardLedgerCursors
     }
 }
 
@@ -159,16 +163,21 @@ actor TsumibenDataExportWorker {
         appInfo: TsumibenDataExportAppInfo,
         exportedAt: Date = .now,
         destinationRoot: URL? = nil,
+        includesRetainedRareRewardModels: Bool = RareRewardReleasePolicy.isEnabled,
         progress: ProgressHandler = { _ in }
     ) throws -> TsumibenDataExportResult {
         try Task.checkCancellation()
+        let shouldIncludeRetainedRareRewardModels = RareRewardReleasePolicy
+            .permitsInternalTestOverride(includesRetainedRareRewardModels)
         progress(TsumibenDataExportProgress(
             phase: .preparing,
             completedRecords: 0,
             estimatedTotalRecords: 0
         ))
 
-        let estimatedCounts = try fetchRecordCounts()
+        let estimatedCounts = try fetchRecordCounts(
+            includesRetainedRareRewardModels: shouldIncludeRetainedRareRewardModels
+        )
         let estimatedTotal = estimatedCounts.total
         let manager = FileManager.default
         let root = (destinationRoot ?? manager.temporaryDirectory).standardizedFileURL
@@ -223,7 +232,7 @@ actor TsumibenDataExportWorker {
 
             let subjectCount = try writeCollection(
                 key: "subjects",
-                displayName: "カテゴリ",
+                displayName: "テーマ",
                 descriptor: FetchDescriptor<Subject>(sortBy: [
                     SortDescriptor(\Subject.createdAt),
                     SortDescriptor(\Subject.id)
@@ -313,7 +322,7 @@ actor TsumibenDataExportWorker {
             try Self.write(",", to: openedHandle)
             let gachaCount = try writeCollection(
                 key: "gachaStates",
-                displayName: "レア粒の状態",
+                displayName: "旧形式の互換状態",
                 descriptor: FetchDescriptor<GachaState>(sortBy: [
                     SortDescriptor(\GachaState.id)
                 ]),
@@ -383,6 +392,49 @@ actor TsumibenDataExportWorker {
                 progress: progress,
                 snapshot: FocusTimerDeviceClaimExportRecord.init
             )
+            try Self.write(",", to: openedHandle)
+            let rareRewardPendingCount: Int
+            if shouldIncludeRetainedRareRewardModels {
+                rareRewardPendingCount = try writeCollection(
+                    key: "rareRewardPendingCommits",
+                    displayName: "保留中の互換データ",
+                    descriptor: FetchDescriptor<RareRewardPendingCommit>(sortBy: [
+                        SortDescriptor(\RareRewardPendingCommit.createdAt),
+                        SortDescriptor(\RareRewardPendingCommit.id)
+                    ]),
+                    encoder: encoder,
+                    handle: openedHandle,
+                    completed: &completed,
+                    estimatedTotal: estimatedTotal,
+                    progress: progress,
+                    snapshot: RareRewardPendingCommitExportRecord.init
+                )
+            } else {
+                try Self.write("\"rareRewardPendingCommits\":[]", to: openedHandle)
+                rareRewardPendingCount = 0
+            }
+            try Self.write(",", to: openedHandle)
+            let rareRewardCursorCount: Int
+            if shouldIncludeRetainedRareRewardModels {
+                rareRewardCursorCount = try writeCollection(
+                    key: "rareRewardLedgerCursors",
+                    displayName: "互換台帳の同期位置",
+                    descriptor: FetchDescriptor<RareRewardLedgerCursor>(sortBy: [
+                        SortDescriptor(\RareRewardLedgerCursor.epochID),
+                        SortDescriptor(\RareRewardLedgerCursor.revision),
+                        SortDescriptor(\RareRewardLedgerCursor.id)
+                    ]),
+                    encoder: encoder,
+                    handle: openedHandle,
+                    completed: &completed,
+                    estimatedTotal: estimatedTotal,
+                    progress: progress,
+                    snapshot: RareRewardLedgerCursorExportRecord.init
+                )
+            } else {
+                try Self.write("\"rareRewardLedgerCursors\":[]", to: openedHandle)
+                rareRewardCursorCount = 0
+            }
 
             let actualCounts = TsumibenDataExportRecordCounts(
                 subjects: subjectCount,
@@ -395,7 +447,9 @@ actor TsumibenDataExportWorker {
                 preferences: prefsCount,
                 activityResetMarkers: resetCount,
                 syncedFocusTimers: timerCount,
-                focusTimerDeviceClaims: claimCount
+                focusTimerDeviceClaims: claimCount,
+                rareRewardPendingCommits: rareRewardPendingCount,
+                rareRewardLedgerCursors: rareRewardCursorCount
             )
             progress(TsumibenDataExportProgress(
                 phase: .finishing,
@@ -423,8 +477,23 @@ actor TsumibenDataExportWorker {
         }
     }
 
-    private func fetchRecordCounts() throws -> TsumibenDataExportRecordCounts {
-        TsumibenDataExportRecordCounts(
+    private func fetchRecordCounts(
+        includesRetainedRareRewardModels: Bool
+    ) throws -> TsumibenDataExportRecordCounts {
+        let rareRewardPendingCount: Int
+        let rareRewardCursorCount: Int
+        if includesRetainedRareRewardModels {
+            rareRewardPendingCount = try modelContext.fetchCount(
+                FetchDescriptor<RareRewardPendingCommit>()
+            )
+            rareRewardCursorCount = try modelContext.fetchCount(
+                FetchDescriptor<RareRewardLedgerCursor>()
+            )
+        } else {
+            rareRewardPendingCount = 0
+            rareRewardCursorCount = 0
+        }
+        return TsumibenDataExportRecordCounts(
             subjects: try modelContext.fetchCount(FetchDescriptor<Subject>()),
             studySessions: try modelContext.fetchCount(FetchDescriptor<StudySession>()),
             achievementStones: try modelContext.fetchCount(FetchDescriptor<AchievementStone>()),
@@ -435,7 +504,9 @@ actor TsumibenDataExportWorker {
             preferences: try modelContext.fetchCount(FetchDescriptor<Prefs>()),
             activityResetMarkers: try modelContext.fetchCount(FetchDescriptor<ActivityResetMarker>()),
             syncedFocusTimers: try modelContext.fetchCount(FetchDescriptor<SyncedFocusTimer>()),
-            focusTimerDeviceClaims: try modelContext.fetchCount(FetchDescriptor<FocusTimerDeviceClaim>())
+            focusTimerDeviceClaims: try modelContext.fetchCount(FetchDescriptor<FocusTimerDeviceClaim>()),
+            rareRewardPendingCommits: rareRewardPendingCount,
+            rareRewardLedgerCursors: rareRewardCursorCount
         )
     }
 
@@ -523,24 +594,33 @@ actor TsumibenDataExportWorker {
 
 private struct SubjectExportRecord: Encodable {
     let id: UUID
+    let syncRecordID: UUID
+    let contentRevision: Int
+    let contentMutationID: UUID
     let name: String
     let colorHex: String
     let sortOrder: Int
     let isArchived: Bool
+    let deletedAt: Date?
     let createdAt: Date
 
     init(_ value: Subject) {
         id = value.id
+        syncRecordID = value.syncRecordID
+        contentRevision = value.contentRevision
+        contentMutationID = value.contentMutationID
         name = value.name
         colorHex = value.colorHex
         sortOrder = value.sortOrder
         isArchived = value.isArchived
+        deletedAt = value.deletedAt
         createdAt = value.createdAt
     }
 }
 
 private struct StudySessionExportRecord: Encodable {
     let id: UUID
+    let syncRecordID: UUID
     let dataEpochID: UUID?
     let subjectID: UUID?
     let subjectIDSnapshot: UUID?
@@ -561,6 +641,7 @@ private struct StudySessionExportRecord: Encodable {
 
     init(_ value: StudySession) {
         id = value.id
+        syncRecordID = value.syncRecordID
         dataEpochID = value.dataEpochID
         subjectID = value.subject?.id
         subjectIDSnapshot = value.subjectIDSnapshot
@@ -583,6 +664,7 @@ private struct StudySessionExportRecord: Encodable {
 
 private struct AchievementStoneExportRecord: Encodable {
     let id: UUID
+    let syncRecordID: UUID
     let dataEpochID: UUID?
     let subjectID: UUID?
     let subjectNameSnapshot: String
@@ -593,10 +675,14 @@ private struct AchievementStoneExportRecord: Encodable {
     let createdAt: Date
     let revision: Int
     let deletedAt: Date?
+    let deletionMutationID: UUID?
+    let deletionRevision: Int
+    let restoredDeletionMutationID: UUID?
     let updatedAt: Date
 
     init(_ value: AchievementStone) {
         id = value.id
+        syncRecordID = value.syncRecordID
         dataEpochID = value.dataEpochID
         subjectID = value.subject?.id
         subjectNameSnapshot = value.subjectNameSnapshot
@@ -607,6 +693,9 @@ private struct AchievementStoneExportRecord: Encodable {
         createdAt = value.createdAt
         revision = value.revision
         deletedAt = value.deletedAt
+        deletionMutationID = value.deletionMutationID
+        deletionRevision = value.deletionRevision
+        restoredDeletionMutationID = value.restoredDeletionMutationID
         updatedAt = value.updatedAt
     }
 }
@@ -705,11 +794,39 @@ private struct GachaStateExportRecord: Encodable {
 
 private struct PrefsExportRecord: Encodable {
     let id: UUID
+    let syncRecordID: UUID
+    let settingsWriterID: String
+    let soundRevision: Int
+    let soundMutationID: UUID?
+    let hapticsRevision: Int
+    let hapticsMutationID: UUID?
+    let timerCompletionSoundRevision: Int
+    let timerCompletionSoundMutationID: UUID?
+    let timerCompletionHapticRevision: Int
+    let timerCompletionHapticMutationID: UUID?
+    let rareRewardRevision: Int
+    let rareRewardMutationID: UUID?
+    let reminderEnabledRevision: Int
+    let reminderEnabledMutationID: UUID?
+    let reminderTimeRevision: Int
+    let reminderTimeMutationID: UUID?
+    let shareIncludesManualRevision: Int
+    let shareIncludesManualMutationID: UUID?
+    let externalThemeRevision: Int
+    let externalThemeMutationID: UUID?
+    let keepScreenAwakeRevision: Int
+    let keepScreenAwakeMutationID: UUID?
+    let preferredFocusMinutesRevision: Int
+    let preferredFocusMinutesMutationID: UUID?
+    let usagePurposeRevision: Int
+    let usagePurposeMutationID: UUID?
     let activityEpochID: UUID?
     let manualDayKey: String
     let manualUsedToday: Int
     let soundOn: Bool
     let hapticsOn: Bool
+    let timerCompletionSoundRawValue: String
+    let timerCompletionHapticRawValue: String
     let rareRewardModeRawValue: String
     let rareRewardModeUpdatedAt: Date?
     let reminderEnabled: Bool
@@ -717,7 +834,8 @@ private struct PrefsExportRecord: Encodable {
     let reminderMinute: Int
     let shareIncludesManual: Bool
     let showsThemeNameExternally: Bool
-    let isPro: Bool
+    /// Historical synchronized field, intentionally ignored as an entitlement.
+    let legacyIsProIgnored: Bool
     let keepScreenAwake: Bool
     let preferredFocusMinutes: Int
     let hasCompletedOnboarding: Bool
@@ -728,11 +846,39 @@ private struct PrefsExportRecord: Encodable {
 
     init(_ value: Prefs) {
         id = value.id
+        syncRecordID = value.syncRecordID
+        settingsWriterID = value.settingsWriterID
+        soundRevision = value.soundRevision
+        soundMutationID = value.soundMutationID
+        hapticsRevision = value.hapticsRevision
+        hapticsMutationID = value.hapticsMutationID
+        timerCompletionSoundRevision = value.timerCompletionSoundRevision
+        timerCompletionSoundMutationID = value.timerCompletionSoundMutationID
+        timerCompletionHapticRevision = value.timerCompletionHapticRevision
+        timerCompletionHapticMutationID = value.timerCompletionHapticMutationID
+        rareRewardRevision = value.rareRewardRevision
+        rareRewardMutationID = value.rareRewardMutationID
+        reminderEnabledRevision = value.reminderEnabledRevision
+        reminderEnabledMutationID = value.reminderEnabledMutationID
+        reminderTimeRevision = value.reminderTimeRevision
+        reminderTimeMutationID = value.reminderTimeMutationID
+        shareIncludesManualRevision = value.shareIncludesManualRevision
+        shareIncludesManualMutationID = value.shareIncludesManualMutationID
+        externalThemeRevision = value.externalThemeRevision
+        externalThemeMutationID = value.externalThemeMutationID
+        keepScreenAwakeRevision = value.keepScreenAwakeRevision
+        keepScreenAwakeMutationID = value.keepScreenAwakeMutationID
+        preferredFocusMinutesRevision = value.preferredFocusMinutesRevision
+        preferredFocusMinutesMutationID = value.preferredFocusMinutesMutationID
+        usagePurposeRevision = value.usagePurposeRevision
+        usagePurposeMutationID = value.usagePurposeMutationID
         activityEpochID = value.activityEpochID
         manualDayKey = value.manualDayKey
         manualUsedToday = value.manualUsedToday
         soundOn = value.soundOn
         hapticsOn = value.hapticsOn
+        timerCompletionSoundRawValue = value.timerCompletionSoundRawValue
+        timerCompletionHapticRawValue = value.timerCompletionHapticRawValue
         rareRewardModeRawValue = value.rareRewardModeRawValue
         rareRewardModeUpdatedAt = value.rareRewardModeUpdatedAt
         reminderEnabled = value.reminderEnabled
@@ -740,7 +886,7 @@ private struct PrefsExportRecord: Encodable {
         reminderMinute = value.reminderMinute
         shareIncludesManual = value.shareIncludesManual
         showsThemeNameExternally = value.showsThemeNameExternally
-        isPro = value.isPro
+        legacyIsProIgnored = false
         keepScreenAwake = value.keepScreenAwake
         preferredFocusMinutes = value.preferredFocusMinutes
         hasCompletedOnboarding = value.hasCompletedOnboarding
@@ -799,6 +945,7 @@ private struct SyncedFocusTimerExportRecord: Encodable {
 
 private struct FocusTimerDeviceClaimExportRecord: Encodable {
     let id: UUID
+    let syncRecordID: UUID
     let dataEpochID: UUID?
     let sessionID: UUID
     let deviceID: String
@@ -808,11 +955,76 @@ private struct FocusTimerDeviceClaimExportRecord: Encodable {
 
     init(_ value: FocusTimerDeviceClaim) {
         id = value.id
+        syncRecordID = value.syncRecordID
         dataEpochID = value.dataEpochID
         sessionID = value.sessionID
         deviceID = value.deviceID
         sequence = value.sequence
         claimedAt = value.claimedAt
         releasedAt = value.releasedAt
+    }
+}
+
+private struct RareRewardPendingCommitExportRecord: Encodable {
+    let id: UUID
+    let dataEpochID: UUID?
+    let epochID: UUID
+    let sessionID: UUID
+    let sourceRawValue: String
+    let completedSeconds: Int
+    let completedGrams: Int
+    let modeRawValue: String
+    let migrationFingerprint: String
+    let migrationTotalCreditedGrams: Int
+    let migrationSinceLastGold: Int
+    let migrationSeedRawValue: String
+    let createdAt: Date
+
+    init(_ value: RareRewardPendingCommit) {
+        id = value.id
+        dataEpochID = value.dataEpochID
+        epochID = value.epochID
+        sessionID = value.sessionID
+        sourceRawValue = value.sourceRawValue
+        completedSeconds = value.completedSeconds
+        completedGrams = value.completedGrams
+        modeRawValue = value.modeRawValue
+        migrationFingerprint = value.migrationFingerprint
+        migrationTotalCreditedGrams = value.migrationTotalCreditedGrams
+        migrationSinceLastGold = value.migrationSinceLastGold
+        migrationSeedRawValue = value.migrationSeedRawValue
+        createdAt = value.createdAt
+    }
+}
+
+private struct RareRewardLedgerCursorExportRecord: Encodable {
+    let id: UUID
+    let dataEpochID: UUID?
+    let epochID: UUID
+    let migrationFingerprint: String
+    let migrationTotalCreditedGrams: Int
+    let migrationSinceLastGold: Int
+    let seedRawValue: String
+    let totalCreditedGrams: Int
+    let creditRemainderGrams: Int
+    let nextOrdinal: Int64
+    let sinceLastGold: Int
+    let revision: Int64
+    let updatedAt: Date
+
+    init(_ value: RareRewardLedgerCursor) {
+        id = value.id
+        dataEpochID = value.dataEpochID
+        epochID = value.epochID
+        migrationFingerprint = value.migrationFingerprint
+        migrationTotalCreditedGrams = value.migrationTotalCreditedGrams
+        migrationSinceLastGold = value.migrationSinceLastGold
+        seedRawValue = value.seedRawValue
+        totalCreditedGrams = value.totalCreditedGrams
+        creditRemainderGrams = value.creditRemainderGrams
+        nextOrdinal = value.nextOrdinal
+        sinceLastGold = value.sinceLastGold
+        revision = value.revision
+        updatedAt = value.updatedAt
     }
 }

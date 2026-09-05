@@ -12,10 +12,12 @@ struct HomeView: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.aggregateProjectionPresentation)
+    private var aggregateProjectionPresentation
     @ScaledMetric(relativeTo: .subheadline) private var homeMenuFontSize: CGFloat = 15
     @ScaledMetric(relativeTo: .subheadline) private var atmosphereTitleFontSize: CGFloat = 15
     @ScaledMetric(relativeTo: .caption2) private var atmosphereSubtitleFontSize: CGFloat = 11
-    @Query(sort: \Subject.sortOrder) private var subjects: [Subject]
+    @Query(sort: \Subject.sortOrder) private var storedSubjects: [Subject]
     @Query private var storedSessions: [StudySession]
     @Query private var storedAchievementStones: [AchievementStone]
     @Query private var storedAggregates: [AggregatePebble]
@@ -23,16 +25,26 @@ struct HomeView: View {
     @Query private var activityResetMarkers: [ActivityResetMarker]
     @Query private var preferences: [Prefs]
 
-    @AppStorage("home.selected-subject") private var selectedSubjectID = ""
-    @AppStorage("jar.tap-hint-seen") private var didSeeTapHint = false
-    @AppStorage("jar.voiceover-tap-hint-seen") private var didSeeVoiceOverTapHint = false
-    @AppStorage(UsagePurpose.storageKey) private var usagePurposeRawValue = UsagePurpose.study.rawValue
-    @AppStorage(HomeAtmosphere.storageKey) private var homeAtmosphereRawValue = HomeAtmosphere.aurora.rawValue
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: "home.selected-subject"))
+    private var selectedSubjectID = ""
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: "jar.tap-hint-seen"))
+    private var didSeeTapHint = false
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: "jar.voiceover-tap-hint-seen"))
+    private var didSeeVoiceOverTapHint = false
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: HomeAtmosphere.storageKey))
+    private var homeAtmosphereRawValue = HomeAtmosphere.aurora.rawValue
     @State private var scene = JarScene()
     @State private var sceneInitialized = false
     @State private var knownLooseIDs = Set<UUID>()
-    @State private var acceptedAggregateRootIDs = Set<UUID>()
-    @State private var rootProjectionIsComplete = true
+    @State private var aggregatePresentationPage:
+        HomeProjectionPolicy.RefreshedAggregatePresentationPage?
+    @State private var supportedSessionBackfill: [StudySession] = []
+    @State private var supportedSessionBackfillStamp:
+        AggregateProjectionCacheStamp?
+    @State private var supportedSessionBackfillVerifiedStamp:
+        AggregateProjectionCacheStamp?
+    @State private var sessionBackfillTask: Task<Void, Never>?
+    @State private var sessionBackfillIsComplete = false
     @State private var resolvedAchievementStones: [AchievementStone] = []
     @State private var projectedAchievementCount = 0
     @State private var achievementCountIsLowerBound = false
@@ -40,6 +52,8 @@ struct HomeView: View {
     /// level-one index avoids rebuilding recursively flattened UUID sets during
     /// ordinary SwiftUI body evaluation.
     @State private var representedSessionIDs = Set<UUID>()
+    @State private var localMembershipProjectionIsComplete = true
+    @State private var conflictedAggregateRootIDs = Set<UUID>()
     @State private var selectedDuration: PomodoroDuration = .twentyFiveMinutes
     @State private var customMinutes = 40
     @State private var focusConfiguration: FocusConfiguration?
@@ -51,6 +65,7 @@ struct HomeView: View {
     @State private var showCustomDuration = false
     @State private var showAccumulationPlan = false
     @State private var completedStratum: PendingStratumCelebration?
+    @State private var isDeferringStratumForCloudVerification = false
     @State private var presentedStratumID: UUID?
     @State private var stratumCelebrationQueue: [PendingStratumCelebration] = []
     @State private var isDeferringCelebrationsForShare = false
@@ -74,34 +89,44 @@ struct HomeView: View {
     @State private var announcedPostDropShareOfferID: UUID?
 
     init() {
-        _storedSessions = Query(HomeProjectionPolicy.looseSessionDescriptor())
+        var subjectDescriptor = FetchDescriptor<Subject>(sortBy: [
+            SortDescriptor(\Subject.sortOrder),
+            SortDescriptor(\Subject.syncRecordID)
+        ])
+        subjectDescriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
+        _storedSubjects = Query(subjectDescriptor)
+        _storedSessions = Query(
+            HomeProjectionPolicy.sessionChangeSentinelDescriptor()
+        )
         _storedAchievementStones = Query(HomeProjectionPolicy.achievementCandidateDescriptor())
         _storedAggregates = Query(HomeProjectionPolicy.aggregateRootDescriptor())
         _storedStrata = Query(HomeProjectionPolicy.legacyCompatibilityDescriptor())
+        _activityResetMarkers = Query(ActivityResetPolicy.currentMarkerDescriptor())
+        _preferences = Query(PrefsConsumerPolicy.descriptor())
     }
 
-    private var activeSubjects: [Subject] { subjects.filter { !$0.isArchived } }
-    private var prefs: Prefs? {
-        currentPreferences.first
+    private var subjects: [Subject] {
+        SubjectSyncPolicy.presentationSubjects(from: storedSubjects)
     }
-    private var currentPreferences: [Prefs] {
-        preferences.filter {
-            ActivityResetPolicy.isCurrent($0.activityEpochID, markers: resetSnapshots)
-        }
+    private var activeSubjects: [Subject] { subjects.filter { !$0.isArchived } }
+    private var resolvedPreferences: PrefsSyncPolicy.ResolvedState? {
+        PrefsConsumerPolicy.resolvedState(
+            in: preferences,
+            markers: resetSnapshots
+        )
+    }
+    private var sensoryPreferences: PrefsSyncPolicy.ResolvedSensoryState {
+        PrefsConsumerPolicy.resolvedSensoryState(in: preferences)
     }
     private var rareRewardMode: RareRewardMode {
-        RareRewardMode.resolved(preferences: currentPreferences)
+        guard RareRewardReleasePolicy.isEnabled else { return .off }
+        return PrefsConsumerPolicy.rareRewardMode(from: resolvedPreferences)
     }
     private var manualCounterState: ManualCounterState {
         ManualCounterState(
-            dayKey: prefs?.manualDayKey ?? "",
-            usedToday: prefs?.manualUsedToday ?? 0
+            dayKey: resolvedPreferences?.manualDayKey ?? "",
+            usedToday: resolvedPreferences?.manualUsedToday ?? 0
         )
-    }
-    private var usagePurpose: UsagePurpose {
-        UsagePurpose(
-            rawValue: prefs?.usagePurposeRawValue ?? usagePurposeRawValue
-        ) ?? .study
     }
     private var homeAtmosphere: HomeAtmosphere {
         HomeAtmosphere.resolved(homeAtmosphereRawValue)
@@ -113,8 +138,23 @@ struct HomeView: View {
         ActivityResetPolicy.currentEpochID(from: resetSnapshots)
     }
     private var sessions: [StudySession] {
-        storedSessions.filter {
+        // The raw @Query exists only as a bounded change trigger. Rendering
+        // waits for the exact-ID backfill so a losing physical prefix can
+        // never become Home mass or a jar body, even transiently.
+        let cacheIsCurrent = if aggregateProjectionPresentation
+            .isCloudVerificationPending {
+            aggregateProjectionPresentation.acceptsCurrentGenerationCache(
+                supportedSessionBackfillStamp
+            )
+        } else {
+            aggregateProjectionPresentation.acceptsVerifiedAggregateCache(
+                supportedSessionBackfillVerifiedStamp
+            )
+        }
+        guard cacheIsCurrent else { return [] }
+        return supportedSessionBackfill.filter {
             ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetSnapshots)
+                && StudySessionIntegrityPolicy.isSupported($0)
         }
     }
     private var achievementCandidates: [AchievementStone] {
@@ -125,45 +165,78 @@ struct HomeView: View {
     private var achievementStones: [AchievementStone] {
         resolvedAchievementStones
     }
-    private var aggregates: [AggregatePebble] {
-        storedAggregates.filter {
-            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetSnapshots)
+    private var currentAggregatePresentationPage:
+        HomeProjectionPolicy.RefreshedAggregatePresentationPage? {
+        guard let aggregatePresentationPage,
+              aggregateProjectionPresentation.acceptsVerifiedAggregateCache(
+                  aggregatePresentationPage.cacheStamp
+              ) else {
+            return nil
         }
+        return aggregatePresentationPage
+    }
+    private var aggregates: [AggregatePebble] {
+        currentAggregatePresentationPage?.aggregateRoots ?? []
     }
     private var strata: [Stratum] {
-        storedStrata.filter {
-            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetSnapshots)
-        }
+        currentAggregatePresentationPage?.legacyStrata ?? []
+    }
+    private var acceptedAggregateRootIDs: Set<UUID> {
+        currentAggregatePresentationPage?.acceptedAggregateRootIDs ?? []
+    }
+    private var rootProjectionIsComplete: Bool {
+        currentAggregatePresentationPage?.rootProjectionIsComplete ?? false
+    }
+    private var aggregateProjectionNeedsMaintenance: Bool {
+        currentAggregatePresentationPage?
+            .aggregateProjectionNeedsMaintenance ?? true
     }
     private var queriedLooseSessions: [StudySession] {
-        Dictionary(grouping: sessions, by: \.id).values.compactMap { duplicates -> StudySession? in
-            guard let id = duplicates.first?.id,
-                  !representedSessionIDs.contains(id),
-                  !duplicates.contains(where: \.isBaked)
-            else { return nil }
-            return duplicates.max { lhs, rhs in lhs.grams < rhs.grams }
+        StudySessionSyncPolicy.canonicalSessions(from: sessions).filter {
+            !representedSessionIDs.contains($0.id)
         }
         .sorted { $0.endAt > $1.endAt }
     }
     private var looseSessions: [StudySession] {
-        let newestRootEnd = acceptedAggregateRoots.map(\.periodEnd).max()
-        let accepted = queriedLooseSessions.filter { session in
-            guard let newestRootEnd else { return true }
-            return session.endAt > newestRootEnd
-        }
-        return Array(accepted.prefix(HomeProjectionPolicy.looseSessionLimit))
+        Array(queriedLooseSessions.prefix(HomeProjectionPolicy.looseSessionLimit))
     }
-    private var projectionNeedsMaintenance: Bool {
+    private var localProjectionNeedsMaintenance: Bool {
         !rootProjectionIsComplete
+            || aggregateProjectionNeedsMaintenance
+            || !localMembershipProjectionIsComplete
+            || !sessionBackfillIsComplete
             || acceptedAggregateRootIDs.count
                 != AggregatePebblePolicy.activeRoots(from: aggregates).count
             || queriedLooseSessions.count != looseSessions.count
-            || (storedSessions.count == HomeProjectionPolicy.looseSessionQueryLimit
-                && sessions.count < storedSessions.count)
+    }
+    private var projectionNeedsMaintenance: Bool {
+        localProjectionNeedsMaintenance
+            || aggregateProjectionPresentation.isCloudVerificationPending
+    }
+    /// Roots whose bounded recursive summary preflight succeeded. Membership
+    /// conflicts are applied separately so the exact UUID scan can recover on
+    /// the next store change instead of filtering its own input permanently.
+    private var validatedAggregateRoots: [AggregatePebble] {
+        guard aggregateProjectionPresentation.allowsAggregateSummaries else {
+            return []
+        }
+        return AggregatePebblePolicy.activeRoots(from: aggregates).filter {
+            acceptedAggregateRootIDs.contains($0.id)
+        }
+    }
+    /// The newest validated aggregate is a useful large-store suffix horizon,
+    /// but it is not proof that every earlier source row was aggregated. Home
+    /// therefore keeps any horizon-backed loose projection explicitly
+    /// incomplete until a durable maintenance-frontier certificate exists.
+    private var verifiedAggregateSessionHorizon: Date? {
+        guard aggregateProjectionPresentation.verifiedCacheStamp != nil else {
+            return nil
+        }
+        return validatedAggregateRoots.map(\.periodEnd).max()
     }
     private var acceptedAggregateRoots: [AggregatePebble] {
-        AggregatePebblePolicy.activeRoots(from: aggregates).filter {
-            acceptedAggregateRootIDs.contains($0.id)
+        validatedAggregateRoots.filter {
+            !conflictedAggregateRootIDs.contains($0.id)
         }
     }
     private var projectionTotals: HomeProjectionPolicy.Totals {
@@ -181,7 +254,11 @@ struct HomeView: View {
     private var activeAggregateRoots: [AggregatePebble] {
         acceptedAggregateRoots
     }
+    private var activeLegacyStrata: [Stratum] {
+        strata
+    }
     private var visibleGoldPebbleCount: Int {
+        guard RareRewardReleasePolicy.isEnabled else { return 0 }
         let loose = RareRewardCounts.total(looseSessions.map(\.rareRewardCounts))
         return HomeProjectionPolicy.saturatingNonnegativeSum([
             HomeProjectionPolicy.saturatingNonnegativeSum(
@@ -191,6 +268,7 @@ struct HomeView: View {
         ])
     }
     private var visiblePrismPebbleCount: Int {
+        guard RareRewardReleasePolicy.isEnabled else { return 0 }
         let loose = RareRewardCounts.total(looseSessions.map(\.rareRewardCounts))
         return HomeProjectionPolicy.saturatingNonnegativeSum([
             HomeProjectionPolicy.saturatingNonnegativeSum(
@@ -240,13 +318,16 @@ struct HomeView: View {
         looseSessions.isEmpty
             && visibleAchievementStones.isEmpty
             && activeAggregateRoots.isEmpty
-            && strata.isEmpty
+            && activeLegacyStrata.isEmpty
     }
-    private var sessionChangeTokens: [String] {
-        sessions.map { "\($0.id.uuidString)-\($0.isBaked)" }
+    private var sessionChangeTokens: [StudySessionSyncPolicy.ChangeToken] {
+        sessions.map(StudySessionSyncPolicy.changeToken(for:))
+    }
+    private var storedSessionChangeTokens: [StudySessionSyncPolicy.ChangeToken] {
+        storedSessions.map(StudySessionSyncPolicy.changeToken(for:))
     }
     private var stratumChangeTokens: [String] {
-        strata.map { stratum in
+        storedStrata.map { stratum in
             [
                 stratum.id.uuidString,
                 stratum.sessionIDsJSON,
@@ -258,19 +339,7 @@ struct HomeView: View {
         }
     }
     private var aggregateChangeTokens: [String] {
-        aggregates.map { aggregate in
-            [
-                aggregate.id.uuidString,
-                String(aggregate.level),
-                String(aggregate.pebbleCount),
-                String(aggregate.grams),
-                aggregate.colorMixJSON,
-                aggregate.subjectMixJSON,
-                aggregate.sessionIDsJSON,
-                aggregate.childAggregateIDsJSON,
-                aggregate.parentAggregateID?.uuidString ?? "root"
-            ].joined(separator: "-")
-        }
+        storedAggregates.map(AggregateProjectionChangeFingerprint.value(for:))
     }
     private var achievementChangeTokens: [String] {
         storedAchievementStones.map {
@@ -290,7 +359,7 @@ struct HomeView: View {
     }
     private var sensoryChangeTokens: [String] {
         preferences.map {
-            "\($0.soundOn)-\($0.hapticsOn)-\($0.rareRewardModeRawValue)-\($0.rareRewardModeUpdatedAt?.timeIntervalSince1970 ?? -1)"
+            PrefsConsumerPolicy.fingerprint(for: $0)
         }
     }
     private var celebrationPresentationBlockers: [Bool] {
@@ -309,7 +378,9 @@ struct HomeView: View {
             router.sharePresented,
             router.recoveredFocus != nil,
             router.recoveredBreak != nil,
-            isDeferringCelebrationsForShare
+            isDeferringCelebrationsForShare,
+            aggregateProjectionPresentation.isCloudVerificationPending,
+            isDeferringStratumForCloudVerification
         ]
     }
     private var canPresentStratumCelebration: Bool {
@@ -404,7 +475,11 @@ struct HomeView: View {
     private var presentedContent: some View {
         mainContent
         .fullScreenCover(item: $focusConfiguration) { configuration in
-            FocusView(subject: configuration.subject, duration: configuration.duration)
+            FocusView(
+                subject: configuration.subject,
+                duration: configuration.duration,
+                dataEpochID: currentActivityEpochID
+            )
         }
         .fullScreenCover(item: $breakConfiguration, onDismiss: {
             recoverPendingRewardReceipt()
@@ -417,14 +492,8 @@ struct HomeView: View {
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showAccumulationOverview) {
-            AccumulationOverviewLoader(
-                resetMarkers: resetSnapshots,
-                lifetimeGrams: totalGrams,
-                lifetimePebbleCount: totalPebbles,
-                lifetimeIsLowerBound: projectionNeedsMaintenance,
-                initialClusterID: overviewInitialClusterID
-            )
-            .presentationDragIndicator(.visible)
+            accumulationOverviewSheet
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showManualEntry) {
             ManualEntrySheet(
@@ -439,7 +508,6 @@ struct HomeView: View {
             AchievementEntrySheet(
                 initialSubject: selectedSubject,
                 subjects: activeSubjects,
-                usagePurpose: usagePurpose,
                 onAdd: addAchievementStone
             )
                 .presentationDetents(auxiliarySheetDetents)
@@ -457,6 +525,33 @@ struct HomeView: View {
         .sheet(item: $completedStratum, onDismiss: finishPresentedStratumCelebration) { request in
             stratumCelebrationSheet(request)
         }
+    }
+
+    @ViewBuilder
+    private var accumulationOverviewSheet: some View {
+        let content = AccumulationOverviewLoader(
+            resetMarkers: resetSnapshots,
+            lifetimeGrams: totalGrams,
+            lifetimePebbleCount: totalPebbles,
+            lifetimeIsLowerBound: localProjectionNeedsMaintenance,
+            projectionPresentation: aggregateProjectionPresentation,
+            initialClusterID: overviewInitialClusterID
+        )
+#if DEBUG && targetEnvironment(simulator)
+        // A sheet owns a separate presentation host. Forward the pinned AX5
+        // UI-test value explicitly so this audit exercises the accessibility
+        // layout rather than the ordinary segmented-control layout.
+        if LocalPreviewLaunchPolicy.forcesAccessibility5(
+            environment: ProcessInfo.processInfo.environment,
+            isDebugBuild: true
+        ) {
+            content.environment(\.dynamicTypeSize, .accessibility5)
+        } else {
+            content
+        }
+#else
+        content
+#endif
     }
 
     private var auxiliarySheetDetents: Set<PresentationDetent> {
@@ -487,6 +582,7 @@ struct HomeView: View {
             recoverInterruptionNotice()
             scheduleTiltHintIfNeeded()
             schedulePendingReviewRequestIfPossible()
+            refreshSupportedSessionBackfill()
         }
         .onDisappear {
             widgetRefreshTask?.cancel()
@@ -498,6 +594,8 @@ struct HomeView: View {
             pendingCapacityCelebrations.removeAll()
             tiltHintTask?.cancel()
             tiltHintTask = nil
+            sessionBackfillTask?.cancel()
+            sessionBackfillTask = nil
             showsTiltHint = false
             capacityRemaining = nil
             clearSceneCallbacks()
@@ -506,6 +604,9 @@ struct HomeView: View {
             syncScene()
             scheduleTiltHintIfNeeded()
         }
+        .onChange(of: storedSessionChangeTokens) { _, _ in
+            refreshSupportedSessionBackfill()
+        }
         .onChange(of: achievementChangeTokens) { _, _ in
             refreshAchievementProjection()
             refreshAchievementCount()
@@ -513,6 +614,19 @@ struct HomeView: View {
         }
         .onChange(of: aggregateChangeTokens) { _, _ in
             refreshAcceptedAggregateRoots()
+            syncScene()
+            scheduleTiltHintIfNeeded()
+        }
+        .onChange(of: aggregateProjectionPresentation) { _, presentation in
+            if presentation.isCloudVerificationPending {
+                deferPresentedStratumForCloudVerification()
+                discardAggregateCelebrationSnapshotsForInvalidation()
+            }
+            refreshAcceptedAggregateRoots()
+            refreshSupportedSessionBackfill()
+            if !presentation.isCloudVerificationPending {
+                recoverPendingStratumCelebrations()
+            }
             syncScene()
             scheduleTiltHintIfNeeded()
         }
@@ -533,6 +647,7 @@ struct HomeView: View {
         }
         .onChange(of: sensoryChangeTokens) { _, _ in
             applySensoryPreferences()
+            restorePreferredDuration()
         }
         .onChange(of: reduceMotion) { _, enabled in
             cancelTiltHintPresentation()
@@ -597,8 +712,11 @@ struct HomeView: View {
                 prismPebbleCount: visiblePrismPebbleCount,
                 accentHex: selectedSubject?.colorHex ?? Constants.Color.amberLamp,
                 lifetimeCoreColorHex: lifetimeCoreColorHex,
-                projectionIsLowerBound: projectionNeedsMaintenance,
-                fusionProgressDescription: fusionAccessibilityDescription
+                projectionIsLowerBound: localProjectionNeedsMaintenance,
+                projectionIsUnverified:
+                    aggregateProjectionPresentation.isCloudVerificationPending,
+                fusionProgressDescription: fusionAccessibilityDescription,
+                isMotionEnabled: homeJarMotionIsEnabled
             )
                 .padding(.horizontal, 4)
 
@@ -707,11 +825,10 @@ struct HomeView: View {
                     grams: totalGrams,
                     rootCount: activeAggregateRoots.count,
                     looseCount: looseSessions.count,
-                    // The named-store fault scenarios contain at most ten
-                    // loose rows, well below the bounded Home query limit.
-                    // Exposing both raw rows and unique IDs catches a duplicate
-                    // SwiftData insert that the canonical jar projection would
-                    // otherwise deliberately hide.
+                    // This is the recent local-change sentinel, not a lifetime
+                    // row count. Named-store fault scenarios contain at most
+                    // ten recent rows, so duplicate inserts remain observable
+                    // without forcing the 40-year source table to sort.
                     sessionRowCount: storedSessions.count,
                     uniqueSessionIDCount: Set(storedSessions.map(\.id)).count
                 )
@@ -725,9 +842,31 @@ struct HomeView: View {
         .frame(height: height)
     }
 
+    /// SwiftUI keeps presenting views mounted behind sheets. The jar owns the
+    /// device sensor only while Home is actually frontmost so a hidden bottle
+    /// cannot answer the same shake as a planning preview (or make noise under
+    /// an unrelated sheet).
+    private var homeJarMotionIsEnabled: Bool {
+        router.selectedTab == .jar
+            && focusConfiguration == nil
+            && breakConfiguration == nil
+            && !showHomeMenu
+            && !showAccumulationOverview
+            && !showManualEntry
+            && !showAchievementEntry
+            && !showCustomDuration
+            && !showAccumulationPlan
+            && completedStratum == nil
+            && !router.paywallPresented
+            && !router.sharePresented
+            && router.recoveredFocus == nil
+            && router.recoveredBreak == nil
+            && router.cloudFocusRecoveryOffer == nil
+    }
+
     private var jarMetricHUD: some View {
         VStack(spacing: 3) {
-            Text(usagePurpose == .work ? "積み上げた仕事の集中" : "積み上げた集中")
+            Text("積み上げた集中")
                 // This HUD is decorative and excluded from VoiceOver. Keep it
                 // inside the fixed SpriteKit canvas at accessibility sizes;
                 // the jar's accessibility value carries the same information.
@@ -748,6 +887,11 @@ struct HomeView: View {
 
             VStack(spacing: 4) {
                 jarMetricPill(jarMetricSummary)
+                if aggregateProjectionPresentation.isCloudVerificationPending {
+                    Text("iCloudを再確認中")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.68))
+                }
                 if showsPreFusionRail {
                     preFusionRail
                 }
@@ -763,19 +907,56 @@ struct HomeView: View {
     }
 
     private var homeMassValue: String {
-        if totalGrams < 1_000 { return totalGrams.formatted() }
-        return (Double(totalGrams) / 1_000).formatted(.number.precision(.fractionLength(1 ... 2)))
+        let verifiedValue: String
+        if totalGrams < 1_000 {
+            verifiedValue = totalGrams.formatted()
+        } else {
+            verifiedValue = (Double(totalGrams) / 1_000).formatted(
+                .number.precision(.fractionLength(1 ... 2))
+            )
+        }
+        return AggregateProjectionPresentationPolicy.homeMassValue(
+            verifiedValue: verifiedValue,
+            context: aggregateProjectionPresentation
+        )
     }
 
     private var homeMassUnit: String {
         let unit = totalGrams < 1_000 ? "g" : "kg"
-        return projectionNeedsMaintenance ? "\(unit)以上" : unit
+        return AggregateProjectionPresentationPolicy.homeMassUnit(
+            verifiedUnit: unit,
+            hasLocalLowerBound: localProjectionNeedsMaintenance,
+            context: aggregateProjectionPresentation
+        )
     }
 
     private var jarMetricSummary: String {
         let milestones = uniqueAchievementCount > 0 ? " ・ 記念石 \(achievementCountLabel)" : ""
-        let lowerBound = projectionNeedsMaintenance ? "+" : ""
-        return "\(totalPebbles.formatted())\(lowerBound)粒\(milestones)"
+        return AggregateProjectionPresentationPolicy.homeCountSummary(
+            count: totalPebbles,
+            milestoneSuffix: milestones,
+            hasLocalLowerBound: localProjectionNeedsMaintenance,
+            context: aggregateProjectionPresentation
+        )
+    }
+
+    private var homeMenuMassValue: String {
+        aggregateProjectionPresentation.isCloudVerificationPending
+            ? "再集計中"
+            : formattedMass(totalGrams)
+    }
+
+    private var homeMenuCountValue: String {
+        aggregateProjectionPresentation.isCloudVerificationPending
+            ? "確認済み \(totalPebbles)粒"
+            : "\(totalPebbles)粒"
+    }
+
+    private var homeMenuAccessibilitySummary: String {
+        if aggregateProjectionPresentation.isCloudVerificationPending {
+            return "iCloudの累計を再集計中。この端末で確認済みの集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
+        }
+        return "累計\(formattedMass(totalGrams))、集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
     }
 
     private var effortProgressSnapshot: EffortProgressSnapshot {
@@ -817,17 +998,19 @@ struct HomeView: View {
     }
 
     private var fusionAccessibilityDescription: String? {
-        guard totalPebbles > 0 || projectionNeedsMaintenance else { return nil }
+        guard !aggregateProjectionPresentation.isCloudVerificationPending,
+              totalPebbles > 0 || localProjectionNeedsMaintenance
+        else { return nil }
         guard let state = JarLifetimeCorePresentation.state(
             totalPebbleCount: totalPebbles,
             totalGrams: totalGrams,
-            projectionIsLowerBound: projectionNeedsMaintenance
+            projectionIsLowerBound: localProjectionNeedsMaintenance
         ) else { return nil }
         var components = [state.progressLabel, state.nextFusionLabel]
             .compactMap { $0 }
         if let physicalState = JarLifetimeCorePresentation.state(
             totalPebbleCount: totalPebbles,
-            projectionIsLowerBound: projectionNeedsMaintenance
+            projectionIsLowerBound: localProjectionNeedsMaintenance
         ) {
             let physical = [physicalState.progressLabel, physicalState.nextFusionLabel]
                 .compactMap { $0 }
@@ -839,6 +1022,7 @@ struct HomeView: View {
 
     private var largeTextFusionProgressState: JarLifetimeCoreState? {
         guard dynamicTypeSize.isAccessibilitySize,
+              !aggregateProjectionPresentation.isCloudVerificationPending,
               JarLifetimeCorePresentation.shouldShowCore(
                 totalPebbleCount: totalPebbles,
                 totalGrams: totalGrams
@@ -847,7 +1031,7 @@ struct HomeView: View {
         return JarLifetimeCorePresentation.state(
             totalPebbleCount: totalPebbles,
             totalGrams: totalGrams,
-            projectionIsLowerBound: projectionNeedsMaintenance
+            projectionIsLowerBound: localProjectionNeedsMaintenance
         )
     }
 
@@ -913,7 +1097,22 @@ struct HomeView: View {
 
     @ViewBuilder
     private var emptyJarMessage: some View {
-        if dynamicTypeSize.isAccessibilitySize {
+        if aggregateProjectionPresentation.isCloudVerificationPending {
+            VStack(spacing: 8) {
+                ProgressView()
+                    .tint(TsumibenTheme.amber)
+                    .accessibilityHidden(true)
+                Text("iCloudを再集計中")
+                    .font(.headline.weight(.bold))
+                Text("この端末で確認できた記録だけを表示しています。")
+                    .font(.caption)
+                    .foregroundStyle(TsumibenTheme.muted)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(
+                "iCloudを再集計中。この端末で確認できた記録だけを表示しています"
+            )
+        } else if dynamicTypeSize.isAccessibilitySize {
             // The bottle is a fixed visual canvas. At accessibility text sizes,
             // keep its message short and move the actionable detail to the
             // scrollable launcher immediately below it.
@@ -992,11 +1191,11 @@ struct HomeView: View {
                         .lineLimit(2)
                     Text(
                         selectedSubject == nil
-                            ? "勉強にも、仕事にも"
-                            : "\(selectedSubject?.safeDisplayName ?? "選択中のテーマ") ・ 完走で +\(selectedDuration.grams)g"
+                            ? "勉強も仕事も、同じ一覧で"
+                            : "\(selectedSubject?.safeDisplayName ?? "選択中のテーマ") ・ +\(selectedDuration.grams)g ・ 長押しで変更"
                     )
                     .font(.system(.caption, design: .rounded, weight: .bold))
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                    .lineLimit(2)
                 }
 
                 Spacer(minLength: 4)
@@ -1021,6 +1220,31 @@ struct HomeView: View {
                 : "\(selectedSubject?.safeDisplayName ?? "選択中のテーマ")を\(focusDurationLabel)集中する、完走で\(selectedDuration.grams)グラム"
         )
         .accessibilityHint(focusActionAccessibilityHint)
+        .accessibilityIdentifier("home.focus-launcher")
+        .accessibilityActions {
+            ForEach(activeSubjects) { subject in
+                Button("テーマを\(subject.safeDisplayName)に変更") {
+                    selectSubject(subject)
+                }
+            }
+        }
+        .contextMenu {
+            if activeSubjects.isEmpty {
+                Button {
+                    router.selectedTab = .settings
+                } label: {
+                    Label("テーマを追加", systemImage: "plus.circle")
+                }
+            } else {
+                subjectSelectionActions
+                Divider()
+                Button {
+                    router.selectedTab = .settings
+                } label: {
+                    Label("テーマを管理", systemImage: "slider.horizontal.3")
+                }
+            }
+        }
         .disabled(breakOffer != nil || breakOfferTask != nil || hasPendingRewardReceipt)
         .padding(.bottom, 8)
     }
@@ -1032,16 +1256,16 @@ struct HomeView: View {
         if hasPendingRewardReceipt {
             return "積み上げ結果を閉じると使えます"
         }
-        return selectedSubject == nil ? "設定画面を開きます" : "タイマーを開始します"
+        return selectedSubject == nil
+            ? "設定画面を開きます"
+            : "タイマーを開始します。長押しまたはアクションでテーマを変更できます"
     }
 
     private var focusDurationLabel: String {
-        if selectedDuration == .twentyFiveMinutes { return "25分" }
-        if selectedDuration == .sixtyMinutes { return "60分" }
 #if DEBUG
         if selectedDuration == .demo { return "12秒" }
 #endif
-        return "\(customMinutes)分"
+        return "\(selectedDuration.minutes ?? customMinutes)分"
     }
 
     private var homeMenu: some View {
@@ -1109,8 +1333,8 @@ struct HomeView: View {
 
                 Text(
                     dynamicTypeSize.isAccessibilitySize
-                        ? "教科・仕事の色はそのままに、\n背景の空気だけを変えます。"
-                        : "教科・仕事の色はそのままに、背景の空気だけを変えます。"
+                        ? "テーマの色はそのままに、\n背景の空気だけを変えます。"
+                        : "テーマの色はそのままに、背景の空気だけを変えます。"
                 )
                     .font(.caption)
                     .foregroundStyle(TsumibenTheme.muted)
@@ -1138,7 +1362,7 @@ struct HomeView: View {
         return Button {
             guard homeAtmosphere != atmosphere else { return }
             homeAtmosphereRawValue = atmosphere.rawValue
-            if prefs?.hapticsOn ?? true {
+            if sensoryPreferences.hapticsOn {
                 Haptics.shared.playSecondaryCollision()
             }
         } label: {
@@ -1259,17 +1483,7 @@ struct HomeView: View {
                     .buttonStyle(TsumibenPrimaryButtonStyle())
                 } else {
                     Menu {
-                        ForEach(activeSubjects) { subject in
-                            Button {
-                                selectedSubjectID = subject.id.uuidString
-                            } label: {
-                                if selectedSubject?.id == subject.id {
-                                    Label(subject.safeDisplayName, systemImage: "checkmark")
-                                } else {
-                                    Text(subject.safeDisplayName)
-                                }
-                            }
-                        }
+                        subjectSelectionActions
                     } label: {
                         HStack(spacing: 10) {
                             Circle()
@@ -1293,6 +1507,25 @@ struct HomeView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var subjectSelectionActions: some View {
+        ForEach(activeSubjects) { subject in
+            Button {
+                selectSubject(subject)
+            } label: {
+                if selectedSubject?.id == subject.id {
+                    Label(subject.safeDisplayName, systemImage: "checkmark")
+                } else {
+                    Text(subject.safeDisplayName)
+                }
+            }
+        }
+    }
+
+    private func selectSubject(_ subject: Subject) {
+        selectedSubjectID = subject.id.uuidString
     }
 
     private var menuAccumulationActions: some View {
@@ -1338,15 +1571,15 @@ struct HomeView: View {
             Group {
                 if dynamicTypeSize.isAccessibilitySize {
                     VStack(spacing: 12) {
-                        menuMetric(value: formattedMass(totalGrams), label: "累計")
-                        menuMetric(value: "\(totalPebbles)粒", label: "集中")
+                        menuMetric(value: homeMenuMassValue, label: "累計")
+                        menuMetric(value: homeMenuCountValue, label: "集中")
                         menuMetric(value: "\(achievementCountLabel)個", label: "成果")
                     }
                 } else {
                     HStack(spacing: 0) {
-                        menuMetric(value: formattedMass(totalGrams), label: "累計")
+                        menuMetric(value: homeMenuMassValue, label: "累計")
                         Divider().frame(height: 34)
-                        menuMetric(value: "\(totalPebbles)粒", label: "集中")
+                        menuMetric(value: homeMenuCountValue, label: "集中")
                         Divider().frame(height: 34)
                         menuMetric(value: "\(achievementCountLabel)個", label: "成果")
                     }
@@ -1355,7 +1588,7 @@ struct HomeView: View {
             .padding(.vertical, 12)
             .background(TsumibenTheme.card)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("累計\(formattedMass(totalGrams))、集中\(totalPebbles)粒、成果\(achievementCountLabel)個")
+            .accessibilityLabel(homeMenuAccessibilitySummary)
 
             menuActionButton(
                 title: "積み上がりを見る",
@@ -1497,19 +1730,26 @@ struct HomeView: View {
             VStack(spacing: 8) {
                 startBreakButton(offer)
                     .frame(maxWidth: .infinity)
-                if showShareChip {
-                    postDropShareButton
-                        .frame(maxWidth: .infinity)
-                }
+                postDropShareButton
+                    .frame(maxWidth: .infinity)
+                    .opacity(showShareChip ? 1 : 0)
+                    .allowsHitTesting(showShareChip)
+                    .accessibilityHidden(!showShareChip)
                 dismissBreakOfferButton(offer, showsText: true)
             }
         } else {
             HStack(spacing: 10) {
-                Spacer(minLength: 0)
                 dismissBreakOfferButton(offer, showsText: true)
-                if showShareChip { postDropShareButton }
+                    .frame(maxWidth: .infinity)
+                postDropShareButton
+                    .frame(maxWidth: .infinity)
+                    .opacity(showShareChip ? 1 : 0)
+                    .allowsHitTesting(showShareChip)
+                    .accessibilityHidden(!showShareChip)
                 startBreakButton(offer)
+                    .frame(maxWidth: .infinity)
             }
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -1541,7 +1781,15 @@ struct HomeView: View {
     }
 
     private func postDropHeading(_ offer: BreakOffer) -> some View {
-        HStack(spacing: 11) {
+        let canPublishHistory = !offer.projectionWasCloudUnverified
+            && canPublishBreakOfferProjection(offer)
+        let historyTitle = canPublishHistory
+            ? offer.weeklyTitle
+            : "今回の記録を保存"
+        let historySpokenTitle = canPublishHistory
+            ? offer.weeklySpokenTitle
+            : "今回の記録は保存済みです"
+        return HStack(spacing: 11) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 34, weight: .black))
                 .foregroundStyle(Color(hex: offer.heroColorHex(for: rareRewardMode)))
@@ -1556,7 +1804,7 @@ struct HomeView: View {
                     .font(.system(.headline, design: .rounded, weight: .black))
                     .fixedSize(horizontal: false, vertical: true)
                 Text(
-                    "\(offer.subjectName) +\(offer.grams)g（\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))） ・ \(offer.weeklyTitle)\(offer.rareRewardCounts.multiDrawSummary.map { " ・ \($0)" } ?? "")"
+                    "\(offer.subjectName) +\(offer.grams)g（\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))） ・ \(historyTitle)\(offer.rareRewardCounts.multiDrawSummary.map { " ・ \($0)" } ?? "")"
                 )
                     .font(.caption)
                     .foregroundStyle(TsumibenTheme.muted)
@@ -1580,7 +1828,7 @@ struct HomeView: View {
         .accessibilityIdentifier("reward.heading")
         .accessibilityLabel(offer.dropTitle(for: rareRewardMode))
         .accessibilityValue(
-            "テーマは\(offer.subjectName)です。今回は\(offer.grams)グラム、標準換算は\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))です。\(offer.weeklySpokenTitle)。\(offer.rareRewardCounts.multiDrawSummary.map { "\($0)。" } ?? "")\(offer.minutes)分休憩を利用できます"
+            "テーマは\(offer.subjectName)です。今回は\(offer.grams)グラム、標準換算は\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))です。\(historySpokenTitle)。\(offer.rareRewardCounts.multiDrawSummary.map { "\($0)。" } ?? "")\(offer.minutes)分休憩を利用できます"
         )
         .accessibilityHint(
             showShareChip
@@ -1591,11 +1839,53 @@ struct HomeView: View {
 
     @ViewBuilder
     private func postDropFusionProgress(_ offer: BreakOffer) -> some View {
-        if let effortProgress = offer.effortProgress {
+        if aggregateProjectionPresentation.isCloudVerificationPending
+            || offer.projectionWasCloudUnverified
+            || !canPublishBreakOfferProjection(offer) {
+            postDropCloudVerificationPending(offer)
+        } else if let effortProgress = offer.effortProgress {
             postDropEffortProgress(effortProgress, offer: offer)
         } else {
             postDropLegacyFusionProgress(offer)
         }
+    }
+
+    private func postDropCloudVerificationPending(_ offer: BreakOffer) -> some View {
+        let isStillVerifying = aggregateProjectionPresentation
+            .isCloudVerificationPending
+        return Label {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(isStillVerifying ? "iCloudを再集計中" : "集計を更新しました")
+                    .font(.headline.weight(.black))
+                Text(
+                    isStillVerifying
+                        ? "今回の +\(offer.grams)g は保存済みです。生涯合計は確認後に表示します。"
+                        : "今回の +\(offer.grams)g は保存済みです。更新前の生涯合計は再利用しません。"
+                )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(TsumibenTheme.muted)
+            }
+        } icon: {
+            Image(systemName: "icloud.and.arrow.down")
+                .foregroundStyle(TsumibenTheme.amber)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .background(TsumibenTheme.raised.opacity(0.78), in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("reward.projection-verification-pending")
+        .accessibilityLabel(
+            isStillVerifying
+                ? "iCloudを再集計中。今回の\(offer.grams)グラムは保存済みです。生涯合計は確認後に表示します"
+                : "集計を更新しました。今回の\(offer.grams)グラムは保存済みです。更新前の生涯合計は再利用しません"
+        )
+    }
+
+    private func canPublishBreakOfferProjection(_ offer: BreakOffer) -> Bool {
+        !aggregateProjectionPresentation.usesCloudPersistence
+            || aggregateProjectionPresentation.acceptsVerifiedAggregateCache(
+                offer.projectionCacheStamp
+            )
     }
 
     private func postDropEffortProgress(
@@ -1889,16 +2179,13 @@ struct HomeView: View {
     }
 
     private var durationPicker: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: 8) {
-                    durationChips
-                }
-            } else {
-                HStack(spacing: 8) {
-                    durationChips
-                }
-            }
+        LazyVGrid(
+            columns: dynamicTypeSize.isAccessibilitySize
+                ? [GridItem(.flexible())]
+                : [GridItem(.flexible()), GridItem(.flexible())],
+            spacing: 8
+        ) {
+            durationChips
         }
     }
 
@@ -1907,8 +2194,22 @@ struct HomeView: View {
             DurationChip(title: "25分", subtitle: "+250g", selected: selectedDuration == .twentyFiveMinutes) {
                 selectDuration(.twentyFiveMinutes)
             }
+            DurationChip(
+                title: "45分",
+                subtitle: "+450g",
+                selected: selectedDuration == .custom(minutes: Constants.Timer.fortyFiveMinutes)
+            ) {
+                selectDuration(.custom(minutes: Constants.Timer.fortyFiveMinutes))
+            }
             DurationChip(title: "60分", subtitle: "+600g", selected: selectedDuration == .sixtyMinutes) {
                 selectDuration(.sixtyMinutes)
+            }
+            DurationChip(
+                title: "90分",
+                subtitle: "+900g",
+                selected: selectedDuration == .custom(minutes: Constants.Timer.ninetyMinutes)
+            ) {
+                selectDuration(.custom(minutes: Constants.Timer.ninetyMinutes))
             }
             DurationChip(
                 title: customDurationTitle,
@@ -2016,40 +2317,107 @@ struct HomeView: View {
     }
 
     private func syncBaseLayers() {
-        representedSessionIDs = AggregatePebblePolicy.directSessionIDs(from: acceptedAggregateRoots)
-            .union(strata.flatMap(\.sessionIDs))
+        do {
+            let membership = try HomeProjectionPolicy.localMembershipProjection(
+                for: sessions,
+                representedAggregateRoots: validatedAggregateRoots,
+                legacyStrata: activeLegacyStrata,
+                context: modelContext,
+                resetMarkers: resetSnapshots
+            )
+            representedSessionIDs = membership.representedSessionIDs
+            localMembershipProjectionIsComplete = membership.isCompleteForCandidates
+            conflictedAggregateRootIDs = membership.conflictedRootIDs
+        } catch {
+            // A failed membership read keeps candidates loose and removes every
+            // possibly overlapping root. This is a conservative lower bound;
+            // keeping both layers would overstate synchronized activity.
+            representedSessionIDs = []
+            localMembershipProjectionIsComplete = false
+            conflictedAggregateRootIDs = Set(validatedAggregateRoots.map(\.id))
+        }
         scene.showsMonthLabels = purchase.isPro
         scene.configureAggregates(
             acceptedAggregateRoots,
-            legacyStrata: strata.map(JarStratumVisual.init(stratum:))
+            legacyStrata: activeLegacyStrata.map(
+                JarStratumVisual.init(stratum:)
+            )
         )
         scheduleWidgetSnapshot()
     }
 
-    private func refreshAcceptedAggregateRoots() {
-        do {
-            let persistedRootCount = try modelContext.fetchCount(
-                FetchDescriptor<AggregatePebble>(
-                    predicate: #Predicate { aggregate in
-                        aggregate.parentAggregateID == nil
-                    }
+    private func refreshSupportedSessionBackfill() {
+        sessionBackfillTask?.cancel()
+        sessionBackfillIsComplete = false
+        let markers = resetSnapshots
+        let cacheStamp = aggregateProjectionPresentation.currentCacheStamp
+        let verifiedCacheStamp = aggregateProjectionPresentation.verifiedCacheStamp
+        let currentEpochID = ActivityResetPolicy.currentEpochID(from: markers)
+        let physicalSessionRowCount = try? modelContext.fetchCount(
+            BoundedHistoryPolicy.sessionCountDescriptor(epochID: currentEpochID)
+        )
+        let trustedAggregateHorizon = verifiedAggregateSessionHorizon
+        let queryPlan = HomeProjectionPolicy.initialLooseSessionQueryPlan(
+            physicalSessionRowCount: physicalSessionRowCount,
+            verifiedAggregateEnd: trustedAggregateHorizon
+        )
+        sessionBackfillTask = Task { @MainActor in
+            await Task.yield()
+            do {
+                let page = try HomeProjectionPolicy.supportedLooseSessionPage(
+                    context: modelContext,
+                    resetMarkers: markers,
+                    startingAt: queryPlan.lowerBound
                 )
-            )
-            rootProjectionIsComplete = persistedRootCount
-                <= HomeProjectionPolicy.aggregateRootLimit
-                && (storedAggregates.count < HomeProjectionPolicy.aggregateRootLimit
-                    || aggregates.count == storedAggregates.count)
-            acceptedAggregateRootIDs = try HomeProjectionPolicy.acceptedRootSummaryIDs(
-                roots: aggregates,
-                context: modelContext,
-                resetMarkers: resetSnapshots
-            )
+                try Task.checkCancellation()
+                guard aggregateProjectionPresentation
+                    .acceptsCurrentGenerationCache(cacheStamp) else { return }
+                supportedSessionBackfill = page.sessions
+                supportedSessionBackfillStamp = cacheStamp
+                supportedSessionBackfillVerifiedStamp = verifiedCacheStamp
+                sessionBackfillIsComplete = page.isCompleteForHomeCandidates
+                if HomeProjectionPolicy.shouldRequestLocalSessionMaintenance(
+                    trustedAggregateHorizon: trustedAggregateHorizon,
+                    requestedLowerBound: queryPlan.lowerBound,
+                    pageIsComplete: page.isCompleteForHomeCandidates
+                ) {
+                    router.requestLocalSessionMaintenanceOnce()
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                // Keep the already loaded bounded page. A later store change,
+                // foreground transition, or relaunch retries the scan.
+            }
+        }
+    }
+
+    private func refreshAcceptedAggregateRoots() {
+        guard let cacheStamp = aggregateProjectionPresentation
+            .verifiedCacheStamp else {
+            aggregatePresentationPage = nil
+            return
+        }
+        do {
+            let page = try HomeProjectionPolicy
+                .refreshedAggregatePresentationPage(
+                    context: modelContext,
+                    resetMarkers: resetSnapshots,
+                    cacheStamp: cacheStamp
+                )
+            guard aggregateProjectionPresentation
+                .acceptsVerifiedAggregateCache(page.cacheStamp) else {
+                aggregatePresentationPage = nil
+                return
+            }
+            // Publish one atomic page only after the explicit payload fetches,
+            // validation, and generation recheck have all succeeded.
+            aggregatePresentationPage = page
         } catch {
             // A parent that cannot be verified during a transient store read is
             // omitted for this frame. The query change/relaunch retries without
             // risking duplicated mass or a phantom jar body.
-            acceptedAggregateRootIDs = []
-            rootProjectionIsComplete = false
+            aggregatePresentationPage = nil
         }
     }
 
@@ -2084,13 +2452,15 @@ struct HomeView: View {
     }
 
     private func applySensoryPreferences() {
-        scene.soundEnabled = prefs?.soundOn ?? true
-        scene.hapticsEnabled = prefs?.hapticsOn ?? true
+        scene.soundEnabled = sensoryPreferences.soundOn
+        scene.hapticsEnabled = sensoryPreferences.hapticsOn
         scene.rareRewardMode = rareRewardMode
     }
 
     private func restorePreferredDuration() {
-        guard let preferred = prefs?.preferredFocusMinutes else { return }
+        guard let preferred = resolvedPreferences?.preferredFocusMinutes else {
+            return
+        }
         let restored = PomodoroDuration(minutes: preferred)
         if restored.requiresPro {
             customMinutes = min(
@@ -2111,13 +2481,10 @@ struct HomeView: View {
 
     private func confirmCustomDuration() {
         selectedDuration = PomodoroDuration(minutes: customMinutes)
-        prefs?.preferredFocusMinutes = customMinutes
-        do {
-            try modelContext.save()
-        } catch {
-            modelContext.rollback()
-            router.showToast("集中時間を保存できませんでした", symbol: "exclamationmark.triangle")
-        }
+        persistPreferredFocusMinutes(
+            customMinutes,
+            failureMessage: "集中時間を保存できませんでした"
+        )
         showCustomDuration = false
     }
 
@@ -2154,13 +2521,10 @@ struct HomeView: View {
     private func selectDuration(_ duration: PomodoroDuration) {
         selectedDuration = duration
         guard let minutes = duration.minutes else { return }
-        prefs?.preferredFocusMinutes = minutes
-        do {
-            try modelContext.save()
-        } catch {
-            modelContext.rollback()
-            router.showToast("集中時間を保存できませんでした", symbol: "exclamationmark.triangle")
-        }
+        persistPreferredFocusMinutes(
+            minutes,
+            failureMessage: "集中時間を保存できませんでした"
+        )
     }
 
     private func startFocus(duration: PomodoroDuration) {
@@ -2169,21 +2533,52 @@ struct HomeView: View {
             return
         }
         selectedDuration = duration
-        prefs?.preferredFocusMinutes = duration.minutes ?? Constants.Timer.twentyFiveMinutes
-        do {
-            try modelContext.save()
-        } catch {
-            modelContext.rollback()
-            router.showToast("前回使った時間として保存できませんでした", symbol: "exclamationmark.triangle")
-        }
+        persistPreferredFocusMinutes(
+            duration.minutes ?? Constants.Timer.twentyFiveMinutes,
+            failureMessage: "前回使った時間として保存できませんでした"
+        )
         focusConfiguration = FocusConfiguration(subject: subject, duration: duration)
     }
 
+    private func persistPreferredFocusMinutes(
+        _ minutes: Int,
+        failureMessage: String
+    ) {
+        guard let resolvedPreferences else {
+            router.showToast(failureMessage, symbol: "exclamationmark.triangle")
+            return
+        }
+        guard resolvedPreferences.preferredFocusMinutes != minutes else {
+            return
+        }
+        do {
+            try PrefsConsumerPolicy.mutate(
+                .preferredFocusMinutes,
+                context: modelContext,
+                markers: resetSnapshots
+            ) {
+                $0.preferredFocusMinutes = minutes
+            }
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            router.showToast(failureMessage, symbol: "exclamationmark.triangle")
+        }
+    }
+
     private func enqueueStratumCelebration(_ request: JarBakeRequest) {
-        enqueueStratumCelebration(PendingStratumCelebration(request: request))
+        enqueueStratumCelebration(PendingStratumCelebration(
+            request: request,
+            projectionCacheStamp:
+                aggregateProjectionPresentation.verifiedCacheStamp
+        ))
     }
 
     private func enqueueStratumCelebration(_ request: PendingStratumCelebration) {
+        guard canPublishCelebrationSnapshot(request) else {
+            PendingStratumCelebrationStore.remove(id: request.id)
+            return
+        }
         guard completedStratum?.id != request.id,
               !stratumCelebrationQueue.contains(where: { $0.id == request.id })
         else { return }
@@ -2202,6 +2597,7 @@ struct HomeView: View {
     }
 
     private func presentNextStratumCelebrationIfNeeded() {
+        discardUnpublishableCelebrationSnapshots()
         guard completedStratum == nil,
               canPresentStratumCelebration,
               !stratumCelebrationQueue.isEmpty
@@ -2211,6 +2607,12 @@ struct HomeView: View {
     }
 
     private func finishPresentedStratumCelebration() {
+        if isDeferringStratumForCloudVerification {
+            isDeferringStratumForCloudVerification = false
+            presentedStratumID = nil
+            presentNextStratumCelebrationIfNeeded()
+            return
+        }
         if let presentedStratumID {
             PendingStratumCelebrationStore.remove(id: presentedStratumID)
             self.presentedStratumID = nil
@@ -2218,17 +2620,86 @@ struct HomeView: View {
         presentNextStratumCelebrationIfNeeded()
     }
 
+    private func deferPresentedStratumForCloudVerification() {
+        guard let active = completedStratum else { return }
+        if !stratumCelebrationQueue.contains(where: { $0.id == active.id }) {
+            stratumCelebrationQueue.insert(active, at: 0)
+        }
+        isDeferringStratumForCloudVerification = true
+        completedStratum = nil
+    }
+
+    /// Revokes every aggregate-derived emotional receipt synchronously with
+    /// Root's projection trust. The aggregate/session source rows remain
+    /// untouched; only UI snapshots that could otherwise reappear when the
+    /// pending boolean flips back to false are discarded.
+    private func discardAggregateCelebrationSnapshotsForInvalidation() {
+        capacityCelebrationTask?.cancel()
+        capacityCelebrationTask = nil
+        celebrationRecoveryTask?.cancel()
+        celebrationRecoveryTask = nil
+        let ids = Set(
+            ([completedStratum].compactMap { $0 }
+                + stratumCelebrationQueue
+                + pendingCapacityCelebrations)
+                .map(\.id)
+        )
+        ids.forEach { PendingStratumCelebrationStore.remove(id: $0) }
+        completedStratum = nil
+        presentedStratumID = nil
+        stratumCelebrationQueue.removeAll()
+        pendingCapacityCelebrations.removeAll()
+        isDeferringStratumForCloudVerification = false
+    }
+
+    private func canPublishCelebrationSnapshot(
+        _ request: PendingStratumCelebration
+    ) -> Bool {
+        !aggregateProjectionPresentation.usesCloudPersistence
+            || aggregateProjectionPresentation.acceptsVerifiedAggregateCache(
+                request.projectionCacheStamp
+            )
+    }
+
+    private func discardUnpublishableCelebrationSnapshots() {
+        let rejected = ([completedStratum].compactMap { $0 }
+            + stratumCelebrationQueue
+            + pendingCapacityCelebrations).filter {
+                !canPublishCelebrationSnapshot($0)
+            }
+        rejected.forEach {
+            PendingStratumCelebrationStore.remove(id: $0.id)
+        }
+        let rejectedIDs = Set(rejected.map(\.id))
+        if let completedStratum,
+           rejectedIDs.contains(completedStratum.id) {
+            self.completedStratum = nil
+            presentedStratumID = nil
+        }
+        stratumCelebrationQueue.removeAll { rejectedIDs.contains($0.id) }
+        pendingCapacityCelebrations.removeAll { rejectedIDs.contains($0.id) }
+    }
+
     private func recoverPendingStratumCelebrations() {
+        // Initial cloud launch is pending. Preserve the durable queue until a
+        // ticket is verified, then accept only snapshots from that exact
+        // process/epoch (normally a same-run interrupted animation).
+        guard !aggregateProjectionPresentation.isCloudVerificationPending else {
+            return
+        }
         capacityRemaining = nil
         let persistedIDs = Set(aggregates.map(\.id)).union(strata.map(\.id))
         let pending = PendingStratumCelebrationStore.load()
         let now = Date.now
         let recoverable = pending.filter {
-            persistedIDs.contains($0.id) && !scene.isBakeInProgress
+            canPublishCelebrationSnapshot($0)
+                && persistedIDs.contains($0.id)
+                && !scene.isBakeInProgress
         }
         let latestRecoverable = PendingStratumCelebrationSelection.latest(in: recoverable)
         let recoverableIDs = Set(recoverable.map(\.id))
         let waiting = pending.filter {
+            guard canPublishCelebrationSnapshot($0) else { return false }
             if recoverableIDs.contains($0.id) {
                 return $0.id == latestRecoverable?.id
             }
@@ -2251,7 +2722,7 @@ struct HomeView: View {
     }
 
     private func addManualEntry(_ duration: ManualDuration) -> Bool {
-        guard let prefs else {
+        guard let resolvedPreferences else {
             router.showToast("設定情報を読み込めませんでした", symbol: "exclamationmark.triangle")
             return false
         }
@@ -2264,8 +2735,8 @@ struct HomeView: View {
         let now = Date.now
         let decision = FairnessPolicy.consumeManualEntry(
             state: ManualCounterState(
-                dayKey: prefs.manualDayKey,
-                usedToday: prefs.manualUsedToday
+                dayKey: resolvedPreferences.manualDayKey,
+                usedToday: resolvedPreferences.manualUsedToday
             ),
             at: now
         )
@@ -2276,9 +2747,19 @@ struct HomeView: View {
 
         // Apply the quota and session in the same SwiftData transaction. Merely
         // selecting a duration in the confirmation sheet never mutates Prefs.
-        prefs.activityEpochID = currentActivityEpochID
-        prefs.manualDayKey = decision.state.dayKey
-        prefs.manualUsedToday = decision.state.usedToday
+        let writer: Prefs
+        do {
+            writer = try PrefsSyncPolicy.ensureWriterRow(
+                context: modelContext,
+                currentEpochID: currentActivityEpochID
+            )
+        } catch {
+            modelContext.rollback()
+            router.showToast("設定情報を安全に保存できませんでした", symbol: "exclamationmark.triangle")
+            return false
+        }
+        writer.manualDayKey = decision.state.dayKey
+        writer.manualUsedToday = decision.state.usedToday
         let session = StudySession(
             subject: subject,
             startAt: now.addingTimeInterval(-TimeInterval(duration.seconds)),
@@ -2390,14 +2871,22 @@ struct HomeView: View {
             }
         case let .bakeStarted(request):
             failedBakeIDs.remove(request.id)
-            PendingStratumCelebrationStore.insert(PendingStratumCelebration(request: request))
+            PendingStratumCelebrationStore.insert(PendingStratumCelebration(
+                request: request,
+                projectionCacheStamp:
+                    aggregateProjectionPresentation.verifiedCacheStamp
+            ))
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
                 capacityRemaining = 0
             }
         case let .bakeCompleted(request):
             capacityRemaining = nil
             guard failedBakeIDs.remove(request.id) == nil else { return }
-            let celebration = PendingStratumCelebration(request: request)
+            let celebration = PendingStratumCelebration(
+                request: request,
+                projectionCacheStamp:
+                    aggregateProjectionPresentation.verifiedCacheStamp
+            )
             if !pendingCapacityCelebrations.contains(where: { $0.id == celebration.id }) {
                 pendingCapacityCelebrations.append(celebration)
             }
@@ -2460,7 +2949,8 @@ struct HomeView: View {
         // misleading second “+2500g” reward.
         if descriptor.isAggregate { return }
         var message: String
-        switch descriptor.kind {
+        let presentationKind = RareRewardPresentationPolicy.kind(descriptor.kind)
+        switch presentationKind {
         case .gold:
             message = rareRewardMode.usesEnhancedPresentation
                 ? Constants.UIStrings.goldToast(grams: descriptor.grams)
@@ -2474,10 +2964,10 @@ struct HomeView: View {
                 ? Constants.UIStrings.dropToast(subject: descriptor.subjectName)
                 : "\(descriptor.subjectName) +\(descriptor.grams)g 積んだ"
         }
-        if let batch = descriptor.rewardBatchSummary {
+        if let batch = descriptor.presentationRewardBatchSummary {
             message += " ・ \(batch)"
         }
-        let usesRareSymbol = descriptor.kind != .normal
+        let usesRareSymbol = presentationKind != .normal
             && rareRewardMode.usesEnhancedPresentation
         router.showToast(message, symbol: usesRareSymbol ? "sparkles" : "scalemass")
 
@@ -2531,7 +3021,11 @@ struct HomeView: View {
             prismRewardCount: descriptor.rareRewardCounts.prismCount,
             totalPebbleCount: max(1, totalPebbles),
             totalStudyGrams: max(descriptor.grams, totalGrams),
-            projectionIsLowerBound: projectionNeedsMaintenance
+            projectionIsLowerBound: localProjectionNeedsMaintenance,
+            projectionWasCloudUnverified:
+                aggregateProjectionPresentation.isCloudVerificationPending,
+            projectionCacheStamp:
+                aggregateProjectionPresentation.verifiedCacheStamp
         )
         // Persist before consuming the one-shot landing marker. If the process
         // dies at any later instruction, Home can still recover this exact
@@ -2602,8 +3096,12 @@ struct HomeView: View {
         // review state in an explicitly opted-in local UI-test process.
         guard !LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess else { return }
         let defaults = UserDefaults.standard
-        let countKey = "review.local-completion-count"
-        let firstCompletionKey = "review.first-local-completion-date"
+        let countKey = AccountScopedLocalState.defaultsKey(
+            base: "review.local-completion-count"
+        )
+        let firstCompletionKey = AccountScopedLocalState.defaultsKey(
+            base: "review.first-local-completion-date"
+        )
         let now = Date.now
         let storedCount = max(0, defaults.integer(forKey: countKey))
         let count = storedCount == Int.max ? Int.max : storedCount + 1
@@ -2622,12 +3120,19 @@ struct HomeView: View {
         ),
               let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         else { return }
-        let versionKey = "review.requested-version"
+        let versionKey = AccountScopedLocalState.defaultsKey(
+            base: "review.requested-version"
+        )
         guard defaults.string(forKey: versionKey) != version else { return }
         // Defer the request until the rest offer or any aggregation celebration
         // has been dismissed. `celebrationPresentationBlockers` will retry at
         // the next genuinely quiet home state.
-        defaults.set(version, forKey: "review.pending-version")
+        defaults.set(
+            version,
+            forKey: AccountScopedLocalState.defaultsKey(
+                base: "review.pending-version"
+            )
+        )
     }
 
     private func schedulePendingReviewRequestIfPossible() {
@@ -2635,11 +3140,17 @@ struct HomeView: View {
         // guarding only the earning path would still allow that modal to appear.
         guard !LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess else { return }
         let defaults = UserDefaults.standard
+        let pendingVersionKey = AccountScopedLocalState.defaultsKey(
+            base: "review.pending-version"
+        )
+        let requestedVersionKey = AccountScopedLocalState.defaultsKey(
+            base: "review.requested-version"
+        )
         guard let currentVersion = Bundle.main.object(
             forInfoDictionaryKey: "CFBundleShortVersionString"
         ) as? String,
-              defaults.string(forKey: "review.pending-version") == currentVersion,
-              defaults.string(forKey: "review.requested-version") != currentVersion
+              defaults.string(forKey: pendingVersionKey) == currentVersion,
+              defaults.string(forKey: requestedVersionKey) != currentVersion
         else { return }
 
         reviewRequestTask?.cancel()
@@ -2650,8 +3161,8 @@ struct HomeView: View {
                   completedStratum == nil,
                   stratumCelebrationQueue.isEmpty
             else { return }
-            defaults.set(currentVersion, forKey: "review.requested-version")
-            defaults.removeObject(forKey: "review.pending-version")
+            defaults.set(currentVersion, forKey: requestedVersionKey)
+            defaults.removeObject(forKey: pendingVersionKey)
             requestReview()
         }
     }
@@ -2659,7 +3170,9 @@ struct HomeView: View {
     private func scheduleShareChipIfNeeded(for newSessions: [StudySession]) {
         guard newSessions.contains(where: { $0.source == .timer }) else { return }
         let dayKey = FairnessPolicy.deviceDayKey(for: .now)
-        let promptKey = "share.prompt.\(dayKey)"
+        let promptKey = AccountScopedLocalState.defaultsKey(
+            base: "share.prompt.\(dayKey)"
+        )
         guard !UserDefaults.standard.bool(forKey: promptKey), shareChipTask == nil else { return }
         shareChipTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(Constants.Share.completionChipDelay))
@@ -2678,13 +3191,10 @@ struct HomeView: View {
             $0.manualPebbleCount == 0
                 && $0.measuredPebbleCount == $0.pebbleCount
         }
-        let uniqueSessions = Dictionary(grouping: sessions, by: \.id).values.compactMap {
-            $0.max { lhs, rhs in lhs.grams < rhs.grams }
-        }
+        let uniqueSessions = StudySessionSyncPolicy.canonicalSessions(from: sessions)
         let looseMeasured = uniqueSessions.filter {
             $0.source == .timer
                 && !representedSessionIDs.contains($0.id)
-                && !$0.isBaked
         }
         let measuredSessionGrams = uniqueSessions
             .filter { $0.source == .timer }
@@ -2700,7 +3210,6 @@ struct HomeView: View {
         )
         let looseRewards = RareRewardCounts.total(uniqueSessions.filter {
             !representedSessionIDs.contains($0.id)
-                && !$0.isBaked
         }.map(\.rareRewardCounts))
         let aggregateGoldCount = HomeProjectionPolicy.saturatingNonnegativeSum(
             acceptedRoots.map(\.goldPebbleCount)
@@ -2779,6 +3288,9 @@ struct HomeView: View {
 #if targetEnvironment(macCatalyst)
         return "瓶をタップすると粒が跳ね、左右にドラッグすると転がります"
 #else
+        if reduceMotion {
+            return "瓶をタップすると近くの粒が短く浮きます（動きを減らしています）"
+        }
         return "瓶をタップすると粒が跳ね、iPhoneを傾けると転がります"
 #endif
     }
@@ -2800,12 +3312,24 @@ struct HomeView: View {
         else { return }
         announcedPostDropOfferID = offer.id
 
-        let progressMessage = PostDropProgressAccessibilityPresentation.description(
-            effortProgress: offer.effortProgress,
-            fusionState: offer.fusionState,
-            projectionIsLowerBound: offer.projectionIsLowerBound
+        let progressMessage = (
+            aggregateProjectionPresentation.isCloudVerificationPending
+                || offer.projectionWasCloudUnverified
+                || !canPublishBreakOfferProjection(offer)
         )
-        var message = "\(offer.dropTitle(for: rareRewardMode))\(offer.subjectName)、\(offer.grams)グラム、\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))。\(offer.weeklySpokenTitle)。\(offer.rareRewardCounts.multiDrawSummary.map { "\($0)。" } ?? "")\(progressMessage)。\(offer.minutes)分休憩できます"
+            ? (aggregateProjectionPresentation.isCloudVerificationPending
+                ? "iCloudを再集計中。今回の記録は保存済みです。生涯合計は確認後に表示します"
+                : "集計を更新しました。今回の記録は保存済みです。更新前の生涯合計は再利用しません")
+            : PostDropProgressAccessibilityPresentation.description(
+                effortProgress: offer.effortProgress,
+                fusionState: offer.fusionState,
+                projectionIsLowerBound: offer.projectionIsLowerBound
+            )
+        let historyMessage = offer.projectionWasCloudUnverified
+                || !canPublishBreakOfferProjection(offer)
+            ? "今回の記録は保存済みです"
+            : offer.weeklySpokenTitle
+        var message = "\(offer.dropTitle(for: rareRewardMode))\(offer.subjectName)、\(offer.grams)グラム、\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))。\(historyMessage)。\(offer.rareRewardCounts.multiDrawSummary.map { "\($0)。" } ?? "")\(progressMessage)。\(offer.minutes)分休憩できます"
         if showShareChip {
             message += "。今の瓶をカードにして共有できます"
             announcedPostDropShareOfferID = offer.id
@@ -2845,7 +3369,10 @@ struct HomeView: View {
 }
 
 private extension PendingStratumCelebration {
-    init(request: JarBakeRequest) {
+    init(
+        request: JarBakeRequest,
+        projectionCacheStamp: AggregateProjectionCacheStamp?
+    ) {
         self.init(
             id: request.id,
             createdAt: request.createdAt,
@@ -2853,7 +3380,8 @@ private extension PendingStratumCelebration {
             grams: request.grams,
             monthLabel: request.monthLabel,
             colorHex: request.outputDescriptor.colorHex,
-            level: request.outputLevel
+            level: request.outputLevel,
+            projectionCacheStamp: projectionCacheStamp
         )
     }
 }
@@ -2908,6 +3436,8 @@ private struct BreakOffer: Identifiable {
     let fusionState: FusionRewardBridgeState
     let effortProgress: EffortProgressSnapshot?
     let projectionIsLowerBound: Bool
+    let projectionWasCloudUnverified: Bool
+    let projectionCacheStamp: AggregateProjectionCacheStamp?
 
     init(receipt: PendingRewardReceipt) {
         id = receipt.id
@@ -2917,19 +3447,19 @@ private struct BreakOffer: Identifiable {
         colorHex = receipt.colorHex
         weeklyCompletionCount = receipt.weeklyCompletionCount
         weeklyStudyGrams = receipt.weeklyStudyGrams
-        kind = receipt.kind
+        kind = RareRewardPresentationPolicy.kind(receipt.kind)
         if let drawCount = receipt.rareRewardDrawCount,
            let goldCount = receipt.goldRewardCount,
            let prismCount = receipt.prismRewardCount {
-            rareRewardCounts = RareRewardCounts(
+            rareRewardCounts = RareRewardPresentationPolicy.counts(RareRewardCounts(
                 drawCount: drawCount,
                 goldCount: goldCount,
                 prismCount: prismCount
-            )
+            ))
         } else {
-            rareRewardCounts = RareRewardCounts(
+            rareRewardCounts = RareRewardPresentationPolicy.counts(RareRewardCounts(
                 outcomes: receipt.kind == .normal ? [] : [receipt.kind]
-            )
+            ))
         }
         fusionState = FusionRewardBridgePresentation.state(
             totalPebbleCount: receipt.totalPebbleCount
@@ -2941,6 +3471,9 @@ private struct BreakOffer: Identifiable {
             )
         }
         projectionIsLowerBound = receipt.projectionIsLowerBound
+        projectionWasCloudUnverified =
+            receipt.projectionWasCloudUnverified ?? false
+        projectionCacheStamp = receipt.projectionCacheStamp
     }
 
     func heroColorHex(for mode: RareRewardMode) -> String {
@@ -3026,7 +3559,6 @@ private struct AchievementDraft {
 
 private struct AchievementEntrySheet: View {
     let subjects: [Subject]
-    let usagePurpose: UsagePurpose
     let onAdd: (Subject, AchievementDraft) -> Bool
 
     @Environment(\.dismiss) private var dismiss
@@ -3039,11 +3571,9 @@ private struct AchievementEntrySheet: View {
     init(
         initialSubject: Subject?,
         subjects: [Subject],
-        usagePurpose: UsagePurpose,
         onAdd: @escaping (Subject, AchievementDraft) -> Bool
     ) {
         self.subjects = subjects
-        self.usagePurpose = usagePurpose
         self.onAdd = onAdd
         let initialID = initialSubject.flatMap { initial in
             subjects.contains(where: { $0.id == initial.id }) ? initial.id : nil
@@ -3101,7 +3631,7 @@ private struct AchievementEntrySheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            ForEach(usagePurpose.achievementKindsInDisplayOrder) { kind in
+            ForEach(AchievementKind.allCases) { kind in
                 Button {
                     selectedKind = kind
                 } label: {
@@ -3132,9 +3662,7 @@ private struct AchievementEntrySheet: View {
     }
 
     private var achievementIntroduction: String {
-        usagePurpose == .work
-            ? "納品・公開・案件完了などの節目を、集中時間とは別のひとまわり大きな記念石として残せます。"
-            : "100点や試験合格を、集中時間とは別のひとまわり大きな記念石として残せます。"
+        "満点・試験合格・納品・公開などの節目を、集中時間とは別のひとまわり大きな記念石として残せます。"
     }
 
     private func detailsStep(kind: AchievementKind) -> some View {
@@ -3153,7 +3681,7 @@ private struct AchievementEntrySheet: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(usagePurpose.categoryTitle)
+                Text("テーマ")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(TsumibenTheme.muted)
                 Menu {
@@ -3187,7 +3715,7 @@ private struct AchievementEntrySheet: View {
                     .frame(maxWidth: .infinity, minHeight: 50)
                     .background(TsumibenTheme.raised, in: RoundedRectangle(cornerRadius: 12))
                 }
-                .accessibilityLabel("\(usagePurpose.categoryTitle)、\(selectedSubject?.safeDisplayName ?? "未選択")")
+                .accessibilityLabel("テーマ、\(selectedSubject?.safeDisplayName ?? "未選択")")
                 .accessibilityHint("成果を結びつけるテーマを変更できます")
             }
 
@@ -3319,13 +3847,13 @@ private struct ManualEntrySheet: View {
                 .foregroundStyle(availability.isAllowed ? TsumibenTheme.amber : TsumibenTheme.muted)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text("本日あと\(availability.remainingEntries)回")
+                Text("この端末で本日あと\(availability.remainingEntries)回")
                     .font(.headline)
                     .accessibilityIdentifier("manual.remaining-count")
                 Text(
                     availability.isAllowed
                         ? "選んだだけでは保存されません。次の画面で内容を確認できます。"
-                        : "本日の上限です。朝4:00に3回へ切り替わります。"
+                        : "この端末での本日の上限です。朝4:00に3回へ切り替わります。"
                 )
                 .font(.caption)
                 .foregroundStyle(TsumibenTheme.muted)
@@ -3343,7 +3871,7 @@ private struct ManualEntrySheet: View {
                 .font(.caption)
                 .foregroundStyle(TsumibenTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("1日3回まで・朝4:00に回数が切り替わります")
+            Text("この端末で1日3回まで・朝4:00に回数が切り替わります")
                 .font(.caption2)
                 .foregroundStyle(TsumibenTheme.muted)
         }
@@ -3367,7 +3895,7 @@ private struct ManualEntrySheet: View {
                     confirmationRow(title: "加算", value: "+\(duration.grams)g")
                     confirmationRow(
                         title: "保存後",
-                        value: "本日あと\(availability.remainingEntriesAfterSaving)回"
+                        value: "この端末で本日あと\(availability.remainingEntriesAfterSaving)回"
                     )
                 }
 
@@ -3618,7 +4146,7 @@ private struct StratumCelebrationView: View {
                         Text("\(request.pebbleCount)粒を、ひとつに整理した")
                             .font(TsumibenTheme.brand(24))
                             .multilineTextAlignment(.center)
-                        Text("これは瓶を軽く保つための二次的な整理です。保存表示だけを圧縮し、一粒ずつの時間も、\(formattedMass(request.grams))の質量も100%保持します。時間の核は回数でなく質量から進みます。")
+                        Text("これは瓶を軽く保つための二次的な整理です。保存表示だけを圧縮し、一粒ずつの時間も、\(formattedMass(request.grams))の質量も100%保持します。時間の核は回数でなく質量から進みます。次へ急ぐ必要はありません。")
                             .font(.subheadline)
                             .foregroundStyle(TsumibenTheme.muted)
                             .multilineTextAlignment(.center)
@@ -3723,7 +4251,8 @@ private struct AggregatePersistenceRecoveryProbe: View {
         do {
             let sessions = try modelContext.fetch(FetchDescriptor<StudySession>())
             let aggregates = try modelContext.fetch(FetchDescriptor<AggregatePebble>())
-            let loose = sessions.filter { !$0.isBaked }
+            let represented = AggregatePebblePolicy.directSessionIDs(from: aggregates)
+            let loose = sessions.filter { !represented.contains($0.id) }
             let rootRows = aggregates.filter(\.isRoot).sorted {
                 if $0.id == $1.id { return $0.createdAt < $1.createdAt }
                 return $0.id.uuidString < $1.id.uuidString
@@ -3731,13 +4260,14 @@ private struct AggregatePersistenceRecoveryProbe: View {
             let root = rootRows.first
             let sourceIDs = root?.sessionIDs.map(\.uuidString).sorted() ?? []
             let rootIDs = rootRows.map { $0.id.uuidString }.sorted()
-            let logicalGrams = loose.reduce(0) { $0 + $1.grams }
-                + rootRows.reduce(0) { $0 + $1.grams }
+            let logicalGrams = NonnegativeIntPolicy.sum(
+                loose.map(\.grams) + rootRows.map(\.grams)
+            )
 
             auditValue = [
                 "sessionRows=\(sessions.count)",
                 "uniqueSessionIDs=\(Set(sessions.map(\.id)).count)",
-                "bakedSessionRows=\(sessions.filter(\.isBaked).count)",
+                "legacyBakedSessionRows=\(sessions.filter(\.isBaked).count)",
                 "looseSessionRows=\(loose.count)",
                 "aggregateRows=\(aggregates.count)",
                 "uniqueAggregateIDs=\(Set(aggregates.map(\.id)).count)",
@@ -3824,6 +4354,8 @@ private struct JarUITestPresentationProbe: View {
     @State private var bounceStartY: CGFloat?
     @State private var bounceLeaderID: UUID?
     @State private var isTrackingBounce = false
+    @State private var isTrackingReducedMotionLift = false
+    @State private var previousYByPebbleID: [UUID: CGFloat] = [:]
     @State private var targetX: CGFloat = 0.5
     @State private var targetY: CGFloat = 0.88
 
@@ -3864,11 +4396,12 @@ private struct JarUITestPresentationProbe: View {
     }
 
     private func samplePresentation() {
-        // This test exercises the ordinary spatial response. The explicit
-        // two-flag test process must not inherit a host Simulator's Reduce
-        // Motion preference; the probe itself is compiled out of Release.
-        if scene.reduceMotion {
-            scene.reduceMotion = false
+        // UI tests state their intended accessibility mode explicitly. This
+        // avoids silently masking the exact real-device setting that the
+        // reduced-motion regression test is meant to cover.
+        if let requestedReduceMotion = requestedReduceMotion,
+           scene.reduceMotion != requestedReduceMotion {
+            scene.reduceMotion = requestedReduceMotion
         }
 
         var pebbles: [PebbleNode] = []
@@ -3894,6 +4427,38 @@ private struct JarUITestPresentationProbe: View {
             bounceStartY = nil
             bounceLeaderID = nil
             isTrackingBounce = false
+            isTrackingReducedMotionLift = false
+            previousYByPebbleID = [:]
+        }
+
+        defer {
+            previousYByPebbleID = Dictionary(
+                uniqueKeysWithValues: pebbles.map {
+                    ($0.descriptor.id, $0.position.y)
+                }
+            )
+        }
+
+        // Normal-motion travel is captured on SpriteKit's own physics frames.
+        // Polling only from this SwiftUI task can miss the start of a fast arc
+        // under UI automation and substantially under-report its displacement.
+        if !scene.reduceMotion {
+            let sceneSequence = Int(truncatingIfNeeded: scene.tapPresentationSequence)
+            if sceneSequence != bounceSequence {
+                bounceSequence = sceneSequence
+                bounceRise = 0
+            }
+            // Keep the legacy `bounceRise` wire key for existing UI tooling;
+            // the physical path now validates total two-dimensional travel.
+            bounceRise = max(
+                bounceRise,
+                scene.tapPresentationMaximumDisplacement
+            )
+            isTrackingBounce = false
+            isTrackingReducedMotionLift = false
+            bounceStartY = nil
+            bounceLeaderID = nil
+            return
         }
 
         let upwardLeader = pebbles.max { lhs, rhs in
@@ -3901,14 +4466,27 @@ private struct JarUITestPresentationProbe: View {
         }
         let maximumUpwardVelocity = upwardLeader?.physicsBody?.velocity.dy ?? 0
 
-        if !isTrackingBounce,
-           maximumUpwardVelocity >= Self.bounceVelocityThreshold,
-           let upwardLeader {
-            bounceSequence += 1
-            bounceStartY = upwardLeader.position.y
-            bounceLeaderID = upwardLeader.descriptor.id
-            bounceRise = 0
-            isTrackingBounce = true
+        if !isTrackingBounce {
+            if scene.reduceMotion,
+               let liftedPebble = pebbles.first(where: {
+                   $0.action(forKey: "jar.reducedMotion.tapLift") != nil
+               }) {
+                bounceSequence += 1
+                bounceStartY = previousYByPebbleID[liftedPebble.descriptor.id]
+                    ?? liftedPebble.position.y
+                bounceLeaderID = liftedPebble.descriptor.id
+                bounceRise = 0
+                isTrackingBounce = true
+                isTrackingReducedMotionLift = true
+            } else if maximumUpwardVelocity >= Self.bounceVelocityThreshold,
+                      let upwardLeader {
+                bounceSequence += 1
+                bounceStartY = upwardLeader.position.y
+                bounceLeaderID = upwardLeader.descriptor.id
+                bounceRise = 0
+                isTrackingBounce = true
+                isTrackingReducedMotionLift = false
+            }
         }
 
         guard isTrackingBounce,
@@ -3917,11 +4495,28 @@ private struct JarUITestPresentationProbe: View {
               let leader = pebbles.first(where: { $0.descriptor.id == bounceLeaderID })
         else { return }
 
-        bounceRise = max(bounceRise, leader.position.y - bounceStartY)
-        if (leader.physicsBody?.velocity.dy ?? 0) <= 0 {
+        let displacement = isTrackingReducedMotionLift
+            ? abs(leader.position.y - bounceStartY)
+            : leader.position.y - bounceStartY
+        bounceRise = max(bounceRise, displacement)
+        let presentationEnded = isTrackingReducedMotionLift
+            ? leader.action(forKey: "jar.reducedMotion.tapLift") == nil
+            : (leader.physicsBody?.velocity.dy ?? 0) <= 0
+        if presentationEnded {
             isTrackingBounce = false
+            isTrackingReducedMotionLift = false
             self.bounceStartY = nil
             self.bounceLeaderID = nil
+        }
+    }
+
+    private var requestedReduceMotion: Bool? {
+        switch ProcessInfo.processInfo.environment[
+            "TSUMIBEN_UI_TEST_REDUCE_MOTION"
+        ] {
+        case "1": true
+        case "0": false
+        default: nil
         }
     }
 

@@ -1,0 +1,31 @@
+Tumiben is a focus timer that turns completed time into colorful pebbles inside a bottle.
+
+Start with a 25-, 45-, 60-, or 90-minute focus session. When you finish, the time you actually completed is recorded as mass: 10 grams for every minute. Your bottle grows from the time you put in, not from how often you restart the timer.
+
+FEATURES
+
+• Free 25-, 45-, 60-, and 90-minute focus timers
+• One combined theme list for study and work; tap the Home launcher to start or long-press it to change themes without starting
+• Optional manual records kept separate from measured timer sessions
+• A tactile bottle: tap or lightly shake it to move the pebbles, with bounded sound and haptics that reflect their number and size
+• Decimal fusion that groups ten pebbles without losing the underlying records
+• Milestone stones for a perfect score, an exam pass, or a work milestone
+• History, overview, long-term projections, and share cards that always include Tumiben branding and its official website
+• An explicit first-launch choice between private iCloud sync and storage on this iPhone only
+• Privacy-safe Home and Lock Screen widgets that open the app without displaying your records
+
+TUMIBEN PRO
+
+Tumiben Pro is a one-time, non-consumable In-App Purchase. It unlocks every other focus duration from 1 to 180 minutes beyond the free 25-, 45-, 60-, and 90-minute presets, plus month labels on grouped pebbles. There is no subscription, free trial, or automatic renewal.
+
+PRIVACY
+
+Tumiben has no advertising, tracking, analytics service, or developer account system. At first launch, you choose between two equal storage options. “This iPhone only” keeps all app data on the device and supports all basic features without an Apple Account or network connection. It never automatically switches to or uploads to iCloud.
+
+If you confirm iCloud sync, theme names, achievement notes, activity records, settings, and the active timer are stored in your Apple Account's private iCloud storage and synchronized between compatible iPhones. Tumiben verifies the Apple Account online at each launch or resume to prevent account data from being mixed. If the network is unavailable or a different account is active, it fails closed without deleting the stored data.
+
+The storage choice cannot be changed in version 1.0. Deleting and reinstalling the app erases on-device-only data. JSON export is not importable and cannot be used to migrate that data to iCloud or continue it on another device. Sharing and data export happen only when you choose them.
+
+LANGUAGE
+
+The app interface and customer support are currently provided in Japanese.

@@ -11,7 +11,9 @@ enum PomodoroDuration: Hashable, Codable, Sendable {
 
     static let freePresets: [PomodoroDuration] = [
         .twentyFiveMinutes,
-        .sixtyMinutes
+        .custom(minutes: Constants.Timer.fortyFiveMinutes),
+        .sixtyMinutes,
+        .custom(minutes: Constants.Timer.ninetyMinutes)
     ]
 
     var minutes: Int? {
@@ -50,12 +52,10 @@ enum PomodoroDuration: Hashable, Codable, Sendable {
     }
 
     var requiresPro: Bool {
-        switch normalized {
-        case .custom:
-            true
-        default:
-            false
-        }
+#if DEBUG
+        if case .demo = self { return false }
+#endif
+        return !IntegrationConstants.isFreeFocusDuration(seconds)
     }
 
     var isValid: Bool {
@@ -191,6 +191,17 @@ enum PomodoroEngineError: Error, Equatable, Sendable {
 /// drift, daylight-saving changes and delayed background ticks do not alter
 /// completion time.
 struct PomodoroEngine: Codable, Equatable, Sendable {
+    /// No shipping focus can exceed this interval. Besides keeping presentation
+    /// arithmetic bounded, this is the ceiling used when inspecting decoded
+    /// recovery data before it reaches a `Double`-to-`Int` conversion.
+    static let maximumSupportedRemainingSeconds =
+        Constants.Timer.customMaximumMinutes * Constants.Timer.secondsPerMinute
+
+    /// More than 475 years of nonstop 25-minute sessions. Real state never
+    /// approaches this ceiling; it exists so a decoded integer cannot be
+    /// advanced into an overflow on a later completion.
+    static let maximumSupportedCompletedFocusCount = 10_000_000
+
     private(set) var phase: PomodoroPhase
     private(set) var selectedDuration: PomodoroDuration
     private(set) var completedFocusCount: Int
@@ -211,13 +222,168 @@ struct PomodoroEngine: Codable, Equatable, Sendable {
         phase.isBreak || (phase == .paused && pausedPhase?.isBreak == true)
     }
 
+    /// Structural validation for a running focus decoded from persistence or
+    /// CloudKit. This deliberately performs no snapshot calculation: decoded
+    /// `Date` and `Double` values are untrusted until every conversion-sensitive
+    /// field has been checked.
+    var hasValidRunningFocusPayloadState: Bool {
+        guard hasValidFocusPayloadBase,
+              phase == .focusing,
+              pausedPhase == nil,
+              pausedRemaining == nil,
+              let phaseStartedAt,
+              let endDate,
+              Self.isSafePersistedDate(phaseStartedAt),
+              Self.isSafePersistedDate(endDate)
+        else { return false }
+
+        let wallSpan = endDate.timeIntervalSince(phaseStartedAt)
+        return wallSpan.isFinite && wallSpan >= phaseDuration
+    }
+
+    /// Structural validation for a paused focus decoded from persistence or
+    /// CloudKit. Paused remaining time has an explicit product-domain ceiling,
+    /// so resuming it cannot manufacture an unbounded future date.
+    var hasValidPausedFocusPayloadState: Bool {
+        guard hasValidFocusPayloadBase,
+              phase == .paused,
+              pausedPhase == .focusing,
+              endDate == nil,
+              let phaseStartedAt,
+              Self.isSafePersistedDate(phaseStartedAt),
+              let pausedRemaining,
+              pausedRemaining.isFinite,
+              pausedRemaining > 0,
+              pausedRemaining <= TimeInterval(Self.maximumSupportedRemainingSeconds)
+        else { return false }
+        return true
+    }
+
+    /// A pending completion normally retains its session identifier. Version 1
+    /// recovery bytes that cleared only that identifier remain admissible, but
+    /// all other terminal engine fields must still be inert and bounded.
+    var hasValidCompletedFocusPayloadState: Bool {
+        guard hasValidPayloadCommonFields,
+              phase == .focusCompleted,
+              phaseStartedAt == nil,
+              endDate == nil,
+              phaseDuration == 0,
+              pausedPhase == nil,
+              pausedRemaining == nil
+        else { return false }
+        return true
+    }
+
+    /// Breaks are persisted in the same recovery envelope after a completed
+    /// focus. They do not award mass, but still need bounded dates and numeric
+    /// fields before a decoded engine reaches snapshot/resume code.
+    var hasValidRecoverableBreakPayloadState: Bool {
+        guard hasValidPayloadCommonFields,
+              currentSessionID == nil,
+              let phaseStartedAt,
+              Self.isSafePersistedDate(phaseStartedAt)
+        else { return false }
+
+        let breakPhase: PomodoroPhase
+        if phase.isBreak {
+            guard pausedPhase == nil,
+                  pausedRemaining == nil,
+                  let endDate,
+                  Self.isSafePersistedDate(endDate),
+                  endDate.timeIntervalSince(phaseStartedAt).isFinite,
+                  endDate > phaseStartedAt
+            else { return false }
+            breakPhase = phase
+        } else {
+            guard phase == .paused,
+                  let pausedPhase,
+                  pausedPhase.isBreak,
+                  endDate == nil,
+                  let pausedRemaining,
+                  pausedRemaining.isFinite,
+                  pausedRemaining > 0
+            else { return false }
+            breakPhase = pausedPhase
+        }
+
+        let expectedSeconds: Int
+        switch breakPhase {
+        case .shortBreak:
+            expectedSeconds = Constants.Timer.shortBreakMinutes
+                * Constants.Timer.secondsPerMinute
+        case .longBreak:
+            expectedSeconds = Constants.Timer.longBreakMinutes
+                * Constants.Timer.secondsPerMinute
+        default:
+            return false
+        }
+        guard phaseDuration == TimeInterval(expectedSeconds) else { return false }
+        if let pausedRemaining {
+            return pausedRemaining <= TimeInterval(expectedSeconds)
+        }
+        return true
+    }
+
+    /// Validates the frozen award and the terminal engine that produced it.
+    /// Callers use this before materializing decoded completion data into a
+    /// StudySession or performing duration-derived integer arithmetic.
+    func hasValidPersistedCompletion(_ completion: PomodoroCompletion) -> Bool {
+        guard completion.duration.isValid,
+              completion.seconds == completion.duration.seconds,
+              completion.grams == completion.duration.grams,
+              completion.seconds > 0,
+              Self.isSafePersistedDate(completion.startedAt),
+              Self.isSafePersistedDate(completion.endedAt),
+              Self.isSafePersistedDate(completion.observedAt),
+              completion.endedAt > completion.startedAt,
+              completion.endedAt.timeIntervalSince(completion.startedAt).isFinite,
+              completion.endedAt.timeIntervalSince(completion.startedAt)
+                >= TimeInterval(completion.seconds),
+              completion.observedAt >= completion.endedAt,
+              completion.observedUptime.map({ $0.isFinite && $0 >= 0 }) ?? true,
+              hasValidCompletedFocusPayloadState,
+              selectedDuration.normalized == completion.duration.normalized,
+              currentSource == completion.source
+        else { return false }
+
+        // Version 1 recovery bytes may have cleared only this identifier.
+        return currentSessionID == nil || currentSessionID == completion.sessionID
+    }
+
+    static func isSafePersistedDate(_ date: Date) -> Bool {
+        let value = date.timeIntervalSinceReferenceDate
+        return value.isFinite
+            && value >= Date.distantPast.timeIntervalSinceReferenceDate
+            && value <= Date.distantFuture.timeIntervalSinceReferenceDate
+    }
+
+    private var hasValidFocusPayloadBase: Bool {
+        guard hasValidPayloadCommonFields,
+              currentSessionID != nil
+        else { return false }
+        return phaseDuration == TimeInterval(selectedDuration.seconds)
+            && phaseDuration > 0
+            && phaseDuration <= TimeInterval(Self.maximumSupportedRemainingSeconds)
+    }
+
+    private var hasValidPayloadCommonFields: Bool {
+        selectedDuration.isValid
+            && completedFocusCount >= 0
+            && completedFocusCount <= Self.maximumSupportedCompletedFocusCount
+            && phaseDuration.isFinite
+            && currentSource != .manual
+    }
+
     init(
         selectedDuration: PomodoroDuration = .twentyFiveMinutes,
         completedFocusCount: Int = 0
     ) {
         self.phase = .idle
         self.selectedDuration = selectedDuration
-        self.completedFocusCount = max(0, completedFocusCount)
+        self.completedFocusCount = min(
+            max(0, completedFocusCount),
+            Self.maximumSupportedCompletedFocusCount
+        )
         self.phaseStartedAt = nil
         self.endDate = nil
         self.currentSessionID = nil
@@ -307,7 +473,13 @@ struct PomodoroEngine: Codable, Equatable, Sendable {
                 source: currentSource
             )
 
-            completedFocusCount += 1
+            if completedFocusCount < Self.maximumSupportedCompletedFocusCount {
+                completedFocusCount += 1
+            } else {
+                // Decoded/local state may already be at the product-domain
+                // ceiling. Saturate instead of ever trapping on integer add.
+                completedFocusCount = Self.maximumSupportedCompletedFocusCount
+            }
             phase = .focusCompleted
             phaseStartedAt = nil
             endDate = nil
@@ -352,7 +524,18 @@ struct PomodoroEngine: Codable, Equatable, Sendable {
         }
 
         phase = resumedPhase
-        endDate = now.addingTimeInterval(remaining)
+        let resumedEnd = now.addingTimeInterval(remaining)
+        if resumedPhase == .focusing,
+           let startedAt = phaseStartedAt,
+           resumedEnd.timeIntervalSince(startedAt) < phaseDuration {
+            // The wall clock moved backwards while paused. Preserve the
+            // remaining countdown, but rebase the untrusted wall timestamps
+            // so the eventual self-reported completion still has a coherent
+            // [start, end] interval for persistence and CloudKit validation.
+            currentSource = .timerDemoted
+            phaseStartedAt = resumedEnd.addingTimeInterval(-phaseDuration)
+        }
+        endDate = resumedEnd
         pausedPhase = nil
         pausedRemaining = nil
     }
@@ -411,17 +594,27 @@ struct PomodoroEngine: Codable, Equatable, Sendable {
     }
 
     func snapshot(at now: Date) -> PomodoroSnapshot {
-        let remaining: TimeInterval
+        let rawRemaining: TimeInterval
         if phase == .paused {
-            remaining = pausedRemaining ?? 0
+            rawRemaining = pausedRemaining ?? 0
         } else if let endDate, phase.isRunning {
-            remaining = max(0, endDate.timeIntervalSince(now))
+            rawRemaining = endDate.timeIntervalSince(now)
         } else {
+            rawRemaining = 0
+        }
+
+        let remaining: TimeInterval
+        if rawRemaining.isNaN || rawRemaining <= 0 {
             remaining = 0
+        } else {
+            remaining = min(
+                rawRemaining,
+                TimeInterval(Self.maximumSupportedRemainingSeconds)
+            )
         }
 
         let progress: Double
-        if phaseDuration > 0 {
+        if phaseDuration.isFinite, phaseDuration > 0, remaining.isFinite {
             progress = min(1, max(0, 1 - remaining / phaseDuration))
         } else {
             progress = 0

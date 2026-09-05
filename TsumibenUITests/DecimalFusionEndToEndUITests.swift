@@ -23,7 +23,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             "-AppleLocale", "ja_JP",
             // Ten completions intentionally cross the review threshold. Keep
             // the App Store review controller outside this aggregation test.
-            "-review.requested-version", "1.0.0"
+            "-review.requested-version", "1.0"
         ]
         app.launch()
 
@@ -52,7 +52,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         XCTAssertTrue((app.buttons["瓶"].value as? String)?.contains("9粒") == true)
 
         startDemoFocus()
-        let celebrationTitle = app.staticTexts["10粒が、ひとつの結晶になった"]
+        let celebrationTitle = app.staticTexts["10粒を、ひとつに整理した"]
         let dismissBreak = app.buttons["休憩の提案を閉じる"]
 
         XCTAssertTrue(
@@ -153,7 +153,15 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             lifetimeCore.waitForExistence(timeout: 4),
             "The lifetime core must first materialize after the tenth persisted effort"
         )
-        XCTAssertTrue(lifetimeCore.label.contains("集中10粒"), lifetimeCore.label)
+        XCTAssertEqual(lifetimeCore.label, "時間の核")
+        let lifetimeCoreValue = try XCTUnwrap(lifetimeCore.value as? String)
+        XCTAssertTrue(lifetimeCoreValue.contains("集中2.50kg"), lifetimeCoreValue)
+        XCTAssertTrue(lifetimeCoreValue.contains("10.0標準単位"), lifetimeCoreValue)
+        XCTAssertTrue(lifetimeCoreValue.contains("物理履歴10粒"), lifetimeCoreValue)
+        XCTAssertTrue(
+            lifetimeCoreValue.contains("瓶の物理整理：集中10粒"),
+            lifetimeCoreValue
+        )
         XCTAssertFalse(
             app.descendants(matching: .any)["overview.constellation.destination"].exists
         )

@@ -3,7 +3,7 @@ import SwiftUI
 import WidgetKit
 
 struct FocusLiveActivityWidget: Widget {
-    let kind = IntegrationConstants.liveActivityWidgetKind
+    let kind = FocusActivityConstants.widgetKind
 
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: FocusActivityAttributes.self) { context in
@@ -13,28 +13,31 @@ struct FocusLiveActivityWidget: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    HStack(spacing: 7) {
-                        SubjectMark(color: context.subjectColor)
-                        Text(context.attributes.subjectName)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(LivePalette.warmText)
-                            .lineLimit(1)
+                    Label {
+                        Text("つみべん")
+                    } icon: {
+                        Image(systemName: "timer")
                     }
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(LivePalette.amber)
+                    .lineLimit(1)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     FocusStateText(
                         state: context.state,
+                        isStale: context.isStale,
                         fontSize: 18,
                         alignment: .trailing
                     )
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     HStack {
-                        Text("つみべん")
+                        Text("集中タイマー")
                             .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(LivePalette.amber)
+                            .foregroundStyle(LivePalette.mutedText)
                         Spacer()
-                        if context.state.phase != .completed {
+                        if context.state.phase != .completed,
+                           !context.isStale {
                             Text("\(context.attributes.durationSeconds / 60)分")
                                 .font(.system(size: 11, weight: .medium, design: .rounded))
                                 .foregroundStyle(LivePalette.mutedText)
@@ -42,18 +45,21 @@ struct FocusLiveActivityWidget: Widget {
                     }
                 }
             } compactLeading: {
-                SubjectMark(color: context.subjectColor)
+                Image(systemName: "timer")
+                    .foregroundStyle(LivePalette.amber)
             } compactTrailing: {
                 FocusStateText(
                     state: context.state,
+                    isStale: context.isStale,
                     fontSize: 13,
                     alignment: .trailing
                 )
-                .frame(maxWidth: 54)
+                .frame(maxWidth: 58)
             } minimal: {
-                SubjectMark(color: context.subjectColor)
+                Image(systemName: "timer")
+                    .foregroundStyle(LivePalette.amber)
             }
-            .keylineTint(context.subjectColor)
+            .keylineTint(LivePalette.amber)
         }
     }
 }
@@ -65,16 +71,22 @@ private struct FocusLockScreenView: View {
         HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(context.subjectColor.opacity(0.18))
+                    .fill(LivePalette.amber.opacity(0.18))
                     .frame(width: 42, height: 42)
-                SubjectMark(color: context.subjectColor, size: 18)
+                Image(systemName: "timer")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(LivePalette.amber)
             }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("つみべん")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
                     .foregroundStyle(LivePalette.amber)
-                Text(context.attributes.subjectName)
+                Text(
+                    context.state.phase == .completed || context.isStale
+                        ? "集中完了"
+                        : "集中タイマー"
+                )
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(LivePalette.warmText)
                     .lineLimit(1)
@@ -84,6 +96,7 @@ private struct FocusLockScreenView: View {
 
             FocusStateText(
                 state: context.state,
+                isStale: context.isStale,
                 fontSize: context.state.phase == .completed ? 16 : 25,
                 alignment: .trailing
             )
@@ -94,46 +107,52 @@ private struct FocusLockScreenView: View {
     }
 }
 
-private struct SubjectMark: View {
-    let color: Color
-    var size: CGFloat = 12
-
-    var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: size, height: size)
-            .overlay {
-                Circle()
-                    .stroke(.white.opacity(0.34), lineWidth: 1)
-            }
-            .shadow(color: color.opacity(0.7), radius: 4)
-    }
-}
-
 private struct FocusStateText: View {
     let state: FocusActivityAttributes.ContentState
+    let isStale: Bool
     let fontSize: CGFloat
     let alignment: Alignment
 
     var body: some View {
         Group {
-            switch state.phase {
-            case .running:
-                if let endDate = state.endDate {
-                    let startDate = min(Date.now, endDate)
-                    Text(
-                        timerInterval: startDate...endDate,
-                        pauseTime: nil,
-                        countsDown: true,
-                        showsHours: true
-                    )
-                } else {
-                    Text("00:00")
+            if isStale, state.phase == .running {
+                Text("終了")
+                    .accessibilityLabel("集中完了")
+            } else {
+                switch state.phase {
+                case .running:
+                    if let endDate = state.endDate {
+                        let startDate = min(Date.now, endDate)
+                        Text(
+                            timerInterval: startDate...endDate,
+                            pauseTime: nil,
+                            countsDown: true,
+                            showsHours: true
+                        )
+                        .accessibilityLabel(
+                            Text("残り時間、")
+                                + Text(
+                                    timerInterval: startDate...endDate,
+                                    pauseTime: nil,
+                                    countsDown: true,
+                                    showsHours: true
+                                )
+                        )
+                    } else {
+                        Text("00:00")
+                            .accessibilityLabel("残り時間")
+                            .accessibilityValue("00:00")
+                    }
+                case .paused:
+                    Text(Self.clockText(seconds: state.pausedRemainingSeconds ?? 0))
+                        .accessibilityLabel("一時停止中の残り時間")
+                        .accessibilityValue(
+                            Self.clockText(seconds: state.pausedRemainingSeconds ?? 0)
+                        )
+                case .completed:
+                    Text("完了")
+                        .accessibilityLabel("集中完了")
                 }
-            case .paused:
-                Text(Self.clockText(seconds: state.pausedRemainingSeconds ?? 0))
-            case .completed:
-                Text("+\(state.completedGrams ?? IntegrationConstants.defaultCompletedGrams)g 積まれた")
             }
         }
         .font(.system(size: fontSize, weight: .heavy, design: .rounded))
@@ -149,26 +168,6 @@ private struct FocusStateText: View {
     private static func clockText(seconds: Int) -> String {
         let clamped = max(0, seconds)
         return String(format: "%02d:%02d", clamped / 60, clamped % 60)
-    }
-}
-
-private extension ActivityViewContext where Attributes == FocusActivityAttributes {
-    var subjectColor: Color {
-        Color(tsumibenHex: attributes.subjectColorHex) ?? LivePalette.amber
-    }
-}
-
-private extension Color {
-    init?(tsumibenHex: String) {
-        let value = tsumibenHex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        guard value.count == 6, let rgb = UInt64(value, radix: 16) else {
-            return nil
-        }
-        self.init(
-            red: Double((rgb >> 16) & 0xFF) / 255,
-            green: Double((rgb >> 8) & 0xFF) / 255,
-            blue: Double(rgb & 0xFF) / 255
-        )
     }
 }
 

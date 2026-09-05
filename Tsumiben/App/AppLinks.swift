@@ -1,6 +1,10 @@
 import Foundation
 
 enum AppLinks {
+    static let marketingWebsite = URL(
+        string: "https://tumiben.hinoshiba.com/"
+    )!
+
     static var privacyPolicy: URL {
         if let value = Bundle.main.object(
             forInfoDictionaryKey: "TSUMIBEN_PRIVACY_POLICY_URL"
@@ -13,6 +17,10 @@ enum AppLinks {
 
     static let support = URL(
         string: "https://tumiben.hinoshiba.com/support/"
+    )!
+
+    static let commercialDisclosure = URL(
+        string: "https://tumiben.hinoshiba.com/commercial-transactions/"
     )!
 
     static let sourceCode = URL(

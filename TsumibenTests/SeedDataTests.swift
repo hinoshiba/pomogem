@@ -16,7 +16,9 @@ final class SeedDataTests: XCTestCase {
             Prefs.self,
             ActivityResetMarker.self,
             SyncedFocusTimer.self,
-            FocusTimerDeviceClaim.self
+            FocusTimerDeviceClaim.self,
+            RareRewardPendingCommit.self,
+            RareRewardLedgerCursor.self
         ])
         let configuration = ModelConfiguration(
             schema: schema,
@@ -47,7 +49,7 @@ final class SeedDataTests: XCTestCase {
         XCTAssertFalse(try context.fetch(FetchDescriptor<Subject>()).contains { $0.name == "英語" })
     }
 
-    func testBootstrapReconcilesCloudDuplicatesWithoutLosingMass() throws {
+    func testBootstrapResolvesCloudDuplicatesWithoutMutatingSourceRows() throws {
         let container = try makeContainer()
         let context = container.mainContext
         try SeedData.bootstrap(context: context)
@@ -118,9 +120,13 @@ final class SeedDataTests: XCTestCase {
         try SeedData.bootstrap(context: context)
 
         let prefs = try context.fetch(FetchDescriptor<Prefs>())
-        XCTAssertEqual(prefs.count, 1)
-        XCTAssertFalse(try XCTUnwrap(prefs.first).soundOn)
-        XCTAssertTrue(try XCTUnwrap(prefs.first).hasEverImportedBedrock)
+        XCTAssertEqual(prefs.count, 2)
+        let resolvedPrefs = try PrefsSyncPolicy.resolvedState(
+            in: prefs,
+            currentEpochID: nil
+        )
+        XCTAssertFalse(resolvedPrefs.soundOn)
+        XCTAssertTrue(resolvedPrefs.hasEverImportedBedrock)
         // Session history and the singleton can arrive in either order through
         // CloudKit. One locally visible miss is not proof that a synced pity
         // value of nine was stale, so generic reconciliation must never move
@@ -138,17 +144,20 @@ final class SeedDataTests: XCTestCase {
 
         let sessions = try context.fetch(FetchDescriptor<StudySession>())
         let strata = try context.fetch(FetchDescriptor<Stratum>())
-        XCTAssertEqual(sessions.count, 1)
-        XCTAssertTrue(try XCTUnwrap(sessions.first).isBaked)
-        XCTAssertEqual(try XCTUnwrap(sessions.first).pebbleKind, .gold)
+        XCTAssertEqual(sessions.count, 2)
+        let logicalSessions = StudySessionSyncPolicy.canonicalSessions(from: sessions)
+        XCTAssertEqual(logicalSessions.count, 1)
         XCTAssertEqual(
             RareRewardOutcomeCodec.decode(
-                try XCTUnwrap(sessions.first).rareRewardOutcomesRawValue
+                try XCTUnwrap(logicalSessions.first).rareRewardOutcomesRawValue
             ),
             [.gold, .prism]
         )
         XCTAssertEqual(strata.count, 1)
-        XCTAssertEqual(StrataMath.totalGrams(sessions: sessions, strata: strata), 12_000)
+        XCTAssertEqual(
+            StrataMath.totalGrams(sessions: logicalSessions, strata: strata),
+            12_000
+        )
     }
 
     func testCloudPreferencesRestoreOnboardingAndNewestUsagePurpose() throws {
@@ -173,11 +182,14 @@ final class SeedDataTests: XCTestCase {
         try SeedData.bootstrap(context: context)
 
         let values = try context.fetch(FetchDescriptor<Prefs>())
-        let prefs = try XCTUnwrap(values.first)
-        XCTAssertEqual(values.count, 1)
-        XCTAssertTrue(prefs.hasCompletedOnboarding)
-        XCTAssertEqual(prefs.usagePurposeRawValue, UsagePurpose.work.rawValue)
-        XCTAssertEqual(prefs.usagePurposeUpdatedAt, newer)
+        XCTAssertEqual(values.count, 3)
+        let resolved = try PrefsSyncPolicy.resolvedState(
+            in: values,
+            currentEpochID: nil
+        )
+        XCTAssertTrue(resolved.hasCompletedOnboarding)
+        XCTAssertEqual(resolved.usagePurposeRawValue, UsagePurpose.work.rawValue)
+        XCTAssertEqual(resolved.usagePurposeUpdatedAt, newer)
     }
 
     func testRareRewardPreferenceDefaultsAndInvalidValuesFallBackToNoDraw() {
@@ -244,10 +256,16 @@ final class SeedDataTests: XCTestCase {
         try SeedData.bootstrap(context: context)
 
         let values = try context.fetch(FetchDescriptor<Prefs>())
-        let prefs = try XCTUnwrap(values.first)
-        XCTAssertEqual(values.count, 1)
-        XCTAssertEqual(prefs.rareRewardModeRawValue, RareRewardMode.standard.rawValue)
-        XCTAssertEqual(prefs.rareRewardModeUpdatedAt, newer)
+        XCTAssertEqual(values.count, 3)
+        let resolved = try PrefsSyncPolicy.resolvedState(
+            in: values,
+            currentEpochID: nil
+        )
+        XCTAssertEqual(
+            resolved.rareRewardModeRawValue,
+            RareRewardMode.standard.rawValue
+        )
+        XCTAssertEqual(resolved.rareRewardModeUpdatedAt, newer)
     }
 
     func testRareRewardUndatedDuplicateTieChoosesOff() throws {
@@ -266,10 +284,13 @@ final class SeedDataTests: XCTestCase {
         try SeedData.bootstrap(context: context)
 
         let values = try context.fetch(FetchDescriptor<Prefs>())
-        let prefs = try XCTUnwrap(values.first)
-        XCTAssertEqual(values.count, 1)
-        XCTAssertEqual(prefs.rareRewardModeRawValue, RareRewardMode.off.rawValue)
-        XCTAssertNil(prefs.rareRewardModeUpdatedAt)
+        XCTAssertEqual(values.count, 3)
+        let resolved = try PrefsSyncPolicy.resolvedState(
+            in: values,
+            currentEpochID: nil
+        )
+        XCTAssertEqual(resolved.rareRewardModeRawValue, RareRewardMode.off.rawValue)
+        XCTAssertNil(resolved.rareRewardModeUpdatedAt)
     }
 
     func testThemeNameDisclosureDefaultsOffAndOptOutWinsDuplicateMerge() throws {
@@ -289,10 +310,12 @@ final class SeedDataTests: XCTestCase {
         try SeedData.bootstrap(context: context)
 
         let reconciled = try context.fetch(FetchDescriptor<Prefs>())
-        XCTAssertEqual(reconciled.count, 1)
-        XCTAssertFalse(
-            try XCTUnwrap(reconciled.first).showsThemeNameExternally
-        )
+        XCTAssertEqual(reconciled.count, 2)
+        XCTAssertTrue(canonical.showsThemeNameExternally)
+        XCTAssertFalse(try PrefsSyncPolicy.resolvedState(
+            in: reconciled,
+            currentEpochID: nil
+        ).showsThemeNameExternally)
     }
 
     func testDuplicateCompletionKindsConvergeToSameRareResult() throws {
@@ -319,11 +342,13 @@ final class SeedDataTests: XCTestCase {
 
         let sessions = try context.fetch(FetchDescriptor<StudySession>())
             .filter { $0.id == sessionID }
-        XCTAssertEqual(sessions.count, 1)
-        XCTAssertEqual(sessions.first?.pebbleKind, .prism)
+        XCTAssertEqual(sessions.count, 3)
+        let logical = StudySessionSyncPolicy.canonicalSessions(from: sessions)
+        XCTAssertEqual(logical.count, 1)
+        XCTAssertEqual(logical.first?.pebbleKind, .prism)
     }
 
-    func testSessionReconnectsWhenSubjectArrivesAfterCloudCompletion() throws {
+    func testLateSubjectDeliveryKeepsSessionRelationshipReadOnly() throws {
         let container = try makeContainer()
         let context = container.mainContext
         try SeedData.bootstrap(context: context)
@@ -356,11 +381,14 @@ final class SeedDataTests: XCTestCase {
         try context.save()
         try SeedData.bootstrap(context: context)
 
-        XCTAssertTrue(session.subject === lateSubject)
+        XCTAssertNil(session.subject)
+        XCTAssertTrue(
+            SubjectSyncPolicy.canonical(from: [lateSubject]) === lateSubject
+        )
         XCTAssertEqual(session.displaySubjectName, "顧客提案")
     }
 
-    func testPresetDuplicateRehomesExistingSessions() throws {
+    func testPresetLookalikeSourceRowsAndRelationshipsAreRetained() throws {
         let container = try makeContainer()
         let context = container.mainContext
         try SeedData.bootstrap(context: context)
@@ -388,11 +416,11 @@ final class SeedDataTests: XCTestCase {
 
         let englishSubjects = try context.fetch(FetchDescriptor<Subject>())
             .filter { $0.name == "英語" }
-        XCTAssertEqual(englishSubjects.count, 1)
-        XCTAssertTrue(session.subject === englishSubjects.first)
+        XCTAssertEqual(englishSubjects.count, 2)
+        XCTAssertTrue(session.subject === duplicate)
     }
 
-    func testOverlappingCloudBakesCountEverySessionExactlyOnce() throws {
+    func testOverlappingLocalMembershipCountsEverySessionExactlyOnce() throws {
         let container = try makeContainer()
         let context = container.mainContext
         try SeedData.bootstrap(context: context)
@@ -441,7 +469,7 @@ final class SeedDataTests: XCTestCase {
         XCTAssertEqual(StrataMath.totalPebbleCount(sessions: sessions, strata: strata), 3)
     }
 
-    func testBootstrapRepairsBakedFlagWithoutMatchingStratum() throws {
+    func testBootstrapIgnoresLegacyBakedFlagWithoutLocalMembership() throws {
         let container = try makeContainer()
         let context = container.mainContext
         try SeedData.bootstrap(context: context)
@@ -461,7 +489,7 @@ final class SeedDataTests: XCTestCase {
 
         try SeedData.bootstrap(context: context)
 
-        XCTAssertFalse(session.isBaked)
+        XCTAssertTrue(session.isBaked)
         XCTAssertEqual(StrataMath.totalGrams(sessions: [session], strata: []), 250)
         XCTAssertEqual(StrataMath.totalPebbleCount(sessions: [session], strata: []), 1)
     }
@@ -538,7 +566,7 @@ final class SeedDataTests: XCTestCase {
         XCTAssertEqual(visible.map(\.id), Array(stones.dropFirst(2)).map(\.id))
     }
 
-    func testAchievementRevisionEditsEveryLogicalDuplicateWithoutChangingMass() throws {
+    func testAchievementRevisionEditsOnlyOnePhysicalReplicaWithoutChangingMass() throws {
         let container = try makeContainer()
         let context = container.mainContext
         let originalSubject = Subject(
@@ -602,17 +630,23 @@ final class SeedDataTests: XCTestCase {
         )
         try context.save()
 
-        for stone in [first, duplicate] {
-            XCTAssertEqual(stone.revision, 3)
-            XCTAssertNil(stone.deletedAt)
-            XCTAssertEqual(stone.kind, .examPass)
-            XCTAssertEqual(stone.note, "簿記2級 合格")
-            XCTAssertEqual(stone.achievedAt, revisedDate)
-            XCTAssertEqual(stone.subject?.id, revisedSubject.id)
-            XCTAssertEqual(stone.subjectNameSnapshot, revisedSubject.safeDisplayName)
-            XCTAssertEqual(stone.subjectColorHexSnapshot, revisedSubject.colorHex)
-            XCTAssertEqual(stone.updatedAt, revisionDate)
-        }
+        XCTAssertEqual(first.revision, 2)
+        XCTAssertEqual(first.kind, .perfectScore)
+        XCTAssertEqual(first.note, "模試")
+        XCTAssertEqual(first.subject?.id, originalSubject.id)
+
+        XCTAssertEqual(duplicate.revision, 3)
+        XCTAssertNil(duplicate.deletedAt)
+        XCTAssertEqual(duplicate.kind, .examPass)
+        XCTAssertEqual(duplicate.note, "簿記2級 合格")
+        XCTAssertEqual(duplicate.achievedAt, revisedDate)
+        XCTAssertEqual(duplicate.subject?.id, revisedSubject.id)
+        XCTAssertEqual(duplicate.subjectNameSnapshot, revisedSubject.safeDisplayName)
+        XCTAssertEqual(duplicate.subjectColorHexSnapshot, revisedSubject.colorHex)
+        XCTAssertEqual(duplicate.updatedAt, revisionDate)
+        XCTAssertTrue(
+            AchievementStonePolicy.canonicalStone(from: [first, duplicate]) === duplicate
+        )
         XCTAssertEqual(StrataMath.totalGrams(sessions: [session], strata: []), massBefore)
         XCTAssertEqual(StrataMath.totalPebbleCount(sessions: [session], strata: []), 1)
     }
@@ -636,11 +670,20 @@ final class SeedDataTests: XCTestCase {
         let snapshot = AchievementStoneRevisionSnapshot(stone)
 
         let deletionDate = base.addingTimeInterval(10)
-        AchievementStoneRevisionPolicy.delete([stone], now: deletionDate)
+        let deletionMutationID = UUID(
+            uuidString: "A1000000-0000-0000-0000-000000000001"
+        )!
+        AchievementStoneRevisionPolicy.delete(
+            [stone],
+            deletionMutationID: deletionMutationID,
+            now: deletionDate
+        )
         try context.save()
 
         XCTAssertEqual(stone.revision, 2)
         XCTAssertEqual(stone.deletedAt, deletionDate)
+        XCTAssertEqual(stone.deletionRevision, 2)
+        XCTAssertEqual(stone.deletionMutationID, deletionMutationID)
         XCTAssertTrue(AchievementStonePolicy.visibleStones(from: [stone]).isEmpty)
         XCTAssertTrue(try context.fetch(BoundedHistoryPolicy.achievementCandidateDescriptor(
             epochID: nil,
@@ -664,9 +707,29 @@ final class SeedDataTests: XCTestCase {
 
         XCTAssertEqual(stone.revision, 3)
         XCTAssertNil(stone.deletedAt)
+        XCTAssertEqual(stone.deletionRevision, 2)
+        XCTAssertEqual(stone.deletionMutationID, deletionMutationID)
+        XCTAssertEqual(stone.restoredDeletionMutationID, deletionMutationID)
         XCTAssertEqual(stone.note, "簿記2級")
         XCTAssertEqual(stone.kind, .examPass)
         XCTAssertEqual(AchievementStonePolicy.visibleStones(from: [stone]).map(\.id), [stone.id])
+
+        // The restore updated the only physical tombstone in place. Its
+        // retained deletion event still rejects a later higher-revision edit
+        // from an offline device that never observed or acknowledged delete.
+        let lateUnacknowledgedEdit = AchievementStone(
+            id: stone.id,
+            subject: subject,
+            kind: .workMilestone,
+            note: "未観測端末の後着編集",
+            achievedAt: base,
+            createdAt: base,
+            revision: 4,
+            updatedAt: undoDate.addingTimeInterval(1)
+        )
+        XCTAssertTrue(AchievementStonePolicy.canonicalStone(
+            from: [lateUnacknowledgedEdit, stone]
+        ) === stone)
     }
 
     func testAchievementTombstoneWinsStaleOfflineDuplicateAndBootstrapKeepsItDeleted() throws {
@@ -705,10 +768,12 @@ final class SeedDataTests: XCTestCase {
         try SeedData.bootstrap(context: context)
 
         let surviving = try context.fetch(FetchDescriptor<AchievementStone>())
-        XCTAssertEqual(surviving.count, 1)
-        XCTAssertEqual(surviving.first?.id, id)
-        XCTAssertEqual(surviving.first?.revision, 5)
-        XCTAssertNotNil(surviving.first?.deletedAt)
+        XCTAssertEqual(surviving.count, 2)
+        XCTAssertTrue(surviving.contains { $0 === staleActive })
+        XCTAssertTrue(surviving.contains { $0 === tombstone })
+        XCTAssertTrue(
+            AchievementStonePolicy.canonicalStone(from: surviving) === tombstone
+        )
         XCTAssertTrue(AchievementStonePolicy.visibleStones(from: surviving).isEmpty)
     }
 
@@ -775,11 +840,12 @@ final class SeedDataTests: XCTestCase {
             loadedCandidateRowCount: 1
         )
         XCTAssertEqual(homeCount, .init(count: 0, isLowerBound: false))
+        let exact = try context.fetch(AchievementStonePolicy.canonicalDescriptor(
+            id: id,
+            dataEpochID: nil
+        ))
         XCTAssertTrue(
-            try context.fetch(AchievementStonePolicy.canonicalDescriptor(
-                id: id,
-                dataEpochID: nil
-            )).first === tombstone
+            AchievementStonePolicy.canonicalStone(from: exact) === tombstone
         )
     }
 
@@ -812,15 +878,76 @@ final class SeedDataTests: XCTestCase {
         XCTAssertTrue(
             AchievementStonePolicy.canonicalStone(from: [active, deleted]) === deleted
         )
+        let exact = try context.fetch(AchievementStonePolicy.canonicalDescriptor(
+            id: id,
+            dataEpochID: nil
+        ))
         XCTAssertTrue(
-            try context.fetch(AchievementStonePolicy.canonicalDescriptor(
-                id: id,
-                dataEpochID: nil
-            )).first === deleted
+            AchievementStonePolicy.canonicalStone(from: exact) === deleted
         )
     }
 
-    func testBoundedAchievementMutationPageAlwaysIncludesCanonicalTombstone() throws {
+    func testHostileAchievementRevisionCannotWinAndMutationRepairsIt() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let id = UUID()
+        let base = Date(timeIntervalSinceReferenceDate: 5_025_000)
+        let valid = AchievementStone(
+            id: id,
+            kind: .perfectScore,
+            note: "valid",
+            achievedAt: base,
+            createdAt: base,
+            revision: 7,
+            updatedAt: base
+        )
+        let hostile = AchievementStone(
+            id: id,
+            kind: .examPass,
+            note: "hostile",
+            achievedAt: base,
+            createdAt: base,
+            revision: 8,
+            deletedAt: base,
+            updatedAt: base.addingTimeInterval(100)
+        )
+        hostile.revision = Int.max
+        context.insert(valid)
+        context.insert(hostile)
+        try context.save()
+
+        XCTAssertTrue(
+            AchievementStonePolicy.canonicalStone(from: [valid, hostile]) === valid
+        )
+        let exact = try context.fetch(AchievementStonePolicy.canonicalDescriptor(
+            id: id,
+            dataEpochID: nil
+        ))
+        XCTAssertTrue(
+            AchievementStonePolicy.canonicalStone(from: exact) === valid
+        )
+
+        let subject = Subject(name: "修復", colorHex: "#123456", sortOrder: 0)
+        XCTAssertEqual(
+            AchievementStoneRevisionPolicy.edit(
+                [valid, hostile],
+                subject: subject,
+                kind: .workMilestone,
+                note: "repaired",
+                achievedAt: base,
+                now: base.addingTimeInterval(200)
+            ),
+            .applied
+        )
+        XCTAssertEqual(valid.revision, 8)
+        XCTAssertEqual(hostile.revision, Int.max)
+        XCTAssertEqual(valid.note, "repaired")
+        XCTAssertEqual(hostile.note, "hostile")
+        XCTAssertNil(valid.deletedAt)
+        XCTAssertNotNil(hostile.deletedAt)
+    }
+
+    func testBoundedAchievementMutationPageIncludesCompleteBoundedReplicaSet() throws {
         let container = try makeContainer()
         let context = container.mainContext
         let id = UUID()
@@ -842,11 +969,17 @@ final class SeedDataTests: XCTestCase {
         let mutationPage = try context.fetch(
             BoundedHistoryPolicy.achievementRevisionDescriptor(
                 id: id,
-                epochID: nil,
-                limit: 16
+                epochID: nil
             )
         )
-        XCTAssertEqual(mutationPage.count, 16)
+        XCTAssertEqual(mutationPage.count, 20)
+        XCTAssertEqual(
+            BoundedHistoryPolicy.achievementRevisionDescriptor(
+                id: id,
+                epochID: nil
+            ).fetchLimit,
+            AchievementStonePolicy.maximumPhysicalRowsPerLogicalStone + 1
+        )
         XCTAssertEqual(mutationPage.first?.revision, 20)
         XCTAssertNotNil(mutationPage.first?.deletedAt)
 
@@ -860,7 +993,8 @@ final class SeedDataTests: XCTestCase {
             now: base.addingTimeInterval(200)
         )
         XCTAssertTrue(AchievementStonePolicy.visibleStones(from: mutationPage).isEmpty)
-        XCTAssertTrue(mutationPage.allSatisfy { $0.deletedAt != nil })
+        XCTAssertEqual(mutationPage.filter { $0.deletedAt != nil }.count, 1)
+        XCTAssertEqual(mutationPage.first?.revision, 21)
     }
 
     func testAchievementEditCannotImplicitlyResurrectCanonicalTombstone() {
@@ -897,11 +1031,154 @@ final class SeedDataTests: XCTestCase {
             now: base.addingTimeInterval(40)
         )
 
-        for stone in [active, deleted] {
-            XCTAssertEqual(stone.revision, 5)
-            XCTAssertEqual(stone.deletedAt, deletionDate)
-        }
+        XCTAssertEqual(active.revision, 3)
+        XCTAssertNil(active.deletedAt)
+        XCTAssertEqual(deleted.revision, 5)
+        XCTAssertEqual(deleted.deletedAt, deletionDate)
         XCTAssertTrue(AchievementStonePolicy.visibleStones(from: [active, deleted]).isEmpty)
+    }
+
+    func testAchievementRestoreRequiresDominantDeletionTokenAcknowledgement() {
+        let id = UUID()
+        let base = Date(timeIntervalSinceReferenceDate: 5_150_000)
+        let deleteX = UUID(uuidString: "A2000000-0000-0000-0000-000000000001")!
+        let deleteY = UUID(uuidString: "A2000000-0000-0000-0000-000000000002")!
+        let deleteLow = UUID(uuidString: "10000000-0000-0000-0000-000000000001")!
+        let deleteHigh = UUID(uuidString: "F0000000-0000-0000-0000-000000000001")!
+        let tombstoneX = AchievementStone(
+            id: id,
+            kind: .examPass,
+            achievedAt: base,
+            createdAt: base,
+            revision: 5,
+            deletedAt: base,
+            deletionMutationID: deleteX,
+            deletionRevision: 5,
+            updatedAt: base
+        )
+        let unobservedOfflineEdit = AchievementStone(
+            id: id,
+            kind: .workMilestone,
+            achievedAt: base,
+            createdAt: base,
+            revision: 6,
+            updatedAt: base.addingTimeInterval(1)
+        )
+        let restoredX = AchievementStone(
+            id: id,
+            kind: .examPass,
+            achievedAt: base,
+            createdAt: base,
+            revision: 6,
+            deletionMutationID: deleteX,
+            deletionRevision: 5,
+            restoredDeletionMutationID: deleteX,
+            updatedAt: base.addingTimeInterval(2)
+        )
+
+        XCTAssertTrue(AchievementStonePolicy.canonicalStone(
+            from: [tombstoneX, unobservedOfflineEdit]
+        ) === tombstoneX)
+        XCTAssertTrue(AchievementStonePolicy.canonicalStone(
+            from: [restoredX, tombstoneX]
+        ) === restoredX)
+
+        let tombstoneY = AchievementStone(
+            id: id,
+            kind: .examPass,
+            achievedAt: base,
+            createdAt: base,
+            revision: 7,
+            deletedAt: base.addingTimeInterval(3),
+            deletionMutationID: deleteY,
+            deletionRevision: 7,
+            updatedAt: base.addingTimeInterval(3)
+        )
+        let staleAcknowledgementEdit = AchievementStone(
+            id: id,
+            kind: .workMilestone,
+            achievedAt: base,
+            createdAt: base,
+            revision: 8,
+            deletionMutationID: deleteX,
+            deletionRevision: 5,
+            restoredDeletionMutationID: deleteX,
+            updatedAt: base.addingTimeInterval(4)
+        )
+        let restoredY = AchievementStone(
+            id: id,
+            kind: .examPass,
+            achievedAt: base,
+            createdAt: base,
+            revision: 9,
+            deletionMutationID: deleteY,
+            deletionRevision: 7,
+            restoredDeletionMutationID: deleteY,
+            updatedAt: base.addingTimeInterval(5)
+        )
+        XCTAssertTrue(AchievementStonePolicy.canonicalStone(
+            from: [tombstoneX, restoredX, tombstoneY, staleAcknowledgementEdit]
+        ) === tombstoneY)
+        XCTAssertTrue(AchievementStonePolicy.canonicalStone(
+            from: [restoredY, staleAcknowledgementEdit, tombstoneY]
+        ) === restoredY)
+
+        let concurrentLow = AchievementStone(
+            id: id,
+            kind: .examPass,
+            achievedAt: base,
+            createdAt: base,
+            revision: 10,
+            deletedAt: base.addingTimeInterval(6),
+            deletionMutationID: deleteLow,
+            deletionRevision: 10,
+            updatedAt: base.addingTimeInterval(6)
+        )
+        let concurrentHigh = AchievementStone(
+            id: id,
+            kind: .examPass,
+            achievedAt: base,
+            createdAt: base,
+            revision: 10,
+            deletedAt: base.addingTimeInterval(7),
+            deletionMutationID: deleteHigh,
+            deletionRevision: 10,
+            updatedAt: base.addingTimeInterval(7)
+        )
+        let restoredLow = AchievementStone(
+            id: id,
+            kind: .examPass,
+            achievedAt: base,
+            createdAt: base,
+            revision: 11,
+            deletionMutationID: deleteLow,
+            deletionRevision: 10,
+            restoredDeletionMutationID: deleteLow,
+            updatedAt: base.addingTimeInterval(8)
+        )
+        let restoredHigh = AchievementStone(
+            id: id,
+            kind: .examPass,
+            achievedAt: base,
+            createdAt: base,
+            revision: 11,
+            deletionMutationID: deleteHigh,
+            deletionRevision: 10,
+            restoredDeletionMutationID: deleteHigh,
+            updatedAt: base.addingTimeInterval(9)
+        )
+        XCTAssertTrue(AchievementStonePolicy.canonicalStone(
+            from: [concurrentLow, restoredLow, concurrentHigh]
+        ) === concurrentHigh)
+        XCTAssertTrue(AchievementStonePolicy.canonicalStone(
+            from: [restoredHigh, concurrentHigh, concurrentLow]
+        ) === restoredHigh)
+        XCTAssertTrue(AchievementStonePolicy.canonicalStone(
+            from: Array([concurrentLow, concurrentHigh, restoredHigh].reversed())
+        ) === restoredHigh)
+        XCTAssertTrue(AchievementStonePolicy.canonicalStone(
+            from: [restoredHigh]
+        ) === restoredHigh)
     }
 
     func testBootstrapReconcilesDuplicateAchievementAndPreservesSnapshots() throws {
@@ -930,12 +1207,15 @@ final class SeedDataTests: XCTestCase {
         try SeedData.bootstrap(context: context)
 
         let stones = try context.fetch(FetchDescriptor<AchievementStone>())
-        let stone = try XCTUnwrap(stones.first)
-        XCTAssertEqual(stones.count, 1)
-        XCTAssertEqual(stone.id, id)
-        XCTAssertEqual(stone.displaySubjectName, subject.name)
-        XCTAssertEqual(stone.displaySubjectColorHex, subject.colorHex)
-        XCTAssertLessThanOrEqual(stone.achievedAt, .now)
+        XCTAssertEqual(stones.count, 2)
+        XCTAssertTrue(stones.allSatisfy { $0.id == id })
+        let canonical = try XCTUnwrap(
+            AchievementStonePolicy.canonicalStone(from: stones)
+        )
+        XCTAssertTrue(
+            AchievementStonePolicy.canonicalStone(from: Array(stones.reversed())) === canonical
+        )
+        XCTAssertLessThanOrEqual(canonical.achievedAt, .now)
     }
 
     func testBootstrapMigratesLegacyStratumToMovableAggregateIdempotently() throws {
@@ -943,14 +1223,18 @@ final class SeedDataTests: XCTestCase {
         let context = container.mainContext
         try SeedData.bootstrap(context: context)
         let subject = try XCTUnwrap(context.fetch(FetchDescriptor<Subject>()).first)
-        let start = Date(timeIntervalSince1970: 50_000)
+        let start = Date.now.addingTimeInterval(-50_000)
         var sessions: [StudySession] = []
         for index in 0..<10 {
+            let duration = index < 8
+                ? 1_500
+                : ManualDuration.sixtyMinutes.seconds
+            let sessionStart = start.addingTimeInterval(Double(index * 3_600))
             let session = StudySession(
                 subject: subject,
-                startAt: start.addingTimeInterval(Double(index * 1_500)),
-                endAt: start.addingTimeInterval(Double((index + 1) * 1_500)),
-                seconds: 1_500,
+                startAt: sessionStart,
+                endAt: sessionStart.addingTimeInterval(Double(duration)),
+                seconds: duration,
                 source: index < 8 ? .timer : .manual,
                 pebbleKind: index == 0 ? .gold : .normal,
                 grams: index < 8 ? 250 : 600,
@@ -963,7 +1247,7 @@ final class SeedDataTests: XCTestCase {
         let stratumID = UUID()
         let stratum = Stratum(
             id: stratumID,
-            bakedAt: start.addingTimeInterval(20_000),
+            bakedAt: start.addingTimeInterval(40_000),
             pebbleCount: sessions.count,
             heightPt: 42,
             colorMixJSON: StrataMath.encodeColorMix(
@@ -1037,7 +1321,7 @@ final class SeedDataTests: XCTestCase {
         let container = try makeContainer()
         let context = container.mainContext
         try SeedData.bootstrap(context: context)
-        let base = Date(timeIntervalSince1970: 120_000)
+        let base = Date.now.addingTimeInterval(-200_000)
         let parentID = UUID()
         var allSessionIDs: [UUID] = []
         var childIDs: [UUID] = []
@@ -1045,9 +1329,11 @@ final class SeedDataTests: XCTestCase {
         for group in 0..<10 {
             var memberIDs: [UUID] = []
             for index in 0..<10 {
+                let offset = Double((group * 10 + index) * 1_500)
+                let sessionStart = base.addingTimeInterval(offset)
                 let session = StudySession(
-                    startAt: base.addingTimeInterval(Double(group * 10 + index)),
-                    endAt: base.addingTimeInterval(Double(group * 10 + index + 1)),
+                    startAt: sessionStart,
+                    endAt: sessionStart.addingTimeInterval(1_500),
                     seconds: 1_500,
                     source: .timer,
                     pebbleKind: index == 0 ? .gold : .normal,
@@ -1066,8 +1352,8 @@ final class SeedDataTests: XCTestCase {
                 measuredPebbleCount: 10,
                 goldPebbleCount: 1,
                 colorMixJSON: "[]",
-                periodStart: base,
-                periodEnd: base.addingTimeInterval(100),
+                periodStart: base.addingTimeInterval(Double(group * 10 * 1_500)),
+                periodEnd: base.addingTimeInterval(Double((group + 1) * 10 * 1_500)),
                 sessionIDs: memberIDs,
                 parentAggregateID: parentID
             )
@@ -1084,7 +1370,7 @@ final class SeedDataTests: XCTestCase {
             goldPebbleCount: 10,
             colorMixJSON: "[]",
             periodStart: base,
-            periodEnd: base.addingTimeInterval(100),
+            periodEnd: base.addingTimeInterval(100 * 1_500),
             sessionIDs: allSessionIDs,
             childAggregateIDs: childIDs
         )
@@ -1152,7 +1438,7 @@ final class SeedDataTests: XCTestCase {
         XCTAssertEqual(preserved.childAggregateIDs.count, 2)
     }
 
-    func testOverlappingOfflineCompletionsPreserveLaterSessionAsSelfReported() throws {
+    func testOverlappingOfflineCompletionsPreserveBothUniqueSessionsAsMeasured() throws {
         let container = try makeContainer()
         let context = container.mainContext
         try SeedData.bootstrap(context: context)
@@ -1177,18 +1463,22 @@ final class SeedDataTests: XCTestCase {
                 now: startedAt,
                 sessionID: sessionID
             )
+            let endedAt = startedAt.addingTimeInterval(1_500)
+            guard case let .focusCompleted(completion) = engine.advance(at: endedAt) else {
+                throw FocusCloudSyncError.invalidPayload
+            }
             let envelope = FocusRecoveryEnvelope(
                 engine: engine,
                 subject: subject,
                 clockAnchor: nil,
-                pendingCompletion: nil,
-                savedAt: startedAt
+                pendingCompletion: completion,
+                savedAt: endedAt
             )
             return try SyncedFocusTimer(
                 sessionID: sessionID,
                 status: .completed,
                 payload: FocusCloudPayload(envelope: envelope),
-                updatedAt: startedAt.addingTimeInterval(1_500),
+                updatedAt: endedAt,
                 writerDeviceID: writer
             )
         }
@@ -1213,7 +1503,10 @@ final class SeedDataTests: XCTestCase {
             source: .timer,
             grams: 250,
             deviceDayKey: "2027-01-03",
-            isBaked: true
+            rareRewardRuleVersion: Constants.Gacha.creditRuleVersion,
+            rareRewardParticipated: true,
+            rareRewardCreditedGrams: 250,
+            rareRewardOutcomesRawValue: RareRewardOutcomeCodec.encode([.normal])
         )
         let laterSession = StudySession(
             id: laterID,
@@ -1224,51 +1517,20 @@ final class SeedDataTests: XCTestCase {
             pebbleKind: .prism,
             grams: 250,
             deviceDayKey: "2027-01-03",
-            isBaked: true
+            rareRewardRuleVersion: Constants.Gacha.creditRuleVersion,
+            rareRewardParticipated: true,
+            rareRewardCreditedGrams: 250,
+            rareRewardOutcomesRawValue: RareRewardOutcomeCodec.encode([.prism])
         )
         context.insert(firstSession)
         context.insert(laterSession)
-        let ancestorID = UUID()
-        let derived = AggregatePebble(
-            level: 1,
-            pebbleCount: 2,
-            grams: 500,
-            colorMixJSON: "[]",
-            periodStart: start,
-            periodEnd: laterStart.addingTimeInterval(1_500),
-            sessionIDs: [firstID, laterID],
-            parentAggregateID: ancestorID
-        )
-        context.insert(derived)
-        let ancestor = AggregatePebble(
-            id: ancestorID,
-            level: 2,
-            pebbleCount: 2,
-            childAggregateCount: 1,
-            grams: 500,
-            colorMixJSON: "[]",
-            periodStart: start,
-            periodEnd: laterStart.addingTimeInterval(1_500),
-            childAggregateIDs: [derived.id]
-        )
-        context.insert(ancestor)
-        // A membership-less legacy projection prevents the general stratum
-        // reconciler from clearing every historical isBaked flag. Conflict
-        // cleanup must still explicitly release this surviving member.
-        context.insert(Stratum(
-            pebbleCount: 0,
-            heightPt: 0,
-            colorMixJSON: "[]",
-            monthLabel: "legacy",
-            grams: 0
-        ))
         try context.save()
 
         XCTAssertEqual(
             FocusSyncPolicy.supersededSessionIDs(
                 from: [laterTimer.policySnapshot, firstTimer.policySnapshot]
             ),
-            Set([laterID])
+            Set<UUID>()
         )
         try SeedData.bootstrap(context: context)
 
@@ -1276,16 +1538,16 @@ final class SeedDataTests: XCTestCase {
             .sorted { $0.startAt < $1.startAt }
         XCTAssertEqual(remaining.map(\.id), [firstID, laterID])
         XCTAssertEqual(remaining[0].source, .timer)
-        XCTAssertEqual(remaining[1].source, .timerDemoted)
-        XCTAssertEqual(remaining[1].pebbleKind, .normal)
-        XCTAssertTrue(remaining.allSatisfy { !$0.isBaked })
-        XCTAssertFalse(try context.fetch(FetchDescriptor<AggregatePebble>())
-            .contains { $0.id == derived.id })
-        XCTAssertFalse(try context.fetch(FetchDescriptor<AggregatePebble>())
-            .contains { $0.id == ancestor.id })
+        XCTAssertEqual(remaining[1].source, .timer)
+        XCTAssertEqual(remaining[1].pebbleKind, .prism)
+        XCTAssertEqual(remaining.map(\.rareRewardParticipated), [true, true])
+        XCTAssertEqual(remaining.flatMap(\.effectiveRareRewardOutcomes), [
+            .normal,
+            .prism
+        ])
         XCTAssertEqual(
             try context.fetch(FetchDescriptor<GachaState>()).first?.sinceLastGold,
-            1
+            2
         )
         XCTAssertEqual(
             StrataMath.totalGrams(
@@ -1295,14 +1557,15 @@ final class SeedDataTests: XCTestCase {
             500
         )
 
-        // Reconciliation is idempotent and a delayed duplicate cannot make the
-        // preserved completion measured/rare again.
+        // Active-timer recovery may still choose one canonical timer, but once
+        // two different completion UUIDs exist neither is retroactively
+        // demoted. The server rare ledger serializes both unique receipts.
         try SeedData.bootstrap(context: context)
         remaining = try context.fetch(FetchDescriptor<StudySession>())
             .sorted { $0.startAt < $1.startAt }
         XCTAssertEqual(remaining.map(\.id), [firstID, laterID])
-        XCTAssertEqual(remaining[1].source, .timerDemoted)
-        XCTAssertEqual(remaining[1].pebbleKind, .normal)
+        XCTAssertEqual(remaining.map(\.source), [.timer, .timer])
+        XCTAssertEqual(remaining[1].pebbleKind, .prism)
         XCTAssertEqual(
             StrataMath.totalGrams(
                 sessions: remaining,

@@ -11,9 +11,11 @@ struct BreakTimerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Query private var preferences: [Prefs]
+    @Query private var activityResetMarkers: [ActivityResetMarker]
     @ScaledMetric(relativeTo: .largeTitle) private var timerFontSize: CGFloat = 72
     @State private var sessionID: UUID
     @State private var endDate: Date?
+    @State private var clockAnchor: ClockAnchor?
     @State private var now = Date.now
     @State private var didSignalCompletion = false
     @State private var notifications = NotificationManager.shared
@@ -22,28 +24,65 @@ struct BreakTimerView: View {
     @State private var notificationGeneration = 0
     @State private var isBreakActive = true
     @State private var didEnterBackgroundSinceLastActive = false
+    @State private var notificationAuthorizationIsCurrent = false
+    @State private var notificationAuthorizationRefreshGeneration = 0
+    @State private var scheduledCompletionNotificationDeliveryDate: Date? = nil
     private let ticker = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     init(minutes: Int) {
         self.minutes = minutes
         _sessionID = State(initialValue: UUID())
+        _clockAnchor = State(initialValue: nil)
+        _preferences = Query(PrefsConsumerPolicy.descriptor())
+        _activityResetMarkers = Query(
+            ActivityResetPolicy.currentMarkerDescriptor()
+        )
     }
 
     init(recovery: BreakRecoveryEnvelope) {
         minutes = recovery.minutes
         _sessionID = State(initialValue: recovery.id)
         _endDate = State(initialValue: recovery.endDate)
+        _clockAnchor = State(initialValue: recovery.clockAnchor)
+        _scheduledCompletionNotificationDeliveryDate = State(
+            initialValue: recovery.scheduledCompletionNotificationDeliveryDate
+        )
+        _preferences = Query(PrefsConsumerPolicy.descriptor())
+        _activityResetMarkers = Query(
+            ActivityResetPolicy.currentMarkerDescriptor()
+        )
     }
 
     private var remaining: Int {
-        guard let endDate else { return minutes * Constants.Timer.secondsPerMinute }
-        return max(0, Int(ceil(endDate.timeIntervalSince(now))))
+        BreakRecoveryPolicy.remainingSeconds(
+            minutes: minutes,
+            endDate: endDate,
+            at: now
+        )
     }
 
-    private var prefs: Prefs? { preferences.first }
+    private var resetSnapshots: [ActivityResetSnapshot] {
+        activityResetMarkers.map(\.policySnapshot)
+    }
 
-    private var sensoryPreferenceValues: [Bool] {
-        [prefs?.soundOn ?? false, prefs?.hapticsOn ?? false]
+    private var resolvedPreferences: PrefsSyncPolicy.ResolvedState? {
+        PrefsConsumerPolicy.resolvedState(
+            in: preferences,
+            markers: resetSnapshots
+        )
+    }
+
+    private var sensoryPreferences: PrefsSyncPolicy.ResolvedSensoryState {
+        PrefsConsumerPolicy.resolvedSensoryState(in: preferences)
+    }
+
+    private var sensoryPreferenceValues: [String] {
+        [
+            String(sensoryPreferences.soundOn),
+            String(sensoryPreferences.hapticsOn),
+            sensoryPreferences.timerCompletionSound.rawValue,
+            sensoryPreferences.timerCompletionHaptic.rawValue
+        ]
     }
 
     var body: some View {
@@ -113,8 +152,25 @@ struct BreakTimerView: View {
         .task { await prepareBreak() }
         .onReceive(ticker) { date in
             now = date
-            if remaining == 0, scenePhase == .active {
-                signalBreakCompletionIfNeeded(playsSensoryFeedback: true)
+            if remaining == 0,
+               scenePhase == .active,
+               notificationAuthorizationIsCurrent {
+                guard !notificationScheduleState.isScheduling else { return }
+                let completionUptime = ContinuousUptime.now()
+                let returnedFromBackground = didEnterBackgroundSinceLastActive
+                didEnterBackgroundSinceLastActive = false
+                signalBreakCompletionIfNeeded(
+                    playsSensoryFeedback:
+                        TimerCompletionForegroundFeedbackPolicy.shouldPlay(
+                            recoveredAfterExpiration: false,
+                            returnedFromBackground: returnedFromBackground,
+                            notificationMayHaveDelivered:
+                                notificationMayHaveDelivered(
+                                    at: date,
+                                    uptime: completionUptime
+                                )
+                        )
+                )
             }
         }
         .onChange(of: sensoryPreferenceValues) { _, _ in
@@ -129,27 +185,36 @@ struct BreakTimerView: View {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {
                 didEnterBackgroundSinceLastActive = true
+            }
+            notificationAuthorizationRefreshGeneration += 1
+            let refreshGeneration = notificationAuthorizationRefreshGeneration
+            guard newPhase == .active else {
+                notificationAuthorizationIsCurrent = false
                 return
             }
-            guard newPhase == .active, isBreakActive, !didSignalCompletion else { return }
-            let returnedFromBackground = didEnterBackgroundSinceLastActive
-            didEnterBackgroundSinceLastActive = false
-            now = .now
-            if remaining == 0 {
-                // A background notification may already have announced this end;
-                // an inactive-only interruption still deserves the foreground cue.
-                let backgroundNotificationMayHaveFired = returnedFromBackground
-                    && notificationScheduleState == .scheduled
-                signalBreakCompletionIfNeeded(
-                    playsSensoryFeedback: !backgroundNotificationMayHaveFired
-                )
-                return
+            notificationAuthorizationIsCurrent = false
+            Task { @MainActor in
+                await notifications.refreshAuthorizationStatus()
+                guard !Task.isCancelled,
+                      refreshGeneration
+                        == notificationAuthorizationRefreshGeneration,
+                      scenePhase == .active,
+                      isBreakActive,
+                      !didSignalCompletion else { return }
+                notificationAuthorizationIsCurrent = true
+                handleActiveSceneAfterAuthorizationRefresh()
             }
-            Task { await refreshNotificationScheduling() }
         }
         .onDisappear {
+            // A CloudKit-backed RootView is intentionally torn down whenever
+            // the app backgrounds. Invalidate only this view's async callbacks;
+            // the explicit close/completion/account-boundary paths own the OS
+            // notification and persisted recovery cleanup.
             isBreakActive = false
-            stopNotificationScheduling(state: .idle)
+            notificationAuthorizationIsCurrent = false
+            notificationGeneration += 1
+            notificationSchedulingTask?.cancel()
+            notificationSchedulingTask = nil
         }
     }
 
@@ -220,23 +285,96 @@ struct BreakTimerView: View {
 
     @MainActor
     private func prepareBreak() async {
+        guard !Task.isCancelled, isBreakActive else { return }
         configureSensoryPreferences()
+        guard let durationSeconds = BreakRecoveryPolicy.durationSeconds(
+            minutes: minutes
+        ) else {
+            FocusPersistence.clearBreak()
+            isBreakActive = false
+            dismiss()
+            return
+        }
+        let startedAt = Date.now
+        let startedUptime = ContinuousUptime.now()
         let resolvedEndDate = endDate
-            ?? Date.now.addingTimeInterval(TimeInterval(minutes * Constants.Timer.secondsPerMinute))
-        endDate = resolvedEndDate
-        now = .now
+            ?? startedAt.addingTimeInterval(TimeInterval(durationSeconds))
+        let resolvedClockAnchor = clockAnchor ?? {
+            // A missing anchor on a legacy recovery remains untrusted. Only a
+            // newly created break can establish this monotonic continuity.
+            guard endDate == nil else { return nil }
+            return ClockAnchor(
+                wallDate: startedAt,
+                systemUptime: startedUptime
+            )
+        }()
         let recovery = BreakRecoveryEnvelope(
             id: sessionID,
             minutes: minutes,
-            endDate: resolvedEndDate
+            endDate: resolvedEndDate,
+            clockAnchor: resolvedClockAnchor,
+            scheduledCompletionNotificationDeliveryDate:
+                currentNotificationDeliveryWitness
         )
-        FocusPersistence.saveBreak(recovery)
+        guard BreakRecoveryPolicy.isValid(recovery, at: startedAt) else {
+            FocusPersistence.clearBreak()
+            isBreakActive = false
+            dismiss()
+            return
+        }
+        endDate = resolvedEndDate
+        clockAnchor = resolvedClockAnchor
+        now = startedAt
+        FocusPersistence.saveBreak(recovery, at: startedAt)
         guard !Task.isCancelled, isBreakActive else { return }
+        await notifications.refreshAuthorizationStatus()
+        guard !Task.isCancelled, isBreakActive else { return }
+        notificationAuthorizationIsCurrent = scenePhase == .active
         if resolvedEndDate <= .now {
-            signalBreakCompletionIfNeeded(playsSensoryFeedback: false)
+            guard scenePhase == .active else { return }
+            let completionDate = Date.now
+            let completionUptime = ContinuousUptime.now()
+            signalBreakCompletionIfNeeded(
+                playsSensoryFeedback: !notificationMayHaveDelivered(
+                    at: completionDate,
+                    uptime: completionUptime
+                )
+            )
             return
         }
         await refreshNotificationScheduling()
+    }
+
+    @MainActor
+    private func handleActiveSceneAfterAuthorizationRefresh() {
+        let returnedFromBackground = didEnterBackgroundSinceLastActive
+        didEnterBackgroundSinceLastActive = false
+        now = .now
+        let completionUptime = ContinuousUptime.now()
+        if remaining == 0 {
+            if notificationScheduleState.isScheduling {
+                // Let the ticker finish after Notification Center returns
+                // success/failure, retaining the background-return flag.
+                didEnterBackgroundSinceLastActive = returnedFromBackground
+                return
+            }
+            // A background notification may already have announced this end;
+            // an inactive-only interruption still deserves the foreground cue.
+            signalBreakCompletionIfNeeded(
+                playsSensoryFeedback:
+                    TimerCompletionForegroundFeedbackPolicy.shouldPlay(
+                        recoveredAfterExpiration: false,
+                        returnedFromBackground: returnedFromBackground,
+                        notificationMayHaveDelivered:
+                            notificationMayHaveDelivered(
+                                at: now,
+                                uptime: completionUptime
+                            )
+                    )
+            )
+            return
+        }
+        Task { await refreshNotificationScheduling() }
     }
 
     @MainActor
@@ -255,34 +393,48 @@ struct BreakTimerView: View {
         FocusPersistence.clearBreak()
         stopNotificationScheduling(state: .idle)
 
-        let soundOn = prefs?.soundOn ?? false
-        let hapticsOn = prefs?.hapticsOn ?? false
+        let soundOn = sensoryPreferences.soundOn
+        let hapticsOn = sensoryPreferences.hapticsOn
         SoundSynth.shared.isEnabled = soundOn
         Haptics.shared.isEnabled = hapticsOn
         if playsSensoryFeedback, soundOn {
-            SoundSynth.shared.playCompletionChime()
+            SoundSynth.shared.playTimerCompletion(
+                sensoryPreferences.timerCompletionSound
+            )
         }
         if playsSensoryFeedback, hapticsOn {
-            Haptics.shared.playTimerCompletion()
+            Haptics.shared.playTimerCompletion(
+                sensoryPreferences.timerCompletionHaptic
+            )
         }
         UIAccessibility.post(notification: .announcement, argument: "休憩が終わりました")
     }
 
     @MainActor
     private func configureSensoryPreferences() {
-        SoundSynth.shared.isEnabled = prefs?.soundOn ?? false
-        Haptics.shared.isEnabled = prefs?.hapticsOn ?? false
+        SoundSynth.shared.isEnabled = sensoryPreferences.soundOn
+        Haptics.shared.isEnabled = sensoryPreferences.hapticsOn
     }
 
     @MainActor
     private func refreshNotificationScheduling(
         requestAuthorizationIfNeeded: Bool = false
     ) async {
-        guard isBreakActive,
-              !didSignalCompletion,
-              let endDate,
-              endDate > .now else {
+        // View disappearance during CloudKit account revalidation preserves
+        // the already accepted OS request. A stale task must be a no-op, not a
+        // semantic break cancellation.
+        guard !Task.isCancelled,
+              isBreakActive,
+              !didSignalCompletion else { return }
+        guard let endDate else {
             stopNotificationScheduling(state: .idle)
+            return
+        }
+        guard endDate > .now else {
+            // Notification Center may be at the delivery boundary. Preserve
+            // the request/witness until the active completion policy decides
+            // whether an in-app cue is still owed.
+            notificationScheduleState = .idle
             return
         }
 
@@ -292,6 +444,7 @@ struct BreakTimerView: View {
               isBreakActive,
               !didSignalCompletion,
               generationBeforeRefresh == notificationGeneration else { return }
+        notificationAuthorizationIsCurrent = scenePhase == .active
 
         switch notifications.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
@@ -338,9 +491,17 @@ struct BreakTimerView: View {
 
     @MainActor
     private func scheduleBreakNotification(endDate: Date) {
-        guard isBreakActive, !didSignalCompletion, endDate > .now else {
-            stopNotificationScheduling(state: .idle)
+        guard isBreakActive, !didSignalCompletion else { return }
+        guard endDate > .now else {
+            notificationScheduleState = .idle
             return
+        }
+
+        // A replacement request gets a fresh relative-time origin. Never
+        // retain the older, earlier witness while registration is pending.
+        if scheduledCompletionNotificationDeliveryDate != nil {
+            scheduledCompletionNotificationDeliveryDate = nil
+            persistBreakRecovery()
         }
 
         notificationGeneration += 1
@@ -349,7 +510,8 @@ struct BreakTimerView: View {
         let previousTask = notificationSchedulingTask
         previousTask?.cancel()
         notificationScheduleState = .scheduling
-        let playsSound = prefs?.soundOn ?? false
+        let playsSound = sensoryPreferences.soundOn
+        let completionSound = sensoryPreferences.timerCompletionSound
 
         notificationSchedulingTask = Task { @MainActor in
             // Serializing generations prevents an old cancellation from removing
@@ -362,27 +524,30 @@ struct BreakTimerView: View {
                 sessionID: scheduledSessionID,
                 endDate: endDate
             ) else {
-                notifications.cancelBreakCompletion(id: scheduledSessionID)
                 return
             }
 
             do {
-                try await notifications.scheduleBreakCompletion(
+                let scheduleResult = try await notifications
+                    .scheduleBreakCompletion(
                     id: scheduledSessionID,
                     endDate: endDate,
-                    playsSound: playsSound
+                    playsSound: playsSound,
+                    completionSound: completionSound
                 )
+                guard case let .accepted(notificationDeliveryDate) = scheduleResult
+                else { return }
                 guard notificationRequestIsCurrent(
                     generation: generation,
                     sessionID: scheduledSessionID,
                     endDate: endDate
                 ) else {
-                    // UNUserNotificationCenter.add can finish after Task cancellation.
-                    // Remove that late request immediately when its generation is stale.
-                    notifications.cancelBreakCompletion(id: scheduledSessionID)
                     return
                 }
                 notificationScheduleState = .scheduled
+                scheduledCompletionNotificationDeliveryDate =
+                    notificationDeliveryDate
+                persistBreakRecovery()
             } catch {
                 await notifications.refreshAuthorizationStatus()
                 guard notificationRequestIsCurrent(
@@ -390,7 +555,6 @@ struct BreakTimerView: View {
                     sessionID: scheduledSessionID,
                     endDate: endDate
                 ) else {
-                    notifications.cancelBreakCompletion(id: scheduledSessionID)
                     return
                 }
                 notificationScheduleState = notifications.authorizationStatus == .denied
@@ -412,7 +576,6 @@ struct BreakTimerView: View {
             && generation == notificationGeneration
             && sessionID == self.sessionID
             && endDate == self.endDate
-            && endDate > .now
     }
 
     @MainActor
@@ -420,7 +583,58 @@ struct BreakTimerView: View {
         notificationGeneration += 1
         notificationSchedulingTask?.cancel()
         notifications.cancelBreakCompletion(id: sessionID)
+        let hadScheduledWitness =
+            scheduledCompletionNotificationDeliveryDate != nil
+        scheduledCompletionNotificationDeliveryDate = nil
         notificationScheduleState = state
+        if hadScheduledWitness { persistBreakRecovery() }
+    }
+
+    @MainActor
+    private func persistBreakRecovery() {
+        guard isBreakActive, !didSignalCompletion, let endDate else { return }
+        FocusPersistence.saveBreak(BreakRecoveryEnvelope(
+            id: sessionID,
+            minutes: minutes,
+            endDate: endDate,
+            clockAnchor: clockAnchor,
+            scheduledCompletionNotificationDeliveryDate:
+                currentNotificationDeliveryWitness
+        ))
+    }
+
+    private var currentNotificationDeliveryWitness: Date? {
+        guard let deliveryDate = scheduledCompletionNotificationDeliveryDate,
+              let endDate,
+              deliveryDate >= endDate.addingTimeInterval(-0.01),
+              deliveryDate <= endDate.addingTimeInterval(
+                IntegrationConstants.notificationMinimumDelay
+                    + IntegrationConstants
+                        .notificationWitnessRegistrationAllowance
+              )
+        else { return nil }
+        return deliveryDate
+    }
+
+    private func notificationMayHaveDelivered(
+        at date: Date,
+        uptime: TimeInterval
+    ) -> Bool {
+        let timingIsTrustworthy = TimerCompletionForegroundFeedbackPolicy
+            .notificationTimingIsTrustworthy(
+                source: .timer,
+                clockAnchor: clockAnchor,
+                now: date,
+                uptime: uptime
+            )
+        return TimerCompletionForegroundFeedbackPolicy
+            .notificationMayHaveDelivered(
+                isAuthorized: notifications.isAuthorized,
+                expectedDeliveryDate: timingIsTrustworthy
+                    ? currentNotificationDeliveryWitness
+                    : nil,
+                now: date
+            )
     }
 
     @MainActor
@@ -440,4 +654,9 @@ private enum BreakNotificationScheduleState: Equatable {
     case scheduling
     case scheduled
     case failed
+
+    var isScheduling: Bool {
+        if case .scheduling = self { return true }
+        return false
+    }
 }

@@ -191,6 +191,103 @@ final class StrataMathTests: XCTestCase {
         XCTAssertEqual(StrataMath.totalPebbleCount(sessions: sessions, strata: [stratum]), beforeCount)
     }
 
+    func testHistoryProjectionsExcludeUnsupportedSyncedSessionsBeforeAggregation() {
+        let end = Date(timeIntervalSince1970: 1_800_000_000)
+        func timer(id: UUID = UUID()) -> StudySession {
+            StudySession(
+                id: id,
+                startAt: end.addingTimeInterval(-1_500),
+                endAt: end,
+                seconds: 1_500,
+                source: .timer,
+                grams: 250,
+                deviceDayKey: "integrity-projection"
+            )
+        }
+
+        let valid = timer()
+        let overflow = timer()
+        overflow.seconds = Int.max
+        overflow.grams = Int.max
+        let negative = timer()
+        negative.seconds = -1
+        negative.grams = -1
+        let incoherentMass = timer()
+        incoherentMass.seconds = 60
+        incoherentMass.grams = 1_800
+        let badDate = timer()
+        badDate.startAt = badDate.endAt.addingTimeInterval(1)
+        let values = [valid, overflow, negative, incoherentMass, badDate]
+
+        XCTAssertEqual(StrataMath.totalGrams(sessions: values, strata: []), 250)
+        XCTAssertEqual(StrataMath.totalPebbleCount(sessions: values, strata: []), 1)
+        XCTAssertEqual(
+            HomeProjectionPolicy.totals(roots: [], looseSessions: values),
+            HomeProjectionPolicy.Totals(grams: 250, pebbleCount: 1)
+        )
+        XCTAssertEqual(
+            ShareCardSelection.visibleLooseSessions(from: values, representedBy: [ShareStratumVisual]())
+                .map(\.id),
+            [valid.id]
+        )
+
+        let taintedStratum = Stratum(
+            pebbleCount: 1,
+            heightPt: 1,
+            colorMixJSON: "[]",
+            monthLabel: "unsupported",
+            grams: Int.max,
+            sessionIDs: [overflow.id]
+        )
+        XCTAssertEqual(
+            StrataMath.totalGrams(sessions: values, strata: [taintedStratum]),
+            250
+        )
+        XCTAssertEqual(
+            StrataMath.totalPebbleCount(sessions: values, strata: [taintedStratum]),
+            1
+        )
+
+        let taintedLeaf = AggregatePebble(
+            level: 1,
+            pebbleCount: 1,
+            grams: Int.max,
+            measuredPebbleCount: 1,
+            manualPebbleCount: 0,
+            colorMixJSON: "[]",
+            periodStart: overflow.startAt,
+            periodEnd: overflow.endAt,
+            sessionIDs: [overflow.id]
+        )
+        let taintedParent = AggregatePebble(
+            level: 2,
+            pebbleCount: 1,
+            childAggregateCount: 1,
+            grams: Int.max,
+            measuredPebbleCount: 1,
+            manualPebbleCount: 0,
+            colorMixJSON: "[]",
+            periodStart: overflow.startAt,
+            periodEnd: overflow.endAt,
+            childAggregateIDs: [taintedLeaf.id]
+        )
+        taintedLeaf.parentAggregateID = taintedParent.id
+        XCTAssertEqual(
+            StrataMath.totalGrams(
+                sessions: values,
+                aggregates: [taintedLeaf, taintedParent]
+            ),
+            250
+        )
+        XCTAssertEqual(
+            StrataMath.totalPebbleCount(
+                sessions: values,
+                aggregates: [taintedLeaf, taintedParent]
+            ),
+            1
+        )
+    }
+
     func testOrphanBakedSessionStaysVisibleUntilItsStratumArrives() {
         let sessionID = UUID()
         let now = Date(timeIntervalSince1970: 2_000)
@@ -512,7 +609,12 @@ final class StrataMathTests: XCTestCase {
         XCTAssertTrue(request.outputDescriptor.accessibilityDescription.contains("英語など"))
         XCTAssertTrue(request.outputDescriptor.accessibilityDescription.contains("10粒"))
         XCTAssertTrue(request.outputDescriptor.accessibilityDescription.contains("自己申告3粒"))
-        XCTAssertTrue(request.outputDescriptor.accessibilityDescription.contains("虹2粒"))
+        XCTAssertFalse(request.outputDescriptor.accessibilityDescription.contains("虹2粒"))
+        XCTAssertTrue(
+            request.outputDescriptor.aggregate?
+                .accessibilityDescription(presentsRareRewards: true)
+                .contains("虹2粒") == true
+        )
         XCTAssertEqual(request.outputDescriptor.aggregate?.pebbleCount, 10)
     }
 
@@ -564,13 +666,15 @@ final class StrataMathTests: XCTestCase {
         let parentID = UUID()
         var sessions: [StudySession] = []
         var leaves: [AggregatePebble] = []
-        let base = Date(timeIntervalSince1970: 20_000)
+        let base = Date.now.addingTimeInterval(-200_000)
         for group in 0..<10 {
             let members = (0..<10).map { index -> StudySession in
+                let offset = Double((group * 10 + index) * 1_500)
+                let sessionStart = base.addingTimeInterval(offset)
                 let session = StudySession(
                     id: UUID(),
-                    startAt: base.addingTimeInterval(Double(group * 10 + index)),
-                    endAt: base.addingTimeInterval(Double(group * 10 + index + 1)),
+                    startAt: sessionStart,
+                    endAt: sessionStart.addingTimeInterval(1_500),
                     seconds: 1_500,
                     source: .timer,
                     grams: Constants.Mass.measuredPebbleGrams,
@@ -691,12 +795,13 @@ final class StrataMathTests: XCTestCase {
     }
 
     func testOverlappingRootsRecoverExactTotalFromDownloadedSessions() {
-        let base = Date(timeIntervalSince1970: 32_000)
+        let base = Date.now.addingTimeInterval(-30_000)
         let sessions = (0..<11).map { index in
-            StudySession(
+            let sessionStart = base.addingTimeInterval(Double(index * 1_500))
+            return StudySession(
                 id: UUID(),
-                startAt: base.addingTimeInterval(Double(index)),
-                endAt: base.addingTimeInterval(Double(index + 1)),
+                startAt: sessionStart,
+                endAt: sessionStart.addingTimeInterval(1_500),
                 seconds: 1_500,
                 source: .timer,
                 grams: Constants.Mass.measuredPebbleGrams,
@@ -1041,6 +1146,49 @@ final class StrataMathTests: XCTestCase {
     }
 
     @MainActor
+    func testReduceMotionFinishesActiveAggregateOnceWithoutResidualMotion() async throws {
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        scene.reduceMotion = false
+        let descriptors = makeSceneAggregateDescriptors()
+        var deliveredRequestIDs: [UUID] = []
+        scene.onAggregateRequested = { request in
+            deliveredRequestIDs.append(request.id)
+        }
+        scene.restore(pebbles: descriptors)
+
+        scene.update(0)
+        XCTAssertTrue(scene.isBakeInProgress)
+        XCTAssertEqual(scene.physicalPebbleCount, 0)
+        XCTAssertTrue(deliveredRequestIDs.isEmpty)
+
+        scene.reduceMotion = true
+
+        XCTAssertFalse(scene.isBakeInProgress)
+        XCTAssertEqual(deliveredRequestIDs.count, 1)
+        XCTAssertEqual(scene.physicalPebbleCount, 1)
+        XCTAssertEqual(scene.representedPebbleCount, 100)
+        let aggregate = try XCTUnwrap(scene.childNode(withName: "//pebble.*") as? PebbleNode)
+        let body = try XCTUnwrap(aggregate.physicsBody)
+        XCTAssertFalse(body.isDynamic)
+        XCTAssertTrue(body.isResting)
+        XCTAssertEqual(body.velocity.dx, 0, accuracy: 0.001)
+        XCTAssertEqual(body.velocity.dy, 0, accuracy: 0.001)
+        XCTAssertEqual(body.angularVelocity, 0, accuracy: 0.001)
+        XCTAssertFalse(aggregate.hasActions())
+
+        try await Task.sleep(for: .milliseconds(650))
+        XCTAssertEqual(
+            deliveredRequestIDs.count,
+            1,
+            "The old animation deadline must not commit the transaction twice"
+        )
+        XCTAssertEqual(scene.physicalPebbleCount, 1)
+        XCTAssertEqual(scene.representedPebbleCount, 100)
+    }
+
+    @MainActor
     func testAggregateDoesNotStartWithoutPersistenceReceiver() {
         let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
         scene.soundEnabled = false
@@ -1222,6 +1370,367 @@ final class StrataMathTests: XCTestCase {
         XCTAssertTrue(gate.accepts(secondGeneration, reduceMotion: false))
     }
 
+    func testJarMotionActivationRequiresOneVisibleActivePhysicalJar() {
+        XCTAssertTrue(JarMotionActivationPolicy.shouldRun(
+            isMotionEnabled: true,
+            reduceMotion: false,
+            sceneIsActive: true,
+            hasPhysicalContent: true
+        ))
+        XCTAssertFalse(JarMotionActivationPolicy.shouldRun(
+            isMotionEnabled: false,
+            reduceMotion: false,
+            sceneIsActive: true,
+            hasPhysicalContent: true
+        ))
+        XCTAssertFalse(JarMotionActivationPolicy.shouldRun(
+            isMotionEnabled: true,
+            reduceMotion: true,
+            sceneIsActive: true,
+            hasPhysicalContent: true
+        ))
+        XCTAssertFalse(JarMotionActivationPolicy.shouldRun(
+            isMotionEnabled: true,
+            reduceMotion: false,
+            sceneIsActive: false,
+            hasPhysicalContent: true
+        ))
+        XCTAssertFalse(JarMotionActivationPolicy.shouldRun(
+            isMotionEnabled: true,
+            reduceMotion: false,
+            sceneIsActive: true,
+            hasPhysicalContent: false
+        ))
+        XCTAssertTrue(JarMotionActivationPolicy.shouldCaptureShake(
+            isMotionEnabled: true,
+            sceneIsActive: true,
+            hasPhysicalContent: true
+        ))
+        XCTAssertFalse(JarMotionActivationPolicy.shouldCaptureShake(
+            isMotionEnabled: true,
+            sceneIsActive: false,
+            hasPhysicalContent: true
+        ))
+    }
+
+    func testTransientMotionGateInvalidatesScheduledTapWorkSynchronously() {
+        var gate = JarTransientMotionGate()
+        let tapGeneration = gate.begin()
+        XCTAssertTrue(gate.accepts(tapGeneration))
+
+        gate.invalidate()
+        XCTAssertFalse(gate.accepts(tapGeneration))
+
+        let nextTapGeneration = gate.begin()
+        XCTAssertNotEqual(tapGeneration, nextTapGeneration)
+        XCTAssertFalse(gate.accepts(tapGeneration))
+        XCTAssertTrue(gate.accepts(nextTapGeneration))
+    }
+
+    func testTapLaunchPlanTargetsThreeDiametersAndCapsHeavyGemTravel() {
+        let standardRadius = Constants.Jar.measuredRadius
+        let standard = JarTapLaunchPolicy.plan(
+            radius: standardRadius,
+            strength: 1,
+            upwardRoom: 400
+        )
+        XCTAssertEqual(
+            standard.targetTravel,
+            standardRadius * 2 * JarTapLaunchPolicy.targetDiameterMultiplier,
+            accuracy: 0.001
+        )
+        XCTAssertGreaterThan(standard.verticalVelocity, 200)
+        XCTAssertGreaterThan(standard.horizontalVelocity, 80)
+        XCTAssertGreaterThan(standard.returnVelocity, 180)
+
+        let heavy = JarTapLaunchPolicy.plan(
+            radius: Constants.Jar.aggregateMaximumRadius,
+            strength: 1,
+            upwardRoom: 400
+        )
+        XCTAssertEqual(
+            heavy.targetTravel,
+            JarTapLaunchPolicy.maximumTargetTravel,
+            accuracy: 0.001
+        )
+        XCTAssertLessThan(
+            heavy.targetTravel,
+            Constants.Jar.aggregateMaximumRadius * 2
+                * JarTapLaunchPolicy.targetDiameterMultiplier,
+            "A large aggregate should retain visible weight instead of crossing most of the jar"
+        )
+
+        let cramped = JarTapLaunchPolicy.plan(
+            radius: standardRadius,
+            strength: 1,
+            upwardRoom: 17
+        )
+        XCTAssertEqual(cramped.targetTravel, 17, accuracy: 0.001)
+        XCTAssertTrue(cramped.verticalVelocity.isFinite)
+        XCTAssertTrue(cramped.horizontalVelocity.isFinite)
+        XCTAssertTrue(cramped.returnVelocity.isFinite)
+    }
+
+    func testTapLaunchPlanFailSoftsMalformedInputs() {
+        let plan = JarTapLaunchPolicy.plan(
+            radius: .nan,
+            strength: .infinity,
+            upwardRoom: -.infinity
+        )
+        XCTAssertEqual(plan.targetTravel, 0)
+        XCTAssertEqual(plan.verticalVelocity, 0)
+        XCTAssertEqual(plan.horizontalVelocity, 0)
+        XCTAssertEqual(plan.returnVelocity, 0)
+    }
+
+    func testNudgeRateLimiterRejectsRepeatAndNonmonotonicInput() {
+        var limiter = JarGestureRateLimiter()
+        XCTAssertTrue(limiter.accepts(uptime: 10, cooldown: 0.45))
+        XCTAssertFalse(limiter.accepts(uptime: 10.44, cooldown: 0.45))
+        XCTAssertTrue(limiter.accepts(uptime: 10.46, cooldown: 0.45))
+        XCTAssertFalse(limiter.accepts(uptime: 9, cooldown: 0.45))
+        XCTAssertFalse(limiter.accepts(uptime: .nan, cooldown: 0.45))
+    }
+
+    func testShakeVelocityPolicyClampsAndPreservesMassWeighting() {
+        let impulse = CGVector(dx: 12, dy: 8)
+        let small = JarShakeVelocityPolicy.velocity(
+            current: .zero,
+            impulse: impulse,
+            mass: 1,
+            maximumHorizontalVelocity: 20,
+            maximumVerticalVelocity: 20
+        )
+        let large = JarShakeVelocityPolicy.velocity(
+            current: .zero,
+            impulse: impulse,
+            mass: 4,
+            maximumHorizontalVelocity: 20,
+            maximumVerticalVelocity: 20
+        )
+        XCTAssertGreaterThan(hypot(small.dx, small.dy), hypot(large.dx, large.dy))
+
+        let clamped = JarShakeVelocityPolicy.velocity(
+            current: CGVector(dx: 100, dy: -100),
+            impulse: .zero,
+            mass: 1,
+            maximumHorizontalVelocity: 12,
+            maximumVerticalVelocity: 14
+        )
+        XCTAssertEqual(clamped.dx, 12, accuracy: 0.001)
+        XCTAssertEqual(clamped.dy, -14, accuracy: 0.001)
+    }
+
+    func testInteractionCollisionBudgetIsBoundedToGestureWindow() {
+        var budget = JarInteractionCollisionBudget()
+        XCTAssertFalse(budget.isOpen(uptime: 10), "Passive contacts have no budget")
+
+        budget.begin(
+            uptime: 10,
+            muteDuration: 0.20,
+            followUpDuration: 0.80,
+            soundLimit: 2,
+            hapticLimit: 1
+        )
+        XCTAssertEqual(
+            budget.consume(uptime: 10.19, soundReady: true, hapticReady: true),
+            JarInteractionCollisionDecision(playSound: false, playHaptic: false)
+        )
+        XCTAssertEqual(
+            budget.consume(uptime: 10.20, soundReady: true, hapticReady: true),
+            JarInteractionCollisionDecision(playSound: true, playHaptic: true)
+        )
+        XCTAssertEqual(
+            budget.consume(uptime: 10.40, soundReady: true, hapticReady: true),
+            JarInteractionCollisionDecision(playSound: true, playHaptic: false)
+        )
+        XCTAssertEqual(
+            budget.consume(uptime: 10.60, soundReady: true, hapticReady: true),
+            JarInteractionCollisionDecision(playSound: false, playHaptic: false)
+        )
+        XCTAssertFalse(budget.isOpen(uptime: 10.81))
+
+        budget.cancel()
+        XCTAssertFalse(budget.isOpen(uptime: 10.50))
+    }
+
+    func testJarSensoryPlanMakesPhysicalAbundanceDenseButBounded() throws {
+        let sample = JarSensorySample(radius: 11.5, coupling: 1)
+        let one = JarSensoryPolicy.plan(
+            trigger: .tap,
+            samples: [sample],
+            gestureStrength: 0.9,
+            abundanceCount: 1,
+            seed: 42
+        )
+        let many = JarSensoryPolicy.plan(
+            trigger: .tap,
+            samples: [sample],
+            gestureStrength: 0.9,
+            abundanceCount: 64,
+            seed: 42
+        )
+        let shaken = JarSensoryPolicy.plan(
+            trigger: .shake,
+            samples: Array(repeating: sample, count: Constants.Jar.maxPhysicsBodies),
+            gestureStrength: 1,
+            abundanceCount: Constants.Jar.maxPhysicsBodies,
+            seed: 42
+        )
+
+        XCTAssertEqual(one.clinks.count, 1)
+        XCTAssertGreaterThan(many.clinks.count, one.clinks.count)
+        XCTAssertLessThanOrEqual(many.clinks.count, 4)
+        XCTAssertLessThanOrEqual(many.hapticPulses.count, 3)
+        XCTAssertLessThanOrEqual(shaken.clinks.count, 6)
+        XCTAssertLessThanOrEqual(shaken.hapticPulses.count, 4)
+        XCTAssertLessThan(many.soundCooldown, one.soundCooldown)
+        XCTAssertTrue(shaken.clinks.allSatisfy {
+            $0.delay.isFinite && (0 ... 0.20).contains($0.delay)
+                && $0.pitchRate.isFinite && (0.50 ... 1.75).contains($0.pitchRate)
+                && $0.gain.isFinite && (0 ... 0.52).contains($0.gain)
+        })
+        let squaredGain = shaken.clinks.reduce(0.0) {
+            $0 + Double($1.gain * $1.gain)
+        }
+        XCTAssertLessThanOrEqual(squaredGain, 0.52 * 0.52 + 0.000_01)
+    }
+
+    func testJarSensoryPlanMakesLargeGemLowerAndHeavier() throws {
+        let small = JarSensoryPolicy.plan(
+            trigger: .tap,
+            samples: [JarSensorySample(radius: 8, coupling: 1)],
+            gestureStrength: 0.85,
+            seed: 7
+        )
+        let large = JarSensoryPolicy.plan(
+            trigger: .tap,
+            samples: [JarSensorySample(radius: 28, coupling: 1)],
+            gestureStrength: 0.85,
+            seed: 7
+        )
+
+        XCTAssertLessThan(
+            try XCTUnwrap(large.clinks.first).pitchRate,
+            try XCTUnwrap(small.clinks.first).pitchRate
+        )
+        XCTAssertGreaterThan(
+            try XCTUnwrap(large.hapticPulses.first).intensity,
+            try XCTUnwrap(small.hapticPulses.first).intensity
+        )
+        XCTAssertLessThan(
+            try XCTUnwrap(large.hapticPulses.first).sharpness,
+            try XCTUnwrap(small.hapticPulses.first).sharpness
+        )
+        XCTAssertNil(small.rumble)
+        XCTAssertNotNil(large.rumble)
+    }
+
+    func testJarSensoryPlanIsDeterministicAndRejectsInvalidInput() {
+        let input = [
+            JarSensorySample(radius: 11.5, coupling: 1),
+            JarSensorySample(radius: 28, coupling: 0.7)
+        ]
+        let first = JarSensoryPolicy.plan(
+            trigger: .shake,
+            samples: input,
+            gestureStrength: 0.8,
+            abundanceCount: 18,
+            seed: 9_001
+        )
+        let second = JarSensoryPolicy.plan(
+            trigger: .shake,
+            samples: input,
+            gestureStrength: 0.8,
+            abundanceCount: 18,
+            seed: 9_001
+        )
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(
+            JarSensoryPolicy.plan(
+                trigger: .tap,
+                samples: [],
+                gestureStrength: 1,
+                seed: 1
+            ),
+            .silent
+        )
+        XCTAssertEqual(
+            JarSensoryPolicy.plan(
+                trigger: .tap,
+                samples: [JarSensorySample(radius: .nan, coupling: 1)],
+                gestureStrength: 1,
+                seed: 1
+            ),
+            .silent
+        )
+        XCTAssertEqual(
+            JarSensoryPolicy.plan(
+                trigger: .tap,
+                samples: input,
+                gestureStrength: .infinity,
+                seed: 1
+            ),
+            .silent
+        )
+    }
+
+    func testShakeDetectorRequiresOpposingPeaksAndRateLimitsHapticEcho() throws {
+        var detector = JarShakeDetector()
+        XCTAssertNil(detector.ingest(x: 0.2, y: 0.1, z: 0, uptime: 1.0))
+        XCTAssertNil(detector.ingest(x: 1.5, y: 0, z: 0, uptime: 1.1))
+        XCTAssertNil(
+            detector.ingest(x: 1.6, y: 0.1, z: 0, uptime: 1.2),
+            "A stronger peak in the same direction is not a shake by itself"
+        )
+        let event = try XCTUnwrap(
+            detector.ingest(x: -1.7, y: 0, z: 0, uptime: 1.36)
+        )
+        XCTAssertTrue((0.35 ... 1).contains(event.strength))
+        XCTAssertEqual(event.horizontalDirection, -1, accuracy: 0.001)
+        XCTAssertFalse(detector.isArmed)
+
+        XCTAssertNil(
+            detector.ingest(x: 1.8, y: 0, z: 0, uptime: 1.45),
+            "The haptic generated by a shake cannot immediately retrigger it"
+        )
+        XCTAssertNil(detector.ingest(x: 0.1, y: 0, z: 0, uptime: 2.20))
+        XCTAssertNil(detector.ingest(x: 0.1, y: 0, z: 0, uptime: 2.36))
+        XCTAssertTrue(detector.isArmed)
+        XCTAssertNil(detector.ingest(x: 1.5, y: 0, z: 0, uptime: 2.40))
+        XCTAssertNotNil(detector.ingest(x: -1.5, y: 0, z: 0, uptime: 2.58))
+    }
+
+    func testShakeDetectorRecognizesAComfortableLightBackAndForthGesture() {
+        var detector = JarShakeDetector()
+        XCTAssertNil(detector.ingest(x: 0.96, y: 0.05, z: 0, uptime: 1.0))
+        XCTAssertNotNil(
+            detector.ingest(x: -0.98, y: -0.04, z: 0, uptime: 1.36),
+            "A deliberate light shake must not require a forceful 1.35g snap"
+        )
+    }
+
+    func testShakeDetectorRejectsSingleBumpExpiredPeakAndNonfiniteInput() {
+        var detector = JarShakeDetector()
+        XCTAssertNil(detector.ingest(x: .nan, y: 0, z: 0, uptime: 1))
+        XCTAssertNil(detector.ingest(x: 1.8, y: 0, z: 0, uptime: 2))
+        XCTAssertNil(
+            detector.ingest(x: -1.8, y: 0, z: 0, uptime: 2.5),
+            "Opposing peaks outside the reversal window are separate bumps"
+        )
+    }
+
+    func testShakeDetectorPreservesExternalHapticSuppressionAcrossReset() {
+        var detector = JarShakeDetector()
+        detector.suppress(until: 5)
+        detector.reset()
+
+        XCTAssertNil(detector.ingest(x: 1.8, y: 0, z: 0, uptime: 4.7))
+        XCTAssertNil(detector.ingest(x: -1.8, y: 0, z: 0, uptime: 4.9))
+        XCTAssertNil(detector.ingest(x: 1.8, y: 0, z: 0, uptime: 5.01))
+        XCTAssertNotNil(detector.ingest(x: -1.8, y: 0, z: 0, uptime: 5.20))
+    }
+
     @MainActor
     func testReduceMotionImmediatelyRestoresDefaultGravity() {
         let scene = JarScene()
@@ -1233,6 +1742,81 @@ final class StrataMathTests: XCTestCase {
 
         XCTAssertEqual(scene.appliedGravityVector.dx, Constants.Jar.gravityVector.dx)
         XCTAssertEqual(scene.appliedGravityVector.dy, Constants.Jar.gravityVector.dy)
+    }
+
+    @MainActor
+    func testReduceMotionTransitionFreezesRestoresAndSafelyThawsBodies() throws {
+        let first = PebbleDescriptor(
+            subjectName: "英語",
+            colorHex: Constants.Color.english,
+            source: .timer,
+            kind: .normal,
+            grams: Constants.Mass.measuredPebbleGrams
+        )
+        let second = PebbleDescriptor(
+            subjectName: "数学",
+            colorHex: Constants.Color.mathematics,
+            source: .timer,
+            kind: .normal,
+            grams: Constants.Mass.measuredPebbleGrams
+        )
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        scene.reduceMotion = false
+        var landingIDs: [UUID] = []
+        scene.onLanding = { landingIDs.append($0.pebble.id) }
+        scene.restore(pebbles: [first])
+
+        let firstNode = try XCTUnwrap(scene.childNode(
+            withName: "//pebble.\(first.id.uuidString)"
+        ) as? PebbleNode)
+        let firstBody = try XCTUnwrap(firstNode.physicsBody)
+        firstBody.velocity = CGVector(dx: 17, dy: 31)
+        firstBody.angularVelocity = 2.5
+        firstBody.linearDamping = 0.03
+        firstBody.usesPreciseCollisionDetection = true
+        firstBody.isResting = false
+
+        scene.reduceMotion = true
+
+        XCTAssertTrue(firstBody.isResting)
+        XCTAssertEqual(firstBody.velocity.dx, 0, accuracy: 0.001)
+        XCTAssertEqual(firstBody.velocity.dy, 0, accuracy: 0.001)
+        XCTAssertEqual(firstBody.angularVelocity, 0, accuracy: 0.001)
+        XCTAssertEqual(firstBody.linearDamping, Constants.Jar.linearDamping, accuracy: 0.001)
+        XCTAssertFalse(firstBody.usesPreciseCollisionDetection)
+        XCTAssertFalse(firstBody.isDynamic)
+        scene.didSimulatePhysics()
+        XCTAssertEqual(firstBody.velocity.dx, 0, accuracy: 0.001)
+        XCTAssertEqual(firstBody.velocity.dy, 0, accuracy: 0.001)
+
+        scene.restore(pebbles: [first, second])
+        let restoredBodies = try [first, second].map { descriptor in
+            let node = try XCTUnwrap(scene.childNode(
+                withName: "//pebble.\(descriptor.id.uuidString)"
+            ) as? PebbleNode)
+            return try XCTUnwrap(node.physicsBody)
+        }
+        for body in restoredBodies {
+            XCTAssertFalse(body.isDynamic)
+            XCTAssertTrue(body.isResting)
+            XCTAssertEqual(body.velocity.dx, 0, accuracy: 0.001)
+            XCTAssertEqual(body.velocity.dy, 0, accuracy: 0.001)
+            XCTAssertEqual(body.angularVelocity, 0, accuracy: 0.001)
+        }
+        XCTAssertTrue(landingIDs.isEmpty, "Restoring and motion preferences never mint records")
+
+        scene.reduceMotion = false
+        for body in restoredBodies {
+            XCTAssertTrue(body.isDynamic)
+            XCTAssertEqual(body.velocity.dx, 0, accuracy: 0.001)
+            XCTAssertEqual(body.velocity.dy, 0, accuracy: 0.001)
+            XCTAssertEqual(body.angularVelocity, 0, accuracy: 0.001)
+            XCTAssertEqual(body.linearDamping, Constants.Jar.linearDamping, accuracy: 0.001)
+            XCTAssertFalse(body.usesPreciseCollisionDetection)
+        }
+        XCTAssertTrue(landingIDs.isEmpty)
     }
 
     @MainActor
@@ -1270,6 +1854,7 @@ final class StrataMathTests: XCTestCase {
         XCTAssertEqual(body.velocity.dy, 0, accuracy: 0.001)
         XCTAssertEqual(body.angularVelocity, 0, accuracy: 0.001)
         XCTAssertTrue(body.isResting)
+        XCTAssertFalse(body.isDynamic)
         XCTAssertEqual(body.categoryBitMask, JarPhysicsCategory.pebble)
         XCTAssertNotEqual(body.collisionBitMask & JarPhysicsCategory.floor, .zero)
         XCTAssertEqual(landingIDs, [descriptor.id])
@@ -1319,6 +1904,7 @@ final class StrataMathTests: XCTestCase {
         XCTAssertEqual(body.velocity.dy, 0, accuracy: 0.001)
         XCTAssertEqual(body.angularVelocity, 0, accuracy: 0.001)
         XCTAssertTrue(body.isResting)
+        XCTAssertFalse(body.isDynamic)
         XCTAssertEqual(body.categoryBitMask, JarPhysicsCategory.pebble)
         XCTAssertEqual(landingCount, 0, "Aggregate drops never impersonate a new study session")
 
@@ -1371,6 +1957,7 @@ final class StrataMathTests: XCTestCase {
         XCTAssertEqual(body.velocity.dy, 0, accuracy: 0.001)
         XCTAssertEqual(body.angularVelocity, 0, accuracy: 0.001)
         XCTAssertTrue(body.isResting)
+        XCTAssertFalse(body.isDynamic)
         XCTAssertNotNil(pebble.childNode(withName: "aggregate.aura"))
         XCTAssertNil(
             pebble.childNode(withName: "aggregate.aura")?
@@ -1464,14 +2051,14 @@ final class StrataMathTests: XCTestCase {
         XCTAssertFalse(bouncedBody.isResting)
         XCTAssertGreaterThan(
             bouncedBody.velocity.dy,
-            65,
-            "The first physics frame needs enough upward velocity for an 18 pt+ visible hop"
+            200,
+            "The first physics frame must carry roughly three gem diameters of travel"
         )
         bouncedBody.velocity = .zero
         scene.didSimulatePhysics()
         XCTAssertGreaterThan(
             bouncedBody.velocity.dy,
-            65,
+            200,
             "A sleeping floor contact must not consume the visible tap response"
         )
         XCTAssertTrue(bouncedNode.hasLanded, "Tap bounce must not re-arm landing rewards")
@@ -1479,6 +2066,494 @@ final class StrataMathTests: XCTestCase {
         XCTAssertEqual(scene.representedPebbleCount, representedCount)
         XCTAssertEqual(scene.queuedDropCount, queuedCount)
         XCTAssertFalse(scene.bouncePebbles(at: bouncedNode.position))
+    }
+
+    @MainActor
+    func testDeviceShakePreservesRecordsAndLargeGemRespondsWithMoreWeight() throws {
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        let small = PebbleDescriptor(
+            id: UUID(uuidString: "E0000000-0000-4000-8000-000000000001")!,
+            subjectName: "英語",
+            colorHex: Constants.Color.english,
+            source: .timer,
+            kind: .normal,
+            grams: Constants.Mass.measuredPebbleGrams
+        )
+        let large = try XCTUnwrap(makeSceneAggregateDescriptors().last)
+        scene.restore(pebbles: [small, large])
+        let smallNode = try XCTUnwrap(scene.childNode(
+            withName: "//pebble.\(small.id.uuidString)"
+        ) as? PebbleNode)
+        let largeNode = try XCTUnwrap(scene.childNode(
+            withName: "//pebble.\(large.id.uuidString)"
+        ) as? PebbleNode)
+        let smallBody = try XCTUnwrap(smallNode.physicsBody)
+        let largeBody = try XCTUnwrap(largeNode.physicsBody)
+        for body in [smallBody, largeBody] {
+            body.velocity = .zero
+            body.angularVelocity = 0
+            body.isResting = true
+            // Simulate the transient state left by a tap. Shake must restore
+            // both values even after it invalidates the delayed tap cleanup.
+            body.linearDamping = 0.03
+            body.usesPreciseCollisionDetection = true
+        }
+        let originalIDs = Set([smallNode.descriptor.id, largeNode.descriptor.id])
+        let originalCount = scene.physicalPebbleCount
+        let originalRepresentedCount = scene.representedPebbleCount
+
+        XCTAssertGreaterThan(largeBody.mass, smallBody.mass)
+        XCTAssertTrue(scene.shakePebbles(strength: 0.8, horizontal: 1))
+        XCTAssertFalse(scene.shakePebbles(strength: 0.8, horizontal: -1))
+        XCTAssertEqual(scene.physicalPebbleCount, originalCount)
+        XCTAssertEqual(scene.representedPebbleCount, originalRepresentedCount)
+        XCTAssertEqual(
+            Set([smallNode.descriptor.id, largeNode.descriptor.id]),
+            originalIDs
+        )
+        XCTAssertFalse(smallBody.isResting)
+        XCTAssertFalse(largeBody.isResting)
+        for body in [smallBody, largeBody] {
+            XCTAssertLessThanOrEqual(
+                abs(body.velocity.dx),
+                Constants.Jar.shakeMaximumHorizontalVelocity + 0.001
+            )
+            XCTAssertLessThanOrEqual(
+                abs(body.velocity.dy),
+                Constants.Jar.shakeMaximumVerticalVelocity + 0.001
+            )
+            XCTAssertEqual(body.linearDamping, Constants.Jar.linearDamping, accuracy: 0.001)
+            XCTAssertFalse(
+                body.usesPreciseCollisionDetection,
+                "A landed body must not retain expensive CCD after shake"
+            )
+        }
+        XCTAssertGreaterThan(
+            hypot(smallBody.velocity.dx, smallBody.velocity.dy),
+            hypot(largeBody.velocity.dx, largeBody.velocity.dy),
+            "The same bounded impulse should move the larger radius-derived mass less"
+        )
+    }
+
+    @MainActor
+    func testDeviceShakeIsStaticWithReduceMotionAndRejectsAnEmptyJar() throws {
+        let empty = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        empty.soundEnabled = false
+        empty.hapticsEnabled = false
+        XCTAssertFalse(empty.shakePebbles(strength: 1, horizontal: 1))
+
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        scene.reduceMotion = true
+        let descriptor = PebbleDescriptor(
+            subjectName: "英語",
+            colorHex: Constants.Color.english,
+            source: .timer,
+            kind: .normal,
+            grams: Constants.Mass.measuredPebbleGrams
+        )
+        scene.restore(pebbles: [descriptor])
+        let node = try XCTUnwrap(scene.childNode(
+            withName: "//pebble.\(descriptor.id.uuidString)"
+        ) as? PebbleNode)
+        let body = try XCTUnwrap(node.physicsBody)
+        let originalPosition = node.position
+        let originalVelocity = body.velocity
+        let originalCount = scene.physicalPebbleCount
+        let originalRepresentedCount = scene.representedPebbleCount
+
+        XCTAssertTrue(scene.shakePebbles(strength: 1, horizontal: 1))
+        XCTAssertEqual(node.position.x, originalPosition.x, accuracy: 0.001)
+        XCTAssertEqual(node.position.y, originalPosition.y, accuracy: 0.001)
+        XCTAssertEqual(body.velocity.dx, originalVelocity.dx, accuracy: 0.001)
+        XCTAssertEqual(body.velocity.dy, originalVelocity.dy, accuracy: 0.001)
+        XCTAssertEqual(scene.physicalPebbleCount, originalCount)
+        XCTAssertEqual(scene.representedPebbleCount, originalRepresentedCount)
+    }
+
+    @MainActor
+    func testTapLaunchDrivesOnlyPrimaryAndLeavesCollisionTransferToSpriteKit() throws {
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        let descriptors = [
+            PebbleDescriptor(
+                subjectName: "primary",
+                colorHex: Constants.Color.english,
+                source: .timer,
+                kind: .normal,
+                grams: Constants.Mass.measuredPebbleGrams
+            ),
+            PebbleDescriptor(
+                subjectName: "neighbour",
+                colorHex: Constants.Color.mathematics,
+                source: .timer,
+                kind: .normal,
+                grams: Constants.Mass.measuredPebbleGrams
+            ),
+            PebbleDescriptor(
+                subjectName: "far",
+                colorHex: Constants.Color.science,
+                source: .timer,
+                kind: .normal,
+                grams: Constants.Mass.measuredPebbleGrams
+            )
+        ]
+        scene.restore(pebbles: descriptors)
+        let nodes = try descriptors.map { descriptor in
+            try XCTUnwrap(scene.childNode(
+                withName: "//pebble.\(descriptor.id.uuidString)"
+            ) as? PebbleNode)
+        }
+        let bodies = try nodes.map { try XCTUnwrap($0.physicsBody) }
+        nodes[0].position = CGPoint(x: 170, y: 90)
+        nodes[1].position = CGPoint(x: 194, y: 90)
+        nodes[2].position = CGPoint(x: 320, y: 90)
+        for body in bodies {
+            body.velocity = .zero
+            body.angularVelocity = 0
+            body.isResting = true
+        }
+
+        XCTAssertTrue(scene.bouncePebbles(at: nodes[0].position))
+        XCTAssertEqual(
+            scene.activeTapDrivenBodyCount,
+            1,
+            "Only the touched gem may receive scripted velocity"
+        )
+        XCTAssertGreaterThan(bodies[0].velocity.dy, 200)
+        XCTAssertGreaterThan(abs(bodies[0].velocity.dx), 80)
+        XCTAssertEqual(bodies[1].velocity.dx, 0, accuracy: 0.001)
+        XCTAssertEqual(bodies[1].velocity.dy, 0, accuracy: 0.001)
+        XCTAssertEqual(bodies[2].velocity.dx, 0, accuracy: 0.001)
+        XCTAssertEqual(bodies[2].velocity.dy, 0, accuracy: 0.001)
+        XCTAssertNotEqual(
+            bodies[0].collisionBitMask & JarPhysicsCategory.pebble,
+            .zero,
+            "The launched gem must transfer motion through SpriteKit contacts"
+        )
+        XCTAssertNotEqual(
+            bodies[1].collisionBitMask & JarPhysicsCategory.pebble,
+            .zero
+        )
+    }
+
+    @MainActor
+    func testFullPhysicsBudgetStillScriptsOnlyOneTapBody() throws {
+        let descriptors = (0..<Constants.Jar.maxPhysicsBodies).map { index in
+            PebbleDescriptor(
+                subjectName: "body \(index)",
+                colorHex: Constants.Color.english,
+                source: .timer,
+                kind: .normal,
+                grams: Constants.Mass.measuredPebbleGrams
+            )
+        }
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        scene.restore(pebbles: descriptors)
+        let nodes = try descriptors.map { descriptor in
+            try XCTUnwrap(scene.childNode(
+                withName: "//pebble.\(descriptor.id.uuidString)"
+            ) as? PebbleNode)
+        }
+        let bodies = try nodes.map { try XCTUnwrap($0.physicsBody) }
+        for body in bodies {
+            body.velocity = .zero
+            body.angularVelocity = 0
+            body.isResting = true
+        }
+        let originalRepresentedCount = scene.representedPebbleCount
+
+        XCTAssertTrue(scene.bouncePebbles(at: nodes[0].position))
+        XCTAssertEqual(scene.activeTapDrivenBodyCount, 1)
+        XCTAssertEqual(bodies.filter {
+            hypot($0.velocity.dx, $0.velocity.dy) > 0.001
+        }.count, 1)
+        XCTAssertEqual(bodies.filter(\.usesPreciseCollisionDetection).count, 1)
+        XCTAssertTrue(bodies.allSatisfy {
+            $0.velocity.dx.isFinite
+                && $0.velocity.dy.isFinite
+                && $0.angularVelocity.isFinite
+        })
+        XCTAssertEqual(scene.physicalPebbleCount, Constants.Jar.maxPhysicsBodies)
+        XCTAssertEqual(scene.representedPebbleCount, originalRepresentedCount)
+
+        scene.reduceMotion = true
+        XCTAssertNil(scene.activeTapMotionPebbleID)
+        XCTAssertEqual(scene.activeTapDrivenBodyCount, 0)
+        XCTAssertTrue(bodies.allSatisfy {
+            !$0.isDynamic
+                && !$0.usesPreciseCollisionDetection
+                && $0.velocity == .zero
+                && $0.angularVelocity == 0
+        })
+        XCTAssertEqual(scene.physicalPebbleCount, Constants.Jar.maxPhysicsBodies)
+        XCTAssertEqual(scene.representedPebbleCount, originalRepresentedCount)
+    }
+
+    @MainActor
+    func testEquidistantTapSelectsStableUUIDTieBreaker() throws {
+        let lowerID = try XCTUnwrap(UUID(
+            uuidString: "A0000000-0000-4000-8000-000000000001"
+        ))
+        let higherID = try XCTUnwrap(UUID(
+            uuidString: "B0000000-0000-4000-8000-000000000001"
+        ))
+        let descriptors = [higherID, lowerID].map { id in
+            PebbleDescriptor(
+                id: id,
+                subjectName: id == lowerID ? "lower" : "higher",
+                colorHex: Constants.Color.english,
+                source: .timer,
+                kind: .normal,
+                grams: Constants.Mass.measuredPebbleGrams
+            )
+        }
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        scene.restore(pebbles: descriptors)
+        let higher = try XCTUnwrap(scene.childNode(
+            withName: "//pebble.\(higherID.uuidString)"
+        ) as? PebbleNode)
+        let lower = try XCTUnwrap(scene.childNode(
+            withName: "//pebble.\(lowerID.uuidString)"
+        ) as? PebbleNode)
+        higher.position = CGPoint(x: 170, y: 90)
+        lower.position = CGPoint(x: 220, y: 90)
+
+        XCTAssertTrue(scene.bouncePebbles(at: CGPoint(x: 195, y: 90)))
+        XCTAssertEqual(scene.activeTapMotionPebbleID, lowerID)
+    }
+
+    @MainActor
+    func testRestoreInvalidatesTapBeforeRecreatingSamePebbleID() throws {
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        let descriptor = PebbleDescriptor(
+            subjectName: "sync target",
+            colorHex: Constants.Color.english,
+            source: .timer,
+            kind: .normal,
+            grams: Constants.Mass.measuredPebbleGrams
+        )
+        scene.restore(pebbles: [descriptor])
+        let oldNode = try XCTUnwrap(scene.childNode(
+            withName: "//pebble.\(descriptor.id.uuidString)"
+        ) as? PebbleNode)
+        XCTAssertTrue(scene.bouncePebbles(at: oldNode.position))
+        XCTAssertEqual(scene.activeTapMotionPebbleID, descriptor.id)
+
+        scene.restore(pebbles: [descriptor])
+        let restoredNode = try XCTUnwrap(scene.childNode(
+            withName: "//pebble.\(descriptor.id.uuidString)"
+        ) as? PebbleNode)
+        let restoredBody = try XCTUnwrap(restoredNode.physicsBody)
+        XCTAssertFalse(oldNode === restoredNode)
+        XCTAssertNil(scene.activeTapMotionPebbleID)
+        XCTAssertEqual(scene.activeTapDrivenBodyCount, 0)
+        XCTAssertEqual(restoredBody.velocity.dx, 0, accuracy: 0.001)
+        XCTAssertEqual(restoredBody.velocity.dy, 0, accuracy: 0.001)
+        XCTAssertEqual(
+            restoredBody.linearDamping,
+            Constants.Jar.linearDamping,
+            accuracy: 0.001
+        )
+        XCTAssertFalse(restoredBody.usesPreciseCollisionDetection)
+    }
+
+    @MainActor
+    func testLaterTapSynchronouslyFinalizesSlowPreviousFlight() async throws {
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        let descriptors = [
+            PebbleDescriptor(
+                subjectName: "first",
+                colorHex: Constants.Color.english,
+                source: .timer,
+                kind: .normal,
+                grams: Constants.Mass.measuredPebbleGrams
+            ),
+            PebbleDescriptor(
+                subjectName: "second",
+                colorHex: Constants.Color.mathematics,
+                source: .timer,
+                kind: .normal,
+                grams: Constants.Mass.measuredPebbleGrams
+            )
+        ]
+        scene.restore(pebbles: descriptors)
+        let nodes = try descriptors.map { descriptor in
+            try XCTUnwrap(scene.childNode(
+                withName: "//pebble.\(descriptor.id.uuidString)"
+            ) as? PebbleNode)
+        }
+        let bodies = try nodes.map { try XCTUnwrap($0.physicsBody) }
+        nodes[0].position = CGPoint(x: 105, y: 90)
+        nodes[1].position = CGPoint(x: 285, y: 90)
+        for body in bodies {
+            body.velocity = .zero
+            body.isResting = true
+        }
+
+        XCTAssertTrue(scene.bouncePebbles(at: nodes[0].position))
+        XCTAssertEqual(scene.activeTapMotionPebbleID, descriptors[0].id)
+        XCTAssertLessThan(
+            bodies[0].linearDamping,
+            Constants.Jar.linearDamping
+        )
+        XCTAssertTrue(bodies[0].usesPreciseCollisionDetection)
+
+        // With no attached SKView the frame-count gate intentionally keeps the
+        // old launch pending beyond the gesture cooldown.
+        try await Task.sleep(for: .milliseconds(760))
+        XCTAssertTrue(scene.bouncePebbles(at: nodes[1].position))
+        XCTAssertEqual(scene.activeTapMotionPebbleID, descriptors[1].id)
+        XCTAssertEqual(
+            bodies[0].linearDamping,
+            Constants.Jar.linearDamping,
+            accuracy: 0.001
+        )
+        XCTAssertFalse(bodies[0].usesPreciseCollisionDetection)
+        XCTAssertLessThanOrEqual(bodies[0].velocity.dy, -130)
+        XCTAssertEqual(scene.activeTapDrivenBodyCount, 1)
+    }
+
+    @MainActor
+    func testReturnTimeoutCannotReapplyStaleUpwardKick() async throws {
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        let descriptor = PebbleDescriptor(
+            subjectName: "paused flight",
+            colorHex: Constants.Color.english,
+            source: .timer,
+            kind: .normal,
+            grams: Constants.Mass.measuredPebbleGrams
+        )
+        scene.restore(pebbles: [descriptor])
+        let node = try XCTUnwrap(scene.childNode(
+            withName: "//pebble.\(descriptor.id.uuidString)"
+        ) as? PebbleNode)
+        let body = try XCTUnwrap(node.physicsBody)
+
+        XCTAssertTrue(scene.bouncePebbles(at: node.position))
+        XCTAssertGreaterThan(body.velocity.dy, 200)
+        // No SKView means no physics frames. The bounded deferral eventually
+        // chooses return over waiting forever, as a backgrounded scene would.
+        let returnDeadline = Date().addingTimeInterval(3)
+        while scene.activeTapDrivenBodyCount > 0,
+              Date() < returnDeadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertLessThan(body.velocity.dy, 0)
+        XCTAssertEqual(scene.activeTapDrivenBodyCount, 0)
+
+        let returnVelocity = body.velocity.dy
+        scene.didSimulatePhysics()
+        XCTAssertLessThanOrEqual(
+            body.velocity.dy,
+            returnVelocity,
+            "A stale wake kick must not reverse the timed-out return"
+        )
+        let cleanupDeadline = Date().addingTimeInterval(1)
+        while scene.activeTapMotionPebbleID != nil,
+              Date() < cleanupDeadline {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertNil(scene.activeTapMotionPebbleID)
+        XCTAssertEqual(
+            body.linearDamping,
+            Constants.Jar.linearDamping,
+            accuracy: 0.001
+        )
+        XCTAssertFalse(body.usesPreciseCollisionDetection)
+    }
+
+    @MainActor
+    func testTapContactMovesNeighbourOnSpriteKitRenderLoop() async throws {
+        let sceneSize = CGSize(width: 390, height: Constants.Jar.height)
+        let scene = JarScene(size: sceneSize)
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        let descriptors = [
+            PebbleDescriptor(
+                subjectName: "primary",
+                colorHex: Constants.Color.english,
+                source: .timer,
+                kind: .normal,
+                grams: Constants.Mass.measuredPebbleGrams
+            ),
+            PebbleDescriptor(
+                subjectName: "neighbour",
+                colorHex: Constants.Color.mathematics,
+                source: .timer,
+                kind: .normal,
+                grams: Constants.Mass.measuredPebbleGrams
+            )
+        ]
+        scene.restore(pebbles: descriptors)
+        let nodes = try descriptors.map { descriptor in
+            try XCTUnwrap(scene.childNode(
+                withName: "//pebble.\(descriptor.id.uuidString)"
+            ) as? PebbleNode)
+        }
+        let bodies = try nodes.map { try XCTUnwrap($0.physicsBody) }
+        let view = SKView(frame: CGRect(origin: .zero, size: sceneSize))
+        view.preferredFramesPerSecond = Constants.Jar.targetFramesPerSecond
+        view.presentScene(scene)
+        defer { view.presentScene(nil) }
+        try await Task.sleep(for: .milliseconds(100))
+
+        nodes[0].position = CGPoint(x: 170, y: 90)
+        nodes[1].position = CGPoint(x: 194, y: 90)
+        for body in bodies {
+            body.velocity = .zero
+            body.angularVelocity = 0
+            body.isResting = true
+        }
+        let neighbourStart = nodes[1].position
+        let originalCount = scene.physicalPebbleCount
+        let originalRepresentedCount = scene.representedPebbleCount
+
+        XCTAssertTrue(scene.bouncePebbles(at: nodes[0].position))
+        XCTAssertEqual(bodies[1].velocity.dx, 0, accuracy: 0.001)
+        XCTAssertEqual(bodies[1].velocity.dy, 0, accuracy: 0.001)
+        try await Task.sleep(for: .milliseconds(500))
+
+        let neighbourTravel = hypot(
+            nodes[1].position.x - neighbourStart.x,
+            nodes[1].position.y - neighbourStart.y
+        )
+        XCTAssertGreaterThan(
+            neighbourTravel,
+            1.5,
+            "A contacted neighbour must move later through SpriteKit, not a scripted initial wave"
+        )
+        XCTAssertGreaterThanOrEqual(scene.tapPresentationMovedSecondaryCount, 1)
+        XCTAssertEqual(scene.physicalPebbleCount, originalCount)
+        XCTAssertEqual(scene.representedPebbleCount, originalRepresentedCount)
+        for node in nodes {
+            XCTAssertTrue(node.position.x.isFinite)
+            XCTAssertTrue(node.position.y.isFinite)
+            XCTAssertTrue(scene.frame.insetBy(dx: -1, dy: -1).contains(node.position))
+        }
+
+        try await Task.sleep(for: .seconds(1))
+        XCTAssertNil(scene.activeTapMotionPebbleID)
+        XCTAssertEqual(
+            bodies[0].linearDamping,
+            Constants.Jar.linearDamping,
+            accuracy: 0.001
+        )
+        XCTAssertFalse(bodies[0].usesPreciseCollisionDetection)
     }
 
     @MainActor
@@ -1529,7 +2604,7 @@ final class StrataMathTests: XCTestCase {
         farBody.isResting = true
 
         XCTAssertTrue(scene.bouncePebbles(at: near.position))
-        XCTAssertGreaterThan(nearBody.velocity.dy, 70)
+        XCTAssertGreaterThan(nearBody.velocity.dy, 200)
         XCTAssertFalse(nearBody.isResting)
         XCTAssertEqual(farBody.velocity.dx, 0, accuracy: 0.001)
         XCTAssertEqual(farBody.velocity.dy, 0, accuracy: 0.001)
@@ -1543,7 +2618,7 @@ final class StrataMathTests: XCTestCase {
     }
 
     @MainActor
-    func testEmptyLocalTapAcknowledgesExactPointWithoutMovingBodies() {
+    func testSparseGlassTapBouncesNearestGemAndAcknowledgesExactPoint() {
         let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
         scene.soundEnabled = false
         scene.hapticsEnabled = false
@@ -1569,9 +2644,12 @@ final class StrataMathTests: XCTestCase {
         let point = CGPoint(x: 195, y: 340)
 
         XCTAssertTrue(scene.bouncePebbles(at: point))
-        XCTAssertEqual(body.velocity.dx, 0, accuracy: 0.001)
-        XCTAssertEqual(body.velocity.dy, 0, accuracy: 0.001)
-        XCTAssertTrue(body.isResting)
+        XCTAssertGreaterThan(
+            body.velocity.dy,
+            190,
+            "A nonempty bottle must never report a successful tap without moving a real gem"
+        )
+        XCTAssertFalse(body.isResting)
         guard let caustic = scene.childNode(withName: "//jar.tap.caustic") else {
             XCTFail("Tap feedback must remain visible on empty glass")
             return
@@ -1581,7 +2659,7 @@ final class StrataMathTests: XCTestCase {
     }
 
     @MainActor
-    func testTapBounceRejectsOutsideJarAndReduceMotionPreservesBodies() {
+    func testTapBounceRejectsOutsideJarAndReduceMotionUsesCompactVisualLift() {
         let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
         scene.soundEnabled = false
         scene.hapticsEnabled = false
@@ -1594,7 +2672,8 @@ final class StrataMathTests: XCTestCase {
             grams: Constants.Mass.measuredPebbleGrams
         )])
 
-        let body = (scene.childNode(withName: "//pebble.*") as? PebbleNode)?.physicsBody
+        let pebble = scene.childNode(withName: "//pebble.*") as? PebbleNode
+        let body = pebble?.physicsBody
         body?.velocity = .zero
         body?.isResting = true
 
@@ -1605,6 +2684,11 @@ final class StrataMathTests: XCTestCase {
         XCTAssertEqual(body?.velocity.dx ?? .nan, 0, accuracy: 0.001)
         XCTAssertEqual(body?.velocity.dy ?? .nan, 0, accuracy: 0.001)
         XCTAssertEqual(body?.isResting, true)
+        XCTAssertEqual(body?.isDynamic, false)
+        XCTAssertNotNil(
+            pebble?.action(forKey: "jar.reducedMotion.tapLift"),
+            "Reduce Motion keeps physics frozen but must acknowledge a direct tap on one gem"
+        )
         XCTAssertNotNil(
             scene.childNode(withName: "//jar.tap.caustic")?
                 .action(forKey: "jar.tapCaustic"),

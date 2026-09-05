@@ -2,6 +2,65 @@ import XCTest
 @testable import Tsumiben
 
 final class UsagePurposeTests: XCTestCase {
+    func testUnifiedSuggestionCatalogMixesLearningAndWorkWithoutDuplicates() {
+        let names = SubjectSuggestionCatalog.presets.map(\.name)
+        XCTAssertEqual(
+            names,
+            ["英語", "数学", "国語", "理科", "社会", "企画", "開発", "資料作成", "顧客対応"]
+        )
+        XCTAssertEqual(
+            Set(names.map(SubjectNamePolicy.comparisonKey)).count,
+            names.count
+        )
+        XCTAssertTrue(names.allSatisfy {
+            SubjectNamePolicy.validated($0) != nil
+        })
+    }
+
+    func testUnifiedSuggestionLookupUsesSubjectNameNormalization() {
+        XCTAssertEqual(
+            SubjectSuggestionCatalog.preset(named: "　企画　")?.name,
+            "企画"
+        )
+        XCTAssertNil(SubjectSuggestionCatalog.preset(named: "TOEIC"))
+    }
+
+    func testUnifiedGuidanceKeepsProfessionalPrivacyBoundariesVisible() {
+        XCTAssertTrue(SubjectSuggestionCatalog.privacyGuidance.contains("案件名"))
+        XCTAssertTrue(SubjectSuggestionCatalog.privacyGuidance.contains("顧客名"))
+        XCTAssertTrue(SubjectSuggestionCatalog.privacyGuidance.contains("個人名"))
+        XCTAssertTrue(SubjectSuggestionCatalog.professionalUseGuidance.contains("勤怠"))
+        XCTAssertTrue(SubjectSuggestionCatalog.professionalUseGuidance.contains("請求"))
+        XCTAssertTrue(SubjectSuggestionCatalog.professionalUseGuidance.contains("工数管理"))
+    }
+
+    func testOnboardingRetiresOnlyUnselectedHistoryFreeBuiltIns() {
+        XCTAssertTrue(OnboardingThemePolicy.shouldRetireBuiltInPreset(
+            isSelected: false,
+            hasHistory: false
+        ))
+        XCTAssertFalse(OnboardingThemePolicy.shouldRetireBuiltInPreset(
+            isSelected: true,
+            hasHistory: false
+        ))
+        XCTAssertFalse(OnboardingThemePolicy.shouldRetireBuiltInPreset(
+            isSelected: false,
+            hasHistory: true
+        ))
+        XCTAssertTrue(OnboardingThemePolicy.countsAgainstThemeLimitBeforeSelection(
+            isBuiltInPreset: false,
+            hasHistory: false
+        ))
+        XCTAssertFalse(OnboardingThemePolicy.countsAgainstThemeLimitBeforeSelection(
+            isBuiltInPreset: true,
+            hasHistory: false
+        ))
+        XCTAssertTrue(OnboardingThemePolicy.countsAgainstThemeLimitBeforeSelection(
+            isBuiltInPreset: true,
+            hasHistory: true
+        ))
+    }
+
     func testEveryPurposeHasUniqueValidPresets() {
         for purpose in UsagePurpose.allCases {
             let names = purpose.presets.map(\.name)
@@ -22,6 +81,8 @@ final class UsagePurposeTests: XCTestCase {
         let guidance = try? XCTUnwrap(UsagePurpose.work.privacyGuidance)
         XCTAssertTrue(guidance?.contains("シェアカード") == true)
         XCTAssertTrue(guidance?.contains("テーマ名は載せません") == true)
+        XCTAssertTrue(guidance?.contains("終了通知にもテーマ名は表示しません") == true)
+        XCTAssertFalse(guidance?.contains("Live Activity") == true)
         XCTAssertTrue(guidance?.contains("案件名") == true)
         XCTAssertTrue(guidance?.contains("顧客名") == true)
         let professionalGuidance = try? XCTUnwrap(

@@ -199,7 +199,7 @@ struct FusionHierarchySnapshot: Equatable, Sendable {
     var activeLevels: [FusionHierarchyLevel] { levels.filter(\.isActive) }
     var highestActiveLevel: Int { activeLevels.last?.level ?? 0 }
     var representedPebbleCount: Int {
-        levels.reduce(0) { $0 + $1.representedPebbleCount }
+        NonnegativeIntPolicy.sum(levels.map(\.representedPebbleCount))
     }
 }
 
@@ -311,19 +311,442 @@ enum HomeProjectionPolicy {
     /// Overfetch remains hard-bounded so a run of quarantined reset epochs
     /// cannot usually starve the current loose set.
     static let looseSessionQueryLimit = Constants.Jar.maxPhysicsBodies * 4
+    static let maximumLooseSessionScanRows = looseSessionQueryLimit * 16
     static let aggregateRootLimit = Constants.Jar.maxPhysicsBodies
     static let achievementLimit = Constants.Jar.maximumVisibleAchievementStones * 2
     static let legacyCompatibilityLimit = 16
+    /// One extra row is fetched for exact AggregatePebble membership and
+    /// lineage lookups. Reaching the sentinel proves that the logical result
+    /// cannot be selected safely inside the supported physical-copy bound.
+    static let maximumPhysicalAggregateRowsPerExactLookup = 256
+
+    /// Direct UI completions end at the current wall clock even when a focus
+    /// spans its maximum seven-day recovery window. Older CloudKit imports are
+    /// observed by the source-store notification + verification generation;
+    /// this narrow @Query is only the synchronous local-change sentinel.
+    static let localSessionChangeWindow =
+        StudySessionIntegrityPolicy.maximumCompletionWallSpan
+
+    static func sessionChangeSentinelDescriptor(
+        relativeTo referenceDate: Date = .now,
+        limit: Int = looseSessionQueryLimit
+    ) -> FetchDescriptor<StudySession> {
+        let start = referenceDate.addingTimeInterval(-localSessionChangeWindow)
+        var descriptor = FetchDescriptor<StudySession>(
+            predicate: #Predicate { $0.endAt >= start },
+            sortBy: [
+                SortDescriptor(\StudySession.endAt, order: .reverse),
+                SortDescriptor(\StudySession.id, order: .reverse),
+                SortDescriptor(\StudySession.syncRecordID, order: .reverse)
+            ]
+        )
+        descriptor.fetchLimit = max(1, limit)
+        return descriptor
+    }
 
     static func looseSessionDescriptor() -> FetchDescriptor<StudySession> {
         var descriptor = FetchDescriptor<StudySession>(
-            predicate: #Predicate { session in
-                session.isBaked == false
-            },
-            sortBy: [SortDescriptor(\StudySession.endAt, order: .reverse)]
+            sortBy: [
+                SortDescriptor(\StudySession.endAt, order: .reverse),
+                SortDescriptor(\StudySession.id, order: .reverse),
+                SortDescriptor(\StudySession.syncRecordID, order: .reverse)
+            ]
         )
         descriptor.fetchLimit = looseSessionQueryLimit
         return descriptor
+    }
+
+    /// A fixed physical `@Query` page can be filled by invalid rows or losing
+    /// CloudKit copies. The shared scanner exact-resolves each candidate ID and
+    /// advances until its raw edge proves the logical boundary. At the hard
+    /// cap Home receives only resolved groups and marks the projection as a
+    /// lower bound; it never guesses an oversized group's winner.
+    struct SupportedLooseSessionPage {
+        let sessions: [StudySession]
+        let scannedRowCount: Int
+        let isCompleteForHomeCandidates: Bool
+    }
+
+    struct InitialLooseSessionQueryPlan: Equatable {
+        let lowerBound: Date?
+    }
+
+    /// Small stores can be exhausted exactly, including old rootless data.
+    /// Large stores use either the newest currently trusted aggregate as a
+    /// useful suffix horizon or a recent fallback while CloudKit verification
+    /// is pending. Neither horizon is a source-coverage certificate: omitted
+    /// pre-horizon rows therefore remain an explicit lower bound.
+    static func initialLooseSessionQueryPlan(
+        physicalSessionRowCount: Int?,
+        verifiedAggregateEnd: Date?,
+        referenceDate: Date = .now
+    ) -> InitialLooseSessionQueryPlan {
+        if let physicalSessionRowCount,
+           physicalSessionRowCount <= maximumLooseSessionScanRows {
+            return InitialLooseSessionQueryPlan(
+                lowerBound: nil
+            )
+        }
+        return InitialLooseSessionQueryPlan(
+            lowerBound: verifiedAggregateEnd
+                ?? referenceDate.addingTimeInterval(-localSessionChangeWindow)
+        )
+    }
+
+    /// A local-only source store needs one background repair request when Home
+    /// cannot exhaust its rootless source rows. A trusted aggregate horizon is
+    /// already maintained by the normal projection pipeline, so it must not
+    /// trigger a full session generation on every launch.
+    static func shouldRequestLocalSessionMaintenance(
+        trustedAggregateHorizon: Date?,
+        requestedLowerBound: Date?,
+        pageIsComplete: Bool
+    ) -> Bool {
+        trustedAggregateHorizon == nil
+            && (!pageIsComplete || requestedLowerBound != nil)
+    }
+
+    @MainActor
+    static func supportedLooseSessionPage(
+        context: ModelContext,
+        resetMarkers: [ActivityResetSnapshot],
+        startingAt lowerBound: Date? = nil
+    ) throws -> SupportedLooseSessionPage {
+        let page = try BoundedHistoryPolicy.resolvedSessionPage(
+            context: context,
+            epochID: ActivityResetPolicy.currentEpochID(from: resetMarkers),
+            start: lowerBound,
+            order: .reverse,
+            logicalLimit: looseSessionQueryLimit,
+            maximumCandidateRows: maximumLooseSessionScanRows,
+            mode: .lowerBound
+        )
+        // There is currently no durable source-coverage certificate. A raw
+        // Boolean must not be able to upgrade a suffix to complete; a future
+        // implementation should accept a typed, validated certificate here.
+        let requestedRangeIsComplete = lowerBound == nil
+        return SupportedLooseSessionPage(
+            sessions: page.sessions,
+            scannedRowCount: page.scannedPhysicalRowCount,
+            isCompleteForHomeCandidates: requestedRangeIsComplete
+                && page.boundaryIsProven
+                && !page.isPartial
+        )
+    }
+
+    struct LocalMembershipProjection: Equatable {
+        let representedSessionIDs: Set<UUID>
+        let isCompleteForCandidates: Bool
+        /// Presented roots that must be omitted for this frame. Keeping a
+        /// candidate loose is not fail-safe when an ambiguous root summary is
+        /// still counted, because that would make the same mass visible twice.
+        let conflictedRootIDs: Set<UUID>
+    }
+
+    /// Resolves the only authoritative "grouped" signal: membership stored in
+    /// this device's local projection store. `StudySession.isBaked` is a legacy
+    /// synchronized field and is deliberately not consulted.
+    ///
+    /// Higher-level aggregates keep leaf IDs only in their level-one
+    /// descendants, so a root-only query is insufficient. A late canonical
+    /// StudySession winner can move outside the aggregate's persisted date
+    /// span, so each bounded candidate is looked up by exact UUID membership.
+    /// Every physical-copy lookup uses a 257th-row sentinel and refuses to
+    /// choose a winner when the supported 256-row bound is exceeded.
+    @MainActor
+    static func localMembershipProjection(
+        for candidateSessions: [StudySession],
+        representedAggregateRoots: [AggregatePebble],
+        legacyStrata: [Stratum] = [],
+        context: ModelContext,
+        resetMarkers: [ActivityResetSnapshot]
+    ) throws -> LocalMembershipProjection {
+        let canonicalCandidates = StudySessionSyncPolicy
+            .canonicalSessions(from: candidateSessions)
+            .filter {
+                ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetMarkers)
+            }
+        let candidateIDs = Set(canonicalCandidates.map(\.id))
+        guard !candidateIDs.isEmpty else {
+            return LocalMembershipProjection(
+                representedSessionIDs: [],
+                isCompleteForCandidates: true,
+                conflictedRootIDs: []
+            )
+        }
+
+        var represented = Set<UUID>()
+        var isComplete = true
+        let roots = AggregatePebblePolicy.disjointRootSummaries(
+            from: representedAggregateRoots.filter {
+                ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetMarkers)
+                    && $0.projectionValidationVersion
+                        == AggregateProjectionValidation.currentVersion
+            }
+        )
+        let representedRootIDs = Set(roots.map(\.id))
+        var conflictedRootIDs = Set<UUID>()
+        let currentEpochID = ActivityResetPolicy.currentEpochID(from: resetMarkers)
+        let validationVersion = AggregateProjectionValidation.currentVersion
+        let exactLimit = maximumPhysicalAggregateRowsPerExactLookup
+        let sentinelLimit = exactLimit + 1
+
+        enum ExactAggregateLookup {
+            case value(AggregatePebble)
+            case missing
+            case ambiguous
+        }
+        enum PresentedRootResolution {
+            case presented(UUID, additionallyConflicted: Set<UUID>)
+            case outsidePresentedRoot(conflicted: Set<UUID>)
+            case invalid
+        }
+
+        func isSameCanonicalPayload(
+            _ lhs: AggregatePebble,
+            _ rhs: AggregatePebble
+        ) -> Bool {
+            lhs.level == rhs.level
+                && lhs.pebbleCount == rhs.pebbleCount
+                && lhs.childAggregateCount == rhs.childAggregateCount
+                && lhs.grams == rhs.grams
+                && lhs.measuredPebbleCount == rhs.measuredPebbleCount
+                && lhs.manualPebbleCount == rhs.manualPebbleCount
+                && lhs.goldPebbleCount == rhs.goldPebbleCount
+                && lhs.prismPebbleCount == rhs.prismPebbleCount
+                && lhs.colorMixJSON == rhs.colorMixJSON
+                && lhs.subjectMixJSON == rhs.subjectMixJSON
+                && lhs.periodStart == rhs.periodStart
+                && lhs.periodEnd == rhs.periodEnd
+                && Set(lhs.sessionIDs) == Set(rhs.sessionIDs)
+                && Set(lhs.childAggregateIDs) == Set(rhs.childAggregateIDs)
+                && lhs.parentAggregateID == rhs.parentAggregateID
+        }
+
+        var exactAggregateCache: [UUID: ExactAggregateLookup] = [:]
+        func exactAggregate(id: UUID) throws -> ExactAggregateLookup {
+            if let cached = exactAggregateCache[id] { return cached }
+
+            let predicate: Predicate<AggregatePebble>
+            if let currentEpochID {
+                let epochID = currentEpochID
+                predicate = #Predicate { aggregate in
+                    aggregate.id == id
+                        && aggregate.dataEpochID == epochID
+                        && aggregate.projectionValidationVersion == validationVersion
+                }
+            } else {
+                predicate = #Predicate { aggregate in
+                    aggregate.id == id
+                        && aggregate.dataEpochID == nil
+                        && aggregate.projectionValidationVersion == validationVersion
+                }
+            }
+            var descriptor = FetchDescriptor<AggregatePebble>(
+                predicate: predicate,
+                sortBy: [SortDescriptor(\AggregatePebble.createdAt)]
+            )
+            descriptor.fetchLimit = sentinelLimit
+            let rows = try context.fetch(descriptor)
+            let result: ExactAggregateLookup
+            if rows.count > exactLimit {
+                result = .ambiguous
+            } else if rows.isEmpty {
+                result = .missing
+            } else {
+                // Match AggregatePebblePolicy's logical precedence only after
+                // the raw edge proves that every supported physical copy was
+                // observed. A backlink-bearing copy wins over a root copy,
+                // followed by level and creation time.
+                let parented = rows.filter { $0.parentAggregateID != nil }
+                let candidates = parented.isEmpty ? rows : parented
+                let maximumLevel = candidates.map(\.level).max() ?? 1
+                let atMaximumLevel = candidates.filter { $0.level == maximumLevel }
+                let latestCreatedAt = atMaximumLevel.map(\.createdAt).max() ?? .distantPast
+                let winners = atMaximumLevel.filter { $0.createdAt == latestCreatedAt }
+                if let winner = winners.first,
+                   winners.allSatisfy({ isSameCanonicalPayload($0, winner) }) {
+                    result = .value(winner)
+                } else {
+                    // Equal-precedence divergent replicas do not have a
+                    // deterministic logical winner.
+                    result = .ambiguous
+                }
+            }
+            exactAggregateCache[id] = result
+            return result
+        }
+
+        func resolvePresentedRoot(
+            for aggregateID: UUID
+        ) throws -> PresentedRootResolution {
+            var cursorID = aggregateID
+            var path: [UUID] = []
+            var visited = Set<UUID>()
+            let maximumDepth = 24
+
+            for _ in 0..<maximumDepth {
+                guard visited.insert(cursorID).inserted else {
+                    return .invalid
+                }
+                path.append(cursorID)
+
+                guard case .value(let current) = try exactAggregate(id: cursorID) else {
+                    return .invalid
+                }
+                guard let parentID = current.parentAggregateID else {
+                    var pathRootIDs = Set(path).intersection(representedRootIDs)
+                    if representedRootIDs.contains(current.id) {
+                        pathRootIDs.remove(current.id)
+                        return .presented(
+                            current.id,
+                            additionallyConflicted: pathRootIDs
+                        )
+                    }
+                    return .outsidePresentedRoot(conflicted: pathRootIDs)
+                }
+
+                guard current.level >= 1,
+                      current.level < Int.max,
+                      case .value(let parent) = try exactAggregate(id: parentID),
+                      parent.level == NonnegativeIntPolicy.next(
+                        after: current.level,
+                        minimum: 1
+                      ),
+                      parent.parentAggregateID != parent.id,
+                      Set(parent.childAggregateIDs).contains(current.id),
+                      Set(parent.childAggregateIDs).count
+                        == parent.childAggregateCount,
+                      (1...Constants.Jar.aggregateFanIn)
+                        .contains(parent.childAggregateCount)
+                else {
+                    return .invalid
+                }
+                cursorID = parent.id
+            }
+            return .invalid
+        }
+
+        var legacyRepresented = Set<UUID>()
+        for stratum in legacyStrata {
+            guard ActivityResetPolicy.isCurrent(
+                stratum.dataEpochID,
+                markers: resetMarkers
+            ) else { continue }
+            legacyRepresented.formUnion(
+                Set(stratum.sessionIDs).intersection(candidateIDs)
+            )
+        }
+        represented.formUnion(legacyRepresented)
+        var aggregateOwnerRootBySessionID: [UUID: UUID] = [:]
+
+        // Only an exact decoded leaf membership whose complete backlink chain
+        // reaches a root actually presented by the caller may hide a session.
+        // A malformed or over-cap ownership lookup excludes every presented
+        // root for the frame; retaining any of them could turn fail-open loose
+        // rendering into an accounting overstatement.
+        if !representedRootIDs.isEmpty {
+            for candidateID in candidateIDs.sorted(by: {
+                $0.uuidString < $1.uuidString
+            }) {
+                let encodedID = candidateID.uuidString
+                let predicate: Predicate<AggregatePebble>
+                if let currentEpochID {
+                    let epochID = currentEpochID
+                    predicate = #Predicate { aggregate in
+                        aggregate.dataEpochID == epochID
+                            && aggregate.level == 1
+                            && aggregate.projectionValidationVersion == validationVersion
+                            && aggregate.sessionIDsJSON.contains(encodedID)
+                    }
+                } else {
+                    predicate = #Predicate { aggregate in
+                        aggregate.dataEpochID == nil
+                            && aggregate.level == 1
+                            && aggregate.projectionValidationVersion == validationVersion
+                            && aggregate.sessionIDsJSON.contains(encodedID)
+                    }
+                }
+                var descriptor = FetchDescriptor<AggregatePebble>(
+                    predicate: predicate,
+                    sortBy: [
+                        SortDescriptor(\AggregatePebble.id),
+                        SortDescriptor(\AggregatePebble.createdAt)
+                    ]
+                )
+                descriptor.fetchLimit = sentinelLimit
+                let stringMatches = try context.fetch(descriptor)
+                guard stringMatches.count <= exactLimit else {
+                    isComplete = false
+                    conflictedRootIDs.formUnion(representedRootIDs)
+                    continue
+                }
+
+                let exactOwnerIDs = Set(stringMatches.compactMap { aggregate in
+                    Set(aggregate.sessionIDs).contains(candidateID)
+                        ? aggregate.id : nil
+                })
+                var ownerRootIDs = Set<UUID>()
+                var hasInvalidOwner = false
+                for ownerID in exactOwnerIDs {
+                    guard case .value(let leaf) = try exactAggregate(id: ownerID),
+                          leaf.level == 1,
+                          Set(leaf.sessionIDs).contains(candidateID),
+                          Set(leaf.sessionIDs).count == leaf.pebbleCount,
+                          (1...Constants.Jar.aggregateFanIn)
+                            .contains(leaf.pebbleCount)
+                    else {
+                        hasInvalidOwner = true
+                        continue
+                    }
+                    switch try resolvePresentedRoot(for: leaf.id) {
+                    case .presented(let rootID, let additionallyConflicted):
+                        ownerRootIDs.insert(rootID)
+                        if !additionallyConflicted.isEmpty {
+                            isComplete = false
+                            conflictedRootIDs.formUnion(additionallyConflicted)
+                        }
+                    case .outsidePresentedRoot(let implicatedRootIDs):
+                        // This owner is not part of the caller's displayed
+                        // totals. Keep the session loose, but disclose that the
+                        // local projection is not a complete accounting cut.
+                        isComplete = false
+                        conflictedRootIDs.formUnion(implicatedRootIDs)
+                    case .invalid:
+                        hasInvalidOwner = true
+                    }
+                }
+
+                if hasInvalidOwner {
+                    isComplete = false
+                    conflictedRootIDs.formUnion(representedRootIDs)
+                    continue
+                }
+                if ownerRootIDs.count == 1 {
+                    let rootID = ownerRootIDs.first!
+                    if legacyRepresented.contains(candidateID) {
+                        // The legacy layer is also rendered. Prefer it and omit
+                        // the overlapping aggregate instead of counting both.
+                        isComplete = false
+                        conflictedRootIDs.insert(rootID)
+                    } else {
+                        aggregateOwnerRootBySessionID[candidateID] = rootID
+                    }
+                } else if ownerRootIDs.count > 1 {
+                    isComplete = false
+                    conflictedRootIDs.formUnion(ownerRootIDs)
+                }
+            }
+        }
+        for (sessionID, rootID) in aggregateOwnerRootBySessionID
+        where !conflictedRootIDs.contains(rootID) {
+            represented.insert(sessionID)
+        }
+        return LocalMembershipProjection(
+            representedSessionIDs: represented,
+            isCompleteForCandidates: isComplete,
+            conflictedRootIDs: conflictedRootIDs
+        )
     }
 
     static func aggregateRootDescriptor() -> FetchDescriptor<AggregatePebble> {
@@ -361,6 +784,99 @@ enum HomeProjectionPolicy {
         return descriptor
     }
 
+    /// A projection page whose payload was explicitly refreshed in the main
+    /// ModelContext before it was bound to a verification lease. `@Query` is
+    /// intentionally only a change trigger for Home: after a background
+    /// CloudKit/maintenance save, a registered model can retain its old
+    /// payload even though `fetchCount` already sees the updated store.
+    struct RefreshedAggregatePresentationPage {
+        let aggregateRoots: [AggregatePebble]
+        let legacyStrata: [Stratum]
+        let acceptedAggregateRootIDs: Set<UUID>
+        let rootProjectionIsComplete: Bool
+        let aggregateProjectionNeedsMaintenance: Bool
+        let cacheStamp: AggregateProjectionCacheStamp
+    }
+
+    /// Performs value-bearing fetches for both projection formats in the main
+    /// context. The returned stamp is inseparable from those refreshed model
+    /// payloads, so callers cannot promote a pre-import `@Query` array merely
+    /// because the verification pending flag became false.
+    @MainActor
+    static func refreshedAggregatePresentationPage(
+        context: ModelContext,
+        resetMarkers: [ActivityResetSnapshot],
+        cacheStamp: AggregateProjectionCacheStamp
+    ) throws -> RefreshedAggregatePresentationPage {
+        let persistedRootCount = try context.fetchCount(
+            FetchDescriptor<AggregatePebble>(
+                predicate: #Predicate { aggregate in
+                    aggregate.parentAggregateID == nil
+                }
+            )
+        )
+        // These explicit fetches are the important refresh boundary. A count
+        // query alone does not update the value fields of registered models.
+        let fetchedAggregateRoots = try context.fetch(aggregateRootDescriptor())
+        let fetchedLegacyStrata = try context.fetch(legacyCompatibilityDescriptor())
+        let aggregateRoots = fetchedAggregateRoots.filter {
+            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetMarkers)
+        }
+        let legacyStrata = fetchedLegacyStrata.filter {
+            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetMarkers)
+        }
+        let needsMaintenance = try hasUnverifiedAggregateProjection(
+            context: context,
+            resetMarkers: resetMarkers
+        )
+        let acceptedRootIDs = needsMaintenance
+            ? []
+            : try acceptedRootSummaryIDs(
+                roots: aggregateRoots,
+                context: context,
+                resetMarkers: resetMarkers
+            )
+        let rootProjectionIsComplete = persistedRootCount <= aggregateRootLimit
+            && (fetchedAggregateRoots.count < aggregateRootLimit
+                || aggregateRoots.count == fetchedAggregateRoots.count)
+
+        return RefreshedAggregatePresentationPage(
+            aggregateRoots: aggregateRoots,
+            legacyStrata: legacyStrata,
+            acceptedAggregateRootIDs: acceptedRootIDs,
+            rootProjectionIsComplete: rootProjectionIsComplete,
+            aggregateProjectionNeedsMaintenance: needsMaintenance,
+            cacheStamp: cacheStamp
+        )
+    }
+
+    /// Any migrated or invalidated descendant makes the current aggregate
+    /// snapshot non-authoritative. Callers then omit every root until
+    /// maintenance rebuilds the complete versioned projection, preserving a
+    /// lower bound without recursively materializing decades of descendants.
+    @MainActor
+    static func hasUnverifiedAggregateProjection(
+        context: ModelContext,
+        resetMarkers: [ActivityResetSnapshot]
+    ) throws -> Bool {
+        let currentEpochID = ActivityResetPolicy.currentEpochID(from: resetMarkers)
+        let validationVersion = AggregateProjectionValidation.currentVersion
+        let descriptor: FetchDescriptor<AggregatePebble>
+        if let currentEpochID {
+            let epochID = currentEpochID
+            descriptor = FetchDescriptor(predicate: #Predicate { aggregate in
+                aggregate.dataEpochID == epochID
+                    && aggregate.projectionValidationVersion != validationVersion
+            })
+        } else {
+            descriptor = FetchDescriptor(predicate: #Predicate { aggregate in
+                aggregate.dataEpochID == nil
+                    && aggregate.projectionValidationVersion != validationVersion
+            })
+        }
+        return try context.fetchCount(descriptor) > 0
+    }
+
     /// Accepts a bounded root summary only after its direct child equation
     /// closes. This is not proof that every descendant has downloaded; Home
     /// therefore adds only demonstrably newer loose rows and labels other
@@ -371,12 +887,18 @@ enum HomeProjectionPolicy {
         context: ModelContext,
         resetMarkers: [ActivityResetSnapshot]
     ) throws -> Set<UUID> {
+        let hasUnverifiedProjection = try hasUnverifiedAggregateProjection(
+            context: context,
+            resetMarkers: resetMarkers
+        )
+        guard !hasUnverifiedProjection else { return [] }
         var trusted = Set<UUID>()
         for root in AggregatePebblePolicy.activeRoots(from: roots) {
             let directCount = Set(root.sessionIDs).count
             if directCount > 0 {
                 if directCount == root.pebbleCount,
-                   root.level > 1 || directCount <= Constants.Jar.aggregateFanIn {
+                   root.level == 1,
+                   directCount <= Constants.Jar.aggregateFanIn {
                     trusted.insert(root.id)
                 }
                 continue
@@ -400,6 +922,8 @@ enum HomeProjectionPolicy {
             descriptor.fetchLimit = Constants.Jar.aggregateFanIn * 2
             let fetched = try context.fetch(descriptor).filter {
                 ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetMarkers)
+                    && $0.projectionValidationVersion
+                        == AggregateProjectionValidation.currentVersion
             }
             let children = Dictionary(grouping: fetched, by: \.id).values.compactMap {
                 $0.max { lhs, rhs in
@@ -407,10 +931,11 @@ enum HomeProjectionPolicy {
                     return lhs.level < rhs.level
                 }
             }
-            guard Set(children.map(\.id)) == expectedChildIDs,
+            guard root.level > 0,
+                  Set(children.map(\.id)) == expectedChildIDs,
                   children.allSatisfy({ $0.level == root.level - 1 }),
-                  children.reduce(0, { $0 + max(0, $1.pebbleCount) }) == root.pebbleCount,
-                  children.reduce(0, { $0 + max(0, $1.grams) }) == root.grams
+                  NonnegativeIntPolicy.sum(children.map(\.pebbleCount)) == root.pebbleCount,
+                  NonnegativeIntPolicy.sum(children.map(\.grams)) == root.grams
             else { continue }
             trusted.insert(root.id)
         }
@@ -429,9 +954,9 @@ enum HomeProjectionPolicy {
         roots: [AggregatePebble],
         looseSessions: [StudySession]
     ) -> Totals {
-        let uniqueLoose = Dictionary(grouping: looseSessions, by: \.id).values.compactMap {
-            $0.max { lhs, rhs in lhs.grams < rhs.grams }
-        }
+        let uniqueLoose = StudySessionSyncPolicy.canonicalSessions(
+            from: looseSessions
+        )
         let rootGrams = saturatingNonnegativeSum(roots.map(\.grams))
         let looseGrams = saturatingNonnegativeSum(uniqueLoose.map(\.grams))
         let rootPebbleCount = saturatingNonnegativeSum(roots.map(\.pebbleCount))
@@ -448,11 +973,7 @@ enum HomeProjectionPolicy {
     /// into an integer-overflow crash. Saturation is honest here: callers
     /// already distinguish partial/lower-bound projections from exact totals.
     static func saturatingNonnegativeSum(_ values: [Int]) -> Int {
-        values.reduce(0) { partial, rawValue in
-            let value = max(0, rawValue)
-            guard partial <= Int.max - value else { return Int.max }
-            return partial + value
-        }
+        NonnegativeIntPolicy.sum(values)
     }
 
     struct AchievementCountProjection: Equatable {
@@ -501,9 +1022,9 @@ enum HomeProjectionPolicy {
         let weeklyMeasuredGrams: Int
     }
 
-    /// Count-only lifetime cadence plus a paged seven-day query. The lifetime
-    /// count can include a transient logical duplicate until bootstrap merges
-    /// CloudKit rows; no multi-decade model objects are materialized on Home.
+    /// Aggregate-backed lifetime cadence plus a paged seven-day query. Every
+    /// loose or weekly source page is logically deduplicated; no multi-decade
+    /// collection of source model objects is materialized on Home.
     @MainActor
     static func completionMetrics(
         context: ModelContext,
@@ -511,17 +1032,17 @@ enum HomeProjectionPolicy {
         roots: [AggregatePebble],
         looseSessions: [StudySession],
         at date: Date,
-        calendar: Calendar = .autoupdatingCurrent
+        calendar: Calendar = .autoupdatingCurrent,
+        maximumWeeklyPhysicalRows: Int = BoundedHistoryPolicy.weeklySessionRowLimit
     ) throws -> CompletionMetrics {
         // The accepted aggregate summaries already carry exact measured counts,
         // so the long-break cadence does not need to instantiate every historic
         // StudySession. This also avoids SwiftData's runtime-unsupported enum
         // predicates. Home passes only validated roots plus its bounded loose
         // page, making this calculation O(number of rendered bodies).
-        let uniqueLoose = Dictionary(grouping: looseSessions, by: \.id).values
-            .compactMap { duplicates in
-                duplicates.max { lhs, rhs in lhs.endAt < rhs.endAt }
-            }
+        let uniqueLoose = StudySessionSyncPolicy.canonicalSessions(
+            from: looseSessions
+        )
         let completedCount = saturatingNonnegativeSum([
             saturatingNonnegativeSum(roots.map(\.measuredPebbleCount)),
             uniqueLoose.filter { $0.source == .timer }.count
@@ -535,42 +1056,17 @@ enum HomeProjectionPolicy {
                 weeklyMeasuredGrams: 0
             )
         }
-        let start = interval.start
-        let end = interval.end
-        // `SessionSource` is intentionally filtered in memory because enum
-        // predicates are not reliable across the supported SwiftData
-        // runtimes. Applying one fetch limit before that filter silently
-        // under-counted unusually dense 1/10-minute weeks or weeks containing
-        // many stale/reset rows. Page the finite week in a stable order so the
-        // value-bearing mass remains exact without one unbounded fetch.
-        let pageSize = 512
-        var offset = 0
-        var weekly: [StudySession] = []
-        while true {
-            var descriptor = FetchDescriptor<StudySession>(
-                predicate: #Predicate { session in
-                    session.endAt >= start && session.endAt < end
-                },
-                sortBy: [
-                    SortDescriptor(\StudySession.endAt, order: .reverse),
-                    SortDescriptor(\StudySession.id, order: .reverse)
-                ]
-            )
-            descriptor.fetchLimit = pageSize
-            descriptor.fetchOffset = offset
-            let page = try context.fetch(descriptor)
-            weekly.append(contentsOf: page.filter {
-                $0.source == .timer
-                    && ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetMarkers)
-            })
-            guard page.count == pageSize,
-                  offset <= Int.max - page.count
-            else { break }
-            offset += page.count
-        }
-        let unique = Dictionary(grouping: weekly, by: \.id).values.compactMap {
-            $0.max { $0.endAt < $1.endAt }
-        }
+        // Source remains an in-memory filter for SwiftData compatibility, but
+        // logical resolution and interval membership happen first. A losing
+        // in-week row therefore cannot survive when its canonical copy is just
+        // outside the week, and an adversarial dense week fails at a hard cap.
+        let unique = try BoundedHistoryPolicy.resolvedSessionsInFiniteInterval(
+            context: context,
+            epochID: ActivityResetPolicy.currentEpochID(from: resetMarkers),
+            interval: interval,
+            maximumPhysicalRows: maximumWeeklyPhysicalRows
+        )
+            .filter { $0.source == .timer }
         return CompletionMetrics(
             completedFocusCount: completedCount,
             weeklyMeasuredSessionIDs: Set(unique.map(\.id)),
@@ -590,11 +1086,33 @@ enum HomeAggregatePersistenceError: Error, Equatable {
     case conflictingSource(UUID)
     case alreadyConsumedSource(UUID)
     case competingParent(childID: UUID, parentID: UUID)
+    case projectionBusy
+}
+
+/// AggregatePebble is a device-local, derived projection with two writers:
+/// foreground jar fusion and background maintenance. Serializing their full
+/// preflight-to-save transactions closes the otherwise unavoidable gap between
+/// an ownership read and insertion of a differently grouped deterministic ID.
+enum AggregateProjectionMutationGate {
+    private static let lock = NSLock()
+
+    static func withMaintenanceAccess<T>(_ operation: () throws -> T) rethrows -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return try operation()
+    }
+
+    static func tryAcquireForegroundAccess() -> Bool {
+        lock.try()
+    }
+
+    static func releaseForegroundAccess() {
+        lock.unlock()
+    }
 }
 
 enum HomeAggregatePersistence {
     private struct Preflight {
-        let sessionsToBake: [StudySession]
         let childrenToAdopt: [AggregatePebble]
         let shouldInsertAggregate: Bool
     }
@@ -606,6 +1124,10 @@ enum HomeAggregatePersistence {
         dataEpochID: UUID?,
         resetMarkers: [ActivityResetSnapshot]
     ) throws {
+        guard AggregateProjectionMutationGate.tryAcquireForegroundAccess() else {
+            throw HomeAggregatePersistenceError.projectionBusy
+        }
+        defer { AggregateProjectionMutationGate.releaseForegroundAccess() }
         // Resolve and validate every logical source before touching any model.
         // SpriteKit requests can outlive a CloudKit reconciliation frame; a
         // partial mutation here would otherwise bake nine rows and strand the
@@ -617,9 +1139,6 @@ enum HomeAggregatePersistence {
             resetMarkers: resetMarkers
         )
 
-        for session in preflight.sessionsToBake {
-            session.isBaked = true
-        }
         for aggregate in preflight.childrenToAdopt {
             aggregate.parentAggregateID = request.id
         }
@@ -656,8 +1175,10 @@ enum HomeAggregatePersistence {
               sourceIDs.count == Constants.Jar.aggregateFanIn,
               Set(request.pebbleIDs) == sourceIDs,
               let sourceLevel = sources.first?.level,
+              sourceLevel >= 0,
+              sourceLevel < Int.max,
               sources.allSatisfy({ $0.level == sourceLevel }),
-              request.outputLevel == sourceLevel + 1,
+              request.outputLevel == NonnegativeIntPolicy.next(after: sourceLevel),
               StrataMath.aggregate(sources: sources) == request.calculation,
               request.id == JarAggregateRequest.deterministicID(
                 sourceIDs: Array(sourceIDs),
@@ -719,33 +1240,72 @@ enum HomeAggregatePersistence {
               })
         else { throw HomeAggregatePersistenceError.invalidRequest }
 
-        var rowsToBake: [StudySession] = []
         for source in sources {
             let sourceID = source.id
-            let currentRows = try context.fetch(FetchDescriptor<StudySession>(
-                predicate: #Predicate { session in session.id == sourceID }
-            )).filter {
-                ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetMarkers)
+            let current: StudySession?
+            do {
+                current = try BoundedHistoryPolicy.resolvedSession(
+                    id: sourceID,
+                    epochID: ActivityResetPolicy.currentEpochID(from: resetMarkers),
+                    context: context
+                )
+            } catch {
+                // More than 256 physical replicas cannot be safely reduced on
+                // the foreground path. Maintenance retains every source copy
+                // and retries while Home leaves the projection uncommitted.
+                throw HomeAggregatePersistenceError.conflictingSource(sourceID)
+            }
+            guard let current else {
+                throw HomeAggregatePersistenceError.missingCurrentSource(sourceID)
+            }
+            guard sessionMatchesSource(current, source: source) else {
+                throw HomeAggregatePersistenceError.conflictingSource(sourceID)
             }
 
-            // Once the exact aggregate exists, retries are allowed to repair
-            // whichever duplicate leaves have arrived. A missing leaf no longer
-            // makes the already-materialized deterministic result unsafe.
-            if !isIdempotentReplay {
-                guard !currentRows.isEmpty else {
-                    throw HomeAggregatePersistenceError.missingCurrentSource(sourceID)
+            // The old synchronized `StudySession.isBaked` bit can arrive
+            // without this device's projection row. Ownership is therefore
+            // proved only by an exact local AggregatePebble membership.
+            let encodedID = sourceID.uuidString
+            let epochID = ActivityResetPolicy.currentEpochID(from: resetMarkers)
+            let validationVersion = AggregateProjectionValidation.currentVersion
+            let predicate: Predicate<AggregatePebble>
+            if let epochID {
+                predicate = #Predicate { aggregate in
+                    aggregate.dataEpochID == epochID
+                        && aggregate.projectionValidationVersion
+                            == validationVersion
+                        && aggregate.level == 1
+                        && aggregate.sessionIDsJSON.contains(encodedID)
                 }
-                guard currentRows.allSatisfy({ sessionMatchesSource($0, source: source) }) else {
-                    throw HomeAggregatePersistenceError.conflictingSource(sourceID)
-                }
-                guard currentRows.allSatisfy({ !$0.isBaked }) else {
-                    throw HomeAggregatePersistenceError.alreadyConsumedSource(sourceID)
+            } else {
+                predicate = #Predicate { aggregate in
+                    aggregate.dataEpochID == nil
+                        && aggregate.projectionValidationVersion
+                            == validationVersion
+                        && aggregate.level == 1
+                        && aggregate.sessionIDsJSON.contains(encodedID)
                 }
             }
-            rowsToBake.append(contentsOf: currentRows)
+            var membershipDescriptor = FetchDescriptor<AggregatePebble>(
+                predicate: predicate,
+                sortBy: [SortDescriptor(\AggregatePebble.id)]
+            )
+            membershipDescriptor.fetchLimit = BoundedHistoryPolicy
+                .maximumPhysicalRowsPerLogicalSession + 1
+            let candidates = try context.fetch(membershipDescriptor)
+            guard candidates.count
+                    <= BoundedHistoryPolicy.maximumPhysicalRowsPerLogicalSession
+            else {
+                throw HomeAggregatePersistenceError.alreadyConsumedSource(sourceID)
+            }
+            let owners = candidates.filter {
+                Set($0.sessionIDs).contains(sourceID)
+            }
+            guard owners.allSatisfy({ $0.id == request.id }) else {
+                throw HomeAggregatePersistenceError.alreadyConsumedSource(sourceID)
+            }
         }
         return Preflight(
-            sessionsToBake: rowsToBake,
             childrenToAdopt: [],
             shouldInsertAggregate: !isIdempotentReplay
         )
@@ -793,7 +1353,6 @@ enum HomeAggregatePersistence {
             childrenToAdopt.append(contentsOf: currentRows)
         }
         return Preflight(
-            sessionsToBake: [],
             childrenToAdopt: childrenToAdopt,
             shouldInsertAggregate: !isIdempotentReplay
         )
@@ -804,7 +1363,8 @@ enum HomeAggregatePersistence {
         source: AggregateSource
     ) -> Bool {
         let isMeasured = session.source.isMeasured
-        return session.id == source.id
+        return StudySessionIntegrityPolicy.isSupported(session)
+            && session.id == source.id
             && source.level == 0
             && source.pebbleCount == 1
             && source.childAggregateCount == 0

@@ -1,35 +1,92 @@
 # App Review notes draft
 
-つみべんはアカウント登録不要のiPhone集中タイマーです。初回起動後、利用目的とテーマを選ぶと
-Homeの大きなbuttonから25分または60分を開始できます。実時間を待たずに審査する必要がある場合、
-審査側の標準的な時間操作を想定せず、実際のtimer flowを確認してください。hidden demo/debug menuは
-Release buildにありません。
+つみべんは独自アカウント登録不要のiPhone集中タイマーです。最初の画面で、同格の二つの保存先
+「iCloudに保存して同期」と「このiPhoneだけに保存」から明示的に選び、確認して確定します。どちらも
+推奨扱いではありません。審査では「このiPhoneだけに保存」→確認alertの「このiPhoneだけで始める」を
+選ぶと、Apple Accountへのサインインやnetwork接続なしで基本機能を確認できます。続くonboardingで
+任意の「ためしに一粒、落としてみる」（記録には入りません）を実行するか「次へ」で省略し、勉強・
+仕事共通の候補から最初のテーマを1つ選ぶとHomeへ進みます。利用目的の選択や勉強／仕事のmode切替はありません。
+25分／45分／60分／90分timer、記録、瓶、設定を無料で利用できます。Homeの
+大きなbuttonをtapするとtimerを開始し、同じbuttonを長押しするとtimerを開始せずテーマを変更できます。
+テーマの追加・編集・並べ替え・削除はSettingsの一つの「テーマ」一覧で行います。短時間で完走を確認する場合は、
+つみべんPro購入後に Home menu → 時間を選ぶ → 任意時間 で1分を設定してください。無料状態の最短
+timerは25分です。hidden demo/debug menuはRelease buildにありません。
 
 ## In-App Purchase
 
-- Product ID: `com.hinoshiba.tsumiben.pro.lifetime`
+- Product ID: `com.hinoshiba.tumiben.pro.lifetime`
 - Type: Non-Consumable
 - Entry: Home menu → 時間を選ぶ → 任意時間、またはSettings → つみべんPro
-- Unlocks: 1〜180分、まとまり粒の月刻印、share card右下の小さな透かし非表示
+- Unlocks: 無料の25分／45分／60分／90分以外の任意の1〜180分、まとまり粒の月刻印
 - Restore: purchase screenの「購入を復元」
+- Pricing: United States USD 0.99 base price; Japan JPY 100 custom price; other available storefronts use Apple's automatically generated local equivalent
+- Availability: App and IAP are available in 148 of 175 storefronts. Austria, Belgium, Bulgaria, Croatia, Cyprus, Czech Republic, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Ireland, Italy, Latvia, Lithuania, Luxembourg, Malta, Netherlands, Poland, Portugal, Romania, Slovakia, Slovenia, Spain, and Sweden are excluded. United Kingdom, Norway, and Switzerland remain included; automatic availability for new storefronts is enabled.
+- Pre-purchase disclosure: purchase buttonの前に「価格・提供条件・販売者情報を確認」linkを表示
 - Subscription、trial、Web決済、外部purchase linkはありません
+- Share card: 無料／Proとも、つみべんのロゴと`https://tumiben.hinoshiba.com/`を常に表示し、共有本文にも同URLを含めます
 
-25分、60分、記録、iCloud同期、rare粒を含む瓶の基本体験はpurchase不要です。
-
-## Rare visual rewards
-
-実測した対象質量250gごとに、通常粒へgold 8%、prism 0.8%のvisual variant抽選があります。
-goldは20回不発後の次回保証です。確率と保証はSettings内に表示します。利用者は標準、控えめ、
-抽選しないをいつでも無料で選べます。購入で確率、保証、質量、機能価値は変わりません。rare粒は
-購入、換金、交換、譲渡できず、機能的価値を持ちません。
+25分、45分、60分、90分、記録、どちらかの保存先、瓶の基本体験はpurchase不要です。Version 1.0はランダム報酬を
+提供せず、完走時はテーマ色の通常粒を保存します。
 
 ## Apple services and permissions
 
-- private CloudKit: 同じApple AccountのiPhone間で記録を同期。独自loginなし
-- Notifications / Live Activity: timer終了。テーマ名は既定で非表示
-- Motion: 端末の傾きで瓶の重力を計算。保存・送信なし
+- SwiftData private CloudKit: iCloudを選び確認した場合だけ、テーマ名、成果memo、記録、設定、進行中
+  timerを含む7種類の同期元modelを一つのprivate containerへ保存し、同じApple Accountの対応iPhone間で
+  同期。選択時と各launch／resumeで`CKContainer.accountStatus`、`userRecordID`、private databaseの
+  read-only record-zone fetchとfetch前後の`userRecordID`一致を確認した場合だけ開き、独自loginなし
+- This iPhone only: 全ての基本機能をApple Account／networkなしで利用可能。専用random namespaceの
+  local storeだけへ保存し、iCloudへ自動切替／uploadしない
+- Local projection: 瓶とまとまり粒に使う`AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`は
+  CloudKitへuploadせず、選択した保存先の同期元記録から各端末で再構築。iCloudから後着した記録の
+  再検証中は、古いaggregateを生涯の正確値や`+`／`以上`として表示せず「再集計中」と表示し、完了後に更新
+- Notifications: timer終了。通知本文は常にaccount-neutralで、テーマ名を含まない
+- Widget: Home／Lock Screenともaccount-neutralな起動導線だけを表示し、記録、質量、テーマ、画像を
+  App Groupから読まない
+- Live Activity: Homeで任意のtimerを開始してiPhoneをロックすると、ロック画面へアプリ名、選択時間、
+  残り時間、実行／一時停止／完了状態だけを表示。テーマ名、メモ、質量、Apple Account、CloudKit dataは
+  extensionへ渡さない。更新は端末内のみでActivityKit pushなし。通知権限とは独立し、Settings → 集中 →
+  「ロック画面にタイマーを表示」で端末ごとに停止可能。pause／resume／cancelはアプリの集中画面から確認可能
+- Motion: Home表示中、端末の傾きで瓶の重力を計算し、軽い往復shakeで粒を動かす。
+  `NSMotionUsageDescription`で目的を表示し、許可しなくても瓶のtapと他の集中機能を利用可能。値は
+  端末内で即時処理するだけで保存・送信せず、inactive／backgroundでは更新を停止
 - Photos add-only: 利用者が静止画の保存を選んだ場合だけrequest
 - StoreKit 2: productとverified entitlementの確認。独自purchase serverなし
 
+保存先の選択はVersion 1.0では変更できません。「このiPhoneのみ」から後でiCloudを開始するには、必要に
+応じてJSONを書き出した後にappを削除・再installして選び直す必要があり、削除時にlocal記録は失われます。
+JSONは再importできず、移行や記録継続には使えません。iCloudを選択済みの起動／再開時はonlineで同じ
+Apple Accountを検証し、通信不可、account不明、別accountの場合は保存領域を開かずfail closedにします。
+この処理は保存済みdataを削除しません。
+
+Version 1.0ではdirect CloudKit一括削除UIとlaunch gateを無効化しています。Settingsの通常resetは
+旧世代を表示・集計から除外しますが、物理消去ではありません。端末内dataはapp削除、iCloud側の
+app dataはAppleのiCloudストレージ管理から削除するよう案内します。offline別端末は遠隔消去
+できません。
+
+SettingsのJSON exportは、選択した保存先で端末から利用できる全11種類の出荷対象SwiftData modelを
+対象とします。JSONの再import機能はありません。iCloud側のapp dataはAppleのiCloudストレージ管理から
+管理できます。
+
 計画modeは将来の積み上がりを一時的に表示する公開機能です。実記録、抽選、iCloud、Widgetへ
 書き込みません。テストアカウントは不要です。
+
+## Jar sound, haptics, and motion test
+
+実機iPhoneで本体の消音モードを解除してください（効果音は`.ambient`として消音設定を尊重します）。
+
+1. すぐ粒を用意するには Home menu → 「時間を手動で積む」→「30分」→「確認して積む」を選びます。
+   Homeの瓶で粒付近をtapすると、局所的に跳ね、短いカラン音と触覚が同期します。
+2. iPhoneを軽く左右へ往復させると、単発の傾きや机への接触ではなく、反転した2回の加速を検知した
+   ときだけ瓶全体が動きます。粒数が多いほど音の密度が増え、大きいまとまり粒ほど低い音と丸く重い
+   触覚になります。1操作あたりの音数と触覚数には上限があります。
+3. Settings → 音／触覚でそれぞれ独立にOFFにできます。どちらをOFFにしても記録、瓶、tap操作は利用可能です。
+4. iOSの「視差効果を減らす」がONのときはモーション監視と粒の移動を停止し、tapは局所highlightだけを
+   表示します（アプリ内の音／触覚設定がONなら短い感覚feedbackは維持）。
+
+音はAVFoundationで数学的にPCM生成し、録音・stock sample・生成AI音源・download assetを使いません。
+Core Motionの値、tap、生成した音buffer、触覚eventは保存、analytics、network送信に利用しません。
+
+自己申告の上限は、この端末で朝4:00区切りの1日3件です。iCloudを選んだ複数端末が同時に
+offlineの場合、各端末がそれぞれ最大3件を保存でき、再接続後のaccount全体件数は3件を超える場合が
+あります。これはofflineでも記録を失わないための端末単位制限であり、勤怠・試験等の証明用途を
+想定していません。アプリ内表示も「この端末で」と明記します。

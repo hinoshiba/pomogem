@@ -167,10 +167,10 @@ final class FairnessTests: XCTestCase {
             completionUptime: 100
         )
         XCTAssertEqual(integrity, .uptimeReset)
-        XCTAssertFalse(integrity.shouldDemote)
+        XCTAssertTrue(integrity.shouldDemote)
     }
 
-    func testFinalClassificationDemotesOnlyClearClockChanges() {
+    func testFinalClassificationDemotesEveryUnprovenTimerInterval() {
         XCTAssertEqual(
             FairnessPolicy.finalSource(
                 original: .timer,
@@ -183,7 +183,14 @@ final class FairnessTests: XCTestCase {
                 original: .timer,
                 clockIntegrity: .uptimeReset
             ),
-            .timer
+            .timerDemoted
+        )
+        XCTAssertEqual(
+            FairnessPolicy.finalSource(
+                original: .timer,
+                clockIntegrity: .unverifiable
+            ),
+            .timerDemoted
         )
         XCTAssertEqual(
             FairnessPolicy.finalSource(

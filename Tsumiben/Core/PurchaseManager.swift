@@ -36,23 +36,70 @@ enum PurchaseManagerError: LocalizedError, Equatable {
     }
 }
 
-/// Applies a verified transaction before acknowledging it to StoreKit.
-/// Unknown product identifiers stay unfinished so the owning product handler
-/// can process them instead of this single-product facade consuming them.
+enum ProTransactionDeliveryDecision: Equatable, Sendable {
+    case ignoreUnknownProduct
+    case rejectUnverified
+    case rejectInvalidProductType
+    case grant
+    case reconcileWithoutGrant
+
+    var shouldAcknowledge: Bool {
+        switch self {
+        case .grant, .reconcileWithoutGrant:
+            true
+        case .ignoreUnknownProduct, .rejectUnverified, .rejectInvalidProductType:
+            false
+        }
+    }
+}
+
+/// Classifies transaction metadata before any entitlement mutation or StoreKit
+/// acknowledgement. Unknown and unverified transactions remain unfinished so
+/// this facade never consumes work owned by another product handler.
 enum ProTransactionDelivery {
+    static func decision(
+        isVerified: Bool,
+        productID: String,
+        productType: Product.ProductType,
+        revocationDate: Date?,
+        isUpgraded: Bool
+    ) -> ProTransactionDeliveryDecision {
+        guard isVerified else { return .rejectUnverified }
+        guard productID == IntegrationConstants.proProductID else {
+            return .ignoreUnknownProduct
+        }
+        guard productType == .nonConsumable else {
+            return .rejectInvalidProductType
+        }
+        guard revocationDate == nil, !isUpgraded else {
+            return .reconcileWithoutGrant
+        }
+        return .grant
+    }
+
     @discardableResult
     static func process(
-        productID: String,
-        applyEntitlementChange: () async -> Void,
+        decision: ProTransactionDeliveryDecision,
+        applyEntitlementChange: (ProTransactionDeliveryDecision) async -> Void,
         finish: () async -> Void
     ) async -> Bool {
-        guard productID == IntegrationConstants.proProductID else {
-            return false
-        }
+        guard decision.shouldAcknowledge else { return false }
 
-        await applyEntitlementChange()
+        await applyEntitlementChange(decision)
         await finish()
         return true
+    }
+}
+
+/// Process-local arbitration for the same verified transaction arriving from
+/// `purchase()`, `Transaction.unfinished`, and `Transaction.updates` together.
+/// StoreKit remains the cross-launch authority: an interrupted finish is still
+/// returned by `unfinished` after the next process launch.
+struct ProTransactionFinishGate: Equatable, Sendable {
+    private(set) var claimedTransactionIDs: Set<UInt64> = []
+
+    mutating func claim(_ transactionID: UInt64) -> Bool {
+        claimedTransactionIDs.insert(transactionID).inserted
     }
 }
 
@@ -64,6 +111,10 @@ enum ProTransactionDelivery {
 final class PurchaseManager {
     static let shared = PurchaseManager()
 
+    static func startAtAppLaunch() {
+        _ = shared
+    }
+
     private(set) var product: Product?
     private(set) var entitlement: ProEntitlement?
     private(set) var isLoadingProducts = false
@@ -74,13 +125,23 @@ final class PurchaseManager {
 
     @ObservationIgnored
     private var transactionUpdatesTask: Task<Void, Never>?
+    @ObservationIgnored
+    private var coldLaunchReconciliationTask: Task<Void, Never>?
+    @ObservationIgnored
+    private var finishGate = ProTransactionFinishGate()
+    @ObservationIgnored
+    private var entitlementRefreshGeneration: UInt64 = 0
 
     private init() {
+        // Subscribe first. The finite unfinished pass then closes the interval
+        // between the prior process terminating and this listener starting.
         transactionUpdatesTask = observeTransactionUpdates()
+        coldLaunchReconciliationTask = reconcileColdLaunchTransactions()
     }
 
     deinit {
         transactionUpdatesTask?.cancel()
+        coldLaunchReconciliationTask?.cancel()
     }
 
     var isPro: Bool {
@@ -88,7 +149,11 @@ final class PurchaseManager {
     }
 
     func prepare() async {
-        await refreshEntitlements()
+        if let coldLaunchReconciliationTask {
+            await coldLaunchReconciliationTask.value
+        } else {
+            await refreshEntitlements()
+        }
         guard !isPro else { return }
         await loadProduct()
     }
@@ -104,7 +169,7 @@ final class PurchaseManager {
             )
             guard let fetchedProduct = fetchedProducts.first(where: {
                 $0.id == IntegrationConstants.proProductID
-            }) else {
+            }), fetchedProduct.type == .nonConsumable else {
                 let error = PurchaseManagerError.productUnavailable(
                     IntegrationConstants.proProductID
                 )
@@ -143,7 +208,8 @@ final class PurchaseManager {
     }
 
     func purchase(_ product: Product) async throws -> PurchaseOutcome {
-        guard product.id == IntegrationConstants.proProductID else {
+        guard product.id == IntegrationConstants.proProductID,
+              product.type == .nonConsumable else {
             let error = PurchaseManagerError.productUnavailable(product.id)
             lastErrorDescription = error.localizedDescription
             throw error
@@ -157,27 +223,11 @@ final class PurchaseManager {
             switch result {
             case let .success(verification):
                 let transaction = try verified(verification)
-                let grantsPro = transaction.revocationDate == nil
-                    && !transaction.isUpgraded
-                let processed = await ProTransactionDelivery.process(
-                    productID: transaction.productID,
-                    applyEntitlementChange: { [self] in
-                        if grantsPro {
-                            entitlement = .lifetime(productID: transaction.productID)
-                            lastErrorDescription = nil
-                        } else {
-                            await refreshEntitlements()
-                        }
-                    },
-                    finish: {
-                        await transaction.finish()
-                    }
-                )
-
-                guard processed else {
+                let decision = await processVerifiedTransaction(transaction)
+                guard decision != .ignoreUnknownProduct else {
                     throw PurchaseManagerError.productUnavailable(transaction.productID)
                 }
-                guard grantsPro else {
+                guard decision == .grant else {
                     throw PurchaseManagerError.failedVerification
                 }
                 return .purchased
@@ -225,23 +275,34 @@ final class PurchaseManager {
     }
 
     func refreshEntitlements() async {
+        entitlementRefreshGeneration &+= 1
+        let generation = entitlementRefreshGeneration
         var currentEntitlement: ProEntitlement?
         var encounteredVerificationFailure = false
 
         for await result in Transaction.currentEntitlements {
+            guard !Task.isCancelled else { return }
             guard case let .verified(transaction) = result else {
                 encounteredVerificationFailure = true
                 continue
             }
-            guard transaction.productID == IntegrationConstants.proProductID,
-                  transaction.revocationDate == nil,
-                  !transaction.isUpgraded else {
+            let decision = ProTransactionDelivery.decision(
+                isVerified: true,
+                productID: transaction.productID,
+                productType: transaction.productType,
+                revocationDate: transaction.revocationDate,
+                isUpgraded: transaction.isUpgraded
+            )
+            guard decision == .grant else {
                 continue
             }
 
             currentEntitlement = .lifetime(productID: transaction.productID)
         }
 
+        // An update delivered while this sequence was suspended has newer
+        // authority and must not be overwritten by this older snapshot.
+        guard generation == entitlementRefreshGeneration else { return }
         entitlement = currentEntitlement
         lastErrorDescription = encounteredVerificationFailure
             ? PurchaseManagerError.failedVerification.localizedDescription
@@ -260,22 +321,7 @@ final class PurchaseManager {
 
                 switch result {
                 case let .verified(transaction):
-                    let grantsPro = transaction.revocationDate == nil
-                        && !transaction.isUpgraded
-                    await ProTransactionDelivery.process(
-                        productID: transaction.productID,
-                        applyEntitlementChange: { [self] in
-                            if grantsPro {
-                                entitlement = .lifetime(productID: transaction.productID)
-                                lastErrorDescription = nil
-                            } else {
-                                await refreshEntitlements()
-                            }
-                        },
-                        finish: {
-                            await transaction.finish()
-                        }
-                    )
+                    await self.processVerifiedTransaction(transaction)
                 case .unverified:
                     self.lastErrorDescription = PurchaseManagerError
                         .failedVerification
@@ -283,6 +329,80 @@ final class PurchaseManager {
                 }
             }
         }
+    }
+
+    private func reconcileColdLaunchTransactions() -> Task<Void, Never> {
+        Task { [weak self] in
+            guard let self else { return }
+            var encounteredVerificationFailure = false
+            for await result in Transaction.unfinished {
+                guard !Task.isCancelled else { return }
+                switch result {
+                case let .verified(transaction):
+                    await self.processVerifiedTransaction(transaction)
+                case .unverified:
+                    // Never deliver or finish content whose signed payload did
+                    // not verify. Leaving it unfinished permits later recovery.
+                    encounteredVerificationFailure = true
+                }
+            }
+
+            guard !Task.isCancelled else { return }
+            await self.refreshEntitlements()
+            if encounteredVerificationFailure {
+                self.lastErrorDescription = PurchaseManagerError
+                    .failedVerification
+                    .localizedDescription
+            }
+        }
+    }
+
+    @discardableResult
+    private func processVerifiedTransaction(
+        _ transaction: Transaction
+    ) async -> ProTransactionDeliveryDecision {
+        let decision = ProTransactionDelivery.decision(
+            isVerified: true,
+            productID: transaction.productID,
+            productType: transaction.productType,
+            revocationDate: transaction.revocationDate,
+            isUpgraded: transaction.isUpgraded
+        )
+        await ProTransactionDelivery.process(
+            decision: decision,
+            applyEntitlementChange: { [self] decision in
+                switch decision {
+                case .grant:
+                    // Invalidate any current-entitlements pass suspended on an
+                    // older snapshot before publishing this verified delivery.
+                    entitlementRefreshGeneration &+= 1
+                    entitlement = .lifetime(productID: transaction.productID)
+                    lastErrorDescription = nil
+                case .reconcileWithoutGrant:
+                    // A refund, revocation, or upgraded-away transaction must
+                    // never grant Pro. Re-query in case another valid purchase
+                    // still supplies the entitlement.
+                    await refreshEntitlements()
+                case .ignoreUnknownProduct, .rejectUnverified,
+                     .rejectInvalidProductType:
+                    break
+                }
+            },
+            finish: { [self] in
+                await finishIfNeeded(transaction)
+            }
+        )
+        if decision == .rejectInvalidProductType {
+            lastErrorDescription = PurchaseManagerError
+                .failedVerification
+                .localizedDescription
+        }
+        return decision
+    }
+
+    private func finishIfNeeded(_ transaction: Transaction) async {
+        guard finishGate.claim(transaction.id) else { return }
+        await transaction.finish()
     }
 
     private func verified<T>(_ result: VerificationResult<T>) throws -> T {

@@ -6,17 +6,138 @@ import UIKit
 enum FocusCompletionPersistenceResult: Equatable, Sendable {
     case inserted(PebbleKind)
     case alreadyMaterialized
+    case cancelledBeforeCompletion
+    case awaitingMaterializedCompletion
+    case discardedByReset
     case rejectedOwnership
 
     /// A remote owner can still be materializing the same logical completion.
     /// Only outcomes that prove a StudySession exists may retire recovery data.
     var mayRetireRecovery: Bool {
         switch self {
-        case .inserted, .alreadyMaterialized:
+        case .inserted, .alreadyMaterialized, .cancelledBeforeCompletion,
+             .discardedByReset:
             true
-        case .rejectedOwnership:
+        case .awaitingMaterializedCompletion, .rejectedOwnership:
             false
         }
+    }
+}
+
+private enum ExplicitFocusActivityState: Equatable {
+    case focusing(endDate: Date)
+    case paused(remainingSeconds: Int)
+}
+
+/// Decides whether an elapsed timer still needs an in-app completion cue.
+/// A persisted delivery date is trusted only while wall and monotonic clocks
+/// still agree; a relative OS notification may remain pending after a manual
+/// wall-clock jump.
+enum TimerCompletionForegroundFeedbackPolicy {
+    static func notificationMayHaveDelivered(
+        isAuthorized: Bool,
+        expectedDeliveryDate: Date?,
+        now: Date
+    ) -> Bool {
+        isAuthorized
+            && (expectedDeliveryDate ?? .distantFuture) <= now
+    }
+
+    static func shouldPlay(
+        recoveredAfterExpiration: Bool,
+        returnedFromBackground: Bool,
+        notificationMayHaveDelivered: Bool
+    ) -> Bool {
+        !((recoveredAfterExpiration || returnedFromBackground)
+            && notificationMayHaveDelivered)
+    }
+
+    static func notificationTimingIsTrustworthy(
+        source: SessionSource,
+        clockAnchor: ClockAnchor?,
+        now: Date,
+        uptime: TimeInterval
+    ) -> Bool {
+        guard source == .timer,
+              let clockAnchor,
+              case let .valid(drift) = FairnessPolicy.clockIntegrity(
+                from: clockAnchor,
+                completionDate: now,
+                completionUptime: uptime
+              ) else { return false }
+        return drift <= IntegrationConstants.notificationClockDriftTolerance
+    }
+}
+
+/// Constructs the only StudySession shape written while the optional rare
+/// reward feature is disabled for release. Keeping this factory independent of
+/// SwiftUI makes the shipping invariant directly unit-testable.
+enum FocusCompletionSessionFactory {
+    static func normalSession(
+        completion: PomodoroCompletion,
+        subject: Subject?,
+        subjectSnapshot: FocusSubjectSnapshot,
+        dataEpochID: UUID?
+    ) -> StudySession {
+        let persistedStartAt: Date
+        let persistedSeconds: Int
+        let persistedGrams: Int
+#if DEBUG
+        let demoElapsed = completion.endedAt.timeIntervalSince(
+            completion.startedAt
+        )
+        let hasCanonicalDemoPayload: Bool = {
+            guard case .demo = completion.duration else { return false }
+            return completion.seconds == Constants.Timer.demoSeconds
+                && completion.grams == Constants.Mass.measuredPebbleGrams
+                && (completion.source == .timer
+                    || completion.source == .timerDemoted)
+                && completion.startedAt.timeIntervalSinceReferenceDate.isFinite
+                && completion.endedAt.timeIntervalSinceReferenceDate.isFinite
+                && demoElapsed.isFinite
+                && demoElapsed >= TimeInterval(Constants.Timer.demoSeconds)
+        }()
+        if hasCanonicalDemoPayload {
+            // The accelerated 12-second UI-test timer is not a shipping
+            // activity shape. Persist one canonical 25-minute completion so
+            // Debug end-to-end tests exercise the same integrity boundary,
+            // projections, and reward flow as a real free timer.
+            persistedSeconds = Constants.Timer.twentyFiveMinutes
+                * Constants.Timer.secondsPerMinute
+            persistedGrams = StudySession.grams(for: persistedSeconds)
+            persistedStartAt = completion.endedAt.addingTimeInterval(
+                -TimeInterval(persistedSeconds)
+            )
+        } else {
+            persistedStartAt = completion.startedAt
+            persistedSeconds = completion.seconds
+            persistedGrams = completion.grams
+        }
+#else
+        persistedStartAt = completion.startedAt
+        persistedSeconds = completion.seconds
+        persistedGrams = completion.grams
+#endif
+
+        return StudySession(
+            id: completion.sessionID,
+            subject: subject,
+            startAt: persistedStartAt,
+            endAt: completion.endedAt,
+            seconds: persistedSeconds,
+            source: completion.source,
+            pebbleKind: .normal,
+            grams: persistedGrams,
+            deviceDayKey: FairnessPolicy.deviceDayKey(for: completion.endedAt),
+            subjectNameSnapshot: subjectSnapshot.name,
+            subjectColorHexSnapshot: subjectSnapshot.colorHex,
+            subjectIDSnapshot: subjectSnapshot.id,
+            rareRewardRuleVersion: nil,
+            rareRewardParticipated: nil,
+            rareRewardCreditedGrams: nil,
+            rareRewardOutcomesRawValue: nil,
+            dataEpochID: dataEpochID
+        )
     }
 }
 
@@ -26,6 +147,7 @@ struct FocusView: View {
     private let recoveryOrigin: FocusRecoveryOrigin
     private let allowsLocalNotifications: Bool
     private let deviceID: String
+    private let preparedSessionID: UUID?
     let duration: PomodoroDuration
 
     @Environment(\.dismiss) private var dismiss
@@ -36,6 +158,9 @@ struct FocusView: View {
     @Query private var preferences: [Prefs]
     @Query private var gachaStates: [GachaState]
     @Query private var syncedFocusTimers: [SyncedFocusTimer]
+    @Query private var currentSessionCompletedTimers: [SyncedFocusTimer]
+    @Query private var currentSessionCancellationTimers: [SyncedFocusTimer]
+    @Query private var currentSessionStudySessions: [StudySession]
     @Query private var focusDeviceClaims: [FocusTimerDeviceClaim]
     @Query private var activityResetMarkers: [ActivityResetMarker]
 
@@ -61,23 +186,55 @@ struct FocusView: View {
     @State private var dataEpochID: UUID?
     @State private var notifications = NotificationManager.shared
     @State private var notificationScheduleState: FocusNotificationScheduleState = .idle
+    @State private var notificationScheduleGeneration: UInt64 = 0
+    @State private var didEnterBackgroundSinceLastActive = false
+    @State private var isAwaitingRecoveryActivation = false
+    @State private var scheduledCompletionNotificationDeliveryDate: Date? = nil
+    @State private var notificationAuthorizationIsCurrent = false
+    @State private var notificationAuthorizationRefreshGeneration: UInt64 = 0
+    @State private var viewLifecycleGeneration: UInt64 = 0
+    @State private var isViewActive = false
     @AccessibilityFocusState private var completionSaveRetryFocused: Bool
 
     private let ticker = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
 
-    init(subject: Subject, duration: PomodoroDuration) {
+    init(
+        subject: Subject,
+        duration: PomodoroDuration,
+        dataEpochID: UUID? = nil
+    ) {
+        let sessionID = UUID()
         self.subject = subject
         self.subjectSnapshot = FocusSubjectSnapshot(subject: subject)
         self.recoveryOrigin = .local
         self.allowsLocalNotifications = true
         self.deviceID = FocusDeviceIdentity.current()
+        self.preparedSessionID = sessionID
         self.duration = duration
         _engine = State(initialValue: PomodoroEngine(selectedDuration: duration))
-        _dataEpochID = State(initialValue: nil)
+        _dataEpochID = State(initialValue: dataEpochID)
         _preferences = Query(Self.preferencesDescriptor())
         _gachaStates = Query(Self.gachaDescriptor())
-        _syncedFocusTimers = Query(Self.timerDescriptor(sessionID: nil))
-        _focusDeviceClaims = Query(Self.claimDescriptor(sessionID: nil))
+        _syncedFocusTimers = Query(Self.timerDescriptor(
+            sessionID: sessionID,
+            dataEpochID: dataEpochID
+        ))
+        _currentSessionCompletedTimers = Query(Self.completedTimerDescriptor(
+            sessionID: sessionID,
+            dataEpochID: dataEpochID
+        ))
+        _currentSessionCancellationTimers = Query(Self.cancellationTimerDescriptor(
+            sessionID: sessionID,
+            dataEpochID: dataEpochID
+        ))
+        _currentSessionStudySessions = Query(Self.studySessionDescriptor(
+            sessionID: sessionID,
+            dataEpochID: dataEpochID
+        ))
+        _focusDeviceClaims = Query(Self.claimDescriptor(
+            sessionID: sessionID,
+            dataEpochID: dataEpochID
+        ))
         _activityResetMarkers = Query(Self.resetMarkerDescriptor())
     }
 
@@ -94,22 +251,41 @@ struct FocusView: View {
         _pendingCompletion = State(initialValue: request.pendingCompletion)
         _dataEpochID = State(initialValue: request.dataEpochID)
         _didSignalCompletion = State(initialValue: request.pendingCompletion != nil)
+        _isAwaitingRecoveryActivation = State(initialValue: true)
+        _scheduledCompletionNotificationDeliveryDate = State(
+            initialValue: request.scheduledCompletionNotificationDeliveryDate
+        )
         _fairnessNotice = State(initialValue: request.engine.currentSource == .timerDemoted)
         let sessionID = request.pendingCompletion?.sessionID
             ?? request.engine.currentSessionID
+        preparedSessionID = sessionID
         _preferences = Query(Self.preferencesDescriptor())
         _gachaStates = Query(Self.gachaDescriptor())
-        _syncedFocusTimers = Query(Self.timerDescriptor(sessionID: sessionID))
-        _focusDeviceClaims = Query(Self.claimDescriptor(sessionID: sessionID))
+        _syncedFocusTimers = Query(Self.timerDescriptor(
+            sessionID: sessionID,
+            dataEpochID: request.dataEpochID
+        ))
+        _currentSessionCompletedTimers = Query(Self.completedTimerDescriptor(
+            sessionID: sessionID,
+            dataEpochID: request.dataEpochID
+        ))
+        _currentSessionCancellationTimers = Query(Self.cancellationTimerDescriptor(
+            sessionID: sessionID,
+            dataEpochID: request.dataEpochID
+        ))
+        _currentSessionStudySessions = Query(Self.studySessionDescriptor(
+            sessionID: sessionID,
+            dataEpochID: request.dataEpochID
+        ))
+        _focusDeviceClaims = Query(Self.claimDescriptor(
+            sessionID: sessionID,
+            dataEpochID: request.dataEpochID
+        ))
         _activityResetMarkers = Query(Self.resetMarkerDescriptor())
     }
 
     private static func preferencesDescriptor() -> FetchDescriptor<Prefs> {
-        var descriptor = FetchDescriptor<Prefs>(
-            sortBy: [SortDescriptor(\Prefs.id)]
-        )
-        descriptor.fetchLimit = 16
-        return descriptor
+        PrefsConsumerPolicy.descriptor()
     }
 
     private static func gachaDescriptor() -> FetchDescriptor<GachaState> {
@@ -119,23 +295,50 @@ struct FocusView: View {
     }
 
     private static func timerDescriptor(
-        sessionID: UUID?
+        sessionID: UUID?,
+        dataEpochID: UUID?
     ) -> FetchDescriptor<SyncedFocusTimer> {
         var descriptor: FetchDescriptor<SyncedFocusTimer>
-        if let sessionID {
+        if let sessionID, let dataEpochID {
+            let targetID = sessionID
+            let targetEpochID = dataEpochID
+            descriptor = FetchDescriptor(
+                predicate: #Predicate {
+                    $0.sessionID == targetID && $0.dataEpochID == targetEpochID
+                },
+                sortBy: [
+                    SortDescriptor(\SyncedFocusTimer.updatedAt, order: .reverse),
+                    SortDescriptor(\SyncedFocusTimer.revision, order: .reverse)
+                ]
+            )
+        } else if let sessionID {
             let targetID = sessionID
             descriptor = FetchDescriptor(
-                predicate: #Predicate { $0.sessionID == targetID },
+                predicate: #Predicate {
+                    $0.sessionID == targetID && $0.dataEpochID == nil
+                },
+                sortBy: [
+                    SortDescriptor(\SyncedFocusTimer.updatedAt, order: .reverse),
+                    SortDescriptor(\SyncedFocusTimer.revision, order: .reverse)
+                ]
+            )
+        } else if let dataEpochID {
+            let targetEpochID = dataEpochID
+            descriptor = FetchDescriptor(
+                predicate: #Predicate { $0.dataEpochID == targetEpochID },
                 sortBy: [
                     SortDescriptor(\SyncedFocusTimer.updatedAt, order: .reverse),
                     SortDescriptor(\SyncedFocusTimer.revision, order: .reverse)
                 ]
             )
         } else {
-            descriptor = FetchDescriptor(sortBy: [
-                SortDescriptor(\SyncedFocusTimer.updatedAt, order: .reverse),
-                SortDescriptor(\SyncedFocusTimer.revision, order: .reverse)
-            ])
+            descriptor = FetchDescriptor(
+                predicate: #Predicate { $0.dataEpochID == nil },
+                sortBy: [
+                    SortDescriptor(\SyncedFocusTimer.updatedAt, order: .reverse),
+                    SortDescriptor(\SyncedFocusTimer.revision, order: .reverse)
+                ]
+            )
         }
         descriptor.fetchLimit = FocusCloudSyncStore.QueryContract
             .matchingSessionRecordLimit
@@ -143,67 +346,199 @@ struct FocusView: View {
     }
 
     private static func claimDescriptor(
-        sessionID: UUID?
+        sessionID: UUID?,
+        dataEpochID: UUID?
     ) -> FetchDescriptor<FocusTimerDeviceClaim> {
+        let maximumSequence = FocusSyncPolicy.maximumSupportedOwnershipSequence
         var descriptor: FetchDescriptor<FocusTimerDeviceClaim>
-        if let sessionID {
+        if let sessionID, let dataEpochID {
             let targetID = sessionID
+            let targetEpochID = dataEpochID
             descriptor = FetchDescriptor(
-                predicate: #Predicate { $0.sessionID == targetID },
+                predicate: #Predicate {
+                    $0.sessionID == targetID
+                        && $0.dataEpochID == targetEpochID
+                        && $0.sequence >= 0
+                        && $0.sequence <= maximumSequence
+                },
                 sortBy: [
                     SortDescriptor(\FocusTimerDeviceClaim.sequence, order: .reverse),
-                    SortDescriptor(\FocusTimerDeviceClaim.claimedAt, order: .reverse)
+                    SortDescriptor(\FocusTimerDeviceClaim.claimedAt, order: .reverse),
+                    SortDescriptor(\FocusTimerDeviceClaim.deviceID, order: .reverse),
+                    SortDescriptor(\FocusTimerDeviceClaim.id, order: .reverse)
+                ]
+            )
+        } else if let sessionID {
+            let targetID = sessionID
+            descriptor = FetchDescriptor(
+                predicate: #Predicate {
+                    $0.sessionID == targetID
+                        && $0.dataEpochID == nil
+                        && $0.sequence >= 0
+                        && $0.sequence <= maximumSequence
+                },
+                sortBy: [
+                    SortDescriptor(\FocusTimerDeviceClaim.sequence, order: .reverse),
+                    SortDescriptor(\FocusTimerDeviceClaim.claimedAt, order: .reverse),
+                    SortDescriptor(\FocusTimerDeviceClaim.deviceID, order: .reverse),
+                    SortDescriptor(\FocusTimerDeviceClaim.id, order: .reverse)
                 ]
             )
         } else {
-            descriptor = FetchDescriptor(sortBy: [
-                SortDescriptor(\FocusTimerDeviceClaim.claimedAt, order: .reverse),
-                SortDescriptor(\FocusTimerDeviceClaim.sequence, order: .reverse)
-            ])
+            descriptor = FetchDescriptor(
+                predicate: #Predicate {
+                    $0.sequence >= 0
+                        && $0.sequence <= maximumSequence
+                },
+                sortBy: [
+                    SortDescriptor(\FocusTimerDeviceClaim.sequence, order: .reverse),
+                    SortDescriptor(\FocusTimerDeviceClaim.claimedAt, order: .reverse),
+                    SortDescriptor(\FocusTimerDeviceClaim.deviceID, order: .reverse),
+                    SortDescriptor(\FocusTimerDeviceClaim.id, order: .reverse)
+                ]
+            )
         }
         descriptor.fetchLimit = FocusCloudSyncStore.QueryContract
             .matchingSessionClaimLimit
         return descriptor
     }
 
-    private static func resetMarkerDescriptor() -> FetchDescriptor<ActivityResetMarker> {
-        var descriptor = FetchDescriptor<ActivityResetMarker>(sortBy: [
-            SortDescriptor(\ActivityResetMarker.resetAt, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.sequence, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.writerDeviceID, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.epochID, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.id, order: .reverse)
-        ])
+    private static func completedTimerDescriptor(
+        sessionID: UUID?,
+        dataEpochID: UUID?
+    ) -> FetchDescriptor<SyncedFocusTimer> {
+        let targetID = sessionID
+            ?? UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+        let completed = SyncedFocusStatus.completed.rawValue
+        var descriptor: FetchDescriptor<SyncedFocusTimer>
+        if let dataEpochID {
+            let targetEpochID = dataEpochID
+            descriptor = FetchDescriptor(
+                predicate: #Predicate {
+                    $0.sessionID == targetID
+                        && $0.dataEpochID == targetEpochID
+                        && $0.statusRaw == completed
+                },
+                sortBy: [
+                    SortDescriptor(\SyncedFocusTimer.updatedAt, order: .reverse),
+                    SortDescriptor(\SyncedFocusTimer.revision, order: .reverse),
+                    SortDescriptor(\SyncedFocusTimer.id, order: .reverse)
+                ]
+            )
+        } else {
+            descriptor = FetchDescriptor(
+                predicate: #Predicate {
+                    $0.sessionID == targetID
+                        && $0.dataEpochID == nil
+                        && $0.statusRaw == completed
+                },
+                sortBy: [
+                    SortDescriptor(\SyncedFocusTimer.updatedAt, order: .reverse),
+                    SortDescriptor(\SyncedFocusTimer.revision, order: .reverse),
+                    SortDescriptor(\SyncedFocusTimer.id, order: .reverse)
+                ]
+            )
+        }
         descriptor.fetchLimit = 1
         return descriptor
     }
 
-    private var prefs: Prefs? {
-        currentPreferences.first
-    }
-    private var currentPreferences: [Prefs] {
-        preferences.filter {
-            ActivityResetPolicy.isCurrent($0.activityEpochID, markers: resetSnapshots)
+    private static func cancellationTimerDescriptor(
+        sessionID: UUID?,
+        dataEpochID: UUID?
+    ) -> FetchDescriptor<SyncedFocusTimer> {
+        let targetID = sessionID
+            ?? UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+        let cancelled = SyncedFocusStatus.cancelled.rawValue
+        var descriptor: FetchDescriptor<SyncedFocusTimer>
+        let ordering = [
+            SortDescriptor(\SyncedFocusTimer.terminalAt),
+            SortDescriptor(\SyncedFocusTimer.ownershipSequence, order: .reverse),
+            SortDescriptor(\SyncedFocusTimer.revision, order: .reverse),
+            SortDescriptor(\SyncedFocusTimer.updatedAt, order: .reverse),
+            SortDescriptor(\SyncedFocusTimer.writerDeviceID, order: .reverse),
+            SortDescriptor(\SyncedFocusTimer.id, order: .reverse)
+        ]
+        if let dataEpochID {
+            let targetEpochID = dataEpochID
+            descriptor = FetchDescriptor(
+                predicate: #Predicate {
+                    $0.sessionID == targetID
+                        && $0.dataEpochID == targetEpochID
+                        && $0.statusRaw == cancelled
+                },
+                sortBy: ordering
+            )
+        } else {
+            descriptor = FetchDescriptor(
+                predicate: #Predicate {
+                    $0.sessionID == targetID
+                        && $0.dataEpochID == nil
+                        && $0.statusRaw == cancelled
+                },
+                sortBy: ordering
+            )
         }
+        descriptor.fetchLimit = 1
+        return descriptor
+    }
+
+    private static func studySessionDescriptor(
+        sessionID: UUID?,
+        dataEpochID: UUID?
+    ) -> FetchDescriptor<StudySession> {
+        let targetID = sessionID
+            ?? UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+        var descriptor: FetchDescriptor<StudySession>
+        if let dataEpochID {
+            let targetEpochID = dataEpochID
+            descriptor = FetchDescriptor(
+                predicate: #Predicate {
+                    $0.id == targetID && $0.dataEpochID == targetEpochID
+                }
+            )
+        } else {
+            descriptor = FetchDescriptor(
+                predicate: #Predicate {
+                    $0.id == targetID && $0.dataEpochID == nil
+                }
+            )
+        }
+        descriptor.fetchLimit = 2
+        return descriptor
+    }
+
+    private static func resetMarkerDescriptor() -> FetchDescriptor<ActivityResetMarker> {
+        ActivityResetPolicy.currentMarkerDescriptor()
+    }
+
+    private var resolvedPreferences: PrefsSyncPolicy.ResolvedState? {
+        PrefsConsumerPolicy.resolvedState(
+            in: preferences,
+            markers: resetSnapshots
+        )
+    }
+    private var sensoryPreferences: PrefsSyncPolicy.ResolvedSensoryState {
+        PrefsConsumerPolicy.resolvedSensoryState(in: preferences)
     }
     private var rareRewardMode: RareRewardMode {
-        RareRewardMode.resolved(preferences: currentPreferences)
+        PrefsConsumerPolicy.rareRewardMode(from: resolvedPreferences)
     }
     private var needsRareRewardChoice: Bool {
-        recoveryOrigin == .local
+        RareRewardReleasePolicy.isEnabled
+            && recoveryOrigin == .local
             && !didStart
-            && !RareRewardMode.hasExplicitSelection(preferences: currentPreferences)
-    }
-    private var showsThemeNameExternally: Bool {
-        prefs?.showsThemeNameExternally ?? false
-    }
-    private var externalSubjectName: String {
-        showsThemeNameExternally ? subjectSnapshot.name : "集中"
+            && !PrefsConsumerPolicy.hasExplicitRareRewardSelection(
+                in: resolvedPreferences
+            )
     }
     private var snapshot: PomodoroSnapshot { engine.snapshot(at: displayNow) }
     private var accent: Color { Color(hex: subjectSnapshot.colorHex) }
     private var resetSnapshots: [ActivityResetSnapshot] {
         activityResetMarkers.map(\.policySnapshot)
+    }
+    private var preferencesFingerprint: [String] {
+        preferences.map { PrefsConsumerPolicy.fingerprint(for: $0) }
     }
     private var currentSyncedFocusTimers: [SyncedFocusTimer] {
         syncedFocusTimers.filter {
@@ -240,10 +575,21 @@ struct FocusView: View {
         let timerValues = syncedFocusTimers.map {
             "timer-\($0.sessionID.uuidString)-\($0.statusRaw)-\($0.revision)-\($0.updatedAt.timeIntervalSince1970)"
         }
+        let completedValues = currentSessionCompletedTimers.map {
+            "completed-\($0.id.uuidString)-\($0.revision)-\($0.updatedAt.timeIntervalSince1970)"
+        }
+        let cancellationValues = currentSessionCancellationTimers.map {
+            "cancelled-\($0.id.uuidString)-\($0.revision)-\($0.updatedAt.timeIntervalSince1970)-\($0.terminalAt?.timeIntervalSince1970 ?? -1)"
+        }
+        let materializedValues = currentSessionStudySessions.map {
+            "materialized-\($0.id.uuidString)-\($0.endAt.timeIntervalSince1970)-\($0.grams)"
+        }
         let claimValues = focusDeviceClaims.map {
             "claim-\($0.sessionID.uuidString)-\($0.deviceID)-\($0.sequence)-\($0.releasedAt?.timeIntervalSince1970 ?? -1)"
         }
-        return (timerValues + claimValues).sorted()
+        return (timerValues + completedValues + cancellationValues
+            + materializedValues + claimValues)
+            .sorted()
     }
     private var ownsCurrentTimer: Bool {
         guard allowsLocalNotifications, let currentSessionID else { return false }
@@ -302,33 +648,78 @@ struct FocusView: View {
         .foregroundStyle(TsumibenTheme.text)
         .interactiveDismissDisabled()
         .statusBarHidden()
-        .task { await activate() }
+        .task { await beginActivation() }
         .onReceive(ticker) { date in
             displayNow = date
             // Absolute end dates keep advancing while locked/backgrounded. Do
             // not consume completion in the brief inactive run-loop window:
             // doing so can cancel the already-scheduled OS notification before
             // it is delivered. The active transition resolves the same end date.
-            guard scenePhase == .active else { return }
+            guard scenePhase == .active,
+                  notificationAuthorizationIsCurrent else { return }
+            let completionIsElapsed = (engine.endDate ?? .distantFuture) <= date
+            if completionIsElapsed {
+                // Resolve a foreground return only after an in-flight
+                // Notification Center add has a definite success/failure.
+                guard !notificationScheduleState.isScheduling else { return }
+                let completionUptime = ContinuousUptime.now()
+                let playsSensoryFeedback =
+                    foregroundFeedbackShouldPlayForElapsedCompletion(
+                        at: date,
+                        uptime: completionUptime,
+                        returnedFromBackground:
+                            didEnterBackgroundSinceLastActive
+                    )
+                didEnterBackgroundSinceLastActive = false
+                advanceIfNeeded(
+                    at: date,
+                    uptime: completionUptime,
+                    playsSensoryFeedback: playsSensoryFeedback
+                )
+                return
+            }
             advanceIfNeeded(
                 at: date,
                 uptime: ContinuousUptime.now()
             )
         }
         .onChange(of: scenePhase) { _, newPhase in
-            handleScenePhase(to: newPhase)
-            if newPhase == .active {
-                Task { await synchronizeCompletionNotificationIfNeeded() }
+            notificationAuthorizationRefreshGeneration &+= 1
+            let refreshGeneration = notificationAuthorizationRefreshGeneration
+            guard newPhase == .active else {
+                notificationAuthorizationIsCurrent = false
+                handleScenePhase(to: newPhase)
+                return
+            }
+            notificationAuthorizationIsCurrent = false
+            Task { @MainActor in
+                await notifications.refreshAuthorizationStatus()
+                guard !Task.isCancelled,
+                      refreshGeneration
+                        == notificationAuthorizationRefreshGeneration,
+                      scenePhase == .active else { return }
+                notificationAuthorizationIsCurrent = true
+                handleScenePhase(to: .active)
+                if pendingCompletion == nil,
+                   completion == nil,
+                   engine.snapshot(at: .now).phase == .focusing,
+                   let endDate = engine.endDate,
+                   endDate > .now {
+                    await scheduleCurrentCompletionNotification()
+                }
             }
         }
         .onChange(of: focusSyncFingerprint) { _, _ in
-            if ownsCurrentTimer {
+            let retired = enforceCloudOwnership()
+            if !retired, ownsCurrentTimer {
                 Task { await refreshExternalTimerPresentation() }
-            } else {
-                enforceCloudOwnership()
             }
         }
-        .onChange(of: showsThemeNameExternally) { _, _ in
+        .onChange(of: preferencesFingerprint) { _, _ in
+            configureSensoryPreferences()
+            UIApplication.shared.isIdleTimerDisabled =
+                engine.snapshot(at: .now).phase == .focusing
+                && (resolvedPreferences?.keepScreenAwake ?? false)
             guard ownsCurrentTimer else { return }
             Task { await refreshExternalTimerPresentation() }
         }
@@ -337,6 +728,15 @@ struct FocusView: View {
         }
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
+            // RootView may be torn down solely to revalidate the CloudKit
+            // account. Keep the accepted OS request, but fence every callback
+            // owned by this disappearing view from rewriting recovery later.
+            notificationAuthorizationIsCurrent = false
+            notificationAuthorizationRefreshGeneration &+= 1
+            notificationScheduleGeneration &+= 1
+            viewLifecycleGeneration &+= 1
+            isViewActive = false
+            if !didStart { didActivate = false }
         }
         .alert("今日はここまで", isPresented: $showGiveUpConfirmation) {
             Button("続ける", role: .cancel) {}
@@ -379,6 +779,7 @@ struct FocusView: View {
                         Circle().fill(accent).frame(width: 8, height: 8)
                         Text(subjectSnapshot.name)
                             .font(.system(.subheadline, design: .rounded, weight: .bold))
+                            .accessibilityIdentifier("focus.subject")
                     }
                     Text(phaseLabel)
                         .font(.caption2)
@@ -552,7 +953,18 @@ struct FocusView: View {
     }
 
     @MainActor
-    private func activate() async {
+    private func beginActivation() async {
+        guard !Task.isCancelled else { return }
+        isViewActive = true
+        viewLifecycleGeneration &+= 1
+        await activate(lifecycleGeneration: viewLifecycleGeneration)
+    }
+
+    @MainActor
+    private func activate(lifecycleGeneration: UInt64) async {
+        guard !Task.isCancelled,
+              isViewActive,
+              lifecycleGeneration == viewLifecycleGeneration else { return }
         guard !didActivate else { return }
         // No local timer begins until an informed choice is synchronized.
         // Recovery must continue even for a legacy envelope; its completion is
@@ -561,6 +973,9 @@ struct FocusView: View {
         didActivate = true
         configureSensoryPreferences()
         await notifications.refreshAuthorizationStatus()
+        guard !Task.isCancelled,
+              lifecycleGeneration == viewLifecycleGeneration else { return }
+        notificationAuthorizationIsCurrent = scenePhase == .active
 
         if didStart {
             guard ActivityResetPolicy.state(
@@ -571,9 +986,10 @@ struct FocusView: View {
                 return
             }
             let now = Date.now
+            let completionUptime = ContinuousUptime.now()
             displayNow = now
             UIApplication.shared.isIdleTimerDisabled = snapshot.phase == .focusing
-                && (prefs?.keepScreenAwake ?? true)
+                && (resolvedPreferences?.keepScreenAwake ?? false)
 
             if let pendingCompletion {
                 await commitCompletion(pendingCompletion)
@@ -581,21 +997,62 @@ struct FocusView: View {
             }
 
             saveRecoveryState()
+            let completionIsAlreadyElapsed = engine.snapshot(at: now)
+                .remainingSeconds == 0
+            // Never consume an elapsed recovery while inactive/backgrounded:
+            // doing so cancels the OS request before it can notify the user.
+            guard !completionIsAlreadyElapsed || scenePhase == .active else {
+                return
+            }
+            let playsSensoryFeedback: Bool
+            if completionIsAlreadyElapsed {
+                playsSensoryFeedback = foregroundFeedbackShouldPlayForElapsedCompletion(
+                    at: now,
+                    uptime: completionUptime,
+                    returnedFromBackground: false
+                )
+            } else {
+                isAwaitingRecoveryActivation = false
+                playsSensoryFeedback = true
+            }
             advanceIfNeeded(
                 at: now,
-                uptime: ContinuousUptime.now()
+                uptime: completionUptime,
+                playsSensoryFeedback: playsSensoryFeedback
             )
             if pendingCompletion == nil {
-                await refreshExternalTimerPresentation()
+                await scheduleCurrentCompletionNotification()
+                guard !Task.isCancelled,
+                      lifecycleGeneration == viewLifecycleGeneration
+                else { return }
+                if recoveryOrigin == .iCloud,
+                   let sessionID = engine.currentSessionID {
+                    await startLiveActivityForExplicitTimer(
+                        sessionID: sessionID
+                    )
+                    guard !Task.isCancelled,
+                          lifecycleGeneration == viewLifecycleGeneration
+                    else { return }
+                    await refreshExternalTimerPresentation(
+                        synchronizesCompletionNotification: false
+                    )
+                } else {
+                    await refreshExternalTimerPresentation(
+                        synchronizesCompletionNotification: false
+                    )
+                }
             }
             return
         }
 
         didStart = true
         let now = Date.now
-        let sessionID = UUID()
+        let sessionID = preparedSessionID ?? UUID()
         do {
-            dataEpochID = try ActivityResetStore.currentEpochID(context: modelContext)
+            let latestEpochID = try ActivityResetStore.currentEpochID(context: modelContext)
+            guard latestEpochID == dataEpochID else {
+                throw FocusCloudSyncError.activityWasReset
+            }
             try engine.startFocus(
                 duration: duration,
                 isPro: PurchaseManager.shared.isPro,
@@ -608,20 +1065,19 @@ struct FocusView: View {
                 systemUptime: ContinuousUptime.now()
             )
             saveRecoveryState()
-            UIApplication.shared.isIdleTimerDisabled = prefs?.keepScreenAwake ?? true
+            UIApplication.shared.isIdleTimerDisabled =
+                resolvedPreferences?.keepScreenAwake ?? false
 
-            if let endDate = engine.endDate {
-                if notifications.isAuthorized {
-                    await scheduleCurrentCompletionNotification()
-                }
-                _ = try? await FocusActivityManager.shared.start(
-                    sessionID: sessionID,
-                    subjectName: externalSubjectName,
-                    subjectColorHex: subjectSnapshot.colorHex,
-                    durationSeconds: duration.seconds,
-                    endDate: endDate
-                )
-            }
+            await scheduleCurrentCompletionNotification()
+            guard !Task.isCancelled,
+                  lifecycleGeneration == viewLifecycleGeneration else { return }
+            await startLiveActivityForExplicitTimer(sessionID: sessionID)
+            guard !Task.isCancelled,
+                  lifecycleGeneration == viewLifecycleGeneration,
+                  engine.currentSessionID == sessionID else { return }
+            await refreshExternalTimerPresentation(
+                synchronizesCompletionNotification: false
+            )
         } catch {
             setupErrorMessage = error.localizedDescription
         }
@@ -630,7 +1086,7 @@ struct FocusView: View {
     @MainActor
     private func saveRareRewardChoiceAndStart() {
         guard let rareRewardChoice, !isSavingRareRewardChoice else { return }
-        guard !currentPreferences.isEmpty else {
+        guard resolvedPreferences != nil else {
             rareRewardChoiceError = "設定の保存先を準備できませんでした。いったん戻り、もう一度お試しください。"
             return
         }
@@ -638,14 +1094,21 @@ struct FocusView: View {
         isSavingRareRewardChoice = true
         rareRewardChoiceError = nil
         let changedAt = Date.now
-        for preference in currentPreferences {
-            preference.rareRewardModeRawValue = rareRewardChoice.rawValue
-            preference.rareRewardModeUpdatedAt = changedAt
-        }
         do {
+            try PrefsConsumerPolicy.mutate(
+                .rareReward,
+                context: modelContext,
+                markers: resetSnapshots
+            ) {
+                $0.rareRewardModeRawValue = rareRewardChoice.rawValue
+                $0.rareRewardModeUpdatedAt = changedAt
+            }
             try modelContext.save()
             isSavingRareRewardChoice = false
-            Task { await activate() }
+            let lifecycleGeneration = viewLifecycleGeneration
+            Task {
+                await activate(lifecycleGeneration: lifecycleGeneration)
+            }
         } catch {
             modelContext.rollback()
             isSavingRareRewardChoice = false
@@ -673,77 +1136,214 @@ struct FocusView: View {
         await scheduleCurrentCompletionNotification()
     }
 
+    /// Creates a Live Activity only at an explicit local start or accepted
+    /// iCloud handoff. ActivityKit cleanup can suspend while pause/resume/cancel
+    /// stays interactive, so retry against the newest stable engine state. The
+    /// bound prevents a person rapidly tapping the control from keeping this
+    /// activation task alive indefinitely; later controls still update any
+    /// activity that was successfully created.
+    @MainActor
+    private func startLiveActivityForExplicitTimer(
+        sessionID: UUID
+    ) async {
+        let manager = FocusActivityManager.shared
+        for _ in 0..<3 {
+            manager.refreshAuthorization()
+            guard ownsCurrentTimer,
+                  manager.activitiesEnabled,
+                  let intendedState = explicitFocusActivityState(
+                    sessionID: sessionID,
+                    at: .now
+                  )
+            else {
+                if engine.currentSessionID != sessionID {
+                    await manager.cancel(sessionID: sessionID)
+                }
+                return
+            }
+
+            do {
+                switch intendedState {
+                case let .focusing(endDate):
+                    _ = try await manager.start(
+                        sessionID: sessionID,
+                        durationSeconds: duration.seconds,
+                        endDate: endDate
+                    )
+                case let .paused(remainingSeconds):
+                    _ = try await manager.startPaused(
+                        sessionID: sessionID,
+                        durationSeconds: duration.seconds,
+                        remainingSeconds: remainingSeconds
+                    )
+                }
+            } catch {
+                // Live Activity is an optional system-owned surface. Keep the
+                // authoritative in-app timer running if ActivityKit refuses it.
+                return
+            }
+
+            guard let currentState = explicitFocusActivityState(
+                sessionID: sessionID,
+                at: .now
+            ) else {
+                await manager.cancel(sessionID: sessionID)
+                return
+            }
+            if manager.currentSessionID == sessionID,
+               currentState == intendedState {
+                return
+            }
+        }
+    }
+
+    private func explicitFocusActivityState(
+        sessionID: UUID,
+        at now: Date
+    ) -> ExplicitFocusActivityState? {
+        guard engine.currentSessionID == sessionID else { return nil }
+        let currentSnapshot = engine.snapshot(at: now)
+        switch currentSnapshot.phase {
+        case .focusing:
+            guard let endDate = engine.endDate, endDate > now else { return nil }
+            return .focusing(endDate: endDate)
+        case .paused:
+            return .paused(
+                remainingSeconds: currentSnapshot.remainingSeconds
+            )
+        default:
+            return nil
+        }
+    }
+
     @MainActor
     private func scheduleCurrentCompletionNotification() async {
+        guard isViewActive else { return }
+        notificationScheduleGeneration &+= 1
+        let generation = notificationScheduleGeneration
         guard ownsCurrentTimer,
               notifications.isAuthorized,
               engine.snapshot(at: .now).phase == .focusing,
               let sessionID = engine.currentSessionID,
-              let endDate = engine.endDate,
-              endDate > .now
+              let endDate = engine.endDate
         else {
+            invalidateScheduledCompletionNotificationWitness()
+            notificationScheduleState = .idle
+            return
+        }
+        guard endDate > .now else {
+            // Keep a matching success witness until the elapsed completion is
+            // consumed; Notification Center may already have delivered it.
             notificationScheduleState = .idle
             return
         }
 
+        // The replacement request has a new registration origin. Persisting
+        // the old, earlier delivery Date while this add is in flight could
+        // suppress the in-app cue before the replacement has actually fired.
+        invalidateScheduledCompletionNotificationWitness()
         notificationScheduleState = .scheduling
         do {
-            try await notifications.scheduleFocusCompletion(
+            let scheduleResult = try await notifications
+                .scheduleFocusCompletion(
                 sessionID: sessionID,
-                subjectName: subjectSnapshot.name,
-                showsSubjectName: showsThemeNameExternally,
                 endDate: endDate,
-                playsSound: prefs?.soundOn ?? true
+                playsSound: sensoryPreferences.soundOn,
+                completionSound: sensoryPreferences.timerCompletionSound
             )
-            notificationScheduleState = .scheduled
+            guard case let .accepted(notificationDeliveryDate) = scheduleResult
+            else { return }
+            guard !Task.isCancelled,
+                  isViewActive,
+                  notificationScheduleGeneration == generation else { return }
+            // Scheduling crosses into Notification Center and can suspend this
+            // task. A pause, cancellation, ownership handoff, or reschedule may
+            // win while it is awaiting. NotificationManager already converges
+            // the actual pending request; keep the visible status equally
+            // honest by accepting success only for the same active intent.
+            let currentSnapshot = engine.snapshot(at: .now)
+            if ownsCurrentTimer,
+               engine.currentSessionID == sessionID,
+               currentSnapshot.phase == .focusing,
+               engine.endDate == endDate {
+                scheduledCompletionNotificationDeliveryDate =
+                    notificationDeliveryDate
+                notificationScheduleState = .scheduled
+                saveRecoveryState()
+            } else {
+                scheduledCompletionNotificationDeliveryDate = nil
+                notificationScheduleState = .idle
+            }
         } catch {
-            notificationScheduleState = .failed(message: error.localizedDescription)
+            guard !Task.isCancelled,
+                  isViewActive,
+                  notificationScheduleGeneration == generation else { return }
+            if ownsCurrentTimer,
+               engine.currentSessionID == sessionID,
+               engine.snapshot(at: .now).phase == .focusing,
+               engine.endDate == endDate {
+                notificationScheduleState = .failed(message: error.localizedDescription)
+            } else {
+                scheduledCompletionNotificationDeliveryDate = nil
+                notificationScheduleState = .idle
+            }
         }
     }
 
     @MainActor
-    private func refreshExternalTimerPresentation() async {
+    private func refreshExternalTimerPresentation(
+        synchronizesCompletionNotification: Bool = true
+    ) async {
         // Both local notifications and Live Activities belong only to the
         // winning device claim. This guard also covers the narrow handoff race
         // where ownership changes after RootView creates this screen but before
         // its first activation task runs.
+        guard isViewActive else { return }
         guard ownsCurrentTimer else {
             enforceCloudOwnership()
             return
         }
-        await synchronizeCompletionNotificationIfNeeded()
-        guard engine.snapshot(at: .now).phase == .focusing,
-              let sessionID = engine.currentSessionID,
-              let endDate = engine.endDate,
-              endDate > .now
-        else { return }
-
-        // Activity attributes are immutable. Replacing the one active Live
-        // Activity is the only way to apply an opt-out immediately when the
-        // setting arrives from this device or iCloud.
-        _ = try? await FocusActivityManager.shared.start(
-            sessionID: sessionID,
-            subjectName: externalSubjectName,
-            subjectColorHex: subjectSnapshot.colorHex,
-            durationSeconds: duration.seconds,
-            endDate: endDate
-        )
+        let currentSnapshot = engine.snapshot(at: .now)
+        guard let sessionID = engine.currentSessionID else { return }
+        switch currentSnapshot.phase {
+        case .focusing:
+            if synchronizesCompletionNotification {
+                await synchronizeCompletionNotificationIfNeeded()
+            }
+            guard isViewActive else { return }
+            guard let endDate = engine.endDate, endDate > .now else { return }
+            await FocusActivityManager.shared.updateIfPresent(
+                sessionID: sessionID,
+                endDate: endDate
+            )
+        case .paused:
+            NotificationManager.shared.cancelFocusCompletion(sessionID: sessionID)
+            scheduledCompletionNotificationDeliveryDate = nil
+            notificationScheduleState = .idle
+            await FocusActivityManager.shared.pause(
+                sessionID: sessionID,
+                remainingSeconds: currentSnapshot.remainingSeconds
+            )
+        default:
+            return
+        }
     }
 
     private func configureSensoryPreferences() {
-        SoundSynth.shared.isEnabled = prefs?.soundOn ?? true
-        Haptics.shared.isEnabled = prefs?.hapticsOn ?? true
+        SoundSynth.shared.isEnabled = sensoryPreferences.soundOn
+        Haptics.shared.isEnabled = sensoryPreferences.hapticsOn
     }
 
     private func advanceIfNeeded(
         at now: Date,
-        uptime: TimeInterval
+        uptime: TimeInterval,
+        playsSensoryFeedback: Bool = true
     ) {
-        // Breaks are local sensory intervals and have no focus session ID.
-        // Ownership gates only the shared focus award/notification path.
-        if engine.containsRecoverableFocus {
-            guard ownsCurrentTimer else { return }
-        }
+        // Freeze an elapsed completion before consulting mutable CloudKit
+        // ownership. A handoff followed by a cancellation at/after the frozen
+        // scheduled end must not erase effort merely because those foreign
+        // rows arrived while this device was suspended. Ownership still gates
+        // StudySession materialization in `persistCompletion`.
         reconcileClockIntegrity(at: now, uptime: uptime)
         guard let event = engine.advance(at: now, observedUptime: uptime) else { return }
         switch event {
@@ -754,7 +1354,10 @@ struct FocusView: View {
                 clockAnchor: clockAnchor
             )
             fairnessNotice = finalized.source == .timerDemoted
-            handleFocusCompletion(finalized)
+            handleFocusCompletion(
+                finalized,
+                playsSensoryFeedback: playsSensoryFeedback
+            )
         case .breakCompleted:
             FocusPersistence.clear()
             withAnimation { breakFinished = true }
@@ -764,7 +1367,6 @@ struct FocusView: View {
     /// Backgrounding is not a fairness event. Wall time continues against the
     /// saved absolute end date. The continuous clock is consulted separately
     /// only to catch a clear wall-clock jump while preserving normal lock,
-    /// phone-call and Control Center behavior.
     private func reconcileClockIntegrity(
         at now: Date,
         uptime: TimeInterval
@@ -782,32 +1384,36 @@ struct FocusView: View {
         switch integrity {
         case .valid:
             break
-        case .changed:
+        case .changed, .uptimeReset, .unverifiable:
             guard engine.currentSource == .timer else { return }
             do {
                 try engine.demoteCurrentFocus()
                 fairnessNotice = true
+                // Keep a valid local anchor for diagnostics and for coherent
+                // recovery bytes. The source is already irreversibly demoted,
+                // so re-anchoring cannot restore measured-only rewards.
+                self.clockAnchor = ClockAnchor(
+                    wallDate: now,
+                    systemUptime: uptime
+                )
                 saveRecoveryState()
             } catch {
                 operationErrorMessage = error.localizedDescription
             }
-        case .uptimeReset, .unverifiable:
-            // A reboot or an anchor written by an older app version is not
-            // evidence of manipulation. Re-anchor so subsequent changes in
-            // this boot can still be checked.
-            self.clockAnchor = ClockAnchor(
-                wallDate: now,
-                systemUptime: uptime
-            )
-            saveRecoveryState()
         }
     }
 
-    private func handleFocusCompletion(_ result: PomodoroCompletion) {
+    private func handleFocusCompletion(
+        _ result: PomodoroCompletion,
+        playsSensoryFeedback: Bool = true
+    ) {
         guard pendingCompletion == nil else { return }
         pendingCompletion = result
         saveRecoveryState(pendingCompletion: result)
-        signalCompletionIfNeeded(result)
+        signalCompletionIfNeeded(
+            result,
+            playsSensoryFeedback: playsSensoryFeedback
+        )
         Task { await commitCompletion(result) }
     }
 
@@ -820,7 +1426,7 @@ struct FocusView: View {
         completionWasRejectedForOwnership = false
         let persistenceResult: FocusCompletionPersistenceResult
         do {
-            persistenceResult = try persistCompletion(result)
+            persistenceResult = try await persistCompletion(result)
         } catch {
             modelContext.rollback()
             saveRecoveryState(pendingCompletion: result)
@@ -836,7 +1442,12 @@ struct FocusView: View {
             // successful local save.
             saveRecoveryState(pendingCompletion: result)
             completionWasRejectedForOwnership = true
-            completionSaveError = "この完走は別の端末が保存を担当しています。iCloudの記録が届くまで、この端末の復元情報を保持します。しばらく待ってから保存状態を確認してください。"
+            completionSaveError = switch persistenceResult {
+            case .awaitingMaterializedCompletion:
+                "完了状態が先に届き、履歴本体が保存領域へ反映されるのを待っています。この端末の復元情報は保持しています。しばらく待ってから保存状態を確認してください。"
+            default:
+                "この完走は別の保存処理が担当しています。記録が保存領域へ反映されるまで、この端末の復元情報を保持します。しばらく待ってから保存状態を確認してください。"
+            }
             announceCompletionSaveFailure()
             return
         }
@@ -846,6 +1457,16 @@ struct FocusView: View {
         if router.deferredFocusRecovery?.id == result.sessionID {
             router.deferredFocusRecovery = nil
         }
+        if persistenceResult == .cancelledBeforeCompletion
+            || persistenceResult == .discardedByReset {
+            NotificationManager.shared.cancelFocusCompletion(
+                sessionID: result.sessionID
+            )
+            await FocusActivityManager.shared.cancel(sessionID: result.sessionID)
+            dismiss()
+            return
+        }
+
         UserDefaults.standard.set(
             result.sessionID.uuidString.lowercased(),
             forKey: FocusPersistence.localCompletionIDKey
@@ -858,8 +1479,7 @@ struct FocusView: View {
         }
 
         await FocusActivityManager.shared.complete(
-            sessionID: result.sessionID,
-            grams: result.grams
+            sessionID: result.sessionID
         )
         try? await Task.sleep(for: .seconds(Constants.Jar.completionDropDelay))
         // Home is still mounted behind this cover. Dismissing now reveals the
@@ -871,7 +1491,7 @@ struct FocusView: View {
     @MainActor
     private func persistCompletion(
         _ result: PomodoroCompletion
-    ) throws -> FocusCompletionPersistenceResult {
+    ) async throws -> FocusCompletionPersistenceResult {
         guard ActivityResetPolicy.state(
             of: dataEpochID,
             markers: resetSnapshots
@@ -884,15 +1504,194 @@ struct FocusView: View {
         let descriptor = FetchDescriptor<StudySession>(
             predicate: #Predicate { $0.id == completionID }
         )
-        let existingSessionIDs = Set(try modelContext.fetch(descriptor)
-            .filter {
-                ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetSnapshots)
+        let existingSessions = try modelContext.fetch(descriptor).filter {
+            ActivityResetPolicy.isCurrent(
+                $0.dataEpochID,
+                markers: resetSnapshots
+            )
+                && StudySessionIntegrityPolicy.isSupported($0)
+        }
+        let existingSessionIDs = Set(existingSessions.map(\.id))
+
+        if !RareRewardReleasePolicy.isEnabled {
+            guard existingSessions.isEmpty else {
+                // CloudKit may deliver the StudySession before its timer
+                // tombstone. The exact StudySession is already an irreversible
+                // closure sentinel; also append a completed row when the
+                // shared timer payload is available so old clients converge.
+                try? FocusCloudSyncStore.markTerminal(
+                    sessionID: result.sessionID,
+                    status: .completed,
+                    context: modelContext,
+                    deviceID: deviceID,
+                    at: result.observedAt,
+                    enforceOwnership: false
+                )
+                if modelContext.hasChanges { try modelContext.save() }
+                return .alreadyMaterialized
             }
-            .map(\.id))
-        if existingSessionIDs.contains(completionID) {
+            switch try FocusCloudSyncStore.completionGate(
+                sessionID: completionID,
+                context: modelContext
+            ) {
+            case .open:
+                break
+            case .cancelledBeforeCompletion:
+                return .cancelledBeforeCompletion
+            case .completedAwaitingSession:
+                return .awaitingMaterializedCompletion
+            case .materialized:
+                return .alreadyMaterialized
+            }
+            guard try claimCompletionMaterialization(
+                completionID: completionID,
+                existingSessionIDs: existingSessionIDs
+            ) else {
+                return .rejectedOwnership
+            }
+
+            modelContext.insert(FocusCompletionSessionFactory.normalSession(
+                completion: result,
+                subject: subject,
+                subjectSnapshot: subjectSnapshot,
+                dataEpochID: dataEpochID
+            ))
+            try FocusCloudSyncStore.markTerminal(
+                sessionID: result.sessionID,
+                status: .completed,
+                context: modelContext,
+                deviceID: deviceID,
+                at: result.observedAt
+            )
+#if DEBUG && targetEnvironment(simulator)
+            if UITestFaultInjection.consumeFocusCompletionSaveFailure() {
+                throw UITestInjectedPersistenceError.focusCompletionSaveOnce
+            }
+#endif
+            // StudySession and the terminal focus record share the ordinary
+            // SwiftData/iCloud transaction. No rare outbox, cursor, random draw,
+            // or raw CloudKit coordinator participates in this release path.
+            try modelContext.save()
+            return .inserted(.normal)
+        }
+
+        let pendingRows = try rareRewardPendingRows(sessionID: completionID)
+        let versionTwoSessions = existingSessions.filter {
+            $0.rareRewardRuleVersion == RareRewardLedgerV2.ruleVersion
+        }
+        if versionTwoSessions.contains(where: {
+            $0.rareRewardParticipated != nil
+        }) {
+            if !pendingRows.isEmpty {
+                pendingRows.forEach(modelContext.delete)
+                try modelContext.save()
+            }
+            return .alreadyMaterialized
+        }
+        if !existingSessions.isEmpty && versionTwoSessions.isEmpty {
+            guard pendingRows.isEmpty else {
+                throw RareRewardLedgerError.duplicateSessionPayloadMismatch
+            }
             return .alreadyMaterialized
         }
 
+        if !versionTwoSessions.isEmpty {
+            guard !pendingRows.isEmpty else {
+                throw RareRewardLedgerLocalStateError.missingPendingCommit
+            }
+            let payload = try rareRewardPendingPayload(from: pendingRows)
+            try validatePendingSubmission(payload.submission, for: result)
+            return try await finalizeRareReward(
+                payload: payload
+            )
+        }
+
+        guard try claimCompletionMaterialization(
+            completionID: completionID,
+            existingSessionIDs: existingSessionIDs
+        ) else {
+            return .rejectedOwnership
+        }
+
+        // A missing GachaState is an unsaved local projection until after the
+        // cloud-authoritative StudySession/outbox transaction commits.
+        let payload: (
+            submission: RareRewardLedgerSubmission,
+            migration: RareRewardLedgerMigration
+        )
+        if pendingRows.isEmpty {
+            let migration = try rareRewardMigration()
+            payload = (
+                RareRewardLedgerSubmission(
+                    epochID: migration.epochID,
+                    sessionID: result.sessionID,
+                    source: source,
+                    completedSeconds: result.seconds,
+                    completedGrams: result.grams,
+                    mode: rareRewardMode
+                ),
+                migration
+            )
+        } else {
+            payload = try rareRewardPendingPayload(from: pendingRows)
+            try validatePendingSubmission(payload.submission, for: result)
+        }
+        let session = StudySession(
+            id: result.sessionID,
+            subject: subject,
+            startAt: result.startedAt,
+            endAt: result.endedAt,
+            seconds: result.seconds,
+            source: source,
+            pebbleKind: .normal,
+            grams: result.grams,
+            deviceDayKey: FairnessPolicy.deviceDayKey(for: result.endedAt),
+            subjectNameSnapshot: subjectSnapshot.name,
+            subjectColorHexSnapshot: subjectSnapshot.colorHex,
+            subjectIDSnapshot: subjectSnapshot.id,
+            rareRewardRuleVersion: RareRewardLedgerV2.ruleVersion,
+            rareRewardParticipated: nil,
+            rareRewardCreditedGrams: nil,
+            rareRewardOutcomesRawValue: nil,
+            dataEpochID: dataEpochID
+        )
+        modelContext.insert(session)
+        if pendingRows.isEmpty {
+            let pending = RareRewardPendingCommit(
+                id: result.sessionID,
+                dataEpochID: dataEpochID,
+                submission: payload.submission,
+                migration: payload.migration,
+                createdAt: result.observedAt
+            )
+            modelContext.insert(pending)
+        }
+        try FocusCloudSyncStore.markTerminal(
+            sessionID: result.sessionID,
+            status: .completed,
+            context: modelContext,
+            deviceID: deviceID,
+            at: result.observedAt
+        )
+#if DEBUG && targetEnvironment(simulator)
+        if UITestFaultInjection.consumeFocusCompletionSaveFailure() {
+            throw UITestInjectedPersistenceError.focusCompletionSaveOnce
+        }
+#endif
+        // The measured StudySession and retryable outbox are one cloud-store
+        // transaction. No rare outcome is exposed until the custom-zone CAS
+        // returns its durable, idempotent receipt.
+        try modelContext.save()
+        return try await finalizeRareReward(
+            payload: payload
+        )
+    }
+
+    @MainActor
+    private func claimCompletionMaterialization(
+        completionID: UUID,
+        existingSessionIDs: Set<UUID>
+    ) throws -> Bool {
         var claims = try FocusCloudSyncStore.claims(
             sessionID: completionID,
             context: modelContext
@@ -912,75 +1711,340 @@ struct FocusView: View {
             owner = deviceID
         }
 
-        let materializationDecision = FocusSyncPolicy.completionMaterializationDecision(
+        let decision = FocusSyncPolicy.completionMaterializationDecision(
             sessionID: completionID,
             existingSessionIDs: existingSessionIDs,
             currentDeviceID: deviceID,
             claims: claims
         )
-        guard materializationDecision == .insert, owner == deviceID else {
-            return .rejectedOwnership
-        }
-
-        let gacha = currentGachaState ?? {
-            let value = GachaState(dataEpochID: dataEpochID)
-            modelContext.insert(value)
-            return value
-        }()
-        var generator = SystemRandomNumberGenerator()
-        let roll = RareRewardPolicy.draw(
-            source: source,
-            completedSeconds: result.seconds,
-            completedGrams: result.grams,
-            mode: rareRewardMode,
-            state: gacha,
-            using: &generator
-        )
-        let session = StudySession(
-            id: result.sessionID,
-            subject: subject,
-            startAt: result.startedAt,
-            endAt: result.endedAt,
-            seconds: result.seconds,
-            source: source,
-            pebbleKind: roll.kind,
-            grams: result.grams,
-            deviceDayKey: FairnessPolicy.deviceDayKey(for: result.endedAt),
-            subjectNameSnapshot: subjectSnapshot.name,
-            subjectColorHexSnapshot: subjectSnapshot.colorHex,
-            subjectIDSnapshot: subjectSnapshot.id,
-            rareRewardRuleVersion: Constants.Gacha.creditRuleVersion,
-            rareRewardParticipated: roll.participated,
-            rareRewardCreditedGrams: roll.acceptedContributionGrams,
-            rareRewardOutcomesRawValue: RareRewardOutcomeCodec.encode(
-                roll.creditOutcomes
-            ),
-            dataEpochID: dataEpochID
-        )
-        modelContext.insert(session)
-        try FocusCloudSyncStore.markTerminal(
-            sessionID: result.sessionID,
-            status: .completed,
-            context: modelContext,
-            deviceID: deviceID,
-            at: result.observedAt
-        )
-#if DEBUG && targetEnvironment(simulator)
-        if UITestFaultInjection.consumeFocusCompletionSaveFailure() {
-            throw UITestInjectedPersistenceError.focusCompletionSaveOnce
-        }
-#endif
-        try modelContext.save()
-        return .inserted(roll.kind)
+        return decision == .insert && owner == deviceID
     }
 
-    private func signalCompletionIfNeeded(_ result: PomodoroCompletion) {
+    @MainActor
+    private func rareRewardPendingRows(
+        sessionID: UUID
+    ) throws -> [RareRewardPendingCommit] {
+        let epochID = RareRewardLedgerV2.normalizedEpochID(dataEpochID)
+        var descriptor = FetchDescriptor<RareRewardPendingCommit>(
+            predicate: #Predicate {
+                $0.sessionID == sessionID && $0.epochID == epochID
+            },
+            sortBy: [
+                SortDescriptor(\RareRewardPendingCommit.createdAt),
+                SortDescriptor(\RareRewardPendingCommit.id)
+            ]
+        )
+        descriptor.fetchLimit = 32
+        return try modelContext.fetch(descriptor).filter {
+            ActivityResetPolicy.isCurrent(
+                $0.dataEpochID,
+                markers: resetSnapshots
+            )
+        }
+    }
+
+    @MainActor
+    private func rareRewardPendingPayload(
+        from rows: [RareRewardPendingCommit]
+    ) throws -> (
+        submission: RareRewardLedgerSubmission,
+        migration: RareRewardLedgerMigration
+    ) {
+        guard let first = rows.first else {
+            throw RareRewardLedgerLocalStateError.missingPendingCommit
+        }
+        let payload = try first.payload()
+        for row in rows.dropFirst() {
+            let candidate = try row.payload()
+            guard candidate.submission == payload.submission,
+                  candidate.migration == payload.migration else {
+                throw RareRewardLedgerError.duplicateSessionPayloadMismatch
+            }
+        }
+        return payload
+    }
+
+    private func validatePendingSubmission(
+        _ submission: RareRewardLedgerSubmission,
+        for result: PomodoroCompletion
+    ) throws {
+        guard submission.epochID
+                == RareRewardLedgerV2.normalizedEpochID(dataEpochID),
+              submission.sessionID == result.sessionID,
+              submission.source == result.source,
+              submission.completedSeconds == max(0, result.seconds),
+              submission.completedGrams == max(0, result.grams) else {
+            throw RareRewardLedgerError.duplicateSessionPayloadMismatch
+        }
+    }
+
+    @MainActor
+    private func rareRewardMigration() throws -> RareRewardLedgerMigration {
+        if let cursor = try canonicalRareRewardCursor() {
+            return try cursor.migration()
+        }
+
+        // A finalized V2 StudySession may reach this device before the cursor
+        // that preserves its immutable V1 migration baseline. Deriving a fresh
+        // fingerprint from the already-advanced GachaState would fork the
+        // account, so wait for the cursor instead.
+        let version = RareRewardLedgerV2.ruleVersion
+        let finalizedPredicate: Predicate<StudySession>
+        if let dataEpochID {
+            finalizedPredicate = #Predicate {
+                $0.dataEpochID == dataEpochID
+                    && $0.rareRewardRuleVersion == version
+                    && $0.rareRewardParticipated != nil
+            }
+        } else {
+            finalizedPredicate = #Predicate {
+                $0.dataEpochID == nil
+                    && $0.rareRewardRuleVersion == version
+                    && $0.rareRewardParticipated != nil
+            }
+        }
+        let batchSize = 64
+        var offset = 0
+        while true {
+            var descriptor = FetchDescriptor<StudySession>(
+                predicate: finalizedPredicate,
+                sortBy: [SortDescriptor(\StudySession.id)]
+            )
+            descriptor.fetchLimit = batchSize
+            descriptor.fetchOffset = offset
+            let batch = try modelContext.fetch(descriptor)
+            if batch.contains(where: { StudySessionIntegrityPolicy.isSupported($0) }) {
+                throw RareRewardLedgerLocalStateError.missingSynchronizedCursor
+            }
+            guard batch.count == batchSize else { break }
+            offset = NonnegativeIntPolicy.adding(offset, batch.count)
+        }
+
+        return RareRewardLedgerMigration.canonicalV2(dataEpochID: dataEpochID)
+    }
+
+    @MainActor
+    private func currentRareRewardCursors() throws -> [RareRewardLedgerCursor] {
+        let epochID = RareRewardLedgerV2.normalizedEpochID(dataEpochID)
+        var descriptor = FetchDescriptor<RareRewardLedgerCursor>(
+            predicate: #Predicate { $0.epochID == epochID },
+            sortBy: [
+                SortDescriptor(\RareRewardLedgerCursor.revision, order: .reverse),
+                SortDescriptor(\RareRewardLedgerCursor.updatedAt, order: .reverse),
+                SortDescriptor(\RareRewardLedgerCursor.id)
+            ]
+        )
+        descriptor.fetchLimit = 32
+        return try modelContext.fetch(descriptor).filter {
+            ActivityResetPolicy.isCurrent(
+                $0.dataEpochID,
+                markers: resetSnapshots
+            )
+        }
+    }
+
+    @MainActor
+    private func canonicalRareRewardCursor(
+        matching expectedMigration: RareRewardLedgerMigration? = nil
+    ) throws -> RareRewardLedgerCursor? {
+        let cursors = try currentRareRewardCursors()
+        guard let canonical = cursors.first else { return nil }
+        let migration = try canonical.migration()
+        for cursor in cursors.dropFirst() {
+            guard try cursor.migration() == migration else {
+                throw RareRewardLedgerLocalStateError.conflictingCursors
+            }
+        }
+        if let expectedMigration, migration != expectedMigration {
+            throw RareRewardLedgerLocalStateError.conflictingCursors
+        }
+        return canonical
+    }
+
+    @MainActor
+    private func finalizeRareReward(
+        payload: (
+            submission: RareRewardLedgerSubmission,
+            migration: RareRewardLedgerMigration
+        )
+    ) async throws -> FocusCompletionPersistenceResult {
+        _ = try canonicalRareRewardCursor(matching: payload.migration)
+        let receipt = try await RareRewardLedgerRuntime.coordinator.commit(
+            payload.submission,
+            migration: payload.migration
+        )
+        guard receipt.epochID == payload.submission.epochID,
+              receipt.sessionID == payload.submission.sessionID,
+              receipt.submissionFingerprint == payload.submission.fingerprint
+        else {
+            throw RareRewardLedgerRepositoryError.corruptRecord
+        }
+
+        // CloudKit suspension is a re-entrancy boundary. A reset from another
+        // device, or an import that replaces a duplicate row, may have happened
+        // while the raw-ledger CAS was in flight. Never mutate the pre-await
+        // SwiftData objects.
+        let freshResetSnapshots = try ActivityResetStore.snapshots(
+            context: modelContext
+        )
+        guard ActivityResetPolicy.state(
+            of: dataEpochID,
+            markers: freshResetSnapshots
+        ) == .current else {
+            let stalePending = try rareRewardPendingRowsUnfiltered(
+                sessionID: payload.submission.sessionID,
+                epochID: payload.submission.epochID
+            )
+            stalePending.forEach(modelContext.delete)
+            try modelContext.save()
+            return .discardedByReset
+        }
+
+        let sessionID = payload.submission.sessionID
+        let freshSessions = try modelContext.fetch(
+            FetchDescriptor<StudySession>(
+                predicate: #Predicate { $0.id == sessionID }
+            )
+        ).filter {
+            ActivityResetPolicy.isCurrent(
+                $0.dataEpochID,
+                markers: freshResetSnapshots
+            )
+        }
+        guard !freshSessions.isEmpty,
+              freshSessions.allSatisfy({
+                  $0.id == payload.submission.sessionID
+                      && $0.dataEpochID == dataEpochID
+                      && $0.source == payload.submission.source
+                      && $0.seconds == payload.submission.completedSeconds
+                      && $0.grams == payload.submission.completedGrams
+              }) else {
+            throw RareRewardLedgerError.duplicateSessionPayloadMismatch
+        }
+
+        guard let mutationTarget = StudySessionSyncPolicy.canonicalSession(
+            from: freshSessions
+        ) else {
+            throw RareRewardLedgerError.duplicateSessionPayloadMismatch
+        }
+        // This feature is disabled for 1.0. If it is re-enabled, never fan a
+        // receipt out to CloudKit copies owned by other devices. Preserve every
+        // other physical row as concurrent evidence and update one deterministic
+        // source record only.
+        mutationTarget.pebbleKind = receipt.representativeKind
+        mutationTarget.rareRewardRuleVersion = RareRewardLedgerV2.ruleVersion
+        mutationTarget.rareRewardParticipated = receipt.participated
+        mutationTarget.rareRewardCreditedGrams = receipt.acceptedGrams
+        mutationTarget.rareRewardOutcomesRawValue = RareRewardOutcomeCodec.encode(
+            receipt.outcomes
+        )
+
+        let cursor: RareRewardLedgerCursor
+        let previousRevision: Int64
+        if let existing = try canonicalRareRewardCursor(
+            matching: payload.migration
+        ) {
+            cursor = existing
+            previousRevision = existing.revision
+            cursor.apply(receipt, updatedAt: .now)
+        } else {
+            cursor = RareRewardLedgerCursor(
+                id: payload.migration.epochID,
+                dataEpochID: dataEpochID,
+                migration: payload.migration,
+                receipt: receipt
+            )
+            previousRevision = -1
+            modelContext.insert(cursor)
+        }
+        // Refetch after the network suspension so an outbox duplicate delivered
+        // by SwiftData/CloudKit while the CAS was in flight is retired too.
+        let allPendingRows = try rareRewardPendingRowsUnfiltered(
+            sessionID: payload.submission.sessionID,
+            epochID: payload.submission.epochID
+        )
+        for row in allPendingRows {
+            modelContext.delete(row)
+        }
+        // Session, cursor, and outbox are all assigned to the cloud store and
+        // cross one atomic SQLite save boundary. GachaState is a rebuildable
+        // local projection and must not participate in that transaction.
+        try modelContext.save()
+
+        if receipt.revisionAfter >= previousRevision {
+            do {
+                let epochID = dataEpochID
+                let predicate: Predicate<GachaState>
+                if let epochID {
+                    predicate = #Predicate { $0.dataEpochID == epochID }
+                } else {
+                    predicate = #Predicate { $0.dataEpochID == nil }
+                }
+                let gachaRows = try modelContext.fetch(
+                    FetchDescriptor<GachaState>(predicate: predicate)
+                )
+                let gacha = gachaRows.first(where: {
+                    $0.id == BoundedLaunchPreparation.canonicalGachaID
+                }) ?? gachaRows.first ?? GachaState(dataEpochID: dataEpochID)
+                if gachaRows.isEmpty { modelContext.insert(gacha) }
+                gacha.id = BoundedLaunchPreparation.canonicalGachaID
+                gacha.dataEpochID = dataEpochID
+                gacha.rewardCreditGrams = cursor.totalCreditedGrams
+                gacha.sinceLastGold = cursor.sinceLastGold
+                for duplicate in gachaRows where duplicate !== gacha {
+                    modelContext.delete(duplicate)
+                }
+                try modelContext.save()
+            } catch {
+                // The synchronized cursor is authoritative. A launch or
+                // maintenance pass reconstructs this disposable cache.
+                modelContext.rollback()
+            }
+        }
+        return .inserted(receipt.representativeKind)
+    }
+
+    @MainActor
+    private func rareRewardPendingRowsUnfiltered(
+        sessionID: UUID,
+        epochID: UUID
+    ) throws -> [RareRewardPendingCommit] {
+        var descriptor = FetchDescriptor<RareRewardPendingCommit>(
+            predicate: #Predicate {
+                $0.sessionID == sessionID && $0.epochID == epochID
+            },
+            sortBy: [
+                SortDescriptor(\RareRewardPendingCommit.createdAt),
+                SortDescriptor(\RareRewardPendingCommit.id)
+            ]
+        )
+        descriptor.fetchLimit = 32
+        return try modelContext.fetch(descriptor)
+    }
+
+    private func signalCompletionIfNeeded(
+        _ result: PomodoroCompletion,
+        playsSensoryFeedback: Bool = true
+    ) {
         guard !didSignalCompletion else { return }
         didSignalCompletion = true
         NotificationManager.shared.cancelFocusCompletion(sessionID: result.sessionID)
+        scheduledCompletionNotificationDeliveryDate = nil
         notificationScheduleState = .idle
-        SoundSynth.shared.playCompletionChime()
-        Haptics.shared.playTimerCompletion()
+        let soundOn = sensoryPreferences.soundOn
+        let hapticsOn = sensoryPreferences.hapticsOn
+        SoundSynth.shared.isEnabled = soundOn
+        Haptics.shared.isEnabled = hapticsOn
+        if playsSensoryFeedback, soundOn {
+            SoundSynth.shared.playTimerCompletion(
+                sensoryPreferences.timerCompletionSound
+            )
+        }
+        if playsSensoryFeedback, hapticsOn {
+            Haptics.shared.playTimerCompletion(
+                sensoryPreferences.timerCompletionHaptic
+            )
+        }
         UIApplication.shared.isIdleTimerDisabled = false
         if UIAccessibility.isVoiceOverRunning {
             UIAccessibility.post(
@@ -1006,17 +2070,12 @@ struct FocusView: View {
     }
 
     private func saveRecoveryState(pendingCompletion: PomodoroCompletion? = nil) {
-        let resolvedPendingCompletion = pendingCompletion ?? self.pendingCompletion
-        let envelope = FocusRecoveryEnvelope(
-            engine: engine,
-            subject: subjectSnapshot,
-            clockAnchor: clockAnchor,
-            pendingCompletion: resolvedPendingCompletion,
-            savedAt: .now,
-            dataEpochID: dataEpochID
+        let envelope = makeRecoveryEnvelope(
+            pendingCompletion: pendingCompletion
         )
         FocusPersistence.save(envelope)
 
+        let resolvedPendingCompletion = envelope.pendingCompletion
         let status: SyncedFocusStatus
         if resolvedPendingCompletion != nil {
             status = .completionPending
@@ -1047,6 +2106,46 @@ struct FocusView: View {
             // serialization/store failures surface through the existing timer
             // retry path rather than discarding a running focus.
         }
+    }
+
+    private func makeRecoveryEnvelope(
+        pendingCompletion: PomodoroCompletion? = nil
+    ) -> FocusRecoveryEnvelope {
+        let resolvedPendingCompletion = pendingCompletion ?? self.pendingCompletion
+        return FocusRecoveryEnvelope(
+            engine: engine,
+            subject: subjectSnapshot,
+            clockAnchor: clockAnchor,
+            pendingCompletion: resolvedPendingCompletion,
+            savedAt: .now,
+            scheduledCompletionNotificationDeliveryDate:
+                resolvedPendingCompletion == nil
+                ? currentNotificationDeliveryWitness
+                : nil,
+            dataEpochID: dataEpochID
+        )
+    }
+
+    private func invalidateScheduledCompletionNotificationWitness() {
+        guard scheduledCompletionNotificationDeliveryDate != nil else { return }
+        scheduledCompletionNotificationDeliveryDate = nil
+        guard engine.containsRecoverableFocus else { return }
+        // This is device-local delivery evidence. Do not mutate CloudKit just
+        // because notification permission changed outside the app.
+        FocusPersistence.save(makeRecoveryEnvelope())
+    }
+
+    private var currentNotificationDeliveryWitness: Date? {
+        guard let deliveryDate = scheduledCompletionNotificationDeliveryDate,
+              let endDate = engine.endDate,
+              deliveryDate >= endDate.addingTimeInterval(-0.01),
+              deliveryDate <= endDate.addingTimeInterval(
+                IntegrationConstants.notificationMinimumDelay
+                    + IntegrationConstants
+                        .notificationWitnessRegistrationAllowance
+              )
+        else { return nil }
+        return deliveryDate
     }
 
     private func completionCommitView(_ result: PomodoroCompletion) -> some View {
@@ -1157,6 +2256,7 @@ struct FocusView: View {
                 try engine.pause(at: now)
                 if let sessionID = engine.currentSessionID {
                     NotificationManager.shared.cancelFocusCompletion(sessionID: sessionID)
+                    scheduledCompletionNotificationDeliveryDate = nil
                     notificationScheduleState = .idle
                     Task {
                         await FocusActivityManager.shared.pause(
@@ -1167,7 +2267,7 @@ struct FocusView: View {
                 }
             }
             UIApplication.shared.isIdleTimerDisabled = engine.snapshot(at: now).phase == .focusing
-                && (prefs?.keepScreenAwake ?? true)
+                && (resolvedPreferences?.keepScreenAwake ?? false)
             saveRecoveryState()
             displayNow = now
         } catch {
@@ -1220,29 +2320,86 @@ struct FocusView: View {
         UIApplication.shared.isIdleTimerDisabled = false
         if let sessionID {
             NotificationManager.shared.cancelFocusCompletion(sessionID: sessionID)
+            scheduledCompletionNotificationDeliveryDate = nil
             Task { await FocusActivityManager.shared.cancel(sessionID: sessionID) }
         }
         dismiss()
     }
 
-    private func enforceCloudOwnership() {
+    @discardableResult
+    private func enforceCloudOwnership() -> Bool {
+        let now = Date.now
+        if pendingCompletion == nil,
+           completion == nil,
+           engine.containsRecoverableFocus,
+           engine.snapshot(at: now).remainingSeconds == 0 {
+            // The fingerprint callback can run before scene activation after a
+            // background CloudKit import. Preserve the deterministic completion
+            // witness first; the current owner will be the only device allowed
+            // to turn it into a StudySession.
+            // A query callback can arrive while Notification Center is about
+            // to deliver the same end. Defer local completion until active so
+            // the pending request is not cancelled from the background.
+            guard scenePhase == .active,
+                  notificationAuthorizationIsCurrent,
+                  !notificationScheduleState.isScheduling else {
+                // Do not let a remote terminal row erase an already elapsed
+                // local completion while delivery state is still unresolved.
+                return false
+            }
+            let completionUptime = ContinuousUptime.now()
+            advanceIfNeeded(
+                at: now,
+                uptime: completionUptime,
+                playsSensoryFeedback:
+                    foregroundFeedbackShouldPlayForElapsedCompletion(
+                        at: now,
+                        uptime: completionUptime,
+                        returnedFromBackground:
+                            didEnterBackgroundSinceLastActive
+                    )
+            )
+            if pendingCompletion != nil { return false }
+        }
         guard pendingCompletion == nil,
               completion == nil,
-              let sessionID = engine.currentSessionID else { return }
+              let sessionID = engine.currentSessionID else { return false }
 
-        let owner = FocusSyncPolicy.notificationOwner(
-            for: sessionID,
-            claims: currentFocusDeviceClaims.map(\.policySnapshot)
+        let owner = try? FocusCloudSyncStore.notificationOwner(
+            sessionID: sessionID,
+            context: modelContext
         )
-        let canonicalSessionID = FocusSyncPolicy.canonicalActive(
-            from: currentSyncedFocusTimers.map(\.policySnapshot)
-        )?.sessionID
+        let canonicalSessionID: UUID?
+        do {
+            canonicalSessionID = try FocusCloudSyncStore.canonicalActive(
+                context: modelContext
+            )?.sessionID
+        } catch {
+            // A bounded-query or maintenance failure cannot prove this local
+            // timer lost. Keep its recovery bytes, notification, and Live
+            // Activity until a later import/maintenance pass can decide.
+            return false
+        }
         let lostOwnership = owner != nil && owner != deviceID
-        let superseded = !currentSyncedFocusTimers.isEmpty
-            && canonicalSessionID != sessionID
-        guard lostOwnership || superseded else { return }
+        let superseded: Bool
+        if let canonicalSessionID {
+            superseded = canonicalSessionID != sessionID
+        } else {
+            // No global candidate is not, by itself, proof of supersession: a
+            // partial CloudKit import can expose closure witnesses before the
+            // matching StudySession. Only exact irreversible closure may retire
+            // the active local UI here.
+            guard let gate = try? FocusCloudSyncStore.completionGate(
+                sessionID: sessionID,
+                context: modelContext
+            ) else { return false }
+            superseded = gate == .cancelledBeforeCompletion
+                || gate == .materialized
+        }
+        guard lostOwnership || superseded else { return false }
 
         NotificationManager.shared.cancelFocusCompletion(sessionID: sessionID)
+        scheduledCompletionNotificationDeliveryDate = nil
         notificationScheduleState = .idle
         FocusPersistence.clear()
         UIApplication.shared.isIdleTimerDisabled = false
@@ -1254,6 +2411,7 @@ struct FocusView: View {
             symbol: "icloud.and.arrow.up"
         )
         dismiss()
+        return true
     }
 
     private func enforceActivityReset() {
@@ -1263,6 +2421,7 @@ struct FocusView: View {
         ) != .current else { return }
         if let sessionID = currentSessionID {
             NotificationManager.shared.cancelFocusCompletion(sessionID: sessionID)
+            scheduledCompletionNotificationDeliveryDate = nil
             Task { await FocusActivityManager.shared.cancel(sessionID: sessionID) }
         }
         notificationScheduleState = .idle
@@ -1276,6 +2435,9 @@ struct FocusView: View {
     }
 
     private func handleScenePhase(to newPhase: ScenePhase) {
+        if newPhase == .background {
+            didEnterBackgroundSinceLastActive = true
+        }
         if newPhase == .inactive || newPhase == .background {
             saveRecoveryState()
             UIApplication.shared.isIdleTimerDisabled = false
@@ -1286,12 +2448,68 @@ struct FocusView: View {
 
         let returnDate = Date.now
         let returnUptime = ContinuousUptime.now()
+        let completionIsElapsed = (engine.endDate ?? .distantFuture) <= returnDate
+        if completionIsElapsed, notificationScheduleState.isScheduling {
+            // The ticker consumes this once add succeeds or fails. Keep the
+            // background-return flag until delivery possibility is known.
+            displayNow = returnDate
+            UIApplication.shared.isIdleTimerDisabled = false
+            return
+        }
+        let playsSensoryFeedback: Bool
+        if completionIsElapsed {
+            playsSensoryFeedback = foregroundFeedbackShouldPlayForElapsedCompletion(
+                at: returnDate,
+                uptime: returnUptime,
+                returnedFromBackground: didEnterBackgroundSinceLastActive
+            )
+        } else {
+            isAwaitingRecoveryActivation = false
+            playsSensoryFeedback = true
+        }
+        didEnterBackgroundSinceLastActive = false
         displayNow = returnDate
         UIApplication.shared.isIdleTimerDisabled = engine.snapshot(at: returnDate).phase == .focusing
-            && (prefs?.keepScreenAwake ?? true)
+            && (resolvedPreferences?.keepScreenAwake ?? false)
         advanceIfNeeded(
             at: returnDate,
-            uptime: returnUptime
+            uptime: returnUptime,
+            playsSensoryFeedback: playsSensoryFeedback
+        )
+    }
+
+    private func foregroundFeedbackShouldPlayForElapsedCompletion(
+        at now: Date,
+        uptime: TimeInterval,
+        returnedFromBackground: Bool
+    ) -> Bool {
+        let recoveredAfterExpiration = isAwaitingRecoveryActivation
+        isAwaitingRecoveryActivation = false
+        // Time-interval notifications run against elapsed time, while the
+        // persisted witness is a wall-clock Date. If the wall clock moved,
+        // never suppress the foreground cue based on that Date: the OS request
+        // can still be pending on its relative clock.
+        let notificationTimingIsTrustworthy =
+            TimerCompletionForegroundFeedbackPolicy
+                .notificationTimingIsTrustworthy(
+                    source: engine.currentSource,
+                    clockAnchor: clockAnchor,
+                    now: now,
+                    uptime: uptime
+                )
+        return TimerCompletionForegroundFeedbackPolicy.shouldPlay(
+            recoveredAfterExpiration: recoveredAfterExpiration,
+            returnedFromBackground: returnedFromBackground,
+            notificationMayHaveDelivered:
+                TimerCompletionForegroundFeedbackPolicy
+                    .notificationMayHaveDelivered(
+                        isAuthorized: notifications.isAuthorized,
+                        expectedDeliveryDate:
+                            notificationTimingIsTrustworthy
+                            ? currentNotificationDeliveryWitness
+                            : nil,
+                        now: now
+                    )
         )
     }
 
@@ -1345,7 +2563,7 @@ private struct RareRewardPreFocusChoiceView: View {
                 .accessibilityHint(
                     selection == nil
                         ? "3つの選択肢から1つ選んでください"
-                        : "選択をiCloudへ保存してからタイマーを開始します"
+                        : "選択を保存領域へ確定してからタイマーを開始します"
                 )
                 .accessibilityIdentifier("focus.rare-reward-choice.confirm")
 
@@ -1503,6 +2721,11 @@ private enum FocusNotificationScheduleState: Equatable {
     case scheduling
     case scheduled
     case failed(message: String)
+
+    var isScheduling: Bool {
+        if case .scheduling = self { return true }
+        return false
+    }
 }
 
 private struct CompletedDrop: Equatable {

@@ -81,6 +81,120 @@ final class FocusPersistenceTests: XCTestCase {
         }
     }
 
+    func testScheduledNotificationWitnessRoundTripsAndRejectsWrongEndDate() throws {
+        let start = Date(timeIntervalSince1970: 1_800_015_000)
+        var engine = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
+        try engine.startFocus(isPro: false, now: start)
+        let endDate = try XCTUnwrap(engine.endDate)
+        let envelope = FocusRecoveryEnvelope(
+            engine: engine,
+            subject: FocusSubjectSnapshot(
+                id: UUID(),
+                name: "読書",
+                colorHex: "#4C8CCF"
+            ),
+            clockAnchor: ClockAnchor(wallDate: start, systemUptime: 10_000),
+            pendingCompletion: nil,
+            savedAt: start,
+            scheduledCompletionNotificationDeliveryDate: endDate
+        )
+
+        FocusPersistence.save(envelope)
+        XCTAssertEqual(
+            FocusPersistence.load()?.scheduledCompletionNotificationDeliveryDate,
+            endDate
+        )
+
+        var legacyObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: JSONEncoder().encode(envelope)
+            ) as? [String: Any]
+        )
+        legacyObject.removeValue(
+            forKey: "scheduledCompletionNotificationDeliveryDate"
+        )
+        let legacy = try JSONDecoder().decode(
+            FocusRecoveryEnvelope.self,
+            from: JSONSerialization.data(withJSONObject: legacyObject)
+        )
+        XCTAssertNil(legacy.scheduledCompletionNotificationDeliveryDate)
+
+        let invalid = FocusRecoveryEnvelope(
+            engine: engine,
+            subject: envelope.subject,
+            clockAnchor: envelope.clockAnchor,
+            pendingCompletion: nil,
+            savedAt: start,
+            scheduledCompletionNotificationDeliveryDate:
+                endDate.addingTimeInterval(
+                    IntegrationConstants.notificationMinimumDelay
+                        + IntegrationConstants
+                            .notificationWitnessRegistrationAllowance
+                        + 1
+                )
+        )
+        FocusPersistence.save(invalid)
+        XCTAssertNil(FocusPersistence.load())
+    }
+
+    func testAccountBoundaryInvalidatesFocusAndBreakNotificationWitnesses() throws {
+        let suiteName = "TsumibenTests.notification-witness.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let namespace = AccountDataNamespace()
+        let now = Date.now
+        var engine = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
+        try engine.startFocus(isPro: false, now: now)
+        let focusEndDate = try XCTUnwrap(engine.endDate)
+        let focus = FocusRecoveryEnvelope(
+            engine: engine,
+            subject: FocusSubjectSnapshot(
+                id: UUID(),
+                name: "設計",
+                colorHex: "#4C8CCF"
+            ),
+            clockAnchor: ClockAnchor(wallDate: now, systemUptime: 10_000),
+            pendingCompletion: nil,
+            savedAt: now,
+            scheduledCompletionNotificationDeliveryDate: focusEndDate
+        )
+        let breakEndDate = now.addingTimeInterval(
+            TimeInterval(Constants.Timer.shortBreakMinutes * 60)
+        )
+        let rest = BreakRecoveryEnvelope(
+            id: UUID(),
+            minutes: Constants.Timer.shortBreakMinutes,
+            endDate: breakEndDate,
+            scheduledCompletionNotificationDeliveryDate: breakEndDate
+        )
+        let focusKey = AccountScopedLocalState.defaultsKey(
+            base: "focus.persisted-engine",
+            namespace: namespace
+        )
+        let breakKey = AccountScopedLocalState.defaultsKey(
+            base: "break.persisted-session",
+            namespace: namespace
+        )
+        defaults.set(try JSONEncoder().encode(focus), forKey: focusKey)
+        defaults.set(try JSONEncoder().encode(rest), forKey: breakKey)
+
+        FocusPersistence.clearScheduledCompletionNotificationWitness(
+            namespace: namespace,
+            defaults: defaults
+        )
+
+        let clearedFocus = try JSONDecoder().decode(
+            FocusRecoveryEnvelope.self,
+            from: try XCTUnwrap(defaults.data(forKey: focusKey))
+        )
+        let clearedBreak = try JSONDecoder().decode(
+            BreakRecoveryEnvelope.self,
+            from: try XCTUnwrap(defaults.data(forKey: breakKey))
+        )
+        XCTAssertNil(clearedFocus.scheduledCompletionNotificationDeliveryDate)
+        XCTAssertNil(clearedBreak.scheduledCompletionNotificationDeliveryDate)
+    }
+
     func testKillAfterScheduledEndRestoresStableIdempotentCompletionID() throws {
         let start = Date(timeIntervalSince1970: 1_800_020_000)
         let sessionID = UUID(uuidString: "00000000-0000-0000-0000-000000000224")!
@@ -134,7 +248,127 @@ final class FocusPersistenceTests: XCTestCase {
         )
     }
 
-    func testLegacyClockAnchorDecodesAsUnverifiableInsteadOfFalseTamper() throws {
+    func testForwardClockRelaunchDemotesBeforeElapsedCompletion() throws {
+        let start = Date(timeIntervalSince1970: 1_800_021_000)
+        let sessionID = UUID(uuidString: "00000000-0000-0000-0000-000000000225")!
+        var engine = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
+        try engine.startFocus(isPro: false, now: start, sessionID: sessionID)
+        let original = FocusRecoveryEnvelope(
+            engine: engine,
+            subject: FocusSubjectSnapshot(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000115")!,
+                name: "英語",
+                colorHex: "#4C8CCF"
+            ),
+            clockAnchor: ClockAnchor(wallDate: start, systemUptime: 50_000),
+            pendingCompletion: nil,
+            savedAt: start
+        )
+        let maliciousNow = start.addingTimeInterval(3_600)
+
+        let prepared = FocusPersistence.preparedForLocalRelaunch(
+            original,
+            at: maliciousNow,
+            uptime: 50_010
+        )
+
+        XCTAssertEqual(prepared.engine.currentSource, .timerDemoted)
+        XCTAssertEqual(
+            FocusPersistence.relaunchAction(for: prepared, at: maliciousNow),
+            .finishFocus
+        )
+        var completing = prepared.engine
+        let event = try XCTUnwrap(completing.advance(
+            at: maliciousNow,
+            observedUptime: 50_010
+        ))
+        guard case let .focusCompleted(completion) = event else {
+            return XCTFail("Expected fail-closed completion")
+        }
+        XCTAssertEqual(completion.sessionID, sessionID)
+        XCTAssertEqual(completion.source, .timerDemoted)
+    }
+
+    func testUptimeResetRelaunchDemotionSurvivesAnotherProcessRelaunch() throws {
+        let start = Date(timeIntervalSince1970: 1_800_022_000)
+        var engine = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
+        try engine.startFocus(isPro: false, now: start)
+        let original = FocusRecoveryEnvelope(
+            engine: engine,
+            subject: FocusSubjectSnapshot(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000116")!,
+                name: "宅建",
+                colorHex: "#3FA57C"
+            ),
+            clockAnchor: ClockAnchor(wallDate: start, systemUptime: 80_000),
+            pendingCompletion: nil,
+            savedAt: start
+        )
+        let restoredAt = start.addingTimeInterval(600)
+        let prepared = FocusPersistence.preparedForLocalRelaunch(
+            original,
+            at: restoredAt,
+            uptime: 100
+        )
+        XCTAssertEqual(prepared.engine.currentSource, .timerDemoted)
+        XCTAssertEqual(
+            FocusPersistence.relaunchAction(for: prepared, at: restoredAt),
+            .resumeFocus(remainingSeconds: 900)
+        )
+
+        FocusPersistence.save(prepared)
+        let afterSecondRelaunch = try XCTUnwrap(FocusPersistence.load())
+        XCTAssertEqual(afterSecondRelaunch.engine.currentSource, .timerDemoted)
+        XCTAssertEqual(
+            FocusPersistence.preparedForLocalRelaunch(
+                afterSecondRelaunch,
+                at: restoredAt.addingTimeInterval(60),
+                uptime: 160
+            ).engine.currentSource,
+            .timerDemoted
+        )
+    }
+
+    func testCrossDeviceAdoptionDemotesActiveFocusAndPersistsThatDecision() throws {
+        let start = Date(timeIntervalSince1970: 1_800_023_000)
+        var remoteEngine = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
+        try remoteEngine.startFocus(isPro: false, now: start)
+        let adoptedAt = start.addingTimeInterval(300)
+        let offered = FocusRecoveryEnvelope(
+            engine: remoteEngine,
+            subject: FocusSubjectSnapshot(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000117")!,
+                name: "英語",
+                colorHex: "#4C8CCF"
+            ),
+            clockAnchor: ClockAnchor(wallDate: adoptedAt, systemUptime: 1_000),
+            pendingCompletion: nil,
+            savedAt: adoptedAt
+        )
+
+        let adopted = FocusPersistence.preparedForCrossDeviceAdoption(
+            offered,
+            at: adoptedAt,
+            uptime: 1_000
+        )
+        XCTAssertEqual(adopted.engine.currentSource, .timerDemoted)
+
+        FocusPersistence.save(adopted)
+        let recovered = try XCTUnwrap(FocusPersistence.load())
+        XCTAssertEqual(recovered.engine.currentSource, .timerDemoted)
+        var completing = recovered.engine
+        let scheduledEnd = try XCTUnwrap(completing.endDate)
+        let event = try XCTUnwrap(completing.advance(
+            at: scheduledEnd,
+            observedUptime: 2_200
+        ))
+        guard case let .focusCompleted(completion) = event else {
+            return XCTFail("Expected adopted completion")
+        }
+        XCTAssertEqual(completion.source, .timerDemoted)
+    }
+
+    func testLegacyClockAnchorDecodesAsUnverifiableAndActiveRecoveryDemotes() throws {
         struct LegacyClockAnchor: Encodable {
             let wallDate: Date
             let systemUptime: TimeInterval
@@ -154,6 +388,25 @@ final class FocusPersistenceTests: XCTestCase {
             ),
             .unverifiable
         )
+
+        var engine = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
+        try engine.startFocus(isPro: false, now: start)
+        let prepared = FocusPersistence.preparedForLocalRelaunch(
+            FocusRecoveryEnvelope(
+                engine: engine,
+                subject: FocusSubjectSnapshot(
+                    id: UUID(uuidString: "00000000-0000-0000-0000-000000000118")!,
+                    name: "宅建",
+                    colorHex: "#3FA57C"
+                ),
+                clockAnchor: anchor,
+                pendingCompletion: nil,
+                savedAt: start
+            ),
+            at: start.addingTimeInterval(60),
+            uptime: 12_060
+        )
+        XCTAssertEqual(prepared.engine.currentSource, .timerDemoted)
     }
 
     func testLegacyEnginePayloadRemainsDetectableAndDoesNotInventSubject() throws {
@@ -171,16 +424,138 @@ final class FocusPersistenceTests: XCTestCase {
         XCTAssertNil(recovered.pendingCompletion)
     }
 
+    func testLocalRecoveryRejectsHostileEngineBeforeSnapshotAndRemovesBytes() throws {
+        let start = Date(timeIntervalSince1970: 1_800_100_100)
+        var engine = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
+        try engine.startFocus(isPro: false, now: start, sessionID: UUID())
+        let envelope = FocusRecoveryEnvelope(
+            engine: engine,
+            subject: FocusSubjectSnapshot(
+                id: UUID(),
+                name: "英語",
+                colorHex: "#4C8CCF"
+            ),
+            clockAnchor: ClockAnchor(wallDate: start, systemUptime: 10),
+            pendingCompletion: nil,
+            savedAt: start
+        )
+        var payload = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(envelope))
+                as? [String: Any]
+        )
+        var encodedEngine = try XCTUnwrap(payload["engine"] as? [String: Any])
+        encodedEngine["endDate"] = Double.greatestFiniteMagnitude / 4
+        payload["engine"] = encodedEngine
+        let hostileData = try JSONSerialization.data(withJSONObject: payload)
+        let hostileEnvelope = try JSONDecoder().decode(
+            FocusRecoveryEnvelope.self,
+            from: hostileData
+        )
+
+        XCTAssertEqual(
+            FocusPersistence.relaunchAction(for: hostileEnvelope, at: start),
+            .discard
+        )
+        UserDefaults.standard.set(hostileData, forKey: FocusPersistence.key)
+        XCTAssertNil(FocusPersistence.load())
+        XCTAssertNil(UserDefaults.standard.data(forKey: FocusPersistence.key))
+    }
+
     func testBreakRecoveryRoundTripAndClear() throws {
+        let now = Date(timeIntervalSince1970: 1_800_199_100)
         let value = BreakRecoveryEnvelope(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000333")!,
             minutes: 15,
-            endDate: Date(timeIntervalSince1970: 1_800_200_000)
+            endDate: Date(timeIntervalSince1970: 1_800_200_000),
+            clockAnchor: ClockAnchor(
+                wallDate: now,
+                systemUptime: 42_000
+            )
         )
-        FocusPersistence.saveBreak(value)
-        XCTAssertEqual(FocusPersistence.loadBreak(), value)
+        FocusPersistence.saveBreak(value, at: now)
+        XCTAssertEqual(FocusPersistence.loadBreak(at: now), value)
+
+        var legacyObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: JSONEncoder().encode(value)
+            ) as? [String: Any]
+        )
+        legacyObject.removeValue(forKey: "clockAnchor")
+        let legacy = try JSONDecoder().decode(
+            BreakRecoveryEnvelope.self,
+            from: JSONSerialization.data(withJSONObject: legacyObject)
+        )
+        XCTAssertNil(legacy.clockAnchor)
         FocusPersistence.clearBreak()
         XCTAssertNil(FocusPersistence.loadBreak())
+    }
+
+    func testCorruptBreakRecoveryIsRejectedAndRemovedWithoutIntegerConversion() throws {
+        let suiteName = "TsumibenTests.break-corruption.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let now = Date(timeIntervalSince1970: 1_800_210_000)
+        let key = AccountScopedLocalState.defaultsKey(
+            base: "break.persisted-session",
+            defaults: defaults
+        )
+        let corruptValues = [
+            BreakRecoveryEnvelope(
+                id: UUID(),
+                minutes: Int.max,
+                endDate: now.addingTimeInterval(300)
+            ),
+            BreakRecoveryEnvelope(
+                id: UUID(),
+                minutes: Constants.Timer.shortBreakMinutes,
+                endDate: Date(
+                    timeIntervalSinceReferenceDate: Double(Int.max) * 2
+                )
+            )
+        ]
+
+        for value in corruptValues {
+            defaults.set(try JSONEncoder().encode(value), forKey: key)
+            XCTAssertNil(FocusPersistence.loadBreak(defaults: defaults, at: now))
+            XCTAssertNil(defaults.data(forKey: key))
+        }
+        XCTAssertEqual(
+            BreakRecoveryPolicy.remainingSeconds(
+                minutes: Int.max,
+                endDate: nil,
+                at: now
+            ),
+            0
+        )
+    }
+
+    func testBreakRecoveryCountdownIsFiniteAndBounded() {
+        let now = Date(timeIntervalSince1970: 1_800_220_000)
+        XCTAssertEqual(
+            BreakRecoveryPolicy.remainingSeconds(
+                minutes: Constants.Timer.shortBreakMinutes,
+                endDate: nil,
+                at: now
+            ),
+            300
+        )
+        XCTAssertEqual(
+            BreakRecoveryPolicy.remainingSeconds(
+                minutes: Constants.Timer.shortBreakMinutes,
+                endDate: now.addingTimeInterval(301),
+                at: now
+            ),
+            300,
+            "A small backward-clock drift must never extend the configured break"
+        )
+        XCTAssertEqual(
+            BreakRecoveryPolicy.remainingSeconds(
+                minutes: Constants.Timer.shortBreakMinutes,
+                endDate: now.addingTimeInterval(10_000),
+                at: now
+            ),
+            0
+        )
     }
 
     func testPendingStratumCelebrationStoreIsDurableDeduplicatedAndRemovable() throws {

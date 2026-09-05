@@ -1,6 +1,6 @@
 # つみべん — iCloud同期後の有界メンテナンス設計
 
-更新日: 2026-08-31
+更新日: 2026-09-04
 
 ## 1. 目的
 
@@ -9,10 +9,10 @@
 この仕組みが守る成果は次のとおりです。
 
 1. 40年・350,640セッション規模でも、Home、瓶、集中開始、設定を操作できる
-2. CloudKitの到着順が前後しても、質量、レア粒、実績、集約階層、タイマー所有権が最終的に収束する
+2. CloudKitの同期元recordの到着順が前後しても、質量、実績、タイマー所有権と、端末内で再構築する集約階層が最終的に収束する
 3. アプリ終了、バックグラウンド移行、通信断、途中失敗のあとも同じ修復を安全に再開できる
 4. 活動データのreset世代が未知の行を、誤って削除または現在世代へ混入しない
-5. 初回オンボーディングと、利用者が削除した教科の選択を壊さない
+5. 初回オンボーディングと、利用者が削除したテーマの選択を壊さない
 
 ここでいう「メンテナンス」は、表示前に全データを正常化する起動ゲートではありません。表示は安全な会計frontierとreset gateで先に成立させ、深い修復は小さなsliceへ分割して収束させます。
 
@@ -24,14 +24,131 @@
 - iCloud上の全レコードが端末へ届いたことを証明すること
 - `CloudSyncMonitor` のアカウント状態を同期進捗へ読み替えること
 - Home、Share、Settingsの画面設計を変更すること
-- 初回オンボーディングで利用者が選んでいない教科を追加すること
+- 初回オンボーディングで利用者が選んでいないテーマを追加すること
 - `SeedData.bootstrap` をそのまま本番のバックグラウンド処理として呼ぶこと
 - 1回の起動または1回のforeground滞在中に、全修復を必ず完了させること
 - 未知のCloudKit到着順に対して、推測で欠損データを補完または削除すること
 
-## 3. 現状とgap
+## 3. 実装状態と残る検証gap
 
-### 3.1 起動時の読み取りは意図的に小さい
+`SyncMaintenanceCoordinator`、durable checkpoint、`SyncMaintenanceSliceWorker`とRootのforeground
+drainはproduction pathへ実装済みです。各sliceは最大fetch 256行、総access 1,024行、save 1回に
+制限し、failure時の指数backoffはforeground中もcancellable timerで再開します。ここで残るgapは
+署名済み2台／production CloudKitでの配信順序・長時間中断試験、最新Release candidateでの全test、
+iOS 18+ History token経路の追加最適化です。iOS 17の正しさはrolling verification fallbackで成立させます。
+初回の同格な保存先選択、local-only namespace、cloud modeのaccount identity fail-closedとlocal namespace
+分離は実装済みですが、両modeとA→B block→A復帰を含む実機検証まではproduction上の分離を実証済みと
+しません。rare台帳はversion 1.0で無効です。将来有効にする
+場合は、SwiftData側のpending commit／cursorをactive Apple Accountへbindingし、account切替時に
+別accountへ送らない境界も改めて設計・実機検証する必要があります。
+
+### 3.1 永続化境界
+
+version 1.0は最初の`ModelContainer`を作る前に、同格の「iCloudで同期」と「このiPhoneのみ」を提示し、
+それぞれの確認後に一方を確定します。どちらも推奨扱いにせず、選択はVersion 1.0では変更できません。
+shipping `ModelContainer`は選択に応じて次の分離を使います。
+
+- iCloud選択時の`iCloud.com.hinoshiba.tumiben`: `Subject`、`StudySession`、`AchievementStone`、`Prefs`、
+  `ActivityResetMarker`、`SyncedFocusTimer`、`FocusTimerDeviceClaim`の7 modelだけをprivate CloudKitへ同期
+- iCloud選択時の`TsumibenLocalProjection`: `AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`の4 modelを
+  端末内だけに保存し、上記同期元recordから再構築。CloudKitへuploadしない
+- local-only選択時: 同じ7 source modelと4 projection modelを専用random namespaceの別々の端末storeへ
+  保存し、両configurationともCloudKit `.none`。Apple Account／networkなしで全基本機能を利用でき、
+  iCloudへ自動switch／uploadしない
+- rare reward operations container: version 1.0ではentitlement、shipping schema、runtime writerから
+  無効化。将来の設計・回帰testだけをsourceに保持
+
+現在世代またはmarker未着世代に属する7 source modelの物理rowは、CloudKitから後着する別copyの証拠です。
+background maintenanceはそれらを決定論的なpure resolverで論理表示・会計へまとめますが、duplicateを
+canonical rowへ書き戻したり、他copyへfan-outしたり、物理削除したりしません。物理削除を許すsource側の
+例外は、supported reset markerで明示的に証明したstale epochと、同じUUIDの有効な`StudySession`がすでに
+materializeしているとexact queryで確認した後のclosed focus active tailだけです。4種類のlocal projectionは
+CloudKit sourceから再構築できる端末内dataなので、検証済みのmerge／compact／再作成を続けます。
+
+#### 3.1.1 Version 1.0の最終CloudKit source schema
+
+Version 1.0はまだpublic buildがなく、既存production user dataをmigrationする段階ではありません。最終RCは
+次の追加fieldを含む7-model schemaを初回production schemaとして固定します。
+
+| Model | 最終RCで確認する追加field |
+|---|---|
+| `Subject` | `syncRecordID`、`contentRevision`、`contentMutationID`、`deletedAt` |
+| `StudySession` | `syncRecordID` |
+| `AchievementStone` | `syncRecordID`、`deletionRevision`、`deletionMutationID`、`restoredDeletionMutationID`（`revision`、`deletedAt`、`updatedAt`と併用） |
+| `Prefs` | `syncRecordID`、`settingsWriterID`、`timerCompletionSoundRawValue`、`timerCompletionHapticRawValue`、下記12 groupのrevision／mutation pair |
+| `ActivityResetMarker` | 追加なし。既存の`id`／`epochID`／`sequence`を使用 |
+| `SyncedFocusTimer` | 追加なし。既存の`id`／`sessionID`／`revision`を使用 |
+| `FocusTimerDeviceClaim` | `syncRecordID` |
+
+`Prefs`の12 groupは`sound`、`haptics`、`timerCompletionSound`、`timerCompletionHaptic`、`rareReward`、
+`reminderEnabled`、`reminderTime`、`shareIncludesManual`、`externalTheme`、`keepScreenAwake`、
+`preferredFocusMinutes`、`usagePurpose`です。`timerCompletionSound`は`timerCompletionSoundRawValue`、
+`timerCompletionSoundRevision`、`timerCompletionSoundMutationID`を持ち、`timerCompletionHaptic`は
+`timerCompletionHapticRawValue`、`timerCompletionHapticRevision`、`timerCompletionHapticMutationID`を持ちます。
+`usagePurpose`は既存CloudKit schemaとJSON exportとの互換性のために保持する履歴groupです。出荷UIは
+勉強・仕事共通の一つのテーマ一覧を使い、この値で候補、設定画面、onboardingを分岐しません。
+各groupは、たとえば`soundRevision`と`soundMutationID`のように、`<group>Revision`と
+`<group>MutationID`を一組で持ちます。端末は`settingsWriterID`が自分と一致する1物理rowだけを更新し、
+他端末rowをfan-out更新しません。resolverは各field groupを独立に選ぶため、別端末がofflineで別設定を
+変更しても片方を失わず、同じ設定のtrue→false／false→trueもrevisionで表現できます。
+`AchievementStone`のdurable削除eventは`(deletionRevision, deletionMutationID)`です。削除操作はeventを
+作り、同じ物理rowを明示Undoする場合も`deletionRevision`と`deletionMutationID`を消しません。Undoは実際に
+観測した削除tokenだけを`restoredDeletionMutationID`へackし、通常編集は削除eventとrestore ackを全て
+保持します。pre-release legacy `deletedAt` rowは
+`(row.revision, deletionMutationID ?? syncRecordID)`を削除eventとして合成します。activeな高revision rowでも、
+未観測の新しい削除tokenをackしていなければ復活根拠にしません。
+
+productionへpromoteする前に、CloudKit Consoleの**development environmentだけ**をclearし、最終RCで
+7 modelを再initializeします。上記field名・型・defaultをdevelopment schemaで照合し、clean install、
+partial delivery、2台offline競合、exportを検証した同一schemaだけをproductionへdeployします。
+production environmentはclear／resetせず、schemaを再生成した別binaryを先に配布しません。public release
+後のfield変更は、このpre-release clear手順を再利用せず、released store fixtureとversioned migrationで
+別releaseとして扱います。
+
+configuration間のrelationshipは作りません。maintenanceは同期元recordを正本としてlocal projectionを
+更新し、projectionの途中状態をCloudKitへ逆流させません。1.0では
+`CompleteDataDeletionReleasePolicy.isEnabled == false`とし、direct CloudKit一括削除UIとlaunch gateを
+このworkerの契約に含めません。Version 1.0のWidgetはaccount-neutralな起動導線だけを表示し、
+SwiftData、CloudKit、App Group、snapshotを一切読みません。Live Activityはアプリ名、選択時間、残り時間、
+実行状態だけを表示し、属性をランダムなsession UUIDと秒数に限定します。process終了中のApple Account
+切替ではOSの描画cacheを同期失効できないため、system surfaceへ最初からaccount由来dataを置かないことを
+境界にします。local-onlyから後でiCloudを始める場合は、必要に応じて
+閲覧用JSONを書き出した後にappを削除・再installして選び直します。app削除でlocal記録は失われ、JSONは
+再importできず、migrationや別端末での記録継続には使えません。
+
+### 3.2 Apple Account境界
+
+shippingのcloud modeは、利用者へtheme名、成果memo、記録、設定、進行中timerをApple Accountのprivate
+iCloudへ保存することとonline確認要件を表示し、利用者がiCloud選択を確認した後、SwiftUIが`RootView`
+またはCloudKit-backed `ModelContainer`を作る前に次の境界を確立します。
+
+1. `CKContainer.accountStatus()`がavailableであることを確認する
+2. `userRecordID()`を取得する
+3. private databaseの全record zoneをread-only fetchし、通信不可またはactive iCloud accountなしなら失敗する
+   fresh CloudKit requestを完了する。SwiftData管理containerへraw recordの作成・変更は行わない
+4. `userRecordID()`を再取得してfetch前後のIDが一致することを確かめ、container IDとrecord IDを端末内で
+   SHA-256 fingerprintへ変換する。途中で変わった場合はどちらもmountせず再試行を求める
+5. 初回確定時はfingerprintとrandom UUID namespaceを不変の保存先profileへ保存する
+6. 以後の各launch／resumeは、fresh request後のfingerprintと保存済みprofileが完全一致する場合だけ、
+   cloud cacheとlocal projectionのSQLite URL、focus復旧／deferred完走、maintenance checkpoint、reset
+   適用状態を同じnamespaceへ分離してcontainerをmountする
+
+通信不可、account identity不明、保存済みfingerprintと異なるaccountでは旧storeへfallbackせず、記録領域を
+開かないfail-closed画面に留まります。Bへ自動switchせず、元のAへ戻ってonline確認できた場合だけ同じA
+namespaceを再利用します。fail closedは保存済みdataを削除しません。profile／store履歴の欠落、
+破損、部分的なsource／projection pair、sidecarだけの履歴、複数namespace、未知artifactは新規選択で
+上書きせずrecovery gateへ送ります。旧versionのregistryが存在する場合は整合性を検査しますが、存在しない
+こと自体は正常です。registryは1.0のnamespace authorityではなく、1.0は作成・更新・保存しません。
+ただし、選択profileを確定した直後、最初の
+store fileを作る前にprocessが終了した境界だけは、fileが0件でも一度限りの正当なmount準備状態として
+扱います。
+
+`.CKAccountChanged`を受けたときは、Rootと既知のtimer side effectを
+退役させ、旧`ModelContainer`が解放されてからidentityを再解決します。
+通常backgroundでもstoreをunmountし、foregroundで再検証するため、processがaccount change通知を受ける
+前にsuspendされた場合の旧store再利用を避けます。このboundaryはCloudKit import完了を意味しません。
+
+### 3.3 起動時の読み取りは意図的に小さい
 
 `RootView` は最初の画面を守るため、次の上限付きsentinelだけを保持します。
 
@@ -50,7 +167,7 @@
 
 これは起動性能として正しい一方、古い日時を持つ後着行や、上限外の既存行の更新をfingerprintだけで完全には検知できません。Rootのfingerprintは「変化が見えたときの早いhint」であり、完全な変更履歴ではありません。
 
-### 3.2 現在のforeground reconciliationが済ませること
+### 3.4 現在のforeground reconciliationが済ませること
 
 `RootView.reconcileIncomingActivityData()` は、UIを守るため次だけを行います。
 
@@ -58,7 +175,7 @@
 2. 最新のactivity resetを端末ローカル状態へ適用する
 3. `BoundedLaunchPreparation.prepare` を実行する
 4. bounded preparationが返した理由を `pendingLaunchMaintenanceReasons` へ追加する
-5. boundedな`Prefs`情報からオンボーディング状態と利用目的を復元する
+5. boundedな`Prefs`情報からオンボーディング状態と、互換性用`usagePurpose`値を復元する
 6. boundedな最新timer情報から、別端末の集中を引き継ぐ提案を作る
 
 `BoundedLaunchPreparation` の各query契約は最大1行です。現行のdeep maintenance理由は次の5種類に限られます。
@@ -69,26 +186,32 @@
 - `gachaSingletonCanonicalized`
 - `localFocusAwaitingResetMarker`
 
-### 3.3 現在は済ませていないこと
+`prefsSingletonCanonicalized`はpre-release checkpoint互換のreason名であり、source `Prefs`を物理的に
+canonical rowへ統合する許可ではありません。
 
-次は `reconcileIncomingActivityData()` では実行されません。
+### 3.5 軽量foreground reconciliationとworkerの分担
 
-- 既知の旧reset世代の物理削除
-- `Prefs`、`GachaState` の全duplicate統合
-- 同じlogical UUIDを持つ`StudySession`の統合
-- 重複または競合するfocus完走のfairness demotion
-- `AchievementStone`の重複統合とsnapshot修復
-- `Stratum` membershipの一意化と`isBaked`修復
-- legacy `Stratum`から`AggregatePebble`への移行
-- aggregate lineage、構成、親子関係、10進carryの修復
-- `Bedrock`の統合
-- `Subject`重複の統合とsession・achievementの再接続
+次は `reconcileIncomingActivityData()` 自身では実行せず、durable reasonを受けた
+`SyncMaintenanceSliceWorker`が後続sliceで実行します。
 
-また、canonicalなsingletonがすでに存在する状態で別duplicateが後着すると、bounded preparationは新しいsingleton理由を返しません。現行5理由だけをworkerの唯一の起動条件にすると取りこぼします。
+- 既知の旧reset世代だけを対象にしたsource rowの物理削除
+- `Prefs`を12 field groupごとに、全物理rowを保持したまま論理解決
+- 同じlogical UUIDを持つ`StudySession`を、全物理rowを保持したまま論理解決
+- 同じsession UUIDを持つfocus完走／active recovery／claimを、全物理rowを保持したまま論理解決
+- materialized `StudySession`で閉じたことを証明したfocus active tailだけを別phaseで削除
+- `AchievementStone`と`Subject`を、tombstoneを含め全物理rowを保持したまま論理解決
+- `GachaState`、`Stratum`、`AggregatePebble`、`Bedrock`という端末内projectionのduplicate統合、
+  membership、lineage、10進carry、legacy移行の修復
 
-### 3.4 `SeedData.bootstrap` は正解系だが本番workerではない
+論理winnerがすでに見えている状態で別source duplicateが後着しても取りこぼさないよう、現行実装は
+5つのlaunch理由だけに依存せず、各modelのbounded fingerprint、reset変更、foreground時のrolling
+verificationからtyped kindをenqueueします。
 
-`SeedData.bootstrap` は小さいfixtureに対する決定論的なrepair oracleです。しかし現状は`@MainActor`で、複数modelを全件fetchします。40年storeで本番のinteractive pathから呼ぶことはできません。
+### 3.6 `SeedData.bootstrap` は小規模oracleであり本番workerではない
+
+`SeedData.bootstrap` は小さいfixtureに対する決定論的なrepair oracleです。`@MainActor`で複数modelを
+全件fetchするため、40年storeの本番interactive pathからは呼びません。本番では同じ不変条件を
+有界なModelActor workerへ移植済みです。
 
 さらに、次のsubject seed処理を含みます。
 
@@ -100,7 +223,10 @@ reconcileSubjects(
 prefs.hasCompletedInitialSubjectSeed = true
 ```
 
-この動作を汎用workerへ移すと、初回オンボーディング前に全presetを作ったり、利用者が削除したpresetを別端末で復活させたりする危険があります。`SeedData.bootstrap` はテストoracleとして残し、本番workerにはactor-safeな小さいrepair policyを段階的に移植します。
+このseed動作を汎用workerへ移すと、初回オンボーディング前に全presetを作ったり、利用者が削除した
+presetを別端末で復活させたりする危険があります。そのため`SeedData.bootstrap`はtest oracleとして
+残し、本番workerは欠損presetを作らず、source rowのread-only論理解決とlocal projectionの
+actor-safeなrepairだけを行います。
 
 ## 4. 必須の不変条件
 
@@ -116,6 +242,11 @@ achievement stones = 0g
 
 ### 4.2 reset世代
 
+- supported markerは`sequence` 0...1,000,000だけ。範囲外はcorrupt／unsupportedとして勝者にも
+  stale判定根拠にも使わず、対応epochのrowを推測で削除しない
+- winnerの主順序はLamport-style `sequence`。同一sequenceは`writerDeviceID`、`epochID`、marker `id`の
+  安定順で決め、`resetAt`は表示・監査metadataにしか使わない
+- 新しいresetは観測済みwinnerの`sequence + 1`。上限到達時はcounterを再利用せず操作を拒否する
 - markerが1件もない場合、`nil` epochだけがcurrent
 - winning markerのepochがcurrent
 - markerが存在する非winning epochと、marker存在後の`nil` epochはstale
@@ -124,9 +255,16 @@ achievement stones = 0g
 
 物理削除は容量整理であり、正しさのsource of truthはappend-onlyなreset markerです。
 
-### 4.3 logical groupのatomicity
+### 4.3 logical groupの非破壊性
 
-同じUUIDを持つduplicate groupは、完全なmerge値の計算、canonical更新、duplicate削除を同じsaveで行います。page境界でgroupの半分だけを保存してはいけません。
+現在世代またはmarker未着世代のsource duplicate groupは、完全なbounded setをpure resolverへ渡して
+論理winner／field winnerを求めます。groupの半分しか見えていない状態でも、見えているcopyを書換えたり
+削除したりせず、次のdeliveryで再解決します。maintenanceによるcanonical書戻し、duplicate削除、全copyへの
+fan-out更新は禁止です。利用者の明示操作だけが、Subject／Achievementでは選択した1物理row、`Prefs`では
+自端末の`settingsWriterID`に一致する1物理rowへ新しいrevision／mutation IDを書きます。
+
+端末内projectionのduplicate merge／deleteは、完全なgroupまたは証明済みconnected componentを同じsaveで
+処理します。page境界でprojection groupの半分だけを保存してはいけません。
 
 ### 4.4 aggregateの保守性
 
@@ -151,7 +289,7 @@ short-lived @ModelActor SliceWorker
             v
 MainActor side effects
   - local focus retirement
-  - notification / Live Activity cleanup
+  - notification cleanup
   - optional passive UI refresh
 ```
 
@@ -212,7 +350,7 @@ slice開始時には、対象kindとgenerationをsnapshotします。slice終了
 | sessions | focus fairness、strata、aggregates、gacha、subjects |
 | focus timer | focus fairness、sessions、gacha |
 | strata | aggregates |
-| subject | sessions・achievementsの再接続 |
+| subject | sessions・achievementsのsnapshotベース論理表示を再評価（source relationshipは書換えない） |
 | preferences | user-state反映、bedrock確認 |
 
 展開したreasonとgenerationは、worker開始前にcheckpointへ保存します。
@@ -222,6 +360,10 @@ slice開始時には、対象kindとgenerationをsnapshotします。slice終了
 同じcontainerに対するmaintenance sliceは常に1本です。要求が増えた場合は実行中taskを増やさず、generationを更新して次sliceへ渡します。
 
 sceneがinactiveまたはbackgroundになった場合は新しいsliceを開始しません。すでにatomic saveへ入ったsliceは完了結果を受け取り、それ以外はcancelしてcursorを保持します。
+
+### 6.5 foregroundのidle graceとpacing
+
+初回およびforeground復帰時のrolling verificationは、remote importの見落としがあり得るcloud modeだけが新規に要求し、first frameから60秒のcancellable idle grace後に開始します。local-only、in-memory、Simulatorのlocal storeにはremote blind spotがないため、初回の全範囲verificationを追加しませんが、既存checkpointと明示的なtyped reasonは失いません。drainは選択中tabに依存せず、sceneがactiveである限りSettings／Log／Overview／Shareを含む全画面の背後で継続します。さらにcloud modeのactive sceneは15分ごとにverification ticketを更新し、長時間同じ画面を開いたままでもrolling sweepを再要求します。fingerprintまたは通知が観測したimport reasonはverification markerより高いpriorityを保ちます。drain自体はbackground priorityで、成功したslice間に100msのcancellable pauseを置きます。350,640 sessionを128件pageだけで一巡する最悪ケースでは約2,740 sliceとなり、pauseだけで約274秒を追加しますが、cursorとgenerationが端末内checkpointへ保存されるため、1回のforegroundで完走させることより直接操作の応答性を優先し、終了・background後は同じ安全な境界から再開します。
 
 ## 7. `@ModelActor` slice worker契約
 
@@ -263,15 +405,15 @@ wall timeは停止条件の補助です。同期fetchはdeadline到達時に中�
 
 ### 7.2 saveの境界
 
-1 sliceで複数phaseを中途半端に保存しません。save単位は次のいずれかです。
+1 sliceで複数phaseを中途半端に保存しません。background workerがsaveできる単位は次のいずれかです。
 
-- 1つ以上の完全に読み切ったlogical UUID group
-- 1つ以上の独立したachievement group
-- 証明が完了したaggregate nodeまたは小さいconnected component
-- 256件以下の既知stale row削除
-- singleton accumulatorの走査完了後のcanonical merge
+- 証明が完了したlocal projectionのgroup、aggregate node、または小さいconnected component
+- 256件以下の明示的に証明されたstale epoch source row削除
+- exactなmaterialized `StudySession`で閉じたことを証明したfocus active tail削除
 
-読み取り途中のaccumulatorはcursorへ保存し、完全なmerge値が得られるまで破壊的変更をしません。
+現在世代／marker未着世代のsource resolverは`saveCount == 0`です。読み取り途中のaccumulatorはcursorへ保存し、
+完全な論理解決値が得られるまでsource rowを変更しません。`Prefs`、`StudySession`、`AchievementStone`、
+`Subject`、focus timer／claimのduplicateを理由に、canonical書戻しや物理削除を追加してはいけません。
 
 ### 7.3 queryとpagination
 
@@ -304,23 +446,53 @@ markerが存在しないepochを削除queryの対象にしなければ、unknown
 
 ### Phase 1: singleton fast repair
 
-- `Prefs` deterministic merge
+- `Prefs`を全物理row保持のまま12 field groupごとに決定論的解決
 - `GachaState` singletonのcanonical確認
 - `Bedrock`の小さい統合
 - `localFocusAwaitingResetMarker`のexact marker再確認
 
-fresh installでsingletonが作られただけなら、duplicate不存在を小さく確認して完了します。この理由から全履歴scanを開始しません。
+fresh installで端末所有の`Prefs` rowまたはlocal projection singletonが作られただけなら、小さい確認で
+完了します。この理由から全履歴scanを開始しません。workerはforeign `Prefs` rowを変更せず、端末所有rowの
+作成／設定変更も利用者操作またはbounded launch writerへ委ねます。
 
 local focusが`awaitingMarker`のままなら、reasonを消さず、即時retry loopもしません。marker fingerprint、foreground、History eventのいずれかで再評価します。
 
-### Phase 2: logical activity identityとfairness
+### Phase 2: logical activity identityとfocus recovery
 
-1. `StudySession` duplicateをlogical UUIDごとに統合
-2. snapshot、grams、rare kind、`isBaked`をoracle policyで収束
-3. overlapping focus完走を検出
-4. superseded sessionを`.timerDemoted`、normal、unbakedへ変更
-5. 影響するprojectionを保守的に再検証対象へ送る
-6. gachaの最大512候補tailを、session/focus修復後に評価する
+1. `StudySession` duplicateをlogical UUIDごとにpure resolverで一度だけ会計し、物理rowは全て保持
+2. snapshot、grams、rare kindの論理winnerをstableなpolicyで解決し、legacy `isBaked`は会計根拠にしない
+3. 同じsession UUIDのtimer履歴では、materialized `.completed`を不可逆な完走証拠とする
+4. `.completed`がない場合、preferred completion-pendingと最早cancellationを集合として解決する。
+   cancellationがscheduled endより前ならcancel、同時刻以降ならpendingを論理winnerとするが、両rowを保持
+5. terminal rowがなければpreferred active revisionとclaimをlogical group単位で解決し、物理rowは保持
+6. 異なるsession UUIDは破壊的にcancelしない。回復UI／通知だけを最古startのactive timerへ直列化し、
+   offline端末間で時間が重なった別UUIDの完走は両方をmeasured recordとして保持する
+7. exact queryで有効なmaterialized `StudySession`を確認した場合だけ、そのclosed sessionのactive timer tailを
+   削除できる。これはduplicate compactionではなく、完走recordへmaterialize済みの一時active tail整理である
+8. 影響するlocal projectionを保守的に再検証対象へ送る
+9. gachaの最大512候補tailを、session/focus解決後に評価する
+
+同一focus sessionの全pageは最大256行ずつread-onlyで検証し、pure resolverのaccumulatorと境界だけを
+checkpointへ保持します。検証後もterminal／active／claimのCloudKit source copyを小さい証拠集合へfoldせず、
+一行もcanonicalへ書戻しません。後方pageの破損はそのlogical groupを非破壊でquarantineし、別group／別kindの
+maintenanceを継続します。interactiveなexact session queryは128行を上限とし、それを超える履歴を
+truncated winnerとして利用せずmaintenance要求としてfail closedします。maintenanceが全pageを読んでも
+source row数自体は減らないため、UIのbounded ceilingを超える履歴が自動的に解消すると主張しません。
+
+account-wide interactive recoveryが検査するactive logical sessionは最大256件です。invalid groupは表示・
+変更せず次の独立sessionへ進みますが、valid timerの前にinvalid active logical sessionが257件以上並ぶと
+有界scanを使い切り、maintenance後もfail closedが継続し得ます。checkpoint quarantineは他作業を飢餓
+させませんがrow自体をqueryから外さないため、この上限を解消しません。完全解消には、raw payloadを
+保持したままinteractive predicateから除外し、再decode成功時に解除するversioned model-level quarantineが
+必要です。version 1.0でschemaを増やさない場合は既知limitationとしてrelease ownerとsupportが受け入れます。
+
+ただしこれはnetwork partition中の完走と取消をglobal transactionへ直列化する仕組みではありません。
+未materializedのcompletion-pendingへscheduled end前cancelが届いてからcommit判定すればcancelを尊重します。
+一方、別端末で`StudySession`がすでにmaterializeした後に同じcancelが後着した場合は、既保存の完走を削除・
+demoteせず`.completed`を優先します。したがって「cancelをcommit前に観測したか／StudySessionが先に保存
+されたか」により、partition境界の最終履歴が分岐し得ます。version 1.0は履歴を遡及削除する危険より
+既保存完走の保護を選ぶ契約であり、強いglobal linearizabilityを主張しません。このCAP trade-offは
+署名済み2台のoffline試験とApp Review説明で確認します。
 
 gacha progressは、部分同期で後退させません。
 
@@ -330,47 +502,78 @@ reconciled = max(known synced progress, locally proven progress)
 
 ### Phase 3: achievements
 
-- 同じUUIDのduplicateを統合
-- noteをsanitize
-- 未来日時を上限補正
-- subject name/color snapshotを補完
+- 同じUUIDのduplicateをrevision、tombstone、stable physical identityで論理解決し、全物理rowを保持
+- 表示時のnote sanitize、未来日時上限、subject name/color snapshot fallbackをwinnerから計算
+- 通常編集は`deletedAt`、`deletionRevision`、`deletionMutationID`、`restoredDeletionMutationID`を保持する
+- 明示Undoだけが選択した1物理rowへ高いrevisionと、観測済み削除tokenをackする
+  `restoredDeletionMutationID`を書いてrestoreする。in-place restore後も元の削除event pairは保持する
 - 質量へは加算しない
 
 ### Phase 4: legacy strata
 
 - duplicate `Stratum`を統合
 - 同じsession membershipを複数stratumへ所属させない
-- membershipを権威として`StudySession.isBaked`を修復
-- 対応するstratumが未着の場合、otherwise-unclaimed sessionをlooseとして保持
+- local projection membershipを権威として会計し、source `StudySession.isBaked`は書換えない
+- 対応するstratumが未着の場合、otherwise-unclaimed sessionをlooseとして論理表示する
 
 ### Phase 5: aggregate graph
 
-- duplicate aggregateを統合
+- phase 0でduplicate aggregateをlogical ID単位に統合する
+- phase 1で既存leafを一つずつ再検証する。leafのmember UUID一覧と各winnerの固定長SHA-256 digestだけを
+  `AggregateLeafValidationState`へ保存し、ownerの一意性と各UUIDのcount/fetch/count exact readを複数sliceで
+  行う。全member収集後の昇格sliceではmember 0から全件を再読し、全digestが一致した現物winnerからleafの
+  全semantic payloadを再導出する。この一巡をslice budget内で完了できない異常密度は昇格せず、leafと
+  ancestorを`projectionValidationVersion == 0`のままfail closedにし、同cursorの100ms busy loopではなく
+  durable retryと指数backoffへ移す
+- phase 2でHomeに通常のloose pebbleとして残す最新128 `StudySession`の境界を固定し、それより古い
+  current sessionをUUID keysetで最大64件ずつ読む。最大10 sessionごとの決定的level-1 leafを、1 slice
+  1 saveで不足分だけ作る。既存membershipは日付範囲ではなくexact UUID owner queryで判定する
+- phase 3で同levelの検証済みlocal rootを10個単位に選び、決定的parent IDへ1 parent／saveでcarryする。
+  既存parentをmax-mergeせず、child集合からgrams／count／source／reward／subject／dateを全て再導出する
 - legacy stratumから互換aggregateを作る
 - direct sessionとchild aggregateの構成を検証する
 - parent/child backlinkを修復する
 - 証明できるflattened lineageだけcompactする
-- rootを10個単位で決定論的にcarryする
 
 aggregateは単純なpage単位で完結しません。Historyから得たdirty aggregate IDを起点に、parentと最大10 childをbounded frontierで辿ります。1回で完了しない場合はfrontierをcursorへ保存します。
 
+empty local projectionからでも512件を超える履歴を再構築できなければ、Homeのbounded 512-row candidate
+queryより古いsessionが集計から欠落します。このため620 session fixtureで、空local store、同じ`endAt`
+のUUID tie、複数slice、save成功後checkpoint未更新のreplay、全grams／count／source／reward内訳、再generation
+実行後のfingerprint不変を検査します。local projectionを正本にせず、cloud-authored `StudySession`を
+再構築元とする点は変えません。
+
 sessionから所属aggregateを逆引きするindexed relationshipは現行schemaにありません。session変更時は、aggregateのrolling verificationを独立phaseとして要求します。ただし40年のclean storeでmigration versionが完了済みなら毎起動scanしません。
+
+`projectionValidationVersion`未達のaggregateが一つでも存在する間は、Home／Overview／Share等の全consumerで
+aggregate rootを表示会計から除外します。cloud modeでは、起動後または新しいverification generationが
+pendingの間も同様に、生涯の正確値、`+`、`以上`を表示しません。代わりに「再集計中」と、その時点で
+端末上の同期元から確認できた範囲だけである旨を表示します。local-onlyにはremote blind spotがないため、
+localな書込み完了後の値をexactとして扱えます。
 
 ### Phase 6: subjectsとrelationship
 
-- presetと同一identityのsubject duplicateを統合
-- sessionとachievementをcanonical subjectへ付け替える
-- snapshot subject IDから未接続sessionを再接続する
+- presetと同一identityのsubject duplicateをrevision、sticky tombstone、stable physical identityで論理解決し、
+  全物理rowを保持する
+- version 1.0はsubject restore UIを持たないため、一度観測したsupportedな`deletedAt`は、より高いrevisionの
+  offline renameより常に優先する
+- sessionとachievementはrelationshipをfan-out書換えせず、snapshot subject IDから論理表示を解決する
 - missing presetは挿入しない
 - `hasCompletedInitialSubjectSeed`をworkerから変更しない
 
-### Phase 7: physical compaction
+### Phase 7: 許可されたphysical cleanup
 
-known stale rowsをmodelごとに小さく削除します。このphaseの未完了を理由にUIを止めません。現在世代の論理repairと並行して少しずつ進められます。
+supported reset markerでknown staleと証明したsource rowをmodelごとに小さく削除します。また、Phase 2の
+materialized `StudySession` proofがあるclosed focus active tailだけを専用phaseで削除できます。このphaseの
+未完了を理由にUIを止めません。現在世代／marker未着世代のsource duplicateは対象外です。local projectionの
+検証済みcompactionは各projection phaseで行います。
 
 ## 9. checkpointとクラッシュ回復
 
-checkpointはCloudKitへ同期せず、この端末だけへ保存します。候補は小さいCodable payloadを持つ`UserDefaults`またはatomic replaceするApplication Support内JSONです。CloudKit modelへ保存すると、別端末がこの端末の未完了作業を消す危険があります。
+checkpointはCloudKitへ同期せず、この端末だけへ保存し、検証済みApple Accountのrandom namespaceを
+keyへ含めます。現行実装は小さいCodable payloadを`UserDefaults`へ保存します。CloudKit modelへ保存すると
+別端末がこの端末の未完了作業を消し、global keyへ保存するとaccount切替後に前accountのcursorを適用する
+危険があります。identity未検証中はactive namespaceへfallbackしません。
 
 checkpointは少なくとも次を含みます。
 
@@ -432,10 +635,27 @@ iOS 17にはSwiftData History APIがありません。次をfallbackとします
 - upgrade後の一回限りresumable verification
 - first frame後の小さいlaunch verification
 - genuine foreground returnごとのbounded rolling verification
+- active sceneが継続する間の15分ごとのbounded rolling verification
+- `ModelContext.didSave`から、main UIの`StudySession`／`ActivityResetMarker`変更だけを受理し、
+  maintenance自己書込みと無関係なentityを除外するtyped hint
+- `NSPersistentStoreRemoteChange`のstore URLが、検証済みaccount namespaceのCloudKit source store URLと
+  完全一致した場合だけ受理するtyped hint。local projection storeとURLなし／未知URLは除外
 - 既存Root sentinel fingerprintからの早いtype hint
 - reset markerとlocal focusのexact再確認
 
-iOS 17 fallbackは、Rootのtop-N fingerprintだけで「古い後着行を即時かつ完全に検知できる」とは主張しません。複数foregroundにまたがって最終的に全範囲を再確認する設計です。
+iOS 17 fallbackは、Rootのtop-N fingerprintまたは通知だけで「古い後着行を即時かつ完全に検知できる」とは
+主張しません。通知は1秒のcoalesce windowで重複を抑えますが、window内の後続通知も即座にtrustを取消し、
+durable `.sessions` generationを増やします。高コストなfull verification要求だけをwindow末尾へまとめます。
+正しさは初回、真正なforeground復帰、active継続中のrolling verificationで成立させます。
+
+同一process内の通常UI saveは、source sessionまたはreset markerの識別子、もしくは明示的な
+invalidated-allだけをtyped reasonへ変換します。iOS 18以降はmaintenance authorを除外し、iOS 17では
+other／nil contextのdidSaveをmaintenance由来の可能性があるため除外します。unknown entityを無条件に
+全scanへ昇格しません。Core Dataのremote-change optionは外部変更だけでなく当該storeへの全writeを通知し得る
+ため、通知名だけで外部性を主張しません。exact source URLのremote通知がworker実行中に届いた場合はtrustを
+即時取消し、verification reasonをdurable化します。現在cursorを毎回resetしないようworker quiescenceまで
+session generation更新を遅延し、その後に必ず一度再実行します。source-only sentinelは通知payload欠落時の
+補助で、projection-only fingerprintはUI refreshだけに使いmaintenance reasonを生成しません。
 
 行数だけの比較では、件数が変わらないupdateを検知できません。`fetchCount`はcheap hintとして使えても、完全な変更検出ではありません。
 
@@ -453,11 +673,16 @@ iOS 17 fallbackは、Rootのtop-N fingerprintだけで「古い後着行を即�
 
 - `.available`を「同期完了」と扱わない
 - `.available`になったことを理由にpending reasonやHistory tokenをclearしない
-- `.noAccount`、`.temporarilyUnavailable`、`.simulator`でもlocal maintenanceを止めない
+- Settings用monitorの一時的なstatusだけを理由に、mount済みの同一account checkpointをclearしない
 - monitorをmaintenance coordinatorへ変形しない
 - Settingsの「再確認」はaccount statusだけを更新する
 
-将来、Settingsの再確認後にverificationを要求する場合も、account statusの値に関係なく単なる追加hintとしてenqueueします。正しさはHistoryまたはrolling verificationで成立させます。
+これは「account不明でもshipping storeを開く」という意味ではありません。Section 3.2のlaunch boundaryは
+別のsecurity gateであり、iCloud選択時は通信不可、identity不明、fingerprint不一致ではcontainer自体を
+mountしません。
+Simulatorの専用local storeではCloudKit account statusにかかわらずlocal maintenanceを実行できます。
+将来、Settingsの再確認後にverificationを要求する場合も、statusは単なる追加hintであり、同期完了の
+証拠にはしません。データ修復の正しさはHistoryまたはrolling verificationで成立させます。
 
 ## 12. error、cancel、backoff
 
@@ -467,7 +692,7 @@ iOS 17 fallbackは、Rootのtop-N fingerprintだけで「古い後着行を即�
 - foregroundへ戻ったときにbackoff期限を再評価する
 - cancellationは完了済みatomic saveを取り消したと仮定しない
 - save結果が不明な場合は同じidempotent groupを再読込して判断する
-- UIへ必要な通知・Live Activity・UserDefaults cleanupは`mainActorEffects`として返し、MainActorで実行する
+- UIへ必要な通知・UserDefaults cleanupは`mainActorEffects`として返し、MainActorで実行する
 
 maintenanceの未完了は、現在世代を安全に表示できる限りblocking startup errorにしません。
 
@@ -485,7 +710,26 @@ maintenanceの未完了は、現在世代を安全に表示できる限りblocki
 | background中のrequest | 新sliceを始めず、active復帰で再開 |
 | awaiting marker継続 | busy loopせず、reasonを保持 |
 
-### 13.2 Budget契約
+### 13.2 Apple Account境界
+
+| Test | 期待値 |
+|---|---|
+| 初回local-only／offline | Apple Account／networkなしで専用namespaceを確定し全基本機能を利用 |
+| local-only選択後の再起動 | 同じlocal namespaceを開き、iCloudへ自動switch／uploadしない |
+| late cloud verification | 先に確定したlocal-only選択を上書きしない |
+| iCloud選択時の初回offline | cloud／local projection storeと旧defaultsを開かずfail closed |
+| online A→online B→online A | Bをblockし、Aへ戻りonline確認できると同じA namespaceを再利用 |
+| 検証済みAのoffline再起動 | offline reuseせず、store、focus、checkpointを一切開かない |
+| profile／store pairの欠落・破損 | fresh choiceへ戻さずrecovery gate。既存artifactを上書き／削除しない |
+| account change／background | 旧Rootを外しcontainer解放後にだけ次accountを解決 |
+| Widget単独起動 | account状態にかかわらず非個人化した同じ起動導線だけを返す |
+| Live Activity | account-neutralな時間／状態だけ。theme、memo、質量、account／CloudKit dataを渡さず、local toggle OFF、account退役、resetで終了 |
+| process停止中の旧timer通知 | account-neutralな共通文面だけが届き得る。subject nameをpayloadへ含めない |
+
+pure registry／URL／key／external-surface policyのunit testに加え、通知到着順とprocess suspensionを含む
+署名済み実機のA→B block→A復帰試験をrelease gateとします。
+
+### 13.3 Budget契約
 
 すべてのworker testは`MaintenanceFetchAudit`を検査します。
 
@@ -500,12 +744,20 @@ saveCount <= 1
 - 256件を超えるstale削除は`moreWork`とcursorを返す
 - 行を削除しても次sliceでskipしない
 - 40年clean fixtureのsingleton verificationはsession/aggregate fetchを0回にする
-- 1 logical UUID groupがpage境界をまたいでも1つへ収束する
+- 1 logical UUID source groupがpage境界をまたいでも同じ論理値へ収束し、reverse入力、A/B→B/C→late C、
+  checkpoint replayの全てでphysical fingerprintと`saveCount == 0`を維持する
+- 620件・empty local projectionでも最新128件をlooseに残し、それ以前のsessionを全て一度だけaggregateへ
+  表現する。Homeの512件bounded queryとroot summaryで総grams／countが一致する
+- aggregate save後に古いcursorをreplayしてもmembership重複がなく、全generation再実行でfingerprint不変
+- focus timerが256件を超えても全source rowを保持し、completed、preferred pending、最早cancelから、
+  delivery順とslice境界にかかわらず同じ論理winnerへ収束する
+- 後方pageにinvalid payload／snapshot conflictがあればread-only validationでgroup全体を非破壊保持し、
+  quarantine後も別groupを処理する
 - aggregate missing childではflattened payloadを保持する
 
 wall-clockだけのperformance testは端末差で不安定です。構造budgetを必須とし、wall-clockはUI regression testで補完します。
 
-### 13.3 `SeedData.bootstrap`との差分oracle
+### 13.4 `SeedData.bootstrap`との差分oracle
 
 同じ小fixtureを2つのin-memory containerへ作ります。
 
@@ -514,37 +766,53 @@ wall-clockだけのperformance testは端末差で不安定です。構造budget
 
 次の正規化snapshotを比較します。
 
-- `Prefs`の全merge対象scalar
+- `Prefs`の12 field-group winner、writer ownership、revision／mutation stamp
 - logical session数、質量、rare kind、source、`isBaked`、subject snapshot
 - achievement数、kind、note、日時、subject snapshot
 - stratum membership、grams、count
 - aggregate ID、level、parent/children、session IDs、質量、構成、root frontier
 - gacha progress
 - bedrock値
-- subject identityとrelationship
+- subject identityとsnapshotベースの論理linkage（source relationship fingerprintは不変）
 - unknown epoch rowの保存状態
+- current／awaiting source rowのphysical fingerprint不変とbackground `saveCount == 0`
 
 既存fixtureでは少なくとも次を差分oracleへ含めます。
 
 | 既存テストの論点 | Workerで守る契約 |
 |---|---|
-| Cloud duplicateと質量維持 | singleton/session/stratum/bedrockが同じ結果 |
-| rare kind duplicate | rare mergeが到着順に依存しない |
-| subjectの後着 | snapshot IDからrelationshipを再接続 |
-| preset duplicate | relationshipをcanonicalへ付替え |
+| Cloud duplicateと質量維持 | sourceは物理row不変の論理解決、projectionは同じ再構築結果 |
+| rare kind duplicate | rare kindの論理解決が到着順に依存しない |
+| subjectの後着 | snapshot IDから書換えなしで論理表示を再解決 |
+| preset duplicate | sticky tombstone込みの同じlogical subjectを選び、全copyを保持 |
 | overlapping bakes | 同じsessionを1回だけ会計 |
-| orphan `isBaked` | membershipがなければlooseへ戻す |
-| achievement duplicate | snapshotとsanitize結果が一致 |
+| orphan `isBaked` | source bitを書換えず、local membershipがなければlooseとして会計 |
+| achievement duplicate | revision／tombstone／snapshotの論理結果が一致し、全copyを保持 |
 | legacy stratum migration | aggregateをidempotentに作る |
 | decimal carry | childを残し、決定論的parentを作る |
 | flattened lineage | 完全なproofだけcompact |
 | missing child | 古いpayloadを保持 |
-| overlapping offline focus | 後発をself-reported normalとして保持 |
+| overlapping offline focus | 異なるsession UUIDは両方measuredとして保持し、同一UUIDの再送は全copyを保持して論理1件として扱う |
 | reset marker後着 | unknownをmarker前に削除しない |
 
 worker完了後に同じ全phaseをもう一度実行し、`writeCount == 0`かつsnapshot不変であることも必須です。
+さらにsource resolver単独の初回実行も`writeCount == 0`であり、foreign `Prefs` rowや同じlogical IDの
+別physical rowを変更しないことを検査します。
 
-### 13.4 Historyとfallback
+`Prefs`は12 groupを個別に検査します。別端末が異なるgroupを同時変更した場合の合成、同じgroupの
+false→true／true→false、legacy／stale copyの後着、reverse入力、同じrevisionで異なるmutation IDの
+stable tie、同一stampでpayloadが異なる場合のfail-closed、revision上限での新規変更拒否を含めます。
+`Subject`はrevision 0 tombstoneを含め削除が高revision offline renameで復活しないこと、
+`AchievementStone`は通常編集が`deletedAt`と削除event／restore ackを全て保持し、明示Undoだけが観測済み
+tokenを`restoredDeletionMutationID`でackした高revision restoreになることを検査します。in-place restore後も
+`(deletionRevision, deletionMutationID)`が残ること、legacy `deletedAt` rowを
+`(row.revision, deletionMutationID ?? syncRecordID)`へ合成すること、未観測の新しい削除eventを復活させない
+ことも固定します。JSON exportには新しい`syncRecordID`、Subject revision／tombstone、Achievement
+`deletionRevision`／`deletionMutationID`／`restoredDeletionMutationID`、`settingsWriterID`、
+`timerCompletionSoundRawValue`、`timerCompletionHapticRawValue`、24個のPrefs stamp fieldを含め、raw evidenceを
+失わないことを固定します。
+
+### 13.5 Historyとfallback
 
 #### iOS 18以降
 
@@ -561,25 +829,29 @@ worker完了後に同じ全phaseをもう一度実行し、`writeCount == 0`か�
 - 1回のforeground budgetを超えず、次foregroundでcursorから継続する
 - migration version完了後のclean launchで全履歴scanを再開しない
 
-### 13.5 resetとオンボーディング
+### 13.6 resetとオンボーディング
 
 - unknown epochはmarker前にdelete、merge、current化されない
+- `resetAt`が過去／未来へ大きくずれてもLamport sequenceのwinnerが変わらない
+- 同一sequenceのoffline markerが安定tie-breakで収束し、範囲外sequenceをwinner／stale根拠にしない
+- maximum sequence到達後は新markerを同じsequenceで作らずresetを拒否する
 - marker到着後、winningなら保持、known staleならbounded delete対象になる
 - slice中のwinning marker変更でcursorを無効化する
 - fresh storeのworker完了後も`Subject`は0件のまま
 - workerは`hasCompletedInitialSubjectSeed`を変更しない
 - 利用者が削除したpresetをworkerが再作成しない
 
-### 13.6 `CloudSyncMonitor`
+### 13.7 `CloudSyncMonitor`
 
 全availability caseで次を確認します。
 
 - local maintenance policyをblockしない
 - `.available`でpending generationをclearしない
-- `.simulator`でもlocal repairを実行できる
+- `.simulator`の専用local storeではlocal repairを実行できる
+- launch identity boundaryがblockした場合は、monitor statusと無関係にshipping containerを開かない
 - 表示文言は「全記録反映済み」と主張しない
 
-### 13.7 40年UI
+### 13.8 40年UI
 
 既存 `FortyYearPersistentColdLaunchUITests` のbudgetを維持します。
 
@@ -598,17 +870,21 @@ Settings表示 < 5秒
 - eventual idleまで全slice auditがbudget内
 - relaunchしてもcursorから再開し、理由を失わない
 
-## 14. 段階導入
+## 14. 段階導入の到達点
+
+Stage 0〜4とStage 6のproduction defaultは実装済みです。Stage 5はiOS 17 rolling verificationを
+実装済みで、iOS 18+ History token pathは性能最適化として未実装です。実CloudKit 2台試験が完了する
+までは、実装済みという状態をproduction収束の実証と同一視しません。
 
 ### Stage 0: 契約と観測
 
 - `MaintenanceKind`、generation、cursor、auditのpure typeを追加
 - fake workerでCoordinator testを先に通す
-- 本番データへのwriteはまだ行わない
+- pure typeとfake workerで契約を固定してからproduction writeを有効化済み
 
 ### Stage 1: singletonとlocal focus
 
-- `Prefs`、`GachaState`、`Bedrock`のbounded verification
+- `Prefs`のread-only field-group resolutionと、`GachaState`／`Bedrock`のbounded local verification
 - bounded launch理由をdurable checkpointへ変換
 - `localFocusAwaitingResetMarker`をbusy loopなしで再評価
 - 40年clean storeでheavy fetchが0であることを確認
@@ -616,16 +892,18 @@ Settings表示 < 5秒
 ### Stage 2: reset、session、fairness、gacha
 
 - known stale compaction
-- logical session duplicate repair
-- overlapping focus demotion
+- logical session duplicateのread-only resolution
+- 同じlogical session UUIDだけを一度会計し、同じUUIDの全physical copyと、時間帯が重なる異なるoffline
+  UUIDの両方を保持
 - gacha monotone reconciliation
 - reset、gacha、failure recovery testを差分oracle化
 
 ### Stage 3: achievements、subjects、strata
 
-- achievement repair
-- subject dedupe/reconnect。ただしpreset seedは禁止
-- stratum membershipと`isBaked`修復
+- achievementのrevision／durable deletion event／restore ackをread-only解決。明示的な編集／削除／Undoだけが
+  選択した1 rowを更新し、通常編集とin-place restoreも既存削除eventを消さない
+- subjectのrevision／sticky tombstoneをread-only解決。ただしpreset seedとrelationship fan-outは禁止
+- local stratum membership修復。source `StudySession.isBaked`は変更せず会計から除外
 
 ### Stage 4: aggregate graph
 
@@ -637,9 +915,9 @@ Settings表示 < 5秒
 
 ### Stage 5: History検出
 
-- iOS 18+ History token path
-- iOS 17 rolling verification
-- token expiry、crash replay、maintenance author test
+- iOS 17 rolling verificationをproduction fallbackとして実装済み
+- iOS 18+ History token pathは性能最適化として延期
+- History pathを追加するreleaseでtoken expiry、crash replay、maintenance author testを必須化
 
 ### Stage 6: 本番有効化
 
@@ -648,7 +926,8 @@ Settings表示 < 5秒
 - `SeedData.bootstrap`は小fixtureのoracleとして保持
 - legacy MainActor full sweepは、本番呼出しがないことをtestで固定してから整理する
 
-各Stageは前Stageのbudgetとidempotencyを維持したまま進めます。aggregateまで未実装の段階で、maintenance全体が完全に収束すると表示またはログで主張してはいけません。
+各Stageは前Stageのbudgetとidempotencyを維持します。local testだけでmaintenance全体がproduction
+CloudKit上でも収束すると表示またはlogで主張してはいけません。
 
 ## 15. 絶対にしないこと
 
@@ -658,7 +937,7 @@ Settings表示 < 5秒
 - `batchSize`またはwall-clockだけを有界性の証拠にしない
 - delete/mutateしながら`fetchOffset`を増やさない
 - markerが未着のunknown epochをstaleとして削除しない
-- partial duplicate groupを保存しない
+- current／awaiting source duplicate groupをcanonicalへ書戻し、削除、またはfan-out更新しない
 - missing childやcycleがあるaggregate lineageを推測でcompactしない
 - workerからpreset subjectを自動追加しない
 - workerから`hasCompletedInitialSubjectSeed`をtrueにしない
@@ -666,8 +945,15 @@ Settings表示 < 5秒
 - 新しいreasonが来た可能性を無視してpending Setを一括clearしない
 - repair完了前にHistory tokenを進めない
 - checkpointをCloudKitへ同期しない
+- checkpoint、focus復旧stateをaccount未検証のglobal key／fileへfallbackしない
+- cloud modeで通信不可、identity不明またはfingerprint不一致のまま旧`ModelContainer`を開かない
+- `resetAt`をreset winnerの主順序または有効期限として使わない
+- unsupportedなreset sequenceをwinnerまたはstale削除の証拠にしない
 - `CloudSyncMonitor.available`をimport完了と解釈しない
-- `CloudSyncMonitor`がofflineまたはsimulatorという理由でlocal repairを止めない
+- Settings用`CloudSyncMonitor`だけでaccount boundaryのallow／blockを決めない
+- Simulatorの専用local storeを`CloudSyncMonitor`がofflineという理由で止めない
+- 同じfocus sessionのsource rowをcompletion／cancellationの小さい集合へ物理compactionしない
+- 異なるfocus session UUIDをpartial snapshotだけで破壊的にcancel／deleteしない
 - `localFocusAwaitingResetMarker`を短間隔で無限retryしない
 - slice失敗ごとに同じtoastを表示しない
 - Rootのtop-N fingerprintを完全な変更履歴と扱わない
@@ -685,4 +971,7 @@ Settings表示 < 5秒
 - [Fetching and filtering time-based model changes](https://developer.apple.com/documentation/swiftdata/fetching-and-filtering-time-based-model-changes)
 - [HistoryDescriptor](https://developer.apple.com/documentation/swiftdata/historydescriptor)
 
-ローカルのiOS 26.5 SDK interfaceでも、`ModelActor`とModelContextのbatch APIはiOS 17以降、SwiftData HistoryはiOS 18以降、`HistoryDescriptor`の`sortBy` initializerはiOS 26以降であることを確認しています。このアプリのdeployment targetはiOS 17のため、Historyはavailability分岐を持つ追加最適化兼変更検出として実装し、iOS 17 fallbackを必ず残します。
+ローカルのXcode 26.3／iOS 26.2 SDK interfaceでも、`ModelActor`とModelContextのbatch APIはiOS 17
+以降、SwiftData HistoryはiOS 18以降、`HistoryDescriptor`の`sortBy` initializerはiOS 26以降であることを
+確認しています。このアプリのdeployment targetはiOS 17のため、Historyは将来の追加最適化兼変更検出
+とし、実装済みのiOS 17 rolling verification fallbackを正しさの経路として残します。

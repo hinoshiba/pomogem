@@ -19,6 +19,8 @@ struct WrappedView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppRouter.self) private var router
+    @Environment(\.aggregateProjectionPresentation)
+    private var aggregateProjectionPresentation
     @Query private var activityResetMarkers: [ActivityResetMarker]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -33,12 +35,14 @@ struct WrappedView: View {
         _activityResetMarkers = Query(BoundedHistoryPolicy.latestResetMarkerDescriptor())
     }
 
-    private var totalMinutes: Int { monthSessions.reduce(0) { $0 + $1.seconds } / 60 }
+    private var totalMinutes: Int {
+        NonnegativeIntPolicy.sum(monthSessions.map(\.seconds)) / 60
+    }
     private var topSubject: String {
         let groups = Dictionary(grouping: monthSessions, by: \.displaySubjectName)
         return groups.max { lhs, rhs in
-            lhs.value.reduce(0) { $0 + $1.grams }
-                < rhs.value.reduce(0) { $0 + $1.grams }
+            NonnegativeIntPolicy.sum(lhs.value.map(\.grams))
+                < NonnegativeIntPolicy.sum(rhs.value.map(\.grams))
         }?.key ?? "—"
     }
 
@@ -71,7 +75,17 @@ struct WrappedView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
 
-                if pageIsPartial {
+                if aggregateProjectionPresentation.isCloudVerificationPending {
+                    Label(
+                        "iCloudを再集計中です。この端末で確認できた記録だけを表示しています。",
+                        systemImage: "arrow.triangle.2.circlepath.icloud"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(TsumibenTheme.muted)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
+                    .accessibilityIdentifier("wrapped.cloud-verification-notice")
+                } else if pageIsPartial {
                     Label(
                         "この月は記録が多いため、最新\(BoundedHistoryPolicy.periodSessionLimit)件の表示分です。",
                         systemImage: "rectangle.stack.badge.exclamationmark"
@@ -100,6 +114,8 @@ struct WrappedView: View {
                         revealed: revealed,
                         reduceMotion: reduceMotion,
                         isPartial: pageIsPartial
+                            || aggregateProjectionPresentation
+                                .isCloudVerificationPending
                     )
                         .frame(width: 230, height: 300)
                 }
@@ -119,7 +135,7 @@ struct WrappedView: View {
 
                 Spacer(minLength: 12)
                 VStack(spacing: 10) {
-                    Button(pageIsPartial ? "表示分をカードにする" : "この月の瓶をカードにする") {
+                    Button(wrappedShareButtonTitle) {
                         dismiss()
                         Task {
                             try? await Task.sleep(for: .milliseconds(320))
@@ -157,7 +173,9 @@ struct WrappedView: View {
 
     private var loadKey: String {
         let epoch = ActivityResetPolicy.currentEpochID(from: resetSnapshots)?.uuidString ?? "pre-reset"
-        return "\(epoch)|\(month.start.timeIntervalSinceReferenceDate)|\(scenePhase == .active)"
+        let verification = aggregateProjectionPresentation
+            .isCloudVerificationPending ? "cloud-pending" : "verified"
+        return "\(epoch)|\(month.start.timeIntervalSinceReferenceDate)|\(verification)|\(scenePhase == .active)"
     }
 
     @MainActor
@@ -175,26 +193,16 @@ struct WrappedView: View {
         }
         do {
             let epochID = ActivityResetPolicy.currentEpochID(from: resetSnapshots)
-            let raw = try modelContext.fetch(BoundedHistoryPolicy.sessionDescriptor(
+            let page = try BoundedHistoryPolicy.resolvedSessionPage(
+                context: modelContext,
                 epochID: epochID,
                 start: interval.start,
                 end: interval.end,
                 order: .forward,
-                limit: BoundedHistoryPolicy.periodSessionLimit + 1
-            ))
-            pageIsPartial = raw.count > BoundedHistoryPolicy.periodSessionLimit
-            monthSessions = Dictionary(
-                grouping: Array(raw.prefix(BoundedHistoryPolicy.periodSessionLimit)),
-                by: \.id
+                logicalLimit: BoundedHistoryPolicy.periodSessionLimit
             )
-            .values
-            .compactMap { duplicates in
-                duplicates.max { lhs, rhs in
-                    if lhs.grams == rhs.grams { return lhs.endAt < rhs.endAt }
-                    return lhs.grams < rhs.grams
-                }
-            }
-            .sorted { $0.endAt < $1.endAt }
+            pageIsPartial = page.isPartial
+            monthSessions = page.sessions
             isLoading = false
         } catch {
             monthSessions = []
@@ -213,9 +221,18 @@ struct WrappedView: View {
 
     @ViewBuilder
     private var wrappedStats: some View {
-        WrappedStat(title: pageIsPartial ? "表示時間" : "時間", value: formatMinutes(totalMinutes))
-        WrappedStat(title: pageIsPartial ? "表示粒" : "元の粒", value: "\(monthSessions.count)")
-        WrappedStat(title: pageIsPartial ? "表示分トップ" : "いちばん積んだ", value: topSubject)
+        let scoped = pageIsPartial
+            || aggregateProjectionPresentation.isCloudVerificationPending
+        WrappedStat(title: scoped ? "確認済み時間" : "時間", value: formatMinutes(totalMinutes))
+        WrappedStat(title: scoped ? "確認済み粒" : "元の粒", value: "\(monthSessions.count)")
+        WrappedStat(title: scoped ? "確認済みトップ" : "いちばん積んだ", value: topSubject)
+    }
+
+    private var wrappedShareButtonTitle: String {
+        if aggregateProjectionPresentation.isCloudVerificationPending {
+            return "確認済み分をカードにする"
+        }
+        return pageIsPartial ? "表示分をカードにする" : "この月の瓶をカードにする"
     }
 }
 

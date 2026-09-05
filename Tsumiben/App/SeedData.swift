@@ -110,8 +110,31 @@ enum GachaHistoryReconciliationPolicy {
                     let sameRule = versioned.filter {
                         $0.rareRewardRuleVersion == newestRule
                     }
-                    guard newestRule == Constants.Gacha.creditRuleVersion,
-                          sameRule.allSatisfy({
+                    guard newestRule == Constants.Gacha.creditRuleVersion
+                            || newestRule == RareRewardLedgerV2.ruleVersion else {
+                        return LogicalRewardEvent(
+                            endAt: endAt,
+                            id: first.id,
+                            outcomes: [],
+                            creditedGrams: 0
+                        )
+                    }
+                    // V2 materializes a deliberately outcome-free StudySession
+                    // before its custom-zone receipt is available. Ignore those
+                    // pending physical copies when a finalized copy has already
+                    // arrived, and never let a pending-only row advance the cache.
+                    let finalized = newestRule == RareRewardLedgerV2.ruleVersion
+                        ? sameRule.filter { $0.rareRewardParticipated != nil }
+                        : sameRule
+                    guard !finalized.isEmpty else {
+                        return LogicalRewardEvent(
+                            endAt: endAt,
+                            id: first.id,
+                            outcomes: [],
+                            creditedGrams: 0
+                        )
+                    }
+                    guard finalized.allSatisfy({
                         $0.rareRewardParticipated == true
                     }) else {
                         return LogicalRewardEvent(
@@ -121,17 +144,17 @@ enum GachaHistoryReconciliationPolicy {
                             creditedGrams: 0
                         )
                     }
-                    let creditedValues = sameRule.compactMap(
+                    let creditedValues = finalized.compactMap(
                         \.rareRewardCreditedGrams
                     )
-                    let outcomeValues = sameRule.compactMap(
+                    let outcomeValues = finalized.compactMap(
                         \.rareRewardOutcomes
                     )
                     // A partially delivered or conflicting duplicate is not
                     // evidence for advancing a fairness-sensitive counter.
-                    guard creditedValues.count == sameRule.count,
+                    guard creditedValues.count == finalized.count,
                           Set(creditedValues).count == 1,
-                          outcomeValues.count == sameRule.count,
+                          outcomeValues.count == finalized.count,
                           Set(outcomeValues.map {
                             RareRewardOutcomeCodec.encode($0)
                           }).count == 1,
@@ -204,39 +227,49 @@ enum SeedData {
     @MainActor
     static func bootstrap(context: ModelContext) throws {
         let resetMarkers = try ActivityResetStore.snapshots(context: context)
-        try purgeStaleActivityData(context: context, markers: resetMarkers)
+        // Cloud-authored records and the rebuildable local projection live in
+        // separate persistent stores. A ModelContext save spanning both stores
+        // is not an atomic transaction, so each phase is independently
+        // idempotent and reaches a durable boundary before the next begins.
+        try purgeStaleCloudActivityData(context: context, markers: resetMarkers)
         let prefs = try reconcilePreferences(
             context: context,
             markers: resetMarkers
         )
         try reconcileSessions(context: context, markers: resetMarkers)
-        try reconcileSupersededFocusSessions(
-            context: context,
-            markers: resetMarkers
-        )
         try reconcileAchievementStones(context: context, markers: resetMarkers)
-        try reconcileStrata(context: context, markers: resetMarkers)
-        try reconcileAggregates(context: context, markers: resetMarkers)
-        try reconcileGacha(context: context, markers: resetMarkers)
-        try reconcileBedrock(
-            context: context,
-            prefs: prefs,
-            markers: resetMarkers
-        )
         try reconcileSubjects(
             context: context,
             insertMissingPresets: !prefs.hasCompletedInitialSubjectSeed
         )
         try reconnectSessionSubjects(context: context, markers: resetMarkers)
         prefs.hasCompletedInitialSubjectSeed = true
-        try context.save()
+        if context.hasChanges { try context.save() }
+
+        try purgeStaleLocalProjection(context: context, markers: resetMarkers)
+        try reconcileStrata(context: context, markers: resetMarkers)
+        try reconcileAggregates(context: context, markers: resetMarkers)
+        try reconcileGacha(context: context, markers: resetMarkers)
+        let hasImportedBedrock = try reconcileBedrock(
+            context: context,
+            markers: resetMarkers
+        )
+        if context.hasChanges { try context.save() }
+
+        // This synchronized preference is only a convenience hint. If its
+        // final cloud save fails after local Bedrock repair, the next
+        // idempotent bootstrap derives it again without losing either store.
+        if hasImportedBedrock, !prefs.hasEverImportedBedrock {
+            prefs.hasEverImportedBedrock = true
+            try context.save()
+        }
     }
 
     /// Physical deletion is only compaction. The append-only reset marker is
     /// what makes this idempotent when an offline device uploads old rows
     /// again. Unknown epochs are quarantined until their marker arrives.
     @MainActor
-    private static func purgeStaleActivityData(
+    private static func purgeStaleCloudActivityData(
         context: ModelContext,
         markers: [ActivityResetSnapshot]
     ) throws {
@@ -252,6 +285,35 @@ enum SeedData {
         where isStale(value.dataEpochID) {
             context.delete(value)
         }
+        for value in try context.fetch(FetchDescriptor<SyncedFocusTimer>())
+        where isStale(value.dataEpochID) {
+            context.delete(value)
+        }
+        for value in try context.fetch(FetchDescriptor<FocusTimerDeviceClaim>())
+        where isStale(value.dataEpochID) {
+            context.delete(value)
+        }
+        if RareRewardReleasePolicy.isEnabled {
+            for value in try context.fetch(FetchDescriptor<RareRewardPendingCommit>())
+            where isStale(value.dataEpochID) {
+                context.delete(value)
+            }
+            for value in try context.fetch(FetchDescriptor<RareRewardLedgerCursor>())
+            where isStale(value.dataEpochID) {
+                context.delete(value)
+            }
+        }
+    }
+
+    @MainActor
+    private static func purgeStaleLocalProjection(
+        context: ModelContext,
+        markers: [ActivityResetSnapshot]
+    ) throws {
+        func isStale(_ epochID: UUID?) -> Bool {
+            ActivityResetPolicy.state(of: epochID, markers: markers) == .stale
+        }
+
         for value in try context.fetch(FetchDescriptor<AggregatePebble>())
         where isStale(value.dataEpochID) {
             context.delete(value)
@@ -268,100 +330,6 @@ enum SeedData {
         where isStale(value.dataEpochID) {
             context.delete(value)
         }
-        for value in try context.fetch(FetchDescriptor<SyncedFocusTimer>())
-        where isStale(value.dataEpochID) {
-            context.delete(value)
-        }
-        for value in try context.fetch(FetchDescriptor<FocusTimerDeviceClaim>())
-        where isStale(value.dataEpochID) {
-            context.delete(value)
-        }
-    }
-
-    /// Preserves both earned completions when two offline devices finished
-    /// overlapping, different session UUIDs. The later logical timer is no
-    /// longer treated as independently measured, but its StudySession remains
-    /// as a self-reported, normal pebble. Any aggregate touching it is a
-    /// rebuildable projection and is discarded so its composition cannot retain
-    /// stale measured/rare metadata.
-    @MainActor
-    private static func reconcileSupersededFocusSessions(
-        context: ModelContext,
-        markers: [ActivityResetSnapshot]
-    ) throws {
-        let timerRecords = try context.fetch(FetchDescriptor<SyncedFocusTimer>())
-            .filter {
-                ActivityResetPolicy.isCurrent($0.dataEpochID, markers: markers)
-            }
-        let supersededIDs = FocusSyncPolicy.supersededSessionIDs(
-            from: timerRecords.map(\.policySnapshot)
-        )
-        guard !supersededIDs.isEmpty else { return }
-
-        let sessions = try context.fetch(FetchDescriptor<StudySession>()).filter {
-            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: markers)
-        }
-        for session in sessions where supersededIDs.contains(session.id) {
-            session.source = .timerDemoted
-            session.pebbleKind = .normal
-            session.isBaked = false
-        }
-
-        let strata = try context.fetch(FetchDescriptor<Stratum>()).filter {
-            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: markers)
-        }
-        var releasedSessionIDs = Set<UUID>()
-        var retainedProjectionSessionIDs = Set<UUID>()
-        for stratum in strata
-        where !supersededIDs.isDisjoint(with: Set(stratum.sessionIDs)) {
-            releasedSessionIDs.formUnion(stratum.sessionIDs)
-            context.delete(stratum)
-        }
-        for stratum in strata
-        where supersededIDs.isDisjoint(with: Set(stratum.sessionIDs)) {
-            retainedProjectionSessionIDs.formUnion(stratum.sessionIDs)
-        }
-
-        let aggregates = try context.fetch(FetchDescriptor<AggregatePebble>()).filter {
-            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: markers)
-        }
-        var discardedAggregateIDs = Set(aggregates.lazy
-            .filter { !supersededIDs.isDisjoint(with: Set($0.sessionIDs)) }
-            .map(\.id))
-        var didExpand = true
-        while didExpand {
-            didExpand = false
-            for aggregate in aggregates
-            where discardedAggregateIDs.isDisjoint(
-                with: Set(aggregate.childAggregateIDs)
-            ) == false {
-                if discardedAggregateIDs.insert(aggregate.id).inserted {
-                    didExpand = true
-                }
-            }
-        }
-        for aggregate in aggregates {
-            if discardedAggregateIDs.contains(aggregate.id) {
-                releasedSessionIDs.formUnion(aggregate.sessionIDs)
-                context.delete(aggregate)
-                continue
-            }
-            retainedProjectionSessionIDs.formUnion(aggregate.sessionIDs)
-            if let parentID = aggregate.parentAggregateID,
-               discardedAggregateIDs.contains(parentID) {
-                aggregate.parentAggregateID = nil
-            }
-            aggregate.replaceChildAggregateIDs(
-                aggregate.childAggregateIDs.filter {
-                    !discardedAggregateIDs.contains($0)
-                }
-            )
-        }
-        for session in sessions
-        where releasedSessionIDs.contains(session.id)
-            && !retainedProjectionSessionIDs.contains(session.id) {
-            session.isBaked = false
-        }
     }
 
     @MainActor
@@ -369,82 +337,24 @@ enum SeedData {
         context: ModelContext,
         markers: [ActivityResetSnapshot]
     ) throws -> Prefs {
-        var values = try context.fetch(FetchDescriptor<Prefs>())
         let currentEpochID = ActivityResetPolicy.currentEpochID(from: markers)
-        let currentGenerationValues = values.filter {
-            ActivityResetPolicy.isCurrent($0.activityEpochID, markers: markers)
-        }
-        let canonical: Prefs
-        if let existing = currentGenerationValues.first(where: { $0.id == prefsID })
-            ?? currentGenerationValues.first {
-            canonical = existing
-        } else {
-            canonical = Prefs(id: prefsID, activityEpochID: currentEpochID)
-            context.insert(canonical)
-            values.append(canonical)
-        }
-
-        canonical.id = prefsID
-        let currentDay = FairnessPolicy.deviceDayKey(for: .now)
-        let currentValues = values.filter {
-            $0.manualDayKey == currentDay
-                && ActivityResetPolicy.isCurrent($0.activityEpochID, markers: markers)
-        }
-        canonical.activityEpochID = currentEpochID
-        canonical.manualDayKey = currentDay
-        canonical.manualUsedToday = currentValues.map(\.manualUsedToday).max() ?? 0
-        canonical.soundOn = values.allSatisfy(\.soundOn)
-        canonical.hapticsOn = values.allSatisfy(\.hapticsOn)
-        if let rareRewardSource = RareRewardMode.preferredPreferenceSource(in: values) {
-            canonical.rareRewardModeRawValue = rareRewardSource.rareRewardModeRawValue
-            canonical.rareRewardModeUpdatedAt = rareRewardSource.rareRewardModeUpdatedAt
-        } else {
-            canonical.rareRewardModeRawValue = RareRewardMode.off.rawValue
-            canonical.rareRewardModeUpdatedAt = nil
-        }
-        canonical.reminderEnabled = values.contains(where: \.reminderEnabled)
-        if let reminder = values.first(where: \.reminderEnabled) {
-            canonical.reminderHour = reminder.reminderHour
-            canonical.reminderMinute = reminder.reminderMinute
-        }
-        canonical.shareIncludesManual = values.contains(where: \.shareIncludesManual)
-        // A duplicate created on an older/offline device must never silently
-        // re-enable category names on public system surfaces. Users can opt in
-        // again after the records converge.
-        canonical.showsThemeNameExternally = values.allSatisfy(\.showsThemeNameExternally)
-        canonical.isPro = values.contains(where: \.isPro)
-        canonical.keepScreenAwake = values.allSatisfy(\.keepScreenAwake)
-        canonical.preferredFocusMinutes = values
-            .map(\.preferredFocusMinutes)
-            .first { $0 != Constants.Timer.twentyFiveMinutes }
-            ?? canonical.preferredFocusMinutes
-        canonical.hasCompletedOnboarding = values.contains(where: \.hasCompletedOnboarding)
-        let purposeSources = values.filter {
-            UsagePurpose(rawValue: $0.usagePurposeRawValue) != nil
-        }
-        if let purposeSource = purposeSources.max(by: { lhs, rhs in
-                let leftDate = lhs.usagePurposeUpdatedAt ?? .distantPast
-                let rightDate = rhs.usagePurposeUpdatedAt ?? .distantPast
-                if leftDate == rightDate {
-                    return lhs.id.uuidString < rhs.id.uuidString
-                }
-                return leftDate < rightDate
-        }) {
-            canonical.usagePurposeRawValue = purposeSource.usagePurposeRawValue
-            canonical.usagePurposeUpdatedAt = purposeSource.usagePurposeUpdatedAt
-        }
-        canonical.hasEverImportedBedrock = values.contains(where: \.hasEverImportedBedrock)
-        canonical.hasCompletedInitialSubjectSeed = values.contains(where: \.hasCompletedInitialSubjectSeed)
-
-        for value in values where value !== canonical {
-            if ActivityResetPolicy.state(
-                of: value.activityEpochID,
-                markers: markers
-            ) != .awaitingMarker {
-                context.delete(value)
-            }
-        }
-        return canonical
+        let values = try PrefsSyncPolicy.fetchBounded(from: context)
+        let resolved = try PrefsSyncPolicy.resolvedState(
+            in: values,
+            currentEpochID: currentEpochID
+        )
+        let writer = try PrefsSyncPolicy.ensureWriterRow(
+            context: context,
+            currentEpochID: currentEpochID,
+            canonicalID: prefsID
+        )
+        // Only monotone lifecycle facts are mirrored during bootstrap. All
+        // reversible fields remain read-only until an explicit user mutation.
+        writer.hasCompletedOnboarding = resolved.hasCompletedOnboarding
+        writer.hasEverImportedBedrock = resolved.hasEverImportedBedrock
+        writer.hasCompletedInitialSubjectSeed = resolved.hasCompletedInitialSubjectSeed
+        writer.isPro = false
+        return writer
     }
 
     @MainActor
@@ -462,6 +372,41 @@ enum SeedData {
         }
         canonical.id = gachaID
         canonical.dataEpochID = currentEpochID
+
+        let ledgerCursors: [RareRewardLedgerCursor]
+        if RareRewardReleasePolicy.isEnabled {
+            ledgerCursors = try context.fetch(
+                FetchDescriptor<RareRewardLedgerCursor>(sortBy: [
+                    SortDescriptor(\RareRewardLedgerCursor.revision, order: .reverse),
+                    SortDescriptor(\RareRewardLedgerCursor.updatedAt, order: .reverse),
+                    SortDescriptor(\RareRewardLedgerCursor.id)
+                ])
+            ).filter {
+                ActivityResetPolicy.isCurrent($0.dataEpochID, markers: markers)
+            }
+        } else {
+            ledgerCursors = []
+        }
+        let validLedgerCursors = ledgerCursors.compactMap { cursor -> (
+            cursor: RareRewardLedgerCursor,
+            migration: RareRewardLedgerMigration,
+            epoch: RareRewardLedgerEpoch
+        )? in
+            guard let migration = try? cursor.migration(),
+                  let epoch = try? cursor.epochMirror() else { return nil }
+            return (cursor, migration, epoch)
+        }
+        if let ledger = validLedgerCursors.first,
+           validLedgerCursors.allSatisfy({ $0.migration == ledger.migration }) {
+            // Once V2 exists, only the server-issued revision order knows
+            // whether a later credit reset pity. Wall-clock StudySession order
+            // must never resurrect an older miss counter.
+            canonical.rewardCreditGrams = ledger.epoch.totalCreditedGrams
+            canonical.sinceLastGold = ledger.epoch.sinceLastGold
+            for value in values where value !== canonical { context.delete(value) }
+            return
+        }
+
         let descriptor: FetchDescriptor<StudySession>
         if let currentEpochID {
             descriptor = FetchDescriptor(
@@ -487,7 +432,9 @@ enum SeedData {
         var boundedDescriptor = descriptor
         boundedDescriptor.fetchLimit = GachaHistoryReconciliationPolicy
             .maximumCandidateRecordCount
-        let tail = try context.fetch(boundedDescriptor).map {
+        let tail = StudySessionIntegrityPolicy.supported(
+            try context.fetch(boundedDescriptor)
+        ).map {
             GachaHistorySnapshot(
                 id: $0.id,
                 endAt: $0.endAt,
@@ -540,19 +487,18 @@ enum SeedData {
     @MainActor
     private static func reconcileBedrock(
         context: ModelContext,
-        prefs: Prefs,
         markers: [ActivityResetSnapshot]
-    ) throws {
+    ) throws -> Bool {
         let values = try context.fetch(FetchDescriptor<Bedrock>(
             sortBy: [SortDescriptor(\Bedrock.importedAt)]
         )).filter {
             ActivityResetPolicy.isCurrent($0.dataEpochID, markers: markers)
         }
-        guard let canonical = values.first else { return }
+        guard let canonical = values.first else { return false }
         canonical.hours = values.map(\.hours).max() ?? canonical.hours
         canonical.importedAt = values.map(\.importedAt).min() ?? canonical.importedAt
-        prefs.hasEverImportedBedrock = true
         for value in values.dropFirst() { context.delete(value) }
+        return true
     }
 
     @MainActor
@@ -564,63 +510,9 @@ enum SeedData {
             sortBy: [SortDescriptor(\StudySession.endAt)]
         )).filter {
             ActivityResetPolicy.isCurrent($0.dataEpochID, markers: markers)
+                && StudySessionIntegrityPolicy.isSupported($0)
         }
-        for group in Dictionary(grouping: values, by: \.id).values {
-            guard let canonical = group.first else { continue }
-            canonical.isBaked = group.contains(where: \.isBaked)
-            canonical.grams = group.map(\.grams).max() ?? canonical.grams
-            canonical.pebbleKind = StudySessionSyncPolicy.mergedPebbleKind(
-                group.map(\.pebbleKind)
-            )
-            if let reward = StudySessionSyncPolicy.mergedRareRewardMetadata(group) {
-                canonical.rareRewardRuleVersion = reward.ruleVersion
-                canonical.rareRewardParticipated = reward.participated
-                canonical.rareRewardCreditedGrams = reward.creditedGrams
-                canonical.rareRewardOutcomesRawValue = reward.outcomesRawValue
-                canonical.pebbleKind = reward.participated
-                    ? RareRewardPolicy.representativeKind(
-                        for: RareRewardOutcomeCodec.decode(
-                            reward.outcomesRawValue
-                        ) ?? []
-                    )
-                    : .normal
-            }
-            if canonical.subject == nil {
-                canonical.subject = group.compactMap(\.subject).first
-            }
-            if canonical.subjectIDSnapshot == nil {
-                canonical.subjectIDSnapshot = group
-                    .compactMap(\.subjectIDSnapshot)
-                    .first
-                    ?? canonical.subject?.id
-            }
-            if canonical.subjectNameSnapshot.isEmpty {
-                canonical.subjectNameSnapshot = group
-                    .map(\.subjectNameSnapshot)
-                    .first { !$0.isEmpty }
-                    ?? canonical.subject?.name
-                    ?? ""
-            }
-            if canonical.subjectColorHexSnapshot == Constants.Color.textMute {
-                canonical.subjectColorHexSnapshot = group
-                    .map(\.subjectColorHexSnapshot)
-                    .first { $0 != Constants.Color.textMute }
-                    ?? canonical.subject?.colorHex
-                    ?? Constants.Color.textMute
-            }
-            for value in group.dropFirst() { context.delete(value) }
-        }
-        for value in values {
-            if value.subjectIDSnapshot == nil, let subject = value.subject {
-                value.subjectIDSnapshot = subject.id
-            }
-            if value.subjectNameSnapshot.isEmpty, let subject = value.subject {
-                value.subjectNameSnapshot = subject.name
-            }
-            if value.subjectColorHexSnapshot == Constants.Color.textMute, let subject = value.subject {
-                value.subjectColorHexSnapshot = subject.colorHex
-            }
-        }
+        _ = StudySessionSyncPolicy.canonicalSessions(from: values)
     }
 
     @MainActor
@@ -629,18 +521,15 @@ enum SeedData {
         markers: [ActivityResetSnapshot]
     ) throws {
         let subjects = try context.fetch(FetchDescriptor<Subject>())
-        let subjectsByID = Dictionary(grouping: subjects, by: \.id).compactMapValues(\.first)
+        let subjectsByID = Dictionary(grouping: subjects, by: \.id).compactMapValues {
+            SubjectSyncPolicy.canonical(from: $0)
+        }
         let sessions = try context.fetch(FetchDescriptor<StudySession>()).filter {
             ActivityResetPolicy.isCurrent($0.dataEpochID, markers: markers)
+                && StudySessionIntegrityPolicy.isSupported($0)
         }
         for session in sessions {
-            if session.subjectIDSnapshot == nil, let subject = session.subject {
-                session.subjectIDSnapshot = subject.id
-            }
-            guard session.subject == nil,
-                  let subjectID = session.subjectIDSnapshot,
-                  let subject = subjectsByID[subjectID] else { continue }
-            session.subject = subject
+            _ = session.subjectIDSnapshot.flatMap { subjectsByID[$0] }
         }
     }
 
@@ -654,44 +543,7 @@ enum SeedData {
         )).filter {
             ActivityResetPolicy.isCurrent($0.dataEpochID, markers: markers)
         }
-        for group in Dictionary(grouping: values, by: \.id).values where group.count > 1 {
-            guard let canonical = AchievementStonePolicy.canonicalStone(from: group) else {
-                continue
-            }
-            if canonical.subject == nil {
-                canonical.subject = group.compactMap(\.subject).first
-            }
-            if canonical.subjectNameSnapshot.isEmpty {
-                canonical.subjectNameSnapshot = group
-                    .map(\.subjectNameSnapshot)
-                    .first { !$0.isEmpty }
-                    ?? canonical.subject?.name
-                    ?? ""
-            }
-            if canonical.subjectColorHexSnapshot == Constants.Color.textMute {
-                canonical.subjectColorHexSnapshot = group
-                    .map(\.subjectColorHexSnapshot)
-                    .first { $0 != Constants.Color.textMute }
-                    ?? canonical.subject?.colorHex
-                    ?? Constants.Color.textMute
-            }
-            canonical.note = AchievementStone.sanitizedNote(canonical.note)
-            canonical.achievedAt = min(canonical.achievedAt, .now)
-            canonical.revision = max(1, canonical.revision)
-            for value in group where value !== canonical { context.delete(value) }
-        }
-        for value in values {
-            value.note = AchievementStone.sanitizedNote(value.note)
-            value.achievedAt = min(value.achievedAt, .now)
-            value.revision = max(1, value.revision)
-            if value.subjectNameSnapshot.isEmpty, let subject = value.subject {
-                value.subjectNameSnapshot = subject.name
-            }
-            if value.subjectColorHexSnapshot == Constants.Color.textMute,
-               let subject = value.subject {
-                value.subjectColorHexSnapshot = subject.colorHex
-            }
-        }
+        _ = AchievementStonePolicy.canonicalStones(from: values)
     }
 
     @MainActor
@@ -727,11 +579,13 @@ enum SeedData {
 
         let sessions = try context.fetch(FetchDescriptor<StudySession>()).filter {
             ActivityResetPolicy.isCurrent($0.dataEpochID, markers: markers)
+                && StudySessionIntegrityPolicy.isSupported($0)
         }
-        var sessionsByID: [UUID: StudySession] = [:]
-        for session in sessions {
-            if sessionsByID[session.id] == nil { sessionsByID[session.id] = session }
-        }
+        let sessionsByID = Dictionary(
+            uniqueKeysWithValues: StudySessionSyncPolicy
+                .canonicalSessions(from: sessions)
+                .map { ($0.id, $0) }
+        )
 
         var claimedSessionIDs = Set<UUID>()
         for stratum in survivors.sorted(by: {
@@ -746,7 +600,6 @@ enum SeedData {
                 continue
             }
             claimedSessionIDs.formUnion(uniqueMembership)
-            for id in uniqueMembership { sessionsByID[id]?.isBaked = true }
 
             guard uniqueMembership != membership else { continue }
             let originalCount = max(membership.count, 1)
@@ -756,28 +609,21 @@ enum SeedData {
 
             let members = uniqueMembership.compactMap { sessionsByID[$0] }
             if members.count == uniqueMembership.count {
-                stratum.grams = members.reduce(0) { $0 + $1.grams }
+                stratum.grams = NonnegativeIntPolicy.sum(members.map(\.grams))
                 stratum.colorMixJSON = StrataMath.encodeColorMix(
                     StrataMath.colorMix(hexColors: members.map(\.displaySubjectColorHex))
                 )
             } else {
-                stratum.grams = Int(
+                stratum.grams = NonnegativeIntPolicy.clamped(
                     (Double(stratum.grams) * Double(uniqueMembership.count) / Double(originalCount))
                         .rounded()
                 )
             }
         }
 
-        // CloudKit can deliver the session-side `isBaked` update before the
-        // corresponding Stratum record. Membership is authoritative for all
-        // modern strata, so an otherwise-unclaimed row must stay visible and
-        // count toward mass until its layer arrives. Legacy strata without
-        // membership still need the historical flag to avoid double counting.
-        if !survivors.contains(where: { $0.sessionIDs.isEmpty }) {
-            for (id, session) in sessionsByID {
-                session.isBaked = claimedSessionIDs.contains(id)
-            }
-        }
+        // `StudySession.isBaked` is a legacy synchronized field. Local Stratum
+        // membership is the only grouping authority, so reconciliation never
+        // republishes a device-specific projection bit through CloudKit.
     }
 
     /// Migrates fixed strata into movable aggregates without deleting the
@@ -843,8 +689,13 @@ enum SeedData {
         var seenIDs = Set(values.map(\.id))
         let sessions = try context.fetch(FetchDescriptor<StudySession>()).filter {
             ActivityResetPolicy.isCurrent($0.dataEpochID, markers: markers)
+                && StudySessionIntegrityPolicy.isSupported($0)
         }
-        let sessionsByID = Dictionary(grouping: sessions, by: \.id).compactMapValues(\.first)
+        let sessionsByID = Dictionary(
+            uniqueKeysWithValues: StudySessionSyncPolicy
+                .canonicalSessions(from: sessions)
+                .map { ($0.id, $0) }
+        )
         let strata = try context.fetch(FetchDescriptor<Stratum>(
             sortBy: [SortDescriptor(\Stratum.bakedAt)]
         )).filter {
@@ -870,7 +721,7 @@ enum SeedData {
                     AggregateSubjectFraction(
                         name: index == 0 ? "過去の集中" : "過去の集中 \(index + 1)",
                         colorHex: item.hex,
-                        pebbleCount: Int(
+                        pebbleCount: NonnegativeIntPolicy.clamped(
                             (item.fraction * Double(max(stratum.pebbleCount, 1))).rounded()
                         )
                     )
@@ -924,20 +775,26 @@ enum SeedData {
             )
             let hasCompleteChildren = !aggregate.childAggregateIDs.isEmpty
                 && children.count == Set(aggregate.childAggregateIDs).count
-            let knownComposition = aggregate.measuredPebbleCount + aggregate.manualPebbleCount
+            let knownComposition = NonnegativeIntPolicy.adding(
+                aggregate.measuredPebbleCount,
+                aggregate.manualPebbleCount
+            )
             if knownComposition < aggregate.pebbleCount {
                 if members.count == aggregate.sessionIDs.count, !members.isEmpty {
                     aggregate.measuredPebbleCount = members.filter { $0.source.isMeasured }.count
                     aggregate.manualPebbleCount = members.filter { !$0.source.isMeasured }.count
                 } else if hasCompleteChildren {
-                    aggregate.measuredPebbleCount = children.reduce(0) {
-                        $0 + $1.measuredPebbleCount
-                    }
-                    aggregate.manualPebbleCount = children.reduce(0) {
-                        $0 + $1.manualPebbleCount
-                    }
+                    aggregate.measuredPebbleCount = NonnegativeIntPolicy.sum(
+                        children.map(\.measuredPebbleCount)
+                    )
+                    aggregate.manualPebbleCount = NonnegativeIntPolicy.sum(
+                        children.map(\.manualPebbleCount)
+                    )
                 } else {
-                    aggregate.measuredPebbleCount += aggregate.pebbleCount - knownComposition
+                    aggregate.measuredPebbleCount = NonnegativeIntPolicy.adding(
+                        aggregate.measuredPebbleCount,
+                        aggregate.pebbleCount - knownComposition
+                    )
                 }
             }
             if members.count == aggregate.sessionIDs.count, !members.isEmpty {
@@ -975,7 +832,6 @@ enum SeedData {
                     )
                 }
             }
-            for sessionID in aggregate.sessionIDs { sessionsByID[sessionID]?.isBaked = true }
         }
 
         try rollUpAggregateRoots(
@@ -1135,7 +991,7 @@ enum SeedData {
     private static func subjectMixFromSessions(
         _ sessions: [StudySession]
     ) -> [AggregateSubjectFraction] {
-        let values = sessions.map {
+        let values = StudySessionSyncPolicy.canonicalSessions(from: sessions).map {
             [AggregateSubjectFraction(
                 name: $0.displaySubjectName,
                 colorHex: $0.displaySubjectColorHex,
@@ -1153,16 +1009,13 @@ enum SeedData {
         var existing = try context.fetch(FetchDescriptor<Subject>(
             sortBy: [SortDescriptor(\Subject.createdAt)]
         ))
-        let sessions = try context.fetch(FetchDescriptor<StudySession>())
-        let achievementStones = try context.fetch(FetchDescriptor<AchievementStone>())
-
         for (index, preset) in subjects.enumerated() {
             let matches = existing.filter {
                 $0.id == preset.id
                     || ($0.name == preset.name
                         && $0.colorHex.caseInsensitiveCompare(preset.colorHex) == .orderedSame)
             }
-            guard let canonical = matches.first(where: { $0.id == preset.id }) ?? matches.first else {
+            guard !matches.isEmpty else {
                 if insertMissingPresets {
                     let value = Subject(
                         id: preset.id,
@@ -1175,18 +1028,10 @@ enum SeedData {
                 }
                 continue
             }
-
-            canonical.id = preset.id
-            for duplicate in matches where duplicate !== canonical {
-                for session in sessions where session.subject === duplicate {
-                    session.subject = canonical
-                }
-                for stone in achievementStones where stone.subject === duplicate {
-                    stone.subject = canonical
-                }
-                context.delete(duplicate)
-                existing.removeAll { $0 === duplicate }
-            }
+            // A matching source row is sufficient. Same-ID duplicates are
+            // retained and resolved at presentation boundaries; rewriting
+            // relationships or deleting rows here can race an offline edit.
+            _ = SubjectSyncPolicy.canonical(from: matches)
         }
     }
 }

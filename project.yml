@@ -8,8 +8,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.10"
-    MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "4"
     TARGETED_DEVICE_FAMILY: "1"
     GENERATE_INFOPLIST_FILE: true
     ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -26,6 +26,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSHumanReadableCopyright: Copyright © 2026 hinoshiba
+        NSSupportsLiveActivities: true
         LSApplicationCategoryType: public.app-category.education
         UIApplicationSupportsIndirectInputEvents: true
         UILaunchScreen: {}
@@ -33,9 +34,7 @@ targets:
         UIStatusBarStyle: UIStatusBarStyleLightContent
         UIUserInterfaceStyle: Dark
         NSPhotoLibraryAddUsageDescription: シェアカードを写真に保存します。
-        NSMotionUsageDescription: 端末の傾きに合わせて瓶の粒を転がすために使います。
-        NSSupportsLiveActivities: true
-        NSSupportsLiveActivitiesFrequentUpdates: false
+        NSMotionUsageDescription: 端末の傾きや振る操作に合わせて瓶の粒を動かすために使います。値は保存・送信しません。
         ITSAppUsesNonExemptEncryption: false
         TSUMIBEN_PRIVACY_POLICY_URL: "https://tumiben.hinoshiba.com/privacy/"
         UIAppFonts:
@@ -46,17 +45,17 @@ targets:
       - path: Tsumiben
         excludes:
           - Resources/Products.storekit
+          - Resources/GENERATED-ASSETS.md
       - path: Shared
     entitlements:
       path: Tsumiben/Tsumiben.entitlements
       properties:
         aps-environment: $(APS_ENVIRONMENT)
         com.apple.developer.icloud-container-identifiers:
-          - iCloud.com.hinoshiba.tsumiben
+          - iCloud.com.hinoshiba.tumiben
+        com.apple.developer.icloud-container-environment: $(ICLOUD_CONTAINER_ENVIRONMENT)
         com.apple.developer.icloud-services:
           - CloudKit
-        com.apple.security.application-groups:
-          - group.com.hinoshiba.tsumiben
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1"
@@ -64,13 +63,15 @@ targets:
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: false
         CODE_SIGN_STYLE: Automatic
-        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.tsumiben
+        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.tumiben
         PRODUCT_NAME: Tsumiben
       configs:
         Debug:
           APS_ENVIRONMENT: development
+          ICLOUD_CONTAINER_ENVIRONMENT: Development
         Release:
           APS_ENVIRONMENT: production
+          ICLOUD_CONTAINER_ENVIRONMENT: Production
     dependencies:
       - target: TsumibenWidgets
         embed: true
@@ -88,23 +89,22 @@ targets:
         NSHumanReadableCopyright: Copyright © 2026 hinoshiba
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
-        NSSupportsLiveActivities: true
     sources:
       - path: TsumibenWidgets
         excludes:
           - PrivacyInfo.xcprivacy
-      - path: Shared
+          - TsumibenWidgets.entitlements
+      - path: Shared/FocusActivityAttributes.swift
       - path: TsumibenWidgets/PrivacyInfo.xcprivacy
         buildPhase: resources
-    entitlements:
-      path: TsumibenWidgets/TsumibenWidgets.entitlements
-      properties:
-        com.apple.security.application-groups:
-          - group.com.hinoshiba.tsumiben
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1"
-        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.tsumiben.widgets
+        SUPPORTS_MACCATALYST: false
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: false
+        CODE_SIGN_STYLE: Automatic
+        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.tumiben.widgets
         PRODUCT_NAME: TsumibenWidgets
         SKIP_INSTALL: true
   TsumibenTests:
@@ -115,7 +115,7 @@ targets:
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1"
-        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.tsumiben.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.tumiben.tests
         GENERATE_INFOPLIST_FILE: true
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Tsumiben.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Tsumiben"
         BUNDLE_LOADER: "$(TEST_HOST)"
@@ -129,7 +129,7 @@ targets:
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1"
-        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.tsumiben.uitests
+        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.tumiben.uitests
         GENERATE_INFOPLIST_FILE: true
     dependencies:
       - target: Tsumiben

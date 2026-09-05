@@ -3,30 +3,66 @@
 ## 推奨回答
 
 現行Release candidateについては、アプリ本体から運営者へ自動送信する仕組みがないため、
-「No, we do not collect data from this app」を第一候補とします。ただし、サポートページから
-利用者が任意で送るメールは、Appleのoptional disclosure条件をすべて満たす場合に限って
-省略可能です。提出担当者が現行の質問文と実運用を照合して最終回答します。
+「No, we do not collect data from this app」を第一候補とします。これは実装だけで自動決定できる
+回答ではなく、private CloudKit dataを運営者が取得・閲覧・保持しないことと、下記のsupport運用を
+提出時にも満たすことが前提です。サポートページから利用者が任意で送るメールは、Appleのoptional
+disclosure条件をすべて満たす場合に限って省略可能です。提出担当者が現行の質問文、production binary、
+Apple teamの実際のaccess、mail運用を照合して最終回答します。
 
 根拠:
 
 - 独自account、analytics、ads、tracking、developer serverがない
-- 学習・仕事dataは端末と利用者自身のprivate CloudKit databaseに保存
+- 初回に「iCloudで同期」と「このiPhoneのみ」を同格で提示し、確認後に一方を確定する。どちらも
+  推奨扱いにせず、Version 1.0では後から変更できない
+- 「このiPhoneのみ」は全ての基本機能をApple Account／networkなしで利用でき、専用random namespaceの
+  端末storeだけへ保存する。iCloudへ自動切替／uploadしない
+- iCloudを選択した場合だけ、テーマ名、成果memo、記録、設定、進行中timerを含む7種類の同期元modelを、
+  端末と利用者自身のSwiftData用private CloudKit databaseに保存する
+- CloudKit user record IDはaccount境界の照合にだけ使い、container情報とともに端末内でSHA-256
+  fingerprintへ変換する。local store名とdefaults keyには別のrandom namespaceを使い、raw identifierを
+  埋め込まない。選択時と各launch／resumeで`accountStatus`と`userRecordID`を確認し、private databaseの
+  全record zoneをread-only fetchしてonline accessを確かめる。通信不可、account不明、別accountの場合は
+  保存領域を開かないが、保存済みdataは削除しない
+- `AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`の4種類は端末内だけの表示用projectionで、
+  同期元記録から再構築しCloudKitへuploadしない
 - motionはその場で処理し、保存・送信しない
 - shareは利用者の明示操作でsystem share sheetへ渡すだけ
-- 全11種類のSwiftData保存データのversioned JSON exportも、利用者の明示操作だけで生成し、
-  選択した保存・共有先へ渡す
+- 全11種類の出荷対象SwiftData保存データのversioned JSON exportも、利用者の明示操作だけで生成し、
+  選択した保存・共有先へ渡す。Version 1.0にJSON再importはなく、local-only dataのiCloud移行や
+  機種変更時の継続には使えない
 - StoreKit transactionは端末上でApple署名をverifyし、developer serverへ送らない
+- Live Activityは明示的に開始した集中のランダムなsession UUID、秒数、終了日時／残り時間、状態だけを
+  ActivityKitへ渡して端末内更新する。theme名、memo、質量、Apple Account／CloudKit dataを含めず、
+  ActivityKit pushやdeveloper serverを使わないため、この機能自体によるdeveloperのdata collectionはない
 - third-party SDKがない
+- version 1.0ではrare rewardのUI／writer／runtime repository pathと、二つ目のoperations CloudKit
+  containerに接続するentitlement／capabilityを無効化している。将来検討用sourceと公開identifierは
+  Release app targetにも残るため、production archiveでnetwork accessが到達不能なことを再確認する
+- 1.0は独自accountを作らず、direct CloudKit一括削除UI／launch gateも出荷しない。端末側はapp削除、
+  iCloud側はAppleのiCloudストレージ管理を案内し、offline別端末を遠隔消去できないことを公開policyへ明記
 
-公開Support／Privacy／TermsはGitHub Pagesをorigin、CloudflareをCDN／reverse proxyとして配信し、
-接続情報とnetwork診断情報が各serviceで処理される場合があります。これらはapp binaryへ組み込んだ
+公開Support／Privacy／Terms／販売条件はGitHub Pagesで配信し、接続情報とnetwork診断情報がGitHubで
+処理される場合があります。これはapp binaryへ組み込んだ
 SDKやappからの自動送信ではありませんが、公開プライバシーポリシーとsupport mailのoptional
 disclosure判断には含めます。
 
 サポートメールがoptional disclosureの条件を満たさないと判断される場合は、少なくとも
-Email AddressとCustomer Supportを、目的App Functionality、trackingなしとして申告します。
-通常のメールは送信元と内容を結び付けられるため、匿名化していない限り「linked to user」
-として扱います。
+Email AddressをApp Functionality（customer support）目的、linked to user、trackingなしとして申告します。
+通常のメールは送信元と内容を結び付けられるため、匿名化していない限り「linked to user」として
+扱います。問い合わせへJSON export、集中記録、機微なテーマ名を添付させる運用にはしません。
+
+## Publish直前の運用確認
+
+- production archiveの全network endpoint、runtime SDK、privacy manifest、entitlementを再走査する
+- CloudKitがprivate databaseだけで、運営者のserver、analytics、crash uploadへ転送されないことを確認する
+- 初回保存先の二択が同格で、iCloudへ送る具体的dataとonline account確認、local-onlyの不変性・削除・
+  JSON非移行性が確認前に表示されることをRelease実機で確認する
+- Apple Developer team／CloudKit運用者が利用者dataを日常support、debug、分析、backup目的で取得・閲覧・
+  exportしない運用をownerが確認する
+- support mailがAppleの現行optional disclosure条件を全て満たすか、実際の受付、保持、12か月以内の
+  原則削除、早期削除依頼を含めて確認する
+- 一つでも満たせない場合は「Data Not Collected」を選ばず、該当data type、purpose、linked status、
+  tracking statusを実態どおり申告する
 
 ただしこれは提出用draftです。Appleはappと組み込んだthird party全体の実態を正確かつ最新に回答
 するよう求めています。提出直前にproduction archiveのnetwork、CloudKit access、StoreKit、
@@ -41,9 +77,11 @@ App Managerが最終決定・Publishします。
 
 - Tracking: false
 - Tracking domains: none
-- Collected data types: none
-- Main app required-reason APIs: File Timestamp `C617.1`、System Boot Time `35F9.1`、User Defaults `CA92.1`
-- Widget required-reason APIs: none
+- Collected data types: none（上記のproduction／運用確認を完了した場合の候補。未確定）
+- Main app required-reason APIs: File Timestamp `C617.1`、System Boot Time `35F9.1`、standard User Defaults
+  `CA92.1`
+- Widget required-reason APIs: none。Version 1.0のWidgetとLive Activity extensionは利用者data、CloudKit、
+  App Group、UserDefaultsを読まず、account-neutralな起動導線または時間／状態だけを表示
 
 新しいnetwork endpoint、SDK、permission、data retention、Widget accessを追加した時点で、このdraftを
 無効として再回答します。

@@ -146,35 +146,48 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         )
     }
 
-    func testRareRewardParticipationCanBeDisabledAndRestored() {
+    func testTimerCompletionChoicesExposeCancellableThreeSecondPreview() {
+        openMenuAction(containing: "設定")
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+
+        let soundPicker = app.descendants(matching: .any)[
+            "settings.completion-sound"
+        ]
+        XCTAssertTrue(scrollUntilHittable(soundPicker, swiping: .up))
+        XCTAssertTrue(soundPicker.isEnabled)
+
+        let hapticPicker = app.descendants(matching: .any)[
+            "settings.completion-haptic"
+        ]
+        XCTAssertTrue(scrollUntilHittable(hapticPicker, swiping: .up))
+        XCTAssertTrue(hapticPicker.isEnabled)
+
+        let preview = app.buttons["settings.completion-preview"]
+        XCTAssertTrue(scrollUntilHittable(preview, swiping: .up))
+        XCTAssertEqual(preview.value as? String, "待機中")
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "Timer completion sound and haptic settings"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        preview.tap()
+        XCTAssertTrue(waitForValue(of: preview, timeout: 1.5) {
+            $0?.hasPrefix("あと") == true
+        })
+        XCTAssertEqual(preview.label, "プレビューをキャンセル")
+
+        preview.tap()
+        XCTAssertTrue(waitForValue(of: preview, toEqual: "待機中"))
+        XCTAssertEqual(preview.label, "3秒後に試す")
+    }
+
+    func testRareRewardParticipationControlsAreAbsentForRelease() {
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
 
         let picker = app.descendants(matching: .any)["settings.rare-reward-mode"]
-        XCTAssertTrue(scrollUntilHittable(picker, swiping: .up))
-        let originalValue = picker.value as? String
-
-        picker.tap()
-        let off = app.staticTexts["抽選しない"]
-        XCTAssertTrue(off.waitForExistence(timeout: 4))
-        off.tap()
-        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 4))
-        XCTAssertTrue(
-            waitForValue(of: picker, timeout: 2, matching: {
-                $0?.contains("抽選しない") == true
-            }),
-            "The explicit no-draw choice must be visible after selection"
-        )
-
-        picker.tap()
-        let standard = app.staticTexts["標準"]
-        XCTAssertTrue(standard.waitForExistence(timeout: 4))
-        standard.tap()
-        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 4))
-        XCTAssertTrue(
-            waitForValue(of: picker, toEqual: originalValue ?? "標準"),
-            "The audit must restore the original participation choice"
-        )
+        XCTAssertFalse(picker.waitForExistence(timeout: 1))
+        XCTAssertFalse(app.staticTexts["粒のバリエーション"].exists)
+        XCTAssertFalse(app.navigationBars["ランダムなレア粒"].exists)
     }
 
     func testAchievementCanBeEditedDeletedAndUndoneFromLog() {
@@ -340,9 +353,8 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
     }
 }
 
-/// A fresh or migrated installation must see an informed, reversible choice
-/// before any eligible timer starts. This launch flag is test-only and keeps
-/// the otherwise shared UI-test fixture deliberately unselected.
+/// Release 1.0 must ignore legacy/unselected rare-reward preferences and keep
+/// every rare-reward choice surface outside the shipping flow.
 @MainActor
 final class RareRewardOptInUITests: XCTestCase {
     private var activeApp: XCUIApplication?
@@ -357,7 +369,7 @@ final class RareRewardOptInUITests: XCTestCase {
         activeApp = nil
     }
 
-    func testOnboardingRequiresAnEqualWeightRareRewardChoice() {
+    func testOnboardingSkipsRareRewardChoiceForRelease() {
         let app = XCUIApplication()
         activeApp = app
         app.launchEnvironment["TSUMIBEN_LOCAL_PREVIEW"] = "1"
@@ -375,40 +387,39 @@ final class RareRewardOptInUITests: XCTestCase {
             NSPredicate(format: "label CONTAINS %@", "ためしに一粒")
         ).firstMatch
         XCTAssertTrue(trialDrop.waitForExistence(timeout: 4))
-        trialDrop.tap()
-        XCTAssertTrue(waitUntilEnabled(next, timeout: 4))
+        XCTAssertTrue(
+            waitUntilEnabled(next, timeout: 4),
+            "The tutorial drop is an optional preview, not a setup gate"
+        )
         next.tap()
+
+        XCTAssertTrue(
+            app.staticTexts["最初のテーマを選ぶ"].waitForExistence(timeout: 4)
+        )
+        XCTAssertFalse(app.buttons["勉強"].exists)
+        XCTAssertFalse(app.buttons["仕事"].exists)
 
         let firstSubject = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", "英語")
         ).firstMatch
         XCTAssertTrue(firstSubject.waitForExistence(timeout: 4))
         firstSubject.tap()
-        XCTAssertTrue(waitUntilEnabled(next, timeout: 2))
-        next.tap()
 
         let panel = app.descendants(matching: .any)["onboarding.rare-reward-choice"]
-        XCTAssertTrue(panel.waitForExistence(timeout: 5))
-        for mode in ["off", "quiet", "standard"] {
-            let choice = app.buttons["rare-reward.choice.\(mode)"]
-            XCTAssertTrue(choice.exists)
-            XCTAssertEqual(choice.value as? String, "未選択")
-        }
+        XCTAssertFalse(panel.waitForExistence(timeout: 1))
 
         let finish = app.buttons["瓶をひらく"]
-        XCTAssertTrue(finish.exists)
-        XCTAssertFalse(finish.isEnabled)
-        app.buttons["rare-reward.choice.quiet"].tap()
+        XCTAssertTrue(finish.waitForExistence(timeout: 4))
         XCTAssertTrue(finish.isEnabled)
         finish.tap()
 
         XCTAssertTrue(
             app.buttons["メニュー"].waitForExistence(timeout: 8),
-            "The explicit onboarding choice must be saved before Home opens"
+            "Onboarding must finish without exposing a rare-reward choice"
         )
     }
 
-    func testUnselectedUserChoosesBeforeTimerAndCanUseNoDraw() {
+    func testUnselectedLegacyPreferenceDoesNotGateTimerForRelease() {
         let app = XCUIApplication()
         activeApp = app
         app.launchEnvironment["TSUMIBEN_LOCAL_PREVIEW"] = "1"
@@ -429,29 +440,10 @@ final class RareRewardOptInUITests: XCTestCase {
         ).tap()
 
         let choicePanel = app.descendants(matching: .any)["focus.rare-reward-choice"]
-        XCTAssertTrue(
-            choicePanel.waitForExistence(timeout: 5),
-            "An unselected user must not enter a running timer"
-        )
-        XCTAssertTrue(app.buttons["rare-reward.choice.off"].exists)
-        XCTAssertTrue(app.buttons["rare-reward.choice.quiet"].exists)
-        XCTAssertTrue(app.buttons["rare-reward.choice.standard"].exists)
-        XCTAssertTrue(app.descendants(matching: .any)["rare-reward.equal-outcomes"].exists)
-        let probabilityDisclosure = app.descendants(matching: .any)[
-            "rare-reward.disclosure.percent"
-        ]
-        XCTAssertTrue(probabilityDisclosure.exists)
-        XCTAssertTrue(probabilityDisclosure.label.contains("いつもの粒 91.2%"))
-
-        let confirm = app.buttons["focus.rare-reward-choice.confirm"]
-        XCTAssertFalse(confirm.isEnabled)
-        app.buttons["rare-reward.choice.off"].tap()
-        XCTAssertTrue(confirm.isEnabled)
-        confirm.tap()
-
+        XCTAssertFalse(choicePanel.waitForExistence(timeout: 1))
         XCTAssertTrue(
             app.buttons["一時停止"].waitForExistence(timeout: 7),
-            "The timer may begin only after the selected mode is saved"
+            "A legacy unselected preference must not block the shipping timer"
         )
         XCTAssertFalse(choicePanel.exists)
 

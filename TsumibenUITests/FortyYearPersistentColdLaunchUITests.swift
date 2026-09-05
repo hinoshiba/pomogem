@@ -45,7 +45,27 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         seeder.terminate()
 
         let firstColdLaunch = configuredApp()
-        let firstElapsed = try launchAndAssertResponsive(firstColdLaunch)
+        let firstHomeTimings = try launchAndAssertFirstInteractiveHome(
+            firstColdLaunch
+        )
+        XCTContext.runActivity(named: String(
+            format: "40-year first interactive Home elapsed: %.3fs",
+            firstHomeTimings.firstInteractive
+        )) { _ in }
+        XCTContext.runActivity(named: String(
+            format: "40-year first Home menu round trip elapsed: %.3fs",
+            firstHomeTimings.menuRoundTrip
+        )) { _ in }
+        XCTAssertLessThan(
+            firstHomeTimings.firstInteractive,
+            15,
+            "The first usable Home control must appear within 15 seconds"
+        )
+        XCTAssertLessThan(
+            firstHomeTimings.menuRoundTrip,
+            15,
+            "The first Home menu must open and close within 15 seconds after its controls appear"
+        )
         let firstProbe = try waitForStableFixtureProbe(in: firstColdLaunch, timeout: 30)
         assertExpected(firstProbe)
         firstColdLaunch.buttons["メニュー"].tap()
@@ -56,13 +76,36 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
             scrollUntilHittable(settings, in: firstColdLaunch),
             "Settings must remain reachable in the full Home menu"
         )
-        let settingsStartedAt = ProcessInfo.processInfo.systemUptime
         settings.tap()
         XCTAssertTrue(firstColdLaunch.navigationBars["設定"].waitForExistence(timeout: 5))
+        let settingsAudit = try waitForSettingsRenderAudit(in: firstColdLaunch)
+        let settingsRenderMilliseconds = try integerField(
+            "milliseconds",
+            in: settingsAudit
+        )
         XCTAssertLessThan(
-            ProcessInfo.processInfo.systemUptime - settingsStartedAt,
-            5,
-            "Settings must not materialize the forty-year history on entry"
+            settingsRenderMilliseconds,
+            5_000,
+            "Settings must render within five in-app seconds without materializing the forty-year history"
+        )
+        XCTAssertLessThanOrEqual(
+            try integerField("subjects", in: settingsAudit),
+            16,
+            "Settings must preserve its bounded Subject query"
+        )
+        XCTAssertLessThanOrEqual(
+            try integerField("preferences", in: settingsAudit),
+            16,
+            "Settings must preserve its bounded Prefs query"
+        )
+        XCTAssertLessThanOrEqual(
+            try integerField("resetMarkers", in: settingsAudit),
+            1,
+            "Settings must fetch only the current reset marker"
+        )
+        let initialCommitGeneration = try integerField(
+            "commitGeneration",
+            in: settingsAudit
         )
         let keepAwake = firstColdLaunch.switches["settings.keep-screen-awake"]
         XCTAssertTrue(
@@ -80,10 +123,40 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
             didChangeKeepAwake,
             "The keep-awake preference must visibly change after one tap; alert=\(alertDiagnostic(in: firstColdLaunch))"
         )
+        let firstToggleElapsed = ProcessInfo.processInfo.systemUptime
+            - firstToggleStartedAt
+        let firstCommitAudit = try waitForSettingsCommitAudit(
+            in: firstColdLaunch,
+            afterGeneration: initialCommitGeneration
+        )
+        let firstCommitMilliseconds = try integerField(
+            "commitMilliseconds",
+            in: firstCommitAudit
+        )
+        let firstCommitGeneration = try integerField(
+            "commitGeneration",
+            in: firstCommitAudit
+        )
+        XCTContext.runActivity(named: String(
+            format: "40-year keep-awake save elapsed: %.3fs XCUI / %dms app",
+            firstToggleElapsed,
+            firstCommitMilliseconds
+        )) { _ in }
+        XCTAssertEqual(firstCommitAudit["commitSucceeded"], "true")
+        XCTAssertGreaterThan(firstCommitGeneration, initialCommitGeneration)
+        XCTAssertGreaterThanOrEqual(firstCommitMilliseconds, 0)
         XCTAssertLessThan(
-            ProcessInfo.processInfo.systemUptime - firstToggleStartedAt,
-            4,
-            "Saving one preference must remain responsive with forty years of history"
+            firstCommitMilliseconds,
+            4_000,
+            "The in-app mutation and durable save must finish within four seconds"
+        )
+        // The strict durability budget comes from the in-process probe above.
+        // This outer XCUI interval includes accessibility polling and app-wide
+        // quiescence, so it is a deadlock watchdog rather than the save SLA.
+        XCTAssertLessThan(
+            firstToggleElapsed,
+            10,
+            "The XCUI round trip must not deadlock after saving one preference"
         )
         let secondToggleStartedAt = ProcessInfo.processInfo.systemUptime
         let restoreKeepAwake = firstColdLaunch.switches["settings.keep-screen-awake"]
@@ -97,28 +170,70 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
             ),
             "The reversible audit must restore the original preference"
         )
+        let secondToggleElapsed = ProcessInfo.processInfo.systemUptime
+            - secondToggleStartedAt
+        let secondCommitAudit = try waitForSettingsCommitAudit(
+            in: firstColdLaunch,
+            afterGeneration: firstCommitGeneration
+        )
+        let secondCommitMilliseconds = try integerField(
+            "commitMilliseconds",
+            in: secondCommitAudit
+        )
+        let secondCommitGeneration = try integerField(
+            "commitGeneration",
+            in: secondCommitAudit
+        )
+        XCTContext.runActivity(named: String(
+            format: "40-year keep-awake restore elapsed: %.3fs XCUI / %dms app",
+            secondToggleElapsed,
+            secondCommitMilliseconds
+        )) { _ in }
+        XCTAssertEqual(secondCommitAudit["commitSucceeded"], "true")
+        XCTAssertGreaterThan(secondCommitGeneration, firstCommitGeneration)
+        XCTAssertGreaterThanOrEqual(secondCommitMilliseconds, 0)
         XCTAssertLessThan(
-            ProcessInfo.processInfo.systemUptime - secondToggleStartedAt,
-            4,
-            "Restoring one preference must remain responsive with forty years of history"
+            secondCommitMilliseconds,
+            4_000,
+            "The in-app restore and durable save must finish within four seconds"
+        )
+        // Keep the same coarse watchdog around the reversible audit; the app
+        // probe remains the authoritative mutation-and-save measurement.
+        XCTAssertLessThan(
+            secondToggleElapsed,
+            10,
+            "The XCUI round trip must not deadlock after restoring one preference"
         )
         firstColdLaunch.navigationBars["設定"].buttons.element(boundBy: 0).tap()
         XCTAssertTrue(firstColdLaunch.buttons["メニュー"].waitForExistence(timeout: 5))
         assertExpected(try waitForStableFixtureProbe(in: firstColdLaunch, timeout: 10))
-        XCTAssertLessThan(
-            firstElapsed,
-            15,
-            "A bounded Home projection should complete the adversarial interaction within 15 seconds"
-        )
         firstColdLaunch.terminate()
 
         let secondColdLaunch = configuredApp()
-        let secondElapsed = try launchAndAssertResponsive(secondColdLaunch)
+        let secondHomeTimings = try launchAndAssertFirstInteractiveHome(
+            secondColdLaunch
+        )
+        XCTContext.runActivity(named: String(
+            format: "40-year second interactive Home elapsed: %.3fs",
+            secondHomeTimings.firstInteractive
+        )) { _ in }
+        XCTContext.runActivity(named: String(
+            format: "40-year second Home menu round trip elapsed: %.3fs",
+            secondHomeTimings.menuRoundTrip
+        )) { _ in }
+        XCTAssertLessThan(
+            secondHomeTimings.firstInteractive,
+            15,
+            "The relaunched first interactive Home must appear within 15 seconds"
+        )
+        XCTAssertLessThan(
+            secondHomeTimings.menuRoundTrip,
+            15,
+            "The relaunched Home menu must open and close within 15 seconds after its controls appear"
+        )
         let secondProbe = try waitForStableFixtureProbe(in: secondColdLaunch, timeout: 30)
         assertExpected(secondProbe)
         XCTAssertEqual(secondProbe, firstProbe, "Relaunch must preserve every projection invariant")
-        XCTAssertLessThan(secondElapsed, 15)
-
         secondColdLaunch.buttons["メニュー"].tap()
         let relaunchedSettings = secondColdLaunch.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", "設定")
@@ -193,26 +308,54 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         ).tap()
     }
 
-    private func launchAndAssertResponsive(_ app: XCUIApplication) throws -> TimeInterval {
+    private func launchAndAssertFirstInteractiveHome(
+        _ app: XCUIApplication
+    ) throws -> (firstInteractive: TimeInterval, menuRoundTrip: TimeInterval) {
         let startedAt = ProcessInfo.processInfo.systemUptime
         app.launch()
 
         let menu = app.buttons["メニュー"]
         XCTAssertTrue(menu.waitForExistence(timeout: 20))
         XCTAssertTrue(menu.isHittable)
+        // Stop the cold-launch clock at the first usable Home control, then
+        // immediately start a separate action round trip so post-frame work
+        // cannot hide inside later functional assertions.
+        let responsiveElapsed = ProcessInfo.processInfo.systemUptime - startedAt
+        let menuRoundTripStartedAt = ProcessInfo.processInfo.systemUptime
+        menu.tap()
+        let close = app.buttons["home.menu.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForHittable(close, timeout: 5))
+        close.tap()
+        XCTAssertTrue(
+            waitForHittable(menu, timeout: 5),
+            "Home menu control must become hittable again after closing the menu"
+        )
+        let menuRoundTripElapsed = ProcessInfo.processInfo.systemUptime
+            - menuRoundTripStartedAt
+
         XCTAssertTrue(app.buttons["瓶"].waitForExistence(timeout: 5))
         let launcher = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "集中する")
         ).firstMatch
         XCTAssertTrue(launcher.waitForExistence(timeout: 5))
         XCTAssertTrue(launcher.isHittable)
+        return (responsiveElapsed, menuRoundTripElapsed)
+    }
 
-        menu.tap()
-        let close = app.buttons["home.menu.close"]
-        XCTAssertTrue(close.waitForExistence(timeout: 5))
-        XCTAssertTrue(close.isHittable)
-        close.tap()
-        return ProcessInfo.processInfo.systemUptime - startedAt
+    private func waitForHittable(
+        _ element: XCUIElement,
+        timeout: TimeInterval
+    ) -> Bool {
+        let predicate = NSPredicate { candidate, _ in
+            guard let candidate = candidate as? XCUIElement else { return false }
+            return candidate.exists && candidate.isHittable
+        }
+        let expectation = XCTNSPredicateExpectation(
+            predicate: predicate,
+            object: element
+        )
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
     private func scrollUntilHittable(
@@ -221,10 +364,24 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         attempts: Int = 8
     ) -> Bool {
         for _ in 0..<attempts {
-            if element.exists, element.isHittable { return true }
+            if isSafelyHittable(element, in: app) { return true }
             app.swipeUp()
         }
-        return element.exists && element.isHittable
+        return isSafelyHittable(element, in: app)
+    }
+
+    private func isSafelyHittable(
+        _ element: XCUIElement,
+        in app: XCUIApplication
+    ) -> Bool {
+        guard element.exists, element.isHittable else { return false }
+        let frame = element.frame
+        let visibleFrame = app.windows.firstMatch.frame.insetBy(dx: 0, dy: 44)
+        return !frame.isEmpty
+            && frame.minY.isFinite
+            && frame.maxY.isFinite
+            && frame.minY >= visibleFrame.minY
+            && frame.maxY <= visibleFrame.maxY
     }
 
     private func waitForValue(
@@ -294,6 +451,74 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         throw ProbeError.didNotStabilize(
             latest: canonicalDescription(of: latest),
             observed: observed.sorted()
+        )
+    }
+
+    private func waitForSettingsRenderAudit(
+        in app: XCUIApplication,
+        timeout: TimeInterval = 5
+    ) throws -> [String: String] {
+        let probe = app.descendants(matching: .any)["settings.render-audit.probe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: timeout))
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            let sample = try fields(from: probe)
+            if sample["milliseconds"] != nil { return sample }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        } while Date() < deadline
+        return try fields(from: probe)
+    }
+
+    private func waitForSettingsCommitAudit(
+        in app: XCUIApplication,
+        afterGeneration generation: Int,
+        timeout: TimeInterval = 5
+    ) throws -> [String: String] {
+        let probe = app.descendants(matching: .any)["settings.render-audit.probe"]
+        guard probe.waitForExistence(timeout: timeout) else {
+            throw ProbeError.settingsCommitDidNotAdvance(
+                afterGeneration: generation,
+                observed: ["probe-missing"]
+            )
+        }
+        let deadline = Date().addingTimeInterval(timeout)
+        var observed = Set<String>()
+        repeat {
+            let sample = try fields(from: probe)
+            observed.insert(canonicalDescription(of: sample))
+            if let rawGeneration = sample["commitGeneration"],
+               let observedGeneration = Int(rawGeneration),
+               observedGeneration > generation,
+               let rawMilliseconds = sample["commitMilliseconds"],
+               let milliseconds = Int(rawMilliseconds),
+               milliseconds >= 0 {
+                return sample
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        } while Date() < deadline
+        throw ProbeError.settingsCommitDidNotAdvance(
+            afterGeneration: generation,
+            observed: observed.sorted()
+        )
+    }
+
+    private func integerField(
+        _ key: String,
+        in fields: [String: String],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> Int {
+        let rawValue = try XCTUnwrap(
+            fields[key],
+            "Missing \(key) in Settings render audit: \(fields)",
+            file: file,
+            line: line
+        )
+        return try XCTUnwrap(
+            Int(rawValue),
+            "Invalid \(key) in Settings render audit: \(fields)",
+            file: file,
+            line: line
         )
     }
 
@@ -466,6 +691,10 @@ final class FortyYearPlanningUITests: XCTestCase {
 private enum ProbeError: LocalizedError {
     case missingValue
     case didNotStabilize(latest: String, observed: [String])
+    case settingsCommitDidNotAdvance(
+        afterGeneration: Int,
+        observed: [String]
+    )
 
     var errorDescription: String? {
         switch self {
@@ -473,6 +702,8 @@ private enum ProbeError: LocalizedError {
             "40-year fixture probe has no accessibility value"
         case let .didNotStabilize(latest, observed):
             "40-year fixture probe did not reach the exact stable projection; latest=[\(latest)], observed=\(observed)"
+        case let .settingsCommitDidNotAdvance(generation, observed):
+            "Settings commit audit did not advance beyond generation \(generation); observed=\(observed)"
         }
     }
 }

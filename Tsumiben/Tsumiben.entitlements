@@ -6,15 +6,13 @@
 	<string>$(APS_ENVIRONMENT)</string>
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
-		<string>iCloud.com.hinoshiba.tsumiben</string>
+		<string>iCloud.com.hinoshiba.tumiben</string>
 	</array>
+	<key>com.apple.developer.icloud-container-environment</key>
+	<string>$(ICLOUD_CONTAINER_ENVIRONMENT)</string>
 	<key>com.apple.developer.icloud-services</key>
 	<array>
 		<string>CloudKit</string>
-	</array>
-	<key>com.apple.security.application-groups</key>
-	<array>
-		<string>group.com.hinoshiba.tsumiben</string>
 	</array>
 </dict>
 </plist>

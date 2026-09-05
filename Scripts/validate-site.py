@@ -106,8 +106,8 @@ required = [
     ROOT / "sitemap.xml",
     ROOT / "styles.css",
     ROOT / "app.js",
-    ROOT / "og-focus-v5.png",
-    ROOT / "public/app-icon-focus-v4.png",
+    ROOT / "og-focus-v6.png",
+    ROOT / "public/app-icon-focus-v5.png",
     ROOT / "public/apple-touch-icon.png",
     ROOT / "public/app-home-current.webp",
     ROOT / "public/ZenMaruGothic-Black.ttf",
@@ -207,11 +207,11 @@ expected_meta = {
     "og:site_name": "つみべん",
     "og:locale": "ja_JP",
     "og:url": PUBLIC_BASE,
-    "og:image": PUBLIC_BASE + "og-focus-v5.png",
+    "og:image": PUBLIC_BASE + "og-focus-v6.png",
     "og:image:width": "1200",
     "og:image:height": "630",
     "twitter:card": "summary_large_image",
-    "twitter:image": PUBLIC_BASE + "og-focus-v5.png",
+    "twitter:image": PUBLIC_BASE + "og-focus-v6.png",
 }
 for key, expected in expected_meta.items():
     if index_meta.get(key) != expected:
@@ -220,8 +220,8 @@ for key, expected in expected_meta.items():
 not_found_refs = {value for _, value in parsed_pages[(ROOT / "404.html").resolve()].refs}
 required_not_found_refs = {
     "/",
-    "/styles.css?v=7",
-    "/public/app-icon-focus-v4.png",
+    "/styles.css?v=9",
+    "/public/app-icon-focus-v5.png",
     "/public/apple-touch-icon.png",
     "/privacy/",
     "/support/",
@@ -285,10 +285,10 @@ expected_locations = set(expected_canonical.values())
 if sitemap_locations != expected_locations:
     fail(f"sitemap locations mismatch: {sorted(sitemap_locations)}")
 
-og = ROOT / "og-focus-v5.png"
+og = ROOT / "og-focus-v6.png"
 if png_dimensions(og) != (1200, 630):
-    fail("og-focus-v5.png must be exactly 1200x630")
-if png_dimensions(ROOT / "public/app-icon-focus-v4.png") != (256, 256):
+    fail("og-focus-v6.png must be exactly 1200x630")
+if png_dimensions(ROOT / "public/app-icon-focus-v5.png") != (256, 256):
     fail("web app icon must be exactly 256x256")
 if png_dimensions(ROOT / "public/apple-touch-icon.png") != (180, 180):
     fail("apple-touch-icon must be exactly 180x180")

@@ -82,7 +82,7 @@ enum UsagePurpose: String, CaseIterable, Identifiable, Sendable {
 
     var privacyGuidance: String? {
         guard self == .work else { return nil }
-        return "シェアカードにテーマ名は載せません。成果メモも載せません。ロック画面と終了通知へのテーマ名表示は設定で選べます。案件名・顧客名・個人名などの守秘情報は入れず、「企画」「顧客対応」のような大分類がおすすめです。"
+        return "シェアカードにテーマ名は載せません。成果メモも載せません。終了通知にもテーマ名は表示しません。案件名・顧客名・個人名などの守秘情報は入れず、「企画」「顧客対応」のような大分類がおすすめです。"
     }
 
     var professionalUseGuidance: String? {
@@ -114,5 +114,50 @@ enum UsagePurpose: String, CaseIterable, Identifiable, Sendable {
                 CategoryPreset(name: "顧客対応", colorHex: Constants.Color.japanese)
             ]
         }
+    }
+}
+
+/// A single, purpose-neutral catalogue used by theme setup surfaces.
+///
+/// `UsagePurpose` remains above as a storage compatibility type because its
+/// raw values are already synchronized through CloudKit and included in data
+/// exports. New UI must not branch on that legacy preference: learning and
+/// work themes live in the same list and differ only by the name users choose.
+enum SubjectSuggestionCatalog {
+    static let presets: [UsagePurpose.CategoryPreset] =
+        UsagePurpose.study.presets + UsagePurpose.work.presets
+
+    static let inputPlaceholder = "例：英語、TOEIC、企画、開発"
+    static let exampleHint = "例：英語、数学、TOEIC、企画、開発、資料作成"
+    static let setupDetail =
+        "勉強も仕事も同じテーマ一覧で管理できます。候補を1つ選ぶか、自由に入力してください。"
+    static let privacyGuidance =
+        "仕事に使う場合は、案件名・顧客名・個人名などの守秘情報を避け、「企画」「開発」のような大分類がおすすめです。"
+    static let professionalUseGuidance =
+        "個人の集中を振り返るための記録です。勤怠・請求・正式な工数管理の代わりには使わないでください。"
+
+    static func preset(named name: String) -> UsagePurpose.CategoryPreset? {
+        let key = SubjectNamePolicy.comparisonKey(name)
+        return presets.first {
+            SubjectNamePolicy.comparisonKey($0.name) == key
+        }
+    }
+}
+
+enum OnboardingThemePolicy {
+    /// A built-in row may be created before setup is complete. Only a user's
+    /// explicit selection or historical relationship makes it durable.
+    static func shouldRetireBuiltInPreset(
+        isSelected: Bool,
+        hasHistory: Bool
+    ) -> Bool {
+        !isSelected && !hasHistory
+    }
+
+    static func countsAgainstThemeLimitBeforeSelection(
+        isBuiltInPreset: Bool,
+        hasHistory: Bool
+    ) -> Bool {
+        !isBuiltInPreset || hasHistory
     }
 }

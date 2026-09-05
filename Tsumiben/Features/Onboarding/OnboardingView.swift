@@ -3,21 +3,38 @@ import SwiftUI
 import UIKit
 
 struct OnboardingView: View {
-    let onComplete: (Set<String>, Bool, UsagePurpose, RareRewardMode) -> Void
+    let persistenceMode: PersistenceLaunchMode
+    let onComplete: (Set<String>, Bool, RareRewardMode) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var page = 0
     @State private var trialDropped = false
-    @State private var usagePurpose = UsagePurpose.study
-    @State private var selectionsByPurpose: [UsagePurpose: Set<String>] = [
-        .study: [],
-        .work: []
-    ]
+    @State private var selectedSubjects = Set<String>()
     @State private var wantsNotifications = false
     @State private var selectedRareRewardMode: RareRewardMode?
-    @Query(sort: \Subject.sortOrder) private var existingSubjects: [Subject]
+    @Query(sort: \Subject.sortOrder) private var storedSubjects: [Subject]
 
-    private let pageCount = 4
+    init(
+        persistenceMode: PersistenceLaunchMode = .inMemoryPreview,
+        onComplete: @escaping (Set<String>, Bool, RareRewardMode) -> Void
+    ) {
+        self.persistenceMode = persistenceMode
+        self.onComplete = onComplete
+        var descriptor = FetchDescriptor<Subject>(sortBy: [
+            SortDescriptor(\Subject.sortOrder),
+            SortDescriptor(\Subject.syncRecordID)
+        ])
+        descriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
+        _storedSubjects = Query(descriptor)
+    }
+
+    private var pageCount: Int {
+        RareRewardReleasePolicy.isEnabled ? 4 : 3
+    }
+
+    private var existingSubjects: [Subject] {
+        SubjectSyncPolicy.presentationSubjects(from: storedSubjects)
+    }
 
     var body: some View {
         ZStack {
@@ -35,23 +52,24 @@ struct OnboardingView: View {
                 .padding(.top, 12)
 
                 TabView(selection: pageSelection) {
-                    ValuePage()
+                    ValuePage(persistenceMode: persistenceMode)
                     .tag(0)
 
                     TrialDropPage(dropped: $trialDropped)
                     .tag(1)
 
                     SubjectSetupPage(
-                        usagePurpose: $usagePurpose,
-                        selectedSubjects: activeSelections,
+                        selectedSubjects: $selectedSubjects,
                         wantsNotifications: $wantsNotifications,
                         existingSubjectNames: Set(existingSubjects.map(\.name)),
                         availableNewSubjectSlots: availableNewSubjectSlots
                     )
                     .tag(2)
 
-                    RareRewardOnboardingPage(selection: $selectedRareRewardMode)
-                        .tag(3)
+                    if RareRewardReleasePolicy.isEnabled {
+                        RareRewardOnboardingPage(selection: $selectedRareRewardMode)
+                            .tag(3)
+                    }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: page)
@@ -86,8 +104,7 @@ struct OnboardingView: View {
         Binding(
             get: { page },
             set: { nextPage in
-                guard !(page == 1 && nextPage > page && !trialDropped) else { return }
-                guard !(page == 2 && nextPage > page && currentSelections.isEmpty) else { return }
+                guard !(page == 2 && nextPage > page && selectedSubjects.isEmpty) else { return }
                 page = nextPage
             }
         )
@@ -100,66 +117,59 @@ struct OnboardingView: View {
                 page += 1
             }
         } else {
-            guard let selectedRareRewardMode else { return }
+            let resolvedRareRewardMode: RareRewardMode
+            if RareRewardReleasePolicy.isEnabled {
+                guard let selectedRareRewardMode else { return }
+                resolvedRareRewardMode = selectedRareRewardMode
+            } else {
+                resolvedRareRewardMode = .off
+            }
             onComplete(
-                currentSelections,
+                selectedSubjects,
                 wantsNotifications,
-                usagePurpose,
-                selectedRareRewardMode
+                resolvedRareRewardMode
             )
         }
     }
 
     private var isPrimaryActionDisabled: Bool {
-        (page == 1 && !trialDropped)
-            || (page == 2 && currentSelections.isEmpty)
-            || (page == pageCount - 1 && selectedRareRewardMode == nil)
+        (page == 2 && selectedSubjects.isEmpty)
+            || (RareRewardReleasePolicy.isEnabled
+                && page == pageCount - 1
+                && selectedRareRewardMode == nil)
     }
 
     private var primaryActionHint: String {
-        if page == 1, !trialDropped {
-            return "ためしの一粒を積むと進めます"
+        if page == 2, selectedSubjects.isEmpty {
+            return "テーマを1つ選ぶと瓶をひらけます"
         }
-        if page == 2, currentSelections.isEmpty {
-            return "カテゴリを1つ以上選ぶと瓶をひらけます"
-        }
-        if page == pageCount - 1, selectedRareRewardMode == nil {
+        if RareRewardReleasePolicy.isEnabled,
+           page == pageCount - 1,
+           selectedRareRewardMode == nil {
             return "レア粒の扱いを1つ選ぶと瓶をひらけます"
         }
         return ""
     }
 
-    private var currentSelections: Set<String> {
-        selectionsByPurpose[usagePurpose] ?? []
-    }
-
-    /// The study presets are seeded before the first-use choice is known. In
-    /// work mode, unused preset rows with no history are removed on completion
-    /// and therefore must not consume the user's twelve active category slots.
+    /// Built-in learning presets can exist before first-use setup is complete.
+    /// Unselected presets without history are reclaimed on completion and must
+    /// not consume one of the user's twelve theme slots here.
     private var availableNewSubjectSlots: Int {
-        let occupiedCount: Int
-        if usagePurpose == .work {
-            let studyPresetIDs = Set(SeedData.subjects.map(\.id))
-            occupiedCount = existingSubjects.filter { subject in
-                !studyPresetIDs.contains(subject.id)
-                    || !(subject.studySessions?.isEmpty ?? true)
+        let builtInIDs = Set(SeedData.subjects.map(\.id))
+        let occupiedCount = existingSubjects.filter { subject in
+            OnboardingThemePolicy.countsAgainstThemeLimitBeforeSelection(
+                isBuiltInPreset: builtInIDs.contains(subject.id),
+                hasHistory: !(subject.studySessions?.isEmpty ?? true)
                     || !(subject.achievementStones?.isEmpty ?? true)
-            }.count
-        } else {
-            occupiedCount = existingSubjects.count
-        }
+            )
+        }.count
         return max(0, Constants.App.maximumSubjects - occupiedCount)
-    }
-
-    private var activeSelections: Binding<Set<String>> {
-        Binding(
-            get: { selectionsByPurpose[usagePurpose] ?? [] },
-            set: { selectionsByPurpose[usagePurpose] = $0 }
-        )
     }
 }
 
 private struct ValuePage: View {
+    let persistenceMode: PersistenceLaunchMode
+
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
@@ -170,12 +180,12 @@ private struct ValuePage: View {
                     .frame(height: jarHeight)
                 VStack(spacing: 14) {
                     SectionEyebrow(text: "YOUR TIME, IN THE JAR")
-                    Text("25分集中すると、1粒。")
+                    Text("集中を終えると、一粒。")
                         .font(TsumibenTheme.brand(30))
                         .multilineTextAlignment(.center)
                         .foregroundStyle(TsumibenTheme.text)
                         .accessibilityAddTraits(.isHeader)
-                    Text("完走した集中時間が、瓶の中で手応えのある粒になります。")
+                    Text("長く集中した粒ほど大きく、瓶の中へ重く積み上がります。")
                         .font(.body)
                         .foregroundStyle(TsumibenTheme.muted)
                         .multilineTextAlignment(.center)
@@ -195,11 +205,15 @@ private struct ValuePage: View {
                     )
                     ValuePromise(
                         symbol: "arrow.triangle.2.circlepath.icloud.fill",
-                        title: "積み上げを引き継ぐ",
-                        detail: "iCloudを有効にした同じApple Accountなら、iPhone間・機種変更後も同期"
+                        title: persistenceMode == .localOnly
+                            ? "このiPhoneだけに保存"
+                            : "iCloudで引き継ぐ",
+                        detail: persistenceMode == .localOnly
+                            ? "iCloudへ自動送信せず、この端末の専用領域へ保存"
+                            : "同じApple AccountのiPhone間で同期。起動・再開時はオンライン確認が必要"
                     )
 
-                    Text("以前の瓶がある場合は、この画面を開いたままiCloudの反映を少しお待ちください。届くと自動で瓶が開きます。")
+                    Text(storageDetail)
                         .font(.caption)
                         .foregroundStyle(TsumibenTheme.muted)
                         .multilineTextAlignment(.center)
@@ -216,6 +230,13 @@ private struct ValuePage: View {
 
     private var jarHeight: CGFloat {
         verticalSizeClass == .compact || dynamicTypeSize.isAccessibilitySize ? 180 : 250
+    }
+
+    private var storageDetail: String {
+        if persistenceMode == .localOnly {
+            return "この保存方式はVersion 1では後からiCloudへ切り替わらず、記録を自動アップロードしません。JSON書き出しは保管用で、アプリへ戻す機能はありません。"
+        }
+        return "以前の瓶がある場合は、この画面を開いたままiCloudの反映を少しお待ちください。届くと自動で瓶が開きます。"
     }
 }
 
@@ -343,12 +364,12 @@ private struct TrialDropPage: View {
 
                 VStack(spacing: 12) {
                     if (reduceMotion || voiceOverEnabled), !dropped, !isDropping {
-                        Text("着地演出は必須ではありません。記録を作らずに先へ進めます。")
+                        Text("ためしの一粒は任意です。記録を作らず、「次へ」でそのまま進めます。")
                             .font(.caption)
                             .foregroundStyle(TsumibenTheme.muted)
                             .multilineTextAlignment(.center)
                             .fixedSize(horizontal: false, vertical: true)
-                        Button("演出を省略して進む", action: completeWithoutAnimation)
+                        Button("動きを使わず一粒を試す", action: completeWithoutAnimation)
                             .buttonStyle(TsumibenPrimaryButtonStyle())
                         if !reduceMotion {
                             Button("着地演出を試す", action: startDrop)
@@ -362,7 +383,7 @@ private struct TrialDropPage: View {
                             .fixedSize(horizontal: false, vertical: true)
                         Button("もう一度", action: startDrop)
                             .buttonStyle(TsumibenSecondaryButtonStyle())
-                        Button("演出を省略して進む", action: completeWithoutAnimation)
+                        Button("動きを使わず一粒を試す", action: completeWithoutAnimation)
                             .buttonStyle(TsumibenPrimaryButtonStyle())
                     } else {
                         Button(action: startDrop) {
@@ -373,7 +394,7 @@ private struct TrialDropPage: View {
                         .accessibilityValue(isDropping ? "落下中" : dropped ? "着地済み" : "落下前")
                     }
 
-                    Text("0g・記録には入りません")
+                    Text("任意の体験です。0g・記録には入りません。「次へ」で省略できます。")
                         .font(.caption)
                         .foregroundStyle(TsumibenTheme.muted)
                 }
@@ -490,16 +511,16 @@ private struct TrialDropPage: View {
 }
 
 private struct SubjectSetupPage: View {
-    @Binding var usagePurpose: UsagePurpose
     @Binding var selectedSubjects: Set<String>
     @Binding var wantsNotifications: Bool
     let existingSubjectNames: Set<String>
     let availableNewSubjectSlots: Int
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var customSubjectName = ""
     @State private var customSubjectFeedback: String?
 
     private var presetNames: Set<String> {
-        Set(usagePurpose.presets.map(\.name))
+        Set(SubjectSuggestionCatalog.presets.map(\.name))
     }
 
     private var customSubjects: [String] {
@@ -526,7 +547,7 @@ private struct SubjectSetupPage: View {
         guard customSubjectValidationError == nil,
               let name = SubjectNamePolicy.validated(customSubjectName)
         else { return false }
-        return !requiresNewSubject(named: name) || remainingNewSubjectSlots > 0
+        return canChooseSubject(named: name)
     }
 
     private var customSubjectValidationError: SubjectNamePolicy.ValidationError? {
@@ -549,149 +570,77 @@ private struct SubjectSetupPage: View {
         return "あと\(SubjectNamePolicy.remainingCharacters(for: customSubjectName))文字入力できます"
     }
 
+    private var suggestionColumns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize
+            ? [GridItem(.flexible())]
+            : [GridItem(.flexible()), GridItem(.flexible())]
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
                 VStack(alignment: .leading, spacing: 10) {
                     SectionEyebrow(text: "YOUR BOTTLE")
-                    Text("何に使いますか？")
+                    Text("最初のテーマを選ぶ")
                         .font(TsumibenTheme.brand(30))
-                    Text("目的に合わせて、最初のカテゴリ候補と言葉を整えます。どちらを選んでも後から変更できます。")
+                    Text(SubjectSuggestionCatalog.setupDetail)
                         .font(.subheadline)
                         .foregroundStyle(TsumibenTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
-                }
-
-                VStack(spacing: 10) {
-                    ForEach(UsagePurpose.allCases) { purpose in
-                        Button {
-                            usagePurpose = purpose
-                            customSubjectName = ""
-                            customSubjectFeedback = nil
-                        } label: {
-                            HStack(spacing: 14) {
-                                Image(systemName: purpose.symbol)
-                                    .foregroundStyle(
-                                        usagePurpose == purpose
-                                            ? TsumibenTheme.amber
-                                            : TsumibenTheme.muted
-                                    )
-                                    .frame(width: 28)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(purpose.title)
-                                        .font(.system(.body, design: .rounded, weight: .bold))
-                                    Text(purpose.summary)
-                                        .font(.caption)
-                                        .foregroundStyle(TsumibenTheme.muted)
-                                }
-                                Spacer(minLength: 8)
-                                Image(
-                                    systemName: usagePurpose == purpose
-                                        ? "checkmark.circle.fill"
-                                        : "circle"
-                                )
-                                .foregroundStyle(
-                                    usagePurpose == purpose
-                                        ? TsumibenTheme.amber
-                                        : TsumibenTheme.muted
-                                )
-                            }
-                            .padding(.horizontal, 16)
-                            .frame(minHeight: 62)
-                            .background(TsumibenTheme.card, in: RoundedRectangle(cornerRadius: 15))
-                            .overlay {
-                                if usagePurpose == purpose {
-                                    RoundedRectangle(cornerRadius: 15)
-                                        .stroke(TsumibenTheme.amber.opacity(0.7), lineWidth: 1)
-                                }
-                            }
-                        }
-                        .buttonStyle(
-                            TsumibenRowButtonStyle(
-                                isSelected: usagePurpose == purpose,
-                                cornerRadius: 15
-                            )
-                        )
-                        .accessibilityValue(usagePurpose == purpose ? "選択中" : "未選択")
-                        .accessibilityAddTraits(usagePurpose == purpose ? .isSelected : [])
-                    }
-                }
-
-                if let privacyGuidance = usagePurpose.privacyGuidance {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label {
-                            Text(privacyGuidance)
-                                .font(.caption)
-                                .foregroundStyle(TsumibenTheme.muted)
-                                .fixedSize(horizontal: false, vertical: true)
-                        } icon: {
-                            Image(systemName: "lock.shield.fill")
-                                .foregroundStyle(TsumibenTheme.amber)
-                        }
-                        if let professionalUseGuidance = usagePurpose.professionalUseGuidance {
-                            Divider()
-                            Label {
-                                Text(professionalUseGuidance)
-                                    .font(.caption)
-                                    .foregroundStyle(TsumibenTheme.muted)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            } icon: {
-                                Image(systemName: "person.crop.circle.badge.checkmark")
-                                    .foregroundStyle(TsumibenTheme.amber)
-                            }
-                        }
-                    }
-                    .padding(16)
-                    .background(TsumibenTheme.card, in: RoundedRectangle(cornerRadius: 16))
-                    .accessibilityElement(children: .combine)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(usagePurpose.firstCategoryTitle)
-                        .font(TsumibenTheme.brand(24))
-                    Text(usagePurpose.setupDetail)
-                        .font(.subheadline)
+                    Text("候補から選ぶ")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(TsumibenTheme.muted)
+                    Text("あとで設定から追加・編集できます。")
+                        .font(.caption)
                         .foregroundStyle(TsumibenTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                VStack(spacing: 10) {
-                    ForEach(usagePurpose.presets) { preset in
+                LazyVGrid(columns: suggestionColumns, spacing: 10) {
+                    ForEach(SubjectSuggestionCatalog.presets) { preset in
+                        let isSelected = selectedSubjects.contains(preset.name)
                         Button {
-                            togglePreset(preset)
+                            choosePreset(preset)
                         } label: {
-                            HStack(spacing: 14) {
+                            HStack(spacing: 10) {
                                 Circle()
                                     .fill(Color(hex: preset.colorHex))
                                     .frame(width: 14, height: 14)
                                 Text(preset.name)
                                     .font(.system(.body, design: .rounded, weight: .bold))
                                 Spacer()
-                                Image(systemName: selectedSubjects.contains(preset.name) ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(selectedSubjects.contains(preset.name) ? TsumibenTheme.amber : TsumibenTheme.muted)
+                                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(isSelected ? TsumibenTheme.amber : TsumibenTheme.muted)
                             }
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, 14)
                             .frame(minHeight: 50)
                             .background(TsumibenTheme.card, in: RoundedRectangle(cornerRadius: 13))
                         }
-                        .buttonStyle(TsumibenBareButtonStyle())
-                        .accessibilityValue(selectedSubjects.contains(preset.name) ? "選択中" : "未選択")
-                        .accessibilityAddTraits(
-                            selectedSubjects.contains(preset.name) ? .isSelected : []
+                        .buttonStyle(
+                            TsumibenRowButtonStyle(
+                                isSelected: isSelected,
+                                cornerRadius: 13
+                            )
                         )
+                        .disabled(!canChooseSubject(named: preset.name))
+                        .accessibilityValue(isSelected ? "選択中" : "未選択")
+                        .accessibilityAddTraits(isSelected ? .isSelected : [])
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(usagePurpose.customFieldTitle)
+                    Text("自由に入力")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(TsumibenTheme.muted)
-                    Text("新しく追加できるのはあと\(remainingNewSubjectSlots)件です（合計最大\(Constants.App.maximumSubjects)件）。既存のテーマを選び直す場合は枠を使いません。")
+                    Text("新しく追加できるのはあと\(remainingNewSubjectSlots)件です（合計最大\(Constants.App.maximumSubjects)件）。")
                         .font(.caption)
                         .foregroundStyle(TsumibenTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 8) {
-                        TextField(usagePurpose.customFieldPlaceholder, text: $customSubjectName)
+                        TextField(SubjectSuggestionCatalog.inputPlaceholder, text: $customSubjectName)
                             .textInputAutocapitalization(.never)
                             .submitLabel(.done)
                             .onSubmit(addCustomSubject)
@@ -703,7 +652,7 @@ private struct SubjectSetupPage: View {
                             .padding(.horizontal, 14)
                             .frame(minHeight: 50)
                             .background(TsumibenTheme.card, in: RoundedRectangle(cornerRadius: 13))
-                        Button("追加", action: addCustomSubject)
+                        Button("選択", action: addCustomSubject)
                             .font(.subheadline.weight(.bold))
                             .frame(minWidth: 64, minHeight: 50)
                             .background(TsumibenTheme.raised, in: RoundedRectangle(cornerRadius: 13))
@@ -723,7 +672,7 @@ private struct SubjectSetupPage: View {
                             .foregroundStyle(TsumibenTheme.amber)
                             .fixedSize(horizontal: false, vertical: true)
                     } else if remainingNewSubjectSlots == 0 {
-                        Text("追加できる枠をすべて選びました。瓶をひらいた後も編集できます。")
+                        Text("新しいテーマの枠がありません。既存のテーマを選ぶか、瓶をひらいた後に整理してください。")
                             .font(.caption)
                             .foregroundStyle(TsumibenTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -754,13 +703,38 @@ private struct SubjectSetupPage: View {
 
                 Label(
                     selectedSubjects.isEmpty
-                        ? "カテゴリを1つ以上選ぶと、瓶をひらけます"
-                        : "\(selectedSubjects.count)件を選択中",
+                        ? "テーマを1つ選ぶと、瓶をひらけます"
+                        : "最初のテーマ：\(selectedSubjects.first ?? "選択済み")",
                     systemImage: selectedSubjects.isEmpty ? "circle" : "checkmark.circle.fill"
                 )
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(selectedSubjects.isEmpty ? TsumibenTheme.muted : TsumibenTheme.amber)
                 .fixedSize(horizontal: false, vertical: true)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Label {
+                        Text(SubjectSuggestionCatalog.privacyGuidance)
+                            .font(.caption)
+                            .foregroundStyle(TsumibenTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "lock.shield.fill")
+                            .foregroundStyle(TsumibenTheme.amber)
+                    }
+                    Divider()
+                    Label {
+                        Text(SubjectSuggestionCatalog.professionalUseGuidance)
+                            .font(.caption)
+                            .foregroundStyle(TsumibenTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "person.crop.circle.badge.checkmark")
+                            .foregroundStyle(TsumibenTheme.amber)
+                    }
+                }
+                .padding(16)
+                .background(TsumibenTheme.card, in: RoundedRectangle(cornerRadius: 16))
+                .accessibilityElement(children: .combine)
 
                 Toggle(isOn: $wantsNotifications) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -794,10 +768,8 @@ private struct SubjectSetupPage: View {
         guard let name = SubjectNamePolicy.validated(customSubjectName) else { return }
 
         let normalized = SubjectNamePolicy.comparisonKey(name)
-        if let preset = usagePurpose.presets.first(where: {
-            SubjectNamePolicy.comparisonKey($0.name) == normalized
-        }) {
-            selectedSubjects.insert(preset.name)
+        if let preset = SubjectSuggestionCatalog.preset(named: name) {
+            selectedSubjects = [preset.name]
             customSubjectName = ""
             showCustomSubjectFeedback("同じ名前の候補「\(preset.name)」を選択しました。")
             return
@@ -807,16 +779,16 @@ private struct SubjectSetupPage: View {
             SubjectNamePolicy.comparisonKey($0) == normalized
         }) {
             customSubjectName = ""
-            showCustomSubjectFeedback("「\(existing)」はすでに追加されています。")
+            showCustomSubjectFeedback("「\(existing)」を選択しています。")
             return
         }
 
-        guard !requiresNewSubject(named: name) || remainingNewSubjectSlots > 0 else {
-            showCustomSubjectFeedback("カテゴリは合計最大\(Constants.App.maximumSubjects)件です。不要なテーマは設定から削除できます。")
+        guard canChooseSubject(named: name) else {
+            showCustomSubjectFeedback("テーマは合計最大\(Constants.App.maximumSubjects)件です。不要なテーマは設定から削除できます。")
             return
         }
 
-        selectedSubjects.insert(name)
+        selectedSubjects = [name]
         customSubjectName = ""
         customSubjectFeedback = nil
     }
@@ -826,18 +798,20 @@ private struct SubjectSetupPage: View {
         UIAccessibility.post(notification: .announcement, argument: message)
     }
 
-    private func togglePreset(_ preset: UsagePurpose.CategoryPreset) {
-        if selectedSubjects.contains(preset.name) {
-            selectedSubjects.remove(preset.name)
-            customSubjectFeedback = nil
-            return
-        }
-        guard !requiresNewSubject(named: preset.name) || remainingNewSubjectSlots > 0 else {
+    private func choosePreset(_ preset: UsagePurpose.CategoryPreset) {
+        guard canChooseSubject(named: preset.name) else {
             showCustomSubjectFeedback("追加できるテーマは合計最大\(Constants.App.maximumSubjects)件です。")
             return
         }
-        selectedSubjects.insert(preset.name)
+        selectedSubjects = [preset.name]
+        customSubjectName = ""
         customSubjectFeedback = nil
+    }
+
+    private func canChooseSubject(named name: String) -> Bool {
+        !requiresNewSubject(named: name)
+            || remainingNewSubjectSlots > 0
+            || selectedNewSubjectCount > 0
     }
 
     private func requiresNewSubject(named name: String) -> Bool {

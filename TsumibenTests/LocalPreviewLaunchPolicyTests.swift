@@ -3,6 +3,65 @@ import XCTest
 @testable import Tsumiben
 
 final class LocalPreviewLaunchPolicyTests: XCTestCase {
+    func testFirstActiveSceneRetriesBeforeStorageSelection() {
+        XCTAssertEqual(
+            PersistenceLaunchScenePolicy.action(
+                isActive: true,
+                hasSession: false,
+                isPreparing: true,
+                isQuiescingAccountChange: false,
+                usesCloudAccountBoundary: false
+            ),
+            .preparePersistence
+        )
+    }
+
+    func testActiveSceneDoesNotReplaceLoadedOrRetiringSession() {
+        XCTAssertEqual(
+            PersistenceLaunchScenePolicy.action(
+                isActive: true,
+                hasSession: true,
+                isPreparing: false,
+                isQuiescingAccountChange: false,
+                usesCloudAccountBoundary: true
+            ),
+            .none
+        )
+        XCTAssertEqual(
+            PersistenceLaunchScenePolicy.action(
+                isActive: true,
+                hasSession: false,
+                isPreparing: false,
+                isQuiescingAccountChange: true,
+                usesCloudAccountBoundary: true
+            ),
+            .none
+        )
+    }
+
+    func testOnlyCloudWorkRetiresWhenSceneLeavesActiveState() {
+        XCTAssertEqual(
+            PersistenceLaunchScenePolicy.action(
+                isActive: false,
+                hasSession: false,
+                isPreparing: true,
+                isQuiescingAccountChange: false,
+                usesCloudAccountBoundary: true
+            ),
+            .retireCloudSession
+        )
+        XCTAssertEqual(
+            PersistenceLaunchScenePolicy.action(
+                isActive: false,
+                hasSession: true,
+                isPreparing: false,
+                isQuiescingAccountChange: false,
+                usesCloudAccountBoundary: false
+            ),
+            .none
+        )
+    }
+
     func testAX5OverrideRequiresDebugUITestModeAndExplicitFlag() {
         let enabledEnvironment = [
             LocalPreviewLaunchPolicy.environmentKey: "1",
@@ -151,6 +210,17 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
 
 final class PaywallContinuationTests: XCTestCase {
     @MainActor
+    func testLocalSessionMaintenanceRequestLatchesExactlyOncePerProcess() {
+        let router = AppRouter()
+
+        XCTAssertFalse(router.localSessionMaintenanceRequestedThisProcess)
+        XCTAssertTrue(router.requestLocalSessionMaintenanceOnce())
+        XCTAssertTrue(router.localSessionMaintenanceRequestedThisProcess)
+        XCTAssertFalse(router.requestLocalSessionMaintenanceOnce())
+        XCTAssertTrue(router.localSessionMaintenanceRequestedThisProcess)
+    }
+
+    @MainActor
     func testHomeCustomDurationResumesExactlyOnceAfterProPurchase() {
         let router = AppRouter()
 
@@ -192,6 +262,24 @@ final class PaywallContinuationTests: XCTestCase {
 }
 
 final class CloudAccountAvailabilityTests: XCTestCase {
+    func testPrivateDatabaseProbeHasLaunchDeadlines() {
+        let operation = CloudKitOnlineAccountVerifier
+            .makePrivateDatabaseProbe()
+
+        XCTAssertEqual(
+            operation.configuration.timeoutIntervalForRequest,
+            CloudKitOnlineAccountVerifier.requestTimeout
+        )
+        XCTAssertEqual(
+            operation.configuration.timeoutIntervalForResource,
+            CloudKitOnlineAccountVerifier.resourceTimeout
+        )
+        XCTAssertLessThanOrEqual(
+            CloudKitOnlineAccountVerifier.resourceTimeout,
+            8
+        )
+    }
+
     func testSimulatorDoesNotOfferIneffectiveRecoveryActions() {
         XCTAssertFalse(CloudAccountAvailability.simulator.showsRefreshAction)
         XCTAssertFalse(CloudAccountAvailability.simulator.showsSettingsShortcut)
@@ -231,7 +319,7 @@ final class PurchaseConfigurationTests: XCTestCase {
     func testAppOffersOnlyTheStableLifetimeProductIdentifier() {
         XCTAssertEqual(
             IntegrationConstants.proProductID,
-            "com.hinoshiba.tsumiben.pro.lifetime"
+            "com.hinoshiba.tumiben.pro.lifetime"
         )
         XCTAssertEqual(
             IntegrationConstants.proProductIDs,

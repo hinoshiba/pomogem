@@ -1,78 +1,41 @@
 import Foundation
 import SwiftUI
-import UIKit
 import WidgetKit
 
 private struct JarWidgetEntry: TimelineEntry {
     let date: Date
-    let metadata: WidgetSnapshotMetadata
-    let imageData: Data?
 }
 
 private struct JarTimelineProvider: TimelineProvider {
     func placeholder(in context: Context) -> JarWidgetEntry {
-        JarWidgetEntry(
-            date: .now,
-            metadata: WidgetSnapshotMetadata(
-                totalGrams: 12_750,
-                measuredGrams: 12_500,
-                pebbleCount: 51,
-                goldCount: 3,
-                prismCount: 1
-            ),
-            imageData: nil
-        )
+        JarWidgetEntry(date: .now)
     }
 
     func getSnapshot(
         in context: Context,
         completion: @escaping (JarWidgetEntry) -> Void
     ) {
-        completion(loadEntry())
+        completion(JarWidgetEntry(date: .now))
     }
 
     func getTimeline(
         in context: Context,
         completion: @escaping (Timeline<JarWidgetEntry>) -> Void
     ) {
-        let entry = loadEntry()
-        let refreshDate = Date.now.addingTimeInterval(
-            IntegrationConstants.widgetTimelineRefreshInterval
-        )
-        completion(Timeline(entries: [entry], policy: .after(refreshDate)))
-    }
-
-    private func loadEntry() -> JarWidgetEntry {
-        guard let containerURL = IntegrationConstants.appGroupContainerURL() else {
-            return JarWidgetEntry(date: .now, metadata: .empty, imageData: nil)
-        }
-
-        let metadataURL = containerURL.appendingPathComponent(
-            IntegrationConstants.widgetSnapshotMetadataFileName,
-            isDirectory: false
-        )
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
-        guard let metadataData = try? Data(contentsOf: metadataURL),
-              let metadata = try? decoder.decode(
-                  WidgetSnapshotMetadata.self,
-                  from: metadataData
-              ) else {
-            return JarWidgetEntry(date: .now, metadata: .empty, imageData: nil)
-        }
-
-        let imageData = metadata.imageURL.flatMap { try? Data(contentsOf: $0) }
-        return JarWidgetEntry(
-            date: metadata.updatedAt,
-            metadata: metadata,
-            imageData: imageData
-        )
+        completion(Timeline(
+            entries: [JarWidgetEntry(date: .now)],
+            policy: .never
+        ))
     }
 }
 
+private enum NeutralWidgetConstants {
+    static let homeKind = "TsumibenJarWidget"
+    static let lockScreenKind = "TsumibenMassWidget"
+}
+
 struct JarHomeWidget: Widget {
-    let kind = IntegrationConstants.homeWidgetKind
+    let kind = NeutralWidgetConstants.homeKind
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: JarTimelineProvider()) { entry in
@@ -82,7 +45,7 @@ struct JarHomeWidget: Widget {
                 }
         }
         .configurationDisplayName("つみべん")
-        .description("瓶と積んだ質量")
+        .description("今日の集中を始める")
         .supportedFamilies([.systemSmall, .systemMedium])
         .contentMarginsDisabled()
     }
@@ -104,50 +67,42 @@ private struct JarHomeWidgetView: View {
     private var smallLayout: some View {
         VStack(spacing: 8) {
             wordmark
-            JarArtwork(imageData: entry.imageData)
+            NeutralJarArtwork()
                 .frame(maxHeight: .infinity)
-            massLabel(alignment: .center)
+            Text("集中を始める")
+                .font(.system(size: 16, weight: .heavy, design: .rounded))
+                .foregroundStyle(WidgetPalette.warmText)
+                .lineLimit(1)
         }
         .padding(12)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("つみべんで集中を始める")
     }
 
     private var mediumLayout: some View {
         HStack(spacing: 16) {
-            JarArtwork(imageData: entry.imageData)
+            NeutralJarArtwork()
                 .frame(width: 126)
 
             VStack(alignment: .leading, spacing: 0) {
                 wordmark
                 Spacer(minLength: 8)
-                Text("積んだ質量")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(WidgetPalette.mutedText)
-                Text(entry.metadata.formattedTotalMass)
-                    .font(.system(size: 29, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
+                Text("今日のひと粒を積もう")
+                    .font(.system(size: 23, weight: .heavy, design: .rounded))
                     .foregroundStyle(WidgetPalette.warmText)
-                    .minimumScaleFactor(0.65)
-                    .lineLimit(1)
-                HStack(spacing: 8) {
-                    Label("\(entry.metadata.pebbleCount)", systemImage: "circle.fill")
-                    if entry.metadata.goldCount > 0 {
-                        Label("\(entry.metadata.goldCount)", systemImage: "sparkles")
-                    }
-                    if entry.metadata.prismCount > 0 {
-                        Label("\(entry.metadata.prismCount)", systemImage: "diamond.fill")
-                    }
-                }
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(WidgetPalette.mutedText)
+                    .minimumScaleFactor(0.72)
+                    .lineLimit(2)
                 Spacer(minLength: 8)
-                Text(entry.metadata.updatedAt, style: .relative)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(WidgetPalette.mutedText.opacity(0.75))
+                Label("タップしてアプリを開く", systemImage: "arrow.up.forward.app")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(WidgetPalette.mutedText)
             }
             .padding(.vertical, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 14)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("つみべんで今日の集中を始める")
     }
 
     private var wordmark: some View {
@@ -164,21 +119,9 @@ private struct JarHomeWidgetView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func massLabel(alignment: Alignment) -> some View {
-        Text(entry.metadata.formattedTotalMass)
-            .font(.system(size: 22, weight: .heavy, design: .rounded))
-            .monospacedDigit()
-            .foregroundStyle(WidgetPalette.warmText)
-            .minimumScaleFactor(0.6)
-            .lineLimit(1)
-            .frame(maxWidth: .infinity, alignment: alignment)
-            .accessibilityLabel("積んだ質量 \(entry.metadata.formattedTotalMass)")
-    }
 }
 
-private struct JarArtwork: View {
-    let imageData: Data?
-
+private struct NeutralJarArtwork: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -186,20 +129,13 @@ private struct JarArtwork: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(WidgetPalette.glassEdge, lineWidth: 1)
 
-            if let imageData,
-               let image = UIImage(data: imageData) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .padding(4)
-            } else {
-                VStack(spacing: 5) {
-                    Image(systemName: "hourglass.bottomhalf.filled")
-                        .font(.system(size: 25, weight: .light))
-                    Text("まだ空っぽ。")
-                        .font(.system(size: 10, weight: .semibold))
-                }
-                .foregroundStyle(WidgetPalette.mutedText)
+            VStack(spacing: 7) {
+                Image(systemName: "circle.grid.3x3.fill")
+                    .font(.system(size: 29, weight: .light))
+                    .foregroundStyle(WidgetPalette.amber)
+                Text("ひと粒ずつ")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(WidgetPalette.mutedText)
             }
         }
         .accessibilityHidden(true)
@@ -207,15 +143,15 @@ private struct JarArtwork: View {
 }
 
 struct JarLockScreenWidget: Widget {
-    let kind = IntegrationConstants.lockScreenWidgetKind
+    let kind = NeutralWidgetConstants.lockScreenKind
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: JarTimelineProvider()) { entry in
             JarLockScreenView(entry: entry)
                 .containerBackground(for: .widget) { Color.clear }
         }
-        .configurationDisplayName("つみべん 総質量")
-        .description("積んだ総質量")
+        .configurationDisplayName("つみべん")
+        .description("集中を始める")
         .supportedFamilies([
             .accessoryInline,
             .accessoryCircular,
@@ -232,16 +168,15 @@ private struct JarLockScreenView: View {
         switch family {
         case .accessoryInline:
             Label(
-                entry.metadata.formattedTotalMass,
+                "集中を始める",
                 systemImage: "circle.grid.3x3.fill"
             )
         case .accessoryCircular:
             VStack(spacing: -2) {
                 Image(systemName: "circle.grid.3x3.fill")
                     .font(.system(size: 12, weight: .semibold))
-                Text(entry.metadata.formattedTotalMass)
-                    .font(.system(size: 13, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
+                Text("集中")
+                    .font(.system(size: 11, weight: .heavy, design: .rounded))
                     .minimumScaleFactor(0.55)
                     .lineLimit(1)
             }
@@ -249,9 +184,8 @@ private struct JarLockScreenView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Label("つみべん", systemImage: "circle.grid.3x3.fill")
                     .font(.system(size: 11, weight: .semibold))
-                Text(entry.metadata.formattedTotalMass)
-                    .font(.system(size: 22, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
+                Text("集中を始める")
+                    .font(.system(size: 16, weight: .heavy, design: .rounded))
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
             }

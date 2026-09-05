@@ -34,7 +34,9 @@ final class TsumibenDataExporterTests: XCTestCase {
             Prefs.self,
             ActivityResetMarker.self,
             SyncedFocusTimer.self,
-            FocusTimerDeviceClaim.self
+            FocusTimerDeviceClaim.self,
+            RareRewardPendingCommit.self,
+            RareRewardLedgerCursor.self
         ])
         let configuration = ModelConfiguration(
             "TsumibenDataExporterTests",
@@ -51,13 +53,19 @@ final class TsumibenDataExporterTests: XCTestCase {
         let instant = Date(timeIntervalSince1970: 1_700_000_000)
         let epochID = UUID(uuidString: "10000000-0000-0000-0000-000000000001")!
         let subjectID = UUID(uuidString: "20000000-0000-0000-0000-000000000001")!
+        let subjectSyncRecordID = UUID(uuidString: "21000000-0000-0000-0000-000000000001")!
+        let subjectMutationID = UUID(uuidString: "22000000-0000-0000-0000-000000000001")!
         let subject = Subject(
             id: subjectID,
             name: "社外秘プロジェクト",
             colorHex: "#12A0D0",
             sortOrder: 7,
             isArchived: true,
-            createdAt: instant
+            deletedAt: instant.addingTimeInterval(120),
+            createdAt: instant,
+            syncRecordID: subjectSyncRecordID,
+            contentRevision: 9,
+            contentMutationID: subjectMutationID
         )
         context.insert(subject)
 
@@ -69,7 +77,7 @@ final class TsumibenDataExporterTests: XCTestCase {
                 index
             ))!
             sessionIDs.append(id)
-            context.insert(StudySession(
+            let session = StudySession(
                 id: id,
                 subject: subject,
                 startAt: instant,
@@ -84,10 +92,31 @@ final class TsumibenDataExporterTests: XCTestCase {
                 rareRewardParticipated: true,
                 rareRewardCreditedGrams: 250,
                 rareRewardOutcomesRawValue: index == 0 ? "prism" : "",
-                dataEpochID: epochID
-            ))
+                dataEpochID: epochID,
+                syncRecordID: UUID(uuidString: String(
+                    format: "31000000-0000-0000-0000-%012d",
+                    index
+                ))!
+            )
+            if index == 0 {
+                // Unsupported synchronized/legacy rows stay available in the
+                // raw export even though user-visible projections quarantine
+                // them through StudySessionIntegrityPolicy.
+                session.seconds = Int.max
+                session.grams = Int.max
+            }
+            context.insert(session)
         }
 
+        let achievementSyncRecordID = UUID(
+            uuidString: "41000000-0000-0000-0000-000000000001"
+        )!
+        let achievementDeletionID = UUID(
+            uuidString: "42000000-0000-0000-0000-000000000001"
+        )!
+        let achievementRestoreID = UUID(
+            uuidString: "42000000-0000-0000-0000-000000000002"
+        )!
         context.insert(AchievementStone(
             id: UUID(uuidString: "40000000-0000-0000-0000-000000000001")!,
             subject: subject,
@@ -98,7 +127,11 @@ final class TsumibenDataExporterTests: XCTestCase {
             dataEpochID: epochID,
             revision: 3,
             deletedAt: instant.addingTimeInterval(60),
-            updatedAt: instant.addingTimeInterval(60)
+            deletionMutationID: achievementDeletionID,
+            deletionRevision: 3,
+            restoredDeletionMutationID: achievementRestoreID,
+            updatedAt: instant.addingTimeInterval(60),
+            syncRecordID: achievementSyncRecordID
         ))
         context.insert(AggregatePebble(
             id: UUID(uuidString: "50000000-0000-0000-0000-000000000001")!,
@@ -138,12 +171,17 @@ final class TsumibenDataExporterTests: XCTestCase {
             rewardCreditGrams: 9_999,
             dataEpochID: epochID
         ))
-        context.insert(Prefs(
+        let prefsSyncRecordID = UUID(
+            uuidString: "81000000-0000-0000-0000-000000000001"
+        )!
+        let prefs = Prefs(
             id: UUID(uuidString: "80000000-0000-0000-0000-000000000001")!,
             manualDayKey: "2023-11-14",
             manualUsedToday: 2,
             soundOn: false,
             hapticsOn: false,
+            timerCompletionSoundRawValue: TimerCompletionSound.bright.rawValue,
+            timerCompletionHapticRawValue: TimerCompletionHaptic.strong.rawValue,
             rareRewardModeRawValue: RareRewardMode.quiet.rawValue,
             rareRewardModeUpdatedAt: instant,
             reminderEnabled: true,
@@ -159,8 +197,41 @@ final class TsumibenDataExporterTests: XCTestCase {
             usagePurposeUpdatedAt: instant,
             hasEverImportedBedrock: true,
             hasCompletedInitialSubjectSeed: true,
-            activityEpochID: epochID
-        ))
+            activityEpochID: epochID,
+            syncRecordID: prefsSyncRecordID,
+            settingsWriterID: "account-device-writer"
+        )
+        let preferenceMutationIDs = (1...12).map { index in
+            UUID(uuidString: String(
+                format: "82000000-0000-0000-0000-%012d",
+                index
+            ))!
+        }
+        prefs.soundRevision = 11
+        prefs.soundMutationID = preferenceMutationIDs[0]
+        prefs.hapticsRevision = 12
+        prefs.hapticsMutationID = preferenceMutationIDs[1]
+        prefs.rareRewardRevision = 13
+        prefs.rareRewardMutationID = preferenceMutationIDs[2]
+        prefs.reminderEnabledRevision = 14
+        prefs.reminderEnabledMutationID = preferenceMutationIDs[3]
+        prefs.reminderTimeRevision = 15
+        prefs.reminderTimeMutationID = preferenceMutationIDs[4]
+        prefs.shareIncludesManualRevision = 16
+        prefs.shareIncludesManualMutationID = preferenceMutationIDs[5]
+        prefs.externalThemeRevision = 17
+        prefs.externalThemeMutationID = preferenceMutationIDs[6]
+        prefs.keepScreenAwakeRevision = 18
+        prefs.keepScreenAwakeMutationID = preferenceMutationIDs[7]
+        prefs.preferredFocusMinutesRevision = 19
+        prefs.preferredFocusMinutesMutationID = preferenceMutationIDs[8]
+        prefs.usagePurposeRevision = 20
+        prefs.usagePurposeMutationID = preferenceMutationIDs[9]
+        prefs.timerCompletionSoundRevision = 21
+        prefs.timerCompletionSoundMutationID = preferenceMutationIDs[10]
+        prefs.timerCompletionHapticRevision = 22
+        prefs.timerCompletionHapticMutationID = preferenceMutationIDs[11]
+        context.insert(prefs)
         context.insert(ActivityResetMarker(
             id: UUID(uuidString: "90000000-0000-0000-0000-000000000001")!,
             epochID: epochID,
@@ -201,7 +272,52 @@ final class TsumibenDataExporterTests: XCTestCase {
             sequence: 3,
             claimedAt: instant,
             releasedAt: instant.addingTimeInterval(30),
-            dataEpochID: epochID
+            dataEpochID: epochID,
+            syncRecordID: UUID(
+                uuidString: "C1000000-0000-0000-0000-000000000001"
+            )!
+        ))
+        let rareMigration = RareRewardLedgerMigration.legacy(
+            dataEpochID: epochID,
+            totalCreditedGrams: 0,
+            sinceLastGold: 0
+        )
+        let rareSubmission = RareRewardLedgerSubmission(
+            epochID: epochID,
+            sessionID: timerSessionID,
+            source: .timer,
+            completedSeconds: 1_500,
+            completedGrams: 250,
+            mode: .quiet
+        )
+        context.insert(RareRewardPendingCommit(
+            id: timerSessionID,
+            dataEpochID: epochID,
+            submission: rareSubmission,
+            migration: rareMigration,
+            createdAt: instant
+        ))
+        context.insert(RareRewardLedgerCursor(
+            id: epochID,
+            dataEpochID: epochID,
+            migration: rareMigration,
+            receipt: RareRewardLedgerReceipt(
+                epochID: epochID,
+                sessionID: timerSessionID,
+                submissionFingerprint: rareSubmission.fingerprint,
+                participated: true,
+                nonparticipationReason: nil,
+                acceptedGrams: 250,
+                firstOrdinal: 0,
+                ordinalCount: 1,
+                outcomes: [.normal],
+                revisionBefore: 0,
+                revisionAfter: 1,
+                totalCreditedGramsAfter: 250,
+                creditRemainderGramsAfter: 0,
+                sinceLastGoldAfter: 1
+            ),
+            updatedAt: instant
         ))
         try context.save()
 
@@ -211,6 +327,7 @@ final class TsumibenDataExporterTests: XCTestCase {
         let result = try await worker.export(
             appInfo: TsumibenDataExportAppInfo(version: "1.2.3", build: "456"),
             exportedAt: exportedAt,
+            includesRetainedRareRewardModels: true,
             progress: { progress.append($0) }
         )
         addTeardownBlock {
@@ -218,7 +335,7 @@ final class TsumibenDataExporterTests: XCTestCase {
         }
 
         XCTAssertEqual(result.recordCounts.studySessions, sessionCount)
-        XCTAssertEqual(result.recordCounts.total, sessionCount + 10)
+        XCTAssertEqual(result.recordCounts.total, sessionCount + 12)
         XCTAssertTrue(FileManager.default.fileExists(atPath: result.fileURL.path))
 
         let data = try Data(contentsOf: result.fileURL)
@@ -243,12 +360,20 @@ final class TsumibenDataExporterTests: XCTestCase {
             "preferences",
             "activityResetMarkers",
             "syncedFocusTimers",
-            "focusTimerDeviceClaims"
+            "focusTimerDeviceClaims",
+            "rareRewardPendingCommits",
+            "rareRewardLedgerCursors"
         ]
         XCTAssertEqual(Set(records.keys), expectedCollections)
         for key in expectedCollections {
             XCTAssertFalse(try XCTUnwrap(records[key] as? [Any]).isEmpty, key)
         }
+
+        let subjects = try XCTUnwrap(records["subjects"] as? [[String: Any]])
+        XCTAssertEqual(subjects.first?["syncRecordID"] as? String, subjectSyncRecordID.uuidString)
+        XCTAssertEqual(subjects.first?["contentRevision"] as? Int, 9)
+        XCTAssertEqual(subjects.first?["contentMutationID"] as? String, subjectMutationID.uuidString)
+        XCTAssertNotNil(subjects.first?["deletedAt"])
 
         let sessions = try XCTUnwrap(records["studySessions"] as? [[String: Any]])
         XCTAssertEqual(sessions.count, sessionCount)
@@ -256,13 +381,65 @@ final class TsumibenDataExporterTests: XCTestCase {
         XCTAssertEqual(sessions.last?["id"] as? String, sessionIDs.last?.uuidString)
         XCTAssertEqual(sessions.first?["subjectID"] as? String, subjectID.uuidString)
         XCTAssertEqual(sessions.first?["rareRewardOutcomesRawValue"] as? String, "prism")
+        XCTAssertEqual(sessions.first?["seconds"] as? Int, Int.max)
+        XCTAssertEqual(sessions.first?["grams"] as? Int, Int.max)
+        XCTAssertEqual(
+            sessions.first?["syncRecordID"] as? String,
+            "31000000-0000-0000-0000-000000000000"
+        )
 
         let achievements = try XCTUnwrap(records["achievementStones"] as? [[String: Any]])
         XCTAssertEqual(achievements.first?["note"] as? String, "公開前の成果メモ")
         XCTAssertNotNil(achievements.first?["deletedAt"])
+        XCTAssertEqual(
+            achievements.first?["syncRecordID"] as? String,
+            achievementSyncRecordID.uuidString
+        )
+        XCTAssertEqual(
+            achievements.first?["deletionMutationID"] as? String,
+            achievementDeletionID.uuidString
+        )
+        XCTAssertEqual(achievements.first?["deletionRevision"] as? Int, 3)
+        XCTAssertEqual(
+            achievements.first?["restoredDeletionMutationID"] as? String,
+            achievementRestoreID.uuidString
+        )
+        let preferences = try XCTUnwrap(records["preferences"] as? [[String: Any]])
+        let exportedPrefs = try XCTUnwrap(preferences.first)
+        XCTAssertNil(exportedPrefs["isPro"])
+        XCTAssertEqual(exportedPrefs["legacyIsProIgnored"] as? Bool, false)
+        XCTAssertEqual(exportedPrefs["syncRecordID"] as? String, prefsSyncRecordID.uuidString)
+        XCTAssertEqual(exportedPrefs["settingsWriterID"] as? String, "account-device-writer")
+        let stampKeys = [
+            "sound", "haptics", "rareReward", "reminderEnabled", "reminderTime",
+            "shareIncludesManual", "externalTheme", "keepScreenAwake",
+            "preferredFocusMinutes", "usagePurpose", "timerCompletionSound",
+            "timerCompletionHaptic"
+        ]
+        for (index, key) in stampKeys.enumerated() {
+            XCTAssertEqual(exportedPrefs["\(key)Revision"] as? Int, index + 11, key)
+            XCTAssertEqual(
+                exportedPrefs["\(key)MutationID"] as? String,
+                preferenceMutationIDs[index].uuidString,
+                key
+            )
+        }
+        XCTAssertEqual(
+            exportedPrefs["timerCompletionSoundRawValue"] as? String,
+            TimerCompletionSound.bright.rawValue
+        )
+        XCTAssertEqual(
+            exportedPrefs["timerCompletionHapticRawValue"] as? String,
+            TimerCompletionHaptic.strong.rawValue
+        )
         let timers = try XCTUnwrap(records["syncedFocusTimers"] as? [[String: Any]])
         XCTAssertFalse((timers.first?["payloadDataBase64"] as? String ?? "").isEmpty)
         XCTAssertEqual(timers.first?["writerDeviceID"] as? String, "random-timer-device-id")
+        let claims = try XCTUnwrap(records["focusTimerDeviceClaims"] as? [[String: Any]])
+        XCTAssertEqual(
+            claims.first?["syncRecordID"] as? String,
+            "C1000000-0000-0000-0000-000000000001"
+        )
 
         let progressValues = progress.snapshot()
         XCTAssertTrue(progressValues.contains {

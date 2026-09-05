@@ -62,7 +62,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
             "The post-mutation injected failure must reach Home's existing retry affordance"
         )
         XCTAssertFalse(
-            app.staticTexts["10粒が、ひとつの結晶になった"].exists,
+            app.staticTexts["10粒を、ひとつに整理した"].exists,
             "An uncommitted aggregate must never be celebrated"
         )
 
@@ -87,7 +87,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
             in: app,
             expected: [
                 "sessionRows": "10", "uniqueSessionIDs": "10",
-                "bakedSessionRows": "0", "looseSessionRows": "10",
+                "legacyBakedSessionRows": "0", "looseSessionRows": "10",
                 "aggregateRows": "0", "uniqueAggregateIDs": "0",
                 "rootRows": "0", "uniqueRootIDs": "0", "logicalGrams": "2500"
             ],
@@ -112,7 +112,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         add(failureAttachment)
 
         retry.tap()
-        let celebration = app.staticTexts["10粒が、ひとつの結晶になった"]
+        let celebration = app.staticTexts["10粒を、ひとつに整理した"]
         XCTAssertTrue(
             celebration.waitForExistence(timeout: 12),
             "The explicit retry must persist before presenting the fusion celebration"
@@ -133,7 +133,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
             in: app,
             expected: [
                 "sessionRows": "10", "uniqueSessionIDs": "10",
-                "bakedSessionRows": "10", "looseSessionRows": "0",
+                "legacyBakedSessionRows": "0", "looseSessionRows": "0",
                 "aggregateRows": "1", "uniqueAggregateIDs": "1",
                 "rootRows": "1", "uniqueRootIDs": "1",
                 "rootID": aggregateEntry.id,
@@ -164,7 +164,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
             retry.waitForExistence(timeout: 2),
             "A committed deterministic aggregate must not be requested again after relaunch"
         )
-        XCTAssertFalse(app.staticTexts["10粒が、ひとつの結晶になった"].exists)
+        XCTAssertFalse(app.staticTexts["10粒を、ひとつに整理した"].exists)
 
         let relaunched = try waitForJarProbe(in: app, expectedCount: 1, timeout: 10)
         XCTAssertEqual(relaunched.records, persistedJarRecords)
@@ -173,7 +173,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
             in: app,
             expected: [
                 "sessionRows": "10", "uniqueSessionIDs": "10",
-                "bakedSessionRows": "10", "looseSessionRows": "0",
+                "legacyBakedSessionRows": "0", "looseSessionRows": "0",
                 "aggregateRows": "1", "uniqueAggregateIDs": "1",
                 "rootRows": "1", "uniqueRootIDs": "1",
                 "rootID": aggregateEntry.id,
@@ -208,7 +208,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         app.launchArguments += [
             "-AppleLanguages", "(ja)",
             "-AppleLocale", "ja_JP",
-            "-review.requested-version", "1.0.0"
+            "-review.requested-version", "1.0"
         ]
         return app
     }

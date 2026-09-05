@@ -10,15 +10,13 @@
 - License text: `LICENSE-fonts.txt`
 
 第三者の解析、広告、SNS、ネットワーク、課金SDKは同梱していません。CloudKit、StoreKit、
-SwiftData、SpriteKit、WidgetKit、ActivityKit、Photos、Core Motion、UserNotificationsなどは
+SwiftData、SpriteKit、WidgetKit、ActivityKit、Photos、Core Motion、AVFoundation、Core Haptics、UserNotificationsなどは
 AppleのSDK／OS機能としてAppleの契約に従い、Appleプラットフォーム上だけで利用します。
 システムフォントとSF SymbolsもAppleの提供機能として表示し、フォントやSymbol画像を抽出して
 同梱、再配布、アプリアイコンや商標へ利用しません。これらをMITとして再許諾しません。
 
-製品サイトはGitHub Pagesをorigin、CloudflareをCDN／リバースプロキシとして利用します。
-Cloudflareが配信時にメールアドレス保護用scriptを挿入する場合があります。これはアプリbinaryや
-Git repositoryへ同梱する依存ではなく、各サービスの規約に従う配信処理です。データ処理は
-`PRIVACY.md`と公開プライバシーポリシーに記録します。
+製品サイトはGitHub Pagesで配信します。将来CDN、リバースプロキシ、解析など別の配信事業者を
+追加する場合は、運用開始前にこの台帳、`PRIVACY.md`、公開プライバシーポリシーを更新します。
 
 ## 開発時だけ使うツール
 

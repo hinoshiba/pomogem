@@ -279,7 +279,7 @@
     if (!latestAggregate) return false;
     const aggregatedCount = Number(latestAggregate.dataset.pebbleCount) || 10;
     const currentSummary = vesselContentsSummary();
-    status.textContent = `${processedCount}粒を、教科色と元の記録を保ったまま整理。現在は${currentSummary.structure}。`;
+    status.textContent = `${processedCount}粒を、テーマ色と元の記録を保ったまま整理。現在は${currentSummary.structure}。`;
     updateVesselAccessibility();
     announce(`✦ ×${aggregatedCount}のまとまり粒が完成`);
     return true;
@@ -315,9 +315,11 @@
 
   hydrateStaticGems();
   document.querySelector('#lab-drop')?.addEventListener('click', drop);
-  document.querySelector('#hero-drop')?.addEventListener('click', () => {
-    document.querySelector('#experience')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-    setTimeout(drop, 420);
+  document.querySelector('#hero-drop')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    const reducesMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document.querySelector('#experience')?.scrollIntoView({ behavior: reducesMotion ? 'auto' : 'smooth' });
+    setTimeout(drop, reducesMotion ? 0 : 420);
   });
   if (vessel && 'ResizeObserver' in window) {
     const resizeObserver = new ResizeObserver(() => {

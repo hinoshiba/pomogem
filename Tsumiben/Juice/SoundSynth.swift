@@ -1,11 +1,233 @@
 import AVFoundation
+import UIKit
+import UserNotifications
 
-/// Runtime-only sound design for the jar. No bundled audio files are used.
+enum JarSensoryTrigger: Equatable, Sendable {
+    case tap
+    case shake
+    case collision
+}
+
+struct JarSensorySample: Equatable, Sendable {
+    let radius: Double
+    let coupling: Double
+}
+
+struct JarClinkEvent: Equatable, Sendable {
+    let delay: TimeInterval
+    let pitchRate: Float
+    let gain: Float
+    let variant: Int
+}
+
+struct JarHapticPulse: Equatable, Sendable {
+    let delay: TimeInterval
+    let intensity: Float
+    let sharpness: Float
+}
+
+struct JarHapticRumble: Equatable, Sendable {
+    let duration: TimeInterval
+    let intensity: Float
+    let sharpness: Float
+}
+
+struct JarSensoryPlan: Equatable, Sendable {
+    let clinks: [JarClinkEvent]
+    let hapticPulses: [JarHapticPulse]
+    let rumble: JarHapticRumble?
+    let soundCooldown: TimeInterval
+    let hapticCooldown: TimeInterval
+
+    static let silent = JarSensoryPlan(
+        clinks: [],
+        hapticPulses: [],
+        rumble: nil,
+        soundCooldown: Constants.Sound.secondaryCollisionCooldown,
+        hapticCooldown: Constants.Sound.secondaryCollisionCooldown
+    )
+}
+
+/// Converts physical jar state into one short, bounded audiovisual gesture.
+///
+/// Only the number of live bodies contributes to abundance: a x10,000
+/// aggregate remains one large, heavy stone rather than impersonating ten
+/// thousand simultaneous sounds. Keeping this policy platform-independent also
+/// lets release tests prove its limits without requiring audio or haptic
+/// hardware.
+enum JarSensoryPolicy {
+    static func plan(
+        trigger: JarSensoryTrigger,
+        samples rawSamples: [JarSensorySample],
+        gestureStrength rawGestureStrength: Double,
+        abundanceCount rawAbundanceCount: Int? = nil,
+        seed: UInt64
+    ) -> JarSensoryPlan {
+        guard rawGestureStrength.isFinite else { return .silent }
+        let gestureStrength = clamp(rawGestureStrength, lower: 0, upper: 1)
+        guard gestureStrength > 0 else { return .silent }
+
+        let samples = rawSamples.compactMap { sample -> JarSensorySample? in
+            guard sample.radius.isFinite,
+                  sample.radius > 0,
+                  sample.coupling.isFinite,
+                  sample.coupling > 0
+            else { return nil }
+            return JarSensorySample(
+                radius: clamp(sample.radius, lower: 4, upper: 36),
+                coupling: clamp(sample.coupling, lower: 0.04, upper: 1)
+            )
+        }
+        guard !samples.isEmpty else { return .silent }
+
+        var radiusWeight = 0.0
+        var weightedRadius = 0.0
+        var squaredCoupling = 0.0
+        for sample in samples {
+            let weight = sample.radius * sample.radius * sample.coupling
+            radiusWeight += weight
+            weightedRadius += sample.radius * weight
+            squaredCoupling += sample.coupling * sample.coupling
+        }
+        guard radiusWeight > 0 else { return .silent }
+
+        let meanRadius = weightedRadius / radiusWeight
+        let heaviness = clamp(
+            (log(meanRadius) - log(8)) / (log(30) - log(8)),
+            lower: 0,
+            upper: 1
+        )
+        let abundanceCount = min(
+            max(rawAbundanceCount ?? samples.count, 1),
+            Constants.Jar.maxPhysicsBodies
+        )
+        let abundance = clamp(
+            log2(1 + Double(abundanceCount)) / log2(33),
+            lower: 0,
+            upper: 1
+        )
+        let meanCoupling = sqrt(squaredCoupling / Double(samples.count))
+        let strength = clamp(
+            gestureStrength * meanCoupling,
+            lower: 0,
+            upper: 1
+        )
+
+        let maximumClinks: Int
+        switch trigger {
+        case .tap: maximumClinks = 4
+        case .shake: maximumClinks = 6
+        case .collision: maximumClinks = 1
+        }
+        let requestedClinks = Int((
+            1 + Double(maximumClinks - 1) * sqrt(abundance * strength)
+        ).rounded())
+        let clinkCount = min(abundanceCount, max(1, requestedClinks))
+        let totalGain = min(
+            0.52,
+            0.12 + 0.25 * sqrt(strength) + 0.08 * heaviness + 0.05 * abundance
+        )
+        let perClinkGain = totalGain / sqrt(Double(clinkCount))
+        let targetFrequency = exp(
+            log(1_800) + (log(650) - log(1_800)) * heaviness
+        )
+        let basePitchRate = targetFrequency / Constants.Sound.gemClinkBaseFrequency
+        let spacing = 0.045 + (0.018 - 0.045) * abundance
+        let clinks = (0 ..< clinkCount).map { index in
+            let pitchJitter = (seededUnit(seed, index: index, salt: 0xA1) - 0.5) * 0.08
+            let delayJitter = (seededUnit(seed, index: index, salt: 0xB7) - 0.5) * 0.012
+            return JarClinkEvent(
+                delay: trigger == .collision
+                    ? 0
+                    : max(0, Double(index) * spacing + delayJitter),
+                pitchRate: Float(clamp(
+                    basePitchRate * (1 + pitchJitter),
+                    lower: 0.50,
+                    upper: 1.75
+                )),
+                gain: Float(clamp(perClinkGain, lower: 0.04, upper: 0.52)),
+                variant: Int(seededUnit(seed, index: index, salt: 0xD3) * Double(
+                    Constants.Sound.gemClinkVariantCount
+                )).clamped(to: 0 ... max(Constants.Sound.gemClinkVariantCount - 1, 0))
+            )
+        }
+
+        let maximumPulses: Int
+        switch trigger {
+        case .tap: maximumPulses = 3
+        case .shake: maximumPulses = 4
+        case .collision: maximumPulses = 1
+        }
+        let pulseCount = min(clinkCount, maximumPulses)
+        let baseIntensity = clamp(
+            0.16 + 0.42 * strength + 0.20 * heaviness + 0.08 * abundance,
+            lower: 0.16,
+            upper: 0.82
+        )
+        let sharpness = clamp(
+            0.88 - 0.58 * heaviness + 0.05 * strength,
+            lower: 0.20,
+            upper: 0.92
+        )
+        let pulses = (0 ..< pulseCount).map { index in
+            JarHapticPulse(
+                delay: trigger == .collision ? 0 : Double(index) * spacing,
+                intensity: Float(baseIntensity * pow(0.76, Double(index))),
+                sharpness: Float(sharpness)
+            )
+        }
+        let rumble: JarHapticRumble? = heaviness > 0.55 && trigger != .collision
+            ? JarHapticRumble(
+                duration: 0.06 + 0.08 * heaviness,
+                intensity: Float((0.06 + 0.14 * heaviness) * strength),
+                sharpness: Float(0.08 + 0.16 * (1 - heaviness))
+            )
+            : nil
+
+        return JarSensoryPlan(
+            clinks: clinks,
+            hapticPulses: pulses,
+            rumble: rumble,
+            soundCooldown: 0.12 - 0.055 * abundance,
+            hapticCooldown: 0.16 - 0.03 * abundance
+        )
+    }
+
+    private static func clamp(_ value: Double, lower: Double, upper: Double) -> Double {
+        min(max(value, lower), upper)
+    }
+
+    /// SplitMix64 gives deterministic timbre/delay variation without relying
+    /// on Swift's process-randomized Hasher or persisting any interaction data.
+    private static func seededUnit(_ seed: UInt64, index: Int, salt: UInt64) -> Double {
+        var value = seed
+            &+ UInt64(truncatingIfNeeded: index) &* 0x9E37_79B9_7F4A_7C15
+            &+ salt
+        value = (value ^ (value >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        value = (value ^ (value >> 27)) &* 0x94D0_49BB_1331_11EB
+        value ^= value >> 31
+        return Double(value >> 11) / Double(UInt64(1) << 53)
+    }
+}
+
+private extension Int {
+    func clamped(to range: ClosedRange<Int>) -> Int {
+        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
+    }
+}
+
+/// Runtime-only sound design for the jar and timer. No third-party or bundled
+/// audio samples are used.
 @MainActor
 final class SoundSynth {
     static let shared = SoundSynth()
 
-    var isEnabled = true
+    var isEnabled = true {
+        didSet {
+            guard isEnabled != oldValue, !isEnabled else { return }
+            stopEngine(clearRunRequest: true, deactivateSession: true)
+        }
+    }
     var masterVolume: Float = 1 {
         didSet { masterVolume = min(max(masterVolume, 0), 1) }
     }
@@ -21,17 +243,34 @@ final class SoundSynth {
         var busyUntilUptime = -Double.greatestFiniteMagnitude
     }
 
-    private let engine = AVAudioEngine()
+    private var engine = AVAudioEngine()
     private let format: AVAudioFormat
     private var voices: [Voice] = []
     private var nextImportantVoice = 0
     private var interruptionObserver: NSObjectProtocol?
     private var configurationObserver: NSObjectProtocol?
+    private var mediaServicesResetObserver: NSObjectProtocol?
+    private var resignActiveObserver: NSObjectProtocol?
+    private var didBecomeActiveObserver: NSObjectProtocol?
     private var lastTickUptime = -Double.greatestFiniteMagnitude
+    private var engineRunRequested = false
+    private var resumeAfterInterruption = false
+    private var isAudioInterrupted = false
+    private var isApplicationInactive = true
+    private var playbackGeneration: UInt64 = 0
+    private var idleShutdownGeneration: UInt64 = 0
+    private var latestScheduledClinkUptime = -Double.greatestFiniteMagnitude
+
+    /// Leave a little room for the output render pipeline to consume the final
+    /// scheduled frame, then release the audio session. Jar sounds are short
+    /// enhancements, so keeping the engine active for the whole foreground
+    /// lifetime would waste power without improving later interactions.
+    private static let idleShutdownGrace: TimeInterval = 0.120
 
     private let thuds: [AVAudioPCMBuffer]
     private let tick: AVAudioPCMBuffer
-    private let chime: AVAudioPCMBuffer
+    private let gemClinks: [AVAudioPCMBuffer]
+    private let timerCompletionSounds: [TimerCompletionSound: AVAudioPCMBuffer]
     private let gold: AVAudioPCMBuffer
     private let prism: AVAudioPCMBuffer
 
@@ -44,10 +283,18 @@ final class SoundSynth {
             Self.makeThud(startFrequency: $0)
         }
         tick = Self.makeTick()
-        chime = Self.makeChime()
+        gemClinks = (0 ..< Constants.Sound.gemClinkVariantCount).map {
+            Self.makeGemClink(seed: UInt64($0 + 1))
+        }
+        timerCompletionSounds = Dictionary(uniqueKeysWithValues:
+            TimerCompletionSound.allCases.map { style in
+                (style, Self.makeTimerCompletionBuffer(for: style))
+            }
+        )
         gold = Self.makeGold(frequency: Constants.Sound.goldCarrier)
         prism = Self.makePrism()
 
+        isApplicationInactive = UIApplication.shared.applicationState != .active
         configureSession()
         configureEngine()
         observeAudioLifecycle()
@@ -56,11 +303,19 @@ final class SoundSynth {
     deinit {
         if let interruptionObserver { NotificationCenter.default.removeObserver(interruptionObserver) }
         if let configurationObserver { NotificationCenter.default.removeObserver(configurationObserver) }
+        if let mediaServicesResetObserver {
+            NotificationCenter.default.removeObserver(mediaServicesResetObserver)
+        }
+        if let resignActiveObserver { NotificationCenter.default.removeObserver(resignActiveObserver) }
+        if let didBecomeActiveObserver {
+            NotificationCenter.default.removeObserver(didBecomeActiveObserver)
+        }
     }
 
     func prepare() {
         guard isEnabled else { return }
-        startEngineIfNeeded()
+        // Preallocate player resources without activating the process-wide
+        // audio session. The first explicit play request owns activation.
         voices.forEach { $0.player.prepare(withFrameCount: AVAudioFrameCount(format.sampleRate)) }
     }
 
@@ -92,9 +347,78 @@ final class SoundSynth {
         )
     }
 
+    func playClinks(_ events: [JarClinkEvent], userInitiated: Bool) {
+        guard isEnabled, !events.isEmpty, !gemClinks.isEmpty else { return }
+        let generation = playbackGeneration
+        let schedulingUptime = ProcessInfo.processInfo.systemUptime
+        for (index, event) in events.enumerated() {
+            guard event.delay.isFinite else { continue }
+            let safeDelay = max(event.delay, 0)
+            let playEvent = { [weak self] in
+                guard let self,
+                      self.isEnabled,
+                      self.playbackGeneration == generation,
+                      !self.gemClinks.isEmpty
+                else { return }
+                let variant = event.variant.clamped(to: 0 ... self.gemClinks.count - 1)
+                self.play(
+                    self.gemClinks[variant],
+                    volume: event.gain,
+                    pitchRate: event.pitchRate,
+                    priority: userInitiated && index == 0 ? .important : .incidental
+                )
+            }
+            if safeDelay <= 0 {
+                playEvent()
+            } else {
+                latestScheduledClinkUptime = max(
+                    latestScheduledClinkUptime,
+                    schedulingUptime + safeDelay
+                )
+                DispatchQueue.main.asyncAfter(deadline: .now() + safeDelay) {
+                    playEvent()
+                }
+            }
+        }
+    }
+
     func playCompletionChime() {
-        guard isEnabled else { return }
-        play(chime, volume: 1, priority: .important)
+        playTimerCompletion(.standard)
+    }
+
+    func playTimerCompletion(_ style: TimerCompletionSound) {
+        guard isEnabled, let buffer = timerCompletionSounds[style] else { return }
+        play(buffer, volume: 1, priority: .important)
+    }
+
+    /// Shared deterministic source for foreground playback and the short CAF
+    /// copied into Library/Sounds for notifications delivered while suspended.
+    static func makeTimerCompletionBuffer(
+        for style: TimerCompletionSound
+    ) -> AVAudioPCMBuffer {
+        switch style {
+        case .standard:
+            makeChime()
+        case .soft:
+            makeTimerTone(
+                notes: [
+                    (frequency: 523.25, start: 0, duration: 0.28),
+                    (frequency: 659.25, start: 0.16, duration: 0.34)
+                ],
+                gain: 0.50,
+                timbre: .soft
+            )
+        case .bright:
+            makeTimerTone(
+                notes: [
+                    (frequency: 880.00, start: 0, duration: 0.16),
+                    (frequency: 1_108.73, start: 0.09, duration: 0.18),
+                    (frequency: 1_318.51, start: 0.18, duration: 0.24)
+                ],
+                gain: 0.38,
+                timbre: .bright
+            )
+        }
     }
 
     func playGold() {
@@ -121,7 +445,8 @@ final class SoundSynth {
         pitchRate: Float = 1,
         priority: Priority
     ) {
-        startEngineIfNeeded()
+        guard isEnabled else { return }
+        requestEngineStart()
         guard engine.isRunning, !voices.isEmpty else { return }
 
         let now = ProcessInfo.processInfo.systemUptime
@@ -142,14 +467,14 @@ final class SoundSynth {
         voice.busyUntilUptime = now + duration
         voice.player.scheduleBuffer(buffer, at: nil, options: .interrupts)
         voice.player.play()
+        scheduleIdleShutdown(after: duration)
     }
 
     private func configureSession() {
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
+            try session.setCategory(.ambient, mode: .default, options: [])
             try session.setPreferredSampleRate(Constants.Sound.sampleRate)
-            try session.setActive(true)
         } catch {
             // Sound is enhancement-only; physics, haptics and persistence must remain usable.
         }
@@ -167,17 +492,133 @@ final class SoundSynth {
         }
         engine.mainMixerNode.outputVolume = 1
         engine.prepare()
+    }
+
+    private func requestEngineStart() {
+        guard isEnabled, !isAudioInterrupted, !isApplicationInactive else {
+            // Enhancement requests that arrive while inactive/interrupted are
+            // dropped, not queued for an unsolicited sound or engine start.
+            engineRunRequested = false
+            return
+        }
+        engineRunRequested = true
         startEngineIfNeeded()
     }
 
     private func startEngineIfNeeded() {
-        guard isEnabled, !engine.isRunning else { return }
+        guard isEnabled,
+              engineRunRequested,
+              !isAudioInterrupted,
+              !isApplicationInactive,
+              !engine.isRunning
+        else { return }
+        let session = AVAudioSession.sharedInstance()
+        var sessionWasActivated = false
         do {
-            try AVAudioSession.sharedInstance().setActive(true)
+            try session.setActive(true)
+            sessionWasActivated = true
             try engine.start()
         } catch {
-            // The next user event retries. Silent mode and audio interruptions never block a drop.
+            // Activation can succeed before the engine fails. Roll it back so
+            // a failed enhancement never leaves the shared audio session live;
+            // the next explicit user event retries from a clean boundary.
+            engineRunRequested = false
+            if sessionWasActivated {
+                try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            }
         }
+    }
+
+    private func stopEngine(clearRunRequest: Bool, deactivateSession: Bool) {
+        playbackGeneration &+= 1
+        idleShutdownGeneration &+= 1
+        latestScheduledClinkUptime = -Double.greatestFiniteMagnitude
+        if clearRunRequest {
+            engineRunRequested = false
+        }
+        for voice in voices {
+            voice.player.stop()
+            voice.busyUntilUptime = -Double.greatestFiniteMagnitude
+        }
+        if engine.isRunning {
+            engine.stop()
+        }
+        guard deactivateSession else { return }
+        do {
+            try AVAudioSession.sharedInstance().setActive(
+                false,
+                options: .notifyOthersOnDeactivation
+            )
+        } catch {
+            // An interruption may already own/deactivate the shared session.
+        }
+    }
+
+    private func scheduleIdleShutdown(after playbackDuration: TimeInterval) {
+        guard playbackDuration.isFinite else { return }
+        idleShutdownGeneration &+= 1
+        let generation = idleShutdownGeneration
+        scheduleIdleShutdownCheck(
+            generation: generation,
+            after: max(playbackDuration, 0) + Self.idleShutdownGrace
+        )
+    }
+
+    private func scheduleIdleShutdownCheck(
+        generation: UInt64,
+        after delay: TimeInterval
+    ) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(delay, 0)) { [weak self] in
+            guard let self,
+                  self.idleShutdownGeneration == generation,
+                  self.engineRunRequested
+            else { return }
+
+            let now = ProcessInfo.processInfo.systemUptime
+            let remainingPlayback = self.voices.reduce(0.0) { remaining, voice in
+                max(remaining, voice.busyUntilUptime - now)
+            }
+            let remainingScheduledClinks = self.latestScheduledClinkUptime - now
+            let remainingActivity = max(remainingPlayback, remainingScheduledClinks)
+            if remainingActivity > 0 {
+                self.scheduleIdleShutdownCheck(
+                    generation: generation,
+                    after: remainingActivity + Self.idleShutdownGrace
+                )
+                return
+            }
+            self.stopEngine(clearRunRequest: true, deactivateSession: true)
+        }
+    }
+
+    private func rebuildAfterMediaServicesReset() {
+        // Apple's media-server reset contract invalidates engines, players and
+        // audio units. Cancel queued clinks and replace those objects, but do
+        // not activate or replay anything until the next explicit user action.
+        playbackGeneration &+= 1
+        idleShutdownGeneration &+= 1
+        latestScheduledClinkUptime = -Double.greatestFiniteMagnitude
+        engineRunRequested = false
+        resumeAfterInterruption = false
+        isAudioInterrupted = false
+        isApplicationInactive = UIApplication.shared.applicationState != .active
+        for voice in voices {
+            voice.player.stop()
+        }
+        if engine.isRunning {
+            engine.stop()
+        }
+        if let configurationObserver {
+            NotificationCenter.default.removeObserver(configurationObserver)
+            self.configurationObserver = nil
+        }
+        voices.removeAll(keepingCapacity: false)
+        nextImportantVoice = 0
+        lastTickUptime = -Double.greatestFiniteMagnitude
+        engine = AVAudioEngine()
+        configureSession()
+        configureEngine()
+        observeEngineConfigurationChanges()
     }
 
     private func observeAudioLifecycle() {
@@ -186,25 +627,107 @@ final class SoundSynth {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated { [weak self] in
                 guard let self,
                       let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-                      let type = AVAudioSession.InterruptionType(rawValue: raw),
-                      type == .ended else { return }
-                self.startEngineIfNeeded()
+                      let type = AVAudioSession.InterruptionType(rawValue: raw)
+                else { return }
+                switch type {
+                case .began:
+                    self.isAudioInterrupted = true
+                    self.resumeAfterInterruption = self.engineRunRequested
+                        && self.engine.isRunning
+                    self.stopEngine(clearRunRequest: false, deactivateSession: false)
+                case .ended:
+                    self.isAudioInterrupted = false
+                    let optionRaw = notification.userInfo?[
+                        AVAudioSessionInterruptionOptionKey
+                    ] as? UInt ?? 0
+                    let options = AVAudioSession.InterruptionOptions(rawValue: optionRaw)
+                    let shouldResume = self.resumeAfterInterruption
+                        && options.contains(.shouldResume)
+                        && self.isEnabled
+                        && !self.isApplicationInactive
+                    self.resumeAfterInterruption = false
+                    guard shouldResume else {
+                        self.engineRunRequested = false
+                        return
+                    }
+                    self.startEngineIfNeeded()
+                    if self.engine.isRunning {
+                        // Stopped voices aren't replayed after an interruption;
+                        // release the otherwise empty resumed engine promptly.
+                        self.scheduleIdleShutdown(after: 0)
+                    }
+                @unknown default:
+                    self.resumeAfterInterruption = false
+                    self.engineRunRequested = false
+                }
             }
+        }
+        observeEngineConfigurationChanges()
+        mediaServicesResetObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.mediaServicesWereResetNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { [weak self] in
+                self?.rebuildAfterMediaServicesReset()
+            }
+        }
+        resignActiveObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.willResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { [weak self] in
+                guard let self else { return }
+                self.isApplicationInactive = true
+                self.resumeAfterInterruption = false
+                self.stopEngine(clearRunRequest: true, deactivateSession: true)
+            }
+        }
+        didBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { [weak self] in
+                // Becoming active alone never activates audio. The next
+                // explicit play request does so on demand.
+                self?.isApplicationInactive = false
+            }
+        }
+    }
+
+    private func observeEngineConfigurationChanges() {
+        if let configurationObserver {
+            NotificationCenter.default.removeObserver(configurationObserver)
         }
         configurationObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
             object: engine,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.startEngineIfNeeded() }
+            MainActor.assumeIsolated { [weak self] in
+                guard let self,
+                      self.engineRunRequested,
+                      self.isEnabled,
+                      !self.isAudioInterrupted,
+                      !self.isApplicationInactive
+                else { return }
+                self.startEngineIfNeeded()
+            }
         }
     }
 }
 
 private extension SoundSynth {
+    enum TimerToneTimbre {
+        case soft
+        case bright
+    }
+
     static func makeBuffer(
         duration: TimeInterval,
         sample: (_ time: Double, _ progress: Double) -> Float
@@ -258,6 +781,42 @@ private extension SoundSynth {
         }
     }
 
+    /// A deterministic struck-gem model: inharmonic modes provide the glassy
+    /// body and a 2.5 ms seeded strike adds enough variation that a cluster
+    /// reads as multiple stones. It is generated directly into PCM and has no
+    /// source recording, stock sample, AHAP file, or network dependency.
+    static func makeGemClink(seed: UInt64) -> AVAudioPCMBuffer {
+        var noiseState = seed &+ 0x9E37_79B9_7F4A_7C15
+        let ratios = Constants.Sound.gemClinkModalRatios
+        let amplitudes = Constants.Sound.gemClinkModalAmplitudes
+        let variantOffset = (Double(seed % 7) - 3) * 0.004
+
+        return makeBuffer(duration: Constants.Sound.gemClinkDuration) { time, progress in
+            let attack = min(time / 0.0015, 1)
+            let release = max(1 - progress, 0)
+            var resonances = 0.0
+            for index in ratios.indices {
+                guard amplitudes.indices.contains(index) else { continue }
+                let frequency = Constants.Sound.gemClinkBaseFrequency
+                    * ratios[index] * (1 + variantOffset * Double(index + 1))
+                let decay = 0.052 / (1 + Double(index) * 0.52)
+                resonances += amplitudes[index]
+                    * exp(-time / decay)
+                    * sin(2 * Double.pi * frequency * time + Double(index) * 0.37)
+            }
+
+            noiseState = noiseState &* 6_364_136_223_846_793_005 &+ 1
+            let unitNoise = Double((noiseState >> 40) & 0xFF_FFFF)
+                / Double(0xFF_FFFF) * 2 - 1
+            let strikeEnvelope = time < Constants.Sound.gemClinkStrikeNoiseDuration
+                ? 1 - time / Constants.Sound.gemClinkStrikeNoiseDuration
+                : 0
+            let signal = attack * release * resonances * 0.46
+                + unitNoise * strikeEnvelope * 0.15
+            return Float(tanh(signal) * 0.78)
+        }
+    }
+
     static func makeChime() -> AVAudioPCMBuffer {
         let secondStart = Constants.Sound.chimeGap
         let duration = max(
@@ -276,6 +835,35 @@ private extension SoundSynth {
                     * noteEnvelope(time: localTime, duration: Constants.Sound.chimeSecondDuration)
             }
             return Float(value * Constants.Sound.chimeGain)
+        }
+    }
+
+    static func makeTimerTone(
+        notes: [(frequency: Double, start: TimeInterval, duration: TimeInterval)],
+        gain: Double,
+        timbre: TimerToneTimbre
+    ) -> AVAudioPCMBuffer {
+        let duration = notes.map { $0.start + $0.duration }.max() ?? 0.25
+        return makeBuffer(duration: duration) { time, _ in
+            var value = Double.zero
+            for note in notes where time >= note.start {
+                let localTime = time - note.start
+                guard localTime <= note.duration else { continue }
+                let progress = localTime / note.duration
+                let attack = min(localTime / 0.008, 1)
+                let release = pow(max(1 - progress, 0), timbre == .soft ? 1.8 : 2.7)
+                let phase = 2 * Double.pi * note.frequency * localTime
+                let wave: Double
+                switch timbre {
+                case .soft:
+                    wave = sin(phase) + 0.16 * sin(phase * 2)
+                case .bright:
+                    wave = triangle(frequency: note.frequency, time: localTime)
+                        + 0.12 * sin(phase * 3)
+                }
+                value += wave * attack * release
+            }
+            return Float(tanh(value * gain))
         }
     }
 
@@ -325,5 +913,96 @@ private extension SoundSynth {
         let decay = exp(-decayTime / Constants.Sound.decay)
         let release = max(1 - time / duration, 0)
         return attack * decay * release
+    }
+}
+
+/// Notification Center can only play files already present in the app bundle
+/// or Library/Sounds. We derive these tiny files from the same math as the
+/// foreground synthesizer, so the selected cue remains consistent without
+/// adding licensed recordings to the repository.
+@MainActor
+enum TimerCompletionSoundLibrary {
+    private static let fileVersion = 1
+
+    static func notificationSound(
+        for style: TimerCompletionSound
+    ) -> UNNotificationSound {
+        do {
+            let url = try ensureSoundFile(for: style)
+            return UNNotificationSound(
+                named: UNNotificationSoundName(rawValue: url.lastPathComponent)
+            )
+        } catch {
+            return .default
+        }
+    }
+
+    @discardableResult
+    static func ensureSoundFile(
+        for style: TimerCompletionSound,
+        libraryDirectory: URL? = nil,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        let library = try libraryDirectory ?? fileManager.url(
+            for: .libraryDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let soundsDirectory = library.appendingPathComponent(
+            "Sounds",
+            isDirectory: true
+        )
+        try fileManager.createDirectory(
+            at: soundsDirectory,
+            withIntermediateDirectories: true
+        )
+
+        let fileName = "tumiben-timer-\(style.rawValue)-v\(fileVersion).caf"
+        let destination = soundsDirectory.appendingPathComponent(fileName)
+        if let attributes = try? fileManager.attributesOfItem(
+            atPath: destination.path
+        ), let size = attributes[.size] as? NSNumber, size.intValue > 64 {
+            return destination
+        }
+
+        let temporary = soundsDirectory.appendingPathComponent(
+            ".\(fileName).writing"
+        )
+        if fileManager.fileExists(atPath: temporary.path) {
+            try fileManager.removeItem(at: temporary)
+        }
+
+        do {
+            try write(
+                SoundSynth.makeTimerCompletionBuffer(for: style),
+                to: temporary
+            )
+            if fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+            try fileManager.moveItem(at: temporary, to: destination)
+            return destination
+        } catch {
+            try? fileManager.removeItem(at: temporary)
+            throw error
+        }
+    }
+
+    private static func write(
+        _ buffer: AVAudioPCMBuffer,
+        to url: URL
+    ) throws {
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: buffer.format.sampleRate,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false
+        ]
+        let file = try AVAudioFile(forWriting: url, settings: settings)
+        try file.write(from: buffer)
     }
 }

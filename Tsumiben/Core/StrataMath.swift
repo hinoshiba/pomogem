@@ -131,7 +131,9 @@ struct BakeCalculation: Equatable, Sendable {
 
     /// Useful for asserting that a visual bake has not changed mass.
     var totalGramsAfterBake: Int {
-        grams + remainingPebbles.reduce(0) { $0 + $1.grams }
+        NonnegativeIntPolicy.sum(
+            [grams] + remainingPebbles.map(\.grams)
+        )
     }
 }
 
@@ -231,9 +233,7 @@ struct ShareStratumVisual: Identifiable, Equatable {
     }
 
     private static func uniqueSessions(_ sessions: [StudySession]) -> [StudySession] {
-        Dictionary(grouping: sessions, by: \.id).values.compactMap { duplicates in
-            duplicates.max { lhs, rhs in lhs.grams < rhs.grams }
-        }
+        StudySessionSyncPolicy.canonicalSessions(from: sessions)
     }
 }
 
@@ -308,7 +308,9 @@ struct ShareAggregateVisual: Identifiable, Equatable {
             AggregateSubjectFraction(
                 name: index == 0 ? "過去の集中" : "過去の集中 \(index + 1)",
                 colorHex: item.hex,
-                pebbleCount: Int((item.fraction * Double(max(stratum.pebbleCount, 1))).rounded())
+                pebbleCount: NonnegativeIntPolicy.clamped(
+                    (item.fraction * Double(max(stratum.pebbleCount, 1))).rounded()
+                )
             )
         }
         sessionIDs = stratum.sessionIDs
@@ -330,7 +332,9 @@ struct ShareAggregateVisual: Identifiable, Equatable {
             AggregateSubjectFraction(
                 name: index == 0 ? "過去の集中" : "過去の集中 \(index + 1)",
                 colorHex: item.hex,
-                pebbleCount: Int((item.fraction * Double(max(stratum.pebbleCount, 1))).rounded())
+                pebbleCount: NonnegativeIntPolicy.clamped(
+                    (item.fraction * Double(max(stratum.pebbleCount, 1))).rounded()
+                )
             )
         }
         sessionIDs = []
@@ -426,9 +430,9 @@ struct ShareAggregateVisual: Identifiable, Equatable {
         prismPebbleCount = rewards.prismCount
 
         if all.count == memberIDs.count {
-            grams = included.reduce(0) { $0 + $1.grams }
+            grams = NonnegativeIntPolicy.sum(included.map(\.grams))
         } else {
-            grams = Int(
+            grams = NonnegativeIntPolicy.clamped(
                 (Double(max(0, fallbackGrams))
                     * Double(included.count)
                     / Double(max(fallbackPebbleCount, 1))).rounded()
@@ -437,9 +441,7 @@ struct ShareAggregateVisual: Identifiable, Equatable {
     }
 
     private static func uniqueSessions(_ sessions: [StudySession]) -> [StudySession] {
-        Dictionary(grouping: sessions, by: \.id).values.compactMap { duplicates in
-            duplicates.max { $0.grams < $1.grams }
-        }
+        StudySessionSyncPolicy.canonicalSessions(from: sessions)
     }
 }
 
@@ -468,13 +470,8 @@ enum ShareCardSelection {
         representedBy strata: [ShareStratumVisual]
     ) -> [StudySession] {
         let representedIDs = Set(strata.flatMap(\.sessionIDs))
-        return Dictionary(grouping: sessions, by: \.id).values.compactMap { duplicates in
-            guard let id = duplicates.first?.id,
-                  !representedIDs.contains(id),
-                  !duplicates.contains(where: \.isBaked)
-            else { return nil }
-            return duplicates.max { lhs, rhs in lhs.grams < rhs.grams }
-        }
+        return StudySessionSyncPolicy.canonicalSessions(from: sessions)
+            .filter { !representedIDs.contains($0.id) }
         .sorted { $0.endAt < $1.endAt }
     }
 
@@ -483,13 +480,8 @@ enum ShareCardSelection {
         representedBy aggregates: [ShareAggregateVisual]
     ) -> [StudySession] {
         let representedIDs = Set(aggregates.flatMap(\.sessionIDs))
-        return Dictionary(grouping: sessions, by: \.id).values.compactMap { duplicates in
-            guard let id = duplicates.first?.id,
-                  !representedIDs.contains(id),
-                  !duplicates.contains(where: \.isBaked)
-            else { return nil }
-            return duplicates.max { $0.grams < $1.grams }
-        }
+        return StudySessionSyncPolicy.canonicalSessions(from: sessions)
+            .filter { !representedIDs.contains($0.id) }
         .sorted { $0.endAt < $1.endAt }
     }
 }
@@ -525,9 +517,10 @@ enum StrataMath {
               unique.allSatisfy({ $0.level == sourceLevel })
         else { return nil }
 
-        let pebbleCount = unique.reduce(0) { $0 + $1.pebbleCount }
+        let pebbleCount = NonnegativeIntPolicy.sum(unique.map(\.pebbleCount))
         guard pebbleCount > 0 else { return nil }
-        let level = sourceLevel + 1
+        guard sourceLevel >= 0, sourceLevel < Int.max else { return nil }
+        let level = NonnegativeIntPolicy.next(after: sourceLevel)
         let colorMix = weightedColorMix(
             unique.map { ($0.colorMix, Double(max($0.pebbleCount, 1))) }
         )
@@ -538,7 +531,7 @@ enum StrataMath {
             level: level,
             pebbleCount: pebbleCount,
             childAggregateCount: sourceLevel == 0 ? 0 : unique.count,
-            grams: unique.reduce(0) { $0 + $1.grams },
+            grams: NonnegativeIntPolicy.sum(unique.map(\.grams)),
             radius: aggregateRadius(level: level),
             colorMix: colorMix,
             subjectMix: subjectMix,
@@ -553,10 +546,18 @@ enum StrataMath {
                 }
                 : [],
             childAggregateIDs: sourceLevel == 0 ? [] : unique.map(\.id),
-            measuredPebbleCount: unique.reduce(0) { $0 + $1.measuredPebbleCount },
-            manualPebbleCount: unique.reduce(0) { $0 + $1.manualPebbleCount },
-            goldPebbleCount: unique.reduce(0) { $0 + $1.goldPebbleCount },
-            prismPebbleCount: unique.reduce(0) { $0 + $1.prismPebbleCount }
+            measuredPebbleCount: NonnegativeIntPolicy.sum(
+                unique.map(\.measuredPebbleCount)
+            ),
+            manualPebbleCount: NonnegativeIntPolicy.sum(
+                unique.map(\.manualPebbleCount)
+            ),
+            goldPebbleCount: NonnegativeIntPolicy.sum(
+                unique.map(\.goldPebbleCount)
+            ),
+            prismPebbleCount: NonnegativeIntPolicy.sum(
+                unique.map(\.prismPebbleCount)
+            )
         )
     }
 
@@ -586,8 +587,8 @@ enum StrataMath {
         return AggregateOverview(
             rootCount: summaries.count,
             highestLevel: summaries.map(\.level).max() ?? 0,
-            pebbleCount: summaries.reduce(0) { $0 + max(0, $1.pebbleCount) },
-            grams: summaries.reduce(0) { $0 + max(0, $1.grams) },
+            pebbleCount: NonnegativeIntPolicy.sum(summaries.map(\.pebbleCount)),
+            grams: NonnegativeIntPolicy.sum(summaries.map(\.grams)),
             colorMix: weightedColorMix(weights),
             subjectMix: mergedSubjectMix(summaries.map(\.subjectMix)),
             periodStart: summaries.map(\.periodStart).min(),
@@ -632,7 +633,8 @@ enum StrataMath {
     }
 
     static func shouldBake(physicalBodyCount: Int, adding incomingCount: Int = 0) -> Bool {
-        max(0, physicalBodyCount) + max(0, incomingCount) >= Constants.Jar.bakeThreshold
+        NonnegativeIntPolicy.adding(physicalBodyCount, incomingCount)
+            >= Constants.Jar.bakeThreshold
     }
 
     /// One normal measured pebble is one capacity unit. Using cross-section
@@ -713,7 +715,7 @@ enum StrataMath {
             ),
             colorMix: mix,
             colorMixJSON: encodeColorMix(mix),
-            grams: baked.reduce(0) { $0 + $1.grams }
+            grams: NonnegativeIntPolicy.sum(baked.map(\.grams))
         )
     }
 
@@ -737,10 +739,12 @@ enum StrataMath {
         radius: Double = Double(Constants.Jar.measuredRadius),
         innerWidth: Double
     ) -> Double {
-        stratumHeight(
-            pebbleRadii: Array(repeating: max(0, radius), count: max(0, pebbleCount)),
-            innerWidth: innerWidth
-        )
+        guard innerWidth > 0 else { return 0 }
+        let safeRadius = max(0, radius)
+        let totalArea = Double(max(0, pebbleCount))
+            * Double.pi * safeRadius * safeRadius
+        return (totalArea / innerWidth * Constants.Jar.strataPackingFactor)
+            .rounded(.toNearestOrAwayFromZero)
     }
 
     static func colorMix(hexColors: [String]) -> [StratumColorFraction] {
@@ -810,8 +814,11 @@ enum StrataMath {
         }
         var counts: [Key: Int] = [:]
         for item in mixes.flatMap({ $0 }) where item.pebbleCount > 0 {
-            counts[Key(name: item.name, colorHex: item.colorHex.uppercased()), default: 0]
-                += item.pebbleCount
+            let key = Key(name: item.name, colorHex: item.colorHex.uppercased())
+            counts[key] = NonnegativeIntPolicy.adding(
+                counts[key, default: 0],
+                item.pebbleCount
+            )
         }
         return counts.map {
             AggregateSubjectFraction(
@@ -883,94 +890,152 @@ enum StrataMath {
     /// Total mass remains reconstructible after bake: loose sessions plus the
     /// exact mass captured in persisted strata.
     static func totalGrams(sessions: [StudySession], strata: [Stratum]) -> Int {
-        struct SessionAggregate {
-            var grams: Int
-            var isBaked: Bool
-        }
-        var sessionsByID: [UUID: SessionAggregate] = [:]
-        for session in sessions {
-            let safeGrams = max(0, session.grams)
-            if var aggregate = sessionsByID[session.id] {
-                aggregate.grams = max(aggregate.grams, safeGrams)
-                aggregate.isBaked = aggregate.isBaked || session.isBaked
-                sessionsByID[session.id] = aggregate
-            } else {
-                sessionsByID[session.id] = SessionAggregate(
-                    grams: safeGrams,
-                    isBaked: session.isBaked
-                )
-            }
-        }
+        let invalidOnlySessionIDs = invalidOnlySessionIDs(in: sessions)
+        let sessionsByID = Dictionary(
+            uniqueKeysWithValues: StudySessionSyncPolicy
+                .canonicalSessions(from: sessions)
+                .map { ($0.id, $0) }
+        )
+        let sessionFirstTotal = NonnegativeIntPolicy.sum(
+            sessionsByID.values.map(\.grams)
+        )
 
         var uniqueStrata: [UUID: Stratum] = [:]
-        for stratum in strata where uniqueStrata[stratum.id] == nil {
+        for stratum in strata
+        where Set(stratum.sessionIDs).isDisjoint(with: invalidOnlySessionIDs)
+            && uniqueStrata[stratum.id] == nil {
             uniqueStrata[stratum.id] = stratum
         }
         var representedSessionIDs = Set<UUID>()
-        var bakedGrams = 0
+        var attributedGrams = 0
+        var unattributedGrams = 0
+        var newestUnattributedBake: Date?
         for stratum in uniqueStrata.values.sorted(by: {
             if $0.bakedAt == $1.bakedAt { return $0.id.uuidString < $1.id.uuidString }
             return $0.bakedAt < $1.bakedAt
         }) {
             let membership = Set(stratum.sessionIDs).subtracting(representedSessionIDs)
             guard !membership.isEmpty else {
-                if stratum.sessionIDs.isEmpty { bakedGrams += max(0, stratum.grams) }
+                if stratum.sessionIDs.isEmpty {
+                    unattributedGrams = NonnegativeIntPolicy.adding(
+                        unattributedGrams,
+                        stratum.grams
+                    )
+                    newestUnattributedBake = max(
+                        newestUnattributedBake ?? stratum.bakedAt,
+                        stratum.bakedAt
+                    )
+                }
                 continue
             }
             representedSessionIDs.formUnion(membership)
-            let knownGrams = membership.compactMap { sessionsByID[$0]?.grams }.reduce(0, +)
+            let knownGrams = NonnegativeIntPolicy.sum(
+                membership.compactMap { sessionsByID[$0]?.grams }
+            )
             if membership.allSatisfy({ sessionsByID[$0] != nil }) {
-                bakedGrams += knownGrams
+                attributedGrams = NonnegativeIntPolicy.adding(
+                    attributedGrams,
+                    knownGrams
+                )
             } else {
-                bakedGrams += Int(
+                let proportionalGrams = NonnegativeIntPolicy.clamped(
                     (Double(max(0, stratum.grams))
                         * Double(membership.count)
                         / Double(max(stratum.sessionIDs.count, 1)))
                         .rounded()
                 )
+                attributedGrams = NonnegativeIntPolicy.adding(
+                    attributedGrams,
+                    proportionalGrams
+                )
             }
         }
-        let hasLegacyUnattributedStratum = uniqueStrata.values.contains { $0.sessionIDs.isEmpty }
-        let looseGrams = sessionsByID
-            .filter {
-                !representedSessionIDs.contains($0.key)
-                    && !(hasLegacyUnattributedStratum && $0.value.isBaked)
+        let unrepresentedSessionGrams = NonnegativeIntPolicy.sum(
+            sessionsByID.compactMap { entry in
+                representedSessionIDs.contains(entry.key)
+                    ? nil
+                    : entry.value.grams
             }
-            .reduce(0) { $0 + $1.value.grams }
-        return looseGrams + bakedGrams
+        )
+        let membershipProjection = NonnegativeIntPolicy.adding(
+            attributedGrams,
+            unrepresentedSessionGrams
+        )
+        guard let newestUnattributedBake else {
+            return max(sessionFirstTotal, membershipProjection)
+        }
+        let newerUnrepresentedGrams = NonnegativeIntPolicy.sum(
+            sessionsByID.compactMap { entry in
+                guard !representedSessionIDs.contains(entry.key),
+                      entry.value.endAt > newestUnattributedBake else { return nil }
+                return entry.value.grams
+            }
+        )
+        let compatibilityProjection = NonnegativeIntPolicy.sum([
+            attributedGrams,
+            unattributedGrams,
+            newerUnrepresentedGrams
+        ])
+        return max(sessionFirstTotal, membershipProjection, compatibilityProjection)
     }
 
     static func totalPebbleCount(sessions: [StudySession], strata: [Stratum]) -> Int {
-        var sessionBakeState: [UUID: Bool] = [:]
-        for session in sessions {
-            sessionBakeState[session.id] = (sessionBakeState[session.id] ?? false) || session.isBaked
-        }
+        let invalidOnlySessionIDs = invalidOnlySessionIDs(in: sessions)
+        let sessionsByID = Dictionary(
+            uniqueKeysWithValues: StudySessionSyncPolicy
+                .canonicalSessions(from: sessions)
+                .map { ($0.id, $0) }
+        )
         var uniqueStrata: [UUID: Stratum] = [:]
-        for stratum in strata where uniqueStrata[stratum.id] == nil {
+        for stratum in strata
+        where Set(stratum.sessionIDs).isDisjoint(with: invalidOnlySessionIDs)
+            && uniqueStrata[stratum.id] == nil {
             uniqueStrata[stratum.id] = stratum
         }
         var representedSessionIDs = Set<UUID>()
-        var bakedCount = 0
+        var attributedCount = 0
+        var unattributedCount = 0
+        var newestUnattributedBake: Date?
         for stratum in uniqueStrata.values.sorted(by: {
             if $0.bakedAt == $1.bakedAt { return $0.id.uuidString < $1.id.uuidString }
             return $0.bakedAt < $1.bakedAt
         }) {
             let membership = Set(stratum.sessionIDs).subtracting(representedSessionIDs)
             if membership.isEmpty {
-                if stratum.sessionIDs.isEmpty { bakedCount += max(0, stratum.pebbleCount) }
+                if stratum.sessionIDs.isEmpty {
+                    unattributedCount = NonnegativeIntPolicy.adding(
+                        unattributedCount,
+                        stratum.pebbleCount
+                    )
+                    newestUnattributedBake = max(
+                        newestUnattributedBake ?? stratum.bakedAt,
+                        stratum.bakedAt
+                    )
+                }
             } else {
                 representedSessionIDs.formUnion(membership)
-                bakedCount += membership.count
+                attributedCount = NonnegativeIntPolicy.adding(
+                    attributedCount,
+                    membership.count
+                )
             }
         }
-        let hasLegacyUnattributedStratum = uniqueStrata.values.contains { $0.sessionIDs.isEmpty }
-        let looseCount = sessionBakeState
-            .filter {
-                !representedSessionIDs.contains($0.key)
-                    && !(hasLegacyUnattributedStratum && $0.value)
-            }
-            .count
-        return looseCount + bakedCount
+        let membershipProjection = NonnegativeIntPolicy.adding(
+            attributedCount,
+            sessionsByID.keys.filter { !representedSessionIDs.contains($0) }.count
+        )
+        guard let newestUnattributedBake else {
+            return max(sessionsByID.count, membershipProjection)
+        }
+        let compatibilityProjection = NonnegativeIntPolicy.sum([
+            attributedCount,
+            unattributedCount,
+            sessionsByID.values.filter {
+                !representedSessionIDs.contains($0.id)
+                    && $0.endAt > newestUnattributedBake
+            }.count
+        ])
+        return max(sessionsByID.count, membershipProjection, compatibilityProjection)
     }
 
     /// Aggregate-aware lifetime mass. Known StudySession rows are authoritative;
@@ -980,42 +1045,60 @@ enum StrataMath {
         aggregates: [AggregatePebble],
         directSessionIDs _: Set<UUID>? = nil
     ) -> Int {
-        struct SessionAggregate {
-            var grams: Int
-            var isBaked: Bool
-        }
-        var sessionsByID: [UUID: SessionAggregate] = [:]
-        for session in sessions {
-            let safeGrams = max(0, session.grams)
-            if var existing = sessionsByID[session.id] {
-                existing.grams = max(existing.grams, safeGrams)
-                existing.isBaked = existing.isBaked || session.isBaked
-                sessionsByID[session.id] = existing
-            } else {
-                sessionsByID[session.id] = SessionAggregate(
-                    grams: safeGrams,
-                    isBaked: session.isBaked
-                )
+        let sessionsByID = Dictionary(
+            uniqueKeysWithValues: StudySessionSyncPolicy
+                .canonicalSessions(from: sessions)
+                .map { ($0.id, $0) }
+        )
+        let sessionFirstTotal = NonnegativeIntPolicy.sum(
+            sessionsByID.values.map(\.grams)
+        )
+        let frontier = AggregatePebblePolicy.accountingFrontier(
+            from: aggregatesExcludingInvalidSessionBranches(
+                aggregates,
+                sessions: sessions
+            )
+        )
+        let aggregateMass = NonnegativeIntPolicy.sum(
+            frontier.summaries.map(\.grams)
+        )
+        let unrepresentedSessionMass = NonnegativeIntPolicy.sum(
+            sessionsByID.compactMap { entry in
+                frontier.representedSessionIDs.contains(entry.key)
+                    ? nil
+                    : entry.value.grams
             }
+        )
+        let membershipProjection = NonnegativeIntPolicy.adding(
+            aggregateMass,
+            unrepresentedSessionMass
+        )
+        guard frontier.containsUnknownMembership,
+              let newestUnknownEnd = frontier.summaries
+                .filter(AggregatePebblePolicy.isUnattributedCompatibility)
+                .map(\.periodEnd)
+                .max()
+        else {
+            return max(sessionFirstTotal, membershipProjection)
         }
-        let sessionFirstTotal = sessionsByID.values.reduce(0) { $0 + $1.grams }
-        let frontier = AggregatePebblePolicy.accountingFrontier(from: aggregates)
-        let aggregateFirstTotal = frontier.summaries.reduce(0) {
-            $0 + max(0, $1.grams)
-        }
-            + sessionsByID.reduce(0) { total, entry in
+        let newerUnrepresentedSessionMass = NonnegativeIntPolicy.sum(
+            sessionsByID.compactMap { entry in
                 guard !frontier.representedSessionIDs.contains(entry.key),
-                      !(frontier.containsUnknownMembership && entry.value.isBaked)
-                else {
-                    return total
-                }
-                return total + entry.value.grams
+                      entry.value.endAt > newestUnknownEnd else { return nil }
+                return entry.value.grams
             }
-        // Session-first survives a session-side isBaked flag arriving before
-        // its aggregate. Aggregate-first survives the inverse CloudKit order
-        // and fills sessions that have not downloaded yet. Taking the larger
-        // lower bound avoids double counting either representation.
-        return max(sessionFirstTotal, aggregateFirstTotal)
+        )
+        let compatibilityProjection = NonnegativeIntPolicy.adding(
+            aggregateMass,
+            newerUnrepresentedSessionMass
+        )
+        // Membership-less legacy summaries are an alternate lower bound. A
+        // synchronized `isBaked` bit is never evidence that they own a row.
+        return max(
+            sessionFirstTotal,
+            unrepresentedSessionMass,
+            compatibilityProjection
+        )
     }
 
     static func totalPebbleCount(
@@ -1023,21 +1106,96 @@ enum StrataMath {
         aggregates: [AggregatePebble],
         directSessionIDs _: Set<UUID>? = nil
     ) -> Int {
-        var sessionBakeState: [UUID: Bool] = [:]
-        for session in sessions {
-            sessionBakeState[session.id] = (sessionBakeState[session.id] ?? false)
-                || session.isBaked
+        let sessionsByID = Dictionary(
+            uniqueKeysWithValues: StudySessionSyncPolicy
+                .canonicalSessions(from: sessions)
+                .map { ($0.id, $0) }
+        )
+        let sessionFirstTotal = sessionsByID.count
+        let frontier = AggregatePebblePolicy.accountingFrontier(
+            from: aggregatesExcludingInvalidSessionBranches(
+                aggregates,
+                sessions: sessions
+            )
+        )
+        let aggregateCount = NonnegativeIntPolicy.sum(
+            frontier.summaries.map(\.pebbleCount)
+        )
+        let unrepresentedSessionCount = sessionsByID.keys.filter {
+                !frontier.representedSessionIDs.contains($0)
+            }.count
+        let membershipProjection = NonnegativeIntPolicy.adding(
+            aggregateCount,
+            unrepresentedSessionCount
+        )
+        guard frontier.containsUnknownMembership,
+              let newestUnknownEnd = frontier.summaries
+                .filter(AggregatePebblePolicy.isUnattributedCompatibility)
+                .map(\.periodEnd)
+                .max()
+        else {
+            return max(sessionFirstTotal, membershipProjection)
         }
-        let sessionFirstTotal = sessionBakeState.count
-        let frontier = AggregatePebblePolicy.accountingFrontier(from: aggregates)
-        let aggregateFirstTotal = frontier.summaries.reduce(0) {
-            $0 + max(0, $1.pebbleCount)
-        } + sessionBakeState.reduce(0) { total, entry in
-            guard !frontier.representedSessionIDs.contains(entry.key),
-                  !(frontier.containsUnknownMembership && entry.value)
-            else { return total }
-            return total + 1
+        let newerUnrepresentedSessionCount = sessionsByID.values.filter {
+            !frontier.representedSessionIDs.contains($0.id)
+                && $0.endAt > newestUnknownEnd
+        }.count
+        let compatibilityProjection = NonnegativeIntPolicy.adding(
+            aggregateCount,
+            newerUnrepresentedSessionCount
+        )
+        return max(
+            sessionFirstTotal,
+            unrepresentedSessionCount,
+            compatibilityProjection
+        )
+    }
+
+    /// A valid physical copy of a logical completion remains usable while a
+    /// corrupt duplicate is quarantined. An ID is unsafe only when every copy
+    /// available to the projection fails the product integrity boundary.
+    private static func invalidOnlySessionIDs(
+        in sessions: [StudySession]
+    ) -> Set<UUID> {
+        Set(Dictionary(grouping: sessions, by: \.id).compactMap { id, rows in
+            rows.contains(where: { StudySessionIntegrityPolicy.isSupported($0) })
+                ? nil
+                : id
+        })
+    }
+
+    /// Local aggregates are derived caches, not raw evidence. If a leaf names
+    /// a quarantined completion, omit that leaf and every ancestor that rolls
+    /// it up. Untainted siblings then become a conservative lower-bound
+    /// frontier; the raw StudySession and projection records stay persisted.
+    private static func aggregatesExcludingInvalidSessionBranches(
+        _ aggregates: [AggregatePebble],
+        sessions: [StudySession]
+    ) -> [AggregatePebble] {
+        let invalidIDs = invalidOnlySessionIDs(in: sessions)
+        guard !invalidIDs.isEmpty else { return aggregates }
+
+        var excluded = Set(aggregates.compactMap { aggregate in
+            Set(aggregate.sessionIDs).isDisjoint(with: invalidIDs)
+                ? nil
+                : aggregate.id
+        })
+        var parentIDsByChildID: [UUID: Set<UUID>] = [:]
+        for aggregate in aggregates {
+            for childID in Set(aggregate.childAggregateIDs) {
+                parentIDsByChildID[childID, default: []].insert(aggregate.id)
+            }
+            if let parentID = aggregate.parentAggregateID {
+                parentIDsByChildID[aggregate.id, default: []].insert(parentID)
+            }
         }
-        return max(sessionFirstTotal, aggregateFirstTotal)
+        var pending = Array(excluded)
+        while let childID = pending.popLast() {
+            for parentID in parentIDsByChildID[childID] ?? []
+            where excluded.insert(parentID).inserted {
+                pending.append(parentID)
+            }
+        }
+        return aggregates.filter { !excluded.contains($0.id) }
     }
 }

@@ -1,18 +1,24 @@
+import Observation
 import SwiftData
 import SwiftUI
 import UIKit
 
 struct SettingsView: View {
+    let persistenceMode: PersistenceLaunchMode
+
     @Environment(\.modelContext) private var modelContext
     @Environment(AppRouter.self) private var router
+    @Environment(CompleteDataDeletionController.self) private var completeDeletion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
-    @Query private var subjects: [Subject]
+    @Query private var storedSubjects: [Subject]
     @Query private var preferences: [Prefs]
     @Query private var activityResetMarkers: [ActivityResetMarker]
 
-    @AppStorage("notifications.wrapped") private var wrappedNotifications = false
-    @AppStorage(UsagePurpose.storageKey) private var usagePurposeRawValue = UsagePurpose.study.rawValue
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: "notifications.wrapped"))
+    private var wrappedNotifications = false
+    @AppStorage(FocusActivityPreference.enabledDefaultsKey)
+    private var liveActivityEnabled = true
     @State private var purchase = PurchaseManager.shared
     @State private var isSubjectEditorPresented = false
     @State private var editingSubjectID: UUID?
@@ -29,56 +35,59 @@ struct SettingsView: View {
     @State private var isExportingData = false
     @State private var showDataExportShareSheet = false
     @State private var dataExportError: String?
+    @State private var showCompleteDeletionConfirmation = false
+    @State private var booleanSettingsCommitGeneration = 0
+    @State private var completionPreview = TimerCompletionPreviewController()
+#if DEBUG
+    @State private var lastBooleanSettingsCommitMilliseconds = -1
+    @State private var lastBooleanSettingsCommitSucceeded = false
+#endif
 
-    private var prefs: Prefs? {
-        currentPreferences.first
+    private var resolvedPreferences: PrefsSyncPolicy.ResolvedState? {
+        _ = booleanSettingsCommitGeneration
+        return PrefsConsumerPolicy.resolvedState(
+            in: preferences,
+            markers: resetSnapshots
+        )
     }
-    private var currentPreferences: [Prefs] {
-        preferences.filter {
-            ActivityResetPolicy.isCurrent($0.activityEpochID, markers: resetSnapshots)
-        }
+    private var sensoryPreferences: PrefsSyncPolicy.ResolvedSensoryState {
+        _ = booleanSettingsCommitGeneration
+        return PrefsConsumerPolicy.resolvedSensoryState(in: preferences)
     }
     private var resetSnapshots: [ActivityResetSnapshot] {
         activityResetMarkers.map(\.policySnapshot)
+    }
+    private var subjects: [Subject] {
+        SubjectSyncPolicy.presentationSubjects(from: storedSubjects)
     }
     private func isCurrentActivity(_ epochID: UUID?) -> Bool {
         ActivityResetPolicy.isCurrent(epochID, markers: resetSnapshots)
     }
 
-    init() {
+    init(persistenceMode: PersistenceLaunchMode = .inMemoryPreview) {
+        self.persistenceMode = persistenceMode
         var subjectDescriptor = FetchDescriptor<Subject>(sortBy: [
             SortDescriptor(\Subject.sortOrder),
             SortDescriptor(\Subject.createdAt),
             SortDescriptor(\Subject.id)
         ])
-        subjectDescriptor.fetchLimit = Constants.App.maximumSubjects + 4
-        _subjects = Query(subjectDescriptor)
+        subjectDescriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
+        _storedSubjects = Query(subjectDescriptor)
 
-        var prefsDescriptor = FetchDescriptor<Prefs>(
-            sortBy: [SortDescriptor(\Prefs.id)]
-        )
-        prefsDescriptor.fetchLimit = 16
-        _preferences = Query(prefsDescriptor)
+        _preferences = Query(PrefsConsumerPolicy.descriptor())
 
-        var markerDescriptor = FetchDescriptor<ActivityResetMarker>(sortBy: [
-            SortDescriptor(\ActivityResetMarker.resetAt, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.sequence, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.writerDeviceID, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.epochID, order: .reverse),
-            SortDescriptor(\ActivityResetMarker.id, order: .reverse)
-        ])
-        markerDescriptor.fetchLimit = 1
-        _activityResetMarkers = Query(markerDescriptor)
+        _activityResetMarkers = Query(ActivityResetPolicy.currentMarkerDescriptor())
     }
 
     var body: some View {
         List {
-            usageSection
             subjectsSection
             focusSection
-            rarePebbleSection
+            if RareRewardReleasePolicy.isEnabled {
+                rarePebbleSection
+            }
             sensorySection
-            CloudSyncSettingsSection()
+            CloudSyncSettingsSection(persistenceMode: persistenceMode)
             notificationSection
             shareSection
             proSection
@@ -97,8 +106,7 @@ struct SettingsView: View {
                let subject = subjects.first(where: { $0.id == editingSubjectID }) {
                 SubjectEditorView(
                     subject: subject,
-                    suggestedColorHex: subject.colorHex,
-                    usagePurpose: usagePurpose
+                    suggestedColorHex: subject.colorHex
                 ) { name, color, isArchived in
                     saveSubjectEdits(
                         subject: subject,
@@ -111,7 +119,6 @@ struct SettingsView: View {
                 SubjectEditorView(
                     subject: nil,
                     suggestedColorHex: nextSubjectColor,
-                    usagePurpose: usagePurpose,
                     onSave: addSubject
                 )
             }
@@ -131,8 +138,14 @@ struct SettingsView: View {
                 }
             }
         }
+        .sheet(isPresented: $showCompleteDeletionConfirmation) {
+            CompleteDataDeletionConfirmationView {
+                showCompleteDeletionConfirmation = false
+                completeDeletion.startOrRetry()
+            }
+        }
         .alert(
-            "カテゴリを削除",
+            "テーマを削除",
             isPresented: Binding(
                 get: { subjectPendingDeletion != nil },
                 set: {
@@ -163,7 +176,7 @@ struct SettingsView: View {
             Button("キャンセル", role: .cancel) {}
             Button("リセット", role: .destructive) { resetStudyData() }
         } message: {
-            Text("集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。同じiCloudの端末には接続後に反映されます。オフライン端末から古い記録が戻ることを防ぐため、旧世代の行は同期用に残り、データ書き出しには含まれます。物理的な消去はAppleのiCloudデータ管理から行ってください。この操作は取り消せません。")
+            Text(resetDataMessage)
         }
         .alert("通知を設定できませんでした", isPresented: Binding(
             get: { notificationError != nil },
@@ -189,35 +202,66 @@ struct SettingsView: View {
         } message: {
             Text(dataExportError ?? "")
         }
+#if DEBUG
+        .overlay(alignment: .topLeading) {
+            if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
+                Text("Settings render audit probe")
+                    .font(.system(size: 1))
+                    .foregroundStyle(Color.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("settings.render-audit.probe")
+                    .accessibilityLabel("Settings render audit probe")
+                    .accessibilityValue(Text(verbatim:
+                        (router.settingsRenderAuditValue ?? "state=waiting")
+                            + ";commitGeneration=\(booleanSettingsCommitGeneration)"
+                            + ";commitMilliseconds=\(lastBooleanSettingsCommitMilliseconds)"
+                            + ";commitSucceeded=\(lastBooleanSettingsCommitSucceeded)"
+                    ))
+                    .allowsHitTesting(false)
+                    .onAppear {
+                        router.completeSettingsRenderAudit(
+                            subjectCount: subjects.count,
+                            preferenceCount: preferences.count,
+                            resetMarkerCount: activityResetMarkers.count
+                        )
+                    }
+            }
+        }
+#endif
         .task {
             await purchase.refreshEntitlements()
             await reconcileNotificationAuthorization()
             await removeStaleDataExports()
         }
         .onChange(of: scenePhase) { _, newPhase in
-            guard newPhase == .active else { return }
+            guard newPhase == .active else {
+                completionPreview.cancel()
+                return
+            }
             Task {
                 await purchase.refreshEntitlements()
                 await reconcileNotificationAuthorization()
             }
         }
+        .onChange(of: completionPreviewConfiguration) { _, _ in
+            completionPreview.cancel()
+        }
         .onDisappear {
+            completionPreview.cancel()
             guard !showDataExportShareSheet else { return }
             cancelDataExport(announce: false)
             removePresentedDataExport()
         }
     }
 
-    private var usagePurpose: UsagePurpose {
-        UsagePurpose(rawValue: usagePurposeRawValue) ?? .study
-    }
-
     private var rareRewardMode: RareRewardMode {
-        RareRewardMode.resolved(preferences: currentPreferences)
+        PrefsConsumerPolicy.rareRewardMode(from: resolvedPreferences)
     }
 
     private var hasExplicitRareRewardSelection: Bool {
-        RareRewardMode.hasExplicitSelection(preferences: currentPreferences)
+        PrefsConsumerPolicy.hasExplicitRareRewardSelection(
+            in: resolvedPreferences
+        )
     }
 
     private var rareRewardModeBinding: Binding<RareRewardMode> {
@@ -227,126 +271,27 @@ struct SettingsView: View {
         )
     }
 
-    private var availableSubjectSlots: Int {
-        max(0, Constants.App.maximumSubjects - subjects.count)
-    }
-
-    private var missingWorkPresets: [UsagePurpose.CategoryPreset] {
-        guard usagePurpose == .work else { return [] }
-        let existingKeys = Set(subjects.map {
-            SubjectNamePolicy.comparisonKey($0.name)
-        })
-        return UsagePurpose.work.presets.filter {
-            !existingKeys.contains(SubjectNamePolicy.comparisonKey($0.name))
-        }
-    }
-
-    private var usagePurposeBinding: Binding<UsagePurpose> {
-        Binding(
-            get: { usagePurpose },
-            set: { updateUsagePurpose($0) }
-        )
-    }
-
-    private func updateUsagePurpose(_ purpose: UsagePurpose) {
-        guard purpose != usagePurpose else { return }
-        let previousRawValue = usagePurposeRawValue
-        usagePurposeRawValue = purpose.rawValue
-
-        guard let prefs else {
-            usagePurposeRawValue = previousRawValue
-            settingsError = "使い方をiCloudへ保存できませんでした。しばらく待ってから、もう一度お試しください。"
-            return
-        }
-
-        prefs.usagePurposeRawValue = purpose.rawValue
-        prefs.usagePurposeUpdatedAt = .now
-        if purpose == .work {
-            // A prior opt-in made while studying must not carry into a newly
-            // selected professional context without another explicit choice.
-            prefs.showsThemeNameExternally = false
-        }
-        do {
-            try modelContext.save()
-        } catch {
-            modelContext.rollback()
-            usagePurposeRawValue = previousRawValue
-            settingsError = "使い方をiCloudへ保存できませんでした。変更前の状態に戻しました。\n\(error.localizedDescription)"
-        }
-    }
-
     private func updateRareRewardMode(_ mode: RareRewardMode) {
         guard mode != rareRewardMode || !hasExplicitRareRewardSelection else { return }
-        guard !currentPreferences.isEmpty else {
-            settingsError = "ランダムなレア粒の設定をiCloudへ保存できませんでした。しばらく待ってから、もう一度お試しください。"
+        guard resolvedPreferences != nil else {
+            settingsError = "ランダムなレア粒の設定を\(storageDestination)へ保存できませんでした。しばらく待ってから、もう一度お試しください。"
             return
         }
 
         let changedAt = Date.now
-        for preference in currentPreferences {
-            preference.rareRewardModeRawValue = mode.rawValue
-            preference.rareRewardModeUpdatedAt = changedAt
-        }
-        if let error = commitChanges(failureMessage: "ランダムなレア粒の設定を保存できませんでした。") {
-            settingsError = error
-        }
-    }
-
-    private var usageSection: some View {
-        Section {
-            Picker("主な用途", selection: usagePurposeBinding) {
-                ForEach(UsagePurpose.allCases) { purpose in
-                    Label(purpose.title, systemImage: purpose.symbol)
-                        .tag(purpose)
-                }
+        do {
+            try PrefsConsumerPolicy.mutate(
+                .rareReward,
+                context: modelContext,
+                markers: resetSnapshots
+            ) {
+                $0.rareRewardModeRawValue = mode.rawValue
+                $0.rareRewardModeUpdatedAt = changedAt
             }
-            .pickerStyle(.segmented)
-
-            if let privacyGuidance = usagePurpose.privacyGuidance {
-                SettingLabel(
-                    title: "仕事では大分類で記録",
-                    subtitle: privacyGuidance,
-                    symbol: "lock.shield.fill"
-                )
-                if let professionalUseGuidance = usagePurpose.professionalUseGuidance {
-                    SettingLabel(
-                        title: "個人の振り返り用",
-                        subtitle: professionalUseGuidance,
-                        symbol: "person.crop.circle.badge.checkmark"
-                    )
-                }
-                if !missingWorkPresets.isEmpty {
-                    Menu {
-                        ForEach(missingWorkPresets) { preset in
-                            Button {
-                                addWorkPreset(preset)
-                            } label: {
-                                Label(preset.name, systemImage: "plus.circle")
-                            }
-                            .disabled(availableSubjectSlots == 0)
-                        }
-                    } label: {
-                        SettingLabel(
-                            title: "仕事カテゴリ候補を追加",
-                            subtitle: availableSubjectSlots > 0
-                                ? "企画・開発などから選択（あと\(availableSubjectSlots)件）"
-                                : "最大\(Constants.App.maximumSubjects)件です。不要なカテゴリを整理すると追加できます",
-                            symbol: "briefcase.fill"
-                        )
-                    }
-                    .accessibilityHint("追加する仕事カテゴリを選びます")
-                }
-            } else {
-                SettingLabel(
-                    title: "勉強と資格に合わせる",
-                    subtitle: "教科名・資格名ごとに集中を積みます",
-                    symbol: "book.closed.fill"
-                )
-            }
-        } header: {
-            Text("使い方")
-        } footer: {
-            Text("用途を変えても、現在のカテゴリや過去の記録は変わりません。\(usagePurpose.customExamples)")
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            settingsError = "ランダムなレア粒の設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
         }
     }
 
@@ -391,11 +336,16 @@ struct SettingsView: View {
                 )
                 .swipeActions(edge: .leading) {
                     Button(subject.isArchived ? "表示" : "非表示") {
-                        subject.isArchived.toggle()
-                        if let error = commitChanges(
-                            failureMessage: "カテゴリの表示設定を保存できませんでした。"
-                        ) {
-                            settingsError = error
+                        do {
+                            subject.isArchived.toggle()
+                            try SubjectSyncPolicy.recordUserMutation(
+                                from: subject,
+                                among: storedSubjects
+                            )
+                            try modelContext.save()
+                        } catch {
+                            modelContext.rollback()
+                            settingsError = "テーマの表示設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
                         }
                     }
                     .tint(TsumibenTheme.raised)
@@ -412,29 +362,50 @@ struct SettingsView: View {
                 editingSubjectID = nil
                 isSubjectEditorPresented = true
             } label: {
-                Label("\(usagePurpose.categoryTitle)を追加", systemImage: "plus")
+                Label("テーマを追加", systemImage: "plus")
             }
             .disabled(subjects.count >= Constants.App.maximumSubjects)
             .accessibilityHint(
                 subjects.count >= Constants.App.maximumSubjects
                     ? "最大12件です。不要な項目を削除すると追加できます"
-                    : "新しい\(usagePurpose.categoryTitle)を追加します"
+                    : "新しいテーマを追加します"
             )
         } header: {
-            Text(usagePurpose.categoryTitle)
+            Text("テーマ")
         } footer: {
-            Text("最大12件。削除しても、過去の質量と記録は残ります。長押しで順番を変更できます。")
+            Text("勉強も仕事も同じ一覧です。最大12件。追加画面には名前のヒントがあります。削除しても過去の質量と記録は残ります。長押しで順番を変更できます。")
         }
     }
 
     private var focusSection: some View {
         Section("集中") {
-            if let prefs {
-                @Bindable var prefs = prefs
+            Toggle(isOn: $liveActivityEnabled) {
+                SettingLabel(
+                    title: "ロック画面にタイマーを表示",
+                    subtitle: "次回の集中から時間だけを表示",
+                    symbol: "lock.display"
+                )
+            }
+            .accessibilityIdentifier("settings.live-activity")
+            .onChange(of: liveActivityEnabled) { _, enabled in
+                Task { @MainActor in
+                    if enabled {
+                        FocusActivityManager.shared.refreshAuthorization()
+                    } else {
+                        await FocusActivityManager.shared.endAll()
+                    }
+                }
+            }
+
+            Text("iPhoneの設定でライブアクティビティが許可されている場合に表示します。")
+                .font(.caption)
+                .foregroundStyle(TsumibenTheme.muted)
+
+            if let resolvedPreferences {
                 Toggle(isOn: settingBinding(
-                    $prefs.keepScreenAwake,
-                    target: prefs,
-                    keyPath: \.keepScreenAwake
+                    .keepScreenAwake,
+                    currentValue: resolvedPreferences.keepScreenAwake,
+                    update: { $0.keepScreenAwake = $1 }
                 )) {
                     SettingLabel(
                         title: "集中中は画面をロックしない",
@@ -443,20 +414,9 @@ struct SettingsView: View {
                     )
                 }
                 .accessibilityIdentifier("settings.keep-screen-awake")
-                Toggle(isOn: settingBinding(
-                    $prefs.showsThemeNameExternally,
-                    target: prefs,
-                    keyPath: \.showsThemeNameExternally
-                )) {
-                    SettingLabel(
-                        title: "ロック画面・通知にテーマ名を表示",
-                        subtitle: "オフなら「集中」とだけ表示します",
-                        symbol: "lock.rectangle.stack"
-                    )
-                }
             }
             if purchase.isPro {
-                if prefs != nil {
+                if resolvedPreferences != nil {
                     Group {
                         if dynamicTypeSize.isAccessibilitySize {
                             VStack(alignment: .leading, spacing: 8) {
@@ -509,28 +469,87 @@ struct SettingsView: View {
     }
 
     private var sensorySection: some View {
-        Section("音と触覚") {
-            if let prefs {
-                @Bindable var prefs = prefs
-                Toggle(isOn: settingBinding(
-                    $prefs.soundOn,
-                    target: prefs,
-                    keyPath: \.soundOn
-                )) {
-                    SettingLabel(title: "音", subtitle: "サイレントスイッチに従います", symbol: "speaker.wave.2")
+        Section {
+            Toggle(isOn: settingBinding(
+                .sound,
+                currentValue: sensoryPreferences.soundOn,
+                update: { $0.soundOn = $1 },
+                onCommitted: { value in
+                    completionPreview.cancel()
+                    SoundSynth.shared.isEnabled = value
+                    synchronizeNotifications()
                 }
-                Toggle(isOn: settingBinding(
-                    $prefs.hapticsOn,
-                    target: prefs,
-                    keyPath: \.hapticsOn
-                )) {
-                    SettingLabel(
-                        title: "触覚",
-                        subtitle: "完了・着地・瓶操作。レア専用は標準モードのみ",
-                        symbol: "waveform"
-                    )
-                }
+            )) {
+                SettingLabel(title: "音", subtitle: "サイレントスイッチに従います", symbol: "speaker.wave.2")
             }
+
+            Picker(selection: timerCompletionSoundBinding) {
+                ForEach(TimerCompletionSound.allCases) { style in
+                    Text(style.title)
+                        .tag(style)
+                        .accessibilityLabel("\(style.title)。\(style.detail)")
+                        .accessibilityIdentifier(
+                            "settings.completion-sound.\(style.rawValue)"
+                        )
+                }
+            } label: {
+                SettingLabel(
+                    title: "タイマー終了音",
+                    subtitle: sensoryPreferences.timerCompletionSound.detail,
+                    symbol: sensoryPreferences.timerCompletionSound.systemImage
+                )
+            }
+            .pickerStyle(.navigationLink)
+            .disabled(!sensoryPreferences.soundOn)
+            .accessibilityIdentifier("settings.completion-sound")
+
+            Toggle(isOn: settingBinding(
+                .haptics,
+                currentValue: sensoryPreferences.hapticsOn,
+                update: { $0.hapticsOn = $1 },
+                onCommitted: {
+                    completionPreview.cancel()
+                    Haptics.shared.isEnabled = $0
+                }
+            )) {
+                SettingLabel(
+                    title: "触覚",
+                    subtitle: RareRewardReleasePolicy.isEnabled
+                        ? "アプリ内の完了・着地・瓶操作。レア専用は標準モードのみ"
+                        : "アプリ内の完了・着地・瓶操作に使います",
+                    symbol: "waveform"
+                )
+            }
+
+            Picker(selection: timerCompletionHapticBinding) {
+                ForEach(TimerCompletionHaptic.allCases) { style in
+                    Text(style.title)
+                        .tag(style)
+                        .accessibilityLabel("\(style.title)。\(style.detail)")
+                        .accessibilityIdentifier(
+                            "settings.completion-haptic.\(style.rawValue)"
+                        )
+                }
+            } label: {
+                SettingLabel(
+                    title: "タイマー終了時の触覚",
+                    subtitle: sensoryPreferences.timerCompletionHaptic.detail,
+                    symbol: sensoryPreferences.timerCompletionHaptic.systemImage
+                )
+            }
+            .pickerStyle(.navigationLink)
+            .disabled(!sensoryPreferences.hapticsOn)
+            .accessibilityIdentifier("settings.completion-haptic")
+
+            TimerCompletionPreviewRow(
+                controller: completionPreview,
+                configuration: completionPreviewConfiguration
+            )
+            .disabled(completionPreviewConfiguration.isSilent)
+        } header: {
+            Text("音と触覚")
+        } footer: {
+            Text("終了音の種類はアプリ内とロック中の通知に反映します（アプリ内ではサイレントスイッチに従います）。触覚のオン・オフと種類はアプリ内だけに適用され、ロック中はiPhoneの通知設定に従います。")
         }
     }
 
@@ -566,7 +585,7 @@ struct SettingsView: View {
                 )
             }
             .pickerStyle(.navigationLink)
-            .disabled(prefs == nil)
+            .disabled(resolvedPreferences == nil)
             .accessibilityIdentifier("settings.rare-reward-mode")
             .accessibilityHint("質量、融合、結晶、成果、機能は変わりません。オフでは抽選用の端数と金の保証カウントを停止します")
 
@@ -580,8 +599,8 @@ struct SettingsView: View {
                 }
                 .buttonStyle(TsumibenBareButtonStyle())
                 .foregroundStyle(TsumibenTheme.amber)
-                .disabled(prefs == nil)
-                .accessibilityHint("乱数、抽選用の端数、金の保証カウントを動かさない選択をiCloudへ保存します")
+                .disabled(resolvedPreferences == nil)
+                .accessibilityHint("乱数、抽選用の端数、金の保証カウントを動かさない選択を\(storageDestination)へ保存します")
                 .accessibilityIdentifier("settings.rare-reward-confirm-off")
             }
 
@@ -613,15 +632,15 @@ struct SettingsView: View {
 
     private var notificationSection: some View {
         Section {
-            if let prefs {
+            if let resolvedPreferences {
                 Toggle(isOn: Binding(
-                    get: { prefs.reminderEnabled },
+                    get: { resolvedPreferences.reminderEnabled },
                     set: { enabled in updateReminder(enabled: enabled) }
                 )) {
                     SettingLabel(title: "毎日のリマインダ", subtitle: Constants.UIStrings.eveningNotification, symbol: "bell")
                 }
 
-                if prefs.reminderEnabled {
+                if resolvedPreferences.reminderEnabled {
                     DatePicker(
                         "通知する時刻",
                         selection: reminderTimeBinding,
@@ -645,12 +664,11 @@ struct SettingsView: View {
 
     private var shareSection: some View {
         Section("シェア") {
-            if let prefs {
-                @Bindable var prefs = prefs
+            if let resolvedPreferences {
                 Toggle(isOn: settingBinding(
-                    $prefs.shareIncludesManual,
-                    target: prefs,
-                    keyPath: \.shareIncludesManual
+                    .shareIncludesManual,
+                    currentValue: resolvedPreferences.shareIncludesManual,
+                    update: { $0.shareIncludesManual = $1 }
                 )) {
                     SettingLabel(title: "自己申告を含める", subtitle: "既定は実測のみ", symbol: "square.and.arrow.up")
                 }
@@ -669,7 +687,7 @@ struct SettingsView: View {
                         .frame(width: 28)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(Constants.UIStrings.paywallTitle).font(.headline)
-                        Text(purchase.isPro ? "利用中" : "任意時間・月の刻印・右下の小さな透かしを非表示")
+                        Text(purchase.isPro ? "利用中" : "任意時間・まとまり粒の月刻印")
                             .font(.caption)
                             .foregroundStyle(TsumibenTheme.muted)
                     }
@@ -685,7 +703,19 @@ struct SettingsView: View {
     private var privacySection: some View {
         Section("サポートとプライバシー") {
             SettingLabel(title: "自動収集なし", subtitle: "解析SDK・広告・自前サーバーなし", symbol: "hand.raised.fill")
-            SettingLabel(title: "iCloud", subtitle: "あなたのプライベートデータベースのみ", symbol: "icloud")
+            if persistenceMode == .localOnly {
+                SettingLabel(
+                    title: "このiPhoneのみ",
+                    subtitle: "iCloudへ送信しない端末内の専用領域",
+                    symbol: "iphone"
+                )
+            } else {
+                SettingLabel(
+                    title: "iCloud",
+                    subtitle: "あなたのプライベートデータベースのみ",
+                    symbol: "icloud"
+                )
+            }
             Link(destination: AppLinks.support) {
                 SettingLabel(title: "サポート・お問い合わせ", subtitle: "Webで開く", symbol: "questionmark.circle")
             }
@@ -754,7 +784,7 @@ struct SettingsView: View {
             .buttonStyle(TsumibenBareButtonStyle())
             .disabled(isExportingData)
             .accessibilityLabel("データを書き出す")
-            .accessibilityHint("この端末で利用可能な記録、カテゴリ、設定をJSONファイルにして、保存先を選びます")
+            .accessibilityHint("この端末で利用可能な記録、テーマ、設定をJSONファイルにして、保存先を選びます")
 
             if isExportingData, let dataExportProgress {
                 VStack(alignment: .leading, spacing: 8) {
@@ -773,11 +803,72 @@ struct SettingsView: View {
             }
 
             Button("表示中の記録をリセット", role: .destructive) { showResetData = true }
+
+            if CompleteDataDeletionReleasePolicy.isEnabled,
+               persistenceMode != .localOnly {
+                Button(role: .destructive) {
+                    showCompleteDeletionConfirmation = true
+                } label: {
+                    HStack(spacing: 14) {
+                        Image(systemName: "trash.slash.fill")
+                            .frame(width: 28)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("ユーザー内容を削除")
+                                .font(.headline)
+                            Text("端末とiCloudの内容（削除世代記録を除く）")
+                                .font(.caption)
+                                .foregroundStyle(TsumibenTheme.muted)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(TsumibenTheme.muted)
+                    }
+                    .frame(minHeight: 44)
+                }
+                .buttonStyle(TsumibenBareButtonStyle())
+                .disabled(isExportingData || completeDeletion.hasStarted)
+                .accessibilityHint("二段階の確認画面を開きます。この操作は取り消せません")
+            }
+
+            if persistenceMode != .localOnly,
+               case let .failed(phase, message) = completeDeletion.status {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("削除は未完了です", systemImage: "exclamationmark.icloud")
+                        .font(.headline)
+                    if let phase {
+                        Text(phase.userFacingTitle)
+                            .font(.caption)
+                            .foregroundStyle(TsumibenTheme.muted)
+                    }
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(TsumibenTheme.muted)
+                    Button("削除を再試行") {
+                        completeDeletion.startOrRetry()
+                    }
+                }
+            }
         } header: {
             Text("データ")
         } footer: {
-            Text("書き出しファイルには、カテゴリ名・成果メモ・設定・同期用のランダムな端末識別子と、以前リセットした旧世代を含む、この端末で利用可能な全11種類の保存データが入ります。SNS用の共有画像とは異なります。保存先を確認してください。リセット後もカテゴリとアプリ設定は残ります。")
+            Text(dataStorageDisclosure)
         }
+    }
+
+    private var resetDataMessage: String {
+        if persistenceMode == .localOnly {
+            return "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。旧世代の行は端末内に残り、データ書き出しには含まれる場合があります。端末内の物理データはアプリを削除すると消去できます。この操作は取り消せません。"
+        }
+        return "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。同じiCloudの端末には接続後に反映されます。オフライン端末から古い記録が戻ることを防ぐため、旧世代の行は同期用に残り、データ書き出しには含まれます。端末内の物理データはアプリを削除すると消去できます。iCloud側のアプリデータはAppleのiCloudストレージ管理から削除してください。この操作は取り消せません。"
+    }
+
+    private var dataStorageDisclosure: String {
+        let contents = "書き出しファイルには、テーマ名・成果メモ・設定・タイマー整合用のランダムな端末識別子と、以前リセットした旧世代を含む、この端末で利用可能な全11種類の出荷対象保存データが入ります。SNS用の共有画像とは異なります。保存先を確認してください。通常のリセット後はテーマとアプリ設定が残ります。"
+        if persistenceMode == .localOnly {
+            return contents + " 端末内の物理データはアプリの削除で消去できます。JSONは保管用で、アプリへ再読込したりiCloudの記録へ移行したりする機能はありません。"
+        }
+        return contents + " 端末内の物理データはアプリの削除、iCloud側はAppleのiCloudストレージ管理から削除できます。"
     }
 
     private func startDataExport() {
@@ -871,22 +962,108 @@ struct SettingsView: View {
     }
 
     private func settingBinding(
-        _ source: Binding<Bool>,
-        target: Prefs,
-        keyPath: ReferenceWritableKeyPath<Prefs, Bool>
+        _ group: PrefsSyncPolicy.Group,
+        currentValue: Bool,
+        update: @escaping (Prefs, Bool) -> Void,
+        onCommitted: @escaping (Bool) -> Void = { _ in }
     ) -> Binding<Bool> {
         Binding(
-            get: { source.wrappedValue },
+            get: {
+                // Establish an explicit SwiftUI dependency so a successful
+                // synchronous SwiftData save is reflected by the Toggle in the
+                // same interaction, without retaining an uncommitted overlay.
+                _ = booleanSettingsCommitGeneration
+                return currentValue
+            },
             set: { value in
-                guard source.wrappedValue != value else { return }
-                // Mutate through Bindable's projected binding so SwiftUI's
-                // control state and accessibility value update in the same
-                // transaction as the user's tap. The exact model remains the
-                // persistence target below.
-                source.wrappedValue = value
-                updateSetting(target, keyPath, value: value)
+                guard currentValue != value else { return }
+#if DEBUG
+                let commitStartedAt = ProcessInfo.processInfo.systemUptime
+#endif
+                let didCommit = updateSetting(
+                    group,
+                    value: value,
+                    update: update,
+                    onCommitted: onCommitted
+                )
+                booleanSettingsCommitGeneration &+= 1
+#if DEBUG
+                if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
+                    lastBooleanSettingsCommitMilliseconds = Int(
+                        (ProcessInfo.processInfo.systemUptime - commitStartedAt)
+                            * 1_000
+                    )
+                    lastBooleanSettingsCommitSucceeded = didCommit
+                }
+#endif
             }
         )
+    }
+
+    private var timerCompletionSoundBinding: Binding<TimerCompletionSound> {
+        Binding(
+            get: { sensoryPreferences.timerCompletionSound },
+            set: { updateTimerCompletionSound($0) }
+        )
+    }
+
+    private var timerCompletionHapticBinding: Binding<TimerCompletionHaptic> {
+        Binding(
+            get: { sensoryPreferences.timerCompletionHaptic },
+            set: { updateTimerCompletionHaptic($0) }
+        )
+    }
+
+    private var completionPreviewConfiguration: TimerCompletionPreviewConfiguration {
+        TimerCompletionPreviewConfiguration(
+            sound: sensoryPreferences.soundOn
+                ? sensoryPreferences.timerCompletionSound
+                : nil,
+            haptic: sensoryPreferences.hapticsOn
+                ? sensoryPreferences.timerCompletionHaptic
+                : nil
+        )
+    }
+
+    private func updateTimerCompletionSound(_ style: TimerCompletionSound) {
+        guard style != sensoryPreferences.timerCompletionSound else { return }
+        completionPreview.cancel()
+        do {
+            try PrefsConsumerPolicy.mutate(
+                .timerCompletionSound,
+                context: modelContext,
+                markers: resetSnapshots
+            ) {
+                $0.timerCompletionSoundRawValue = style.rawValue
+            }
+            try modelContext.save()
+            booleanSettingsCommitGeneration &+= 1
+            // Materialize the selected notification cue while the app is active.
+            // Scheduling also retries and safely falls back to the system sound.
+            _ = try? TimerCompletionSoundLibrary.ensureSoundFile(for: style)
+        } catch {
+            modelContext.rollback()
+            settingsError = "タイマー終了音を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+        }
+    }
+
+    private func updateTimerCompletionHaptic(_ style: TimerCompletionHaptic) {
+        guard style != sensoryPreferences.timerCompletionHaptic else { return }
+        completionPreview.cancel()
+        do {
+            try PrefsConsumerPolicy.mutate(
+                .timerCompletionHaptic,
+                context: modelContext,
+                markers: resetSnapshots
+            ) {
+                $0.timerCompletionHapticRawValue = style.rawValue
+            }
+            try modelContext.save()
+            booleanSettingsCommitGeneration &+= 1
+        } catch {
+            modelContext.rollback()
+            settingsError = "タイマー終了時の触覚を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+        }
     }
 
     private var preferredFocusMinutesBinding: Binding<Int> {
@@ -894,7 +1071,8 @@ struct SettingsView: View {
             get: {
                 min(
                     max(
-                        prefs?.preferredFocusMinutes ?? Constants.Timer.twentyFiveMinutes,
+                        resolvedPreferences?.preferredFocusMinutes
+                            ?? Constants.Timer.twentyFiveMinutes,
                         Constants.Timer.customMinimumMinutes
                     ),
                     Constants.Timer.customMaximumMinutes
@@ -917,19 +1095,31 @@ struct SettingsView: View {
         Binding(
             get: {
                 var components = Calendar.current.dateComponents([.year, .month, .day], from: .now)
-                components.hour = prefs?.reminderHour ?? 20
-                components.minute = prefs?.reminderMinute ?? 0
+                components.hour = resolvedPreferences?.reminderHour
+                    ?? Constants.Notification.defaultReminderHour
+                components.minute = resolvedPreferences?.reminderMinute
+                    ?? Constants.Notification.defaultReminderMinute
                 return Calendar.current.date(from: components) ?? .now
             },
             set: { date in
-                guard let prefs else { return }
-                prefs.reminderHour = Calendar.current.component(.hour, from: date)
-                prefs.reminderMinute = Calendar.current.component(.minute, from: date)
-                if let error = commitChanges(failureMessage: "通知時刻を保存できませんでした。") {
-                    settingsError = error
-                    return
+                guard resolvedPreferences != nil else { return }
+                let hour = Calendar.current.component(.hour, from: date)
+                let minute = Calendar.current.component(.minute, from: date)
+                do {
+                    try PrefsConsumerPolicy.mutate(
+                        .reminderTime,
+                        context: modelContext,
+                        markers: resetSnapshots
+                    ) {
+                        $0.reminderHour = hour
+                        $0.reminderMinute = minute
+                    }
+                    try modelContext.save()
+                    synchronizeNotifications()
+                } catch {
+                    modelContext.rollback()
+                    settingsError = "通知時刻を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
                 }
-                synchronizeNotifications()
             }
         )
     }
@@ -947,23 +1137,25 @@ struct SettingsView: View {
 
     private func addSubject(name: String, colorHex: String, isArchived _: Bool) -> String? {
         guard subjects.count < Constants.App.maximumSubjects else {
-            return "カテゴリは最大\(Constants.App.maximumSubjects)件までです。"
+            return "テーマは最大\(Constants.App.maximumSubjects)件までです。"
         }
         if let validationError = subjectNameValidationError(name) {
             return validationError
         }
         guard let sanitizedName = SubjectNamePolicy.validated(name) else {
             return SubjectNamePolicy.validationError(for: name)?.message
-                ?? "カテゴリ名を入力してください。"
+                ?? "テーマ名を入力してください。"
         }
         modelContext.insert(
             Subject(
                 name: sanitizedName,
                 colorHex: colorHex,
-                sortOrder: (subjects.map(\.sortOrder).max() ?? -1) + 1
+                sortOrder: NonnegativeIntPolicy.next(
+                    after: subjects.map(\.sortOrder).max()
+                )
             )
         )
-        return commitChanges(failureMessage: "カテゴリを追加できませんでした。")
+        return commitChanges(failureMessage: "テーマを追加できませんでした。")
     }
 
     private func saveSubjectEdits(
@@ -980,39 +1172,22 @@ struct SettingsView: View {
         }
         guard let sanitizedName = SubjectNamePolicy.validated(name) else {
             return SubjectNamePolicy.validationError(for: name)?.message
-                ?? "カテゴリ名を入力してください。"
+                ?? "テーマ名を入力してください。"
         }
         do {
-            let related = try currentRelatedRecords(for: subject)
             subject.name = sanitizedName
             subject.colorHex = color
             subject.isArchived = isArchived
-            for session in related.sessions {
-                session.subjectNameSnapshot = sanitizedName
-                session.subjectColorHexSnapshot = color
-            }
-            for stone in related.achievements {
-                stone.subjectNameSnapshot = sanitizedName
-                stone.subjectColorHexSnapshot = color
-            }
+            try SubjectSyncPolicy.recordUserMutation(
+                from: subject,
+                among: storedSubjects
+            )
             try modelContext.save()
             return nil
         } catch {
             modelContext.rollback()
-            return "カテゴリの変更を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+            return "テーマの変更を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
         }
-    }
-
-    private func addWorkPreset(_ preset: UsagePurpose.CategoryPreset) {
-        if let error = addSubject(
-            name: preset.name,
-            colorHex: preset.colorHex,
-            isArchived: false
-        ) {
-            settingsError = error
-            return
-        }
-        router.showToast("「\(preset.name)」を追加しました", symbol: "briefcase.fill")
     }
 
     private func subjectNameValidationError(
@@ -1028,27 +1203,21 @@ struct SettingsView: View {
                 && SubjectNamePolicy.comparisonKey($0.name) == normalized
         }
         guard let duplicate else { return nil }
-        return "同じ名前のカテゴリ「\(duplicate.safeDisplayName)」がすでにあります。"
+        return "同じ名前のテーマ「\(duplicate.safeDisplayName)」がすでにあります。"
     }
 
     private func deleteSubject(_ subject: Subject) {
         do {
-            let related = try currentRelatedRecords(for: subject)
-            for session in related.sessions {
-                session.subjectNameSnapshot = subject.safeDisplayName
-                session.subjectColorHexSnapshot = subject.colorHex
-                session.subject = nil
-            }
-            for stone in related.achievements {
-                stone.subjectNameSnapshot = subject.safeDisplayName
-                stone.subjectColorHexSnapshot = subject.colorHex
-                stone.subject = nil
-            }
-            modelContext.delete(subject)
+            subject.isArchived = true
+            subject.deletedAt = .now
+            try SubjectSyncPolicy.recordUserMutation(
+                from: subject,
+                among: storedSubjects
+            )
             try modelContext.save()
         } catch {
             modelContext.rollback()
-            settingsError = "カテゴリを削除できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+            settingsError = "テーマを削除できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
         }
     }
 
@@ -1065,12 +1234,14 @@ struct SettingsView: View {
     private func prepareSubjectDeletion(_ subject: Subject) {
         do {
             let related = try currentRelatedRecords(for: subject)
-            subjectPendingDeletionRecordCount = Set(related.sessions.map(\.id)).count
-                + Set(related.achievements.map(\.id)).count
+            subjectPendingDeletionRecordCount = NonnegativeIntPolicy.adding(
+                Set(related.sessions.map(\.id)).count,
+                Set(related.achievements.map(\.id)).count
+            )
             subjectPendingDeletion = subject
         } catch {
             modelContext.rollback()
-            settingsError = "関連する記録を確認できないため、カテゴリを削除できません。\n\(error.localizedDescription)"
+            settingsError = "関連する記録を確認できないため、テーマを削除できません。\n\(error.localizedDescription)"
         }
     }
 
@@ -1083,42 +1254,47 @@ struct SettingsView: View {
         let achievementDescriptor: FetchDescriptor<AchievementStone>
         if let currentEpochID {
             sessionDescriptor = FetchDescriptor(predicate: #Predicate {
-                $0.dataEpochID == currentEpochID && $0.subject?.id == targetID
+                $0.dataEpochID == currentEpochID
+                    && ($0.subjectIDSnapshot == targetID || $0.subject?.id == targetID)
             })
             achievementDescriptor = FetchDescriptor(predicate: #Predicate {
                 $0.dataEpochID == currentEpochID && $0.subject?.id == targetID
             })
         } else {
             sessionDescriptor = FetchDescriptor(predicate: #Predicate {
-                $0.dataEpochID == nil && $0.subject?.id == targetID
+                $0.dataEpochID == nil
+                    && ($0.subjectIDSnapshot == targetID || $0.subject?.id == targetID)
             })
             achievementDescriptor = FetchDescriptor(predicate: #Predicate {
                 $0.dataEpochID == nil && $0.subject?.id == targetID
             })
         }
 
-        // A duplicate Subject row can share the same logical UUID after an
-        // offline merge. Only mutate rows related to the exact object the user
-        // selected; the UUID predicate keeps the database-side read scoped.
-        let sessions = try modelContext.fetch(sessionDescriptor).filter {
-            $0.subject === subject
-        }
-        let achievementCandidates = try modelContext.fetch(achievementDescriptor).filter {
-            $0.subject === subject
-        }
-        let achievements = try AchievementStonePolicy.resolvedVisibleCandidates(
-            from: achievementCandidates,
-            context: modelContext
-        ).filter { $0.subject === subject }
+        let sessions = StudySessionSyncPolicy.canonicalSessions(
+            from: try modelContext.fetch(sessionDescriptor)
+        )
+        let achievements = AchievementStonePolicy.canonicalStones(
+            from: try modelContext.fetch(achievementDescriptor)
+        ).filter { $0.deletedAt == nil }
         return (sessions, achievements)
     }
 
     private func moveSubjects(from source: IndexSet, to destination: Int) {
         var reordered = subjects
         reordered.move(fromOffsets: source, toOffset: destination)
-        for (index, subject) in reordered.enumerated() { subject.sortOrder = index }
-        if let error = commitChanges(failureMessage: "カテゴリの並び順を保存できませんでした。") {
-            settingsError = error
+        do {
+            for (index, subject) in reordered.enumerated()
+            where subject.sortOrder != index {
+                subject.sortOrder = index
+                try SubjectSyncPolicy.recordUserMutation(
+                    from: subject,
+                    among: storedSubjects
+                )
+            }
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            settingsError = "テーマの並び順を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
         }
     }
 
@@ -1142,15 +1318,26 @@ struct SettingsView: View {
     }
 
     private func updatePreferredFocusMinutes(_ minutes: Int) {
-        guard let prefs else { return }
+        guard let resolvedPreferences else { return }
         let normalized = min(
             max(minutes, Constants.Timer.customMinimumMinutes),
             Constants.Timer.customMaximumMinutes
         )
-        guard prefs.preferredFocusMinutes != normalized else { return }
-        prefs.preferredFocusMinutes = normalized
-        if let error = commitChanges(failureMessage: "既定の集中時間を保存できませんでした。") {
-            settingsError = error
+        guard resolvedPreferences.preferredFocusMinutes != normalized else {
+            return
+        }
+        do {
+            try PrefsConsumerPolicy.mutate(
+                .preferredFocusMinutes,
+                context: modelContext,
+                markers: resetSnapshots
+            ) {
+                $0.preferredFocusMinutes = normalized
+            }
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            settingsError = "既定の集中時間を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
         }
     }
 
@@ -1166,7 +1353,7 @@ struct SettingsView: View {
         _ preference: PassiveNotificationPreference,
         enabled: Bool
     ) {
-        guard prefs != nil else { return }
+        guard resolvedPreferences != nil else { return }
         Task { @MainActor in
             let manager = NotificationManager.shared
             if enabled {
@@ -1187,10 +1374,18 @@ struct SettingsView: View {
 
             switch preference {
             case .dailyReminder:
-                guard let prefs else { return }
-                prefs.reminderEnabled = enabled
-                if let error = commitChanges(failureMessage: "毎日のリマインダ設定を保存できませんでした。") {
-                    settingsError = error
+                do {
+                    try PrefsConsumerPolicy.mutate(
+                        .reminderEnabled,
+                        context: modelContext,
+                        markers: resetSnapshots
+                    ) {
+                        $0.reminderEnabled = enabled
+                    }
+                    try modelContext.save()
+                } catch {
+                    modelContext.rollback()
+                    settingsError = "毎日のリマインダ設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
                     return
                 }
             case .wrapped:
@@ -1208,8 +1403,6 @@ struct SettingsView: View {
     }
 
     private func resetStudyData() {
-        let prefsToAdvance = prefs
-
         let marker: ActivityResetMarker
         do {
             marker = try ActivityResetStore.beginReset(
@@ -1227,9 +1420,18 @@ struct SettingsView: View {
         // deleting hundreds of thousands of rows here made Settings itself an
         // unrecoverable main-thread freeze for long-lived accounts. Physical
         // row compaction is maintenance, never a prerequisite for reset.
-        prefsToAdvance?.activityEpochID = marker.epochID
-        prefsToAdvance?.manualDayKey = FairnessPolicy.deviceDayKey(for: .now)
-        prefsToAdvance?.manualUsedToday = 0
+        do {
+            let writer = try PrefsSyncPolicy.ensureWriterRow(
+                context: modelContext,
+                currentEpochID: marker.epochID
+            )
+            writer.manualDayKey = FairnessPolicy.deviceDayKey(for: .now)
+            writer.manualUsedToday = 0
+        } catch {
+            modelContext.rollback()
+            settingsError = "記録をリセットできませんでした。\n\(error.localizedDescription)"
+            return
+        }
         if let error = commitChanges(failureMessage: "記録をリセットできませんでした。") {
             settingsError = error
             return
@@ -1241,13 +1443,22 @@ struct SettingsView: View {
         PendingRewardReceiptStore.removeAll()
         FocusRestCadenceStore.removeAll()
         UserDefaults.standard.removeObject(forKey: FocusPersistence.localCompletionIDKey)
-        UserDefaults.standard.removeObject(forKey: "review.local-completion-count")
+        UserDefaults.standard.removeObject(
+            forKey: AccountScopedLocalState.defaultsKey(
+                base: "review.local-completion-count"
+            )
+        )
         for key in UserDefaults.standard.dictionaryRepresentation().keys
-        where key.hasPrefix("wrapped.") || key.hasPrefix("share.prompt.") {
+        where AccountScopedLocalState.keyBelongsToActiveNamespace(
+            key,
+            basePrefix: "share.prompt."
+        ) {
             UserDefaults.standard.removeObject(forKey: key)
         }
         router.showToast(
-            "記録をリセットしました。ほかの端末にはiCloud接続後に反映されます",
+            persistenceMode == .localOnly
+                ? "このiPhone内の記録をリセットしました"
+                : "記録をリセットしました。ほかの端末にはiCloud接続後に反映されます",
             symbol: "trash"
         )
 
@@ -1257,33 +1468,38 @@ struct SettingsView: View {
             do {
                 try await WidgetSnapshotStore.shared.clear()
             } catch {
-                settingsError = "この端末の記録はリセット済みですが、ウィジェットの表示を消去できませんでした。iCloudへの反映には時間がかかる場合があります。\n\(error.localizedDescription)"
+                settingsError = persistenceMode == .localOnly
+                    ? "このiPhone内の記録はリセット済みですが、端末上の補助表示を消去できませんでした。\n\(error.localizedDescription)"
+                    : "この端末の記録はリセット済みですが、ウィジェットの表示を消去できませんでした。iCloudへの反映には時間がかかる場合があります。\n\(error.localizedDescription)"
             }
         }
     }
 
-    private func updateSetting(
-        _ target: Prefs,
-        _ keyPath: ReferenceWritableKeyPath<Prefs, Bool>,
-        value: Bool
-    ) {
-        // `settingBinding` normally applied the value through @Bindable
-        // already. Keep this fallback so this persistence boundary remains
-        // correct if it is reused by a non-projected caller later.
-        if target[keyPath: keyPath] != value {
-            target[keyPath: keyPath] = value
-        }
-        if let error = commitChanges(failureMessage: "設定を保存できませんでした。") {
-            settingsError = error
-            return
-        }
+    private var storageDestination: String {
+        persistenceMode == .localOnly ? "このiPhone" : "iCloud"
+    }
 
-        if keyPath == \Prefs.soundOn {
-            SoundSynth.shared.isEnabled = value
-            synchronizeNotifications()
-        }
-        if keyPath == \Prefs.hapticsOn {
-            Haptics.shared.isEnabled = value
+    private func updateSetting(
+        _ group: PrefsSyncPolicy.Group,
+        value: Bool,
+        update: (Prefs, Bool) -> Void,
+        onCommitted: (Bool) -> Void
+    ) -> Bool {
+        do {
+            try PrefsConsumerPolicy.mutate(
+                group,
+                context: modelContext,
+                markers: resetSnapshots
+            ) {
+                update($0, value)
+            }
+            try modelContext.save()
+            onCommitted(value)
+            return true
+        } catch {
+            modelContext.rollback()
+            settingsError = "設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+            return false
         }
     }
 
@@ -1300,10 +1516,19 @@ struct SettingsView: View {
     private func disableNotificationPreference(_ preference: PassiveNotificationPreference) {
         switch preference {
         case .dailyReminder:
-            guard let prefs, prefs.reminderEnabled else { return }
-            prefs.reminderEnabled = false
-            if let error = commitChanges(failureMessage: "毎日のリマインダをオフにできませんでした。") {
-                settingsError = error
+            guard resolvedPreferences?.reminderEnabled == true else { return }
+            do {
+                try PrefsConsumerPolicy.mutate(
+                    .reminderEnabled,
+                    context: modelContext,
+                    markers: resetSnapshots
+                ) {
+                    $0.reminderEnabled = false
+                }
+                try modelContext.save()
+            } catch {
+                modelContext.rollback()
+                settingsError = "毎日のリマインダをオフにできませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
             }
         case .wrapped:
             wrappedNotifications = false
@@ -1311,16 +1536,26 @@ struct SettingsView: View {
     }
 
     private func reconcileNotificationAuthorization() async {
-        guard let prefs else { return }
+        let prefs = resolvedPreferences
         let manager = NotificationManager.shared
         await manager.refreshAuthorizationStatus()
 
         if !manager.isAuthorized {
-            let hadEnabledPreference = prefs.reminderEnabled || wrappedNotifications
-            if prefs.reminderEnabled {
-                prefs.reminderEnabled = false
-                if let error = commitChanges(failureMessage: "通知の実際の状態を保存できませんでした。") {
-                    settingsError = error
+            let hadEnabledPreference = (prefs?.reminderEnabled ?? false)
+                || wrappedNotifications
+            if prefs?.reminderEnabled == true {
+                do {
+                    try PrefsConsumerPolicy.mutate(
+                        .reminderEnabled,
+                        context: modelContext,
+                        markers: resetSnapshots
+                    ) {
+                        $0.reminderEnabled = false
+                    }
+                    try modelContext.save()
+                } catch {
+                    modelContext.rollback()
+                    settingsError = "通知の実際の状態を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
                 }
             }
             wrappedNotifications = false
@@ -1334,16 +1569,19 @@ struct SettingsView: View {
     }
 
     private func synchronizeNotificationsNow() async {
-        guard let prefs else { return }
+        let prefs = resolvedPreferences
         let manager = NotificationManager.shared
         await manager.refreshAuthorizationStatus()
         do {
             try await manager.synchronizePassiveNotifications(
-                dailyReminderEnabled: prefs.reminderEnabled && manager.isAuthorized,
+                dailyReminderEnabled: (prefs?.reminderEnabled ?? false)
+                    && manager.isAuthorized,
                 wrappedEnabled: wrappedNotifications && manager.isAuthorized,
-                hour: prefs.reminderHour,
-                minute: prefs.reminderMinute,
-                playsSound: prefs.soundOn
+                hour: prefs?.reminderHour
+                    ?? Constants.Notification.defaultReminderHour,
+                minute: prefs?.reminderMinute
+                    ?? Constants.Notification.defaultReminderMinute,
+                playsSound: prefs?.soundOn ?? false
             )
         } catch {
             notificationError = "通知の予定を更新できませんでした。\n\(error.localizedDescription)"
@@ -1359,6 +1597,320 @@ struct SettingsView: View {
     private enum PassiveNotificationPreference {
         case dailyReminder
         case wrapped
+    }
+}
+
+struct TimerCompletionPreviewConfiguration: Equatable, Sendable {
+    let sound: TimerCompletionSound?
+    let haptic: TimerCompletionHaptic?
+
+    var isSilent: Bool { sound == nil && haptic == nil }
+}
+
+enum TimerCompletionPreviewState: Equatable {
+    case idle
+    case countingDown(Int)
+
+    var remainingSeconds: Int? {
+        guard case let .countingDown(value) = self else { return nil }
+        return value
+    }
+}
+
+/// Generation fencing is intentional in addition to Task cancellation: an
+/// injected or system await may finish after cancellation, and an obsolete
+/// preview must never play with a stale selection.
+@MainActor
+@Observable
+final class TimerCompletionPreviewController {
+    typealias Sleeper = @Sendable () async throws -> Void
+    typealias Playback = @MainActor @Sendable (
+        TimerCompletionPreviewConfiguration
+    ) -> Void
+
+    private(set) var state: TimerCompletionPreviewState = .idle
+
+    private let sleeper: Sleeper
+    private let playback: Playback
+    private var task: Task<Void, Never>?
+    private var generation: UInt64 = 0
+
+    init(
+        sleeper: @escaping Sleeper = {
+            try await Task.sleep(for: .seconds(1))
+        },
+        playback: @escaping Playback = { configuration in
+            if let sound = configuration.sound {
+                SoundSynth.shared.isEnabled = true
+                SoundSynth.shared.playTimerCompletion(sound)
+            }
+            if let haptic = configuration.haptic {
+                Haptics.shared.isEnabled = true
+                Haptics.shared.playTimerCompletion(haptic)
+            }
+        }
+    ) {
+        self.sleeper = sleeper
+        self.playback = playback
+    }
+
+    var isRunning: Bool { state != .idle }
+
+    func start(_ configuration: TimerCompletionPreviewConfiguration) {
+        guard !configuration.isSilent else {
+            cancel()
+            return
+        }
+
+        generation &+= 1
+        let previewGeneration = generation
+        task?.cancel()
+        state = .countingDown(3)
+        let sleeper = self.sleeper
+        let playback = self.playback
+
+        task = Task { @MainActor [weak self] in
+            for nextValue in [2, 1, 0] {
+                do {
+                    try await sleeper()
+                } catch {
+                    guard let self, self.generation == previewGeneration else {
+                        return
+                    }
+                    self.task = nil
+                    self.state = .idle
+                    return
+                }
+
+                guard let self,
+                      !Task.isCancelled,
+                      self.generation == previewGeneration else { return }
+                if nextValue > 0 {
+                    self.state = .countingDown(nextValue)
+                }
+            }
+
+            guard let self,
+                  !Task.isCancelled,
+                  self.generation == previewGeneration else { return }
+            self.task = nil
+            self.state = .idle
+            playback(configuration)
+        }
+    }
+
+    func cancel() {
+        generation &+= 1
+        task?.cancel()
+        task = nil
+        state = .idle
+    }
+}
+
+private struct TimerCompletionPreviewRow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let controller: TimerCompletionPreviewController
+    let configuration: TimerCompletionPreviewConfiguration
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button(action: togglePreview) {
+                HStack(spacing: 12) {
+                    Image(systemName: controller.isRunning
+                        ? "xmark.circle.fill"
+                        : "play.circle.fill")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(TsumibenTheme.amber)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(controller.isRunning
+                            ? "プレビューをキャンセル"
+                            : "3秒後に試す")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(TsumibenTheme.text)
+                        Text("選んだ終了音と触覚を一緒に確認します")
+                            .font(.caption)
+                            .foregroundStyle(TsumibenTheme.muted)
+                    }
+                    Spacer(minLength: 8)
+                    if let remaining = controller.state.remainingSeconds {
+                        Text("\(remaining)")
+                            .font(.title3.monospacedDigit().weight(.bold))
+                            .foregroundStyle(TsumibenTheme.amber)
+                            .contentTransition(
+                                reduceMotion
+                                    ? .identity
+                                    : .numericText(countsDown: true)
+                            )
+                            .accessibilityHidden(true)
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(TsumibenRowButtonStyle())
+            .accessibilityIdentifier("settings.completion-preview")
+            .accessibilityLabel(controller.isRunning
+                ? "プレビューをキャンセル"
+                : "3秒後に試す")
+            .accessibilityValue(controller.state.remainingSeconds.map {
+                "あと\($0)秒"
+            } ?? "待機中")
+            .accessibilityHint(configuration.isSilent
+                ? "音か触覚をオンにすると試せます"
+                : "選んだタイマー終了音と触覚を3秒後に再生します")
+
+            if let remaining = controller.state.remainingSeconds {
+                VStack(alignment: .leading, spacing: 5) {
+                    ProgressView(
+                        value: Double(3 - remaining),
+                        total: 3
+                    )
+                    .tint(TsumibenTheme.amber)
+                    Text("あと\(remaining)秒")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(TsumibenTheme.muted)
+                        .contentTransition(
+                            reduceMotion
+                                ? .identity
+                                : .numericText(countsDown: true)
+                        )
+                        .accessibilityIdentifier(
+                            "settings.completion-preview.status"
+                        )
+                }
+                .animation(
+                    reduceMotion ? nil : .easeInOut(duration: 0.18),
+                    value: remaining
+                )
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("プレビューまであと\(remaining)秒")
+                .accessibilityAddTraits(.updatesFrequently)
+            }
+        }
+    }
+
+    private func togglePreview() {
+        if controller.isRunning {
+            controller.cancel()
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: "プレビューをキャンセルしました"
+            )
+        } else {
+            controller.start(configuration)
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: "3秒後にプレビューします。もう一度押すとキャンセルできます"
+            )
+        }
+    }
+}
+
+private struct CompleteDataDeletionConfirmationView: View {
+    private enum Step {
+        case consequences
+        case finalConfirmation
+    }
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var step: Step = .consequences
+    @State private var understoodOtherDevices = false
+    @State private var confirmationText = ""
+
+    let onConfirmed: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if step == .consequences {
+                    consequences
+                } else {
+                    finalConfirmation
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(NightBackground())
+            .navigationTitle(step == .consequences ? "ユーザー内容を削除" : "最終確認")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") { dismiss() }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                actionButton
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(.ultraThinMaterial)
+            }
+        }
+    }
+
+    private var consequences: some View {
+        Group {
+            Section {
+                Label("テーマと成果メモ", systemImage: "tag.slash")
+                Label("集中記録・粒・集計", systemImage: "clock.badge.xmark")
+                Label("設定・タイマー復元情報・ウィジェット", systemImage: "gear.badge.xmark")
+                Label("このAppのプライベートiCloud上のユーザー内容", systemImage: "icloud.slash")
+            } header: {
+                Text("取り消せない削除対象")
+            } footer: {
+                Text("テーマ・記録・設定などのユーザー内容を削除します。古い端末からの再流入を検知するため、内容を含まない削除世代記録1件（世代ID・処理ID・連番・状態・日時）はiCloudに残ります。Proの購入履歴はAppleが管理しているため削除されず、同じApple Accountでは復元できます。")
+            }
+
+            Section("削除を始める前に") {
+                Text("iCloudへ接続できる状態で実行してください。通信が切れた場合は完了と表示せず、安全な位置から再試行します。")
+                Text("ほかの端末も最新版へ更新し、オンラインで一度起動してください。オフラインのままの端末や、この削除世代に対応していない古いバージョンは、端末内の古い記録を後からiCloudへ再送する可能性があります。")
+                Text("本Appは別端末のローカル保存を遠隔消去できません。削除後も、使わない古いインストールは削除してください。")
+            }
+        }
+    }
+
+    private var finalConfirmation: some View {
+        Group {
+            Section {
+                Toggle(
+                    "ほかの端末と古いバージョンに関する制約を確認しました",
+                    isOn: $understoodOtherDevices
+                )
+            }
+
+            Section {
+                TextField("削除", text: $confirmationText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .accessibilityLabel("確認のため削除と入力")
+            } header: {
+                Text("「削除」と入力")
+            } footer: {
+                Text("開始後は記録の追加を停止します。iCloudでユーザー内容の削除と、内容を含まない削除世代記録の確定を確認するまで、通常画面には戻りません。")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var actionButton: some View {
+        if step == .consequences {
+            Button("内容を確認して次へ") {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    step = .finalConfirmation
+                }
+            }
+            .buttonStyle(TsumibenPrimaryButtonStyle())
+        } else {
+            Button("ユーザー内容を削除", role: .destructive) {
+                onConfirmed()
+            }
+            .buttonStyle(TsumibenPrimaryButtonStyle())
+            .disabled(
+                !understoodOtherDevices
+                    || confirmationText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        != "削除"
+            )
+        }
     }
 }
 
@@ -1523,7 +2075,6 @@ private struct RarePebbleGuideRow: View {
 private struct SubjectEditorView: View {
     let subject: Subject?
     let suggestedColorHex: String
-    let usagePurpose: UsagePurpose
     let onSave: (String, String, Bool) -> String?
 
     @Environment(\.dismiss) private var dismiss
@@ -1531,6 +2082,7 @@ private struct SubjectEditorView: View {
     @State private var colorHex: String
     @State private var isArchived: Bool
     @State private var saveError: String?
+    @FocusState private var isNameFocused: Bool
 
     private let palette = [
         SubjectColorChoice(hex: Constants.Color.english, name: "朱色"),
@@ -1570,12 +2122,10 @@ private struct SubjectEditorView: View {
     init(
         subject: Subject?,
         suggestedColorHex: String,
-        usagePurpose: UsagePurpose,
         onSave: @escaping (String, String, Bool) -> String?
     ) {
         self.subject = subject
         self.suggestedColorHex = suggestedColorHex
-        self.usagePurpose = usagePurpose
         self.onSave = onSave
         _name = State(initialValue: subject?.name ?? "")
         _colorHex = State(initialValue: subject?.colorHex ?? suggestedColorHex)
@@ -1586,10 +2136,12 @@ private struct SubjectEditorView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField(usagePurpose.customFieldPlaceholder, text: $name)
+                    TextField(SubjectSuggestionCatalog.inputPlaceholder, text: $name)
                         .textInputAutocapitalization(.never)
                         .submitLabel(.done)
-                        .accessibilityHint("カテゴリ名は\(SubjectNamePolicy.maximumCharacters)文字までです")
+                        .focused($isNameFocused)
+                        .onSubmit { isNameFocused = false }
+                        .accessibilityHint("テーマ名は\(SubjectNamePolicy.maximumCharacters)文字までです")
                 } header: {
                     Text("名前")
                 } footer: {
@@ -1597,13 +2149,14 @@ private struct SubjectEditorView: View {
                         Text(nameStatusMessage)
                             .foregroundStyle(nameIsTooLong ? Color.red : TsumibenTheme.muted)
                             .accessibilityLabel(nameStatusMessage)
-                        if let privacyGuidance = usagePurpose.privacyGuidance {
-                            Text(privacyGuidance)
+                        if subject == nil {
+                            Text(SubjectSuggestionCatalog.exampleHint)
                                 .foregroundStyle(TsumibenTheme.muted)
                                 .fixedSize(horizontal: false, vertical: true)
-                        }
-                        if let professionalUseGuidance = usagePurpose.professionalUseGuidance {
-                            Text(professionalUseGuidance)
+                            Text(SubjectSuggestionCatalog.privacyGuidance)
+                                .foregroundStyle(TsumibenTheme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(SubjectSuggestionCatalog.professionalUseGuidance)
                                 .foregroundStyle(TsumibenTheme.muted)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -1656,14 +2209,14 @@ private struct SubjectEditorView: View {
             }
             .scrollContentBackground(.hidden)
             .background(NightBackground())
-            .navigationTitle(subject == nil ? "\(usagePurpose.categoryTitle)を追加" : "カテゴリを編集")
+            .navigationTitle(subject == nil ? "テーマを追加" : "テーマを編集")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
                         guard let sanitizedName = SubjectNamePolicy.validated(name) else {
                             saveError = nameValidationError?.message
-                                ?? "カテゴリ名を入力してください。"
+                                ?? "テーマ名を入力してください。"
                             return
                         }
                         let error = onSave(

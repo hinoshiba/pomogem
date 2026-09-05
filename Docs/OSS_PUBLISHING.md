@@ -1,12 +1,13 @@
 # 初回OSS公開手順
 
-更新日: 2026-09-02
+更新日: 2026-09-05
 
 ## 現在の監査結果
 
-公開対象のsource/configから、秘密鍵、API token、`.p12`、`.p8`、provisioning profile、実Team
-selectorは見つかっていません。CloudKit、App Group、bundle ID、IAP product IDは公開識別子で、
-credentialではありません。
+公開対象のsource/configから、秘密鍵、API token、`.p12`、`.p8`、provisioning profile、署名identityは
+見つかっていません。projectのbuild設定には実Team selectorを置かず、Archive検証helperにだけ期待する
+Team IDを固定しています。Team ID、CloudKit container、bundle ID、IAP product IDは署名済みappや
+Store listingから確認できる公開識別子で、credentialではありません。
 
 一方、監査時点の作業folderには約4.1GBの`DerivedData*`と`Artifacts/`があり、build logの
 absolute path、username、simulator diagnostic、build済み`.app`などを含んでいました。これらは
@@ -16,6 +17,12 @@ sourceではないため、repository外の`Tsumiben-local-artifacts-20260902`�
 このfolderは、監査済みの現在treeから`git@github.com:hinoshiba/Tumiben.git`へ公開するために
 新規初期化し、既存historyは移植していません。最初のcommit後かつpush前に、到達可能な全blobと
 author／committer metadataを再監査します。将来別のhistoryを移植する場合も全blobを別途scanします。
+commit／annotated tagのraw identity emailは、GitHub noreply identityまたは公開承認済みの
+`support@hinoshiba.com`だけを許可し、`.mailmap`で表示上置換したidentityは許可根拠にしません。
+
+2026-09-05現在、`./Scripts/check-oss-readiness.sh`はreachable commit `ed7f63b`のraw
+author／committer identityが上記allowlist外として失敗します。公開してよいidentityとして明示承認するか、
+既存remoteを含むhistory rewriteをownerが承認して完了するまで、OSS公開gateを合格扱いにしません。
 
 ## 初回commit
 

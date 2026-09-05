@@ -625,9 +625,10 @@ enum FortyYearPersistenceHarness {
         let coldVisibleAchievements = AchievementStonePolicy.visibleStones(
             from: coldAchievements
         )
+        let newestAggregateEnd = visibleRoots.map(\.periodEnd).max() ?? .distantPast
         var looseDescriptor = FetchDescriptor<StudySession>(
             predicate: #Predicate<StudySession> { session in
-                session.isBaked == false
+                session.endAt > newestAggregateEnd
             },
             sortBy: [SortDescriptor(\StudySession.endAt, order: .reverse)]
         )
@@ -710,7 +711,9 @@ enum FortyYearPersistenceHarness {
             Prefs.self,
             ActivityResetMarker.self,
             SyncedFocusTimer.self,
-            FocusTimerDeviceClaim.self
+            FocusTimerDeviceClaim.self,
+            RareRewardPendingCommit.self,
+            RareRewardLedgerCursor.self
         ])
         let configuration = ModelConfiguration(
             "FortyYearPersistenceHarness",

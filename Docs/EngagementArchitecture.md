@@ -2,6 +2,14 @@
 
 更新日: 2026-09-01
 
+> Release status（2026-09-03）: Version 1.0は`RareRewardReleasePolicy.isEnabled == false`です。
+> Apple Account切替時の台帳分離と実機2台検証が未完了のため、以下のrare reward設計は将来候補・
+> 回帰test用sourceとしてのみ保持し、1.0のUI、完走処理、shipping schema、CloudKit entitlementには
+> 含めません。1.0の完走はテーマ色の通常粒を決定論的に保存します。将来有効化する場合も、
+> `StudySession`のCloudKit duplicate全copyへのreceipt fan-outは禁止します。有効化前に端末-owned
+> writer identityを設計し、その単一rowへのmutationとread-time logical resolverを実機の
+> partial-delivery試験で再検証します。
+
 ## 1. 目標
 
 つみべんが最適化するのは、アプリを何度も開かせることではなく、利用者が自分で選んだ学習や仕事へ戻りやすくなることです。
@@ -22,7 +30,7 @@
 
 | 研究知見 | つみべんでの判断 |
 |---|---|
-| 自己決定理論では、自律性・有能感・関係性を満たす動機づけが持続に重要 | 教科、用途、時間、通知、共有は本人が選ぶ。完走後は能力の証拠を返し、自動で次のタイマーを始めない |
+| 自己決定理論では、自律性・有能感・関係性を満たす動機づけが持続に重要 | テーマ、時間、通知、共有は本人が選ぶ。勉強／仕事の用途選択で入口を分けず、完走後は能力の証拠を返し、自動で次のタイマーを始めない |
 | 習慣は同じ文脈での反復から形成され、形成速度の個人差は大きい。一度の欠落が習慣形成を壊すとは限らない | 連続日数ではなく「今週戻ってきた回数」を表示。一日休んでも何も失わない。将来の再訪cueは本人が選ぶ `if-then` 形式にする |
 | 進捗の可視化は次の行動を促し得るが、時間の可視化だけで理解度や技能向上を証明することはできない | 一回の完走で粒と決定論的な10-slotを必ず進め、長期の瓶にも同じ記録を残す。成果の星は時間とは分ける |
 | 不確実なインセンティブは条件によって反復を増やし得るが、学習成果や健康を長期的に改善する根拠にはならない | レア粒は視覚のみ、価値ゼロ、再抽選なし、確率開示、Proで確率不変。通常粒と決定論的進捗を全完走に保証し、ランダムを継続の主エンジンにしない |
@@ -30,7 +38,7 @@
 | 失敗後の自己慈悲は、少なくとも実験条件では次の改善行動を支える場合がある | 空白期間を失敗画面にせず、過去の瓶を先に見せ、「記録はそのまま」から一回の再開へ導く |
 | バッジ、順位、競争、ポイントは条件次第で動機や成績を悪化させる | 公開ランキング、強制比較、streak救済課金を入れない。共有は自分の瓶と質量の表現に限定 |
 | 選んだ相手への目標共有は支援を得やすくする可能性があるが、広いSNS公開やGIF共有そのものが学習を改善するとは限らない | 共有は任意・編集可能・自動投稿なしとし、共有回数を学習成果の代理にしない |
-| 通知は注意を中断し、頻度や制御不能感がストレスになり得る | 通知は既定オフ、時刻を本人が選び、カテゴリ名は既定で端末外に出さない |
+| 通知は注意を中断し、頻度や制御不能感がストレスになり得る | 通知は既定オフ、時刻を本人が選び、テーマ名は端末外の通知へ出さない |
 
 主要資料:
 
@@ -96,8 +104,8 @@ Reward Bridgeは新しい通貨でも抽選目標でもなく、物理的な粒�
 戻って見えるため、この状態では確実な`今回 +1粒`と`結晶進捗を同期中`だけを表示し、
 iCloud到着後に正確なslot位置へ切り替えます。
 
-完走直後の表示はpersisted Reward Receiptで保護します。StudySessionを学習記録のsource of
-truthとしたまま、session ID、時刻、休憩分数、質量、教科表示名、色、週内回数、確定した
+完走直後の表示はpersisted Reward Receiptで保護します。StudySessionを集中記録のsource of
+truthとしたまま、session ID、時刻、休憩分数、質量、テーマ表示名、色、週内回数、確定した
 粒種、着地時点の累計粒数、partial projectionかどうかという表示用full payloadを
 UserDefaultsへ最大4件保存します。一回限りの着地markerを消費するより先にreceipt保存を
 確認するため、その後にプロセスが終了してもセッションを再保存・再抽選せず復元できます。
@@ -124,12 +132,12 @@ receiptも同時に削除します。
 - 1〜9粒では、動く実物粒を主役にし、HUDの小さな10-slot railだけを必ず一つ進める。瓶の中央に同じ一粒を別のgemとして複製しない
 - 10粒が実際に融合した時点で初めて、同じ生涯カウントから導出した非物理の「時間の核」を物理層の奥に誕生させる。以後の10-slotはレア抽選とは無関係に進む
 - 1〜9粒のReward BridgeとOverviewは、完成済みgemに見える中央素材を描かず、透過した「結晶の器」だけを示す。10粒で初めて色面・ハイライト・発光を持つ実体核へ変化し、未達と達成を見た目で正確に分ける
-- 核の色は選択中の教科ではなく、会計frontierの質量加重色から導出する。部分同期時は推測した10進位置を描かず、「以上／同期中」に切り替える
+- 核の色は選択中のテーマではなく、会計frontierの質量加重色から導出する。部分同期時は推測した10進位置を描かず、「以上／同期中」に切り替える
 
 #### 育つ結晶
 
 - 10粒 → ×10、10個の×10 → ×100という十進階層
-- 元のセッション、質量、教科構成、実測／手動、レア内包数を保持する
+- 元のセッション、質量、テーマ構成、実測／手動、レア内包数を保持する
 - 高階層ほど発光、面、輪郭を強くする
 - 物理半径は上限を持たせ、長期利用で瓶を塞がない
 - 数字ラベルは物理回転を打ち消し、常に読める
@@ -214,7 +222,7 @@ achievement stones = 0g
 
 - `standard（標準）`: 対象質量が累計250gへ達するごとに一回抽選し、種類の色・光、レア専用の落下前予告、常時きらめき、着地時の専用音・専用触覚を使う
 - `quiet（控えめ）`: `standard`と同じ250g境界・確率で抽選し、金の保証カウントも同じように進める。粒種と履歴は保持する一方、レア専用の落下前予告、常時きらめき、専用音・専用触覚は使わない。タイマー終了通知と通常の着地フィードバックは、本人が選んだ全体の音・触覚設定に従う
-- `off（抽選しない）`: 実測完走でもRNGを呼ばず、カテゴリ色の通常粒を保存する。抽選用の端数質量と金の保証カウントは増加もリセットもせず現在位置で停止し、`standard`または`quiet`へ戻したとき同じ位置から再開する。`off`中の質量をあとから抽選用に貯めない
+- `off（抽選しない）`: 実測完走でもRNGを呼ばず、テーマ色の通常粒を保存する。抽選用の端数質量と金の保証カウントは増加もリセットもせず現在位置で停止し、`standard`または`quiet`へ戻したとき同じ位置から再開する。`off`中の質量をあとから抽選用に貯めない
 
 設定変更で過去の`StudySession`の粒種や結晶内の金・虹の実数は書き換えません。既存の履歴、質量、十進融合、共有範囲と共有内訳はすべて保持します。`off`中の完走には隠れた抽選結果そのものが存在しないため、再び抽選を有効にしてもあとからレア結果を開示しません。どの設定も無料で、機能、成果、質量、融合速度、共有可否に差をつけません。
 
@@ -299,7 +307,7 @@ achievement stones = 0g
 - 瓶または結晶のGIF
 - 累計または選択期間のグラム数
 - 利用者が確認・編集できるハッシュタグ
-- 教科名・仕事カテゴリ名を外へ出すかの明示選択
+- 保存済みテーマ名や成果メモは自動で外へ出さず、利用者が確認・編集した追加タグだけを明示的に共有する
 - 金／虹のレア粒内訳と、100点／試験合格／仕事の節目という記念石種別
 
 カード内の瓶は、密度を上げて判別不能にするのではなく代表表示にします。
@@ -323,11 +331,11 @@ achievement stones = 0g
 
 | 導線 | 攻撃的な問い | リリース条件 |
 |---|---|---|
-| 初回起動 | 物理接触イベントが来ないと先へ進めないか | VoiceOver・Reduce Motionで演出省略可能 |
-| タイマー開始 | 誤った教科・時間で始めやすいか | 開始前に教科と時間が読め、中断可能 |
-| 25分／60分 | demoだけ通り、本番の無料時間が開始・停止・再開できない状態を見逃さないか | 両方を実UIで開始・一時停止・再開・「今日はここまで」まで操作し、中断では粒と質量を増やさない |
-| カテゴリ管理 | 追加・改名・非表示・復帰・削除の途中でHomeが選択不能にならないか | 全lifecycleを実UIで通し、選択中カテゴリの削除後も別カテゴリへ安全にfallback。過去記録はsnapshot名で保持 |
-| カテゴリ削除 | OSがキャンセルactionを視覚・AX上から抑制し、背景タップだけが回避策にならないか | 履歴保持と不可逆性を本文に示し、削除と明示キャンセルを同時にAX操作可能なalertで表示 |
+| 初回起動 | 物理接触イベントが来ないと先へ進めないか。勉強／仕事という不要な分類を強制していないか | ためしの一粒は任意で「次へ」から省略可能。共通候補から最初のテーマ1件だけを選ぶ |
+| タイマー開始 | 誤ったテーマ・時間で始めやすいか。テーマ変更の長押しで集中まで始まらないか | 開始前にテーマと時間が読め、tapだけが開始する。長押しは開始せずテーマを変更でき、中断も可能 |
+| 25分／45分／60分／90分 | demoだけ通り、本番の無料時間が開始・停止・再開できない状態を見逃さないか | 四つすべてを実UIで開始・一時停止・再開・「今日はここまで」まで操作し、中断では粒と質量を増やさない |
+| テーマ管理 | 追加・改名・非表示・復帰・削除の途中でHomeが選択不能にならないか | 勉強・仕事共通の一一覧で全lifecycleを実UIで通し、選択中テーマの削除後も別テーマへ安全にfallback。過去記録はsnapshot名で保持 |
+| テーマ削除 | OSがキャンセルactionを視覚・AX上から抑制し、背景タップだけが回避策にならないか | 履歴保持と不可逆性を本文に示し、削除と明示キャンセルを同時にAX操作可能なalertで表示 |
 | バックグラウンド | OS終了、時計変更、機種変更で二重完了するか | 同一session IDで冪等 |
 | 2端末 | オフライン競合で正常完走が消えないか | 両完走を説明付きで保持 |
 | 完了保存 | 所有権拒否を成功と誤認しないか | 結果型を分離し、未確認ならリカバリ保持 |
@@ -341,7 +349,7 @@ achievement stones = 0g
 | 再訪 | 休んだ人へ罪悪感や失効を示し、一般通知で繰り返し追わないか | 任意・編集可能・無効化可能な本人作成if-then cueと「記録はそのまま」の再開文言 |
 | レア演出 | Reduce Motionだけで不確実報酬を拒否できたことにしていないか。未選択を標準扱いしていないか | 初回に同格の`抽選しない / 控えめ / 標準`から明示選択。未選択と抽選しない設定ではRNGと保証進行を止めても、履歴・質量・融合・共有・成果に不利益を与えない |
 | シェア | キャンセル・容量超過・生成失敗から戻れるか | データを失わず再試行可能、CTAが見える |
-| 課金 | 複数プランに見せる、偽の期限、価格の不一致、復元困難がないか | 100円の買い切り1商品だけをStoreKitの表示価格で提示し、復元、条件、法的リンク、閉じるを常時提供 |
+| 課金 | 複数プランに見せる、偽の期限、価格の不一致、復元困難がないか | 無料download＋買い切り1商品だけとし、日本JPY 100、米国USD 0.99基準、その他はAppleの現地相当額をStoreKitの`displayPrice`で提示。復元、条件、法的リンク、閉じるを常時提供 |
 | iCloud | Apple Account可否を同期成功と誤表示しないか | 保存済み／待機／最終同期／エラーを分離 |
 | unsigned simulator | CloudKit entitlementのないビルドでcontainer生成時に例外終了しないか | `CKContainer`構築前にsimulator判定し、ローカル専用状態へ分岐 |
 | アクセシビリティ | AX5、VoiceOver、Reduce Motionで詰まらないか | 全主要E2Eを通す |
@@ -361,12 +369,12 @@ achievement stones = 0g
 表示します。瓶内の固定サイズHUDに加え、Accessibility Dynamic Typeではスクロール可能な
 system fontの補助カードを出し、VoiceOverの完走通知にも長期・直近の両方を含めます。
 
-共有Composerは、既定状態で`GIF / 静止画`、`4:5 / 9:16`、共有範囲、タグ、透かし、写真保存
-という六つの判断を同時に要求していました。通常の意図は「今の瓶を共有する」なので、既定値を
+共有Composerは、既定状態で`GIF / 静止画`、`4:5 / 9:16`、共有範囲、タグ、ブランド表示、写真保存
+という六つの情報と判断を同時に提示していました。通常の意図は「今の瓶を共有する」なので、既定値を
 一行で開示し、任意変更を一つの`調整`へ段階開示します。通常はComposerからsystem share
 sheetまで一回のタップです。自己申告だけの期間は「記録なし」と誤表示せず、`自己申告を含めて
-カードにする`を直接提示します。共有先アプリの選択はOSのactivity viewに委ね、自前でSNS別の
-選択画面を重ねません。
+カードにする`を直接提示します。つみべんのロゴと公式サイトは無料／Proともカードへ常設し、公式
+URLを共有本文にも含めます。共有先アプリの選択はOSのactivity viewに委ね、自前でSNS別の選択画面を重ねません。
 
 完走後の旧`閉じる`は見た目が約34×14ptで、隣の共有・休憩CTAより著しく小さく、端を狙う
 操作で失敗しました。文字付きcapsuleへ変更し、通常時88×44pt前後、Accessibility最大文字では
@@ -394,7 +402,7 @@ viewport内、相互非重複、端部タップ、hit region、text clipping、�
 - 生涯root結晶18個、未集約0個
 - Debugの可視物理体はroot 18個 + 成果12個 = 30個
 - 通常画面の可視物理体は常に128以下
-- 元ID、質量、教科構成、成果12個を保持
+- 元ID、質量、テーマ構成、成果12個を保持
 - うるう年、DST、timezone変更を含む
 - 同じ8,766,000分を、10分×876,600回、25分×350,640回、60分×146,100回へ分けても、すべて87,660,000g・350,640標準単位になる
 - 上記三経路は物理粒数と融合回数だけが異なり、時間の核、質量節目、星図の価値表示は一致する
@@ -442,7 +450,7 @@ Reward Bridge／Receiptの追加targeted回帰:
 - 積み上がり計画の実UI回帰1/1に合格。Release相当のメニューから開き、常時「予測・保存なし」を表示し、60分へ変更後も閉じて開き直すと初期値へ戻ることを検証。preview sceneが共有音・触覚サービスを変更してアプリ全体を無音化していた副作用を除去した
 
 - `ProgressPresentationTests` 32/32合格。直近10-slot、10／100境界の完成10/10、11／19／20／99粒での「長期tier + 次の結晶」の二重表示、1〜9の透過destination、10以上の実体core、lower-boundのcore保持とslot同期中表示、receiptのfull payload round-trip・重複排除・明示削除を検証
-- 共有のunit回帰20/20、実UI回帰4/4に合格。通常時は一つの共有CTAと折りたたんだ`調整`、自己申告のみでは正直な直接CTAを示し、4:5／9:16のプレビュー・静止画・GIFが同じ正規化canvasを共有して、バッジ・タグ・透かしをカード外へ押し出さないことを検証
+- 共有のunit回帰20/20、実UI回帰4/4に合格。通常時は一つの共有CTAと折りたたんだ`調整`、自己申告のみでは正直な直接CTAを示し、4:5／9:16のプレビュー・静止画・GIFが同じ正規化canvasを共有して、バッジ・タグ・常設ブランド表示をカード外へ押し出さないことを検証
 - 完走後CTAの敵対的UI回帰7/7に合格。`閉じる`は通常約88×44pt、Accessibility最大文字では338×44ptを確保し、共有・休憩との非重複、初期viewport、端部タップ、hit region、文字切れ、説明、button traitを検証
 - 専用persistent UI relaunch test 1/1合格。完走後にプロセス終了しても同じBridgeが復元され、保存済み粒が1件のまま増減せず、ack後の再起動では再提示しないことを検証
 - 完走保存fault UI test 1/1合格。実transactionを保存直前に一度失敗させ、保護時0行、Home再試行後`sessionRows=1 / uniqueSessionIDs=1 / 250g`、faultを再armした別processの再起動後も同じ1行であることを検証
@@ -454,8 +462,8 @@ Reward Bridge／Receiptの追加targeted回帰:
 - `RuntimeFlowAuditUITests` 5/5、`CriticalFlowAdversarialUITests` 4/4、独立した実時間×10 E2E 1/1の計10/10に合格。連続完走中に旧Reward BridgeのAX要素を次回分と誤認したテスト競合は、旧Bridge消失、launcherのhittable、Focus画面成立、新Bridge出現、各回の実粒数増分を同期条件にして排除し、製品側の8→9→10保存・融合が正常であることを再確認
 - 瓶の局所バウンド、レア抽選の初回選択／無抽選、完走保存失敗、融合保存失敗を同一serial bundleで5/5合格。各UI testの開始前／終了後にアプリprocessを明示終了し、残留Reward Receiptをdrainしてシナリオを隔離。負荷時の12秒timerは結果条件を弱めず待機上限だけ60秒にし、粒ID、grams、融合元、再起動後の永続化assertを維持
 - 主要導線の敵対的UI再検証 2/2合格。手動追加、資格合格、Overview、記録、GIF共有、設定、Pro説明を往復してHomeへ復帰し、画面維持設定も変更後に元の値へ戻せることを検証
-- 25分・60分の実タイマーは、開始→一時停止→再開→中断を2/2で通過。英語`PAUSED`を「一時停止」へ統一し、同義の中断操作を下部「今日はここまで」1件に統合。中断後も粒・質量を増やさないことを確認
-- カテゴリ削除の明示cancelは、修正前AXで`exists=false / frame=absent`を検出。system `confirmationDialog`へ背景タップだけで戻らせず、削除／キャンセルを同時表示するalertへ変更した。修正後は`exists=true / hittable=true / 288×48pt`、cancel後の存続と再確認後の削除を1/1で実操作
+- 無料の25分・45分・60分・90分の実タイマーは、同じ開始→一時停止→再開→中断を4/4で再検証する。既存の25分・60分は2/2で通過し、中断後も粒・質量を増やさないことを確認済み。英語`PAUSED`を「一時停止」へ統一し、同義の中断操作を下部「今日はここまで」1件に統合
+- テーマ削除の明示cancelは、修正前AXで`exists=false / frame=absent`を検出。system `confirmationDialog`へ背景タップだけで戻らせず、削除／キャンセルを同時表示するalertへ変更した。修正後は`exists=true / hittable=true / 288×48pt`、cancel後の存続と再確認後の削除を1/1で実操作
 - Reduce Motion targeted回帰 73/73合格。通常粒・集約粒・融合直後の結晶を決定論的な安全位置へ静置し、速度／角速度を0にしたまま意味上の着地だけを完了すること、非Reduce Motion経路を変えないことを検証
 - 固定AX5敵対的監査 1/1合格。Home、Menu、Overviewの「いま／結晶／年月」の5画面に対して、コントラスト・タップ領域・説明・文字切れ・traitsの25監査を通し、Overviewを閉じてHomeへ戻るところまで検証
 - system Dynamic Type監査 1/1合格。テスト専用サイズ固定を使わず、XCTestが文字サイズを実際に変更しながらHome→Menu→Overviewの主要導線を検証
@@ -495,7 +503,7 @@ CとDの差は視覚的レアだけに限定し、Dでも本人はいつでも`q
 防御指標:
 
 - 本人が設定した睡眠時間帯の利用増加
-- 25分／60分の選択比率がレア条件だけで変化していないか
+- 25分／45分／60分／90分の選択比率がレア条件だけで変化していないか
 - 通知無効化率
 - 休憩スキップの連続回数
 - 連続3本・4本以上の完走率と、タイマー外のアプリ滞在時間
@@ -508,7 +516,7 @@ CとDの差は視覚的レアだけに限定し、Dでも本人はいつでも`q
 
 現時点の`Analytics.shared`は永続化・通信・loggingを行わない`NoOpAnalytics`です。
 したがって、上記は実験計画であって、現行Reward Bridgeやレア粒の継続効果を示す実績では
-ありません。実験前に、教科名、成果メモ、顧客名を収集しない最小イベント設計、同意、
+ありません。実験前に、テーマ名、成果メモ、顧客名を収集しない最小イベント設計、同意、
 撤回、保存期間、分析除外条件、安全性の非劣性基準を事前に固定します。
 
 ## 9. 現在の実装状況
@@ -518,7 +526,7 @@ CとDの差は視覚的レアだけに限定し、Dでも本人はいつでも`q
 - Homeは瓶・開始・メニューに限定
 - Focusは中断操作を下部「今日はこまで」1件に限定し、一時停止表記を日本語に統一。突然閉じる左上×は置かない
 - タップ位置への局所衝撃、傾き、Reduce Motion
-- 25分・60分、Proの任意時間
+- 無料の25分・45分・60分・90分、Proのそれ以外の任意時間（1〜180分）
 - 終了音・触覚、画面維持
 - 通常／金／虹、確率開示、Pro非連動
 - `標準 / 控えめ / 抽選しない`のレア粒設定。初回は三択を同じ寸法・強調で未選択から提示し、選ばずにタイマーを開始できない。旧利用者も明示選択の記録がなければ次回集中前に一度確認する。標準と控えめは実測質量250gごとに同じ抽選・保証を進め、端数を次回へ繰り越すため、同じ600gは分割方法によらず抽選2回 + 100g繰り越しになる。控えめは履歴を保ったままレア専用の予告・常時きらめき・専用音触覚を停止し、抽選しない設定はRNGを呼ばず通常粒を保存して抽選用端数と保証をその位置で停止・再開する。既存履歴、質量、十進融合、共有は変更しない
@@ -538,11 +546,14 @@ CとDの差は視覚的レアだけに限定し、Dでも本人はいつでも`q
 - 最初の1〜3粒を、物理半径や質量を変えず光輪で可視化
 - 完走カードの今週結晶
 - 完走カードとOverviewの今週表示は実測質量を第一指標、戻った回数を頻度の補助指標にする。長い休憩は完走回数ではなく累計1,000g／100分ごとに提案し、分割方法で早められない
-- 完走後カードで、直近の一粒が参加するimmediate 10→1変換を、中央の次tier結晶と周囲10個のsource shardからなる有限の軌道図、`N/10`、残り粒数で示す決定論的Reward Bridge。10／100境界は完成10/10を保持し、保存済み教科色・実levelで一度だけ収束／発光して静止する。長期tierは補助行、partial projectionではslotを推測せず`今回 +1粒／結晶進捗を同期中`だけを表示する
+- 完走後カードで、直近の一粒が参加するimmediate 10→1変換を、中央の次tier結晶と周囲10個のsource shardからなる有限の軌道図、`N/10`、残り粒数で示す決定論的Reward Bridge。10／100境界は完成10/10を保持し、保存済みテーマ色・実levelで一度だけ収束／発光して静止する。長期tierは補助行、partial projectionではslotを推測せず`今回 +1粒／結晶進捗を同期中`だけを表示する
 - 融合sheetは`10 → 1 / 記録100%保持`を可視化し、「次の一粒」ではなく中立な「ここで休む」で閉じられる。完走直後に次の抽選や次の集中を急かさない
 - 完走表示のfull payloadをUserDefaultsへ最大4件保存するpersisted Reward Receipt。着地marker消費より先に保存を確認し、再起動では着地FXやセッション保存を繰り返さず復元、閉じる／休憩／共有の明示ackで一度だけ削除し、activity resetでも削除する。複数件はFIFOでdrainし、後の完走による上書きを防ぐ
 - Reward Receiptの表示または待機中は次の集中開始と融合sheetを保留し、完走カードのack後に融合説明を一度だけ提示する
-- iCloud対象モデルとタイマー引継ぎ基盤
+- `iCloud.com.hinoshiba.tumiben`には`Subject`、`StudySession`、`AchievementStone`、`Prefs`、`ActivityResetMarker`、`SyncedFocusTimer`、`FocusTimerDeviceClaim`の7種類の同期元modelだけを保存
+- `AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`は端末内projection storeへ分離し、同期元recordから再構築してCloudKitへuploadしない
+- version 1.0はoperations containerをentitlementへ含めず、offline完走も`StudySession`の通常粒として直接保存する
+- `CompleteDataDeletionReleasePolicy.isEnabled == false`として、version 1.0のdirect CloudKit一括削除UIとlaunch gateを無効化。Settingsは表示中の記録の通常reset、端末dataはapp削除、cloud dataはAppleのiCloudストレージ管理を案内し、offline別端末を遠隔消去できるとは表示しない
 - 中断時はcancel tombstoneを共有履歴へ保存してからタイマー・通知・復元情報を消去し、保存失敗時は終了を装わずタイマーを継続するfail-safe
 - 初回フレーム表示直後にもCloudKit入着データを照合し、監視開始前に`@Query`へ届いた変更を取りこぼさない
 - iCloud/foreground時の全履歴MainActor走査を廃止し、有界singleton確認へ分離
@@ -560,7 +571,7 @@ CとDの差は視覚的レアだけに限定し、Dでも本人はいつでも`q
 - 350,640セッション・38,958集約・120成果の実SwiftData soakで、30 descriptor（18 roots + 成果12）・0 loose/queue・cold projection 0.165秒・クラッシュ/OOMなしを確認
 - 40年の高速Overview fixtureで、350,640セッション・87,660,000g・18 roots・成果12個・物理体30個と全階層ラベルを実画面検証
 - Releaseにも表示する「積み上がり計画」。1〜40年、週1〜21回、10／25／60分と経過月を変更し、時間・質量・節目・瓶・星図を予測する。永続化やCloudKitへ依存せず、実績、レア抽選、成果石、休憩、共有、音・触覚、ウィジェットへ書き込まない。閉じると入力を破棄し、常時「予測・保存なし」と表示する。開発者向けの検証画面はアプリ内に置かない
-- 最新の全ユニット回帰はXCTest 307件（重量級soak 1件を明示的opt-inとしてskip）とSwift Testing 22件で、failure 0。積み上がり計画の再読込リセットと、画面を持たない40年シナリオ検証、Release Simulator buildにも合格した。別のopt-in実行では重量級soak 1件も合格し、350,640 session・38,958 aggregate・120 achievement（計389,723行）を実SQLiteへ保存した。cold projectionは30 descriptor・queue 0・0.165秒、peak 73,420,256 Bで、終了後に隔離storeとopt-in環境を削除した
+- 回帰件数と成否はrelease candidateごとのXCTest／Swift Testing result bundleを正本とし、この文書へ固定件数を置かない。直近のopt-in 40年soakでは350,640 session・38,958 aggregate・120 achievement（計389,723行）を実SQLiteへ保存し、cold projectionは30 descriptor・queue 0・0.165秒、peak 73,420,256 Bだった。最終候補ではsplit store、rare release gate、direct deletion無効化を含む全suiteとRelease Simulator buildを再実行する
 - 完走保存障害時、復元情報を保持してHomeへ退避し、常設カードから再試行。DEBUG限定の実save faultでrollback、raw 0→1行、再起動非重複を検証
 - 結晶化保存障害時、source 10件の変更とaggregate挿入を同一transactionで完全rollbackし、常設カードから明示再試行。DEBUG限定の実save faultでloose 10件→aggregate 1件→再起動後も同一1件、2,500g、元source UUID集合の不変を検証
 - 旧`SeedData.bootstrap`は本番呼び出しを持たない状態を維持。部分同期下で競合親を作り得る一括migrationは再有効化せず、既存配布storeを移行する場合だけ有界batch workerとして別途実装する
@@ -569,24 +580,29 @@ CとDの差は視覚的レアだけに限定し、Dでも本人はいつでも`q
 
 リリース前の最優先課題:
 
-1. `standard / quiet`のレア抽選と保証は実測質量250gごとの同一境界へ統一済みで、単一端末では同じ600gが分割方法によらず抽選2回 + 100g繰り越しになる。ただし現行のscalar端数・保証台帳は、2端末が同じ旧値から完全オフラインで完走すると、再同期後の単純mergeだけでは抽選回数を正確に復元できない。学習時間・質量・実績の同期とは分離した既知の出荷前blockerとし、private CloudKit custom zone上の原子的なepoch台帳 + 完走receipt、決定論的な抽選ordinal、競合時のrefetch/retry、旧データ移行をV2として実装し、署名済み2台のiPhoneの分断・再接続試験でexactly-onceを確認する。V2完成前は「複数端末でもレア抽選まで完全一致」と訴求しない
+1. rare reward V2の試作と回帰testはsourceに保持するが、Apple Account binding、署名済み2台の
+   分断・再接続、process kill、raw data access、production schema試験が未完了である。Version 1.0は
+   `RareRewardReleasePolicy.isEnabled == false`に固定し、operations container、pending writer、設定UI、
+   結果表示を出荷しない。以下は将来releaseで再検討する場合の設計記録である。
 
    最小反例は、旧状態が`端数200g / 金なし20回`の2台をオフラインにし、両方で50gずつ完走する場合である。各端末は同じ250g ordinalを消費して保証の金粒を一つずつ保存するが、正しい直列化は`合計300g / 金1回 / 次の端数50g`である。scalarの最大値は250g・端数0gとなって50gを失い、新規行の和100gは共有済み200gを失う。二つの保存済み金から、どちらを先のordinalとして残し、もう一方をどの自然抽選へ戻すかも事後には決定できない。`GachaHistoryReconciliationTests`にこの質量・保証双方の反例を固定し、現在のmergeをexactly-onceと誤認する変更を禁止する。
 
-   V2の受入条件は次の通りとする。
+   V2の実装契約と残る実機受入条件は次の通りとする。
 
-   - private databaseの専用custom zoneに、reset epochごとに一つのepoch recordと、`epoch + StudySession UUID`を一意キーにした完走receiptを置く
+   - `iCloud.com.hinoshiba.tumiben.operations`のprivate database専用custom zoneに、reset epochごとに一つのepoch recordと、`epoch + StudySession UUID`を一意キーにした完走receiptを置く
    - epoch recordはmigration fingerprint、credit総質量、端数、次ordinal、金なし回数、抽選seed、revisionを保持する。receiptは参加有無、受理質量、割り当てordinal範囲、全結果、適用前後revisionを保持し、同じsession IDの再送を同じreceiptとして返す
    - epochのchange tagを取得してから、更新epochと新規receiptを同じzoneの一回のatomic saveへ入れ、`ifServerRecordUnchanged`で保存する。競合時は暫定値を捨ててserver recordを再取得し、同じsession IDのreceipt有無を確認してから再計算する。CloudKit custom zoneは同一zoneの複数recordを原子的に変更でき、change tag不一致を`serverRecordChanged`として拒否できる（[CKRecordZone](https://developer.apple.com/documentation/cloudkit/ckrecordzone)、[isAtomic](https://developer.apple.com/documentation/cloudkit/ckmodifyrecordsoperation/isatomic)、[ifServerRecordUnchanged](https://developer.apple.com/documentation/cloudkit/ckmodifyrecordsoperation/recordsavepolicy/ifserverrecordunchanged)）
    - 完全オフライン中はStudySessionとpending receiptだけを同一ローカルtransactionで保存し、未取得のserver ordinalをレア確定結果として表示・共有・集約しない。再接続後のatomic commitだけがレア結果のsource of truthになる
    - `off`も参加なしreceiptを残し、後日の設定変更で過去質量を抽選へ入れない。課金状態はepoch、receipt、seed、確率、保証の入力に含めない
-   - 現行の重複タイマー調停は、後着のclaimによって一度timerだったsessionを`timerDemoted`へ変更できる。rare receiptを先にcommitすると取消後に全後続ordinal・端数・pityを再編する必要があるため、V2は「rare commit前に所有権を同じauthoritative transactionで確定する」か、取消receiptを含む完全な再生規則を実装するまで完成扱いにしない
-   - 旧scalarからのmigrationは、同じepoch IDと旧値から同一fingerprintを作り、最初の原子的createだけを採用する。不一致fingerprintは最大値mergeせず抽選を停止して診断可能にする
-   - signed-in実機2台で、50g+50g、100g+150g、250g+250g、600g+600g、pity直前、同一session再送、順序反転、process kill、通信断、reset、後着demotionを試し、両端末のreceipt集合、ordinal、端数、金なし回数、StudySession投影が一致するまで出荷blockerを解除しない
+   - active timerの通知・復元調停と、完走済みStudySessionの会計を分離する。異なるsession UUIDのoffline同時完走は両方をmeasured recordとして保持し、後着claimで遡及的に`timerDemoted`へ変更しない。同一session UUIDの再送だけを同じreceiptとして返すため、確定済みordinal・端数・pityを後から再編しない
+   - 1.0は初回releaseのため、既に付与済みのStudySession上のrare表示を保持しつつ、merge不能な旧scalar端数／pityは全端末共通のzero baselineからV2を開始する。端末固有の旧値をfingerprintへ入れて永久不一致にしない。不正な非canonical fingerprintは最大値mergeせずfail closedにする
+   - signed-in実機2台で、50g+50g、100g+150g、250g+250g、600g+600g、pity直前、同一session再送、順序反転、process kill、通信断、reset、異なるUUIDの重複時間帯を試し、両端末のreceipt集合、ordinal、端数、金なし回数、StudySession投影が一致するまで出荷blockerを解除しない
+   - local outbox／cursorをactive Apple Accountへbindingし、account変更通知でwriterを停止・storeを隔離する。Aでpendingを残したままBへ切替えてBへ送られず、Aへ戻したときだけ再開する実機試験に合格するまで1.0でrare台帳を有効化しない
+   - 将来のoperations raw epoch／receiptを現行11-model shipping exportへ含める方法を設計する。利用者copy取得方法または適用法令・Apple要件上の扱いを確定できなければrare台帳を有効化しない
 
 2. 10→1の物理整理animationも回数由来なので、時間価値が同一でも短時間分割の方が多く見られる。主CTAや共有では質量を優先し、短い完走を反復させる文言を置かず、28日試験で時間帯・総時間を統制して分割率を監査する
 3. Overviewのon-demand正確集計と同じepoch／UUID規則をLog／Share／Wrappedへ広げ、永続化summary + ページングへ発展させる
-4. deferred maintenanceを有界batchのModelActorとして実装し、small-store oracleと同値検証
+4. 実装済みの有界ModelActor maintenanceを、署名済み2台、長時間offline、process kill、production CloudKitでsmall-store oracleと同値検証する
 5. 現在の年月ブラウザは選択期間を全件batch集計するため正確だが、毎回の再走査を避ける月・年summaryを保存し、CloudKit後着行で差分更新する
 6. 中断tombstoneのオフラインoutboxと設定revision。現状は保存失敗時にタイマーを安全に継続し、outboxはオフラインでも終了意図を即時受理するためのUX改善とする
 5. 同期の最終成功・待機・エラーをAccount可否と分けて表示
