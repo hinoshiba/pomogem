@@ -29,7 +29,7 @@ sparks, giant rainbow gem, casino cues, or baked rounded corners.
 - Shipping iOS asset: `../Tsumiben/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusCycle-v5.png` (1024×1024, sRGB, opaque)
 - Website icon: `../http_dists/public/app-icon-focus-v5.png` (256×256)
 - Website touch icon: `../http_dists/public/apple-touch-icon.png`
-- Open Graph image: `../http_dists/og-focus-v6.png` (1200×630)
+- Open Graph image: `../http_dists/og-focus-v7.png` (1200×630)
 
 The shipping icon is a flattened 1024×1024 sRGB image for compatibility with the app's iOS 17 minimum deployment target. The composition is intentionally separable into background, focus-time ring, vessel, falling unit, and accumulated units for a future Icon Composer source.
 
@@ -61,8 +61,9 @@ References:
 
 ## Legacy files
 
-The previous Focus Vessel v4 source, 256px Web derivative, and focus-v5 Open Graph image remain in the repository for provenance and comparison. They are not the active identity. The obsolete v4 PNG is not retained inside the active AppIcon asset set, which keeps the catalog free of an unassigned child:
+The previous Focus Vessel v4 source, 256px Web derivative, and focus-v5/v6 Open Graph images remain in the repository for provenance and comparison. They are not the active identity. The obsolete v4 PNG is not retained inside the active AppIcon asset set, which keeps the catalog free of an unassigned child:
 
 - `AppIcon-FocusVessel-v4-source.png`
 - `../http_dists/public/app-icon-focus-v4.png`
 - `../http_dists/og-focus-v5.png`
+- `../http_dists/og-focus-v6.png`

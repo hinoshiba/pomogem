@@ -42,9 +42,11 @@ Tsumiben/Resources/PrivacyInfo.xcprivacy
 TsumibenWidgets/PrivacyInfo.xcprivacy
 Brand/AppIcon-FocusCycle-v5-source.png
 Tsumiben/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusCycle-v5.png
-http_dists/og-focus-v6.png
+http_dists/og-focus-v7.png
 http_dists/public/app-icon-focus-v5.png
 http_dists/public/apple-touch-icon.png
+http_dists/public/app-home-v2.webp
+http_dists/public/app-timer-v1.webp
 http_dists/index.html
 http_dists/privacy/index.html
 http_dists/support/index.html
@@ -338,6 +340,12 @@ check_hash a0ee59d504570ad0ce53c2710b2c2114a2518d7ee10e098d1e5787943d19add7 \
   http_dists/public/app-icon-focus-v5.png
 check_hash 50dda39716f125b546d72f379192318530df845f4205fbdb240f55d5564a453a \
   http_dists/public/apple-touch-icon.png
+check_hash db51b5fed769d18eb99cae48ef437f6485311c17e0c191e33cb183d9a3653ad4 \
+  http_dists/og-focus-v7.png
+check_hash f819951afc8a9f60abd18c4540ea18d796fbebf3244aaa1ee013850e33b60f33 \
+  http_dists/public/app-home-v2.webp
+check_hash 7d66a2be14844d67cb2c0c51639fe6d7205c6ff90a678dda45422bf7c810750a \
+  http_dists/public/app-timer-v1.webp
 check_hash ce639d897fe02d352118d09de83f66f334509e46dcea0ea451a0d873be6e4f7f \
   http_dists/og-focus-v6.png
 check_hash b60d2fe464f4460702be923976c5865dfca487b189072ac249638eac1e1ec1ca \

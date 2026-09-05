@@ -6,7 +6,7 @@
 「つみべんPro」で解放します。シェアカードには、プランにかかわらずつみべんのロゴと
 公式サイトを表示します。
 
-![つみべんのホーム画面](http_dists/public/app-home-current.webp)
+![つみべんのホーム画面](http_dists/public/app-home-v2.webp)
 
 ## 主な機能
 

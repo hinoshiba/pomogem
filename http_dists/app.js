@@ -19,6 +19,7 @@
   const vessel = document.querySelector('#lab-vessel');
   const mass = document.querySelector('#lab-mass');
   const status = document.querySelector('#lab-status');
+  const labButton = document.querySelector('#lab-drop');
   const toast = document.querySelector('#toast');
 
   function validHex(value, fallback) {
@@ -308,19 +309,14 @@
     schedulePlacement();
     mass.innerHTML = `${grams.toLocaleString('ja-JP')}<small>g</small>`;
     updateVesselAccessibility();
-    status.textContent = '集中 +250g 積んだ';
-    announce('集中 +250g 積んだ');
+    status.textContent = '一粒、着地。25分＝250gを記録しました。';
+    if (labButton) labButton.textContent = 'もう25分を追加（デモ）';
+    announce('一粒、着地。25分、250グラムを記録しました。');
     scheduleAggregation();
   }
 
   hydrateStaticGems();
-  document.querySelector('#lab-drop')?.addEventListener('click', drop);
-  document.querySelector('#hero-drop')?.addEventListener('click', (event) => {
-    event.preventDefault();
-    const reducesMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    document.querySelector('#experience')?.scrollIntoView({ behavior: reducesMotion ? 'auto' : 'smooth' });
-    setTimeout(drop, reducesMotion ? 0 : 420);
-  });
+  labButton?.addEventListener('click', drop);
   if (vessel && 'ResizeObserver' in window) {
     const resizeObserver = new ResizeObserver(() => {
       cancelAnimationFrame(resizeFrame);

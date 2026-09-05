@@ -82,17 +82,41 @@ Prompt summary: preserve the live Home layout and Japanese UI, while changing on
 
 Prompt summary: preserve the exact Japanese title and wide social-card hierarchy while replacing the former natural-rock vessel with the same open Aurora glass vessel, one falling gem, and three accumulated gems used by the app identity. No lid, natural stones, extra copy, or watermark.
 
-## `og-focus-v6`
+## `og-focus-v7`
 
 - Composed: 2026-09-05
 - Tool: Sharp deterministic composite; the active Focus Cycle v5 icon itself was created with Codex built-in ImageGen
 - Web usage: active Open Graph and X/Twitter preview
+- Shipping asset: `../../http_dists/og-focus-v7.png`
+
+Composition specification: on an opaque 1200×630 sRGB canvas, pair the active Focus Cycle v5 icon
+with the website's midnight, coral, amber, and violet palette; state `ポモドーロタイマー × 集中記録`,
+`終えた時間を、宝石で記録。`, and `25分の集中 ＝ 250g ＝ 宝石1粒`; render all Japanese copy
+with the bundled SIL Open Font License 1.1 Zen Maru Gothic. No third-party image asset is introduced.
+
+## `og-focus-v6` (legacy)
+
+- Composed: 2026-09-05
+- Tool: Sharp deterministic composite; the active Focus Cycle v5 icon itself was created with Codex built-in ImageGen
+- Web usage: previous Open Graph and X/Twitter preview, retained for provenance and comparison
 - Shipping asset: `../../http_dists/og-focus-v6.png`
 
 Composition specification: preserve the exact text and 1200×630 layout of the hinoshiba-owned
 `og-focus-v5.png`; replace only its legacy icon card with the active Focus Cycle v5 icon, using the
 existing 420px rounded card geometry; then normalize the result to opaque RGB sRGB. No third-party
 asset is introduced by this derivative.
+
+## Current Web product screens
+
+- Composed: 2026-09-05
+- Tool: cwebp 1.6, quality 84, method 6, resized to 603×1305
+- Sources: reviewed App Store screenshots 01 and 02
+- Web usage: the Hero's real `timer → completed record` product loop
+- Shipping assets: `../../http_dists/public/app-timer-v1.webp` and
+  `../../http_dists/public/app-home-v2.webp`
+
+The versioned filenames prevent an older Home capture from surviving a browser cache after the
+product UI changes. They preserve the production UI content and introduce no third-party asset.
 
 ## `og-focus-v5` (legacy)
 

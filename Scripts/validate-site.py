@@ -106,10 +106,11 @@ required = [
     ROOT / "sitemap.xml",
     ROOT / "styles.css",
     ROOT / "app.js",
-    ROOT / "og-focus-v6.png",
+    ROOT / "og-focus-v7.png",
     ROOT / "public/app-icon-focus-v5.png",
     ROOT / "public/apple-touch-icon.png",
-    ROOT / "public/app-home-current.webp",
+    ROOT / "public/app-home-v2.webp",
+    ROOT / "public/app-timer-v1.webp",
     ROOT / "public/ZenMaruGothic-Black.ttf",
     ROOT / "font-license.txt",
 ]
@@ -177,6 +178,20 @@ if "基本無料" not in index or "iPhone" not in index:
     fail("index must state iPhone and 基本無料")
 if "https://github.com/hinoshiba/Tumiben" not in index:
     fail("index must link to the public source repository")
+for required_positioning_term in (
+    "ポモドーロタイマー",
+    "見える集中記録",
+    "終えた時間を、宝石で記録。",
+    'href="#demo"',
+    "25分の記録を追加（デモ）",
+    "実際のタイマー、音・触覚、記録保存は再現しません",
+    "public/app-timer-v1.webp",
+    "public/app-home-v2.webp",
+):
+    if required_positioning_term not in index:
+        fail(f"index positioning journey is missing: {required_positioning_term}")
+if 'id="hero-drop"' in index:
+    fail("hero must not trigger an off-screen automatic demo")
 
 index_meta = parsed_pages[(ROOT / "index.html").resolve()].meta
 required_meta = {
@@ -207,11 +222,11 @@ expected_meta = {
     "og:site_name": "つみべん",
     "og:locale": "ja_JP",
     "og:url": PUBLIC_BASE,
-    "og:image": PUBLIC_BASE + "og-focus-v6.png",
+    "og:image": PUBLIC_BASE + "og-focus-v7.png",
     "og:image:width": "1200",
     "og:image:height": "630",
     "twitter:card": "summary_large_image",
-    "twitter:image": PUBLIC_BASE + "og-focus-v6.png",
+    "twitter:image": PUBLIC_BASE + "og-focus-v7.png",
 }
 for key, expected in expected_meta.items():
     if index_meta.get(key) != expected:
@@ -220,7 +235,7 @@ for key, expected in expected_meta.items():
 not_found_refs = {value for _, value in parsed_pages[(ROOT / "404.html").resolve()].refs}
 required_not_found_refs = {
     "/",
-    "/styles.css?v=9",
+    "/styles.css?v=10",
     "/public/app-icon-focus-v5.png",
     "/public/apple-touch-icon.png",
     "/privacy/",
@@ -285,9 +300,9 @@ expected_locations = set(expected_canonical.values())
 if sitemap_locations != expected_locations:
     fail(f"sitemap locations mismatch: {sorted(sitemap_locations)}")
 
-og = ROOT / "og-focus-v6.png"
+og = ROOT / "og-focus-v7.png"
 if png_dimensions(og) != (1200, 630):
-    fail("og-focus-v6.png must be exactly 1200x630")
+    fail("og-focus-v7.png must be exactly 1200x630")
 if png_dimensions(ROOT / "public/app-icon-focus-v5.png") != (256, 256):
     fail("web app icon must be exactly 256x256")
 if png_dimensions(ROOT / "public/apple-touch-icon.png") != (180, 180):
