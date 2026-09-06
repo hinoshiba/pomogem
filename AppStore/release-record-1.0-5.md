@@ -31,7 +31,9 @@ Updated 2026-09-06. This record describes the new app only. App version 1.0 (5) 
 - Domain DNS points to GitHub Pages. HTTPS certificate issuance and final published-page checks remain unverified.
   On 2026-09-06, the user explicitly took responsibility for correcting HTTPS and instructed that App Review submission proceed now.
 - Signing material, personal review contacts, upload logs and detailed CloudKit exports are retained privately
-  outside the repository. Older app registrations and data remain intact. Repository renaming is deferred to the user.
+  outside the repository. The older app was subsequently removed at the user’s explicit request; see
+  `Docs/LEGACY_RELEASE_PROVENANCE.md` for the retirement result and retained main App ID. Old CloudKit data
+  remains intact. Repository renaming is deferred to the user.
 
 Additional signed-device, accessibility, purchase/restore and operational checks in the submission checklist
 remain unverified unless separately checked. This record does not turn unexecuted tests into successes.

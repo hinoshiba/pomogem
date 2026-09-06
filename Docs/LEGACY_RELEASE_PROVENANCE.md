@@ -20,9 +20,26 @@
 | Website | `tumiben.hinoshiba.com` |
 | GitHub repository | `hinoshiba/Tumiben` |
 
-旧app record、IAP、containerの削除・resetは改名工程に含めません。新アプリは別sandbox・別購入権利・
+改名工程中は旧app record、IAP、containerを保持しました。後続の明示依頼による旧登録の整理結果は下記を参照してください。新アプリは別sandbox・別購入権利・
 別CloudKit containerを使い、自動移行や共有を実装していません。旧identifierが存在することを、
 新appのentitlement、schema、StoreKit商品、購入復元の検証に代用しません。
+
+## 後続依頼による旧登録の整理（2026-09-06）
+
+PomoGemの審査提出後、ユーザーから旧TumibenのIDとアプリ登録の削除を明示依頼されました。
+
+- 旧IAPの未提出審査下書きを解除し、旧アプリ本体と旧IAPを全地域で配信停止。
+- App Store Connectの旧アプリ `6806758060` は削除済み。旧登録画面が編集不可となり、
+  「アプリを復元」が表示されることを確認しました（Appleの削除済みアプリへ移動）。
+- 旧Widget App ID `com.hinoshiba.tumiben.widgets` は削除し、DeveloperのID一覧からの消失を確認。
+- 旧本体App ID `com.hinoshiba.tumiben` はAppleが削除を拒否。旧アプリ登録の削除後も
+  App Storeで使用中との応答が続きました。アップロード済みの明示App IDは削除できないという
+  [Appleの制約](https://developer.apple.com/help/account/identifiers/delete-an-app-id/)に該当します。
+  削除成功として扱わず、IDは残っています。
+- 旧CloudKit containerと保存済みデータには削除・resetを行っていません。
+- PomoGemの本体／Widget IDは存在し、アプリ1.0 (5)とProの審査待ちも維持されています。
+
+参照: [Appleのアプリ登録削除手順](https://developer.apple.com/help/app-store-connect/create-an-app-record/remove-an-app/)。
 
 ## 過去の作業と証拠範囲
 
