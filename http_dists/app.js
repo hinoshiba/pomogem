@@ -340,8 +340,8 @@
     const minutes = Math.ceil((1 - progress) * 5) * 5;
     demoTime.textContent = `${String(minutes).padStart(2, '0')}:00`;
     demoTime.setAttribute('aria-label', `早送りデモ、残り${minutes}分`);
-    // Match the app's elapsed ring: grow clockwise from twelve o'clock.
-    demoProgress.style.strokeDashoffset = String((1 - progress) * 100);
+    // Match the app's remaining ring: remove time clockwise from twelve o'clock.
+    demoProgress.style.strokeDashoffset = String(-progress * 100);
   }
 
   function setDemoState(state) {

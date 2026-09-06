@@ -27,6 +27,7 @@ Docs/RELEASING.md
 Docs/OSS_PUBLISHING.md
 Docs/LICENSE_AUDIT.md
 Scripts/check-git-public-metadata.py
+Scripts/public_mailbox_policy.py
 Scripts/check-published-site-policy.sh
 AppStore/README.md
 AppStore/configuration.yml
@@ -558,13 +559,9 @@ if [ -s "$scan_hits" ]; then
   exit 1
 fi
 
-private_mailbox_pattern='[[:alnum:]._%+-]+@(gmail\.com|googlemail\.com|icloud\.com|me\.com|mac\.com|outlook\.com|hotmail\.com|live\.com|yahoo\.[[:alpha:].]+|proton(mail)?\.com)'
-scan_candidate_content regex_i "$private_mailbox_pattern" || exit 1
-if [ -s "$scan_hits" ]; then
-  sed -n '1,20p' "$scan_hits" >&2
-  echo "error: personal mailbox address found in a public candidate file" >&2
-  exit 1
-fi
+# Scan complete mailboxes individually: allowing the owner's exact public
+# address must not exempt a whole line/file or another address at its provider.
+python3 Scripts/public_mailbox_policy.py --files0-from "$scan_list_nul"
 
 identity_output_pattern='^[[:space:]]*[0-9]+\) [[:xdigit:]]{40} ".*(Developer ID|Distribution|Development)'
 scan_candidate_content regex "$identity_output_pattern" || exit 1
@@ -638,9 +635,7 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   if rg -a -q -i -- "$asc_identifier_pattern" "$history_object"; then
     printf '%s\n' 'app-store-connect-identifier' >> "$history_hits"
   fi
-  if rg -a -q -i -- "$private_mailbox_pattern" "$history_object"; then
-    printf '%s\n' 'personal-mailbox' >> "$history_hits"
-  fi
+  python3 Scripts/public_mailbox_policy.py --git-batch "$history_object"
   if rg -a -q -- "$identity_output_pattern" "$history_object"; then
     printf '%s\n' 'signing-identity-output' >> "$history_hits"
   fi

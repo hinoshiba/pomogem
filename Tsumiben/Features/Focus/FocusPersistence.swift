@@ -99,13 +99,18 @@ struct BreakRecoveryEnvelope: Codable, Equatable, Identifiable, Sendable {
     /// persisted notification delivery Date is still safe to trust.
     let clockAnchor: ClockAnchor?
     var scheduledCompletionNotificationDeliveryDate: Date?
+    /// A reward-card selection starts its break before the visual drop. This
+    /// optional link reconciles a crash between saving the timer and advancing
+    /// the card, without recreating a break after its recovery is consumed.
+    let originatingFocusSessionID: UUID?
 
     init(
         id: UUID,
         minutes: Int,
         endDate: Date,
         clockAnchor: ClockAnchor? = nil,
-        scheduledCompletionNotificationDeliveryDate: Date? = nil
+        scheduledCompletionNotificationDeliveryDate: Date? = nil,
+        originatingFocusSessionID: UUID? = nil
     ) {
         self.id = id
         self.minutes = minutes
@@ -113,6 +118,7 @@ struct BreakRecoveryEnvelope: Codable, Equatable, Identifiable, Sendable {
         self.clockAnchor = clockAnchor
         self.scheduledCompletionNotificationDeliveryDate =
             scheduledCompletionNotificationDeliveryDate
+        self.originatingFocusSessionID = originatingFocusSessionID
     }
 }
 
@@ -894,11 +900,60 @@ enum FocusPersistence {
         guard let value = try? JSONDecoder().decode(
             BreakRecoveryEnvelope.self,
             from: data
-        ), BreakRecoveryPolicy.isValid(value, at: now) else {
+        ) else {
+            defaults.removeObject(forKey: key)
+            return nil
+        }
+        // Saving a selected break precedes acknowledging its reward. Complete
+        // that hand-off after a crash, even when the original break is now too
+        // old to show. Its receipt must never offer a fresh five minutes again.
+        if let sourceID = value.originatingFocusSessionID,
+           let anchor = value.clockAnchor,
+           value.id != sourceID,
+           BreakRecoveryPolicy.isValid(value, at: anchor.wallDate) {
+            if PendingRewardReceiptStore.load(defaults: defaults)
+                .first(where: { $0.id == sourceID })?.requiresDrop == true {
+                PendingRewardReceiptStore.acknowledgeDrop(id: sourceID, defaults: defaults)
+            } else {
+                PendingRewardReceiptStore.remove(id: sourceID, defaults: defaults)
+            }
+        }
+        guard BreakRecoveryPolicy.isValid(value, at: now) else {
             defaults.removeObject(forKey: key)
             return nil
         }
         return value
+    }
+
+    /// Commits the user's rest choice before Home can disappear. The existing
+    /// break envelope is the sole durable timer; the gem receipt never owns a
+    /// second timer that could restart after Skip, completion, reset or delete.
+    static func beginRewardBreak(
+        sessionID: UUID,
+        defaults: UserDefaults = .standard,
+        at now: Date = .now,
+        uptime: TimeInterval = ContinuousUptime.now()
+    ) -> BreakRecoveryEnvelope? {
+        if let existing = loadBreak(defaults: defaults, at: now) {
+            return existing.originatingFocusSessionID == sessionID ? existing : nil
+        }
+        guard let receipt = PendingRewardReceiptStore.load(defaults: defaults)
+            .first(where: { $0.id == sessionID }),
+              receipt.dropPhase != .awaitingLanding,
+              let seconds = BreakRecoveryPolicy.durationSeconds(minutes: receipt.breakMinutes)
+        else { return nil }
+        let recovery = BreakRecoveryEnvelope(
+            id: UUID(),
+            minutes: receipt.breakMinutes,
+            endDate: now.addingTimeInterval(TimeInterval(seconds)),
+            clockAnchor: ClockAnchor(wallDate: now, systemUptime: uptime),
+            originatingFocusSessionID: sessionID
+        )
+        guard BreakRecoveryPolicy.isValid(recovery, at: now) else { return nil }
+        saveBreak(recovery, defaults: defaults, at: now)
+        guard let saved = loadBreak(defaults: defaults, at: now),
+              saved == recovery else { return nil }
+        return saved
     }
 
     static func clearBreak(defaults: UserDefaults = .standard) {

@@ -17,12 +17,17 @@ sourceではないため、repository外の`Tsumiben-local-artifacts-20260902`�
 このfolderは、監査済みの現在treeから`git@github.com:hinoshiba/Tumiben.git`へ公開するために
 新規初期化し、既存historyは移植していません。最初のcommit後かつpush前に、到達可能な全blobと
 author／committer metadataを再監査します。将来別のhistoryを移植する場合も全blobを別途scanします。
-commit／annotated tagのraw identity emailは、GitHub noreply identityまたは公開承認済みの
-`support@hinoshiba.com`だけを許可し、`.mailmap`で表示上置換したidentityは許可根拠にしません。
+commit／annotated tagのraw identity emailは、ownerが公開と全履歴への使用を明示指定した
+ kai.openclaw01@gmail.com 、従来のGitHub noreply identity、公開済みの`support@hinoshiba.com`を
+許可します。今後のcommitは kai.openclaw01@gmail.com を使います。`.mailmap`による表示上の
+置換は許可根拠にせず、ほかの個人メールや、このアドレスに似た別アドレスは引き続き拒否します。
 
-2026-09-05現在、`./Scripts/check-oss-readiness.sh`はreachable commit `ed7f63b`のraw
-author／committer identityが上記allowlist外として失敗します。公開してよいidentityとして明示承認するか、
-既存remoteを含むhistory rewriteをownerが承認して完了するまで、OSS公開gateを合格扱いにしません。
+2026-09-06にownerの指示で、既存13 commitのraw author／committer emailを指定アドレスへ
+統一しました。変更前の全refをrepository外へbundleとして保存し、各commitのtree、親子関係、
+名前、日時、messageが保持されることを照合しています。メール変更で無効になる元のGit署名は
+書換え後のcommitから取り除き、元の署名付きobjectは非公開のbackupに保存します。
+remoteへの反映には、確認済みの旧HEADを指定した`--force-with-lease`を使います。
+書換え後の全履歴を含む別cloneで標準OSS検査が成功し、公開メール検査の回帰13件も成功しました。
 
 ## 初回commit
 

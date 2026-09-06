@@ -157,6 +157,67 @@ final class FocusCompletionFailureRecoveryUITests: XCTestCase {
         activeApp = nil
     }
 
+    func testRewardSelectedBreakSurvivesRelaunchWithoutRestartAndSkipIsFinal() throws {
+        cleanDedicatedStore()
+        let app = configuredApp()
+        app.launchArguments += ["-focus.rest-cadence.v2", "reward-rest-relaunch-reset"]
+        activeApp = app
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 12))
+        dismissStaleRewardReceiptsIfNeeded(in: app)
+        selectDemoDuration(in: app)
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(waitForHittable(launcher, timeout: 5))
+        launcher.tap()
+        XCTAssertTrue(stopCompletionAlertIfPresented(in: app))
+        let rest = app.buttons["5分休憩する"]
+        XCTAssertTrue(waitForHittable(rest, timeout: 12))
+        let selectedAt = Date()
+        rest.tap()
+        // Do not wait for the gem or break cover. Unit tests independently
+        // freeze the exact pre-landing state; here kill the real UI as soon as
+        // XCTest returns control after the user's selection.
+        app.terminate()
+        usleep(4_000_000)
+        app.launch()
+        XCTAssertTrue(app.staticTexts["休憩"].waitForExistence(timeout: 15))
+        let countdown = app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "残り[0-9]+分[0-9]+秒")
+        ).firstMatch
+        XCTAssertTrue(countdown.waitForExistence(timeout: 5))
+        let label = countdown.label
+        let regex = try NSRegularExpression(pattern: "残り([0-9]+)分([0-9]+)秒")
+        let match = try XCTUnwrap(regex.firstMatch(in: label, range: NSRange(label.startIndex..., in: label)))
+        let minutes = try XCTUnwrap(Range(match.range(at: 1), in: label))
+        let seconds = try XCTUnwrap(Range(match.range(at: 2), in: label))
+        let remaining = try XCTUnwrap(Int(label[minutes])) * 60 + XCTUnwrap(Int(label[seconds]))
+        XCTAssertLessThan(remaining, 296, "Time outside the process must count toward the selected break")
+        XCTAssertEqual(Double(300 - remaining), Date().timeIntervalSince(selectedAt), accuracy: 4,
+                       "Recovery must retain the original deadline, not restart five minutes")
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Reward-selected rest — original countdown after relaunch"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        let skip = app.buttons["休憩をスキップ"].firstMatch
+        XCTAssertTrue(waitForHittable(skip, timeout: 5))
+        skip.tap()
+        XCTAssertTrue(waitForNonExistence(app.staticTexts["休憩"], timeout: 5))
+        XCTAssertTrue(waitForHittable(launcher, timeout: 12))
+        let landed = try waitForJarProbe(in: app, expectedCount: 1, timeout: 12)
+        XCTAssertEqual(landed.records.count, 1)
+        XCTAssertTrue(landed.records[0].hasSuffix(":250"))
+        XCTAssertFalse(app.buttons["休憩の提案を閉じる"].exists)
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(waitForHittable(launcher, timeout: 15))
+        XCTAssertFalse(app.staticTexts["休憩"].exists, "A landed reward must not recreate a skipped break")
+        let reopened = try waitForJarProbe(in: app, expectedCount: 1, timeout: 8)
+        XCTAssertEqual(reopened.records, landed.records)
+        XCTAssertFalse(app.buttons["休憩の提案を閉じる"].exists)
+    }
+
     private func configuredApp(
         action: String = "normal",
         injectsSaveFailure: Bool = false

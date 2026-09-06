@@ -104,6 +104,174 @@ final class FocusPersistenceTests: XCTestCase {
         XCTAssertEqual(saved.filter { $0.dropPhase == .awaitingLanding }.map(\.id), [receipts[2].id])
     }
 
+    func testRewardBreakSelectionSurvivesReopenAndKeepsOriginalDeadline() throws {
+        let suite = "TsumibenTests.reward-rest-reopen.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let selectedAt = Date(timeIntervalSince1970: 1_800_600_000)
+        let receipt = makeRewardReceipt(createdAt: selectedAt, phase: .awaitingAcknowledgement)
+        XCTAssertTrue(PendingRewardReceiptStore.insert(receipt, defaults: defaults))
+
+        let started = try XCTUnwrap(FocusPersistence.beginRewardBreak(
+            sessionID: receipt.id, defaults: defaults, at: selectedAt, uptime: 10_000
+        ))
+        XCTAssertNotEqual(started.id, receipt.id, "Stopping the focus alert must not acknowledge the break alert")
+        XCTAssertEqual(started.originatingFocusSessionID, receipt.id)
+        XCTAssertEqual(started.endDate, selectedAt.addingTimeInterval(900))
+        XCTAssertEqual(started.clockAnchor, ClockAnchor(wallDate: selectedAt, systemUptime: 10_000))
+        XCTAssertEqual(PendingRewardReceiptStore.load(defaults: defaults).first?.dropPhase, .awaitingLanding)
+
+        // No Home, scene or process-local continuation is retained. Root's
+        // ordinary break recovery reads just these durable bytes on remount.
+        let reopened = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let returnedAt = selectedAt.addingTimeInterval(120)
+        let restored = try XCTUnwrap(FocusPersistence.loadBreak(defaults: reopened, at: returnedAt))
+        XCTAssertEqual(restored, started)
+        XCTAssertEqual(BreakRecoveryPolicy.remainingSeconds(
+            minutes: restored.minutes, endDate: restored.endDate, at: returnedAt
+        ), 780)
+        XCTAssertEqual(FocusPersistence.beginRewardBreak(
+            sessionID: receipt.id, defaults: reopened, at: returnedAt, uptime: 10_120
+        ), started, "A repeated selection must reuse the same timer and deadline")
+    }
+
+    func testRewardBreakRecoveryFinishesCrashBetweenTimerSaveAndReceiptAcknowledgement() throws {
+        let suite = "TsumibenTests.reward-rest-interrupted-write.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let selectedAt = Date(timeIntervalSince1970: 1_800_610_000)
+        let receipt = makeRewardReceipt(createdAt: selectedAt, phase: .awaitingAcknowledgement)
+        XCTAssertTrue(PendingRewardReceiptStore.insert(receipt, defaults: defaults))
+        let selectedBreak = BreakRecoveryEnvelope(
+            id: UUID(), minutes: receipt.breakMinutes,
+            endDate: selectedAt.addingTimeInterval(900),
+            clockAnchor: ClockAnchor(wallDate: selectedAt, systemUptime: 20_000),
+            originatingFocusSessionID: receipt.id
+        )
+        FocusPersistence.saveBreak(selectedBreak, defaults: defaults, at: selectedAt)
+        XCTAssertEqual(PendingRewardReceiptStore.load(defaults: defaults).first?.dropPhase, .awaitingAcknowledgement)
+
+        let reopened = try XCTUnwrap(UserDefaults(suiteName: suite))
+        XCTAssertEqual(FocusPersistence.loadBreak(defaults: reopened, at: selectedAt.addingTimeInterval(30)), selectedBreak)
+        XCTAssertEqual(PendingRewardReceiptStore.load(defaults: reopened).first?.dropPhase, .awaitingLanding)
+        XCTAssertEqual(FocusPersistence.loadBreak(defaults: reopened, at: selectedAt.addingTimeInterval(60)), selectedBreak)
+        XCTAssertEqual(PendingRewardReceiptStore.load(defaults: reopened).count, 1)
+    }
+
+    func testConsumedRewardBreakCannotRestartFromUnlandedReceipt() throws {
+        let suite = "TsumibenTests.reward-rest-consumed.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let now = Date(timeIntervalSince1970: 1_800_620_000)
+        let receipt = makeRewardReceipt(createdAt: now, phase: .awaitingAcknowledgement)
+        XCTAssertTrue(PendingRewardReceiptStore.insert(receipt, defaults: defaults))
+        XCTAssertNotNil(FocusPersistence.beginRewardBreak(
+            sessionID: receipt.id, defaults: defaults, at: now, uptime: 30_000
+        ))
+        // Skip/completion consumes the one durable timer even if the drop has
+        // not yet run on the returning Home.
+        FocusPersistence.clearBreak(defaults: defaults)
+        XCTAssertEqual(PendingRewardReceiptStore.load(defaults: defaults).first?.dropPhase, .awaitingLanding)
+        XCTAssertNil(FocusPersistence.beginRewardBreak(
+            sessionID: receipt.id, defaults: defaults, at: now.addingTimeInterval(5), uptime: 30_005
+        ))
+        XCTAssertNil(FocusPersistence.loadBreak(defaults: defaults, at: now.addingTimeInterval(5)))
+        PendingRewardReceiptStore.remove(id: receipt.id, defaults: defaults)
+        XCTAssertNil(FocusPersistence.beginRewardBreak(
+            sessionID: receipt.id, defaults: defaults, at: now.addingTimeInterval(10), uptime: 30_010
+        ))
+    }
+
+    func testExpiredRewardBreakRecoveryAcknowledgesCardWithoutStartingFreshRest() throws {
+        let suite = "TsumibenTests.reward-rest-expired.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let selectedAt = Date(timeIntervalSince1970: 1_800_630_000)
+        let receipt = makeRewardReceipt(createdAt: selectedAt, phase: .awaitingAcknowledgement)
+        XCTAssertTrue(PendingRewardReceiptStore.insert(receipt, defaults: defaults))
+        let recovery = BreakRecoveryEnvelope(
+            id: UUID(), minutes: receipt.breakMinutes,
+            endDate: selectedAt.addingTimeInterval(900),
+            clockAnchor: ClockAnchor(wallDate: selectedAt, systemUptime: 40_000),
+            originatingFocusSessionID: receipt.id
+        )
+        FocusPersistence.saveBreak(recovery, defaults: defaults, at: selectedAt)
+        // A recent late recovery remains an elapsed timer, not a new duration.
+        let justLate = selectedAt.addingTimeInterval(920)
+        XCTAssertEqual(FocusPersistence.loadBreak(defaults: defaults, at: justLate), recovery)
+        XCTAssertEqual(BreakRecoveryPolicy.remainingSeconds(
+            minutes: recovery.minutes, endDate: recovery.endDate, at: justLate
+        ), 0)
+        // Simulate the unacknowledged crash state again, then return next day.
+        PendingRewardReceiptStore.save([receipt], defaults: defaults)
+        let nextDay = selectedAt.addingTimeInterval(86_400)
+        XCTAssertNil(FocusPersistence.loadBreak(defaults: defaults, at: nextDay))
+        XCTAssertEqual(PendingRewardReceiptStore.load(defaults: defaults).first?.dropPhase, .awaitingLanding)
+        XCTAssertNil(FocusPersistence.beginRewardBreak(
+            sessionID: receipt.id, defaults: defaults, at: nextDay, uptime: 126_400
+        ))
+    }
+
+    func testLegacyRewardBreakUsesExistingRecoveryWithoutReplayingDrop() throws {
+        let suite = "TsumibenTests.reward-rest-legacy.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let now = Date(timeIntervalSince1970: 1_800_640_000)
+        let legacy = makeRewardReceipt(createdAt: now, phase: nil)
+        XCTAssertTrue(PendingRewardReceiptStore.insert(legacy, defaults: defaults))
+        let rest = try XCTUnwrap(FocusPersistence.beginRewardBreak(
+            sessionID: legacy.id, defaults: defaults, at: now, uptime: 50_000
+        ))
+        XCTAssertTrue(PendingRewardReceiptStore.load(defaults: defaults).isEmpty)
+        XCTAssertEqual(FocusPersistence.loadBreak(defaults: defaults, at: now), rest)
+        var oldObject = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(rest)
+        ) as? [String: Any])
+        oldObject.removeValue(forKey: "originatingFocusSessionID")
+        let decoded = try JSONDecoder().decode(BreakRecoveryEnvelope.self,
+            from: JSONSerialization.data(withJSONObject: oldObject))
+        XCTAssertNil(decoded.originatingFocusSessionID)
+        XCTAssertEqual(decoded.id, rest.id)
+        XCTAssertEqual(decoded.endDate, rest.endDate)
+    }
+
+    func testRewardBreakSelectionRespectsNamespaceResetAndOtherActiveBreak() throws {
+        let suite = "TsumibenTests.reward-rest-boundaries.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let firstNamespace = AccountDataNamespace()
+        let secondNamespace = AccountDataNamespace()
+        let now = Date(timeIntervalSince1970: 1_800_650_000)
+        AccountScopedLocalState.activateLocalOnly(namespace: firstNamespace, standardDefaults: defaults)
+        let receipt = makeRewardReceipt(createdAt: now, phase: .awaitingAcknowledgement)
+        XCTAssertTrue(PendingRewardReceiptStore.insert(receipt, defaults: defaults))
+        let rest = try XCTUnwrap(FocusPersistence.beginRewardBreak(
+            sessionID: receipt.id, defaults: defaults, at: now, uptime: 60_000
+        ))
+        let otherReceipt = makeRewardReceipt(createdAt: now.addingTimeInterval(1), phase: .awaitingAcknowledgement)
+        XCTAssertTrue(PendingRewardReceiptStore.insert(otherReceipt, defaults: defaults))
+        XCTAssertNil(FocusPersistence.beginRewardBreak(
+            sessionID: otherReceipt.id, defaults: defaults, at: now.addingTimeInterval(1), uptime: 60_001
+        ))
+        XCTAssertEqual(FocusPersistence.loadBreak(defaults: defaults, at: now), rest)
+
+        AccountScopedLocalState.beginCloudBoundary(standardDefaults: defaults)
+        XCTAssertNil(FocusPersistence.loadBreak(defaults: defaults, at: now))
+        XCTAssertNil(FocusPersistence.beginRewardBreak(sessionID: receipt.id, defaults: defaults, at: now, uptime: 60_000))
+        AccountScopedLocalState.activateLocalOnly(namespace: secondNamespace, standardDefaults: defaults)
+        XCTAssertNil(FocusPersistence.loadBreak(defaults: defaults, at: now))
+        XCTAssertNil(FocusPersistence.beginRewardBreak(sessionID: receipt.id, defaults: defaults, at: now, uptime: 60_000))
+        AccountScopedLocalState.activateLocalOnly(namespace: firstNamespace, standardDefaults: defaults)
+        XCTAssertEqual(FocusPersistence.loadBreak(defaults: defaults, at: now), rest)
+
+        // These are the same account-scoped stores cleared by activity reset
+        // and full deletion. An old animation callback has no timer to revive.
+        FocusPersistence.clearBreak(defaults: defaults)
+        PendingRewardReceiptStore.removeAll(defaults: defaults)
+        XCTAssertNil(FocusPersistence.beginRewardBreak(sessionID: receipt.id, defaults: defaults, at: now, uptime: 60_000))
+        XCTAssertNil(FocusPersistence.loadBreak(defaults: defaults, at: now))
+    }
+
     private func makeRewardReceipt(
         id: UUID = UUID(),
         createdAt: Date = Date(timeIntervalSince1970: 1_800_500_000),

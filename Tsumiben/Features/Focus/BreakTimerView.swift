@@ -6,6 +6,7 @@ import UserNotifications
 
 struct BreakTimerView: View {
     let minutes: Int
+    private let originatingFocusSessionID: UUID?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
@@ -32,6 +33,7 @@ struct BreakTimerView: View {
 
     init(minutes: Int) {
         self.minutes = minutes
+        originatingFocusSessionID = nil
         _sessionID = State(initialValue: UUID())
         _clockAnchor = State(initialValue: nil)
         _preferences = Query(PrefsConsumerPolicy.descriptor())
@@ -42,6 +44,7 @@ struct BreakTimerView: View {
 
     init(recovery: BreakRecoveryEnvelope) {
         minutes = recovery.minutes
+        originatingFocusSessionID = recovery.originatingFocusSessionID
         _sessionID = State(initialValue: recovery.id)
         _endDate = State(initialValue: recovery.endDate)
         _clockAnchor = State(initialValue: recovery.clockAnchor)
@@ -323,6 +326,15 @@ struct BreakTimerView: View {
     @MainActor
     private func prepareBreak() async {
         guard !Task.isCancelled, isBreakActive else { return }
+        // Rest may already be counting down while Home reveals the gem. Join
+        // its one registration before this view replaces the same OS request.
+        await RewardBreakNotificationHandoff.wait(for: sessionID)
+        guard !Task.isCancelled, isBreakActive else { return }
+        if let saved = FocusPersistence.loadBreak(),
+           saved.id == sessionID, saved.endDate == endDate {
+            scheduledCompletionNotificationDeliveryDate =
+                saved.scheduledCompletionNotificationDeliveryDate
+        }
         configureSensoryPreferences()
         guard let durationSeconds = BreakRecoveryPolicy.durationSeconds(
             minutes: minutes
@@ -351,7 +363,8 @@ struct BreakTimerView: View {
             endDate: resolvedEndDate,
             clockAnchor: resolvedClockAnchor,
             scheduledCompletionNotificationDeliveryDate:
-                currentNotificationDeliveryWitness
+                currentNotificationDeliveryWitness,
+            originatingFocusSessionID: originatingFocusSessionID
         )
         guard BreakRecoveryPolicy.isValid(recovery, at: startedAt) else {
             FocusPersistence.clearBreak()
@@ -673,7 +686,8 @@ struct BreakTimerView: View {
             endDate: endDate,
             clockAnchor: clockAnchor,
             scheduledCompletionNotificationDeliveryDate:
-                currentNotificationDeliveryWitness
+                currentNotificationDeliveryWitness,
+            originatingFocusSessionID: originatingFocusSessionID
         ))
     }
 
@@ -718,6 +732,83 @@ struct BreakTimerView: View {
             return
         }
         UIApplication.shared.open(url)
+    }
+}
+
+/// Registers the already-persisted rest independently of Home's animation and
+/// CloudKit view lifetime. This owns only the short Notification Center add;
+/// the operating system owns the actual break deadline.
+@MainActor
+enum RewardBreakNotificationHandoff {
+    private struct Operation {
+        let token: UUID
+        let task: Task<Void, Never>
+        var backgroundTask: UIBackgroundTaskIdentifier
+    }
+
+    private static var operations: [UUID: Operation] = [:]
+
+    static func begin(
+        _ recovery: BreakRecoveryEnvelope,
+        playsSound: Bool,
+        completionSound: TimerCompletionSound
+    ) {
+        guard operations[recovery.id] == nil, recovery.endDate > .now else { return }
+        let key = FocusPersistence.breakKey
+        let token = UUID()
+        let backgroundTask = UIApplication.shared.beginBackgroundTask(
+            withName: "Schedule selected rest"
+        ) {
+            guard var operation = operations[recovery.id], operation.token == token else { return }
+            operation.task.cancel()
+            NotificationManager.shared.cancelBreakCompletion(id: recovery.id)
+            let identifier = operation.backgroundTask
+            operation.backgroundTask = .invalid
+            operations[recovery.id] = operation
+            if identifier != .invalid { UIApplication.shared.endBackgroundTask(identifier) }
+        }
+        let task = Task { @MainActor in
+            defer { finish(id: recovery.id, token: token) }
+            guard !Task.isCancelled,
+                  key == FocusPersistence.breakKey,
+                  let current = FocusPersistence.loadBreak(),
+                  current.id == recovery.id, current.endDate == recovery.endDate,
+                  current.endDate > .now else { return }
+            do {
+                let result = try await NotificationManager.shared.scheduleBreakCompletion(
+                    id: recovery.id,
+                    endDate: recovery.endDate,
+                    playsSound: playsSound,
+                    completionSound: completionSound
+                )
+                guard !Task.isCancelled,
+                      case let .accepted(deliveryDate) = result,
+                      key == FocusPersistence.breakKey,
+                      var saved = FocusPersistence.loadBreak(),
+                      saved.id == recovery.id, saved.endDate == recovery.endDate
+                else { return }
+                saved.scheduledCompletionNotificationDeliveryDate = deliveryDate
+                FocusPersistence.saveBreak(saved)
+            } catch {
+                // BreakTimerView provides the existing permission/retry UI.
+                // The saved clock remains valid even if registration fails.
+            }
+        }
+        operations[recovery.id] = Operation(
+            token: token, task: task, backgroundTask: backgroundTask
+        )
+    }
+
+    static func wait(for id: UUID) async {
+        await operations[id]?.task.value
+    }
+
+    private static func finish(id: UUID, token: UUID) {
+        guard let operation = operations[id], operation.token == token else { return }
+        operations.removeValue(forKey: id)
+        if operation.backgroundTask != .invalid {
+            UIApplication.shared.endBackgroundTask(operation.backgroundTask)
+        }
     }
 }
 

@@ -6,40 +6,56 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+from public_mailbox_policy import APPROVED_PERSONAL_EMAILS
 
-# Keep this narrow and explicit. The support mailbox is approved for public
-# disclosure, but maintainers should normally author commits with the GitHub
-# noreply identity so repository history represents the actual GitHub account.
+
+# Only these complete identities are approved for public disclosure. The
+# owner-authorized personal address is shared with the raw content scanner.
 ALLOWED_EMAILS = frozenset(
     {
         "29009074+hinoshiba@users.noreply.github.com",
         "support@hinoshiba.com",
     }
-)
+) | APPROVED_PERSONAL_EMAILS
 OBJECT_ID = re.compile(rb"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 IDENTITY = re.compile(
-    rb"(author|committer|tagger) ([^<>\x00\r\n]+) <([^<>\x00\r\n]+)> "
+    rb"(author|committer|tagger) ([^<>\x00-\x1f\x7f]+) <([^<>\x00-\x1f\x7f]+)> "
     rb"([0-9]+) ([+-])([0-9]{2})([0-9]{2})\Z"
 )
 
 
 def git(*arguments: str, input_bytes: bytes | None = None) -> bytes:
     try:
-        result = subprocess.run(
-            ["git", "--no-replace-objects", *arguments],
-            input=input_bytes,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-        )
+        # A batch inventory can exceed pipe capacity. Regular temporary files
+        # also keep the audit usable on hosts with exhausted pipe resources.
+        with tempfile.TemporaryFile() as source, tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
+            if input_bytes is not None:
+                source.write(input_bytes)
+                source.seek(0)
+            result = subprocess.run(
+                ["git", "--no-replace-objects", *arguments],
+                stdin=source,
+                stdout=output,
+                stderr=errors,
+                check=False,
+                timeout=120,
+            )
+            output.seek(0)
+            errors.seek(0)
+            stdout = output.read()
+            stderr = errors.read()
+    except subprocess.TimeoutExpired as error:
+        raise SystemExit("error: Git metadata audit command timed out") from error
     except OSError as error:
         raise SystemExit(f"error: cannot execute Git metadata audit: {error}") from error
     if result.returncode != 0:
-        detail = result.stderr.decode("utf-8", "backslashreplace").strip()
+        detail = stderr.decode("utf-8", "backslashreplace").strip()
         raise SystemExit(f"error: Git metadata audit command failed: {detail!r}")
-    return result.stdout
+    return stdout
 
 
 def load_object_ids(path: Path) -> list[bytes]:
@@ -73,6 +89,8 @@ def object_types(object_ids: list[bytes]) -> dict[bytes, bytes]:
             raise SystemExit(
                 f"error: reachable Git object is missing: {object_id.decode('ascii')}"
             )
+        if object_type not in (b"commit", b"tag", b"tree", b"blob"):
+            raise SystemExit("error: Git object inspection returned an unknown object type")
         result[object_id] = object_type
     if set(result) != set(object_ids):
         raise SystemExit("error: Git object inspection returned an incomplete inventory")
@@ -109,8 +127,8 @@ def validate_object(object_id: bytes, object_type: bytes) -> list[str]:
     expected = {b"author": 1, b"committer": 1} if object_type == b"commit" else {b"tagger": 0}
     counts = dict.fromkeys(expected, 0)
     errors: list[str] = []
-    for line in headers.splitlines():
-        kind = line.split(b" ", 1)[0]
+    for line in headers.split(b"\n"):
+        kind = re.split(rb"\s+", line, maxsplit=1)[0]
         if kind not in expected:
             continue
         counts[kind] += 1

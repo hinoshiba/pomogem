@@ -136,7 +136,7 @@ struct HomeView: View {
     @State private var showsTiltHint = false
     @State private var pendingCapacityCelebrations: [PendingStratumCelebration] = []
     @State private var breakOffer: BreakOffer?
-    @State private var breakConfiguration: BreakConfiguration?
+    @State private var breakConfiguration: BreakRecoveryEnvelope?
     @State private var purchase = PurchaseManager.shared
     @State private var announcedPostDropOfferID: UUID?
     @State private var announcedPostDropShareOfferID: UUID?
@@ -607,7 +607,7 @@ struct HomeView: View {
         .fullScreenCover(item: $breakConfiguration, onDismiss: {
             recoverPendingRewardReceipt()
         }) { configuration in
-            BreakTimerView(minutes: configuration.minutes)
+            BreakTimerView(recovery: configuration)
         }
         .sheet(isPresented: $showHomeMenu) {
             homeMenuSheet
@@ -2363,7 +2363,17 @@ struct HomeView: View {
 
     private func startBreakButton(_ offer: BreakOffer) -> some View {
         Button("\(offer.minutes)分休憩") {
-            acknowledgeRewardOffer(offer, destination: .rest(minutes: offer.minutes))
+            guard !rewardDropRevealIsPending, rewardDropDestination == nil else { return }
+            guard let recovery = FocusPersistence.beginRewardBreak(sessionID: offer.id) else {
+                router.showToast("休憩を開始できませんでした。もう一度お試しください", symbol: "arrow.clockwise")
+                return
+            }
+            RewardBreakNotificationHandoff.begin(
+                recovery,
+                playsSound: sensoryPreferences.soundOn,
+                completionSound: sensoryPreferences.timerCompletionSound
+            )
+            acknowledgeRewardOffer(offer, destination: .rest(recovery))
         }
         .buttonStyle(TsumibenCompactButtonStyle())
         .accessibilityLabel("\(offer.minutes)分休憩する")
@@ -2501,8 +2511,16 @@ struct HomeView: View {
             recoverPendingRewardReceipt()
             presentNextStratumCelebrationIfNeeded()
             schedulePendingReviewRequestIfPossible()
-        case let .rest(minutes):
-            breakConfiguration = BreakConfiguration(minutes: minutes)
+        case let .rest(recovery):
+            // The clock starts when Rest is selected, including the drop and
+            // any time away. Never recreate a consumed or expired timer from
+            // this process-local animation callback.
+            if let saved = FocusPersistence.loadBreak(), saved.id == recovery.id {
+                breakConfiguration = saved
+            } else {
+                recoverPendingRewardReceipt()
+                presentNextStratumCelebrationIfNeeded()
+            }
         case .share:
             router.presentShare()
         }
@@ -4144,7 +4162,7 @@ private struct FocusConfiguration: Identifiable {
 private struct RewardDropContinuation {
     enum Destination {
         case home
-        case rest(minutes: Int)
+        case rest(BreakRecoveryEnvelope)
         case share
     }
 
@@ -4255,11 +4273,6 @@ private struct BreakOffer: Identifiable {
             ? "\(Int(kilograms))kg"
             : String(format: "%.2fkg", kilograms)
     }
-}
-
-private struct BreakConfiguration: Identifiable {
-    let id = UUID()
-    let minutes: Int
 }
 
 private struct DurationChip: View {

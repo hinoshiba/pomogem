@@ -126,8 +126,8 @@
 - [ ] 選択したlicense境界を`LICENSE`、`ASSET_LICENSES.md`、`TRADEMARKS.md`、README、release tagで一致させ、
   rights／商標／AI reference inputのowner sign-offを記録
 - [ ] Public化前に全Git historyのsecret／個人情報／署名資材を再監査し、Public化後に匿名access、branch
-  protection、required checks、secret scanning、private vulnerability reportingを確認。2026-09-05時点では
-  reachable commit `ed7f63b`のauthor／committer identityが公開承認allowlist外のためreadiness checkは失敗
+  protection、required checks、secret scanning、private vulnerability reportingを確認。2026-09-06に
+  owner指定の公開メールへ全履歴を統一。履歴・公開メールの検証記録は`Docs/OSS_PUBLISHING.md`を参照
 - [ ] `./Scripts/check-oss-readiness.sh --release`、site validation、build、test、analyzeが成功
 - [ ] 全11出荷対象モデルのversioned JSON exportを40年相当の保存データで実行し、件数・内容・Files保存・一時ファイル削除を確認
 - [ ] local-only実機でofflineの基本機能、削除前のJSON書き出しと再import不可を確認し、iCloud実機2台で
