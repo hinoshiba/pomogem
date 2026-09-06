@@ -275,7 +275,7 @@ private struct ValuePage: View {
                             ? "このiPhoneだけに保存"
                             : "iCloudで引き継ぐ",
                         detail: persistenceMode == .localOnly
-                            ? "iCloudへ自動送信せず、この端末の専用領域へ保存"
+                            ? "このiPhoneの専用領域へ保存"
                             : "同じApple AccountのiPhone間で同期。起動・再開時はオンライン確認が必要"
                     )
 

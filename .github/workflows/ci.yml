@@ -2,8 +2,6 @@ name: iOS CI
 
 on:
   pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -102,7 +100,10 @@ jobs:
           "$RUNNER_TEMP/actionlint" .github/workflows/*.yml
 
       - name: OSS, privacy, Store, and Pages checks
-        run: ./Scripts/check-oss-readiness.sh
+        env:
+          PUBLIC_METADATA_BASE: ${{ github.event.pull_request.base.sha }}
+          PUBLIC_METADATA_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: ./Scripts/check-oss-readiness.sh --current
 
       - name: Verify generated project is committed
         shell: bash

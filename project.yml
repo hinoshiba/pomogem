@@ -40,7 +40,7 @@ targets:
         NSPhotoLibraryAddUsageDescription: シェアカードを写真に保存します。
         NSMotionUsageDescription: 端末の傾きや振る操作に合わせて瓶の粒を動かすために使います。値は保存・送信しません。
         ITSAppUsesNonExemptEncryption: false
-        POMOGEM_PRIVACY_POLICY_URL: "https://pomogem.hinoshiba.com/privacy/"
+        POMOGEM_PRIVACY_POLICY_URL: "https://pomogem.hinoshiba.com/#privacy"
         UIAppFonts:
           - ZenMaruGothic-Black.ttf
         UIBackgroundModes:

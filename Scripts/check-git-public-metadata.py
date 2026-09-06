@@ -13,14 +13,8 @@ sys.dont_write_bytecode = True
 from public_mailbox_policy import APPROVED_PERSONAL_EMAILS
 
 
-# Only these complete identities are approved for public disclosure. The
-# owner-authorized personal address is shared with the raw content scanner.
-ALLOWED_EMAILS = frozenset(
-    {
-        "29009074+hinoshiba@users.noreply.github.com",
-        "support@hinoshiba.com",
-    }
-) | APPROVED_PERSONAL_EMAILS
+# Reuse the exact project-contact allowlist for raw author/committer metadata.
+ALLOWED_EMAILS = APPROVED_PERSONAL_EMAILS
 OBJECT_ID = re.compile(rb"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 IDENTITY = re.compile(
     rb"(author|committer|tagger) ([^<>\x00-\x1f\x7f]+) <([^<>\x00-\x1f\x7f]+)> "
@@ -113,7 +107,7 @@ def validate_identity(object_id: bytes, object_type: bytes, line: bytes) -> str:
     except UnicodeDecodeError:
         return f"{oid} {kind.decode('ascii')} email is not ASCII"
     if email.casefold() not in ALLOWED_EMAILS:
-        return f"{oid} {kind.decode('ascii')} email is not approved: {email!r}"
+        return f"{oid} {kind.decode('ascii')} email is not approved"
     return ""
 
 

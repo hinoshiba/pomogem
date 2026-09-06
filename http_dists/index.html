@@ -1,341 +1,1520 @@
-<!doctype html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#090d1d">
-  <meta name="description" content="ポモジェム（PomoGem）は、集中時間が宝石として瓶に積もるポモドーロタイマー。25・45・60・90分のタイマーを完走して、勉強・仕事の積み重ねを記録。基本無料・広告なしのiPhoneアプリです。">
-  <meta property="og:type" content="website">
-  <meta property="og:site_name" content="ポモジェム">
-  <meta property="og:locale" content="ja_JP">
-  <meta property="og:url" content="https://pomogem.hinoshiba.com/">
-  <meta property="og:title" content="集中した時間が、宝石になる。｜ポモジェム">
-  <meta property="og:description" content="25・45・60・90分のタイマーを完走するたび、集中時間がテーマ色の宝石になって瓶へ積もる、基本無料のiPhoneアプリ。">
-  <meta property="og:image" content="https://pomogem.hinoshiba.com/og-pomogem-v1.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="25分タイマーから宝石の集中記録までを示す、ポモジェムの紹介画像">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="集中した時間が、宝石になる。｜ポモジェム">
-  <meta name="twitter:description" content="25・45・60・90分のタイマーを完走するたび、集中時間がテーマ色の宝石になって瓶へ積もる、基本無料のiPhoneアプリ。">
-  <meta name="twitter:image" content="https://pomogem.hinoshiba.com/og-pomogem-v1.png">
-  <meta name="twitter:image:alt" content="25分タイマーから宝石の集中記録までを示す、ポモジェムの紹介画像">
-  <title>ポモジェム：ポモドーロタイマー</title>
-  <link rel="canonical" href="https://pomogem.hinoshiba.com/">
-  <link rel="alternate" hreflang="ja" href="https://pomogem.hinoshiba.com/">
-  <link rel="alternate" hreflang="en" href="https://pomogem.hinoshiba.com/en/">
-  <link rel="alternate" hreflang="x-default" href="https://pomogem.hinoshiba.com/">
-  <link rel="icon" href="public/app-icon-focus-v5.png">
-  <link rel="apple-touch-icon" href="public/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=15">
-  <script src="app.js?v=11" defer></script>
+<!DOCTYPE html>
+
+<html data-i18n="0" lang="ja">
+<head><script defer="" src="language.js?v=1"></script>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport"/>
+<meta content="#090d1d" name="theme-color"/>
+<meta content="ポモジェム（PomoGem）は、集中時間が宝石として瓶に積もるポモドーロタイマー。25・45・60・90分のタイマーを完走して、勉強・仕事の積み重ねを記録。基本無料・広告なしのiPhoneアプリです。" data-i18n="1" name="description"/>
+<meta content="website" property="og:type"/>
+<meta content="ポモジェム" data-i18n="2" property="og:site_name"/>
+<meta content="ja_JP" data-i18n="3" property="og:locale"/>
+<meta content="https://pomogem.hinoshiba.com/" data-i18n="4" property="og:url"/>
+<meta content="集中した時間が、宝石になる。｜ポモジェム" data-i18n="5" property="og:title"/>
+<meta content="25・45・60・90分のタイマーを完走するたび、集中時間がテーマ色の宝石になって瓶へ積もる、基本無料のiPhoneアプリ。" data-i18n="6" property="og:description"/>
+<meta content="https://pomogem.hinoshiba.com/og-pomogem-v1.png" property="og:image"/>
+<meta content="1200" property="og:image:width"/>
+<meta content="630" property="og:image:height"/>
+<meta content="25分タイマーから宝石の集中記録までを示す、ポモジェムの紹介画像" data-i18n="7" property="og:image:alt"/>
+<meta content="summary_large_image" name="twitter:card"/>
+<meta content="集中した時間が、宝石になる。｜ポモジェム" data-i18n="8" name="twitter:title"/>
+<meta content="25・45・60・90分のタイマーを完走するたび、集中時間がテーマ色の宝石になって瓶へ積もる、基本無料のiPhoneアプリ。" data-i18n="9" name="twitter:description"/>
+<meta content="https://pomogem.hinoshiba.com/og-pomogem-v1.png" name="twitter:image"/>
+<meta content="25分タイマーから宝石の集中記録までを示す、ポモジェムの紹介画像" data-i18n="10" name="twitter:image:alt"/>
+<title data-i18n="11">ポモジェム：ポモドーロタイマー</title>
+<link href="https://pomogem.hinoshiba.com/" rel="canonical"/>
+
+
+
+<link href="public/app-icon-focus-v5.png" rel="icon"/>
+<link href="public/apple-touch-icon.png" rel="apple-touch-icon"/>
+<link href="styles.css?v=16" rel="stylesheet"/>
+<script defer="" src="app.js?v=12"></script>
 </head>
 <body class="product-page">
-  <a class="skip-link" href="#main">本文へ移動</a>
-  <header class="site-header">
-    <a class="brand" href="#top" aria-label="ポモジェム ホーム">
-      <img src="public/app-icon-focus-v5.png" alt="" width="38" height="38">
-      <span>ポモジェム</span>
-    </a>
-    <nav aria-label="メインナビゲーション">
-      <a href="#experience">使い方</a>
-      <a href="#plans">無料・Pro</a>
-      <a href="#faq">よくある質問</a>
-      <a href="support/">サポート</a>
-    </nav>
-    <details class="mobile-menu" id="mobile-menu">
-      <summary>メニュー</summary>
-      <nav aria-label="モバイルナビゲーション">
-        <a href="#experience">使い方・デモ</a>
-        <a href="#plans">無料・Pro</a>
-        <a href="#faq">よくある質問</a>
-        <a href="#privacy">データ保存</a>
-        <a href="support/">サポート</a>
-        <a href="#download">公開について</a>
-      </nav>
-    </details>
-    <a class="language-switch" href="en/" lang="en" hreflang="en" aria-label="Switch to English">English</a>
-    <a class="header-cta" href="#download">公開について</a>
-  </header>
-
-  <main id="main">
-    <section class="hero" id="top">
-      <div class="hero-copy">
-        <p class="eyebrow"><span></span> ポモドーロタイマー <b>×</b> 見える集中記録</p>
-        <h1><span>集中した時間が、</span><br><span><em>宝石</em>になる。</span></h1>
-        <p class="hero-lead">勉強も、仕事も。25分のタイマーで集中。完走すると、その時間が宝石になって瓶に残ります。集中の積み重ねが見える、基本無料のiPhoneアプリです。</p>
-        <ol class="hero-flow" role="list" aria-label="ポモジェムのポモドーロ体験">
-          <li><span>01</span><strong>25:00</strong><small>時間を選んで開始</small></li>
-          <li><span>02</span><strong>完走</strong><small>タイマーで実測</small></li>
-          <li class="hero-flow-reward"><span>03</span><strong>+250g</strong><small>宝石1粒を記録</small><i class="hero-flow-gem" data-gem-kind="normal" data-gem-base="#EF6B5D" data-gem-edge="#FFB0A1" data-gem-glow="#FF7C69" aria-hidden="true"></i></li>
-        </ol>
-        <div class="hero-actions">
-          <a class="button primary" href="#demo">集中から宝石まで、8秒で体験</a>
-          <a class="button quiet" href="#plans">無料でできること <span aria-hidden="true">↓</span></a>
-        </div>
-        <p class="release-note">App Store 近日公開 <span aria-hidden="true">·</span> iPhone / iOS 17以降</p>
-        <ul class="trust-list" aria-label="主な特徴">
-          <li>基本無料</li>
-          <li>広告・行動解析なし</li>
-          <li>アカウント不要</li>
-          <li>iCloud同期は任意</li>
-        </ul>
-      </div>
-
-      <div class="phone-stage" role="group" aria-label="ポモドーロタイマーから宝石の集中記録までの実際のアプリ画面">
-        <div class="orbit orbit-one"></div>
-        <div class="orbit orbit-two"></div>
-        <figure class="product-shot timer-shot">
-          <div class="timer-shot-shell">
-            <img src="public/app-timer-v2.webp" alt="英語をテーマに25分の集中を計測し、終了通知を設定できる、ポモジェムのポモドーロタイマー画面" width="603" height="1305">
-          </div>
-          <figcaption><span>01</span> タイマーで集中</figcaption>
-        </figure>
-        <div class="conversion-badge" aria-hidden="true"><small>25分完走</small><strong>+250g → 1粒</strong></div>
-        <figure class="product-shot app-shot">
-          <div class="app-shot-shell">
-            <img src="public/app-home-v3.webp" alt="25分の集中を250gの宝石1粒として記録し、テーマと時間を選んで次の集中を始められる、ポモジェムのホーム画面" width="603" height="1305">
-          </div>
-          <figcaption><span>02</span> 宝石で記録</figcaption>
-        </figure>
-      </div>
-    </section>
-
-    <section class="experience section" id="experience">
-      <div class="section-heading">
-        <div><p class="section-label">FOCUS → RECORD → GEM</p><h2>タイマーを完走すると、<br>宝石が1粒。</h2></div>
-        <p>タイマーを始めて、集中して、完走する。その25分が宝石になるまでを、約8秒に短縮して体験できます。</p>
-      </div>
-      <div class="drop-lab">
-        <div class="lab-copy">
-          <ol>
-            <li><span>01</span><div><h3>テーマと時間を選ぶ</h3><p>勉強の科目も、企画や開発など仕事のテーマも自由。</p></div></li>
-            <li><span>02</span><div><h3>タイマーで集中する</h3><p>25分・45分・60分・90分の基本タイマーは無料です。</p></div></li>
-            <li><span>03</span><div><h3>完走を自動で記録</h3><p>25分なら250g。アプリでは、テーマ色の宝石が音と触覚とともに積もります。</p></div></li>
-          </ol>
-        </div>
-        <div class="lab-vessel-wrap" id="demo" data-state="ready" role="group" aria-labelledby="demo-title">
-          <h3 class="demo-title" id="demo-title">集中した時間が、宝石になる。</h3>
-          <p class="demo-speed" id="demo-speed">25分の集中を約8秒で早送りするデモ</p>
-          <div class="demo-journey">
-            <div class="demo-focus">
-              <p class="demo-stage-label"><span>01</span> タイマーで集中</p>
-              <div class="demo-clock">
-                <svg viewBox="0 0 160 160" aria-hidden="true">
-                  <circle class="demo-clock-track" cx="80" cy="80" r="73"/>
-                  <circle class="demo-clock-progress" id="demo-progress" cx="80" cy="80" r="73" pathLength="100"/>
-                </svg>
-                <div class="demo-clock-face">
-                  <span class="demo-theme">英語</span>
-                  <strong id="demo-time" role="timer" aria-live="off" aria-label="早送りデモ、残り25分">25:00</strong>
-                  <span id="demo-phase">開始前</span>
-                </div>
-              </div>
-            </div>
-            <div class="demo-bridge" aria-hidden="true"><span>完走で</span><b>→</b></div>
-            <div class="demo-record">
-              <p class="demo-stage-label"><span>02</span> 宝石として残る</p>
-              <div class="lab-vessel" id="lab-vessel" role="img" aria-label="デモ用の瓶。現在は空です。">
-                <span class="demo-empty" id="demo-empty" aria-hidden="true">完走すると<br>ここに1粒</span>
-            <svg class="lab-bottle" viewBox="0 0 340 350" preserveAspectRatio="none" aria-hidden="true">
-              <defs>
-                <linearGradient id="labBottleGlass" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0" stop-color="#ff8a70" stop-opacity=".17"/>
-                  <stop offset=".38" stop-color="#aac3f0" stop-opacity=".035"/>
-                  <stop offset=".72" stop-color="#8068f6" stop-opacity=".08"/>
-                  <stop offset="1" stop-color="#8acbff" stop-opacity=".16"/>
-                </linearGradient>
-                <linearGradient id="labBottleEdge" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0" stop-color="#ffb1a0" stop-opacity=".72"/>
-                  <stop offset=".42" stop-color="#d9e8ff" stop-opacity=".25"/>
-                  <stop offset="1" stop-color="#8acbff" stop-opacity=".82"/>
-                </linearGradient>
-              </defs>
-              <path d="M74 20 L74 47 C74 57 52 59 38 78 C25 96 23 118 23 142 L18 304 Q18 332 49 338 L291 338 Q322 332 322 304 L317 142 C317 118 315 96 302 78 C288 59 266 57 266 47 L266 20 Z" fill="url(#labBottleGlass)" stroke="url(#labBottleEdge)" stroke-width="2.4"/>
-              <ellipse cx="170" cy="20" rx="96" ry="10" fill="#071021" fill-opacity=".42" stroke="#c8dcff" stroke-opacity=".62" stroke-width="2"/>
-              <ellipse cx="170" cy="22" rx="88" ry="6" fill="none" stroke="#8acbff" stroke-opacity=".24" stroke-width="1.2"/>
-              <path d="M78 22 L78 46 Q78 54 65 62" fill="none" stroke="#ffb1a0" stroke-opacity=".48" stroke-linecap="round" stroke-width="2.2"/>
-              <path d="M262 22 L262 46 Q262 54 275 62" fill="none" stroke="#9fd2ff" stroke-opacity=".58" stroke-linecap="round" stroke-width="2.2"/>
-              <path d="M38 104 C31 154 31 245 34 291" fill="none" stroke="#ff9b81" stroke-opacity=".37" stroke-linecap="round" stroke-width="4"/>
-              <path d="M302 104 C309 154 309 245 306 291" fill="none" stroke="#9fd2ff" stroke-opacity=".45" stroke-linecap="round" stroke-width="4"/>
-              <path d="M42 319 Q170 337 298 319" fill="none" stroke="#8acbff" stroke-opacity=".25" stroke-width="2"/>
-            </svg>
-            <div class="lab-glass"></div>
-            <div class="lab-floor"></div>
-              </div>
-              <div class="lab-mass"><span id="demo-total">まだ集中の記録はありません</span><strong id="lab-mass">0<small>g</small></strong></div>
-            </div>
-          </div>
-          <button class="button primary lab-button" id="lab-start" type="button" disabled aria-describedby="demo-speed lab-note">集中をはじめる（8秒デモ）</button>
-          <div class="demo-controls" id="demo-controls" hidden>
-            <button class="button quiet" id="demo-pause" type="button">一時停止</button>
-            <button class="button quiet" id="demo-cancel" type="button">中断する</button>
-          </div>
-          <p class="lab-status" id="lab-status" role="status" aria-live="polite" aria-atomic="true">まずはタイマーを開始。完走すると、集中した時間が1粒になります。</p>
-          <p class="demo-rest" id="demo-rest" hidden>アプリでは休憩をはさんで、次の集中へ。次の25分も、一粒に。</p>
-          <p class="lab-note" id="lab-note">体験用の早送り表示です。実際の25分は計測せず、音・触覚・記録保存は再現しません。</p>
-          <noscript><p class="lab-note">デモを動かすにはJavaScriptを有効にしてください。アプリの画面と使い方は、このままご覧いただけます。</p></noscript>
-          <a class="demo-next" href="#plans">この体験は基本無料。機能を確認する <span aria-hidden="true">→</span></a>
-        </div>
-      </div>
-    </section>
-
-    <section class="principles section" id="principles">
-      <p class="section-label">WHY MASS?</p>
-      <div class="principle-grid">
-        <h2>グラフではなく、<br>手ざわりを残す。</h2>
-        <p>集中した時間は、終わった瞬間から見えなくなる。ポモジェムは時間を監視するのではなく、触れられそうな重さへ変える。ひとつのiPhoneで積んだ時間は、短く分けても長くまとめても、同じ総時間なら同じ質量になる。タップすれば跳ね、傾ければ転がる。</p>
-      </div>
-      <div class="manifesto" role="list" aria-label="プロダクト原則">
-        <article role="listitem"><span>01</span><h3>減らない。</h3><p>休んだ日があっても、積んだ粒はそのまま。連続記録は数えない。</p></article>
-        <article role="listitem"><span>02</span><h3>ごまかさない。</h3><p>1分はいつでも10g。回数ではなく、積んだ総時間を成長の基準にする。</p></article>
-        <article role="listitem"><span>03</span><h3>責めない。</h3><p>手動で積んだ回も、実測と区別しながら努力の記録として残す。</p></article>
-      </div>
-    </section>
-
-    <section class="plans section" id="plans">
-      <div class="section-heading compact">
-        <div><p class="section-label">FREE &amp; PRO</p><h2>始めるのは無料。<br>Proは、買い切り。</h2></div>
-        <p>集中を積み上げる基本体験は無料のまま。ポモジェムProは、時間設定と振り返り表示を少し細かくしたい人のための追加機能です。</p>
-      </div>
-      <div class="plan-grid">
-        <article class="plan-card free-plan">
-          <div class="plan-card-heading"><span>FREE</span><h3>無料でできること</h3><strong>基本機能</strong></div>
-          <ul>
-            <li>25分・45分・60分・90分の集中タイマー</li>
-            <li>完走した時間を宝石として瓶へ記録</li>
-            <li>テーマ、履歴、まとまり粒、記念石</li>
-            <li>静止画・GIFのシェアカード</li>
-            <li>「このiPhoneのみ」または確認後のiCloud同期</li>
-          </ul>
-        </article>
-        <article class="plan-card pro-plan">
-          <div class="plan-card-heading"><span>ONE-TIME PRO</span><h3>ポモジェムPro</h3><strong>買い切り</strong></div>
-          <ul>
-            <li>無料プリセット以外の1〜360分を自由に設定</li>
-            <li>まとまり粒へ月の刻印を表示</li>
-            <li>サブスクリプション、無料トライアル、自動更新なし</li>
-            <li>同じApple Accountなら「購入を復元」から再確認</li>
-            <li>ロゴと公式サイトは無料／Proともシェアカードに表示</li>
-          </ul>
-        </article>
-      </div>
-      <div class="plan-disclosure">
-        <p><strong>Proは1回限りの買い切りです。</strong>購入時の提供内容と条件は、アプリ内のApp Store購入確認画面でご確認ください。購入処理と返金申請はApp Storeを通じて行われます。法令上の権利を制限せず、Web決済や外部購入はありません。ファミリー共有には対応していません。</p>
-        <nav aria-label="購入に関する案内"><a href="commercial-transactions/">購入条件・販売者情報</a><a href="terms/">利用条件</a><a href="support/#restore">購入の復元</a></nav>
-      </div>
-    </section>
-
-    <section class="fairness section" id="fairness">
-      <div class="section-heading compact">
-        <div><p class="section-label">MEASURED &amp; MANUAL</p><h2>実測も手動記録も、<br>違いがわかる形で残す。</h2></div>
-        <p>タイマーで測った記録と自己申告の違いを見える形で残しながら、どちらの集中も失わず積みます。100点、合格、仕事の節目は、質量を増やさない記念石として別に残します。</p>
-      </div>
-      <div class="layer-cards">
-        <article class="layer-card measured"><div class="sample-pebble" data-gem-kind="normal" data-gem-base="#EF6B5D" data-gem-edge="#FFB0A1" data-gem-glow="#FF7C69" aria-hidden="true"></div><span>タイマー完走</span><h3>実測</h3><p>つやのある粒。総質量とシェアに入る。</p></article>
-        <article class="layer-card manual"><div class="sample-pebble" data-gem-kind="normal" data-gem-base="#EF6B5D" data-gem-edge="#FFB0A1" data-gem-glow="#FF7C69" data-gem-manual="true" aria-hidden="true"></div><span>手動・時刻の大きな不整合</span><h3>自己申告</h3><p>テーマ色は同じまま、内側の破線で区別。ロック中は通常どおり進み、手動記録はシェアに含めるか選べる。</p></article>
-        <article class="layer-card cluster"><div class="cluster-sample" data-gem-kind="aggregate" data-gem-count="10" data-gem-level="1" data-gem-colors="#EF6B5D,#4D7CDE,#3FA57C,#8A6FD1,#C25FA3" aria-hidden="true"></div><span>10粒が集まる</span><h3>まとまり粒</h3><p>元の色と記録を内側に残したまま、大きな一粒になって瓶で動く。</p></article>
-        <article class="layer-card achievement"><div class="achievement-samples" aria-hidden="true"><div class="achievement-sample primary" data-gem-kind="achievement" data-gem-base="#D93D68" data-gem-edge="#FF9CB5" data-gem-glow="#FF5E91" data-gem-mark="100"></div><div class="achievement-sample secondary pass" data-gem-kind="achievement" data-gem-base="#008E76" data-gem-edge="#70FFD8" data-gem-glow="#27E6BD" data-gem-mark="✓"></div><div class="achievement-sample secondary work" data-gem-kind="achievement" data-gem-base="#6D50EA" data-gem-edge="#BDAEFF" data-gem-glow="#8F70FF" data-gem-mark="W"></div></div><span>100点・合格・仕事の節目</span><h3>記念石</h3><p>ひとまわり大きく、0g。最新12個は瓶で動き、全件が記録棚に残る。</p></article>
-      </div>
-    </section>
-
-    <section class="full-jar section" id="full-jar">
-      <div class="full-jar-visual" aria-hidden="true">
-        <div class="cutaway-jar">
-          <svg class="cutaway-bottle" viewBox="0 0 320 420" preserveAspectRatio="none">
-            <defs>
-              <linearGradient id="cutBottleGlass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff8a70" stop-opacity=".15"/><stop offset=".45" stop-color="#aac3f0" stop-opacity=".025"/><stop offset="1" stop-color="#8acbff" stop-opacity=".16"/></linearGradient>
-              <linearGradient id="cutBottleEdge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb1a0" stop-opacity=".66"/><stop offset=".46" stop-color="#d9e8ff" stop-opacity=".22"/><stop offset="1" stop-color="#8acbff" stop-opacity=".76"/></linearGradient>
-            </defs>
-            <path d="M74 18 L74 46 C74 57 54 61 41 80 C28 100 25 124 25 150 L19 382 Q19 407 47 413 L273 413 Q301 407 301 382 L295 150 C295 124 292 100 279 80 C266 61 246 57 246 46 L246 18 Z" fill="url(#cutBottleGlass)" stroke="url(#cutBottleEdge)" stroke-width="2.2"/>
-            <ellipse cx="160" cy="18" rx="86" ry="9" fill="#071021" fill-opacity=".4" stroke="#c8dcff" stroke-opacity=".58" stroke-width="2"/>
-            <ellipse cx="160" cy="20" rx="79" ry="5.5" fill="none" stroke="#8acbff" stroke-opacity=".22" stroke-width="1.1"/>
-            <path d="M78 20 L78 45 Q78 53 66 61" fill="none" stroke="#ffb1a0" stroke-opacity=".48" stroke-width="2"/>
-            <path d="M242 20 L242 45 Q242 53 254 61" fill="none" stroke="#9fd2ff" stroke-opacity=".56" stroke-width="2"/>
-            <path d="M38 113 C31 172 31 296 35 365" fill="none" stroke="#ff9b81" stroke-opacity=".28" stroke-linecap="round" stroke-width="3.6"/>
-            <path d="M282 113 C289 172 289 296 285 365" fill="none" stroke="#9fd2ff" stroke-opacity=".36" stroke-linecap="round" stroke-width="3.6"/>
-          </svg>
-          <span class="jar-state-label">満杯後 · 自動整理済み</span>
-          <div class="overview-cluster c1" data-gem-kind="aggregate" data-gem-count="10" data-gem-level="1" data-gem-colors="#EF6B5D,#4D7CDE,#C25FA3"></div>
-          <div class="overview-cluster c2" data-gem-kind="aggregate" data-gem-count="10" data-gem-level="1" data-gem-colors="#3FA57C,#8A6FD1,#4D7CDE"></div>
-          <div class="overview-cluster c3" data-gem-kind="aggregate" data-gem-count="100" data-gem-level="2" data-gem-colors="#EF6B5D,#4D7CDE,#3FA57C,#8A6FD1,#C25FA3"></div>
-          <div class="packed-pebbles" data-packed-gems></div>
-        </div>
-      </div>
-      <div class="full-jar-copy">
-        <p class="section-label">AFTER IT FILLS</p>
-        <h2>満杯は、<br>終わりじゃない。</h2>
-        <p class="lead">瓶の光は2.50kg（250分）ごとに何度でも満ち、満ちた回数も残ります。超過分は失わず次の巡へ。動く粒は10個ずつ「まとまり粒」へ整理して余白をつくるだけ。総質量も一回ごとの記録も、そのままです。</p>
-        <div class="flow-row"><span>一粒を10回</span><b>→</b><span>×10のまとまり粒</span><b>→</b><span>×100へ積み上がる</span></div>
-        <p class="subtle">ホームは今の瓶だけ。今週は実測質量を第一表示し、長い休憩は1,000g（100分）ごとに提案します。メニューの「積み上がり」では、まとまり粒と月ごとの瓶を俯瞰。「積み上がり計画」では、期間・週の回数・10／25／60分を変えて将来の瓶を試算できます。予測は実績・iCloudへ保存せず、閉じるとリセットされます。</p>
-      </div>
-    </section>
-
-    <section class="privacy section" id="privacy">
-      <div><p class="section-label">PRIVATE, AND YOURS</p><h2>保存先は、<br>自分で選ぶ。</h2></div>
-      <div class="privacy-copy"><p>初回に「iCloudで同期」と「このiPhoneのみ」を同じ扱いで選べます。このiPhoneのみでもApple Accountや通信なしで基本機能を使え、データは自動送信されません。iCloudを選び確認した場合は、テーマ名、成果メモ、記録、設定、進行中タイマーをApple AccountのプライベートiCloud領域で同期します。Version 1.0では保存先を後から変更できず、「このiPhoneのみ」の記録はアプリ削除で失われます。JSONは再インポートや移行には使えません。アカウント登録、解析SDK、広告目的の追跡、自前サーバーへの送信はありません。</p><a href="privacy/">プライバシーポリシーを読む <span aria-hidden="true">↗</span></a></div>
-    </section>
-
-    <section class="faq section" id="faq" aria-labelledby="faq-title">
-      <div class="section-heading compact">
-        <div><p class="section-label">BEFORE YOUR FIRST GEM</p><h2 id="faq-title">はじめる前の、<br>気になること。</h2></div>
-        <p>最初の一粒から、自分のペースで。よくある質問をまとめました。</p>
-      </div>
-      <div class="faq-list">
-        <details>
-          <summary>無料でどこまで使えますか？</summary>
-          <p>25・45・60・90分のタイマー、宝石の記録、テーマ、履歴、シェア、選択式のiCloud同期まで無料です。Proは自由な1〜360分の設定と、まとまり粒の月刻印を追加する買い切りです。<a href="#plans">無料・Proの機能を見る</a></p>
-        </details>
-        <details>
-          <summary>画面をロックしても計測できますか？</summary>
-          <p>はい。画面をロックしてもタイマーは進みます。終了通知は許可した場合に届き、通知にテーマ名は表示しません。通知の設定は後から変更できます。</p>
-        </details>
-        <details>
-          <summary>毎日続けられなくても大丈夫ですか？</summary>
-          <p>休んだ日があっても、積んだ宝石は減りません。連続記録を数えず、集中した時間を残します。タイマーを使わなかった時間も、実測と区別した手動記録で残せます。</p>
-        </details>
-        <details>
-          <summary>アカウント登録や通信は必要ですか？</summary>
-          <p>ポモジェムへのアカウント登録は不要です。初回に「このiPhoneのみ」を選ぶと、Apple Accountや通信なしで基本機能を利用できます。「iCloudで同期」を選ぶ場合は、同じApple Accountと通信が必要です。</p>
-        </details>
-        <details>
-          <summary>機種変更しても記録を引き継げますか？</summary>
-          <p>初回に「iCloudで同期」を選んだ場合は、同じApple Accountの対応iPhoneで記録を続けられます。Version 1.0では保存先を後から変更できません。「このiPhoneのみ」の記録はアプリの削除で失われ、書き出したJSONは再インポートや移行には使えません。<a href="#privacy">保存先について詳しく見る</a></p>
-        </details>
-      </div>
-      <p class="faq-support">ほかにお困りのことは、<a href="support/">サポート・お問い合わせ</a>へ。</p>
-    </section>
-
-    <section class="download section" id="download" aria-labelledby="download-title">
-      <img src="public/app-icon-focus-v5.png" alt="ポモジェムのアプリアイコン" width="112" height="112">
-      <p class="section-label">COMING TO THE APP STORE</p>
-      <h2 id="download-title">次の25分から、<br>集中を積み上げよう。</h2>
-      <p>iPhone / iOS 17以降</p>
-      <p class="release-status"><span aria-hidden="true"></span> App Store 近日公開</p>
-      <p class="download-note">現在、リリースに向けて準備中です。<br>公開後、このページからダウンロードできます。</p>
-      <div class="download-actions">
-        <a class="button primary" href="#demo">集中から宝石まで、8秒で体験</a>
-        <a class="button quiet" href="#faq">よくある質問を見る</a>
-      </div>
-      <small>#ポモジェム</small>
-    </section>
-  </main>
-
-  <footer class="site-footer">
-    <div class="footer-identity">
-      <a class="brand" href="#top"><img src="public/app-icon-focus-v5.png" alt="" width="32" height="32"><span>ポモジェム</span></a>
-      <p>集中した時間が、宝石になる。</p>
-    </div>
-    <nav aria-label="フッターナビゲーション">
-      <a href="support/">サポート</a>
-      <a href="mailto:support@hinoshiba.com">お問い合わせ</a>
-      <a href="privacy/">プライバシー</a>
-      <a href="terms/">利用条件</a>
-      <a href="font-license.txt">フォントライセンス</a>
-    </nav>
-    <p class="footer-legal">© <span id="year">2026</span> hinoshiba <span>ソースコードはMIT License。名称・ロゴ・ブランド素材は対象外です。</span></p>
-  </footer>
-
-  <div class="toast" id="toast" aria-hidden="true"></div>
-</body>
+<a class="skip-link" data-i18n="12" href="#main">本文へ移動</a>
+<header class="site-header">
+<a aria-label="ポモジェム ホーム" class="brand" data-i18n="13" href="#top">
+<img alt="" height="38" src="public/app-icon-focus-v5.png" width="38"/>
+<span data-i18n="14">ポモジェム</span>
+</a>
+<nav aria-label="メインナビゲーション" data-i18n="15">
+<a href="#experience">使い方</a>
+<a href="#plans">無料・Pro</a>
+<a href="#faq">よくある質問</a>
+<a href="#support">サポート</a>
+<a href="#privacy">プライバシー</a><a href="#sales">販売について</a></nav>
+<details class="mobile-menu" id="mobile-menu">
+<summary data-i18n="16">メニュー</summary>
+<nav aria-label="モバイルナビゲーション" data-i18n="17">
+<a href="#experience">使い方・デモ</a>
+<a href="#plans">無料・Pro</a>
+<a href="#faq">よくある質問</a>
+<a href="#privacy">データ保存</a>
+<a href="#support">サポート</a>
+<a href="#download">公開について</a>
+<a href="#privacy">プライバシー</a><a href="#sales">販売について</a></nav>
+</details>
+<a aria-label="Switch to English" class="language-switch" data-i18n="18" data-language-switch="" href="?lang=en" hreflang="en" lang="en">English</a>
+<a class="header-cta" data-i18n="19" href="#download">公開について</a>
+</header>
+<main id="main">
+<section class="hero" id="top">
+<div class="hero-copy">
+<p class="eyebrow" data-i18n="20"><span></span> ポモドーロタイマー <b>×</b> 見える集中記録</p>
+<h1 data-i18n="21"><span>集中した時間が、</span><br/><span><em>宝石</em>になる。</span></h1>
+<p class="hero-lead" data-i18n="22">勉強も、仕事も。25分のタイマーで集中。完走すると、その時間が宝石になって瓶に残ります。集中の積み重ねが見える、基本無料のiPhoneアプリです。</p>
+<ol aria-label="ポモジェムのポモドーロ体験" class="hero-flow" data-i18n="23" role="list">
+<li data-i18n="24"><span>01</span><strong>25:00</strong><small>時間を選んで開始</small></li>
+<li data-i18n="25"><span>02</span><strong>完走</strong><small>タイマーで実測</small></li>
+<li class="hero-flow-reward"><span>03</span><strong>+250g</strong><small data-i18n="26">宝石1粒を記録</small><i aria-hidden="true" class="hero-flow-gem" data-gem-base="#EF6B5D" data-gem-edge="#FFB0A1" data-gem-glow="#FF7C69" data-gem-kind="normal"></i></li>
+</ol>
+<div class="hero-actions" data-i18n="27">
+<a class="button primary" href="#demo">集中から宝石まで、8秒で体験</a>
+<a class="button quiet" href="#plans">無料でできること <span aria-hidden="true">↓</span></a>
+</div>
+<p class="release-note" data-i18n="28">App Store 近日公開 <span aria-hidden="true">·</span> iPhone / iOS 17以降</p>
+<ul aria-label="主な特徴" class="trust-list" data-i18n="29">
+<li data-i18n="30">基本無料</li>
+<li data-i18n="31">広告・行動解析なし</li>
+<li data-i18n="32">アカウント不要</li>
+<li data-i18n="33">iCloud同期は任意</li>
+</ul>
+</div>
+<div aria-label="ポモドーロタイマーから宝石の集中記録までの実際のアプリ画面" class="phone-stage" data-i18n="34" role="group">
+<div class="orbit orbit-one"></div>
+<div class="orbit orbit-two"></div>
+<figure class="product-shot timer-shot">
+<div class="timer-shot-shell">
+<img alt="英語をテーマに25分の集中を計測し、終了通知を設定できる、ポモジェムのポモドーロタイマー画面" data-i18n="35" height="1305" src="public/app-timer-v2.webp" width="603"/>
+</div>
+<figcaption data-i18n="36"><span>01</span> タイマーで集中</figcaption>
+</figure>
+<div aria-hidden="true" class="conversion-badge" data-i18n="37"><small>25分完走</small><strong>+250g → 1粒</strong></div>
+<figure class="product-shot app-shot">
+<div class="app-shot-shell">
+<img alt="25分の集中を250gの宝石1粒として記録し、テーマと時間を選んで次の集中を始められる、ポモジェムのホーム画面" data-i18n="38" height="1305" src="public/app-home-v3.webp" width="603"/>
+</div>
+<figcaption data-i18n="39"><span>02</span> 宝石で記録</figcaption>
+</figure>
+<p class="screenshot-note" data-i18n="40">スクリーンショットは日本語版です。</p></div>
+</section>
+<section class="experience section" id="experience">
+<div class="section-heading">
+<div><p class="section-label">FOCUS → RECORD → GEM</p><h2 data-i18n="41">タイマーを完走すると、<br/>宝石が1粒。</h2></div>
+<p data-i18n="42">タイマーを始めて、集中して、完走する。その25分が宝石になるまでを、約8秒に短縮して体験できます。</p>
+</div>
+<div class="drop-lab">
+<div class="lab-copy">
+<ol>
+<li><span>01</span><div><h3 data-i18n="43">テーマと時間を選ぶ</h3><p data-i18n="44">勉強の科目も、企画や開発など仕事のテーマも自由。</p></div></li>
+<li><span>02</span><div><h3 data-i18n="45">タイマーで集中する</h3><p data-i18n="46">25分・45分・60分・90分の基本タイマーは無料です。</p></div></li>
+<li><span>03</span><div><h3 data-i18n="47">完走を自動で記録</h3><p data-i18n="48">25分なら250g。アプリでは、テーマ色の宝石が音と触覚とともに積もります。</p></div></li>
+</ol>
+</div>
+<div aria-labelledby="demo-title" class="lab-vessel-wrap" data-state="ready" id="demo" role="group">
+<h3 class="demo-title" data-i18n="49" id="demo-title">集中した時間が、宝石になる。</h3>
+<p class="demo-speed" data-i18n="50" id="demo-speed">25分の集中を約8秒で早送りするデモ</p>
+<div class="demo-journey">
+<div class="demo-focus">
+<p class="demo-stage-label" data-i18n="51"><span>01</span> タイマーで集中</p>
+<div class="demo-clock">
+<svg aria-hidden="true" viewbox="0 0 160 160">
+<circle class="demo-clock-track" cx="80" cy="80" r="73"></circle>
+<circle class="demo-clock-progress" cx="80" cy="80" id="demo-progress" pathlength="100" r="73"></circle>
+</svg>
+<div class="demo-clock-face">
+<span class="demo-theme" data-i18n="52">英語</span>
+<strong aria-label="早送りデモ、残り25分" aria-live="off" data-i18n="53" id="demo-time" role="timer">25:00</strong>
+<span data-i18n="54" id="demo-phase">開始前</span>
+</div>
+</div>
+</div>
+<div aria-hidden="true" class="demo-bridge" data-i18n="55"><span>完走で</span><b>→</b></div>
+<div class="demo-record">
+<p class="demo-stage-label" data-i18n="56"><span>02</span> 宝石として残る</p>
+<div aria-label="デモ用の瓶。現在は空です。" class="lab-vessel" data-i18n="57" id="lab-vessel" role="img">
+<span aria-hidden="true" class="demo-empty" data-i18n="58" id="demo-empty">完走すると<br/>ここに1粒</span>
+<svg aria-hidden="true" class="lab-bottle" preserveaspectratio="none" viewbox="0 0 340 350">
+<defs>
+<lineargradient id="labBottleGlass" x1="0" x2="1" y1="0" y2="1">
+<stop offset="0" stop-color="#ff8a70" stop-opacity=".17"></stop>
+<stop offset=".38" stop-color="#aac3f0" stop-opacity=".035"></stop>
+<stop offset=".72" stop-color="#8068f6" stop-opacity=".08"></stop>
+<stop offset="1" stop-color="#8acbff" stop-opacity=".16"></stop>
+</lineargradient>
+<lineargradient id="labBottleEdge" x1="0" x2="1" y1="0" y2="1">
+<stop offset="0" stop-color="#ffb1a0" stop-opacity=".72"></stop>
+<stop offset=".42" stop-color="#d9e8ff" stop-opacity=".25"></stop>
+<stop offset="1" stop-color="#8acbff" stop-opacity=".82"></stop>
+</lineargradient>
+</defs>
+<path d="M74 20 L74 47 C74 57 52 59 38 78 C25 96 23 118 23 142 L18 304 Q18 332 49 338 L291 338 Q322 332 322 304 L317 142 C317 118 315 96 302 78 C288 59 266 57 266 47 L266 20 Z" fill="url(#labBottleGlass)" stroke="url(#labBottleEdge)" stroke-width="2.4"></path>
+<ellipse cx="170" cy="20" fill="#071021" fill-opacity=".42" rx="96" ry="10" stroke="#c8dcff" stroke-opacity=".62" stroke-width="2"></ellipse>
+<ellipse cx="170" cy="22" fill="none" rx="88" ry="6" stroke="#8acbff" stroke-opacity=".24" stroke-width="1.2"></ellipse>
+<path d="M78 22 L78 46 Q78 54 65 62" fill="none" stroke="#ffb1a0" stroke-linecap="round" stroke-opacity=".48" stroke-width="2.2"></path>
+<path d="M262 22 L262 46 Q262 54 275 62" fill="none" stroke="#9fd2ff" stroke-linecap="round" stroke-opacity=".58" stroke-width="2.2"></path>
+<path d="M38 104 C31 154 31 245 34 291" fill="none" stroke="#ff9b81" stroke-linecap="round" stroke-opacity=".37" stroke-width="4"></path>
+<path d="M302 104 C309 154 309 245 306 291" fill="none" stroke="#9fd2ff" stroke-linecap="round" stroke-opacity=".45" stroke-width="4"></path>
+<path d="M42 319 Q170 337 298 319" fill="none" stroke="#8acbff" stroke-opacity=".25" stroke-width="2"></path>
+</svg>
+<div class="lab-glass"></div>
+<div class="lab-floor"></div>
+</div>
+<div class="lab-mass"><span data-i18n="59" id="demo-total">まだ集中の記録はありません</span><strong id="lab-mass">0<small>g</small></strong></div>
+</div>
+</div>
+<button aria-describedby="demo-speed lab-note" class="button primary lab-button" data-i18n="60" disabled="" id="lab-start" type="button">集中をはじめる（8秒デモ）</button>
+<div class="demo-controls" hidden="" id="demo-controls">
+<button class="button quiet" data-i18n="61" id="demo-pause" type="button">一時停止</button>
+<button class="button quiet" data-i18n="62" id="demo-cancel" type="button">中断する</button>
+</div>
+<p aria-atomic="true" aria-live="polite" class="lab-status" data-i18n="63" id="lab-status" role="status">まずはタイマーを開始。完走すると、集中した時間が1粒になります。</p>
+<p class="demo-rest" data-i18n="64" hidden="" id="demo-rest">アプリでは休憩をはさんで、次の集中へ。次の25分も、一粒に。</p>
+<p class="lab-note" data-i18n="65" id="lab-note">体験用の早送り表示です。実際の25分は計測せず、音・触覚・記録保存は再現しません。</p>
+<noscript><p class="lab-note" data-i18n="66">デモを動かすにはJavaScriptを有効にしてください。アプリの画面と使い方は、このままご覧いただけます。</p></noscript>
+<a class="demo-next" data-i18n="67" href="#plans">この体験は基本無料。機能を確認する <span aria-hidden="true">→</span></a>
+</div>
+</div>
+</section>
+<section class="principles section" id="principles">
+<p class="section-label">WHY MASS?</p>
+<div class="principle-grid">
+<h2 data-i18n="68">グラフではなく、<br/>手ざわりを残す。</h2>
+<p data-i18n="69">集中した時間は、終わった瞬間から見えなくなる。ポモジェムは時間を監視するのではなく、触れられそうな重さへ変える。ひとつのiPhoneで積んだ時間は、短く分けても長くまとめても、同じ総時間なら同じ質量になる。タップすれば跳ね、傾ければ転がる。</p>
+</div>
+<div aria-label="プロダクト原則" class="manifesto" data-i18n="70" role="list">
+<article role="listitem"><span>01</span><h3 data-i18n="71">減らない。</h3><p data-i18n="72">休んだ日があっても、積んだ粒はそのまま。連続記録は数えない。</p></article>
+<article role="listitem"><span>02</span><h3 data-i18n="73">ごまかさない。</h3><p data-i18n="74">1分はいつでも10g。回数ではなく、積んだ総時間を成長の基準にする。</p></article>
+<article role="listitem"><span>03</span><h3 data-i18n="75">責めない。</h3><p data-i18n="76">手動で積んだ回も、実測と区別しながら努力の記録として残す。</p></article>
+</div>
+</section>
+<section class="plans section" id="plans">
+<div class="section-heading compact">
+<div><p class="section-label">FREE &amp; PRO</p><h2 data-i18n="77">始めるのは無料。<br/>Proは、買い切り。</h2></div>
+<p data-i18n="78">集中を積み上げる基本体験は無料のまま。ポモジェムProは、時間設定と振り返り表示を少し細かくしたい人のための追加機能です。</p>
+</div>
+<div class="plan-grid">
+<article class="plan-card free-plan">
+<div class="plan-card-heading"><span>FREE</span><h3 data-i18n="79">無料でできること</h3><strong data-i18n="80">基本機能</strong></div>
+<ul>
+<li data-i18n="81">25分・45分・60分・90分の集中タイマー</li>
+<li data-i18n="82">完走した時間を宝石として瓶へ記録</li>
+<li data-i18n="83">テーマ、履歴、まとまり粒、記念石</li>
+<li data-i18n="84">静止画・GIFのシェアカード</li>
+<li data-i18n="85">「このiPhoneのみ」または確認後のiCloud同期</li>
+</ul>
+</article>
+<article class="plan-card pro-plan">
+<div class="plan-card-heading"><span>ONE-TIME PRO</span><h3 data-i18n="86">ポモジェムPro</h3><strong data-i18n="87">買い切り</strong></div>
+<ul>
+<li data-i18n="88">無料プリセット以外の1〜360分を自由に設定</li>
+<li data-i18n="89">まとまり粒へ月の刻印を表示</li>
+<li data-i18n="90">サブスクリプション、無料トライアル、自動更新なし</li>
+<li data-i18n="91">同じApple Accountなら「購入を復元」から再確認</li>
+<li data-i18n="92">ロゴと公式サイトは無料／Proともシェアカードに表示</li>
+</ul>
+</article>
+</div>
+<div class="plan-disclosure">
+<p data-i18n="93"><strong>Proは1回限りの買い切りです。</strong>購入時の提供内容と条件は、アプリ内のApp Store購入確認画面でご確認ください。購入処理と返金申請はApp Storeを通じて行われます。法令上の権利を制限せず、Web決済や外部購入はありません。ファミリー共有には対応していません。</p>
+<nav aria-label="購入に関する案内" data-i18n="94"><a href="#sales">購入条件・販売者情報</a><a href="#terms">利用条件</a><a href="#support">購入の復元</a></nav>
+</div>
+</section>
+<section class="fairness section" id="fairness">
+<div class="section-heading compact">
+<div><p class="section-label">MEASURED &amp; MANUAL</p><h2 data-i18n="95">実測も手動記録も、<br/>違いがわかる形で残す。</h2></div>
+<p data-i18n="96">タイマーで測った記録と自己申告の違いを見える形で残しながら、どちらの集中も失わず積みます。100点、合格、仕事の節目は、質量を増やさない記念石として別に残します。</p>
+</div>
+<div class="layer-cards">
+<article class="layer-card measured"><div aria-hidden="true" class="sample-pebble" data-gem-base="#EF6B5D" data-gem-edge="#FFB0A1" data-gem-glow="#FF7C69" data-gem-kind="normal"></div><span data-i18n="97">タイマー完走</span><h3 data-i18n="98">実測</h3><p data-i18n="99">つやのある粒。総質量とシェアに入る。</p></article>
+<article class="layer-card manual"><div aria-hidden="true" class="sample-pebble" data-gem-base="#EF6B5D" data-gem-edge="#FFB0A1" data-gem-glow="#FF7C69" data-gem-kind="normal" data-gem-manual="true"></div><span data-i18n="100">手動・時刻の大きな不整合</span><h3 data-i18n="101">自己申告</h3><p data-i18n="102">テーマ色は同じまま、内側の破線で区別。ロック中は通常どおり進み、手動記録はシェアに含めるか選べる。</p></article>
+<article class="layer-card cluster"><div aria-hidden="true" class="cluster-sample" data-gem-colors="#EF6B5D,#4D7CDE,#3FA57C,#8A6FD1,#C25FA3" data-gem-count="10" data-gem-kind="aggregate" data-gem-level="1"></div><span data-i18n="103">10粒が集まる</span><h3 data-i18n="104">まとまり粒</h3><p data-i18n="105">元の色と記録を内側に残したまま、大きな一粒になって瓶で動く。</p></article>
+<article class="layer-card achievement"><div aria-hidden="true" class="achievement-samples"><div class="achievement-sample primary" data-gem-base="#D93D68" data-gem-edge="#FF9CB5" data-gem-glow="#FF5E91" data-gem-kind="achievement" data-gem-mark="100"></div><div class="achievement-sample secondary pass" data-gem-base="#008E76" data-gem-edge="#70FFD8" data-gem-glow="#27E6BD" data-gem-kind="achievement" data-gem-mark="✓"></div><div class="achievement-sample secondary work" data-gem-base="#6D50EA" data-gem-edge="#BDAEFF" data-gem-glow="#8F70FF" data-gem-kind="achievement" data-gem-mark="W"></div></div><span data-i18n="106">100点・合格・仕事の節目</span><h3 data-i18n="107">記念石</h3><p data-i18n="108">ひとまわり大きく、0g。最新12個は瓶で動き、全件が記録棚に残る。</p></article>
+</div>
+</section>
+<section class="full-jar section" id="full-jar">
+<div aria-hidden="true" class="full-jar-visual">
+<div class="cutaway-jar">
+<svg class="cutaway-bottle" preserveaspectratio="none" viewbox="0 0 320 420">
+<defs>
+<lineargradient id="cutBottleGlass" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#ff8a70" stop-opacity=".15"></stop><stop offset=".45" stop-color="#aac3f0" stop-opacity=".025"></stop><stop offset="1" stop-color="#8acbff" stop-opacity=".16"></stop></lineargradient>
+<lineargradient id="cutBottleEdge" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#ffb1a0" stop-opacity=".66"></stop><stop offset=".46" stop-color="#d9e8ff" stop-opacity=".22"></stop><stop offset="1" stop-color="#8acbff" stop-opacity=".76"></stop></lineargradient>
+</defs>
+<path d="M74 18 L74 46 C74 57 54 61 41 80 C28 100 25 124 25 150 L19 382 Q19 407 47 413 L273 413 Q301 407 301 382 L295 150 C295 124 292 100 279 80 C266 61 246 57 246 46 L246 18 Z" fill="url(#cutBottleGlass)" stroke="url(#cutBottleEdge)" stroke-width="2.2"></path>
+<ellipse cx="160" cy="18" fill="#071021" fill-opacity=".4" rx="86" ry="9" stroke="#c8dcff" stroke-opacity=".58" stroke-width="2"></ellipse>
+<ellipse cx="160" cy="20" fill="none" rx="79" ry="5.5" stroke="#8acbff" stroke-opacity=".22" stroke-width="1.1"></ellipse>
+<path d="M78 20 L78 45 Q78 53 66 61" fill="none" stroke="#ffb1a0" stroke-opacity=".48" stroke-width="2"></path>
+<path d="M242 20 L242 45 Q242 53 254 61" fill="none" stroke="#9fd2ff" stroke-opacity=".56" stroke-width="2"></path>
+<path d="M38 113 C31 172 31 296 35 365" fill="none" stroke="#ff9b81" stroke-linecap="round" stroke-opacity=".28" stroke-width="3.6"></path>
+<path d="M282 113 C289 172 289 296 285 365" fill="none" stroke="#9fd2ff" stroke-linecap="round" stroke-opacity=".36" stroke-width="3.6"></path>
+</svg>
+<span class="jar-state-label" data-i18n="109">満杯後 · 自動整理済み</span>
+<div class="overview-cluster c1" data-gem-colors="#EF6B5D,#4D7CDE,#C25FA3" data-gem-count="10" data-gem-kind="aggregate" data-gem-level="1"></div>
+<div class="overview-cluster c2" data-gem-colors="#3FA57C,#8A6FD1,#4D7CDE" data-gem-count="10" data-gem-kind="aggregate" data-gem-level="1"></div>
+<div class="overview-cluster c3" data-gem-colors="#EF6B5D,#4D7CDE,#3FA57C,#8A6FD1,#C25FA3" data-gem-count="100" data-gem-kind="aggregate" data-gem-level="2"></div>
+<div class="packed-pebbles" data-packed-gems=""></div>
+</div>
+</div>
+<div class="full-jar-copy">
+<p class="section-label">AFTER IT FILLS</p>
+<h2 data-i18n="110">満杯は、<br/>終わりじゃない。</h2>
+<p class="lead" data-i18n="111">瓶の光は2.50kg（250分）ごとに何度でも満ち、満ちた回数も残ります。超過分は失わず次の巡へ。動く粒は10個ずつ「まとまり粒」へ整理して余白をつくるだけ。総質量も一回ごとの記録も、そのままです。</p>
+<div class="flow-row" data-i18n="112"><span>一粒を10回</span><b>→</b><span>×10のまとまり粒</span><b>→</b><span>×100へ積み上がる</span></div>
+<p class="subtle" data-i18n="113">ホームは今の瓶だけ。今週は実測質量を第一表示し、長い休憩は1,000g（100分）ごとに提案します。メニューの「積み上がり」では、まとまり粒と月ごとの瓶を俯瞰。「積み上がり計画」では、期間・週の回数・10／25／60分を変えて将来の瓶を試算できます。予測は実績・iCloudへ保存せず、閉じるとリセットされます。</p>
+</div>
+</section>
+<section aria-labelledby="privacy-title" class="section policy-section" id="privacy"><div class="section-heading"><div class="eyebrow">PRIVACY</div><h2 data-i18n="114" id="privacy-title">プライバシーポリシー</h2></div><div class="policy-copy"><p data-i18n="115">運営者はhinoshibaです。テーマ名、メモ、集中記録、設定、進行中タイマーを機能の提供に使います。初回に「このiPhoneのみ」を選ぶと端末内に保存し、「iCloudで同期」を選ぶとApple AccountのプライベートiCloud領域で同期します。Version 1.0では保存先を後から変更できません。開発者は集中記録を収集せず、広告・追跡は行いません。</p><p data-i18n="116">設定のデータ管理から記録の書き出し・削除ができます。「すべてのデータを消去」は選択した保存先を対象とし、iCloudの削除には通信が必要です。端末のみの記録はアプリの削除で失われ、書き出したJSONは再インポートや移行には使えません。</p><p data-i18n="117">通知、写真への保存、端末の動きは、それぞれ完走通知、シェア画像の保存、瓶の演出に利用します。権限は端末の設定で変更できます。共有した画像やメモは、選んだ共有先へ渡ります。Widgetはアプリを開く案内、Live Activityはタイマーの時間と状態を表示します。</p><p data-i18n="118">購入確認と選択したiCloud同期はAppleが処理し、<a href="https://www.apple.com/legal/privacy/">Appleのプライバシーポリシー</a>が適用されます。このサイトはGitHub Pagesで配信され、IPアドレスなどのアクセス情報は<a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHubのプライバシーステートメント</a>に従って処理されます。</p><p data-i18n="119">お問い合わせのメールアドレスと本文は、対応のために必要な期間利用し、不要になった情報は削除します。<a href="mailto:support@hinoshiba.com">support@hinoshiba.com</a>へご連絡ください。最終更新：2026年9月6日。変更時はこのページを更新します。</p></div></section>
+<section aria-labelledby="faq-title" class="faq section" id="faq">
+<div class="section-heading compact">
+<div><p class="section-label">BEFORE YOUR FIRST GEM</p><h2 data-i18n="120" id="faq-title">はじめる前の、<br/>気になること。</h2></div>
+<p data-i18n="121">最初の一粒から、自分のペースで。よくある質問をまとめました。</p>
+</div>
+<div class="faq-list">
+<details>
+<summary data-i18n="122">無料でどこまで使えますか？</summary>
+<p data-i18n="123">25・45・60・90分のタイマー、宝石の記録、テーマ、履歴、シェア、選択式のiCloud同期まで無料です。Proは自由な1〜360分の設定と、まとまり粒の月刻印を追加する買い切りです。<a href="#plans">無料・Proの機能を見る</a></p>
+</details>
+<details>
+<summary data-i18n="124">画面をロックしても計測できますか？</summary>
+<p data-i18n="125">はい。画面をロックしてもタイマーは進みます。終了通知は許可した場合に届き、通知にテーマ名は表示しません。通知の設定は後から変更できます。</p>
+</details>
+<details>
+<summary data-i18n="126">毎日続けられなくても大丈夫ですか？</summary>
+<p data-i18n="127">休んだ日があっても、積んだ宝石は減りません。連続記録を数えず、集中した時間を残します。タイマーを使わなかった時間も、実測と区別した手動記録で残せます。</p>
+</details>
+<details>
+<summary data-i18n="128">アカウント登録や通信は必要ですか？</summary>
+<p data-i18n="129">ポモジェムへのアカウント登録は不要です。初回に「このiPhoneのみ」を選ぶと、Apple Accountや通信なしで基本機能を利用できます。「iCloudで同期」を選ぶ場合は、同じApple Accountと通信が必要です。</p>
+</details>
+<details>
+<summary data-i18n="130">機種変更しても記録を引き継げますか？</summary>
+<p data-i18n="131">初回に「iCloudで同期」を選んだ場合は、同じApple Accountの対応iPhoneで記録を続けられます。Version 1.0では保存先を後から変更できません。「このiPhoneのみ」の記録はアプリの削除で失われ、書き出したJSONは再インポートや移行には使えません。<a href="#privacy">保存先について詳しく見る</a></p>
+</details>
+</div>
+<p class="faq-support" data-i18n="132">ほかにお困りのことは、<a href="#support">サポート・お問い合わせ</a>へ。</p>
+</section>
+<section aria-labelledby="download-title" class="download section" id="download">
+<img alt="ポモジェムのアプリアイコン" data-i18n="133" height="112" src="public/app-icon-focus-v5.png" width="112"/>
+<p class="section-label">COMING TO THE APP STORE</p>
+<h2 data-i18n="134" id="download-title">次の25分から、<br/>集中を積み上げよう。</h2>
+<p data-i18n="135">iPhone / iOS 17以降</p>
+<p class="release-status" data-i18n="136"><span aria-hidden="true"></span> App Store 近日公開</p>
+<p class="download-note" data-i18n="137">現在、リリースに向けて準備中です。<br/>公開後、このページからダウンロードできます。</p>
+<div class="download-actions" data-i18n="138">
+<a class="button primary" href="#demo">集中から宝石まで、8秒で体験</a>
+<a class="button quiet" href="#faq">よくある質問を見る</a>
+</div>
+<small data-i18n="139">#ポモジェム</small>
+</section>
+<section aria-labelledby="support-title" class="section policy-section" id="support"><div class="section-heading"><div class="eyebrow">SUPPORT</div><h2 data-i18n="140" id="support-title">サポート</h2></div><div class="policy-copy"><p data-i18n="141">App Storeの購入・請求・返金は<a href="https://support.apple.com/billing">Appleサポート</a>をご利用ください。返金の申請は<a href="https://reportaproblem.apple.com/">Appleの問題を報告する</a>から行えます。</p><p data-i18n="142">Proを再び利用するには、購入時と同じApple Accountでアプリ内の「購入を復元」を選びます。アプリの不具合や製品については、FAQをご確認のうえ<a href="mailto:support@hinoshiba.com">support@hinoshiba.com</a>へ、OS・アプリのバージョンと再現手順をお送りください。</p></div></section><section aria-labelledby="terms-title" class="section policy-section" id="terms"><div class="section-heading"><div class="eyebrow">TERMS</div><h2 data-i18n="143" id="terms-title">利用条件</h2></div><div class="policy-copy"><p data-i18n="144">App Store版には<a href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/">Apple標準EULA</a>が適用されます。集中記録は個人の振り返り用です。勤怠、給与、請求などの正式な記録として使う場合は内容を確認してください。</p><p data-i18n="145">ソースコードはMIT Licenseで公開しています。名称・ロゴ・ブランド素材の条件は<a href="https://github.com/hinoshiba/pomogem">GitHub</a>をご確認ください。</p></div></section><section aria-labelledby="sales-title" class="section policy-section" id="sales"><div class="section-heading"><div class="eyebrow">SALES</div><h2 data-i18n="146" id="sales-title">販売について</h2></div><div class="policy-copy"><p data-i18n="147">ポモジェムProは1回限りの非消費型アプリ内課金です。サブスクリプションや自動更新はありません。機能と動作環境はこのページの無料・Pro案内に記載しています。価格は購入前にアプリ内とApp Storeの確認画面に表示され、購入完了後に利用できます。通信料は利用者の負担です。</p><p data-i18n="148">支払方法・支払時期はApp Storeの購入確認画面に従います。購入・請求・返金は<a href="https://support.apple.com/billing">Appleの案内</a>をご確認ください。法令上認められる権利を制限するものではありません。</p><p data-i18n="149">特定商取引法に基づく販売事業者の氏名（名称）・所在地・電話番号その他必要な情報は、購入判断前に確認できるよう、請求に応じて遅滞なく電子メールで開示します。<a href="mailto:support@hinoshiba.com">support@hinoshiba.com</a>へご請求ください。購入済みである必要はありません。</p></div></section></main>
+<footer class="site-footer">
+<div class="footer-identity">
+<a class="brand" href="#top"><img alt="" height="32" src="public/app-icon-focus-v5.png" width="32"/><span data-i18n="150">ポモジェム</span></a>
+<p data-i18n="151">集中した時間が、宝石になる。</p>
+</div>
+<nav aria-label="フッターナビゲーション" data-i18n="152">
+<a href="#support">サポート</a>
+<a href="mailto:support@hinoshiba.com">お問い合わせ</a>
+<a href="#privacy">プライバシー</a>
+<a href="#terms">利用条件</a>
+<a href="font-license.txt">フォントライセンス</a>
+<a href="https://github.com/hinoshiba/pomogem">GitHub · Open source</a><a href="https://www.hinoshiba.com/products/">ほかのアプリ</a></nav>
+<p class="footer-legal">© <span id="year">2026</span> hinoshiba <span data-i18n="153">ソースコードはMIT License。名称・ロゴ・ブランド素材は対象外です。</span></p>
+</footer>
+<div aria-hidden="true" class="toast" id="toast"></div>
+<script id="translations" type="application/json">{
+  "0": {
+    "attributes": {
+      "lang": {
+        "ja": "ja",
+        "en": "en"
+      }
+    }
+  },
+  "1": {
+    "attributes": {
+      "content": {
+        "ja": "ポモジェム（PomoGem）は、集中時間が宝石として瓶に積もるポモドーロタイマー。25・45・60・90分のタイマーを完走して、勉強・仕事の積み重ねを記録。基本無料・広告なしのiPhoneアプリです。",
+        "en": "PomoGem is a Pomodoro timer that turns focused time into gems in a jar. Complete 25, 45, 60, or 90 minute timers to record your study and work. An iPhone app with free core features and no ads."
+      }
+    }
+  },
+  "2": {
+    "attributes": {
+      "content": {
+        "ja": "ポモジェム",
+        "en": "PomoGem"
+      }
+    }
+  },
+  "3": {
+    "attributes": {
+      "content": {
+        "ja": "ja_JP",
+        "en": "en_US"
+      }
+    }
+  },
+  "4": {
+    "attributes": {
+      "content": {
+        "ja": "https://pomogem.hinoshiba.com/",
+        "en": "https://pomogem.hinoshiba.com/en/"
+      }
+    }
+  },
+  "5": {
+    "attributes": {
+      "content": {
+        "ja": "集中した時間が、宝石になる。｜ポモジェム",
+        "en": "Your focused time becomes a gem. | PomoGem"
+      }
+    }
+  },
+  "6": {
+    "attributes": {
+      "content": {
+        "ja": "25・45・60・90分のタイマーを完走するたび、集中時間がテーマ色の宝石になって瓶へ積もる、基本無料のiPhoneアプリ。",
+        "en": "An iPhone app with free core features. Complete a 25, 45, 60, or 90 minute timer to add a gem in your theme color to your jar."
+      }
+    }
+  },
+  "7": {
+    "attributes": {
+      "content": {
+        "ja": "25分タイマーから宝石の集中記録までを示す、ポモジェムの紹介画像",
+        "en": "PomoGem preview showing a 25 minute timer and a focus record made of gems. App interface shown in Japanese."
+      }
+    }
+  },
+  "8": {
+    "attributes": {
+      "content": {
+        "ja": "集中した時間が、宝石になる。｜ポモジェム",
+        "en": "Your focused time becomes a gem. | PomoGem"
+      }
+    }
+  },
+  "9": {
+    "attributes": {
+      "content": {
+        "ja": "25・45・60・90分のタイマーを完走するたび、集中時間がテーマ色の宝石になって瓶へ積もる、基本無料のiPhoneアプリ。",
+        "en": "An iPhone app with free core features. Complete a 25, 45, 60, or 90 minute timer to add a gem in your theme color to your jar."
+      }
+    }
+  },
+  "10": {
+    "attributes": {
+      "content": {
+        "ja": "25分タイマーから宝石の集中記録までを示す、ポモジェムの紹介画像",
+        "en": "PomoGem preview showing a 25 minute timer and a focus record made of gems. App interface shown in Japanese."
+      }
+    }
+  },
+  "11": {
+    "text": {
+      "0": {
+        "ja": "ポモジェム：ポモドーロタイマー",
+        "en": "PomoGem: Pomodoro Timer"
+      }
+    }
+  },
+  "12": {
+    "text": {
+      "0": {
+        "ja": "本文へ移動",
+        "en": "Skip to content"
+      }
+    }
+  },
+  "13": {
+    "attributes": {
+      "aria-label": {
+        "ja": "ポモジェム ホーム",
+        "en": "PomoGem home"
+      }
+    }
+  },
+  "14": {
+    "text": {
+      "0": {
+        "ja": "ポモジェム",
+        "en": "PomoGem"
+      }
+    }
+  },
+  "15": {
+    "html": {
+      "ja": "\n<a href=\"#experience\">使い方<\/a>\n<a href=\"#plans\">無料・Pro<\/a>\n<a href=\"#faq\">よくある質問<\/a>\n<a href=\"#support\">サポート<\/a>\n<a href=\"#privacy\">プライバシー<\/a><a href=\"#sales\">販売について<\/a>",
+      "en": "\n<a href=\"#experience\">How it works<\/a>\n<a href=\"#plans\">Free &amp; Pro<\/a>\n<a href=\"#faq\">FAQ<\/a>\n<a href=\"#support\">Support<\/a>\n<a href=\"#privacy\">Privacy<\/a><a href=\"#sales\">Sales<\/a>"
+    },
+    "attributes": {
+      "aria-label": {
+        "ja": "メインナビゲーション",
+        "en": "Main navigation"
+      }
+    }
+  },
+  "16": {
+    "text": {
+      "0": {
+        "ja": "メニュー",
+        "en": "Menu"
+      }
+    }
+  },
+  "17": {
+    "html": {
+      "ja": "\n<a href=\"#experience\">使い方・デモ<\/a>\n<a href=\"#plans\">無料・Pro<\/a>\n<a href=\"#faq\">よくある質問<\/a>\n<a href=\"#privacy\">データ保存<\/a>\n<a href=\"#support\">サポート<\/a>\n<a href=\"#download\">公開について<\/a>\n<a href=\"#privacy\">プライバシー<\/a><a href=\"#sales\">販売について<\/a>",
+      "en": "\n<a href=\"#experience\">How it works &amp; demo<\/a>\n<a href=\"#plans\">Free &amp; Pro<\/a>\n<a href=\"#faq\">FAQ<\/a>\n<a href=\"#privacy\">Data storage<\/a>\n<a href=\"#support\">Support<\/a>\n<a href=\"#download\">Release info<\/a>\n<a href=\"#privacy\">Privacy<\/a><a href=\"#sales\">Sales<\/a>"
+    },
+    "attributes": {
+      "aria-label": {
+        "ja": "モバイルナビゲーション",
+        "en": "Mobile navigation"
+      }
+    }
+  },
+  "18": {
+    "text": {
+      "0": {
+        "ja": "English",
+        "en": "日本語"
+      }
+    },
+    "attributes": {
+      "aria-label": {
+        "ja": "Switch to English",
+        "en": "日本語に切り替える"
+      },
+      "href": {
+        "ja": "?lang=en",
+        "en": "?lang=ja"
+      },
+      "lang": {
+        "ja": "en",
+        "en": "ja"
+      },
+      "hreflang": {
+        "ja": "en",
+        "en": "ja"
+      }
+    }
+  },
+  "19": {
+    "text": {
+      "0": {
+        "ja": "公開について",
+        "en": "Release info"
+      }
+    }
+  },
+  "20": {
+    "html": {
+      "ja": "<span><\/span> ポモドーロタイマー <b>×<\/b> 見える集中記録",
+      "en": "<span><\/span> Pomodoro timer <b>×<\/b> Focus you can see"
+    }
+  },
+  "21": {
+    "html": {
+      "ja": "<span>集中した時間が、<\/span><br/><span><em>宝石<\/em>になる。<\/span>",
+      "en": "<span>Your focused time<\/span><br/><span>becomes a <em>gem.<\/em><\/span>"
+    }
+  },
+  "22": {
+    "text": {
+      "0": {
+        "ja": "勉強も、仕事も。25分のタイマーで集中。完走すると、その時間が宝石になって瓶に残ります。集中の積み重ねが見える、基本無料のiPhoneアプリです。",
+        "en": "Studying or working? Focus with a 25 minute timer. Finish it, and that time becomes a gem in your jar. See your focus add up in an iPhone app with free core features."
+      }
+    }
+  },
+  "23": {
+    "attributes": {
+      "aria-label": {
+        "ja": "ポモジェムのポモドーロ体験",
+        "en": "The PomoGem Pomodoro experience"
+      }
+    }
+  },
+  "24": {
+    "html": {
+      "ja": "<span>01<\/span><strong>25:00<\/strong><small>時間を選んで開始<\/small>",
+      "en": "<span>01<\/span><strong>25:00<\/strong><small>Choose a time and start<\/small>"
+    }
+  },
+  "25": {
+    "html": {
+      "ja": "<span>02<\/span><strong>完走<\/strong><small>タイマーで実測<\/small>",
+      "en": "<span>02<\/span><strong>Complete<\/strong><small>Measured by the timer<\/small>"
+    }
+  },
+  "26": {
+    "text": {
+      "0": {
+        "ja": "宝石1粒を記録",
+        "en": "Record one gem"
+      }
+    }
+  },
+  "27": {
+    "html": {
+      "ja": "\n<a class=\"button primary\" href=\"#demo\">集中から宝石まで、8秒で体験<\/a>\n<a class=\"button quiet\" href=\"#plans\">無料でできること <span aria-hidden=\"true\">↓<\/span><\/a>\n",
+      "en": "\n<a class=\"button primary\" href=\"#demo\">From focus to gem: try the 8 second demo<\/a>\n<a class=\"button quiet\" href=\"#plans\">Included for free <span aria-hidden=\"true\">↓<\/span><\/a>\n"
+    }
+  },
+  "28": {
+    "html": {
+      "ja": "App Store 近日公開 <span aria-hidden=\"true\">·<\/span> iPhone / iOS 17以降",
+      "en": "Coming soon to the App Store <span aria-hidden=\"true\">·<\/span> iPhone / iOS 17 or later"
+    }
+  },
+  "29": {
+    "attributes": {
+      "aria-label": {
+        "ja": "主な特徴",
+        "en": "Key features"
+      }
+    }
+  },
+  "30": {
+    "text": {
+      "0": {
+        "ja": "基本無料",
+        "en": "Free core features"
+      }
+    }
+  },
+  "31": {
+    "text": {
+      "0": {
+        "ja": "広告・行動解析なし",
+        "en": "No ads or behavioral analytics"
+      }
+    }
+  },
+  "32": {
+    "text": {
+      "0": {
+        "ja": "アカウント不要",
+        "en": "No account required"
+      }
+    }
+  },
+  "33": {
+    "text": {
+      "0": {
+        "ja": "iCloud同期は任意",
+        "en": "Optional iCloud sync"
+      }
+    }
+  },
+  "34": {
+    "attributes": {
+      "aria-label": {
+        "ja": "ポモドーロタイマーから宝石の集中記録までの実際のアプリ画面",
+        "en": "Actual app screens showing the Pomodoro timer and focus records as gems. Screenshots show the Japanese app interface."
+      }
+    }
+  },
+  "35": {
+    "attributes": {
+      "alt": {
+        "ja": "英語をテーマに25分の集中を計測し、終了通知を設定できる、ポモジェムのポモドーロタイマー画面",
+        "en": "PomoGem timer showing a 25 minute English study session and end notification settings. Screenshot shows the Japanese app interface."
+      }
+    }
+  },
+  "36": {
+    "html": {
+      "ja": "<span>01<\/span> タイマーで集中",
+      "en": "<span>01<\/span> Focus with a timer"
+    }
+  },
+  "37": {
+    "html": {
+      "ja": "<small>25分完走<\/small><strong>+250g → 1粒<\/strong>",
+      "en": "<small>25 minutes complete<\/small><strong>+250g → 1 gem<\/strong>"
+    }
+  },
+  "38": {
+    "attributes": {
+      "alt": {
+        "ja": "25分の集中を250gの宝石1粒として記録し、テーマと時間を選んで次の集中を始められる、ポモジェムのホーム画面",
+        "en": "PomoGem home screen recording 25 minutes of focus as one 250g gem, with theme and duration choices for the next session. Screenshot shows the Japanese app interface."
+      }
+    }
+  },
+  "39": {
+    "html": {
+      "ja": "<span>02<\/span> 宝石で記録",
+      "en": "<span>02<\/span> Record a gem"
+    }
+  },
+  "40": {
+    "text": {
+      "0": {
+        "ja": "スクリーンショットは日本語版です。",
+        "en": "Screenshots show the Japanese app interface."
+      }
+    }
+  },
+  "41": {
+    "html": {
+      "ja": "タイマーを完走すると、<br/>宝石が1粒。",
+      "en": "Finish your timer.<br/>Add a gem."
+    }
+  },
+  "42": {
+    "text": {
+      "0": {
+        "ja": "タイマーを始めて、集中して、完走する。その25分が宝石になるまでを、約8秒に短縮して体験できます。",
+        "en": "Start the timer, focus, and finish. See those 25 minutes become a gem in a demo sped up to about 8 seconds."
+      }
+    }
+  },
+  "43": {
+    "text": {
+      "0": {
+        "ja": "テーマと時間を選ぶ",
+        "en": "Choose a theme and duration"
+      }
+    }
+  },
+  "44": {
+    "text": {
+      "0": {
+        "ja": "勉強の科目も、企画や開発など仕事のテーマも自由。",
+        "en": "Choose any theme: a school subject, planning, development, or other work."
+      }
+    }
+  },
+  "45": {
+    "text": {
+      "0": {
+        "ja": "タイマーで集中する",
+        "en": "Focus with the timer"
+      }
+    }
+  },
+  "46": {
+    "text": {
+      "0": {
+        "ja": "25分・45分・60分・90分の基本タイマーは無料です。",
+        "en": "The standard 25, 45, 60, and 90 minute timers are free."
+      }
+    }
+  },
+  "47": {
+    "text": {
+      "0": {
+        "ja": "完走を自動で記録",
+        "en": "Automatically record completed sessions"
+      }
+    }
+  },
+  "48": {
+    "text": {
+      "0": {
+        "ja": "25分なら250g。アプリでは、テーマ色の宝石が音と触覚とともに積もります。",
+        "en": "25 minutes makes 250g. In the app, gems in your theme color gather with sound and haptic feedback."
+      }
+    }
+  },
+  "49": {
+    "text": {
+      "0": {
+        "ja": "集中した時間が、宝石になる。",
+        "en": "Your focused time becomes a gem."
+      }
+    }
+  },
+  "50": {
+    "text": {
+      "0": {
+        "ja": "25分の集中を約8秒で早送りするデモ",
+        "en": "A 25 minute focus session sped up to about 8 seconds"
+      }
+    }
+  },
+  "51": {
+    "html": {
+      "ja": "<span>01<\/span> タイマーで集中",
+      "en": "<span>01<\/span> Focus with the timer"
+    }
+  },
+  "52": {
+    "text": {
+      "0": {
+        "ja": "英語",
+        "en": "English study"
+      }
+    }
+  },
+  "53": {
+    "attributes": {
+      "aria-label": {
+        "ja": "早送りデモ、残り25分",
+        "en": "Sped-up demo, 25 minutes remaining"
+      }
+    }
+  },
+  "54": {
+    "text": {
+      "0": {
+        "ja": "開始前",
+        "en": "Ready"
+      }
+    }
+  },
+  "55": {
+    "html": {
+      "ja": "<span>完走で<\/span><b>→<\/b>",
+      "en": "<span>On completion<\/span><b>→<\/b>"
+    }
+  },
+  "56": {
+    "html": {
+      "ja": "<span>02<\/span> 宝石として残る",
+      "en": "<span>02<\/span> Keep it as a gem"
+    }
+  },
+  "57": {
+    "attributes": {
+      "aria-label": {
+        "ja": "デモ用の瓶。現在は空です。",
+        "en": "Demo jar. It is currently empty."
+      }
+    }
+  },
+  "58": {
+    "html": {
+      "ja": "完走すると<br/>ここに1粒",
+      "en": "Finish your session.<br/>A gem lands here."
+    }
+  },
+  "59": {
+    "text": {
+      "0": {
+        "ja": "まだ集中の記録はありません",
+        "en": "No focus sessions recorded yet"
+      }
+    }
+  },
+  "60": {
+    "text": {
+      "0": {
+        "ja": "集中をはじめる（8秒デモ）",
+        "en": "Start focusing (8-second demo)"
+      }
+    }
+  },
+  "61": {
+    "text": {
+      "0": {
+        "ja": "一時停止",
+        "en": "Pause"
+      }
+    }
+  },
+  "62": {
+    "text": {
+      "0": {
+        "ja": "中断する",
+        "en": "Cancel"
+      }
+    }
+  },
+  "63": {
+    "text": {
+      "0": {
+        "ja": "まずはタイマーを開始。完走すると、集中した時間が1粒になります。",
+        "en": "Start the timer. Complete it to turn your focused time into a gem."
+      }
+    }
+  },
+  "64": {
+    "text": {
+      "0": {
+        "ja": "アプリでは休憩をはさんで、次の集中へ。次の25分も、一粒に。",
+        "en": "In the app, take a break before your next session. Your next 25 minutes becomes another gem."
+      }
+    }
+  },
+  "65": {
+    "text": {
+      "0": {
+        "ja": "体験用の早送り表示です。実際の25分は計測せず、音・触覚・記録保存は再現しません。",
+        "en": "This is a sped-up preview. It does not measure a real 25 minute session, play sounds, provide haptic feedback, or save records."
+      }
+    }
+  },
+  "66": {
+    "text": {
+      "0": {
+        "ja": "デモを動かすにはJavaScriptを有効にしてください。アプリの画面と使い方は、このままご覧いただけます。",
+        "en": "Enable JavaScript to run the demo. You can still view the app screenshots and instructions here."
+      }
+    }
+  },
+  "67": {
+    "html": {
+      "ja": "この体験は基本無料。機能を確認する <span aria-hidden=\"true\">→<\/span>",
+      "en": "The core experience is free. Explore the features <span aria-hidden=\"true\">→<\/span>"
+    }
+  },
+  "68": {
+    "html": {
+      "ja": "グラフではなく、<br/>手ざわりを残す。",
+      "en": "Beyond a chart.<br/>Something you can feel."
+    }
+  },
+  "69": {
+    "text": {
+      "0": {
+        "ja": "集中した時間は、終わった瞬間から見えなくなる。ポモジェムは時間を監視するのではなく、触れられそうな重さへ変える。ひとつのiPhoneで積んだ時間は、短く分けても長くまとめても、同じ総時間なら同じ質量になる。タップすれば跳ね、傾ければ転がる。",
+        "en": "Focused time disappears from view the moment it ends. PomoGem turns that time into weight that feels almost tangible, instead of monitoring it. On one iPhone, the same total time always makes the same mass, whether your sessions are short or long. Tap the gems to make them bounce. Tilt your phone to watch them roll."
+      }
+    }
+  },
+  "70": {
+    "attributes": {
+      "aria-label": {
+        "ja": "プロダクト原則",
+        "en": "Product principles"
+      }
+    }
+  },
+  "71": {
+    "text": {
+      "0": {
+        "ja": "減らない。",
+        "en": "It stays with you."
+      }
+    }
+  },
+  "72": {
+    "text": {
+      "0": {
+        "ja": "休んだ日があっても、積んだ粒はそのまま。連続記録は数えない。",
+        "en": "Take a day off. Your gems stay right where they are. There are no streaks to count."
+      }
+    }
+  },
+  "73": {
+    "text": {
+      "0": {
+        "ja": "ごまかさない。",
+        "en": "Every minute counts equally."
+      }
+    }
+  },
+  "74": {
+    "text": {
+      "0": {
+        "ja": "1分はいつでも10g。回数ではなく、積んだ総時間を成長の基準にする。",
+        "en": "One minute always equals 10g. Progress is based on your total focused time, not the number of sessions."
+      }
+    }
+  },
+  "75": {
+    "text": {
+      "0": {
+        "ja": "責めない。",
+        "en": "No guilt."
+      }
+    }
+  },
+  "76": {
+    "text": {
+      "0": {
+        "ja": "手動で積んだ回も、実測と区別しながら努力の記録として残す。",
+        "en": "Manually added sessions also remain as a record of your effort, clearly distinguished from timed sessions."
+      }
+    }
+  },
+  "77": {
+    "html": {
+      "ja": "始めるのは無料。<br/>Proは、買い切り。",
+      "en": "Start for free.<br/>Buy Pro once."
+    }
+  },
+  "78": {
+    "text": {
+      "0": {
+        "ja": "集中を積み上げる基本体験は無料のまま。ポモジェムProは、時間設定と振り返り表示を少し細かくしたい人のための追加機能です。",
+        "en": "The core experience of building up your focus stays free. PomoGem Pro adds more control over session durations and how you look back on your progress."
+      }
+    }
+  },
+  "79": {
+    "text": {
+      "0": {
+        "ja": "無料でできること",
+        "en": "Included for free"
+      }
+    }
+  },
+  "80": {
+    "text": {
+      "0": {
+        "ja": "基本機能",
+        "en": "Core features"
+      }
+    }
+  },
+  "81": {
+    "text": {
+      "0": {
+        "ja": "25分・45分・60分・90分の集中タイマー",
+        "en": "25, 45, 60, and 90 minute focus timers"
+      }
+    }
+  },
+  "82": {
+    "text": {
+      "0": {
+        "ja": "完走した時間を宝石として瓶へ記録",
+        "en": "Record completed sessions as gems in your jar"
+      }
+    }
+  },
+  "83": {
+    "text": {
+      "0": {
+        "ja": "テーマ、履歴、まとまり粒、記念石",
+        "en": "Themes, history, grouped gems, and milestone stones"
+      }
+    }
+  },
+  "84": {
+    "text": {
+      "0": {
+        "ja": "静止画・GIFのシェアカード",
+        "en": "Share cards as still images or GIFs"
+      }
+    }
+  },
+  "85": {
+    "text": {
+      "0": {
+        "ja": "「このiPhoneのみ」または確認後のiCloud同期",
+        "en": "“This iPhone Only” or iCloud sync after confirmation"
+      }
+    }
+  },
+  "86": {
+    "text": {
+      "0": {
+        "ja": "ポモジェムPro",
+        "en": "PomoGem Pro"
+      }
+    }
+  },
+  "87": {
+    "text": {
+      "0": {
+        "ja": "買い切り",
+        "en": "One-time purchase"
+      }
+    }
+  },
+  "88": {
+    "text": {
+      "0": {
+        "ja": "無料プリセット以外の1〜360分を自由に設定",
+        "en": "Set any duration from 1 to 360 minutes beyond the free presets"
+      }
+    }
+  },
+  "89": {
+    "text": {
+      "0": {
+        "ja": "まとまり粒へ月の刻印を表示",
+        "en": "Show month stamps on grouped gems"
+      }
+    }
+  },
+  "90": {
+    "text": {
+      "0": {
+        "ja": "サブスクリプション、無料トライアル、自動更新なし",
+        "en": "No subscription, free trial, or automatic renewal"
+      }
+    }
+  },
+  "91": {
+    "text": {
+      "0": {
+        "ja": "同じApple Accountなら「購入を復元」から再確認",
+        "en": "Restore purchases with the same Apple Account"
+      }
+    }
+  },
+  "92": {
+    "text": {
+      "0": {
+        "ja": "ロゴと公式サイトは無料／Proともシェアカードに表示",
+        "en": "Share cards show the logo and official website in both Free and Pro"
+      }
+    }
+  },
+  "93": {
+    "html": {
+      "ja": "<strong>Proは1回限りの買い切りです。<\/strong>購入時の提供内容と条件は、アプリ内のApp Store購入確認画面でご確認ください。購入処理と返金申請はApp Storeを通じて行われます。法令上の権利を制限せず、Web決済や外部購入はありません。ファミリー共有には対応していません。",
+      "en": "<strong>Pro is a one-time purchase.<\/strong> Review the features and terms in the App Store purchase confirmation screen within the app when you buy. Purchases and refund requests are handled through the App Store. Your statutory rights are not limited. There are no web payments or external purchases. Family Sharing is not supported."
+    }
+  },
+  "94": {
+    "html": {
+      "ja": "<a href=\"#sales\">購入条件・販売者情報<\/a><a href=\"#terms\">利用条件<\/a><a href=\"#support\">購入の復元<\/a>",
+      "en": "<a href=\"#sales\">Purchase terms &amp; seller information<\/a><a href=\"#terms\">Terms<\/a><a href=\"#support\">Restore purchases<\/a>"
+    },
+    "attributes": {
+      "aria-label": {
+        "ja": "購入に関する案内",
+        "en": "Purchase information"
+      }
+    }
+  },
+  "95": {
+    "html": {
+      "ja": "実測も手動記録も、<br/>違いがわかる形で残す。",
+      "en": "Timed or added by hand.<br/>Clearly marked, always kept."
+    }
+  },
+  "96": {
+    "text": {
+      "0": {
+        "ja": "タイマーで測った記録と自己申告の違いを見える形で残しながら、どちらの集中も失わず積みます。100点、合格、仕事の節目は、質量を増やさない記念石として別に残します。",
+        "en": "Keep both timed sessions and self-reported focus, with a visible distinction between them. A perfect score, a passed exam, or a work milestone can be saved separately as a milestone stone that adds no mass."
+      }
+    }
+  },
+  "97": {
+    "text": {
+      "0": {
+        "ja": "タイマー完走",
+        "en": "Completed timer"
+      }
+    }
+  },
+  "98": {
+    "text": {
+      "0": {
+        "ja": "実測",
+        "en": "Measured"
+      }
+    }
+  },
+  "99": {
+    "text": {
+      "0": {
+        "ja": "つやのある粒。総質量とシェアに入る。",
+        "en": "A glossy gem. Included in total mass and share cards."
+      }
+    }
+  },
+  "100": {
+    "text": {
+      "0": {
+        "ja": "手動・時刻の大きな不整合",
+        "en": "Manual entry or a major clock discrepancy"
+      }
+    }
+  },
+  "101": {
+    "text": {
+      "0": {
+        "ja": "自己申告",
+        "en": "Self-reported"
+      }
+    }
+  },
+  "102": {
+    "text": {
+      "0": {
+        "ja": "テーマ色は同じまま、内側の破線で区別。ロック中は通常どおり進み、手動記録はシェアに含めるか選べる。",
+        "en": "The theme color stays the same, with an inner dashed line to distinguish it. Timers run normally while your screen is locked. You can choose whether to include manual records when sharing."
+      }
+    }
+  },
+  "103": {
+    "text": {
+      "0": {
+        "ja": "10粒が集まる",
+        "en": "10 gems come together"
+      }
+    }
+  },
+  "104": {
+    "text": {
+      "0": {
+        "ja": "まとまり粒",
+        "en": "Grouped gems"
+      }
+    }
+  },
+  "105": {
+    "text": {
+      "0": {
+        "ja": "元の色と記録を内側に残したまま、大きな一粒になって瓶で動く。",
+        "en": "One larger gem moves around the jar, keeping the original colors and records inside."
+      }
+    }
+  },
+  "106": {
+    "text": {
+      "0": {
+        "ja": "100点・合格・仕事の節目",
+        "en": "Perfect scores, passed exams, and work milestones"
+      }
+    }
+  },
+  "107": {
+    "text": {
+      "0": {
+        "ja": "記念石",
+        "en": "Milestone stones"
+      }
+    }
+  },
+  "108": {
+    "text": {
+      "0": {
+        "ja": "ひとまわり大きく、0g。最新12個は瓶で動き、全件が記録棚に残る。",
+        "en": "A little larger, weighing 0g. The latest 12 move around the jar, and all remain on the record shelf."
+      }
+    }
+  },
+  "109": {
+    "text": {
+      "0": {
+        "ja": "満杯後 · 自動整理済み",
+        "en": "After filling · Automatically grouped"
+      }
+    }
+  },
+  "110": {
+    "html": {
+      "ja": "満杯は、<br/>終わりじゃない。",
+      "en": "A full jar<br/>is just the beginning."
+    }
+  },
+  "111": {
+    "text": {
+      "0": {
+        "ja": "瓶の光は2.50kg（250分）ごとに何度でも満ち、満ちた回数も残ります。超過分は失わず次の巡へ。動く粒は10個ずつ「まとまり粒」へ整理して余白をつくるだけ。総質量も一回ごとの記録も、そのままです。",
+        "en": "The jar fills with light every 2.50kg (250 minutes), as many times as you keep going, and counts each fill. Any extra carries over to the next cycle. Moving gems are combined into groups of 10 to make room. Your total mass and every individual record stay intact."
+      }
+    }
+  },
+  "112": {
+    "html": {
+      "ja": "<span>一粒を10回<\/span><b>→<\/b><span>×10のまとまり粒<\/span><b>→<\/b><span>×100へ積み上がる<\/span>",
+      "en": "<span>10 individual gems<\/span><b>→<\/b><span>One ×10 grouped gem<\/span><b>→<\/b><span>Build up to ×100<\/span>"
+    }
+  },
+  "113": {
+    "text": {
+      "0": {
+        "ja": "ホームは今の瓶だけ。今週は実測質量を第一表示し、長い休憩は1,000g（100分）ごとに提案します。メニューの「積み上がり」では、まとまり粒と月ごとの瓶を俯瞰。「積み上がり計画」では、期間・週の回数・10／25／60分を変えて将来の瓶を試算できます。予測は実績・iCloudへ保存せず、閉じるとリセットされます。",
+        "en": "Home shows your current jar. The weekly view puts measured mass first, and a long break is suggested every 1,000g (100 minutes). Open “Accumulation” in the menu for an overview of grouped gems and monthly jars. In “Accumulation Plan,” estimate future jars by changing the period, sessions per week, and 10, 25, or 60 minute sessions. Estimates are not saved to your records or iCloud and reset when you close the view."
+      }
+    }
+  },
+  "114": {
+    "text": {
+      "0": {
+        "ja": "プライバシーポリシー",
+        "en": "Privacy policy"
+      }
+    }
+  },
+  "115": {
+    "text": {
+      "0": {
+        "ja": "運営者はhinoshibaです。テーマ名、メモ、集中記録、設定、進行中タイマーを機能の提供に使います。初回に「このiPhoneのみ」を選ぶと端末内に保存し、「iCloudで同期」を選ぶとApple AccountのプライベートiCloud領域で同期します。Version 1.0では保存先を後から変更できません。開発者は集中記録を収集せず、広告・追跡は行いません。",
+        "en": "The operator is hinoshiba. Theme names, notes, focus records, preferences, and the active timer support app features. Choose This iPhone Only to store data locally, or Sync with iCloud to sync in your Apple Account’s private iCloud storage. Version 1.0 cannot change the storage choice later. The developer does not collect focus records or use advertising or tracking."
+      }
+    }
+  },
+  "116": {
+    "text": {
+      "0": {
+        "ja": "設定のデータ管理から記録の書き出し・削除ができます。「すべてのデータを消去」は選択した保存先を対象とし、iCloudの削除には通信が必要です。端末のみの記録はアプリの削除で失われ、書き出したJSONは再インポートや移行には使えません。",
+        "en": "Use data management in Settings to export or delete records. Delete all data applies to the selected storage; iCloud deletion requires a connection. Local-only records are lost if you delete the app. Exported JSON cannot be reimported or used for migration."
+      }
+    }
+  },
+  "117": {
+    "text": {
+      "0": {
+        "ja": "通知、写真への保存、端末の動きは、それぞれ完走通知、シェア画像の保存、瓶の演出に利用します。権限は端末の設定で変更できます。共有した画像やメモは、選んだ共有先へ渡ります。Widgetはアプリを開く案内、Live Activityはタイマーの時間と状態を表示します。",
+        "en": "Notifications, saving to Photos, and device motion are used for completion alerts, saving share images, and jar effects. Permissions can be changed in device settings. Shared images and notes are sent to the destination you choose. Widgets offer a shortcut to the app; Live Activities show timer duration and state."
+      }
+    }
+  },
+  "118": {
+    "html": {
+      "ja": "購入確認と選択したiCloud同期はAppleが処理し、<a href=\"https://www.apple.com/legal/privacy/\">Appleのプライバシーポリシー<\/a>が適用されます。このサイトはGitHub Pagesで配信され、IPアドレスなどのアクセス情報は<a href=\"https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement\">GitHubのプライバシーステートメント<\/a>に従って処理されます。",
+      "en": "Apple processes purchase verification and your selected iCloud sync under <a href=\"https://www.apple.com/legal/privacy/\">Apple’s privacy policy<\/a>. This site is hosted on GitHub Pages, which processes access information such as IP addresses under <a href=\"https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement\">GitHub’s Privacy Statement<\/a>."
+    }
+  },
+  "119": {
+    "html": {
+      "ja": "お問い合わせのメールアドレスと本文は、対応のために必要な期間利用し、不要になった情報は削除します。<a href=\"mailto:support@hinoshiba.com\">support@hinoshiba.com<\/a>へご連絡ください。最終更新：2026年9月6日。変更時はこのページを更新します。",
+      "en": "Your email address and message are used for support as long as needed and deleted when no longer necessary. Contact <a href=\"mailto:support@hinoshiba.com\">support@hinoshiba.com<\/a>. Updated September 6, 2026. Changes will be published on this page."
+    }
+  },
+  "120": {
+    "html": {
+      "ja": "はじめる前の、<br/>気になること。",
+      "en": "Before your<br/>first gem."
+    }
+  },
+  "121": {
+    "text": {
+      "0": {
+        "ja": "最初の一粒から、自分のペースで。よくある質問をまとめました。",
+        "en": "Start with one gem and go at your own pace. Here are answers to common questions."
+      }
+    }
+  },
+  "122": {
+    "text": {
+      "0": {
+        "ja": "無料でどこまで使えますか？",
+        "en": "What can I use for free?"
+      }
+    }
+  },
+  "123": {
+    "html": {
+      "ja": "25・45・60・90分のタイマー、宝石の記録、テーマ、履歴、シェア、選択式のiCloud同期まで無料です。Proは自由な1〜360分の設定と、まとまり粒の月刻印を追加する買い切りです。<a href=\"#plans\">無料・Proの機能を見る<\/a>",
+      "en": "25, 45, 60, and 90 minute timers, gem records, themes, history, sharing, and optional iCloud sync are free. Pro is a one-time purchase that adds custom durations from 1 to 360 minutes and month stamps on grouped gems. <a href=\"#plans\">Compare Free &amp; Pro features<\/a>"
+    }
+  },
+  "124": {
+    "text": {
+      "0": {
+        "ja": "画面をロックしても計測できますか？",
+        "en": "Does the timer work with my screen locked?"
+      }
+    }
+  },
+  "125": {
+    "text": {
+      "0": {
+        "ja": "はい。画面をロックしてもタイマーは進みます。終了通知は許可した場合に届き、通知にテーマ名は表示しません。通知の設定は後から変更できます。",
+        "en": "Yes. The timer continues while your screen is locked. If you allow notifications, you will receive one when the session ends. Notifications do not show the theme name. You can change notification settings later."
+      }
+    }
+  },
+  "126": {
+    "text": {
+      "0": {
+        "ja": "毎日続けられなくても大丈夫ですか？",
+        "en": "Is it okay if I skip a day?"
+      }
+    }
+  },
+  "127": {
+    "text": {
+      "0": {
+        "ja": "休んだ日があっても、積んだ宝石は減りません。連続記録を数えず、集中した時間を残します。タイマーを使わなかった時間も、実測と区別した手動記録で残せます。",
+        "en": "Your gems do not disappear when you take a day off. PomoGem keeps your focused time without counting streaks. You can also add time spent without a timer as a manual record, distinguished from timed sessions."
+      }
+    }
+  },
+  "128": {
+    "text": {
+      "0": {
+        "ja": "アカウント登録や通信は必要ですか？",
+        "en": "Do I need an account or internet access?"
+      }
+    }
+  },
+  "129": {
+    "text": {
+      "0": {
+        "ja": "ポモジェムへのアカウント登録は不要です。初回に「このiPhoneのみ」を選ぶと、Apple Accountや通信なしで基本機能を利用できます。「iCloudで同期」を選ぶ場合は、同じApple Accountと通信が必要です。",
+        "en": "You do not need to register a PomoGem account. Choose “This iPhone Only” at first launch to use core features without an Apple Account or a network connection. “Sync with iCloud” requires the same Apple Account and a network connection."
+      }
+    }
+  },
+  "130": {
+    "text": {
+      "0": {
+        "ja": "機種変更しても記録を引き継げますか？",
+        "en": "Can I keep my records when I change phones?"
+      }
+    }
+  },
+  "131": {
+    "html": {
+      "ja": "初回に「iCloudで同期」を選んだ場合は、同じApple Accountの対応iPhoneで記録を続けられます。Version 1.0では保存先を後から変更できません。「このiPhoneのみ」の記録はアプリの削除で失われ、書き出したJSONは再インポートや移行には使えません。<a href=\"#privacy\">保存先について詳しく見る<\/a>",
+      "en": "If you chose “Sync with iCloud” at first launch, you can continue your records on a supported iPhone using the same Apple Account. In Version 1.0, you cannot change storage later. Deleting the app removes records stored with “This iPhone Only,” and exported JSON cannot be reimported or used for migration. <a href=\"#privacy\">Learn more about storage<\/a>"
+    }
+  },
+  "132": {
+    "html": {
+      "ja": "ほかにお困りのことは、<a href=\"#support\">サポート・お問い合わせ<\/a>へ。",
+      "en": "Need more help? Visit <a href=\"#support\">support &amp; contact<\/a>."
+    }
+  },
+  "133": {
+    "attributes": {
+      "alt": {
+        "ja": "ポモジェムのアプリアイコン",
+        "en": "PomoGem app icon"
+      }
+    }
+  },
+  "134": {
+    "html": {
+      "ja": "次の25分から、<br/>集中を積み上げよう。",
+      "en": "Build your focus,<br/>starting with 25 minutes."
+    }
+  },
+  "135": {
+    "text": {
+      "0": {
+        "ja": "iPhone / iOS 17以降",
+        "en": "iPhone / iOS 17 or later"
+      }
+    }
+  },
+  "136": {
+    "html": {
+      "ja": "<span aria-hidden=\"true\"><\/span> App Store 近日公開",
+      "en": "<span aria-hidden=\"true\"><\/span> Coming soon to the App Store"
+    }
+  },
+  "137": {
+    "html": {
+      "ja": "現在、リリースに向けて準備中です。<br/>公開後、このページからダウンロードできます。",
+      "en": "We are preparing for release.<br/>Once available, you can download the app from this page."
+    }
+  },
+  "138": {
+    "html": {
+      "ja": "\n<a class=\"button primary\" href=\"#demo\">集中から宝石まで、8秒で体験<\/a>\n<a class=\"button quiet\" href=\"#faq\">よくある質問を見る<\/a>\n",
+      "en": "\n<a class=\"button primary\" href=\"#demo\">From focus to gem: try the 8 second demo<\/a>\n<a class=\"button quiet\" href=\"#faq\">Read the FAQ<\/a>\n"
+    }
+  },
+  "139": {
+    "text": {
+      "0": {
+        "ja": "#ポモジェム",
+        "en": "#PomoGem"
+      }
+    }
+  },
+  "140": {
+    "text": {
+      "0": {
+        "ja": "サポート",
+        "en": "Support"
+      }
+    }
+  },
+  "141": {
+    "html": {
+      "ja": "App Storeの購入・請求・返金は<a href=\"https://support.apple.com/billing\">Appleサポート<\/a>をご利用ください。返金の申請は<a href=\"https://reportaproblem.apple.com/\">Appleの問題を報告する<\/a>から行えます。",
+      "en": "For App Store purchases, billing, and refunds, use <a href=\"https://support.apple.com/billing\">Apple Support<\/a>. Request a refund through <a href=\"https://reportaproblem.apple.com/\">Report a Problem<\/a>."
+    }
+  },
+  "142": {
+    "html": {
+      "ja": "Proを再び利用するには、購入時と同じApple Accountでアプリ内の「購入を復元」を選びます。アプリの不具合や製品については、FAQをご確認のうえ<a href=\"mailto:support@hinoshiba.com\">support@hinoshiba.com<\/a>へ、OS・アプリのバージョンと再現手順をお送りください。",
+      "en": "To restore Pro, choose Restore Purchases in the app with the Apple Account used for the purchase. For app issues and product questions, check the FAQ, then contact <a href=\"mailto:support@hinoshiba.com\">support@hinoshiba.com<\/a> with the OS and app versions and steps to reproduce the issue."
+    }
+  },
+  "143": {
+    "text": {
+      "0": {
+        "ja": "利用条件",
+        "en": "Terms of use"
+      }
+    }
+  },
+  "144": {
+    "html": {
+      "ja": "App Store版には<a href=\"https://www.apple.com/legal/internet-services/itunes/dev/stdeula/\">Apple標準EULA<\/a>が適用されます。集中記録は個人の振り返り用です。勤怠、給与、請求などの正式な記録として使う場合は内容を確認してください。",
+      "en": "App Store copies are subject to <a href=\"https://www.apple.com/legal/internet-services/itunes/dev/stdeula/\">Apple’s Standard EULA<\/a>. Focus records support personal reflection. Verify them before using them for attendance, payroll, billing, or other formal records."
+    }
+  },
+  "145": {
+    "html": {
+      "ja": "ソースコードはMIT Licenseで公開しています。名称・ロゴ・ブランド素材の条件は<a href=\"https://github.com/hinoshiba/pomogem\">GitHub<\/a>をご確認ください。",
+      "en": "The source code is available under the MIT License. See <a href=\"https://github.com/hinoshiba/pomogem\">GitHub<\/a> for name, logo, and brand asset terms."
+    }
+  },
+  "146": {
+    "text": {
+      "0": {
+        "ja": "販売について",
+        "en": "Sales information"
+      }
+    }
+  },
+  "147": {
+    "text": {
+      "0": {
+        "ja": "ポモジェムProは1回限りの非消費型アプリ内課金です。サブスクリプションや自動更新はありません。機能と動作環境はこのページの無料・Pro案内に記載しています。価格は購入前にアプリ内とApp Storeの確認画面に表示され、購入完了後に利用できます。通信料は利用者の負担です。",
+        "en": "PomoGem Pro is a one-time, non-consumable in-app purchase with no subscription or automatic renewal. See Free & Pro on this page for features and requirements. The price appears in the app and the App Store confirmation before purchase. Access starts after purchase completes. You are responsible for connection charges."
+      }
+    }
+  },
+  "148": {
+    "html": {
+      "ja": "支払方法・支払時期はApp Storeの購入確認画面に従います。購入・請求・返金は<a href=\"https://support.apple.com/billing\">Appleの案内<\/a>をご確認ください。法令上認められる権利を制限するものではありません。",
+      "en": "Payment method and timing follow the App Store purchase confirmation. See <a href=\"https://support.apple.com/billing\">Apple’s guidance<\/a> for purchases, billing, and refunds. This does not limit rights under applicable law."
+    }
+  },
+  "149": {
+    "html": {
+      "ja": "特定商取引法に基づく販売事業者の氏名（名称）・所在地・電話番号その他必要な情報は、購入判断前に確認できるよう、請求に応じて遅滞なく電子メールで開示します。<a href=\"mailto:support@hinoshiba.com\">support@hinoshiba.com<\/a>へご請求ください。購入済みである必要はありません。",
+      "en": "Where required under Japan’s Act on Specified Commercial Transactions, the seller’s name, address, telephone number, and other required information will be disclosed by email without delay on request, before you decide to purchase. Contact <a href=\"mailto:support@hinoshiba.com\">support@hinoshiba.com<\/a>. A prior purchase is not required."
+    }
+  },
+  "150": {
+    "text": {
+      "0": {
+        "ja": "ポモジェム",
+        "en": "PomoGem"
+      }
+    }
+  },
+  "151": {
+    "text": {
+      "0": {
+        "ja": "集中した時間が、宝石になる。",
+        "en": "Your focused time becomes a gem."
+      }
+    }
+  },
+  "152": {
+    "html": {
+      "ja": "\n<a href=\"#support\">サポート<\/a>\n<a href=\"mailto:support@hinoshiba.com\">お問い合わせ<\/a>\n<a href=\"#privacy\">プライバシー<\/a>\n<a href=\"#terms\">利用条件<\/a>\n<a href=\"font-license.txt\">フォントライセンス<\/a>\n<a href=\"https://github.com/hinoshiba/pomogem\">GitHub · Open source<\/a><a href=\"https://www.hinoshiba.com/products/\">ほかのアプリ<\/a>",
+      "en": "\n<a href=\"#support\">Support<\/a>\n<a href=\"mailto:support@hinoshiba.com\">Contact<\/a>\n<a href=\"#privacy\">Privacy<\/a>\n<a href=\"#terms\">Terms<\/a>\n<a href=\"font-license.txt\">Font license<\/a>\n<a href=\"https://github.com/hinoshiba/pomogem\">GitHub · Open source<\/a><a href=\"https://www.hinoshiba.com/products/\">More apps<\/a>"
+    },
+    "attributes": {
+      "aria-label": {
+        "ja": "フッターナビゲーション",
+        "en": "Footer navigation"
+      }
+    }
+  },
+  "153": {
+    "text": {
+      "0": {
+        "ja": "ソースコードはMIT License。名称・ロゴ・ブランド素材は対象外です。",
+        "en": "Source code is licensed under the MIT License. The name, logo, and brand assets are excluded."
+      }
+    }
+  }
+}</script></body>
 </html>

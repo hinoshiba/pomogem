@@ -12,20 +12,19 @@ import sys
 from pathlib import Path
 
 
-# The repository owner explicitly approved this complete address for public
-# authorship. This does not approve other addresses at the same provider.
-APPROVED_PERSONAL_EMAILS = frozenset({"kai.openclaw01@gmail.com"})
+# Only this complete project mailbox is approved for public contact and authorship.
+APPROVED_PERSONAL_EMAILS = frozenset({"support@hinoshiba.com"})
 PRIVATE_DOMAIN = re.compile(
     rb"@(?:gmail\.com|googlemail\.com|icloud\.com|me\.com|mac\.com|"
-    rb"outlook\.com|hotmail\.com|live\.com|yahoo\.[a-z.]+|proton(?:mail)?\.com)",
+    rb"hinoshiba\.com|users\.noreply\.github\.com|outlook\.com|hotmail\.com|live\.com|yahoo\.[a-z.]+|proton(?:mail)?\.com)",
     re.IGNORECASE,
 )
-LOCAL_BYTES = frozenset(b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.!#$%&'*+/=?^_`{|}~-")
+LOCAL_BYTES = frozenset(b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.!#$%&*+/=?^_{|}~-")
 DOMAIN_BYTES = frozenset(b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._%+-")
 
 
 def wide_private_domains(encoding: str) -> re.Pattern[bytes]:
-    domains = ("gmail.com", "googlemail.com", "icloud.com", "me.com", "mac.com",
+    domains = ("hinoshiba.com", "users.noreply.github.com", "gmail.com", "googlemail.com", "icloud.com", "me.com", "mac.com",
                "outlook.com", "hotmail.com", "live.com", "proton.com", "protonmail.com")
     patterns = [re.escape(("@" + domain).encode(encoding)) for domain in domains]
     yahoo_suffix = rb"(?:[a-z.]\x00)+" if encoding == "utf-16-le" else rb"(?:\x00[a-z.])+"

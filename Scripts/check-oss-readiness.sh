@@ -6,9 +6,9 @@ cd "$ROOT"
 
 MODE=${1:-standard}
 case "$MODE" in
-  standard|--release) ;;
+  standard|--current|--release) ;;
   *)
-    echo "error: usage: $0 [--release]" >&2
+    echo "error: usage: $0 [--current|--release]" >&2
     exit 2
     ;;
 esac
@@ -180,7 +180,7 @@ require(
     "main URL registration differs from the new app identifier and scheme",
 )
 require(info.get("ITSAppUsesNonExemptEncryption") is False, "export-compliance declaration must remain false")
-require(info.get("POMOGEM_PRIVACY_POLICY_URL") == "https://pomogem.hinoshiba.com/privacy/", "privacy policy URL differs from the canonical URL")
+require(info.get("POMOGEM_PRIVACY_POLICY_URL") == "https://pomogem.hinoshiba.com/#privacy", "privacy policy URL differs from the canonical URL")
 require(info.get("NSHumanReadableCopyright") == "Copyright © 2026 hinoshiba", "main bundle copyright differs from the release record")
 require(
     info.get("NSMotionUsageDescription")
@@ -615,6 +615,22 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   fi
   rm -f "$tracked_list"
 
+fi
+
+if [ "$MODE" = --current ]; then
+  echo "Current-file audit selected; run the default audit separately for complete Git history."
+  metadata_base=${PUBLIC_METADATA_BASE:-}
+  if [ -z "$metadata_base" ] && git rev-parse --verify origin/main >/dev/null 2>&1; then
+    metadata_base=$(git merge-base origin/main HEAD)
+  fi
+  if [ -n "$metadata_base" ]; then
+    metadata_head=${PUBLIC_METADATA_HEAD:-HEAD}
+    git rev-list "$metadata_base..$metadata_head" > "$history_object_ids"
+    if [ -s "$history_object_ids" ]; then
+      python3 Scripts/check-git-public-metadata.py "$history_object_ids"
+    fi
+  fi
+elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
     echo "error: full Git history is required for the release audit" >&2
     exit 1
@@ -705,10 +721,10 @@ if [ "$MODE" = '--release' ]; then
 
   for url in \
     https://pomogem.hinoshiba.com/ \
-    https://pomogem.hinoshiba.com/privacy/ \
-    https://pomogem.hinoshiba.com/support/ \
-    https://pomogem.hinoshiba.com/terms/ \
-    https://pomogem.hinoshiba.com/commercial-transactions/; do
+    https://pomogem.hinoshiba.com/#privacy \
+    https://pomogem.hinoshiba.com/#support \
+    https://pomogem.hinoshiba.com/#terms \
+    https://pomogem.hinoshiba.com/#sales; do
     status=$(curl --silent --show-error --max-time 20 --output /dev/null --write-out '%{http_code}' "$url" || true)
     if [ "$status" != 200 ]; then
       echo "error: release URL must return HTTPS 200 without redirect: $url ($status)" >&2

@@ -324,7 +324,7 @@ if app_plist.get("CFBundleURLTypes") != [{
     "CFBundleURLSchemes": ["pomogem"],
 }]:
     fail("app URL registration differs from the reviewed PomoGem identifier and scheme")
-if app_plist.get("POMOGEM_PRIVACY_POLICY_URL") != "https://pomogem.hinoshiba.com/privacy/":
+if app_plist.get("POMOGEM_PRIVACY_POLICY_URL") != "https://pomogem.hinoshiba.com/#privacy":
     fail("app privacy URL differs from the reviewed canonical host")
 if app_plist.get("ITSAppUsesNonExemptEncryption") is not False:
     fail("app export-compliance declaration differs from the reviewed release")

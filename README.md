@@ -113,12 +113,13 @@ fail closedにします。「このiPhoneのみ」はiCloudへ自動switch／upl
 `main`へのサイト関連ファイルのpush時に公開前検査を行い、そのフォルダだけを自動配信します。
 必要に応じてActions画面から手動実行もできます。Pagesは公式repository IDで実行先を制限し、
 repositoryの改名前後で同じ配信先を使用します。GitHub repositoryは現在privateで、ユーザーによる改名と
-公開確認が残っています。公開Webのsource linkは匿名でアクセスできるようになってから追加します。
+公開確認が残っています。WebにはソースへのGitHubリンクを掲載していますが、repositoryの公開まではアクセス権が必要です。
+製品サイトは日本語・Englishを同じページで切り替え、案内とポリシーへアンカーで移動します。
 
 - 製品サイト: <https://pomogem.hinoshiba.com/>
-- 製品サイト（English）: <https://pomogem.hinoshiba.com/en/>
-- Privacy Policy: <https://pomogem.hinoshiba.com/privacy/>
-- Support: <https://pomogem.hinoshiba.com/support/>
+- 製品サイト（English）: <https://pomogem.hinoshiba.com/?lang=en>
+- Privacy Policy: <https://pomogem.hinoshiba.com/#privacy>
+- Support: <https://pomogem.hinoshiba.com/#support>
 
 URLを変える場合は、Webのcanonical/OG、`.github/workflows/pages.yml`、`project.yml`、
 `PomoGem/App/AppLinks.swift`、App Store metadataを同時に更新してください。

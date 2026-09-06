@@ -3,7 +3,7 @@
 更新日: 2026-09-06
 
 この手順は、許可済みMacのXcode OrganizerからiPhone版をArchive、Validate、Uploadするための
-正本です。Xcode Cloudは現時点で前提にしません。Mac／Mac Catalyst版は作成しません。
+正本です。Mac／Mac Catalyst版は作成しません。
 
 ## 今回の候補と識別子
 
@@ -52,7 +52,7 @@ buildするよう求めています。開始時に[Upcoming Requirements](https:
    availabilityを完成させる
 6. 初回のNon-Consumableは新しいapp versionと同じsubmissionへ追加する
 7. `pomogem.hinoshiba.com`のDNSをGitHub Pagesの指示どおり設定し、custom domain検証とHTTPS強制を有効化する
-8. Privacy、Support、Termsと購入前案内専用の販売者情報URLを公開し、redirectなしのHTTPS 200を確認する。販売者情報URLはPro案内とアプリの購入前案内からだけリンクし、グローバルheader／footer／sitemapへ掲載せず、`noindex`にする
+8. 単一の製品ページがHTTPS 200で表示され、Privacy、Support、Terms、販売についての各アンカーへ移動できることを確認する。販売セクションはPro案内とアプリの購入前案内からも到達できるようにする
 9. App Privacy、年齢区分、輸出コンプライアンス、accessibility回答を実装と照合する
 10. 「iPhone/iPad appをApple silicon Macで提供」とVision Proでの提供は、未検証のため無効にする
 11. Sign-in requiredはunchecked、Demo accountはnoneとする。Review Notesには、clean installで同格の

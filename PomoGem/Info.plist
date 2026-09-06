@@ -44,7 +44,7 @@
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>POMOGEM_PRIVACY_POLICY_URL</key>
-	<string>https://pomogem.hinoshiba.com/privacy/</string>
+	<string>https://pomogem.hinoshiba.com/#privacy</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>ZenMaruGothic-Black.ttf</string>

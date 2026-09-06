@@ -12,19 +12,19 @@ enum AppLinks {
            let url = URL(string: value) {
             return url
         }
-        return URL(string: "https://pomogem.hinoshiba.com/privacy/")!
+        return URL(string: "https://pomogem.hinoshiba.com/#privacy")!
     }
 
     static let support = URL(
-        string: "https://pomogem.hinoshiba.com/support/"
+        string: "https://pomogem.hinoshiba.com/#support"
     )!
 
     static let commercialDisclosure = URL(
-        string: "https://pomogem.hinoshiba.com/commercial-transactions/"
+        string: "https://pomogem.hinoshiba.com/#sales"
     )!
 
     static let sourceCode = URL(
-        string: "https://github.com/hinoshiba/PomoGem"
+        string: "https://github.com/hinoshiba/pomogem"
     )!
 
     static let standardEULA = URL(
