@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1200, initial-scale=1">
+  <title>ポモジェム — Open Graph artwork</title>
+  <style>
+    @font-face {
+      font-family: "Zen Maru Gothic";
+      src: url("../http_dists/public/ZenMaruGothic-Black.ttf") format("truetype");
+      font-weight: 900;
+      font-display: block;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 1200px; height: 630px; margin: 0; overflow: hidden; }
+    body { color: #f8f5ee; font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif; }
+    .artwork {
+      position: relative;
+      width: 1200px;
+      height: 630px;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse at 0 0, #6d34423d, transparent 52%),
+        radial-gradient(ellipse at 90% 74%, #50408c52, transparent 45%),
+        linear-gradient(120deg, #141827, #0b1020 65%, #171b33);
+    }
+    .artwork::after { content: ""; position: absolute; inset: 20px; border: 1px solid #cbd6ff0c; border-radius: 25px; pointer-events: none; }
+    .brand { position: absolute; top: 52px; left: 58px; display: flex; align-items: center; gap: 17px; }
+    .brand img { width: 56px; height: 56px; border-radius: 15px; box-shadow: 0 12px 28px #0005; }
+    .brand-name { font: 900 36px/1 "Zen Maru Gothic", sans-serif; letter-spacing: .025em; }
+    .brand-english { margin-top: 7px; color: #a6afc6; font-size: 13px; font-weight: 600; letter-spacing: .18em; }
+    .copy { position: absolute; left: 62px; top: 166px; width: 662px; }
+    .eyebrow { display: flex; align-items: center; gap: 11px; margin: 0 0 27px; color: #f0bb76; font-size: 21px; font-weight: 700; letter-spacing: .06em; }
+    .eyebrow::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #f28c7c; box-shadow: 0 0 15px #f28c7c70; }
+    h1 { margin: 0; font: 900 65px/1.32 "Zen Maru Gothic", sans-serif; letter-spacing: -.05em; }
+    h1 span { display: block; white-space: nowrap; }
+    h1 .result { font-size: 78px; letter-spacing: -.055em; }
+    h1 em { color: #ff9586; font-style: normal; }
+    .support { margin: 27px 0 0; color: #bac3d7; font-size: 23px; line-height: 1.6; letter-spacing: .025em; }
+    .signature { position: absolute; left: 63px; bottom: 48px; display: flex; align-items: center; gap: 13px; color: #c1c9d9; font-size: 16px; }
+    .signature::before { content: ""; width: 28px; height: 1px; background: #ee907ea1; }
+    .visual { position: absolute; width: 388px; height: 526px; right: 49px; top: 50px; }
+    .visual svg { display: block; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <main class="artwork" aria-label="ポモジェム。ポモドーロタイマーで集中した時間が、宝石になる。">
+    <div class="brand">
+      <img src="../http_dists/public/app-icon-focus-v5.png" width="56" height="56" alt="">
+      <div><div class="brand-name">ポモジェム</div><div class="brand-english">PomoGem</div></div>
+    </div>
+    <div class="copy">
+      <p class="eyebrow">ポモドーロタイマー</p>
+      <h1><span>集中した時間が、</span><span class="result"><em>宝石</em>になる。</span></h1>
+      <p class="support">勉強も、仕事も。<br>完走した時間を、一粒ずつ。</p>
+    </div>
+    <p class="signature">休んだ日も、積み上げた記録は減りません。</p>
+    <div class="visual" role="img" aria-label="25分のタイマーから、一粒の宝石が瓶へ落ちるイメージ">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 388 526" fill="none">
+        <defs>
+          <linearGradient id="ring" x1="97" y1="44" x2="298" y2="225" gradientUnits="userSpaceOnUse"><stop stop-color="#ffb099"/><stop offset=".5" stop-color="#f57778"/><stop offset="1" stop-color="#c796e7"/></linearGradient>
+          <linearGradient id="glass" x1="72" y1="328" x2="300" y2="491" gradientUnits="userSpaceOnUse"><stop stop-color="#d6e9ff" stop-opacity=".09"/><stop offset=".53" stop-color="#718dd0" stop-opacity=".04"/><stop offset="1" stop-color="#bbd9ff" stop-opacity=".11"/></linearGradient>
+          <linearGradient id="edge" x1="56" y1="307" x2="326" y2="478" gradientUnits="userSpaceOnUse"><stop stop-color="#e1eeff" stop-opacity=".74"/><stop offset=".55" stop-color="#94b3e2" stop-opacity=".23"/><stop offset="1" stop-color="#afc8ff" stop-opacity=".62"/></linearGradient>
+          <radialGradient id="halo"><stop stop-color="#f28483" stop-opacity=".17"/><stop offset="1" stop-color="#f28483" stop-opacity="0"/></radialGradient>
+          <radialGradient id="floor"><stop stop-color="#798adc" stop-opacity=".3"/><stop offset="1" stop-color="#798adc" stop-opacity="0"/></radialGradient>
+          <filter id="soft"><feGaussianBlur stdDeviation="12"/></filter>
+          <g id="gem">
+            <path d="M0 -25 21 -15 25 8 8 25 -14 20 -25 0 -17 -20Z" fill="currentColor"/>
+            <path d="M0 -25 2 -3 21 -15Z" fill="#fff" fill-opacity=".31"/>
+            <path d="M21 -15 2 -3 25 8Z" fill="#fff" fill-opacity=".13"/>
+            <path d="M25 8 2 -3 8 25Z" fill="#20152e" fill-opacity=".13"/>
+            <path d="M8 25 2 -3 -14 20Z" fill="#22132c" fill-opacity=".24"/>
+            <path d="M-14 20 2 -3 -25 0Z" fill="#fff" fill-opacity=".08"/>
+            <path d="M-25 0 2 -3 -17 -20Z" fill="#fff" fill-opacity=".25"/>
+            <path d="M-17 -20 2 -3 0 -25Z" fill="#fff" fill-opacity=".45"/>
+            <path d="M0 -25 21 -15 25 8 8 25 -14 20 -25 0 -17 -20Z" stroke="#fff" stroke-opacity=".4" stroke-width="1.4"/>
+            <path d="M0 -25 2 -3 21 -15M2 -3 25 8M2 -3 8 25M2 -3 -14 20M2 -3 -25 0M2 -3 -17 -20" stroke="#fff" stroke-opacity=".23" stroke-width="1"/>
+          </g>
+        </defs>
+        <rect x="1" y="1" width="386" height="524" rx="48" fill="#11182a" fill-opacity=".6" stroke="#a5b9ed" stroke-opacity=".12"/>
+        <circle cx="194" cy="146" r="124" fill="url(#halo)"/>
+        <circle cx="194" cy="142" r="89" stroke="#f58980" stroke-opacity=".12" stroke-width="16" filter="url(#soft)"/>
+        <circle cx="194" cy="142" r="85" stroke="url(#ring)" stroke-width="12"/>
+        <circle cx="194" cy="57" r="5" fill="#fff3e7"/>
+        <text x="194" y="155" text-anchor="middle" fill="#fff5ed" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-weight="700" font-size="48" letter-spacing="-2">25:00</text>
+        <text x="194" y="186" text-anchor="middle" fill="#a2aec9" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-weight="600" font-size="11" letter-spacing="3">FOCUS</text>
+        <path d="M194 247V267M186 260 194 268 202 260" stroke="#c4d1ed" stroke-opacity=".6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="194" cy="305" r="54" fill="url(#halo)"/>
+        <use href="#gem" transform="translate(194 304) rotate(10) scale(.77)" color="#f59180"/>
+        <path d="M194 335V354" stroke="#f7a995" stroke-opacity=".45" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 6"/>
+        <ellipse cx="194" cy="491" rx="139" ry="20" fill="url(#floor)"/>
+        <path d="M104 362V379C104 389 72 394 68 414V465C68 486 93 490 194 490S320 486 320 465V414C316 394 284 389 284 379V362" fill="url(#glass)" stroke="url(#edge)" stroke-width="2.3"/>
+        <ellipse cx="194" cy="362" rx="91" ry="11" fill="#0d1425" stroke="url(#edge)" stroke-width="2.4"/>
+        <ellipse cx="194" cy="365" rx="85" ry="7" stroke="#d9e9ff" stroke-opacity=".15" stroke-width="1.4"/>
+        <ellipse cx="194" cy="476" rx="110" ry="8" fill="#bdc8ff" fill-opacity=".045"/>
+        <use href="#gem" transform="translate(130 460) rotate(-18) scale(.77)" color="#8babe3"/>
+        <use href="#gem" transform="translate(188 461) rotate(12) scale(.83)" color="#f29287"/>
+        <use href="#gem" transform="translate(247 459) rotate(-9) scale(.78)" color="#b39be1"/>
+        <path d="M80 416V456M95 397 112 387" stroke="#e6f0ff" stroke-opacity=".23" stroke-width="3" stroke-linecap="round"/>
+        <path d="M309 424V462" stroke="#d8e9ff" stroke-opacity=".17" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+  </main>
+</body>
+</html>

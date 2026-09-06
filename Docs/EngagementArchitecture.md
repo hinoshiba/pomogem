@@ -1,6 +1,10 @@
-# つみべん — 持続的学習と報酬設計
+# ポモジェム — 持続的学習と報酬設計
 
-更新日: 2026-09-01
+設計初版: 2026-09-01
+名称・識別子更新: 2026-09-06
+
+過去の日付の実測・test件数は前身アプリの実施履歴であり、PomoGem 1.0 (5)の合格結果ではありません。
+新候補の検証と外部サービス登録は`AppStore/configuration.yml`のrelease gateで追跡します。
 
 > Release status（2026-09-03）: Version 1.0は`RareRewardReleasePolicy.isEnabled == false`です。
 > Apple Account切替時の台帳分離と実機2台検証が未完了のため、以下のrare reward設計は将来候補・
@@ -12,7 +16,7 @@
 
 ## 1. 目標
 
-つみべんが最適化するのは、アプリを何度も開かせることではなく、利用者が自分で選んだ学習や仕事へ戻りやすくなることです。
+ポモジェムが最適化するのは、アプリを何度も開かせることではなく、利用者が自分で選んだ学習や仕事へ戻りやすくなることです。
 
 成功の定義は次の順です。
 
@@ -28,7 +32,7 @@
 
 ## 2. エビデンスから設計への変換
 
-| 研究知見 | つみべんでの判断 |
+| 研究知見 | ポモジェムでの判断 |
 |---|---|
 | 自己決定理論では、自律性・有能感・関係性を満たす動機づけが持続に重要 | テーマ、時間、通知、共有は本人が選ぶ。勉強／仕事の用途選択で入口を分けず、完走後は能力の証拠を返し、自動で次のタイマーを始めない |
 | 習慣は同じ文脈での反復から形成され、形成速度の個人差は大きい。一度の欠落が習慣形成を壊すとは限らない | 連続日数ではなく「今週戻ってきた回数」を表示。一日休んでも何も失わない。将来の再訪cueは本人が選ぶ `if-then` 形式にする |
@@ -207,7 +211,7 @@ achievement stones = 0g
 
 維持する制約:
 
-- 1〜180分の実測完走で積んだ対象質量のみ抽選へ加算し、250gごとに一回抽選する
+- 1〜360分の実測完走で積んだ対象質量のみ抽選へ加算し、250gごとに一回抽選する
 - 250g未満の端数質量は次の対象完走へ繰り越す
 - 通常粒は必ず付与
 - 金・虹は見た目以外の価値を持たない
@@ -373,7 +377,7 @@ system fontの補助カードを出し、VoiceOverの完走通知にも長期・
 という六つの情報と判断を同時に提示していました。通常の意図は「今の瓶を共有する」なので、既定値を
 一行で開示し、任意変更を一つの`調整`へ段階開示します。通常はComposerからsystem share
 sheetまで一回のタップです。自己申告だけの期間は「記録なし」と誤表示せず、`自己申告を含めて
-カードにする`を直接提示します。つみべんのロゴと公式サイトは無料／Proともカードへ常設し、公式
+カードにする`を直接提示します。ポモジェムのロゴと公式サイトは無料／Proともカードへ常設し、公式
 URLを共有本文にも含めます。共有先アプリの選択はOSのactivity viewに委ね、自前でSNS別の選択画面を重ねません。
 
 完走後の旧`閉じる`は見た目が約34×14ptで、隣の共有・休憩CTAより著しく小さく、端を狙う
@@ -550,7 +554,7 @@ CとDの差は視覚的レアだけに限定し、Dでも本人はいつでも`q
 - 融合sheetは`10 → 1 / 記録100%保持`を可視化し、「次の一粒」ではなく中立な「ここで休む」で閉じられる。完走直後に次の抽選や次の集中を急かさない
 - 完走表示のfull payloadをUserDefaultsへ最大4件保存するpersisted Reward Receipt。着地marker消費より先に保存を確認し、再起動では着地FXやセッション保存を繰り返さず復元、閉じる／休憩／共有の明示ackで一度だけ削除し、activity resetでも削除する。複数件はFIFOでdrainし、後の完走による上書きを防ぐ
 - Reward Receiptの表示または待機中は次の集中開始と融合sheetを保留し、完走カードのack後に融合説明を一度だけ提示する
-- `iCloud.com.hinoshiba.tumiben`には`Subject`、`StudySession`、`AchievementStone`、`Prefs`、`ActivityResetMarker`、`SyncedFocusTimer`、`FocusTimerDeviceClaim`の7種類の同期元modelだけを保存
+- `iCloud.com.hinoshiba.pomogem`には`Subject`、`StudySession`、`AchievementStone`、`Prefs`、`ActivityResetMarker`、`SyncedFocusTimer`、`FocusTimerDeviceClaim`の7種類の同期元modelだけを保存
 - `AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`は端末内projection storeへ分離し、同期元recordから再構築してCloudKitへuploadしない
 - version 1.0はoperations containerをentitlementへ含めず、offline完走も`StudySession`の通常粒として直接保存する
 - `CompleteDataDeletionReleasePolicy.isEnabled == false`として、version 1.0のdirect CloudKit一括削除UIとlaunch gateを無効化。Settingsは表示中の記録の通常reset、端末dataはapp削除、cloud dataはAppleのiCloudストレージ管理を案内し、offline別端末を遠隔消去できるとは表示しない
@@ -589,7 +593,7 @@ CとDの差は視覚的レアだけに限定し、Dでも本人はいつでも`q
 
    V2の実装契約と残る実機受入条件は次の通りとする。
 
-   - `iCloud.com.hinoshiba.tumiben.operations`のprivate database専用custom zoneに、reset epochごとに一つのepoch recordと、`epoch + StudySession UUID`を一意キーにした完走receiptを置く
+   - `iCloud.com.hinoshiba.pomogem.operations`のprivate database専用custom zoneに、reset epochごとに一つのepoch recordと、`epoch + StudySession UUID`を一意キーにした完走receiptを置く
    - epoch recordはmigration fingerprint、credit総質量、端数、次ordinal、金なし回数、抽選seed、revisionを保持する。receiptは参加有無、受理質量、割り当てordinal範囲、全結果、適用前後revisionを保持し、同じsession IDの再送を同じreceiptとして返す
    - epochのchange tagを取得してから、更新epochと新規receiptを同じzoneの一回のatomic saveへ入れ、`ifServerRecordUnchanged`で保存する。競合時は暫定値を捨ててserver recordを再取得し、同じsession IDのreceipt有無を確認してから再計算する。CloudKit custom zoneは同一zoneの複数recordを原子的に変更でき、change tag不一致を`serverRecordChanged`として拒否できる（[CKRecordZone](https://developer.apple.com/documentation/cloudkit/ckrecordzone)、[isAtomic](https://developer.apple.com/documentation/cloudkit/ckmodifyrecordsoperation/isatomic)、[ifServerRecordUnchanged](https://developer.apple.com/documentation/cloudkit/ckmodifyrecordsoperation/recordsavepolicy/ifserverrecordunchanged)）
    - 完全オフライン中はStudySessionとpending receiptだけを同一ローカルtransactionで保存し、未取得のserver ordinalをレア確定結果として表示・共有・集約しない。再接続後のatomic commitだけがレア結果のsource of truthになる

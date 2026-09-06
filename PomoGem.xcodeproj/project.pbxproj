@@ -1,0 +1,1302 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0028448389369194561E4B1C /* RareRewardCloudKitLedgerRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 205B46BDFDEE8825FF82511E /* RareRewardCloudKitLedgerRepository.swift */; };
+		010D2749B23AAC656FA4DFEE /* WidgetSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D818B9CBC387B5C7C74CE301 /* WidgetSnapshotStore.swift */; };
+		01CAA824E44B0D8235C83A8E /* FairnessPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A889309BC037B43F7C5906A /* FairnessPolicy.swift */; };
+		060F0EB3F272CF1318515E6F /* SoundSynth.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1B65B3483A5F46CCEB18924 /* SoundSynth.swift */; };
+		0720DDB7D513CB10C736C318 /* FortyYearDebugScenario.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200C14C0D5A5A1A1A0342749 /* FortyYearDebugScenario.swift */; };
+		08287C3427FF8A90467F54F9 /* SubjectNamePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C58C458F3816E6A3F1E1E80 /* SubjectNamePolicyTests.swift */; };
+		0F722CD539417C08CE93C404 /* AccumulationPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94833894E32ECA0E88B3E8DD /* AccumulationPlanView.swift */; };
+		1110628FE44CB1EDE502B687 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FC4168C297AEE36A6F794B8 /* OnboardingView.swift */; };
+		1142A86A589A4BA6F25EC137 /* JarSpriteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C8318D569F3634174B05480 /* JarSpriteView.swift */; };
+		128570FAED1861610B4E0BCC /* SyncMaintenance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BF84C957F5965D5E7377EAD /* SyncMaintenance.swift */; };
+		12AC4E182FB22BF3688F80C7 /* PomodoroEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7413EEBB67AFE9BC30EF9C7E /* PomodoroEngine.swift */; };
+		17BC30315ED1C468B0A18CAC /* PebbleNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACEBB3395B953447C69946D /* PebbleNode.swift */; };
+		17BEB2E41142345A44CAC93A /* AccessibilityAdversarialUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 405164FE628C5989DD6BDCAE /* AccessibilityAdversarialUITests.swift */; };
+		17FC0F392D238B6D61617A0F /* ProgressCrystal.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE92572890DD4D8BE55C6A58 /* ProgressCrystal.swift */; };
+		18B29AA975AC068CF342FA9B /* CloudSyncMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DD41B95531C607AD6AEFA85 /* CloudSyncMonitor.swift */; };
+		1C672705C528E9BDA90A68A2 /* FocusActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 242F6C46DFBD7EB7FF76A689 /* FocusActivityManager.swift */; };
+		1EFC03E8D775BD2DDC551F2B /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23281121BA4A32647A92F516 /* Models.swift */; };
+		1F0A26CEDD94391DC3E98C20 /* CompleteDataDeletionTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A050345814C902A4AF65C03 /* CompleteDataDeletionTypes.swift */; };
+		1F96B5E7B41F562BB1529DA4 /* EngagementOverviewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4383D72800A4EF0F5C7823FE /* EngagementOverviewUITests.swift */; };
+		210B91AF5B3C606C22519C12 /* ActivityResetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C6C6F690DAE80124E03BFF0 /* ActivityResetTests.swift */; };
+		24FDE33C03F4B5B936F37337 /* BoundedLaunchPreparationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 189F9C27085367C86D86A859 /* BoundedLaunchPreparationTests.swift */; };
+		26A13C585B7493B72A6709E4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDFD2F7482C6D59F73C3C3DE /* RootView.swift */; };
+		2B25657CFD257ECB14FC4ED3 /* PersistenceStoreTopology.swift in Sources */ = {isa = PBXBuildFile; fileRef = D80F315027168B5F3C0DAD54 /* PersistenceStoreTopology.swift */; };
+		2C4CC152BE16517C844AC96C /* GIFShareLifecycleUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B646D23FDCC8F9053F943B3F /* GIFShareLifecycleUITests.swift */; };
+		3065CFF38231215168E38678 /* AccumulationPlanProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6545EB68BE25DE2F487A00 /* AccumulationPlanProjection.swift */; };
+		3129DA6A9A8D346C435F4FDF /* AccumulationTimelineBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AA276827B98A4CCACD8602E /* AccumulationTimelineBrowser.swift */; };
+		31576D5BF6D43195672807F8 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 69C5703FB01685FF8A965F3B /* PrivacyInfo.xcprivacy */; };
+		3439FEA3ACD444E912E983DF /* ProTransactionDeliveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70620F1FDA88831716FCBC0 /* ProTransactionDeliveryTests.swift */; };
+		36203279B916057EAD7B7723 /* UsagePurposeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CB634DC37D02EBA2DDFCBA8 /* UsagePurposeTests.swift */; };
+		3709C60ABCD5F3018E110AC9 /* HomeProjectionSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A8CBB070CBE2C504813FD08 /* HomeProjectionSupport.swift */; };
+		3A4AEA37D55B4E47E777E3A8 /* FocusActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B814E25FF138C969CB6F717F /* FocusActivityAttributes.swift */; };
+		3D86CF9AAD0B75173E802096 /* FusionHierarchyPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2870FE2BF0209900A742B4C9 /* FusionHierarchyPresentationTests.swift */; };
+		402D47F4D51A614035C8EA62 /* ShareActivityItemSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0922D0F864E131F54F7ECD29 /* ShareActivityItemSource.swift */; };
+		40A0452D3F88178D8765D82B /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0DB3E232484AC671632F8E7 /* Haptics.swift */; };
+		4129A240F273AA2DF7D27F5C /* LICENSE-fonts.txt in Resources */ = {isa = PBXBuildFile; fileRef = DBD525CB72EF7C8BBA600020 /* LICENSE-fonts.txt */; };
+		4232571BF9FD777E141B4B3E /* PersistenceStoreTopologyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37C94826242029C7168F438B /* PersistenceStoreTopologyTests.swift */; };
+		453A0778BD86CCA955F5A42D /* CompleteDataDeletionCloudKitStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 615E94CC16260A4473F866A6 /* CompleteDataDeletionCloudKitStore.swift */; };
+		45C3432E965D93244196538F /* AccumulationOverviewLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37D8A39D7590751605852BB0 /* AccumulationOverviewLoader.swift */; };
+		465E3C03FA99E52F23D14C1E /* WrappedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFF2A86B3C795B7E8FDBA94 /* WrappedView.swift */; };
+		51787EE53CA9F1B365122A0A /* FocusActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B814E25FF138C969CB6F717F /* FocusActivityAttributes.swift */; };
+		51F8EC43204320B66CC02E5E /* AccumulationOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10EFFABB27F8DBC43A8CD172 /* AccumulationOverviewView.swift */; };
+		534FBC80B8FA0BF9EFCAD341 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E3D385EF53739817C342544D /* PrivacyInfo.xcprivacy */; };
+		53FE675CF48B37882F6017A3 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC92C18D8E0837F496656397 /* Theme.swift */; };
+		5669E1873627D0F098F108BF /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EED7C76A33B9A41894714705 /* PaywallView.swift */; };
+		57BB587F88E885764BB97E19 /* PostDropProgressAccessibilityPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE24992BDBEA2EE11809580B /* PostDropProgressAccessibilityPresentationTests.swift */; };
+		5DB48410BC347FAE6BD91C78 /* FocusCompletionFailureRecoveryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88643D553679C84D93A636AE /* FocusCompletionFailureRecoveryUITests.swift */; };
+		5E521D17EFF0330DC4D121CD /* CriticalFlowAdversarialUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 553C936224E8783AF264B56A /* CriticalFlowAdversarialUITests.swift */; };
+		5F3E44D05AD0E99DC817C83D /* StrataMathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE6330E992C4131296B0D702 /* StrataMathTests.swift */; };
+		660CC6C015B35FE94AFDB1F1 /* LogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3E82651684A6C991C347B6A /* LogView.swift */; };
+		66B0B837100338A432A9CFB4 /* AccumulationTimelineRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C7FCEA6CCE642823CB5D6E0 /* AccumulationTimelineRepository.swift */; };
+		6942B6C03CA0272A8045D97C /* SeedDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 839664B06CFA54BA8F0F3E87 /* SeedDataTests.swift */; };
+		6CC59443F511CB7EBA219F5E /* RareRewardLedgerV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD7BA595ACB195819AF7A8D3 /* RareRewardLedgerV2.swift */; };
+		703B60B0CEEF21AB82E85EA6 /* PomodoroEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A06D837D8B5741939DD3A4A /* PomodoroEngineTests.swift */; };
+		729A9DC32833D190C3788565 /* UsagePurpose.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A9C1314CC1B5A18521DFEA /* UsagePurpose.swift */; };
+		7601FA40A717E710583BE7E5 /* HomeAtmosphereTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A658F93291D3387937A39FF /* HomeAtmosphereTests.swift */; };
+		7850E3935D17341485C46C16 /* CompleteDataDeletionLaunchPreflight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 329AEDF3BEDD1C9D0C701244 /* CompleteDataDeletionLaunchPreflight.swift */; };
+		7CB82FE804B2887172375629 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EFB20CEF01CE01A6FC6CBB9 /* Constants.swift */; };
+		7D6C7A960DAE6D98765C0855 /* PomoGemDataExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF23306474C1C7B694067BD8 /* PomoGemDataExporter.swift */; };
+		7E609DA4FFF63A35C8FA31DB /* PomoGemLogo.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC5D4F1A16DE0265ED6EBF24 /* PomoGemLogo.swift */; };
+		7ED2EF2BEFDE44798E640A27 /* IntegrationConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = A46EC111083ACA7C8AC45F2B /* IntegrationConstants.swift */; };
+		827A5E1202E74FB391153A04 /* RuntimeFlowAuditUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4EF78A2F31B9E452F76E31F /* RuntimeFlowAuditUITests.swift */; };
+		8285E34ACD8332D6C60A67A9 /* WidgetSnapshotMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 014830BCE0238FC2EDF6BF0D /* WidgetSnapshotMetadata.swift */; };
+		83E357D8D9C4C20E08E32784 /* GachaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC25878D4247A90507703B3 /* GachaTests.swift */; };
+		85AE65A5717313B412A5A472 /* FocusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C21086FA8AA02D4E255C5070 /* FocusView.swift */; };
+		86DB99135392B5D396C62471 /* ZenMaruGothic-Black.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FE10FA71F90EB663584AB5E6 /* ZenMaruGothic-Black.ttf */; };
+		8730954852C7DF188C0DD36E /* FocusLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 709FC45F97CB4D1415090519 /* FocusLiveActivityWidget.swift */; };
+		87E2C61FF9D4548C21BBAAA6 /* CompleteDataDeletionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B4CF11C44B1C6941E51EF0D /* CompleteDataDeletionCoordinator.swift */; };
+		880F334852E695FA5EC9D036 /* SeedData.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5DA97C297B2465DCA37429F /* SeedData.swift */; };
+		987A5B495CFF5E4AF0963713 /* UITestFaultInjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5542B8EEF5204878A5734E13 /* UITestFaultInjection.swift */; };
+		9B0D45C064B95151B3779A74 /* AggregatePersistenceFailureRecoveryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 626D6B716E894C9A3DEE9E3E /* AggregatePersistenceFailureRecoveryUITests.swift */; };
+		9C81622243F21976590DDAEE /* Analytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D472A1DA7AE5AE7B665ABD /* Analytics.swift */; };
+		9F5BC57BB4923D391D26B6E8 /* StrataRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F444E317993ECB2656CB2A /* StrataRenderer.swift */; };
+		A003B64D43B8832EE14B3A1D /* ActivityDataReset.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C9B254744000EDE32C1F03 /* ActivityDataReset.swift */; };
+		A31EE707CD33039BDF77042D /* PomoGemWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0514C1FADC6B20E25A7D561 /* PomoGemWidgetsBundle.swift */; };
+		A374879F73D328AA043A35C4 /* JarInteractionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1844B82DC222AD01D3D479B8 /* JarInteractionUITests.swift */; };
+		A3E82C43D5DDA9CEB282918E /* PebbleRadiusPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1DC4428849BCE1969B53808 /* PebbleRadiusPolicyTests.swift */; };
+		A6733FD0CA20B59E361EF1A1 /* JarWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C82F7F0FD796F8D9446AB8F /* JarWidgets.swift */; };
+		A6F93F76737E47580C347850 /* FairnessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55E64106E5BFD3302306C308 /* FairnessTests.swift */; };
+		A7435362437D268E3A0FACA2 /* FortyYearPersistenceHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DDAE8A3E08C0FB57CB0FBE1 /* FortyYearPersistenceHarness.swift */; };
+		A9170DFE871C52545745EAA6 /* SubjectNamePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 145E16DC0F8C5A77BA5070B5 /* SubjectNamePolicy.swift */; };
+		A92F3091A783C359B1B55918 /* BreakTimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 301B5DB2A2FAC88DC5015AF4 /* BreakTimerView.swift */; };
+		A930060FC3755AF7F8DB3DA7 /* ShareComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 802AFB78CDAD28FB3854309E /* ShareComposerView.swift */; };
+		A9C0D11803B6F1516CAB93B5 /* GachaHistoryReconciliationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E38675DCE672C29E9EBF0A56 /* GachaHistoryReconciliationTests.swift */; };
+		AB36821AD3DF9DF1078F2A18 /* AnimatedShareExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7CA0949614CED6AA5F16278 /* AnimatedShareExporterTests.swift */; };
+		AB92A5C29B406BE9B5100044 /* RareRewardLedgerLocalState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C496D64AA5AC2AD3BE657462 /* RareRewardLedgerLocalState.swift */; };
+		ACBAD0B80D98ADEFB7302823 /* ProgressPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4876B16EDE82FFACCC197D8 /* ProgressPresentationTests.swift */; };
+		AE8D65F0021D89EBCE8A654C /* AnimatedShareExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0436DD2C5029182DC15ABE18 /* AnimatedShareExporter.swift */; };
+		B1581E5B52C281BA5FE2F812 /* PomoGemApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50E849952EFAEFD4597EE5ED /* PomoGemApp.swift */; };
+		B33D614C086D72C449C9C8AA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A81DCEA1C2A2133E7484C8F8 /* Assets.xcassets */; };
+		BB4684F22CCCFCD20ADAA7FC /* FocusCloudSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C1A3EC45EA14A6C5E689533 /* FocusCloudSyncTests.swift */; };
+		BEF371ED4930286E44B1E2A1 /* AccumulationPlanProjectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123F29DD48209F44DCBF4C6E /* AccumulationPlanProjectionTests.swift */; };
+		C31D583787B341043A788CED /* PomoGemWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E75DF8EA8E1254BF65A52583 /* PomoGemWidgets.appex */; platformFilters = (ios, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C4208C5EDC386BA7697E0AD5 /* FocusPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484808620D30DF4DC69CD2E8 /* FocusPersistence.swift */; };
+		C62051B8ED2541CD5A86B248 /* BoundedLaunchPreparation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48EB4B5DE51DBD3D3008B8B9 /* BoundedLaunchPreparation.swift */; };
+		C94D41C8F2E3F291CB6BE07C /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E44B05ED15660B2277666445 /* HomeView.swift */; };
+		CA9C6731181068A241AFFECF /* RareRewardLedgerV2Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ED4A83E537DFC93B1D07F98 /* RareRewardLedgerV2Tests.swift */; };
+		D0069C8F579D2AF0EB430806 /* PomoGemDataExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F80442D2D22E628B70A0E36 /* PomoGemDataExporterTests.swift */; };
+		D18F4C6891682464DA3530F1 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00B48EE312926E6EAC5412EE /* AppRouter.swift */; };
+		D27F15FBC1CE684AF29DDABA /* FortyYearPersistenceHarnessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0843F72D5D9544A2DC84ADA /* FortyYearPersistenceHarnessTests.swift */; };
+		D2D9930D9C15D7D6F7650B38 /* GachaEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5F337E4E147E9E6B47EEAA3 /* GachaEngine.swift */; };
+		D327FF3F60F21C8E4756BA30 /* JarScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECD32D06418B1E26D368ACEB /* JarScene.swift */; };
+		D71C1C4A72E145D141128C66 /* DecimalFusionEndToEndUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D5BBBD0771D0437A32FFB64 /* DecimalFusionEndToEndUITests.swift */; };
+		D8047F55883738E97AA2F354 /* AppLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13A5573A93B75183A10587E4 /* AppLinks.swift */; };
+		D9B5819276B555906901D9B1 /* CompleteDataDeletionSystemAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAB36DAA45CD3F662E33B306 /* CompleteDataDeletionSystemAdapters.swift */; };
+		DA1920C5349796A55548304A /* SyncMaintenanceWorkerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2FBF7E577EC280E22DDC78A /* SyncMaintenanceWorkerTests.swift */; };
+		DB581C5F804C40DDBCA4B0C5 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8018C65F844DB234D0AAC3E /* NotificationManager.swift */; };
+		DC90ADA9D0794047850E597F /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D58C3C1A3A761BDD16883051 /* SettingsView.swift */; };
+		DF244E6D7791BE754CAF67DF /* FortyYearPersistentColdLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6417FB0D2F61DFB2082D39A3 /* FortyYearPersistentColdLaunchUITests.swift */; };
+		E04EFC95CA679302829D0718 /* CompleteDataDeletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E984B31823624BC75D97F76E /* CompleteDataDeletionTests.swift */; };
+		E0FE5075622E7B1290C57681 /* PurchaseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 691189CE99E8C37EC486382D /* PurchaseManager.swift */; };
+		E105F7B8C90D3B25DBF3B861 /* FortyYearDebugScenarioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B5D3DADE9BB942B8D5A6E7 /* FortyYearDebugScenarioTests.swift */; };
+		E2B7506FAB263874D88CD2DC /* StrataMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB33553E11FE75154EDC5E34 /* StrataMath.swift */; };
+		EAEE7DC58351957E5F87FDB6 /* SyncMaintenanceWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75FEB1C5A7ADA079417D3332 /* SyncMaintenanceWorker.swift */; };
+		EC756FBB0F108A7E2FA29232 /* LocalPreviewLaunchPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6C6D396C5FB8FF2FEC27957 /* LocalPreviewLaunchPolicyTests.swift */; };
+		ECC0CC7314E35D33520215A1 /* FocusCloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = F876E41FCE0D77EC75DBC1DF /* FocusCloudSync.swift */; };
+		EDD291E0A2639D3BA303ABED /* CompleteDataDeletionFileStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93826561EFF75F9231D4FA19 /* CompleteDataDeletionFileStateStore.swift */; };
+		F08AAF9718C62F7929EB9F67 /* FortyYearPersistentUITestFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C4741B2BC35EDA4111889D3 /* FortyYearPersistentUITestFixture.swift */; };
+		F36027E2DA6CA68B2A3CB5F9 /* EffortConstellationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80EC6B4F00AB031A3A22BA5D /* EffortConstellationView.swift */; };
+		F63D0E1393564892B0F5C3AA /* FocusPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08A32F2347209B1E24B76281 /* FocusPersistenceTests.swift */; };
+		FBFEB564B7AB9E0735D7855D /* JarSnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD95D870B04E5DBD5913A66D /* JarSnapshotter.swift */; };
+		FCB1C8F99A85F6B47477E360 /* AccumulationTimelineRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21361A11D14FBB08C51AE057 /* AccumulationTimelineRepositoryTests.swift */; };
+		FD5E7022FA135DA440D649AA /* HomeProjectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B78F394CAE07C13C1BE00957 /* HomeProjectionTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		21A5B559A6BD823BAA48F021 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 32C72D0B83E56DA51D70BC8E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 86B8EC431F0675F6961FD5D2;
+			remoteInfo = PomoGem;
+		};
+		30CECFA87C5EB0DB2ECEE468 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 32C72D0B83E56DA51D70BC8E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9AD62CE1586BDA070B796AA7;
+			remoteInfo = PomoGemWidgets;
+		};
+		68594C88EB132A5021611DE1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 32C72D0B83E56DA51D70BC8E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 86B8EC431F0675F6961FD5D2;
+			remoteInfo = PomoGem;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C35376FFA67040390CD61286 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C31D583787B341043A788CED /* PomoGemWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		00B48EE312926E6EAC5412EE /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
+		014830BCE0238FC2EDF6BF0D /* WidgetSnapshotMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSnapshotMetadata.swift; sourceTree = "<group>"; };
+		0436DD2C5029182DC15ABE18 /* AnimatedShareExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedShareExporter.swift; sourceTree = "<group>"; };
+		08A32F2347209B1E24B76281 /* FocusPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusPersistenceTests.swift; sourceTree = "<group>"; };
+		0922D0F864E131F54F7ECD29 /* ShareActivityItemSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareActivityItemSource.swift; sourceTree = "<group>"; };
+		0CB634DC37D02EBA2DDFCBA8 /* UsagePurposeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsagePurposeTests.swift; sourceTree = "<group>"; };
+		10EFFABB27F8DBC43A8CD172 /* AccumulationOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationOverviewView.swift; sourceTree = "<group>"; };
+		123F29DD48209F44DCBF4C6E /* AccumulationPlanProjectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationPlanProjectionTests.swift; sourceTree = "<group>"; };
+		13A5573A93B75183A10587E4 /* AppLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLinks.swift; sourceTree = "<group>"; };
+		145E16DC0F8C5A77BA5070B5 /* SubjectNamePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectNamePolicy.swift; sourceTree = "<group>"; };
+		1844B82DC222AD01D3D479B8 /* JarInteractionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarInteractionUITests.swift; sourceTree = "<group>"; };
+		189F9C27085367C86D86A859 /* BoundedLaunchPreparationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedLaunchPreparationTests.swift; sourceTree = "<group>"; };
+		1A889309BC037B43F7C5906A /* FairnessPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FairnessPolicy.swift; sourceTree = "<group>"; };
+		1ED4A83E537DFC93B1D07F98 /* RareRewardLedgerV2Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RareRewardLedgerV2Tests.swift; sourceTree = "<group>"; };
+		200C14C0D5A5A1A1A0342749 /* FortyYearDebugScenario.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FortyYearDebugScenario.swift; sourceTree = "<group>"; };
+		205B46BDFDEE8825FF82511E /* RareRewardCloudKitLedgerRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RareRewardCloudKitLedgerRepository.swift; sourceTree = "<group>"; };
+		21361A11D14FBB08C51AE057 /* AccumulationTimelineRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationTimelineRepositoryTests.swift; sourceTree = "<group>"; };
+		23281121BA4A32647A92F516 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		242F6C46DFBD7EB7FF76A689 /* FocusActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusActivityManager.swift; sourceTree = "<group>"; };
+		2870FE2BF0209900A742B4C9 /* FusionHierarchyPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FusionHierarchyPresentationTests.swift; sourceTree = "<group>"; };
+		2DDAE8A3E08C0FB57CB0FBE1 /* FortyYearPersistenceHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FortyYearPersistenceHarness.swift; sourceTree = "<group>"; };
+		301B5DB2A2FAC88DC5015AF4 /* BreakTimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreakTimerView.swift; sourceTree = "<group>"; };
+		329AEDF3BEDD1C9D0C701244 /* CompleteDataDeletionLaunchPreflight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompleteDataDeletionLaunchPreflight.swift; sourceTree = "<group>"; };
+		36D725F8C91299D814A75F92 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		37C94826242029C7168F438B /* PersistenceStoreTopologyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceStoreTopologyTests.swift; sourceTree = "<group>"; };
+		37D8A39D7590751605852BB0 /* AccumulationOverviewLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationOverviewLoader.swift; sourceTree = "<group>"; };
+		38D472A1DA7AE5AE7B665ABD /* Analytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Analytics.swift; sourceTree = "<group>"; };
+		3A658F93291D3387937A39FF /* HomeAtmosphereTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeAtmosphereTests.swift; sourceTree = "<group>"; };
+		3C7FCEA6CCE642823CB5D6E0 /* AccumulationTimelineRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationTimelineRepository.swift; sourceTree = "<group>"; };
+		405164FE628C5989DD6BDCAE /* AccessibilityAdversarialUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityAdversarialUITests.swift; sourceTree = "<group>"; };
+		4383D72800A4EF0F5C7823FE /* EngagementOverviewUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngagementOverviewUITests.swift; sourceTree = "<group>"; };
+		484808620D30DF4DC69CD2E8 /* FocusPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusPersistence.swift; sourceTree = "<group>"; };
+		48EB4B5DE51DBD3D3008B8B9 /* BoundedLaunchPreparation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedLaunchPreparation.swift; sourceTree = "<group>"; };
+		4A6545EB68BE25DE2F487A00 /* AccumulationPlanProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationPlanProjection.swift; sourceTree = "<group>"; };
+		4AC25878D4247A90507703B3 /* GachaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GachaTests.swift; sourceTree = "<group>"; };
+		4ACEBB3395B953447C69946D /* PebbleNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PebbleNode.swift; sourceTree = "<group>"; };
+		4AFF2A86B3C795B7E8FDBA94 /* WrappedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WrappedView.swift; sourceTree = "<group>"; };
+		4BF84C957F5965D5E7377EAD /* SyncMaintenance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncMaintenance.swift; sourceTree = "<group>"; };
+		4C82F7F0FD796F8D9446AB8F /* JarWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarWidgets.swift; sourceTree = "<group>"; };
+		4C8318D569F3634174B05480 /* JarSpriteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarSpriteView.swift; sourceTree = "<group>"; };
+		50E849952EFAEFD4597EE5ED /* PomoGemApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemApp.swift; sourceTree = "<group>"; };
+		553C936224E8783AF264B56A /* CriticalFlowAdversarialUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CriticalFlowAdversarialUITests.swift; sourceTree = "<group>"; };
+		5542B8EEF5204878A5734E13 /* UITestFaultInjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestFaultInjection.swift; sourceTree = "<group>"; };
+		55E64106E5BFD3302306C308 /* FairnessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FairnessTests.swift; sourceTree = "<group>"; };
+		5C58C458F3816E6A3F1E1E80 /* SubjectNamePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectNamePolicyTests.swift; sourceTree = "<group>"; };
+		5C6C6F690DAE80124E03BFF0 /* ActivityResetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityResetTests.swift; sourceTree = "<group>"; };
+		615E94CC16260A4473F866A6 /* CompleteDataDeletionCloudKitStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompleteDataDeletionCloudKitStore.swift; sourceTree = "<group>"; };
+		626D6B716E894C9A3DEE9E3E /* AggregatePersistenceFailureRecoveryUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AggregatePersistenceFailureRecoveryUITests.swift; sourceTree = "<group>"; };
+		6417FB0D2F61DFB2082D39A3 /* FortyYearPersistentColdLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FortyYearPersistentColdLaunchUITests.swift; sourceTree = "<group>"; };
+		691189CE99E8C37EC486382D /* PurchaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseManager.swift; sourceTree = "<group>"; };
+		69C5703FB01685FF8A965F3B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		6A06D837D8B5741939DD3A4A /* PomodoroEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomodoroEngineTests.swift; sourceTree = "<group>"; };
+		6D5BBBD0771D0437A32FFB64 /* DecimalFusionEndToEndUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecimalFusionEndToEndUITests.swift; sourceTree = "<group>"; };
+		709FC45F97CB4D1415090519 /* FocusLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusLiveActivityWidget.swift; sourceTree = "<group>"; };
+		7413EEBB67AFE9BC30EF9C7E /* PomodoroEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomodoroEngine.swift; sourceTree = "<group>"; };
+		75FEB1C5A7ADA079417D3332 /* SyncMaintenanceWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncMaintenanceWorker.swift; sourceTree = "<group>"; };
+		7A050345814C902A4AF65C03 /* CompleteDataDeletionTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompleteDataDeletionTypes.swift; sourceTree = "<group>"; };
+		7A8CBB070CBE2C504813FD08 /* HomeProjectionSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeProjectionSupport.swift; sourceTree = "<group>"; };
+		7C4741B2BC35EDA4111889D3 /* FortyYearPersistentUITestFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FortyYearPersistentUITestFixture.swift; sourceTree = "<group>"; };
+		7EFB20CEF01CE01A6FC6CBB9 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
+		802AFB78CDAD28FB3854309E /* ShareComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareComposerView.swift; sourceTree = "<group>"; };
+		80EC6B4F00AB031A3A22BA5D /* EffortConstellationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffortConstellationView.swift; sourceTree = "<group>"; };
+		839664B06CFA54BA8F0F3E87 /* SeedDataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeedDataTests.swift; sourceTree = "<group>"; };
+		857120F2E4D07836E776F57E /* PomoGemTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PomoGemTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		88643D553679C84D93A636AE /* FocusCompletionFailureRecoveryUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusCompletionFailureRecoveryUITests.swift; sourceTree = "<group>"; };
+		8B4CF11C44B1C6941E51EF0D /* CompleteDataDeletionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompleteDataDeletionCoordinator.swift; sourceTree = "<group>"; };
+		8F80442D2D22E628B70A0E36 /* PomoGemDataExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemDataExporterTests.swift; sourceTree = "<group>"; };
+		9067A4176EA91B2C33852DEC /* PomoGem.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PomoGem.entitlements; sourceTree = "<group>"; };
+		91B5D3DADE9BB942B8D5A6E7 /* FortyYearDebugScenarioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FortyYearDebugScenarioTests.swift; sourceTree = "<group>"; };
+		93826561EFF75F9231D4FA19 /* CompleteDataDeletionFileStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompleteDataDeletionFileStateStore.swift; sourceTree = "<group>"; };
+		94833894E32ECA0E88B3E8DD /* AccumulationPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationPlanView.swift; sourceTree = "<group>"; };
+		9AA276827B98A4CCACD8602E /* AccumulationTimelineBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationTimelineBrowser.swift; sourceTree = "<group>"; };
+		9C1A3EC45EA14A6C5E689533 /* FocusCloudSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusCloudSyncTests.swift; sourceTree = "<group>"; };
+		9DD41B95531C607AD6AEFA85 /* CloudSyncMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSyncMonitor.swift; sourceTree = "<group>"; };
+		9FC4168C297AEE36A6F794B8 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		A3E82651684A6C991C347B6A /* LogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogView.swift; sourceTree = "<group>"; };
+		A46EC111083ACA7C8AC45F2B /* IntegrationConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntegrationConstants.swift; sourceTree = "<group>"; };
+		A4876B16EDE82FFACCC197D8 /* ProgressPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressPresentationTests.swift; sourceTree = "<group>"; };
+		A81DCEA1C2A2133E7484C8F8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B02EEB7A35DBF9383CDAA5C6 /* PomoGem.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PomoGem.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1B65B3483A5F46CCEB18924 /* SoundSynth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundSynth.swift; sourceTree = "<group>"; };
+		B1C9B254744000EDE32C1F03 /* ActivityDataReset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityDataReset.swift; sourceTree = "<group>"; };
+		B646D23FDCC8F9053F943B3F /* GIFShareLifecycleUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GIFShareLifecycleUITests.swift; sourceTree = "<group>"; };
+		B78F394CAE07C13C1BE00957 /* HomeProjectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeProjectionTests.swift; sourceTree = "<group>"; };
+		B814E25FF138C969CB6F717F /* FocusActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusActivityAttributes.swift; sourceTree = "<group>"; };
+		BDFD2F7482C6D59F73C3C3DE /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		C0514C1FADC6B20E25A7D561 /* PomoGemWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemWidgetsBundle.swift; sourceTree = "<group>"; };
+		C0A9C1314CC1B5A18521DFEA /* UsagePurpose.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsagePurpose.swift; sourceTree = "<group>"; };
+		C21086FA8AA02D4E255C5070 /* FocusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusView.swift; sourceTree = "<group>"; };
+		C41895D93AA0E1FAF3C2B55A /* PomoGemUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PomoGemUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C496D64AA5AC2AD3BE657462 /* RareRewardLedgerLocalState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RareRewardLedgerLocalState.swift; sourceTree = "<group>"; };
+		C4EF78A2F31B9E452F76E31F /* RuntimeFlowAuditUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeFlowAuditUITests.swift; sourceTree = "<group>"; };
+		C7CA0949614CED6AA5F16278 /* AnimatedShareExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedShareExporterTests.swift; sourceTree = "<group>"; };
+		C7F444E317993ECB2656CB2A /* StrataRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataRenderer.swift; sourceTree = "<group>"; };
+		CAB36DAA45CD3F662E33B306 /* CompleteDataDeletionSystemAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompleteDataDeletionSystemAdapters.swift; sourceTree = "<group>"; };
+		CD7BA595ACB195819AF7A8D3 /* RareRewardLedgerV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RareRewardLedgerV2.swift; sourceTree = "<group>"; };
+		CF23306474C1C7B694067BD8 /* PomoGemDataExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemDataExporter.swift; sourceTree = "<group>"; };
+		D0843F72D5D9544A2DC84ADA /* FortyYearPersistenceHarnessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FortyYearPersistenceHarnessTests.swift; sourceTree = "<group>"; };
+		D0DB3E232484AC671632F8E7 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
+		D58C3C1A3A761BDD16883051 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		D5DA97C297B2465DCA37429F /* SeedData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeedData.swift; sourceTree = "<group>"; };
+		D80F315027168B5F3C0DAD54 /* PersistenceStoreTopology.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceStoreTopology.swift; sourceTree = "<group>"; };
+		D818B9CBC387B5C7C74CE301 /* WidgetSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSnapshotStore.swift; sourceTree = "<group>"; };
+		D8BB54CBBDDCDE71CCCF845D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		DBD525CB72EF7C8BBA600020 /* LICENSE-fonts.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LICENSE-fonts.txt"; sourceTree = "<group>"; };
+		DC5D4F1A16DE0265ED6EBF24 /* PomoGemLogo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemLogo.swift; sourceTree = "<group>"; };
+		DE92572890DD4D8BE55C6A58 /* ProgressCrystal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressCrystal.swift; sourceTree = "<group>"; };
+		E2FBF7E577EC280E22DDC78A /* SyncMaintenanceWorkerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncMaintenanceWorkerTests.swift; sourceTree = "<group>"; };
+		E38675DCE672C29E9EBF0A56 /* GachaHistoryReconciliationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GachaHistoryReconciliationTests.swift; sourceTree = "<group>"; };
+		E3D385EF53739817C342544D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		E44B05ED15660B2277666445 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		E6C6D396C5FB8FF2FEC27957 /* LocalPreviewLaunchPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalPreviewLaunchPolicyTests.swift; sourceTree = "<group>"; };
+		E75DF8EA8E1254BF65A52583 /* PomoGemWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PomoGemWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E984B31823624BC75D97F76E /* CompleteDataDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompleteDataDeletionTests.swift; sourceTree = "<group>"; };
+		ECD32D06418B1E26D368ACEB /* JarScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarScene.swift; sourceTree = "<group>"; };
+		EED7C76A33B9A41894714705 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
+		F1DC4428849BCE1969B53808 /* PebbleRadiusPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PebbleRadiusPolicyTests.swift; sourceTree = "<group>"; };
+		F5F337E4E147E9E6B47EEAA3 /* GachaEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GachaEngine.swift; sourceTree = "<group>"; };
+		F70620F1FDA88831716FCBC0 /* ProTransactionDeliveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProTransactionDeliveryTests.swift; sourceTree = "<group>"; };
+		F8018C65F844DB234D0AAC3E /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		F876E41FCE0D77EC75DBC1DF /* FocusCloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusCloudSync.swift; sourceTree = "<group>"; };
+		FB33553E11FE75154EDC5E34 /* StrataMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataMath.swift; sourceTree = "<group>"; };
+		FC92C18D8E0837F496656397 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		FD95D870B04E5DBD5913A66D /* JarSnapshotter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarSnapshotter.swift; sourceTree = "<group>"; };
+		FE10FA71F90EB663584AB5E6 /* ZenMaruGothic-Black.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "ZenMaruGothic-Black.ttf"; sourceTree = "<group>"; };
+		FE24992BDBEA2EE11809580B /* PostDropProgressAccessibilityPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDropProgressAccessibilityPresentationTests.swift; sourceTree = "<group>"; };
+		FE6330E992C4131296B0D702 /* StrataMathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataMathTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		0077C57C60E3A99643D31172 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				FE10FA71F90EB663584AB5E6 /* ZenMaruGothic-Black.ttf */,
+			);
+			path = Fonts;
+			sourceTree = "<group>";
+		};
+		007CF09C7C09CE16B8416D54 /* PomoGem */ = {
+			isa = PBXGroup;
+			children = (
+				D8BB54CBBDDCDE71CCCF845D /* Info.plist */,
+				9067A4176EA91B2C33852DEC /* PomoGem.entitlements */,
+				E321EE3CAA3143D97744D963 /* App */,
+				75884B2A92CF8B5CBFF9D93C /* Core */,
+				D6EEA88C596B44BC09B6D95F /* Debug */,
+				27B577698CD559FBBC0899F6 /* Features */,
+				D108D4C872417073C7D172BA /* Jar */,
+				7D23BF4799E22C444E20483E /* Juice */,
+				28E4E14876C3E59A426D16CC /* Resources */,
+			);
+			path = PomoGem;
+			sourceTree = "<group>";
+		};
+		0263CD03E62D8CA32D61EE24 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B02EEB7A35DBF9383CDAA5C6 /* PomoGem.app */,
+				857120F2E4D07836E776F57E /* PomoGemTests.xctest */,
+				C41895D93AA0E1FAF3C2B55A /* PomoGemUITests.xctest */,
+				E75DF8EA8E1254BF65A52583 /* PomoGemWidgets.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		14A456E2CEF0FA2B64A4760C /* Planning */ = {
+			isa = PBXGroup;
+			children = (
+				4A6545EB68BE25DE2F487A00 /* AccumulationPlanProjection.swift */,
+				94833894E32ECA0E88B3E8DD /* AccumulationPlanView.swift */,
+			);
+			path = Planning;
+			sourceTree = "<group>";
+		};
+		26036E970EEFD9ABD6801BD3 /* Overview */ = {
+			isa = PBXGroup;
+			children = (
+				37D8A39D7590751605852BB0 /* AccumulationOverviewLoader.swift */,
+				10EFFABB27F8DBC43A8CD172 /* AccumulationOverviewView.swift */,
+				9AA276827B98A4CCACD8602E /* AccumulationTimelineBrowser.swift */,
+				3C7FCEA6CCE642823CB5D6E0 /* AccumulationTimelineRepository.swift */,
+				80EC6B4F00AB031A3A22BA5D /* EffortConstellationView.swift */,
+				DE92572890DD4D8BE55C6A58 /* ProgressCrystal.swift */,
+			);
+			path = Overview;
+			sourceTree = "<group>";
+		};
+		27B577698CD559FBBC0899F6 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				B2D7A6DB898B82FC100B3C33 /* Focus */,
+				459926F0A1A66CBFB5259239 /* Home */,
+				552D4F913BCB67E653A9781D /* Log */,
+				6D2AF319544B3A7CB5876557 /* Onboarding */,
+				26036E970EEFD9ABD6801BD3 /* Overview */,
+				810E93D7F8532EB54DB7084D /* Paywall */,
+				14A456E2CEF0FA2B64A4760C /* Planning */,
+				6303CCF965DC4FCB4BD972A0 /* Settings */,
+				8F02467E575BA9B57E159778 /* Share */,
+				B411AF2681C9F23FA7602401 /* Wrapped */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		28E4E14876C3E59A426D16CC /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A81DCEA1C2A2133E7484C8F8 /* Assets.xcassets */,
+				DBD525CB72EF7C8BBA600020 /* LICENSE-fonts.txt */,
+				E3D385EF53739817C342544D /* PrivacyInfo.xcprivacy */,
+				0077C57C60E3A99643D31172 /* Fonts */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		3014B994040D9A7DD39A5FEF /* TimerEngine */ = {
+			isa = PBXGroup;
+			children = (
+				F876E41FCE0D77EC75DBC1DF /* FocusCloudSync.swift */,
+				7413EEBB67AFE9BC30EF9C7E /* PomodoroEngine.swift */,
+			);
+			path = TimerEngine;
+			sourceTree = "<group>";
+		};
+		459926F0A1A66CBFB5259239 /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				7A8CBB070CBE2C504813FD08 /* HomeProjectionSupport.swift */,
+				E44B05ED15660B2277666445 /* HomeView.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		552D4F913BCB67E653A9781D /* Log */ = {
+			isa = PBXGroup;
+			children = (
+				A3E82651684A6C991C347B6A /* LogView.swift */,
+			);
+			path = Log;
+			sourceTree = "<group>";
+		};
+		5A5C678803C3F4D823903F7C /* PomoGemUITests */ = {
+			isa = PBXGroup;
+			children = (
+				405164FE628C5989DD6BDCAE /* AccessibilityAdversarialUITests.swift */,
+				626D6B716E894C9A3DEE9E3E /* AggregatePersistenceFailureRecoveryUITests.swift */,
+				553C936224E8783AF264B56A /* CriticalFlowAdversarialUITests.swift */,
+				6D5BBBD0771D0437A32FFB64 /* DecimalFusionEndToEndUITests.swift */,
+				4383D72800A4EF0F5C7823FE /* EngagementOverviewUITests.swift */,
+				88643D553679C84D93A636AE /* FocusCompletionFailureRecoveryUITests.swift */,
+				6417FB0D2F61DFB2082D39A3 /* FortyYearPersistentColdLaunchUITests.swift */,
+				B646D23FDCC8F9053F943B3F /* GIFShareLifecycleUITests.swift */,
+				1844B82DC222AD01D3D479B8 /* JarInteractionUITests.swift */,
+				C4EF78A2F31B9E452F76E31F /* RuntimeFlowAuditUITests.swift */,
+			);
+			path = PomoGemUITests;
+			sourceTree = "<group>";
+		};
+		6303CCF965DC4FCB4BD972A0 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				CF23306474C1C7B694067BD8 /* PomoGemDataExporter.swift */,
+				D58C3C1A3A761BDD16883051 /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		6480F50AACBDD6334A6B201D /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				B814E25FF138C969CB6F717F /* FocusActivityAttributes.swift */,
+				A46EC111083ACA7C8AC45F2B /* IntegrationConstants.swift */,
+				014830BCE0238FC2EDF6BF0D /* WidgetSnapshotMetadata.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		6D2AF319544B3A7CB5876557 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				9FC4168C297AEE36A6F794B8 /* OnboardingView.swift */,
+			);
+			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		75884B2A92CF8B5CBFF9D93C /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				38D472A1DA7AE5AE7B665ABD /* Analytics.swift */,
+				9DD41B95531C607AD6AEFA85 /* CloudSyncMonitor.swift */,
+				7EFB20CEF01CE01A6FC6CBB9 /* Constants.swift */,
+				1A889309BC037B43F7C5906A /* FairnessPolicy.swift */,
+				F5F337E4E147E9E6B47EEAA3 /* GachaEngine.swift */,
+				F8018C65F844DB234D0AAC3E /* NotificationManager.swift */,
+				D80F315027168B5F3C0DAD54 /* PersistenceStoreTopology.swift */,
+				691189CE99E8C37EC486382D /* PurchaseManager.swift */,
+				205B46BDFDEE8825FF82511E /* RareRewardCloudKitLedgerRepository.swift */,
+				C496D64AA5AC2AD3BE657462 /* RareRewardLedgerLocalState.swift */,
+				CD7BA595ACB195819AF7A8D3 /* RareRewardLedgerV2.swift */,
+				FB33553E11FE75154EDC5E34 /* StrataMath.swift */,
+				145E16DC0F8C5A77BA5070B5 /* SubjectNamePolicy.swift */,
+				4BF84C957F5965D5E7377EAD /* SyncMaintenance.swift */,
+				75FEB1C5A7ADA079417D3332 /* SyncMaintenanceWorker.swift */,
+				C0A9C1314CC1B5A18521DFEA /* UsagePurpose.swift */,
+				D818B9CBC387B5C7C74CE301 /* WidgetSnapshotStore.swift */,
+				9D602C9DA037AB0EBA899FB8 /* DataDeletion */,
+				9B5F39354189945702AF39D8 /* Models */,
+				3014B994040D9A7DD39A5FEF /* TimerEngine */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		7D23BF4799E22C444E20483E /* Juice */ = {
+			isa = PBXGroup;
+			children = (
+				D0DB3E232484AC671632F8E7 /* Haptics.swift */,
+				B1B65B3483A5F46CCEB18924 /* SoundSynth.swift */,
+			);
+			path = Juice;
+			sourceTree = "<group>";
+		};
+		810E93D7F8532EB54DB7084D /* Paywall */ = {
+			isa = PBXGroup;
+			children = (
+				EED7C76A33B9A41894714705 /* PaywallView.swift */,
+			);
+			path = Paywall;
+			sourceTree = "<group>";
+		};
+		82FBF2110B0B7FABF0BD0285 /* PomoGemTests */ = {
+			isa = PBXGroup;
+			children = (
+				123F29DD48209F44DCBF4C6E /* AccumulationPlanProjectionTests.swift */,
+				21361A11D14FBB08C51AE057 /* AccumulationTimelineRepositoryTests.swift */,
+				5C6C6F690DAE80124E03BFF0 /* ActivityResetTests.swift */,
+				C7CA0949614CED6AA5F16278 /* AnimatedShareExporterTests.swift */,
+				189F9C27085367C86D86A859 /* BoundedLaunchPreparationTests.swift */,
+				E984B31823624BC75D97F76E /* CompleteDataDeletionTests.swift */,
+				55E64106E5BFD3302306C308 /* FairnessTests.swift */,
+				9C1A3EC45EA14A6C5E689533 /* FocusCloudSyncTests.swift */,
+				08A32F2347209B1E24B76281 /* FocusPersistenceTests.swift */,
+				91B5D3DADE9BB942B8D5A6E7 /* FortyYearDebugScenarioTests.swift */,
+				D0843F72D5D9544A2DC84ADA /* FortyYearPersistenceHarnessTests.swift */,
+				2870FE2BF0209900A742B4C9 /* FusionHierarchyPresentationTests.swift */,
+				E38675DCE672C29E9EBF0A56 /* GachaHistoryReconciliationTests.swift */,
+				4AC25878D4247A90507703B3 /* GachaTests.swift */,
+				3A658F93291D3387937A39FF /* HomeAtmosphereTests.swift */,
+				B78F394CAE07C13C1BE00957 /* HomeProjectionTests.swift */,
+				E6C6D396C5FB8FF2FEC27957 /* LocalPreviewLaunchPolicyTests.swift */,
+				F1DC4428849BCE1969B53808 /* PebbleRadiusPolicyTests.swift */,
+				37C94826242029C7168F438B /* PersistenceStoreTopologyTests.swift */,
+				6A06D837D8B5741939DD3A4A /* PomodoroEngineTests.swift */,
+				8F80442D2D22E628B70A0E36 /* PomoGemDataExporterTests.swift */,
+				FE24992BDBEA2EE11809580B /* PostDropProgressAccessibilityPresentationTests.swift */,
+				A4876B16EDE82FFACCC197D8 /* ProgressPresentationTests.swift */,
+				F70620F1FDA88831716FCBC0 /* ProTransactionDeliveryTests.swift */,
+				1ED4A83E537DFC93B1D07F98 /* RareRewardLedgerV2Tests.swift */,
+				839664B06CFA54BA8F0F3E87 /* SeedDataTests.swift */,
+				FE6330E992C4131296B0D702 /* StrataMathTests.swift */,
+				5C58C458F3816E6A3F1E1E80 /* SubjectNamePolicyTests.swift */,
+				E2FBF7E577EC280E22DDC78A /* SyncMaintenanceWorkerTests.swift */,
+				0CB634DC37D02EBA2DDFCBA8 /* UsagePurposeTests.swift */,
+			);
+			path = PomoGemTests;
+			sourceTree = "<group>";
+		};
+		8F02467E575BA9B57E159778 /* Share */ = {
+			isa = PBXGroup;
+			children = (
+				0436DD2C5029182DC15ABE18 /* AnimatedShareExporter.swift */,
+				0922D0F864E131F54F7ECD29 /* ShareActivityItemSource.swift */,
+				802AFB78CDAD28FB3854309E /* ShareComposerView.swift */,
+			);
+			path = Share;
+			sourceTree = "<group>";
+		};
+		9B5F39354189945702AF39D8 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				B1C9B254744000EDE32C1F03 /* ActivityDataReset.swift */,
+				23281121BA4A32647A92F516 /* Models.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		9D602C9DA037AB0EBA899FB8 /* DataDeletion */ = {
+			isa = PBXGroup;
+			children = (
+				615E94CC16260A4473F866A6 /* CompleteDataDeletionCloudKitStore.swift */,
+				8B4CF11C44B1C6941E51EF0D /* CompleteDataDeletionCoordinator.swift */,
+				93826561EFF75F9231D4FA19 /* CompleteDataDeletionFileStateStore.swift */,
+				329AEDF3BEDD1C9D0C701244 /* CompleteDataDeletionLaunchPreflight.swift */,
+				CAB36DAA45CD3F662E33B306 /* CompleteDataDeletionSystemAdapters.swift */,
+				7A050345814C902A4AF65C03 /* CompleteDataDeletionTypes.swift */,
+			);
+			path = DataDeletion;
+			sourceTree = "<group>";
+		};
+		B2D7A6DB898B82FC100B3C33 /* Focus */ = {
+			isa = PBXGroup;
+			children = (
+				301B5DB2A2FAC88DC5015AF4 /* BreakTimerView.swift */,
+				242F6C46DFBD7EB7FF76A689 /* FocusActivityManager.swift */,
+				484808620D30DF4DC69CD2E8 /* FocusPersistence.swift */,
+				C21086FA8AA02D4E255C5070 /* FocusView.swift */,
+			);
+			path = Focus;
+			sourceTree = "<group>";
+		};
+		B411AF2681C9F23FA7602401 /* Wrapped */ = {
+			isa = PBXGroup;
+			children = (
+				4AFF2A86B3C795B7E8FDBA94 /* WrappedView.swift */,
+			);
+			path = Wrapped;
+			sourceTree = "<group>";
+		};
+		C89C63233FA9851955E5CAEF = {
+			isa = PBXGroup;
+			children = (
+				007CF09C7C09CE16B8416D54 /* PomoGem */,
+				82FBF2110B0B7FABF0BD0285 /* PomoGemTests */,
+				5A5C678803C3F4D823903F7C /* PomoGemUITests */,
+				E133BDB27B41154C661251C6 /* PomoGemWidgets */,
+				6480F50AACBDD6334A6B201D /* Shared */,
+				0263CD03E62D8CA32D61EE24 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D108D4C872417073C7D172BA /* Jar */ = {
+			isa = PBXGroup;
+			children = (
+				ECD32D06418B1E26D368ACEB /* JarScene.swift */,
+				FD95D870B04E5DBD5913A66D /* JarSnapshotter.swift */,
+				4C8318D569F3634174B05480 /* JarSpriteView.swift */,
+				4ACEBB3395B953447C69946D /* PebbleNode.swift */,
+				C7F444E317993ECB2656CB2A /* StrataRenderer.swift */,
+			);
+			path = Jar;
+			sourceTree = "<group>";
+		};
+		D6EEA88C596B44BC09B6D95F /* Debug */ = {
+			isa = PBXGroup;
+			children = (
+				200C14C0D5A5A1A1A0342749 /* FortyYearDebugScenario.swift */,
+				2DDAE8A3E08C0FB57CB0FBE1 /* FortyYearPersistenceHarness.swift */,
+				7C4741B2BC35EDA4111889D3 /* FortyYearPersistentUITestFixture.swift */,
+				5542B8EEF5204878A5734E13 /* UITestFaultInjection.swift */,
+			);
+			path = Debug;
+			sourceTree = "<group>";
+		};
+		E133BDB27B41154C661251C6 /* PomoGemWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				709FC45F97CB4D1415090519 /* FocusLiveActivityWidget.swift */,
+				36D725F8C91299D814A75F92 /* Info.plist */,
+				4C82F7F0FD796F8D9446AB8F /* JarWidgets.swift */,
+				C0514C1FADC6B20E25A7D561 /* PomoGemWidgetsBundle.swift */,
+				69C5703FB01685FF8A965F3B /* PrivacyInfo.xcprivacy */,
+			);
+			path = PomoGemWidgets;
+			sourceTree = "<group>";
+		};
+		E321EE3CAA3143D97744D963 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				13A5573A93B75183A10587E4 /* AppLinks.swift */,
+				00B48EE312926E6EAC5412EE /* AppRouter.swift */,
+				48EB4B5DE51DBD3D3008B8B9 /* BoundedLaunchPreparation.swift */,
+				50E849952EFAEFD4597EE5ED /* PomoGemApp.swift */,
+				DC5D4F1A16DE0265ED6EBF24 /* PomoGemLogo.swift */,
+				BDFD2F7482C6D59F73C3C3DE /* RootView.swift */,
+				D5DA97C297B2465DCA37429F /* SeedData.swift */,
+				FC92C18D8E0837F496656397 /* Theme.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		86B8EC431F0675F6961FD5D2 /* PomoGem */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F634213FB1EAD792E843697C /* Build configuration list for PBXNativeTarget "PomoGem" */;
+			buildPhases = (
+				555927DB5C988152D280C500 /* Sources */,
+				1C9954C30F50946880C5FA26 /* Resources */,
+				C35376FFA67040390CD61286 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				19381E1B5088D4E4B5A0FCB5 /* PBXTargetDependency */,
+			);
+			name = PomoGem;
+			packageProductDependencies = (
+			);
+			productName = PomoGem;
+			productReference = B02EEB7A35DBF9383CDAA5C6 /* PomoGem.app */;
+			productType = "com.apple.product-type.application";
+		};
+		8AA21426E049B1AD52AEB8B6 /* PomoGemUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F66158C75E041A4AF424410D /* Build configuration list for PBXNativeTarget "PomoGemUITests" */;
+			buildPhases = (
+				B8A45C830B1A333159B5E467 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				29BBA5BFC8732D8296BD461F /* PBXTargetDependency */,
+			);
+			name = PomoGemUITests;
+			packageProductDependencies = (
+			);
+			productName = PomoGemUITests;
+			productReference = C41895D93AA0E1FAF3C2B55A /* PomoGemUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		9AD62CE1586BDA070B796AA7 /* PomoGemWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B7460CB5FB3756FC9F183444 /* Build configuration list for PBXNativeTarget "PomoGemWidgets" */;
+			buildPhases = (
+				10C7347096E7243FBE8B1B25 /* Sources */,
+				A68900E7B85CCA40F0CBEACD /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PomoGemWidgets;
+			packageProductDependencies = (
+			);
+			productName = PomoGemWidgets;
+			productReference = E75DF8EA8E1254BF65A52583 /* PomoGemWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		FAC76651F2008C6F68ABDA24 /* PomoGemTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0116B8AEDEA7D757976A46FD /* Build configuration list for PBXNativeTarget "PomoGemTests" */;
+			buildPhases = (
+				B21677DD741B1FE029179BA6 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1A1CAD131680B6D900967D4D /* PBXTargetDependency */,
+			);
+			name = PomoGemTests;
+			packageProductDependencies = (
+			);
+			productName = PomoGemTests;
+			productReference = 857120F2E4D07836E776F57E /* PomoGemTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		32C72D0B83E56DA51D70BC8E /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					86B8EC431F0675F6961FD5D2 = {
+						ProvisioningStyle = Automatic;
+					};
+					8AA21426E049B1AD52AEB8B6 = {
+						TestTargetID = 86B8EC431F0675F6961FD5D2;
+					};
+					9AD62CE1586BDA070B796AA7 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = CAFB83B1937F4C985D9E375F /* Build configuration list for PBXProject "PomoGem" */;
+			developmentRegion = ja;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				ja,
+			);
+			mainGroup = C89C63233FA9851955E5CAEF;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 0263CD03E62D8CA32D61EE24 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				86B8EC431F0675F6961FD5D2 /* PomoGem */,
+				FAC76651F2008C6F68ABDA24 /* PomoGemTests */,
+				8AA21426E049B1AD52AEB8B6 /* PomoGemUITests */,
+				9AD62CE1586BDA070B796AA7 /* PomoGemWidgets */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1C9954C30F50946880C5FA26 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B33D614C086D72C449C9C8AA /* Assets.xcassets in Resources */,
+				4129A240F273AA2DF7D27F5C /* LICENSE-fonts.txt in Resources */,
+				534FBC80B8FA0BF9EFCAD341 /* PrivacyInfo.xcprivacy in Resources */,
+				86DB99135392B5D396C62471 /* ZenMaruGothic-Black.ttf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A68900E7B85CCA40F0CBEACD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				31576D5BF6D43195672807F8 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		10C7347096E7243FBE8B1B25 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				51787EE53CA9F1B365122A0A /* FocusActivityAttributes.swift in Sources */,
+				8730954852C7DF188C0DD36E /* FocusLiveActivityWidget.swift in Sources */,
+				A6733FD0CA20B59E361EF1A1 /* JarWidgets.swift in Sources */,
+				A31EE707CD33039BDF77042D /* PomoGemWidgetsBundle.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		555927DB5C988152D280C500 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				45C3432E965D93244196538F /* AccumulationOverviewLoader.swift in Sources */,
+				51F8EC43204320B66CC02E5E /* AccumulationOverviewView.swift in Sources */,
+				3065CFF38231215168E38678 /* AccumulationPlanProjection.swift in Sources */,
+				0F722CD539417C08CE93C404 /* AccumulationPlanView.swift in Sources */,
+				3129DA6A9A8D346C435F4FDF /* AccumulationTimelineBrowser.swift in Sources */,
+				66B0B837100338A432A9CFB4 /* AccumulationTimelineRepository.swift in Sources */,
+				A003B64D43B8832EE14B3A1D /* ActivityDataReset.swift in Sources */,
+				9C81622243F21976590DDAEE /* Analytics.swift in Sources */,
+				AE8D65F0021D89EBCE8A654C /* AnimatedShareExporter.swift in Sources */,
+				D8047F55883738E97AA2F354 /* AppLinks.swift in Sources */,
+				D18F4C6891682464DA3530F1 /* AppRouter.swift in Sources */,
+				C62051B8ED2541CD5A86B248 /* BoundedLaunchPreparation.swift in Sources */,
+				A92F3091A783C359B1B55918 /* BreakTimerView.swift in Sources */,
+				18B29AA975AC068CF342FA9B /* CloudSyncMonitor.swift in Sources */,
+				453A0778BD86CCA955F5A42D /* CompleteDataDeletionCloudKitStore.swift in Sources */,
+				87E2C61FF9D4548C21BBAAA6 /* CompleteDataDeletionCoordinator.swift in Sources */,
+				EDD291E0A2639D3BA303ABED /* CompleteDataDeletionFileStateStore.swift in Sources */,
+				7850E3935D17341485C46C16 /* CompleteDataDeletionLaunchPreflight.swift in Sources */,
+				D9B5819276B555906901D9B1 /* CompleteDataDeletionSystemAdapters.swift in Sources */,
+				1F0A26CEDD94391DC3E98C20 /* CompleteDataDeletionTypes.swift in Sources */,
+				7CB82FE804B2887172375629 /* Constants.swift in Sources */,
+				F36027E2DA6CA68B2A3CB5F9 /* EffortConstellationView.swift in Sources */,
+				01CAA824E44B0D8235C83A8E /* FairnessPolicy.swift in Sources */,
+				3A4AEA37D55B4E47E777E3A8 /* FocusActivityAttributes.swift in Sources */,
+				1C672705C528E9BDA90A68A2 /* FocusActivityManager.swift in Sources */,
+				ECC0CC7314E35D33520215A1 /* FocusCloudSync.swift in Sources */,
+				C4208C5EDC386BA7697E0AD5 /* FocusPersistence.swift in Sources */,
+				85AE65A5717313B412A5A472 /* FocusView.swift in Sources */,
+				0720DDB7D513CB10C736C318 /* FortyYearDebugScenario.swift in Sources */,
+				A7435362437D268E3A0FACA2 /* FortyYearPersistenceHarness.swift in Sources */,
+				F08AAF9718C62F7929EB9F67 /* FortyYearPersistentUITestFixture.swift in Sources */,
+				D2D9930D9C15D7D6F7650B38 /* GachaEngine.swift in Sources */,
+				40A0452D3F88178D8765D82B /* Haptics.swift in Sources */,
+				3709C60ABCD5F3018E110AC9 /* HomeProjectionSupport.swift in Sources */,
+				C94D41C8F2E3F291CB6BE07C /* HomeView.swift in Sources */,
+				7ED2EF2BEFDE44798E640A27 /* IntegrationConstants.swift in Sources */,
+				D327FF3F60F21C8E4756BA30 /* JarScene.swift in Sources */,
+				FBFEB564B7AB9E0735D7855D /* JarSnapshotter.swift in Sources */,
+				1142A86A589A4BA6F25EC137 /* JarSpriteView.swift in Sources */,
+				660CC6C015B35FE94AFDB1F1 /* LogView.swift in Sources */,
+				1EFC03E8D775BD2DDC551F2B /* Models.swift in Sources */,
+				DB581C5F804C40DDBCA4B0C5 /* NotificationManager.swift in Sources */,
+				1110628FE44CB1EDE502B687 /* OnboardingView.swift in Sources */,
+				5669E1873627D0F098F108BF /* PaywallView.swift in Sources */,
+				17BC30315ED1C468B0A18CAC /* PebbleNode.swift in Sources */,
+				2B25657CFD257ECB14FC4ED3 /* PersistenceStoreTopology.swift in Sources */,
+				B1581E5B52C281BA5FE2F812 /* PomoGemApp.swift in Sources */,
+				7D6C7A960DAE6D98765C0855 /* PomoGemDataExporter.swift in Sources */,
+				7E609DA4FFF63A35C8FA31DB /* PomoGemLogo.swift in Sources */,
+				12AC4E182FB22BF3688F80C7 /* PomodoroEngine.swift in Sources */,
+				17FC0F392D238B6D61617A0F /* ProgressCrystal.swift in Sources */,
+				E0FE5075622E7B1290C57681 /* PurchaseManager.swift in Sources */,
+				0028448389369194561E4B1C /* RareRewardCloudKitLedgerRepository.swift in Sources */,
+				AB92A5C29B406BE9B5100044 /* RareRewardLedgerLocalState.swift in Sources */,
+				6CC59443F511CB7EBA219F5E /* RareRewardLedgerV2.swift in Sources */,
+				26A13C585B7493B72A6709E4 /* RootView.swift in Sources */,
+				880F334852E695FA5EC9D036 /* SeedData.swift in Sources */,
+				DC90ADA9D0794047850E597F /* SettingsView.swift in Sources */,
+				402D47F4D51A614035C8EA62 /* ShareActivityItemSource.swift in Sources */,
+				A930060FC3755AF7F8DB3DA7 /* ShareComposerView.swift in Sources */,
+				060F0EB3F272CF1318515E6F /* SoundSynth.swift in Sources */,
+				E2B7506FAB263874D88CD2DC /* StrataMath.swift in Sources */,
+				9F5BC57BB4923D391D26B6E8 /* StrataRenderer.swift in Sources */,
+				A9170DFE871C52545745EAA6 /* SubjectNamePolicy.swift in Sources */,
+				128570FAED1861610B4E0BCC /* SyncMaintenance.swift in Sources */,
+				EAEE7DC58351957E5F87FDB6 /* SyncMaintenanceWorker.swift in Sources */,
+				53FE675CF48B37882F6017A3 /* Theme.swift in Sources */,
+				987A5B495CFF5E4AF0963713 /* UITestFaultInjection.swift in Sources */,
+				729A9DC32833D190C3788565 /* UsagePurpose.swift in Sources */,
+				8285E34ACD8332D6C60A67A9 /* WidgetSnapshotMetadata.swift in Sources */,
+				010D2749B23AAC656FA4DFEE /* WidgetSnapshotStore.swift in Sources */,
+				465E3C03FA99E52F23D14C1E /* WrappedView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B21677DD741B1FE029179BA6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BEF371ED4930286E44B1E2A1 /* AccumulationPlanProjectionTests.swift in Sources */,
+				FCB1C8F99A85F6B47477E360 /* AccumulationTimelineRepositoryTests.swift in Sources */,
+				210B91AF5B3C606C22519C12 /* ActivityResetTests.swift in Sources */,
+				AB36821AD3DF9DF1078F2A18 /* AnimatedShareExporterTests.swift in Sources */,
+				24FDE33C03F4B5B936F37337 /* BoundedLaunchPreparationTests.swift in Sources */,
+				E04EFC95CA679302829D0718 /* CompleteDataDeletionTests.swift in Sources */,
+				A6F93F76737E47580C347850 /* FairnessTests.swift in Sources */,
+				BB4684F22CCCFCD20ADAA7FC /* FocusCloudSyncTests.swift in Sources */,
+				F63D0E1393564892B0F5C3AA /* FocusPersistenceTests.swift in Sources */,
+				E105F7B8C90D3B25DBF3B861 /* FortyYearDebugScenarioTests.swift in Sources */,
+				D27F15FBC1CE684AF29DDABA /* FortyYearPersistenceHarnessTests.swift in Sources */,
+				3D86CF9AAD0B75173E802096 /* FusionHierarchyPresentationTests.swift in Sources */,
+				A9C0D11803B6F1516CAB93B5 /* GachaHistoryReconciliationTests.swift in Sources */,
+				83E357D8D9C4C20E08E32784 /* GachaTests.swift in Sources */,
+				7601FA40A717E710583BE7E5 /* HomeAtmosphereTests.swift in Sources */,
+				FD5E7022FA135DA440D649AA /* HomeProjectionTests.swift in Sources */,
+				EC756FBB0F108A7E2FA29232 /* LocalPreviewLaunchPolicyTests.swift in Sources */,
+				A3E82C43D5DDA9CEB282918E /* PebbleRadiusPolicyTests.swift in Sources */,
+				4232571BF9FD777E141B4B3E /* PersistenceStoreTopologyTests.swift in Sources */,
+				D0069C8F579D2AF0EB430806 /* PomoGemDataExporterTests.swift in Sources */,
+				703B60B0CEEF21AB82E85EA6 /* PomodoroEngineTests.swift in Sources */,
+				57BB587F88E885764BB97E19 /* PostDropProgressAccessibilityPresentationTests.swift in Sources */,
+				3439FEA3ACD444E912E983DF /* ProTransactionDeliveryTests.swift in Sources */,
+				ACBAD0B80D98ADEFB7302823 /* ProgressPresentationTests.swift in Sources */,
+				CA9C6731181068A241AFFECF /* RareRewardLedgerV2Tests.swift in Sources */,
+				6942B6C03CA0272A8045D97C /* SeedDataTests.swift in Sources */,
+				5F3E44D05AD0E99DC817C83D /* StrataMathTests.swift in Sources */,
+				08287C3427FF8A90467F54F9 /* SubjectNamePolicyTests.swift in Sources */,
+				DA1920C5349796A55548304A /* SyncMaintenanceWorkerTests.swift in Sources */,
+				36203279B916057EAD7B7723 /* UsagePurposeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B8A45C830B1A333159B5E467 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				17BEB2E41142345A44CAC93A /* AccessibilityAdversarialUITests.swift in Sources */,
+				9B0D45C064B95151B3779A74 /* AggregatePersistenceFailureRecoveryUITests.swift in Sources */,
+				5E521D17EFF0330DC4D121CD /* CriticalFlowAdversarialUITests.swift in Sources */,
+				D71C1C4A72E145D141128C66 /* DecimalFusionEndToEndUITests.swift in Sources */,
+				1F96B5E7B41F562BB1529DA4 /* EngagementOverviewUITests.swift in Sources */,
+				5DB48410BC347FAE6BD91C78 /* FocusCompletionFailureRecoveryUITests.swift in Sources */,
+				DF244E6D7791BE754CAF67DF /* FortyYearPersistentColdLaunchUITests.swift in Sources */,
+				2C4CC152BE16517C844AC96C /* GIFShareLifecycleUITests.swift in Sources */,
+				A374879F73D328AA043A35C4 /* JarInteractionUITests.swift in Sources */,
+				827A5E1202E74FB391153A04 /* RuntimeFlowAuditUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		19381E1B5088D4E4B5A0FCB5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilters = (
+				ios,
+			);
+			target = 9AD62CE1586BDA070B796AA7 /* PomoGemWidgets */;
+			targetProxy = 30CECFA87C5EB0DB2ECEE468 /* PBXContainerItemProxy */;
+		};
+		1A1CAD131680B6D900967D4D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 86B8EC431F0675F6961FD5D2 /* PomoGem */;
+			targetProxy = 68594C88EB132A5021611DE1 /* PBXContainerItemProxy */;
+		};
+		29BBA5BFC8732D8296BD461F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 86B8EC431F0675F6961FD5D2 /* PomoGem */;
+			targetProxy = 21A5B559A6BD823BAA48F021 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		1426462622819047922438D4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.hinoshiba.pomogem.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PomoGem.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PomoGem";
+			};
+			name = Release;
+		};
+		1B4DED0E6BFF836CA167006F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = PomoGemWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.hinoshiba.pomogem.widgets;
+				PRODUCT_NAME = PomoGemWidgets;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		1C4B9C55DBB107FD6294905A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.hinoshiba.pomogem.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = PomoGem;
+			};
+			name = Debug;
+		};
+		23D4B16021F26B3322540867 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.hinoshiba.pomogem.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = PomoGem;
+			};
+			name = Release;
+		};
+		554BBA0AF11CCE4C8BD4CA2B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = PomoGemWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.hinoshiba.pomogem.widgets;
+				PRODUCT_NAME = PomoGemWidgets;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		5E5B4120EFDAB8944BD6A9BF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.hinoshiba.pomogem.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PomoGem.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PomoGem";
+			};
+			name = Debug;
+		};
+		6B01E1555F600557FAFC5C9F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APS_ENVIRONMENT = development;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = PomoGem/PomoGem.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				ICLOUD_CONTAINER_ENVIRONMENT = Development;
+				INFOPLIST_FILE = PomoGem/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.hinoshiba.pomogem;
+				PRODUCT_NAME = PomoGem;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		6FFBD805C78A9A46BB2C7777 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 5;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		9C7C694C5E887C9AE026A893 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 5;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		C10E594EE99BBED83AE23C40 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APS_ENVIRONMENT = production;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = PomoGem/PomoGem.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				ICLOUD_CONTAINER_ENVIRONMENT = Production;
+				INFOPLIST_FILE = PomoGem/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.hinoshiba.pomogem;
+				PRODUCT_NAME = PomoGem;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0116B8AEDEA7D757976A46FD /* Build configuration list for PBXNativeTarget "PomoGemTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E5B4120EFDAB8944BD6A9BF /* Debug */,
+				1426462622819047922438D4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B7460CB5FB3756FC9F183444 /* Build configuration list for PBXNativeTarget "PomoGemWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				554BBA0AF11CCE4C8BD4CA2B /* Debug */,
+				1B4DED0E6BFF836CA167006F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CAFB83B1937F4C985D9E375F /* Build configuration list for PBXProject "PomoGem" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6FFBD805C78A9A46BB2C7777 /* Debug */,
+				9C7C694C5E887C9AE026A893 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F634213FB1EAD792E843697C /* Build configuration list for PBXNativeTarget "PomoGem" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B01E1555F600557FAFC5C9F /* Debug */,
+				C10E594EE99BBED83AE23C40 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F66158C75E041A4AF424410D /* Build configuration list for PBXNativeTarget "PomoGemUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1C4B9C55DBB107FD6294905A /* Debug */,
+				23D4B16021F26B3322540867 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 32C72D0B83E56DA51D70BC8E /* Project object */;
+}

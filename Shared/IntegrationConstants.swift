@@ -14,8 +14,8 @@ enum ReleaseExternalSurfacePolicy {
 /// Stable identifiers and tuning values retained by the host application.
 /// The version 1 Widget intentionally has no dependency on this source file.
 public enum IntegrationConstants {
-    public static let homeWidgetKind = "TsumibenJarWidget"
-    public static let lockScreenWidgetKind = "TsumibenMassWidget"
+    public static let homeWidgetKind = "PomoGemJarWidget"
+    public static let lockScreenWidgetKind = "PomoGemMassWidget"
     public static let widgetSnapshotImageFileName = "jar-widget.png"
     public static let widgetSnapshotMetadataFileName = "jar-widget.json"
     public static let widgetTimelineRefreshInterval: TimeInterval = 15 * 60
@@ -44,7 +44,7 @@ public enum IntegrationConstants {
     ///
     /// Keep this identifier stable: non-consumable purchases are restored by
     /// matching the App Store transaction to this exact product identifier.
-    public static let proProductID = "com.hinoshiba.tumiben.pro.lifetime"
+    public static let proProductID = "com.hinoshiba.pomogem.pro.lifetime"
     public static let proProductIDs: Set<String> = [proProductID]
 
     public static func isFreeFocusDuration(_ seconds: Int) -> Bool {

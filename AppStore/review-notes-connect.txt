@@ -1,19 +1,19 @@
-Tumiben（つみべん）は、独自アカウント不要のiPhone集中タイマーです。テストアカウントは不要です。
+PomoGem（ポモジェム）は、独自アカウント不要のiPhone集中タイマーです。テストアカウントは不要です。
 
 REVIEW PATH
 
 1. Clean install後、最初の画面で同格の「iCloudに保存して同期」または「このiPhoneだけに保存」を選びます。Apple Accountやnetworkなしで確認する場合は「このiPhoneだけに保存」→確認alertの「このiPhoneだけで始める」を選んでください。
 2. 任意の「ためしに一粒、落としてみる」は記録に入りません。「次へ」で省略できます。その後、勉強・仕事共通の候補から最初のテーマを1つ選ぶとHomeへ進みます。利用目的のmode切替はありません。
 3. Homeの選択欄でテーマと時間を選び、大きな開始buttonをtapするとtimerを開始します。無料版は25分／45分／60分／90分を利用できます。
-4. 短時間で完走を確認する場合は、Tumiben Pro購入後にHomeの時間表示 →「自由な時間を設定」で1分を設定してください。hidden demo/debug menuはRelease buildにありません。
+4. 短時間で完走を確認する場合は、PomoGem Pro購入後にHomeの時間表示 →「自由な時間を設定」で1分を設定してください。hidden demo/debug menuはRelease buildにありません。
 
 IN-APP PURCHASE
 
-- Product ID: com.hinoshiba.tumiben.pro.lifetime
+- Product ID: com.hinoshiba.pomogem.pro.lifetime
 - Type: Non-Consumable、1回限りの買い切り
-- Entry: Homeの時間表示 →「自由な時間を設定」、またはSettings →「つみべんPro」
+- Entry: Homeの時間表示 →「自由な時間を設定」、またはSettings →「ポモジェムPro」
 - Unlocks: 無料preset以外の1〜360分、まとまり粒の月刻印
-- Share cards: 無料／Proとも、つみべんのロゴとhttps://tumiben.hinoshiba.com/を常に表示
+- Share cards: 無料／Proとも、ポモジェムのロゴとhttps://pomogem.hinoshiba.com/を常に表示
 - Restore: purchase screen下部の「購入を復元」
 - Paywall: StoreKitのProduct.displayPriceを表示し、購入buttonより前に「価格・提供条件・販売者情報を確認」linkを表示
 - Subscription、free trial、自動更新、Web決済、外部purchase link、独自purchase serverはありません

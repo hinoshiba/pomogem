@@ -1,23 +1,28 @@
 # App Store submission checklist
 
+新IDのPomoGem 1.0 (5)のチェックリストです。実装済みの項目と、Apple上の登録・実機検証は
+分けて確認します。以前のアプリに対するupload／価格／schema／登録済みの証拠は新アプリへ転用しません。
+過去の結果は`Docs/LEGACY_RELEASE_PROVENANCE.md`に分離しています。
+
 ## 未完了なら提出しない項目
 
 - [ ] 2026-09-06改訂のja-JP／en-US掲載文・subtitle・promotional text・keywordsとHomeのテーマ／時間選択導線を
   最終候補へ照合し、App Store Connectへ保存後に再読み込みで一致を確認。過去の転記済みcheckは今回改訂の保存を意味しない
 - [ ] Homeのテーマ／時間選択が写る最終候補で正式screenshotを再撮影し、5枚・hash・画面内versionを更新。
-  現在の1.0 (3)画像と開発中のArtifacts画像を今回の提出証拠として扱わない
+  旧候補の画像と開発中のArtifacts画像を今回の提出証拠として扱わない
 - [ ] `release-experience-review.md`の共通タスクを署名済み実機でVoiceOver／200%以上の文字サイズ／
   視差効果を減らす／色以外の識別／コントラストの観点から実行。Accessibility Nutrition Labelsは
   検証を完了した対応項目だけを申告し、自動UI auditだけを対応根拠にしない
-- [x] App Store Connect app record（Apple ID `6806758060`、`com.hinoshiba.tumiben`）を確認
+- [x] 新App Store Connect app record（Apple ID `6809139517`、SKU `pomogem-ios`、`com.hinoshiba.pomogem`、日本語名「ポモジェム：ポモドーロタイマー」）の作成を確認（2026-09-06）。未公開・未提出
 - [x] Free／Paid Apps Agreement、tax、bankingがactiveであることを確認（2026-09-03）
 - [x] App Store Connect上のDSA statusがnon-trader表示であることを確認（2026-09-04）
 - [ ] Pages、Privacy、Support、Termsが公開され、購入前案内専用の販売者情報URLを含む全URLがredirectなしHTTPS 200。販売者情報URLはPro案内とアプリの購入前案内からだけリンクし、グローバルheader／footer／sitemapから外れ、`noindex`
-- [ ] `tumiben.hinoshiba.com`のDNSを検証し、GitHub Pagesの「Enforce HTTPS」を有効化
+- [x] `pomogem.hinoshiba.com`のCNAMEが`hinoshiba.github.io`へ向くことを確認（2026-09-06）
+- [ ] GitHub Pagesのcustom domain所有確認と「Enforce HTTPS」を有効化し、新domainの実配信を検証
 - [ ] 公開SupportメールアドレスとGitHub profileの掲載をmaintainerが明示承認
-- [ ] 1.0は未出荷なので`iCloud.com.hinoshiba.tumiben`のdevelopment schemaだけをclearし、最終RCから
+- [ ] 新規`iCloud.com.hinoshiba.pomogem`のdevelopment schemaを、最終RCから
   replica identity／Subject tombstone／Achievement deletion revision・token・restore ack／
-  `timerDisplayModeRawValue`と13組・26 fieldのPrefs stampを含む7種類の同期元modelを再initialize・検証して、
+  `timerDisplayModeRawValue`と13組・26 fieldのPrefs stampを含む7種類の同期元modelでinitialize・検証して、
   同一schemaをproductionへdeployする。production environmentはclearしない
 - [x] 初回に「iCloudで同期」と「このiPhoneのみ」を同格で提示し、どちらも推奨扱いにせず、確認後に
   一方を確定するVersion 1.0仕様へ実装／listing／Privacy／Review Notesを統一。iCloudの選択説明から
@@ -80,7 +85,7 @@
   残る最終ゲートとして、一意なbuild番号のRelease Archiveで同じ3種類のissueが0件であることを確認する
 - [x] 最新Release candidateで、onboardingの任意のためし粒を「次へ」で省略し、勉強／仕事を分けない
   共通候補から最初のテーマ1件だけで完了できることを確認。Settingsも一つのテーマ一覧だけを表示し、
-  Home開始buttonはtapで集中開始、長押しで開始せずテーマ変更、既存の履歴と互換性用`usagePurpose`値は保持する。
+  Home開始buttonはtapで集中開始し、種類と時間はHomeの専用選択欄で変更する。既存の履歴と互換性用`usagePurpose`値は保持する。
   2026-09-05のfocused unit 9件とUI 4件で失敗0件
 - [ ] `timerDisplayMode`の4つのraw value、既定値と未知値の`ringAndTime`へのfallback、別groupとのoffline同時変更、
   同一groupの競合解決、JSON raw export、2台間同期を最終development schemaと署名済み実機で確認する
@@ -90,32 +95,35 @@
 - [ ] 署名済み実機2台でmaintenance、foreground復帰、15分以上のactive継続中に相手端末から追加・更新した
   古い日時のsession、remote import通知、再集計中表示、timer引き継ぎと同期を検証し、Release buildに
   rare reward UI／operations entitlement／direct CloudKit一括削除UI／削除用launch preflight gateがないことを確認
-- [x] host App IDのiCloud／CloudKit、Push Notifications、IAP、hostだけへの
-  `iCloud.com.hinoshiba.tumiben`割当、Widget App IDの追加capabilityなしでの登録を完了。2026-09-04の
-  upload用配布copyで、両targetの明示bundle ID、Apple Distribution profile、`get-task-allow = false`、
-  hostのCloudKit Production／APNs ProductionをApp Store ConnectとXcode配布logの双方で確認
-- [x] Non-Consumable `com.hinoshiba.tumiben.pro.lifetime`を作成し、米国USD 0.99を基準価格、日本をJPY 100のcustom price、その他の配信地域をAppleの現地相当額に設定
+- [x] `com.hinoshiba.pomogem`と`com.hinoshiba.pomogem.widgets`、
+  `iCloud.com.hinoshiba.pomogem`を新規登録し、containerのhostへの割当を確認（2026-09-06）
+- [ ] 配布前にhostのiCloud／CloudKit、Push Notifications、IAPとWidgetの追加capabilityなしを照合し、
+  新しい配布copyで両targetの明示bundle ID、Apple Distribution profile、`get-task-allow = false`、
+  hostのCloudKit Production／APNs Productionを実物で確認する
+- [ ] 新Non-Consumable `com.hinoshiba.pomogem.pro.lifetime`を作成し、米国USD 0.99を基準価格、日本をJPY 100のcustom price、その他の配信地域をAppleの現地相当額に設定
 - [ ] 日本向け有料IAPについて販売主体と特商法上の表示要否を確認し、必要な事業者情報・価格・支払／提供時期・返品等を購入前に表示。氏名／住所／電話／Webで省略する販売価格は、請求時に購入判断前の十分な余裕をもって遅滞なく提供できる実運用を確認（現行の既知blocker）
 - [ ] `Docs/COMMERCIAL_DISCLOSURE_OPERATIONS.md`に従い、非公開の法定情報正本、販売価格を含む開示請求メール、担当者不在時の代替手順を実地確認
-- [x] IAPのja-JP（`つみべんPro`）／en-US（`Tumiben Pro`）説明を「任意時間・月刻印」の2機能へ更新し、IAP review notesも同じ提供内容へ更新。2026-09-05に同じIAPをdraft submissionへ再追加し、reload後の完全一致を確認。Product ID、tax、price、availability、Family Sharingは変更なし
+- [ ] 新IAPのja-JP（`ポモジェムPro`）／en-US（`PomoGem Pro`）を「任意時間・月刻印」の
+  2機能で登録し、新product IDのreview notes・価格・配信地域・Family Sharingを保存後に再確認する。
+  同じ新アプリのversion 1.0と初回IAPを同一のreview submissionへ追加する
 - [ ] IAP review screenshotを「任意時間・月刻印」の2機能とStoreKitの実価格だけを示す現行paywallへ差し替え、reload確認
-- [x] App本体をFree、Public、148／175 Countries or Regionsへ設定。現行EU 27を除外し、United Kingdom、Norway、Switzerlandは含め、今後追加されるstorefrontの自動追加を有効化
-- [x] IAPをApp本体と同じ148／175 Countries or Regionsへ設定。現行EU 27を除外し、United Kingdom、Norway、Switzerlandは含め、今後追加されるstorefrontの自動追加を有効化
-- [x] App本体とIAPのEU 27での提供を外し、Version 1.0のEU DSA release blockerを配信範囲で解消。これはtrader該当性についての法律判断ではなく、将来EU提供を有効にする場合はAccount Holderが再評価
+- [ ] App本体をFree、Public、148／175 Countries or Regionsへ設定。現行EU 27を除外し、United Kingdom、Norway、Switzerlandは含め、今後追加されるstorefrontの自動追加を有効化
+- [ ] IAPをApp本体と同じ148／175 Countries or Regionsへ設定。現行EU 27を除外し、United Kingdom、Norway、Switzerlandは含め、今後追加されるstorefrontの自動追加を有効化
+- [ ] App本体とIAPのEU 27での提供を外し、Version 1.0のEU DSA release blockerを配信範囲で解消。これはtrader該当性についての法律判断ではなく、将来EU提供を有効にする場合はAccount Holderが再評価
 - [ ] `ja-JP`と`en-US`のlistingを入力し、英語listingでApp UI／supportが日本語であることを明示
-- [x] version 1.0のja-JP／en-US descriptionとApp Review notesをsource-of-truthどおり保存し、2026-09-05のreload後に完全一致を確認
+- [ ] 新version 1.0のja-JP／en-US descriptionとApp Review notesを正本どおり保存し、reload後の完全一致を確認
 - [ ] App Review contactのfirst name、last name、国際形式電話番号、emailをApp Store Connectだけに入力し、保存後にreloadして確認
 - [ ] Sandboxでpurchase、pending、cancel、restore、revocationを確認
 - [ ] App Privacy draftをproduction archive、private CloudKit access権限、support mailの実運用と照合。
   運営者がiCloud dataを取得・閲覧・保持せずoptional disclosure条件も満たす場合だけData Not Collectedを
   Publishし、満たさなければEmail Address等を実態どおり申告
-- [x] privacy manifestでhostのFile Timestamp `C617.1`、System Boot Time `35F9.1`、standard defaults
+- [ ] privacy manifestでhostのFile Timestamp `C617.1`、System Boot Time `35F9.1`、standard defaults
   `CA92.1`と、Widgetのrequired-reason API宣言が空であることをRelease archiveに照合
-- [x] `AppStore/age-rating.md`の全descriptorを2026年版age rating質問へ入力し、生成結果4+を保存後にreloadして確認
+- [ ] `AppStore/age-rating.md`の全descriptorを新レコードの2026年版age rating質問へ入力し、生成結果4+を保存後にreloadして確認
 - [ ] Export complianceを現行質問で確認
-- [x] 現行`1.0 (3)`のiPhone screenshot 5枚を2026-09-05にproduction UIのDebug-only fixtureで再captureし、
-  UI test 1/1 pass、1284×2778 RGB／alphaなし、個人情報・placeholder・誤訴求なし、03の初回250g完走は
-  「閉じる」左／空のGIF中央列／「5分休憩」右が均衡し、05は`1.0 (3)`かつdirect deletion rowなしを目視確認
+- [ ] 新1.0 (5)のiPhone screenshot 5枚をproduction UIのDebug-only fixtureから撮影し、
+  実行結果と1284×2778 RGB／alphaなし、個人情報・placeholder・誤訴求なしを
+  `screenshots/README.md`に記録する。新IAPのlive-price画像は別gateとして確認する
 - [ ] 上記5枚を署名済みRelease実機と比較し、visual parityがない画像は再capture
 - [ ] metadataのname、subtitle、description、keywords、URLs、review notesを入力
 - [ ] Accessibility Nutrition Labelsを実機評価に基づき回答
@@ -133,11 +141,11 @@
 - [ ] local-only実機でofflineの基本機能、削除前のJSON書き出しと再import不可を確認し、iCloud実機2台で
   online account確認、同期、timer引き継ぎ、reset、通信断時fail-closedと非破壊性を確認
 - [x] Xcode CLI Archiveとraw development署名検証、Organizerの`Distribute App`表示、owner本人による
-  Distribute／Uploadを2026-09-04に完了。Xcode側はerror／warning 0、App Store Connect側はTumiben
+  Distribute／Uploadを2026-09-04に完了。Xcode側はerror／warning 0、App Store Connect側はPomoGem
   `1.0 (1)`をValidated／Ready to Submitとして受領。ただしこれはLive Activityと45／90分無料枠を含まない
 - [x] 現行仕様を含む`1.0 (3)`を2026-09-05に新規Archiveし、raw development署名、host／Widget、
   CloudKit／APNs development環境、Privacy Manifest、arm64、Release debug-gate scanを検証。
-  Organizer archiveは`~/Library/Developer/Xcode/Archives/2026-09-05/Tsumiben 2026-09-05, 00.49.00.xcarchive`
+  Organizer archiveは`~/Library/Developer/Xcode/Archives/2026-09-05/PomoGem 2026-09-05, 00.49.00.xcarchive`
 - [ ] 上記Release appをNoe’s iPhone 14へ既存dataを消さずinstall済み。端末lockによりCLI起動要求が
   iOSから拒否されたため、unlock状態での起動と今回のテーマUIの実機smokeを完了する
 - [ ] `timerDisplayMode`を含む最終候補を一意なbuild番号でArchive／Distributeし、distribution署名／

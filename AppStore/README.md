@@ -19,14 +19,20 @@ APIのcredentialやdownloadしたprofileは置きません。
 - `submission-checklist.md`: versionごとの提出gate
 - `release-experience-review.md`: 掲載文・導線・アクセシビリティのリリース前評価と実機確認項目
 
-2026-09-06の掲載文とHome導線の改訂はローカル原稿です。App Store Connectに保存済みの原稿とは
-差があるため、最終候補の検証後に転記し、再読み込みで照合してください。スクリーンショット5枚と
-実StoreKit価格のIAP審査画像はversion 1.0 (4)から撮り直し、目視とchecksumを確認済みです。
-署名済みRelease実機との表示一致とApp Store Connectへの登録は別途確認してください。
+2026-09-06に新ブランド・新IDのPomoGem 1.0 (5)へ更新しました。掲載文の正本は
+`metadata/`です。旧アプリのApp Store Connect登録、アップロード、課金価格、CloudKit schemaは
+新アプリの完了証拠には使いません。2026-09-06に新App Store record（Apple ID `6809139517`、
+SKU `pomogem-ios`、bundle ID `com.hinoshiba.pomogem`、日本語名「ポモジェム：ポモドーロタイマー」）を
+作成・確認し、実値を`configuration.yml`へ記録しました。公開・ダウンロード可能にはまだなっていないため、
+`app_store_listing_status: not_public`を保持し、Webは「近日公開」のままSmart App Bannerを表示しません。
 
-既存のApp Store Connect record（Apple ID `6806758060`、bundle ID
-`com.hinoshiba.tumiben`）を公式recordとして使用します。WebにはこのIDのSmart App Banner metadataを
-掲載しますが、App Store上で公開されるまではdownload buttonを有効化しません。
+5枚の掲載画像はPomoGem 1.0 (5)のproduction UIから再撮影済みです。実行結果とファイルのhashは
+`screenshots/README.md`に記録します。新IAPの実StoreKit価格を取得できるまでは
+`review_screenshot_status: pending_live_price_capture`とし、旧商品の価格画像は同梱しません。
+Developer Portalでは新しいmain／Widget App IDとCloudKit containerの登録・hostへの割当を確認しました。
+この登録はProduction schemaのdeployや配布署名の完了を意味しません。新IDの署名・実機表示・Sandbox・
+CloudKit Production・Connectの残りの提出内容の保存と再読み込みは別途必須です。
+過去のアーカイブ等の来歴は`Docs/LEGACY_RELEASE_PROVENANCE.md`に分離しています。
 
 App Store Connectのcopyright欄は`configuration.yml`の`2026 hinoshiba`を正本とし、アプリ内の
 表示、Info.plist、Web footer、repository licenseと一致させます。

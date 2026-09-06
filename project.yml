@@ -1,4 +1,4 @@
-name: Tsumiben
+name: PomoGem
 options:
   bundleIdPrefix: com.hinoshiba
   developmentLanguage: ja
@@ -9,20 +9,24 @@ settings:
   base:
     SWIFT_VERSION: "5.10"
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "4"
+    CURRENT_PROJECT_VERSION: "5"
     TARGETED_DEVICE_FAMILY: "1"
     GENERATE_INFOPLIST_FILE: true
     ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
 targets:
-  Tsumiben:
+  PomoGem:
     type: application
     platform: iOS
     supportedDestinations:
       - iOS
     info:
-      path: Tsumiben/Info.plist
+      path: PomoGem/Info.plist
       properties:
-        CFBundleDisplayName: つみべん
+        CFBundleDisplayName: ポモジェム
+        CFBundleURLTypes:
+          - CFBundleURLName: com.hinoshiba.pomogem
+            CFBundleURLSchemes:
+              - pomogem
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSHumanReadableCopyright: Copyright © 2026 hinoshiba
@@ -36,23 +40,23 @@ targets:
         NSPhotoLibraryAddUsageDescription: シェアカードを写真に保存します。
         NSMotionUsageDescription: 端末の傾きや振る操作に合わせて瓶の粒を動かすために使います。値は保存・送信しません。
         ITSAppUsesNonExemptEncryption: false
-        TSUMIBEN_PRIVACY_POLICY_URL: "https://tumiben.hinoshiba.com/privacy/"
+        POMOGEM_PRIVACY_POLICY_URL: "https://pomogem.hinoshiba.com/privacy/"
         UIAppFonts:
           - ZenMaruGothic-Black.ttf
         UIBackgroundModes:
           - remote-notification
     sources:
-      - path: Tsumiben
+      - path: PomoGem
         excludes:
           - Resources/Products.storekit
           - Resources/GENERATED-ASSETS.md
       - path: Shared
     entitlements:
-      path: Tsumiben/Tsumiben.entitlements
+      path: PomoGem/PomoGem.entitlements
       properties:
         aps-environment: $(APS_ENVIRONMENT)
         com.apple.developer.icloud-container-identifiers:
-          - iCloud.com.hinoshiba.tumiben
+          - iCloud.com.hinoshiba.pomogem
         com.apple.developer.icloud-container-environment: $(ICLOUD_CONTAINER_ENVIRONMENT)
         com.apple.developer.icloud-services:
           - CloudKit
@@ -63,8 +67,8 @@ targets:
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: false
         CODE_SIGN_STYLE: Automatic
-        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.tumiben
-        PRODUCT_NAME: Tsumiben
+        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.pomogem
+        PRODUCT_NAME: PomoGem
       configs:
         Debug:
           APS_ENVIRONMENT: development
@@ -73,29 +77,29 @@ targets:
           APS_ENVIRONMENT: production
           ICLOUD_CONTAINER_ENVIRONMENT: Production
     dependencies:
-      - target: TsumibenWidgets
+      - target: PomoGemWidgets
         embed: true
         destinationFilters:
           - iOS
-  TsumibenWidgets:
+  PomoGemWidgets:
     type: app-extension
     platform: iOS
     info:
-      path: TsumibenWidgets/Info.plist
+      path: PomoGemWidgets/Info.plist
       properties:
-        CFBundleDisplayName: つみべん
+        CFBundleDisplayName: ポモジェム
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSHumanReadableCopyright: Copyright © 2026 hinoshiba
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     sources:
-      - path: TsumibenWidgets
+      - path: PomoGemWidgets
         excludes:
           - PrivacyInfo.xcprivacy
-          - TsumibenWidgets.entitlements
+          - PomoGemWidgets.entitlements
       - path: Shared/FocusActivityAttributes.swift
-      - path: TsumibenWidgets/PrivacyInfo.xcprivacy
+      - path: PomoGemWidgets/PrivacyInfo.xcprivacy
         buildPhase: resources
     settings:
       base:
@@ -104,49 +108,49 @@ targets:
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: false
         CODE_SIGN_STYLE: Automatic
-        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.tumiben.widgets
-        PRODUCT_NAME: TsumibenWidgets
+        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.pomogem.widgets
+        PRODUCT_NAME: PomoGemWidgets
         SKIP_INSTALL: true
-  TsumibenTests:
+  PomoGemTests:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - path: TsumibenTests
+      - path: PomoGemTests
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1"
-        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.tumiben.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.pomogem.tests
         GENERATE_INFOPLIST_FILE: true
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Tsumiben.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Tsumiben"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/PomoGem.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PomoGem"
         BUNDLE_LOADER: "$(TEST_HOST)"
     dependencies:
-      - target: Tsumiben
-  TsumibenUITests:
+      - target: PomoGem
+  PomoGemUITests:
     type: bundle.ui-testing
     platform: iOS
     sources:
-      - path: TsumibenUITests
+      - path: PomoGemUITests
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1"
-        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.tumiben.uitests
+        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.pomogem.uitests
         GENERATE_INFOPLIST_FILE: true
     dependencies:
-      - target: Tsumiben
+      - target: PomoGem
 schemes:
-  Tsumiben:
+  PomoGem:
     build:
       targets:
-        Tsumiben: all
-        TsumibenTests: [test]
-        TsumibenUITests: [test]
+        PomoGem: all
+        PomoGemTests: [test]
+        PomoGemUITests: [test]
     run:
       config: Debug
-      storeKitConfiguration: Tsumiben/Resources/Products.storekit
+      storeKitConfiguration: PomoGem/Resources/Products.storekit
     test:
       config: Debug
       targets:
-        - TsumibenTests
-        - TsumibenUITests
+        - PomoGemTests
+        - PomoGemUITests
     archive:
       config: Release

@@ -1,12 +1,16 @@
-# つみべん
+# ポモジェム
 
 集中時間を「質量」に変え、物理演算の粒として瓶へ積み上げるiPhoneアプリです。
 25分・45分・60分・90分のタイマー、記録、瓶、選択式のiCloud同期は基本無料で利用できます。
 それ以外の任意の1〜360分と、まとまり粒の月刻印は、1回限りのアプリ内課金
-「つみべんPro」で解放します。シェアカードには、プランにかかわらずつみべんのロゴと
+「ポモジェムPro」で解放します。シェアカードには、プランにかかわらずポモジェムのロゴと
 公式サイトを表示します。
 
-![つみべんのホーム画面](http_dists/public/app-home-v2.webp)
+PomoGemは新しいアプリとしてリリース準備中です。App Store・IAP・CloudKitの識別子を新設し、
+以前の開発版のデータや購入権利は自動移行しません。公開先と未完了のrelease gateは
+[App Store設定](AppStore/configuration.yml)と[リリース手順](Docs/RELEASING.md)で管理します。
+
+![ポモジェムのホーム画面](http_dists/public/app-home-v3.webp)
 
 ## 主な機能
 
@@ -41,10 +45,10 @@ iPad専用UI、Mac、Mac Catalystには対応していません。
 ```sh
 brew install xcodegen
 xcodegen generate
-open Tsumiben.xcodeproj
+open PomoGem.xcodeproj
 ```
 
-`Tsumiben`スキームとiPhoneシミュレータを選び、Runします。署名なしSimulatorは
+`PomoGem`スキームとiPhoneシミュレータを選び、Runします。署名なしSimulatorは
 CloudKitへ接続せず、専用のローカル永続ストアを使います。iCloud、通知、
 モーション、StoreKit、Live Activityの最終確認は実機で行ってください。Version 1.0のWidgetは
 account-neutralな起動導線だけを表示します。Live Activityもaccount-neutralとし、明示的に集中を
@@ -53,7 +57,7 @@ Apple Account、CloudKit由来の内容は渡しません。設定から端末�
 ActivityKit pushを使いません。
 
 `project.yml`がXcodeプロジェクト設定の正本です。変更後は`xcodegen generate`を実行し、
-生成された`Tsumiben.xcodeproj`も同じ変更としてコミットします。
+生成された`PomoGem.xcodeproj`も同じ変更としてコミットします。
 
 ## 検証
 
@@ -62,8 +66,8 @@ ActivityKit pushを使いません。
 python3 Scripts/validate-site.py
 xcodegen generate
 xcodebuild \
-  -project Tsumiben.xcodeproj \
-  -scheme Tsumiben \
+  -project PomoGem.xcodeproj \
+  -scheme PomoGem \
   -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath DerivedData-CI \
   build CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
@@ -79,10 +83,10 @@ CloudKit、App内課金へ接続する権限は付与されません。
 
 | 用途 | 公式版の識別子 |
 |---|---|
-| App bundle | `com.hinoshiba.tumiben` |
-| Widget bundle | `com.hinoshiba.tumiben.widgets` |
-| SwiftData同期用CloudKit container | `iCloud.com.hinoshiba.tumiben` |
-| Non-Consumable IAP | `com.hinoshiba.tumiben.pro.lifetime` |
+| App bundle | `com.hinoshiba.pomogem` |
+| Widget bundle | `com.hinoshiba.pomogem.widgets` |
+| SwiftData同期用CloudKit container | `iCloud.com.hinoshiba.pomogem` |
+| Non-Consumable IAP | `com.hinoshiba.pomogem.pro.lifetime` |
 
 Version 1.0では、Apple Account切替時の安全境界を実機で証明できていないレア抽選台帳と、
 アプリ内からのCloudKit一括削除を出荷経路から無効化しています。通常のtheme名、成果memo、集中記録、
@@ -95,7 +99,7 @@ fail closedにします。「このiPhoneのみ」はiCloudへ自動switch／upl
 署名に使うApple Developer Teamはリポジトリへ固定せず、Xcodeのローカル設定または
 `xcodebuild DEVELOPMENT_TEAM=<Team ID>`で指定します。forkを配布する場合は`project.yml`、
 `Shared/IntegrationConstants.swift`、
-`Tsumiben/Core/CloudSyncMonitor.swift`、entitlements、StoreKit設定、Web URLを自分の
+`PomoGem/Core/CloudSyncMonitor.swift`、entitlements、StoreKit設定、Web URLを自分の
 識別子へ置き換えてください。製品名、アイコン、マーケティング画像も
 [商標・ブランド方針](TRADEMARKS.md)に従って置き換える必要があります。
 
@@ -107,14 +111,16 @@ fail closedにします。「このiPhoneのみ」はiCloudへ自動switch／upl
 
 `http_dists/`はビルド不要の静的サイトです。Pagesの公開元をGitHub Actionsにすると、
 `main`へのサイト関連ファイルのpush時に公開前検査を行い、そのフォルダだけを自動配信します。
-必要に応じてActions画面から手動実行もできます。
+必要に応じてActions画面から手動実行もできます。Pagesは公式repository IDで実行先を制限し、
+repositoryの改名前後で同じ配信先を使用します。GitHub repositoryは現在privateで、ユーザーによる改名と
+公開確認が残っています。公開Webのsource linkは匿名でアクセスできるようになってから追加します。
 
-- 製品サイト: <https://tumiben.hinoshiba.com/>
-- Privacy Policy: <https://tumiben.hinoshiba.com/privacy/>
-- Support: <https://tumiben.hinoshiba.com/support/>
+- 製品サイト: <https://pomogem.hinoshiba.com/>
+- Privacy Policy: <https://pomogem.hinoshiba.com/privacy/>
+- Support: <https://pomogem.hinoshiba.com/support/>
 
 URLを変える場合は、Webのcanonical/OG、`.github/workflows/pages.yml`、`project.yml`、
-`Tsumiben/App/AppLinks.swift`、App Store metadataを同時に更新してください。
+`PomoGem/App/AppLinks.swift`、App Store metadataを同時に更新してください。
 
 ## OSS運用
 
@@ -131,7 +137,7 @@ URLを変える場合は、Webのcanonical/OG、`.github/workflows/pages.yml`、
 |---|---|
 | ソースコードと通常文書 | [MIT License](LICENSE) |
 | Zen Maru Gothic | SIL Open Font License 1.1（[LICENSE-fonts.txt](LICENSE-fonts.txt)） |
-| 「つみべん」「Tumiben」「Tsumiben」の名称、ロゴ、アプリアイコン、生成背景、Store／Web向けマーケティング画像 | MIT対象外。Copyright 2026 hinoshiba. All rights reserved. |
+| 「ポモジェム」「PomoGem」の名称、ロゴ、アプリアイコン、生成背景、Store／Web向けマーケティング画像 | MIT対象外。Copyright 2026 hinoshiba. All rights reserved. |
 
 同梱された未改変のブランド素材は、このリポジトリの取得・fork、ローカルでのbuild／test、
 CI、code review、contributionに必要な範囲に限り保持・複製できます。この限定許諾は、素材を

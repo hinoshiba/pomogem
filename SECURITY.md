@@ -7,11 +7,11 @@
 ## 脆弱性を非公開で報告する
 
 脆弱性、プライバシー漏えい、認証情報の露出はpublic issueへ投稿しないでください。
-[GitHub Private Vulnerability Reporting](https://github.com/hinoshiba/Tumiben/security/advisories/new)
+[GitHub Private Vulnerability Reporting](https://github.com/hinoshiba/PomoGem/security/advisories/new)
 を利用してください。repositoryの公開前、またはPrivate Vulnerability Reportingを利用できない
 場合は、`support@hinoshiba.com`へ、影響するversion、iOS、再現手順、想定影響を、実利用者
 データを含めずに連絡してください。通常の問い合わせはWebの
-[サポート窓口](https://tumiben.hinoshiba.com/support/)も利用できます。
+[サポート窓口](https://pomogem.hinoshiba.com/support/)も利用できます。
 
 秘密鍵、署名identity、certificate/private-key bundle、provisioning profile、App Store
 Connect key、Keychain、実際の集中テーマ・顧客名をissue、PR、メール、添付ファイルで送らないで

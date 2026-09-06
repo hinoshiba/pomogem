@@ -1,6 +1,6 @@
 # App Review notes draft
 
-つみべんは独自アカウント登録不要のiPhone集中タイマーです。最初の画面で、同格の二つの保存先
+ポモジェムは独自アカウント登録不要のiPhone集中タイマーです。最初の画面で、同格の二つの保存先
 「iCloudに保存して同期」と「このiPhoneだけに保存」から明示的に選び、確認して確定します。どちらも
 推奨扱いではありません。審査では「このiPhoneだけに保存」→確認alertの「このiPhoneだけで始める」を
 選ぶと、Apple Accountへのサインインやnetwork接続なしで基本機能を確認できます。続くonboardingで
@@ -9,21 +9,21 @@
 25分／45分／60分／90分timer、記録、瓶、設定を無料で利用できます。Homeでテーマと時間を選び、
 大きな開始buttonをtapするとtimerを開始します。テーマと時間は開始buttonの上にある選択欄で変更できます。
 テーマの追加・編集・並べ替え・削除はSettingsの一つの「テーマ」一覧で行います。短時間で完走を確認する場合は、
-つみべんPro購入後に Homeの時間表示 → 「自由な時間を設定」 で1分を設定してください。無料状態の最短
+ポモジェムPro購入後に Homeの時間表示 → 「自由な時間を設定」 で1分を設定してください。無料状態の最短
 timerは25分です。hidden demo/debug menuはRelease buildにありません。
 
 ## In-App Purchase
 
-- Product ID: `com.hinoshiba.tumiben.pro.lifetime`
+- Product ID: `com.hinoshiba.pomogem.pro.lifetime`
 - Type: Non-Consumable
-- Entry: Homeの時間表示 → 「自由な時間を設定」、またはSettings → つみべんPro
+- Entry: Homeの時間表示 → 「自由な時間を設定」、またはSettings → ポモジェムPro
 - Unlocks: 無料の25分／45分／60分／90分以外の任意の1〜360分、まとまり粒の月刻印
 - Restore: purchase screenの「購入を復元」
 - Pricing: United States USD 0.99 base price; Japan JPY 100 custom price; other available storefronts use Apple's automatically generated local equivalent
 - Availability: App and IAP are available in 148 of 175 storefronts. Austria, Belgium, Bulgaria, Croatia, Cyprus, Czech Republic, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Ireland, Italy, Latvia, Lithuania, Luxembourg, Malta, Netherlands, Poland, Portugal, Romania, Slovakia, Slovenia, Spain, and Sweden are excluded. United Kingdom, Norway, and Switzerland remain included; automatic availability for new storefronts is enabled.
 - Pre-purchase disclosure: purchase buttonの前に「価格・提供条件・販売者情報を確認」linkを表示
 - Subscription、trial、Web決済、外部purchase linkはありません
-- Share card: 無料／Proとも、つみべんのロゴと`https://tumiben.hinoshiba.com/`を常に表示し、共有本文にも同URLを含めます
+- Share card: 無料／Proとも、ポモジェムのロゴと`https://pomogem.hinoshiba.com/`を常に表示し、共有本文にも同URLを含めます
 
 25分、45分、60分、90分、記録、どちらかの保存先、瓶の基本体験はpurchase不要です。Version 1.0はランダム報酬を
 提供せず、完走時はテーマ色の通常粒を保存します。

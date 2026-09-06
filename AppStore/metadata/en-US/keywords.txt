@@ -1,1 +1,1 @@
-pomodoro,study,work,habit,record,exam,reading,time management,bottle
+study,work,habit,record,exam,reading,time management,jar,gem,progress

@@ -4,7 +4,7 @@ import Foundation
 import ActivityKit
 
 enum FocusActivityConstants {
-    static let widgetKind = "TsumibenFocusLiveActivity"
+    static let widgetKind = "PomoGemFocusLiveActivity"
     static let secondsPerMinute = 60
     static let dismissalDelay: TimeInterval = 2 * 60
 }

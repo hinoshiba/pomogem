@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Verify the signed contents of the version 1.0 Tsumiben iOS archive without
+# Verify the signed contents of the version 1.0 PomoGem iOS archive without
 # printing certificate subjects, profile names, UUIDs, device identifiers, or
 # entitlement payloads.
 #
@@ -14,26 +14,26 @@ set -euo pipefail
 IFS=$'\n\t'
 umask 077
 
-readonly TSUMIBEN_AUDIT_APP_BUNDLE_ID='com.hinoshiba.tumiben'
-readonly TSUMIBEN_AUDIT_WIDGET_BUNDLE_ID='com.hinoshiba.tumiben.widgets'
-readonly TSUMIBEN_AUDIT_TEAM_ID='94HVVWXLK3'
-readonly TSUMIBEN_AUDIT_APP_GROUP='group.com.hinoshiba.tumiben'
-readonly TSUMIBEN_AUDIT_ICLOUD_CONTAINER='iCloud.com.hinoshiba.tumiben'
-readonly TSUMIBEN_AUDIT_MARKETING_VERSION='1.0'
-readonly TSUMIBEN_AUDIT_BUILD_NUMBER='4'
-readonly TSUMIBEN_AUDIT_MINIMUM_IOS='17.0'
-readonly TSUMIBEN_AUDIT_FONT_SHA256='6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f'
-readonly TSUMIBEN_AUDIT_FONT_LICENSE_SHA256='e8b4d8c39b0d7cc4b202dbd013b999bc6233a9bbe6cce1c37cfddc26ad544228'
-export TSUMIBEN_AUDIT_APP_BUNDLE_ID TSUMIBEN_AUDIT_WIDGET_BUNDLE_ID
-export TSUMIBEN_AUDIT_TEAM_ID TSUMIBEN_AUDIT_APP_GROUP
-export TSUMIBEN_AUDIT_ICLOUD_CONTAINER TSUMIBEN_AUDIT_MARKETING_VERSION
-export TSUMIBEN_AUDIT_BUILD_NUMBER TSUMIBEN_AUDIT_MINIMUM_IOS
+readonly POMOGEM_AUDIT_APP_BUNDLE_ID='com.hinoshiba.pomogem'
+readonly POMOGEM_AUDIT_WIDGET_BUNDLE_ID='com.hinoshiba.pomogem.widgets'
+readonly POMOGEM_AUDIT_TEAM_ID='94HVVWXLK3'
+readonly POMOGEM_AUDIT_APP_GROUP='group.com.hinoshiba.pomogem'
+readonly POMOGEM_AUDIT_ICLOUD_CONTAINER='iCloud.com.hinoshiba.pomogem'
+readonly POMOGEM_AUDIT_MARKETING_VERSION='1.0'
+readonly POMOGEM_AUDIT_BUILD_NUMBER='5'
+readonly POMOGEM_AUDIT_MINIMUM_IOS='17.0'
+readonly POMOGEM_AUDIT_FONT_SHA256='6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f'
+readonly POMOGEM_AUDIT_FONT_LICENSE_SHA256='e8b4d8c39b0d7cc4b202dbd013b999bc6233a9bbe6cce1c37cfddc26ad544228'
+export POMOGEM_AUDIT_APP_BUNDLE_ID POMOGEM_AUDIT_WIDGET_BUNDLE_ID
+export POMOGEM_AUDIT_TEAM_ID POMOGEM_AUDIT_APP_GROUP
+export POMOGEM_AUDIT_ICLOUD_CONTAINER POMOGEM_AUDIT_MARKETING_VERSION
+export POMOGEM_AUDIT_BUILD_NUMBER POMOGEM_AUDIT_MINIMUM_IOS
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./Scripts/verify-release-archive.sh /path/to/Tsumiben.xcarchive
-  ./Scripts/verify-release-archive.sh --distribution /path/to/Tsumiben.xcarchive
+  ./Scripts/verify-release-archive.sh /path/to/PomoGem.xcarchive
+  ./Scripts/verify-release-archive.sh --distribution /path/to/PomoGem.xcarchive
 
 Default mode validates a raw Organizer archive. It accepts coherent Apple
 Development/development-profile signing or Apple Distribution/App Store
@@ -101,12 +101,12 @@ if [ ! -d "$archive_path" ] || [ -L "$archive_path" ]; then
 fi
 
 readonly archive_info="$archive_path/Info.plist"
-readonly app_bundle="$archive_path/Products/Applications/Tsumiben.app"
-readonly widget_bundle="$app_bundle/PlugIns/TsumibenWidgets.appex"
+readonly app_bundle="$archive_path/Products/Applications/PomoGem.app"
+readonly widget_bundle="$app_bundle/PlugIns/PomoGemWidgets.appex"
 readonly app_info="$app_bundle/Info.plist"
 readonly widget_info="$widget_bundle/Info.plist"
-readonly app_binary="$app_bundle/Tsumiben"
-readonly widget_binary="$widget_bundle/TsumibenWidgets"
+readonly app_binary="$app_bundle/PomoGem"
+readonly widget_binary="$widget_bundle/PomoGemWidgets"
 readonly app_privacy="$app_bundle/PrivacyInfo.xcprivacy"
 readonly widget_privacy="$widget_bundle/PrivacyInfo.xcprivacy"
 readonly app_font="$app_bundle/ZenMaruGothic-Black.ttf"
@@ -129,22 +129,22 @@ for file in "$archive_info" "$app_info" "$widget_info" \
 done
 
 if [ "$(/usr/bin/shasum -a 256 "$app_font" | /usr/bin/cut -d ' ' -f 1)" != \
-  "$TSUMIBEN_AUDIT_FONT_SHA256" ]; then
+  "$POMOGEM_AUDIT_FONT_SHA256" ]; then
   fail 'bundled Zen Maru Gothic font differs from the reviewed release asset'
 fi
 
 if [ "$(/usr/bin/shasum -a 256 "$app_font_license" | /usr/bin/cut -d ' ' -f 1)" != \
-  "$TSUMIBEN_AUDIT_FONT_LICENSE_SHA256" ]; then
+  "$POMOGEM_AUDIT_FONT_LICENSE_SHA256" ]; then
   fail 'bundled font license differs from the reviewed SIL Open Font License text'
 fi
 
-audit_tmp=$(mktemp -d "${TMPDIR:-/tmp}/tsumiben-archive-audit.XXXXXX") \
+audit_tmp=$(mktemp -d "${TMPDIR:-/tmp}/pomogem-archive-audit.XXXXXX") \
   || fail 'could not create private audit workspace'
 readonly audit_tmp
 
 cleanup() {
   case "$audit_tmp" in
-    "${TMPDIR:-/tmp}"/tsumiben-archive-audit.*)
+    "${TMPDIR:-/tmp}"/pomogem-archive-audit.*)
       if [ -d "$audit_tmp" ] && [ ! -L "$audit_tmp" ]; then
         /bin/rm -rf "$audit_tmp"
       fi
@@ -175,12 +175,12 @@ from pathlib import Path
     widget_privacy_raw,
 ) = sys.argv[1:]
 
-APP_ID = os.environ["TSUMIBEN_AUDIT_APP_BUNDLE_ID"]
-WIDGET_ID = os.environ["TSUMIBEN_AUDIT_WIDGET_BUNDLE_ID"]
-TEAM_ID = os.environ["TSUMIBEN_AUDIT_TEAM_ID"]
-VERSION = os.environ["TSUMIBEN_AUDIT_MARKETING_VERSION"]
-BUILD = os.environ["TSUMIBEN_AUDIT_BUILD_NUMBER"]
-MINIMUM_IOS = os.environ["TSUMIBEN_AUDIT_MINIMUM_IOS"]
+APP_ID = os.environ["POMOGEM_AUDIT_APP_BUNDLE_ID"]
+WIDGET_ID = os.environ["POMOGEM_AUDIT_WIDGET_BUNDLE_ID"]
+TEAM_ID = os.environ["POMOGEM_AUDIT_TEAM_ID"]
+VERSION = os.environ["POMOGEM_AUDIT_MARKETING_VERSION"]
+BUILD = os.environ["POMOGEM_AUDIT_BUILD_NUMBER"]
+MINIMUM_IOS = os.environ["POMOGEM_AUDIT_MINIMUM_IOS"]
 
 
 def fail(message: str) -> None:
@@ -201,9 +201,9 @@ def load(path: Path, label: str) -> dict:
 
 archive = Path(archive_raw)
 applications = archive / "Products" / "Applications"
-app = applications / "Tsumiben.app"
+app = applications / "PomoGem.app"
 plugins = app / "PlugIns"
-widget = plugins / "TsumibenWidgets.appex"
+widget = plugins / "PomoGemWidgets.appex"
 
 try:
     embedded_apps = sorted(
@@ -217,10 +217,10 @@ try:
 except OSError:
     fail("archive application topology is unreadable")
 
-if embedded_apps != ["Tsumiben.app"]:
-    fail("archive must contain exactly the reviewed Tsumiben app")
-if embedded_extensions != ["TsumibenWidgets.appex"]:
-    fail("app must embed exactly the reviewed Tsumiben Widget extension")
+if embedded_apps != ["PomoGem.app"]:
+    fail("archive must contain exactly the reviewed PomoGem app")
+if embedded_extensions != ["PomoGemWidgets.appex"]:
+    fail("app must embed exactly the reviewed PomoGem Widget extension")
 
 debug_payload_names = []
 try:
@@ -240,16 +240,16 @@ if debug_payload_names:
 archive_plist = load(Path(archive_info_raw), "archive Info.plist")
 if archive_plist.get("ArchiveVersion") != 2:
     fail("archive format version is not the reviewed Xcode archive format")
-if archive_plist.get("Name") != "Tsumiben":
-    fail("archive product name is not Tsumiben")
-if archive_plist.get("SchemeName") != "Tsumiben":
-    fail("archive scheme is not Tsumiben")
+if archive_plist.get("Name") != "PomoGem":
+    fail("archive product name is not PomoGem")
+if archive_plist.get("SchemeName") != "PomoGem":
+    fail("archive scheme is not PomoGem")
 
 properties = archive_plist.get("ApplicationProperties")
 if not isinstance(properties, dict):
     fail("archive is missing ApplicationProperties")
 expected_archive_properties = {
-    "ApplicationPath": "Applications/Tsumiben.app",
+    "ApplicationPath": "Applications/PomoGem.app",
     "Architectures": ["arm64"],
     "CFBundleIdentifier": APP_ID,
     "CFBundleShortVersionString": VERSION,
@@ -276,6 +276,7 @@ def validate_bundle_info(
 ) -> None:
     expected = {
         "CFBundleIdentifier": bundle_id,
+        "CFBundleDisplayName": "ポモジェム",
         "CFBundleExecutable": executable,
         "CFBundlePackageType": package_type,
         "CFBundleShortVersionString": VERSION,
@@ -305,19 +306,26 @@ validate_bundle_info(
     app_plist,
     label="app",
     bundle_id=APP_ID,
-    executable="Tsumiben",
+    executable="PomoGem",
     package_type="APPL",
 )
 validate_bundle_info(
     widget_plist,
     label="Widget",
     bundle_id=WIDGET_ID,
-    executable="TsumibenWidgets",
+    executable="PomoGemWidgets",
     package_type="XPC!",
 )
 
 if app_plist.get("LSRequiresIPhoneOS") is not True:
     fail("app must require iPhoneOS")
+if app_plist.get("CFBundleURLTypes") != [{
+    "CFBundleURLName": APP_ID,
+    "CFBundleURLSchemes": ["pomogem"],
+}]:
+    fail("app URL registration differs from the reviewed PomoGem identifier and scheme")
+if app_plist.get("POMOGEM_PRIVACY_POLICY_URL") != "https://pomogem.hinoshiba.com/privacy/":
+    fail("app privacy URL differs from the reviewed canonical host")
 if app_plist.get("ITSAppUsesNonExemptEncryption") is not False:
     fail("app export-compliance declaration differs from the reviewed release")
 if app_plist.get("NSSupportsLiveActivities") is not True:
@@ -489,11 +497,11 @@ from typing import Any, Optional
     widget_certificate_raw,
 ) = sys.argv[1:]
 
-TEAM_ID = os.environ["TSUMIBEN_AUDIT_TEAM_ID"]
-APP_ID = os.environ["TSUMIBEN_AUDIT_APP_BUNDLE_ID"]
-WIDGET_ID = os.environ["TSUMIBEN_AUDIT_WIDGET_BUNDLE_ID"]
-APP_GROUP = os.environ["TSUMIBEN_AUDIT_APP_GROUP"]
-ICLOUD_CONTAINER = os.environ["TSUMIBEN_AUDIT_ICLOUD_CONTAINER"]
+TEAM_ID = os.environ["POMOGEM_AUDIT_TEAM_ID"]
+APP_ID = os.environ["POMOGEM_AUDIT_APP_BUNDLE_ID"]
+WIDGET_ID = os.environ["POMOGEM_AUDIT_WIDGET_BUNDLE_ID"]
+APP_GROUP = os.environ["POMOGEM_AUDIT_APP_GROUP"]
+ICLOUD_CONTAINER = os.environ["POMOGEM_AUDIT_ICLOUD_CONTAINER"]
 OPERATIONS_CONTAINER = f"{ICLOUD_CONTAINER}.operations"
 
 
@@ -891,9 +899,9 @@ scan_release_binary() {
   fi
 
   for marker in \
-    'TSUMIBEN_LOCAL_PREVIEW' \
-    'TSUMIBEN_UI_TEST_' \
-    'TSUMIBEN_RUN_40_YEAR_PERSISTENCE' \
+    'POMOGEM_LOCAL_PREVIEW' \
+    'POMOGEM_UI_TEST_' \
+    'POMOGEM_RUN_40_YEAR_PERSISTENCE' \
     'FortyYearPersistentUITestFixture' \
     'FortyYearDebugScenario' \
     'FortyYearPersistenceHarness' \
@@ -911,12 +919,12 @@ scan_release_binary "$app_binary" 'app'
 scan_release_binary "$widget_binary" 'widget'
 
 if ! LC_ALL=C /usr/bin/grep -Fq \
-  'TsumibenFocusLiveActivity' "$audit_tmp/widget-strings.txt"; then
+  'PomoGemFocusLiveActivity' "$audit_tmp/widget-strings.txt"; then
   fail 'Widget is missing the reviewed Live Activity configuration marker'
 fi
 
 if LC_ALL=C /usr/bin/grep -Fq \
-  "$TSUMIBEN_AUDIT_APP_GROUP" "$audit_tmp/app-strings.txt"; then
+  "$POMOGEM_AUDIT_APP_GROUP" "$audit_tmp/app-strings.txt"; then
   fail 'app executable contains the removed version 1.0 App Group identifier'
 fi
 if ! LC_ALL=C /usr/bin/grep -Fq \
@@ -971,8 +979,8 @@ for account_marker in \
   'NSUbiquitousKeyValueStore' \
   'ubiquityIdentityToken' \
   'CKContainer' \
-  "$TSUMIBEN_AUDIT_APP_GROUP" \
-  "$TSUMIBEN_AUDIT_ICLOUD_CONTAINER"; do
+  "$POMOGEM_AUDIT_APP_GROUP" \
+  "$POMOGEM_AUDIT_ICLOUD_CONTAINER"; do
   if LC_ALL=C /usr/bin/grep -Fq "$account_marker" "$audit_tmp/widget-strings.txt"; then
     fail 'neutral Widget executable contains an account-derived data or Live Activity marker'
   fi

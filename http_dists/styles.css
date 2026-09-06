@@ -255,6 +255,7 @@ h2 { margin: 0; font-size: clamp(38px, 5vw, 64px); line-height: 1.28; letter-spa
 /* Release journey: useful next steps at every screen size. */
 .mobile-menu { display: none; }
 .hero h1>span { white-space: nowrap; }
+.footer-identity { flex-wrap: wrap; row-gap: 8px; }
 .header-cta { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; }
 .site-header>nav a { display: inline-flex; align-items: center; min-height: 44px; }
 .site-footer nav a { display: inline-flex; align-items: center; min-height: 44px; }
@@ -282,9 +283,10 @@ h2 { margin: 0; font-size: clamp(38px, 5vw, 64px); line-height: 1.28; letter-spa
   .product-page section[id], .lab-vessel-wrap { scroll-margin-top: 148px; }
 }
 @media (min-width: 901px) {
-  .hero h1 { font-size: clamp(50px,5.1vw,72px); }
+  .hero h1 { font-size: clamp(42px,4.4vw,62px); }
 }
 @media (max-width: 560px) {
+  .hero h1 { font-size: clamp(34px,10.5vw,46px); }
   .product-page .site-header { grid-template-columns: minmax(0,1fr) auto auto; gap: 10px; }
   .product-page .site-header>.header-cta { grid-column: 3; white-space: nowrap; }
   .mobile-menu { display: block; grid-column: 2; grid-row: 1; }

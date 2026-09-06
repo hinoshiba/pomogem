@@ -8,7 +8,7 @@
 - ソースコードと通常文書には`LICENSE`のMIT Licenseが適用されます。
 - Zen Maru GothicにはSIL Open Font License 1.1が適用されます。全文は
   `LICENSE-fonts.txt`を参照してください。
-- 下表で「All rights reserved」とした「つみべん」「Tumiben」「Tsumiben」固有の視覚素材は
+- 下表で「All rights reserved」とした「ポモジェム」「PomoGem」固有の視覚素材は
   MIT Licenseの対象外です。著作権とブランド上の権利はhinoshibaが留保します。
 
 この台帳の第三者向け限定許諾は、権利者であるhinoshiba自身による公式アプリ、公式Web、
@@ -35,29 +35,31 @@ App Store素材の制作、公開、販売を制限するものではありま�
 権利者から別途書面による許可を得てください。この限定許諾は、名称やロゴを商標として使う
 権利を付与しません。
 
+PomoGemへの改名時点では、文字を含まない既存iconとAurora背景を継続使用します。
+listing 5枚はPomoGem 1.0 (5)から新規captureし、XCTestのRGB PNG添付を無加工でコピーしています。
+署名済みRelease実機とのparityは別のrelease gateで確認します。
+IAP審査画像は、新しいPomoGem商品をStoreKitで取得して実価格を撮影するまで未取得です。
+旧商品の画像や仮価格の画像を新版の審査素材として掲載しません。通常のOSS検査は明示的なpending状態と
+release blockerがある場合に限りlisting 5枚を許容し、提出用検査は実価格画像・hash・出所の記録を必須とします。
+
 | 素材 | 場所 | 出所 | 配布条件 | SHA-256 |
 |---|---|---|---|---|
-| つみべん App Icon（Focus Cycle v5、active） | `Tsumiben/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusCycle-v5.png` | Tumiben独自のv4 iconとpaletteを基に、本プロジェクト向けにCodex built-in ImageGenで再設計し、人が選定・調整 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `1c8c4ac81b99a2201fdaa3a723ca2e76ee08350970f3243053d0d8b4d37ae15e` |
+| ポモジェム App Icon（Focus Cycle v5、active） | `PomoGem/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusCycle-v5.png` | 本プロジェクトの前身で制作したv4 iconとpaletteを基に、本プロジェクト向けにCodex built-in ImageGenで再設計し、人が選定・調整 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `1c8c4ac81b99a2201fdaa3a723ca2e76ee08350970f3243053d0d8b4d37ae15e` |
 | App Icon高解像度source（Focus Cycle v5、active） | `Brand/AppIcon-FocusCycle-v5-source.png` | 上記の生成source | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `9b83d0ac419add475e4e3cf4ff42dabb7bb7340a4a59eddfe6dcdeb2dd5859cc` |
 | Web App Icon（Focus Cycle v5、active） | `http_dists/public/app-icon-focus-v5.png` | active App Iconの256px Web用派生画像 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `a0ee59d504570ad0ce53c2710b2c2114a2518d7ee10e098d1e5787943d19add7` |
 | Apple Touch Icon（Focus Cycle v5、active） | `http_dists/public/apple-touch-icon.png` | active App Iconの180px Web用派生画像 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `50dda39716f125b546d72f379192318530df845f4205fbdb240f55d5564a453a` |
-| Web OG画像（focus v7、active） | `http_dists/og-focus-v7.png` | active App IconとOFLのZen Maru GothicをSharpで決定論的に合成し、ポモドーロタイマー×集中記録の訴求へ更新 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `db51b5fed769d18eb99cae48ef437f6485311c17e0c191e33cb183d9a3653ad4` |
-| Webホーム画面（v2、active） | `http_dists/public/app-home-v2.webp` | App Store画面01をcwebpで603×1305へ縮小 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `f819951afc8a9f60abd18c4540ea18d796fbebf3244aaa1ee013850e33b60f33` |
-| Webタイマー画面（v1、active） | `http_dists/public/app-timer-v1.webp` | App Store画面02をcwebpで603×1305へ縮小 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `7d66a2be14844d67cb2c0c51639fe6d7205c6ff90a678dda45422bf7c810750a` |
+| Web OG画像（PomoGem v1、active） | `http_dists/og-pomogem-v1.png` | 本プロジェクトのHTML/CSS原稿 Brand/og-pomogem.html と既存icon・OFL fontをブラウザーで1200×630に描画・capture後、sipsでJPEGからPNGへ形式のみ変換。2026-09-06に新名称・domain・訴求を目視確認。新規ImageGen素材ではない | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `a434e1526f860cc2765ec4a02fae07e151edf3d239b8be053e66a7eaf27fee99` |
+| Webホーム画面（v3、active） | `http_dists/public/app-home-v3.webp` | PomoGem 1.0 (5)の新App Store画面01から cwebp -q 85 -m 6 -resize 603 0 で603×1305へ縮小 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `e36fad494ed4223b21f518d68b5aad1649dc893a94b402442d2dc8a3bddc896a` |
+| Webタイマー画面（v2、active） | `http_dists/public/app-timer-v2.webp` | PomoGem 1.0 (5)の新App Store画面02から cwebp -q 85 -m 6 -resize 603 0 で603×1305へ縮小 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `24a79a83b7fb5cbc58aad0dc304d8b02c920ca611d7953bca511d2e42173ee77` |
 | 旧App Icon高解像度source（Focus Vessel v4） | `Brand/AppIcon-FocusVessel-v4-source.png` | 本プロジェクト向けにAI支援で生成し、人が選定・調整 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `b60d2fe464f4460702be923976c5865dfca487b189072ac249638eac1e1ec1ca` |
-| 旧Web App Icon（focus v4） | `http_dists/public/app-icon-focus-v4.png` | 旧App IconのWeb用派生画像 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `05ac0bbdc58cfa85d23d5b01cf2a3d38dc0d89016ee33fa1a940cef1e1a7c469` |
-| 旧Web OG画像（focus v6） | `http_dists/og-focus-v6.png` | 旧OG v5へactive App IconをSharpで決定論的に合成した旧訴求画像 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `ce639d897fe02d352118d09de83f66f334509e46dcea0ea451a0d873be6e4f7f` |
-| 旧Web OG画像（focus v5） | `http_dists/og-focus-v5.png` | 旧ブランド素材と実アプリ画面から作成 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `09e0544c3af28dec0b24b95b34503727357f7bf53e28d4d8697a2e876aa7896f` |
 | 旧App Icon比較素材 | `Brand/AppIcon-Aurora-v3-legacy.png` | 本プロジェクト向けにAI支援で生成 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `30d8c4b856a46dc87a00c5c09861df6a008ffce8092a0a3f72bea4b074e3a4f8` |
-| Aurora背景 | `Tsumiben/Resources/Assets.xcassets/focus.aurora.imageset/focus-aurora.png` | 本プロジェクト向けにAI支援で生成し、人が選定・調整 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `b6a9e5e324e13978eeb0806ce051ca51304571d4fb22544916c55cc8350a8e66` |
-| 旧Webホーム画面 | `http_dists/public/app-home-current.webp` | 実アプリ画面から作成。Web上の参照はv2へ移行済み | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `28a3a322c560fabbff571a3fb399346fbf8298120891f50f93f6a61f5df2df66` |
-| App Store画面 01 | `AppStore/screenshots/ja-JP/01-home-with-first-pebble.png` | version 1.0 (4)のproduction UIをDebug-only deterministic fixtureでcapture | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `5c7a093ae749a354512fe4a82f21861f60b3f33ffdf9a031625b1acb8dbcb629` |
-| App Store画面 02 | `AppStore/screenshots/ja-JP/02-25-minute-focus.png` | version 1.0 (4)のproduction UIをDebug-only deterministic fixtureでcapture | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `962c5fb13046560d265bc6c4eca354481b6ead5cc489b0a3c8e8cc8aca6bb657` |
-| App Store画面 03 | `AppStore/screenshots/ja-JP/03-completion-reward.png` | version 1.0 (4)のproduction UIをDebug-only deterministic fixtureでcapture | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `8cbdd99b4a7218c4ff05df7313abf48e9ca80d690e3578e70835c2ed5cef67c1` |
-| App Store画面 04 | `AppStore/screenshots/ja-JP/04-accumulation-overview.png` | version 1.0 (4)のproduction UIをDebug-only deterministic fixtureでcapture | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `77a59f13e47a27e92c21505fc91255a6a99c3a9ae772f231e59badba9ea02eed` |
-| App Store画面 05 | `AppStore/screenshots/ja-JP/05-iCloud-and-privacy.png` | version 1.0 (4)のproduction UIをDebug-only deterministic fixtureでcapture | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `8c5afaba9317c5e03e30c6609d4642e5718c62da5dac54442fd64dabba915c4f` |
-| IAP審査画面 | `AppStore/screenshots/iap-review/01-tumiben-pro-live-price.png` | version 1.0 (4)のproduction UIでStoreKitの実商品価格を表示してcapture。購入未実行、価格加工なし | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `9a6107604fc9228f5e5ac257f424277758459c1d055e126f311ee91b83661bc6` |
-| Zen Maru Gothic Black | `Tsumiben/Resources/Fonts/ZenMaruGothic-Black.ttf`、`http_dists/public/ZenMaruGothic-Black.ttf` | Copyright 2021 The Zen Maru Gothic Project Authors | SIL Open Font License 1.1。`LICENSE-fonts.txt`参照 | `6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f` |
+| Aurora背景 | `PomoGem/Resources/Assets.xcassets/focus.aurora.imageset/focus-aurora.png` | 本プロジェクト向けにAI支援で生成し、人が選定・調整 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `b6a9e5e324e13978eeb0806ce051ca51304571d4fb22544916c55cc8350a8e66` |
+| App Store画面 01 | `AppStore/screenshots/ja-JP/01-home-with-first-pebble.png` | PomoGem 1.0 (5)のproduction UIをDebug-only deterministic fixtureで2026-09-06に新規capture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `c4d5200526bcd629561c7be909ae7563d753071446de111772b59f6bdef06e50` |
+| App Store画面 02 | `AppStore/screenshots/ja-JP/02-25-minute-focus.png` | PomoGem 1.0 (5)のproduction UIをDebug-only deterministic fixtureで2026-09-06に新規capture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `a226fbe8844c33d044b281f4ef3ee557a17cea398db4d104607de6d985d96b60` |
+| App Store画面 03 | `AppStore/screenshots/ja-JP/03-completion-reward.png` | PomoGem 1.0 (5)のproduction UIをDebug-only deterministic fixtureで2026-09-06に新規capture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `8cbdd99b4a7218c4ff05df7313abf48e9ca80d690e3578e70835c2ed5cef67c1` |
+| App Store画面 04 | `AppStore/screenshots/ja-JP/04-accumulation-overview.png` | PomoGem 1.0 (5)のproduction UIをDebug-only deterministic fixtureで2026-09-06に新規capture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `77a59f13e47a27e92c21505fc91255a6a99c3a9ae772f231e59badba9ea02eed` |
+| App Store画面 05 | `AppStore/screenshots/ja-JP/05-iCloud-and-privacy.png` | PomoGem 1.0 (5)のproduction UIをDebug-only deterministic fixtureで2026-09-06に新規capture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `0aaaf14b32c8b5834cbf9bd2eadbe1fff37f59409cdf818bb0471f87356cf97d` |
+| Zen Maru Gothic Black | `PomoGem/Resources/Fonts/ZenMaruGothic-Black.ttf`、`http_dists/public/ZenMaruGothic-Black.ttf` | Copyright 2021 The Zen Maru Gothic Project Authors | SIL Open Font License 1.1。`LICENSE-fonts.txt`参照 | `6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f` |
 
-生成経緯とpromptの要約は`Tsumiben/Resources/GENERATED-ASSETS.md`に記録しています。
+生成経緯とpromptの要約は`PomoGem/Resources/GENERATED-ASSETS.md`に記録しています。
 SF Symbolsは`Image(systemName:)`で参照し、書き出したSymbol画像を同梱していません。

@@ -1,7 +1,7 @@
 # Privacy architecture
 
 この文書は公開ソース上のデータフローの正本です。利用者向けの正式なポリシーは
-<https://tumiben.hinoshiba.com/privacy/>です。
+<https://pomogem.hinoshiba.com/privacy/>です。
 
 ## 保存するデータ
 

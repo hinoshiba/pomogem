@@ -3,7 +3,7 @@ set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
-base_url=${1:-https://tumiben.hinoshiba.com/}
+base_url=${1:-https://pomogem.hinoshiba.com/}
 case "$base_url" in
   https://*) ;;
   *)
@@ -13,7 +13,7 @@ case "$base_url" in
 esac
 base_url=${base_url%/}/
 
-policy_dir=$(mktemp -d "${TMPDIR:-/tmp}/tumiben-site-policy.XXXXXX")
+policy_dir=$(mktemp -d "${TMPDIR:-/tmp}/pomogem-site-policy.XXXXXX")
 trap 'rm -rf "$policy_dir"' EXIT HUP INT TERM
 
 fetch_page() {

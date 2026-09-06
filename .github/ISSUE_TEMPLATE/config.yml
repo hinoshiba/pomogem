@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: 非公開の脆弱性報告
-    url: https://github.com/hinoshiba/Tumiben/security/advisories/new
+    url: https://github.com/hinoshiba/PomoGem/security/advisories/new
     about: 脆弱性やプライバシー漏えいはpublic issueではなく、非公開で報告してください。
   - name: 利用者サポート
-    url: https://tumiben.hinoshiba.com/support/
+    url: https://pomogem.hinoshiba.com/support/
     about: 購入復元や公開issueに適さない利用上の問い合わせはこちらです。

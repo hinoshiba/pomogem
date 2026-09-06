@@ -1,9 +1,25 @@
-# つみべん公式版 — ローカルArchive／App Storeリリース手順
+# ポモジェム公式版 — ローカルArchive／App Storeリリース手順
 
 更新日: 2026-09-06
 
 この手順は、許可済みMacのXcode OrganizerからiPhone版をArchive、Validate、Uploadするための
 正本です。Xcode Cloudは現時点で前提にしません。Mac／Mac Catalyst版は作成しません。
+
+## 今回の候補と識別子
+
+PomoGem 1.0 (5)は、新しいBundle ID・App Store record・IAP・CloudKit containerを使う初回候補です。
+2026-09-06に新App Store recordを作成し、`AppStore/configuration.yml`へApple ID `6809139517`を
+記録しました。SKUは`pomogem-ios`、登録名は「ポモジェム：ポモドーロタイマー」です。
+main／Widget App ID、新CloudKit containerの登録とhostへの割当も確認しました。
+登録済みでも公開前は`app_store_listing_status: not_public`を保持し、Webは「近日公開」のまま
+Smart App Bannerを表示しません。実際に公開・ダウンロード可能になってからstatusを`public`へ変更し、
+同じ数値IDのSmart App Bannerを追加して検証します。
+旧製品のbuild、審査画像、StoreKit商品、CloudKit配布状態は新候補の合格証拠に使いません。
+履歴は`Docs/LEGACY_RELEASE_PROVENANCE.md`へ隔離し、未完了項目の正本は
+`AppStore/configuration.yml`の`release_blockers`に保持します。
+
+新Bundle IDは別アプリなので、旧版の保存データや購入権利を自動移行・共有しません。
+既存のapp record、IAP、CloudKit container、production dataを削除・resetする工程はありません。
 
 ## 1. 安全境界
 
@@ -21,20 +37,21 @@ buildするよう求めています。開始時に[Upcoming Requirements](https:
 
 ## 2. App Store Connectを先に整える
 
-初回upload前にApp Store Connectのapp recordが必要です。
+初回upload前にApp Store Connectのapp recordが必要です。今回のrecordは`6809139517`として作成済みです。
+以下の価格、提供地域、IAP、配布、公開設定は、record作成とは別に確認します。
 
-1. Bundle ID `com.hinoshiba.tumiben`、iCloud/CloudKit、Push Notifications、
+1. Bundle ID `com.hinoshiba.pomogem`、iCloud/CloudKit、Push Notifications、
    In-App Purchaseのcapabilityが同じteamにある
-2. Widget bundle `com.hinoshiba.tumiben.widgets`は登録するが、Version 1.0ではApp Group、iCloud、
+2. Widget bundle `com.hinoshiba.pomogem.widgets`は登録するが、Version 1.0ではApp Group、iCloud、
    CloudKit、APNs capabilityを付けない。account-neutralな起動導線だけを表示する
-3. `com.hinoshiba.tumiben.pro.lifetime`をNon-Consumableで1件だけ作り、米国USD 0.99を基準価格、
+3. `com.hinoshiba.pomogem.pro.lifetime`をNon-Consumableで1件だけ作り、米国USD 0.99を基準価格、
    日本JPY 100をcustom price、その他をAppleの現地相当額にする
 4. AppとIAPを現行EU 27を除く148／175 Countries or Regionsへ設定し、今後追加されるstorefrontの
    自動追加を有効にする
-5. IAPのja-JP名`つみべんPro`、en-US名`Tumiben Pro`、各説明、審査用screenshot、税区分、
+5. IAPのja-JP名`ポモジェムPro`、en-US名`PomoGem Pro`、各説明、審査用screenshot、税区分、
    availabilityを完成させる
 6. 初回のNon-Consumableは新しいapp versionと同じsubmissionへ追加する
-7. `tumiben.hinoshiba.com`のDNSをGitHub Pagesの指示どおり設定し、custom domain検証とHTTPS強制を有効化する
+7. `pomogem.hinoshiba.com`のDNSをGitHub Pagesの指示どおり設定し、custom domain検証とHTTPS強制を有効化する
 8. Privacy、Support、Termsと購入前案内専用の販売者情報URLを公開し、redirectなしのHTTPS 200を確認する。販売者情報URLはPro案内とアプリの購入前案内からだけリンクし、グローバルheader／footer／sitemapへ掲載せず、`noindex`にする
 9. App Privacy、年齢区分、輸出コンプライアンス、accessibility回答を実装と照合する
 10. 「iPhone/iPad appをApple silicon Macで提供」とVision Proでの提供は、未検証のため無効にする
@@ -49,7 +66,7 @@ Appleの現行手順は[Upload builds](https://developer.apple.com/help/app-stor
 ## 3. CloudKit production gate
 
 App Store版はproduction CloudKit environmentだけを利用します。SwiftData同期元用
-`iCloud.com.hinoshiba.tumiben`をdevelopmentで実機検証してから、CloudKit Consoleでversion 1.0に
+`iCloud.com.hinoshiba.pomogem`をdevelopmentで実機検証してから、CloudKit Consoleでversion 1.0に
 必要なschemaをproductionへdeployします。
 
 - SwiftData containerには`Subject`、`StudySession`、`AchievementStone`、`Prefs`、
@@ -104,11 +121,15 @@ xcodegen generate
 - `SUPPORTS_MACCATALYST = NO`
 - appとWidgetの`PrivacyInfo.xcprivacy`がarchiveへ含まれ、Widget側のrequired-reason APIは空
 - App Iconが1024×1024、alphaなし
-- Release buildに`TSUMIBEN_UI_TEST_*`、`TSUMIBEN_LOCAL_PREVIEW`、
-  `TSUMIBEN_RUN_40_YEAR_PERSISTENCE`のDebug補助が含まれない
+- Release buildに`POMOGEM_UI_TEST_*`、`POMOGEM_LOCAL_PREVIEW`、
+  `POMOGEM_RUN_40_YEAR_PERSISTENCE`のDebug補助が含まれない
 - Pages、Privacy、Support、Terms、OG、font licenseが公開済みで、購入前案内専用の販売者情報URLも直接HTTPS 200
-- screenshot 5枚はproduction UIをDebug-only fixtureでcapture済みで、UI test 1/1 pass、05に無効化した
-  direct deletion rowが写っていない。署名済みRelease実機とのvisual parityを確認し、差があれば再captureする
+- PomoGem 1.0 (5)からlisting screenshot 5枚とIAP審査画像を再captureし、production UIと架空dataだけを
+  使用する。新しいStoreKit商品を確認し、05に無効化したdirect deletion rowがないことと、署名済み
+  Release実機とのvisual parityを確認する。旧版の画像や価格取得を新商品の証拠として再利用しない。
+  IAP画像未取得中はproductの`review_screenshot_status: pending_live_price_capture`と明示blockerを
+  保持する。通常OSS検査だけがこの状態を許容し、`--release`は拒否する。新商品の実価格画像を確認後、
+  `captured_live_price`、checksum manifest、asset台帳を同時に更新する
 - App Store metadataと実画面に未実装・Mac対応・Web決済の記述がない
 - `AppStore/configuration.yml`の`release_blockers`が空。blockerの正本は同fileとし、文書側へ
   個数や要約を重複転記して陳腐化させない
@@ -117,8 +138,8 @@ xcodegen generate
 
 ```sh
 xcodebuild \
-  -project Tsumiben.xcodeproj \
-  -scheme Tsumiben \
+  -project PomoGem.xcodeproj \
+  -scheme PomoGem \
   -configuration Release \
   -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath DerivedData-Release-Verify \
@@ -130,7 +151,8 @@ unit test、主要UI test、static analyzerを実行します。40年soakはrele
 
 ## 6. 実機の最終確認
 
-- 25分／45分／60分／90分、pause、cancel、完走、音、触覚、account-neutralな終了通知
+- 無料の25分／45分／60分／90分とProの1〜360分、上限360分の保存・復旧、pause、cancel、完走、
+  音、触覚、account-neutralな終了通知
 - clean installで同格の保存先二択、両方の確認、local-onlyのoffline基本機能、選択の不変性、app削除前の
   JSON書き出しが再import／移行には使えないという表示
 - iCloud選択時のonline確認、各launch／resume、A→B block→A復帰、通信断時fail-closedと保存data非削除
@@ -143,7 +165,7 @@ unit test、主要UI test、static analyzerを実行します。40年soakはrele
 - iPhoneの傾き、瓶のtap位置への局所衝撃、Reduce Motion
 - onboardingの任意のためし粒を「次へ」で省略でき、勉強／仕事の利用目的を選ばず最初のテーマ1件で完了すること
 - 勉強・仕事共通の一つのテーマ一覧での追加・編集・並べ替え・削除
-- Home開始buttonのtapでは集中を開始し、長押しでは開始せず別テーマへ変更できること
+- Homeのテーマ／集中時間の選択欄から変更でき、開始buttonのtapで集中を開始できること
 - 成果の石、10→1／100→1の融合、長期projection、計画modeが実績を書き換えないこと
 - 静止画／GIF、写真追加拒否、共有取消、個人用theme・memoが画像へ入らないこと
 - StoreKit sandboxの購入、pending、cancel、復元、revocation後の権利更新
@@ -153,7 +175,7 @@ unit test、主要UI test、static analyzerを実行します。40年soakはrele
 
 ## 7. Xcode OrganizerでArchive／Upload
 
-1. Xcode 26以降で`Tsumiben.xcodeproj`を開く
+1. Xcode 26以降で`PomoGem.xcodeproj`を開く
 2. Signing & Capabilitiesで公式teamとAutomatically manage signingを選ぶ
 3. destinationを`Any iOS Device (arm64)`または接続実機にする
 4. Product → Archive

@@ -66,14 +66,14 @@ if "currently provided in Japanese" not in en_values["description.txt"]:
     fail("en-US description must disclose the Japanese-language interface")
 
 expected_urls = {
-    "support_url.txt": "https://tumiben.hinoshiba.com/support/",
-    "marketing_url.txt": "https://tumiben.hinoshiba.com/",
-    "privacy_url.txt": "https://tumiben.hinoshiba.com/privacy/",
+    "support_url.txt": "https://pomogem.hinoshiba.com/support/",
+    "marketing_url.txt": "https://pomogem.hinoshiba.com/",
+    "privacy_url.txt": "https://pomogem.hinoshiba.com/privacy/",
 }
 for name, expected in expected_urls.items():
     value = read(name)
     parsed = urlsplit(value)
-    if parsed.scheme != "https" or parsed.netloc != "tumiben.hinoshiba.com":
+    if parsed.scheme != "https" or parsed.netloc != "pomogem.hinoshiba.com":
         fail(f"{name} must use the canonical HTTPS host")
     if value != expected:
         fail(f"{name} must be exactly {expected}")
@@ -212,11 +212,11 @@ required_lines = (
     "- ja-JP",
     "- en-US",
     'marketing_version: "1.0"',
-    'build_number: "4"',
+    'build_number: "5"',
     'copyright: "2026 hinoshiba"',
-    "website_host: tumiben.hinoshiba.com",
-    "app_bundle_id: com.hinoshiba.tumiben",
-    "widget_bundle_id: com.hinoshiba.tumiben.widgets",
+    "website_host: pomogem.hinoshiba.com",
+    "app_bundle_id: com.hinoshiba.pomogem",
+    "widget_bundle_id: com.hinoshiba.pomogem.widgets",
     'minimum_ios: "17.0"',
     "supports_ipad_ui: false",
     "supports_mac_catalyst: false",
@@ -227,8 +227,8 @@ required_lines = (
     f"availability: {AVAILABILITY_CONTRACT}",
     "apple_school_manager_reduced_price: true",
     "i_cloud_containers:",
-    "synchronized_data: iCloud.com.hinoshiba.tumiben",
-    "- product_id: com.hinoshiba.tumiben.pro.lifetime",
+    "synchronized_data: iCloud.com.hinoshiba.pomogem",
+    "- product_id: com.hinoshiba.pomogem.pro.lifetime",
     "type: non_consumable",
     "base_country_or_region: United States",
     "united_states_target_price_usd: 0.99",
@@ -319,6 +319,18 @@ for product_position, start in enumerate(iap_starts):
         fail("configuration.yml in_app_purchases contains an empty product_id")
     iap_product_ids.append(product_id)
     scope = f"in_app_purchases[{product_id}]"
+    review_screenshot_status = yaml_scalar(product, 4, "review_screenshot_status", scope)
+    if review_screenshot_status not in {"pending_live_price_capture", "captured_live_price"}:
+        fail(f"configuration.yml {scope}.review_screenshot_status is invalid")
+    if review_screenshot_status == "pending_live_price_capture":
+        blocker = (
+            "- capture and verify the new PomoGem IAP review screenshot with the live "
+            f"StoreKit price for {product_id}"
+        )
+        if blocker not in configuration_lines:
+            fail("pending IAP screenshot requires its explicit release blocker")
+        if args.release:
+            fail("IAP review screenshot has not been captured with the new live product price")
     if yaml_scalar(product, 4, "availability", scope) != AVAILABILITY_CONTRACT:
         fail(f"configuration.yml {scope}.availability must be {AVAILABILITY_CONTRACT}")
     if (
@@ -334,15 +346,15 @@ for product_position, start in enumerate(iap_starts):
 if len(iap_product_ids) != len(set(iap_product_ids)):
     fail("configuration.yml in_app_purchases contains duplicate product_id values")
 
-if "iCloud.com.hinoshiba.tumiben.operations" in configuration:
+if "iCloud.com.hinoshiba.pomogem.operations" in configuration:
     fail("version 1.0 must not declare the disabled rare-reward operations container")
-if "group.com.hinoshiba.tumiben" in configuration or "- app_groups" in configuration_lines:
+if "group.com.hinoshiba.pomogem" in configuration or "- app_groups" in configuration_lines:
     fail("version 1.0 must not declare the removed App Group")
 if "rare_rewards: disabled" not in configuration_lines:
     fail("version 1.0 rare-reward release gate must remain disabled")
 
 project = (ROOT / "project.yml").read_text(encoding="utf-8")
-for line in ('MARKETING_VERSION: "1.0"', 'CURRENT_PROJECT_VERSION: "4"'):
+for line in ('MARKETING_VERSION: "1.0"', 'CURRENT_PROJECT_VERSION: "5"'):
     if line not in project:
         fail(f"project.yml version does not match App Store configuration: {line}")
 
@@ -365,7 +377,7 @@ if len(iap_review_notes) > 4000:
     fail("iap-review-notes-connect.txt exceeds the App Store Connect 4,000-character limit")
 for label in (
     "25-, 45-, 60-, and 90-minute",
-    "Share cards retain the Tumiben logo",
+    "Share cards retain the PomoGem logo",
     "価格・提供条件・販売者情報を確認",
     "購入を復元",
 ):
@@ -376,8 +388,20 @@ if "manually release after approval" in (ROOT / "AppStore/connect-entry-plan.md"
 ):
     fail("connect-entry-plan.md conflicts with the automatic release decision")
 
-if args.release and "app_store_id: null" in configuration_lines:
-    fail("App Store ID is still null")
+app_store_id = yaml_scalar(configuration_entries, 0, "app_store_id", "app")
+oss_publication = yaml_block(configuration_entries, 0, "oss_publication", "oss_publication")
+if yaml_scalar(oss_publication, 2, "repository_visibility", "oss_publication") not in {"private", "public"}:
+    fail("source repository visibility must be private or public")
+listing_status = yaml_scalar(configuration_entries, 0, "app_store_listing_status", "app")
+if listing_status not in {"not_public", "public"}:
+    fail("App Store listing status must be not_public or public")
+if listing_status == "public" and app_store_id == "null":
+    fail("a public App Store listing requires its registered numeric ID")
+if app_store_id == "null":
+    if args.release:
+        fail("App Store ID is still null")
+elif not (app_store_id.isascii() and app_store_id.isdecimal() and not app_store_id.startswith("0")):
+    fail("App Store ID must be null or a positive unquoted numeric ID")
 if args.release and "release_blockers: []" not in configuration_lines:
     fail("release blockers are still recorded")
 

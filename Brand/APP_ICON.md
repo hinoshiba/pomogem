@@ -1,4 +1,4 @@
-# つみべん App Icon — Focus Cycle v5
+# ポモジェム App Icon — Focus Cycle v5
 
 ## Brand idea
 
@@ -16,7 +16,8 @@
 
 - Redesigned: 2026-09-05
 - Tool: Codex built-in ImageGen
-- Basis: Tumiben自身のFocus Vessel v4と、アプリで使っているネイビー／コーラル／ブルー／バイオレットのpaletteから再設計
+- Basis: 本プロジェクトの前身で制作したFocus Vessel v4と、アプリで使っているネイビー／コーラル／ブルー／バイオレットのpaletteから再設計
+- Reused: 2026-09-06のPomoGem改名では、文字を含まない既存Focus Cycle v5 iconを継続採用。新規生成としては扱わない
 
 Prompt summary: an opaque dark-navy square; a thick, incomplete coral-to-blue focus-time ring;
 one matte coral unit falling; a simplified translucent receiving vessel containing three calm coral,
@@ -26,22 +27,23 @@ sparks, giant rainbow gem, casino cues, or baked rounded corners.
 ## Production files
 
 - Source render: `AppIcon-FocusCycle-v5-source.png` (1254×1254, sRGB, opaque)
-- Shipping iOS asset: `../Tsumiben/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusCycle-v5.png` (1024×1024, sRGB, opaque)
+- Shipping iOS asset: `../PomoGem/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusCycle-v5.png` (1024×1024, sRGB, opaque)
 - Website icon: `../http_dists/public/app-icon-focus-v5.png` (256×256)
 - Website touch icon: `../http_dists/public/apple-touch-icon.png`
-- Open Graph image: `../http_dists/og-focus-v7.png` (1200×630)
+- Open Graph image: `../http_dists/og-pomogem-v1.png` (1200×630)
 
 The shipping icon is a flattened 1024×1024 sRGB image for compatibility with the app's iOS 17 minimum deployment target. The composition is intentionally separable into background, focus-time ring, vessel, falling unit, and accumulated units for a future Icon Composer source.
 
 ## Category and confusion review
 
-Reviewed: 2026-09-05. Apple defines Productivity around organizing or making work and processes
-more efficient, while Education is oriented toward teaching a particular subject or skill. Tumiben's
+Original icon review: 2026-09-05, before the PomoGem rename. This review concerns the icon composition;
+it does not establish clearance of the new product name. Apple defines Productivity around organizing or making work and processes
+more efficient, while Education is oriented toward teaching a particular subject or skill. PomoGem's
 primary App Store category is therefore Productivity and its secondary category is Education.
 
 The market review rejected tomato, tree, check-mark, standalone clock, and a pure ring-with-stacked-
 stones mark. The first four are crowded focus-app conventions; the last already resembles existing
-focus and wellness identities and also loses Tumiben's falling-and-receiving product loop. Focus Cycle
+focus and wellness identities and also loses PomoGem's falling-and-receiving product loop. Focus Cycle
 v5 keeps the time cue dominant while making the one-unit-to-accumulation sequence the distinctive cue.
 
 This is a dated design-confusion screen, not a legal trademark clearance or registrability opinion.
@@ -61,9 +63,13 @@ References:
 
 ## Legacy files
 
-The previous Focus Vessel v4 source, 256px Web derivative, and focus-v5/v6 Open Graph images remain in the repository for provenance and comparison. They are not the active identity. The obsolete v4 PNG is not retained inside the active AppIcon asset set, which keeps the catalog free of an unassigned child:
+The previous icon source renders remain in Brand for provenance and comparison. They are not the active identity:
 
 - `AppIcon-FocusVessel-v4-source.png`
-- `../http_dists/public/app-icon-focus-v4.png`
-- `../http_dists/og-focus-v5.png`
-- `../http_dists/og-focus-v6.png`
+- `AppIcon-Aurora-v3-legacy.png`
+
+The superseded Open Graph, app-screen and old Web-icon derivatives were removed from the public site during
+its PomoGem rename on 2026-09-06. Their original files remain in Git history; they are not deployed as public URLs.
+The active Open Graph image comes from the native HTML/CSS source `og-pomogem.html`, rendered in a browser
+with the existing Focus Cycle icon and licensed font. The browser capture was normalized from JPEG to PNG
+with sips without changing its composition. It is not a newly ImageGen-generated illustration.

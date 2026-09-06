@@ -6,7 +6,7 @@
 
 - Copyright 2021 The Zen Maru Gothic Project Authors
 - License: SIL Open Font License 1.1
-- Files: `Tsumiben/Resources/Fonts/ZenMaruGothic-Black.ttf`、Web用コピー
+- Files: `PomoGem/Resources/Fonts/ZenMaruGothic-Black.ttf`、Web用コピー
 - License text: `LICENSE-fonts.txt`
 
 第三者の解析、広告、SNS、ネットワーク、課金SDKは同梱していません。CloudKit、StoreKit、

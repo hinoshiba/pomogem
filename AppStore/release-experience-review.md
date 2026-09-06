@@ -171,7 +171,8 @@ keywordsはUTF-8で70／68 bytes。これは原稿の検査結果であり、実
 既存画像は1.0 (3)の過去資料。今回のHome改訂後の正式set、signed Release実機との一致、IAP審査用の
 現行Paywall画像の3点は未完了。正式画像の再現手順は `screenshots/README.md` を参照。
 
-今回の1.0 (4)ソースから5画面のQA候補を取得したが、提出用setには置き換えていない。
+改名前の1.0 (4)で取得した5画面は過去のQA記録であり、新IDのPomoGemの提出証拠ではない。
+現行画像と撮影結果は`AppStore/screenshots/README.md`を参照する。
 保存先画面にはSimulator固有の診断表示があるため、署名済み実機で再撮影してから掲載する。
 
 ## 課金導線

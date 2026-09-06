@@ -1,10 +1,10 @@
 # Japan commercial disclosure decision — draft
 
 Status: paid IAP selected by owner; disclosure page implemented locally. Operational verification remains required before release.
-Scope: Non-Consumable `com.hinoshiba.tumiben.pro.lifetime`
+Scope: Non-Consumable `com.hinoshiba.pomogem.pro.lifetime`
 
 この文書に個人の氏名、住所、電話番号は記録しません。公開pageは請求時開示方式を採用し、
-`https://tumiben.hinoshiba.com/commercial-transactions/` と購入button前のApp内linkを実装済みです。
+`https://pomogem.hinoshiba.com/commercial-transactions/` と購入button前のApp内linkを実装済みです。
 公開前に、ownerが実際の法定情報を安全に保持し、請求へ遅滞なく回答できる運用を確認します。
 実運用のrelease gateは`Docs/COMMERCIAL_DISCLOSURE_OPERATIONS.md`を正本とします。
 

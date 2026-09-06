@@ -1,8 +1,11 @@
 # App Store Connect entry plan — version 1.0
 
-Verified: 2026-09-05
-Existing record: Apple ID `6806758060`, SKU `tumiben-ios`, primary language Japanese,
-bundle ID `com.hinoshiba.tumiben`
+Prepared: 2026-09-06 for PomoGem 1.0 (5).
+New record created and verified on 2026-09-06: Apple ID `6809139517`.
+SKU `pomogem-ios`, primary language Japanese, bundle ID `com.hinoshiba.pomogem`.
+The registered Japanese name is ポモジェム：ポモドーロタイマー. This record is not publicly available.
+[Open the new App Store Connect version](https://appstoreconnect.apple.com/apps/6809139517/distribution/ios/version/inflight).
+Creation does not complete its IAP, production schema, distribution signing, pricing, or submission.
 
 この文書はApp Store Connectへ保存する値の正本です。個人の連絡先、credential、certificate、
 profileはrepositoryへ記録しません。値を保存した後はpageをreloadし、保持されたことを確認します。
@@ -11,17 +14,17 @@ profileはrepositoryへ記録しません。値を保存した後はpageをreloa
 
 | Field | Value |
 |---|---|
-| Name | つみべん |
-| Subtitle | 勉強・仕事の集中タイマーと、減らない記録 |
+| Name | `metadata/ja-JP/name.txt`（ポモジェム：ポモドーロタイマー） |
+| Subtitle | `metadata/ja-JP/subtitle.txt`（集中した時間が、宝石になる） |
 | Primary language | Japanese |
-| Bundle ID | `com.hinoshiba.tumiben` |
-| SKU | `tumiben-ios` |
+| Bundle ID | `com.hinoshiba.pomogem` |
+| SKU | `pomogem-ios` |
 | Content Rights | Yes — third-party content is included／shown and the rights are held（OFL fontを含む。ownerの全asset provenance sign-offを前提） |
 | Primary Category | Productivity |
 | Secondary Category | Education |
 | Age rating target | 4+（質問票の全回答を下記どおり確認） |
 
-つみべんの中心機能は、特定教科を教える教材ではなく、勉強と仕事の集中時間を整理・計測する道具です。
+ポモジェムの中心機能は、特定教科を教える教材ではなく、勉強と仕事の集中時間を整理・計測する道具です。
 Appleのカテゴリ定義に合わせ、発見性に強く影響するPrimaryはProductivity、学習用途を補足する
 SecondaryはEducationとします。
 
@@ -77,14 +80,12 @@ supportが現在日本語であることを明示し、英語UIがあると誤�
 - 5枚の順序は、Homeの瓶、無料25分timer、完走reward、積み上がりoverview、Settingsの
   iCloud／privacy説明とする。
 - 架空dataだけを使い、個人情報、通知、debug UI、placeholder、誤った購入状態を含めない。
-- 初回IAPのreview screenshotには、価格をStoreKitから表示した実paywall
-  `AppStore/screenshots/iap-review/01-tumiben-pro-live-price.png`を使う。2026-09-06にversion 1.0 (4)
-  の実商品表示をcaptureし、購入未実行・価格加工なしで目視確認済み。App Store Connectへの登録は別途行う。
-- 2026-09-06にversion 1.0 (4)のproduction UIから、Debug-only deterministic fixtureで5枚を
-  captureし目視確認済み。Homeの直接選択、残量timer、閉じた後に粒が落ちる完走cardと一致する。
-  5枚目は自然scrollでsupport／privacy節とversionを表示し、Simulator診断文を含まない。
-  原captureと個別再撮影の結果は`AppStore/screenshots/README.md`に記録する。
-  signed Release実機とのvisual parityは未確認で、別の提出gateとする。
+- 初回IAPのreview screenshotは、新product IDの実StoreKit価格を表示したpaywallを撮影する。
+  対象ファイルは`AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png`。
+  `configuration.yml`が`pending_live_price_capture`の間は、この画像を存在するものとして登録しない。
+- 掲載画像5枚はPomoGem 1.0 (5)から撮影し、実行結果・目視・checksumを
+  `AppStore/screenshots/README.md`へ記録する。旧ビルドの撮影記録は新アプリの証拠にしない。
+  署名済みRelease実機とのvisual parityは独立した提出gateとする。
 
 ## Pricing and Availability
 
@@ -109,12 +110,12 @@ statusは公開前と各更新時に再監査します。新しいstorefrontの�
 
 | Field | Value |
 |---|---|
-| Product ID | `com.hinoshiba.tumiben.pro.lifetime` |
+| Product ID | `com.hinoshiba.pomogem.pro.lifetime` |
 | Type | Non-Consumable |
-| Reference Name | Tsumiben Pro Lifetime |
-| ja-JP name | つみべんPro |
+| Reference Name | PomoGem Pro Lifetime |
+| ja-JP name | ポモジェムPro |
 | ja-JP description | 任意の集中時間とまとまり粒の月刻印を買い切りで追加。 |
-| en-US name | Tumiben Pro |
+| en-US name | PomoGem Pro |
 | en-US description | Custom timers and month labels. |
 | Base country or region | United States |
 | United States target price | USD 0.99（「約1ドル」の利用可能な標準price point） |
@@ -122,7 +123,7 @@ statusは公開前と各更新時に再監査します。新しいstorefrontの�
 | Other available storefronts | AppleがUSD 0.99を基準に為替・税・各地域の価格慣行から生成する現地相当額 |
 | Availability | App本体と同じ148 of 175 Countries or Regions（現行EU 27を除外。新しいstorefrontは自動追加） |
 | Family Sharing | Off |
-| Review screenshot | `AppStore/screenshots/iap-review/01-tumiben-pro-live-price.png`（ローカル準備済み、Connectへ登録） |
+| Review screenshot | `pending_live_price_capture`。新商品のStoreKit実価格を取得後に `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png` を撮影・検証してConnectへ登録 |
 | Review notes | `AppStore/iap-review-notes-connect.txt` |
 
 Unlockは無料の25分／45分／60分／90分以外の任意の1〜360分と、まとまり粒の月刻印です。share cardは無料／Proともロゴと公式サイトを常設します。subscription、trial、
@@ -224,7 +225,7 @@ Prefsの13 groupは`sound`、`haptics`、`timerCompletionSound`、`timerCompleti
 timer表示設定fieldは`timerDisplayModeRawValue`、`timerDisplayModeRevision`、
 `timerDisplayModeMutationID`です。既知raw valueは`ringAndTime`、`filledDial`、`timeOnly`、`ringOnly`で、
 既定値と未知値の表示fallbackは`ringAndTime`です。
-`usagePurpose`は既存CloudKit schema／JSON exportとの互換性のために残す履歴fieldであり、出荷UIは
+`usagePurpose`はモデル構造／JSON field構成を維持する履歴fieldであり、旧containerからの移行を意味しません。出荷UIは
 勉強・仕事共通の一つのテーマ一覧を使い、この値で表示や候補を分岐しません。
 各端末は自分の`settingsWriterID`に一致する1 physical rowだけを更新し、他端末のrowを変更しません。
 Subjectの削除tombstoneはVersion 1.0ではstickyで、後着した高revision renameでも復活しません。
@@ -233,8 +234,8 @@ Achievementのdurable削除eventは`(deletionRevision, deletionMutationID)`で�
 restoreを書きます。legacy `deletedAt` rowは`(row.revision, deletionMutationID ?? syncRecordID)`をeventとして
 合成します。後から届いた未観測の新しい削除eventを、高revision active rowだけで復活させません。
 
-Version 1.0はまだpublic buildがないため、最終archive前にCloudKit Consoleの**development environmentだけ**を
-clearし、最終RCから7 modelを再initializeします。上記fieldの名前・型・default、4種類のtimer表示選択、
+新しい`iCloud.com.hinoshiba.pomogem`のdevelopment environmentを最終RCからinitializeし、
+7 modelを照合します。旧containerをclearする工程はありません。上記fieldの名前・型・default、4種類のtimer表示選択、
 clean install、2台のoffline変更、A/B→B/C→late Cのpartial delivery、foreign row不変、JSON raw exportを
 developmentで検証し、
 同じschemaだけをproductionへdeployします。production environmentはclear／resetしません。schemaが異なる
@@ -242,9 +243,10 @@ buildを先にTestFlightへ出さず、production deploy時刻と検証したcom
 
 ## EU Digital Services Act
 
-2026-09-04時点で、このappはApp Store Connect上の **non-trader** です。App本体とIAPを現行EU 27から
-除外し、いずれも148／175 storefrontで提供する設定を保存したため、Version 1.0のEU DSA release
-blockerは配信範囲の変更によって解消しています。United Kingdom、Norway、Switzerlandは配信対象です。
+Version 1.0の提供方針は、App本体とIAPを現行EU 27から除外し、いずれも148／175 storefrontで
+提供することです。新app recordと新IAPへ設定を保存し、再読み込みで確認するまで地域設定のgateは
+完了しません。以前のrecordでの保存履歴は今回の完了根拠にしません。United Kingdom、Norway、
+Switzerlandは配信対象に含める計画です。accountの **non-trader** statusも提出時に照合します。
 これはtrader該当性についての法律判断ではありません。将来EUでの提供を有効にする場合、またはEU構成・
 事業実態・Apple要件が変わる場合は、公開前にAccount Holderがstatus、連絡先検証、product page表示を
 再評価します。個人住所・電話・メール・確認書類はrepositoryへ保存しません。
@@ -257,9 +259,12 @@ blockerは配信範囲の変更によって解消しています。United Kingdo
 
 ## Required Developer Portal state
 
-- main App ID: `com.hinoshiba.tumiben`
-- widget App ID: `com.hinoshiba.tumiben.widgets`
-- SwiftData iCloud container: `iCloud.com.hinoshiba.tumiben`（CloudKit、hostへ割当）
+2026-09-06に下記main／Widget App IDとCloudKit containerの新規登録、およびcontainerのhostへの
+割当を確認しました。Production schema、署名済みArchive／distributionの検証は別の未完了gateです。
+
+- main App ID: `com.hinoshiba.pomogem`
+- widget App ID: `com.hinoshiba.pomogem.widgets`
+- SwiftData iCloud container: `iCloud.com.hinoshiba.pomogem`（CloudKit、hostへ割当）
 - main capabilities: iCloud／CloudKit、Push Notifications、In-App Purchase
 - widget capabilities: none。App Group、iCloud／CloudKit、Push Notificationsを割り当てない。ローカル更新の
   Live Activityは既存Widget extensionを使い、専用entitlementやActivityKit pushを追加しない
@@ -270,15 +275,14 @@ automatic signingによるportal mutationはowner許可後だけ行い、既存c
 しません。Archiveとexported IPAでhost／widgetのbundle ID、team、profile、entitlement、version／build、
 architecture、codesignを再検証します。
 
-CloudKit development schemaのclear／最終RC再initialize、field照合、2台検証、productionへのexact schema
+新CloudKit development containerの最終RC initialize、field照合、2台検証、productionへのexact schema
 deployは未完了です。これはbuild選択・TestFlight配布より前のblockerであり、production schemaをclearして
 解消してはいけません。
 
 ## Remaining App Store Connect work
 
-- version 1.0のja-JP／en-US descriptionとreview notesは2026-09-05にsource-of-truthどおり保存し、
-  reload後の完全一致を確認済み。残るlisting field、copyright、screenshots、category、content rightsを
-  source-of-truthどおり保存し、reload後も一致することを確認
+- 新version 1.0のja-JP／en-US description、review notes、listing field、copyright、screenshots、
+  category、content rightsをsource-of-truthどおり保存し、reload後の完全一致を確認
 - App Privacyをproduction binaryと運用に照合して回答・公開
 - App Reviewの必須contact first name、last name、国際形式phone、emailを入力
   （個人情報のためrepositoryには置かず、提出画面だけで入力）
@@ -286,4 +290,5 @@ deployは未完了です。これはbuild選択・TestFlight配布より前のbl
   同じsubmissionへ追加して、release methodがautomaticであることを再確認
 - 最終CloudKit schema、signed-device／Sandbox QA、export compliance、accessibility回答を完了
 
-これらの入力はdraft保存であってもteam accountへ影響するため、ownerの実行確認後に行います。
+2026-09-06にユーザーは新IDでの新規登録とアプリ・HPへの全面反映を明示的に指示しました。
+通常の登録・draft保存はこの許可の範囲で進め、実行した結果だけを完了として記録します。

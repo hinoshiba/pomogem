@@ -1,6 +1,6 @@
-# つみべん — iCloud同期後の有界メンテナンス設計
+# ポモジェム — iCloud同期後の有界メンテナンス設計
 
-更新日: 2026-09-04
+更新日: 2026-09-06（新アプリの識別子・初回schema手順）
 
 ## 1. 目的
 
@@ -48,9 +48,9 @@ version 1.0は最初の`ModelContainer`を作る前に、同格の「iCloudで�
 それぞれの確認後に一方を確定します。どちらも推奨扱いにせず、選択はVersion 1.0では変更できません。
 shipping `ModelContainer`は選択に応じて次の分離を使います。
 
-- iCloud選択時の`iCloud.com.hinoshiba.tumiben`: `Subject`、`StudySession`、`AchievementStone`、`Prefs`、
+- iCloud選択時の`iCloud.com.hinoshiba.pomogem`: `Subject`、`StudySession`、`AchievementStone`、`Prefs`、
   `ActivityResetMarker`、`SyncedFocusTimer`、`FocusTimerDeviceClaim`の7 modelだけをprivate CloudKitへ同期
-- iCloud選択時の`TsumibenLocalProjection`: `AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`の4 modelを
+- iCloud選択時の`PomoGemLocalProjection`: `AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`の4 modelを
   端末内だけに保存し、上記同期元recordから再構築。CloudKitへuploadしない
 - local-only選択時: 同じ7 source modelと4 projection modelを専用random namespaceの別々の端末storeへ
   保存し、両configurationともCloudKit `.none`。Apple Account／networkなしで全基本機能を利用でき、
@@ -67,8 +67,9 @@ CloudKit sourceから再構築できる端末内dataなので、検証済みのm
 
 #### 3.1.1 Version 1.0の最終CloudKit source schema
 
-Version 1.0はまだpublic buildがなく、既存production user dataをmigrationする段階ではありません。最終RCは
-次の追加fieldを含む7-model schemaを初回production schemaとして固定します。
+PomoGemは新Bundle ID・新CloudKit containerで始める別アプリです。旧製品のstore、購入権利、CloudKit
+recordを移行・共有しません。新containerに次のfieldを含む7-model schemaを初回production schemaとして
+固定します。JSONはformat=`jp.hinoshiba.pomogem.user-data`、schemaVersion 3で出力し、再importはありません。
 
 | Model | 最終RCで確認する追加field |
 |---|---|
@@ -88,7 +89,7 @@ Version 1.0はまだpublic buildがなく、既存production user dataをmigrati
 `timerDisplayMode`は`timerDisplayModeRawValue`、`timerDisplayModeRevision`、
 `timerDisplayModeMutationID`を持ち、`ringAndTime`、`filledDial`、`timeOnly`、`ringOnly`の4種類を独立して
 同期します。既定値と未知raw valueの表示fallbackは`ringAndTime`です。
-`usagePurpose`は既存CloudKit schemaとJSON exportとの互換性のために保持する履歴groupです。出荷UIは
+`usagePurpose`はモデル構造とJSON field構成を維持する履歴groupです。旧containerとの接続や移行を意味しません。出荷UIは
 勉強・仕事共通の一つのテーマ一覧を使い、この値で候補、設定画面、onboardingを分岐しません。
 各groupは、たとえば`soundRevision`と`soundMutationID`のように、`<group>Revision`と
 `<group>MutationID`を一組で持ちます。端末は`settingsWriterID`が自分と一致する1物理rowだけを更新し、
@@ -101,12 +102,13 @@ Version 1.0はまだpublic buildがなく、既存production user dataをmigrati
 `(row.revision, deletionMutationID ?? syncRecordID)`を削除eventとして合成します。activeな高revision rowでも、
 未観測の新しい削除tokenをackしていなければ復活根拠にしません。
 
-productionへpromoteする前に、CloudKit Consoleの**development environmentだけ**をclearし、最終RCで
-7 modelを再initializeします。上記field名・型・default（`timerDisplayModeRawValue = ringAndTime`を含む）を
+productionへpromoteする前に、新しい`iCloud.com.hinoshiba.pomogem`のdevelopment environmentを
+最終RCでinitializeします。旧containerをclear／resetする工程はありません。新containerのdevelopmentに
+試作schemaが残って再初期化が必要な場合も、対象とdata消去の許可を確認し、productionは変更しません。上記field名・型・default（`timerDisplayModeRawValue = ringAndTime`を含む）を
 development schemaで照合し、clean install、4種類の表示選択、partial delivery、2台offline競合、exportを
 検証した同一schemaだけをproductionへdeployします。
 production environmentはclear／resetせず、schemaを再生成した別binaryを先に配布しません。public release
-後のfield変更は、このpre-release clear手順を再利用せず、released store fixtureとversioned migrationで
+後のfield変更は、この初回initialize手順を再利用せず、released store fixtureとversioned migrationで
 別releaseとして扱います。
 
 configuration間のrelationshipは作りません。maintenanceは同期元recordを正本としてlocal projectionを

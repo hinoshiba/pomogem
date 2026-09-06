@@ -1,6 +1,6 @@
-Turn your next 25 minutes into a colorful pebble.
+Turn your next 25 minutes into a colorful gem.
 
-Tumiben is a focus timer that turns completed time into a bottle of visible progress. Study for an exam, work on a project, or spend time with a book. Every completed session adds to a collection you can look back on. Taking a day off never removes your progress.
+PomoGem is a focus timer that turns completed time into a bottle of visible progress. Study for an exam, work on a project, or spend time with a book. Every completed session adds to a collection you can look back on. Taking a day off never removes your progress.
 
 The app interface and customer support are currently provided in Japanese.
 
@@ -16,18 +16,18 @@ FEATURES
 • A tactile bottle: tap or lightly shake it to move the pebbles, with bounded sound and haptics that reflect their number and size
 • Ten pebbles combine into a growing crystal while your original records remain available
 • Milestone stones for a perfect score, an exam pass, or a work milestone
-• History, overview, long-term projections, and share cards that always include Tumiben branding and its official website
+• History, overview, long-term projections, and share cards that always include PomoGem branding and its official website
 • An explicit first-launch choice between private iCloud sync and storage on this iPhone only
 • Privacy-safe Home and Lock Screen widgets that open the app without displaying your records
 
-TUMIBEN PRO
+POMOGEM PRO
 
-Tumiben Pro is a one-time, non-consumable In-App Purchase. It unlocks every other focus duration from 1 to 360 minutes beyond the free 25-, 45-, 60-, and 90-minute presets, plus month labels on grouped pebbles. There is no subscription, free trial, or automatic renewal.
+PomoGem Pro is a one-time, non-consumable In-App Purchase. It unlocks every other focus duration from 1 to 360 minutes beyond the free 25-, 45-, 60-, and 90-minute presets, plus month labels on grouped pebbles. There is no subscription, free trial, or automatic renewal.
 
 PRIVACY
 
-Tumiben has no advertising, tracking, analytics service, or developer account system. At first launch, you choose between two equal storage options. “This iPhone only” keeps all app data on the device and supports all basic features without an Apple Account or network connection. It never automatically switches to or uploads to iCloud.
+PomoGem has no advertising, tracking, analytics service, or developer account system. At first launch, you choose between two equal storage options. “This iPhone only” keeps all app data on the device and supports all basic features without an Apple Account or network connection. It never automatically switches to or uploads to iCloud.
 
-If you confirm iCloud sync, theme names, achievement notes, activity records, settings, and the active timer are stored in your Apple Account's private iCloud storage and synchronized between compatible iPhones. Tumiben verifies the Apple Account online at each launch or resume to prevent account data from being mixed. If the network is unavailable or a different account is active, the app pauses access to those records without deleting them.
+If you confirm iCloud sync, theme names, achievement notes, activity records, settings, and the active timer are stored in your Apple Account's private iCloud storage and synchronized between compatible iPhones. PomoGem verifies the Apple Account online at each launch or resume to prevent account data from being mixed. If the network is unavailable or a different account is active, the app pauses access to those records without deleting them.
 
 The storage choice cannot be changed in version 1.0. Deleting and reinstalling the app erases on-device-only data. JSON export is not importable and cannot be used to migrate that data to iCloud or continue it on another device. Sharing and data export happen only when you choose them.

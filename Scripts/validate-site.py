@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1] / "http_dists"
-PUBLIC_BASE = "https://tumiben.hinoshiba.com/"
+PUBLIC_BASE = "https://pomogem.hinoshiba.com/"
 INDEX_PAGE = ROOT / "index.html"
 COMMERCIAL_PAGE = ROOT / "commercial-transactions/index.html"
 COMMERCIAL_MARKERS = ("commercial-transactions", "販売条件", "販売者情報")
@@ -30,7 +30,7 @@ PUBLIC_CONTACT_PATTERNS = (
 # against accidentally publishing a real address or telephone number in an
 # otherwise hard-to-detect format.
 APPROVED_COMMERCIAL_DISCLOSURE_SHA256 = (
-    "84e4c738158f61a930e4b625f50d8a62979b0abb1a86da1759ade6675f4c2e37"
+    "b0d5fb95a1becc5100c43e575d6b5062473d6526e5fbeda385ce2c978ee95846"
 )
 
 
@@ -126,7 +126,7 @@ required = [
     ROOT / "sitemap.xml",
     ROOT / "styles.css",
     ROOT / "app.js",
-    ROOT / "og-focus-v7.png",
+    ROOT / "og-pomogem-v1.png",
     ROOT / "public/app-icon-focus-v5.png",
     ROOT / "public/apple-touch-icon.png",
     ROOT / "public/app-home-v3.webp",
@@ -235,12 +235,12 @@ if index_commercial_link_count != 1:
 index = INDEX_PAGE.read_text(encoding="utf-8")
 if "基本無料" not in index or "iPhone" not in index:
     fail("index must state iPhone and 基本無料")
-if "https://github.com/hinoshiba/Tumiben" not in index:
-    fail("index must link to the public source repository")
+# The source repository is still private and its rename is pending. Add public
+# source links only after that destination is anonymously accessible.
 for required_positioning_term in (
     "ポモドーロタイマー",
     "見える集中記録",
-    "終えた時間を、宝石で記録。",
+    "集中した時間が、宝石になる。",
     'href="#demo"',
     "集中から宝石まで、8秒で体験",
     'id="demo-time"',
@@ -258,7 +258,6 @@ if 'id="hero-drop"' in index:
 index_meta = parsed_pages[(ROOT / "index.html").resolve()].meta
 required_meta = {
     "description",
-    "apple-itunes-app",
     "og:type",
     "og:site_name",
     "og:locale",
@@ -279,25 +278,55 @@ missing_meta = sorted(key for key in required_meta if not index_meta.get(key, ""
 if missing_meta:
     fail(f"index metadata is missing: {', '.join(missing_meta)}")
 expected_meta = {
-    "apple-itunes-app": "app-id=6806758060",
     "og:type": "website",
-    "og:site_name": "つみべん",
+    "og:site_name": "ポモジェム",
     "og:locale": "ja_JP",
     "og:url": PUBLIC_BASE,
-    "og:image": PUBLIC_BASE + "og-focus-v7.png",
+    "og:image": PUBLIC_BASE + "og-pomogem-v1.png",
     "og:image:width": "1200",
     "og:image:height": "630",
     "twitter:card": "summary_large_image",
-    "twitter:image": PUBLIC_BASE + "og-focus-v7.png",
+    "twitter:image": PUBLIC_BASE + "og-pomogem-v1.png",
 }
 for key, expected in expected_meta.items():
     if index_meta.get(key) != expected:
         fail(f"index {key} mismatch: {index_meta.get(key)!r}")
 
+# Registration precedes public availability. Show a matching Store banner only
+# after the listing is publicly available to download.
+store_configuration = (ROOT.parent / "AppStore/configuration.yml").read_text(encoding="utf-8")
+repository_visibility = re.findall(r"^  repository_visibility: ([a-z]+)$", store_configuration, re.MULTILINE)
+if len(repository_visibility) != 1 or repository_visibility[0] not in {"private", "public"}:
+    fail("configuration must declare the actual source repository visibility")
+public_source_url = "https://github.com/hinoshiba/PomoGem"
+source_links = [value for parser in parsed_pages.values() for attribute, value in parser.refs
+                if attribute == "href" and (value == public_source_url or value.startswith(public_source_url + "/"))]
+if repository_visibility[0] == "private" and source_links:
+    fail("private source repository links must not appear on the public website")
+if repository_visibility[0] == "public" and public_source_url not in index:
+    fail("index must link to the anonymously accessible public source repository")
+store_id_entries = re.findall(r"^app_store_id:\s*([^\n]+)$", store_configuration, re.MULTILINE)
+if len(store_id_entries) != 1:
+    fail("configuration must contain exactly one app_store_id")
+store_id = store_id_entries[0].strip()
+if store_id != "null" and not re.fullmatch(r"[1-9][0-9]*", store_id):
+    fail("app_store_id must be null or a positive unquoted numeric ID")
+listing_status_entries = re.findall(r"^app_store_listing_status: ([a-z_]+)$", store_configuration, re.MULTILINE)
+if len(listing_status_entries) != 1 or listing_status_entries[0] not in {"not_public", "public"}:
+    fail("configuration must declare exactly one valid app_store_listing_status")
+if listing_status_entries[0] == "not_public":
+    if "apple-itunes-app" in index_meta:
+        fail("Smart App Banner must be absent while the listing is not public")
+else:
+    if store_id == "null":
+        fail("a public App Store listing requires its registered numeric ID")
+    if index_meta.get("apple-itunes-app") != f"app-id={store_id}":
+        fail("Smart App Banner must match the configured public app_store_id")
+
 not_found_refs = {value for _, value in parsed_pages[(ROOT / "404.html").resolve()].refs}
 required_not_found_refs = {
     "/",
-    "/styles.css?v=10",
+    "/styles.css?v=14",
     "/public/app-icon-focus-v5.png",
     "/public/apple-touch-icon.png",
     "/privacy/",
@@ -358,7 +387,7 @@ if "Allow: /" not in robots:
 if f"Sitemap: {PUBLIC_BASE}sitemap.xml" not in robots:
     fail("robots.txt has a non-canonical sitemap URL")
 
-if (ROOT / "CNAME").read_text(encoding="utf-8").strip() != "tumiben.hinoshiba.com":
+if (ROOT / "CNAME").read_text(encoding="utf-8").strip() != "pomogem.hinoshiba.com":
     fail("CNAME must match the canonical product host")
 
 try:
@@ -370,9 +399,9 @@ sitemap_locations = {element.text for element in sitemap.findall("sm:url/sm:loc"
 if sitemap_locations != expected_sitemap_locations:
     fail(f"sitemap locations mismatch: {sorted(sitemap_locations)}")
 
-og = ROOT / "og-focus-v7.png"
+og = ROOT / "og-pomogem-v1.png"
 if png_dimensions(og) != (1200, 630):
-    fail("og-focus-v7.png must be exactly 1200x630")
+    fail("og-pomogem-v1.png must be exactly 1200x630")
 if png_dimensions(ROOT / "public/app-icon-focus-v5.png") != (256, 256):
     fail("web app icon must be exactly 256x256")
 if png_dimensions(ROOT / "public/apple-touch-icon.png") != (180, 180):
@@ -395,7 +424,7 @@ if any(term.lower() in site_script.lower() for term in ("rare", "prism", "goldco
 
 font_hashes = {
     hashlib.sha256((ROOT / "public/ZenMaruGothic-Black.ttf").read_bytes()).hexdigest(),
-    hashlib.sha256((ROOT.parent / "Tsumiben/Resources/Fonts/ZenMaruGothic-Black.ttf").read_bytes()).hexdigest(),
+    hashlib.sha256((ROOT.parent / "PomoGem/Resources/Fonts/ZenMaruGothic-Black.ttf").read_bytes()).hexdigest(),
 }
 if len(font_hashes) != 1:
     fail("app and website font copies differ")

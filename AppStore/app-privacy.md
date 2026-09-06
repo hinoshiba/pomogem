@@ -71,7 +71,7 @@ App Managerが最終決定・Publishします。
 
 ## Privacy Policy URL
 
-`https://tumiben.hinoshiba.com/privacy/`
+`https://pomogem.hinoshiba.com/privacy/`
 
 ## Manifestとの整合
 

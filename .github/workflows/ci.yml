@@ -121,8 +121,8 @@ jobs:
           set -euo pipefail
           release_derived_data="${RUNNER_TEMP}/DerivedData-CI-Release"
           xcodebuild \
-            -project Tsumiben.xcodeproj \
-            -scheme Tsumiben \
+            -project PomoGem.xcodeproj \
+            -scheme PomoGem \
             -configuration Release \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$release_derived_data" \
@@ -131,10 +131,10 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO
 
-          app_bundle="$release_derived_data/Build/Products/Release-iphonesimulator/Tsumiben.app"
-          widget_bundle="$app_bundle/PlugIns/TsumibenWidgets.appex"
-          main_binary="$app_bundle/Tsumiben"
-          widget_binary="$widget_bundle/TsumibenWidgets"
+          app_bundle="$release_derived_data/Build/Products/Release-iphonesimulator/PomoGem.app"
+          widget_bundle="$app_bundle/PlugIns/PomoGemWidgets.appex"
+          main_binary="$app_bundle/PomoGem"
+          widget_binary="$widget_bundle/PomoGemWidgets"
 
           for required_path in \
             "$app_bundle" \
@@ -161,8 +161,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          app_bundle="${RUNNER_TEMP}/DerivedData-CI-Release/Build/Products/Release-iphonesimulator/Tsumiben.app"
-          forbidden_release_tokens='TSUMIBEN_UI_TEST_|TSUMIBEN_LOCAL_PREVIEW|TSUMIBEN_RUN_40_YEAR_PERSISTENCE'
+          app_bundle="${RUNNER_TEMP}/DerivedData-CI-Release/Build/Products/Release-iphonesimulator/PomoGem.app"
+          forbidden_release_tokens='POMOGEM_UI_TEST_|POMOGEM_LOCAL_PREVIEW|POMOGEM_RUN_40_YEAR_PERSISTENCE'
 
           set +e
           matches=$(LC_ALL=C grep -R -a -l -E "$forbidden_release_tokens" "$app_bundle")
@@ -215,17 +215,17 @@ jobs:
             exit 1
           fi
           echo "Selected Simulator: $simulator_udid"
-          echo "TSUMIBEN_CI_SIMULATOR_UDID=$simulator_udid" >> "$GITHUB_ENV"
+          echo "POMOGEM_CI_SIMULATOR_UDID=$simulator_udid" >> "$GITHUB_ENV"
 
       - name: Unit tests
         run: |
           xcodebuild \
-            -project Tsumiben.xcodeproj \
-            -scheme Tsumiben \
+            -project PomoGem.xcodeproj \
+            -scheme PomoGem \
             -configuration Debug \
-            -destination "platform=iOS Simulator,id=${TSUMIBEN_CI_SIMULATOR_UDID}" \
+            -destination "platform=iOS Simulator,id=${POMOGEM_CI_SIMULATOR_UDID}" \
             -derivedDataPath DerivedData-CI-Tests \
             test \
-            -only-testing:TsumibenTests \
+            -only-testing:PomoGemTests \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO

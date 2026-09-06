@@ -38,17 +38,17 @@ AppStore/submission-checklist.md
 AppStore/connect-entry-plan.md
 AppStore/screenshots/checksums.sha256
 project.yml
-Tsumiben.xcodeproj/project.pbxproj
-Tsumiben.xcodeproj/xcshareddata/xcschemes/Tsumiben.xcscheme
-Tsumiben/Resources/PrivacyInfo.xcprivacy
-TsumibenWidgets/PrivacyInfo.xcprivacy
+PomoGem.xcodeproj/project.pbxproj
+PomoGem.xcodeproj/xcshareddata/xcschemes/PomoGem.xcscheme
+PomoGem/Resources/PrivacyInfo.xcprivacy
+PomoGemWidgets/PrivacyInfo.xcprivacy
 Brand/AppIcon-FocusCycle-v5-source.png
-Tsumiben/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusCycle-v5.png
-http_dists/og-focus-v7.png
+PomoGem/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusCycle-v5.png
+http_dists/og-pomogem-v1.png
 http_dists/public/app-icon-focus-v5.png
 http_dists/public/apple-touch-icon.png
-http_dists/public/app-home-v2.webp
-http_dists/public/app-timer-v1.webp
+http_dists/public/app-home-v3.webp
+http_dists/public/app-timer-v2.webp
 http_dists/index.html
 http_dists/privacy/index.html
 http_dists/support/index.html
@@ -123,11 +123,11 @@ ruby -e 'require "psych"; ARGV.each { |path| Psych.parse_file(path) }' \
   .github/workflows/*.yml \
   .github/ISSUE_TEMPLATE/*.yml
 
-plutil -lint Tsumiben/Info.plist >/dev/null
-plutil -lint Tsumiben/Resources/PrivacyInfo.xcprivacy >/dev/null
-plutil -lint TsumibenWidgets/PrivacyInfo.xcprivacy >/dev/null
-plutil -lint Tsumiben/Tsumiben.entitlements >/dev/null
-plutil -lint TsumibenWidgets/TsumibenWidgets.entitlements >/dev/null
+plutil -lint PomoGem/Info.plist >/dev/null
+plutil -lint PomoGem/Resources/PrivacyInfo.xcprivacy >/dev/null
+plutil -lint PomoGemWidgets/PrivacyInfo.xcprivacy >/dev/null
+plutil -lint PomoGem/PomoGem.entitlements >/dev/null
+plutil -lint PomoGemWidgets/PomoGemWidgets.entitlements >/dev/null
 python3 - <<'PY'
 import plistlib
 from pathlib import Path
@@ -140,7 +140,7 @@ def require(condition: bool, message: str):
     if not condition:
         raise SystemExit(f"error: {message}")
 
-main_manifest = load("Tsumiben/Resources/PrivacyInfo.xcprivacy")
+main_manifest = load("PomoGem/Resources/PrivacyInfo.xcprivacy")
 require(main_manifest.get("NSPrivacyTracking") is False, "main privacy manifest must disable tracking")
 require(main_manifest.get("NSPrivacyTrackingDomains") == [], "main privacy manifest must not list tracking domains")
 require(main_manifest.get("NSPrivacyCollectedDataTypes") == [], "main privacy manifest must not declare collected data")
@@ -157,7 +157,7 @@ require(
     "main privacy manifest required-reason declarations differ from the reviewed allowlist",
 )
 
-widget_manifest = load("TsumibenWidgets/PrivacyInfo.xcprivacy")
+widget_manifest = load("PomoGemWidgets/PrivacyInfo.xcprivacy")
 require(widget_manifest.get("NSPrivacyTracking") is False, "widget privacy manifest must disable tracking")
 require(widget_manifest.get("NSPrivacyTrackingDomains") == [], "widget privacy manifest must not list tracking domains")
 require(widget_manifest.get("NSPrivacyCollectedDataTypes") == [], "widget privacy manifest must not declare collected data")
@@ -170,9 +170,17 @@ require(
     "widget privacy manifest required-reason declarations differ from the reviewed allowlist",
 )
 
-info = load("Tsumiben/Info.plist")
+info = load("PomoGem/Info.plist")
+require(info.get("CFBundleDisplayName") == "ポモジェム", "main display name differs from the current brand")
+require(
+    info.get("CFBundleURLTypes") == [{
+        "CFBundleURLName": "com.hinoshiba.pomogem",
+        "CFBundleURLSchemes": ["pomogem"],
+    }],
+    "main URL registration differs from the new app identifier and scheme",
+)
 require(info.get("ITSAppUsesNonExemptEncryption") is False, "export-compliance declaration must remain false")
-require(info.get("TSUMIBEN_PRIVACY_POLICY_URL") == "https://tumiben.hinoshiba.com/privacy/", "privacy policy URL differs from the canonical URL")
+require(info.get("POMOGEM_PRIVACY_POLICY_URL") == "https://pomogem.hinoshiba.com/privacy/", "privacy policy URL differs from the canonical URL")
 require(info.get("NSHumanReadableCopyright") == "Copyright © 2026 hinoshiba", "main bundle copyright differs from the release record")
 require(
     info.get("NSMotionUsageDescription")
@@ -180,16 +188,17 @@ require(
     "motion purpose string differs from the reviewed on-device-only behavior",
 )
 
-widget_info = load("TsumibenWidgets/Info.plist")
+widget_info = load("PomoGemWidgets/Info.plist")
+require(widget_info.get("CFBundleDisplayName") == "ポモジェム", "widget display name differs from the current brand")
 require(widget_info.get("NSHumanReadableCopyright") == "Copyright © 2026 hinoshiba", "widget bundle copyright differs from the release record")
 require(info.get("NSSupportsLiveActivities") is True, "main bundle must enable the reviewed account-neutral Live Activity")
 require(widget_info.get("NSSupportsLiveActivities") in (None, False), "widget bundle must not enable Live Activities for version 1")
 
-app_entitlements = load("Tsumiben/Tsumiben.entitlements")
+app_entitlements = load("PomoGem/PomoGem.entitlements")
 require(app_entitlements.get("aps-environment") == "$(APS_ENVIRONMENT)", "app APNs entitlement must use the reviewed build setting")
 require(
     app_entitlements.get("com.apple.developer.icloud-container-identifiers") == [
-        "iCloud.com.hinoshiba.tumiben",
+        "iCloud.com.hinoshiba.pomogem",
     ],
     "app iCloud container entitlement differs from the release identifier",
 )
@@ -199,7 +208,7 @@ require(
     "main app must not retain the removed App Group entitlement",
 )
 
-widget_entitlements = load("TsumibenWidgets/TsumibenWidgets.entitlements")
+widget_entitlements = load("PomoGemWidgets/PomoGemWidgets.entitlements")
 for forbidden in (
     "aps-environment",
     "com.apple.developer.icloud-container-identifiers",
@@ -220,46 +229,46 @@ grep -Fqx '        SUPPORTS_MACCATALYST: false' project.yml
 grep -Fqx '        CODE_SIGN_STYLE: Automatic' project.yml
 grep -Fq 'ITSAppUsesNonExemptEncryption: false' project.yml
 grep -Fq 'FocusLiveActivityWidget()' \
-  TsumibenWidgets/TsumibenWidgetsBundle.swift
-grep -Fq 'static let widgetKind = "TsumibenFocusLiveActivity"' \
+  PomoGemWidgets/PomoGemWidgetsBundle.swift
+grep -Fq 'static let widgetKind = "PomoGemFocusLiveActivity"' \
   Shared/FocusActivityAttributes.swift
 grep -Fq 'FocusLiveActivityWidget.swift in Sources' \
-  Tsumiben.xcodeproj/project.pbxproj
+  PomoGem.xcodeproj/project.pbxproj
 grep -Fq 'FocusActivityManager.swift in Sources' \
-  Tsumiben.xcodeproj/project.pbxproj
+  PomoGem.xcodeproj/project.pbxproj
 
 focus_attributes_source_entries=$(grep -Fc \
   'FocusActivityAttributes.swift in Sources' \
-  Tsumiben.xcodeproj/project.pbxproj)
+  PomoGem.xcodeproj/project.pbxproj)
 if [ "$focus_attributes_source_entries" -lt 4 ]; then
   echo "error: shared Live Activity attributes must belong to both app and Widget source phases" >&2
   exit 1
 fi
 
-if rg -n 'macCatalyst|TsumibenCatalyst|sdk=macosx|SUPPORTS_MACCATALYST: true' project.yml; then
+if rg -n 'macCatalyst|PomoGemCatalyst|sdk=macosx|SUPPORTS_MACCATALYST: true' project.yml; then
   echo "error: Mac Catalyst configuration remains in project.yml" >&2
   exit 1
 fi
 
-if [ -e Tsumiben/TsumibenCatalyst.entitlements ]; then
+if [ -e PomoGem/PomoGemCatalyst.entitlements ]; then
   echo "error: obsolete Catalyst entitlement is present" >&2
   exit 1
 fi
 
-if rg -n 'iCloud\.com\.hinoshiba\.tumiben\.operations' \
-    project.yml Tsumiben/Tsumiben.entitlements Tsumiben.xcodeproj/project.pbxproj; then
+if rg -n 'iCloud\.com\.hinoshiba\.pomogem\.operations' \
+    project.yml PomoGem/PomoGem.entitlements PomoGem.xcodeproj/project.pbxproj; then
   echo "error: disabled rare-reward operations container remains in shipping configuration" >&2
   exit 1
 fi
 
 grep -Fqx '    static let isEnabled = false' \
-  Tsumiben/Core/RareRewardLedgerLocalState.swift
+  PomoGem/Core/RareRewardLedgerLocalState.swift
 grep -Fqx '    static let isEnabled = false' \
-  Tsumiben/Core/DataDeletion/CompleteDataDeletionTypes.swift
+  PomoGem/Core/DataDeletion/CompleteDataDeletionTypes.swift
 python3 - <<'PY'
 from pathlib import Path
 
-source = Path("Tsumiben/Core/PersistenceStoreTopology.swift").read_text()
+source = Path("PomoGem/Core/PersistenceStoreTopology.swift").read_text()
 start = source.index("private static let cloudModelTypes")
 end = source.index("private static let localProjectionModelTypes", start)
 cloud_block = source[start:end]
@@ -279,24 +288,24 @@ for required in (
         raise SystemExit(f"error: shipping CloudKit schema omits {required}")
 PY
 
-if rg -n 'iPhoneとMac|iPhone・Mac|Mac版|Mac・機種変更' Tsumiben --glob '*.swift'; then
+if rg -n 'iPhoneとMac|iPhone・Mac|Mac版|Mac・機種変更' PomoGem --glob '*.swift'; then
   echo "error: user-facing Mac support claim remains in the iPhone app" >&2
   exit 1
 fi
 
 if rg -n '^[[:space:]]*PROVISIONING_PROFILE(_SPECIFIER)?([[:space:]]|:|=)' \
-    project.yml Tsumiben.xcodeproj --glob 'project.yml' --glob '*.pbxproj'; then
+    project.yml PomoGem.xcodeproj --glob 'project.yml' --glob '*.pbxproj'; then
   echo "error: provisioning profile selector must not be committed" >&2
   exit 1
 fi
 
 if rg -n '^[[:space:]]*DEVELOPMENT_TEAM([[:space:]]|:|=)' \
-    project.yml Tsumiben.xcodeproj --glob 'project.yml' --glob '*.pbxproj'; then
+    project.yml PomoGem.xcodeproj --glob 'project.yml' --glob '*.pbxproj'; then
   echo "error: a local signing team selector is committed" >&2
   exit 1
 fi
 
-for debug_file in Tsumiben/Debug/*.swift; do
+for debug_file in PomoGem/Debug/*.swift; do
   first_line=$(sed -n '1p' "$debug_file")
   case "$first_line" in
     '#if DEBUG'*) ;;
@@ -311,12 +320,12 @@ python3 - <<'PY'
 import json
 from pathlib import Path
 
-store = json.loads(Path("Tsumiben/Resources/Products.storekit").read_text())
+store = json.loads(Path("PomoGem/Resources/Products.storekit").read_text())
 products = store.get("products", [])
 if len(products) != 1:
     raise SystemExit("error: exactly one StoreKit product is required")
 product = products[0]
-if product.get("productID") != "com.hinoshiba.tumiben.pro.lifetime":
+if product.get("productID") != "com.hinoshiba.pomogem.pro.lifetime":
     raise SystemExit("error: StoreKit product identifier differs from the release identifier")
 if product.get("type") != "NonConsumable":
     raise SystemExit("error: StoreKit product must remain NonConsumable")
@@ -337,40 +346,33 @@ check_hash() {
 check_hash 9b83d0ac419add475e4e3cf4ff42dabb7bb7340a4a59eddfe6dcdeb2dd5859cc \
   Brand/AppIcon-FocusCycle-v5-source.png
 check_hash 1c8c4ac81b99a2201fdaa3a723ca2e76ee08350970f3243053d0d8b4d37ae15e \
-  Tsumiben/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusCycle-v5.png
+  PomoGem/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusCycle-v5.png
 check_hash a0ee59d504570ad0ce53c2710b2c2114a2518d7ee10e098d1e5787943d19add7 \
   http_dists/public/app-icon-focus-v5.png
 check_hash 50dda39716f125b546d72f379192318530df845f4205fbdb240f55d5564a453a \
   http_dists/public/apple-touch-icon.png
-check_hash db51b5fed769d18eb99cae48ef437f6485311c17e0c191e33cb183d9a3653ad4 \
-  http_dists/og-focus-v7.png
-check_hash f819951afc8a9f60abd18c4540ea18d796fbebf3244aaa1ee013850e33b60f33 \
-  http_dists/public/app-home-v2.webp
-check_hash 7d66a2be14844d67cb2c0c51639fe6d7205c6ff90a678dda45422bf7c810750a \
-  http_dists/public/app-timer-v1.webp
-check_hash ce639d897fe02d352118d09de83f66f334509e46dcea0ea451a0d873be6e4f7f \
-  http_dists/og-focus-v6.png
+check_hash a434e1526f860cc2765ec4a02fae07e151edf3d239b8be053e66a7eaf27fee99 \
+  http_dists/og-pomogem-v1.png
+check_hash e36fad494ed4223b21f518d68b5aad1649dc893a94b402442d2dc8a3bddc896a \
+  http_dists/public/app-home-v3.webp
+check_hash 24a79a83b7fb5cbc58aad0dc304d8b02c920ca611d7953bca511d2e42173ee77 \
+  http_dists/public/app-timer-v2.webp
 check_hash b60d2fe464f4460702be923976c5865dfca487b189072ac249638eac1e1ec1ca \
   Brand/AppIcon-FocusVessel-v4-source.png
 check_hash 30d8c4b856a46dc87a00c5c09861df6a008ffce8092a0a3f72bea4b074e3a4f8 \
   Brand/AppIcon-Aurora-v3-legacy.png
 check_hash b6a9e5e324e13978eeb0806ce051ca51304571d4fb22544916c55cc8350a8e66 \
-  Tsumiben/Resources/Assets.xcassets/focus.aurora.imageset/focus-aurora.png
-check_hash 09e0544c3af28dec0b24b95b34503727357f7bf53e28d4d8697a2e876aa7896f \
-  http_dists/og-focus-v5.png
-check_hash 28a3a322c560fabbff571a3fb399346fbf8298120891f50f93f6a61f5df2df66 \
-  http_dists/public/app-home-current.webp
-check_hash 05ac0bbdc58cfa85d23d5b01cf2a3d38dc0d89016ee33fa1a940cef1e1a7c469 \
-  http_dists/public/app-icon-focus-v4.png
+  PomoGem/Resources/Assets.xcassets/focus.aurora.imageset/focus-aurora.png
 check_hash 6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f \
-  Tsumiben/Resources/Fonts/ZenMaruGothic-Black.ttf
+  PomoGem/Resources/Fonts/ZenMaruGothic-Black.ttf
 check_hash 6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f \
   http_dists/public/ZenMaruGothic-Black.ttf
 
 shasum -a 256 -c AppStore/screenshots/checksums.sha256 >/dev/null
-python3 - <<'PY'
+python3 - "$MODE" <<'PY'
 import hashlib
 import re
+import sys
 from pathlib import Path, PurePosixPath
 
 ledger_path = Path("ASSET_LICENSES.md")
@@ -381,8 +383,30 @@ expected_paths = {
     "AppStore/screenshots/ja-JP/03-completion-reward.png",
     "AppStore/screenshots/ja-JP/04-accumulation-overview.png",
     "AppStore/screenshots/ja-JP/05-iCloud-and-privacy.png",
-    "AppStore/screenshots/iap-review/01-tumiben-pro-live-price.png",
 }
+iap_image = "AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png"
+configuration = Path("AppStore/configuration.yml").read_text()
+statuses = re.findall(r"^    review_screenshot_status: ([a-z_]+)$", configuration, re.MULTILINE)
+if len(statuses) != 1 or statuses[0] not in {"pending_live_price_capture", "captured_live_price"}:
+    raise SystemExit("error: one explicit IAP review screenshot status is required")
+iap_images = {
+    path.as_posix() for path in Path("AppStore/screenshots/iap-review").rglob("*")
+    if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".heic", ".heif", ".avif", ".tif", ".tiff"}
+}
+if statuses[0] == "pending_live_price_capture":
+    blocker = (
+        "  - capture and verify the new PomoGem IAP review screenshot with the live "
+        "StoreKit price for com.hinoshiba.pomogem.pro.lifetime"
+    )
+    if sys.argv[1] == "--release" or blocker not in configuration.splitlines():
+        raise SystemExit("error: a pending IAP screenshot is allowed only for standard OSS checks with its release blocker")
+    # An unlisted old or simulated price image must not remain publishable.
+    if iap_images:
+        raise SystemExit("error: pending IAP review directory must not contain a stale price image")
+else:
+    if iap_images != {iap_image}:
+        raise SystemExit("error: captured IAP review directory must contain exactly the reviewed new product image")
+    expected_paths.add(iap_image)
 
 manifest_entries = {}
 for line_number, line in enumerate(manifest_path.read_text().splitlines(), start=1):
@@ -397,7 +421,7 @@ for line_number, line in enumerate(manifest_path.read_text().splitlines(), start
     manifest_entries[raw_path] = digest
 
 if set(manifest_entries) != expected_paths:
-    raise SystemExit("error: screenshot checksum manifest differs from the reviewed five listing images and one IAP review image")
+    raise SystemExit("error: screenshot checksum manifest differs from the five listing images and declared IAP capture status")
 
 ledger_entries = {}
 for line_number, line in enumerate(ledger_path.read_text().splitlines(), start=1):
@@ -412,7 +436,7 @@ for line_number, line in enumerate(ledger_path.read_text().splitlines(), start=1
     ledger_entries[raw_path] = digest
 
 if set(ledger_entries) != expected_paths:
-    raise SystemExit("error: ASSET_LICENSES.md differs from the reviewed five listing images and one IAP review image")
+    raise SystemExit("error: ASSET_LICENSES.md differs from the five listing images and declared IAP capture status")
 
 for raw_path in sorted(expected_paths):
     path = PurePosixPath(raw_path)
@@ -439,7 +463,7 @@ if command -v sips >/dev/null 2>&1; then
     exit 1
   fi
 
-  icon=Tsumiben/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusCycle-v5.png
+  icon=PomoGem/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-FocusCycle-v5.png
   width=$(sips -g pixelWidth "$icon" | awk '/pixelWidth/ {print $2}')
   height=$(sips -g pixelHeight "$icon" | awk '/pixelHeight/ {print $2}')
   alpha=$(sips -g hasAlpha "$icon" | awk '/hasAlpha/ {print $2}')
@@ -451,14 +475,14 @@ if command -v sips >/dev/null 2>&1; then
   fi
 fi
 
-scan_list=$(mktemp "${TMPDIR:-/tmp}/tsumiben-public-files.XXXXXX")
-scan_list_nul=$(mktemp "${TMPDIR:-/tmp}/tsumiben-public-files-nul.XXXXXX")
-scan_hits=$(mktemp "${TMPDIR:-/tmp}/tsumiben-scan-hits.XXXXXX")
-scan_errors=$(mktemp "${TMPDIR:-/tmp}/tsumiben-scan-errors.XXXXXX")
-history_inventory=$(mktemp "${TMPDIR:-/tmp}/tsumiben-history-inventory.XXXXXX")
-history_object_ids=$(mktemp "${TMPDIR:-/tmp}/tsumiben-history-object-ids.XXXXXX")
-history_object=$(mktemp "${TMPDIR:-/tmp}/tsumiben-history-object.XXXXXX")
-history_hits=$(mktemp "${TMPDIR:-/tmp}/tsumiben-history-hits.XXXXXX")
+scan_list=$(mktemp "${TMPDIR:-/tmp}/pomogem-public-files.XXXXXX")
+scan_list_nul=$(mktemp "${TMPDIR:-/tmp}/pomogem-public-files-nul.XXXXXX")
+scan_hits=$(mktemp "${TMPDIR:-/tmp}/pomogem-scan-hits.XXXXXX")
+scan_errors=$(mktemp "${TMPDIR:-/tmp}/pomogem-scan-errors.XXXXXX")
+history_inventory=$(mktemp "${TMPDIR:-/tmp}/pomogem-history-inventory.XXXXXX")
+history_object_ids=$(mktemp "${TMPDIR:-/tmp}/pomogem-history-object-ids.XXXXXX")
+history_object=$(mktemp "${TMPDIR:-/tmp}/pomogem-history-object.XXXXXX")
+history_hits=$(mktemp "${TMPDIR:-/tmp}/pomogem-history-hits.XXXXXX")
 trap 'rm -f "$scan_list" "$scan_list_nul" "$scan_hits" "$scan_errors" "$history_inventory" "$history_object_ids" "$history_object" "$history_hits"' EXIT HUP INT TERM
 
 find . \
@@ -582,7 +606,7 @@ if [ -s "$scan_hits" ]; then
 fi
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  tracked_list=$(mktemp "${TMPDIR:-/tmp}/tsumiben-tracked-files.XXXXXX")
+  tracked_list=$(mktemp "${TMPDIR:-/tmp}/pomogem-tracked-files.XXXXXX")
   git ls-files > "$tracked_list"
   if rg -ni "$forbidden_path_pattern" "$tracked_list"; then
     echo "error: forbidden material is tracked" >&2
@@ -680,11 +704,11 @@ if [ "$MODE" = '--release' ]; then
   fi
 
   for url in \
-    https://tumiben.hinoshiba.com/ \
-    https://tumiben.hinoshiba.com/privacy/ \
-    https://tumiben.hinoshiba.com/support/ \
-    https://tumiben.hinoshiba.com/terms/ \
-    https://tumiben.hinoshiba.com/commercial-transactions/; do
+    https://pomogem.hinoshiba.com/ \
+    https://pomogem.hinoshiba.com/privacy/ \
+    https://pomogem.hinoshiba.com/support/ \
+    https://pomogem.hinoshiba.com/terms/ \
+    https://pomogem.hinoshiba.com/commercial-transactions/; do
     status=$(curl --silent --show-error --max-time 20 --output /dev/null --write-out '%{http_code}' "$url" || true)
     if [ "$status" != 200 ]; then
       echo "error: release URL must return HTTPS 200 without redirect: $url ($status)" >&2
@@ -692,20 +716,20 @@ if [ "$MODE" = '--release' ]; then
     fi
   done
 
-  ./Scripts/check-published-site-policy.sh https://tumiben.hinoshiba.com/
+  ./Scripts/check-published-site-policy.sh https://pomogem.hinoshiba.com/
 
   http_status=$(curl --silent --show-error --max-time 20 \
-    --output /dev/null --write-out '%{http_code}' http://tumiben.hinoshiba.com/ || true)
+    --output /dev/null --write-out '%{http_code}' http://pomogem.hinoshiba.com/ || true)
   case "$http_status" in
     301|302|307|308) ;;
     *)
-      echo "error: public HTTP endpoint must redirect to HTTPS (http://tumiben.hinoshiba.com/ returned $http_status)" >&2
+      echo "error: public HTTP endpoint must redirect to HTTPS (http://pomogem.hinoshiba.com/ returned $http_status)" >&2
       exit 1
       ;;
   esac
   final_url=$(curl --silent --show-error --location --max-time 20 \
-    --output /dev/null --write-out '%{url_effective}' http://tumiben.hinoshiba.com/ || true)
-  if [ "$final_url" != 'https://tumiben.hinoshiba.com/' ]; then
+    --output /dev/null --write-out '%{url_effective}' http://pomogem.hinoshiba.com/ || true)
+  if [ "$final_url" != 'https://pomogem.hinoshiba.com/' ]; then
     echo "error: public HTTP endpoint must end at the canonical HTTPS URL ($final_url)" >&2
     exit 1
   fi

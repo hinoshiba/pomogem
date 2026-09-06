@@ -1,6 +1,6 @@
 # Export compliance draft
 
-つみべんは独自の暗号algorithm、VPN、messaging encryption、credential storage、暗号libraryを
+ポモジェムは独自の暗号algorithm、VPN、messaging encryption、credential storage、暗号libraryを
 実装・同梱していません。CloudKit、StoreKit、App Store通信など、Apple OSが提供する標準機能を
 利用します。この実装監査に基づき、`ITSAppUsesNonExemptEncryption = NO`を設定します。
 

@@ -1,7 +1,7 @@
 # 商標・ブランド方針
 
 `LICENSE`のMIT Licenseは、このリポジトリのソースコードと通常文書に適用されます。
-「つみべん」「Tumiben」「Tsumiben」の名称、ロゴ、アプリアイコン、製品固有のビジュアル、Store
+「ポモジェム」「PomoGem」の名称、ロゴ、アプリアイコン、製品固有のビジュアル、Store
 掲載素材を商標や公式版の識別表示として利用する権利は付与しません。
 
 `ASSET_LICENSES.md`は、未改変のブランド素材をsource checkout／fork内に保持し、

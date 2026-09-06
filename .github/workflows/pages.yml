@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/pages.yml
+      - AppStore/configuration.yml
       - Scripts/validate-site.py
       - Scripts/check-published-site-policy.sh
       - http_dists/**
@@ -17,6 +18,7 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# The official repository ID survives its rename; forks have different IDs.
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -36,17 +38,17 @@ jobs:
           node --check http_dists/app.js
 
       - name: Configure GitHub Pages
-        if: github.repository == 'hinoshiba/Tumiben'
+        if: github.repository_id == '1351233156'
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
       - name: Upload Pages artifact
-        if: github.repository == 'hinoshiba/Tumiben'
+        if: github.repository_id == '1351233156'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: http_dists
 
   deploy:
-    if: github.repository == 'hinoshiba/Tumiben'
+    if: github.repository_id == '1351233156'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -69,7 +71,7 @@ jobs:
 
       - name: Smoke test published site
         env:
-          SITE_URL: https://tumiben.hinoshiba.com/
+          SITE_URL: https://pomogem.hinoshiba.com/
         shell: bash
         run: |
           set -euo pipefail
@@ -98,9 +100,9 @@ jobs:
           check_url "${base_url}support/"
           check_url "${base_url}terms/"
           check_url "${base_url}commercial-transactions/"
-          check_url "${base_url}og-focus-v7.png"
+          check_url "${base_url}og-pomogem-v1.png"
           check_url "${base_url}public/app-icon-focus-v5.png"
-          check_url "${base_url}public/app-home-v2.webp"
-          check_url "${base_url}public/app-timer-v1.webp"
+          check_url "${base_url}public/app-home-v3.webp"
+          check_url "${base_url}public/app-timer-v2.webp"
           check_url "${base_url}font-license.txt"
           ./Scripts/check-published-site-policy.sh "$base_url"

@@ -1,6 +1,6 @@
 # 初回OSS公開手順
 
-更新日: 2026-09-05
+更新日: 2026-09-06
 
 ## 現在の監査結果
 
@@ -9,14 +9,17 @@
 Team IDを固定しています。Team ID、CloudKit container、bundle ID、IAP product IDは署名済みappや
 Store listingから確認できる公開識別子で、credentialではありません。
 
-一方、監査時点の作業folderには約4.1GBの`DerivedData*`と`Artifacts/`があり、build logの
-absolute path、username、simulator diagnostic、build済み`.app`などを含んでいました。これらは
-sourceではないため、repository外の`Tsumiben-local-artifacts-20260902`へ退避し、
-`.gitignore`でも除外します。退避folderや親folder全体をzip公開してはいけません。
+初回公開前のbuild artifact退避とGit初期化の実施履歴は
+`Docs/LEGACY_RELEASE_PROVENANCE.md`に保持します。現在の公開対象は既存履歴を保持して
+`git@github.com:hinoshiba/PomoGem.git`へ名称変更するrepositoryです。改名のためにGitを再初期化したり、
+既存履歴を捨てたりしません。push前に到達可能な全blobとauthor／committer metadataを再監査します。
+将来別のhistoryを移植する場合も全blobを別途scanします。
 
-このfolderは、監査済みの現在treeから`git@github.com:hinoshiba/Tumiben.git`へ公開するために
-新規初期化し、既存historyは移植していません。最初のcommit後かつpush前に、到達可能な全blobと
-author／committer metadataを再監査します。将来別のhistoryを移植する場合も全blobを別途scanします。
+現在のrepositoryはprivateです。ユーザーが最後に改名するため、それまでは既存originと名前を保持して
+commit／CI／Pagesを進めます。新しい`hinoshiba/PomoGem` URLを公開Webのsource／issue導線へは載せず、
+問い合わせは公式supportメールへ案内します。改名とPublic化を実施し匿名accessを確認した後に、
+`AppStore/configuration.yml`の`oss_publication.repository_visibility`とWebのsource linkを更新します。
+Pagesの公式repository制限は、改名で変化しないrepository ID `1351233156`で判定し、forkの配信を拒否します。
 commit／annotated tagのraw identity emailは、ownerが公開と全履歴への使用を明示指定した
  kai.openclaw01@gmail.com 、従来のGitHub noreply identity、公開済みの`support@hinoshiba.com`を
 許可します。今後のcommitは kai.openclaw01@gmail.com を使います。`.mailmap`による表示上の
@@ -29,7 +32,7 @@ commit／annotated tagのraw identity emailは、ownerが公開と全履歴へ�
 remoteへの反映には、確認済みの旧HEADを指定した`--force-with-lease`を使います。
 書換え後の全履歴を含む別cloneで標準OSS検査が成功し、公開メール検査の回帰13件も成功しました。
 
-## 初回commit
+## 初回公開の参考手順（既存repositoryでは再初期化しない）
 
 1. Xcodeでこのprojectを閉じ、`DerivedData*`、`Artifacts/`、すべての`xcuserdata`をrepository外へ
    退避する。`.gitignore`は第二防線であり、公開候補folderへ個人用状態を残さない
@@ -44,8 +47,8 @@ remoteへの反映には、確認済みの旧HEADを指定した`--force-with-le
 
 ```text
 .github/  AppStore/  Brand/  Docs/  Scripts/  Shared/
-Tsumiben/  TsumibenTests/  TsumibenUITests/  TsumibenWidgets/
-http_dists/  project.yml  Tsumiben.xcodeproj/
+PomoGem/  PomoGemTests/  PomoGemUITests/  PomoGemWidgets/
+http_dists/  project.yml  PomoGem.xcodeproj/
 README.md  LICENSE  LICENSE-fonts.txt  PRIVACY.md
 SECURITY.md  CONTRIBUTING.md  CODE_OF_CONDUCT.md
 TRADEMARKS.md  ASSET_LICENSES.md  THIRD_PARTY_NOTICES.md  .gitignore
@@ -71,7 +74,7 @@ release blockerまで要求するため、初回OSS公開だけを目的にし�
 - PR、iOS CI、OSS readinessをrequired checkにする
 - Pages sourceをGitHub Actionsにする
 - `main`へのサイト関連ファイルのpushでPages workflowを自動実行し、手動実行も許可する
-- `http_dists/CNAME`の`tumiben.hinoshiba.com`をcustom domainとして設定し、DNS検証後にHTTPSを強制する
+- `http_dists/CNAME`の`pomogem.hinoshiba.com`をcustom domainとして設定し、DNS検証後にHTTPSを強制する
 - `github-pages` environmentを使い、deploy jobだけに`pages:write`と`id-token:write`を許可
 - CodeQLのSwift default setupが利用できる場合は有効化
 - DependabotのGitHub Actions updateを有効化
