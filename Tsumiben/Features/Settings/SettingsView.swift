@@ -452,13 +452,13 @@ struct SettingsView: View {
                     Group {
                         if dynamicTypeSize.isAccessibilitySize {
                             VStack(alignment: .leading, spacing: 8) {
-                                SettingLabel(title: "任意のタイマー時間", subtitle: "1〜180分", symbol: "timer")
+                                SettingLabel(title: "任意のタイマー時間", subtitle: Constants.UIStrings.customDurationRange, symbol: "timer")
                                 proAvailabilityLabel
                                     .padding(.leading, 40)
                             }
                         } else {
                             HStack(spacing: 10) {
-                                SettingLabel(title: "任意のタイマー時間", subtitle: "1〜180分", symbol: "timer")
+                                SettingLabel(title: "任意のタイマー時間", subtitle: Constants.UIStrings.customDurationRange, symbol: "timer")
                                 Spacer(minLength: 8)
                                 proAvailabilityLabel
                             }
@@ -482,7 +482,7 @@ struct SettingsView: View {
                     router.presentPaywall(from: .customTimer)
                 } label: {
                     HStack(spacing: 10) {
-                        SettingLabel(title: "任意のタイマー時間", subtitle: "1〜180分", symbol: "timer")
+                        SettingLabel(title: "任意のタイマー時間", subtitle: Constants.UIStrings.customDurationRange, symbol: "timer")
                         Spacer(minLength: 8)
                         Text("Pro")
                             .font(.caption.weight(.bold))

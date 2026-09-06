@@ -12,7 +12,7 @@ profileはrepositoryへ記録しません。値を保存した後はpageをreloa
 | Field | Value |
 |---|---|
 | Name | つみべん |
-| Subtitle | 集中時間を、瓶に積もう。 |
+| Subtitle | 勉強・仕事の集中タイマーと、減らない記録 |
 | Primary language | Japanese |
 | Bundle ID | `com.hinoshiba.tumiben` |
 | SKU | `tumiben-ios` |
@@ -64,7 +64,7 @@ supportが現在日本語であることを明示し、英語UIがあると誤�
 - Review path: clean installの最初の画面で同格の「このiPhoneのみ」を選ぶと、Apple Account／networkなしで
   全基本機能を審査可能。iCloud pathは選択確認とonline Apple Account検証が必要。続くonboardingの
   ためし粒は任意で「次へ」から省略でき、勉強／仕事共通の候補から最初のテーマ1件を選ぶ。Homeの
-  テーマと時間を選び、開始buttonのtapでtimerを開始する。開始buttonの長押しでも、開始せずテーマを変更する
+  開始buttonの上にある選択欄でテーマと時間を選び、開始buttonのtapでtimerを開始する
 - Release: automatically release after App Review approval
 - App Review contact: required。提出担当者はcontact first name、last name、`+`と国番号を含む
   international-format phone number、email addressをApp Store Connect上で入力し、保存後にreloadして
@@ -77,10 +77,14 @@ supportが現在日本語であることを明示し、英語UIがあると誤�
 - 5枚の順序は、Homeの瓶、無料25分timer、完走reward、積み上がりoverview、Settingsの
   iCloud／privacy説明とする。
 - 架空dataだけを使い、個人情報、通知、debug UI、placeholder、誤った購入状態を含めない。
-- 初回IAPのreview screenshotには、価格をStoreKitから表示した実paywallを使う。
-- 5枚すべてを`CompleteDataDeletionReleasePolicy.isEnabled == false`のproduction UIから、Debug-only
-  deterministic fixtureでcapture済み。UI testは1/1 passし、5枚目にdirect CloudKit一括削除rowが
-  ないことを目視確認済み。signed Release実機とのvisual parityは未確認で、別の提出gateとする。
+- 初回IAPのreview screenshotには、価格をStoreKitから表示した実paywall
+  `AppStore/screenshots/iap-review/01-tumiben-pro-live-price.png`を使う。2026-09-06にversion 1.0 (4)
+  の実商品表示をcaptureし、購入未実行・価格加工なしで目視確認済み。App Store Connectへの登録は別途行う。
+- 2026-09-06にversion 1.0 (4)のproduction UIから、Debug-only deterministic fixtureで5枚を
+  captureし目視確認済み。Homeの直接選択、残量timer、閉じた後に粒が落ちる完走cardと一致する。
+  5枚目は自然scrollでsupport／privacy節とversionを表示し、Simulator診断文を含まない。
+  原captureと個別再撮影の結果は`AppStore/screenshots/README.md`に記録する。
+  signed Release実機とのvisual parityは未確認で、別の提出gateとする。
 
 ## Pricing and Availability
 
@@ -118,10 +122,10 @@ statusは公開前と各更新時に再監査します。新しいstorefrontの�
 | Other available storefronts | AppleがUSD 0.99を基準に為替・税・各地域の価格慣行から生成する現地相当額 |
 | Availability | App本体と同じ148 of 175 Countries or Regions（現行EU 27を除外。新しいstorefrontは自動追加） |
 | Family Sharing | Off |
-| Review screenshot | 実paywallを提出前に追加 |
+| Review screenshot | `AppStore/screenshots/iap-review/01-tumiben-pro-live-price.png`（ローカル準備済み、Connectへ登録） |
 | Review notes | `AppStore/iap-review-notes-connect.txt` |
 
-Unlockは無料の25分／45分／60分／90分以外の任意の1〜180分と、まとまり粒の月刻印です。share cardは無料／Proともロゴと公式サイトを常設します。subscription、trial、
+Unlockは無料の25分／45分／60分／90分以外の任意の1〜360分と、まとまり粒の月刻印です。share cardは無料／Proともロゴと公式サイトを常設します。subscription、trial、
 external purchase、独自serverはありません。purchase、pending、cancel、restore、revocationと、
 entitlement反映後にtransactionをfinishすることをSandboxで検証します。初回IAPはversion 1.0と同じ
 submissionへ追加します。

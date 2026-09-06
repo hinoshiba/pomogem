@@ -339,6 +339,59 @@ final class FocusPersistenceTests: XCTestCase {
         XCTAssertEqual(recovered.pendingCompletion?.observedUptime, 1_542)
     }
 
+    func testSixHourFocusRoundTripsLocalAndCloudRecoveryBeforeAndAfterCompletion() throws {
+        let start = Date(timeIntervalSince1970: 1_800_005_000)
+        let sessionID = UUID()
+        let subject = FocusSubjectSnapshot(id: UUID(), name: "仕事", colorHex: "#3FA57C")
+        let anchor = ClockAnchor(wallDate: start, systemUptime: 1_000)
+        var engine = PomodoroEngine(selectedDuration: .custom(minutes: 360))
+        try engine.startFocus(isPro: true, now: start, sessionID: sessionID)
+        FocusPersistence.save(FocusRecoveryEnvelope(
+            engine: engine, subject: subject, clockAnchor: anchor,
+            pendingCompletion: nil, savedAt: start
+        ))
+
+        let running = try XCTUnwrap(FocusPersistence.load())
+        XCTAssertEqual(running.engine, engine)
+        let halfway = start.addingTimeInterval(10_800)
+        XCTAssertEqual(
+            FocusPersistence.relaunchAction(for: running, at: halfway),
+            .resumeFocus(remainingSeconds: 10_800)
+        )
+        let portableRunning = try JSONDecoder().decode(
+            FocusCloudPayload.self,
+            from: JSONEncoder().encode(FocusCloudPayload(envelope: running))
+        )
+        XCTAssertTrue(portableRunning.isCompatible(with: .running))
+        let adopted = portableRunning.recoveryEnvelope(adoptedAt: halfway)
+        XCTAssertEqual(adopted.engine.currentSessionID, sessionID)
+        XCTAssertEqual(adopted.engine.endDate, start.addingTimeInterval(21_600))
+        XCTAssertEqual(adopted.engine.snapshot(at: halfway).remainingSeconds, 10_800)
+
+        engine = running.engine
+        let end = start.addingTimeInterval(21_600)
+        guard case let .focusCompleted(completion) = engine.advance(at: end) else {
+            return XCTFail("Expected the restored six-hour timer to complete")
+        }
+        FocusPersistence.save(FocusRecoveryEnvelope(
+            engine: engine, subject: subject, clockAnchor: anchor,
+            pendingCompletion: completion, savedAt: end
+        ))
+        let pending = try XCTUnwrap(FocusPersistence.load())
+        XCTAssertEqual(pending.pendingCompletion?.seconds, 21_600)
+        XCTAssertEqual(pending.pendingCompletion?.grams, 3_600)
+        XCTAssertEqual(
+            FocusPersistence.relaunchAction(for: pending, at: end.addingTimeInterval(60)),
+            .commitPendingCompletion
+        )
+        let portablePending = try JSONDecoder().decode(
+            FocusCloudPayload.self,
+            from: JSONEncoder().encode(FocusCloudPayload(envelope: pending))
+        )
+        XCTAssertTrue(portablePending.isCompatible(with: .completionPending))
+        XCTAssertEqual(portablePending.pendingCompletion, completion)
+    }
+
     func testRelaunchResumesSameSessionAtOneTwelveAndTwentyFourMinutes() throws {
         let start = Date(timeIntervalSince1970: 1_800_010_000)
         let sessionID = UUID(uuidString: "00000000-0000-0000-0000-000000000223")!

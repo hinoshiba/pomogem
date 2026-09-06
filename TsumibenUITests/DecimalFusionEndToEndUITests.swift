@@ -223,11 +223,10 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
     }
 
     private func selectDemoDuration() {
-        app.buttons["メニュー"].tap()
+        app.buttons["home.duration-picker"].tap()
         let demoDuration = app.buttons["12秒、DEMO"]
         XCTAssertTrue(demoDuration.waitForExistence(timeout: 4))
         demoDuration.tap()
-        app.buttons["home.menu.close"].tap()
         XCTAssertTrue(demoLauncher.waitForExistence(timeout: 4))
     }
 

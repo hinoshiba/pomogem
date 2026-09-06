@@ -569,10 +569,45 @@ final class FortyYearPlanningUITests: XCTestCase {
     func testNormalLaunchHidesDeveloperOnlyControls() {
         let app = XCUIApplication()
         app.launchEnvironment["TSUMIBEN_LOCAL_PREVIEW"] = "1"
+        app.launchEnvironment["TSUMIBEN_UI_TEST_MODE"] = "0"
         app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
         app.launch()
+        defer { app.terminate() }
 
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 10))
+        // Ordinary local preview has no seeded themes. Create one through
+        // the same Settings path as an empty Home before checking its timer menu.
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(scrollUntilHittable(launcher, in: app))
+        XCTAssertEqual(launcher.label, "テーマを選んではじめる")
+        launcher.tap()
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        let addTheme = app.buttons["テーマを追加"]
+        XCTAssertTrue(scrollUntilHittable(addTheme, in: app))
+        addTheme.tap()
+        let themeEditor = app.navigationBars["テーマを追加"]
+        XCTAssertTrue(themeEditor.waitForExistence(timeout: 5))
+        let nameField = app.textFields.firstMatch
+        XCTAssertTrue(nameField.waitForExistence(timeout: 4))
+        nameField.tap()
+        nameField.typeText("通常起動のテーマ")
+        themeEditor.buttons["保存"].tap()
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == false"),
+                object: themeEditor
+            )], timeout: 5),
+            .completed
+        )
+        app.navigationBars["設定"].buttons.element(boundBy: 0).tap()
+
+        let durationPicker = app.buttons["home.duration-picker"]
+        XCTAssertTrue(durationPicker.waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUntilHittable(durationPicker, in: app))
+        durationPicker.tap()
+        XCTAssertTrue(app.buttons["25分"].waitForExistence(timeout: 4))
+        XCTAssertFalse(app.buttons["12秒、DEMO"].exists)
+        app.buttons["25分"].tap()
         app.buttons["メニュー"].tap()
         XCTAssertTrue(app.navigationBars["メニュー"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["12秒、DEMO"].exists)

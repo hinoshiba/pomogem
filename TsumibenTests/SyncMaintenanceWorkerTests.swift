@@ -1038,6 +1038,32 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         )
     }
 
+    func testSixHourPreferenceConvergesWhileOverLimitReplicaIsIgnored() throws {
+        let earlier = Prefs(preferredFocusMinutes: 180)
+        earlier.preferredFocusMinutesRevision = 1
+        earlier.preferredFocusMinutesMutationID = UUID()
+        let latest = Prefs(preferredFocusMinutes: 360)
+        latest.preferredFocusMinutesRevision = 2
+        latest.preferredFocusMinutesMutationID = UUID()
+        let invalidNewer = Prefs(preferredFocusMinutes: 361)
+        invalidNewer.preferredFocusMinutesRevision = 3
+        invalidNewer.preferredFocusMinutesMutationID = UUID()
+
+        let forward = try PrefsSyncPolicy.resolvedState(
+            in: [earlier, invalidNewer, latest], currentEpochID: nil
+        )
+        let reversed = try PrefsSyncPolicy.resolvedState(
+            in: [latest, invalidNewer, earlier], currentEpochID: nil
+        )
+        XCTAssertEqual(forward.preferredFocusMinutes, 360)
+        XCTAssertEqual(forward, reversed)
+        XCTAssertEqual(try PrefsSyncPolicy.resolvedState(
+            in: [invalidNewer], currentEpochID: nil
+        ).preferredFocusMinutes, 25)
+        XCTAssertEqual(invalidNewer.preferredFocusMinutes, 361,
+                       "An unsupported replica must be ignored without rewriting its stored value")
+    }
+
     func testTimerDisplayModeConvergesAndInvalidValuesFallBackSafely() throws {
         let earlier = Prefs(
             timerDisplayModeRawValue: TimerDisplayMode.timeOnly.rawValue

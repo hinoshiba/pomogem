@@ -1,4 +1,4 @@
-Tumiben Pro is a one-time, non-consumable In-App Purchase. It unlocks every focus duration from 1 to 180 minutes beyond the free 25-, 45-, 60-, and 90-minute presets, plus month labels on grouped pebbles. Share cards retain the Tumiben logo and https://tumiben.hinoshiba.com/ for Free and Pro users. There is no subscription, free trial, automatic renewal, external payment, account login, or custom purchase server.
+Tumiben Pro is a one-time, non-consumable In-App Purchase. It unlocks every focus duration from 1 to 360 minutes beyond the free 25-, 45-, 60-, and 90-minute presets, plus month labels on grouped pebbles. Share cards retain the Tumiben logo and https://tumiben.hinoshiba.com/ for Free and Pro users. There is no subscription, free trial, automatic renewal, external payment, account login, or custom purchase server.
 
 Review steps:
 

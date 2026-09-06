@@ -110,7 +110,7 @@ struct PaywallView: View {
             PaywallFeature(
                 symbol: "timer",
                 title: "任意の集中時間",
-                detail: "1〜180分"
+                detail: Constants.UIStrings.customDurationRange
             )
             Divider().overlay(TsumibenTheme.glassEdge.opacity(0.08))
             PaywallFeature(

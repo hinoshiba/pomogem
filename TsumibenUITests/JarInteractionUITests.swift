@@ -48,11 +48,12 @@ final class JarInteractionUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["瓶"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["瓶"].exists, "An empty jar must not expose a dead button")
 
-        app.buttons["メニュー"].tap()
+        app.buttons["home.duration-picker"].tap()
         let demoDuration = app.buttons["12秒、DEMO"]
         XCTAssertTrue(demoDuration.waitForExistence(timeout: 3))
         demoDuration.tap()
 
+        app.buttons["メニュー"].tap()
         let aurora = app.buttons["オーロラ、光に包まれる"]
         XCTAssertTrue(aurora.waitForExistence(timeout: 3))
         aurora.tap()

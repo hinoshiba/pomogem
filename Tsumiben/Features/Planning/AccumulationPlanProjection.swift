@@ -11,7 +11,8 @@ struct AccumulationPlanProjection: Equatable, Sendable {
     struct Plan: Equatable, Sendable {
         static let yearRange = 1 ... 40
         static let sessionsPerWeekRange = 1 ... 168
-        static let minutesPerSessionRange = 1 ... 180
+        static let minutesPerSessionRange =
+            Constants.Timer.customMinimumMinutes ... Constants.Timer.customMaximumMinutes
 
         let years: Int
         let sessionsPerWeek: Int

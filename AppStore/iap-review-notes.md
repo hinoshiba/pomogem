@@ -1,12 +1,15 @@
 # In-App Purchase review notes
 
 Product: `com.hinoshiba.tumiben.pro.lifetime`
+
+Review image: `AppStore/screenshots/iap-review/01-tumiben-pro-live-price.png`
+（1.0 build 4、実際のStoreKit商品価格を表示、購入未実行。出所は`screenshots/README.md`）
 Type: Non-Consumable
 
 ## English (for App Review)
 
 Tumiben Pro is a one-time, non-consumable purchase. It unlocks every other focus timer from
-1 to 180 minutes beyond the free 25-, 45-, 60-, and 90-minute presets, plus month labels on
+1 to 360 minutes beyond the free 25-, 45-, 60-, and 90-minute presets, plus month labels on
 grouped pebbles. Share cards retain Tumiben branding for every user. There is no subscription,
 free trial, external payment, account login, or custom purchase server.
 
@@ -27,7 +30,7 @@ The first non-consumable is submitted together with app version 1.0.
 
 ## 日本語
 
-つみべんProは1回限りの買い切りです。無料の25分・45分・60分・90分以外の任意の1〜180分タイマーと、まとまり粒の月刻印を解放します。
+つみべんProは1回限りの買い切りです。無料の25分・45分・60分・90分以外の任意の1〜360分タイマーと、まとまり粒の月刻印を解放します。
 シェアカードのつみべんロゴと公式サイトは、無料／Proとも常に表示します。subscription、trial、
 外部決済、独自purchase serverはありません。
 

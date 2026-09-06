@@ -58,8 +58,8 @@ final class ProgressPresentationTests: XCTestCase {
             )
         }
 
-        XCTAssertEqual(StudySessionIntegrityPolicy.maximumSeconds, 10_800)
-        XCTAssertEqual(StudySessionIntegrityPolicy.maximumGrams, 1_800)
+        XCTAssertEqual(StudySessionIntegrityPolicy.maximumSeconds, 21_600)
+        XCTAssertEqual(StudySessionIntegrityPolicy.maximumGrams, 3_600)
         XCTAssertEqual(
             StudySessionIntegrityPolicy.maximumFutureLead,
             365 * 24 * 60 * 60
@@ -77,6 +77,14 @@ final class ProgressPresentationTests: XCTestCase {
         XCTAssertTrue(StudySessionIntegrityPolicy.isSupported(
             session(seconds: 10_800, grams: 1_800)
         ))
+        for source in [SessionSource.timer, .timerDemoted] {
+            XCTAssertTrue(StudySessionIntegrityPolicy.isSupported(
+                session(seconds: 21_600, source: source, grams: 3_600)
+            ))
+            XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(
+                session(seconds: 21_660, source: source, grams: 3_610)
+            ), "A coherent 361-minute completion must still be quarantined")
+        }
         XCTAssertTrue(ManualDuration.allCases.allSatisfy { duration in
             StudySessionIntegrityPolicy.isSupported(session(
                 seconds: duration.seconds,
@@ -92,7 +100,7 @@ final class ProgressPresentationTests: XCTestCase {
             session(seconds: 60, grams: 600)
         ))
         XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(
-            session(seconds: 10_801, grams: 1_800)
+            session(seconds: 21_601, grams: 3_600)
         ))
         XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(
             session(seconds: ManualDuration.thirtyMinutes.seconds,

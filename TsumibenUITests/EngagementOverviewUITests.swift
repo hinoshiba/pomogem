@@ -26,12 +26,11 @@ final class EngagementOverviewUITests: XCTestCase {
             staleDismiss.tap()
             XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
         }
-        app.buttons["メニュー"].tap()
+        app.buttons["home.duration-picker"].tap()
 
         let demoDuration = app.buttons["12秒、DEMO"]
         XCTAssertTrue(demoDuration.waitForExistence(timeout: 4))
         demoDuration.tap()
-        app.buttons["home.menu.close"].tap()
 
         let launcher = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "12秒集中する")
@@ -304,11 +303,10 @@ final class EngagementOverviewUITests: XCTestCase {
             staleDismiss.tap()
         }
 
-        app.buttons["メニュー"].tap()
+        app.buttons["home.duration-picker"].tap()
         let demoDuration = app.buttons["12秒、DEMO"]
         XCTAssertTrue(demoDuration.waitForExistence(timeout: 4))
         demoDuration.tap()
-        app.buttons["home.menu.close"].tap()
 
         let launcher = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "12秒集中する")

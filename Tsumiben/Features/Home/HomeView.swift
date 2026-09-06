@@ -54,6 +54,7 @@ struct HomeView: View {
     @ScaledMetric(relativeTo: .subheadline) private var homeMenuFontSize: CGFloat = 15
     @ScaledMetric(relativeTo: .subheadline) private var atmosphereTitleFontSize: CGFloat = 15
     @ScaledMetric(relativeTo: .caption2) private var atmosphereSubtitleFontSize: CGFloat = 11
+    @ScaledMetric(relativeTo: .subheadline) private var atmosphereCardHeight: CGFloat = 102
     @Query(sort: \Subject.sortOrder) private var storedSubjects: [Subject]
     @Query private var storedSessions: [StudySession]
     @Query private var storedAchievementStones: [AchievementStone]
@@ -1394,6 +1395,13 @@ struct HomeView: View {
                     systemImage: purchase.isPro ? "slider.horizontal.3" : "lock"
                 )
             }
+#if DEBUG
+            if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
+                Button("12秒、DEMO") {
+                    selectDuration(.demo)
+                }
+            }
+#endif
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "timer")
@@ -1485,30 +1493,6 @@ struct HomeView: View {
         )
         .accessibilityHint(focusActionAccessibilityHint)
         .accessibilityIdentifier("home.focus-launcher")
-        .accessibilityActions {
-            ForEach(activeSubjects) { subject in
-                Button("テーマを\(subject.safeDisplayName)に変更") {
-                    selectSubject(subject)
-                }
-            }
-        }
-        .contextMenu {
-            if activeSubjects.isEmpty {
-                Button {
-                    router.selectedTab = .settings
-                } label: {
-                    Label("テーマを追加", systemImage: "plus.circle")
-                }
-            } else {
-                subjectSelectionActions
-                Divider()
-                Button {
-                    router.selectedTab = .settings
-                } label: {
-                    Label("テーマを管理", systemImage: "slider.horizontal.3")
-                }
-            }
-        }
         .disabled(breakOffer != nil || breakOfferTask != nil || hasPendingRewardReceipt)
         .padding(.bottom, 8)
     }
@@ -1549,14 +1533,13 @@ struct HomeView: View {
                 .contentShape(Rectangle())
         }
         .accessibilityLabel("メニュー")
-        .accessibilityHint("記録、設定、集中時間、背景、手動追加などを開きます")
+        .accessibilityHint("記録、設定、背景、手動追加などを開きます")
     }
 
     private var homeMenuSheet: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
-                    menuFocusSettings
                     menuAtmospherePicker
                     menuAccumulationActions
                     menuAccumulationPlanAction
@@ -1630,45 +1613,48 @@ struct HomeView: View {
                 Haptics.shared.playSecondaryCollision()
             }
         } label: {
-            ZStack(alignment: .bottomLeading) {
-                atmospherePreview(atmosphere)
+            HStack(alignment: .bottom, spacing: 8) {
+                Image(systemName: atmosphere.systemImage)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(.ultraThinMaterial, in: Circle())
 
-                LinearGradient(
-                    colors: [.clear, Color.black.opacity(0.74)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-
-                HStack(alignment: .bottom, spacing: 8) {
-                    Image(systemName: atmosphere.systemImage)
-                        .font(.system(size: 14, weight: .bold))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(atmosphere.title)
+                        .font(.system(size: atmosphereTitleFontSize, weight: .bold, design: .rounded))
+                        .accessibilityHidden(true)
+                    Text(atmosphere.subtitle)
+                        .font(.system(size: atmosphereSubtitleFontSize))
                         .foregroundStyle(.white)
-                        .frame(width: 30, height: 30)
-                        .background(.ultraThinMaterial, in: Circle())
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(atmosphere.title)
-                            .font(.system(size: atmosphereTitleFontSize, weight: .bold, design: .rounded))
-                            .accessibilityHidden(true)
-                        Text(atmosphere.subtitle)
-                            .font(.system(size: atmosphereSubtitleFontSize))
-                            .foregroundStyle(.white)
-                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
-                            .accessibilityHidden(true)
-                    }
-
-                    Spacer(minLength: 2)
-
-                    if isSelected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(TsumibenTheme.amber)
-                            .accessibilityHidden(true)
-                    }
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                        .accessibilityHidden(true)
                 }
-                .padding(10)
+
+                Spacer(minLength: 2)
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(TsumibenTheme.amber)
+                        .accessibilityHidden(true)
+                }
             }
+            .padding(10)
             .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, minHeight: dynamicTypeSize.isAccessibilitySize ? 92 : 102, alignment: .bottomLeading)
+            .frame(maxWidth: .infinity, alignment: .bottomLeading)
+            .frame(height: atmosphereCardHeight, alignment: .bottomLeading)
+            .background {
+                // Artwork decorates the common card size without contributing
+                // its intrinsic image dimensions to the grid's row height.
+                atmospherePreview(atmosphere)
+                    .overlay {
+                        LinearGradient(
+                            colors: [.clear, Color.black.opacity(0.74)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    }
+            }
             .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 17, style: .continuous)
@@ -1687,6 +1673,7 @@ struct HomeView: View {
         .buttonStyle(TsumibenRowButtonStyle(cornerRadius: 17))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(atmosphere.title)、\(atmosphere.subtitle)")
+        .accessibilityIdentifier("home.atmosphere.\(atmosphere.rawValue)")
         // `.ignore` consolidates the decorative preview into one VoiceOver
         // target, so restore the interactive role that SwiftUI otherwise drops.
         .accessibilityAddTraits(.isButton)
@@ -1717,60 +1704,6 @@ struct HomeView: View {
             }
         }
         .accessibilityHidden(true)
-    }
-
-    private var menuFocusSettings: some View {
-        TsumibenCard {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 3) {
-                        SectionEyebrow(text: "FOCUS")
-                        Text("集中設定")
-                            .font(TsumibenTheme.brand(21))
-                    }
-                    Spacer()
-                    Text(focusDurationLabel)
-                        .font(.system(.headline, design: .rounded, weight: .heavy))
-                        .foregroundStyle(TsumibenTheme.amber)
-                }
-
-                if activeSubjects.isEmpty {
-                    Text("テーマを追加するとタイマーを始められます。")
-                        .font(.subheadline)
-                        .foregroundStyle(TsumibenTheme.muted)
-                    Button {
-                        showHomeMenu = false
-                        router.selectedTab = .settings
-                    } label: {
-                        Label("テーマを追加", systemImage: "plus.circle.fill")
-                    }
-                    .buttonStyle(TsumibenPrimaryButtonStyle())
-                } else {
-                    Menu {
-                        subjectSelectionActions
-                    } label: {
-                        HStack(spacing: 10) {
-                            Circle()
-                                .fill(Color(hex: selectedSubject?.colorHex ?? Constants.Color.amberLamp))
-                                .frame(width: 12, height: 12)
-                            Text(selectedSubject?.safeDisplayName ?? "テーマ")
-                                .font(.system(.body, design: .rounded, weight: .bold))
-                            Spacer()
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.caption)
-                                .foregroundStyle(TsumibenTheme.muted)
-                        }
-                        .foregroundStyle(TsumibenTheme.text)
-                        .padding(.horizontal, 14)
-                        .frame(minHeight: 48)
-                        .background(TsumibenTheme.raised, in: RoundedRectangle(cornerRadius: 12))
-                    }
-                    .accessibilityLabel("テーマ、\(selectedSubject?.safeDisplayName ?? "未選択")")
-
-                    durationPicker
-                }
-            }
-        }
     }
 
     @ViewBuilder
@@ -2524,59 +2457,6 @@ struct HomeView: View {
         case .share:
             router.presentShare()
         }
-    }
-
-    private var durationPicker: some View {
-        LazyVGrid(
-            columns: dynamicTypeSize.isAccessibilitySize
-                ? [GridItem(.flexible())]
-                : [GridItem(.flexible()), GridItem(.flexible())],
-            spacing: 8
-        ) {
-            durationChips
-        }
-    }
-
-    @ViewBuilder
-    private var durationChips: some View {
-            DurationChip(title: "25分", subtitle: "+250g", selected: selectedDuration == .twentyFiveMinutes) {
-                selectDuration(.twentyFiveMinutes)
-            }
-            DurationChip(
-                title: "45分",
-                subtitle: "+450g",
-                selected: selectedDuration == .custom(minutes: Constants.Timer.fortyFiveMinutes)
-            ) {
-                selectDuration(.custom(minutes: Constants.Timer.fortyFiveMinutes))
-            }
-            DurationChip(title: "60分", subtitle: "+600g", selected: selectedDuration == .sixtyMinutes) {
-                selectDuration(.sixtyMinutes)
-            }
-            DurationChip(
-                title: "90分",
-                subtitle: "+900g",
-                selected: selectedDuration == .custom(minutes: Constants.Timer.ninetyMinutes)
-            ) {
-                selectDuration(.custom(minutes: Constants.Timer.ninetyMinutes))
-            }
-            DurationChip(
-                title: customDurationTitle,
-                subtitle: purchase.isPro ? "+\(customMinutes * Constants.Mass.gramsPerMinute)g" : "Pro",
-                selected: selectedDuration.requiresPro
-            ) {
-                requestCustomDuration()
-            }
-#if DEBUG
-            if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
-                DurationChip(title: "12秒", subtitle: "DEMO", selected: selectedDuration == .demo) {
-                    selectDuration(.demo)
-                }
-            }
-#endif
-    }
-
-    private var customDurationTitle: String {
-        selectedDuration.requiresPro ? "\(customMinutes)分" : "自由"
     }
 
     private func requestCustomDuration() {
@@ -4272,28 +4152,6 @@ private struct BreakOffer: Identifiable {
         return kilograms.rounded() == kilograms
             ? "\(Int(kilograms))kg"
             : String(format: "%.2fkg", kilograms)
-    }
-}
-
-private struct DurationChip: View {
-    let title: String
-    let subtitle: String
-    let selected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 2) {
-                Text(title).font(.system(.subheadline, design: .rounded, weight: .bold))
-                Text(subtitle).font(.caption2).foregroundStyle(selected ? TsumibenTheme.background.opacity(0.72) : TsumibenTheme.muted)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: 52)
-            .foregroundStyle(selected ? TsumibenTheme.background : TsumibenTheme.text)
-            .background(selected ? TsumibenTheme.amber : TsumibenTheme.raised, in: RoundedRectangle(cornerRadius: 11))
-        }
-        .buttonStyle(TsumibenBareButtonStyle())
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

@@ -583,7 +583,7 @@ enum StudySessionIntegrityPolicy {
     static let maximumPastAge: TimeInterval = 100 * 365.25 * 24 * 60 * 60
     static let maximumFutureLead: TimeInterval = 365 * 24 * 60 * 60
     /// A focus, including all pauses, belongs to one seven-day wall-clock
-    /// window. The active award is still capped at 180 minutes. This permits
+    /// window. The active award is capped at the timer's public maximum. This permits
     /// multi-day recovery while preventing a short completion from spanning
     /// years because of hostile or uninterpretable legacy timestamps.
     static let maximumCompletionWallSpan: TimeInterval = 7 * 24 * 60 * 60

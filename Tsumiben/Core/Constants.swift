@@ -21,7 +21,7 @@ enum Constants {
         static let secondsPerMinute = 60
         static let gramsPerMinute = Mass.gramsPerMinute
         static let customMinimumMinutes = 1
-        static let customMaximumMinutes = 180
+        static let customMaximumMinutes = 360
 
 #if DEBUG
         static let demoSeconds = 12
@@ -398,6 +398,7 @@ enum Constants {
         static let eveningNotification = "瓶が待ってる。今日のひと粒、積んでいく？"
         static let wrappedNotification = "今月の積み重ねを見てみよう。"
         static let paywallTitle = "つみべんPro"
+        static let customDurationRange = "\(Timer.customMinimumMinutes)〜\(Timer.customMaximumMinutes)分"
         static let onboardingOne = "集中した時間は、消えて見えない。"
         static let onboardingTwo = "つみべんは25分を「1粒」に変えて、瓶に積む。"
         static let onboardingThree = "減らない。消えない。責めない。"

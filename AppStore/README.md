@@ -20,8 +20,9 @@ APIのcredentialやdownloadしたprofileは置きません。
 - `release-experience-review.md`: 掲載文・導線・アクセシビリティのリリース前評価と実機確認項目
 
 2026-09-06の掲載文とHome導線の改訂はローカル原稿です。App Store Connectに保存済みの原稿とは
-差があるため、最終候補の検証後に転記し、再読み込みで照合してください。既存スクリーンショットは
-旧Home導線のため、更新後の正式な提出画像へ撮り直す必要があります。
+差があるため、最終候補の検証後に転記し、再読み込みで照合してください。スクリーンショット5枚と
+実StoreKit価格のIAP審査画像はversion 1.0 (4)から撮り直し、目視とchecksumを確認済みです。
+署名済みRelease実機との表示一致とApp Store Connectへの登録は別途確認してください。
 
 既存のApp Store Connect record（Apple ID `6806758060`、bundle ID
 `com.hinoshiba.tumiben`）を公式recordとして使用します。WebにはこのIDのSmart App Banner metadataを

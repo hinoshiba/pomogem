@@ -7,17 +7,17 @@
 任意の「ためしに一粒、落としてみる」（記録には入りません）を実行するか「次へ」で省略し、勉強・
 仕事共通の候補から最初のテーマを1つ選ぶとHomeへ進みます。利用目的の選択や勉強／仕事のmode切替はありません。
 25分／45分／60分／90分timer、記録、瓶、設定を無料で利用できます。Homeでテーマと時間を選び、
-大きな開始buttonをtapするとtimerを開始します。同じbuttonの長押しでも、開始せずテーマを変更できます。
+大きな開始buttonをtapするとtimerを開始します。テーマと時間は開始buttonの上にある選択欄で変更できます。
 テーマの追加・編集・並べ替え・削除はSettingsの一つの「テーマ」一覧で行います。短時間で完走を確認する場合は、
-つみべんPro購入後に Home menu → 時間を選ぶ → 任意時間 で1分を設定してください。無料状態の最短
+つみべんPro購入後に Homeの時間表示 → 「自由な時間を設定」 で1分を設定してください。無料状態の最短
 timerは25分です。hidden demo/debug menuはRelease buildにありません。
 
 ## In-App Purchase
 
 - Product ID: `com.hinoshiba.tumiben.pro.lifetime`
 - Type: Non-Consumable
-- Entry: Home menu → 時間を選ぶ → 任意時間、またはSettings → つみべんPro
-- Unlocks: 無料の25分／45分／60分／90分以外の任意の1〜180分、まとまり粒の月刻印
+- Entry: Homeの時間表示 → 「自由な時間を設定」、またはSettings → つみべんPro
+- Unlocks: 無料の25分／45分／60分／90分以外の任意の1〜360分、まとまり粒の月刻印
 - Restore: purchase screenの「購入を復元」
 - Pricing: United States USD 0.99 base price; Japan JPY 100 custom price; other available storefronts use Apple's automatically generated local equivalent
 - Availability: App and IAP are available in 148 of 175 storefronts. Austria, Belgium, Bulgaria, Croatia, Cyprus, Czech Republic, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Ireland, Italy, Latvia, Lithuania, Luxembourg, Malta, Netherlands, Poland, Portugal, Romania, Slovakia, Slovenia, Spain, and Sweden are excluded. United Kingdom, Norway, and Switzerland remain included; automatic availability for new storefronts is enabled.

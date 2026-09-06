@@ -192,7 +192,7 @@ enum RareRewardCreditPolicy {
     /// Advances the monotonic reward-mass ledger without multiplying or adding
     /// untrusted values before they have been bounded. Manual and demoted
     /// sessions contribute no mass. Product timers are capped at the same
-    /// maximum accepted by `PomodoroDuration`, limiting one RNG batch to eight.
+    /// maximum accepted by `PomodoroDuration`, keeping each RNG batch bounded.
     static func allocation(
         previousTotalGrams rawPreviousTotalGrams: Int,
         completedGrams rawCompletedGrams: Int,

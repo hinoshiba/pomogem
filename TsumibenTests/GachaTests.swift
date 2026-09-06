@@ -298,15 +298,31 @@ final class GachaTests: XCTestCase {
             completedGrams: Int.max,
             source: .timer
         )
-        XCTAssertEqual(
-            bounded.acceptedContributionGrams,
-            Constants.Gacha.maximumCreditableGramsPerCompletion
+        XCTAssertEqual(bounded.acceptedContributionGrams, 3_600)
+        XCTAssertEqual(bounded.earnedCreditCount, 15)
+        XCTAssertEqual(bounded.remainderGrams, 99)
+    }
+
+    func testSixHourRewardPreservesAllCreditsAndRejectsOversizedOutcomePayload() {
+        let state = GachaState(rewardCreditGrams: 249)
+        var generator = CountingRandomNumberGenerator()
+        let result = RareRewardPolicy.draw(
+            source: .timer, completedSeconds: 21_600, completedGrams: 3_600,
+            mode: .standard, state: state, using: &generator
         )
+        XCTAssertEqual(result.acceptedContributionGrams, 3_600)
+        XCTAssertEqual(result.consumedCreditCount, 15)
+        XCTAssertEqual(result.creditRemainderGrams, 99)
+        XCTAssertEqual(state.rewardCreditGrams, 3_849)
+        XCTAssertEqual(generator.callCount, 15)
+        XCTAssertEqual(result.creditOutcomes, Array(repeating: .normal, count: 15))
         XCTAssertEqual(
-            bounded.earnedCreditCount,
-            RareRewardCreditPolicy.maximumCreditsPerCompletion
+            RareRewardOutcomeCodec.decode(RareRewardOutcomeCodec.encode(result.creditOutcomes)),
+            result.creditOutcomes
         )
-        XCTAssertEqual(bounded.remainderGrams, 49)
+        XCTAssertNil(RareRewardOutcomeCodec.decode(RareRewardOutcomeCodec.encode(
+            Array(repeating: .normal, count: 16)
+        )))
     }
 
     func testLegacyGachaStateKeepsPityAndStartsMassLedgerAtZero() {

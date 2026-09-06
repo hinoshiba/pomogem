@@ -66,7 +66,7 @@ final class AccumulationPlanProjectionTests: XCTestCase {
 
         XCTAssertEqual(plan.years, 1)
         XCTAssertEqual(plan.sessionsPerWeek, 1)
-        XCTAssertEqual(plan.minutesPerSession, 180)
+        XCTAssertEqual(plan.minutesPerSession, 360)
 
         XCTAssertEqual(
             AccumulationPlanProjection.make(plan: plan, elapsedMonths: -5).elapsedMonths,
@@ -126,6 +126,22 @@ final class AccumulationPlanProjectionTests: XCTestCase {
         )
         XCTAssertTrue(tenMinutes.isInternallyConsistent)
         XCTAssertTrue(sixtyMinutes.isInternallyConsistent)
+    }
+
+    func testSixHourPlanRetainsFullTimeAndClampsTheNextMinute() {
+        let sixHours = AccumulationPlanProjection.Plan(
+            years: 1, sessionsPerWeek: 7, minutesPerSession: 360
+        )
+        let beyondLimit = AccumulationPlanProjection.Plan(
+            years: 1, sessionsPerWeek: 7, minutesPerSession: 361
+        )
+        XCTAssertEqual(sixHours.minutesPerSession, 360)
+        XCTAssertEqual(beyondLimit, sixHours)
+        let projection = AccumulationPlanProjection.make(plan: sixHours)
+        XCTAssertEqual(projection.focusMinutes, 131_490)
+        XCTAssertEqual(projection.grams, 1_314_900)
+        XCTAssertEqual(projection.representedGrams, 1_314_900)
+        XCTAssertTrue(projection.isInternallyConsistent)
     }
 
     func testEquivalentWeeklyMinutesHaveIdenticalTimeAndMassAtEveryMonth() {

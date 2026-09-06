@@ -30,7 +30,7 @@ PUBLIC_CONTACT_PATTERNS = (
 # against accidentally publishing a real address or telephone number in an
 # otherwise hard-to-detect format.
 APPROVED_COMMERCIAL_DISCLOSURE_SHA256 = (
-    "7253e684d407c9e6cf21d78dfa1e7a398390b697798e63fa224122a8b08e74f9"
+    "84e4c738158f61a930e4b625f50d8a62979b0abb1a86da1759ade6675f4c2e37"
 )
 
 

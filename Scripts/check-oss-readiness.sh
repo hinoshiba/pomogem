@@ -381,6 +381,7 @@ expected_paths = {
     "AppStore/screenshots/ja-JP/03-completion-reward.png",
     "AppStore/screenshots/ja-JP/04-accumulation-overview.png",
     "AppStore/screenshots/ja-JP/05-iCloud-and-privacy.png",
+    "AppStore/screenshots/iap-review/01-tumiben-pro-live-price.png",
 }
 
 manifest_entries = {}
@@ -396,7 +397,7 @@ for line_number, line in enumerate(manifest_path.read_text().splitlines(), start
     manifest_entries[raw_path] = digest
 
 if set(manifest_entries) != expected_paths:
-    raise SystemExit("error: screenshot checksum manifest differs from the reviewed five-file allowlist")
+    raise SystemExit("error: screenshot checksum manifest differs from the reviewed five listing images and one IAP review image")
 
 ledger_entries = {}
 for line_number, line in enumerate(ledger_path.read_text().splitlines(), start=1):
@@ -411,7 +412,7 @@ for line_number, line in enumerate(ledger_path.read_text().splitlines(), start=1
     ledger_entries[raw_path] = digest
 
 if set(ledger_entries) != expected_paths:
-    raise SystemExit("error: ASSET_LICENSES.md differs from the reviewed five-file screenshot allowlist")
+    raise SystemExit("error: ASSET_LICENSES.md differs from the reviewed five listing images and one IAP review image")
 
 for raw_path in sorted(expected_paths):
     path = PurePosixPath(raw_path)

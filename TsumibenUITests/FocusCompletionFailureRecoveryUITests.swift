@@ -250,13 +250,10 @@ final class FocusCompletionFailureRecoveryUITests: XCTestCase {
     }
 
     private func selectDemoDuration(in app: XCUIApplication) {
-        app.buttons["メニュー"].tap()
+        app.buttons["home.duration-picker"].tap()
         let demoDuration = app.buttons["12秒、DEMO"]
         XCTAssertTrue(demoDuration.waitForExistence(timeout: 4))
         demoDuration.tap()
-        let close = app.buttons["home.menu.close"]
-        XCTAssertTrue(close.waitForExistence(timeout: 4))
-        close.tap()
     }
 
     @discardableResult

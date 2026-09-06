@@ -471,48 +471,66 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         )
     }
 
-    func testLongPressLauncherChangesThemeWithoutStartingTimer() {
-        let alternateTheme = "長押しテーマ"
+    func testHomeMenuKeepsEqualSpaceCardsAndDirectFocusControlsAtDefaultAndAX5() {
+        for usesLargeText in [false, true] {
+            app.terminate()
+            app.launchEnvironment["TSUMIBEN_UI_TEST_AX5"] = usesLargeText ? "1" : "0"
+            app.launch()
+            XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 10))
 
-        openMenuAction(containing: "設定")
-        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
-        let addTheme = app.buttons["テーマを追加"]
-        XCTAssertTrue(scrollUntilHittable(addTheme))
-        addTheme.tap()
-        XCTAssertTrue(app.navigationBars["テーマを追加"].waitForExistence(timeout: 5))
-        let nameField = app.textFields.firstMatch
-        XCTAssertTrue(nameField.waitForExistence(timeout: 4))
-        nameField.tap()
-        nameField.typeText(alternateTheme)
-        app.navigationBars["テーマを追加"].buttons["保存"].tap()
-        XCTAssertTrue(waitForAbsence(app.navigationBars["テーマを追加"]))
-        tapNavigationBack(from: "設定")
+            let durationPicker = app.buttons["home.duration-picker"]
+            XCTAssertTrue(scrollUntilHittable(durationPicker, attempts: 12))
+            durationPicker.tap()
+            let fortyFiveMinutes = app.buttons["45分"].firstMatch
+            XCTAssertTrue(fortyFiveMinutes.waitForExistence(timeout: 4))
+            fortyFiveMinutes.tap()
 
-        let launcher = app.descendants(matching: .any)["home.focus-launcher"]
-        XCTAssertTrue(waitForHittable(launcher, timeout: 6))
-        launcher.press(forDuration: 0.9)
+            // Theme management must remain reachable from the visible selector
+            // when its duplicate entry and launcher context menu are removed.
+            let themePicker = app.buttons["home.subject-picker"]
+            XCTAssertTrue(scrollUntilHittable(themePicker, attempts: 12, swipingDown: true))
+            themePicker.tap()
+            let manageThemes = app.buttons["テーマを管理"]
+            XCTAssertTrue(manageThemes.waitForExistence(timeout: 4))
+            manageThemes.tap()
+            XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+            tapNavigationBack(from: "設定")
+            let launcher = app.buttons["home.focus-launcher"]
+            XCTAssertTrue(scrollUntilHittable(launcher, attempts: 12))
+            XCTAssertTrue(launcher.label.contains("45分集中する"))
+            XCTAssertFalse(app.buttons["一時停止"].exists)
 
-        let alternateChoice = app.buttons[alternateTheme]
-        XCTAssertTrue(
-            alternateChoice.waitForExistence(timeout: 5),
-            "A long press must reveal the active theme choices"
-        )
-        alternateChoice.tap()
+            app.buttons["メニュー"].tap()
+            XCTAssertTrue(app.navigationBars["メニュー"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.staticTexts["集中設定"].exists)
+            XCTAssertFalse(app.buttons["45分"].exists)
 
-        XCTAssertFalse(
-            app.buttons["一時停止"].exists,
-            "Choosing a theme from the long-press menu must not start focus"
-        )
-        XCTAssertTrue(
-            launcher.label.contains(alternateTheme),
-            "The launcher must immediately reflect the selected theme"
-        )
-
-        launcher.tap()
-        let focusSubject = app.staticTexts["focus.subject"]
-        XCTAssertTrue(focusSubject.waitForExistence(timeout: 6))
-        XCTAssertEqual(focusSubject.label, alternateTheme)
-        XCTAssertTrue(app.buttons["一時停止"].waitForExistence(timeout: 4))
+            var referenceSize: CGSize?
+            for rawValue in ["midnight", "aurora", "dawn", "study"] {
+                let card = app.buttons["home.atmosphere.\(rawValue)"]
+                XCTAssertTrue(scrollUntilHittable(card, attempts: 12))
+                XCTAssertGreaterThanOrEqual(card.frame.height, 44)
+                if let referenceSize {
+                    XCTAssertEqual(card.frame.width, referenceSize.width, accuracy: 1,
+                                   "All four space cards need the same width at this text size")
+                    XCTAssertEqual(card.frame.height, referenceSize.height, accuracy: 1,
+                                   "The image and subtitle must not change an individual card's height")
+                } else {
+                    referenceSize = card.frame.size
+                }
+                let originalSize = card.frame.size
+                card.tap()
+                XCTAssertEqual(card.frame.width, originalSize.width, accuracy: 1)
+                XCTAssertEqual(card.frame.height, originalSize.height, accuracy: 1,
+                               "Selecting a space must not resize its card")
+            }
+            retainScreenshot(named: usesLargeText ? "Home spaces — equal cards at AX5" : "Home spaces — equal cards at default text")
+            app.buttons["home.menu.close"].tap()
+            XCTAssertTrue(scrollUntilHittable(launcher, attempts: 12))
+            XCTAssertTrue(launcher.label.contains("45分集中する"))
+            XCTAssertFalse(app.buttons["一時停止"].exists,
+                           "Choosing a space must preserve the prepared timer without starting it")
+        }
     }
 
     func testVisibleHomeControlsConfigureFocusWithoutStartingIt() throws {
@@ -580,6 +598,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(customTime.waitForExistence(timeout: 4))
         customTime.tap()
         XCTAssertTrue(app.staticTexts["つみべんPro"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.staticTexts["1〜360分"].exists)
         app.buttons["閉じる"].tap()
         let launcher = app.buttons["home.focus-launcher"]
         XCTAssertTrue(waitForHittable(launcher, timeout: 5))
@@ -646,16 +665,12 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertFalse(editedRow.label.contains("非表示"), editedRow.label)
 
         tapNavigationBack(from: "設定")
-        app.buttons["メニュー"].tap()
-        let themeMenu = app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "テーマ、")
-        ).firstMatch
+        let themeMenu = app.buttons["home.subject-picker"]
         XCTAssertTrue(themeMenu.waitForExistence(timeout: 4))
         themeMenu.tap()
         let themeChoice = app.buttons[editedName]
         XCTAssertTrue(themeChoice.waitForExistence(timeout: 4))
         themeChoice.tap()
-        app.buttons["home.menu.close"].tap()
 
         let selectedLauncher = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", editedName)
@@ -767,13 +782,12 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 10))
 
         // 1. Show the real free 25-minute timer, never the test-only duration.
-        app.buttons["メニュー"].tap()
+        app.buttons["home.duration-picker"].tap()
         let productionDuration = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", "25分")
         ).firstMatch
         XCTAssertTrue(productionDuration.waitForExistence(timeout: 4))
         productionDuration.tap()
-        app.buttons["home.menu.close"].tap()
 
         let productionLauncher = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "25分集中する")
@@ -1037,14 +1051,13 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         expectedRemainingMinute: String,
         attachmentName: String
     ) throws {
-        app.buttons["メニュー"].tap()
+        app.buttons["home.duration-picker"].tap()
         let duration = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", durationButtonPrefix)
         ).firstMatch
         XCTAssertTrue(duration.waitForExistence(timeout: 4))
         XCTAssertTrue(scrollUntilHittable(duration))
         duration.tap()
-        app.buttons["home.menu.close"].tap()
 
         let launcher = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", launcherFragment)
@@ -1127,11 +1140,10 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     }
 
     private func selectDemoDurationForVisualAudit() {
-        app.buttons["メニュー"].tap()
+        app.buttons["home.duration-picker"].tap()
         let demo = app.buttons["12秒、DEMO"]
         XCTAssertTrue(demo.waitForExistence(timeout: 4))
         demo.tap()
-        app.buttons["home.menu.close"].tap()
         XCTAssertTrue(waitForHittable(demoLauncherForVisualAudit, timeout: 5))
     }
 

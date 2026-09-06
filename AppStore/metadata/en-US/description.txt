@@ -22,7 +22,7 @@ FEATURES
 
 TUMIBEN PRO
 
-Tumiben Pro is a one-time, non-consumable In-App Purchase. It unlocks every other focus duration from 1 to 180 minutes beyond the free 25-, 45-, 60-, and 90-minute presets, plus month labels on grouped pebbles. There is no subscription, free trial, or automatic renewal.
+Tumiben Pro is a one-time, non-consumable In-App Purchase. It unlocks every other focus duration from 1 to 360 minutes beyond the free 25-, 45-, 60-, and 90-minute presets, plus month labels on grouped pebbles. There is no subscription, free trial, or automatic renewal.
 
 PRIVACY
 

@@ -587,8 +587,9 @@ final class PomodoroEngineTests: XCTestCase {
 
     func testInvalidCustomDurationsAreRejected() {
         for minutes in [
-            Constants.Timer.customMinimumMinutes - 1,
-            Constants.Timer.customMaximumMinutes + 1
+            0,
+            361,
+            Int.max
         ] {
             var engine = PomodoroEngine()
             XCTAssertThrowsError(
@@ -601,6 +602,50 @@ final class PomodoroEngineTests: XCTestCase {
                 XCTAssertEqual(error as? PomodoroEngineError, .invalidCustomDuration)
             }
         }
+    }
+
+    func testSixHourProTimerPreservesProgressAndAwardAcrossPausedRecovery() throws {
+        var freeEngine = PomodoroEngine()
+        XCTAssertThrowsError(try freeEngine.startFocus(
+            duration: .custom(minutes: 360), isPro: false, now: referenceDate
+        )) { error in
+            XCTAssertEqual(error as? PomodoroEngineError, .customDurationRequiresPro)
+        }
+
+        let sessionID = UUID()
+        var engine = PomodoroEngine()
+        try engine.startFocus(
+            duration: .custom(minutes: 360), isPro: true,
+            now: referenceDate, sessionID: sessionID
+        )
+        XCTAssertEqual(engine.endDate, referenceDate.addingTimeInterval(21_600))
+        XCTAssertEqual(engine.snapshot(at: referenceDate).remainingSeconds, 21_600)
+        let halfway = referenceDate.addingTimeInterval(10_800)
+        XCTAssertEqual(engine.snapshot(at: halfway).remainingSeconds, 10_800)
+        XCTAssertEqual(engine.snapshot(at: halfway).progress, 0.5, accuracy: 0.000_001)
+        XCTAssertNil(engine.advance(at: halfway), "The former three-hour ceiling must not finish focus")
+
+        try engine.pause(at: halfway.addingTimeInterval(0.25))
+        var restored = try JSONDecoder().decode(
+            PomodoroEngine.self, from: JSONEncoder().encode(engine)
+        )
+        XCTAssertTrue(restored.hasValidPausedFocusPayloadState)
+        let resumedAt = halfway.addingTimeInterval(3_600.25)
+        XCTAssertEqual(restored.snapshot(at: resumedAt).remainingSeconds, 10_800)
+        try restored.resume(at: resumedAt)
+        let end = referenceDate.addingTimeInterval(25_200)
+        XCTAssertEqual(restored.endDate, end)
+        XCTAssertNil(restored.advance(at: end.addingTimeInterval(-0.001)))
+        guard case let .focusCompleted(completion) = restored.advance(at: end.addingTimeInterval(30)) else {
+            return XCTFail("Expected one six-hour completion after the pause")
+        }
+        XCTAssertEqual(completion.sessionID, sessionID)
+        XCTAssertEqual(completion.seconds, 21_600)
+        XCTAssertEqual(completion.grams, 3_600)
+        XCTAssertEqual(completion.endedAt, end)
+        XCTAssertEqual(completion.source, .timer)
+        XCTAssertEqual(restored.completedFocusCount, 1)
+        XCTAssertNil(restored.advance(at: end.addingTimeInterval(60)))
     }
 
     func testLateTicksCompleteExactlyOnceWithScheduledEnd() throws {
