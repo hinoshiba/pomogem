@@ -38,9 +38,10 @@ App Store素材の制作、公開、販売を制限するものではありま�
 PomoGemへの改名時点では、文字を含まない既存iconとAurora背景を継続使用します。
 listing 5枚はPomoGem 1.0 (5)から新規captureし、XCTestのRGB PNG添付を無加工でコピーしています。
 署名済みRelease実機とのparityは別のrelease gateで確認します。
-IAP審査画像は、新しいPomoGem商品をStoreKitで取得して実価格を撮影するまで未取得です。
-旧商品の画像や仮価格の画像を新版の審査素材として掲載しません。通常のOSS検査は明示的なpending状態と
-release blockerがある場合に限りlisting 5枚を許容し、提出用検査は実価格画像・hash・出所の記録を必須とします。
+IAP審査画像は、2026-09-06にPomoGem 1.0 (5)の新商品を実際のProduct.productsで取得し、
+StoreKit設定ファイルなしでUS storefrontの実価格$0.99を表示して撮影しました。日本語UIの
+1284×2778 RGB PNGを無加工でコピーし、目視とhashを確認しています。購入自体は実行していません。
+旧商品の画像や仮価格の画像は使わず、購入・復元・署名済み実機・提出の検証は別に行います。
 
 | 素材 | 場所 | 出所 | 配布条件 | SHA-256 |
 |---|---|---|---|---|
@@ -59,6 +60,7 @@ release blockerがある場合に限りlisting 5枚を許容し、提出用検�
 | App Store画面 03 | `AppStore/screenshots/ja-JP/03-completion-reward.png` | PomoGem 1.0 (5)のproduction UIをDebug-only deterministic fixtureで2026-09-06に新規capture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `8cbdd99b4a7218c4ff05df7313abf48e9ca80d690e3578e70835c2ed5cef67c1` |
 | App Store画面 04 | `AppStore/screenshots/ja-JP/04-accumulation-overview.png` | PomoGem 1.0 (5)のproduction UIをDebug-only deterministic fixtureで2026-09-06に新規capture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `77a59f13e47a27e92c21505fc91255a6a99c3a9ae772f231e59badba9ea02eed` |
 | App Store画面 05 | `AppStore/screenshots/ja-JP/05-iCloud-and-privacy.png` | PomoGem 1.0 (5)のproduction UIをDebug-only deterministic fixtureで2026-09-06に新規capture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `0aaaf14b32c8b5834cbf9bd2eadbe1fff37f59409cdf818bb0471f87356cf97d` |
+| IAP審査画面 | `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png` | PomoGem 1.0 (5)のproduction UIで新商品の実StoreKit価格を2026-09-06にcapture。Product.products、StoreKit設定なし、JA UI／US storefront $0.99。購入未実行、1284×2778 RGB PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `d1cba699d99ef7f34cebe0e1261f7fd6616003138a4c01aa9e0ded2555aa52c0` |
 | Zen Maru Gothic Black | `PomoGem/Resources/Fonts/ZenMaruGothic-Black.ttf`、`http_dists/public/ZenMaruGothic-Black.ttf` | Copyright 2021 The Zen Maru Gothic Project Authors | SIL Open Font License 1.1。`LICENSE-fonts.txt`参照 | `6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f` |
 
 生成経緯とpromptの要約は`PomoGem/Resources/GENERATED-ASSETS.md`に記録しています。

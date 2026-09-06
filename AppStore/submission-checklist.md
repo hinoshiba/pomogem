@@ -4,11 +4,19 @@
 分けて確認します。以前のアプリに対するupload／価格／schema／登録済みの証拠は新アプリへ転用しません。
 過去の結果は`Docs/LEGACY_RELEASE_PROVENANCE.md`に分離しています。
 
-## 未完了なら提出しない項目
+## 2026-09-06 の再登録・提出作業
 
-- [ ] 2026-09-06改訂のja-JP／en-US掲載文・subtitle・promotional text・keywordsとHomeのテーマ／時間選択導線を
+新IDの署名・アップロード・CloudKit schema・IAPについて確認済みの結果は
+[release-record-1.0-5.md](release-record-1.0-5.md)を参照します。
+iCloudの端末間同期と関連するアカウント境界の実機再検証は、ユーザーの明示指定で今回は省略。
+以下の未チェック項目を合格とみなすことはありません。OSS公開、追加実機QA、運用確認の項目も含まれ、
+リポジトリは引き続き非公開、改名はユーザーが後で行います。
+
+## 検証項目と未実施の追加確認
+
+- [x] 2026-09-06改訂のja-JP／en-US掲載文・subtitle・promotional text・keywordsとHomeのテーマ／時間選択導線を
   最終候補へ照合し、App Store Connectへ保存後に再読み込みで一致を確認。過去の転記済みcheckは今回改訂の保存を意味しない
-- [ ] Homeのテーマ／時間選択が写る最終候補で正式screenshotを再撮影し、5枚・hash・画面内versionを更新。
+- [x] Homeのテーマ／時間選択が写る最終候補で正式screenshotを再撮影し、5枚・hash・画面内versionを更新。
   旧候補の画像と開発中のArtifacts画像を今回の提出証拠として扱わない
 - [ ] `release-experience-review.md`の共通タスクを署名済み実機でVoiceOver／200%以上の文字サイズ／
   視差効果を減らす／色以外の識別／コントラストの観点から実行。Accessibility Nutrition Labelsは
@@ -20,7 +28,7 @@
 - [x] `pomogem.hinoshiba.com`のCNAMEが`hinoshiba.github.io`へ向くことを確認（2026-09-06）
 - [ ] GitHub Pagesのcustom domain所有確認と「Enforce HTTPS」を有効化し、新domainの実配信を検証
 - [ ] 公開SupportメールアドレスとGitHub profileの掲載をmaintainerが明示承認
-- [ ] 新規`iCloud.com.hinoshiba.pomogem`のdevelopment schemaを、最終RCから
+- [x] 新規`iCloud.com.hinoshiba.pomogem`のdevelopment schemaを、最終RCから
   replica identity／Subject tombstone／Achievement deletion revision・token・restore ack／
   `timerDisplayModeRawValue`と13組・26 fieldのPrefs stampを含む7種類の同期元modelでinitialize・検証して、
   同一schemaをproductionへdeployする。production environmentはclearしない
@@ -97,22 +105,22 @@
   rare reward UI／operations entitlement／direct CloudKit一括削除UI／削除用launch preflight gateがないことを確認
 - [x] `com.hinoshiba.pomogem`と`com.hinoshiba.pomogem.widgets`、
   `iCloud.com.hinoshiba.pomogem`を新規登録し、containerのhostへの割当を確認（2026-09-06）
-- [ ] 配布前にhostのiCloud／CloudKit、Push Notifications、IAPとWidgetの追加capabilityなしを照合し、
+- [x] 配布前にhostのiCloud／CloudKit、Push Notifications、IAPとWidgetの追加capabilityなしを照合し、
   新しい配布copyで両targetの明示bundle ID、Apple Distribution profile、`get-task-allow = false`、
   hostのCloudKit Production／APNs Productionを実物で確認する
-- [ ] 新Non-Consumable `com.hinoshiba.pomogem.pro.lifetime`を作成し、米国USD 0.99を基準価格、日本をJPY 100のcustom price、その他の配信地域をAppleの現地相当額に設定
+- [x] 新Non-Consumable `com.hinoshiba.pomogem.pro.lifetime`を作成し、米国USD 0.99を基準価格、日本をJPY 100のcustom price、その他の配信地域をAppleの現地相当額に設定
 - [ ] 日本向け有料IAPについて販売主体と特商法上の表示要否を確認し、必要な事業者情報・価格・支払／提供時期・返品等を購入前に表示。氏名／住所／電話／Webで省略する販売価格は、請求時に購入判断前の十分な余裕をもって遅滞なく提供できる実運用を確認（現行の既知blocker）
 - [ ] `Docs/COMMERCIAL_DISCLOSURE_OPERATIONS.md`に従い、非公開の法定情報正本、販売価格を含む開示請求メール、担当者不在時の代替手順を実地確認
 - [ ] 新IAPのja-JP（`ポモジェムPro`）／en-US（`PomoGem Pro`）を「任意時間・月刻印」の
   2機能で登録し、新product IDのreview notes・価格・配信地域・Family Sharingを保存後に再確認する。
   同じ新アプリのversion 1.0と初回IAPを同一のreview submissionへ追加する
-- [ ] IAP review screenshotを「任意時間・月刻印」の2機能とStoreKitの実価格だけを示す現行paywallへ差し替え、reload確認
-- [ ] App本体をFree、Public、148／175 Countries or Regionsへ設定。現行EU 27を除外し、United Kingdom、Norway、Switzerlandは含め、今後追加されるstorefrontの自動追加を有効化
-- [ ] IAPをApp本体と同じ148／175 Countries or Regionsへ設定。現行EU 27を除外し、United Kingdom、Norway、Switzerlandは含め、今後追加されるstorefrontの自動追加を有効化
-- [ ] App本体とIAPのEU 27での提供を外し、Version 1.0のEU DSA release blockerを配信範囲で解消。これはtrader該当性についての法律判断ではなく、将来EU提供を有効にする場合はAccount Holderが再評価
-- [ ] `ja-JP`と`en-US`のlistingを入力し、英語listingでApp UI／supportが日本語であることを明示
-- [ ] 新version 1.0のja-JP／en-US descriptionとApp Review notesを正本どおり保存し、reload後の完全一致を確認
-- [ ] App Review contactのfirst name、last name、国際形式電話番号、emailをApp Store Connectだけに入力し、保存後にreloadして確認
+- [x] IAP review screenshotを「任意時間・月刻印」の2機能とStoreKitの実価格だけを示す現行paywallへ差し替え、reload確認
+- [x] App本体をFree、Public、148／175 Countries or Regionsへ設定。現行EU 27を除外し、United Kingdom、Norway、Switzerlandは含め、今後追加されるstorefrontの自動追加を有効化
+- [x] IAPをApp本体と同じ148／175 Countries or Regionsへ設定。現行EU 27を除外し、United Kingdom、Norway、Switzerlandは含め、今後追加されるstorefrontの自動追加を有効化
+- [x] App本体とIAPのEU 27での提供を外し、Version 1.0のEU DSA release blockerを配信範囲で解消。これはtrader該当性についての法律判断ではなく、将来EU提供を有効にする場合はAccount Holderが再評価
+- [x] `ja-JP`と`en-US`のlistingを入力し、英語listingでApp UI／supportが日本語であることを明示
+- [x] 新version 1.0のja-JP／en-US descriptionとApp Review notesを正本どおり保存し、reload後の完全一致を確認
+- [x] App Review contactのfirst name、last name、国際形式電話番号、emailをApp Store Connectだけに入力し、保存後にreloadして確認
 - [ ] Sandboxでpurchase、pending、cancel、restore、revocationを確認
 - [ ] App Privacy draftをproduction archive、private CloudKit access権限、support mailの実運用と照合。
   運営者がiCloud dataを取得・閲覧・保持せずoptional disclosure条件も満たす場合だけData Not Collectedを
@@ -121,11 +129,11 @@
   `CA92.1`と、Widgetのrequired-reason API宣言が空であることをRelease archiveに照合
 - [ ] `AppStore/age-rating.md`の全descriptorを新レコードの2026年版age rating質問へ入力し、生成結果4+を保存後にreloadして確認
 - [ ] Export complianceを現行質問で確認
-- [ ] 新1.0 (5)のiPhone screenshot 5枚をproduction UIのDebug-only fixtureから撮影し、
+- [x] 新1.0 (5)のiPhone screenshot 5枚をproduction UIのDebug-only fixtureから撮影し、
   実行結果と1284×2778 RGB／alphaなし、個人情報・placeholder・誤訴求なしを
   `screenshots/README.md`に記録する。新IAPのlive-price画像は別gateとして確認する
 - [ ] 上記5枚を署名済みRelease実機と比較し、visual parityがない画像は再capture
-- [ ] metadataのname、subtitle、description、keywords、URLs、review notesを入力
+- [x] metadataのname、subtitle、description、keywords、URLs、review notesを入力
 - [ ] Accessibility Nutrition Labelsを実機評価に基づき回答
 - [x] Apple silicon MacとVision ProでのiOS app提供を無効化
 - [x] Apple School Manager reduced priceをenabledとして保存
@@ -140,14 +148,8 @@
 - [ ] 全11出荷対象モデルのversioned JSON exportを40年相当の保存データで実行し、件数・内容・Files保存・一時ファイル削除を確認
 - [ ] local-only実機でofflineの基本機能、削除前のJSON書き出しと再import不可を確認し、iCloud実機2台で
   online account確認、同期、timer引き継ぎ、reset、通信断時fail-closedと非破壊性を確認
-- [x] Xcode CLI Archiveとraw development署名検証、Organizerの`Distribute App`表示、owner本人による
-  Distribute／Uploadを2026-09-04に完了。Xcode側はerror／warning 0、App Store Connect側はPomoGem
-  `1.0 (1)`をValidated／Ready to Submitとして受領。ただしこれはLive Activityと45／90分無料枠を含まない
-- [x] 現行仕様を含む`1.0 (3)`を2026-09-05に新規Archiveし、raw development署名、host／Widget、
-  CloudKit／APNs development環境、Privacy Manifest、arm64、Release debug-gate scanを検証。
-  Organizer archiveは`~/Library/Developer/Xcode/Archives/2026-09-05/PomoGem 2026-09-05, 00.49.00.xcarchive`
-- [ ] 上記Release appをNoe’s iPhone 14へ既存dataを消さずinstall済み。端末lockによりCLI起動要求が
-  iOSから拒否されたため、unlock状態での起動と今回のテーマUIの実機smokeを完了する
+- 過去の別アプリ1.0 (1)／1.0 (3)のアップロード・実機installは、今回の新アプリの証拠にはしない。
+  日時と旧IDを含む履歴は`Docs/LEGACY_RELEASE_PROVENANCE.md`を参照。
 - [ ] `timerDisplayMode`を含む最終候補を一意なbuild番号でArchive／Distributeし、distribution署名／
   production CloudKit・APNsを再検証して、App Store Connectでそのbuildを提出対象へ選択
 - [ ] 変更後の最終候補をDistribute後、internal TestFlightまたは同一署名候補相当の実機QAを完了

@@ -211,7 +211,7 @@ i_cloud_sync:
     materialized_session_closed_focus_tail_cleanup: allowed
 app_privacy:
   proposed_answer: data_not_collected
-  status: draft_requires_production_and_operations_verification
+  status: data_not_collected_published_2026_09_06
   assumption: private_cloudkit_data_is_not_accessed_or_retained_by_developer
   required_reason_apis:
     app:
@@ -229,7 +229,7 @@ in_app_purchases:
   - product_id: com.hinoshiba.pomogem.pro.lifetime
     type: non_consumable
     reference_name: PomoGem Pro Lifetime
-    review_screenshot_status: pending_live_price_capture
+    review_screenshot_status: captured_live_price
     family_sharing: false
     availability: non_eu_148_of_175_countries_and_regions
     automatically_available_in_new_countries_or_regions: true
@@ -239,7 +239,7 @@ in_app_purchases:
     localizations:
       ja-JP:
         display_name: ポモジェムPro
-        description: 任意の集中時間とまとまり粒の月刻印を買い切りで追加。
+        description: 自由な1〜360分と月刻印を追加。買い切りで、自動更新はありません。
       en-US:
         display_name: PomoGem Pro
         description: Custom timers and month labels.
@@ -265,14 +265,40 @@ oss_publication:
     - store_and_web_marketing_images
   owner_decision_required: publish_as_mixed_license_or_relicense_and_replace_excluded_assets
 release_blockers:
-  - capture and verify the new PomoGem IAP review screenshot with the live StoreKit price for com.hinoshiba.pomogem.pro.lifetime
-  - register and verify the new PomoGem IAP before submission
   - signed clean-install testing must verify the equal first-launch choices, both confirmations, immutable selection, and the complete local-only basic experience without an Apple Account or network
-  - initialize the new PomoGem CloudKit development container from the final release candidate including replica identity, Subject tombstone, Achievement deletion-event and restore-ack fields, the timer-completion and timer-display raw selections, and all 26 preference stamp fields, validate it, then deploy that exact seven-model source schema to production without resetting production
-  - signed two-device testing must verify source synchronization, account A-to-B blocking and return-to-A remount, bounded reconciliation, timer handoff, and fail-closed network-loss recovery
   - owner must accept the focus partition trade-off that materialized completions survive delayed cancellation
   - owner must accept the fail-closed interactive recovery ceiling when more than 256 corrupt active logical timer sessions precede a valid session, or ship a versioned reversible quarantine design
   - Japan paid-IAP operator disclosure and pre-purchase legal presentation require owner or qualified legal determination
   - owner must choose mixed-license publication or relicense and replace the excluded brand assets
   - publish and verify the Privacy, Support, and Terms pages plus the noindex seller-disclosure endpoint linked only beside the Pro offer and before the in-app purchase button over canonical HTTPS
   - complete StoreKit Sandbox, signed-device, TestFlight, App Store metadata, and distribution-signing verification
+
+release_verification_2026_09_06:
+  app_store_record_created: true
+  iap_apple_id: 6809141970
+  iap_added_to_review: true
+  cloudkit_schema:
+    development_imported: true
+    production_deployed: true
+    final_model_entities_verified: 7
+    final_model_scalar_attributes_verified: 120
+    production_semantic_match: true
+    previous_container_records_changed: false
+  icloud_device_sync_testing: skipped_by_explicit_user_request
+  distribution_export: verified_apple_distribution_app_and_widget
+  distribution_cloudkit_environment: Production
+  distribution_aps_environment: production
+  get_task_allow: false
+  upload: succeeded
+  build_processing: complete
+  build_attached_to_version: true
+  app_and_iap_review_draft: ready_to_submit
+  app_review_submitted: false
+  uploaded_version: "1.0"
+  uploaded_build: "5"
+  focused_unit_tests_passed: 125
+  ci_run: 34024974468
+  ci_result: success
+  live_storekit_price_capture: USD_0_99
+  live_storekit_purchase_performed: false
+  signing_secrets_and_review_contact: private_outside_repository

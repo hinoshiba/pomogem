@@ -5,8 +5,8 @@
 The checked-in set shows PomoGem version 1.0 build 5, including the visible theme and
 duration controls on Home, the remaining-time ring, and the completion card
 before the gem drops. All five images were visually reviewed and their hashes
-recorded in `checksums.sha256`. The new product's separate IAP price image is
-pending, as described below.
+recorded in `checksums.sha256`. The new product's separate IAP review image
+shows its actual StoreKit price and is documented below.
 
 Compare the set with the signed Release build on a supported physical iPhone
 before submission; that visual-parity check remains outstanding. Images saved
@@ -159,22 +159,37 @@ Screenshot 03 shows the first saved 250g completion before the drop, with Close,
 GIF, and 5-minute break actions. Signed-Release physical-device visual parity
 remains a separate submission gate.
 `shasum -a 256 -c AppStore/screenshots/checksums.sha256` verifies the five listing
-images. Add the IAP image only after its live-price capture has passed review.
+images and the separate IAP review image.
 
-## IAP review image — pending
+## IAP review image — captured
 
-Status: `pending_live_price_capture`.
+Status: `captured_live_price`.
 
-The new product `com.hinoshiba.pomogem.pro.lifetime` still requires its own
-review screenshot. Capture the production paywall only after StoreKit returns
-this product and its actual localized `Product.displayPrice`. The intended
-destination is `iap-review/01-pomogem-pro-live-price.png`.
+`iap-review/01-pomogem-pro-live-price.png` was captured on 2026-09-06 from
+PomoGem version 1.0 build 5 on an iPhone 12 Pro Max simulator running iOS 26.5.
+The Japanese production paywall displays `com.hinoshiba.pomogem.pro.lifetime`
+returned by the actual `Product.products` request, without a local StoreKit
+configuration. The US storefront supplied the displayed `$0.99` price through
+`Product.displayPrice`; this is not a Japan-storefront price capture.
 
-The earlier product's price screenshot was preserved in a private historical
-archive and removed from the public screenshot set and checksum manifest. It
-does not prove availability or price for the new product. Do not substitute
-that image, draw a price into a screenshot, or use a StoreKit test catalog to
-claim a live product. This capture remains a submission gate.
+The image shows the 1–360 minute range, month labels on grouped pebbles,
+one-time purchase, the pre-purchase seller-disclosure link, and Restore
+Purchases. The capture test
+`IAPCaptureUITests/testCaptureActualStoreKitPrice` passed (1 of 1 tests).
+It opened the paywall and checked that its purchase control was available;
+it did not perform a purchase, restore, or offer redemption.
+
+The source attachment was `136CBBEE-68B6-4251-AF3B-0E604F56ECBD.png`, named
+`01-pomogem-pro-live-price` in the XCTest result. It was already an opaque
+1284 × 2778 RGB PNG and was copied byte for byte, with no cropping, price
+replacement, compositing, or other pixel edits. Its hash is recorded in
+`checksums.sha256` and `ASSET_LICENSES.md`.
+
+The earlier product's price screenshot remains in a private historical
+archive and is not included in this set. This new capture establishes the
+paywall's visible product and price; it does not establish purchase/restore
+success, signed-Release physical-device parity, or App Store Connect upload
+and submission completion.
 
 ## English product page
 
