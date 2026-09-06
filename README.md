@@ -116,6 +116,7 @@ repositoryの改名前後で同じ配信先を使用します。GitHub repositor
 公開確認が残っています。公開Webのsource linkは匿名でアクセスできるようになってから追加します。
 
 - 製品サイト: <https://pomogem.hinoshiba.com/>
+- 製品サイト（English）: <https://pomogem.hinoshiba.com/en/>
 - Privacy Policy: <https://pomogem.hinoshiba.com/privacy/>
 - Support: <https://pomogem.hinoshiba.com/support/>
 

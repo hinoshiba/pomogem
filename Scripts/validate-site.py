@@ -13,12 +13,17 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1] / "http_dists"
 PUBLIC_BASE = "https://pomogem.hinoshiba.com/"
 INDEX_PAGE = ROOT / "index.html"
+ENGLISH_INDEX_PAGE = ROOT / "en/index.html"
 COMMERCIAL_PAGE = ROOT / "commercial-transactions/index.html"
+ENGLISH_COMMERCIAL_PAGE = ROOT / "en/commercial-transactions/index.html"
+INDEX_PAGES = {INDEX_PAGE, ENGLISH_INDEX_PAGE}
+COMMERCIAL_PAGES = {COMMERCIAL_PAGE, ENGLISH_COMMERCIAL_PAGE}
 COMMERCIAL_MARKERS = ("commercial-transactions", "販売条件", "販売者情報")
 EXACT_PRICE_PATTERNS = (
     r"[¥￥$]\s*\d",
     r"\b(?:USD|JPY)\s*\d",
     r"\d[\d,]*(?:\.\d+)?\s*(?:円|米ドル|ドル)",
+    r"\d[\d,]*(?:\.\d+)?\s*(?:USD|JPY|dollars?|yen|cents?)\b",
 )
 PUBLIC_CONTACT_PATTERNS = (
     r"href\s*=\s*[\"']tel:",
@@ -29,16 +34,19 @@ PUBLIC_CONTACT_PATTERNS = (
 # replacement of this approved snapshot hash. This is the fail-closed guard
 # against accidentally publishing a real address or telephone number in an
 # otherwise hard-to-detect format.
-APPROVED_COMMERCIAL_DISCLOSURE_SHA256 = (
-    "b0d5fb95a1becc5100c43e575d6b5062473d6526e5fbeda385ce2c978ee95846"
-)
+APPROVED_COMMERCIAL_DISCLOSURE_SHA256 = {
+    COMMERCIAL_PAGE: "ae5591a40fb16917658f3429bd5b459d81f11d372a4062ee3fcc3d5c62632ead",
+    ENGLISH_COMMERCIAL_PAGE: "71dc5896b3fa1b2d62388cafc145954e2093d094507d29fe04d77b883fd642e0",
+}
 
 
 class PageParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.refs: list[tuple[str, str]] = []
+        self.links: list[dict[str, str]] = []
         self.canonical: list[str] = []
+        self.alternates: list[tuple[str, str]] = []
         self.meta: dict[str, str] = {}
         self.anchors: set[str] = set()
         self.title_parts: list[str] = []
@@ -46,6 +54,8 @@ class PageParser(HTMLParser):
         self.in_title = False
         self.html_lang: str | None = None
         self.errors: list[str] = []
+        self.section_ids: list[str] = []
+        self.current_anchor: dict[str, str] | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         values = {key: value or "" for key, value in attrs}
@@ -57,14 +67,22 @@ class PageParser(HTMLParser):
             self.html_lang = values.get("lang")
         if tag == "title":
             self.in_title = True
+        if tag == "section":
+            self.section_ids.append(values.get("id", ""))
         if tag in {"a", "link"} and values.get("href"):
             self.refs.append(("href", values["href"]))
+            link = {**values, "tag": tag, "section": "/".join(self.section_ids), "text": ""}
+            self.links.append(link)
+            if tag == "a":
+                self.current_anchor = link
         if tag in {"img", "script", "source"} and values.get("src"):
             self.refs.append(("src", values["src"]))
         if tag == "img" and "alt" not in values:
             self.errors.append(f"img is missing alt: {values.get('src', '<inline>')}")
         if tag == "link" and values.get("rel") == "canonical":
             self.canonical.append(values.get("href", ""))
+        if tag == "link" and values.get("rel") == "alternate" and values.get("hreflang"):
+            self.alternates.append((values["hreflang"], values.get("href", "")))
         if tag == "meta":
             key = values.get("name") or values.get("property")
             if key:
@@ -73,11 +91,17 @@ class PageParser(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         if tag == "title":
             self.in_title = False
+        if tag == "section" and self.section_ids:
+            self.section_ids.pop()
+        if tag == "a":
+            self.current_anchor = None
 
     def handle_data(self, data: str) -> None:
         self.text_parts.append(data)
         if self.in_title:
             self.title_parts.append(data)
+        if self.current_anchor is not None:
+            self.current_anchor["text"] += data
 
 
 def fail(message: str) -> None:
@@ -94,6 +118,11 @@ def png_dimensions(path: Path) -> tuple[int, int]:
 
 def resolve_local(page: Path, value: str) -> Path | None:
     split = urlsplit(value)
+    if split.scheme in {"http", "https"} and split.netloc == urlsplit(PUBLIC_BASE).netloc:
+        # Canonical and language-alternate URLs must resolve inside this build,
+        # just like relative navigation links.
+        value = split.path + (f"#{split.fragment}" if split.fragment else "")
+        split = urlsplit(value)
     if split.scheme in {"http", "https", "mailto", "tel", "data"}:
         return None
     if split.scheme or split.netloc:
@@ -122,6 +151,11 @@ required = [
     ROOT / "support/index.html",
     ROOT / "terms/index.html",
     COMMERCIAL_PAGE,
+    ENGLISH_INDEX_PAGE,
+    ROOT / "en/privacy/index.html",
+    ROOT / "en/support/index.html",
+    ROOT / "en/terms/index.html",
+    ENGLISH_COMMERCIAL_PAGE,
     ROOT / "robots.txt",
     ROOT / "sitemap.xml",
     ROOT / "styles.css",
@@ -145,12 +179,18 @@ expected_canonical = {
     ROOT / "terms/index.html": PUBLIC_BASE + "terms/",
     COMMERCIAL_PAGE: PUBLIC_BASE + "commercial-transactions/",
 }
+for page, canonical in list(expected_canonical.items()):
+    expected_canonical[ROOT / "en" / page.relative_to(ROOT)] = PUBLIC_BASE + "en/" + canonical.removeprefix(PUBLIC_BASE)
 
 expected_sitemap_locations = {
     PUBLIC_BASE,
     PUBLIC_BASE + "privacy/",
     PUBLIC_BASE + "support/",
     PUBLIC_BASE + "terms/",
+}
+expected_sitemap_locations |= {
+    PUBLIC_BASE + "en/" + url.removeprefix(PUBLIC_BASE)
+    for url in expected_sitemap_locations
 }
 
 parsed_pages: dict[Path, PageParser] = {}
@@ -162,14 +202,14 @@ for page in sorted(ROOT.rglob("*.html")):
         fail(f"exact monetary amount must not be published on the website: {page.relative_to(ROOT)}")
     if any(re.search(pattern, source, flags=re.IGNORECASE) for pattern in PUBLIC_CONTACT_PATTERNS):
         fail(f"public phone or postal address must not be embedded in the website: {page.relative_to(ROOT)}")
-    if page not in {INDEX_PAGE, COMMERCIAL_PAGE} and any(marker in source for marker in COMMERCIAL_MARKERS):
+    if page not in INDEX_PAGES | COMMERCIAL_PAGES and any(marker in source for marker in COMMERCIAL_MARKERS):
         fail(f"commercial disclosure must not appear in general site navigation: {page.relative_to(ROOT)}")
-    if page == INDEX_PAGE:
+    if page in INDEX_PAGES:
         if source.count('href="commercial-transactions/"') != 1:
             fail("index must have exactly one relative purchase-disclosure link")
         if source.count("commercial-transactions") != 1:
             fail("index purchase-disclosure endpoint must appear exactly once")
-        if source.count("購入条件・販売者情報") != 1 or "販売条件" in source:
+        if page == INDEX_PAGE and (source.count("購入条件・販売者情報") != 1 or "販売条件" in source):
             fail("index must use the scoped purchase-disclosure label")
     if any(term in source for term in ("Mac版", "Mac Catalyst", "macOS対応")):
         fail(f"unsupported Mac claim remains in {page.relative_to(ROOT)}")
@@ -178,8 +218,9 @@ for page in sorted(ROOT.rglob("*.html")):
     parser = PageParser()
     parser.feed(source)
     parsed_pages[page.resolve()] = parser
-    if parser.html_lang != "ja":
-        fail(f"html lang must be ja: {page.relative_to(ROOT)}")
+    expected_lang = "en" if page.is_relative_to(ROOT / "en") else "ja"
+    if parser.html_lang != expected_lang:
+        fail(f"html lang must be {expected_lang}: {page.relative_to(ROOT)}")
     if not "".join(parser.title_parts).strip():
         fail(f"title is empty: {page.relative_to(ROOT)}")
     visible_text = " ".join(" ".join(parser.text_parts).split())
@@ -191,6 +232,28 @@ for page in sorted(ROOT.rglob("*.html")):
         fail(f"{page.relative_to(ROOT)}: {error}")
     if page in expected_canonical and parser.canonical != [expected_canonical[page]]:
         fail(f"canonical mismatch in {page.relative_to(ROOT)}: {parser.canonical}")
+    if page in expected_canonical:
+        japanese_page = ROOT / page.relative_to(ROOT / "en") if expected_lang == "en" else page
+        english_page = ROOT / "en" / japanese_page.relative_to(ROOT)
+        expected_alternates = [
+            ("ja", expected_canonical[japanese_page]),
+            ("en", expected_canonical[english_page]),
+            ("x-default", expected_canonical[japanese_page]),
+        ]
+        if sorted(parser.alternates) != sorted(expected_alternates):
+            fail(f"language alternates mismatch in {page.relative_to(ROOT)}: {parser.alternates}")
+        other_lang = "ja" if expected_lang == "en" else "en"
+        other_page = japanese_page if expected_lang == "en" else english_page
+        switches = [link for link in parser.links if "language-switch" in link.get("class", "").split()]
+        if not switches:
+            fail(f"visible language switch is missing: {page.relative_to(ROOT)}")
+        for link in switches:
+            expected_label = "日本語" if other_lang == "ja" else "English"
+            if (link["tag"] != "a" or link.get("lang") != other_lang
+                    or link.get("hreflang") != other_lang
+                    or link["text"].strip() != expected_label
+                    or resolve_local(page, link["href"]) != other_page.resolve()):
+                fail(f"language switch must link to its {other_lang} counterpart: {page.relative_to(ROOT)}")
     for _, value in parser.refs:
         target = resolve_local(page, value)
         if target is not None and not target.exists():
@@ -211,26 +274,30 @@ for page, parser in parsed_pages.items():
         if fragment not in target_parser.anchors:
             fail(f"missing fragment target in {page.relative_to(ROOT)}: {value}")
 
-commercial_page_resolved = COMMERCIAL_PAGE.resolve()
-index_page_resolved = INDEX_PAGE.resolve()
-index_commercial_link_count = 0
+commercial_pages_resolved = {page.resolve() for page in COMMERCIAL_PAGES}
+index_commercial_link_count = {page.resolve(): 0 for page in INDEX_PAGES}
 for page, parser in parsed_pages.items():
-    if page == commercial_page_resolved:
-        continue
-    for attribute, value in parser.refs:
-        if attribute != "href":
-            continue
+    for link in parser.links:
+        value = link["href"]
         target = resolve_local(page, value)
-        if target == commercial_page_resolved:
-            if page == index_page_resolved and value == "commercial-transactions/":
-                index_commercial_link_count += 1
+        if target in commercial_pages_resolved:
+            if (page in index_commercial_link_count and value == "commercial-transactions/"
+                    and link["tag"] == "a" and "plans" in link["section"].split("/")):
+                index_commercial_link_count[page] += 1
+            elif page in commercial_pages_resolved and (
+                (link["tag"] == "link" and link.get("rel") in {"canonical", "alternate"})
+                or (link["tag"] == "a" and "language-switch" in link.get("class", "").split())
+                or (link["tag"] == "a" and target == page and value.startswith("#"))
+            ):
+                continue
             else:
                 fail(
                     "commercial disclosure must only be linked from the Pro offer: "
                     f"{page.relative_to(ROOT)}"
                 )
-if index_commercial_link_count != 1:
-    fail("index must link once from the Pro offer to the commercial disclosure")
+for page, count in index_commercial_link_count.items():
+    if count != 1:
+        fail(f"homepage must link once from the Pro offer to the commercial disclosure: {page.relative_to(ROOT)}")
 
 index = INDEX_PAGE.read_text(encoding="utf-8")
 if "基本無料" not in index or "iPhone" not in index:
@@ -255,7 +322,6 @@ for required_positioning_term in (
 if 'id="hero-drop"' in index:
     fail("hero must not trigger an off-screen automatic demo")
 
-index_meta = parsed_pages[(ROOT / "index.html").resolve()].meta
 required_meta = {
     "description",
     "og:type",
@@ -274,9 +340,6 @@ required_meta = {
     "twitter:image",
     "twitter:image:alt",
 }
-missing_meta = sorted(key for key in required_meta if not index_meta.get(key, "").strip())
-if missing_meta:
-    fail(f"index metadata is missing: {', '.join(missing_meta)}")
 expected_meta = {
     "og:type": "website",
     "og:site_name": "ポモジェム",
@@ -288,9 +351,26 @@ expected_meta = {
     "twitter:card": "summary_large_image",
     "twitter:image": PUBLIC_BASE + "og-pomogem-v1.png",
 }
-for key, expected in expected_meta.items():
-    if index_meta.get(key) != expected:
-        fail(f"index {key} mismatch: {index_meta.get(key)!r}")
+for homepage in sorted(INDEX_PAGES):
+    homepage_parser = parsed_pages[homepage.resolve()]
+    homepage_meta = homepage_parser.meta
+    missing_meta = sorted(key for key in required_meta if not homepage_meta.get(key, "").strip())
+    if missing_meta:
+        fail(f"homepage metadata is missing in {homepage.relative_to(ROOT)}: {', '.join(missing_meta)}")
+    localized_expected_meta = dict(expected_meta)
+    if homepage == ENGLISH_INDEX_PAGE:
+        localized_expected_meta.update({"og:site_name": "PomoGem", "og:locale": "en_US", "og:url": PUBLIC_BASE + "en/"})
+        translated_metadata = ["".join(homepage_parser.title_parts)] + [
+            homepage_meta[key] for key in (
+                "description", "og:title", "og:description", "og:image:alt",
+                "twitter:title", "twitter:description", "twitter:image:alt",
+            )
+        ]
+        if any(re.search(r"[\u3040-\u30ff\u3400-\u9fff]", value) for value in translated_metadata):
+            fail("English homepage title, description, and sharing metadata must be translated")
+    for key, expected in localized_expected_meta.items():
+        if homepage_meta.get(key) != expected:
+            fail(f"homepage {key} mismatch in {homepage.relative_to(ROOT)}: {homepage_meta.get(key)!r}")
 
 # Registration precedes public availability. Show a matching Store banner only
 # after the listing is publicly available to download.
@@ -303,8 +383,10 @@ source_links = [value for parser in parsed_pages.values() for attribute, value i
                 if attribute == "href" and (value == public_source_url or value.startswith(public_source_url + "/"))]
 if repository_visibility[0] == "private" and source_links:
     fail("private source repository links must not appear on the public website")
-if repository_visibility[0] == "public" and public_source_url not in index:
-    fail("index must link to the anonymously accessible public source repository")
+if repository_visibility[0] == "public":
+    for homepage in INDEX_PAGES:
+        if public_source_url not in homepage.read_text(encoding="utf-8"):
+            fail(f"homepage must link to the anonymously accessible public source repository: {homepage.relative_to(ROOT)}")
 store_id_entries = re.findall(r"^app_store_id:\s*([^\n]+)$", store_configuration, re.MULTILINE)
 if len(store_id_entries) != 1:
     fail("configuration must contain exactly one app_store_id")
@@ -314,19 +396,21 @@ if store_id != "null" and not re.fullmatch(r"[1-9][0-9]*", store_id):
 listing_status_entries = re.findall(r"^app_store_listing_status: ([a-z_]+)$", store_configuration, re.MULTILINE)
 if len(listing_status_entries) != 1 or listing_status_entries[0] not in {"not_public", "public"}:
     fail("configuration must declare exactly one valid app_store_listing_status")
-if listing_status_entries[0] == "not_public":
-    if "apple-itunes-app" in index_meta:
-        fail("Smart App Banner must be absent while the listing is not public")
-else:
-    if store_id == "null":
-        fail("a public App Store listing requires its registered numeric ID")
-    if index_meta.get("apple-itunes-app") != f"app-id={store_id}":
-        fail("Smart App Banner must match the configured public app_store_id")
+for homepage in INDEX_PAGES:
+    homepage_meta = parsed_pages[homepage.resolve()].meta
+    if listing_status_entries[0] == "not_public":
+        if "apple-itunes-app" in homepage_meta:
+            fail("Smart App Banner must be absent while the listing is not public")
+    else:
+        if store_id == "null":
+            fail("a public App Store listing requires its registered numeric ID")
+        if homepage_meta.get("apple-itunes-app") != f"app-id={store_id}":
+            fail("Smart App Banner must match the configured public app_store_id")
 
 not_found_refs = {value for _, value in parsed_pages[(ROOT / "404.html").resolve()].refs}
 required_not_found_refs = {
     "/",
-    "/styles.css?v=14",
+    "/styles.css?v=15",
     "/public/app-icon-focus-v5.png",
     "/public/apple-touch-icon.png",
     "/privacy/",
@@ -360,10 +444,36 @@ for required_terms_term in (
     if required_terms_term not in terms:
         fail(f"terms page is missing: {required_terms_term}")
 
+english_policy_requirements = {
+    "privacy/index.html": (
+        "GitHub Pages", "GitHub’s Privacy Statement", "IP addresses",
+        "account-neutral", "operator and developer is hinoshiba",
+    ),
+    "terms/index.html": (
+        "Apple’s Standard EULA", "one-time in-app purchase",
+        "no subscription, free trial, or automatic renewal", "attendance, payroll, billing",
+    ),
+    "commercial-transactions/index.html": (
+        "Seller’s name, address, and telephone number",
+        "Proof of a prior purchase is not required", "Apple handles App Store purchase procedures",
+        "StoreKit", "immediately before the purchase", "does not list a fixed price",
+        "by email without delay", "one-time, non-consumable in-app purchase",
+    ),
+}
+for route, required_terms in english_policy_requirements.items():
+    source = (ROOT / "en" / route).read_text(encoding="utf-8")
+    for required_term in required_terms:
+        if required_term not in source:
+            fail(f"English {route} is missing: {required_term}")
+
 commercial = COMMERCIAL_PAGE.read_text(encoding="utf-8")
-commercial_hash = hashlib.sha256(COMMERCIAL_PAGE.read_bytes()).hexdigest()
-if commercial_hash != APPROVED_COMMERCIAL_DISCLOSURE_SHA256:
-    fail("commercial disclosure changed without updating its approved privacy-review hash")
+for commercial_page in COMMERCIAL_PAGES:
+    commercial_hash = hashlib.sha256(commercial_page.read_bytes()).hexdigest()
+    if commercial_hash != APPROVED_COMMERCIAL_DISCLOSURE_SHA256[commercial_page]:
+        fail(f"commercial disclosure changed without updating its approved privacy-review hash: {commercial_page.relative_to(ROOT)}")
+    commercial_meta = parsed_pages[commercial_page.resolve()].meta
+    if commercial_meta.get("robots") != "noindex,follow":
+        fail(f"commercial disclosure must be noindex,follow: {commercial_page.relative_to(ROOT)}")
 for required_commercial_term in (
     "特定商取引法に基づく表記",
     "販売事業者の氏名（名称）・所在地・電話番号",
@@ -377,9 +487,6 @@ for required_commercial_term in (
 ):
     if required_commercial_term not in commercial:
         fail(f"commercial disclosure is missing: {required_commercial_term}")
-commercial_meta = parsed_pages[commercial_page_resolved].meta
-if commercial_meta.get("robots") != "noindex,follow":
-    fail("commercial disclosure must be noindex,follow")
 
 robots = (ROOT / "robots.txt").read_text(encoding="utf-8")
 if "Allow: /" not in robots:

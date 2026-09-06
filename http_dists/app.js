@@ -1,4 +1,55 @@
 (() => {
+  const language = document.documentElement.lang === 'en' ? 'en' : 'ja';
+  const messages = {
+    ja: {
+      empty: '現在は空です',
+      separator: '、',
+      grouped: (size, quantity) => `×${size}のまとまり粒が${quantity}個`,
+      ungrouped: (quantity) => `未集約の粒が${quantity}個`,
+      vessel: (weight, sessions, structure) => `デモ用の瓶。${weight}グラム、集中${sessions}回。${structure}。`,
+      organized: (minutes, quantity, structure) => `合計${minutes}分の集中を記録。${quantity}粒を、テーマ色と元の記録を保ったまま整理しました。現在は${structure}。`,
+      groupComplete: (size) => `✦ ×${size}のまとまり粒が完成`,
+      total: (minutes) => `合計${minutes}分の集中を記録`,
+      complete: '25分、完走。集中した時間が、250gの宝石1粒になりました。',
+      remaining: (minutes) => `早送りデモ、残り${minutes}分`,
+      replay: 'もう一度、集中を体験する',
+      finishing: '完走した時間を、宝石に…',
+      active: '25分の集中を体験中',
+      start: '集中をはじめる（8秒デモ）',
+      resume: '再開する',
+      pause: '一時停止',
+      phases: { ready: '開始前', running: '集中中・早送り', paused: '一時停止中', finishing: '完走！', completed: '25分、完走' },
+      finishingStatus: '25分、完走。集中した時間を宝石にしています。',
+      runningStatus: 'タイマーで集中中。25分を早送りしています。宝石になるのは完走してから。',
+      pausedStatus: '一時停止中。再開すると、残りの集中から体験を続けられます。',
+      resumedStatus: '集中を再開しました。完走すると、時間が宝石になります。',
+      canceledStatus: '途中で中断したので、新しい宝石は増えません。もう一度、集中から体験できます。'
+    },
+    en: {
+      empty: 'Currently empty',
+      separator: ', ',
+      grouped: (size, quantity) => `${quantity} grouped ${quantity === 1 ? 'gem' : 'gems'} of ${size}`,
+      ungrouped: (quantity) => `${quantity} ungrouped ${quantity === 1 ? 'gem' : 'gems'}`,
+      vessel: (weight, sessions, structure) => `Demo jar. ${weight} grams, ${sessions} focus ${sessions === 1 ? 'session' : 'sessions'}. ${structure}.`,
+      organized: (minutes, quantity, structure) => `${minutes} minutes of focus recorded. ${quantity} gems grouped, keeping their theme colors and original records. ${structure}.`,
+      groupComplete: (size) => `✦ A grouped gem of ${size} is complete`,
+      total: (minutes) => `${minutes} minutes of focus recorded`,
+      complete: '25 minutes complete. Your focus time has become one 250 g gem.',
+      remaining: (minutes) => `Fast-forward demo, ${minutes} minutes remaining`,
+      replay: 'Try another focus session',
+      finishing: 'Turning your time into a gem…',
+      active: 'Experiencing 25 minutes of focus',
+      start: 'Start focusing (8-second demo)',
+      resume: 'Resume',
+      pause: 'Pause',
+      phases: { ready: 'Ready', running: 'Focusing · fast-forward', paused: 'Paused', finishing: 'Complete!', completed: '25 minutes complete' },
+      finishingStatus: '25 minutes complete. Turning your focus time into a gem.',
+      runningStatus: 'Focusing with the timer. Fast-forwarding through 25 minutes. Your gem arrives when the session is complete.',
+      pausedStatus: 'Paused. Resume to continue the rest of your focus session.',
+      resumedStatus: 'Focus resumed. Complete the session to turn your time into a gem.',
+      canceledStatus: 'Session canceled, so no new gem was added. You can start the focus demo again.'
+    }
+  }[language];
   const palette = [
     { base: '#EF6B5D', edge: '#FFB0A1', glow: '#FF7C69' },
     { base: '#4D7CDE', edge: '#A8C9FF', glow: '#6EA2FF' },
@@ -210,7 +261,7 @@
   }
 
   function vesselContentsSummary() {
-    if (!vessel) return { structure: '現在は空です' };
+    if (!vessel) return { structure: messages.empty };
     const aggregates = [...vessel.querySelectorAll('.aggregate-pebble')];
     const livePebbles = [...vessel.querySelectorAll('.live-pebble')];
     const groupCounts = new Map();
@@ -220,15 +271,15 @@
     });
     const structureParts = [...groupCounts.entries()]
       .sort((a, b) => b[0] - a[0])
-      .map(([pebbleCount, quantity]) => `×${pebbleCount}のまとまり粒が${quantity}個`);
-    if (livePebbles.length) structureParts.push(`未集約の粒が${livePebbles.length}個`);
-    return { structure: structureParts.join('、') || '現在は空です' };
+      .map(([pebbleCount, quantity]) => messages.grouped(pebbleCount, quantity));
+    if (livePebbles.length) structureParts.push(messages.ungrouped(livePebbles.length));
+    return { structure: structureParts.join(messages.separator) || messages.empty };
   }
 
   function updateVesselAccessibility() {
     if (!vessel) return;
     const summary = vesselContentsSummary();
-    vessel.setAttribute('aria-label', `デモ用の瓶。${grams}グラム、集中${count}回。${summary.structure}。`);
+    vessel.setAttribute('aria-label', messages.vessel(grams, count, summary.structure));
   }
 
   function placeContents() {
@@ -297,10 +348,10 @@
     const aggregatedCount = Number(latestAggregate.dataset.pebbleCount) || 10;
     const currentSummary = vesselContentsSummary();
     if (demoState === 'completed') {
-      status.textContent = `合計${count * 25}分の集中を記録。${processedCount}粒を、テーマ色と元の記録を保ったまま整理しました。現在は${currentSummary.structure}。`;
+      status.textContent = messages.organized(count * 25, processedCount, currentSummary.structure);
     }
     updateVesselAccessibility();
-    announce(`✦ ×${aggregatedCount}のまとまり粒が完成`);
+    announce(messages.groupComplete(aggregatedCount));
     return true;
   }
 
@@ -325,11 +376,11 @@
     count += 1;
     grams += 250;
     schedulePlacement();
-    mass.innerHTML = `${grams.toLocaleString('ja-JP')}<small>g</small>`;
+    mass.innerHTML = `${grams.toLocaleString(language)}<small>g</small>`;
     updateVesselAccessibility();
     demoEmpty.hidden = true;
-    demoTotal.textContent = `合計${count * 25}分の集中を記録`;
-    status.textContent = '25分、完走。集中した時間が、250gの宝石1粒になりました。';
+    demoTotal.textContent = messages.total(count * 25);
+    status.textContent = messages.complete;
     scheduleAggregation();
   }
 
@@ -339,7 +390,7 @@
     // flashing through 1,500 seconds or announcing every visual update.
     const minutes = Math.ceil((1 - progress) * 5) * 5;
     demoTime.textContent = `${String(minutes).padStart(2, '0')}:00`;
-    demoTime.setAttribute('aria-label', `早送りデモ、残り${minutes}分`);
+    demoTime.setAttribute('aria-label', messages.remaining(minutes));
     // Match the app's remaining ring: remove time clockwise from twelve o'clock.
     demoProgress.style.strokeDashoffset = String(-progress * 100);
   }
@@ -354,12 +405,12 @@
     demoControls.hidden = !isActive;
     demoRest.hidden = state !== 'completed';
     labButton.disabled = isActive || state === 'finishing';
-    labButton.textContent = state === 'completed' ? 'もう一度、集中を体験する'
-      : state === 'finishing' ? '完走した時間を、宝石に…'
-      : isActive ? '25分の集中を体験中'
-      : '集中をはじめる（8秒デモ）';
-    demoPause.textContent = state === 'paused' ? '再開する' : '一時停止';
-    demoPhase.textContent = { ready: '開始前', running: '集中中・早送り', paused: '一時停止中', finishing: '完走！', completed: '25分、完走' }[state];
+    labButton.textContent = state === 'completed' ? messages.replay
+      : state === 'finishing' ? messages.finishing
+      : isActive ? messages.active
+      : messages.start;
+    demoPause.textContent = state === 'paused' ? messages.resume : messages.pause;
+    demoPhase.textContent = messages.phases[state];
     if (isActive && startHadFocus) demoPause.focus({ preventScroll: true });
     if (controlsHadFocus && state === 'finishing') {
       demoTime.tabIndex = -1;
@@ -381,7 +432,7 @@
     renderDemoTimer();
     if (demoElapsed >= countdownMilliseconds) {
       setDemoState('finishing');
-      status.textContent = '25分、完走。集中した時間を宝石にしています。';
+      status.textContent = messages.finishingStatus;
       // Hold 00:00 before the gem falls, so completion visibly causes the record.
       completionTimer = setTimeout(completeDemo, 800);
       return;
@@ -395,7 +446,7 @@
     demoStartedAt = performance.now();
     setDemoState('running');
     renderDemoTimer();
-    status.textContent = 'タイマーで集中中。25分を早送りしています。宝石になるのは完走してから。';
+    status.textContent = messages.runningStatus;
     demoFrame = requestAnimationFrame(tickDemo);
   }
 
@@ -405,7 +456,7 @@
     demoElapsed = Math.min(countdownMilliseconds, performance.now() - demoStartedAt);
     renderDemoTimer();
     setDemoState('paused');
-    status.textContent = '一時停止中。再開すると、残りの集中から体験を続けられます。';
+    status.textContent = messages.pausedStatus;
   }
 
   function toggleDemoPause() {
@@ -414,7 +465,7 @@
     } else if (demoState === 'paused') {
       demoStartedAt = performance.now() - demoElapsed;
       setDemoState('running');
-      status.textContent = '集中を再開しました。完走すると、時間が宝石になります。';
+      status.textContent = messages.resumedStatus;
       demoFrame = requestAnimationFrame(tickDemo);
     }
   }
@@ -425,7 +476,7 @@
     demoElapsed = 0;
     setDemoState('ready');
     renderDemoTimer();
-    status.textContent = '途中で中断したので、新しい宝石は増えません。もう一度、集中から体験できます。';
+    status.textContent = messages.canceledStatus;
   }
 
   hydrateStaticGems();
