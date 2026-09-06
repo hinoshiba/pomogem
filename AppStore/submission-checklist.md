@@ -11,6 +11,7 @@
 iCloudの端末間同期と関連するアカウント境界の実機再検証は、ユーザーの明示指定で今回は省略。
 以下の未チェック項目を合格とみなすことはありません。OSS公開、追加実機QA、運用確認の項目も含まれ、
 リポジトリは引き続き非公開、改名はユーザーが後で行います。
+HTTPS証明書の是正もユーザーが担当し、その完了を待たず提出する明示指示に従い、同日19:07 JSTに審査送信しました。
 
 ## 検証項目と未実施の追加確認
 
@@ -21,7 +22,7 @@ iCloudの端末間同期と関連するアカウント境界の実機再検証�
 - [ ] `release-experience-review.md`の共通タスクを署名済み実機でVoiceOver／200%以上の文字サイズ／
   視差効果を減らす／色以外の識別／コントラストの観点から実行。Accessibility Nutrition Labelsは
   検証を完了した対応項目だけを申告し、自動UI auditだけを対応根拠にしない
-- [x] 新App Store Connect app record（Apple ID `6809139517`、SKU `pomogem-ios`、`com.hinoshiba.pomogem`、日本語名「ポモジェム：ポモドーロタイマー」）の作成を確認（2026-09-06）。未公開・未提出
+- [x] 新App Store Connect app record（Apple ID `6809139517`、SKU `pomogem-ios`、`com.hinoshiba.pomogem`、日本語名「ポモジェム：ポモドーロタイマー」）の作成を確認（2026-09-06）。同日19:07 JSTに1.0 (5)＋初回IAPを提出、審査待ち・未公開
 - [x] Free／Paid Apps Agreement、tax、bankingがactiveであることを確認（2026-09-03）
 - [x] App Store Connect上のDSA statusがnon-trader表示であることを確認（2026-09-04）
 - [ ] Pages、Privacy、Support、Termsが公開され、購入前案内専用の販売者情報URLを含む全URLがredirectなしHTTPS 200。販売者情報URLはPro案内とアプリの購入前案内からだけリンクし、グローバルheader／footer／sitemapから外れ、`noindex`
@@ -150,8 +151,8 @@ iCloudの端末間同期と関連するアカウント境界の実機再検証�
   online account確認、同期、timer引き継ぎ、reset、通信断時fail-closedと非破壊性を確認
 - 過去の別アプリ1.0 (1)／1.0 (3)のアップロード・実機installは、今回の新アプリの証拠にはしない。
   日時と旧IDを含む履歴は`Docs/LEGACY_RELEASE_PROVENANCE.md`を参照。
-- [ ] `timerDisplayMode`を含む最終候補を一意なbuild番号でArchive／Distributeし、distribution署名／
+- [x] `timerDisplayMode`を含む最終候補を一意なbuild番号でArchive／Distributeし、distribution署名／
   production CloudKit・APNsを再検証して、App Store Connectでそのbuildを提出対象へ選択
 - [ ] 変更後の最終候補をDistribute後、internal TestFlightまたは同一署名候補相当の実機QAを完了
-- [ ] 初回IAPとapp versionを同じsubmissionへ追加
+- [x] 初回IAPとapp versionを同じsubmissionへ追加し、2026-09-06 19:07 JSTに提出。双方の審査待ちを確認
 - [ ] version/build/commit/tag/CloudKit deploy日時をrelease記録へ保存

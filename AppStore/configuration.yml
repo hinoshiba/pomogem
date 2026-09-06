@@ -270,7 +270,6 @@ release_blockers:
   - owner must accept the fail-closed interactive recovery ceiling when more than 256 corrupt active logical timer sessions precede a valid session, or ship a versioned reversible quarantine design
   - Japan paid-IAP operator disclosure and pre-purchase legal presentation require owner or qualified legal determination
   - owner must choose mixed-license publication or relicense and replace the excluded brand assets
-  - publish and verify the Privacy, Support, and Terms pages plus the noindex seller-disclosure endpoint linked only beside the Pro offer and before the in-app purchase button over canonical HTTPS
   - complete StoreKit Sandbox, signed-device, TestFlight, App Store metadata, and distribution-signing verification
 
 release_verification_2026_09_06:
@@ -292,8 +291,11 @@ release_verification_2026_09_06:
   upload: succeeded
   build_processing: complete
   build_attached_to_version: true
-  app_and_iap_review_draft: ready_to_submit
-  app_review_submitted: false
+  app_and_iap_review_status: waiting_for_review
+  app_review_submitted: true
+  app_review_submitted_at: "2026-09-06T19:07:00+09:00"
+  app_review_submission_id: 3ff3a45b-b7f4-4a4f-a8f1-1c09b22b999f
+  https_certificate_follow_up: user_owned_explicitly_proceed_with_submission
   uploaded_version: "1.0"
   uploaded_build: "5"
   focused_unit_tests_passed: 125
