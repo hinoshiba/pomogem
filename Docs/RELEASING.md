@@ -5,6 +5,14 @@
 この手順は、許可済みMacのXcode OrganizerからiPhone版をArchive、Validate、Uploadするための
 正本です。Mac／Mac Catalyst版は作成しません。
 
+## 既存の自動配布設定を確認（移行時のみ）
+
+以前のXcode Cloudワークフローが存在する場合は、次のリリース前にXcodeまたは
+App Store Connectで無効化し、ブランチ・タグの変更によるビルドや自動配布が
+開始されないことを確認します。リポジトリ内のフック削除だけでは、サーバー側の
+設定は変わりません。既存の実行履歴と成果物は保持し、確認結果を非公開の
+リリース記録へ残します。
+
 ## 今回の候補と識別子
 
 PomoGem 1.0 (5)は、新しいBundle ID・App Store record・IAP・CloudKit containerを使う初回候補です。
