@@ -69,3 +69,12 @@ app-store-connect*.json
 # Signed distribution packages are never GitHub release assets for this app.
 *.pkg
 *.dmg
+
+# Local validation and package caches
+.build/
+__pycache__/
+*.pyc
+node_modules/
+playwright-report/
+test-results/
+coverage/

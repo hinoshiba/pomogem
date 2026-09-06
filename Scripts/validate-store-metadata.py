@@ -66,9 +66,9 @@ if "currently provided in Japanese" not in en_values["description.txt"]:
     fail("en-US description must disclose the Japanese-language interface")
 
 expected_urls = {
-    "support_url.txt": "https://pomogem.hinoshiba.com/support/",
+    "support_url.txt": "https://pomogem.hinoshiba.com/#support",
     "marketing_url.txt": "https://pomogem.hinoshiba.com/",
-    "privacy_url.txt": "https://pomogem.hinoshiba.com/privacy/",
+    "privacy_url.txt": "https://pomogem.hinoshiba.com/#privacy",
 }
 for name, expected in expected_urls.items():
     value = read(name)
@@ -78,8 +78,9 @@ for name, expected in expected_urls.items():
     if value != expected:
         fail(f"{name} must be exactly {expected}")
     en_value = read_localized(EN_META, name)
-    if en_value != expected:
-        fail(f"en-US/{name} must be exactly {expected}")
+    en_expected = expected.replace("https://pomogem.hinoshiba.com/", "https://pomogem.hinoshiba.com/?lang=en")
+    if en_value != en_expected:
+        fail(f"en-US/{name} must be exactly {en_expected}")
 
 keywords = [keyword.strip() for keyword in values["keywords.txt"].split(",")]
 if any(not keyword for keyword in keywords):

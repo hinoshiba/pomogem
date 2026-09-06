@@ -396,3 +396,11 @@ html:lang(en) .demo-bridge span { white-space: normal; text-align: center; }
   html:lang(en) .hero-flow strong { font-size: 13px; }
   html:lang(en) .demo-clock-face { padding: 0 8px; text-align: center; }
 }
+
+/* Policies share the product page and its anchor navigation. */
+.policy-section { display: block; scroll-margin-top: 110px; }
+.policy-copy { max-width: 850px; color: var(--mute); line-height: 1.9; }
+.policy-copy p + p { margin-top: 1.2em; }
+.policy-copy a { color: var(--amber); overflow-wrap: anywhere; }
+.site-footer nav { flex-wrap: wrap; }
+@media (max-width: 1200px) { .site-header > nav { display: none; } .mobile-menu { display: block; } }

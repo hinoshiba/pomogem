@@ -734,11 +734,10 @@ struct SettingsView: View {
 
     private var privacySection: some View {
         Section("サポートとプライバシー") {
-            SettingLabel(title: "自動収集なし", subtitle: "解析SDK・広告・自前サーバーなし", symbol: "hand.raised.fill")
             if persistenceMode == .localOnly {
                 SettingLabel(
                     title: "このiPhoneのみ",
-                    subtitle: "iCloudへ送信しない端末内の専用領域",
+                    subtitle: "このiPhoneの専用領域",
                     symbol: "iphone"
                 )
             } else {

@@ -44,7 +44,7 @@ Appleへ転送するのではなく、販売主体であるdeveloperが上記メ
 
 次のすべてを確認するまで日本で有料IAPを販売しません。
 
-- 販売者情報URLがHTTPSで表示でき、Pro案内とアプリの購入前案内からだけリンクされ、グローバルheader／footer／sitemapには掲載されず`noindex`である
+- 販売者情報URLがHTTPSで表示でき、単一製品ページの販売セクションにあり、Pro案内とアプリの購入前案内から到達できる
 - Paywallの購入buttonより前に販売条件linkがあり、VoiceOverでも到達できる
 - 日本でApp Store Connectに設定した価格が、App内のStoreKit `displayPrice`およびApp Store購入確認画面と一致し、公開Webに固定金額がない
 - 上記の非公開正本が揃っている

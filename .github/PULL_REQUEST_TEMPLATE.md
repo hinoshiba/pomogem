@@ -1,22 +1,18 @@
-## 概要
+## Summary
 
-<!-- 何を、なぜ変更したか -->
+Describe the problem and the resulting behavior. Link related issues if applicable.
 
-## 検証
+## Validation
 
-- [ ] `./Scripts/check-oss-readiness.sh`
-- [ ] `python3 Scripts/validate-site.py`
-- [ ] `xcodegen generate`後に意図しない差分なし
-- [ ] 署名なしiOS Simulator buildと関連test
-- [ ] 関連flowをiPhone実機で確認
-- [ ] UI変更時にDynamic Type、VoiceOver、contrast、Reduce Motionを確認
+Describe the checks you ran and their results. For UI changes, include the languages and screen sizes checked, with screenshots when useful. Note any checks that could not be run.
 
-## プライバシー・公平性・ライセンス
+## Release notes
 
-- [ ] 新しい収集、通信、SDK、permission、required-reason APIはない
-- [ ] またはPrivacy Manifest、`PRIVACY.md`、Web policy、App Store draftを更新した
-- [ ] 同じ総時間の価値、rare抽選、融合、manual/measuredの不変条件を壊さない
-- [ ] dependency/assetの権利を確認し、noticeとasset台帳を更新した
-- [ ] 実際のテーマ、顧客名、案件名、個人情報を含まない
-- [ ] 秘密鍵、証明書bundle、profile、API key、Keychain、archive、signed binaryを含まない
-- [ ] 公式署名・配布に関する変更は`Docs/RELEASING.md`の安全境界に従う
+Describe user-facing changes, compatibility or migration needs, and any remaining limitations. Write “None” if not applicable.
+
+## Checklist
+
+- [ ] The change is focused, and relevant documentation is updated.
+- [ ] Relevant local checks pass; builds for review require no maintainer credentials.
+- [ ] No secrets, personal contact details, or generated build artifacts are included. Use support@hinoshiba.com for project contact information.
+- [ ] Third-party code and assets retain their required license notices.

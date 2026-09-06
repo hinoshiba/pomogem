@@ -1,6 +1,5 @@
 (() => {
-  const language = document.documentElement.lang === 'en' ? 'en' : 'ja';
-  const messages = {
+  const translations = {
     ja: {
       empty: '現在は空です',
       separator: '、',
@@ -49,7 +48,8 @@
       resumedStatus: 'Focus resumed. Complete the session to turn your time into a gem.',
       canceledStatus: 'Session canceled, so no new gem was added. You can start the focus demo again.'
     }
-  }[language];
+  };
+  const messages = new Proxy(translations, { get: (catalog, key) => catalog[document.documentElement.lang][key] });
   const palette = [
     { base: '#EF6B5D', edge: '#FFB0A1', glow: '#FF7C69' },
     { base: '#4D7CDE', edge: '#A8C9FF', glow: '#6EA2FF' },
@@ -84,6 +84,7 @@
   const demoTotal = document.querySelector('#demo-total');
   const countdownMilliseconds = 6000;
   let demoState = 'ready';
+  let hasStartedDemo = false;
   let demoElapsed = 0;
   let demoStartedAt = 0;
   let demoFrame;
@@ -376,7 +377,7 @@
     count += 1;
     grams += 250;
     schedulePlacement();
-    mass.innerHTML = `${grams.toLocaleString(language)}<small>g</small>`;
+    mass.innerHTML = `${grams.toLocaleString(document.documentElement.lang)}<small>g</small>`;
     updateVesselAccessibility();
     demoEmpty.hidden = true;
     demoTotal.textContent = messages.total(count * 25);
@@ -442,6 +443,7 @@
 
   function startDemo() {
     if (demoState !== 'ready' && demoState !== 'completed') return;
+    hasStartedDemo = true;
     demoElapsed = 0;
     demoStartedAt = performance.now();
     setDemoState('running');
@@ -479,6 +481,18 @@
     status.textContent = messages.canceledStatus;
   }
 
+  document.addEventListener('languagechange', () => {
+    renderDemoTimer();
+    setDemoState(demoState);
+    mass.innerHTML = `${grams.toLocaleString(document.documentElement.lang)}<small>g</small>`;
+    updateVesselAccessibility();
+    demoEmpty.hidden = count > 0;
+    if (count) demoTotal.textContent = messages.total(count * 25);
+    const stateMessages = { running: 'runningStatus', paused: 'pausedStatus', finishing: 'finishingStatus', completed: 'complete' };
+    if (stateMessages[demoState]) status.textContent = messages[stateMessages[demoState]];
+    else if (hasStartedDemo) status.textContent = messages.canceledStatus;
+    schedulePlacement();
+  });
   hydrateStaticGems();
   labButton?.addEventListener('click', startDemo);
   demoPause?.addEventListener('click', toggleDemoPause);

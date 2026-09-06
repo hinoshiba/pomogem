@@ -14,7 +14,7 @@
 提出前に次を実行します。
 
 ```sh
-./Scripts/check-oss-readiness.sh
+./Scripts/check-oss-readiness.sh --current
 python3 Scripts/validate-site.py
 xcodegen generate
 ```
@@ -30,3 +30,9 @@ Keychainでのみ作成します。
 Contributionを提出する人は、その内容を提出する権利があり、ソース部分を本リポジトリの
 MIT Licenseで提供することに同意するものとします。名称・brand assetは`TRADEMARKS.md`に
 従います。
+
+開発とリリースにはローカルのXcodeを使用します。PRのCIは署名なしのビルドと検証を行い、
+maintainerのApple Accountやcredentialを必要としません。変更後は関連する検証を実行し、
+差分を確認してgit commitとgit pushを行い、共通PRテンプレートで提出してください。
+プロジェクトの公開連絡先とmaintainerのcommitメールアドレスは`support@hinoshiba.com`です。
+履歴を含む公開監査は`./Scripts/check-oss-readiness.sh`で別途実行します。

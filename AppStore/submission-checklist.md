@@ -25,7 +25,7 @@ HTTPS証明書の是正もユーザーが担当し、その完了を待たず提
 - [x] 新App Store Connect app record（Apple ID `6809139517`、SKU `pomogem-ios`、`com.hinoshiba.pomogem`、日本語名「ポモジェム：ポモドーロタイマー」）の作成を確認（2026-09-06）。同日19:07 JSTに1.0 (5)＋初回IAPを提出、審査待ち・未公開
 - [x] Free／Paid Apps Agreement、tax、bankingがactiveであることを確認（2026-09-03）
 - [x] App Store Connect上のDSA statusがnon-trader表示であることを確認（2026-09-04）
-- [ ] Pages、Privacy、Support、Termsが公開され、購入前案内専用の販売者情報URLを含む全URLがredirectなしHTTPS 200。販売者情報URLはPro案内とアプリの購入前案内からだけリンクし、グローバルheader／footer／sitemapから外れ、`noindex`
+- [ ] 単一の製品ページがHTTPS 200で表示され、日本語・Englishの切り替えとPrivacy、Support、Terms、販売セクションの各アンカーが動く。Pro案内とアプリの購入前リンクから販売セクションへ到達できる
 - [x] `pomogem.hinoshiba.com`のCNAMEが`hinoshiba.github.io`へ向くことを確認（2026-09-06）
 - [ ] GitHub Pagesのcustom domain所有確認と「Enforce HTTPS」を有効化し、新domainの実配信を検証
 - [ ] 公開SupportメールアドレスとGitHub profileの掲載をmaintainerが明示承認

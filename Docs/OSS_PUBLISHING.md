@@ -15,22 +15,15 @@ Store listingから確認できる公開識別子で、credentialではありま
 既存履歴を捨てたりしません。push前に到達可能な全blobとauthor／committer metadataを再監査します。
 将来別のhistoryを移植する場合も全blobを別途scanします。
 
-現在のrepositoryはprivateです。ユーザーが最後に改名するため、それまでは既存originと名前を保持して
-commit／CI／Pagesを進めます。新しい`hinoshiba/PomoGem` URLを公開Webのsource／issue導線へは載せず、
-問い合わせは公式supportメールへ案内します。改名とPublic化を実施し匿名accessを確認した後に、
-`AppStore/configuration.yml`の`oss_publication.repository_visibility`とWebのsource linkを更新します。
-Pagesの公式repository制限は、改名で変化しないrepository ID `1351233156`で判定し、forkの配信を拒否します。
-commit／annotated tagのraw identity emailは、ownerが公開と全履歴への使用を明示指定した
- kai.openclaw01@gmail.com 、従来のGitHub noreply identity、公開済みの`support@hinoshiba.com`を
-許可します。今後のcommitは kai.openclaw01@gmail.com を使います。`.mailmap`による表示上の
-置換は許可根拠にせず、ほかの個人メールや、このアドレスに似た別アドレスは引き続き拒否します。
+現在のrepositoryはprivateです。既存originと名前を保持してcommit／CI／Pagesを進めます。
+製品ページにはGitHubリンクを掲載していますが、公開までアクセス権が必要です。
+公開を行う場合は匿名accessを確認し、`AppStore/configuration.yml`の
+`oss_publication.repository_visibility`を実態に合わせて更新します。
+Pagesの配信先は改名で変化しないrepository IDで制限します。
 
-2026-09-06にownerの指示で、既存13 commitのraw author／committer emailを指定アドレスへ
-統一しました。変更前の全refをrepository外へbundleとして保存し、各commitのtree、親子関係、
-名前、日時、messageが保持されることを照合しています。メール変更で無効になる元のGit署名は
-書換え後のcommitから取り除き、元の署名付きobjectは非公開のbackupに保存します。
-remoteへの反映には、確認済みの旧HEADを指定した`--force-with-lease`を使います。
-書換え後の全履歴を含む別cloneで標準OSS検査が成功し、公開メール検査の回帰13件も成功しました。
+公開する連絡先と今後のcommit／annotated tagのメールは`support@hinoshiba.com`に統一します。
+PRでは現在のファイルと新規commitのidentityを検証し、履歴全体の監査は独立して実行します。
+過去の監査結果や履歴の変更に関する記録はrepository外で管理します。
 
 ## 初回公開の参考手順（既存repositoryでは再初期化しない）
 

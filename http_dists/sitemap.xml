@@ -1,27 +1,2 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://pomogem.hinoshiba.com/</loc>
-  </url>
-  <url>
-    <loc>https://pomogem.hinoshiba.com/privacy/</loc>
-  </url>
-  <url>
-    <loc>https://pomogem.hinoshiba.com/support/</loc>
-  </url>
-  <url>
-    <loc>https://pomogem.hinoshiba.com/terms/</loc>
-  </url>
-  <url>
-    <loc>https://pomogem.hinoshiba.com/en/</loc>
-  </url>
-  <url>
-    <loc>https://pomogem.hinoshiba.com/en/privacy/</loc>
-  </url>
-  <url>
-    <loc>https://pomogem.hinoshiba.com/en/support/</loc>
-  </url>
-  <url>
-    <loc>https://pomogem.hinoshiba.com/en/terms/</loc>
-  </url>
-</urlset>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://pomogem.hinoshiba.com/</loc></url></urlset>
