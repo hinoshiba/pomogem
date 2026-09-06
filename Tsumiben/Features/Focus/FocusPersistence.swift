@@ -306,6 +306,12 @@ enum PendingStratumCelebrationStore {
     }
 }
 
+/// The durable hand-off from a result card to its first visible jar drop.
+enum PendingRewardDropPhase: String, Codable, Sendable {
+    case awaitingAcknowledgement
+    case awaitingLanding
+}
+
 /// A local, durable receipt for the emotional hand-off from a committed timer
 /// to Home. The StudySession remains the source of truth; this small snapshot
 /// only guarantees that a process termination cannot permanently swallow the
@@ -342,6 +348,14 @@ struct PendingRewardReceipt: Identifiable, Codable, Equatable, Sendable {
     /// intentionally process-local in cloud mode, so a durable completion
     /// receipt can survive relaunch without reviving an old aggregate total.
     let projectionCacheStamp: AggregateProjectionCacheStamp?
+    /// Missing in older receipts, whose physical drop already happened before
+    /// the card appeared. Keep nil distinct so upgrading never replays them.
+    fileprivate(set) var dropPhase: PendingRewardDropPhase?
+
+    var requiresDrop: Bool { dropPhase != nil }
+    var isAwaitingAcknowledgement: Bool {
+        dropPhase == .awaitingAcknowledgement
+    }
 
     init(
         id: UUID,
@@ -360,7 +374,8 @@ struct PendingRewardReceipt: Identifiable, Codable, Equatable, Sendable {
         totalStudyGrams: Int? = nil,
         projectionIsLowerBound: Bool,
         projectionWasCloudUnverified: Bool = false,
-        projectionCacheStamp: AggregateProjectionCacheStamp? = nil
+        projectionCacheStamp: AggregateProjectionCacheStamp? = nil,
+        dropPhase: PendingRewardDropPhase? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -379,12 +394,13 @@ struct PendingRewardReceipt: Identifiable, Codable, Equatable, Sendable {
         self.projectionIsLowerBound = projectionIsLowerBound
         self.projectionWasCloudUnverified = projectionWasCloudUnverified
         self.projectionCacheStamp = projectionCacheStamp
+        self.dropPhase = dropPhase
     }
 }
 
 enum PendingRewardReceiptStore {
     static let defaultsKey = "home.pending-reward-receipts.v1"
-    private static let maximumPendingCount = 4
+    static let maximumPendingCount = 4
 
     static func load(defaults: UserDefaults = .standard) -> [PendingRewardReceipt] {
         let key = AccountScopedLocalState.defaultsKey(
@@ -430,6 +446,30 @@ enum PendingRewardReceiptStore {
         values.append(value)
         save(values, defaults: defaults)
         return load(defaults: defaults).contains { $0.id == value.id }
+    }
+
+    /// Persist the acknowledgement with one replacement of the existing
+    /// receipt array. Keep its frozen metrics and FIFO position intact; never
+    /// remove/reinsert it or turn a legacy, already-landed card into a new drop.
+    @discardableResult
+    static func acknowledgeDrop(
+        id: UUID,
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        var values = load(defaults: defaults)
+        guard let index = values.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+        switch values[index].dropPhase {
+        case .awaitingAcknowledgement:
+            values[index].dropPhase = .awaitingLanding
+            save(values, defaults: defaults)
+            return load(defaults: defaults).contains(values[index])
+        case .awaitingLanding:
+            return true
+        case nil:
+            return false
+        }
     }
 
     static func remove(id: UUID, defaults: UserDefaults = .standard) {

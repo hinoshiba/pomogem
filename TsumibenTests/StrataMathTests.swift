@@ -1,3 +1,4 @@
+import Metal
 import SpriteKit
 import XCTest
 @testable import Tsumiben
@@ -2504,6 +2505,204 @@ final class StrataMathTests: XCTestCase {
                 accuracy: 0.001
             )
             XCTAssertFalse(body.isResting)
+            XCTAssertEqual(scene.completionDropSequence, 0)
+            XCTAssertFalse(scene.hasCompletionDropInFlight)
+        }
+    }
+
+    @MainActor
+    func testCompletionDropEntersVisibleTopEdgeAndSurvivesResizeWithoutFalseTravel() throws {
+        let descriptor = PebbleDescriptor(
+            subjectName: "資格",
+            colorHex: Constants.Color.english,
+            source: .timer,
+            kind: .normal,
+            grams: Constants.Mass.measuredPebbleGrams
+        )
+        let scene = makeDropScene(reduceMotion: false)
+        var landingIDs: [UUID] = []
+        scene.onLanding = { landingIDs.append($0.pebble.id) }
+
+        scene.dropFromAbove(descriptor)
+        scene.dropFromAbove(descriptor)
+        XCTAssertEqual(scene.queuedDropCount, 1)
+        XCTAssertTrue(scene.hasCompletionDropInFlight)
+        XCTAssertEqual(scene.completionDropSequence, 0, "Enqueueing is not visible travel")
+        scene.update(0)
+
+        let pebble = try XCTUnwrap(scene.childNode(
+            withName: "//pebble.\(descriptor.id.uuidString)"
+        ) as? PebbleNode)
+        let body = try XCTUnwrap(pebble.physicsBody)
+        XCTAssertEqual(pebble.position.y, scene.size.height, accuracy: 0.001)
+        XCTAssertLessThan(pebble.position.y - pebble.radius, scene.size.height)
+        XCTAssertGreaterThan(pebble.position.y + pebble.radius, scene.size.height)
+        XCTAssertEqual(pebble.position.x, scene.size.width / 2, accuracy: 0.001)
+        XCTAssertEqual(body.velocity.dx, 0, accuracy: 0.001)
+        XCTAssertLessThan(body.velocity.dy, 0)
+        XCTAssertEqual(body.categoryBitMask & JarPhysicsCategory.pebble, 0)
+        XCTAssertEqual(body.collisionBitMask & JarPhysicsCategory.wall, 0)
+        XCTAssertFalse(pebble.hasLanded)
+        XCTAssertFalse(scene.hasLandedPebble(withID: descriptor.id))
+        XCTAssertEqual(scene.completionDropSequence, 1)
+        XCTAssertTrue(scene.hasCompletionDropInFlight)
+
+        scene.size = CGSize(width: 320, height: 380)
+        scene.didSimulatePhysics()
+        XCTAssertEqual(pebble.position.y, 380, accuracy: 0.001)
+        // Independently compute the inner neck edges, including the body's
+        // radius, so a responsive rebuild cannot spawn it against a wall.
+        let outer = scene.snapshotRect
+        let neckInset = min(50, outer.width * 0.14)
+        XCTAssertGreaterThanOrEqual(
+            pebble.position.x - pebble.radius,
+            outer.minX + neckInset + Constants.Jar.wallInset
+        )
+        XCTAssertLessThanOrEqual(
+            pebble.position.x + pebble.radius,
+            outer.maxX - neckInset - Constants.Jar.wallInset
+        )
+        XCTAssertEqual(scene.completionDropMaximumFall, 0, accuracy: 0.001)
+        XCTAssertFalse(scene.completionDropHasLanded)
+        XCTAssertTrue(landingIDs.isEmpty)
+        scene.dropFromAbove(descriptor)
+        XCTAssertEqual(scene.queuedDropCount, 0)
+        XCTAssertEqual(scene.physicalPebbleCount, 1)
+    }
+
+    @MainActor
+    func testCompletionDropFallsThroughNeckAndReportsOneLandingOnSpriteKitRenderLoop() throws {
+        let descriptor = PebbleDescriptor(
+            subjectName: "資格",
+            colorHex: Constants.Color.english,
+            source: .timer,
+            kind: .normal,
+            grams: Constants.Mass.measuredPebbleGrams
+        )
+        let scene = makeDropScene(reduceMotion: false)
+        var landingIDs: [UUID] = []
+        var landingObservedCompletedPresentation = false
+        scene.onLanding = { [weak scene] in
+            landingIDs.append($0.pebble.id)
+            landingObservedCompletedPresentation = scene?.completionDropHasLanded == true
+                && scene?.hasCompletionDropInFlight == false
+        }
+        let device = try XCTUnwrap(
+            MTLCreateSystemDefaultDevice(),
+            "The SpriteKit renderer needs a Metal device to drive its scene update cycle"
+        )
+        let renderer = SKRenderer(device: device)
+        let expectedSize = scene.size
+        // A renderer without a viewport must retain the fixture's dimensions.
+        // resizeFill would resize the jar and its floor to a zero-sized target.
+        scene.scaleMode = .aspectFit
+        renderer.scene = scene
+        defer {
+            scene.onLanding = nil
+            renderer.scene = nil
+        }
+        // SKRenderer has no SKView mount callback. Build the empty scene's
+        // size-dependent walls and floor through its existing lifecycle hook.
+        scene.didChangeSize(.zero)
+        let startTime = ProcessInfo.processInfo.systemUptime
+        let frameInterval: TimeInterval = 1.0 / 60.0
+        renderer.update(atTime: startTime)
+        XCTAssertEqual(scene.size, expectedSize)
+        scene.dropFromAbove(descriptor)
+        var frame = 1
+        renderer.update(atTime: startTime + Double(frame) * frameInterval)
+        let pebble = try XCTUnwrap(scene.childNode(
+            withName: "//pebble.\(descriptor.id.uuidString)"
+        ) as? PebbleNode)
+        let initialY = pebble.position.y
+        var observedFall: CGFloat = 0
+        // Drive the complete SpriteKit update/action/physics cycle explicitly.
+        // This needs no window drawable, wall-clock sleep, or test-owned motion.
+        while landingIDs.isEmpty, frame < 180 {
+            frame += 1
+            renderer.update(atTime: startTime + Double(frame) * frameInterval)
+            observedFall = max(observedFall, initialY - pebble.position.y)
+        }
+
+        XCTAssertEqual(landingIDs, [descriptor.id])
+        XCTAssertTrue(landingObservedCompletedPresentation)
+        XCTAssertTrue(scene.hasLandedPebble(withID: descriptor.id))
+        XCTAssertFalse(scene.hasLandedPebble(withID: UUID()))
+        XCTAssertGreaterThan(observedFall, 300, "The body must really cross the jar")
+        XCTAssertGreaterThan(scene.completionDropMaximumFall, 300)
+        XCTAssertLessThanOrEqual(scene.completionDropMaximumFall, initialY)
+        XCTAssertEqual(scene.completionDropSequence, 1)
+        let body = try XCTUnwrap(pebble.physicsBody)
+        XCTAssertEqual(body.categoryBitMask, JarPhysicsCategory.pebble)
+        XCTAssertNotEqual(body.collisionBitMask & JarPhysicsCategory.wall, 0)
+        XCTAssertNotEqual(body.contactTestBitMask & JarPhysicsCategory.wall, 0)
+
+        scene.dropFromAbove(descriptor)
+        frame += 1
+        renderer.update(atTime: startTime + Double(frame) * frameInterval)
+        XCTAssertEqual(scene.physicalPebbleCount, 1)
+        XCTAssertEqual(scene.queuedDropCount, 0)
+        XCTAssertEqual(landingIDs, [descriptor.id])
+        let retainedFall = scene.completionDropMaximumFall
+        scene.restore(pebbles: [descriptor])
+        frame += 1
+        renderer.update(atTime: startTime + Double(frame) * frameInterval)
+        XCTAssertEqual(scene.completionDropSequence, 1)
+        XCTAssertEqual(scene.completionDropMaximumFall, retainedFall)
+        XCTAssertTrue(scene.completionDropHasLanded)
+        XCTAssertFalse(scene.hasCompletionDropInFlight)
+    }
+
+    @MainActor
+    func testReducedMotionCompletionDropSettlesOnceWithoutClaimingVisibleTravel() throws {
+        let descriptor = PebbleDescriptor(
+            subjectName: "資格",
+            colorHex: Constants.Color.english,
+            source: .timer,
+            kind: .normal,
+            grams: Constants.Mass.measuredPebbleGrams
+        )
+        for initiallyReduced in [true, false] {
+            let scene = makeDropScene(reduceMotion: initiallyReduced)
+            var landingIDs: [UUID] = []
+            scene.onLanding = { landingIDs.append($0.pebble.id) }
+            scene.dropFromAbove(descriptor)
+            scene.update(0)
+            if !initiallyReduced {
+                XCTAssertTrue(scene.hasCompletionDropInFlight)
+                XCTAssertTrue(landingIDs.isEmpty)
+                scene.reduceMotion = true
+            }
+            let pebble = try XCTUnwrap(scene.childNode(
+                withName: "//pebble.\(descriptor.id.uuidString)"
+            ) as? PebbleNode)
+            let body = try XCTUnwrap(pebble.physicsBody)
+            XCTAssertTrue(pebble.hasLanded)
+            XCTAssertEqual(
+                pebble.position.y,
+                Constants.Jar.floorInset + descriptor.radius,
+                accuracy: 0.001
+            )
+            XCTAssertFalse(body.isDynamic)
+            XCTAssertTrue(body.isResting)
+            XCTAssertEqual(body.velocity.dy, 0, accuracy: 0.001)
+            XCTAssertEqual(body.categoryBitMask, JarPhysicsCategory.pebble)
+            XCTAssertNotEqual(body.collisionBitMask & JarPhysicsCategory.wall, 0)
+            XCTAssertNotEqual(body.contactTestBitMask & JarPhysicsCategory.wall, 0)
+            XCTAssertEqual(scene.completionDropSequence, 1)
+            XCTAssertEqual(scene.completionDropMaximumFall, 0, accuracy: 0.001)
+            XCTAssertTrue(scene.completionDropHasLanded)
+            XCTAssertFalse(scene.hasCompletionDropInFlight)
+            XCTAssertEqual(landingIDs, [descriptor.id])
+
+            scene.reduceMotion = false
+            scene.reduceMotion = true
+            scene.dropFromAbove(descriptor)
+            scene.didSimulatePhysics()
+            XCTAssertEqual(scene.physicalPebbleCount, 1)
+            XCTAssertEqual(scene.queuedDropCount, 0)
+            XCTAssertEqual(scene.completionDropSequence, 1)
+            XCTAssertEqual(landingIDs, [descriptor.id])
         }
     }
 

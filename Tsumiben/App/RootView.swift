@@ -610,6 +610,10 @@ struct RootView: View {
                     }
                 }
                 .transition(.opacity)
+                // Onboarding has no NavigationStack accessibility container.
+                // Keep the readiness marker on this group so it cannot replace
+                // the identifiers of the step heading and navigation buttons.
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("root.first-frame.ready")
                 .task { await markFirstFramePresented() }
             }
@@ -2711,7 +2715,9 @@ struct MainNavigationView: View {
         .sheet(isPresented: $router.sharePresented) {
             ShareComposerView(scope: router.shareScope)
         }
-        .fullScreenCover(item: $router.recoveredFocus) { request in
+        .fullScreenCover(item: $router.recoveredFocus, onDismiss: {
+            router.completeFocusPresentation()
+        }) { request in
             FocusView(recovery: request)
         }
         .fullScreenCover(item: $router.recoveredBreak) { recovery in

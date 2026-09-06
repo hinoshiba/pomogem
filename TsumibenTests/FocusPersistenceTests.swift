@@ -10,6 +10,130 @@ final class FocusPersistenceTests: XCTestCase {
         super.tearDown()
     }
 
+    func testRewardDropPhaseRoundTripsAndMissingPhaseKeepsLegacySemantics() throws {
+        for phase in [PendingRewardDropPhase.awaitingAcknowledgement, .awaitingLanding] {
+            let receipt = makeRewardReceipt(phase: phase)
+            let data = try JSONEncoder().encode(receipt)
+            let decoded = try JSONDecoder().decode(PendingRewardReceipt.self, from: data)
+            XCTAssertEqual(decoded, receipt)
+            XCTAssertTrue(decoded.requiresDrop)
+            XCTAssertEqual(decoded.isAwaitingAcknowledgement, phase == .awaitingAcknowledgement)
+        }
+
+        let receipt = makeRewardReceipt(phase: .awaitingAcknowledgement)
+        var legacyObject = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(receipt)
+        ) as? [String: Any])
+        legacyObject.removeValue(forKey: "dropPhase")
+        let legacy = try JSONDecoder().decode(
+            PendingRewardReceipt.self,
+            from: JSONSerialization.data(withJSONObject: legacyObject)
+        )
+        XCTAssertNil(legacy.dropPhase)
+        XCTAssertFalse(legacy.requiresDrop)
+        XCTAssertFalse(legacy.isAwaitingAcknowledgement)
+        XCTAssertEqual(legacy, makeRewardReceipt(id: receipt.id, phase: nil))
+    }
+
+    func testRewardDropAcknowledgementPreservesFrozenReceiptAndFIFOWithoutDuplication() throws {
+        let suiteName = "TsumibenTests.reward-drop-ack.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let start = Date(timeIntervalSince1970: 1_800_500_000)
+        let first = makeRewardReceipt(createdAt: start, phase: nil)
+        let target = makeRewardReceipt(
+            createdAt: start.addingTimeInterval(1), phase: .awaitingAcknowledgement
+        )
+        let last = makeRewardReceipt(
+            createdAt: start.addingTimeInterval(2), phase: .awaitingAcknowledgement
+        )
+        for receipt in [last, target, first] {
+            XCTAssertTrue(PendingRewardReceiptStore.insert(receipt, defaults: defaults))
+        }
+        XCTAssertTrue(PendingRewardReceiptStore.acknowledgeDrop(id: target.id, defaults: defaults))
+        let acknowledged = makeRewardReceipt(
+            id: target.id, createdAt: target.createdAt, phase: .awaitingLanding
+        )
+        let expected = [first, acknowledged, last]
+
+        // Read through a fresh defaults instance, as a returning Home does.
+        let reopenedDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        XCTAssertEqual(PendingRewardReceiptStore.load(defaults: reopenedDefaults), expected)
+        XCTAssertTrue(PendingRewardReceiptStore.acknowledgeDrop(id: target.id, defaults: defaults))
+        // A delayed duplicate insertion must not rewind an acknowledged card.
+        XCTAssertTrue(PendingRewardReceiptStore.insert(target, defaults: defaults))
+        XCTAssertEqual(PendingRewardReceiptStore.load(defaults: defaults), expected)
+    }
+
+    func testRewardDropAcknowledgementRejectsLegacyAndMissingReceiptsWithoutWriting() throws {
+        let suiteName = "TsumibenTests.reward-drop-legacy.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let legacy = makeRewardReceipt(phase: nil)
+        XCTAssertTrue(PendingRewardReceiptStore.insert(legacy, defaults: defaults))
+        let key = AccountScopedLocalState.defaultsKey(
+            base: PendingRewardReceiptStore.defaultsKey, defaults: defaults
+        )
+        let originalData = try XCTUnwrap(defaults.data(forKey: key))
+
+        XCTAssertFalse(PendingRewardReceiptStore.acknowledgeDrop(id: legacy.id, defaults: defaults))
+        XCTAssertFalse(PendingRewardReceiptStore.acknowledgeDrop(id: UUID(), defaults: defaults))
+        XCTAssertEqual(defaults.data(forKey: key), originalData)
+        XCTAssertEqual(PendingRewardReceiptStore.load(defaults: defaults), [legacy])
+    }
+
+    func testRewardDropAcknowledgementKeepsExistingFourReceiptBound() throws {
+        let suiteName = "TsumibenTests.reward-drop-bound.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let start = Date(timeIntervalSince1970: 1_800_500_000)
+        let receipts = (0..<5).map { offset in
+            makeRewardReceipt(
+                createdAt: start.addingTimeInterval(TimeInterval(offset)),
+                phase: .awaitingAcknowledgement
+            )
+        }
+        for receipt in receipts {
+            XCTAssertTrue(PendingRewardReceiptStore.insert(receipt, defaults: defaults))
+        }
+        XCTAssertFalse(PendingRewardReceiptStore.acknowledgeDrop(id: receipts[0].id, defaults: defaults))
+        XCTAssertTrue(PendingRewardReceiptStore.acknowledgeDrop(id: receipts[2].id, defaults: defaults))
+        let saved = PendingRewardReceiptStore.load(defaults: defaults)
+        XCTAssertEqual(saved.map(\.id), Array(receipts.dropFirst()).map(\.id))
+        XCTAssertEqual(saved.map(\.createdAt), Array(receipts.dropFirst()).map(\.createdAt))
+        XCTAssertEqual(saved.filter { $0.dropPhase == .awaitingLanding }.map(\.id), [receipts[2].id])
+    }
+
+    private func makeRewardReceipt(
+        id: UUID = UUID(),
+        createdAt: Date = Date(timeIntervalSince1970: 1_800_500_000),
+        phase: PendingRewardDropPhase?
+    ) -> PendingRewardReceipt {
+        PendingRewardReceipt(
+            id: id,
+            createdAt: createdAt,
+            breakMinutes: 15,
+            grams: 450,
+            subjectName: "資格勉強",
+            colorHex: "#3FA57C",
+            weeklyCompletionCount: 7,
+            weeklyStudyGrams: 2_150,
+            kind: .gold,
+            rareRewardDrawCount: 2,
+            goldRewardCount: 1,
+            prismRewardCount: 0,
+            totalPebbleCount: 17,
+            totalStudyGrams: 5_450,
+            projectionIsLowerBound: true,
+            projectionWasCloudUnverified: true,
+            projectionCacheStamp: AggregateProjectionCacheStamp(
+                namespace: UUID(uuidString: "00000000-0000-0000-0000-000000000991")!,
+                verificationEpoch: 9
+            ),
+            dropPhase: phase
+        )
+    }
+
     func testRecoveryEnvelopeRoundTripPreservesSubjectClockAndPendingCompletion() throws {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let subject = FocusSubjectSnapshot(

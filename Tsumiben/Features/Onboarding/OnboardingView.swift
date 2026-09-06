@@ -40,14 +40,35 @@ struct OnboardingView: View {
         ZStack {
             NightBackground()
             VStack(spacing: 0) {
-                HStack {
-                    TsumibenLogo(compact: true)
-                    Spacer()
-                    Text("\(page + 1) / \(pageCount)")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundStyle(TsumibenTheme.muted)
-                        .accessibilityLabel("全\(pageCount)ページ中、\(page + 1)ページ")
+                HStack(spacing: 12) {
+                    if page == 0 {
+                        TsumibenLogo(compact: true)
+                    } else {
+                        Button(action: retreat) {
+                            Label("戻る", systemImage: "chevron.left")
+                                .font(.subheadline.weight(.semibold))
+                                .frame(minWidth: 68, minHeight: 44, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(TsumibenCompactButtonStyle(tint: TsumibenTheme.text, isProminent: false))
+                        .accessibilityLabel("戻る")
+                        .accessibilityHint("選んだ内容を保ったまま、前のページへ戻ります")
+                        .accessibilityIdentifier("onboarding.back")
+                    }
+                    Spacer(minLength: 8)
+                    VStack(alignment: .trailing, spacing: 3) {
+                        Text(stepTitle)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(TsumibenTheme.text)
+                        Text("\(page + 1) / \(pageCount)")
+                            .font(.system(.caption2, design: .monospaced, weight: .bold))
+                            .foregroundStyle(TsumibenTheme.muted)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("全\(pageCount)ページ中、\(page + 1)ページ。\(stepTitle)")
+                    .accessibilityIdentifier("onboarding.step")
                 }
+                .frame(minHeight: 44)
                 .padding(.horizontal, 24)
                 .padding(.top, 12)
 
@@ -74,7 +95,7 @@ struct OnboardingView: View {
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: page)
 
-                VStack(spacing: 18) {
+                VStack(spacing: 12) {
                     HStack(spacing: 7) {
                         ForEach(0..<pageCount, id: \.self) { index in
                             Capsule()
@@ -85,6 +106,19 @@ struct OnboardingView: View {
                     }
                     .accessibilityHidden(true)
 
+                    if page == 2 {
+                        Text(
+                            selectedSubjects.isEmpty
+                                ? "テーマを1つ選ぶと、瓶をひらけます"
+                                : "最初のテーマ：\(selectedSubjects.sorted().first ?? "選択済み")"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(selectedSubjects.isEmpty ? TsumibenTheme.muted : TsumibenTheme.amber)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("onboarding.selection-summary")
+                    }
+
                     Button {
                         advance()
                     } label: {
@@ -93,10 +127,27 @@ struct OnboardingView: View {
                     .buttonStyle(TsumibenPrimaryButtonStyle())
                     .disabled(isPrimaryActionDisabled)
                     .accessibilityHint(primaryActionHint)
+                    .accessibilityIdentifier("onboarding.next")
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 18)
             }
+        }
+    }
+
+    private var stepTitle: String {
+        switch page {
+        case 0: "集中が残るしくみ"
+        case 1: "一粒を体験（任意）"
+        case 2: "最初のテーマ"
+        default: "粒の好み"
+        }
+    }
+
+    private func retreat() {
+        guard page > 0 else { return }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
+            page -= 1
         }
     }
 
@@ -148,7 +199,16 @@ struct OnboardingView: View {
            selectedRareRewardMode == nil {
             return "レア粒の扱いを1つ選ぶと瓶をひらけます"
         }
-        return ""
+        switch page {
+        case 0:
+            return "次は、記録を作らず一粒を試せるページです"
+        case 1:
+            return "体験を省略して、最初のテーマを選べます"
+        case 2 where !RareRewardReleasePolicy.isEnabled:
+            return "ホームへ進みます。テーマと時間を確認してから集中を始められます"
+        default:
+            return "次のページへ進みます"
+        }
     }
 
     /// Built-in learning presets can exist before first-use setup is complete.
@@ -185,11 +245,17 @@ private struct ValuePage: View {
                         .multilineTextAlignment(.center)
                         .foregroundStyle(TsumibenTheme.text)
                         .accessibilityAddTraits(.isHeader)
-                    Text("長く集中した粒ほど大きく、瓶の中へ重く積み上がります。")
+                    Text("テーマと時間を選んで、集中をはじめる。\n完走すると、その時間が一粒になって残ります。")
                         .font(.body)
                         .foregroundStyle(TsumibenTheme.muted)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
+                    Label("25・45・60・90分のタイマーは無料", systemImage: "timer")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(TsumibenTheme.amber)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("onboarding.free-timers")
                 }
 
                 VStack(spacing: 10) {
@@ -518,6 +584,7 @@ private struct SubjectSetupPage: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var customSubjectName = ""
     @State private var customSubjectFeedback: String?
+    @FocusState private var customSubjectFocused: Bool
 
     private var presetNames: Set<String> {
         Set(SubjectSuggestionCatalog.presets.map(\.name))
@@ -587,6 +654,10 @@ private struct SubjectSetupPage: View {
                         .font(.subheadline)
                         .foregroundStyle(TsumibenTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
+                    Text("このあとはホームで時間を選び、開始ボタンをタップ。テーマはいつでも変更できます。")
+                        .font(.caption)
+                        .foregroundStyle(TsumibenTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -641,6 +712,7 @@ private struct SubjectSetupPage: View {
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 8) {
                         TextField(SubjectSuggestionCatalog.inputPlaceholder, text: $customSubjectName)
+                            .focused($customSubjectFocused)
                             .textInputAutocapitalization(.never)
                             .submitLabel(.done)
                             .onSubmit(addCustomSubject)
@@ -701,16 +773,6 @@ private struct SubjectSetupPage: View {
                     }
                 }
 
-                Label(
-                    selectedSubjects.isEmpty
-                        ? "テーマを1つ選ぶと、瓶をひらけます"
-                        : "最初のテーマ：\(selectedSubjects.first ?? "選択済み")",
-                    systemImage: selectedSubjects.isEmpty ? "circle" : "checkmark.circle.fill"
-                )
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(selectedSubjects.isEmpty ? TsumibenTheme.muted : TsumibenTheme.amber)
-                .fixedSize(horizontal: false, vertical: true)
-
                 VStack(alignment: .leading, spacing: 12) {
                     Label {
                         Text(SubjectSuggestionCatalog.privacyGuidance)
@@ -738,26 +800,38 @@ private struct SubjectSetupPage: View {
 
                 Toggle(isOn: $wantsNotifications) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("瓶からの通知")
+                        Text("毎日のリマインダー")
                             .font(.system(.body, design: .rounded, weight: .bold))
-                        Text(Constants.UIStrings.eveningNotification)
+                        Text("\(reminderTimeText)に、集中を思い出す通知を受け取る")
                             .font(.caption)
                             .foregroundStyle(TsumibenTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .tint(TsumibenTheme.amber)
                 .padding(16)
                 .background(TsumibenTheme.card, in: RoundedRectangle(cornerRadius: 16))
+                .accessibilityIdentifier("onboarding.daily-reminder")
 
-                Text("通知はあとから設定できます。赤いバッジや連続記録の警告は使いません。")
+                Text("通知は任意です。時刻やオン・オフは設定で変更できます。タイマーの終了通知は、このリマインダーをオフにしていても使えます。")
                     .font(.caption)
                     .foregroundStyle(TsumibenTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 10)
             }
             .padding(.horizontal, 24)
             .padding(.top, 36)
         }
         .scrollBounceBehavior(.basedOnSize)
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var reminderTimeText: String {
+        String(
+            format: "%02d:%02d",
+            Constants.Notification.defaultReminderHour,
+            Constants.Notification.defaultReminderMinute
+        )
     }
 
     private func addCustomSubject() {
@@ -771,6 +845,7 @@ private struct SubjectSetupPage: View {
         if let preset = SubjectSuggestionCatalog.preset(named: name) {
             selectedSubjects = [preset.name]
             customSubjectName = ""
+            customSubjectFocused = false
             showCustomSubjectFeedback("同じ名前の候補「\(preset.name)」を選択しました。")
             return
         }
@@ -779,6 +854,7 @@ private struct SubjectSetupPage: View {
             SubjectNamePolicy.comparisonKey($0) == normalized
         }) {
             customSubjectName = ""
+            customSubjectFocused = false
             showCustomSubjectFeedback("「\(existing)」を選択しています。")
             return
         }
@@ -791,6 +867,7 @@ private struct SubjectSetupPage: View {
         selectedSubjects = [name]
         customSubjectName = ""
         customSubjectFeedback = nil
+        customSubjectFocused = false
     }
 
     private func showCustomSubjectFeedback(_ message: String) {
@@ -806,6 +883,7 @@ private struct SubjectSetupPage: View {
         selectedSubjects = [preset.name]
         customSubjectName = ""
         customSubjectFeedback = nil
+        customSubjectFocused = false
     }
 
     private func canChooseSubject(named name: String) -> Bool {

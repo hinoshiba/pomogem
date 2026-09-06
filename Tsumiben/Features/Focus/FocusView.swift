@@ -662,6 +662,7 @@ struct FocusView: View {
         .foregroundStyle(TsumibenTheme.text)
         .interactiveDismissDisabled()
         .statusBarHidden()
+        .onAppear { router.beginFocusPresentation() }
         .task { await beginActivation() }
         .onReceive(ticker) { date in
             displayNow = date
@@ -867,7 +868,10 @@ struct FocusView: View {
     }
 
     private var phaseLabel: String {
-        switch snapshot.phase {
+        if timerDisplayMode == .filledDial, snapshot.phase != .paused {
+            return snapshot.phase.isBreak ? "休憩中" : "集中中"
+        }
+        return switch snapshot.phase {
         case .shortBreak: "5分休憩"
         case .longBreak: "15分休憩"
         case .paused where completion == nil: engine.currentSource == .timerDemoted ? "自己申告あつかい・一時停止" : "一時停止"
@@ -1318,6 +1322,7 @@ struct FocusView: View {
         }
         let currentSnapshot = engine.snapshot(at: .now)
         guard let sessionID = engine.currentSessionID else { return }
+        registerFocusReturnReminderIfNeeded()
         switch currentSnapshot.phase {
         case .focusing:
             if synchronizesCompletionNotification {
@@ -1524,9 +1529,9 @@ struct FocusView: View {
         isFinishingCompletion = true
         retireCompletionRecovery(result)
         try? await Task.sleep(for: .seconds(Constants.Jar.completionDropDelay))
-        // Home is still mounted behind this cover. Dismissing now reveals the
-        // real SpriteKit drop; its contact callback owns the synchronized
-        // thud, landing haptic, dust and camera shake.
+        // The presentation host releases Home only after this cover closes.
+        // Home shows the saved completion message, then drops the gem when
+        // that message is acknowledged.
         dismiss()
     }
 
@@ -2174,6 +2179,9 @@ struct FocusView: View {
             pendingCompletion: pendingCompletion
         )
         FocusPersistence.save(envelope)
+        registerFocusReturnReminderIfNeeded(
+            pendingCompletion: envelope.pendingCompletion
+        )
 
         let resolvedPendingCompletion = envelope.pendingCompletion
         let status: SyncedFocusStatus
@@ -2223,6 +2231,28 @@ struct FocusView: View {
                 ? currentNotificationDeliveryWitness
                 : nil,
             dataEpochID: dataEpochID
+        )
+    }
+
+    /// Retain only a locally owned, running timer in the process-level
+    /// notification manager. The CloudKit launch host can remove this view
+    /// on inactive, before the subsequent background notification is sent.
+    private func registerFocusReturnReminderIfNeeded(
+        pendingCompletion: PomodoroCompletion? = nil
+    ) {
+        guard isViewActive,
+              ownsCurrentTimer,
+              pendingCompletion == nil,
+              self.pendingCompletion == nil,
+              completion == nil,
+              engine.snapshot(at: .now).phase == .focusing,
+              let sessionID = engine.currentSessionID,
+              let endDate = engine.endDate,
+              endDate > .now else { return }
+        NotificationManager.shared.registerFocusReturnReminder(
+            sessionID: sessionID,
+            endDate: endDate,
+            playsSound: sensoryPreferences.soundOn
         )
     }
 
@@ -2758,9 +2788,8 @@ enum FocusTimerDisplayPolicy {
     }
 }
 
-/// The selected countdown presentation. Ring modes preserve the original
-/// clockwise elapsed-time arc; the filled dial removes elapsed area clockwise
-/// from twelve o'clock, like a physical visual timer.
+/// Both ring and dial begin full and remove elapsed time clockwise from
+/// twelve o'clock. The remaining colored area always represents time left.
 struct FocusTimerDisplay: View {
     let size: CGFloat
     let progress: Double
@@ -2780,8 +2809,8 @@ struct FocusTimerDisplay: View {
         FocusTimerDisplayPolicy.normalizedProgress(progress)
     }
 
-    private var elapsedPercent: Int {
-        Int((normalizedProgress * 100).rounded())
+    private var remainingPercent: Int {
+        Int((FocusTimerDisplayPolicy.remainingFraction(for: progress) * 100).rounded())
     }
 
     private var lineWidth: CGFloat {
@@ -2809,7 +2838,7 @@ struct FocusTimerDisplay: View {
         ZStack {
             switch displayMode {
             case .ringAndTime:
-                elapsedRing
+                remainingRing
                 currentLabels
             case .filledDial:
                 remainingDial
@@ -2817,30 +2846,30 @@ struct FocusTimerDisplay: View {
                 remainingTimeLabel
                     .padding(max(24, lineWidth * 2.5))
             case .ringOnly:
-                elapsedRing
+                remainingRing
                 statusLabel
                     .padding(max(24, lineWidth * 2.5))
             }
         }
         .frame(width: size, height: size)
-        .accessibilityIdentifier("focus.timer-display")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibleMode)
         .accessibilityValue(
-            "\(accessibleRemainingTime)、\(elapsedPercent)パーセント経過"
+            "\(accessibleRemainingTime)、\(remainingPercent)パーセント残り"
                 + (isPaused ? "、一時停止中" : "")
         )
         .accessibilityHint(isPaused ? "再開ボタンでタイマーを再開できます" : "一時停止ボタンでタイマーを止められます")
         .accessibilityAddTraits(.updatesFrequently)
+        .accessibilityIdentifier("focus.timer-display")
     }
 
-    private var elapsedRing: some View {
+    private var remainingRing: some View {
         ZStack {
             Circle()
                 .stroke(.white.opacity(0.09), lineWidth: lineWidth)
 
             Circle()
-                .trim(from: 0, to: normalizedProgress)
+                .trim(from: normalizedProgress, to: 1)
                 .stroke(
                     accent,
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
@@ -2852,9 +2881,9 @@ struct FocusTimerDisplay: View {
                     value: normalizedProgress
                 )
 
-            // A fixed origin and a moving head make direction unambiguous.
+            // The boundary advances clockwise as the remaining arc shrinks.
             Circle()
-                .fill(accent.opacity(normalizedProgress == 0 ? 0.58 : 0.9))
+                .fill(accent.opacity(normalizedProgress < 1 ? 0.58 : 0))
                 .frame(
                     width: max(5, lineWidth * 0.58),
                     height: max(5, lineWidth * 0.58)
@@ -2907,7 +2936,7 @@ struct FocusTimerDisplay: View {
     }
 
     private var statusLabel: some View {
-        Text("\(modeLabel)  ·  \(elapsedPercent)% 経過")
+        Text("\(modeLabel)  ·  \(remainingPercent)% 残り")
             .font(.caption2.weight(.bold))
             .tracking(1.2)
             .foregroundStyle(

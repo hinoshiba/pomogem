@@ -413,6 +413,9 @@ final class SystemCompleteDataDeletionDeviceState: CompleteDataDeletionDeviceSta
     }
 
     func clearDeviceState() async throws {
+        // Invalidate in-flight adds before clearing OS state so a suspended
+        // timer/return-reminder request cannot reappear after deletion.
+        await NotificationManager.shared.cancelAllTimerNotifications()
         notificationCenter.removeAllPendingNotificationRequests()
         notificationCenter.removeAllDeliveredNotifications()
         try await notificationCenter.setBadgeCount(0)

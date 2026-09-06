@@ -69,7 +69,7 @@ final class JarInteractionUITests: XCTestCase {
         let dismissBreakOffer = app.buttons["休憩の提案を閉じる"]
         XCTAssertTrue(
             dismissBreakOffer.waitForExistence(timeout: 60),
-            "The demo completion must land one pebble and return Home"
+            "The demo completion must return Home with its reward card"
         )
         dismissBreakOffer.tap()
 
@@ -86,7 +86,7 @@ final class JarInteractionUITests: XCTestCase {
         let beforeTap = try waitForPresentationCount(
             1,
             from: presentationProbe,
-            timeout: 3
+            timeout: 10
         )
 
         // Resolve the live SpriteKit position and tap that exact gem. A fixed
@@ -153,6 +153,16 @@ final class JarInteractionUITests: XCTestCase {
             XCTAssertTrue(dismiss.waitForExistence(timeout: 3))
             dismiss.tap()
             XCTAssertTrue(waitForNonExistence(bridge, timeout: 3))
+            // Do not interrupt the new fall before its receipt is retired.
+            let launcher = app.buttons["home.focus-launcher"]
+            let ready = XCTNSPredicateExpectation(
+                predicate: NSPredicate { object, _ in
+                    guard let element = object as? XCUIElement else { return false }
+                    return element.exists && element.isEnabled
+                },
+                object: launcher
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 8), .completed)
             app.terminate()
             app.launch()
             XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 12))
@@ -198,7 +208,7 @@ final class JarInteractionUITests: XCTestCase {
     ) throws -> PresentationSample {
         let deadline = Date().addingTimeInterval(timeout)
         var latest = try presentationSample(from: probe)
-        while latest.count != expectedCount, Date() < deadline {
+        while (latest.count != expectedCount || !latest.dropLanded), Date() < deadline {
             usleep(25_000)
             latest = try presentationSample(from: probe)
         }
@@ -207,6 +217,7 @@ final class JarInteractionUITests: XCTestCase {
             expectedCount,
             "The presentation probe must observe the completed pebble before interaction"
         )
+        XCTAssertTrue(latest.dropLanded, "The earned pebble must land before its tap target is sampled")
         return latest
     }
 
@@ -233,6 +244,8 @@ final class JarInteractionUITests: XCTestCase {
               let bounceSequence = Int(bounceSequenceRaw),
               let bounceRiseRaw = fields["bounceRise"],
               let bounceRise = Double(bounceRiseRaw),
+              let dropLandedRaw = fields["dropLanded"],
+              ["0", "1"].contains(dropLandedRaw),
               let targetXRaw = fields["targetX"],
               let targetX = Double(targetXRaw),
               let targetYRaw = fields["targetY"],
@@ -246,6 +259,7 @@ final class JarInteractionUITests: XCTestCase {
             records: records,
             bounceSequence: bounceSequence,
             bounceRise: bounceRise,
+            dropLanded: dropLandedRaw == "1",
             targetX: targetX,
             targetY: targetY
         )
@@ -258,6 +272,7 @@ private struct PresentationSample {
     let records: String
     let bounceSequence: Int
     let bounceRise: Double
+    let dropLanded: Bool
     let targetX: Double
     let targetY: Double
 }

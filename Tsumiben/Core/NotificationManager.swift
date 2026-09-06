@@ -28,6 +28,50 @@ enum TimerCompletionNotificationScheduleResult: Equatable, Sendable {
     case superseded
 }
 
+enum FocusReturnReminderPolicy {
+    // This device preference follows Live Activity's local opt-in policy;
+    // no account, subject, or study record is stored in the setting.
+    static let enabledDefaultsKey = "notifications.focus-return-reminder.enabled"
+    static let delay: TimeInterval = 30
+    static let completionQuietWindow: TimeInterval = 60
+
+    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: enabledDefaultsKey)
+    }
+
+    static func shouldSchedule(
+        preferenceEnabled: Bool,
+        sceneIsBackground: Bool,
+        phase: PomodoroPhase,
+        endDate: Date?,
+        now: Date = .now
+    ) -> Bool {
+        guard preferenceEnabled, sceneIsBackground, phase == .focusing,
+              let endDate else { return false }
+        let remaining = endDate.timeIntervalSince(now)
+        return remaining.isFinite && remaining > delay + completionQuietWindow
+    }
+}
+
+/// A narrow notification-center boundary for exercising reminder races
+/// without scheduling notifications on a developer's device.
+@MainActor
+struct FocusReturnReminderNotificationClient {
+    var authorizationStatus: () async -> UNAuthorizationStatus
+    var add: (UNNotificationRequest) async throws -> Void
+    var removePending: ([String]) -> Void
+    var removeDelivered: ([String]) -> Void
+
+    static func system(center: UNUserNotificationCenter) -> Self {
+        Self(
+            authorizationStatus: { await center.notificationSettings().authorizationStatus },
+            add: { try await center.add($0) },
+            removePending: { center.removePendingNotificationRequests(withIdentifiers: $0) },
+            removeDelivered: { center.removeDeliveredNotifications(withIdentifiers: $0) }
+        )
+    }
+}
+
 /// Owns every local notification emitted by the app.
 ///
 /// Passive reminders are materialized as one-shot requests so the monthly
@@ -43,11 +87,17 @@ final class NotificationManager {
     private(set) var lastErrorDescription: String?
 
     private let center: UNUserNotificationCenter
+    private let focusReturnReminderClient: FocusReturnReminderNotificationClient
+    private let focusReturnReminderDefaults: UserDefaults
     private var authorizationRefreshGeneration: UInt64 = 0
     private var latestAuthorizationRefresh: AuthorizationRefreshIntent?
     private var focusNotificationGeneration: UInt64 = 0
     private var focusNotificationIntents: [UUID: UInt64] = [:]
     private var focusNotificationOperations: [UUID: NotificationScheduleOperation] = [:]
+    private var focusReturnReminderGeneration: UInt64 = 0
+    private var focusReturnReminderSessionID: UUID?
+    private var focusReturnReminderOperation: NotificationScheduleOperation?
+    private var registeredFocusReturnReminder: FocusReturnReminderCandidate?
     private var breakNotificationGeneration: UInt64 = 0
     private var breakNotificationIntents: [UUID: UInt64] = [:]
     private var breakNotificationOperations: [UUID: NotificationScheduleOperation] = [:]
@@ -63,8 +113,15 @@ final class NotificationManager {
         let task: Task<TimerCompletionNotificationScheduleResult, Error>
     }
 
+    private struct FocusReturnReminderCandidate: Equatable {
+        let sessionID: UUID
+        let endDate: Date
+        let playsSound: Bool
+    }
+
     private enum Identifier {
         static let completionPrefix = "tsumiben.focus.complete."
+        static let focusReturnReminder = "tsumiben.focus.return-reminder"
         static let breakPrefix = "tsumiben.break.complete."
         static let passivePrefix = "tsumiben.passive."
 
@@ -88,8 +145,14 @@ final class NotificationManager {
         }
     }
 
-    private init(center: UNUserNotificationCenter = .current()) {
+    init(
+        center: UNUserNotificationCenter = .current(),
+        focusReturnReminderClient: FocusReturnReminderNotificationClient? = nil,
+        focusReturnReminderDefaults: UserDefaults = .standard
+    ) {
         self.center = center
+        self.focusReturnReminderClient = focusReturnReminderClient ?? .system(center: center)
+        self.focusReturnReminderDefaults = focusReturnReminderDefaults
     }
 
     var isAuthorized: Bool {
@@ -121,11 +184,11 @@ final class NotificationManager {
     func refreshAuthorizationStatus() async -> UNAuthorizationStatus {
         authorizationRefreshGeneration &+= 1
         let generation = authorizationRefreshGeneration
-        let center = center
+        let authorizationQuery = focusReturnReminderClient.authorizationStatus
         var intent = AuthorizationRefreshIntent(
             generation: generation,
             task: Task { @MainActor in
-                await center.notificationSettings().authorizationStatus
+                await authorizationQuery()
             }
         )
         latestAuthorizationRefresh = intent
@@ -207,6 +270,159 @@ final class NotificationManager {
         center.removePendingNotificationRequests(
             withIdentifiers: [Identifier.completion(sessionID: sessionID)]
         )
+        if registeredFocusReturnReminder?.sessionID == sessionID {
+            registeredFocusReturnReminder = nil
+        }
+        if focusReturnReminderSessionID == sessionID {
+            cancelFocusReturnReminder()
+        }
+    }
+
+    /// The owning Focus view registers its running timer before a temporary
+    /// inactive-state unmount. The persistent launch host consumes this
+    /// process-local snapshot only upon an actual background transition.
+    func registerFocusReturnReminder(
+        sessionID: UUID,
+        endDate: Date,
+        playsSound: Bool
+    ) {
+        guard !timerSchedulingIsSuspendedForAccountBoundary else { return }
+        let candidate = FocusReturnReminderCandidate(
+            sessionID: sessionID,
+            endDate: endDate,
+            playsSound: playsSound
+        )
+        guard registeredFocusReturnReminder != candidate else { return }
+        cancelFocusReturnReminder()
+        registeredFocusReturnReminder = candidate
+    }
+
+    func scheduleRegisteredFocusReturnReminder() async throws
+        -> TimerCompletionNotificationScheduleResult {
+        guard let candidate = registeredFocusReturnReminder else {
+            cancelFocusReturnReminder()
+            return .superseded
+        }
+        return try await scheduleFocusReturnReminder(
+            sessionID: candidate.sessionID,
+            endDate: candidate.endDate,
+            playsSound: candidate.playsSound
+        )
+    }
+
+    /// Call only for an actual background transition of a running focus.
+    /// One identifier and one operation chain cover all sessions so cleanup
+    /// from an older add cannot remove a newer timer's reminder.
+    func scheduleFocusReturnReminder(
+        sessionID: UUID,
+        endDate: Date,
+        playsSound: Bool
+    ) async throws -> TimerCompletionNotificationScheduleResult {
+        guard !Task.isCancelled else { return .superseded }
+        guard !timerSchedulingIsSuspendedForAccountBoundary,
+              focusReturnReminderTimeIsEligible(endDate: endDate) else {
+            cancelFocusReturnReminder()
+            return .superseded
+        }
+        focusReturnReminderGeneration &+= 1
+        let generation = focusReturnReminderGeneration
+        focusReturnReminderSessionID = sessionID
+        removeFocusReturnReminderRequests()
+        let requestedAt = Date.now
+        let previousTask = focusReturnReminderOperation?.task
+        let operationTask = Task<TimerCompletionNotificationScheduleResult, Error> {
+            @MainActor [self] in
+            if let previousTask {
+                _ = try? await previousTask.value
+            }
+            guard focusReturnReminderIntentIsCurrent(generation, sessionID: sessionID) else {
+                return .superseded
+            }
+            await refreshAuthorizationStatus()
+            guard focusReturnReminderIntentIsCurrent(generation, sessionID: sessionID) else {
+                return .superseded
+            }
+            guard isAuthorized, focusReturnReminderTimeIsEligible(endDate: endDate) else {
+                removeFocusReturnReminderRequests()
+                return .superseded
+            }
+            // Preserve the background transition's deadline if authorization
+            // refresh or an earlier add took time to finish.
+            let delay = TimerCompletionNotificationTiming.deliveryDelay(
+                endDate: requestedAt.addingTimeInterval(FocusReturnReminderPolicy.delay),
+                requestCreatedAt: .now
+            )
+            let content = notificationContent(
+                body: "集中時間が続いています。タイマーに戻って続けましょう。",
+                playsSound: playsSound
+            )
+            let request = UNNotificationRequest(
+                identifier: Identifier.focusReturnReminder,
+                content: content,
+                trigger: UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false)
+            )
+            do {
+                try await focusReturnReminderClient.add(request)
+            } catch {
+                guard focusReturnReminderIntentIsCurrent(generation, sessionID: sessionID) else {
+                    removeFocusReturnReminderRequests()
+                    return .superseded
+                }
+                lastErrorDescription = error.localizedDescription
+                throw error
+            }
+            guard focusReturnReminderIntentIsCurrent(generation, sessionID: sessionID),
+                  isAuthorized, focusReturnReminderTimeIsEligible(endDate: endDate) else {
+                removeFocusReturnReminderRequests()
+                return .superseded
+            }
+            lastErrorDescription = nil
+            return .accepted(deliveryDate: TimerCompletionNotificationTiming
+                .conservativeDeliveryDate(delay: delay, registrationCompletedAt: .now))
+        }
+        focusReturnReminderOperation = NotificationScheduleOperation(
+            generation: generation,
+            task: operationTask
+        )
+        defer {
+            if focusReturnReminderOperation?.generation == generation {
+                focusReturnReminderOperation = nil
+            }
+        }
+        return try await operationTask.value
+    }
+
+    /// Foregrounding cancels the pending/delivered cue while retaining the
+    /// registered running timer for its next actual background transition.
+    func cancelFocusReturnReminder() {
+        focusReturnReminderGeneration &+= 1
+        focusReturnReminderSessionID = nil
+        removeFocusReturnReminderRequests()
+        // Keep the in-flight operation in the chain until its late add has
+        // finished and removed itself; a newer add must wait for that cleanup.
+    }
+
+    private func focusReturnReminderIntentIsCurrent(
+        _ generation: UInt64,
+        sessionID: UUID
+    ) -> Bool {
+        !timerSchedulingIsSuspendedForAccountBoundary
+            && focusReturnReminderGeneration == generation
+            && focusReturnReminderSessionID == sessionID
+    }
+
+    private func focusReturnReminderTimeIsEligible(endDate: Date) -> Bool {
+        FocusReturnReminderPolicy.shouldSchedule(
+            preferenceEnabled: FocusReturnReminderPolicy.isEnabled(defaults: focusReturnReminderDefaults),
+            sceneIsBackground: true,
+            phase: .focusing,
+            endDate: endDate
+        )
+    }
+
+    private func removeFocusReturnReminderRequests() {
+        focusReturnReminderClient.removePending([Identifier.focusReturnReminder])
+        focusReturnReminderClient.removeDelivered([Identifier.focusReturnReminder])
     }
 
     func scheduleBreakCompletion(
@@ -268,6 +484,8 @@ final class NotificationManager {
     /// its accepted lock-screen notifications must remain scheduled.
     func suspendTimerSchedulingForAccountBoundary() {
         timerSchedulingIsSuspendedForAccountBoundary = true
+        registeredFocusReturnReminder = nil
+        cancelFocusReturnReminder()
         focusNotificationIntents.removeAll()
         focusNotificationGeneration &+= 1
         breakNotificationIntents.removeAll()
@@ -282,6 +500,8 @@ final class NotificationManager {
     /// present, so it removes every locally scheduled transient request by the
     /// app-owned identifier prefixes.
     func cancelAllTimerNotifications() async {
+        registeredFocusReturnReminder = nil
+        cancelFocusReturnReminder()
         focusNotificationIntents.removeAll()
         focusNotificationGeneration &+= 1
         breakNotificationIntents.removeAll()

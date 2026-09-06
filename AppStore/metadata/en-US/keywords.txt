@@ -1,1 +1,1 @@
-focus,timer,pomodoro,study,work,habit,productivity,record
+pomodoro,study,work,habit,record,exam,reading,time management,bottle

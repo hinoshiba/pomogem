@@ -76,6 +76,12 @@ struct HomeView: View {
     private var homeAtmosphereRawValue = HomeAtmosphere.aurora.rawValue
     @State private var scene = JarScene()
     @State private var sceneInitialized = false
+    @State private var homeIsVisible = false
+    @State private var rewardDropRevealIsPending = false
+    @State private var rewardDropRevealRequestID: UUID?
+    @State private var rewardDropDestination: RewardDropContinuation?
+    @State private var rewardSessionBackfill: [StudySession] = []
+    @State private var rewardSessionBackfillGeneration: HomeSceneSessionSnapshotGeneration?
     @State private var knownLooseIDs = Set<UUID>()
     @State private var aggregatePresentationPage:
         HomeProjectionPolicy.RefreshedAggregatePresentationPage?
@@ -200,7 +206,18 @@ struct HomeView: View {
         // waits for the exact-ID backfill so a losing physical prefix can
         // never become Home mass or a jar body, even transiently.
         guard sceneSessionSnapshotIsCurrent else { return [] }
-        return supportedSessionBackfill.filter {
+        return StudySessionSyncPolicy.canonicalSessions(
+            from: supportedSessionBackfill + currentRewardSessionBackfill
+        ).filter {
+            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetSnapshots)
+                && StudySessionIntegrityPolicy.isSupported($0)
+        }
+    }
+    private var currentRewardSessionBackfill: [StudySession] {
+        guard rewardSessionBackfillGeneration == HomeSceneSessionSnapshotGeneration(
+            aggregateProjectionPresentation
+        ) else { return [] }
+        return rewardSessionBackfill.filter {
             ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetSnapshots)
                 && StudySessionIntegrityPolicy.isSupported($0)
         }
@@ -246,7 +263,12 @@ struct HomeView: View {
         .sorted { $0.endAt > $1.endAt }
     }
     private var looseSessions: [StudySession] {
-        Array(queriedLooseSessions.prefix(HomeProjectionPolicy.looseSessionLimit))
+        let rewardIDs = Set(currentRewardSessionBackfill.map(\.id))
+        let candidates = queriedLooseSessions
+        let rewards = candidates.filter { rewardIDs.contains($0.id) }
+        let remaining = candidates.filter { !rewardIDs.contains($0.id) }
+        return Array((rewards + remaining).prefix(HomeProjectionPolicy.looseSessionLimit))
+            .sorted { $0.endAt > $1.endAt }
     }
     private var localProjectionNeedsMaintenance: Bool {
         !rootProjectionIsComplete
@@ -434,6 +456,7 @@ struct HomeView: View {
             showCustomDuration,
             breakOffer != nil,
             breakOfferTask != nil,
+            rewardDropDestination != nil,
             hasPendingRewardReceipt,
             focusConfiguration != nil,
             breakConfiguration != nil,
@@ -452,6 +475,14 @@ struct HomeView: View {
     private var hasPendingRewardReceipt: Bool {
         !PendingRewardReceiptStore.load().isEmpty
     }
+    private var rewardDropSurfaceIsObscured: Bool {
+        showHomeMenu || showAccumulationOverview || selectedAggregateDetail != nil
+            || showManualEntry || showAchievementEntry || showCustomDuration
+            || showAccumulationPlan || completedStratum != nil
+            || breakConfiguration != nil || router.recoveredBreak != nil
+            || router.paywallPresented || router.sharePresented
+            || router.selectedTab != .jar
+    }
     private var selectedSubject: Subject? {
         activeSubjects.first { $0.id.uuidString == selectedSubjectID } ?? activeSubjects.first
     }
@@ -462,9 +493,11 @@ struct HomeView: View {
 
     private var mainContent: some View {
         GeometryReader { proxy in
+            ScrollViewReader { scrollProxy in
             ScrollView {
                 VStack(spacing: 0) {
                     jarCard(height: homeJarHeight(availableHeight: proxy.size.height))
+                        .id("home.jar")
                     if latestInspectableAggregateID != nil {
                         aggregateInspectionSlot
                             .padding(.top, 8)
@@ -474,6 +507,10 @@ struct HomeView: View {
                         largeTextFusionProgressCard(state)
                     }
                     Spacer(minLength: 14)
+                    if !activeSubjects.isEmpty {
+                        focusSelectionControls
+                            .padding(.bottom, 10)
+                    }
                     focusLauncher
                 }
                 .padding(.horizontal, 16)
@@ -489,6 +526,19 @@ struct HomeView: View {
 #endif
             }
             .scrollBounceBehavior(.basedOnSize)
+            .onChange(of: rewardDropRevealRequestID) { _, requestID in
+                guard requestID != nil else { return }
+                withAnimation(
+                    reduceMotion ? nil : .easeOut(duration: 0.3),
+                    completionCriteria: .removed
+                ) {
+                    scrollProxy.scrollTo("home.jar", anchor: .top)
+                } completion: {
+                    rewardDropRevealIsPending = false
+                    syncScene()
+                }
+            }
+            }
         }
         .background {
             HomeAtmosphereBackground(
@@ -541,12 +591,18 @@ struct HomeView: View {
 
     private var presentedContent: some View {
         mainContent
-        .fullScreenCover(item: $focusConfiguration) { configuration in
+        .fullScreenCover(item: $focusConfiguration, onDismiss: {
+            router.completeFocusPresentation()
+            syncScene()
+            continueRewardDropIfPossible()
+            recoverPendingRewardReceipt()
+        }) { configuration in
             FocusView(
                 subject: configuration.subject,
                 duration: configuration.duration,
                 dataEpochID: currentActivityEpochID
             )
+            .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .fullScreenCover(item: $breakConfiguration, onDismiss: {
             recoverPendingRewardReceipt()
@@ -639,15 +695,18 @@ struct HomeView: View {
         return [.height(390), .large]
     }
 
-    private var observedContent: some View {
+    private var lifecycleContent: some View {
         presentedContent
         .onAppear {
+            homeIsVisible = true
+            rewardDropRevealIsPending = false
             restorePreferredDuration()
             configureScene()
             refreshAcceptedAggregateRoots()
             refreshAchievementProjection()
             refreshAchievementCount()
             syncScene()
+            continueRewardDropIfPossible()
             recoverPendingRewardReceipt()
             recoverPendingStratumCelebrations()
             recoverInterruptionNotice()
@@ -656,10 +715,12 @@ struct HomeView: View {
             refreshSupportedSessionBackfill()
         }
         .onDisappear {
+            homeIsVisible = false
             widgetRefreshTask?.cancel()
             celebrationRecoveryTask?.cancel()
             capacityCelebrationTask?.cancel()
             breakOfferTask?.cancel()
+            breakOfferTask = nil
             reviewRequestTask?.cancel()
             shareChipTask?.cancel()
             aggregateInspectionTask?.cancel()
@@ -674,6 +735,23 @@ struct HomeView: View {
             capacityRemaining = nil
             clearSceneCallbacks()
         }
+        .onChange(of: router.focusPresentationIsActive) { _, isActive in
+            guard !isActive else { return }
+            configureScene()
+            syncScene()
+            continueRewardDropIfPossible()
+            recoverPendingRewardReceipt()
+        }
+        .onChange(of: rewardDropSurfaceIsObscured) { _, isObscured in
+            guard !isObscured else { return }
+            syncScene()
+            continueRewardDropIfPossible()
+            recoverPendingRewardReceipt()
+        }
+    }
+
+    private var observedContent: some View {
+        lifecycleContent
         .onChange(of: sessionChangeTokens) { _, _ in
             syncScene()
             scheduleTiltHintIfNeeded()
@@ -810,6 +888,9 @@ struct HomeView: View {
                 .multilineTextAlignment(.center)
                 .padding(20)
                 .frame(maxWidth: 320)
+                // The metrics keep a fixed position below the bottle's rim.
+                // On a short canvas, move the empty-state copy below them.
+                .offset(y: max(0, 456 - height) / 2)
             }
 
             if let remaining = capacityRemaining, remaining <= 15 {
@@ -1222,8 +1303,8 @@ struct HomeView: View {
                     .font(TsumibenTheme.brand(21))
                 Text(
                     selectedSubject == nil
-                        ? "メニューでテーマを決めると、ここから始まる。"
-                        : Constants.UIStrings.jarEmptyBody
+                        ? "下のボタンから、最初のテーマを追加しよう。"
+                        : "\(focusDurationLabel)の集中で、ここにひと粒落ちる。"
                 )
                     .font(.caption)
                     .foregroundStyle(TsumibenTheme.muted)
@@ -1235,9 +1316,10 @@ struct HomeView: View {
         if dynamicTypeSize.isAccessibilitySize {
             return 520
         }
-        // iPhone 15 is the reference canvas. Keep the launch control visible on
-        // the first screen while letting the bottle breathe on Pro-sized phones.
-        return min(520, max(Constants.Jar.height, availableHeight - 126))
+        // Reserve room for the visible theme/time controls and start button,
+        // including on compact iPhones. Larger text keeps a scrollable canvas.
+        let inspectionHeight: CGFloat = latestInspectableAggregateID == nil ? 0 : 72
+        return min(520, max(320, availableHeight - 216 - inspectionHeight))
     }
 
     private var homeContentMaxWidth: CGFloat {
@@ -1246,6 +1328,104 @@ struct HomeView: View {
 #else
         return .infinity
 #endif
+    }
+
+    private var focusSelectionControls: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 8) {
+                    homeSubjectPicker
+                    homeDurationPicker
+                }
+            } else {
+                HStack(spacing: 10) {
+                    homeSubjectPicker
+                    homeDurationPicker
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+        }
+    }
+
+    private var homeSubjectPicker: some View {
+        Menu {
+            subjectSelectionActions
+            Divider()
+            Button {
+                router.selectedTab = .settings
+            } label: {
+                Label("テーマを管理", systemImage: "slider.horizontal.3")
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Color(hex: selectedSubject?.colorHex ?? Constants.Color.amberLamp))
+                    .frame(width: 10, height: 10)
+                    .accessibilityHidden(true)
+                Text(selectedSubject?.safeDisplayName ?? "テーマを選ぶ")
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.bold))
+                    .accessibilityHidden(true)
+            }
+            .font(.system(.subheadline, design: .rounded, weight: .bold))
+            .foregroundStyle(TsumibenTheme.text)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .background(TsumibenTheme.raised.opacity(0.9), in: RoundedRectangle(cornerRadius: 14))
+        }
+        .accessibilityLabel("テーマ、\(selectedSubject?.safeDisplayName ?? "未選択")")
+        .accessibilityHint("テーマを変更できます。タイマーは開始しません")
+        .accessibilityIdentifier("home.subject-picker")
+    }
+
+    private var homeDurationPicker: some View {
+        Menu {
+            Section("無料の集中タイマー") {
+                ForEach(PomodoroDuration.freePresets, id: \.self) { duration in
+                    homeDurationOption(duration)
+                }
+            }
+            Button(action: requestCustomDuration) {
+                Label(
+                    purchase.isPro ? "自由な時間を設定" : "自由な時間を設定（Pro）",
+                    systemImage: purchase.isPro ? "slider.horizontal.3" : "lock"
+                )
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "timer")
+                    .accessibilityHidden(true)
+                Text(focusDurationLabel)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.bold))
+                    .accessibilityHidden(true)
+            }
+            .font(.system(.subheadline, design: .rounded, weight: .bold))
+            .foregroundStyle(TsumibenTheme.text)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .background(TsumibenTheme.raised.opacity(0.9), in: RoundedRectangle(cornerRadius: 14))
+        }
+        .accessibilityLabel("集中時間、\(focusDurationLabel)")
+        .accessibilityHint("時間を変更できます。25分、45分、60分、90分は無料です")
+        .accessibilityIdentifier("home.duration-picker")
+    }
+
+    private func homeDurationOption(_ duration: PomodoroDuration) -> some View {
+        Button {
+            selectDuration(duration)
+        } label: {
+            let title = "\(duration.minutes ?? customMinutes)分"
+            if selectedDuration == duration {
+                Label(title, systemImage: "checkmark")
+            } else {
+                Text(title)
+            }
+        }
     }
 
     private var focusLauncher: some View {
@@ -1276,7 +1456,7 @@ struct HomeView: View {
                     Text(
                         selectedSubject == nil
                             ? "勉強も仕事も、同じ一覧で"
-                            : "\(selectedSubject?.safeDisplayName ?? "選択中のテーマ") ・ +\(selectedDuration.grams)g ・ 長押しで変更"
+                            : "\(selectedSubject?.safeDisplayName ?? "選択中のテーマ") ・ 完走で+\(selectedDuration.grams)g"
                     )
                     .font(.system(.caption, design: .rounded, weight: .bold))
                     .lineLimit(2)
@@ -1342,7 +1522,7 @@ struct HomeView: View {
         }
         return selectedSubject == nil
             ? "設定画面を開きます"
-            : "タイマーを開始します。長押しまたはアクションでテーマを変更できます"
+            : "タイマーを開始します。上のテーマと時間のボタンで内容を変更できます"
     }
 
     private var focusDurationLabel: String {
@@ -1780,6 +1960,11 @@ struct HomeView: View {
         TsumibenCard {
             VStack(alignment: .leading, spacing: 12) {
                 postDropHeading(offer)
+                if offer.isAwaitingDrop {
+                    Text("閉じると、一粒が瓶に落ちます。")
+                        .font(.caption)
+                        .foregroundStyle(TsumibenTheme.muted)
+                }
                 if dynamicTypeSize.isAccessibilitySize {
                     // Keep every safe exit in the initial viewport at the
                     // largest text sizes. The detailed crystal evidence stays
@@ -2178,17 +2363,7 @@ struct HomeView: View {
 
     private func startBreakButton(_ offer: BreakOffer) -> some View {
         Button("\(offer.minutes)分休憩") {
-            TimerCompletionAlertAcknowledgementStore.mark(
-                sessionID: offer.id
-            )
-            TimerCompletionAlertController.shared.stop(sessionID: offer.id)
-            breakOfferTask?.cancel()
-            shareChipTask?.cancel()
-            shareChipTask = nil
-            retireRewardReceipt(offer)
-            breakOffer = nil
-            showShareChip = false
-            breakConfiguration = BreakConfiguration(minutes: offer.minutes)
+            acknowledgeRewardOffer(offer, destination: .rest(minutes: offer.minutes))
         }
         .buttonStyle(TsumibenCompactButtonStyle())
         .accessibilityLabel("\(offer.minutes)分休憩する")
@@ -2196,29 +2371,8 @@ struct HomeView: View {
 
     private var postDropShareButton: some View {
         Button {
-            breakOfferTask?.cancel()
-            shareChipTask?.cancel()
-            shareChipTask = nil
-            // Keep a queued fusion beat behind the share composer. Without
-            // this blocker, the 180ms hand-off can let a celebration sheet win
-            // the presentation race before the GIF studio opens.
-            isDeferringCelebrationsForShare = true
-            if let offer = breakOffer {
-                TimerCompletionAlertAcknowledgementStore.mark(
-                    sessionID: offer.id
-                )
-                TimerCompletionAlertController.shared.stop(
-                    sessionID: offer.id
-                )
-                retireRewardReceipt(offer)
-            }
-            breakOffer = nil
-            showShareChip = false
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(180))
-                guard !Task.isCancelled else { return }
-                router.presentShare()
-            }
+            guard let offer = breakOffer else { return }
+            acknowledgeRewardOffer(offer, destination: .share)
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "play.rectangle.fill")
@@ -2239,23 +2393,15 @@ struct HomeView: View {
 
     private func dismissBreakOfferButton(_ offer: BreakOffer, showsText: Bool) -> some View {
         Button {
-            TimerCompletionAlertAcknowledgementStore.mark(
-                sessionID: offer.id
-            )
-            TimerCompletionAlertController.shared.stop(sessionID: offer.id)
-            breakOfferTask?.cancel()
-            shareChipTask?.cancel()
-            shareChipTask = nil
-            retireRewardReceipt(offer)
-            breakOffer = nil
-            showShareChip = false
-            recoverPendingRewardReceipt()
+            acknowledgeRewardOffer(offer, destination: .home)
         } label: {
             HStack(spacing: showsText ? 6 : 0) {
                 Image(systemName: "xmark")
                     .accessibilityHidden(true)
                 if showsText {
                     Text("閉じる")
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
             .font(.subheadline.weight(.bold))
@@ -2276,6 +2422,90 @@ struct HomeView: View {
         .buttonStyle(TsumibenBareButtonStyle())
         .accessibilityLabel("休憩の提案を閉じる")
         .accessibilityIdentifier("reward.dismiss")
+    }
+
+    private func acknowledgeRewardOffer(
+        _ offer: BreakOffer,
+        destination: RewardDropContinuation.Destination
+    ) {
+        guard !rewardDropRevealIsPending, rewardDropDestination == nil else { return }
+        if offer.isAwaitingDrop,
+           !PendingRewardReceiptStore.acknowledgeDrop(id: offer.id) {
+            router.showToast("もう一度「閉じる」を押してください", symbol: "arrow.clockwise")
+            return
+        }
+        TimerCompletionAlertAcknowledgementStore.mark(sessionID: offer.id)
+        TimerCompletionAlertController.shared.stop(sessionID: offer.id)
+        breakOfferTask?.cancel()
+        breakOfferTask = nil
+        shareChipTask?.cancel()
+        shareChipTask = nil
+        if case .share = destination {
+            isDeferringCelebrationsForShare = true
+        }
+
+        guard offer.isAwaitingDrop else {
+            // Receipts from older versions have already landed.
+            retireRewardReceipt(offer)
+            breakOffer = nil
+            showShareChip = false
+            continueAfterRewardDrop(destination)
+            return
+        }
+
+        rewardDropDestination = RewardDropContinuation(
+            sessionID: offer.id,
+            destination: destination
+        )
+        rewardDropRevealIsPending = true
+        withAnimation(
+            reduceMotion ? nil : .easeOut(duration: 0.3),
+            completionCriteria: .removed
+        ) {
+            breakOffer = nil
+            showShareChip = false
+        } completion: {
+            // The card changes the bottle's available height. Finish that
+            // layout, then reveal the bottle before starting actual physics.
+            rewardDropRevealRequestID = offer.id
+        }
+    }
+
+    private func finishRewardDrop(sessionID: UUID) {
+        PendingRewardReceiptStore.remove(id: sessionID)
+        if rewardDropDestination?.sessionID == sessionID {
+            rewardDropDestination?.hasLanded = true
+            rewardDropRevealRequestID = nil
+            continueRewardDropIfPossible()
+        } else {
+            recoverPendingRewardReceipt()
+        }
+    }
+
+    private func continueRewardDropIfPossible() {
+        guard let continuation = rewardDropDestination,
+              continuation.hasLanded,
+              homeIsVisible,
+              !router.focusPresentationIsActive,
+              focusConfiguration == nil,
+              router.recoveredFocus == nil,
+              !rewardDropSurfaceIsObscured
+        else { return }
+        rewardDropDestination = nil
+        continueAfterRewardDrop(continuation.destination)
+    }
+
+    private func continueAfterRewardDrop(_ destination: RewardDropContinuation.Destination) {
+        switch destination {
+        case .home:
+            recoverPendingRewardReceipt()
+            presentNextStratumCelebrationIfNeeded()
+            schedulePendingReviewRequestIfPossible()
+        case let .rest(minutes):
+            breakConfiguration = BreakConfiguration(minutes: minutes)
+        case .share:
+            router.presentShare()
+        }
     }
 
     private var durationPicker: some View {
@@ -2316,18 +2546,7 @@ struct HomeView: View {
                 subtitle: purchase.isPro ? "+\(customMinutes * Constants.Mass.gramsPerMinute)g" : "Pro",
                 selected: selectedDuration.requiresPro
             ) {
-                showHomeMenu = false
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(250))
-                    if purchase.isPro {
-                        showCustomDuration = true
-                    } else {
-                        router.presentPaywall(
-                            from: .customTimer,
-                            pendingIntent: .homeCustomDuration
-                        )
-                    }
-                }
+                requestCustomDuration()
             }
 #if DEBUG
             if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
@@ -2340,6 +2559,21 @@ struct HomeView: View {
 
     private var customDurationTitle: String {
         selectedDuration.requiresPro ? "\(customMinutes)分" : "自由"
+    }
+
+    private func requestCustomDuration() {
+        showHomeMenu = false
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            if purchase.isPro {
+                showCustomDuration = true
+            } else {
+                router.presentPaywall(
+                    from: .customTimer,
+                    pendingIntent: .homeCustomDuration
+                )
+            }
+        }
     }
 
     private func configureScene() {
@@ -2373,13 +2607,56 @@ struct HomeView: View {
         // replays their drop, sound, haptic, and "+ng 積んだ" toast.
         // Keep the last valid app/widget presentation until the accepted page
         // arrives instead of transiently publishing an empty history.
-        guard sceneSessionSnapshotIsCurrent else { return }
+        guard sceneSessionSnapshotIsCurrent,
+              homeIsVisible,
+              !router.focusPresentationIsActive,
+              focusConfiguration == nil,
+              router.recoveredFocus == nil
+        else { return }
+        // A projection refresh must not shelf-pack a gem halfway through its
+        // first visible descent. The landing callback applies the latest page.
+        guard !scene.hasCompletionDropInFlight else { return }
+        guard refreshRewardSessionBackfill() else { return }
         syncBaseLayers()
+
+        let localCompletions = looseSessions.filter(hasLocalCompletionMarker)
+        for session in localCompletions {
+            _ = prepareRewardReceipt(
+                for: PebbleDescriptor(session: session),
+                dropPhase: .awaitingAcknowledgement
+            )
+        }
+        if !localCompletions.isEmpty {
+            scheduleShareChipIfNeeded(for: localCompletions)
+        }
+
+        // If Home was navigated away from during the short fall, the physical
+        // contact may precede callback reattachment. Retire that presentation
+        // without dropping the same saved gem again.
+        for receipt in PendingRewardReceiptStore.load()
+        where receipt.dropPhase == .awaitingLanding {
+            if scene.hasLandedPebble(withID: receipt.id)
+                || representedSessionIDs.contains(receipt.id) {
+                finishRewardDrop(sessionID: receipt.id)
+            }
+        }
+        let pendingReceipts = PendingRewardReceiptStore.load()
+        let canRevealDrop = !rewardDropRevealIsPending
+            && breakOffer == nil
+            && !rewardDropSurfaceIsObscured
+        let awaitingDropIDs = Set(pendingReceipts.filter {
+            $0.dropPhase == .awaitingLanding
+        }.map(\.id))
+        let heldIDs = Set(pendingReceipts.filter {
+            $0.isAwaitingAcknowledgement || ($0.requiresDrop && !canRevealDrop)
+        }.map(\.id)).union(looseSessions.filter(hasLocalCompletionMarker).map(\.id))
         let current = (
             looseSessions.map(PebbleDescriptor.init(session:))
                 + visibleAchievementStones.map(PebbleDescriptor.init(achievement:))
-        ).sorted { $0.createdAt < $1.createdAt }
+        ).filter { !heldIDs.contains($0.id) }
+            .sorted { $0.createdAt < $1.createdAt }
         let currentIDs = Set(current.map(\.id))
+        recoverPendingRewardReceipt()
 
         let snapshotGeneration = HomeSceneSessionSnapshotGeneration(
             aggregateProjectionPresentation
@@ -2389,15 +2666,13 @@ struct HomeView: View {
             appliedGeneration: appliedSceneSessionSnapshotGeneration,
             acceptedGeneration: snapshotGeneration
         ) {
-            let pendingCompletion = looseSessions.first(where: hasLocalCompletionMarker)
-            let restored = current.filter { $0.id != pendingCompletion?.id }
+            let restored = current.filter { !awaitingDropIDs.contains($0.id) }
             scene.restore(pebbles: restored)
             knownLooseIDs = currentIDs
             sceneInitialized = true
             appliedSceneSessionSnapshotGeneration = snapshotGeneration
-            if let pendingCompletion {
-                scene.drop([PebbleDescriptor(session: pendingCompletion)])
-                scheduleShareChipIfNeeded(for: [pendingCompletion])
+            for descriptor in current where awaitingDropIDs.contains(descriptor.id) {
+                scene.dropFromAbove(descriptor)
             }
             scheduleWidgetSnapshot()
             return
@@ -2412,7 +2687,10 @@ struct HomeView: View {
             if removedIDs.isSubset(of: allAchievementIDs) {
                 scene.removePebbles(withIDs: removedIDs)
             } else {
-                scene.restore(pebbles: current)
+                scene.restore(pebbles: current.filter { !awaitingDropIDs.contains($0.id) })
+                for descriptor in current where awaitingDropIDs.contains(descriptor.id) {
+                    scene.dropFromAbove(descriptor)
+                }
                 knownLooseIDs = currentIDs
                 scheduleWidgetSnapshot()
                 return
@@ -2421,7 +2699,13 @@ struct HomeView: View {
         let newStudyDescriptors = newDescriptors.filter { !$0.isAchievement }
         let newAchievementDescriptors = newDescriptors.filter(\.isAchievement)
         if !newStudyDescriptors.isEmpty {
-            scene.drop(newStudyDescriptors)
+            for descriptor in newStudyDescriptors {
+                if awaitingDropIDs.contains(descriptor.id) {
+                    scene.dropFromAbove(descriptor)
+                } else {
+                    scene.drop(descriptor)
+                }
+            }
             scheduleShareChipIfNeeded(for: newSessions)
         }
         if !newAchievementDescriptors.isEmpty {
@@ -2429,6 +2713,35 @@ struct HomeView: View {
         }
         knownLooseIDs = currentIDs
         scheduleWidgetSnapshot()
+    }
+
+    private func refreshRewardSessionBackfill() -> Bool {
+        let receipts = PendingRewardReceiptStore.load().filter(\.requiresDrop)
+        guard !receipts.isEmpty else { return true }
+        do {
+            let resolved = try HomeProjectionPolicy.pendingRewardSessionCandidates(
+                for: receipts,
+                context: modelContext,
+                resetMarkers: resetSnapshots
+            )
+            let resolvedIDs = Set(resolved.map(\.id))
+            // Keep a just-landed older reward visible for this Home generation.
+            // Removing its receipt must not immediately remove its jar body.
+            let retained = currentRewardSessionBackfill.filter {
+                !resolvedIDs.contains($0.id)
+            }
+            rewardSessionBackfill = Array(
+                (resolved + retained).prefix(PendingRewardReceiptStore.maximumPendingCount)
+            )
+            rewardSessionBackfillGeneration = HomeSceneSessionSnapshotGeneration(
+                aggregateProjectionPresentation
+            )
+            return true
+        } catch {
+            // A failed bounded lookup is not proof that a saved reward is gone.
+            // Leave the durable receipt intact until the next accepted refresh.
+            return false
+        }
     }
 
     private func syncBaseLayers() {
@@ -2958,10 +3271,12 @@ struct HomeView: View {
             capacityRemaining = nil
             modelContext.rollback()
             syncBaseLayers()
+            let heldRewardIDs = Set(PendingRewardReceiptStore.load().filter(\.requiresDrop).map(\.id))
             let restored = (
                 looseSessions.map(PebbleDescriptor.init(session:))
                     + visibleAchievementStones.map(PebbleDescriptor.init(achievement:))
-            ).sorted { $0.createdAt < $1.createdAt }
+            ).filter { !heldRewardIDs.contains($0.id) }
+                .sorted { $0.createdAt < $1.createdAt }
             scene.restore(pebbles: restored)
             knownLooseIDs = Set(restored.map(\.id))
             sceneInitialized = true
@@ -3091,9 +3406,32 @@ struct HomeView: View {
             && rareRewardMode.usesEnhancedPresentation
         router.showToast(message, symbol: usesRareSymbol ? "sparkles" : "scalemass")
 
+        if PendingRewardReceiptStore.load().contains(where: {
+            $0.id == descriptor.id && $0.dropPhase == .awaitingLanding
+        }) {
+            finishRewardDrop(sessionID: descriptor.id)
+            syncScene()
+            return
+        }
         guard descriptor.source != .manual,
               hasLocalCompletionMarker(descriptor.id)
         else { return }
+        if let receipt = prepareRewardReceipt(for: descriptor, dropPhase: nil) {
+            scheduleRewardReceipt(receipt, delay: .milliseconds(1_650))
+        }
+    }
+
+    @discardableResult
+    private func prepareRewardReceipt(
+        for descriptor: PebbleDescriptor,
+        dropPhase: PendingRewardDropPhase?
+    ) -> PendingRewardReceipt? {
+        if let existing = PendingRewardReceiptStore.load().first(where: { $0.id == descriptor.id }) {
+            if hasLocalCompletionMarker(descriptor.id) {
+                UserDefaults.standard.removeObject(forKey: FocusPersistence.localCompletionIDKey)
+            }
+            return existing
+        }
         let historyMetrics = try? HomeProjectionPolicy.completionMetrics(
             context: modelContext,
             resetMarkers: resetSnapshots,
@@ -3103,8 +3441,8 @@ struct HomeView: View {
         )
         var measuredCompletionDates = historyMetrics?.weeklyMeasuredDates ?? []
         if historyMetrics?.weeklyMeasuredSessionIDs.contains(descriptor.id) != true {
-            // SwiftData query delivery can trail SpriteKit's landing callback
-            // by one render pass. Include the just-landed, locally committed
+            // SwiftData query delivery can trail completion preparation.
+            // Include the locally committed
             // timer exactly once so the completion card never says “0”.
             measuredCompletionDates.append(descriptor.createdAt)
         }
@@ -3123,7 +3461,7 @@ struct HomeView: View {
             sessionID: descriptor.id,
             contributionGrams: descriptor.grams
         )
-        // Freeze the projection at the landing boundary. A delayed live read
+        // Freeze the projection when preparing the completion message. A delayed live read
         // can change underneath the user while CloudKit or a decimal fusion is
         // being applied, making the receipt claim a precision it does not have.
         let receipt = PendingRewardReceipt(
@@ -3145,28 +3483,39 @@ struct HomeView: View {
             projectionWasCloudUnverified:
                 aggregateProjectionPresentation.isCloudVerificationPending,
             projectionCacheStamp:
-                aggregateProjectionPresentation.verifiedCacheStamp
+                aggregateProjectionPresentation.verifiedCacheStamp,
+            dropPhase: dropPhase
         )
-        // Persist before consuming the one-shot landing marker. If the process
+        // Persist before consuming the one-shot completion marker. If the process
         // dies at any later instruction, Home can still recover this exact
         // receipt once without awarding or saving the session again.
-        if PendingRewardReceiptStore.insert(receipt) {
-            UserDefaults.standard.removeObject(forKey: FocusPersistence.localCompletionIDKey)
-        }
-        scheduleRewardReceipt(receipt, delay: .milliseconds(1_650))
+        guard PendingRewardReceiptStore.insert(receipt) else { return nil }
+        UserDefaults.standard.removeObject(forKey: FocusPersistence.localCompletionIDKey)
         scheduleReviewRequestIfEarned()
+        return receipt
     }
 
     private func recoverPendingRewardReceipt() {
+        let receipts = PendingRewardReceiptStore.load()
         guard breakOffer == nil,
               breakOfferTask == nil,
+              homeIsVisible,
+              !router.focusPresentationIsActive,
+              !rewardDropRevealIsPending,
+              rewardDropDestination == nil,
               focusConfiguration == nil,
+              router.recoveredFocus == nil,
               breakConfiguration == nil,
+              router.recoveredBreak == nil,
+              router.selectedTab == .jar,
               !router.sharePresented,
-              let receipt = PendingRewardReceiptStore.load().first
+              !receipts.contains(where: { $0.dropPhase == .awaitingLanding }),
+              let receipt = receipts.first(where: {
+                  $0.dropPhase != .awaitingLanding
+              })
         else { return }
-        // A recovered receipt is already detached from the physical impact, so
-        // a short settling delay is enough to avoid covering the first frame.
+        // New receipts precede the first fall; legacy receipts have already
+        // landed. Neither may be presented behind the active timer.
         scheduleRewardReceipt(receipt, delay: .milliseconds(280))
     }
 
@@ -3178,10 +3527,18 @@ struct HomeView: View {
         // earlier completion; acknowledging it drains the next durable item.
         guard breakOffer == nil, breakOfferTask == nil else { return }
         breakOfferTask = Task { @MainActor in
-            // Fresh receipts leave room for the thud and mass toast. Recovered
-            // receipts use the shorter delay above and contain no replayed FX.
+            // New receipts precede the fall. The legacy landing path leaves
+            // room for its existing thud and mass toast before the card.
             try? await Task.sleep(for: delay)
             guard !Task.isCancelled else { return }
+            guard homeIsVisible,
+                  !router.focusPresentationIsActive,
+                  focusConfiguration == nil,
+                  router.recoveredFocus == nil
+            else {
+                breakOfferTask = nil
+                return
+            }
             withAnimation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.86)) {
                 breakOffer = BreakOffer(receipt: receipt)
             }
@@ -3784,6 +4141,18 @@ private struct FocusConfiguration: Identifiable {
     let duration: PomodoroDuration
 }
 
+private struct RewardDropContinuation {
+    enum Destination {
+        case home
+        case rest(minutes: Int)
+        case share
+    }
+
+    let sessionID: UUID
+    let destination: Destination
+    var hasLanded = false
+}
+
 private struct BreakOffer: Identifiable {
     let id: UUID
     let minutes: Int
@@ -3799,8 +4168,10 @@ private struct BreakOffer: Identifiable {
     let projectionIsLowerBound: Bool
     let projectionWasCloudUnverified: Bool
     let projectionCacheStamp: AggregateProjectionCacheStamp?
+    let isAwaitingDrop: Bool
 
     init(receipt: PendingRewardReceipt) {
+        isAwaitingDrop = receipt.requiresDrop
         id = receipt.id
         minutes = receipt.breakMinutes
         grams = receipt.grams
@@ -3847,6 +4218,7 @@ private struct BreakOffer: Identifiable {
     }
 
     func dropTitle(for mode: RareRewardMode) -> String {
+        if isAwaitingDrop { return "集中を記録しました。" }
         if !mode.usesEnhancedPresentation {
             return switch kind {
             case .normal: "一粒、着地。"
@@ -4721,6 +5093,9 @@ private struct JarUITestPresentationProbe: View {
     @State private var previousPositionByPebbleID: [UUID: CGPoint] = [:]
     @State private var targetX: CGFloat = 0.5
     @State private var targetY: CGFloat = 0.88
+    @State private var dropSequence = 0
+    @State private var dropFall: CGFloat = 0
+    @State private var dropLanded = false
 
     var body: some View {
         Text("Jar presentation probe")
@@ -4745,18 +5120,24 @@ private struct JarUITestPresentationProbe: View {
 
     private var presentationValue: String {
         String(
-            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f",
+            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d",
             count,
             Double(maximumY),
             records,
             bounceSequence,
             Double(bounceRise),
             Double(targetX),
-            Double(targetY)
+            Double(targetY),
+            dropSequence,
+            Double(dropFall),
+            dropLanded ? 1 : 0
         )
     }
 
     private func samplePresentation() {
+        dropSequence = Int(truncatingIfNeeded: scene.completionDropSequence)
+        dropFall = scene.completionDropMaximumFall
+        dropLanded = scene.completionDropHasLanded
         var pebbles: [PebbleNode] = []
         collectPebbles(from: scene, into: &pebbles)
 

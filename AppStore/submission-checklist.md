@@ -2,6 +2,13 @@
 
 ## 未完了なら提出しない項目
 
+- [ ] 2026-09-06改訂のja-JP／en-US掲載文・subtitle・promotional text・keywordsとHomeのテーマ／時間選択導線を
+  最終候補へ照合し、App Store Connectへ保存後に再読み込みで一致を確認。過去の転記済みcheckは今回改訂の保存を意味しない
+- [ ] Homeのテーマ／時間選択が写る最終候補で正式screenshotを再撮影し、5枚・hash・画面内versionを更新。
+  現在の1.0 (3)画像と開発中のArtifacts画像を今回の提出証拠として扱わない
+- [ ] `release-experience-review.md`の共通タスクを署名済み実機でVoiceOver／200%以上の文字サイズ／
+  視差効果を減らす／色以外の識別／コントラストの観点から実行。Accessibility Nutrition Labelsは
+  検証を完了した対応項目だけを申告し、自動UI auditだけを対応根拠にしない
 - [x] App Store Connect app record（Apple ID `6806758060`、`com.hinoshiba.tumiben`）を確認
 - [x] Free／Paid Apps Agreement、tax、bankingがactiveであることを確認（2026-09-03）
 - [x] App Store Connect上のDSA statusがnon-trader表示であることを確認（2026-09-04）

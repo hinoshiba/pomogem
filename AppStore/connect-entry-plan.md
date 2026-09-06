@@ -64,7 +64,7 @@ supportが現在日本語であることを明示し、英語UIがあると誤�
 - Review path: clean installの最初の画面で同格の「このiPhoneのみ」を選ぶと、Apple Account／networkなしで
   全基本機能を審査可能。iCloud pathは選択確認とonline Apple Account検証が必要。続くonboardingの
   ためし粒は任意で「次へ」から省略でき、勉強／仕事共通の候補から最初のテーマ1件を選ぶ。Homeの
-  開始buttonはtapでtimerを開始し、長押しでは開始せずテーマを変更する
+  テーマと時間を選び、開始buttonのtapでtimerを開始する。開始buttonの長押しでも、開始せずテーマを変更する
 - Release: automatically release after App Review approval
 - App Review contact: required。提出担当者はcontact first name、last name、`+`と国番号を含む
   international-format phone number、email addressをApp Store Connect上で入力し、保存後にreloadして

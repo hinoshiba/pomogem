@@ -30,7 +30,10 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         XCTAssertTrue(thirtyMinutes.waitForExistence(timeout: 4))
         let remaining = app.staticTexts["manual.remaining-count"]
         XCTAssertTrue(remaining.waitForExistence(timeout: 4))
-        XCTAssertEqual(remaining.label, "本日あと3回")
+        // The manual-entry allowance belongs to this device in every storage
+        // mode; the copy must not imply a shared iCloud-wide allowance.
+        let initialRemainingLabel = "この端末で本日あと3回"
+        XCTAssertEqual(remaining.label, initialRemainingLabel)
         thirtyMinutes.tap()
         let manualConfirm = app.buttons["manual.confirm"]
         XCTAssertTrue(
@@ -39,11 +42,11 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         )
         XCTAssertEqual(
             remaining.label,
-            "本日あと3回",
+            initialRemainingLabel,
             "Previewing a duration must not consume the daily allowance"
         )
         let postSaveCount = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "保存後", "本日あと2回")
+            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "保存後", "この端末で本日あと2回")
         ).firstMatch
         XCTAssertTrue(
             postSaveCount.waitForExistence(timeout: 4),
@@ -381,6 +384,18 @@ final class RareRewardOptInUITests: XCTestCase {
 
         let next = app.buttons["次へ"]
         XCTAssertTrue(next.waitForExistence(timeout: 8))
+        let back = app.buttons["onboarding.back"]
+        XCTAssertFalse(back.exists)
+        let step = app.descendants(matching: .any)["onboarding.step"]
+        XCTAssertTrue(step.label.contains("1ページ"))
+        next.tap()
+
+        XCTAssertTrue(back.waitForExistence(timeout: 4))
+        XCTAssertTrue(back.isHittable)
+        XCTAssertGreaterThanOrEqual(back.frame.height, 44)
+        back.tap()
+        XCTAssertTrue(next.waitForExistence(timeout: 4))
+        XCTAssertFalse(back.exists)
         next.tap()
 
         let trialDrop = app.buttons.matching(
@@ -398,18 +413,31 @@ final class RareRewardOptInUITests: XCTestCase {
         )
         XCTAssertFalse(app.buttons["勉強"].exists)
         XCTAssertFalse(app.buttons["仕事"].exists)
+        let finish = app.buttons["瓶をひらく"]
+        XCTAssertTrue(finish.waitForExistence(timeout: 4))
+        XCTAssertFalse(finish.isEnabled)
 
         let firstSubject = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", "英語")
         ).firstMatch
         XCTAssertTrue(firstSubject.waitForExistence(timeout: 4))
         firstSubject.tap()
+        let selection = app.descendants(matching: .any)["onboarding.selection-summary"]
+        XCTAssertTrue(selection.label.contains("英語"))
+        XCTAssertTrue(selection.isHittable)
+
+        back.tap()
+        XCTAssertTrue(next.waitForExistence(timeout: 4))
+        next.tap()
+        XCTAssertTrue(finish.waitForExistence(timeout: 4))
+        XCTAssertTrue(
+            selection.label.contains("英語"),
+            "Going back must preserve the explicitly chosen first theme"
+        )
 
         let panel = app.descendants(matching: .any)["onboarding.rare-reward-choice"]
         XCTAssertFalse(panel.waitForExistence(timeout: 1))
 
-        let finish = app.buttons["瓶をひらく"]
-        XCTAssertTrue(finish.waitForExistence(timeout: 4))
         XCTAssertTrue(finish.isEnabled)
         finish.tap()
 

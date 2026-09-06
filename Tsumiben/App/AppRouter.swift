@@ -63,6 +63,7 @@ final class AppRouter {
     private(set) var localSessionMaintenanceRequestedThisProcess = false
     var sharePresented = false
     var shareScope: ShareScope = .all
+    private(set) var focusPresentationIsActive = false
     var recoveredFocus: RecoveredFocusRequest?
     var deferredFocusRecovery: RecoveredFocusRequest?
     var recoveredBreak: BreakRecoveryEnvelope?
@@ -127,6 +128,16 @@ final class AppRouter {
                 }
             }
         }
+    }
+
+    func beginFocusPresentation() {
+        guard !focusPresentationIsActive else { return }
+        focusPresentationIsActive = true
+    }
+
+    func completeFocusPresentation() {
+        guard focusPresentationIsActive else { return }
+        focusPresentationIsActive = false
     }
 
     func presentPaywall(

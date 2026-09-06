@@ -25,6 +25,56 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 10))
     }
 
+    func testAX5SettingsTimerDisplayChoicesRemainReachable() {
+        defer { app.terminate() }
+        app.buttons["メニュー"].tap()
+        let settingsAction = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "設定")
+        ).firstMatch
+        XCTAssertTrue(scrollUntilHittable(settingsAction))
+        settingsAction.tap()
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 8))
+        let settingsDisplay = app.descendants(matching: .any)["settings.timer-display-mode"].firstMatch
+        XCTAssertTrue(scrollUntilHittable(settingsDisplay, attempts: 20))
+        XCTAssertGreaterThanOrEqual(settingsDisplay.frame.height, 43.5)
+        settingsDisplay.tap()
+
+        let ring = app.buttons["timer-display.option.ringAndTime"]
+        XCTAssertTrue(ring.waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUntilHittable(ring))
+        XCTAssertGreaterThanOrEqual(ring.frame.height, 43.5)
+        let ringFrame = ring.frame
+        let dial = app.buttons["timer-display.option.filledDial"]
+        XCTAssertTrue(scrollUntilHittable(dial, attempts: 12))
+        XCTAssertGreaterThanOrEqual(dial.frame.height, 43.5)
+        XCTAssertEqual(dial.frame.minX, ringFrame.minX, accuracy: 1,
+                       "Large text choices must use one column")
+        dial.tap()
+        XCTAssertEqual(dial.value as? String, "選択中")
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "AX5 Settings timer styles — selected physical dial"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        app.navigationBars["タイマーの表示"].buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        app.navigationBars["設定"].buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(scrollUntilHittable(launcher, attempts: 12))
+        launcher.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["focus.timer-display"].firstMatch
+            .waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["focus.display-mode"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["timer-display.selection"].exists)
+        let giveUp = app.buttons["今日はここまで"]
+        XCTAssertTrue(scrollUntilHittable(giveUp, attempts: 12))
+        giveUp.tap()
+        let confirmation = app.alerts["今日はここまで"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
+        confirmation.buttons["今日はここまで"].tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 6))
+    }
+
     func testAX5HomeMenuAndOverviewNowRemainReachableAndAuditable() throws {
         let menu = app.buttons["メニュー"]
         // An empty jar has no local-impact action yet, so it intentionally
@@ -75,6 +125,68 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         )
 
         closeOverview()
+    }
+
+    func testAX5VisibleFocusControlsRemainReachableAndDoNotStartFocus() {
+        defer { app.terminate() }
+
+        let presentation = app.descendants(matching: .any)["jar.presentation.probe"]
+        XCTAssertTrue(presentation.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            ((presentation.value as? String) ?? "").hasPrefix("count=0;"),
+            "This journey starts from the disposable empty bottle fixture"
+        )
+
+        let themePicker = app.buttons["home.subject-picker"]
+        let durationPicker = app.buttons["home.duration-picker"]
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(scrollUntilFullyVisibleInContent(themePicker, attempts: 12))
+        XCTAssertTrue(themePicker.isHittable)
+        XCTAssertGreaterThanOrEqual(themePicker.frame.height, 47.5)
+        XCTAssertTrue(scrollUntilFullyVisibleInContent(durationPicker, attempts: 12))
+        XCTAssertTrue(durationPicker.isHittable)
+        XCTAssertGreaterThanOrEqual(durationPicker.frame.height, 47.5)
+        XCTAssertLessThanOrEqual(
+            themePicker.frame.maxY,
+            durationPicker.frame.minY,
+            "The two controls must stack without overlap at AX5"
+        )
+
+        durationPicker.tap()
+        let fortyFiveMinutes = app.buttons["45分"].firstMatch
+        XCTAssertTrue(fortyFiveMinutes.waitForExistence(timeout: 4))
+        XCTAssertTrue(scrollUntilHittable(fortyFiveMinutes))
+        fortyFiveMinutes.tap()
+        XCTAssertTrue(scrollUntilFullyVisibleInContent(launcher, attempts: 12))
+        XCTAssertTrue(launcher.isHittable)
+        XCTAssertTrue(launcher.label.contains("45分集中する"))
+        XCTAssertFalse(app.buttons["一時停止"].exists)
+        XCTAssertFalse(app.staticTexts["つみべんPro"].exists)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "AX5 Home — visible selectors and configured free timer"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        XCTAssertTrue(scrollUntilFullyVisibleInContent(themePicker, attempts: 12))
+        themePicker.tap()
+        let manageThemes = app.buttons["テーマを管理"]
+        XCTAssertTrue(manageThemes.waitForExistence(timeout: 4))
+        XCTAssertTrue(scrollUntilHittable(manageThemes))
+        manageThemes.tap()
+        let settingsNavigation = app.navigationBars["設定"]
+        XCTAssertTrue(settingsNavigation.waitForExistence(timeout: 6))
+        XCTAssertFalse(app.buttons["一時停止"].exists)
+
+        settingsNavigation.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUntilFullyVisibleInContent(launcher, attempts: 12))
+        XCTAssertTrue(launcher.label.contains("45分集中する"))
+        XCTAssertFalse(app.buttons["一時停止"].exists)
+        XCTAssertTrue(
+            ((presentation.value as? String) ?? "").hasPrefix("count=0;"),
+            "Configuring a timer and visiting theme settings must not create effort"
+        )
     }
 
     func testAX5CrystalHierarchyRemainsReachableAndAuditable() throws {

@@ -2442,23 +2442,23 @@ enum TimerDisplayMode: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .ringAndTime: "標準（円と時間）"
-        case .filledDial: "色の円"
+        case .ringAndTime: "リング＋時間"
+        case .filledDial: "円盤（数字なし）"
         case .timeOnly: "時間のみ"
-        case .ringOnly: "外周のみ"
+        case .ringOnly: "リングのみ"
         }
     }
 
     var detail: String {
         switch self {
         case .ringAndTime:
-            "外周、残り時間、経過率を表示します"
+            "残り時間と、時計回りに減るリングを表示します"
         case .filledDial:
-            "色の面が残り時間に合わせて減ります。数字は表示しません"
+            "物理タイマーのように、色の円盤が時計回りに減ります。数字は表示しません"
         case .timeOnly:
             "残り時間の数字だけを大きく表示します"
         case .ringOnly:
-            "標準表示から残り時間の数字を隠します"
+            "時計回りに減るリングと残りの割合を表示します。残り時間の数字は表示しません"
         }
     }
 

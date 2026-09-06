@@ -1,5 +1,14 @@
 # App Store screenshots
 
+## Current release gate — 2026-09-06
+
+The checked-in images predate the visible theme and duration controls on Home.
+They remain historical capture evidence and must be replaced before submission.
+Capture the final candidate with the procedure below, review all five images,
+and regenerate `checksums.sha256`. Compare the new set with the signed Release
+build on a supported physical iPhone. Images saved under `Artifacts/` during
+development are review references, not an approved App Store screenshot set.
+
 ## Japanese iPhone set
 
 `ja-JP/` contains five release-intended product-UI screenshots captured with a
@@ -28,16 +37,21 @@ The screenshots intentionally contain:
 - no claimed Pro entitlement and no simulated purchase state;
 - no promotional text or device-frame compositing.
 
-The set deliberately omits the paywall while the live App Store Connect
-product is being created. It therefore contains neither a hard-coded price nor
-a synthetic purchased state. If a paywall screenshot is added later, capture
+The set omits the paywall and focuses on the free experience. It contains
+neither a hard-coded price nor a synthetic purchased state. If a paywall
+screenshot is added later, capture
 the localized `Product.displayPrice` supplied by StoreKit; do not draw a price
 into the image.
 
 The test fixture uses a Debug-only 12-second timer to create one 250g record,
-but it closes that picker before capture. The reward it creates is the same
+but restores the visible duration to 25 minutes before capturing the reward
+card and Home. The reward it creates is the same
 250g normal pebble as a real 25-minute completion. Version 1.0's release policy
 disables random rewards, so this set cannot randomly change.
+
+The current Simulator storage screen can contain diagnostic text. Treat new
+captures as QA candidates and recapture that screen on the signed physical
+device before replacing the historical set.
 
 These images verify product-page composition and truthful UI content; they are
 not evidence that the signed Release archive renders identically. Before

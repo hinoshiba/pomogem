@@ -129,8 +129,8 @@ required = [
     ROOT / "og-focus-v7.png",
     ROOT / "public/app-icon-focus-v5.png",
     ROOT / "public/apple-touch-icon.png",
-    ROOT / "public/app-home-v2.webp",
-    ROOT / "public/app-timer-v1.webp",
+    ROOT / "public/app-home-v3.webp",
+    ROOT / "public/app-timer-v2.webp",
     ROOT / "public/ZenMaruGothic-Black.ttf",
     ROOT / "font-license.txt",
 ]
@@ -242,10 +242,13 @@ for required_positioning_term in (
     "見える集中記録",
     "終えた時間を、宝石で記録。",
     'href="#demo"',
-    "25分の記録を追加（デモ）",
-    "実際のタイマー、音・触覚、記録保存は再現しません",
-    "public/app-timer-v1.webp",
-    "public/app-home-v2.webp",
+    "集中から宝石まで、8秒で体験",
+    'id="demo-time"',
+    'id="lab-start"',
+    "25分の集中を約8秒で早送りするデモ",
+    "実際の25分は計測せず、音・触覚・記録保存は再現しません",
+    "public/app-timer-v2.webp",
+    "public/app-home-v3.webp",
 ):
     if required_positioning_term not in index:
         fail(f"index positioning journey is missing: {required_positioning_term}")

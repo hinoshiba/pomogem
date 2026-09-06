@@ -1,9 +1,201 @@
 import SwiftUI
+import UserNotifications
 import XCTest
 @testable import Tsumiben
 
 final class PomodoroEngineTests: XCTestCase {
     private let referenceDate = Date(timeIntervalSince1970: 1_788_000_000)
+
+    func testFocusReturnReminderPreferenceDefaultsOffAndHonorsExplicitChoice() throws {
+        let suite = "FocusReturnReminderPolicy.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertFalse(FocusReturnReminderPolicy.isEnabled(defaults: defaults))
+        defaults.set(true, forKey: FocusReturnReminderPolicy.enabledDefaultsKey)
+        XCTAssertTrue(FocusReturnReminderPolicy.isEnabled(defaults: defaults))
+        defaults.set(false, forKey: FocusReturnReminderPolicy.enabledDefaultsKey)
+        XCTAssertFalse(FocusReturnReminderPolicy.isEnabled(defaults: defaults))
+    }
+
+    func testFocusReturnReminderRequiresMoreThanSixtySecondsAfterDelivery() {
+        XCTAssertEqual(FocusReturnReminderPolicy.delay, 30)
+        XCTAssertEqual(FocusReturnReminderPolicy.completionQuietWindow, 60)
+        for remaining in [-1.0, 0, 30, 60, 89.999, 90, 90.001, 120] {
+            XCTAssertEqual(
+                FocusReturnReminderPolicy.shouldSchedule(
+                    preferenceEnabled: true,
+                    sceneIsBackground: true,
+                    phase: .focusing,
+                    endDate: referenceDate.addingTimeInterval(remaining),
+                    now: referenceDate
+                ),
+                remaining > 90,
+                "remaining=\(remaining) must leave over sixty seconds after the thirty-second reminder"
+            )
+        }
+        for endDate in [nil, Date(timeIntervalSinceReferenceDate: .infinity),
+                        Date(timeIntervalSinceReferenceDate: .nan)] as [Date?] {
+            XCTAssertFalse(FocusReturnReminderPolicy.shouldSchedule(
+                preferenceEnabled: true, sceneIsBackground: true, phase: .focusing,
+                endDate: endDate, now: referenceDate
+            ))
+        }
+        XCTAssertFalse(FocusReturnReminderPolicy.shouldSchedule(
+            preferenceEnabled: true, sceneIsBackground: true, phase: .focusing,
+            endDate: referenceDate.addingTimeInterval(120),
+            now: Date(timeIntervalSinceReferenceDate: .nan)
+        ))
+    }
+
+    func testFocusReturnReminderRequiresOptInActualBackgroundAndRunningFocus() {
+        for phase in [PomodoroPhase.idle, .paused, .focusCompleted, .shortBreak,
+                      .longBreak, .breakCompleted, .focusing] {
+            for enabled in [false, true] {
+                for isBackground in [false, true] {
+                    XCTAssertEqual(
+                        FocusReturnReminderPolicy.shouldSchedule(
+                            preferenceEnabled: enabled,
+                            sceneIsBackground: isBackground,
+                            phase: phase,
+                            endDate: referenceDate.addingTimeInterval(120),
+                            now: referenceDate
+                        ),
+                        enabled && isBackground && phase == .focusing
+                    )
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func testFocusReturnReminderCandidateSurvivesForegroundCancellationUntilTimerEnds() async throws {
+        let fixture = try FocusReturnReminderFixture()
+        defer { fixture.cleanUp() }
+        let sessionID = UUID()
+        fixture.manager.registerFocusReturnReminder(
+            sessionID: sessionID, endDate: .now.addingTimeInterval(300), playsSound: false
+        )
+        // A temporary inactive-state View unmount must preserve the candidate.
+        fixture.manager.cancelFocusReturnReminder()
+        let first = try await fixture.manager.scheduleRegisteredFocusReturnReminder()
+        guard case .accepted = first else { return XCTFail("Expected the retained running timer") }
+        let request = try XCTUnwrap(fixture.recorder.additions.last)
+        let trigger = try XCTUnwrap(request.trigger as? UNTimeIntervalNotificationTrigger)
+        XCTAssertFalse(trigger.repeats)
+        XCTAssertGreaterThan(trigger.timeInterval, 25)
+        XCTAssertLessThanOrEqual(trigger.timeInterval, 30)
+        XCTAssertEqual(request.content.body, "集中時間が続いています。タイマーに戻って続けましょう。")
+        XCTAssertNil(request.content.sound)
+        XCTAssertNil(request.content.badge)
+        XCTAssertTrue(request.content.userInfo.isEmpty)
+        fixture.recorder.delivered.insert(request.identifier)
+        fixture.manager.cancelFocusReturnReminder()
+        XCTAssertTrue(fixture.recorder.pending.isEmpty)
+        XCTAssertTrue(fixture.recorder.delivered.isEmpty)
+
+        // The next actual departure may reuse the candidate, but pause/end
+        // cancellation must retire it even after foreground cleared its cue.
+        fixture.manager.cancelFocusCompletion(sessionID: sessionID)
+        let afterPause = try await fixture.manager.scheduleRegisteredFocusReturnReminder()
+        XCTAssertEqual(afterPause, .superseded)
+        XCTAssertEqual(fixture.recorder.additions.count, 1)
+    }
+
+    @MainActor
+    func testFocusReturnReminderLateAddCannotSurviveForegroundCancellation() async throws {
+        let fixture = try FocusReturnReminderFixture()
+        defer { fixture.cleanUp() }
+        fixture.recorder.holdNextAdd = true
+        fixture.recorder.deliverOnAdd = true
+        let operation = Task { @MainActor in
+            try await fixture.manager.scheduleFocusReturnReminder(
+                sessionID: UUID(), endDate: .now.addingTimeInterval(300), playsSound: true
+            )
+        }
+        try await fixture.waitForAddCount(1)
+        fixture.manager.cancelFocusReturnReminder()
+        fixture.recorder.finishHeldAdd()
+        let result = try await operation.value
+        XCTAssertEqual(result, .superseded)
+        XCTAssertTrue(fixture.recorder.pending.isEmpty)
+        XCTAssertTrue(fixture.recorder.delivered.isEmpty)
+    }
+
+    @MainActor
+    func testFocusReturnReminderSerializesNewSessionBehindAnUnfinishedOldAdd() async throws {
+        let fixture = try FocusReturnReminderFixture()
+        defer { fixture.cleanUp() }
+        let oldSession = UUID()
+        let newSession = UUID()
+        fixture.recorder.holdNextAdd = true
+        let oldOperation = Task { @MainActor in
+            try await fixture.manager.scheduleFocusReturnReminder(
+                sessionID: oldSession, endDate: .now.addingTimeInterval(300), playsSound: false
+            )
+        }
+        try await fixture.waitForAddCount(1)
+        fixture.manager.registerFocusReturnReminder(
+            sessionID: newSession, endDate: .now.addingTimeInterval(300), playsSound: true
+        )
+        let newOperation = Task { @MainActor in
+            try await fixture.manager.scheduleRegisteredFocusReturnReminder()
+        }
+        await Task.yield()
+        XCTAssertEqual(fixture.recorder.additions.count, 1,
+                       "The new add must wait until old add cleanup has finished")
+        fixture.manager.cancelFocusCompletion(sessionID: oldSession)
+        fixture.recorder.finishHeldAdd()
+        let oldResult = try await oldOperation.value
+        let newResult = try await newOperation.value
+        XCTAssertEqual(oldResult, .superseded)
+        guard case .accepted = newResult else { return XCTFail("Expected the new session reminder") }
+        XCTAssertEqual(fixture.recorder.additions.count, 2)
+        XCTAssertEqual(fixture.recorder.maximumConcurrentAdds, 1)
+        XCTAssertEqual(Set(fixture.recorder.additions.map(\.identifier)).count, 1)
+        XCTAssertEqual(fixture.recorder.pending.count, 1)
+        XCTAssertNotNil(fixture.recorder.pending.values.first?.content.sound)
+    }
+
+    @MainActor
+    func testFocusReturnReminderAccountBoundaryRetiresCandidateAndInFlightAdd() async throws {
+        let fixture = try FocusReturnReminderFixture()
+        defer { fixture.cleanUp() }
+        fixture.manager.registerFocusReturnReminder(
+            sessionID: UUID(), endDate: .now.addingTimeInterval(300), playsSound: true
+        )
+        fixture.recorder.holdNextAdd = true
+        let operation = Task { @MainActor in
+            try await fixture.manager.scheduleRegisteredFocusReturnReminder()
+        }
+        try await fixture.waitForAddCount(1)
+        fixture.manager.suspendTimerSchedulingForAccountBoundary()
+        fixture.manager.resumeTimerSchedulingAfterAccountBoundary()
+        fixture.recorder.finishHeldAdd()
+        let result = try await operation.value
+        XCTAssertEqual(result, .superseded)
+        XCTAssertTrue(fixture.recorder.pending.isEmpty)
+        let recovered = try await fixture.manager.scheduleRegisteredFocusReturnReminder()
+        XCTAssertEqual(recovered, .superseded)
+        XCTAssertEqual(fixture.recorder.additions.count, 1)
+    }
+
+    @MainActor
+    func testFocusReturnReminderCannotBypassAuthorizationOrPreference() async throws {
+        let fixture = try FocusReturnReminderFixture()
+        defer { fixture.cleanUp() }
+        fixture.manager.registerFocusReturnReminder(
+            sessionID: UUID(), endDate: .now.addingTimeInterval(300), playsSound: true
+        )
+        fixture.recorder.status = .denied
+        let denied = try await fixture.manager.scheduleRegisteredFocusReturnReminder()
+        XCTAssertEqual(denied, .superseded)
+        XCTAssertTrue(fixture.recorder.additions.isEmpty)
+        fixture.recorder.status = .authorized
+        fixture.defaults.set(false, forKey: FocusReturnReminderPolicy.enabledDefaultsKey)
+        let disabled = try await fixture.manager.scheduleRegisteredFocusReturnReminder()
+        XCTAssertEqual(disabled, .superseded)
+        XCTAssertTrue(fixture.recorder.additions.isEmpty)
+    }
 
     func testScreenAwakePolicyCoversFocusAndBreakOnlyWhileRunningInForeground() {
         for phase in [
@@ -222,6 +414,10 @@ final class PomodoroEngineTests: XCTestCase {
             [.ringAndTime, .filledDial, .timeOnly, .ringOnly]
         )
         XCTAssertEqual(
+            TimerDisplayMode.allCases.map(\.rawValue),
+            ["ringAndTime", "filledDial", "timeOnly", "ringOnly"]
+        )
+        XCTAssertEqual(
             TimerDisplayMode.resolved("future-unknown-mode"),
             .ringAndTime
         )
@@ -256,8 +452,56 @@ final class PomodoroEngineTests: XCTestCase {
         XCTAssertTrue(quarterElapsed.contains(CGPoint(x: 25, y: 75)))
         XCTAssertTrue(quarterElapsed.contains(CGPoint(x: 25, y: 25)))
 
+        let halfElapsed = FocusRemainingDialShape(
+            elapsedProgress: 0.5
+        ).path(in: rect)
+        XCTAssertFalse(halfElapsed.contains(CGPoint(x: 75, y: 25)))
+        XCTAssertFalse(halfElapsed.contains(CGPoint(x: 75, y: 75)))
+        XCTAssertTrue(halfElapsed.contains(CGPoint(x: 25, y: 75)))
+        XCTAssertTrue(halfElapsed.contains(CGPoint(x: 25, y: 25)))
+
         let empty = FocusRemainingDialShape(elapsedProgress: 1).path(in: rect)
         XCTAssertTrue(empty.isEmpty)
+    }
+
+    @MainActor
+    func testRenderedRingsRemoveElapsedArcClockwiseFromTwelveOClock() throws {
+        // Sample the middle of each quadrant on the 240-point circle, away
+        // from the origin, moving marker, rounded ends, and central labels.
+        let quadrantPoints = [
+            CGPoint(x: 215, y: 45),  // Upper right
+            CGPoint(x: 215, y: 215), // Lower right
+            CGPoint(x: 45, y: 215),  // Lower left
+            CGPoint(x: 45, y: 45)    // Upper left
+        ]
+        let cases: [(progress: Double, visible: [Bool])] = [
+            (0, [true, true, true, true]),
+            (0.25, [false, true, true, true]),
+            (0.5, [false, false, true, true]),
+            (1, [false, false, false, false])
+        ]
+
+        for mode in [TimerDisplayMode.ringAndTime, .ringOnly] {
+            for testCase in cases {
+                let image = try renderTimerDisplay(mode: mode, progress: testCase.progress)
+                let pixels = try XCTUnwrap(image.cgImage)
+                let visible = try quadrantPoints.map {
+                    try timerAccentIsVisible(in: pixels, at: $0, scale: image.scale)
+                }
+
+                XCTAssertEqual(
+                    visible,
+                    testCase.visible,
+                    "\(mode.rawValue), progress \(testCase.progress): clockwise from upper right"
+                )
+                if visible != testCase.visible {
+                    let attachment = XCTAttachment(image: image)
+                    attachment.name = "Ring countdown — \(mode.rawValue) — \(testCase.progress)"
+                    attachment.lifetime = .keepAlways
+                    add(attachment)
+                }
+            }
+        }
     }
 
     @MainActor
@@ -265,26 +509,7 @@ final class PomodoroEngineTests: XCTestCase {
         var renderedImages: [Data] = []
 
         for mode in TimerDisplayMode.allCases {
-            let content = ZStack {
-                Color.black
-                FocusTimerDisplay(
-                    size: 240,
-                    progress: 0.25,
-                    remainingTime: "18:45",
-                    accessibleRemainingTime: "残り18分45秒",
-                    modeLabel: "FOCUS",
-                    displayMode: mode,
-                    isBreakMode: false,
-                    isPaused: false,
-                    accent: .red,
-                    reduceMotion: true
-                )
-            }
-            .frame(width: 260, height: 260)
-
-            let renderer = ImageRenderer(content: content)
-            renderer.scale = 2
-            let image = try XCTUnwrap(renderer.uiImage, mode.rawValue)
+            let image = try renderTimerDisplay(mode: mode, progress: 0.25)
             XCTAssertEqual(image.size, CGSize(width: 260, height: 260))
             renderedImages.append(try XCTUnwrap(image.pngData(), mode.rawValue))
 
@@ -299,6 +524,65 @@ final class PomodoroEngineTests: XCTestCase {
             TimerDisplayMode.allCases.count,
             "Each timer mode must produce a distinct visual treatment"
         )
+    }
+
+    @MainActor
+    private func renderTimerDisplay(mode: TimerDisplayMode, progress: Double) throws -> UIImage {
+        let seconds = Int(1_500 * (1 - progress))
+        let content = ZStack {
+            Color.black
+            FocusTimerDisplay(
+                size: 240,
+                progress: progress,
+                remainingTime: String(format: "%02d:%02d", seconds / 60, seconds % 60),
+                accessibleRemainingTime: "残り\(seconds / 60)分\(seconds % 60)秒",
+                modeLabel: "FOCUS",
+                displayMode: mode,
+                isBreakMode: false,
+                isPaused: false,
+                accent: Color(.sRGB, red: 1, green: 0, blue: 0, opacity: 1),
+                reduceMotion: true
+            )
+        }
+        .frame(width: 260, height: 260)
+        .environment(\.dynamicTypeSize, .large)
+
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = 2
+        return try XCTUnwrap(renderer.uiImage, mode.rawValue)
+    }
+
+    private func timerAccentIsVisible(
+        in image: CGImage,
+        at point: CGPoint,
+        scale: CGFloat
+    ) throws -> Bool {
+        // CGImage cropping uses image coordinates with an upper-left origin.
+        // Average a small patch wholly inside the stroke, then normalize its
+        // channels to sRGB RGBA instead of assuming ImageRenderer's byte order.
+        let patch = try XCTUnwrap(image.cropping(to: CGRect(
+            x: (point.x - 1) * scale,
+            y: (point.y - 1) * scale,
+            width: 2 * scale,
+            height: 2 * scale
+        )))
+        let colorSpace = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
+        let context = try XCTUnwrap(CGContext(
+            data: nil,
+            width: 1,
+            height: 1,
+            bitsPerComponent: 8,
+            bytesPerRow: 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                | CGBitmapInfo.byteOrder32Big.rawValue
+        ))
+        context.interpolationQuality = .high
+        context.draw(patch, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        let pixel = try XCTUnwrap(context.data).assumingMemoryBound(to: UInt8.self)
+
+        // The dim track and red shadow must not count as remaining time.
+        return pixel[0] > 160 && pixel[1] < 80 && pixel[2] < 80
     }
 
     func testInvalidCustomDurationsAreRejected() {
@@ -599,4 +883,86 @@ final class PomodoroEngineTests: XCTestCase {
         XCTAssertEqual(completion.grams, Constants.Mass.measuredPebbleGrams)
     }
 #endif
+}
+
+@MainActor
+private final class FocusReturnReminderFixture {
+    let suite = "FocusReturnReminderScheduling.\(UUID().uuidString)"
+    let defaults: UserDefaults
+    let recorder = FocusReturnReminderRecorder()
+    let manager: NotificationManager
+
+    init() throws {
+        defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.set(true, forKey: FocusReturnReminderPolicy.enabledDefaultsKey)
+        manager = NotificationManager(
+            focusReturnReminderClient: recorder.client,
+            focusReturnReminderDefaults: defaults
+        )
+    }
+
+    func cleanUp() {
+        recorder.finishHeldAdd()
+        manager.suspendTimerSchedulingForAccountBoundary()
+        defaults.removePersistentDomain(forName: suite)
+    }
+
+    func waitForAddCount(_ count: Int) async throws {
+        let deadline = Date.now.addingTimeInterval(3)
+        while recorder.additions.count < count, Date.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        guard recorder.additions.count == count else {
+            XCTFail("Expected \(count) reminder add calls, observed \(recorder.additions.count)")
+            throw AddWaitError.didNotReachExpectedCount
+        }
+    }
+
+    private enum AddWaitError: Error { case didNotReachExpectedCount }
+}
+
+@MainActor
+private final class FocusReturnReminderRecorder {
+    var status: UNAuthorizationStatus = .authorized
+    var additions: [UNNotificationRequest] = []
+    var pending: [String: UNNotificationRequest] = [:]
+    var delivered: Set<String> = []
+    var holdNextAdd = false
+    var deliverOnAdd = false
+    private var activeAddCount = 0
+    private(set) var maximumConcurrentAdds = 0
+    private var heldAdd: CheckedContinuation<Void, Never>?
+
+    var client: FocusReturnReminderNotificationClient {
+        FocusReturnReminderNotificationClient(
+            authorizationStatus: { self.status },
+            add: { request in
+                self.activeAddCount += 1
+                self.maximumConcurrentAdds = max(self.maximumConcurrentAdds, self.activeAddCount)
+                defer { self.activeAddCount -= 1 }
+                self.additions.append(request)
+                if self.holdNextAdd {
+                    self.holdNextAdd = false
+                    await withCheckedContinuation { self.heldAdd = $0 }
+                }
+                if self.deliverOnAdd {
+                    self.delivered.insert(request.identifier)
+                } else {
+                    self.pending[request.identifier] = request
+                }
+            },
+            removePending: { identifiers in
+                for identifier in identifiers { self.pending.removeValue(forKey: identifier) }
+            },
+            removeDelivered: { identifiers in
+                for identifier in identifiers { self.delivered.remove(identifier) }
+            }
+        )
+    }
+
+    func finishHeldAdd() {
+        let continuation = heldAdd
+        heldAdd = nil
+        continuation?.resume()
+    }
 }

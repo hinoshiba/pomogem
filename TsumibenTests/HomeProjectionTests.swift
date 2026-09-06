@@ -4,6 +4,164 @@ import XCTest
 
 @MainActor
 final class HomeProjectionTests: XCTestCase {
+    func testPendingRewardCandidatesFindCanonicalRecordOutsideNormalHomePage() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let oldEnd = Date(timeIntervalSince1970: 1_800_000_000)
+        let old = pendingRewardSession(endAt: oldEnd)
+        let canonical = pendingRewardSession(id: old.id, endAt: oldEnd, source: .timerDemoted)
+        context.insert(old)
+        context.insert(canonical)
+        for index in 1...HomeProjectionPolicy.looseSessionQueryLimit {
+            context.insert(pendingRewardSession(endAt: oldEnd.addingTimeInterval(Double(index))))
+        }
+        try context.save()
+        let page = try HomeProjectionPolicy.supportedLooseSessionPage(
+            context: context, resetMarkers: []
+        )
+        XCTAssertEqual(page.sessions.count, HomeProjectionPolicy.looseSessionQueryLimit)
+        XCTAssertFalse(page.sessions.contains { $0.id == old.id })
+
+        let recovered = try HomeProjectionPolicy.pendingRewardSessionCandidates(
+            for: [pendingRewardReceipt(for: old)],
+            context: context,
+            resetMarkers: []
+        )
+        XCTAssertEqual(recovered.map(\.id), [old.id])
+        XCTAssertEqual(recovered.first?.syncRecordID, canonical.syncRecordID)
+        XCTAssertEqual(recovered.first?.source, .timerDemoted)
+        let combined = StudySessionSyncPolicy.canonicalSessions(from: page.sessions + recovered + [old])
+        XCTAssertEqual(combined.filter { $0.id == old.id }.count, 1)
+        XCTAssertEqual(combined.first { $0.id == old.id }?.syncRecordID, canonical.syncRecordID)
+        XCTAssertFalse(context.hasChanges, "Recovering presentation candidates must not save or award effort")
+    }
+
+    func testPendingRewardCandidatesIgnoreLegacyDeduplicateAndKeepFourLookupBound() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let start = Date(timeIntervalSince1970: 1_800_100_000)
+        let candidates = (0...PendingRewardReceiptStore.maximumPendingCount).map {
+            pendingRewardSession(endAt: start.addingTimeInterval(Double($0)))
+        }
+        let legacy = pendingRewardSession(endAt: start.addingTimeInterval(-1))
+        (candidates + [legacy]).forEach { context.insert($0) }
+        try context.save()
+        let receipts = [pendingRewardReceipt(for: legacy, phase: nil)]
+            + candidates.reversed().map { pendingRewardReceipt(for: $0) }
+            + [pendingRewardReceipt(for: candidates[0], phase: .awaitingLanding)]
+
+        let recovered = try HomeProjectionPolicy.pendingRewardSessionCandidates(
+            for: receipts, context: context, resetMarkers: []
+        )
+        XCTAssertEqual(recovered.map(\.id), Array(candidates.prefix(4)).map(\.id))
+        XCTAssertEqual(Set(recovered.map(\.id)).count, 4)
+        XCTAssertFalse(recovered.contains { $0.id == legacy.id })
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    func testPendingRewardCandidatesRespectResetEpochAndRejectUnsupportedRows() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let end = Date(timeIntervalSince1970: 1_800_200_000)
+        let currentEpoch = UUID()
+        let marker = ActivityResetSnapshot(
+            id: UUID(), epochID: currentEpoch, sequence: 1,
+            resetAt: end.addingTimeInterval(-2_000), writerDeviceID: "reward-test"
+        )
+        let current = pendingRewardSession(endAt: end, epochID: currentEpoch)
+        let stale = pendingRewardSession(endAt: end.addingTimeInterval(1))
+        let awaitingMarker = pendingRewardSession(endAt: end.addingTimeInterval(2), epochID: UUID())
+        let unsupported = pendingRewardSession(endAt: end.addingTimeInterval(3), epochID: currentEpoch)
+        unsupported.seconds = -1
+        let candidates = [current, stale, awaitingMarker, unsupported]
+        candidates.forEach { context.insert($0) }
+        try context.save()
+
+        let recovered = try HomeProjectionPolicy.pendingRewardSessionCandidates(
+            for: candidates.map { pendingRewardReceipt(for: $0) },
+            context: context,
+            resetMarkers: [marker]
+        )
+        XCTAssertEqual(recovered.map(\.id), [current.id])
+        let missing = pendingRewardSession(endAt: end.addingTimeInterval(4), epochID: currentEpoch)
+        XCTAssertTrue(try HomeProjectionPolicy.pendingRewardSessionCandidates(
+            for: [pendingRewardReceipt(for: missing)], context: context, resetMarkers: [marker]
+        ).isEmpty)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<StudySession>()), candidates.count)
+        XCTAssertFalse(context.hasChanges, "Missing and quarantined source rows must remain untouched")
+    }
+
+    func testPendingRewardCandidatesFailClosedAtOversizedExactReplicaGroup() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let end = Date(timeIntervalSince1970: 1_800_300_000)
+        let id = UUID()
+        let copies = (0...BoundedHistoryPolicy.maximumPhysicalRowsPerLogicalSession).map { _ in
+            pendingRewardSession(id: id, endAt: end)
+        }
+        copies.forEach { context.insert($0) }
+        try context.save()
+
+        XCTAssertThrowsError(try HomeProjectionPolicy.pendingRewardSessionCandidates(
+            for: [pendingRewardReceipt(for: copies[0])], context: context, resetMarkers: []
+        )) { error in
+            XCTAssertEqual(error as? BoundedHistoryPolicy.SessionResolutionError, .logicalReplicaLimitExceeded)
+        }
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<StudySession>()), copies.count)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    func testPendingRewardCandidatesRequireAcceptedAggregateRootForMembership() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let fixture = try makeLeafAggregateFixture()
+        fixture.sessions.forEach { context.insert($0) }
+        let root = fixture.request.makeAggregatePebble()
+        context.insert(root)
+        try context.save()
+        let session = try XCTUnwrap(fixture.sessions.first)
+        let recovered = try HomeProjectionPolicy.pendingRewardSessionCandidates(
+            for: [pendingRewardReceipt(for: session)], context: context, resetMarkers: []
+        )
+
+        let unverified = try HomeProjectionPolicy.localMembershipProjection(
+            for: recovered, representedAggregateRoots: [], context: context, resetMarkers: []
+        )
+        XCTAssertTrue(unverified.representedSessionIDs.isEmpty,
+                      "Finding a pending source must not promote an unverified aggregate")
+        let verified = try HomeProjectionPolicy.localMembershipProjection(
+            for: recovered, representedAggregateRoots: [root], context: context, resetMarkers: []
+        )
+        XCTAssertEqual(verified.representedSessionIDs, [session.id])
+        XCTAssertTrue(verified.isCompleteForCandidates)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    private func pendingRewardSession(
+        id: UUID = UUID(),
+        endAt: Date,
+        source: SessionSource = .timer,
+        epochID: UUID? = nil
+    ) -> StudySession {
+        StudySession(
+            id: id, startAt: endAt.addingTimeInterval(-1_500), endAt: endAt,
+            seconds: 1_500, source: source, grams: 250,
+            deviceDayKey: "pending-reward", dataEpochID: epochID
+        )
+    }
+
+    private func pendingRewardReceipt(
+        for session: StudySession,
+        phase: PendingRewardDropPhase? = .awaitingAcknowledgement
+    ) -> PendingRewardReceipt {
+        PendingRewardReceipt(
+            id: session.id, createdAt: session.endAt, breakMinutes: 5,
+            grams: session.grams, subjectName: "資格", colorHex: "#3FA57C",
+            weeklyCompletionCount: 1, kind: .normal, totalPebbleCount: 1,
+            projectionIsLowerBound: true, dropPhase: phase
+        )
+    }
+
     func testHistoryDestinationDescriptorsAreEpochFilteredAndHardBounded() throws {
         let container = try makeContainer()
         let context = container.mainContext

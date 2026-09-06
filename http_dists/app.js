@@ -19,8 +19,24 @@
   const vessel = document.querySelector('#lab-vessel');
   const mass = document.querySelector('#lab-mass');
   const status = document.querySelector('#lab-status');
-  const labButton = document.querySelector('#lab-drop');
+  const labButton = document.querySelector('#lab-start');
   const toast = document.querySelector('#toast');
+  const demo = document.querySelector('#demo');
+  const demoTime = document.querySelector('#demo-time');
+  const demoProgress = document.querySelector('#demo-progress');
+  const demoPhase = document.querySelector('#demo-phase');
+  const demoControls = document.querySelector('#demo-controls');
+  const demoPause = document.querySelector('#demo-pause');
+  const demoCancel = document.querySelector('#demo-cancel');
+  const demoRest = document.querySelector('#demo-rest');
+  const demoEmpty = document.querySelector('#demo-empty');
+  const demoTotal = document.querySelector('#demo-total');
+  const countdownMilliseconds = 6000;
+  let demoState = 'ready';
+  let demoElapsed = 0;
+  let demoStartedAt = 0;
+  let demoFrame;
+  let completionTimer;
 
   function validHex(value, fallback) {
     return /^#[0-9a-f]{6}$/i.test(value || '') ? value.toUpperCase() : fallback;
@@ -220,7 +236,7 @@
     const contents = [...vessel.querySelectorAll('.aggregate-pebble, .live-pebble')];
     const side = 22;
     const gap = 5;
-    const availableWidth = Math.max(vessel.clientWidth, 240);
+    const availableWidth = vessel.clientWidth || 240;
     let cursorX = side;
     let baseline = vessel.clientHeight - 14;
     let rowHeight = 0;
@@ -280,7 +296,9 @@
     if (!latestAggregate) return false;
     const aggregatedCount = Number(latestAggregate.dataset.pebbleCount) || 10;
     const currentSummary = vesselContentsSummary();
-    status.textContent = `${processedCount}粒を、テーマ色と元の記録を保ったまま整理。現在は${currentSummary.structure}。`;
+    if (demoState === 'completed') {
+      status.textContent = `合計${count * 25}分の集中を記録。${processedCount}粒を、テーマ色と元の記録を保ったまま整理しました。現在は${currentSummary.structure}。`;
+    }
     updateVesselAccessibility();
     announce(`✦ ×${aggregatedCount}のまとまり粒が完成`);
     return true;
@@ -309,14 +327,144 @@
     schedulePlacement();
     mass.innerHTML = `${grams.toLocaleString('ja-JP')}<small>g</small>`;
     updateVesselAccessibility();
-    status.textContent = '一粒、着地。25分＝250gを記録しました。';
-    if (labButton) labButton.textContent = 'もう25分を追加（デモ）';
-    announce('一粒、着地。25分、250グラムを記録しました。');
+    demoEmpty.hidden = true;
+    demoTotal.textContent = `合計${count * 25}分の集中を記録`;
+    status.textContent = '25分、完走。集中した時間が、250gの宝石1粒になりました。';
     scheduleAggregation();
   }
 
+  function renderDemoTimer() {
+    const progress = Math.min(1, demoElapsed / countdownMilliseconds);
+    // Five-minute steps make the accelerated passage readable, without
+    // flashing through 1,500 seconds or announcing every visual update.
+    const minutes = Math.ceil((1 - progress) * 5) * 5;
+    demoTime.textContent = `${String(minutes).padStart(2, '0')}:00`;
+    demoTime.setAttribute('aria-label', `早送りデモ、残り${minutes}分`);
+    // Match the app's elapsed ring: grow clockwise from twelve o'clock.
+    demoProgress.style.strokeDashoffset = String((1 - progress) * 100);
+  }
+
+  function setDemoState(state) {
+    const controlsHadFocus = demoControls.contains(document.activeElement);
+    const startHadFocus = document.activeElement === labButton;
+    const timerHadFocus = document.activeElement === demoTime;
+    demoState = state;
+    demo.dataset.state = state;
+    const isActive = state === 'running' || state === 'paused';
+    demoControls.hidden = !isActive;
+    demoRest.hidden = state !== 'completed';
+    labButton.disabled = isActive || state === 'finishing';
+    labButton.textContent = state === 'completed' ? 'もう一度、集中を体験する'
+      : state === 'finishing' ? '完走した時間を、宝石に…'
+      : isActive ? '25分の集中を体験中'
+      : '集中をはじめる（8秒デモ）';
+    demoPause.textContent = state === 'paused' ? '再開する' : '一時停止';
+    demoPhase.textContent = { ready: '開始前', running: '集中中・早送り', paused: '一時停止中', finishing: '完走！', completed: '25分、完走' }[state];
+    if (isActive && startHadFocus) demoPause.focus({ preventScroll: true });
+    if (controlsHadFocus && state === 'finishing') {
+      demoTime.tabIndex = -1;
+      demoTime.focus({ preventScroll: true });
+    } else if ((controlsHadFocus && !isActive) || (timerHadFocus && state === 'completed')) {
+      labButton.focus({ preventScroll: true });
+    }
+  }
+
+  function completeDemo() {
+    if (demoState !== 'finishing' || document.hidden) return;
+    setDemoState('completed');
+    drop();
+  }
+
+  function tickDemo() {
+    if (demoState !== 'running') return;
+    demoElapsed = Math.min(countdownMilliseconds, performance.now() - demoStartedAt);
+    renderDemoTimer();
+    if (demoElapsed >= countdownMilliseconds) {
+      setDemoState('finishing');
+      status.textContent = '25分、完走。集中した時間を宝石にしています。';
+      // Hold 00:00 before the gem falls, so completion visibly causes the record.
+      completionTimer = setTimeout(completeDemo, 800);
+      return;
+    }
+    demoFrame = requestAnimationFrame(tickDemo);
+  }
+
+  function startDemo() {
+    if (demoState !== 'ready' && demoState !== 'completed') return;
+    demoElapsed = 0;
+    demoStartedAt = performance.now();
+    setDemoState('running');
+    renderDemoTimer();
+    status.textContent = 'タイマーで集中中。25分を早送りしています。宝石になるのは完走してから。';
+    demoFrame = requestAnimationFrame(tickDemo);
+  }
+
+  function pauseDemo() {
+    if (demoState !== 'running') return;
+    cancelAnimationFrame(demoFrame);
+    demoElapsed = Math.min(countdownMilliseconds, performance.now() - demoStartedAt);
+    renderDemoTimer();
+    setDemoState('paused');
+    status.textContent = '一時停止中。再開すると、残りの集中から体験を続けられます。';
+  }
+
+  function toggleDemoPause() {
+    if (demoState === 'running') {
+      pauseDemo();
+    } else if (demoState === 'paused') {
+      demoStartedAt = performance.now() - demoElapsed;
+      setDemoState('running');
+      status.textContent = '集中を再開しました。完走すると、時間が宝石になります。';
+      demoFrame = requestAnimationFrame(tickDemo);
+    }
+  }
+
+  function cancelDemo() {
+    if (demoState !== 'running' && demoState !== 'paused') return;
+    cancelAnimationFrame(demoFrame);
+    demoElapsed = 0;
+    setDemoState('ready');
+    renderDemoTimer();
+    status.textContent = '途中で中断したので、新しい宝石は増えません。もう一度、集中から体験できます。';
+  }
+
   hydrateStaticGems();
-  labButton?.addEventListener('click', drop);
+  labButton?.addEventListener('click', startDemo);
+  demoPause?.addEventListener('click', toggleDemoPause);
+  demoCancel?.addEventListener('click', cancelDemo);
+  if (labButton) labButton.disabled = false;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      pauseDemo();
+      clearTimeout(completionTimer);
+    } else if (demoState === 'finishing') {
+      completionTimer = setTimeout(completeDemo, 800);
+    }
+  });
+
+  const mobileMenu = document.querySelector('#mobile-menu');
+  mobileMenu?.addEventListener('click', (event) => {
+    const link = event.target.closest('a');
+    if (!link) return;
+    mobileMenu.open = false;
+    const href = link.getAttribute('href');
+    if (href?.startsWith('#')) {
+      const destination = document.getElementById(href.slice(1));
+      if (destination) {
+        destination.tabIndex = -1;
+        destination.focus({ preventScroll: true });
+      }
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && mobileMenu?.open) {
+      mobileMenu.open = false;
+      mobileMenu.querySelector('summary').focus({ preventScroll: true });
+    }
+  });
+  document.addEventListener('click', (event) => {
+    if (mobileMenu?.open && !mobileMenu.contains(event.target)) mobileMenu.open = false;
+  });
   if (vessel && 'ResizeObserver' in window) {
     const resizeObserver = new ResizeObserver(() => {
       cancelAnimationFrame(resizeFrame);

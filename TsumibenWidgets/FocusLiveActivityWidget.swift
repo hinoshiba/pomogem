@@ -53,11 +53,22 @@ struct FocusLiveActivityWidget: Widget {
                             isStale: context.isStale,
                             durationSeconds: context.attributes.durationSeconds
                         )
+
+                        FocusReturnGuidance(
+                            state: context.state,
+                            isStale: context.isStale
+                        )
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityHint(focusReturnGuidance(
+                        state: context.state,
+                        isStale: context.isStale
+                    ))
                 }
             } compactLeading: {
                 Image(systemName: "timer")
                     .foregroundStyle(LivePalette.amber)
+                    .accessibilityLabel("つみべんのタイマー")
             } compactTrailing: {
                 FocusStateText(
                     state: context.state,
@@ -66,9 +77,18 @@ struct FocusLiveActivityWidget: Widget {
                     alignment: .trailing
                 )
                 .frame(maxWidth: 58)
+                .accessibilityHint(focusReturnGuidance(
+                    state: context.state,
+                    isStale: context.isStale
+                ))
             } minimal: {
                 Image(systemName: "timer")
                     .foregroundStyle(LivePalette.amber)
+                    .accessibilityLabel("つみべんのタイマー")
+                    .accessibilityHint(focusReturnGuidance(
+                        state: context.state,
+                        isStale: context.isStale
+                    ))
             }
             .keylineTint(LivePalette.amber)
         }
@@ -118,10 +138,36 @@ private struct FocusLockScreenView: View {
                 isStale: context.isStale,
                 durationSeconds: context.attributes.durationSeconds
             )
+
+            FocusReturnGuidance(
+                state: context.state,
+                isStale: context.isStale
+            )
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 13)
         .accessibilityElement(children: .combine)
+        .accessibilityHint(focusReturnGuidance(
+            state: context.state,
+            isStale: context.isStale
+        ))
+    }
+}
+
+/// Tapping the Live Activity already opens its containing app. This is a
+/// description of that system action, not a separate button or a timer command.
+private struct FocusReturnGuidance: View {
+    let state: FocusActivityAttributes.ContentState
+    let isStale: Bool
+
+    var body: some View {
+        Text(focusReturnGuidance(state: state, isStale: isStale))
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(LivePalette.mutedText)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            // The enclosing surface exposes the same instruction as its hint.
+            .accessibilityHidden(true)
     }
 }
 
@@ -263,4 +309,17 @@ private func focusStatusTitle(
         return "一時停止中"
     }
     return "集中を続けています"
+}
+
+private func focusReturnGuidance(
+    state: FocusActivityAttributes.ContentState,
+    isStale: Bool
+) -> String {
+    if isStale || state.phase == .completed {
+        return "タップして完了を確認"
+    }
+    if state.phase == .paused {
+        return "タップしてタイマーへ"
+    }
+    return "タップして集中へ戻る"
 }

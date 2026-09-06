@@ -6,8 +6,8 @@
 選ぶと、Apple Accountへのサインインやnetwork接続なしで基本機能を確認できます。続くonboardingで
 任意の「ためしに一粒、落としてみる」（記録には入りません）を実行するか「次へ」で省略し、勉強・
 仕事共通の候補から最初のテーマを1つ選ぶとHomeへ進みます。利用目的の選択や勉強／仕事のmode切替はありません。
-25分／45分／60分／90分timer、記録、瓶、設定を無料で利用できます。Homeの
-大きなbuttonをtapするとtimerを開始し、同じbuttonを長押しするとtimerを開始せずテーマを変更できます。
+25分／45分／60分／90分timer、記録、瓶、設定を無料で利用できます。Homeでテーマと時間を選び、
+大きな開始buttonをtapするとtimerを開始します。同じbuttonの長押しでも、開始せずテーマを変更できます。
 テーマの追加・編集・並べ替え・削除はSettingsの一つの「テーマ」一覧で行います。短時間で完走を確認する場合は、
 つみべんPro購入後に Home menu → 時間を選ぶ → 任意時間 で1分を設定してください。無料状態の最短
 timerは25分です。hidden demo/debug menuはRelease buildにありません。
@@ -39,13 +39,17 @@ timerは25分です。hidden demo/debug menuはRelease buildにありません�
 - Local projection: 瓶とまとまり粒に使う`AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`は
   CloudKitへuploadせず、選択した保存先の同期元記録から各端末で再構築。iCloudから後着した記録の
   再検証中は、古いaggregateを生涯の正確値や`+`／`以上`として表示せず「再集計中」と表示し、完了後に更新
-- Notifications: timer終了。通知本文は常にaccount-neutralで、テーマ名を含まない
+- Notifications: timer終了と、任意の「集中に戻るお知らせ」。後者はSettings → 集中でオンにして
+  通知を許可すると、計測中にアプリを離れて30秒後に一度通知し、復帰・一時停止・中断時に取り消す。
+  画面ロックも対象。休憩中と終了間際は予約しない。通知本文は常にaccount-neutralで、テーマ名を含まない
 - Widget: Home／Lock Screenともaccount-neutralな起動導線だけを表示し、記録、質量、テーマ、画像を
   App Groupから読まない
 - Live Activity: Homeで任意のtimerを開始してiPhoneをロックすると、ロック画面へアプリ名、選択時間、
   残り時間、実行／一時停止／完了状態だけを表示。テーマ名、メモ、質量、Apple Account、CloudKit dataは
   extensionへ渡さない。更新は端末内のみでActivityKit pushなし。通知権限とは独立し、Settings → 集中 →
-  「ロック画面にタイマーを表示」で端末ごとに停止可能。pause／resume／cancelはアプリの集中画面から確認可能
+  「画面を閉じてもタイマーを表示」で端末ごとに停止可能。Dynamic Islandにも残り時間を表示し、
+  展開表示とロック画面に帰還案内を出す。タップするとアプリを開き、既存の集中画面・復元処理へ戻る。
+  pause／resume／cancelはアプリの集中画面から確認可能
 - Motion: Home表示中、端末の傾きで瓶の重力を計算し、軽い往復shakeで粒を動かす。
   `NSMotionUsageDescription`で目的を表示し、許可しなくても瓶のtapと他の集中機能を利用可能。値は
   端末内で即時処理するだけで保存・送信せず、inactive／backgroundでは更新を停止

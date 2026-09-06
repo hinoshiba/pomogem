@@ -434,6 +434,41 @@ enum HomeProjectionPolicy {
         )
     }
 
+    /// Resolve only the bounded pending reward IDs, even when their records
+    /// precede Home's normal page. These are source candidates, not proof that
+    /// an aggregate is verified: merge them into the existing membership
+    /// projection and retain its accepted-root and cache-generation gates.
+    /// Missing, quarantined and unsupported records remain unresolved. An
+    /// oversized physical replica group throws rather than guessing a winner.
+    @MainActor
+    static func pendingRewardSessionCandidates(
+        for receipts: [PendingRewardReceipt],
+        context: ModelContext,
+        resetMarkers: [ActivityResetSnapshot]
+    ) throws -> [StudySession] {
+        var seen = Set<UUID>()
+        let pendingIDs = receipts
+            .filter(\.requiresDrop)
+            .sorted {
+                if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
+                return $0.id.uuidString < $1.id.uuidString
+            }
+            .filter { seen.insert($0.id).inserted }
+            .prefix(PendingRewardReceiptStore.maximumPendingCount)
+            .map(\.id)
+        let epochID = ActivityResetPolicy.currentEpochID(from: resetMarkers)
+        return try pendingIDs.compactMap { id in
+            guard let session = try BoundedHistoryPolicy.resolvedSession(
+                id: id,
+                epochID: epochID,
+                context: context
+            ), ActivityResetPolicy.isCurrent(session.dataEpochID, markers: resetMarkers),
+               StudySessionIntegrityPolicy.isSupported(session)
+            else { return nil }
+            return session
+        }
+    }
+
     struct LocalMembershipProjection: Equatable {
         let representedSessionIDs: Set<UUID>
         let isCompleteForCandidates: Bool

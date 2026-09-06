@@ -211,6 +211,10 @@ struct TsumibenApp: App {
         // entitlements as soon as the application object is constructed.
         PurchaseManager.startAtAppLaunch()
 
+        // A return reminder belongs only to the preceding absence. Cancel it
+        // before any asynchronous storage/account recovery on a cold launch.
+        NotificationManager.shared.cancelFocusReturnReminder()
+
         if !ReleaseExternalSurfacePolicy.supportsLiveActivities
             || !FocusActivityPreference.isEnabled()
             || LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
@@ -292,6 +296,9 @@ private struct TsumibenPersistenceLaunchHost: View {
     @State private var mustDestroyPersistentStores = false
     @State private var pendingDestructionNamespace: AccountDataNamespace?
     @State private var isQuiescingAccountChange = false
+    @State private var focusReturnReminderTask: Task<Void, Never>?
+    @State private var focusReturnReminderGeneration: UInt64 = 0
+    @State private var focusReturnReminderBackgroundTask: UIBackgroundTaskIdentifier = .invalid
     @State private var retiringContainer: RetiringPersistenceContainerReference?
     @State private var suspendedAccountBinding = AccountScopedLocalState
         .pendingPreviousBinding()
@@ -1015,6 +1022,7 @@ private struct TsumibenPersistenceLaunchHost: View {
     }
 
     private func handleScenePhaseChange(_ phase: ScenePhase) {
+        handleFocusReturnReminderScenePhase(phase)
         let action = PersistenceLaunchScenePolicy.action(
             isActive: phase == .active,
             hasSession: session != nil,
@@ -1068,6 +1076,51 @@ private struct TsumibenPersistenceLaunchHost: View {
             case .cancelled, .continueWaiting:
                 return
             }
+        }
+    }
+
+    /// This host survives inactive CloudKit container retirement. Reserve the
+    /// notification only at background, never for a permission sheet or
+    /// Control Center's temporary inactive state.
+    private func handleFocusReturnReminderScenePhase(_ phase: ScenePhase) {
+        endFocusReturnReminderBackgroundTask()
+        focusReturnReminderGeneration &+= 1
+        let generation = focusReturnReminderGeneration
+        focusReturnReminderTask?.cancel()
+        focusReturnReminderTask = nil
+        let manager = NotificationManager.shared
+        manager.cancelFocusReturnReminder()
+        guard phase == .background else { return }
+
+        // Keep execution only for the short Notification Center add, not
+        // for the 30-second grace period; the OS owns the delivery timer.
+        focusReturnReminderBackgroundTask = UIApplication.shared.beginBackgroundTask(
+            withName: "Schedule focus return reminder"
+        ) {
+            // A later phase already ended the previous background task.
+            guard generation == focusReturnReminderGeneration else { return }
+            focusReturnReminderTask?.cancel()
+            manager.cancelFocusReturnReminder()
+            endFocusReturnReminderBackgroundTask()
+        }
+        focusReturnReminderTask = Task { @MainActor in
+            defer {
+                if generation == focusReturnReminderGeneration {
+                    endFocusReturnReminderBackgroundTask()
+                }
+            }
+            guard !Task.isCancelled,
+                  generation == focusReturnReminderGeneration,
+                  scenePhase == .background else { return }
+            _ = try? await manager.scheduleRegisteredFocusReturnReminder()
+        }
+    }
+
+    private func endFocusReturnReminderBackgroundTask() {
+        let identifier = focusReturnReminderBackgroundTask
+        focusReturnReminderBackgroundTask = .invalid
+        if identifier != .invalid {
+            UIApplication.shared.endBackgroundTask(identifier)
         }
     }
 

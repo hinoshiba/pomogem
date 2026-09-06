@@ -111,6 +111,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                         node.removeFromParent()
                     }
                 }
+                settleCompletionDropsForReduceMotion()
             } else {
                 livePebbles.forEach(thawAfterReducedMotion)
                 resumeSimulation()
@@ -122,11 +123,28 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         didSet { renderBaseLayers() }
     }
 
+    private enum DropOrigin {
+        case interior
+        case sceneTop
+    }
+
+    private enum CompletionEntryPhysics {
+        // JarPhysicsCategory occupies bits 0...2. The mouth's containment
+        // edge accepts ordinary pebbles only, allowing this body to enter.
+        static let category: UInt32 = 1 << 3
+    }
+
     private struct QueuedDrop {
         let descriptor: PebbleDescriptor
         let horizontalUnit: CGFloat
+        let origin: DropOrigin
         var readyUptime: TimeInterval
         var needsSpecialAnticipation: Bool
+    }
+
+    private struct CompletionDropTracking {
+        let pebbleID: UUID
+        var startY: CGFloat
     }
 
     private struct ActiveBake {
@@ -320,6 +338,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private(set) var tapPresentationMaximumRise: CGFloat = 0
     private(set) var tapPresentationMaximumDisplacement: CGFloat = 0
     private(set) var tapPresentationMovedSecondaryCount = 0
+    private var aboveEntryPebbleIDs = Set<UUID>()
+    private var completionDropTracking: CompletionDropTracking?
+    /// Retain the last presented completion's evidence after a history refresh.
+    /// Ordinary additions and restored bodies never advance this sequence.
+    private(set) var completionDropSequence: UInt64 = 0
+    private(set) var completionDropMaximumFall: CGFloat = 0
+    private(set) var completionDropHasLanded = false
     private var lastSecondarySoundUptime = -Double.greatestFiniteMagnitude
     private var lastSecondaryHapticUptime = -Double.greatestFiniteMagnitude
     private var nudgeRateLimiter = JarGestureRateLimiter()
@@ -420,6 +445,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
     }
     var queuedDropCount: Int { dropQueue.count }
+    var hasCompletionDropInFlight: Bool {
+        dropQueue.contains { $0.origin == .sceneTop }
+            || livePebbles.contains {
+                aboveEntryPebbleIDs.contains($0.descriptor.id) && !$0.hasLanded
+            }
+    }
+
+    func hasLandedPebble(withID id: UUID) -> Bool {
+        livePebbles.contains { $0.descriptor.id == id && $0.hasLanded }
+    }
     /// Observation-only test seam: a tap must actively drive exactly one body.
     /// Other gems move only when SpriteKit resolves a real contact.
     var activeTapDrivenBodyCount: Int { pendingTapKick?.kicks.count ?? 0 }
@@ -568,6 +603,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         tapPresentationMaximumRise = 0
         tapPresentationMaximumDisplacement = 0
         tapPresentationMovedSecondaryCount = 0
+        aboveEntryPebbleIDs.removeAll()
+        completionDropTracking = nil
         cancelActiveBakeForRestore()
         dropQueue.removeAll()
         mutedLandingIDs.removeAll()
@@ -621,6 +658,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 QueuedDrop(
                     descriptor: descriptor,
                     horizontalUnit: CGFloat.random(in: -1 ... 1),
+                    origin: .interior,
                     readyUptime: now,
                     needsSpecialAnticipation: false
                 )
@@ -699,6 +737,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             dropQueue[index] = QueuedDrop(
                 descriptor: descriptor,
                 horizontalUnit: queued.horizontalUnit,
+                origin: queued.origin,
                 readyUptime: queued.readyUptime,
                 needsSpecialAnticipation: queued.needsSpecialAnticipation
             )
@@ -815,6 +854,24 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         freezeForReducedMotion(pebble)
     }
 
+    private func settleCompletionDropsForReduceMotion() {
+        let inFlight = livePebbles.filter {
+            aboveEntryPebbleIDs.contains($0.descriptor.id) && !$0.hasLanded
+        }
+        for pebble in inFlight {
+            settleForReduceMotion(pebble)
+            finishCompletionEntryPhysics(for: pebble)
+            aboveEntryPebbleIDs.remove(pebble.descriptor.id)
+            if completionDropTracking?.pebbleID == pebble.descriptor.id {
+                // The preference change finishes the receipt without claiming
+                // the instant static placement was a rendered fall.
+                completionDropHasLanded = true
+                completionDropTracking = nil
+            }
+            deliverReducedMotionLandingIfNeeded(for: pebble)
+        }
+    }
+
     /// Reduce Motion freezes the physical simulation itself, not just its
     /// presentation. Clearing every kinetic field before disabling dynamics
     /// also prevents a queued tap return from becoming visible later.
@@ -867,6 +924,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
     }
 
+    /// Home releases this presentation after the completion card has closed
+    /// and the jar is visible. Its lower half enters at the scene's top edge,
+    /// then falls through the center of the neck without resizing the bottle.
+    func dropFromAbove(_ descriptor: PebbleDescriptor) {
+        enqueue(descriptor, delay: .zero, origin: .sceneTop)
+    }
+
     /// Removes items that rotate from the live jar into the permanent record
     /// shelf. Their persistence is untouched, and clearing the accepted IDs
     /// allows an older stone to reappear if a newer synced record is removed.
@@ -879,6 +943,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         dropQueue.removeAll { ids.contains($0.descriptor.id) }
         mutedLandingIDs.subtract(ids)
         acceptedPebbleIDs.subtract(ids)
+        aboveEntryPebbleIDs.subtract(ids)
+        if let tracking = completionDropTracking, ids.contains(tracking.pebbleID) {
+            completionDropTracking = nil
+        }
         for pebble in livePebbles where ids.contains(pebble.descriptor.id) {
             pebble.removeFromParent()
         }
@@ -2110,6 +2178,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     override func didSimulatePhysics() {
         super.didSimulatePhysics()
         updateTapPresentationTrackingIfNeeded()
+        for pebble in livePebbles where aboveEntryPebbleIDs.contains(pebble.descriptor.id) {
+            if pebble.position.y + pebble.radius <= interiorRect.maxY {
+                finishCompletionEntryPhysics(for: pebble)
+            }
+        }
+        updateCompletionDropTrackingIfNeeded()
         advancePendingTapLaunchIfNeeded()
         livePebbles.forEach {
             $0.updatePresentationLighting(horizontal: opticalTiltFraction)
@@ -2177,6 +2251,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             let impulseSpeed = contact.collisionImpulse / max(pebble.physicsBody?.mass ?? 1, 1)
             let impactSpeed = max(velocity, impulseSpeed)
             pebble.markLanded()
+            finishCompletionEntryPhysics(for: pebble)
+            aboveEntryPebbleIDs.remove(pebble.descriptor.id)
+            updateCompletionDropTrackingIfNeeded()
             if mutedLandingIDs.remove(pebble.descriptor.id) != nil {
                 deliveredLanding = true
                 continue
@@ -2710,12 +2787,17 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     @discardableResult
-    private func enqueue(_ descriptor: PebbleDescriptor, delay: TimeInterval) -> Bool {
+    private func enqueue(
+        _ descriptor: PebbleDescriptor,
+        delay: TimeInterval,
+        origin: DropOrigin = .interior
+    ) -> Bool {
         guard acceptedPebbleIDs.insert(descriptor.id).inserted else { return false }
         dropQueue.append(
             QueuedDrop(
                 descriptor: descriptor,
-                horizontalUnit: CGFloat.random(in: -1 ... 1),
+                horizontalUnit: origin == .sceneTop ? 0 : CGFloat.random(in: -1 ... 1),
+                origin: origin,
                 readyUptime: ProcessInfo.processInfo.systemUptime + delay,
                 needsSpecialAnticipation: shouldShowSpecialAnticipation(for: descriptor)
             )
@@ -2783,12 +2865,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
         let next = dropQueue.removeFirst()
         hasReportedHardLimit = false
-        spawn(next.descriptor, horizontalUnit: next.horizontalUnit)
+        spawn(next.descriptor, horizontalUnit: next.horizontalUnit, origin: next.origin)
         lastSpawnUptime = now
         _ = beginBakeIfNeeded(force: false)
     }
 
-    private func spawn(_ descriptor: PebbleDescriptor, horizontalUnit: CGFloat) {
+    private func spawn(
+        _ descriptor: PebbleDescriptor,
+        horizontalUnit: CGFloat,
+        origin: DropOrigin
+    ) {
         let node = PebbleNode(
             descriptor: descriptor,
             reduceMotion: reduceMotion,
@@ -2796,12 +2882,27 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
         if !reduceMotion {
             let xRange = interiorRect.width * Constants.Jar.dropHorizontalRangeFraction
-            node.position = CGPoint(
-                x: interiorRect.midX + min(max(horizontalUnit, -1), 1) * xRange,
-                y: interiorRect.maxY - node.radius
-            )
+            if origin == .sceneTop {
+                let entryRange = allowedHorizontalRange(at: size.height, radius: node.radius)
+                node.position = CGPoint(
+                    x: (entryRange.lowerBound + entryRange.upperBound) / 2,
+                    y: size.height
+                )
+                aboveEntryPebbleIDs.insert(descriptor.id)
+                // The bottle has a horizontal containment edge across its
+                // mouth. Ignore walls only during this centered entry, then
+                // rejoin ordinary containment once the whole body is inside.
+                node.physicsBody?.categoryBitMask = CompletionEntryPhysics.category
+                node.physicsBody?.collisionBitMask &= ~JarPhysicsCategory.wall
+                node.physicsBody?.contactTestBitMask &= ~JarPhysicsCategory.wall
+            } else {
+                node.position = CGPoint(
+                    x: interiorRect.midX + min(max(horizontalUnit, -1), 1) * xRange,
+                    y: interiorRect.maxY - node.radius
+                )
+            }
             node.physicsBody?.velocity = CGVector(
-                dx: CGFloat.random(
+                dx: origin == .sceneTop ? 0 : CGFloat.random(
                     in: -Constants.Jar.dropHorizontalSpeed ... Constants.Jar.dropHorizontalSpeed
                 ),
                 dy: Constants.Jar.dropVerticalSpeed
@@ -2817,11 +2918,45 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             // physics frame before Reduce Motion takes effect.
             settleForReduceMotion(node)
         }
+        if origin == .sceneTop {
+            completionDropSequence &+= 1
+            completionDropMaximumFall = 0
+            completionDropHasLanded = node.hasLanded
+            completionDropTracking = node.hasLanded ? nil : CompletionDropTracking(
+                pebbleID: descriptor.id,
+                startY: node.position.y
+            )
+        }
         publishPhysicalContentChangeIfNeeded()
         if reduceMotion {
             deliverReducedMotionLandingIfNeeded(for: node)
         }
         resetIdleObservation()
+    }
+
+    private func updateCompletionDropTrackingIfNeeded() {
+        guard let tracking = completionDropTracking,
+              let pebble = livePebbles.first(where: {
+                  $0.descriptor.id == tracking.pebbleID
+              })
+        else { return }
+        completionDropMaximumFall = max(
+            completionDropMaximumFall,
+            tracking.startY - pebble.position.y
+        )
+        if pebble.hasLanded {
+            completionDropHasLanded = true
+            completionDropTracking = nil
+        }
+    }
+
+    private func finishCompletionEntryPhysics(for pebble: PebbleNode) {
+        guard let body = pebble.physicsBody,
+              body.categoryBitMask == CompletionEntryPhysics.category
+        else { return }
+        body.categoryBitMask = JarPhysicsCategory.pebble
+        body.collisionBitMask |= JarPhysicsCategory.wall
+        body.contactTestBitMask |= JarPhysicsCategory.wall
     }
 
     @discardableResult
@@ -3534,7 +3669,15 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 max(pebble.position.x, horizontalRange.lowerBound),
                 horizontalRange.upperBound
             )
-            pebble.position.y = min(pebble.position.y, interiorRect.maxY - pebble.radius)
+            let previousY = pebble.position.y
+            let upperY = aboveEntryPebbleIDs.contains(pebble.descriptor.id) && !pebble.hasLanded
+                ? size.height
+                : interiorRect.maxY - pebble.radius
+            pebble.position.y = min(pebble.position.y, upperY)
+            if completionDropTracking?.pebbleID == pebble.descriptor.id {
+                // A geometry rescue is layout, not observed physical travel.
+                completionDropTracking?.startY += pebble.position.y - previousY
+            }
         }
         rescuePebblesBelowFloor()
     }

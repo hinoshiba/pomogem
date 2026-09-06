@@ -19,6 +19,9 @@ struct SettingsView: View {
     private var wrappedNotifications = false
     @AppStorage(FocusActivityPreference.enabledDefaultsKey)
     private var liveActivityEnabled = true
+    @AppStorage(FocusReturnReminderPolicy.enabledDefaultsKey)
+    private var focusReturnReminderEnabled = false
+    @State private var isUpdatingFocusReturnReminder = false
     @State private var purchase = PurchaseManager.shared
     @State private var isSubjectEditorPresented = false
     @State private var editingSubjectID: UUID?
@@ -401,31 +404,35 @@ struct SettingsView: View {
                 .font(.caption)
                 .foregroundStyle(TsumibenTheme.muted)
 
+            Toggle(isOn: Binding(
+                get: { focusReturnReminderEnabled },
+                set: { updateFocusReturnReminder(enabled: $0) }
+            )) {
+                SettingLabel(
+                    title: "集中に戻るお知らせ",
+                    subtitle: "アプリを離れて30秒後に一度通知",
+                    symbol: "bell.badge"
+                )
+            }
+            .disabled(isUpdatingFocusReturnReminder)
+            .accessibilityIdentifier("settings.focus-return-reminder")
+
+            Text("既定はオフ。集中タイマー中だけ通知し、戻ると取り消します。一時停止中・休憩中・終了間際は通知しません。画面をロックした場合も通知されます。")
+                .font(.caption)
+                .foregroundStyle(TsumibenTheme.muted)
+
             if let resolvedPreferences {
-                Picker(selection: timerDisplayModeBinding) {
-                    ForEach(TimerDisplayMode.allCases) { mode in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(mode.title)
-                            Text(mode.detail)
-                                .font(.caption)
-                                .foregroundStyle(TsumibenTheme.muted)
-                        }
-                        .tag(mode)
-                        .accessibilityElement(children: .combine)
-                        .accessibilityIdentifier(
-                            "settings.timer-display-mode.\(mode.rawValue)"
-                        )
-                    }
+                NavigationLink {
+                    TimerDisplayModeSelectionView(selection: timerDisplayModeBinding)
                 } label: {
                     SettingLabel(
                         title: "集中タイマーの表示",
-                        subtitle: resolvedPreferences.timerDisplayMode.detail,
+                        subtitle: resolvedPreferences.timerDisplayMode.title,
                         symbol: "circle.dotted"
                     )
                 }
-                .pickerStyle(.navigationLink)
                 .accessibilityIdentifier("settings.timer-display-mode")
-                .accessibilityHint("集中と、その直後の休憩の見た目だけを変更します")
+                .accessibilityHint("4つの見本から、タイマーの見た目を選べます")
 
                 Toggle(isOn: settingBinding(
                     .keepScreenAwake,
@@ -1404,6 +1411,33 @@ struct SettingsView: View {
         updatePassiveNotification(.wrapped, enabled: enabled)
     }
 
+    private func updateFocusReturnReminder(enabled: Bool) {
+        guard !isUpdatingFocusReturnReminder else { return }
+        let manager = NotificationManager.shared
+        if !enabled {
+            focusReturnReminderEnabled = false
+            manager.cancelFocusReturnReminder()
+            return
+        }
+
+        isUpdatingFocusReturnReminder = true
+        Task { @MainActor in
+            defer { isUpdatingFocusReturnReminder = false }
+            await manager.refreshAuthorizationStatus()
+            var granted = manager.isAuthorized
+            if !granted {
+                granted = await manager.requestAuthorization()
+            }
+            focusReturnReminderEnabled = granted
+            if !granted {
+                manager.cancelFocusReturnReminder()
+                notificationError = notificationPermissionMessage(
+                    underlyingError: manager.lastErrorDescription
+                )
+            }
+        }
+    }
+
     private func updatePassiveNotification(
         _ preference: PassiveNotificationPreference,
         enabled: Bool
@@ -1600,6 +1634,7 @@ struct SettingsView: View {
         if !manager.isAuthorized {
             let hadEnabledPreference = (prefs?.reminderEnabled ?? false)
                 || wrappedNotifications
+                || focusReturnReminderEnabled
             if prefs?.reminderEnabled == true {
                 do {
                     try PrefsConsumerPolicy.mutate(
@@ -1616,6 +1651,8 @@ struct SettingsView: View {
                 }
             }
             wrappedNotifications = false
+            focusReturnReminderEnabled = false
+            manager.cancelFocusReturnReminder()
 
             if hadEnabledPreference {
                 notificationError = notificationPermissionMessage(underlyingError: nil)
@@ -1654,6 +1691,130 @@ struct SettingsView: View {
     private enum PassiveNotificationPreference {
         case dailyReminder
         case wrapped
+    }
+}
+
+/// Shared by Settings navigation and the active timer's presentation sheet.
+/// The caller owns persistence; these samples never create or advance a timer.
+struct TimerDisplayModeSelectionView: View {
+    @Binding var selection: TimerDisplayMode
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), alignment: .top),
+            count: dynamicTypeSize.isAccessibilitySize ? 1 : 2
+        )
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("残り時間の見え方を選ぶ")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(TsumibenTheme.text)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("見本は25分タイマーの途中、残り16分15秒です。選んだ表示はすぐに反映されます。")
+                        .font(.subheadline)
+                        .foregroundStyle(TsumibenTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(TimerDisplayMode.allCases) { mode in
+                        displayOption(mode)
+                    }
+                }
+
+                Text("どの表示でも、タイマーの時間や集中の記録は変わりません。")
+                    .font(.caption)
+                    .foregroundStyle(TsumibenTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(20)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .background(NightBackground())
+        .navigationTitle("タイマーの表示")
+        .navigationBarTitleDisplayMode(.inline)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("timer-display.selection")
+    }
+
+    private func displayOption(_ mode: TimerDisplayMode) -> some View {
+        let isSelected = selection == mode
+        return Button {
+            guard selection != mode else { return }
+            selection = mode
+        } label: {
+            VStack(spacing: 14) {
+                displayPreview(mode)
+                    .frame(maxWidth: .infinity)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(mode.title)
+                        .font(.headline)
+                        .foregroundStyle(TsumibenTheme.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(mode.detail)
+                        .font(.caption)
+                        .foregroundStyle(TsumibenTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(14)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: dynamicTypeSize.isAccessibilitySize ? nil : 246,
+                alignment: .top
+            )
+            .background(TsumibenTheme.card, in: RoundedRectangle(cornerRadius: 18))
+            .overlay(alignment: .topTrailing) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(isSelected ? TsumibenTheme.amber : TsumibenTheme.muted)
+                    .padding(12)
+                    .accessibilityHidden(true)
+            }
+        }
+        .buttonStyle(TsumibenRowButtonStyle(isSelected: isSelected, cornerRadius: 18))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(mode.title)。\(mode.detail)")
+        .accessibilityValue(isSelected ? "選択中" : "未選択")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityHint(isSelected ? "現在のタイマー表示です" : "選ぶとすぐに反映されます")
+        .accessibilityIdentifier("timer-display.option.\(mode.rawValue)")
+        .accessibilityAction {
+            guard selection != mode else { return }
+            selection = mode
+        }
+    }
+
+    private func displayPreview(_ mode: TimerDisplayMode) -> some View {
+        // Scale the production layout as a whole, preserving its proportions.
+        // The card's accessible title and detail describe this decorative image.
+        FocusTimerDisplay(
+            size: 240,
+            progress: 0.35,
+            remainingTime: "16:15",
+            accessibleRemainingTime: "残り16分15秒",
+            modeLabel: "FOCUS",
+            displayMode: mode,
+            isBreakMode: false,
+            isPaused: false,
+            accent: TsumibenTheme.amber,
+            reduceMotion: true
+        )
+        .environment(\.dynamicTypeSize, .large)
+        .scaleEffect(112.0 / 240.0)
+        .frame(width: 112, height: 112)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 

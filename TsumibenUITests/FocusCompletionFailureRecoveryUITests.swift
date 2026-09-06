@@ -93,7 +93,17 @@ final class FocusCompletionFailureRecoveryUITests: XCTestCase {
 
         homeRetry.tap()
 
-        let savedJar = try waitForJarProbe(in: app, expectedCount: 1, timeout: 12)
+        let dismissReward = app.buttons["休憩の提案を閉じる"]
+        XCTAssertTrue(dismissReward.waitForExistence(timeout: 12))
+        let pendingRewardJar = try waitForJarProbe(in: app, expectedCount: 0, timeout: 3)
+        XCTAssertTrue(pendingRewardJar.records.isEmpty,
+                      "The retried reward must wait outside the jar while its card is visible")
+        dismissReward.tap()
+        XCTAssertTrue(waitForNonExistence(dismissReward, timeout: 5))
+
+        let savedJar = try waitForJarProbe(
+            in: app, expectedCount: 1, timeout: 12, requiringLanding: true
+        )
         XCTAssertEqual(savedJar.records.count, 1)
         XCTAssertTrue(savedJar.records[0].hasSuffix(":250"), savedJar.rawValue)
         XCTAssertTrue(
@@ -110,7 +120,6 @@ final class FocusCompletionFailureRecoveryUITests: XCTestCase {
             timeout: 8
         )
 
-        dismissRewardBridgeIfPresent(in: app)
         let persistedRecords = savedJar.records
         app.terminate()
 
@@ -213,6 +222,8 @@ final class FocusCompletionFailureRecoveryUITests: XCTestCase {
             XCTAssertTrue(dismiss.waitForExistence(timeout: 2))
             dismiss.tap()
             XCTAssertTrue(waitForNonExistence(bridge, timeout: 2))
+            // Acknowledgement now retires the receipt after the drop lands.
+            XCTAssertTrue(waitForHittable(app.buttons["home.focus-launcher"], timeout: 8))
             app.terminate()
             app.launch()
             XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 12))
@@ -220,19 +231,11 @@ final class FocusCompletionFailureRecoveryUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["reward.bridge"].exists)
     }
 
-    private func dismissRewardBridgeIfPresent(in app: XCUIApplication) {
-        let bridge = app.descendants(matching: .any)["reward.bridge"]
-        guard bridge.waitForExistence(timeout: 3) else { return }
-        let dismiss = app.buttons["休憩の提案を閉じる"]
-        XCTAssertTrue(dismiss.waitForExistence(timeout: 2))
-        dismiss.tap()
-        XCTAssertTrue(waitForNonExistence(bridge, timeout: 2))
-    }
-
     private func waitForJarProbe(
         in app: XCUIApplication,
         expectedCount: Int,
-        timeout: TimeInterval
+        timeout: TimeInterval,
+        requiringLanding: Bool = false
     ) throws -> JarProbeSample {
         let probe = app.descendants(matching: .any)["jar.presentation.probe"]
         guard probe.waitForExistence(timeout: min(timeout, 5)) else {
@@ -242,7 +245,9 @@ final class FocusCompletionFailureRecoveryUITests: XCTestCase {
         var latest = ""
         repeat {
             latest = (probe.value as? String) ?? probe.label
-            if let sample = JarProbeSample(rawValue: latest), sample.count == expectedCount {
+            if let sample = JarProbeSample(rawValue: latest),
+               sample.count == expectedCount,
+               !requiringLanding || sample.dropLanded {
                 return sample
             }
             usleep(50_000)
@@ -319,6 +324,7 @@ final class FocusCompletionFailureRecoveryUITests: XCTestCase {
 private struct JarProbeSample {
     let count: Int
     let records: [String]
+    let dropLanded: Bool
     let rawValue: String
 
     init?(rawValue: String) {
@@ -338,6 +344,7 @@ private struct JarProbeSample {
               let rawRecords = fields["records"]
         else { return nil }
         self.count = count
+        dropLanded = fields["dropLanded"] == "1"
         records = rawRecords.isEmpty
             ? []
             : rawRecords.split(separator: ",").map(String.init)

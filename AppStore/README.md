@@ -17,6 +17,11 @@ APIのcredentialやdownloadしたprofileは置きません。
 - `export-compliance.md`: 暗号化回答の根拠
 - `japan-commercial-disclosure-draft.md`: 日本向け有料IAPの法定表示判断と公開前gate
 - `submission-checklist.md`: versionごとの提出gate
+- `release-experience-review.md`: 掲載文・導線・アクセシビリティのリリース前評価と実機確認項目
+
+2026-09-06の掲載文とHome導線の改訂はローカル原稿です。App Store Connectに保存済みの原稿とは
+差があるため、最終候補の検証後に転記し、再読み込みで照合してください。既存スクリーンショットは
+旧Home導線のため、更新後の正式な提出画像へ撮り直す必要があります。
 
 既存のApp Store Connect record（Apple ID `6806758060`、bundle ID
 `com.hinoshiba.tumiben`）を公式recordとして使用します。WebにはこのIDのSmart App Banner metadataを
