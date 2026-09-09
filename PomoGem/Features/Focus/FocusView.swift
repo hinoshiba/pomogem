@@ -168,6 +168,7 @@ struct FocusView: View {
     @Query private var activityResetMarkers: [ActivityResetMarker]
 
     @State private var engine: PomodoroEngine
+    @State private var orientationSessionID = UUID()
     @State private var displayNow = Date.now
     @State private var didStart = false
     @State private var didActivate = false
@@ -779,8 +780,17 @@ struct FocusView: View {
         }
     }
 
+    private var timerOrientationSessionID: AnyHashable {
+        // The legacy engine break has no UUID. Its original start remains
+        // stable through pause/resume and persisted view reconstruction.
+        if engine.containsRecoverableBreak, let startedAt = engine.phaseStartedAt {
+            return AnyHashable(startedAt)
+        }
+        return AnyHashable(preparedSessionID ?? orientationSessionID)
+    }
+
     private var timerContent: some View {
-        TimerOrientationContainer { context in
+        TimerOrientationContainer(sessionID: timerOrientationSessionID) { context in
             let usesColumns = context.isLandscape && !dynamicTypeSize.isAccessibilitySize
             let ringSize = FocusTimerLayoutPolicy.ringSize(in: context.size)
             ScrollView {

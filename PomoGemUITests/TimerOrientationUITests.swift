@@ -6,6 +6,7 @@ import XCTest
 @MainActor
 final class TimerOrientationUITests: XCTestCase {
     private var app: XCUIApplication!
+    private var needsDefaultOrientationCleanup = false
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -16,7 +17,8 @@ final class TimerOrientationUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchArguments += [
             "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP",
-            "-focus.rest-cadence.v2", "timer-orientation-ui-test-reset"
+            "-focus.rest-cadence.v2", "timer-orientation-ui-test-reset",
+            "-timer.default-orientation", "automatic"
         ]
     }
 
@@ -29,6 +31,99 @@ final class TimerOrientationUITests: XCTestCase {
         if app?.state == .runningForeground {
             dismissPresentedTimerIfNeeded()
         }
+        if needsDefaultOrientationCleanup {
+            if app.state != .runningForeground { app.launch() }
+            dismissPresentedTimerIfNeeded()
+            openDefaultOrientationSettings()
+            selectDefaultOrientation("automatic", towardStart: true)
+            closeDefaultOrientationSettings()
+        }
+    }
+
+    func testSettingsDefaultOrientationChoicesPersistAndEachNewFocusUsesSavedDirection() throws {
+        useStoredDefaultOrientation()
+        launch()
+        openDefaultOrientationSettings()
+
+        let choices = ["automatic", "up", "right", "down", "left"]
+        for choice in choices {
+            selectDefaultOrientation(choice, towardStart: choice == "automatic")
+            for other in choices {
+                let option = app.buttons["timer-default-orientation.option.\(other)"]
+                XCTAssertEqual(option.value as? String, other == choice ? "選択中" : "未選択",
+                               "Exactly one default orientation must be selected")
+            }
+        }
+        selectDefaultOrientation("right", towardStart: true)
+        retainScreenshot(named: "timer-default-orientation-settings")
+        closeDefaultOrientationSettings()
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 10))
+        openDefaultOrientationSettings()
+        XCTAssertEqual(app.buttons["timer-default-orientation.option.right"].value as? String, "選択中",
+                       "The device-local default must survive an app restart")
+        closeDefaultOrientationSettings()
+
+        let timer = startFocus(duration: "25分")
+        assertDirection("右")
+        XCUIDevice.shared.orientation = .landscapeRight
+        assertDirection("右")
+        XCUIDevice.shared.orientation = .portrait
+        let initialSeconds = try remainingSeconds(timer)
+        let started = Date()
+        rotate(to: "下")
+        try assertCountdownContinued(timer, from: initialSeconds, since: started)
+        cancelFocusAndVerifyHome()
+
+        openDefaultOrientationSettings()
+        XCTAssertEqual(app.buttons["timer-default-orientation.option.right"].value as? String, "選択中",
+                       "An in-timer manual rotation must not overwrite the saved default")
+        closeDefaultOrientationSettings()
+        _ = startFocus(duration: "25分")
+        assertDirection("右")
+        cancelFocusAndVerifyHome()
+    }
+
+    func testNewBreakUsesSavedDefaultAfterFocusChangesItsOwnDirection() throws {
+        useStoredDefaultOrientation()
+        launch(rotationLocked: true)
+        openDefaultOrientationSettings()
+        selectDefaultOrientation("right")
+        closeDefaultOrientationSettings()
+
+        let timer = startFiveMinuteBreak(expectedDirection: "右", focusManualDirection: "下")
+        assertAccessibleRotationControl()
+        let initialSeconds = try remainingSeconds(timer)
+        let started = Date()
+        rotate(to: "下")
+        try assertCountdownContinued(timer, from: initialSeconds, since: started)
+        skipBreakAndVerifyHome()
+        openDefaultOrientationSettings()
+        XCTAssertEqual(app.buttons["timer-default-orientation.option.right"].value as? String, "選択中",
+                       "The break's manual direction must also stay separate from the saved default")
+        closeDefaultOrientationSettings()
+    }
+
+    func testAX5DefaultOrientationSettingsChoicesRemainReachable() throws {
+        useStoredDefaultOrientation()
+        launch(rotationLocked: true, accessibilitySize: true)
+        openDefaultOrientationSettings()
+
+        for choice in ["automatic", "up", "right", "down", "left"] {
+            selectDefaultOrientation(choice, towardStart: choice == "automatic")
+            let option = app.buttons["timer-default-orientation.option.\(choice)"]
+            XCTAssertGreaterThanOrEqual(option.frame.height, 43.5)
+            XCTAssertFalse(option.label.isEmpty)
+        }
+        selectDefaultOrientation("down", towardStart: true)
+        retainScreenshot(named: "timer-default-orientation-settings-ax5")
+        closeDefaultOrientationSettings()
+        _ = startFocus(duration: "25分")
+        assertDirection("下")
+        assertAccessibleRotationControl()
+        cancelFocusAndVerifyHome()
     }
 
     func testLockedRotationManualCycleKeepsRunningDeadlineAndCapturesFourLayouts() throws {
@@ -180,8 +275,13 @@ final class TimerOrientationUITests: XCTestCase {
         skipBreakAndVerifyHome()
     }
 
-    private func startFiveMinuteBreak() -> XCUIElement {
+    private func startFiveMinuteBreak(
+        expectedDirection: String = "上",
+        focusManualDirection: String? = nil
+    ) -> XCUIElement {
         _ = startFocus(duration: "12秒、DEMO")
+        assertDirection(expectedDirection)
+        if let focusManualDirection { rotate(to: focusManualDirection) }
         let stop = app.buttons["focus.completion-alert.stop"]
         XCTAssertTrue(stop.waitForExistence(timeout: 25))
         XCTAssertTrue(reveal(stop, towardStart: false))
@@ -191,7 +291,7 @@ final class TimerOrientationUITests: XCTestCase {
         XCTAssertTrue(reveal(startBreak, towardStart: false))
         startBreak.tap()
         XCTAssertTrue(app.staticTexts["休憩"].waitForExistence(timeout: 12))
-        assertDirection("上")
+        assertDirection(expectedDirection)
         let timer = app.staticTexts.matching(NSPredicate(
             format: "label MATCHES %@", "残り[0-9]+分[0-9]+秒"
         )).firstMatch
@@ -205,6 +305,76 @@ final class TimerOrientationUITests: XCTestCase {
         skipBreak.tap()
         XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 8))
         XCTAssertFalse(app.buttons["timer.rotate"].exists)
+    }
+
+    private func useStoredDefaultOrientation() {
+        // NSArgumentDomain intentionally isolates the older rotation tests.
+        // Settings persistence needs the real writable UserDefaults domain.
+        if let index = app.launchArguments.firstIndex(of: "-timer.default-orientation") {
+            app.launchArguments.removeSubrange(index ... index + 1)
+        }
+        needsDefaultOrientationCleanup = true
+    }
+
+    private func openDefaultOrientationSettings() {
+        if app.navigationBars["タイマーの既定の向き"].exists { return }
+        if !app.navigationBars["設定"].exists {
+            let menu = app.buttons["メニュー"]
+            XCTAssertTrue(waitForHittable(menu))
+            menu.tap()
+            let settings = app.buttons.matching(NSPredicate(
+                format: "label CONTAINS %@", "設定"
+            )).firstMatch
+            XCTAssertTrue(reveal(settings, towardStart: false))
+            settings.tap()
+        }
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        let row = app.descendants(matching: .any)["settings.timer-default-orientation"].firstMatch
+        XCTAssertTrue(reveal(row, towardStart: false, attempts: 20))
+        row.tap()
+        XCTAssertTrue(app.navigationBars["タイマーの既定の向き"].waitForExistence(timeout: 5))
+    }
+
+    private func selectDefaultOrientation(_ value: String, towardStart: Bool = false) {
+        let option = app.buttons["timer-default-orientation.option.\(value)"]
+        XCTAssertTrue(reveal(option, towardStart: towardStart))
+        // AX5 rows can remain hittable after scrolling even when their center
+        // is covered by the navigation bar. Bring the whole row into content
+        // before tapping, as in the existing accessibility settings audit.
+        let windowFrame = app.windows.firstMatch.frame
+        let contentTop = app.navigationBars["タイマーの既定の向き"].frame.maxY
+        for _ in 0 ..< 6 {
+            let frame = option.frame
+            if frame.minY >= contentTop, frame.maxY <= windowFrame.maxY { break }
+            let contentMovesUp = frame.maxY > windowFrame.maxY
+            let startY = contentMovesUp ? 0.72 : 0.38
+            let endY = contentMovesUp ? 0.50 : 0.60
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startY))
+                .press(
+                    forDuration: 0.05,
+                    thenDragTo: app.coordinate(
+                        withNormalizedOffset: CGVector(dx: 0.5, dy: endY)
+                    )
+                )
+        }
+        XCTAssertGreaterThanOrEqual(option.frame.minY, contentTop)
+        XCTAssertLessThanOrEqual(option.frame.maxY, windowFrame.maxY)
+        XCTAssertTrue(waitForHittable(option))
+        option.tap()
+        let selected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND value == %@", "選択中"),
+            object: option
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 4), .completed,
+                       "Tapping the visible option must save and select \(value)")
+    }
+
+    private func closeDefaultOrientationSettings() {
+        app.navigationBars["タイマーの既定の向き"].buttons.element(boundBy: 0).tap()
+        let settings = app.navigationBars["設定"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        settings.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(waitForHittable(app.buttons["メニュー"]))
     }
 
     private func launch(rotationLocked: Bool = false, accessibilitySize: Bool = false) {
@@ -339,8 +509,8 @@ final class TimerOrientationUITests: XCTestCase {
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
-    private func reveal(_ element: XCUIElement, towardStart: Bool) -> Bool {
-        for _ in 0 ..< 8 {
+    private func reveal(_ element: XCUIElement, towardStart: Bool, attempts: Int = 8) -> Bool {
+        for _ in 0 ..< attempts {
             if element.exists, element.isHittable { return true }
             // The AX5 reward uses a separate scrollable bottom inset. A swipe
             // on the app can move Home behind it without ever exposing the

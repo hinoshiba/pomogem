@@ -41,8 +41,10 @@ dataを含めません。Live Activityは端末内で更新し、独自serverや
   求める場合は目的を表示し、許可しなくてもtapと他の集中機能を利用できる。値、tap、判定結果を
   保存・送信せず、アプリがinactive／backgroundの間は更新を停止
 - UIKit device orientation: 集中・休憩タイマーの上下左右のレイアウトに、端末の向きの通知を利用する。
-  瓶用のCore Motionとは別のUIKit APIで、追加の権限を要求しない。向きと手動選択は実行中のメモリだけに
-  保持し、保存・同期・送信しない。タイマー画面を閉じたときやinactive／backgroundでは向きの更新を停止
+  瓶用のCore Motionとは別のUIKit APIで、追加の権限を要求しない。端末から届く向きとタイマー中の
+  一時的な手動選択は実行中のメモリだけに保持する。設定で選ぶ既定の向き（自動／上／右／下／左）だけを
+  このiPhoneのUserDefaultsに保存し、同期・送信・JSON書き出しはしない。通常の記録リセットでは保持し、
+  アプリ削除時には消去される。タイマー画面を閉じたときやinactive／backgroundでは向きの更新を停止
 - AVFoundation／Core Haptics: 瓶の粒に対する操作を音と触覚で返すため端末内だけで利用する。
   録音、音声取得、操作履歴の保存・送信は行わず、音と触覚は設定から個別に停止可能
 - System share sheet / pasteboard: 利用者の明示操作時だけ共有物または定型本文を渡す

@@ -27,7 +27,9 @@ Apple teamの実際のaccess、mail運用を照合して最終回答します。
   同期元記録から再構築しCloudKitへuploadしない
 - 瓶用のCore Motionはその場で処理し、保存・送信しない
 - 集中・休憩タイマーはUIKitのdevice orientation通知で上下左右の表示を切り替える。追加の権限要求や
-  Core Motion managerの追加はなく、向きと手動選択は実行中のメモリだけに保持し、保存・同期・送信しない
+  Core Motion managerの追加はない。端末から届く向きとタイマー中の一時的な手動選択は実行中のメモリだけに
+  保持する。設定で選ぶ既定の向き（自動／上／右／下／左）だけをこのiPhoneのUserDefaultsに保存し、
+  同期・送信・JSON書き出しはしない。通常の記録リセットでは保持し、アプリ削除時には消去される
 - shareは利用者の明示操作でsystem share sheetへ渡すだけ
 - 全11種類の出荷対象SwiftData保存データのversioned JSON exportも、利用者の明示操作だけで生成し、
   選択した保存・共有先へ渡す。Version 1.0にJSON再importはなく、local-only dataのiCloud移行や
@@ -87,6 +89,7 @@ App Managerが最終決定・Publishします。
 - タイマーのUIKit device orientation利用によるdata type／required-reason API categoryの追加はない。
   端末内だけで処理する向きは[Appleの収集の定義](https://developer.apple.com/app-store/app-privacy-details/)に
   該当せず、使用APIは[required-reason APIの一覧](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype)に該当しない
+- 既定の向きの端末内保存には、すでに宣言しているstandard User Defaults `CA92.1`を使用する
 
 新しいnetwork endpoint、SDK、permission、data retention、Widget accessを追加した時点で、このdraftを
 無効として再回答します。

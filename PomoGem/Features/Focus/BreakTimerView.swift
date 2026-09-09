@@ -96,7 +96,7 @@ struct BreakTimerView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             RadialGradient(colors: [PomoGemTheme.amber.opacity(0.08), .clear], center: .center, startRadius: 0, endRadius: 340).ignoresSafeArea()
-            TimerOrientationContainer { context in
+            TimerOrientationContainer(sessionID: sessionID) { context in
                 ScrollView {
                     VStack(spacing: 20) {
                         timerHeader
