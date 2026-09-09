@@ -153,7 +153,10 @@ struct FocusView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(AppRouter.self) private var router
     @Query private var preferences: [Prefs]
     @Query private var gachaStates: [GachaState]
@@ -777,93 +780,118 @@ struct FocusView: View {
     }
 
     private var timerContent: some View {
-        GeometryReader { proxy in
-            let ringSize = FocusTimerLayoutPolicy.ringSize(in: proxy.size)
+        TimerOrientationContainer { context in
+            let usesColumns = context.isLandscape && !dynamicTypeSize.isAccessibilitySize
+            let ringSize = FocusTimerLayoutPolicy.ringSize(in: context.size)
             ScrollView {
                 VStack(spacing: 0) {
-            HStack {
-                Color.clear
-                    .frame(width: 44, height: 44)
-                    .accessibilityHidden(true)
+                    timerHeader
 
-                Spacer()
-
-                VStack(spacing: 2) {
-                    HStack(spacing: 7) {
-                        Circle().fill(accent).frame(width: 8, height: 8)
-                        Text(subjectSnapshot.name)
-                            .font(.system(.subheadline, design: .rounded, weight: .bold))
-                            .accessibilityIdentifier("focus.subject")
+                    if usesColumns {
+                        HStack(spacing: 32) {
+                            timerDisplay(size: ringSize)
+                                .frame(maxWidth: .infinity)
+                            VStack(spacing: 20) {
+                                timerNotice
+                                timerActions
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .padding(.horizontal, 28)
+                        .padding(.vertical, 12)
+                        .frame(maxHeight: .infinity)
+                    } else {
+                        Spacer(minLength: 18)
+                        timerDisplay(size: ringSize)
+                        timerNotice
+                            .padding(.horizontal, 24)
+                            .padding(.top, 24)
+                        Spacer(minLength: 18)
+                        timerActions
+                            .padding(.horizontal, 24)
+                            .padding(.bottom, 24)
                     }
-                    Text(phaseLabel)
-                        .font(.caption2)
-                        .foregroundStyle(PomoGemTheme.muted)
-                }
-
-                Spacer()
-                Color.clear.frame(width: 44, height: 44)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-
-            Spacer(minLength: 18)
-
-            FocusTimerDisplay(
-                size: ringSize,
-                progress: snapshot.progress,
-                remainingTime: formattedTime(snapshot.remainingSeconds),
-                accessibleRemainingTime: accessibleTime(snapshot.remainingSeconds),
-                modeLabel: timerModeLabel,
-                displayMode: timerDisplayMode,
-                isBreakMode: snapshot.phase.isBreak || engine.containsRecoverableBreak,
-                isPaused: snapshot.phase == .paused,
-                accent: accent,
-                reduceMotion: reduceMotion
-            )
-
-            if fairnessNotice {
-                Label("端末時刻の大きな変化を検出。この回だけ自己申告あつかいです", systemImage: "clock.badge.exclamationmark")
-                    .font(.caption)
-                    .foregroundStyle(PomoGemTheme.muted)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    .padding(.top, 24)
-                    .transition(.opacity)
-            } else {
-                completionNotificationStatus
-                    .padding(.top, 24)
-            }
-
-            Spacer(minLength: 18)
-
-            VStack(spacing: 12) {
-                Button(action: togglePause) {
-                    Label(
-                        snapshot.phase == .paused ? Constants.UIStrings.resume : Constants.UIStrings.pause,
-                        systemImage: snapshot.phase == .paused ? "play.fill" : "pause.fill"
-                    )
-                }
-                .buttonStyle(PomoGemPrimaryButtonStyle(tintHex: subjectSnapshot.colorHex))
-
-                if snapshot.phase.isBreak || engine.containsRecoverableBreak {
-                    Button("休憩をスキップ", action: skipBreak)
-                        .buttonStyle(PomoGemSecondaryButtonStyle())
-                } else {
-                    Button(Constants.UIStrings.giveUp) { showGiveUpConfirmation = true }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .frame(minHeight: 44)
-                        .buttonStyle(PomoGemBareButtonStyle())
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 24)
                 }
                 .frame(maxWidth: .infinity)
-                .frame(minHeight: proxy.size.height)
+                .frame(minHeight: context.size.height)
             }
             .scrollIndicators(.hidden)
             .scrollBounceBehavior(.basedOnSize)
+        }
+    }
+
+    private var timerHeader: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 7) {
+                    Circle().fill(accent).frame(width: 8, height: 8)
+                    Text(subjectSnapshot.name)
+                        .font(.system(.subheadline, design: .rounded, weight: .bold))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("focus.subject")
+                }
+                Text(phaseLabel)
+                    .font(.caption2)
+                    .foregroundStyle(PomoGemTheme.muted)
+            }
+            Spacer(minLength: 0)
+            TimerRotationControls()
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 8)
+    }
+
+    private func timerDisplay(size: CGFloat) -> some View {
+        FocusTimerDisplay(
+            size: size,
+            progress: snapshot.progress,
+            remainingTime: formattedTime(snapshot.remainingSeconds),
+            accessibleRemainingTime: accessibleTime(snapshot.remainingSeconds),
+            modeLabel: timerModeLabel,
+            displayMode: timerDisplayMode,
+            isBreakMode: snapshot.phase.isBreak || engine.containsRecoverableBreak,
+            isPaused: snapshot.phase == .paused,
+            accent: accent,
+            reduceMotion: reduceMotion
+        )
+    }
+
+    @ViewBuilder
+    private var timerNotice: some View {
+        if fairnessNotice {
+            Label("端末時刻の大きな変化を検出。この回だけ自己申告あつかいです", systemImage: "clock.badge.exclamationmark")
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .transition(.opacity)
+        } else {
+            completionNotificationStatus
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var timerActions: some View {
+        VStack(spacing: 12) {
+            Button(action: togglePause) {
+                Label(
+                    snapshot.phase == .paused ? Constants.UIStrings.resume : Constants.UIStrings.pause,
+                    systemImage: snapshot.phase == .paused ? "play.fill" : "pause.fill"
+                )
+            }
+            .buttonStyle(PomoGemPrimaryButtonStyle(tintHex: subjectSnapshot.colorHex))
+
+            if snapshot.phase.isBreak || engine.containsRecoverableBreak {
+                Button("休憩をスキップ", action: skipBreak)
+                    .buttonStyle(PomoGemSecondaryButtonStyle())
+            } else {
+                Button(Constants.UIStrings.giveUp) { showGiveUpConfirmation = true }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .frame(minHeight: 44)
+                    .buttonStyle(PomoGemBareButtonStyle())
+            }
         }
     }
 
@@ -2772,6 +2800,9 @@ enum FocusTimerLayoutPolicy {
               container.height > 0
         else { return 1 }
 
+        if container.width > container.height {
+            return max(1, min(286, container.height - 84, (container.width - 88) / 2))
+        }
         let heightCap: CGFloat = container.height < 650 ? 214 : 286
         return max(1, min(container.width - 64, heightCap))
     }

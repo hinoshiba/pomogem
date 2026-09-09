@@ -34,8 +34,10 @@
 		3065CFF38231215168E38678 /* AccumulationPlanProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6545EB68BE25DE2F487A00 /* AccumulationPlanProjection.swift */; };
 		3129DA6A9A8D346C435F4FDF /* AccumulationTimelineBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AA276827B98A4CCACD8602E /* AccumulationTimelineBrowser.swift */; };
 		31576D5BF6D43195672807F8 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 69C5703FB01685FF8A965F3B /* PrivacyInfo.xcprivacy */; };
+		333DF582943D92E70B48938A /* TimerOrientationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A447FDE838FF146B199E1D /* TimerOrientationUITests.swift */; };
 		3439FEA3ACD444E912E983DF /* ProTransactionDeliveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70620F1FDA88831716FCBC0 /* ProTransactionDeliveryTests.swift */; };
 		36203279B916057EAD7B7723 /* UsagePurposeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CB634DC37D02EBA2DDFCBA8 /* UsagePurposeTests.swift */; };
+		36692E1841949143EDE1393D /* TimerOrientationContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A1EC5E455F08FF0861D2A12 /* TimerOrientationContainer.swift */; };
 		3709C60ABCD5F3018E110AC9 /* HomeProjectionSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A8CBB070CBE2C504813FD08 /* HomeProjectionSupport.swift */; };
 		3A4AEA37D55B4E47E777E3A8 /* FocusActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B814E25FF138C969CB6F717F /* FocusActivityAttributes.swift */; };
 		3D86CF9AAD0B75173E802096 /* FusionHierarchyPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2870FE2BF0209900A742B4C9 /* FusionHierarchyPresentationTests.swift */; };
@@ -98,6 +100,7 @@
 		B33D614C086D72C449C9C8AA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A81DCEA1C2A2133E7484C8F8 /* Assets.xcassets */; };
 		BB4684F22CCCFCD20ADAA7FC /* FocusCloudSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C1A3EC45EA14A6C5E689533 /* FocusCloudSyncTests.swift */; };
 		BEF371ED4930286E44B1E2A1 /* AccumulationPlanProjectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123F29DD48209F44DCBF4C6E /* AccumulationPlanProjectionTests.swift */; };
+		C1A6F71A16C201FA8B534B8B /* TimerOrientationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04E9E2DA32B1E56F9400B993 /* TimerOrientationTests.swift */; };
 		C31D583787B341043A788CED /* PomoGemWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E75DF8EA8E1254BF65A52583 /* PomoGemWidgets.appex */; platformFilters = (ios, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C4208C5EDC386BA7697E0AD5 /* FocusPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484808620D30DF4DC69CD2E8 /* FocusPersistence.swift */; };
 		C62051B8ED2541CD5A86B248 /* BoundedLaunchPreparation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48EB4B5DE51DBD3D3008B8B9 /* BoundedLaunchPreparation.swift */; };
@@ -173,6 +176,7 @@
 		00B48EE312926E6EAC5412EE /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
 		014830BCE0238FC2EDF6BF0D /* WidgetSnapshotMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSnapshotMetadata.swift; sourceTree = "<group>"; };
 		0436DD2C5029182DC15ABE18 /* AnimatedShareExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedShareExporter.swift; sourceTree = "<group>"; };
+		04E9E2DA32B1E56F9400B993 /* TimerOrientationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerOrientationTests.swift; sourceTree = "<group>"; };
 		08A32F2347209B1E24B76281 /* FocusPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusPersistenceTests.swift; sourceTree = "<group>"; };
 		0922D0F864E131F54F7ECD29 /* ShareActivityItemSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareActivityItemSource.swift; sourceTree = "<group>"; };
 		0CB634DC37D02EBA2DDFCBA8 /* UsagePurposeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsagePurposeTests.swift; sourceTree = "<group>"; };
@@ -241,6 +245,7 @@
 		91B5D3DADE9BB942B8D5A6E7 /* FortyYearDebugScenarioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FortyYearDebugScenarioTests.swift; sourceTree = "<group>"; };
 		93826561EFF75F9231D4FA19 /* CompleteDataDeletionFileStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompleteDataDeletionFileStateStore.swift; sourceTree = "<group>"; };
 		94833894E32ECA0E88B3E8DD /* AccumulationPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationPlanView.swift; sourceTree = "<group>"; };
+		9A1EC5E455F08FF0861D2A12 /* TimerOrientationContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerOrientationContainer.swift; sourceTree = "<group>"; };
 		9AA276827B98A4CCACD8602E /* AccumulationTimelineBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationTimelineBrowser.swift; sourceTree = "<group>"; };
 		9C1A3EC45EA14A6C5E689533 /* FocusCloudSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusCloudSyncTests.swift; sourceTree = "<group>"; };
 		9DD41B95531C607AD6AEFA85 /* CloudSyncMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSyncMonitor.swift; sourceTree = "<group>"; };
@@ -252,6 +257,7 @@
 		B02EEB7A35DBF9383CDAA5C6 /* PomoGem.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PomoGem.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1B65B3483A5F46CCEB18924 /* SoundSynth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundSynth.swift; sourceTree = "<group>"; };
 		B1C9B254744000EDE32C1F03 /* ActivityDataReset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityDataReset.swift; sourceTree = "<group>"; };
+		B3A447FDE838FF146B199E1D /* TimerOrientationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerOrientationUITests.swift; sourceTree = "<group>"; };
 		B646D23FDCC8F9053F943B3F /* GIFShareLifecycleUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GIFShareLifecycleUITests.swift; sourceTree = "<group>"; };
 		B78F394CAE07C13C1BE00957 /* HomeProjectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeProjectionTests.swift; sourceTree = "<group>"; };
 		B814E25FF138C969CB6F717F /* FocusActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusActivityAttributes.swift; sourceTree = "<group>"; };
@@ -424,6 +430,7 @@
 				B646D23FDCC8F9053F943B3F /* GIFShareLifecycleUITests.swift */,
 				1844B82DC222AD01D3D479B8 /* JarInteractionUITests.swift */,
 				C4EF78A2F31B9E452F76E31F /* RuntimeFlowAuditUITests.swift */,
+				B3A447FDE838FF146B199E1D /* TimerOrientationUITests.swift */,
 			);
 			path = PomoGemUITests;
 			sourceTree = "<group>";
@@ -531,6 +538,7 @@
 				FE6330E992C4131296B0D702 /* StrataMathTests.swift */,
 				5C58C458F3816E6A3F1E1E80 /* SubjectNamePolicyTests.swift */,
 				E2FBF7E577EC280E22DDC78A /* SyncMaintenanceWorkerTests.swift */,
+				04E9E2DA32B1E56F9400B993 /* TimerOrientationTests.swift */,
 				0CB634DC37D02EBA2DDFCBA8 /* UsagePurposeTests.swift */,
 			);
 			path = PomoGemTests;
@@ -575,6 +583,7 @@
 				242F6C46DFBD7EB7FF76A689 /* FocusActivityManager.swift */,
 				484808620D30DF4DC69CD2E8 /* FocusPersistence.swift */,
 				C21086FA8AA02D4E255C5070 /* FocusView.swift */,
+				9A1EC5E455F08FF0861D2A12 /* TimerOrientationContainer.swift */,
 			);
 			path = Focus;
 			sourceTree = "<group>";
@@ -873,6 +882,7 @@
 				128570FAED1861610B4E0BCC /* SyncMaintenance.swift in Sources */,
 				EAEE7DC58351957E5F87FDB6 /* SyncMaintenanceWorker.swift in Sources */,
 				53FE675CF48B37882F6017A3 /* Theme.swift in Sources */,
+				36692E1841949143EDE1393D /* TimerOrientationContainer.swift in Sources */,
 				987A5B495CFF5E4AF0963713 /* UITestFaultInjection.swift in Sources */,
 				729A9DC32833D190C3788565 /* UsagePurpose.swift in Sources */,
 				8285E34ACD8332D6C60A67A9 /* WidgetSnapshotMetadata.swift in Sources */,
@@ -914,6 +924,7 @@
 				5F3E44D05AD0E99DC817C83D /* StrataMathTests.swift in Sources */,
 				08287C3427FF8A90467F54F9 /* SubjectNamePolicyTests.swift in Sources */,
 				DA1920C5349796A55548304A /* SyncMaintenanceWorkerTests.swift in Sources */,
+				C1A6F71A16C201FA8B534B8B /* TimerOrientationTests.swift in Sources */,
 				36203279B916057EAD7B7723 /* UsagePurposeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -932,6 +943,7 @@
 				2C4CC152BE16517C844AC96C /* GIFShareLifecycleUITests.swift in Sources */,
 				A374879F73D328AA043A35C4 /* JarInteractionUITests.swift in Sources */,
 				827A5E1202E74FB391153A04 /* RuntimeFlowAuditUITests.swift in Sources */,
+				333DF582943D92E70B48938A /* TimerOrientationUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

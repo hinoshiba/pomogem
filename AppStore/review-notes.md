@@ -12,6 +12,11 @@
 ポモジェムPro購入後に Homeの時間表示 → 「自由な時間を設定」 で1分を設定してください。無料状態の最短
 timerは25分です。hidden demo/debug menuはRelease buildにありません。
 
+集中・休憩画面はiPhoneの向きに合わせて上下左右へ切り替わり、横向きでは時計と操作を左右に配置します。
+左上の回転buttonは「上→右→下→左」の順に手動で向きを固定し、「自動」で端末への追従に戻せます。
+iOS 26以降は画面の向きのロックを尊重します。それより前のiOSではlock状態を取得する公開APIがないため、
+UIKitが届ける向きの通知に追従します。手動固定はすべての対応OSで利用できます。
+
 ## In-App Purchase
 
 - Product ID: `com.hinoshiba.pomogem.pro.lifetime`
@@ -50,9 +55,12 @@ timerは25分です。hidden demo/debug menuはRelease buildにありません�
   「画面を閉じてもタイマーを表示」で端末ごとに停止可能。Dynamic Islandにも残り時間を表示し、
   展開表示とロック画面に帰還案内を出す。タップするとアプリを開き、既存の集中画面・復元処理へ戻る。
   pause／resume／cancelはアプリの集中画面から確認可能
-- Motion: Home表示中、端末の傾きで瓶の重力を計算し、軽い往復shakeで粒を動かす。
+- Core Motion: Home表示中、端末の傾きで瓶の重力を計算し、軽い往復shakeで粒を動かす。
   `NSMotionUsageDescription`で目的を表示し、許可しなくても瓶のtapと他の集中機能を利用可能。値は
   端末内で即時処理するだけで保存・送信せず、inactive／backgroundでは更新を停止
+- UIKit device orientation: 集中・休憩タイマーの回転に使う。瓶用のCore Motionとは別で、追加の権限を
+  要求しない。向きと手動選択は実行中のメモリだけに保持し、保存・同期・送信せず、タイマー画面を
+  閉じたときやinactive／backgroundでは向きの更新を停止
 - Photos add-only: 利用者が静止画の保存を選んだ場合だけrequest
 - StoreKit 2: productとverified entitlementの確認。独自purchase serverなし
 
