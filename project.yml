@@ -35,6 +35,8 @@ targets:
         UIApplicationSupportsIndirectInputEvents: true
         UILaunchScreen: {}
         UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
         UIStatusBarStyle: UIStatusBarStyleLightContent
         UIUserInterfaceStyle: Dark
         NSPhotoLibraryAddUsageDescription: シェアカードを写真に保存します。

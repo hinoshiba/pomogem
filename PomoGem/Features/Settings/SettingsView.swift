@@ -21,6 +21,8 @@ struct SettingsView: View {
     private var liveActivityEnabled = true
     @AppStorage(FocusReturnReminderPolicy.enabledDefaultsKey)
     private var focusReturnReminderEnabled = false
+    @AppStorage(TimerOrientationPreference.defaultsKey)
+    private var defaultTimerOrientationRawValue = TimerDefaultOrientation.automatic.rawValue
     @State private var isUpdatingFocusReturnReminder = false
     @State private var purchase = PurchaseManager.shared
     @State private var isSubjectEditorPresented = false
@@ -447,6 +449,21 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("settings.keep-screen-awake")
             }
+            NavigationLink {
+                TimerDefaultOrientationSettingsView(selection: Binding(
+                    get: { TimerDefaultOrientation(rawValue: defaultTimerOrientationRawValue) ?? .automatic },
+                    set: { defaultTimerOrientationRawValue = $0.rawValue }
+                ))
+            } label: {
+                SettingLabel(
+                    title: "タイマーの既定の向き",
+                    subtitle: (TimerDefaultOrientation(rawValue: defaultTimerOrientationRawValue) ?? .automatic).title,
+                    symbol: "rotate.right"
+                )
+            }
+            .accessibilityIdentifier("settings.timer-default-orientation")
+            .accessibilityHint("新しい集中・休憩タイマーを開く向きを選べます")
+
             if purchase.isPro {
                 if resolvedPreferences != nil {
                     Group {
