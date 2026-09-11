@@ -1997,6 +1997,72 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         )
     }
 
+    func testReadOnlyFocusMaintenanceRefreshesDelayedTimerOutsideRootSentinel() async throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let base = Date.now.addingTimeInterval(-600)
+        for index in 0 ..< 64 {
+            let start = base.addingTimeInterval(100 + TimeInterval(index))
+            let timer = try makeFocusTimer(
+                recordID: orderedUUID(21_000 + index),
+                sessionID: orderedUUID(22_000 + index),
+                start: start,
+                updatedAt: start,
+                revision: 1,
+                ownershipSequence: 0,
+                writer: "history-device"
+            )
+            timer.markTerminal(
+                .cancelled,
+                at: start.addingTimeInterval(1),
+                writerDeviceID: "history-device"
+            )
+            context.insert(timer)
+        }
+        try context.save()
+
+        // Root observes only the newest 64 timer rows. An older timer can
+        // legitimately arrive later from a device that was previously offline.
+        var sentinel = FetchDescriptor<SyncedFocusTimer>(sortBy: [
+            SortDescriptor(\SyncedFocusTimer.updatedAt, order: .reverse)
+        ])
+        sentinel.fetchLimit = 64
+        let beforeImport = try context.fetch(sentinel).map(\.policySnapshot)
+        XCTAssertNil(try FocusCloudSyncStore.canonicalActive(context: context))
+
+        let delayedSessionID = orderedUUID(23_000)
+        context.insert(try makeFocusTimer(
+            recordID: orderedUUID(23_001),
+            sessionID: delayedSessionID,
+            start: base,
+            updatedAt: base,
+            revision: 1,
+            ownershipSequence: 0,
+            writer: "previously-offline-device"
+        ))
+        try context.save()
+        XCTAssertEqual(try context.fetch(sentinel).map(\.policySnapshot), beforeImport)
+        XCTAssertEqual(
+            try FocusCloudSyncStore.canonicalActive(context: context)?.sessionID,
+            delayedSessionID
+        )
+
+        let results = try await runFocusMaintenance(
+            container: container,
+            generation: 39,
+            maximumSlices: 8
+        )
+        let completion = try XCTUnwrap(results.last)
+        XCTAssertEqual(completion.disposition, .completed)
+        XCTAssertTrue(
+            completion.mainActorEffects.contains(.reevaluateLocalFocus),
+            "Read-only import verification must wake Root's bounded recovery query"
+        )
+        XCTAssertTrue(results.allSatisfy { $0.audit.saveCount == 0 })
+        XCTAssertEqual(try context.fetch(sentinel).map(\.policySnapshot), beforeImport)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<SyncedFocusTimer>()), 65)
+    }
+
     func testOversizedFocusClaimGroupFailsClosedWithoutSourceCompaction() async throws {
         let container = try makeContainer()
         let context = container.mainContext
@@ -2576,12 +2642,11 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         )
         selectedBefore.payloadData = Data([0xFF, 0x00, 0xFE])
         try context.save()
-        XCTAssertThrowsError(try FocusCloudSyncStore.canonicalActive(context: context)) {
-            XCTAssertEqual(
-                $0 as? FocusCloudSyncError,
-                .timerHistoryRequiresMaintenance
-            )
-        }
+        XCTAssertEqual(
+            try FocusCloudSyncStore.canonicalActive(context: context)?.sessionID,
+            historySessionID,
+            "A corrupt group must not hide a valid multi-page timer history"
+        )
 
         let results = try await runFocusMaintenance(
             container: container,
@@ -2611,12 +2676,11 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
             (try? $0.decodedPayload()) != nil
         })
         XCTAssertTrue(results.allSatisfy { $0.audit.saveCount == 0 })
-        XCTAssertThrowsError(try FocusCloudSyncStore.canonicalActive(context: context)) {
-            XCTAssertEqual(
-                $0 as? FocusCloudSyncError,
-                .timerHistoryRequiresMaintenance
-            )
-        }
+        XCTAssertEqual(
+            try FocusCloudSyncStore.canonicalActive(context: context)?.sessionID,
+            historySessionID,
+            "A corrupt group must not hide a valid multi-page timer history"
+        )
     }
 
     func test129MismatchedRunningAndPendingSessionsDoNotStarveValidTimer() async throws {

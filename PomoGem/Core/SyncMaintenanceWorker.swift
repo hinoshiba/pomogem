@@ -3777,7 +3777,14 @@ private extension SyncMaintenanceSliceWorker {
                     category: "quarantined-focus-timer-payload"
                 )
             }
-            return .completed(request: request, audit: runtime.audit)
+            // A delayed CloudKit timer can sort outside Root's recent-row
+            // sentinel. Read-only verification still has to wake the recovery
+            // query; otherwise that timer stays invisible until foregrounding.
+            return .completed(
+                request: request,
+                audit: runtime.audit,
+                effects: [.reevaluateLocalFocus]
+            )
         }
 
         let sessionID = candidate.sessionID

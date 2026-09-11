@@ -72,6 +72,23 @@ struct FocusReturnReminderNotificationClient {
     }
 }
 
+/// Injectable boundary for pending requests shared by timer and passive
+/// scheduling. Tests can delay system callbacks without touching device state.
+@MainActor
+struct NotificationRequestClient {
+    var add: (UNNotificationRequest) async throws -> Void
+    var pending: () async -> [UNNotificationRequest]
+    var removePending: ([String]) -> Void
+
+    static func system(center: UNUserNotificationCenter) -> Self {
+        Self(
+            add: { try await center.add($0) },
+            pending: { await center.pendingNotificationRequests() },
+            removePending: { center.removePendingNotificationRequests(withIdentifiers: $0) }
+        )
+    }
+}
+
 /// Owns every local notification emitted by the app.
 ///
 /// Passive reminders are materialized as one-shot requests so the monthly
@@ -87,6 +104,7 @@ final class NotificationManager {
     private(set) var lastErrorDescription: String?
 
     private let center: UNUserNotificationCenter
+    private let requestClient: NotificationRequestClient
     private let focusReturnReminderClient: FocusReturnReminderNotificationClient
     private let focusReturnReminderDefaults: UserDefaults
     private var authorizationRefreshGeneration: UInt64 = 0
@@ -101,6 +119,8 @@ final class NotificationManager {
     private var breakNotificationGeneration: UInt64 = 0
     private var breakNotificationIntents: [UUID: UInt64] = [:]
     private var breakNotificationOperations: [UUID: NotificationScheduleOperation] = [:]
+    private var passiveNotificationGeneration: UInt64 = 0
+    private var passiveNotificationTask: Task<Void, Error>?
     private var timerSchedulingIsSuspendedForAccountBoundary = false
 
     private struct AuthorizationRefreshIntent {
@@ -147,10 +167,12 @@ final class NotificationManager {
 
     init(
         center: UNUserNotificationCenter = .current(),
+        requestClient: NotificationRequestClient? = nil,
         focusReturnReminderClient: FocusReturnReminderNotificationClient? = nil,
         focusReturnReminderDefaults: UserDefaults = .standard
     ) {
         self.center = center
+        self.requestClient = requestClient ?? .system(center: center)
         self.focusReturnReminderClient = focusReturnReminderClient ?? .system(center: center)
         self.focusReturnReminderDefaults = focusReturnReminderDefaults
     }
@@ -267,8 +289,8 @@ final class NotificationManager {
 
     func cancelFocusCompletion(sessionID: UUID) {
         focusNotificationIntents.removeValue(forKey: sessionID)
-        center.removePendingNotificationRequests(
-            withIdentifiers: [Identifier.completion(sessionID: sessionID)]
+        requestClient.removePending(
+            [Identifier.completion(sessionID: sessionID)]
         )
         if registeredFocusReturnReminder?.sessionID == sessionID {
             registeredFocusReturnReminder = nil
@@ -474,8 +496,8 @@ final class NotificationManager {
 
     func cancelBreakCompletion(id: UUID) {
         breakNotificationIntents.removeValue(forKey: id)
-        center.removePendingNotificationRequests(
-            withIdentifiers: [Identifier.breakCompletion(id: id)]
+        requestClient.removePending(
+            [Identifier.breakCompletion(id: id)]
         )
     }
 
@@ -490,6 +512,7 @@ final class NotificationManager {
         focusNotificationGeneration &+= 1
         breakNotificationIntents.removeAll()
         breakNotificationGeneration &+= 1
+        passiveNotificationGeneration &+= 1
     }
 
     func resumeTimerSchedulingAfterAccountBoundary() {
@@ -506,8 +529,16 @@ final class NotificationManager {
         focusNotificationGeneration &+= 1
         breakNotificationIntents.removeAll()
         breakNotificationGeneration &+= 1
-        await removePendingRequests(withPrefix: Identifier.completionPrefix)
-        await removePendingRequests(withPrefix: Identifier.breakPrefix)
+        await removePendingRequests(withPrefix: Identifier.completionPrefix) { identifier in
+            !self.focusNotificationIntents.keys.contains {
+                Identifier.completion(sessionID: $0) == identifier
+            }
+        }
+        await removePendingRequests(withPrefix: Identifier.breakPrefix) { identifier in
+            !self.breakNotificationIntents.keys.contains {
+                Identifier.breakCompletion(id: $0) == identifier
+            }
+        }
     }
 
     /// Refreshes the next 35 days of engagement notifications.
@@ -523,7 +554,53 @@ final class NotificationManager {
         now: Date = .now,
         calendar: Calendar = .autoupdatingCurrent
     ) async throws {
-        await removePendingRequests(withPrefix: Identifier.passivePrefix)
+        guard !Task.isCancelled, !timerSchedulingIsSuspendedForAccountBoundary else { return }
+        passiveNotificationGeneration &+= 1
+        let generation = passiveNotificationGeneration
+        let previous = passiveNotificationTask
+        // All daily identifiers share one chain. An older add must finish its
+        // cleanup before the replacement is allowed to reuse those identifiers.
+        let task = Task { @MainActor in
+            if let previous { _ = try? await previous.value }
+            guard self.passiveNotificationIntentIsCurrent(generation) else { return }
+            try await self.performPassiveNotificationSync(
+                dailyReminderEnabled: dailyReminderEnabled,
+                wrappedEnabled: wrappedEnabled,
+                hour: hour, minute: minute, playsSound: playsSound,
+                now: now, calendar: calendar, generation: generation
+            )
+        }
+        passiveNotificationTask = task
+        defer {
+            if passiveNotificationGeneration == generation { passiveNotificationTask = nil }
+        }
+        // Once accepted, finish this manager-owned transaction even if its
+        // Settings view disappears. View cancellation is not an OFF intent:
+        // rolling back here would erase enabled reminders without a successor.
+        // A newer schedule, explicit cancellation, or account boundary still
+        // invalidates the generation and cleans up its in-flight additions.
+        try await task.value
+    }
+
+    private func passiveNotificationIntentIsCurrent(_ generation: UInt64) -> Bool {
+        passiveNotificationGeneration == generation
+            && !timerSchedulingIsSuspendedForAccountBoundary && !Task.isCancelled
+    }
+
+    private func performPassiveNotificationSync(
+        dailyReminderEnabled: Bool,
+        wrappedEnabled: Bool,
+        hour: Int,
+        minute: Int,
+        playsSound: Bool,
+        now: Date,
+        calendar: Calendar,
+        generation: UInt64
+    ) async throws {
+        await removePendingRequests(withPrefix: Identifier.passivePrefix) { _ in
+            self.passiveNotificationIntentIsCurrent(generation)
+        }
+        guard passiveNotificationIntentIsCurrent(generation) else { return }
 
         guard dailyReminderEnabled || wrappedEnabled else {
             lastErrorDescription = nil
@@ -544,8 +621,15 @@ final class NotificationManager {
             return
         }
 
+        var addedIdentifiers: [String] = []
+        defer {
+            if !passiveNotificationIntentIsCurrent(generation) {
+                requestClient.removePending(addedIdentifiers)
+            }
+        }
         do {
             for offset in 0..<IntegrationConstants.passiveNotificationHorizonDays {
+                guard passiveNotificationIntentIsCurrent(generation) else { return }
                 guard let date = calendar.date(
                     byAdding: .day,
                     value: offset,
@@ -580,17 +664,27 @@ final class NotificationManager {
                     content: content,
                     trigger: trigger
                 )
-                try await center.add(request)
+                // Include an in-flight identifier so even a late failed add
+                // cannot leave a partial schedule behind.
+                addedIdentifiers.append(request.identifier)
+                try await requestClient.add(request)
+                guard passiveNotificationIntentIsCurrent(generation) else { return }
             }
             lastErrorDescription = nil
         } catch {
+            requestClient.removePending(addedIdentifiers)
+            guard passiveNotificationIntentIsCurrent(generation) else { return }
             lastErrorDescription = error.localizedDescription
             throw error
         }
     }
 
     func cancelPassiveNotifications() async {
-        await removePendingRequests(withPrefix: Identifier.passivePrefix)
+        passiveNotificationGeneration &+= 1
+        let generation = passiveNotificationGeneration
+        await removePendingRequests(withPrefix: Identifier.passivePrefix) { _ in
+            self.passiveNotificationGeneration == generation
+        }
     }
 
     /// Keeps the home screen free from red badge counts even if an older build
@@ -649,20 +743,21 @@ final class NotificationManager {
             )
         )
         do {
-            try await center.add(request)
+            try await requestClient.add(request)
         } catch {
+            // A failed replacement must not leave its previous trigger armed
+            // at the old deadline. The per-identifier chain guarantees that a
+            // newer add has not started yet, so this cleanup cannot erase it.
+            requestClient.removePending([identifier])
             guard intentIsCurrent() else {
-                center.removePendingNotificationRequests(
-                    withIdentifiers: [identifier]
-                )
                 return .superseded
             }
             lastErrorDescription = error.localizedDescription
             throw error
         }
         guard intentIsCurrent() else {
-            center.removePendingNotificationRequests(
-                withIdentifiers: [identifier]
+            requestClient.removePending(
+                [identifier]
             )
             return .superseded
         }
@@ -676,20 +771,19 @@ final class NotificationManager {
         )
     }
 
-    private func removePendingRequests(withPrefix prefix: String) async {
+    private func removePendingRequests(
+        withPrefix prefix: String,
+        shouldRemove: @MainActor (String) -> Bool = { _ in true }
+    ) async {
         let pending = await pendingNotificationRequests()
         let identifiers = pending
             .map(\.identifier)
-            .filter { $0.hasPrefix(prefix) }
+            .filter { $0.hasPrefix(prefix) && shouldRemove($0) }
         guard !identifiers.isEmpty else { return }
-        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        requestClient.removePending(identifiers)
     }
 
     private func pendingNotificationRequests() async -> [UNNotificationRequest] {
-        await withCheckedContinuation { continuation in
-            center.getPendingNotificationRequests { requests in
-                continuation.resume(returning: requests)
-            }
-        }
+        await requestClient.pending()
     }
 }

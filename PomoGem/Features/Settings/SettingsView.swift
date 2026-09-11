@@ -3,6 +3,48 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+enum NotificationPreference: Hashable {
+    case dailyReminder
+    case wrapped
+    case focusReturnReminder
+}
+
+/// Authorization may outlive a later toggle. Keep independent user intents
+/// for each setting so a delayed permission result cannot restore an old
+/// value or cancel an update to a different reminder.
+@MainActor
+final class NotificationPreferenceIntentGate {
+    private var intents: [NotificationPreference: UUID] = [:]
+
+    func begin(_ preference: NotificationPreference) -> UUID {
+        let intent = UUID()
+        intents[preference] = intent
+        return intent
+    }
+
+    func isCurrent(_ preference: NotificationPreference, intent: UUID) -> Bool {
+        !Task.isCancelled && intents[preference] == intent
+    }
+
+    /// Nil means a newer update or task cancellation superseded this request.
+    func authorizeUpdate(
+        _ preference: NotificationPreference,
+        intent: UUID,
+        enabled: Bool,
+        refreshAuthorization: () async -> Bool,
+        requestAuthorization: () async -> Bool
+    ) async -> Bool? {
+        guard isCurrent(preference, intent: intent) else { return nil }
+        guard enabled else { return true }
+        let alreadyAuthorized = await refreshAuthorization()
+        guard isCurrent(preference, intent: intent) else { return nil }
+        guard !alreadyAuthorized else { return true }
+        let granted = await requestAuthorization()
+        guard isCurrent(preference, intent: intent) else { return nil }
+        return granted
+    }
+}
+
 struct SettingsView: View {
     let persistenceMode: PersistenceLaunchMode
 
@@ -23,7 +65,6 @@ struct SettingsView: View {
     private var focusReturnReminderEnabled = false
     @AppStorage(TimerOrientationPreference.defaultsKey)
     private var defaultTimerOrientationRawValue = TimerDefaultOrientation.automatic.rawValue
-    @State private var isUpdatingFocusReturnReminder = false
     @State private var purchase = PurchaseManager.shared
     @State private var isSubjectEditorPresented = false
     @State private var editingSubjectID: UUID?
@@ -32,6 +73,8 @@ struct SettingsView: View {
     @State private var showResetData = false
     @State private var showFontLicense = false
     @State private var notificationError: String?
+    @State private var notificationPreferenceIntents =
+        NotificationPreferenceIntentGate()
     @State private var settingsError: String?
     @State private var dataExportTask: Task<Void, Never>?
     @State private var activeDataExportID: UUID?
@@ -416,7 +459,6 @@ struct SettingsView: View {
                     symbol: "bell.badge"
                 )
             }
-            .disabled(isUpdatingFocusReturnReminder)
             .accessibilityIdentifier("settings.focus-return-reminder")
 
             Text("既定はオフ。集中タイマー中だけ通知し、戻ると取り消します。一時停止中・休憩中・終了間際は通知しません。画面をロックした場合も通知されます。")
@@ -1428,7 +1470,7 @@ struct SettingsView: View {
     }
 
     private func updateFocusReturnReminder(enabled: Bool) {
-        guard !isUpdatingFocusReturnReminder else { return }
+        let intent = notificationPreferenceIntents.begin(.focusReturnReminder)
         let manager = NotificationManager.shared
         if !enabled {
             focusReturnReminderEnabled = false
@@ -1436,14 +1478,20 @@ struct SettingsView: View {
             return
         }
 
-        isUpdatingFocusReturnReminder = true
         Task { @MainActor in
-            defer { isUpdatingFocusReturnReminder = false }
-            await manager.refreshAuthorizationStatus()
-            var granted = manager.isAuthorized
-            if !granted {
-                granted = await manager.requestAuthorization()
-            }
+            guard let granted = await notificationPreferenceIntents.authorizeUpdate(
+                .focusReturnReminder,
+                intent: intent,
+                enabled: true,
+                refreshAuthorization: {
+                    await manager.refreshAuthorizationStatus()
+                    return manager.isAuthorized
+                },
+                requestAuthorization: {
+                    await manager.requestAuthorization()
+                }
+            ), notificationPreferenceIntents.isCurrent(.focusReturnReminder, intent: intent)
+            else { return }
             focusReturnReminderEnabled = granted
             if !granted {
                 manager.cancelFocusReturnReminder()
@@ -1459,22 +1507,29 @@ struct SettingsView: View {
         enabled: Bool
     ) {
         guard resolvedPreferences != nil else { return }
+        let intent = notificationPreferenceIntents.begin(preference.intentKey)
         Task { @MainActor in
             let manager = NotificationManager.shared
-            if enabled {
-                await manager.refreshAuthorizationStatus()
-                var granted = manager.isAuthorized
-                if !granted {
-                    granted = await manager.requestAuthorization()
+            guard let permitted = await notificationPreferenceIntents.authorizeUpdate(
+                preference.intentKey,
+                intent: intent,
+                enabled: enabled,
+                refreshAuthorization: {
+                    await manager.refreshAuthorizationStatus()
+                    return manager.isAuthorized
+                },
+                requestAuthorization: {
+                    await manager.requestAuthorization()
                 }
-                guard granted else {
-                    disableNotificationPreference(preference)
-                    notificationError = notificationPermissionMessage(
-                        underlyingError: manager.lastErrorDescription
-                    )
-                    await synchronizeNotificationsNow()
-                    return
-                }
+            ), notificationPreferenceIntents.isCurrent(preference.intentKey, intent: intent)
+            else { return }
+            guard permitted else {
+                disableNotificationPreference(preference)
+                notificationError = notificationPermissionMessage(
+                    underlyingError: manager.lastErrorDescription
+                )
+                await synchronizeNotificationsNow()
+                return
             }
 
             switch preference {
@@ -1643,9 +1698,10 @@ struct SettingsView: View {
     }
 
     private func reconcileNotificationAuthorization() async {
-        let prefs = resolvedPreferences
         let manager = NotificationManager.shared
         await manager.refreshAuthorizationStatus()
+        guard !Task.isCancelled else { return }
+        let prefs = resolvedPreferences
 
         if !manager.isAuthorized {
             let hadEnabledPreference = (prefs?.reminderEnabled ?? false)
@@ -1679,9 +1735,10 @@ struct SettingsView: View {
     }
 
     private func synchronizeNotificationsNow() async {
-        let prefs = resolvedPreferences
         let manager = NotificationManager.shared
         await manager.refreshAuthorizationStatus()
+        guard !Task.isCancelled else { return }
+        let prefs = resolvedPreferences
         do {
             try await manager.synchronizePassiveNotifications(
                 dailyReminderEnabled: (prefs?.reminderEnabled ?? false)
@@ -1707,6 +1764,13 @@ struct SettingsView: View {
     private enum PassiveNotificationPreference {
         case dailyReminder
         case wrapped
+
+        var intentKey: NotificationPreference {
+            switch self {
+            case .dailyReminder: .dailyReminder
+            case .wrapped: .wrapped
+            }
+        }
     }
 }
 
