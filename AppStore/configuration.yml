@@ -7,8 +7,8 @@ store_localizations:
   - en-US
 app_store_id: 6809139517
 app_store_listing_status: not_public
-marketing_version: "1.0"
-build_number: "5"
+marketing_version: "1.0.1"
+build_number: "6"
 copyright: "2026 hinoshiba"
 website_host: pomogem.hinoshiba.com
 app_bundle_id: com.hinoshiba.pomogem
