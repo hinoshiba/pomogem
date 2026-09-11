@@ -58,8 +58,10 @@ upload success does not imply approval or public availability.
 Current-file readiness, Store metadata, site validation and profile regression tests
 passed. `check-oss-readiness.sh --release` still fails because checklist blockers
 remain recorded; it is not represented as passing. The default full-history check
-also rejects retained local historical Git metadata; release CI's fetched history
-passed its audit. Historical local references were not rewritten or published.
+also rejects pre-existing historical Git identity metadata. CI audits the current
+files and the PR's new commit metadata; it does not certify the entire history.
+Existing history was not rewritten. New release commits and the source tag use
+the approved project mailbox.
 
 Signed-device, two-device iCloud/account-switch, accessibility, StoreKit purchase/
 restore and remaining operational checks were not executed for this patch. Earlier
