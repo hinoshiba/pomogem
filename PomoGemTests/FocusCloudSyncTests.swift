@@ -1004,6 +1004,108 @@ final class FocusCloudSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testReleaseOutsideFullOwnershipPageCannotAuthorizeANewClaim() throws {
+        let container = try focusContainer(named: "FocusCloudSyncTruncatedRelease")
+        let context = container.mainContext
+        let instant = Date(timeIntervalSince1970: 1_800_550_000)
+        let candidateID = UUID()
+        for sequence in 2...FocusCloudSyncStore.QueryContract.matchingSessionClaimLimit {
+            context.insert(FocusTimerDeviceClaim(
+                sessionID: sessionA, deviceID: "released-\(sequence)",
+                sequence: sequence, claimedAt: instant,
+                releasedAt: instant.addingTimeInterval(30)
+            ))
+        }
+        context.insert(FocusTimerDeviceClaim(
+            id: candidateID, sessionID: sessionA, deviceID: "released-candidate",
+            sequence: 1, claimedAt: instant.addingTimeInterval(10)
+        ))
+        // Physical copies need not have matching metadata. Any release of the
+        // logical claim tombstones it; the older timestamp puts this evidence
+        // deterministically beyond the initial 128-row prefix.
+        context.insert(FocusTimerDeviceClaim(
+            id: candidateID, sessionID: sessionA, deviceID: "released-candidate",
+            sequence: 1, claimedAt: instant,
+            releasedAt: instant.addingTimeInterval(30)
+        ))
+        context.insert(FocusTimerDeviceClaim(
+            sessionID: sessionA, deviceID: "actual-owner",
+            sequence: 0, claimedAt: instant
+        ))
+        let timer = try timerRecord(
+            sessionID: sessionA, status: .running, start: instant,
+            updatedAt: instant, revision: 1, ownershipSequence: 0,
+            writer: "actual-owner"
+        )
+        context.insert(timer)
+        try context.save()
+        let claimsBefore = try context.fetchCount(FetchDescriptor<FocusTimerDeviceClaim>())
+        let recordsBefore = try context.fetchCount(FetchDescriptor<SyncedFocusTimer>())
+        let bounded = try FocusCloudSyncStore.claims(sessionID: sessionA, context: context)
+        XCTAssertEqual(bounded.count, FocusCloudSyncStore.QueryContract.matchingSessionClaimLimit)
+        XCTAssertEqual(FocusSyncPolicy.notificationOwner(
+            for: sessionA, claims: bounded.map(\.policySnapshot)
+        ), "released-candidate")
+        let complete = try context.fetch(FetchDescriptor<FocusTimerDeviceClaim>())
+        XCTAssertEqual(FocusSyncPolicy.notificationOwner(
+            for: sessionA, claims: complete.map(\.policySnapshot)
+        ), "actual-owner")
+
+        let assertBoundedFailure: (Error) -> Void = {
+            XCTAssertEqual($0 as? FocusCloudSyncError, .timerHistoryRequiresMaintenance)
+        }
+        XCTAssertThrowsError(try FocusCloudSyncStore.notificationOwner(
+            sessionID: sessionA, context: context
+        )) { assertBoundedFailure($0) }
+        XCTAssertThrowsError(try FocusCloudSyncStore.claimOwnership(
+            sessionID: sessionA, context: context, deviceID: "new-device"
+        )) { assertBoundedFailure($0) }
+        XCTAssertThrowsError(try FocusCloudSyncStore.upsert(
+            envelope: timer.decodedPayload().recoveryEnvelope(adoptedAt: instant),
+            status: .running, context: context, deviceID: "new-device",
+            claimIfUnowned: true, now: instant
+        )) { assertBoundedFailure($0) }
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<FocusTimerDeviceClaim>()), claimsBefore)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<SyncedFocusTimer>()), recordsBefore)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    @MainActor
+    func testCompleteReleasedOwnershipHistoryAllowsANewClaim() throws {
+        let container = try focusContainer(named: "FocusCloudSyncCompleteReleasedClaims")
+        let context = container.mainContext
+        let instant = Date(timeIntervalSince1970: 1_800_550_000)
+        let id = UUID()
+        for releasedAt in [nil, Optional(instant.addingTimeInterval(30))] {
+            context.insert(FocusTimerDeviceClaim(
+                id: id, sessionID: sessionA, deviceID: "released-device",
+                sequence: 8, claimedAt: instant, releasedAt: releasedAt
+            ))
+        }
+        let timer = try timerRecord(
+            sessionID: sessionA, status: .running, start: instant,
+            updatedAt: instant, revision: 1, ownershipSequence: 8,
+            writer: "released-device"
+        )
+        context.insert(timer)
+        try context.save()
+
+        XCTAssertNil(try FocusCloudSyncStore.notificationOwner(sessionID: sessionA, context: context))
+        _ = try FocusCloudSyncStore.upsert(
+            envelope: timer.decodedPayload().recoveryEnvelope(adoptedAt: instant),
+            status: .running, context: context, deviceID: "new-device",
+            claimIfUnowned: true, now: instant.addingTimeInterval(60)
+        )
+        try context.save()
+        XCTAssertEqual(try FocusCloudSyncStore.notificationOwner(
+            sessionID: sessionA, context: context
+        ), "new-device")
+        let claims = try FocusCloudSyncStore.claims(sessionID: sessionA, context: context)
+        XCTAssertEqual(claims.count, 3)
+        XCTAssertEqual(claims.first?.sequence, 9)
+    }
+
+    @MainActor
     func testSwiftDataStoreRoundTripPreservesOneLogicalTimerAndClaim() throws {
         let schema = Schema([
             StudySession.self,

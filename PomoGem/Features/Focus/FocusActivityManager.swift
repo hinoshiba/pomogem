@@ -12,6 +12,56 @@ enum FocusActivityPreference {
     }
 }
 
+/// An accepted cleanup owns these exact OS surfaces. Delayed execution must
+/// never enumerate activities again, because a new focus may have started
+/// while another part of reset cleanup was waiting for the system.
+@MainActor
+struct FocusActivityRetirement {
+    struct Target {
+        let id: String
+        let sessionID: UUID
+        let end: @MainActor () async -> Void
+    }
+
+    private let targets: [Target]
+    private let didEndTarget: @MainActor (String) -> Void
+
+    init(
+        targets: [Target],
+        preserving sessionID: UUID? = nil,
+        didEndTarget: @escaping @MainActor (String) -> Void = { _ in }
+    ) {
+        self.targets = targets.filter { $0.sessionID != sessionID }
+        self.didEndTarget = didEndTarget
+    }
+
+    func end() async {
+        for target in targets {
+            await target.end()
+            didEndTarget(target.id)
+        }
+    }
+}
+
+struct FocusActivityLifecycleState {
+    private(set) var generation: UInt64 = 0
+    private var sessionID: UUID?
+
+    mutating func begin(sessionID: UUID? = nil) -> UInt64 {
+        generation &+= 1
+        self.sessionID = sessionID
+        return generation
+    }
+
+    mutating func acceptRetirement(preserving sessionID: UUID?) {
+        // A preserved local/unknown-epoch focus may itself be awaiting an
+        // ActivityKit callback. Keep that work valid while cancelling any
+        // pre-reset lifecycle operation belonging to another session.
+        if let sessionID, self.sessionID == sessionID { return }
+        _ = begin()
+    }
+}
+
 #if targetEnvironment(macCatalyst)
 /// Live Activities are unavailable in Mac Catalyst. Keeping this no-op facade
 /// lets the focus engine share its lifecycle code without promising a Mac UI
@@ -68,6 +118,12 @@ final class FocusActivityManager {
 
     func endAll() async {}
 
+    func prepareCurrentActivityRetirement(
+        preserving sessionID: UUID? = nil
+    ) -> FocusActivityRetirement {
+        FocusActivityRetirement(targets: [], preserving: sessionID)
+    }
+
     func reconcileWithDurableSession(_ sessionID: UUID?) async {}
 
     func restoreCurrentActivity(for sessionID: UUID? = nil) {}
@@ -85,7 +141,8 @@ final class FocusActivityManager {
     private(set) var currentSessionID: UUID?
     private(set) var activitiesEnabled: Bool
     private(set) var lastErrorDescription: String?
-    private var lifecycleGeneration: UInt64 = 0
+    private var lifecycleState = FocusActivityLifecycleState()
+    private var lifecycleGeneration: UInt64 { lifecycleState.generation }
 
     private init() {
         activitiesEnabled = Self.releaseAndLocalPolicyAllowsActivities
@@ -141,7 +198,7 @@ final class FocusActivityManager {
         durationSeconds: Int,
         content: ActivityContent<FocusActivityAttributes.ContentState>
     ) async throws -> String? {
-        let generation = beginLifecycleMutation()
+        let generation = beginLifecycleMutation(sessionID: sessionID)
         guard Self.releaseAndLocalPolicyAllowsActivities else {
             await endAll(dismissalPolicy: .immediate)
             return nil
@@ -202,7 +259,7 @@ final class FocusActivityManager {
         sessionID: UUID,
         endDate: Date
     ) async {
-        let generation = beginLifecycleMutation()
+        let generation = beginLifecycleMutation(sessionID: sessionID)
         refreshAuthorization()
         guard activitiesEnabled,
               let activity = activity(for: sessionID) else { return }
@@ -214,7 +271,7 @@ final class FocusActivityManager {
     }
 
     func pause(sessionID: UUID, remainingSeconds: Int) async {
-        _ = beginLifecycleMutation()
+        _ = beginLifecycleMutation(sessionID: sessionID)
         guard Self.releaseAndLocalPolicyAllowsActivities else {
             await cancel(sessionID: sessionID)
             return
@@ -227,7 +284,7 @@ final class FocusActivityManager {
     }
 
     func resume(sessionID: UUID, endDate: Date) async {
-        _ = beginLifecycleMutation()
+        _ = beginLifecycleMutation(sessionID: sessionID)
         guard Self.releaseAndLocalPolicyAllowsActivities else {
             await cancel(sessionID: sessionID)
             return
@@ -243,7 +300,7 @@ final class FocusActivityManager {
         sessionID: UUID,
         now: Date = .now
     ) async {
-        let generation = beginLifecycleMutation()
+        let generation = beginLifecycleMutation(sessionID: sessionID)
         guard Self.releaseAndLocalPolicyAllowsActivities else {
             await cancel(sessionID: sessionID)
             return
@@ -260,7 +317,7 @@ final class FocusActivityManager {
     }
 
     func cancel(sessionID: UUID) async {
-        let generation = beginLifecycleMutation()
+        let generation = beginLifecycleMutation(sessionID: sessionID)
         guard let activity = activity(for: sessionID) else { return }
         await activity.end(nil, dismissalPolicy: .immediate)
         guard lifecycleGeneration == generation else { return }
@@ -280,6 +337,29 @@ final class FocusActivityManager {
         currentSessionID = nil
     }
 
+    /// Call synchronously when reset cleanup is accepted, before creating a
+    /// task or awaiting notification cleanup. The resulting plan cannot end a
+    /// later activity or invalidate its newer lifecycle generation.
+    func prepareCurrentActivityRetirement(
+        preserving sessionID: UUID? = nil
+    ) -> FocusActivityRetirement {
+        lifecycleState.acceptRetirement(preserving: sessionID)
+        let targets = Activity<FocusActivityAttributes>.activities.map { activity in
+            FocusActivityRetirement.Target(
+                id: activity.id,
+                sessionID: activity.attributes.sessionID,
+                end: { await activity.end(nil, dismissalPolicy: .immediate) }
+            )
+        }
+        return FocusActivityRetirement(
+            targets: targets,
+            preserving: sessionID,
+            didEndTarget: { [weak self] id in
+                self?.clearCurrentIfMatching(id: id)
+            }
+        )
+    }
+
     /// Reconciles OS-owned state only after the launch path has validated the
     /// durable local focus envelope. This removes an orphan left by a process
     /// termination between clearing persistence and awaiting ActivityKit,
@@ -291,7 +371,7 @@ final class FocusActivityManager {
             return
         }
 
-        let generation = beginLifecycleMutation()
+        let generation = beginLifecycleMutation(sessionID: sessionID)
         let activities = Activity<FocusActivityAttributes>.activities
         var retained: Activity<FocusActivityAttributes>?
         for activity in activities {
@@ -341,15 +421,18 @@ final class FocusActivityManager {
     private func clearCurrentIfMatching(
         _ activity: Activity<FocusActivityAttributes>
     ) {
-        guard currentActivityID == activity.id else { return }
+        clearCurrentIfMatching(id: activity.id)
+    }
+
+    private func clearCurrentIfMatching(id: String) {
+        guard currentActivityID == id else { return }
         currentActivityID = nil
         currentSessionID = nil
     }
 
     @discardableResult
-    private func beginLifecycleMutation() -> UInt64 {
-        lifecycleGeneration &+= 1
-        return lifecycleGeneration
+    private func beginLifecycleMutation(sessionID: UUID? = nil) -> UInt64 {
+        lifecycleState.begin(sessionID: sessionID)
     }
 
     /// UI tests exercise timer behavior, not OS-owned surfaces. Suppressing

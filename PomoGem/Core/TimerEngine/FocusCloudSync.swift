@@ -1792,6 +1792,12 @@ enum FocusCloudSyncStore {
             sessionID: sessionID,
             context: context
         )
+        // Exact release checks may remove every apparent owner from this
+        // prefix. Its original completeness must survive those removals:
+        // shrinking candidates does not prove there is no older active claim
+        // beyond the bounded query.
+        let initialPageMayBeTruncated = candidates.count
+            == QueryContract.matchingSessionClaimLimit
         let currentEpochID = try ActivityResetStore.latestEpochID(context: context)
 
         for _ in 0..<QueryContract.matchingSessionClaimLimit {
@@ -1803,7 +1809,7 @@ enum FocusCloudSyncStore {
                 // groups, a later active claim may exist beyond it. Physical
                 // source claims are retained, so exact verification must fail
                 // closed at the bounded history ceiling.
-                if candidates.count == QueryContract.matchingSessionClaimLimit {
+                if initialPageMayBeTruncated {
                     throw FocusCloudSyncError.timerHistoryRequiresMaintenance
                 }
                 return nil
@@ -1824,7 +1830,12 @@ enum FocusCloudSyncStore {
             guard let verified = FocusSyncPolicy.notificationOwnerClaim(
                 for: sessionID,
                 claims: combinedSnapshots
-            ) else { return nil }
+            ) else {
+                if initialPageMayBeTruncated {
+                    throw FocusCloudSyncError.timerHistoryRequiresMaintenance
+                }
+                return nil
+            }
             if verified.id != provisional.id {
                 candidates.removeAll { $0.id == provisional.id }
                 continue

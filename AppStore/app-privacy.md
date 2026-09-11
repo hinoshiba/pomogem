@@ -90,6 +90,8 @@ App Managerが最終決定・Publishします。
   端末内だけで処理する向きは[Appleの収集の定義](https://developer.apple.com/app-store/app-privacy-details/)に
   該当せず、使用APIは[required-reason APIの一覧](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype)に該当しない
 - 既定の向きの端末内保存には、すでに宣言しているstandard User Defaults `CA92.1`を使用する
+- 中断されたリセット後処理の再試行用UUIDも、同じ`CA92.1`で保存先ごとの端末内UserDefaultsに保持する。
+  正常完了後に消去し、同期・送信・JSON書き出しには含めない
 
 新しいnetwork endpoint、SDK、permission、data retention、Widget accessを追加した時点で、このdraftを
 無効として再回答します。

@@ -75,6 +75,8 @@ struct SettingsView: View {
     @State private var notificationError: String?
     @State private var notificationPreferenceIntents =
         NotificationPreferenceIntentGate()
+    @State private var viewTasks = ViewTaskScope()
+    @State private var resetCleanupJournal = ActivityResetCleanupJournal.live()
     @State private var settingsError: String?
     @State private var dataExportTask: Task<Void, Never>?
     @State private var activeDataExportID: UUID?
@@ -276,9 +278,10 @@ struct SettingsView: View {
             }
         }
 #endif
+        .onAppear { viewTasks.activate() }
         .task {
-            await purchase.refreshEntitlements()
-            await reconcileNotificationAuthorization()
+            await refreshViewServices()
+            guard !Task.isCancelled else { return }
             await removeStaleDataExports()
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -286,15 +289,15 @@ struct SettingsView: View {
                 completionPreview.cancel()
                 return
             }
-            Task {
-                await purchase.refreshEntitlements()
-                await reconcileNotificationAuthorization()
+            viewTasks.start {
+                await refreshViewServices()
             }
         }
         .onChange(of: completionPreviewConfiguration) { _, _ in
             completionPreview.cancel()
         }
         .onDisappear {
+            viewTasks.cancelAll()
             completionPreview.cancel()
             guard !showDataExportShareSheet else { return }
             cancelDataExport(announce: false)
@@ -1046,9 +1049,11 @@ struct SettingsView: View {
     }
 
     private func removeStaleDataExports() async {
-        _ = await Task.detached(priority: .utility) {
-            try? PomoGemDataExporter.removeStaleTemporaryExports()
-        }.value
+        _ = try? await CancellationResponsiveTaskWaiter.value {
+            await Task.detached(priority: .utility) {
+                try? PomoGemDataExporter.removeStaleTemporaryExports()
+            }.value
+        }
     }
 
     private func settingBinding(
@@ -1478,7 +1483,7 @@ struct SettingsView: View {
             return
         }
 
-        Task { @MainActor in
+        viewTasks.start {
             guard let granted = await notificationPreferenceIntents.authorizeUpdate(
                 .focusReturnReminder,
                 intent: intent,
@@ -1508,7 +1513,7 @@ struct SettingsView: View {
     ) {
         guard resolvedPreferences != nil else { return }
         let intent = notificationPreferenceIntents.begin(preference.intentKey)
-        Task { @MainActor in
+        viewTasks.start {
             let manager = NotificationManager.shared
             guard let permitted = await notificationPreferenceIntents.authorizeUpdate(
                 preference.intentKey,
@@ -1557,7 +1562,7 @@ struct SettingsView: View {
     }
 
     private func synchronizeNotifications() {
-        Task { @MainActor in
+        viewTasks.start {
             await synchronizeNotificationsNow()
         }
     }
@@ -1624,12 +1629,28 @@ struct SettingsView: View {
             symbol: "trash"
         )
 
-        Task { @MainActor in
-            await NotificationManager.shared.cancelAllTimerNotifications()
-            await FocusActivityManager.shared.endAll()
+        // The reset marker is already committed. Complete its external cleanup
+        // even if Settings disappears, and keep the old container leased until
+        // that cleanup settles so it cannot reach a remounted account's timer.
+        // Only the optional error presentation belongs to this view's task.
+        let ticket = resetCleanupJournal.begin(epochID: marker.epochID)
+        let notificationCleanup = NotificationManager.shared.prepareTimerNotificationCleanup()
+        let activityCleanup = FocusActivityManager.shared.prepareCurrentActivityRetirement()
+        let deliveredStateCleanup = NotificationManager.shared.prepareDeliveredStateCleanup()
+        let cleanupTask = AcceptedActivityResetCleanup.start(
+            retaining: modelContext.container,
+            completing: ticket
+        ) {
+            await notificationCleanup()
+            await activityCleanup.end()
+            await deliveredStateCleanup()
+            try await WidgetSnapshotStore.shared.clear()
+        }
+        viewTasks.start {
             do {
-                try await WidgetSnapshotStore.shared.clear()
+                try await CancellationResponsiveTaskWaiter.value { try await cleanupTask.value }
             } catch {
+                guard !Task.isCancelled else { return }
                 settingsError = persistenceMode == .localOnly
                     ? "このiPhone内の記録はリセット済みですが、端末上の補助表示を消去できませんでした。\n\(error.localizedDescription)"
                     : "この端末の記録はリセット済みですが、ウィジェットの表示を消去できませんでした。iCloudへの反映には時間がかかる場合があります。\n\(error.localizedDescription)"
@@ -1697,6 +1718,19 @@ struct SettingsView: View {
         }
     }
 
+    private func refreshViewServices() async {
+        // Only the process-wide service is retained by the system wait. The
+        // Settings task can release its ModelContext when the view disappears.
+        let purchase = purchase
+        do {
+            try await CancellationResponsiveTaskWaiter.value {
+                await purchase.refreshEntitlements()
+            }
+        } catch { return }
+        guard !Task.isCancelled else { return }
+        await reconcileNotificationAuthorization()
+    }
+
     private func reconcileNotificationAuthorization() async {
         let manager = NotificationManager.shared
         await manager.refreshAuthorizationStatus()
@@ -1751,6 +1785,7 @@ struct SettingsView: View {
                 playsSound: prefs?.soundOn ?? false
             )
         } catch {
+            guard !Task.isCancelled else { return }
             notificationError = "通知の予定を更新できませんでした。\n\(error.localizedDescription)"
         }
     }

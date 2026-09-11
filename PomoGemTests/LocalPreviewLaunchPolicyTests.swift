@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import XCTest
 @testable import PomoGem
 
@@ -6,7 +7,7 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
     func testFirstActiveSceneRetriesBeforeStorageSelection() {
         XCTAssertEqual(
             PersistenceLaunchScenePolicy.action(
-                isActive: true,
+                phase: .active,
                 hasSession: false,
                 isPreparing: true,
                 isQuiescingAccountChange: false,
@@ -19,7 +20,7 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
     func testActiveSceneDoesNotReplaceLoadedOrRetiringSession() {
         XCTAssertEqual(
             PersistenceLaunchScenePolicy.action(
-                isActive: true,
+                phase: .active,
                 hasSession: true,
                 isPreparing: false,
                 isQuiescingAccountChange: false,
@@ -29,7 +30,7 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
         )
         XCTAssertEqual(
             PersistenceLaunchScenePolicy.action(
-                isActive: true,
+                phase: .active,
                 hasSession: false,
                 isPreparing: false,
                 isQuiescingAccountChange: true,
@@ -39,10 +40,59 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
         )
     }
 
-    func testOnlyCloudWorkRetiresWhenSceneLeavesActiveState() {
+    func testPermissionInterruptionKeepsPublishedSessionWithoutRemountingRoot() {
+        // Notification permission panels can hold the scene inactive until
+        // the user responds. Neither opening nor dismissing the panel may
+        // retire the verified session that owns the onboarding operation.
+        for phase in [ScenePhase.inactive, .active, .inactive, .active] {
+            XCTAssertEqual(PersistenceLaunchScenePolicy.action(
+                phase: phase,
+                hasSession: true,
+                isPreparing: false,
+                isQuiescingAccountChange: false,
+                usesCloudAccountBoundary: true,
+                hasRetiringContainers: true
+            ), .none)
+        }
+    }
+
+    func testInactivePublishedSessionStillRetiresWhenItEntersBackground() {
+        func action(_ phase: ScenePhase) -> PersistenceSceneTransitionAction {
+            PersistenceLaunchScenePolicy.action(
+                phase: phase,
+                hasSession: true,
+                isPreparing: false,
+                isQuiescingAccountChange: false,
+                usesCloudAccountBoundary: true,
+                hasRetiringContainers: true
+            )
+        }
+
+        XCTAssertEqual(action(.inactive), .none)
+        // Moving from a system panel to another app must still close the
+        // CloudKit store before a later foreground account verification.
+        XCTAssertEqual(action(.background), .retireCloudSession)
+    }
+
+    func testUnpublishedCloudMountStillRetiresOnAnyDeactivation() {
+        for phase in [ScenePhase.inactive, .background] {
+            for hasCandidate in [false, true] {
+                XCTAssertEqual(PersistenceLaunchScenePolicy.action(
+                    phase: phase,
+                    hasSession: false,
+                    isPreparing: true,
+                    isQuiescingAccountChange: false,
+                    usesCloudAccountBoundary: true,
+                    hasRetiringContainers: hasCandidate
+                ), .retireCloudSession)
+            }
+        }
+    }
+
+    func testOnlyCloudWorkRetiresWhenSceneEntersBackground() {
         XCTAssertEqual(
             PersistenceLaunchScenePolicy.action(
-                isActive: false,
+                phase: .background,
                 hasSession: false,
                 isPreparing: true,
                 isQuiescingAccountChange: false,
@@ -52,7 +102,7 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
         )
         XCTAssertEqual(
             PersistenceLaunchScenePolicy.action(
-                isActive: false,
+                phase: .background,
                 hasSession: true,
                 isPreparing: false,
                 isQuiescingAccountChange: false,
@@ -62,11 +112,11 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
         )
     }
 
-    func testBackgroundTransitionDoesNotRestartAnInactiveRetirement() {
+    func testBackgroundTransitionDoesNotRestartInterruptedMountRetirement() {
         for isPreparing in [false, true] {
             XCTAssertEqual(
                 PersistenceLaunchScenePolicy.action(
-                    isActive: false,
+                    phase: .background,
                     hasSession: false,
                     isPreparing: isPreparing,
                     isQuiescingAccountChange: true,
@@ -91,7 +141,7 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
 
         func foregroundAction() -> PersistenceSceneTransitionAction {
             PersistenceLaunchScenePolicy.action(
-                isActive: true,
+                phase: .active,
                 hasSession: false,
                 isPreparing: false,
                 isQuiescingAccountChange: true,
@@ -112,7 +162,7 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
     func testForegroundDoesNotBypassOngoingAccountCleanupAfterContainerRelease() {
         for isPreparing in [false, true] {
             XCTAssertEqual(PersistenceLaunchScenePolicy.action(
-                isActive: true,
+                phase: .active,
                 hasSession: false,
                 isPreparing: isPreparing,
                 isQuiescingAccountChange: true,
@@ -122,7 +172,7 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
             ), .none)
         }
         XCTAssertEqual(PersistenceLaunchScenePolicy.action(
-            isActive: false,
+            phase: .background,
             hasSession: false,
             isPreparing: false,
             isQuiescingAccountChange: true,
