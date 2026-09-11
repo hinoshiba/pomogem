@@ -24,6 +24,7 @@ readonly POMOGEM_AUDIT_BUILD_NUMBER='6'
 readonly POMOGEM_AUDIT_MINIMUM_IOS='17.0'
 readonly POMOGEM_AUDIT_FONT_SHA256='6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f'
 readonly POMOGEM_AUDIT_FONT_LICENSE_SHA256='e8b4d8c39b0d7cc4b202dbd013b999bc6233a9bbe6cce1c37cfddc26ad544228'
+readonly POMOGEM_AUDIT_SCRIPT_DIRECTORY="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 export POMOGEM_AUDIT_APP_BUNDLE_ID POMOGEM_AUDIT_WIDGET_BUNDLE_ID
 export POMOGEM_AUDIT_TEAM_ID POMOGEM_AUDIT_APP_GROUP
 export POMOGEM_AUDIT_ICLOUD_CONTAINER POMOGEM_AUDIT_MARKETING_VERSION
@@ -469,7 +470,7 @@ extract_signing_state "$widget_bundle" "$widget_profile" 'widget'
 # deliberately identify only the failed field, never the observed secret or
 # account-specific value.
 PYTHONDONTWRITEBYTECODE=1 python3 - \
-  "$mode" "$archive_info" \
+  "$POMOGEM_AUDIT_SCRIPT_DIRECTORY" "$mode" "$archive_info" \
   "$audit_tmp/app-entitlements.plist" "$audit_tmp/widget-entitlements.plist" \
   "$audit_tmp/app-profile.plist" "$audit_tmp/widget-profile.plist" \
   "$audit_tmp/app-signature.txt" "$audit_tmp/widget-signature.txt" \
@@ -485,6 +486,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 (
+    script_directory_raw,
     mode,
     archive_info_raw,
     app_entitlements_raw,
@@ -496,6 +498,9 @@ from typing import Any, Optional
     app_certificate_raw,
     widget_certificate_raw,
 ) = sys.argv[1:]
+
+sys.path.insert(0, script_directory_raw)
+from release_profile_policy import validate_profile_cloud_environment
 
 TEAM_ID = os.environ["POMOGEM_AUDIT_TEAM_ID"]
 APP_ID = os.environ["POMOGEM_AUDIT_APP_BUNDLE_ID"]
@@ -802,22 +807,10 @@ def validate_signed_bundle(
         if signed_entitlements.get("com.apple.developer.icloud-container-environment") != expected_cloud_environment:
             fail(f"{label} signed CloudKit environment does not match the profile class")
         profile_cloud_value = profile_entitlements.get("com.apple.developer.icloud-container-environment")
-        if isinstance(profile_cloud_value, str):
-            profile_cloud_environments = {profile_cloud_value}
-        elif (
-            isinstance(profile_cloud_value, list)
-            and profile_cloud_value
-            and all(isinstance(item, str) for item in profile_cloud_value)
-        ):
-            profile_cloud_environments = set(profile_cloud_value)
-        else:
-            fail(f"{label} profile CloudKit environment authorization is malformed")
-        if (
-            expected_cloud_environment not in profile_cloud_environments
-            or not profile_cloud_environments.issubset({"Development", "Production"})
-            or (kind != "development" and profile_cloud_environments != {"Production"})
-        ):
-            fail(f"{label} profile CloudKit environment does not match its distribution class")
+        try:
+            validate_profile_cloud_environment(profile_cloud_value, expected_cloud_environment)
+        except ValueError as error:
+            fail(f"{label} {error}")
         if signed_entitlements.get("aps-environment") != expected_aps_environment:
             fail(f"{label} signed APNs environment does not match the profile class")
         if profile_entitlements.get("aps-environment") != expected_aps_environment:
