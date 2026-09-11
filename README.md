@@ -97,6 +97,9 @@ fail closedにします。「このiPhoneのみ」はiCloudへ自動switch／upl
 利用できます。保存先はVersion 1.0では変更できず、app削除・再installでlocal記録は失われ、JSONは
 再importやmigrationには使えません。
 
+「保存領域を確認できません」などのエラーの原因と実機確認手順は、
+[iCloud同期のトラブルシューティング](Docs/iCloudSyncTroubleshooting.md)を参照してください。
+
 署名に使うApple Developer Teamはリポジトリへ固定せず、Xcodeのローカル設定または
 `xcodebuild DEVELOPMENT_TEAM=<Team ID>`で指定します。forkを配布する場合は`project.yml`、
 `Shared/IntegrationConstants.swift`、

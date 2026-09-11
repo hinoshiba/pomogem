@@ -34,7 +34,8 @@ enum PersistenceLaunchScenePolicy {
                 ? .preparePersistence
                 : .none
         }
-        guard usesCloudAccountBoundary,
+        guard !isQuiescingAccountChange,
+              usesCloudAccountBoundary,
               hasSession || isPreparing else {
             return .none
         }
@@ -263,12 +264,47 @@ private final class PomoGemPersistenceSession: Identifiable {
     }
 }
 
-@MainActor
-private final class RetiringPersistenceContainerReference {
-    weak var value: ModelContainer?
+enum PersistenceContainerRetirementError: LocalizedError, Equatable {
+    case previousContainerStillActive
 
-    init(_ value: ModelContainer) {
-        self.value = value
+    var errorDescription: String? {
+        "以前の保存領域がまだ閉じていません。しばらく待って再試行するか、アプリを終了して再起動してください。記録は削除されません。"
+    }
+}
+
+/// Tracks candidates as soon as their stores open, before the asynchronous
+/// post-mount account check can suspend. Cancelling that check does not promise
+/// immediate release, so every live candidate must retire alongside the
+/// published session before another generation can open the same stores.
+@MainActor
+final class PersistenceContainerLifetimeTracker<Container: AnyObject> {
+    private final class Reference {
+        weak var value: Container?
+
+        init(_ value: Container) {
+            self.value = value
+        }
+    }
+
+    private var references: [Reference] = []
+
+    func track(_ container: Container) {
+        references.removeAll { $0.value == nil }
+        guard !references.contains(where: { $0.value === container }) else {
+            return
+        }
+        references.append(Reference(container))
+    }
+
+    var hasLiveContainers: Bool {
+        references.removeAll { $0.value == nil }
+        return !references.isEmpty
+    }
+
+    func requireAllReleased() throws {
+        guard !hasLiveContainers else {
+            throw PersistenceContainerRetirementError.previousContainerStillActive
+        }
     }
 }
 
@@ -299,7 +335,8 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var focusReturnReminderTask: Task<Void, Never>?
     @State private var focusReturnReminderGeneration: UInt64 = 0
     @State private var focusReturnReminderBackgroundTask: UIBackgroundTaskIdentifier = .invalid
-    @State private var retiringContainer: RetiringPersistenceContainerReference?
+    @State private var cloudContainerLifetimes =
+        PersistenceContainerLifetimeTracker<ModelContainer>()
     @State private var suspendedAccountBinding = AccountScopedLocalState
         .pendingPreviousBinding()
 
@@ -538,7 +575,13 @@ private struct PomoGemPersistenceLaunchHost: View {
                 // the Apple Account, so neither identity notification is a
                 // reliable prerequisite. Retire every OS-owned surface from
                 // the prior account before exposing the new namespace.
-                await retireExternalTimerState()
+                await retireExternalTimerState(generation: attempt)
+                try requireCloudMountAuthorization(
+                    expectedBinding: resolvedBoundary.binding,
+                    verifiedBinding: resolvedBoundary.binding,
+                    attempt: attempt,
+                    checkpoint: "after-external-state-retirement"
+                )
             }
             try AccountScopedLocalState.activate(resolvedBoundary.binding)
             let accountNamespace = resolvedBoundary.binding.namespace
@@ -646,26 +689,30 @@ private struct PomoGemPersistenceLaunchHost: View {
         } catch is CancellationError {
             return
         } catch let error as AppleAccountBoundaryResolutionError {
-            guard launchAttempt == attempt else { return }
+            guard launchAttempt == attempt, !Task.isCancelled else { return }
             requestedCloudSelection = false
             canChooseLocalOnly = canOfferLocalOnlySelection
             if suspendedAccountBinding != nil {
-                await retireExternalTimerState()
+                await retireExternalTimerState(generation: attempt)
+                guard launchAttempt == attempt, !Task.isCancelled else { return }
                 suspendedAccountBinding = nil
                 AccountScopedLocalState.clearPendingPreviousBinding()
             }
             AccountScopedLocalState.deactivate()
             launchState = .blocked(error.localizedDescription)
         } catch {
-            guard launchAttempt == attempt else { return }
+            guard launchAttempt == attempt, !Task.isCancelled else { return }
             requestedCloudSelection = false
             canChooseLocalOnly = canOfferLocalOnlySelection
             if suspendedAccountBinding != nil {
-                await retireExternalTimerState()
+                await retireExternalTimerState(generation: attempt)
+                guard launchAttempt == attempt, !Task.isCancelled else { return }
                 suspendedAccountBinding = nil
                 AccountScopedLocalState.clearPendingPreviousBinding()
             }
-            launchState = .failed(error.localizedDescription)
+            launchState = error is PersistenceContainerRetirementError
+                ? .blocked(error.localizedDescription)
+                : .failed(error.localizedDescription)
         }
     }
 
@@ -720,6 +767,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         binding: ActiveAccountLocalBinding,
         attempt: Int
     ) async throws -> PomoGemPersistenceSession {
+        try cloudContainerLifetimes.requireAllReleased()
         // Never substitute a writable in-memory store for a failed shipping
         // store. Even behind an error screen that fallback makes future UI
         // changes dangerously easy to lose. Let the launch host stay blocked
@@ -741,10 +789,12 @@ private struct PomoGemPersistenceLaunchHost: View {
         // iPhone account changes require leaving the foreground, so inspect the
         // two independent lifecycle signals synchronously on both sides of the
         // constructor. Do not publish or retain the candidate on any failure.
+        try cloudContainerLifetimes.requireAllReleased()
         let container = try PersistenceStoreTopology.makeContainer(
             for: .cloudKit,
             accountNamespace: binding.namespace
         )
+        cloudContainerLifetimes.track(container)
         try requireCloudMountAuthorization(
             expectedBinding: binding,
             verifiedBinding: preMountBoundary.binding,
@@ -899,13 +949,12 @@ private struct PomoGemPersistenceLaunchHost: View {
 
     private func retryLaunch() {
         if isQuiescingAccountChange {
-            guard retiringContainer?.value == nil else {
+            guard !cloudContainerLifetimes.hasLiveContainers else {
                 launchState = .blocked(
                     "以前の保存領域はまだ閉じていません。二重に開かないため停止中です。アプリを終了して再起動してください。"
                 )
                 return
             }
-            retiringContainer = nil
             isQuiescingAccountChange = false
             isPreparing = false
         }
@@ -990,7 +1039,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         launchAttempt += 1
         let quiescenceAttempt = launchAttempt
         Task { @MainActor in
-            await retireExternalTimerState()
+            await retireExternalTimerState(generation: quiescenceAttempt)
             let outcome = await waitForContainerRetirement(
                 generation: quiescenceAttempt
             )
@@ -1000,7 +1049,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 // The first cleanup can race view disappearance. With the
                 // global gate still closed, sweep once more after the old
                 // container and its view-owned writers are definitively gone.
-                await retireExternalTimerState()
+                await retireExternalTimerState(generation: quiescenceAttempt)
                 guard launchAttempt == quiescenceAttempt else { return }
                 isPreparing = false
                 isQuiescingAccountChange = false
@@ -1131,12 +1180,15 @@ private struct PomoGemPersistenceLaunchHost: View {
         // unacknowledged alert after the verified container remounts.
         TimerCompletionAlertController.shared.stop()
         if let container = session?.container {
-            retiringContainer = RetiringPersistenceContainerReference(container)
+            cloudContainerLifetimes.track(container)
         }
         session = nil
     }
 
-    private func retireExternalTimerState() async {
+    private func retireExternalTimerState(generation: Int) async {
+        // A superseded launch must not cancel timers created by the next
+        // verified session while this cleanup was awaiting the system.
+        guard launchAttempt == generation, !Task.isCancelled else { return }
         TimerCompletionAlertController.shared.stop()
         if let namespace = suspendedAccountBinding?.namespace {
             FocusPersistence.clearScheduledCompletionNotificationWitness(
@@ -1144,8 +1196,11 @@ private struct PomoGemPersistenceLaunchHost: View {
             )
         }
         await NotificationManager.shared.cancelAllTimerNotifications()
+        guard launchAttempt == generation, !Task.isCancelled else { return }
         await NotificationManager.shared.cancelPassiveNotifications()
+        guard launchAttempt == generation, !Task.isCancelled else { return }
         await NotificationManager.shared.clearDeliveredState()
+        guard launchAttempt == generation, !Task.isCancelled else { return }
         await FocusActivityManager.shared.endAll()
     }
 
@@ -1158,7 +1213,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         var budget = PersistenceContainerRetirementPollBudget(maximumPolls: 80)
         while true {
             let outcome = budget.observe(
-                isReleased: retiringContainer?.value == nil,
+                isReleased: !cloudContainerLifetimes.hasLiveContainers,
                 generationMatches: launchAttempt == generation
             )
             switch outcome {
@@ -1169,7 +1224,6 @@ private struct PomoGemPersistenceLaunchHost: View {
                     return .cancelled
                 }
             case .retired:
-                retiringContainer = nil
                 return .retired
             case .cancelled, .timedOut:
                 return outcome
