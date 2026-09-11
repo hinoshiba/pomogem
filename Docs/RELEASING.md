@@ -1,6 +1,6 @@
 # ポモジェム公式版 — ローカルArchive／App Storeリリース手順
 
-更新日: 2026-09-06
+更新日: 2026-09-11
 
 この手順は、許可済みMacのXcode OrganizerからiPhone版をArchive、Validate、Uploadするための
 正本です。Mac／Mac Catalyst版は作成しません。
@@ -15,10 +15,11 @@ App Store Connectで無効化し、ブランチ・タグの変更によるビル
 
 ## 今回の候補と識別子
 
-PomoGem 1.0 (5)は、新しいBundle ID・App Store record・IAP・CloudKit containerを使う初回候補です。
-2026-09-06に新App Store recordを作成し、`AppStore/configuration.yml`へApple ID `6809139517`を
-記録しました。SKUは`pomogem-ios`、登録名は「ポモジェム：ポモドーロタイマー」です。
-main／Widget App ID、新CloudKit containerの登録とhostへの割当も確認しました。
+今回の更新候補はPomoGem 1.0.1 (6)です。1.0 (5)と同じApp Store record、Bundle ID、IAP、
+CloudKit containerを使用します。Apple IDは`6809139517`、SKUは`pomogem-ios`、
+登録名は「ポモジェム：ポモドーロタイマー」です。初回登録・提出結果は
+`AppStore/release-record-1.0-5.md`、今回の検証・提出結果は
+`AppStore/release-record-1.0.1-6.md`を参照します。
 登録済みでも公開前は`app_store_listing_status: not_public`を保持し、Webは「近日公開」のまま
 Smart App Bannerを表示しません。実際に公開・ダウンロード可能になってからstatusを`public`へ変更し、
 同じ数値IDのSmart App Bannerを追加して検証します。
@@ -26,7 +27,8 @@ Smart App Bannerを表示しません。実際に公開・ダウンロード可�
 履歴は`Docs/LEGACY_RELEASE_PROVENANCE.md`へ隔離し、未完了項目の正本は
 `AppStore/configuration.yml`の`release_blockers`に保持します。
 
-新Bundle IDは別アプリなので、旧版の保存データや購入権利を自動移行・共有しません。
+名称変更前の別Bundle ID製品から、保存データや購入権利を自動移行・共有しません。
+1.0から1.0.1への更新は同じBundle IDを使用します。
 既存のapp record、IAP、CloudKit container、production dataを削除・resetする工程はありません。
 
 ## 1. 安全境界

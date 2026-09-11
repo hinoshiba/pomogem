@@ -28,6 +28,8 @@ Docs/OSS_PUBLISHING.md
 Docs/LICENSE_AUDIT.md
 Scripts/check-git-public-metadata.py
 Scripts/public_mailbox_policy.py
+Scripts/release_profile_policy.py
+Scripts/test-release-profile-policy.py
 Scripts/check-published-site-policy.sh
 AppStore/README.md
 AppStore/configuration.yml
@@ -122,6 +124,8 @@ ruby -e 'require "psych"; ARGV.each { |path| Psych.parse_file(path) }' \
   .github/dependabot.yml \
   .github/workflows/*.yml \
   .github/ISSUE_TEMPLATE/*.yml
+
+python3 Scripts/test-release-profile-policy.py
 
 plutil -lint PomoGem/Info.plist >/dev/null
 plutil -lint PomoGem/Resources/PrivacyInfo.xcprivacy >/dev/null

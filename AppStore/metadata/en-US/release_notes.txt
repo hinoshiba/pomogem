@@ -1,0 +1,4 @@
+- Improved iCloud connection checks, retries, and guidance when a connection cannot be established.
+- Fixed setup or data loading getting stuck when responding to notification permission prompts or returning to the app.
+- Improved iCloud handoff and completion for timers that have been paused and resumed many times.
+- Fixed newer timer notifications or Live Activities being removed after notification settings changed or records were reset.
