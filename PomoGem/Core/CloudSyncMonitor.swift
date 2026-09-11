@@ -109,7 +109,17 @@ struct CloudAccountVerificationFailure: Error, LocalizedError, Equatable, Sendab
             message = "iCloudの状態を確認できません。再試行し、解消しない場合はサポートへお問い合わせください。"
         }
         let code = cloudKitCode.map { "・CloudKit \($0)" } ?? ""
-        return "\(message)\n確認箇所: \(stage.rawValue)\(code)"
+        let waitHint: String
+        if let retryAfter, retryAfter.isFinite, retryAfter > 0 {
+            if retryAfter <= 3_600 {
+                waitHint = "\n再試行まで約\(Int(ceil(retryAfter)))秒お待ちください。"
+            } else {
+                waitHint = "\niCloudが待機を指定しています。時間をおいて再試行してください。"
+            }
+        } else {
+            waitHint = ""
+        }
+        return "\(message)\n確認箇所: \(stage.rawValue)\(code)\(waitHint)"
     }
 
     static func classify(
@@ -162,10 +172,63 @@ struct CloudAccountVerificationFailure: Error, LocalizedError, Equatable, Sendab
     }
 }
 
+/// Server backoff outlives one launch/Settings refresh. Retain only sanitized
+/// failures, never an account identity or a successful authorization. Continuous
+/// uptime honors elapsed sleep time without trusting wall-clock changes.
+actor CloudAccountVerificationBackoff {
+    static let shared = CloudAccountVerificationBackoff()
+
+    private struct Entry {
+        let failure: CloudAccountVerificationFailure
+        let retryAt: TimeInterval
+    }
+
+    private let now: @Sendable () -> TimeInterval
+    private var entries: [String: Entry] = [:]
+
+    init(now: @escaping @Sendable () -> TimeInterval = {
+        ContinuousUptime.now()
+    }) {
+        self.now = now
+    }
+
+    func failureIfWaiting(
+        for containerIdentifier: String
+    ) -> CloudAccountVerificationFailure? {
+        guard let entry = entries[containerIdentifier] else { return nil }
+        let remaining = entry.retryAt - now()
+        guard remaining > 0 else {
+            entries[containerIdentifier] = nil
+            return nil
+        }
+        var failure = entry.failure
+        failure.retryAfter = remaining
+        return failure
+    }
+
+    func record(
+        _ failure: CloudAccountVerificationFailure,
+        for containerIdentifier: String
+    ) {
+        guard failure.kind == .networkUnavailable
+                || failure.kind == .serviceUnavailable,
+              let delay = failure.retryAfter,
+              delay.isFinite, delay > 0 else { return }
+        let retryAt = now() + delay
+        guard retryAt.isFinite else { return }
+        // Overlapping verifications must not shorten a server deadline.
+        if let previous = entries[containerIdentifier],
+           previous.retryAt >= retryAt { return }
+        entries[containerIdentifier] = Entry(failure: failure, retryAt: retryAt)
+    }
+}
+
 struct CloudAccountVerificationClient: Sendable {
     var accountStatus: @Sendable () async throws -> CKAccountStatus
     var userRecordID: @Sendable () async throws -> CKRecord.ID
     var probePrivateDatabase: @Sendable () async throws -> Void
+    var backoff: CloudAccountVerificationBackoff? = nil
+    var containerIdentifier: String = ""
 
     static func live(containerIdentifier: String) -> Self {
         let container = CKContainer(identifier: containerIdentifier)
@@ -175,7 +238,9 @@ struct CloudAccountVerificationClient: Sendable {
             probePrivateDatabase: {
                 try await CloudKitOnlineAccountVerifier
                     .verifyFreshPrivateDatabaseAccess(in: container)
-            }
+            },
+            backoff: .shared,
+            containerIdentifier: containerIdentifier
         )
     }
 }
@@ -276,9 +341,14 @@ enum CloudAccountIdentityVerifier {
 
     private static func step<Value>(
         _ stage: CloudAccountVerificationStage,
+        client: CloudAccountVerificationClient,
         operation: () async throws -> Value
     ) async throws -> Value {
         try Task.checkCancellation()
+        let pendingBackoff = await client.backoff?
+            .failureIfWaiting(for: client.containerIdentifier)
+        try Task.checkCancellation()
+        if let pendingBackoff { throw pendingBackoff }
         do {
             let result = try await operation()
             try Task.checkCancellation()
@@ -286,15 +356,20 @@ enum CloudAccountIdentityVerifier {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
+            let failure = CloudAccountVerificationFailure.classify(error, stage: stage)
+            // A cancelled CloudKit convenience call may still return a real
+            // server response. Preserve its sanitized retry deadline for the
+            // next verifier, while the cancelled caller remains cancelled.
+            await client.backoff?.record(failure, for: client.containerIdentifier)
             try Task.checkCancellation()
-            throw CloudAccountVerificationFailure.classify(error, stage: stage)
+            throw failure
         }
     }
 
     private static func verifyAttempt(
         using client: CloudAccountVerificationClient
     ) async throws -> CKRecord.ID {
-        let status = try await step(.accountStatus, operation: client.accountStatus)
+        let status = try await step(.accountStatus, client: client, operation: client.accountStatus)
         let failureKind: CloudAccountVerificationFailure.Kind?
         switch status {
         case .available: failureKind = nil
@@ -309,9 +384,9 @@ enum CloudAccountIdentityVerifier {
                 kind: failureKind, stage: .accountStatus
             )
         }
-        let before = try await step(.identityBeforeProbe, operation: client.userRecordID)
-        try await step(.privateDatabase, operation: client.probePrivateDatabase)
-        let after = try await step(.identityAfterProbe, operation: client.userRecordID)
+        let before = try await step(.identityBeforeProbe, client: client, operation: client.userRecordID)
+        try await step(.privateDatabase, client: client, operation: client.probePrivateDatabase)
+        let after = try await step(.identityAfterProbe, client: client, operation: client.userRecordID)
         guard before == after else {
             throw CloudAccountVerificationFailure(
                 kind: .accountChanged, stage: .identityAfterProbe

@@ -50,6 +50,7 @@
 		453A0778BD86CCA955F5A42D /* CompleteDataDeletionCloudKitStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 615E94CC16260A4473F866A6 /* CompleteDataDeletionCloudKitStore.swift */; };
 		45C3432E965D93244196538F /* AccumulationOverviewLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37D8A39D7590751605852BB0 /* AccumulationOverviewLoader.swift */; };
 		465E3C03FA99E52F23D14C1E /* WrappedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFF2A86B3C795B7E8FDBA94 /* WrappedView.swift */; };
+		4771665279406F3D656581D7 /* NotificationPreferenceIntentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55359B654256C762CB953477 /* NotificationPreferenceIntentTests.swift */; };
 		51787EE53CA9F1B365122A0A /* FocusActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B814E25FF138C969CB6F717F /* FocusActivityAttributes.swift */; };
 		51F8EC43204320B66CC02E5E /* AccumulationOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10EFFABB27F8DBC43A8CD172 /* AccumulationOverviewView.swift */; };
 		534FBC80B8FA0BF9EFCAD341 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E3D385EF53739817C342544D /* PrivacyInfo.xcprivacy */; };
@@ -87,6 +88,7 @@
 		A31EE707CD33039BDF77042D /* PomoGemWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0514C1FADC6B20E25A7D561 /* PomoGemWidgetsBundle.swift */; };
 		A374879F73D328AA043A35C4 /* JarInteractionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1844B82DC222AD01D3D479B8 /* JarInteractionUITests.swift */; };
 		A3E82C43D5DDA9CEB282918E /* PebbleRadiusPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1DC4428849BCE1969B53808 /* PebbleRadiusPolicyTests.swift */; };
+		A4200548B90A8E41FD363269 /* NotificationManagerRaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04027069D709F7336F78964D /* NotificationManagerRaceTests.swift */; };
 		A6733FD0CA20B59E361EF1A1 /* JarWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C82F7F0FD796F8D9446AB8F /* JarWidgets.swift */; };
 		A6F93F76737E47580C347850 /* FairnessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55E64106E5BFD3302306C308 /* FairnessTests.swift */; };
 		A7435362437D268E3A0FACA2 /* FortyYearPersistenceHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DDAE8A3E08C0FB57CB0FBE1 /* FortyYearPersistenceHarness.swift */; };
@@ -178,6 +180,7 @@
 /* Begin PBXFileReference section */
 		00B48EE312926E6EAC5412EE /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
 		014830BCE0238FC2EDF6BF0D /* WidgetSnapshotMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSnapshotMetadata.swift; sourceTree = "<group>"; };
+		04027069D709F7336F78964D /* NotificationManagerRaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManagerRaceTests.swift; sourceTree = "<group>"; };
 		0436DD2C5029182DC15ABE18 /* AnimatedShareExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedShareExporter.swift; sourceTree = "<group>"; };
 		04E9E2DA32B1E56F9400B993 /* TimerOrientationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerOrientationTests.swift; sourceTree = "<group>"; };
 		08A32F2347209B1E24B76281 /* FocusPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusPersistenceTests.swift; sourceTree = "<group>"; };
@@ -219,6 +222,7 @@
 		4C82F7F0FD796F8D9446AB8F /* JarWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarWidgets.swift; sourceTree = "<group>"; };
 		4C8318D569F3634174B05480 /* JarSpriteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarSpriteView.swift; sourceTree = "<group>"; };
 		50E849952EFAEFD4597EE5ED /* PomoGemApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemApp.swift; sourceTree = "<group>"; };
+		55359B654256C762CB953477 /* NotificationPreferenceIntentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPreferenceIntentTests.swift; sourceTree = "<group>"; };
 		553C936224E8783AF264B56A /* CriticalFlowAdversarialUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CriticalFlowAdversarialUITests.swift; sourceTree = "<group>"; };
 		5542B8EEF5204878A5734E13 /* UITestFaultInjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestFaultInjection.swift; sourceTree = "<group>"; };
 		55E64106E5BFD3302306C308 /* FairnessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FairnessTests.swift; sourceTree = "<group>"; };
@@ -535,6 +539,8 @@
 				3A658F93291D3387937A39FF /* HomeAtmosphereTests.swift */,
 				B78F394CAE07C13C1BE00957 /* HomeProjectionTests.swift */,
 				E6C6D396C5FB8FF2FEC27957 /* LocalPreviewLaunchPolicyTests.swift */,
+				04027069D709F7336F78964D /* NotificationManagerRaceTests.swift */,
+				55359B654256C762CB953477 /* NotificationPreferenceIntentTests.swift */,
 				F1DC4428849BCE1969B53808 /* PebbleRadiusPolicyTests.swift */,
 				37C94826242029C7168F438B /* PersistenceStoreTopologyTests.swift */,
 				6A06D837D8B5741939DD3A4A /* PomodoroEngineTests.swift */,
@@ -924,6 +930,8 @@
 				7601FA40A717E710583BE7E5 /* HomeAtmosphereTests.swift in Sources */,
 				FD5E7022FA135DA440D649AA /* HomeProjectionTests.swift in Sources */,
 				EC756FBB0F108A7E2FA29232 /* LocalPreviewLaunchPolicyTests.swift in Sources */,
+				A4200548B90A8E41FD363269 /* NotificationManagerRaceTests.swift in Sources */,
+				4771665279406F3D656581D7 /* NotificationPreferenceIntentTests.swift in Sources */,
 				A3E82C43D5DDA9CEB282918E /* PebbleRadiusPolicyTests.swift in Sources */,
 				4232571BF9FD777E141B4B3E /* PersistenceStoreTopologyTests.swift in Sources */,
 				D0069C8F579D2AF0EB430806 /* PomoGemDataExporterTests.swift in Sources */,

@@ -2489,6 +2489,8 @@ struct RootView: View {
 
     @MainActor
     private func refreshPassiveNotifications() async {
+        guard !Task.isCancelled else { return }
+        var schedulingStarted = false
         do {
             let values = try PrefsSyncPolicy.fetchBounded(from: modelContext)
             let prefs = try PrefsSyncPolicy.resolvedState(
@@ -2497,6 +2499,7 @@ struct RootView: View {
                     from: resetSnapshots
                 )
             )
+            schedulingStarted = true
             try await NotificationManager.shared.synchronizePassiveNotifications(
                 dailyReminderEnabled: prefs.reminderEnabled,
                 wrappedEnabled: wrappedNotifications,
@@ -2506,7 +2509,12 @@ struct RootView: View {
             )
             lastPassiveNotificationErrorFingerprint = nil
         } catch {
-            await NotificationManager.shared.cancelPassiveNotifications()
+            guard !Task.isCancelled else { return }
+            // The manager rolls back its own failed schedule. A delayed error
+            // from that attempt must not cancel a newer preference refresh.
+            if !schedulingStarted {
+                await NotificationManager.shared.cancelPassiveNotifications()
+            }
             reportPassiveNotificationFailure(error)
         }
     }

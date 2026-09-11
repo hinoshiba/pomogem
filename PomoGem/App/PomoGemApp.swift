@@ -13,6 +13,7 @@ enum PersistenceLaunchMode: Equatable {
 
 enum PersistenceSceneTransitionAction: Equatable {
     case preparePersistence
+    case resumeAfterContainerRetirement
     case retireCloudSession
     case none
 }
@@ -27,9 +28,15 @@ enum PersistenceLaunchScenePolicy {
         hasSession: Bool,
         isPreparing: Bool,
         isQuiescingAccountChange: Bool,
-        usesCloudAccountBoundary: Bool
+        usesCloudAccountBoundary: Bool,
+        didTimeOutContainerRetirement: Bool = false,
+        hasRetiringContainers: Bool = false
     ) -> PersistenceSceneTransitionAction {
         if isActive {
+            if !hasSession, isQuiescingAccountChange,
+               didTimeOutContainerRetirement, !hasRetiringContainers {
+                return .resumeAfterContainerRetirement
+            }
             return !hasSession && !isQuiescingAccountChange
                 ? .preparePersistence
                 : .none
@@ -332,6 +339,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var mustDestroyPersistentStores = false
     @State private var pendingDestructionNamespace: AccountDataNamespace?
     @State private var isQuiescingAccountChange = false
+    @State private var didTimeOutContainerRetirement = false
     @State private var focusReturnReminderTask: Task<Void, Never>?
     @State private var focusReturnReminderGeneration: UInt64 = 0
     @State private var focusReturnReminderBackgroundTask: UIBackgroundTaskIdentifier = .invalid
@@ -956,6 +964,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 return
             }
             isQuiescingAccountChange = false
+            didTimeOutContainerRetirement = false
             isPreparing = false
         }
         guard !isPreparing else { return }
@@ -1058,6 +1067,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 launchAttempt += 1
             case .timedOut:
                 isPreparing = false
+                didTimeOutContainerRetirement = true
                 Self.persistenceLogger.fault(
                     "Timed out waiting for the prior account container to retire"
                 )
@@ -1077,12 +1087,21 @@ private struct PomoGemPersistenceLaunchHost: View {
             hasSession: session != nil,
             isPreparing: isPreparing,
             isQuiescingAccountChange: isQuiescingAccountChange,
-            usesCloudAccountBoundary: usesCloudAccountBoundary
+            usesCloudAccountBoundary: usesCloudAccountBoundary,
+            didTimeOutContainerRetirement: didTimeOutContainerRetirement,
+            hasRetiringContainers: cloudContainerLifetimes.hasLiveContainers
         )
         switch action {
         case .preparePersistence:
             launchState = .preparing("保存方式を確認しています")
             launchAttempt += 1
+            return
+        case .resumeAfterContainerRetirement:
+            // A slow callback may have released the previous store after the
+            // bounded wait ended while the app was away. Reuse the explicit
+            // retry path only after that release is proved; an in-progress
+            // account cleanup must finish its own final sweep first.
+            retryLaunch()
             return
         case .none:
             return
@@ -1116,6 +1135,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 }
             case .timedOut:
                 isPreparing = false
+                didTimeOutContainerRetirement = true
                 Self.persistenceLogger.fault(
                     "Timed out waiting for a backgrounded CloudKit container to retire"
                 )
@@ -1174,6 +1194,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     private func beginContainerRetirement() {
+        didTimeOutContainerRetirement = false
         // Cloud-backed RootView is absent while the account is revalidated.
         // Pause any process-local completion loop so it cannot resume on the
         // foreground edge without its Stop UI. Durable recovery restarts an

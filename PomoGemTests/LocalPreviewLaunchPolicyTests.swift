@@ -78,6 +78,61 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
     }
 
     @MainActor
+    func testForegroundRecoversWhenContainerReleasesAfterRetirementTimedOut() {
+        final class Container {}
+        let lifetimes = PersistenceContainerLifetimeTracker<Container>()
+        var container: Container? = Container()
+        lifetimes.track(container!)
+        var budget = PersistenceContainerRetirementPollBudget(maximumPolls: 0)
+        XCTAssertEqual(budget.observe(
+            isReleased: !lifetimes.hasLiveContainers,
+            generationMatches: true
+        ), .timedOut)
+
+        func foregroundAction() -> PersistenceSceneTransitionAction {
+            PersistenceLaunchScenePolicy.action(
+                isActive: true,
+                hasSession: false,
+                isPreparing: false,
+                isQuiescingAccountChange: true,
+                usesCloudAccountBoundary: true,
+                didTimeOutContainerRetirement: true,
+                hasRetiringContainers: lifetimes.hasLiveContainers
+            )
+        }
+
+        XCTAssertEqual(foregroundAction(), .none)
+        // A system callback finishes after the app's two-second retirement
+        // budget. Returning to the app should now retry without forcing the
+        // user to dismiss a stale storage error manually.
+        container = nil
+        XCTAssertEqual(foregroundAction(), .resumeAfterContainerRetirement)
+    }
+
+    func testForegroundDoesNotBypassOngoingAccountCleanupAfterContainerRelease() {
+        for isPreparing in [false, true] {
+            XCTAssertEqual(PersistenceLaunchScenePolicy.action(
+                isActive: true,
+                hasSession: false,
+                isPreparing: isPreparing,
+                isQuiescingAccountChange: true,
+                usesCloudAccountBoundary: true,
+                didTimeOutContainerRetirement: false,
+                hasRetiringContainers: false
+            ), .none)
+        }
+        XCTAssertEqual(PersistenceLaunchScenePolicy.action(
+            isActive: false,
+            hasSession: false,
+            isPreparing: false,
+            isQuiescingAccountChange: true,
+            usesCloudAccountBoundary: true,
+            didTimeOutContainerRetirement: true,
+            hasRetiringContainers: false
+        ), .none)
+    }
+
+    @MainActor
     func testContainerRetirementWaitsForEveryCandidateAndPublishedSession() throws {
         final class Container {}
         let lifetimes = PersistenceContainerLifetimeTracker<Container>()
