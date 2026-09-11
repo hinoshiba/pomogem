@@ -592,7 +592,12 @@ final class CloudSyncMonitor {
             availability = settledAvailability
             failure = settledFailure
         } catch {
-            guard refreshGeneration == generation, !Task.isCancelled else { return }
+            guard refreshGeneration == generation else { return }
+            guard !Task.isCancelled else {
+                availability = settledAvailability
+                failure = settledFailure
+                return
+            }
             let failure = CloudAccountVerificationFailure.classify(
                 error, stage: .verification
             )
