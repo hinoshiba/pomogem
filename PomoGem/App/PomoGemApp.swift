@@ -24,7 +24,7 @@ enum PersistenceSceneTransitionAction: Equatable {
 /// before the user has selected a storage mode.
 enum PersistenceLaunchScenePolicy {
     static func action(
-        isActive: Bool,
+        phase: ScenePhase,
         hasSession: Bool,
         isPreparing: Bool,
         isQuiescingAccountChange: Bool,
@@ -32,7 +32,7 @@ enum PersistenceLaunchScenePolicy {
         didTimeOutContainerRetirement: Bool = false,
         hasRetiringContainers: Bool = false
     ) -> PersistenceSceneTransitionAction {
-        if isActive {
+        if phase == .active {
             if !hasSession, isQuiescingAccountChange,
                didTimeOutContainerRetirement, !hasRetiringContainers {
                 return .resumeAfterContainerRetirement
@@ -44,6 +44,13 @@ enum PersistenceLaunchScenePolicy {
         guard !isQuiescingAccountChange,
               usesCloudAccountBoundary,
               hasSession || isPreparing else {
+            return .none
+        }
+        // Permission panels and Control Center temporarily deactivate the
+        // foreground scene. Preserve its verified session and view-owned
+        // operations; RootView already pauses foreground maintenance. An
+        // unpublished launch still loses authorization on any deactivation.
+        if phase == .inactive, hasSession {
             return .none
         }
         return .retireCloudSession
@@ -368,6 +375,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         }
         .onReceive(
             NotificationCenter.default.publisher(for: .CKAccountChanged)
+                .receive(on: RunLoop.main)
         ) { _ in
             accountIdentityDidChange()
         }
@@ -1083,7 +1091,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     private func handleScenePhaseChange(_ phase: ScenePhase) {
         handleFocusReturnReminderScenePhase(phase)
         let action = PersistenceLaunchScenePolicy.action(
-            isActive: phase == .active,
+            phase: phase,
             hasSession: session != nil,
             isPreparing: isPreparing,
             isQuiescingAccountChange: isQuiescingAccountChange,
@@ -1148,7 +1156,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         }
     }
 
-    /// This host survives inactive CloudKit container retirement. Reserve the
+    /// This host survives background CloudKit container retirement. Reserve the
     /// notification only at background, never for a permission sheet or
     /// Control Center's temporary inactive state.
     private func handleFocusReturnReminderScenePhase(_ phase: ScenePhase) {

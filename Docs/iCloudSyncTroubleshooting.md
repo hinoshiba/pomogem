@@ -97,6 +97,32 @@ Swiftと保存先の文字列の並び順に依存せず矛盾を検出し、上
 `PRIVACY.md`、Privacy Manifest、App Storeのprivacy回答案を再照合しました。今回の変更は既存の
 CloudKit・端末内通知・連続稼働時間APIの範囲で、SDK、送信先、収集項目、権限、同期modelの追加はありません。
 
+## 再レビューで確認した画面・非同期処理・リセットの問題
+
+| 確認した問題 | 修正 |
+|---|---|
+| 通知許可ダイアログやControl Centerの一時的な`inactive`でも、公開済みのiCloud保存領域を閉じる | 公開済み領域は一時的な非アクティブ化で維持し、backgroundまたはアカウント変更時に閉じる。準備中の領域は従来どおり非アクティブ化で認可を失う |
+| 任意のqueueから届く`CKAccountChanged`でSwiftUIの状態を変更する | 通知をmain run loopへ配送してからアカウント境界を更新する |
+| 消えたRoot／設定画面が通知許可やStoreKitの応答待ちで古い`ModelContext`を保持し、解放待ちtimeoutや遅延書き込みを起こす | 画面に属するTaskを終了時に取り消し、システム応答待ちから即座に離脱する。受付済みの通知更新は管理側で直列実行し、次の更新との順序を保持する |
+| 上限まで取得した所有権の候補が別の解放履歴によって除外されると、未取得の有効な所有者がいるのに新しいclaimを書き込む | 最初のページが不完全である可能性を最後まで保持し、所有者不在を証明できない場合は更新を拒否する |
+| リセット適用済みの記録だけが残り、画面終了やプロセス終了で通知・Live Activityの後処理が抜ける | 端末内の未完了受付を適用済み記録より先に保存し、次回起動で再試行する。正常完了した同じ受付だけを消去する |
+| 遅れたリセット後処理が、その間に開始された集中の通知・Live Activityまで消す | 通知の取消境界とActivityの対象を受付時に確定する。再試行時は現在のリセット世代の集中と復元可能な休憩を読み直して保護する |
+
+Appleは`CKAccountChanged`の通知queueを保証せず、一時的な`inactive`とbackgroundを別の状態として
+定義しています。保存領域の公開前後の認可検証とbackground時のアカウント再確認は維持します。
+([Apple: CKAccountChanged](https://developer.apple.com/documentation/cloudkit/ckaccountchangednotification)、
+[Apple: ScenePhase.inactive](https://developer.apple.com/documentation/swiftui/scenephase/inactive))
+
+回帰テストでは、通知callbackを保留したままの画面終了とコンテナ解放、通知更新の順序、上限外の
+所有権解放による誤更新、未完了受付の再読込、新旧受付の競合、遅延後処理中の新しいActivityを扱います。
+リセット後処理は確定済みの変更に付随するため、画面のキャンセルと独立して実行し、その間は元の保存領域を
+保持します。OS処理が停止し続ける場合に、新しい保存領域を安全確認なしで開くことはありません。
+
+未完了受付は既存のランダムな保存先namespace内のUserDefaultsに、リセット世代UUIDと受付UUIDだけを
+保存します。完了後に消去し、同期・送信・JSON書き出しには含めません。`PRIVACY.md`、host／Widgetの
+Privacy Manifest、`AppStore/app-privacy.md`を再監査し、既存のUserDefaults利用理由`CA92.1`の範囲内で、
+新しい権限、SDK、送信先、同期modelがないことを確認しました。
+
 ## 起こりうる外部要因
 
 以下は調査対象となる可能性です。今回の報告端末で発生したと確認した事象ではありません。

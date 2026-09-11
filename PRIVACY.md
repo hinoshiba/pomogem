@@ -84,6 +84,10 @@ tombstone、旧形式を含む）、
 画面のヒント表示済み状態、審査依頼の回数、実行中処理の一時cacheなど、同期対象ではない端末内の
 UI／runtime状態は書き出し対象に含めません。
 
+記録リセット後の通知・Live Activityの消去が中断された場合に再試行するため、保存先ごとの端末内
+UserDefaultsへリセット世代UUIDと受付UUIDを一時保存します。正常完了後に消去し、同期、送信、
+JSON書き出しには含めません。集中テーマ、記録内容、Apple Account identifierは保存しません。
+
 このJSON書き出しは、選択した保存先で端末から利用できる全11種類の出荷対象SwiftData保存データを
 対象とします。Version 1.0にはJSONを再importする機能がなく、local-only dataをiCloudへ移行したり、
 別端末で記録を継続したりするためには使えません。iCloud側の当該app dataはAppleのiCloudストレージ
