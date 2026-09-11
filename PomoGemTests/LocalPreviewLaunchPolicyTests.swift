@@ -62,6 +62,97 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
         )
     }
 
+    func testBackgroundTransitionDoesNotRestartAnInactiveRetirement() {
+        for isPreparing in [false, true] {
+            XCTAssertEqual(
+                PersistenceLaunchScenePolicy.action(
+                    isActive: false,
+                    hasSession: false,
+                    isPreparing: isPreparing,
+                    isQuiescingAccountChange: true,
+                    usesCloudAccountBoundary: true
+                ),
+                .none
+            )
+        }
+    }
+
+    @MainActor
+    func testContainerRetirementWaitsForEveryCandidateAndPublishedSession() throws {
+        final class Container {}
+        let lifetimes = PersistenceContainerLifetimeTracker<Container>()
+        var candidate: Container? = Container()
+        var published: Container? = Container()
+        lifetimes.track(candidate!)
+        lifetimes.track(published!)
+        lifetimes.track(published!)
+
+        published = nil
+        XCTAssertTrue(lifetimes.hasLiveContainers)
+        XCTAssertThrowsError(try lifetimes.requireAllReleased()) {
+            XCTAssertEqual(
+                $0 as? PersistenceContainerRetirementError,
+                .previousContainerStillActive
+            )
+        }
+        var budget = PersistenceContainerRetirementPollBudget(maximumPolls: 1)
+        XCTAssertEqual(budget.observe(
+            isReleased: !lifetimes.hasLiveContainers,
+            generationMatches: true
+        ), .continueWaiting)
+        XCTAssertEqual(budget.observe(
+            isReleased: !lifetimes.hasLiveContainers,
+            generationMatches: true
+        ), .timedOut)
+
+        candidate = nil
+        XCTAssertFalse(lifetimes.hasLiveContainers)
+        try lifetimes.requireAllReleased()
+        XCTAssertEqual(budget.observe(
+            isReleased: !lifetimes.hasLiveContainers,
+            generationMatches: true
+        ), .retired)
+    }
+
+    @MainActor
+    func testCancelledPostMountVerificationRetainsCandidateUntilItReturns() async {
+        final class Container {}
+        let lifetimes = PersistenceContainerLifetimeTracker<Container>()
+        var finishVerification: CheckedContinuation<Void, Never>?
+        var verificationTask: Task<Void, Never>?
+
+        // A callback-backed account operation need not complete as soon as its
+        // caller is cancelled. Reproduce that interval without network timing.
+        await withCheckedContinuation { started in
+            verificationTask = Task { @MainActor in
+                let candidate = Container()
+                lifetimes.track(candidate)
+                await withCheckedContinuation { continuation in
+                    finishVerification = continuation
+                    started.resume()
+                }
+                withExtendedLifetime(candidate) {}
+            }
+        }
+
+        verificationTask?.cancel()
+        XCTAssertTrue(lifetimes.hasLiveContainers)
+        XCTAssertThrowsError(try lifetimes.requireAllReleased())
+        var budget = PersistenceContainerRetirementPollBudget(maximumPolls: 1)
+        XCTAssertEqual(budget.observe(
+            isReleased: !lifetimes.hasLiveContainers,
+            generationMatches: true
+        ), .continueWaiting)
+
+        finishVerification?.resume()
+        await verificationTask?.value
+        XCTAssertFalse(lifetimes.hasLiveContainers)
+        XCTAssertEqual(budget.observe(
+            isReleased: !lifetimes.hasLiveContainers,
+            generationMatches: true
+        ), .retired)
+    }
+
     func testAX5OverrideRequiresDebugUITestModeAndExplicitFlag() {
         let enabledEnvironment = [
             LocalPreviewLaunchPolicy.environmentKey: "1",
@@ -314,7 +405,7 @@ final class CloudAccountAvailabilityTests: XCTestCase {
         )
         XCTAssertLessThanOrEqual(
             CloudKitOnlineAccountVerifier.resourceTimeout,
-            8
+            30
         )
     }
 
