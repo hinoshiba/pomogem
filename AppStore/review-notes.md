@@ -42,7 +42,9 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
 - SwiftData private CloudKit: iCloudを選び確認した場合だけ、テーマ名、成果memo、記録、設定、進行中
   timerを含む7種類の同期元modelを一つのprivate containerへ保存し、同じApple Accountの対応iPhone間で
   同期。選択時と各launch／resumeで`CKContainer.accountStatus`、`userRecordID`、private databaseの
-  read-only record-zone fetchとfetch前後の`userRecordID`一致を確認した場合だけ開き、独自loginなし
+  read-only record-zone fetchとfetch前後の`userRecordID`一致を確認。さらに、サーバーで観測したリセット履歴と
+  同じか新しい世代が端末へ届くまでHomeを開かない。履歴確認には待機期限があり、失敗時は記録を変更せず
+  再試行を案内する。この確認は全記録の同期完了を保証するものではない。独自loginなし
 - This iPhone only: 全ての基本機能をApple Account／networkなしで利用可能。専用random namespaceの
   local storeだけへ保存し、iCloudへ自動切替／uploadしない
 - Local projection: 瓶とまとまり粒に使う`AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`は
@@ -76,8 +78,9 @@ JSONは再importできず、移行や記録継続には使えません。iCloud�
 Apple Accountを検証し、通信不可、account不明、別accountの場合は保存領域を開かずfail closedにします。
 この処理は保存済みdataを削除しません。
 
-Version 1.0ではdirect CloudKit一括削除UIとlaunch gateを無効化しています。Settingsの通常resetは
-旧世代を表示・集計から除外しますが、物理消去ではありません。端末内dataはapp削除、iCloud側の
+direct CloudKit一括削除UIと削除用launch gateは無効です。記録保護のため、iCloud選択時のSettings →
+「表示中の記録をリセット」は一時的に利用できず、理由を表示します。「このiPhoneだけに保存」では
+引き続き利用でき、以前の世代を表示・集計から除外しますが、物理消去ではありません。端末内dataはapp削除、iCloud側の
 app dataはAppleのiCloudストレージ管理から削除するよう案内します。offline別端末は遠隔消去
 できません。
 

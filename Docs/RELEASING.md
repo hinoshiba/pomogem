@@ -1,6 +1,6 @@
 # ポモジェム公式版 — ローカルArchive／App Storeリリース手順
 
-更新日: 2026-09-11
+更新日: 2026-09-12
 
 この手順は、許可済みMacのXcode OrganizerからiPhone版をArchive、Validate、Uploadするための
 正本です。Mac／Mac Catalyst版は作成しません。
@@ -15,11 +15,14 @@ App Store Connectで無効化し、ブランチ・タグの変更によるビル
 
 ## 今回の候補と識別子
 
-今回の更新候補はPomoGem 1.0.1 (6)です。1.0 (5)と同じApp Store record、Bundle ID、IAP、
+今回の更新候補はPomoGem 1.0.1 (7)です。1.0 (5)と同じApp Store record、Bundle ID、IAP、
 CloudKit containerを使用します。Apple IDは`6809139517`、SKUは`pomogem-ios`、
 登録名は「ポモジェム：ポモドーロタイマー」です。初回登録・提出結果は
-`AppStore/release-record-1.0-5.md`、今回の検証・提出結果は
-`AppStore/release-record-1.0.1-6.md`を参照します。
+`AppStore/release-record-1.0-5.md`、build 6のupload・取消履歴は
+`AppStore/release-record-1.0.1-6.md`、今回の準備・検証・提出状態は
+`AppStore/release-record-1.0.1-7.md`を参照します。
+build 6は実機監査で記録保護の問題を再現したため審査取消操作を行いました。build 7を選択する前に
+App Store Connectで取消処理の完了を再確認します。build 7は準備中で、upload／審査送信済みとは扱いません。
 登録済みでも公開前は`app_store_listing_status: not_public`を保持し、Webは「近日公開」のまま
 Smart App Bannerを表示しません。実際に公開・ダウンロード可能になってからstatusを`public`へ変更し、
 同じ数値IDのSmart App Bannerを追加して検証します。
@@ -99,6 +102,8 @@ App Store版はproduction CloudKit environmentだけを利用します。SwiftDa
   検証できること
 - iCloud選択後、通信不可／account不明／A→Bではstoreを開かずdataを削除しないこと。Aへ戻ってonline
   確認できた場合だけ同じA namespaceを再び開くこと
+- cloud mountではRoot公開前にサーバーのリセット履歴を読み、同じか新しい履歴の端末反映まで待つこと。
+  期限切れ・不完全な応答では新規記録を作れず、既存dataも削除しないこと。全記録の同期完了とは区別する
 - schema migrationと古いversionからの起動
 
 `RareRewardReleasePolicy.isEnabled`はversion 1.0で`false`に固定します。Release実機でrandom rewardの
@@ -111,6 +116,11 @@ direct CloudKit一括削除rowがなく、launch時に削除preflightのnetwork 
 offlineで通常のSwiftData storeを開けるのはlocal-only選択時だけで、iCloud選択時は各launch／resumeの
 online account確認に失敗すればfail closedにします。version 1.0のproduction gateに削除用zone／record
 schemaや削除transaction試験を含めません。
+
+現在の配布候補では、iCloud選択時の「表示中の記録をリセット」も記録保護のため一時停止します。
+無効化された操作と理由の表示、呼び出し時にmarker・設定・timer・通知を変更しないことを確認します。
+local-onlyの通常resetは維持します。履歴確認のread-only preflightは削除用preflightとは別の機能です。
+通常のrelease工程にProduction environmentのresetや既存dataのpurgeを追加してはいけません。
 
 Version 1.0の最終Prefs schemaは`timerDisplayMode`を含む13 group、26個のrevision／mutation stamp fieldです。
 production schemaは削除・rename前提で運用せず、後方互換なadditive changeを基本にします。
@@ -166,6 +176,8 @@ unit test、主要UI test、static analyzerを実行します。40年soakはrele
 - clean installで同格の保存先二択、両方の確認、local-onlyのoffline基本機能、選択の不変性、app削除前の
   JSON書き出しが再import／移行には使えないという表示
 - iCloud選択時のonline確認、各launch／resume、A→B block→A復帰、通信断時fail-closedと保存data非削除
+- 既存CloudKit補助directoryを残した再起動、リセット履歴反映前の新規記録拒否と反映後の記録保持、
+  iCloud通常resetの一時停止とlocal-only通常resetの継続
 - Home／Lock Screen Widgetが利用者dataを表示せずアプリを開くこと
 - Live Activityの開始、pause、resume、期限到達、cancel、完了後dismiss、手動dismiss後に再生成しないこと、
   SettingsでOFFにすると即終了すること。全状態でtheme名、memo、質量、account情報を表示しないこと

@@ -55,6 +55,23 @@ enum ActivityEpochState: Equatable, Sendable {
     case awaitingMarker
 }
 
+enum ActivityResetAdmissionPolicy {
+    static let cloudResetUnavailableMessage =
+        "記録を保護するため、iCloudのリセットは一時的に利用できません。"
+
+    static func permitsUserReset(in mode: PersistenceLaunchMode) -> Bool {
+        switch mode {
+        case .cloudKit:
+            // A reachable account does not establish that all older reset
+            // markers have reached this replica. Accepting a reset here can
+            // make later hydration supersede it and delete newer completions.
+            return false
+        case .localOnly, .inMemoryPreview, .persistentSimulator:
+            return true
+        }
+    }
+}
+
 enum ActivityResetPolicy {
     /// This ceiling rejects an impossible/corrupt CloudKit value before it can
     /// pin the Lamport counter at `Int.max`. One million user-initiated resets
@@ -167,6 +184,28 @@ enum ActivityResetPolicy {
 
 @MainActor
 enum ActivityResetStore {
+    /// Production user actions must pass this gate before inserting a marker
+    /// or changing preferences and local timer state. The lower-level writer
+    /// remains available for migration and deterministic reconciliation tests.
+    @discardableResult
+    static func beginUserInitiatedReset(
+        context: ModelContext,
+        persistenceMode: PersistenceLaunchMode,
+        deviceID: String,
+        now: Date = .now,
+        epochID: UUID = UUID()
+    ) throws -> ActivityResetMarker {
+        guard ActivityResetAdmissionPolicy.permitsUserReset(in: persistenceMode) else {
+            throw ActivityResetStoreError.cloudResetUnavailable
+        }
+        return try beginReset(
+            context: context,
+            deviceID: deviceID,
+            now: now,
+            epochID: epochID
+        )
+    }
+
     /// Reads only the winning reset generation. Most interactive paths need
     /// the current gate, not the complete append-only marker history.
     static func latestSnapshot(
@@ -223,8 +262,14 @@ enum ActivityResetStore {
 
 enum ActivityResetStoreError: LocalizedError, Equatable {
     case sequenceExhausted
+    case cloudResetUnavailable
 
     var errorDescription: String? {
-        "記録のリセット履歴が上限に達しました。サポートへお問い合わせください。"
+        switch self {
+        case .sequenceExhausted:
+            "記録のリセット履歴が上限に達しました。サポートへお問い合わせください。"
+        case .cloudResetUnavailable:
+            ActivityResetAdmissionPolicy.cloudResetUnavailableMessage
+        }
     }
 }

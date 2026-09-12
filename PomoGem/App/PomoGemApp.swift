@@ -830,6 +830,31 @@ private struct PomoGemPersistenceLaunchHost: View {
             checkpoint: "after-container-identity"
         )
 
+        // A new or partially hydrated replica can otherwise create activity
+        // under an obsolete reset epoch. Keep Root, bootstrap, and all app
+        // writers unmounted until the local winner covers the server history.
+        launchState = .preparing("iCloudの記録の履歴を確認しています")
+        try await CloudActivityHistoryPreflight().run(
+            context: container.mainContext,
+            expectedBinding: binding,
+            validateMount: {
+                try requireCloudMountAuthorization(
+                    expectedBinding: binding,
+                    verifiedBinding: postMountBoundary.binding,
+                    attempt: attempt,
+                    checkpoint: "during-history-preflight"
+                )
+            }
+        )
+        let historyBoundary = try await AppleAccountBoundaryResolver()
+            .resolve(expectedBinding: binding)
+        try requireCloudMountAuthorization(
+            expectedBinding: binding,
+            verifiedBinding: historyBoundary.binding,
+            attempt: attempt,
+            checkpoint: "after-history-identity"
+        )
+
         let selection = PersistenceDeploymentSelection.cloud(binding: binding)
         guard PersistenceStoreTopology.persistenceArtifactHistory()
             .hasExactCompleteStorePair(for: selection)
@@ -838,7 +863,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         }
         try requireCloudMountAuthorization(
             expectedBinding: binding,
-            verifiedBinding: postMountBoundary.binding,
+            verifiedBinding: historyBoundary.binding,
             attempt: attempt,
             checkpoint: "before-session-publication"
         )

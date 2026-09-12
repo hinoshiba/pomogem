@@ -97,6 +97,10 @@ fail closedにします。「このiPhoneのみ」はiCloudへ自動switch／upl
 利用できます。保存先はVersion 1.0では変更できず、app削除・再installでlocal記録は失われ、JSONは
 再importやmigrationには使えません。
 
+iCloudの画面公開前には、サーバーで観測したリセット履歴以上の世代が端末へ届いていることも
+期限付きで確認します。全記録の同期完了を待つ機能ではありません。iCloud選択時の「表示中の記録を
+リセット」は記録保護のため一時的に利用できず、local-onlyでは引き続き利用できます。
+
 「保存領域を確認できません」などのエラーの原因と実機確認手順は、
 [iCloud同期のトラブルシューティング](Docs/iCloudSyncTroubleshooting.md)を参照してください。
 

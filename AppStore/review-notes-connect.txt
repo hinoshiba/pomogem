@@ -21,7 +21,9 @@ IN-APP PURCHASE
 APPLE SERVICES AND PRIVACY
 
 - iCloudを選び確認した場合だけ、theme名、achievement memo、記録、設定、進行中timerをApple Accountのprivate CloudKitへ保存します。独自loginはありません。起動・再開時に同じApple Accountをonline確認し、通信不可・account不明・別accountでは保存領域を開かず、dataを削除せずfail closedにします。
+- Homeを開く前に、サーバーで観測したリセット履歴と同じか新しい世代が端末に届いていることも確認します。待機には期限があり、失敗時は記録を変更せず再試行を案内します。全記録の同期完了を保証する確認ではありません。
 - 「このiPhoneだけに保存」は全基本機能をApple Account／networkなしで利用でき、iCloudへ自動切替・uploadしません。Version 1.0では保存先を後から変更できません。
+- 記録保護のため、iCloud選択時のSettings →「表示中の記録をリセット」は一時的に利用できず、理由を表示します。「このiPhoneだけに保存」では引き続き利用できます。通常resetは物理消去ではなく、アプリからのCloudKit一括削除機能も提供していません。
 - Home／Lock Screen Widgetはappを開く導線だけで、記録やthemeを表示しません。
 - Live Activityは、timer開始後のLock ScreenとDynamic Islandにアプリ名、選択時間、残り時間、実行状態と帰還案内を表示します。theme名、memo、質量、Apple Account、CloudKit dataは渡さず、ActivityKit pushも使いません。タップでアプリのタイマーへ戻り、Settings → 集中 →「画面を閉じてもタイマーを表示」で停止できます。
 - 「集中に戻るお知らせ」はSettings → 集中で任意にオンにできます（既定オフ・通知許可が必要）。集中中にアプリを離れると30秒後に一度だけ通知し、復帰・一時停止・中断時に取り消します。画面ロックも対象です。休憩中・終了間際は予約せず、通知にtheme名などは含めません。
