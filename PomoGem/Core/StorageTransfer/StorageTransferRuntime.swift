@@ -120,9 +120,13 @@ final class StorageTransferRuntime {
     }
 
     func preflightCloudMount(binding: ActiveAccountLocalBinding,
+                             controlClient: StorageTransferCloudMountControlClient? = nil,
+                             accountDefaults: UserDefaults = .standard,
                              validateAccess: @escaping @MainActor () throws -> Void) async throws {
+        let reader = StorageTransferCloudMountControlReader(client: controlClient,
+            defaults: accountDefaults, transferJournalStore: store)
         try await preflightCloudMount(binding: binding, readControl: {
-            try await self.remoteRecoveryStatus(binding: binding, validateAccess: validateAccess)
+            try await reader.read(expectedBinding: binding, validateAccess: validateAccess)
         }, validateAccess: validateAccess)
     }
 

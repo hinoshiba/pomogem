@@ -174,6 +174,31 @@ final class StorageTransferSettingsUITests: XCTestCase {
         assertNoOperation()
     }
 
+    func testAX5PostMirrorTimeoutOffersOnlineRetryWithoutStartingOfflineOrTransfer() {
+        launch("cloudLaunchTimedOut", accessibility5: true)
+        XCTAssertTrue(app.staticTexts["iCloudの確認に時間がかかっています"].waitForExistence(timeout: 4))
+        XCTAssertFalse(app.staticTexts["オフラインで開くには再起動が必要です"].exists)
+        XCTAssertFalse(app.buttons["cloud-offline-continue"].exists)
+        XCTAssertFalse(app.buttons["storage-transfer-recover"].exists)
+        XCTAssertFalse(app.buttons["iCloudに保存して同期"].exists)
+        let explanation = app.staticTexts["cloud-launch-timeout-offline-explanation"]
+        XCTAssertTrue(reveal(explanation))
+        XCTAssertTrue(explanation.label.contains("この画面からオンラインで確認し直せます"))
+        XCTAssertTrue(explanation.label.contains("アプリ自体は削除しないでください"))
+        let retry = app.buttons["cloud-offline-online-retry"]
+        XCTAssertTrue(reveal(retry, upwards: false))
+        XCTAssertEqual(retry.label, "オンラインで再試行")
+        assertTouchTarget(retry)
+        attach("AX5 post-mirror timeout — online retry and retained-data explanation")
+        retry.tap()
+        let retried = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "retryCalls=1"),
+            object: app.staticTexts["cloud-launch-timeout.fixture-state"])
+        XCTAssertEqual(XCTWaiter.wait(for: [retried], timeout: 4), .completed)
+        XCTAssertFalse(retry.exists, "Claiming the retry replaces the action with preparation UI")
+        XCTAssertFalse(app.buttons["cloud-offline-continue"].exists)
+        assertNoOperation()
+    }
+
     func testOfflineShowsPendingPhoneCopyAndCannotOpenStorageSwitch() {
         launch("offline")
         assertCompactOfflineBanner()

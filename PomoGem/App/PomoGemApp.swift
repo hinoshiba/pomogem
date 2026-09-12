@@ -372,6 +372,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         case failed(String)
         case relaunchRequired(String)
         case offlineRelaunchRequired(String)
+        case cloudVerificationTimedOut(String)
         case remoteRecovery(String, canCancel: Bool)
         case datasetRefresh(String)
     }
@@ -446,6 +447,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     private var launchStatusContent: some View {
         PersistenceLaunchStatusView(state: launchState, onRetry: retryLaunch,
             onRetryOnline: requestOnlineCloudRetry,
+            canRetryOnline: !isPreparing && !isQuiescingAccountChange,
             onChooseCloud: chooseCloudStorage, onChooseLocalOnly: localOnlySelectionAction,
             onRecoverTransfer: { requestRemoteRecovery(.resume) },
             onCancelTransfer: { requestRemoteRecovery(.cancel) },
@@ -1343,16 +1345,34 @@ private struct PomoGemPersistenceLaunchHost: View {
             }, onExpiry: {
                 guard let expiryGeneration, launchAttempt == expiryGeneration,
                       session == nil, isQuiescingAccountChange else { return }
-                launchState = .blocked(CloudLaunchDeadlineError.expired.localizedDescription)
+                let message = CloudLaunchDeadlineError.expired.localizedDescription
+                if StorageTransferProcessState.cloudMirrorWasOpened {
+                    offlineFallbackRequested = false
+                    canContinueOffline = false
+                    launchState = .cloudVerificationTimedOut(message)
+                } else {
+                    launchState = .blocked(message)
+                }
                 let expiredGeneration = launchAttempt
                 Task { @MainActor in
                     let retirement = await waitForContainerRetirement(generation: expiredGeneration)
                     guard launchAttempt == expiredGeneration else { return }
                     isQuiescingAccountChange = false
-                    if retirement == .retired, scenePhase == .active, hasExistingStore {
+                    let recovery = CloudOfflineHostPolicy.timeoutRecoveryAction(
+                        cloudMirrorWasOpened: StorageTransferProcessState.cloudMirrorWasOpened,
+                        hasExistingStore: hasExistingStore,
+                        containersRetired: retirement == .retired,
+                        sceneIsActive: scenePhase == .active)
+                    switch recovery {
+                    case .openOfflineCopy:
                         offlineFallbackRequested = true
                         launchAttempt += 1
-                    } else {
+                    case .retryOnline:
+                        offlineFallbackRequested = false
+                        canContinueOffline = false
+                        launchState = .cloudVerificationTimedOut(message)
+                        didTimeOutContainerRetirement = retirement == .timedOut
+                    case .remainBlocked:
                         didTimeOutContainerRetirement = retirement == .timedOut
                     }
                 }
@@ -2274,6 +2294,7 @@ private struct PersistenceLaunchStatusView: View {
     let state: PomoGemPersistenceLaunchHost.LaunchState
     let onRetry: () -> Void
     let onRetryOnline: () -> Void
+    let canRetryOnline: Bool
     let onChooseCloud: () -> Void
     let onChooseLocalOnly: (() -> Void)?
     let onRecoverTransfer: () -> Void
@@ -2360,12 +2381,22 @@ private struct PersistenceLaunchStatusView: View {
                                 .buttonStyle(PomoGemSecondaryButtonStyle())
                                 .accessibilityIdentifier("storage-transfer-cancel")
                         }
+                    } else if case .cloudVerificationTimedOut = state {
+                        Button("オンラインで再試行", action: onRetryOnline)
+                            .buttonStyle(PomoGemPrimaryButtonStyle())
+                            .disabled(!canRetryOnline)
+                            .accessibilityIdentifier("cloud-offline-online-retry")
+                        Text("端末の記録は保持しています。この画面からオンラインで確認し直せます。オフラインで端末のデータを使う場合は、アプリを終了して開き直してください。アプリ自体は削除しないでください。")
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("cloud-launch-timeout-offline-explanation")
                     } else if case .offlineRelaunchRequired = state {
                         Text("オフラインで開くにはアプリの再起動が必要です。通信が戻った場合は、この画面からオンラインで確認し直せます。")
                             .foregroundStyle(PomoGemTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
                         Button("オンラインで再試行", action: onRetryOnline)
                             .buttonStyle(PomoGemPrimaryButtonStyle())
+                            .disabled(!canRetryOnline)
                             .accessibilityIdentifier("cloud-offline-online-retry")
                     } else if case .relaunchRequired = state {
                         Text("この画面から再試行せず、アプリを終了して開き直してください。")
@@ -2495,7 +2526,8 @@ private struct PersistenceLaunchStatusView: View {
     private var showsLocalTransferCancellation: Bool {
         switch state {
         case .blocked, .failed, .remoteRecovery: true
-        case .choosingStorage, .preparing, .relaunchRequired, .offlineRelaunchRequired, .datasetRefresh: false
+        case .choosingStorage, .preparing, .relaunchRequired, .offlineRelaunchRequired,
+             .cloudVerificationTimedOut, .datasetRefresh: false
         }
     }
 
@@ -2513,6 +2545,8 @@ private struct PersistenceLaunchStatusView: View {
             "アプリを開き直してください"
         case .offlineRelaunchRequired:
             "オフラインで開くには再起動が必要です"
+        case .cloudVerificationTimedOut:
+            "iCloudの確認に時間がかかっています"
         case .remoteRecovery:
             "保存先の切り替えを復旧します"
         case .datasetRefresh:
@@ -2526,6 +2560,7 @@ private struct PersistenceLaunchStatusView: View {
             "有効にすると、同じApple AccountのiPhone間で記録を同期します。利用しない場合は、このiPhoneだけに保存でき、記録はiCloudへ送信されません。"
         case let .preparing(message), let .blocked(message), let .failed(message),
              let .relaunchRequired(message), let .offlineRelaunchRequired(message),
+             let .cloudVerificationTimedOut(message),
              let .remoteRecovery(message, _), let .datasetRefresh(message):
             message
         }
@@ -2541,7 +2576,7 @@ private struct PersistenceLaunchStatusView: View {
             "externaldrive.badge.exclamationmark"
         case .failed:
             "externaldrive.badge.exclamationmark"
-        case .relaunchRequired, .offlineRelaunchRequired:
+        case .relaunchRequired, .offlineRelaunchRequired, .cloudVerificationTimedOut:
             "arrow.clockwise"
         case .remoteRecovery:
             "icloud.and.arrow.down"
@@ -2550,3 +2585,36 @@ private struct PersistenceLaunchStatusView: View {
         }
     }
 }
+
+#if DEBUG && targetEnvironment(simulator)
+/// Renders the actual launch-status view without an account, store, or mount.
+/// Selected only by the existing explicit in-memory settings UI fixture.
+struct CloudLaunchTimeoutUITestFixtureView: View {
+    @State private var retryCalls = 0
+
+    var body: some View {
+        PersistenceLaunchStatusView(
+            state: retryCalls == 0
+                ? .cloudVerificationTimedOut(CloudLaunchDeadlineError.expired.localizedDescription)
+                : .preparing("オンラインで保存領域を再確認しています"),
+            onRetry: {}, onRetryOnline: {
+                guard retryCalls == 0 else { return }
+                retryCalls += 1
+            },
+            canRetryOnline: true,
+            onChooseCloud: {}, onChooseLocalOnly: nil,
+            onRecoverTransfer: {}, onCancelTransfer: {}, onRefreshDataset: {},
+            onCancelLocalTransfer: nil, retainsTransferCopyOnCancellation: false,
+            onContinueOffline: nil)
+            .safeAreaInset(edge: .bottom) {
+                VStack {
+                    Text(verbatim: "calls=0;choice=none;starting=false")
+                        .accessibilityIdentifier("storage-switch.fixture-state")
+                    Text(verbatim: "retryCalls=\(retryCalls)")
+                        .accessibilityIdentifier("cloud-launch-timeout.fixture-state")
+                }
+                .font(.caption)
+            }
+    }
+}
+#endif

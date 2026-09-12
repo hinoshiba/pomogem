@@ -4,6 +4,10 @@ enum CloudOfflineMountDecision: Equatable, Sendable {
     case allow, relaunchRequired, awaitContainerRetirement
 }
 
+enum CloudLaunchTimeoutRecoveryAction: Equatable, Sendable {
+    case retryOnline, openOfflineCopy, remainBlocked
+}
+
 enum CloudOfflineRecoveryKind: Equatable, Sendable {
     case storageTransfer, resetHistory
 }
@@ -86,6 +90,21 @@ enum CloudOfflineHostPolicy {
         if cloudMirrorWasOpened { return .relaunchRequired }
         if hasLiveContainers { return .awaitContainerRetirement }
         return .allow
+    }
+
+    /// Expiry is not evidence that networking is unavailable. Once a mirror
+    /// was opened, keep the online retry path instead of attempting a `.none`
+    /// fallback that the process fence must reject. An offline candidate still
+    /// has to pass all receipt, account, schema and store checks when opened.
+    static func timeoutRecoveryAction(
+        cloudMirrorWasOpened: Bool,
+        hasExistingStore: Bool,
+        containersRetired: Bool,
+        sceneIsActive: Bool
+    ) -> CloudLaunchTimeoutRecoveryAction {
+        if cloudMirrorWasOpened { return .retryOnline }
+        if hasExistingStore && containersRetired && sceneIsActive { return .openOfflineCopy }
+        return .remainBlocked
     }
 
     static func allowsOfflineFallback(after error: Error) -> Bool {

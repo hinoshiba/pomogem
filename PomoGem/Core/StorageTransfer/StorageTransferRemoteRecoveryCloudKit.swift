@@ -17,6 +17,149 @@ struct StorageTransferRecoveryCloudCASProof: Equatable, Sendable {
     let systemFieldsProof: String
 }
 
+/// Only the exact control read is available through this launch transport.
+/// The real server response doubles as the account verifier's network probe;
+/// no control value or identity proof is cached across reads or attempts.
+@MainActor
+struct StorageTransferCloudMountControlClient {
+    var account: CloudAccountVerificationClient
+    var fetch: @MainActor @Sendable (CKRecord.ID) async throws -> StorageTransferRecoveryCloudRecord?
+
+    static var live: Self {
+        let transport = StorageTransferRecoveryCloudTransport()
+        return Self(account: .live(containerIdentifier: CloudSyncConfiguration.synchronizedDataContainerIdentifier),
+                    fetch: { try await transport.fetch($0) })
+    }
+}
+
+/// Normal mounting is read-only. Resolve accountStatus -> identity -> exact
+/// server control fetch -> identity with the existing namespace resolver, then
+/// validate the response. Mutation/CAS/chunk paths keep their original guards.
+@MainActor
+struct StorageTransferCloudMountControlReader {
+    private let client: StorageTransferCloudMountControlClient
+    private let defaults: UserDefaults
+    private let transferJournalStore: StorageTransferJournalStore?
+    private let notificationCenter: NotificationCenter
+    private let timeout: TimeInterval
+    private let retryDelay: TimeInterval
+
+    init(client: StorageTransferCloudMountControlClient? = nil,
+         defaults: UserDefaults = .standard,
+         transferJournalStore: StorageTransferJournalStore? = nil,
+         notificationCenter: NotificationCenter = .default,
+         timeout: TimeInterval = 45, retryDelay: TimeInterval = 0.5) {
+        self.client = client ?? .live
+        self.defaults = defaults
+        self.transferJournalStore = transferJournalStore
+        self.notificationCenter = notificationCenter
+        self.timeout = timeout.isFinite ? min(max(timeout, 0.01), 60) : 45
+        self.retryDelay = retryDelay
+    }
+
+    func read(expectedBinding: ActiveAccountLocalBinding,
+              validateAccess: @escaping @MainActor () throws -> Void) async throws -> StorageTransferRecoveryControl? {
+        let lease = RecoveryCloudAccountLease(center: notificationCenter)
+        let probe = StorageTransferCloudMountControlProbe(client: client, lease: lease, validateAccess: validateAccess)
+        do {
+            try probe.check()
+            let result = try await recoveryCloudDeadline(timeout: timeout, lease: lease) {
+                try probe.check()
+                var account = client.account
+                account.accountStatus = { try await probe.accountStatus() }
+                account.userRecordID = { try await probe.userRecordID() }
+                account.probePrivateDatabase = { try await probe.fetchControl() }
+                let boundary = try await AppleAccountBoundaryResolver(defaults: defaults, client: account,
+                    verificationTimeout: timeout, retryDelay: retryDelay,
+                    transferJournalStore: transferJournalStore).resolve(expectedBinding: expectedBinding)
+                try probe.check()
+                guard boundary.binding == expectedBinding else {
+                    throw AppleAccountBoundaryResolutionError.blocked(.accountMismatch)
+                }
+                return try probe.control(expectedBinding: expectedBinding)
+            }
+            try probe.check()
+            return result
+        } catch {
+            // The cancellation-responsive lease can win before an account
+            // convenience call returns. Preserve that positive account event.
+            try probe.check()
+            throw error
+        }
+    }
+}
+
+@MainActor
+private final class StorageTransferCloudMountControlProbe {
+    private enum Observation { case unread, received(StorageTransferRecoveryCloudRecord?) }
+    private let client: StorageTransferCloudMountControlClient
+    private let lease: RecoveryCloudAccountLease
+    private let validateAccess: @MainActor () throws -> Void
+    private var observation: Observation = .unread
+
+    init(client: StorageTransferCloudMountControlClient, lease: RecoveryCloudAccountLease,
+         validateAccess: @escaping @MainActor () throws -> Void) {
+        self.client = client
+        self.lease = lease
+        self.validateAccess = validateAccess
+    }
+
+    func check() throws {
+        try Task.checkCancellation()
+        do { try lease.check() }
+        catch { throw AppleAccountBoundaryResolutionError.blocked(.accountMismatch) }
+        try validateAccess()
+    }
+
+    func accountStatus() async throws -> CKAccountStatus {
+        try check()
+        let result = try await client.account.accountStatus()
+        try check()
+        return result
+    }
+
+    func userRecordID() async throws -> CKRecord.ID {
+        try check()
+        let result = try await client.account.userRecordID()
+        try check()
+        return result
+    }
+
+    func fetchControl() async throws {
+        try check()
+        observation = .unread
+        let result: StorageTransferRecoveryCloudRecord?
+        do { result = try await client.fetch(StorageTransferRecoveryCloudCodec.controlID) }
+        catch let CloudStorageTransferCloudError.cloud(failure) {
+            // Preserve the typed transport failure for IdentityVerifier's
+            // bounded retry and server backoff instead of classifying it twice.
+            throw failure
+        } catch CloudStorageTransferCloudError.timedOut {
+            throw CloudAccountVerificationFailure(kind: .timedOut, stage: .privateDatabase)
+        }
+        try check()
+        observation = .received(result)
+    }
+
+    func control(expectedBinding: ActiveAccountLocalBinding) throws -> StorageTransferRecoveryControl? {
+        try check()
+        guard case let .received(response) = observation else {
+            throw StorageTransferRecoveryCloudTransportError.incompleteResponse
+        }
+        // nil is supplied only by the exact transport's authoritative missing
+        // response. Its network/permission/schema failures remain errors.
+        guard let response else { return nil }
+        let control = try StorageTransferRecoveryCloudCodec.decodeControl(response.record,
+            name: StorageTransferRecoverySchema.controlRecordName, terminal: false)
+        guard control.manifest.accountFingerprint == expectedBinding.accountFingerprint else {
+            throw StorageTransferRecoveryError.identityMismatch
+        }
+        try StorageTransferRecoveryEnvelope(control: control, changeTag: response.changeTag,
+            systemFieldsProof: response.systemFieldsProof).validate()
+        return control
+    }
+}
+
 @MainActor
 struct StorageTransferRecoveryCloudClient {
     var verifyAccount: (String) async throws -> Void

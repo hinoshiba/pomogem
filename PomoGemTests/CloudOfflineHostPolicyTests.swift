@@ -3,6 +3,58 @@ import XCTest
 @testable import PomoGem
 
 final class CloudOfflineHostPolicyTests: XCTestCase {
+    @MainActor
+    func testDeadlineAfterMirrorCreationOffersOnlineRetryBeforeAndAfterRetirement() throws {
+        var now: TimeInterval = 0
+        var mirrorOpened = false
+        var attempt = 1
+        var recovery: CloudLaunchTimeoutRecoveryAction = .remainBlocked
+        let deadline = CloudLaunchDeadline(timeout: 12,
+            invalidateAttempt: { attempt += 1 }, onExpiry: {
+                XCTAssertEqual(attempt, 2, "The expired attempt must lose authorization before presenting recovery")
+                recovery = CloudOfflineHostPolicy.timeoutRecoveryAction(
+                    cloudMirrorWasOpened: mirrorOpened, hasExistingStore: true,
+                    containersRetired: false, sceneIsActive: true)
+            }, now: { now })
+        defer { deadline.cancel() }
+        now = 11
+        try deadline.check()
+        // A healthy request can consume the remaining budget after the
+        // constructor; expiry does not prove the network went offline.
+        mirrorOpened = true
+        now = 12
+        XCTAssertThrowsError(try deadline.check()) {
+            XCTAssertEqual($0 as? CloudLaunchDeadlineError, .expired)
+        }
+        XCTAssertEqual(recovery, .retryOnline)
+        for retired in [false, true] {
+            XCTAssertEqual(CloudOfflineHostPolicy.timeoutRecoveryAction(
+                cloudMirrorWasOpened: mirrorOpened, hasExistingStore: true,
+                containersRetired: retired, sceneIsActive: true), .retryOnline)
+            XCTAssertEqual(CloudOfflineHostPolicy.offlineMountDecision(
+                cloudMirrorWasOpened: mirrorOpened, hasLiveContainers: !retired), .relaunchRequired)
+        }
+        XCTAssertFalse(CloudOfflineHostPolicy.prefersOfflineLaunch(explicitOnlineRetry: true,
+            requestedOfflineFallback: false, networkIsOffline: nil))
+        XCTAssertEqual(attempt, 2)
+    }
+
+    func testTimeoutBeforeMirrorKeepsAllExistingOfflineFallbackPrerequisites() {
+        for hasStore in [false, true] {
+            for retired in [false, true] {
+                for active in [false, true] {
+                    let action = CloudOfflineHostPolicy.timeoutRecoveryAction(
+                        cloudMirrorWasOpened: false, hasExistingStore: hasStore,
+                        containersRetired: retired, sceneIsActive: active)
+                    XCTAssertEqual(action, hasStore && retired && active ? .openOfflineCopy : .remainBlocked)
+                    XCTAssertEqual(CloudOfflineHostPolicy.timeoutRecoveryAction(
+                        cloudMirrorWasOpened: true, hasExistingStore: hasStore,
+                        containersRetired: retired, sceneIsActive: active), .retryOnline)
+                }
+            }
+        }
+    }
+
     func testExplicitOnlineRetryBypassesOnlyTheOfflinePreferenceAndNeverTheProcessFence() {
         let paths: [Bool?] = [true, false, nil]
         for path in paths {

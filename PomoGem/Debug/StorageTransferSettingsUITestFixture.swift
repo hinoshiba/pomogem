@@ -7,7 +7,7 @@ enum StorageTransferSettingsUITestFixture {
     private static let environmentKey = "POMOGEM_UI_TEST_STORAGE_TRANSFER"
 
     enum Scenario: String {
-        case local, cloud, offline, offlineRecovery, offlineHistory, cloudNetworkWaiting, activeTimer, exporting, deleting, unavailable
+        case local, cloud, offline, offlineRecovery, offlineHistory, cloudNetworkWaiting, cloudLaunchTimedOut, activeTimer, exporting, deleting, unavailable
 
         var isOffline: Bool { self == .offline || self == .offlineRecovery || self == .offlineHistory }
         var recoveryKind: CloudOfflineRecoveryKind? {
@@ -54,7 +54,16 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
         }
     }
 
+    @ViewBuilder
     private func content(_ scenario: StorageTransferSettingsUITestFixture.Scenario) -> some View {
+        if scenario == .cloudLaunchTimedOut {
+            CloudLaunchTimeoutUITestFixtureView()
+        } else {
+            settingsContent(scenario)
+        }
+    }
+
+    private func settingsContent(_ scenario: StorageTransferSettingsUITestFixture.Scenario) -> some View {
         NavigationStack {
             List {
                 Section {
