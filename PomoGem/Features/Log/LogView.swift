@@ -889,6 +889,7 @@ struct LogView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
     @Environment(\.aggregateProjectionPresentation)
     private var aggregateProjectionPresentation
     @Query private var activityResetMarkers: [ActivityResetMarker]
@@ -1301,8 +1302,10 @@ struct LogView: View {
         if aggregateProjectionPresentation.isCloudVerificationPending {
             PomoGemCard {
                 Label(
-                    "iCloudのまとまり粒を再集計中です。この端末で確認できた個別記録は引き続き表示しています。",
-                    systemImage: "icloud.and.arrow.down"
+                    isCloudOfflineSession
+                        ? "このiPhoneのまとまり粒を確認中です。確認できた個別記録は引き続き表示しています。"
+                        : "iCloudのまとまり粒を再集計中です。この端末で確認できた個別記録は引き続き表示しています。",
+                    systemImage: isCloudOfflineSession ? "checklist" : "icloud.and.arrow.down"
                 )
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(PomoGemTheme.muted)

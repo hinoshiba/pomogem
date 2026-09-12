@@ -351,6 +351,7 @@ struct RootView: View {
     >()
     @State private var completeDeletion = CompleteDataDeletionController()
     @State private var storageTransfer = StorageTransferController()
+    @State private var storageTransferRegistrationID: UUID?
     @State private var isDataDeletionQuiesced = false
     @State private var maintenance = SyncMaintenanceCoordinator()
     @State private var maintenanceDrainTask: Task<Void, Never>?
@@ -687,7 +688,6 @@ struct RootView: View {
         }
         .task {
             installCompleteDeletionOperation()
-            installStorageTransferOperation()
         }
         .alert(
             persistenceMode == .localOnly
@@ -874,8 +874,15 @@ struct RootView: View {
                 await refreshPassiveNotifications()
             }
         }
-        .onAppear { viewTasks.activate() }
+        .onAppear {
+            viewTasks.activate()
+            installStorageTransferOperation()
+        }
         .onDisappear {
+            if let registrationID = storageTransferRegistrationID {
+                storageTransfer.uninstall(registrationID: registrationID)
+                storageTransferRegistrationID = nil
+            }
             viewTasks.cancelAll()
             maintenanceIdleGraceTask?.cancel()
             maintenanceIdleGraceTask = nil
@@ -1412,7 +1419,7 @@ struct RootView: View {
     @MainActor
     private func installStorageTransferOperation() {
         guard let prepareStorageTransfer, let unmountForStorageTransfer else { return }
-        storageTransfer.install { choice in
+        storageTransferRegistrationID = storageTransfer.install { choice in
             guard !isDataDeletionQuiesced,
                   !router.focusPresentationIsActive,
                   router.recoveredFocus == nil,
@@ -2810,6 +2817,7 @@ private struct StartupErrorView: View {
 
 struct MainNavigationView: View {
     @Bindable var router: AppRouter
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let persistenceMode: PersistenceLaunchMode
     @State private var navigationPath: [AppTab] = []
 
@@ -2849,10 +2857,12 @@ struct MainNavigationView: View {
         .fullScreenCover(item: $router.recoveredFocus, onDismiss: {
             router.completeFocusPresentation()
         }) { request in
-            FocusView(recovery: request)
+            CloudConnectionSessionContent { FocusView(recovery: request) }
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .fullScreenCover(item: $router.recoveredBreak) { recovery in
-            BreakTimerView(recovery: recovery)
+            CloudConnectionSessionContent { BreakTimerView(recovery: recovery) }
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
     }
 

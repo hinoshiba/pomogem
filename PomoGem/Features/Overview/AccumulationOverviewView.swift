@@ -438,18 +438,28 @@ struct AccumulationOverviewPageScope: Equatable, Sendable {
     }
 
     var timelineDetail: String {
+        timelineDetail(isCloudOfflineSession: false)
+    }
+
+    func timelineDetail(isCloudOfflineSession: Bool) -> String {
         if totalSessionCountIsCloudUnverified {
-            return "iCloudを再集計中です。年と月の表示には、この端末で確認できた記録だけを使います。"
+            let status = isCloudOfflineSession ? "このiPhoneの集計を確認中です" : "iCloudを再集計中です"
+            return "\(status)。年と月の表示には、この端末で確認できた記録だけを使います。"
         }
         return "生涯瓶は代表表示のまま、年と月を選ぶと、この端末に届いた範囲を正確に集計します。"
     }
 
     var shelfScopeLabel: String {
+        shelfScopeLabel(isCloudOfflineSession: false)
+    }
+
+    func shelfScopeLabel(isCloudOfflineSession: Bool) -> String {
         if totalSessionCountIsCloudUnverified {
+            let status = isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを再集計中"
             guard displayedSessionCount > 0 else {
-                return "iCloudを再集計中・確認済み記録なし"
+                return "\(status)・確認済み記録なし"
             }
-            return "iCloudを再集計中・この端末で確認済みの直近\(displayedSessionCount.formatted())件"
+            return "\(status)・この端末で確認済みの直近\(displayedSessionCount.formatted())件"
         }
         guard historyPageIsPartial else { return "月ごと・全\(totalSessionCount.formatted())件" }
         guard displayedSessionCount > 0 else { return "月別履歴は未読み込み" }
@@ -460,8 +470,13 @@ struct AccumulationOverviewPageScope: Equatable, Sendable {
     }
 
     var emptyShelfMessage: String {
+        emptyShelfMessage(isCloudOfflineSession: false)
+    }
+
+    func emptyShelfMessage(isCloudOfflineSession: Bool) -> String {
         if totalSessionCountIsCloudUnverified {
-            return "iCloudを再集計中です。この端末で確認できた月別記録だけを表示しています。"
+            let status = isCloudOfflineSession ? "このiPhoneの集計を確認中です" : "iCloudを再集計中です"
+            return "\(status)。この端末で確認できた月別記録だけを表示しています。"
         }
         if totalSessionCount > 0 {
             return "生涯記録は保存されていますが、この表示では月別履歴を読み込んでいません。"
@@ -521,11 +536,22 @@ struct AccumulationOverviewView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
     @State private var selectedCluster: AccumulationClusterSummary?
     @State private var selectedLens = AccumulationLens.now
     @State private var didApplyInitialFocus = false
 
     private let calendar = Calendar.autoupdatingCurrent
+
+    private var projectionVerificationTitle: String {
+        isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを再集計中"
+    }
+
+    private var projectionVerificationNotice: String {
+        isCloudOfflineSession
+            ? "このiPhoneの集計を確認中です。確認できた記録だけを表示しています。"
+            : AggregateProjectionPresentationPolicy.cloudPendingNotice
+    }
 
     private var layoutPolicy: AccumulationOverviewLayoutPolicy {
         .resolve(isAccessibilitySize: dynamicTypeSize.isAccessibilitySize)
@@ -766,7 +792,7 @@ struct AccumulationOverviewView: View {
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
             Text(lifetimeIsCloudUnverified
-                ? AggregateProjectionPresentationPolicy.cloudPendingNotice
+                ? projectionVerificationNotice
                 : (pageScope.historyPageIsPartial
                     ? "今週育つ結晶、瓶で動くまとまり、直近の年月。古い一回ごとの記録も消えず、必要な範囲だけ読み込みます。"
                     : "今週育つ結晶、瓶で動くまとまり、年月の棚。距離を変えても、一回ごとの集中と質量はそのまま残ります。"))
@@ -994,8 +1020,8 @@ struct AccumulationOverviewView: View {
 
                 if lifetimeIsCloudUnverified {
                     Label(
-                        "iCloudの集計を再確認中です",
-                        systemImage: "arrow.triangle.2.circlepath.icloud"
+                        isCloudOfflineSession ? "このiPhoneの集計を確認中です" : "iCloudの集計を再確認中です",
+                        systemImage: isCloudOfflineSession ? "checklist" : "arrow.triangle.2.circlepath.icloud"
                     )
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(PomoGemTheme.muted)
@@ -1084,7 +1110,7 @@ struct AccumulationOverviewView: View {
 
                 if fusionHierarchyLevels.isEmpty {
                     Text(lifetimeIsCloudUnverified
-                        ? "iCloudを再集計中です。確認が終わるまで古い階層は表示しません。"
+                        ? "\(projectionVerificationTitle)です。確認が終わるまで古い階層は表示しません。"
                         : "最初の一粒から、ここに結晶の階段が育ちます。")
                         .font(.subheadline)
                         .foregroundStyle(PomoGemTheme.muted)
@@ -1098,7 +1124,9 @@ struct AccumulationOverviewView: View {
                 }
 
                 Text(lifetimeIsCloudUnverified
-                    ? "iCloudの再集計が終わるまで、古い階層は表示しません。この端末で確認できた記録だけを年月の棚に表示します。"
+                    ? (isCloudOfflineSession
+                        ? "このiPhoneの集計の確認が終わるまで、古い階層は表示しません。確認できた記録だけを年月の棚に表示します。"
+                        : "iCloudの再集計が終わるまで、古い階層は表示しません。この端末で確認できた記録だけを年月の棚に表示します。")
                     : (lifetimeIsLowerBound
                         ? "保存領域から確認できた範囲の階層です。整理が終わるまで、生涯値は減らさず「以上」で扱います。"
                         : "段の個数は保存上のまとまりです。10個そろうと次へ圧縮しますが、時間の核はグラムから独立に計算します。"))
@@ -1163,7 +1191,7 @@ struct AccumulationOverviewView: View {
     private var lifetimeStats: some View {
         OverviewStat(
             title: lifetimeIsCloudUnverified
-                ? "集中（iCloud再集計中）"
+                ? (isCloudOfflineSession ? "集中（端末の集計を確認中）" : "集中（iCloud再集計中）")
                 : (lifetimeIsLowerBound ? "集中（集計整理中）" : "集中"),
             value: AggregateProjectionPresentationPolicy.overviewLifetimeValue(
                 verifiedValue: formattedMass(lifetimeGrams),
@@ -1197,7 +1225,8 @@ struct AccumulationOverviewView: View {
 
     private var lifetimeBottleAccessibilityValue: String {
         if lifetimeIsCloudUnverified {
-            return "iCloudの集計を再確認中。この端末で確認済みの記録は\(lifetimePebbleCount)粒。古いまとまりは表示していません。\(pageScope.achievementAccessibilitySummary)"
+            let status = isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudの集計を再確認中"
+            return "\(status)。この端末で確認済みの記録は\(lifetimePebbleCount)粒。古いまとまりは表示していません。\(pageScope.achievementAccessibilitySummary)"
         }
         return "集中\(formattedMass(lifetimeGrams))\(lifetimeIsLowerBound ? "以上" : "")、\(EffortProgressPresentation.formattedStandardUnits(grams: lifetimeGrams))、物理履歴\(lifetimePebbleCount)粒、表示中のまとまり粒\(clusters.count)個、\(pageScope.achievementAccessibilitySummary)。\(pageScope.bottleRepresentativeDisclosure(displayedRecordCount: bottleGraphicRecords.count, displayedClusterCount: bottleGraphicClusters.count, displayedAchievementCount: bottleGraphicMilestones.count))"
     }
@@ -1227,7 +1256,9 @@ struct AccumulationOverviewView: View {
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("overview.lens")
             }
-            Text(selectedLens == .timeline ? pageScope.timelineDetail : selectedLens.detail)
+            Text(selectedLens == .timeline
+                ? pageScope.timelineDetail(isCloudOfflineSession: isCloudOfflineSession)
+                : selectedLens.detail)
                 .font(.caption.weight(.semibold))
                 // This sentence is operational scope disclosure, not tertiary
                 // decoration. Keep it readable at Increase Contrast / AX5.
@@ -1316,7 +1347,7 @@ struct AccumulationOverviewView: View {
                     Label {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(lifetimeIsCloudUnverified
-                                ? "iCloudを再集計中"
+                                ? projectionVerificationTitle
                                 : "10粒ごとに生まれます")
                                 .font(.subheadline.weight(.bold))
                             Text(lifetimeIsCloudUnverified
@@ -1369,7 +1400,7 @@ struct AccumulationOverviewView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("瓶の棚")
                         .font(PomoGemTheme.brand(20))
-                    Text(pageScope.shelfScopeLabel)
+                    Text(pageScope.shelfScopeLabel(isCloudOfflineSession: isCloudOfflineSession))
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.muted)
                 }
@@ -1378,7 +1409,7 @@ struct AccumulationOverviewView: View {
                     Text("瓶の棚")
                         .font(PomoGemTheme.brand(20))
                     Spacer()
-                    Text(pageScope.shelfScopeLabel)
+                    Text(pageScope.shelfScopeLabel(isCloudOfflineSession: isCloudOfflineSession))
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.muted)
                 }
@@ -1386,7 +1417,7 @@ struct AccumulationOverviewView: View {
 
             if monthlyBottles.isEmpty {
                 PomoGemCard {
-                    Text(pageScope.emptyShelfMessage)
+                    Text(pageScope.emptyShelfMessage(isCloudOfflineSession: isCloudOfflineSession))
                         .font(.subheadline)
                         .foregroundStyle(PomoGemTheme.muted)
                         .frame(maxWidth: .infinity, alignment: .leading)

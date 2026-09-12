@@ -458,8 +458,16 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     private var offlineContinuationAction: (() -> Void)? {
-        guard canContinueOffline else { return nil }
+        guard canContinueOffline, canStartOfflineContinuation else { return nil }
         return { requestOfflineUse() }
+    }
+
+    private var canStartOfflineContinuation: Bool {
+        guard session == nil, !isPreparing, !isQuiescingAccountChange,
+              !requiresStorageTransferRelaunch else { return false }
+        return CloudOfflineHostPolicy.offlineMountDecision(
+            cloudMirrorWasOpened: StorageTransferProcessState.cloudMirrorWasOpened,
+            hasLiveContainers: containerLifetimes.hasLiveContainers) == .allow
     }
 
     private func sessionContent(_ current: PomoGemPersistenceSession) -> some View {
@@ -469,11 +477,11 @@ private struct PomoGemPersistenceLaunchHost: View {
         let cleanupID = current.mode == .cloudKit && !current.isCloudOffline && current.startupError == nil
             ? current.id : nil
         let cleanupNamespace = current.accountNamespace
-        return loadedContent(current)
+        return CloudConnectionSessionContent { loadedContent(current) }
             .id(current.id)
             .modelContainer(current.container)
             .environment(\.isCloudOfflineSession, current.isCloudOffline)
-            .safeAreaInset(edge: .top, spacing: 0) { connectionBanner(for: current) }
+            .environment(\.cloudConnectionPresentation, connectionPresentation(for: current))
             .task(id: scenePhase) {
                 if let cleanupID, let cleanupNamespace {
                     await retryStorageTransferCleanup(sessionID: cleanupID, namespace: cleanupNamespace)
@@ -481,19 +489,20 @@ private struct PomoGemPersistenceLaunchHost: View {
             }
     }
 
-    @ViewBuilder
-    private func connectionBanner(for current: PomoGemPersistenceSession) -> some View {
+    private func connectionPresentation(for current: PomoGemPersistenceSession) -> CloudConnectionPresentation? {
         if current.isCloudOffline {
             let notice = offlineRecovery.notice?.sessionID == current.id ? offlineRecovery.notice : nil
-            CloudOfflineBanner(isChecking: isCheckingOfflineConnection, message: offlineMessage,
+            return CloudConnectionPresentation(sessionID: current.id,
+                isChecking: isCheckingOfflineConnection, message: offlineMessage,
                 retry: { retryOfflineConnection() }, recoveryKind: notice?.kind,
                 reviewRecovery: notice?.kind == .storageTransfer ? {
                     if let notice { requestOfflineRecoveryReview(expectedNotice: notice) }
                 } : nil)
         } else if current.mode == .cloudKit, networkPath.isOffline == true {
-            CloudOfflineBanner(isChecking: false,
+            return CloudConnectionPresentation(sessionID: current.id, isChecking: false,
                 message: "通信の回復を待っています。端末への記録は続けられます。", retry: nil)
         }
+        return nil
     }
 
     @MainActor
@@ -1611,7 +1620,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     private func requestOfflineUse() {
-        guard !isPreparing, !requiresStorageTransferRelaunch,
+        guard canStartOfflineContinuation,
               case let .selected(.cloud(binding)) = PersistenceDeploymentState.load(),
               offlineCopyIsEligible(binding: binding) else { return }
         offlineFallbackRequested = true
@@ -2207,6 +2216,7 @@ private struct PomoGemPersistenceLaunchHost: View {
 
     private func beginContainerRetirement() {
         didTimeOutContainerRetirement = false
+        canContinueOffline = false
         // Cloud-backed RootView is absent while the account is revalidated.
         // Pause any process-local completion loop so it cannot resume on the
         // foreground edge without its Stop UI. Durable recovery restarts an

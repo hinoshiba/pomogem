@@ -375,7 +375,160 @@ final class StorageTransferSettingsUITests: XCTestCase {
         assertNoOperation()
     }
 
-    private func launch(_ scenario: String, accessibility5: Bool = false) {
+    func testOfflineRootNavigationAndFullScreenFocusDoNotOverlapBanner() {
+        assertOfflineRootNavigation(accessibility5: false)
+    }
+
+    func testAX5OfflineRootNavigationAndFullScreenFocusDoNotOverlapBanner() {
+        assertOfflineRootNavigation(accessibility5: true)
+    }
+
+    func testAX5OfflineRecoveredBreakKeepsBannerAndReturnActionReachable() {
+        launch("offlineBreakNavigation", accessibility5: true, expectsSettingsFixture: false)
+        let skips = app.buttons.matching(NSPredicate(format: "label == %@", "休憩をスキップ"))
+        XCTAssertTrue(skips.firstMatch.waitForExistence(timeout: 15), "Root must present its actual recovered BreakTimerView")
+        // Break has header and footer actions with the same meaning. Its
+        // foreground header is already visible; the Settings scroll helper
+        // must not compare it against the covered Root's navigation bar.
+        let visibleSkips = skips.allElementsBoundByIndex.filter(\.isHittable)
+            .sorted { $0.frame.minY < $1.frame.minY }
+        XCTAssertFalse(visibleSkips.isEmpty)
+        guard let skip = visibleSkips.first else { return }
+        let details = visibleBannerButton("cloud-offline-details")
+        XCTAssertTrue(details.isHittable)
+        assertTouchTarget(details)
+        assertTouchTarget(skip)
+        XCTAssertGreaterThanOrEqual(skip.frame.minY, details.frame.maxY)
+        XCTAssertLessThanOrEqual(skip.frame.maxY, app.windows.firstMatch.frame.maxY)
+        XCTAssertFalse(skip.frame.intersects(details.frame))
+        attach("AX5 offline actual Root — recovered break and return action")
+        skip.tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
+        assertNavigationClearOfBanner(app.navigationBars.firstMatch)
+        assertNoNavigationRetry()
+    }
+
+    private func assertOfflineRootNavigation(accessibility5: Bool) {
+        launch("offlineNavigation", accessibility5: accessibility5, expectsSettingsFixture: false)
+        let menu = app.buttons["メニュー"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 15), "Use the actual Root/Home toolbar, not a toolbar-free fixture")
+        attach("Offline actual Root — Home toolbar and banner")
+        assertNavigationClearOfBanner(app.navigationBars.firstMatch)
+        XCTAssertTrue(menu.isHittable)
+        menu.tap()
+        XCTAssertTrue(app.navigationBars["メニュー"].waitForExistence(timeout: 4),
+            "A Home menu tap must open the menu, never invoke the cloud retry beneath it")
+        app.buttons["home.menu.close"].tap()
+        assertNoNavigationRetry()
+
+        for (action, title) in [("記録を見る", "記録"), ("設定", "設定")] {
+            menu.tap()
+            XCTAssertTrue(app.navigationBars["メニュー"].waitForExistence(timeout: 4))
+            let destination = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", action)).firstMatch
+            XCTAssertTrue(reveal(destination))
+            destination.tap()
+            let bar = app.navigationBars[title]
+            XCTAssertTrue(bar.waitForExistence(timeout: 5))
+            assertNavigationClearOfBanner(bar)
+            let back = bar.buttons.element(boundBy: 0)
+            XCTAssertTrue(back.isHittable)
+            attach("Offline actual Root — \(title) and back control")
+            back.tap()
+            XCTAssertTrue(menu.waitForExistence(timeout: 5))
+            assertNoNavigationRetry()
+        }
+
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(reveal(launcher))
+        launcher.tap()
+        let pause = app.buttons["一時停止"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 10))
+        // This is HomeView's real new-focus fullScreenCover. It must have its
+        // own visible banner; an inaccessible copy underneath cannot satisfy.
+        let details = visibleBannerButton("cloud-offline-details")
+        XCTAssertTrue(details.isHittable)
+        XCTAssertTrue(visibleBannerButton("cloud-offline-retry").isHittable)
+        let subject = app.staticTexts["focus.subject"]
+        XCTAssertTrue(subject.exists)
+        XCTAssertGreaterThanOrEqual(subject.frame.minY, details.frame.maxY)
+        XCTAssertTrue(reveal(pause))
+        XCTAssertFalse(pause.frame.intersects(details.frame))
+        pause.tap()
+        let resume = app.buttons["再開する"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 4))
+        XCTAssertTrue(reveal(resume))
+        XCTAssertFalse(resume.frame.intersects(details.frame))
+        attach("Offline actual Root — paused full-screen focus with visible banner")
+        assertNoNavigationRetry()
+        details.tap()
+        XCTAssertTrue(app.navigationBars["同期の状態"].waitForExistence(timeout: 4))
+        let message = app.staticTexts["cloud-offline-details-message"]
+        XCTAssertTrue(reveal(message))
+        XCTAssertTrue(message.label.contains("retryCalls=0"))
+        app.buttons["cloud-offline-details-close"].tap()
+        XCTAssertTrue(resume.waitForExistence(timeout: 4), "Closing banner details must preserve the paused timer")
+        let retry = visibleBannerButton("cloud-offline-retry")
+        XCTAssertTrue(retry.isHittable)
+        retry.doubleTap()
+        XCTAssertFalse(retry.isEnabled)
+        XCTAssertTrue(resume.exists, "Updating banner state must not recreate Root or discard its paused focus")
+        details.tap()
+        XCTAssertTrue(app.navigationBars["同期の状態"].waitForExistence(timeout: 4))
+        XCTAssertTrue(reveal(message))
+        XCTAssertTrue(message.label.contains("retryCalls=1"), "The visible full-screen banner invokes exactly one connection action")
+        app.buttons["cloud-offline-details-close"].tap()
+        XCTAssertTrue(resume.waitForExistence(timeout: 4))
+        let timer = app.descendants(matching: .any).matching(identifier: "focus.timer-display").firstMatch
+        let pausedValue = timer.value as? String
+        XCTAssertNotNil(pausedValue)
+
+        // A real UI-created paused timer is recovered through Root's separate
+        // fullScreenCover on the next process. No synthesized focus envelope.
+        launch("offlineNavigationRecovered", accessibility5: accessibility5, expectsSettingsFixture: false)
+        let recoveredResume = app.buttons["再開する"]
+        XCTAssertTrue(recoveredResume.waitForExistence(timeout: 15))
+        XCTAssertTrue(visibleBannerButton("cloud-offline-details").isHittable)
+        XCTAssertTrue(visibleBannerButton("cloud-offline-retry").isHittable)
+        XCTAssertTrue(reveal(recoveredResume))
+        XCTAssertFalse(recoveredResume.frame.intersects(visibleBannerButton("cloud-offline-details").frame))
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "focus.timer-display").firstMatch.value as? String, pausedValue)
+        attach("Offline actual Root — recovered paused focus retains banner and remainder")
+        assertNoNavigationRetry()
+    }
+
+    private func assertNavigationClearOfBanner(_ navigationBar: XCUIElement) {
+        let details = visibleBannerButton("cloud-offline-details")
+        let retry = visibleBannerButton("cloud-offline-retry")
+        XCTAssertTrue(details.isHittable)
+        XCTAssertTrue(retry.isHittable)
+        assertTouchTarget(details)
+        assertTouchTarget(retry)
+        XCTAssertGreaterThanOrEqual(navigationBar.frame.minY,
+            max(details.frame.maxY, retry.frame.maxY) - 0.5,
+            "The Host banner must reserve height above the real navigation bar")
+        for button in navigationBar.buttons.allElementsBoundByIndex {
+            XCTAssertFalse(button.frame.intersects(details.frame))
+            XCTAssertFalse(button.frame.intersects(retry.frame))
+        }
+    }
+
+    private func assertNoNavigationRetry() {
+        let retry = visibleBannerButton("cloud-offline-retry")
+        XCTAssertTrue(retry.isHittable)
+        XCTAssertTrue(retry.isEnabled, "Navigating/pausing must not invoke the connection action")
+    }
+
+    private func visibleBannerButton(_ identifier: String) -> XCUIElement {
+        // UIKit retains the covered Root in the AX snapshot. Require exactly
+        // one actionable foreground copy; merely finding its background twin
+        // would falsely pass a missing full-screen banner.
+        let buttons = app.buttons.matching(identifier: identifier)
+        let visible = buttons.allElementsBoundByIndex.filter(\.isHittable)
+        XCTAssertEqual(visible.count, 1, "Exactly one foreground banner control must be actionable: \(identifier)")
+        return visible.first ?? buttons.firstMatch
+    }
+
+    private func launch(_ scenario: String, accessibility5: Bool = false, expectsSettingsFixture: Bool = true) {
         app?.terminate()
         app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
@@ -384,8 +537,10 @@ final class StorageTransferSettingsUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = accessibility5 ? "1" : "0"
         app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
         app.launch()
-        XCTAssertTrue(state.waitForExistence(timeout: 12), "The explicit Debug-only fixture must be selected")
-        assertNoOperation()
+        if expectsSettingsFixture {
+            XCTAssertTrue(state.waitForExistence(timeout: 12), "The explicit Debug-only fixture must be selected")
+            assertNoOperation()
+        }
     }
 
     private var state: XCUIElement { app.staticTexts["storage-switch.fixture-state"] }

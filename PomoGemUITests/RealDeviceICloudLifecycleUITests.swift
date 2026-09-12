@@ -7,7 +7,7 @@ import XCTest
 ///     | timer-running | timer-paused | local-seed | local-relaunch | local-reset
 ///     | offline | timer-start-for-uninstall | timer-restore
 ///     | theme-delete | theme-delete-restore | theme-deleted-relaunch
-///     | offline-online | offline-use | offline-relaunch | offline-recover | offline-warm
+///     | offline-online | offline-use | offline-relaunch | offline-recover | offline-warm | offline-cleanup
 /// Offline-use phases accept POMOGEM_REAL_ICLOUD_THEME_NAME only in the runner
 /// to select an existing independently retained synthetic Development theme.
 ///   POMOGEM_REAL_ICLOUD_RUN_PREFIX=<unique 8...24 ASCII letters/digits/hyphens>
@@ -24,6 +24,10 @@ import XCTest
 /// Offline-warm keeps a real running timer open through the loss window, then
 /// backgrounds/activates the same process. Restore external networking during
 /// its POMOGEM_REAL_NETWORK_RESTORE_READY window before the explicit online retry.
+/// Offline-cleanup is a separate operator-selected phase after an interrupted
+/// audit. It requires a paused timer for the exact retained synthetic theme,
+/// then cancels only that timer through the ordinary UI. Retain the interrupted
+/// store snapshot first; teardown never performs this cleanup automatically.
 /// Timer-start-for-uninstall deliberately leaves a paused active
 /// timer; confirm its server upload before uninstalling and running timer-restore.
 /// Run theme-delete after timer phases. Before uninstalling for theme-delete-restore,
@@ -47,6 +51,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         case offlineOnline = "offline-online", offlineUse = "offline-use"
         case offlineRelaunch = "offline-relaunch", offlineRecover = "offline-recover"
         case offlineWarm = "offline-warm"
+        case offlineCleanup = "offline-cleanup"
         case timerStartForUninstall = "timer-start-for-uninstall"
         case timerRestore = "timer-restore"
         case themeDelete = "theme-delete"
@@ -89,7 +94,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
                     "Supply a unique 8...24-character ASCII run prefix; reuse it for all phases.")
         themeName = "PomoGemAudit-\(prefix)"
         if let existingName = environment["POMOGEM_REAL_ICLOUD_THEME_NAME"] {
-            try require([.offlineOnline, .offlineUse, .offlineRelaunch, .offlineRecover, .offlineWarm].contains(phase!),
+            try require([.offlineOnline, .offlineUse, .offlineRelaunch, .offlineRecover, .offlineWarm, .offlineCleanup].contains(phase!),
                         "An existing synthetic theme override is limited to explicit offline audit phases.")
             try require(existingName.range(of: "^[A-Za-z0-9 -]{8,64}$", options: .regularExpression) != nil,
                         "Use an exact bounded synthetic ASCII theme name from the independently retained source snapshot.")
@@ -437,6 +442,8 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         let onlineRetry = app!.buttons["cloud-offline-online-retry"]
         try require(onlineRetry.waitForExistence(timeout: 30) && onlineRetry.isEnabled,
                     "When a prior cloud mirror prevents offline reopening, a bounded notice must still allow an explicit online retry.")
+        try require(!app!.buttons["cloud-offline-continue"].exists,
+                    "A process that opened a cloud mirror must not offer an offline action it cannot safely perform.")
         try require(!app!.buttons["iCloudに保存して同期"].exists
                     && !app!.buttons["このiPhoneだけに保存"].exists,
                     "The warm retry notice must not replace the initialized data with fresh storage selection.")
@@ -469,6 +476,21 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try openLog()
         try scrollTo(auditHistoryRow, attempts: 24)
         try require(auditHistoryRow.exists, "Reconnecting must retain the exact offline manual activity in the ordinary UI.")
+        retainEvidence(failure: false)
+    }
+
+    func testInterruptedOfflineAuditPausedTimerCanBeCancelledExplicitly() throws {
+        try select(.offlineCleanup)
+        let app = launchRealApplication()
+        try requireFocus(paused: true, timeout: 30)
+        let subject = app.staticTexts["focus.subject"]
+        try require(subject.waitForExistence(timeout: 5) && subject.label == themeName,
+                    "Cleanup must target the exact independently retained synthetic audit theme.")
+        let pausedSeconds = try timerRemainingSeconds()
+        try require((1...1500).contains(pausedSeconds),
+                    "An interrupted audit must restore its paused 25-minute timer before cleanup.")
+        retainEvidence(failure: false)
+        try cancelAuditTimerAndRequireDurableHome()
         retainEvidence(failure: false)
     }
 
