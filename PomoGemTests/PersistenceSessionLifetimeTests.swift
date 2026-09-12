@@ -1,3 +1,4 @@
+import CloudKit
 import SwiftData
 import SwiftUI
 import UIKit
@@ -6,6 +7,77 @@ import XCTest
 
 @MainActor
 final class PersistenceSessionLifetimeTests: XCTestCase {
+    func testExpiredWarmLaunchDoesNotAutomaticallyRenewAfterImmediateRetirement() async throws {
+        try await assertExpiredWarmLaunchDoesNotAutomaticallyRenew(delaysExpiredTaskUntilRetired: false)
+    }
+
+    func testExpiredWarmLaunchDoesNotAutomaticallyRenewWhenInvalidatedTaskStartsAfterRetirement() async throws {
+        try await assertExpiredWarmLaunchDoesNotAutomaticallyRenew(delaysExpiredTaskUntilRetired: true)
+    }
+
+    func testExplicitRetryAfterExpiredWarmLaunchCanVerifyAndRenderANewSession() async throws {
+        try await assertExpiredWarmLaunchDoesNotAutomaticallyRenew(delaysExpiredTaskUntilRetired: true,
+                                                                  explicitlyRetries: true)
+    }
+
+    private func assertExpiredWarmLaunchDoesNotAutomaticallyRenew(delaysExpiredTaskUntilRetired: Bool,
+                                                                 explicitlyRetries: Bool = false) async throws {
+        let suite = "PersistenceDeadlineLifecycle.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let probe = DeadlineLifecycleProbe(
+            loaded: expectation(description: "first verified session rendered"),
+            retirementStarted: expectation(description: "background retirement is waiting"),
+            activeWhileQuiescing: expectation(description: "active scene awaits retirement"),
+            resumedLookup: expectation(description: "foreground account lookup started"),
+            expired: expectation(description: "foreground watchdog expired"),
+            expiredGenerationObserved: expectation(description: "invalidated generation task checked admission"))
+        probe.delaysExpiredTaskUntilRetired = delaysExpiredTaskUntilRetired
+        let resolver = AppleAccountBoundaryResolver(defaults: defaults,
+            client: CloudAccountVerificationClient(
+                accountStatus: { await probe.accountStatus() },
+                userRecordID: { CKRecord.ID(recordName: "synthetic-deadline-account") },
+                probePrivateDatabase: {}), verificationTimeout: 30)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = UIHostingController(rootView: DeadlineLifecycleHost(probe: probe, resolver: resolver))
+        window.isHidden = false
+        defer {
+            probe.cancelDeadline?()
+            probe.releaseAccountLookups()
+            probe.releaseRetirement()
+            probe.changePhase = nil
+            probe.cancelDeadline = nil
+            probe.retry = nil
+            window.isHidden = true
+            window.rootViewController = nil
+            print("DeadlineLifecycleProbe: \(probe.events.joined(separator: ", "))")
+        }
+        await fulfillment(of: [probe.loaded], timeout: 3)
+        try XCTUnwrap(probe.changePhase)(.background)
+        await fulfillment(of: [probe.retirementStarted], timeout: 2)
+        try XCTUnwrap(probe.changePhase)(.active)
+        await fulfillment(of: [probe.activeWhileQuiescing], timeout: 2)
+        probe.releaseRetirement()
+        await fulfillment(of: [probe.resumedLookup, probe.expired, probe.expiredGenerationObserved],
+                          timeout: 3, enforceOrder: true)
+        XCTAssertFalse(probe.automaticallyRenewed,
+                       "An expired launch must wait for explicit retry after retirement, even if SwiftUI starts its invalidated generation late")
+        XCTAssertEqual(probe.status, "timedOut")
+        XCTAssertEqual(probe.lookupCount, 2, "Initial proof plus one foreground proof; no automatic third verification")
+        if explicitlyRetries {
+            let suppressedAttempt = try XCTUnwrap(probe.expiredAttempt)
+            let retryRendered = expectation(description: "explicit retry verified and rendered a new session")
+            probe.retryRendered = retryRendered
+            probe.allowsRetryLookup = true
+            try XCTUnwrap(probe.retry)()
+            await fulfillment(of: [retryRendered], timeout: 3)
+            XCTAssertEqual(probe.retryRenderedAttempt, suppressedAttempt + 1)
+            XCTAssertEqual(probe.lookupCount, 3)
+            XCTAssertFalse(probe.automaticallyRenewed)
+        }
+    }
+
     func testLoadedRenderCallbackDoesNotRetainRetiredContainer() async throws {
         try await assertLoadedRenderCanRetire(usesQuery: false)
     }
@@ -414,6 +486,253 @@ private struct SessionLifetimeCoverAppearance: UIViewControllerRepresentable {
             guard !reported else { return }
             reported = true
             probe.coverDidAppear?.fulfill()
+        }
+    }
+}
+
+/// Test-only replay of the launch Host's Group/task, scene retirement, and
+/// watchdog callbacks. All account callbacks are injected and use no CloudKit.
+@MainActor
+private final class DeadlineLifecycleProbe {
+    let loaded: XCTestExpectation
+    let retirementStarted: XCTestExpectation
+    let activeWhileQuiescing: XCTestExpectation
+    let resumedLookup: XCTestExpectation
+    let expired: XCTestExpectation
+    let expiredGenerationObserved: XCTestExpectation
+    var changePhase: ((ScenePhase) -> Void)?
+    var cancelDeadline: (() -> Void)?
+    var retry: (() -> Void)?
+    var retryRendered: XCTestExpectation?
+    var retryRenderedAttempt: Int?
+    var allowsRetryLookup = false
+    var events: [String] = []
+    var status = "idle"
+    var lookupCount = 0
+    var automaticallyRenewed = false
+    var expiredAttempt: Int?
+    var didReportExpiredTask = false
+    var didReportLoaded = false
+    var delaysExpiredTaskUntilRetired = false
+    private var didFinishExpiryRetirement = false
+    private var expiryTaskContinuation: CheckedContinuation<Void, Never>?
+    private var isTearingDown = false
+    private var retirementContinuation: CheckedContinuation<Void, Never>?
+    private var accountContinuations: [CheckedContinuation<CKAccountStatus, Never>] = []
+
+    init(loaded: XCTestExpectation, retirementStarted: XCTestExpectation,
+         activeWhileQuiescing: XCTestExpectation,
+         resumedLookup: XCTestExpectation, expired: XCTestExpectation,
+         expiredGenerationObserved: XCTestExpectation) {
+        self.loaded = loaded
+        self.retirementStarted = retirementStarted
+        self.activeWhileQuiescing = activeWhileQuiescing
+        self.resumedLookup = resumedLookup
+        self.expired = expired
+        self.expiredGenerationObserved = expiredGenerationObserved
+    }
+
+    func accountStatus() async -> CKAccountStatus {
+        lookupCount += 1
+        events.append("account-lookup-\(lookupCount)")
+        if lookupCount == 1 || allowsRetryLookup || isTearingDown { return .available }
+        return await withCheckedContinuation {
+            accountContinuations.append($0)
+            if lookupCount == 2 { resumedLookup.fulfill() }
+        }
+    }
+
+    func waitForRetirement() async {
+        await withCheckedContinuation {
+            retirementContinuation = $0
+            retirementStarted.fulfill()
+        }
+    }
+
+    func releaseRetirement() {
+        retirementContinuation?.resume()
+        retirementContinuation = nil
+    }
+
+    func releaseAccountLookups() {
+        isTearingDown = true
+        let pending = accountContinuations
+        accountContinuations.removeAll()
+        pending.forEach { $0.resume(returning: .available) }
+    }
+
+    func waitUntilExpiryRetirementFinishes() async {
+        events.append("invalidated-task-waits-for-retirement")
+        guard !didFinishExpiryRetirement else { return }
+        await withCheckedContinuation { expiryTaskContinuation = $0 }
+    }
+
+    func expiryRetirementFinished() {
+        didFinishExpiryRetirement = true
+        events.append("expiry-retirement-finished")
+        expiryTaskContinuation?.resume()
+        expiryTaskContinuation = nil
+    }
+
+    func reportExpiredTask(attempt: Int, admitted: Bool) {
+        guard attempt == expiredAttempt, !didReportExpiredTask else { return }
+        didReportExpiredTask = true
+        automaticallyRenewed = admitted
+        expiredGenerationObserved.fulfill()
+    }
+}
+
+@MainActor
+private struct DeadlineLifecycleHost: View {
+    let probe: DeadlineLifecycleProbe
+    let resolver: AppleAccountBoundaryResolver
+    @State private var loaded = false
+    @State private var launchAttempt = 0
+    @State private var launchAttemptGate = PersistenceLaunchAttemptGate()
+    @State private var isPreparing = false
+    @State private var isQuiescing = false
+    @State private var scenePhase: ScenePhase = .active
+    @State private var status = "idle"
+    @State private var cloudDeadline: CloudLaunchDeadline?
+
+    var body: some View {
+        Group {
+            if loaded {
+                Text("Loaded").id("verified-session")
+                    .onAppear {
+                        if !probe.didReportLoaded {
+                            probe.didReportLoaded = true
+                            probe.loaded.fulfill()
+                        } else if let retryRendered = probe.retryRendered, probe.retryRenderedAttempt == nil {
+                            probe.retryRenderedAttempt = launchAttempt
+                            retryRendered.fulfill()
+                        }
+                    }
+            } else {
+                Text(status)
+            }
+        }
+        .task(id: launchAttempt) {
+            if probe.delaysExpiredTaskUntilRetired, launchAttempt == probe.expiredAttempt {
+                // Control only task scheduling. SwiftUI may legally deliver
+                // this new-generation task after the retirement continuation.
+                await probe.waitUntilExpiryRetirementFinishes()
+            }
+            await prepare()
+        }
+        .onAppear {
+            probe.changePhase = { scenePhase = $0 }
+            probe.cancelDeadline = { cloudDeadline?.cancel() }
+            probe.retry = {
+                guard !isPreparing, !isQuiescing else { return }
+                setStatus("preparing")
+                launchAttempt += 1
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in handleScene(phase) }
+    }
+
+    private func setStatus(_ value: String) {
+        status = value
+        probe.status = value
+        probe.events.append("status-\(value)-\(launchAttempt)")
+    }
+
+    private func prepare() async {
+        let attempt = launchAttempt
+        probe.events.append("task-start-\(attempt)-quiescing-\(isQuiescing)")
+        guard !loaded, !isQuiescing, launchAttemptGate.allowsPreparation(for: attempt) else {
+            probe.reportExpiredTask(attempt: attempt, admitted: false)
+            return
+        }
+        isPreparing = true
+        var ownedDeadline: CloudLaunchDeadline?
+        defer {
+            ownedDeadline?.cancel()
+            if let ownedDeadline, cloudDeadline === ownedDeadline { cloudDeadline = nil }
+            if launchAttempt == attempt { isPreparing = false }
+            probe.events.append("task-finish-\(attempt)")
+        }
+        do {
+            let deadline = beginDeadline(attempt: attempt)
+            ownedDeadline = deadline
+            setStatus("verifying")
+            probe.reportExpiredTask(attempt: attempt, admitted: true)
+            _ = try await deadline.run { try await resolver.resolve() }
+            try Task.checkCancellation()
+            guard launchAttempt == attempt else { return }
+            try deadline.finish()
+            loaded = true
+        } catch is CancellationError {
+            probe.events.append("task-cancelled-\(attempt)")
+        } catch {
+            guard launchAttempt == attempt, !Task.isCancelled else { return }
+            setStatus("failed")
+        }
+    }
+
+    private func beginDeadline(attempt: Int) -> CloudLaunchDeadline {
+        cloudDeadline?.cancel()
+        var expiryGeneration: Int?
+        let deadline = CloudLaunchDeadline(timeout: probe.didReportLoaded ? 0.1 : 3,
+            invalidateAttempt: {
+                guard launchAttempt == attempt, !loaded else { return }
+                isQuiescing = true
+                isPreparing = false
+                launchAttempt += 1
+                launchAttemptGate.suppressAutomaticStart(for: launchAttempt)
+                expiryGeneration = launchAttempt
+                probe.expiredAttempt = launchAttempt
+                probe.events.append("expired-\(attempt)-invalidated-as-\(launchAttempt)")
+            }, onExpiry: {
+                guard let expiryGeneration, launchAttempt == expiryGeneration,
+                      !loaded, isQuiescing else { return }
+                setStatus("timedOut")
+                probe.expired.fulfill()
+                Task { @MainActor in
+                    // The real Host's async retirement function returns
+                    // immediately when its weak tracker has no live stores.
+                    await alreadyReleased()
+                    guard launchAttempt == expiryGeneration else { return }
+                    isQuiescing = false
+                    setStatus("timedOut")
+                    probe.expiryRetirementFinished()
+                }
+            })
+        cloudDeadline = deadline
+        return deadline
+    }
+
+    private func alreadyReleased() async {}
+
+    private func handleScene(_ phase: ScenePhase) {
+        probe.events.append("scene-\(phase)-\(launchAttempt)")
+        if phase == .active, isQuiescing { probe.activeWhileQuiescing.fulfill() }
+        if phase != .active {
+            cloudDeadline?.cancel()
+            cloudDeadline = nil
+        }
+        switch PersistenceLaunchScenePolicy.action(phase: phase, hasSession: loaded,
+            isPreparing: isPreparing, isQuiescingAccountChange: isQuiescing,
+            usesCloudAccountBoundary: true) {
+        case .preparePersistence:
+            setStatus("preparing")
+            launchAttempt += 1
+        case .retireCloudSession:
+            loaded = false
+            setStatus("retiring")
+            isQuiescing = true
+            launchAttempt += 1
+            let generation = launchAttempt
+            Task { @MainActor in
+                await probe.waitForRetirement()
+                guard launchAttempt == generation else { return }
+                isPreparing = false
+                isQuiescing = false
+                if scenePhase == .active { launchAttempt += 1 }
+            }
+        default:
+            break
         }
     }
 }

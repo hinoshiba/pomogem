@@ -7,7 +7,7 @@ import XCTest
 ///     | timer-running | timer-paused | local-seed | local-relaunch | local-reset
 ///     | offline | timer-start-for-uninstall | timer-restore
 ///     | theme-delete | theme-delete-restore | theme-deleted-relaunch
-///     | offline-online | offline-use | offline-relaunch | offline-recover | offline-warm | offline-cleanup
+///     | offline-online | offline-use | offline-relaunch | offline-recover | offline-warm | offline-cleanup | offline-resume
 /// Offline-use phases accept POMOGEM_REAL_ICLOUD_THEME_NAME only in the runner
 /// to select an existing independently retained synthetic Development theme.
 ///   POMOGEM_REAL_ICLOUD_RUN_PREFIX=<unique 8...24 ASCII letters/digits/hyphens>
@@ -28,6 +28,8 @@ import XCTest
 /// audit. It requires a paused timer for the exact retained synthetic theme,
 /// then cancels only that timer through the ordinary UI. Retain the interrupted
 /// store snapshot first; teardown never performs this cleanup automatically.
+/// Offline-resume explicitly resumes an interrupted audit from its retained
+/// paused timer and manual record, including a fresh externally offline launch.
 /// Timer-start-for-uninstall deliberately leaves a paused active
 /// timer; confirm its server upload before uninstalling and running timer-restore.
 /// Run theme-delete after timer phases. Before uninstalling for theme-delete-restore,
@@ -52,6 +54,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         case offlineRelaunch = "offline-relaunch", offlineRecover = "offline-recover"
         case offlineWarm = "offline-warm"
         case offlineCleanup = "offline-cleanup"
+        case offlineResume = "offline-resume"
         case timerStartForUninstall = "timer-start-for-uninstall"
         case timerRestore = "timer-restore"
         case themeDelete = "theme-delete"
@@ -94,7 +97,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
                     "Supply a unique 8...24-character ASCII run prefix; reuse it for all phases.")
         themeName = "PomoGemAudit-\(prefix)"
         if let existingName = environment["POMOGEM_REAL_ICLOUD_THEME_NAME"] {
-            try require([.offlineOnline, .offlineUse, .offlineRelaunch, .offlineRecover, .offlineWarm, .offlineCleanup].contains(phase!),
+            try require([.offlineOnline, .offlineUse, .offlineRelaunch, .offlineRecover, .offlineWarm, .offlineCleanup, .offlineResume].contains(phase!),
                         "An existing synthetic theme override is limited to explicit offline audit phases.")
             try require(existingName.range(of: "^[A-Za-z0-9 -]{8,64}$", options: .regularExpression) != nil,
                         "Use an exact bounded synthetic ASCII theme name from the independently retained source snapshot.")
@@ -420,6 +423,38 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         retainEvidence(failure: false)
     }
 
+    func testInterruptedOfflineAuditResumesPausedTimerAndRetainsManualRecord() async throws {
+        try select(.offlineResume)
+        _ = launchRealApplication()
+        try requireFocus(paused: true, timeout: 30)
+        try require(!offlineBanner.exists, "Arm network loss only after the updated ordinary app verifies its online session.")
+        let paused = try timerRemainingSeconds()
+        try require((1...1500).contains(paused), "Resume only the previously retained synthetic 25-minute timer.")
+        app!.terminate()
+        NSLog("POMOGEM_REAL_NETWORK_ARM_READY")
+        try await Task.sleep(for: .seconds(45))
+        NSLog("POMOGEM_REAL_NETWORK_RELAUNCH_BEGIN")
+        _ = launchRealApplication()
+        try requireFocus(paused: true, timeout: 30)
+        try requireOfflineBanner()
+        let restoredPaused = try timerRemainingSeconds()
+        try require(restoredPaused == paused,
+                    "A fresh offline process must recover the exact independently retained paused remainder.")
+        try tap(app!.buttons["再開する"])
+        try requireFocus(paused: false, timeout: 10)
+        let resumed = try requireRunningCountdown()
+        try require(resumed < paused, "An actual delivered resume must advance the retained countdown offline.")
+        retainEvidence(failure: false)
+        try cancelAuditTimerAndRequireDurableHome()
+        try requireOfflineBanner()
+        try selectAuditTheme()
+        try openLog()
+        try scrollTo(auditHistoryRow, attempts: 24)
+        try require(auditHistoryRow.exists,
+                    "The independently retained offline manual record must survive timer resume, cancellation and another cold launch.")
+        retainEvidence(failure: false)
+    }
+
     func testNetworkLossDuringTimerAndWarmOnlineRetryRetainPausedTime() async throws {
         try select(.offlineWarm)
         _ = launchRealApplication()
@@ -495,7 +530,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
     }
 
     private var offlineBanner: XCUIElement {
-        app!.buttons["cloud-offline-details"]
+        app!.buttons.matching(identifier: "cloud-offline-details").firstMatch
     }
 
     private func requireOfflineAuditHome(timeout: TimeInterval) throws {
@@ -509,9 +544,18 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
 
     private func requireOfflineBanner() throws {
         try require(offlineBanner.waitForExistence(timeout: 5), "The ordinary offline session must clearly disclose local saving and delayed synchronization.")
-        try require(offlineBanner.label.contains("このiPhoneに保存・iCloud同期は待機中"),
+        // UIKit retains the covered Home in full-screen AX snapshots. Check
+        // the single actionable foreground control before reading its label;
+        // an ambiguous query failure can invalidate later tap evidence.
+        let foreground = app!.buttons.matching(identifier: "cloud-offline-details")
+            .allElementsBoundByIndex.filter(\.isHittable)
+        try require(foreground.count == 1,
+                    "Exactly one foreground offline banner must be actionable.")
+        try require(foreground[0].label.contains("このiPhoneに保存・iCloud同期は待機中"),
                     "The banner must show the user-facing offline persistence explanation.")
-        try require(app!.buttons["cloud-offline-retry"].exists,
+        let retryControls = app!.buttons.matching(identifier: "cloud-offline-retry")
+            .allElementsBoundByIndex.filter(\.isHittable)
+        try require(retryControls.count == 1,
                     "A cold offline copy must expose its guarded reconnect action, independently of a normally mirrored store's network notice.")
     }
 

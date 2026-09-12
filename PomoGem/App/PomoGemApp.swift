@@ -24,6 +24,21 @@ enum PersistenceOfflineResumeAction: Equatable {
     case keepOffline, retryConnection, retireSession
 }
 
+/// Invalidating an expired attempt also changes SwiftUI's task ID. That ID
+/// change cancels old work; it must not implicitly request another launch if
+/// container cleanup finishes before SwiftUI starts the replacement task.
+struct PersistenceLaunchAttemptGate {
+    private var suppressedAutomaticAttempt: Int?
+
+    mutating func suppressAutomaticStart(for attempt: Int) {
+        suppressedAutomaticAttempt = attempt
+    }
+
+    func allowsPreparation(for attempt: Int) -> Bool {
+        suppressedAutomaticAttempt != attempt
+    }
+}
+
 /// Keeps first presentation independent from the CloudKit account boundary.
 /// SwiftUI can run a view task while the initial scene is still inactive; the
 /// following active transition must always retry an unloaded launch, including
@@ -428,6 +443,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
     @State private var launchState: LaunchState = .preparing("保存方式を確認しています")
     @State private var launchAttempt = 0
+    @State private var launchAttemptGate = PersistenceLaunchAttemptGate()
     @State private var isPreparing = false
     @State private var requestedCloudSelection = false
     @State private var canChooseLocalOnly = false
@@ -673,6 +689,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     private func preparePersistenceIfNeeded() async {
         let attempt = launchAttempt
         guard session == nil, !isQuiescingAccountChange else { return }
+        guard launchAttemptGate.allowsPreparation(for: attempt) else { return }
         guard !requiresStorageTransferRelaunch else { return }
         isPreparing = true
         canContinueOffline = false
@@ -1039,6 +1056,12 @@ private struct PomoGemPersistenceLaunchHost: View {
                 launchState = .blocked(message(for: reason))
             }
         } catch is CancellationError {
+            // Record lifecycle values only; never account identifiers, model
+            // contents or store paths. Cancellation must be distinguishable
+            // from a watchdog expiry when diagnosing a retained loading view.
+            Self.persistenceLogger.info(
+                "Launch cancelled attempt=\(attempt) current=\(launchAttempt) taskCancelled=\(Task.isCancelled) active=\(scenePhase == .active) quiescing=\(isQuiescingAccountChange) ownsDeadline=\(ownedDeadline != nil && cloudLaunchDeadline === ownedDeadline)"
+            )
             return
         } catch let error as CloudOfflineSessionError {
             guard launchAttempt == attempt, !Task.isCancelled else { return }
@@ -1389,16 +1412,24 @@ private struct PomoGemPersistenceLaunchHost: View {
 
     private func beginCloudLaunchDeadline(attempt: Int, hasExistingStore: Bool) -> CloudLaunchDeadline {
         cloudLaunchDeadline?.cancel()
+        Self.persistenceLogger.info(
+            "Launch deadline started attempt=\(attempt) existingStore=\(hasExistingStore) mirrorOpened=\(StorageTransferProcessState.cloudMirrorWasOpened)"
+        )
         var expiryGeneration: Int?
         let deadline = CloudLaunchDeadline(timeout: hasExistingStore
             ? CloudLaunchDeadline.existingStoreTimeout : CloudLaunchDeadline.initialStoreTimeout,
             invalidateAttempt: {
+                Self.persistenceLogger.info(
+                    "Launch deadline expired attempt=\(attempt) current=\(launchAttempt) hasSession=\(session != nil)"
+                )
                 guard launchAttempt == attempt, session == nil else { return }
-                // The replacement task sees the quiescence gate before any
-                // asynchronous cleanup. A stale network result cannot publish.
+                // Cleanup and SwiftUI task replacement can run in either
+                // order. Suppress this invalidation generation even after
+                // quiescence ends; a retry/fallback requests a new generation.
                 isQuiescingAccountChange = true
                 isPreparing = false
                 launchAttempt += 1
+                launchAttemptGate.suppressAutomaticStart(for: launchAttempt)
                 expiryGeneration = launchAttempt
             }, onExpiry: {
                 guard let expiryGeneration, launchAttempt == expiryGeneration,
