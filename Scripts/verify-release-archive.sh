@@ -223,20 +223,23 @@ if embedded_apps != ["PomoGem.app"]:
 if embedded_extensions != ["PomoGemWidgets.appex"]:
     fail("app must embed exactly the reviewed PomoGem Widget extension")
 
-debug_payload_names = []
-try:
-    for item in app.rglob("*"):
-        name = item.name.lower()
-        if (
-            name.endswith(".debug.dylib")
-            or name == "__preview.dylib"
-            or "preview-thunk" in name
-        ):
-            debug_payload_names.append(item.name)
-except OSError:
-    fail("archive payload topology is unreadable")
-if debug_payload_names:
-    fail("archive contains a Debug or preview dynamic-library payload")
+def validate_release_payload_topology(bundle: Path) -> None:
+    try:
+        for item in bundle.rglob("*"):
+            name = item.name.lower()
+            if name.endswith(".xctest"):
+                fail("archive contains an XCTest payload")
+            if (
+                name.endswith(".debug.dylib")
+                or name == "__preview.dylib"
+                or "preview-thunk" in name
+            ):
+                fail("archive contains a Debug or preview dynamic-library payload")
+    except OSError:
+        fail("archive payload topology is unreadable")
+
+
+validate_release_payload_topology(app)
 
 archive_plist = load(Path(archive_info_raw), "archive Info.plist")
 if archive_plist.get("ArchiveVersion") != 2:
@@ -894,6 +897,7 @@ scan_release_binary() {
   for marker in \
     'POMOGEM_LOCAL_PREVIEW' \
     'POMOGEM_UI_TEST_' \
+    'POMOGEM_REAL_' \
     'POMOGEM_RUN_40_YEAR_PERSISTENCE' \
     'FortyYearPersistentUITestFixture' \
     'FortyYearDebugScenario' \

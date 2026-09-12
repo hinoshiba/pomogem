@@ -231,6 +231,7 @@ private struct ValuePage: View {
     let persistenceMode: PersistenceLaunchMode
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.isCloudOfflineSession) private var isCloudOffline
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     var body: some View {
@@ -276,7 +277,7 @@ private struct ValuePage: View {
                             : "iCloudで引き継ぐ",
                         detail: persistenceMode == .localOnly
                             ? "このiPhoneの専用領域へ保存"
-                            : "同じApple AccountのiPhone間で同期。起動・再開時はオンライン確認が必要"
+                            : "同じApple AccountのiPhone間で同期。保存済みの端末データはオフラインでも利用できます"
                     )
 
                     Text(storageDetail)
@@ -300,7 +301,10 @@ private struct ValuePage: View {
 
     private var storageDetail: String {
         if persistenceMode == .localOnly {
-            return "この保存方式はVersion 1では後からiCloudへ切り替わらず、記録を自動アップロードしません。JSON書き出しは保管用で、アプリへ戻す機能はありません。"
+            return "記録はこのiPhoneに保存します。後で設定からiCloudを有効にするときは、端末とiCloudのどちらのデータを残すか選べます。JSON書き出しは保管用で、アプリへ戻す機能はありません。"
+        }
+        if isCloudOffline {
+            return "現在は端末に保存済みのデータを使っています。まだ届いていないiCloudのデータは、接続回復後に確認します。"
         }
         return "以前の瓶がある場合は、この画面を開いたままiCloudの反映を少しお待ちください。届くと自動で瓶が開きます。"
     }

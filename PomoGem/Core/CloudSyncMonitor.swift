@@ -409,7 +409,7 @@ enum AppleAccountBoundaryResolutionError: LocalizedError, Equatable {
         case let .verification(failure):
             failure.errorDescription
         case .blocked(.identityUnavailable):
-            "Apple AccountとiCloudをオンラインで確認できません。サインインと通信状態を確認できるまで記録の保存領域は開きません。"
+            "Apple AccountとiCloudを確認できません。確認が済むまで同期を停止します。利用できる端末データがある場合はオフラインで続けられます。"
         case .blocked(.accountMismatch):
             "このインストールでiCloud保存を選んだApple Accountと一致しません。元のApple Accountへ戻すまで保存領域は開きません。"
         case .blocked(.invalidVerifiedIdentity):
@@ -437,17 +437,20 @@ struct AppleAccountBoundaryResolver {
     private let client: CloudAccountVerificationClient?
     private let verificationTimeout: TimeInterval
     private let retryDelay: TimeInterval
+    private let transferJournalStore: StorageTransferJournalStore?
 
     init(
         defaults: UserDefaults = .standard,
         client: CloudAccountVerificationClient? = nil,
         verificationTimeout: TimeInterval = CloudAccountIdentityVerifier.verificationTimeout,
-        retryDelay: TimeInterval = 0.5
+        retryDelay: TimeInterval = 0.5,
+        transferJournalStore: StorageTransferJournalStore? = nil
     ) {
         self.defaults = defaults
         self.client = client
         self.verificationTimeout = verificationTimeout
         self.retryDelay = retryDelay
+        self.transferJournalStore = transferJournalStore
     }
 
     static func hasPersistedRegistryHistory(
@@ -459,6 +462,8 @@ struct AppleAccountBoundaryResolver {
     func resolve(
         expectedBinding: ActiveAccountLocalBinding? = nil
     ) async throws -> ResolvedAppleAccountBoundary {
+        try Task.checkCancellation()
+        let authorityBefore = try loadTransferAuthority()
         let containerIdentifier = CloudSyncConfiguration
             .synchronizedDataContainerIdentifier
         let recordID: CKRecord.ID
@@ -482,16 +487,31 @@ struct AppleAccountBoundaryResolver {
             )
         }
         var registry = try loadRegistry()
-        let decision = registry.resolve(
-            .verified(fingerprint: fingerprint),
-            expectedBinding: expectedBinding
-        )
+        let authorityAfter = try loadTransferAuthority()
+        guard authorityAfter == authorityBefore else {
+            throw AppleAccountBoundaryResolutionError.blocked(.invalidStoredRegistry)
+        }
+        let decision = authorityAfter.decision(verifiedFingerprint: fingerprint,
+            expectedBinding: expectedBinding, registry: registry)
+            ?? registry.resolve(.verified(fingerprint: fingerprint), expectedBinding: expectedBinding)
         switch decision {
         case let .allow(binding):
             try Task.checkCancellation()
             return ResolvedAppleAccountBoundary(binding: binding)
         case let .block(reason):
             throw AppleAccountBoundaryResolutionError.blocked(reason)
+        }
+    }
+
+    private func loadTransferAuthority() throws -> StorageTransferAccountNamespaceAuthority {
+        do {
+            let store: StorageTransferJournalStore?
+            if let transferJournalStore { store = transferJournalStore }
+            else if defaults === UserDefaults.standard { store = try .live() }
+            else { store = nil }
+            return try StorageTransferAccountNamespaceAuthority.read(from: store)
+        } catch {
+            throw AppleAccountBoundaryResolutionError.blocked(.invalidStoredRegistry)
         }
     }
 
@@ -562,7 +582,7 @@ enum CloudAccountAvailability: Equatable, Sendable {
         case .restricted:
             "iCloud保存を続けるには、スクリーンタイムや管理端末のiCloud設定を確認してください"
         case .temporarilyUnavailable:
-            "起動・再開時の本人確認には通信が必要です。接続回復後に再試行してください"
+            "iCloudとの通信を再確認してください。端末への記録は続けられます。この表示は同期完了を示すものではありません"
         case .unavailable:
             "本人確認が完了するまで保存領域は開きません。iCloudと通信状態を確認してください"
         }
@@ -697,12 +717,15 @@ struct CloudSyncSettingsSection: View {
 
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
     @State private var monitor = CloudSyncMonitor()
 
     @ViewBuilder
     var body: some View {
         if persistenceMode == .localOnly {
             localOnlySection
+        } else if isCloudOfflineSession {
+            offlineSection
         } else {
             cloudSection
         }
@@ -723,14 +746,29 @@ struct CloudSyncSettingsSection: View {
                     .foregroundStyle(PomoGemTheme.amber)
             }
 
-            Text("Version 1では保存方式を変更できません。iCloud同期を新しく始めるには、必要なら先に設定の「データを書き出す」でJSONを外部へ保管し、アプリを削除して再インストールしてください。削除するとこのiPhone内の記録は消えます。JSONはアプリへ再読込できないため、新しいiCloudの記録には引き継がれません。")
+            Text("iCloudを使う場合は、下の保存先の設定から切り替えられます。端末とiCloudのどちらのデータを残すかを確認して選んでください。アプリを削除すると、このiPhoneだけに保存した記録は失われます。")
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         } header: {
             Text("保存方式")
         } footer: {
-            Text("この選択は、意図しないアカウントへの記録混入を避けるため、このインストール中は固定されます。")
+            Text("保存先は自動で切り替わりません。切り替えには通信と、データの取り扱いの確認が必要です。")
+        }
+    }
+
+    private var offlineSection: some View {
+        Section {
+            Label("このiPhoneに保存・iCloud同期は待機中", systemImage: "icloud.slash")
+                .font(.headline)
+            Text("保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへはまだ送信されません。通信回復後、同じアカウントとデータを確認してから同期を再開します。")
+                .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("別端末でデータが置き換わっている場合は、端末の記録を保持して同期を停止します。保存先の切り替えは、接続と内容を確認できてから行ってください。")
+                .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+        } header: {
+            Text("iCloudとデバイス")
         }
     }
 
@@ -810,7 +848,7 @@ struct CloudSyncSettingsSection: View {
                 if monitor.availability == .simulator {
                     Text("SimulatorではApple Accountの接続状態を確認できません。iCloud同期はiPhone実機で確認してください。")
                 } else {
-                    Text("このiCloud保存方式では、起動・再開時にApple Accountをオンラインで確認できることが必要です。この表示はすべての記録が反映済みであることを示すものではありません。自前サーバーは使わず、あなたのiCloudプライベートデータベースだけで同期します。")
+                    Text("通信が使えない場合も、前回確認済みの端末データがあれば利用を続けられます。初回の取得・保存先の切り替えには通信が必要です。この接続表示は、すべての記録の同期完了を示すものではありません。あなたのiCloudプライベートデータベースを使います。")
                 }
             }
             // Native List footers lower opacity a second time. An explicit

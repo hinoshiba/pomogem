@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Regressions for CloudKit authorization in the actual archive verifier."""
+"""Regressions for authorization and test exclusion in the archive verifier."""
 
 from __future__ import annotations
 
 import ast
 import re
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from typing import Optional
@@ -115,6 +117,71 @@ class SignedCloudEnvironmentTests(unittest.TestCase):
             with self.subTest(kind=kind), self.assertRaisesRegex(ValueError, "non-App-Store"):
                 self.check_bundle(kind=kind, signed_cloud="Production",
                                   profile_cloud=["Production", "Development"])
+
+
+def verifier_payload_check():
+    script = Path(__file__).with_name("verify-release-archive.sh").read_text()
+    for source in re.findall(r"<<'PY'\n(.*?)\nPY(?:\n|$)", script, re.DOTALL):
+        function = next((node for node in ast.parse(source).body
+                         if isinstance(node, ast.FunctionDef)
+                         and node.name == "validate_release_payload_topology"), None)
+        if function is None:
+            continue
+
+        def fail(message: str) -> None:
+            raise ValueError(message)
+
+        namespace = {"Path": Path, "fail": fail}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), str(Path(__file__)), "exec"), namespace)
+        return namespace["validate_release_payload_topology"]
+    raise AssertionError("The production payload topology check was not found")
+
+
+class ReleaseTestExclusionTests(unittest.TestCase):
+    def test_nested_xctest_payload_is_rejected_including_widget_contents(self) -> None:
+        check = verifier_payload_check()
+        for relative in ("PlugIns/PomoGemTests.xctest",
+                         "PlugIns/PomoGemWidgets.appex/PlugIns/Injected.XCTEST"):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / relative).mkdir(parents=True)
+                with self.assertRaisesRegex(ValueError, "XCTest payload"):
+                    check(root)
+
+    def test_reviewed_payload_remains_allowed_and_preview_exclusion_is_preserved(self) -> None:
+        check = verifier_payload_check()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "PlugIns/PomoGemWidgets.appex").mkdir(parents=True)
+            (root / "PomoGem").write_bytes(b"ordinary executable fixture")
+            check(root)
+            for name in ("PomoGem.debug.dylib", "__preview.dylib", "source.preview-thunk.dylib"):
+                with self.subTest(name=name):
+                    artifact = root / name
+                    artifact.write_bytes(b"fixture")
+                    with self.assertRaisesRegex(ValueError, "Debug or preview"):
+                        check(root)
+                    artifact.unlink()
+
+    def test_real_device_gates_are_rejected_by_the_actual_binary_scan(self) -> None:
+        script = Path(__file__).with_name("verify-release-archive.sh").read_text()
+        function = re.search(r"^scan_release_binary\(\) \{\n.*?^\}", script, re.MULTILINE | re.DOTALL)
+        self.assertIsNotNone(function)
+        shell = "set -euo pipefail\nfail() { exit 71; }\n" + function.group(0) + \
+            '\naudit_tmp=$1\nscan_release_binary "$2" fixture\n'
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Path(directory) / "fixture-binary"
+            for marker in ("POMOGEM_REAL_STORAGE_TRANSFER", "POMOGEM_REAL_TRANSFER_LIFECYCLE",
+                           "POMOGEM_REAL_CLOUD_AUDIT", "POMOGEM_UI_TEST_STORAGE_TRANSFER"):
+                with self.subTest(marker=marker):
+                    fixture.write_bytes(b"ordinary string\n" + marker.encode() + b"\n")
+                    result = subprocess.run(["/bin/bash", "-c", shell, "payload-test", directory, str(fixture)],
+                                            capture_output=True, check=False)
+                    self.assertEqual(result.returncode, 71)
+            fixture.write_bytes(b"ordinary release executable strings\n")
+            result = subprocess.run(["/bin/bash", "-c", shell, "payload-test", directory, str(fixture)],
+                                    capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0)
 
 
 if __name__ == "__main__":

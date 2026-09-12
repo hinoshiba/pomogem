@@ -21,15 +21,17 @@ CloudKit containerを使用します。Apple IDは`6809139517`、SKUは`pomogem-
 `AppStore/release-record-1.0-5.md`、build 6のupload・取消履歴は
 `AppStore/release-record-1.0.1-6.md`、今回の準備・検証・提出状態は
 `AppStore/release-record-1.0.1-7.md`を参照します。
-build 6は実機監査で記録保護の問題を再現したため審査取消操作を行いました。次候補を選択する前に
-App Store Connectで取消処理の完了を再確認します。build 7は固定commit
+build 6は実機監査で記録保護の問題を再現したため審査を取り消し、App Store Connectで
+「デベロッパにより却下済み」を確認しました。build 7は固定commit
 `e4aee83b5e70aa9ae078ff37ad90626bb8becc97`からArchiveし、配布payloadの検証とApple Validateに合格、
 Organizerのupload時刻は2026-09-12 11:56 JST、完了表示の確認は11:57 JSTです。upload後に
 `v1.0.1-build7`を作成・pushし、上記Archive元を指すことを確認しました。後続の記録更新・merge・機能追加の
 commitとArchive元を区別し、このtagを移動しません。
-その後、SettingsでiCloudの有効／無効を切り替え、削除対象を明示して選ぶ機能の追加依頼を受けたため、
-build 7は審査送信せず保留します。次候補の実装・検証とbuild番号は未確定です。Apple側の処理完了・
-versionへの選択は未確認で、Connect作業は利用者のログイン待ちです。
+利用者の並列提出指示に従い、処理済みbuild 7を選択し、ja-JP／en-USの更新内容とReview Notesを
+保存・再読込で照合して2026-09-12 16:26 JSTに審査へ提出しました。
+提出IDは`7f746a75-2605-47c5-83d5-48ee76b40b2c`で、1.0.1 (7)の「審査待ち」を確認済みです。
+SettingsのiCloud切り替えは開発・検証中で、この提出には含みません。次の機能版のbuild番号は未確定です。
+公開Privacyの更新はGitHub Actionsの支払い／上限エラーで未配信のままです。
 登録済みでも公開前は`app_store_listing_status: not_public`を保持し、Webは「近日公開」のまま
 Smart App Bannerを表示しません。実際に公開・ダウンロード可能になってからstatusを`public`へ変更し、
 同じ数値IDのSmart App Bannerを追加して検証します。
@@ -91,7 +93,7 @@ App Store版はproduction CloudKit environmentだけを利用します。SwiftDa
 
 - SwiftData containerには`Subject`、`StudySession`、`AchievementStone`、`Prefs`、
   `ActivityResetMarker`、`SyncedFocusTimer`、`FocusTimerDeviceClaim`の7 model、field、index、
-  relationshipだけがproductionに存在する
+  relationshipがproductionに存在する。保存先切り替え用の追加schemaは下記の記録で区別する
 - `AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`は端末内projection storeにあり、CloudKitへ
   uploadされず、同期元recordから再構築できる
 - 新規iPhone、既存dataのあるiPhone、offline→再接続の同期
@@ -131,6 +133,14 @@ local-onlyの通常resetは維持します。履歴確認のread-only preflight�
 
 Version 1.0の最終Prefs schemaは`timerDisplayMode`を含む13 group、26個のrevision／mutation stamp fieldです。
 production schemaは削除・rename前提で運用せず、後方互換なadditive changeを基本にします。
+
+2026-09-12 16:40 JSTに、保存先切り替えの復旧用`PomoGemStorageTransferControl`と
+`PomoGemStorageTransferChunk`をProductionへ配備しました。Consoleの成功表示、Productionの両型・
+全field、Schema Historyを照合済みです。差分は2型、そのindexと2型への権限追加で、既存7種類の
+同期元schemaの変更・削除はありません。環境resetや利用者recordの削除は行っていません。
+この追加schemaは審査待ちのbuild 7では使いません。開発中の切り替え機能のProduction実通信・
+復旧試験の合格とは区別し、検証範囲は[StorageModeTransfer.md](StorageModeTransfer.md)で管理します。
+
 詳細はAppleの[Deploying an iCloud Container’s Schema](https://developer.apple.com/documentation/cloudkit/deploying-an-icloud-container-s-schema)
 と`Docs/SyncMaintenanceArchitecture.md`を参照します。
 

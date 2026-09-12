@@ -44,6 +44,12 @@ iOS 18+ History token経路の追加最適化です。iOS 17の正しさはrolli
 
 ### 3.1 永続化境界
 
+この節の変更不可・再インストールに関する記述は、保存先切り替えを含まない既存版の制約です。
+開発中の次候補は明示した処理とdurable journal、commit済みreceiptを根拠に保存先を変更します。
+有効化はcloudか端末のどちらを残すか選び、解除はcloudを端末へコピーしてcloud側を残します。
+通常起動の暗黙の切り替えやmergeは許可しません。切り替え中はappを削除せず案内に従い再起動します。
+[保存先切り替えの仕様と未完了gate](StorageModeTransfer.md)を参照してください。
+
 version 1.0は最初の`ModelContainer`を作る前に、同格の「iCloudで同期」と「このiPhoneのみ」を提示し、
 それぞれの確認後に一方を確定します。どちらも推奨扱いにせず、選択はVersion 1.0では変更できません。
 shipping `ModelContainer`は選択に応じて次の分離を使います。
@@ -123,6 +129,11 @@ SwiftData、CloudKit、App Group、snapshotを一切読みません。Live Activ
 再importできず、migrationや別端末での記録継続には使えません。
 
 ### 3.2 Apple Account境界
+
+次候補のnamespace変更では、検証済みの明示したjournalまたはcommit済みreceiptだけを限定的な
+authorityとして使います。通常launchで既存registryを書き換えず、account、保存元、保存先、
+namespaceの他accountとの重複を確認します。commit済みの新cloud領域から旧cacheへ戻るfallbackは
+許可しません。これは下記の通常mountのaccount確認を省略する仕組みではありません。
 
 shippingのcloud modeは、利用者へtheme名、成果memo、記録、設定、進行中timerをApple Accountのprivate
 iCloudへ保存することとonline確認要件を表示し、利用者がiCloud選択を確認した後、SwiftUIが`RootView`

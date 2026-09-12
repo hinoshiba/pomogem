@@ -315,6 +315,8 @@ struct RootView: View {
     let persistenceMode: PersistenceLaunchMode
     let persistenceSafetyNotice: String?
     let rebuildPersistenceAfterCompleteDeletion: @MainActor @Sendable () async -> Void
+    let prepareStorageTransfer: (@MainActor @Sendable (StorageTransferChoice) async throws -> Void)?
+    let unmountForStorageTransfer: (@MainActor @Sendable () -> Void)?
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
@@ -348,6 +350,7 @@ struct RootView: View {
         BoundedLaunchPreparation.DeferredMaintenanceReason
     >()
     @State private var completeDeletion = CompleteDataDeletionController()
+    @State private var storageTransfer = StorageTransferController()
     @State private var isDataDeletionQuiesced = false
     @State private var maintenance = SyncMaintenanceCoordinator()
     @State private var maintenanceDrainTask: Task<Void, Never>?
@@ -387,12 +390,16 @@ struct RootView: View {
         persistenceStartupError: String?,
         persistenceMode: PersistenceLaunchMode = .inMemoryPreview,
         persistenceSafetyNotice: String? = nil,
-        rebuildPersistenceAfterCompleteDeletion: @escaping @MainActor @Sendable () async -> Void = {}
+        rebuildPersistenceAfterCompleteDeletion: @escaping @MainActor @Sendable () async -> Void = {},
+        prepareStorageTransfer: (@MainActor @Sendable (StorageTransferChoice) async throws -> Void)? = nil,
+        unmountForStorageTransfer: (@MainActor @Sendable () -> Void)? = nil
     ) {
         self.persistenceStartupError = persistenceStartupError
         self.persistenceMode = persistenceMode
         self.persistenceSafetyNotice = persistenceSafetyNotice
         self.rebuildPersistenceAfterCompleteDeletion = rebuildPersistenceAfterCompleteDeletion
+        self.prepareStorageTransfer = prepareStorageTransfer
+        self.unmountForStorageTransfer = unmountForStorageTransfer
         _activePersistenceSafetyNotice = State(initialValue: persistenceSafetyNotice)
         _aggregateProjectionPresentation = State(
             initialValue: .initial(for: persistenceMode)
@@ -657,6 +664,20 @@ struct RootView: View {
         }
         .environment(router)
         .environment(completeDeletion)
+        .environment(storageTransfer)
+        .disabled(storageTransfer.isStarting)
+        .overlay {
+            if storageTransfer.isStarting {
+                ZStack {
+                    Color.black.opacity(0.22).ignoresSafeArea()
+                    ProgressView("保存先の切り替えを準備しています")
+                        .padding(24)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                        .accessibilityIdentifier("storage-switch.preparing")
+                }
+                .accessibilityAddTraits(.isModal)
+            }
+        }
         .environment(
             \.aggregateProjectionPresentation,
             aggregateProjectionPresentation
@@ -666,6 +687,7 @@ struct RootView: View {
         }
         .task {
             installCompleteDeletionOperation()
+            installStorageTransferOperation()
         }
         .alert(
             persistenceMode == .localOnly
@@ -1388,6 +1410,33 @@ struct RootView: View {
     }
 
     @MainActor
+    private func installStorageTransferOperation() {
+        guard let prepareStorageTransfer, let unmountForStorageTransfer else { return }
+        storageTransfer.install { choice in
+            guard !isDataDeletionQuiesced,
+                  !router.focusPresentationIsActive,
+                  router.recoveredFocus == nil,
+                  router.deferredFocusRecovery == nil,
+                  router.recoveredBreak == nil,
+                  try FocusCloudSyncStore.canonicalActive(context: modelContext) == nil else {
+                throw StorageTransferError.activeTimer
+            }
+            if modelContext.hasChanges { try modelContext.save() }
+            try await prepareStorageTransfer(choice)
+            isDataDeletionQuiesced = true
+            // The durable request is now present. Do not allow normal writers
+            // to resume if subsequent retirement or copying must be retried.
+            viewTasks.cancelAll()
+            let cleanup = acceptedResetCleanupTask
+            cleanup?.cancel()
+            if let cleanup { _ = await cleanup.result }
+            acceptedResetCleanupTask = nil
+            await quiesceForCompleteDataDeletion()
+            unmountForStorageTransfer()
+        }
+    }
+
+    @MainActor
     private func installCompleteDeletionOperation() {
         guard CompleteDataDeletionReleasePolicy.isEnabled else { return }
         completeDeletion.install {
@@ -1995,12 +2044,8 @@ struct RootView: View {
         } catch {
             modelContext.rollback()
             router.showToast(
-                persistenceMode == .localOnly
-                    ? "初期設定をこのiPhoneへ保存できませんでした。もう一度お試しください"
-                    : "初期設定をiCloudへ保存できませんでした。もう一度お試しください",
-                symbol: persistenceMode == .localOnly
-                    ? "exclamationmark.triangle"
-                    : "exclamationmark.icloud"
+                "初期設定をこのiPhoneへ保存できませんでした。もう一度お試しください",
+                symbol: "exclamationmark.triangle"
             )
             return
         }
