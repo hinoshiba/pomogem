@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ast
+import os
 import re
 import subprocess
 import sys
@@ -172,14 +173,52 @@ class ReleaseTestExclusionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = Path(directory) / "fixture-binary"
             for marker in ("POMOGEM_REAL_STORAGE_TRANSFER", "POMOGEM_REAL_TRANSFER_LIFECYCLE",
-                           "POMOGEM_REAL_CLOUD_AUDIT", "POMOGEM_UI_TEST_STORAGE_TRANSFER"):
+                           "POMOGEM_REAL_CLOUD_AUDIT", "POMOGEM_UI_TEST_STORAGE_TRANSFER",
+                           "liveForIsolatedTesting",
+                           "$s7PomoGem22StorageTransferRuntimeC22liveForIsolatedTestingACyKFZ"):
                 with self.subTest(marker=marker):
                     fixture.write_bytes(b"ordinary string\n" + marker.encode() + b"\n")
                     result = subprocess.run(["/bin/bash", "-c", shell, "payload-test", directory, str(fixture)],
                                             capture_output=True, check=False)
                     self.assertEqual(result.returncode, 71)
-            fixture.write_bytes(b"ordinary release executable strings\n")
+            fixture.write_bytes(b"ordinary release executable strings\nStorageTransferRuntime\n"
+                                b"StorageTransferReleasePolicy\nallowsCloudReplacement\nisolatedTesting\n")
             result = subprocess.run(["/bin/bash", "-c", shell, "payload-test", directory, str(fixture)],
+                                    capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0)
+
+    def test_ci_scan_rejects_dedicated_factory_in_host_and_nested_widget(self) -> None:
+        # Execute the checked-in CI step against inert files. This also catches
+        # regressions where the archive scanner is updated but CI is not.
+        workflow = Path(__file__).resolve().parents[1] / ".github/workflows/ci.yml"
+        match = re.search(
+            r"^      - name: Reject UI-test hooks in Release app\n"
+            r"        shell: bash\n        run: \|\n(?P<body>(?:          .*\n|\n)+)",
+            workflow.read_text(), re.MULTILINE,
+        )
+        self.assertIsNotNone(match)
+        shell = "\n".join(line[10:] for line in match.group("body").splitlines())
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory) / "DerivedData-CI-Release/Build/Products/Release-iphonesimulator/PomoGem.app"
+            widget = bundle / "PlugIns/PomoGemWidgets.appex/PomoGemWidgets"
+            widget.parent.mkdir(parents=True)
+            host = bundle / "PomoGem"
+            ordinary = b"StorageTransferRuntime\nStorageTransferReleasePolicy\nallowsCloudReplacement\nisolatedTesting\n"
+            environment = dict(os.environ, RUNNER_TEMP=directory)
+            for binary in (host, widget):
+                for marker in ("liveForIsolatedTesting",
+                               "$s7PomoGem22StorageTransferRuntimeC22liveForIsolatedTestingACyKFZ"):
+                    with self.subTest(binary=binary.name, marker=marker):
+                        host.write_bytes(ordinary)
+                        widget.write_bytes(ordinary)
+                        binary.write_bytes(ordinary + b"\x00" + marker.encode() + b"\x00")
+                        result = subprocess.run(["/bin/bash", "-c", shell], env=environment,
+                                                capture_output=True, check=False)
+                        self.assertEqual(result.returncode, 1)
+                        self.assertIn(b"forbidden UI-test or Debug hook tokens", result.stderr)
+            host.write_bytes(ordinary)
+            widget.write_bytes(ordinary)
+            result = subprocess.run(["/bin/bash", "-c", shell], env=environment,
                                     capture_output=True, check=False)
             self.assertEqual(result.returncode, 0)
 

@@ -153,18 +153,41 @@ private struct CloudOfflineResetBaseline: Codable {
 @MainActor
 struct CloudOfflineAccessState {
     let directory: URL
+    private let directoryAnchor: URL
 
     init(directory: URL? = nil) throws {
         if let directory {
-            guard directory.isFileURL else { throw CloudOfflineAccessStateError.unsafeDirectory }
-            self.directory = directory.standardizedFileURL
+            try self.init(directory: directory, anchor: URL(fileURLWithPath: "/", isDirectory: true))
         } else {
             guard let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
                 throw CloudOfflineAccessStateError.unsafeDirectory
             }
-            // Foundation's sandbox path can contain the OS-owned /var alias.
-            self.directory = support.resolvingSymlinksInPath().appendingPathComponent("CloudOffline", isDirectory: true)
+            try self.init(applicationSupportDirectory: support,
+                sandboxRoot: URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true))
         }
+    }
+
+    /// These roots come from the OS in production. Only aliases above the
+    /// sandbox boundary may be followed; resolving the whole support path
+    /// would also hide a link inside an app-owned directory. The explicit
+    /// arguments let tests reproduce an OS alias without changing /var.
+    init(applicationSupportDirectory: URL, sandboxRoot: URL) throws {
+        guard applicationSupportDirectory.isFileURL, sandboxRoot.isFileURL else {
+            throw CloudOfflineAccessStateError.unsafeDirectory
+        }
+        let support = applicationSupportDirectory.standardizedFileURL
+        let root = sandboxRoot.standardizedFileURL
+        guard support.pathComponents.count > root.pathComponents.count,
+              support.pathComponents.starts(with: root.pathComponents) else {
+            throw CloudOfflineAccessStateError.unsafeDirectory
+        }
+        try self.init(directory: support.appendingPathComponent("CloudOffline", isDirectory: true), anchor: root)
+    }
+
+    private init(directory: URL, anchor: URL) throws {
+        guard directory.isFileURL else { throw CloudOfflineAccessStateError.unsafeDirectory }
+        self.directory = directory.standardizedFileURL
+        directoryAnchor = anchor
         try prepareDirectory()
     }
 
@@ -260,11 +283,17 @@ struct CloudOfflineAccessState {
         return try StorageTransferStateFile(url: directory.appendingPathComponent("access-v1.json"))
     }
 
-    /// Check each ancestor and create one component at a time. This rejects
-    /// symlink parents as well as links at the owned directory and state file.
+    /// The sandbox root must already exist and cannot itself be a link. Check
+    /// every owned component below it, including on later receipt accesses.
+    /// OS-owned ancestors such as /var are outside this trust boundary.
     private func prepareDirectory() throws {
-        var current = URL(fileURLWithPath: "/", isDirectory: true)
-        for component in directory.pathComponents.dropFirst() {
+        var current = directoryAnchor
+        var anchorInfo = stat()
+        guard lstat(current.path, &anchorInfo) == 0,
+              (anchorInfo.st_mode & S_IFMT) == S_IFDIR else {
+            throw CloudOfflineAccessStateError.unsafeDirectory
+        }
+        for component in directory.pathComponents.dropFirst(directoryAnchor.pathComponents.count) {
             current.appendPathComponent(component, isDirectory: true)
             var info = stat()
             if lstat(current.path, &info) != 0 {

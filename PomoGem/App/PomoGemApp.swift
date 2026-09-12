@@ -392,6 +392,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var storageTransferRecoveryTransactionID: UUID?
     @State private var storageTransferRefreshGenerationID: UUID?
     @State private var cancellableLocalTransferID: UUID?
+    @State private var retainsTransferCopyOnCancellation = false
     @State private var remoteRecoveryAction: RemoteRecoveryAction?
     @State private var cloudLaunchDeadline: CloudLaunchDeadline?
     @State private var offlineFallbackRequested = false
@@ -450,6 +451,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             onCancelTransfer: { requestRemoteRecovery(.cancel) },
             onRefreshDataset: requestDatasetRefresh,
             onCancelLocalTransfer: localTransferCancellationAction,
+            retainsTransferCopyOnCancellation: retainsTransferCopyOnCancellation,
             onContinueOffline: offlineContinuationAction)
     }
 
@@ -667,7 +669,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                     try requireActiveLaunchAttempt(attempt, checkpoint: "during-remote-cancellation-resume")
                 })
                 try requireActiveLaunchAttempt(attempt, checkpoint: "after-remote-cancellation-resume")
-                requireStorageTransferRelaunch()
+                requireStorageTransferRelaunch(message: "切り替えを取り消しました。元の記録を保護したまま、アプリを終了して開き直してください。")
                 return
             }
             if let action = remoteRecoveryAction {
@@ -675,6 +677,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 try requireActiveLaunchAttempt(attempt, checkpoint: "before-transfer-recovery")
                 try containerLifetimes.requireAllReleased()
                 launchState = .preparing("iCloudの切り替え状況を確認しています")
+                var completionMessage: String?
                 switch action {
                 case .resume:
                     guard let binding = storageTransferRecoveryBinding else { throw StorageTransferError.staleTransaction }
@@ -690,6 +693,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                         expectedTransactionID: transactionID, validateAccess: {
                         try requireActiveLaunchAttempt(attempt, checkpoint: "during-transfer-cancellation")
                     })
+                    completionMessage = "切り替えを取り消しました。iCloudの記録を残しています。アプリを終了して開き直してください。"
                 case let .refresh(generation):
                     guard let binding = storageTransferRecoveryBinding else { throw StorageTransferError.staleTransaction }
                     try await transferRuntime.refreshCloudDataset(binding: binding,
@@ -697,13 +701,17 @@ private struct PomoGemPersistenceLaunchHost: View {
                         try requireActiveLaunchAttempt(attempt, checkpoint: "during-dataset-refresh")
                     })
                 case let .cancelPending(transactionID):
+                    let retainsCopy = try transferRuntime.pendingLocalJournal()?.retainsImportOnCancellation == true
                     try await transferRuntime.cancelPendingTransfer(expectedTransactionID: transactionID,
                         validateAccess: {
                         try requireActiveLaunchAttempt(attempt, checkpoint: "during-local-transfer-cancellation")
                     })
+                    completionMessage = retainsCopy
+                        ? "取り込みを取り消しました。元の保存先とiCloudの記録、途中までのコピーを保持しています。アプリを終了して開き直すと、元の保存先から改めて切り替えを開始できます。"
+                        : "切り替えを取り消しました。元の記録を残しています。アプリを終了して開き直してください。"
                 }
                 try requireActiveLaunchAttempt(attempt, checkpoint: "after-transfer-recovery")
-                requireStorageTransferRelaunch()
+                requireStorageTransferRelaunch(message: completionMessage)
                 return
             }
             // A journal can describe moved/promoted stores that intentionally
@@ -712,6 +720,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             let pendingTransfer = try transferRuntime.pendingLocalJournal()
             cancellableLocalTransferID = pendingTransfer?.permitsCancellation == true
                 ? pendingTransfer?.transactionID : nil
+            retainsTransferCopyOnCancellation = pendingTransfer?.retainsImportOnCancellation == true
             if pendingTransfer != nil {
                 canChooseLocalOnly = false
                 guard scenePhase == .active else {
@@ -719,6 +728,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                     return
                 }
                 launchState = .preparing("中断された保存先の切り替えを再開しています")
+                var cancelledRetainedImport = false
                 _ = try await StorageTransferHostJournalGate.resumeIfPending(
                     readPending: { try transferRuntime.pendingLocalJournal() != nil },
                     requireReleased: { try containerLifetimes.requireAllReleased() },
@@ -726,14 +736,19 @@ private struct PomoGemPersistenceLaunchHost: View {
                         try requireActiveLaunchAttempt(attempt, checkpoint: "during-transfer-resume")
                     },
                     resume: {
-                        try await transferRuntime.resumePendingTransfer(validateAccess: {
+                        let outcome = try await transferRuntime.resumePendingTransfer(validateAccess: {
                             try requireActiveLaunchAttempt(attempt, checkpoint: "during-transfer-resume")
                         }, trackContainer: { container, cloudEnabled in
                             if cloudEnabled { StorageTransferProcessState.markCloudMirrorOpened() }
                             containerLifetimes.track(container)
                         })
+                        cancelledRetainedImport = outcome == .cancelledRetainingImport
                     }
                 )
+                if cancelledRetainedImport {
+                    requireStorageTransferRelaunch(message: "中断された取り込みの取消しを完了しました。元の保存先とiCloudの記録、途中までのコピーを保持しています。アプリを終了して開き直してください。")
+                    return
+                }
                 launchAttempt += 1
                 return
             }
@@ -972,6 +987,14 @@ private struct PomoGemPersistenceLaunchHost: View {
             // online .cloud mount may still use all ordinary admission gates.
             AccountScopedLocalState.deactivate()
             launchState = .offlineRelaunchRequired(error.localizedDescription)
+        } catch let error as StorageTransferReleaseError {
+            guard launchAttempt == attempt, !Task.isCancelled else { return }
+            refreshLocalTransferCancellationTarget()
+            canContinueOffline = false
+            canChooseLocalOnly = false
+            requestedCloudSelection = false
+            AccountScopedLocalState.deactivate()
+            launchState = .blocked(error.localizedDescription)
         } catch let error as StorageTransferRuntimeError {
             guard launchAttempt == attempt, !Task.isCancelled else { return }
             refreshLocalTransferCancellationTarget()
@@ -1760,6 +1783,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         storageTransferRecoveryTransactionID = nil
         storageTransferRefreshGenerationID = nil
         cancellableLocalTransferID = nil
+        retainsTransferCopyOnCancellation = false
         AccountScopedLocalState.deactivate()
         NotificationManager.shared.cancelFocusReturnReminder()
         beginContainerRetirement()
@@ -1799,8 +1823,10 @@ private struct PomoGemPersistenceLaunchHost: View {
         do {
             let journal = try StorageTransferRuntime.live().pendingLocalJournal()
             cancellableLocalTransferID = journal?.permitsCancellation == true ? journal?.transactionID : nil
+            retainsTransferCopyOnCancellation = journal?.retainsImportOnCancellation == true
         } catch {
             cancellableLocalTransferID = nil
+            retainsTransferCopyOnCancellation = false
         }
     }
 
@@ -2254,6 +2280,7 @@ private struct PersistenceLaunchStatusView: View {
     let onCancelTransfer: () -> Void
     let onRefreshDataset: () -> Void
     let onCancelLocalTransfer: (() -> Void)?
+    let retainsTransferCopyOnCancellation: Bool
     let onContinueOffline: (() -> Void)?
 
     @State private var storageConfirmation: StorageConfirmation?
@@ -2321,7 +2348,13 @@ private struct PersistenceLaunchStatusView: View {
                     } else if case let .remoteRecovery(_, canCancel) = state {
                         Button("復旧を続ける", action: onRecoverTransfer)
                             .buttonStyle(PomoGemPrimaryButtonStyle())
+                            .disabled(!StorageTransferReleasePolicy.standard.allowsCloudReplacement)
                             .accessibilityIdentifier("storage-transfer-recover")
+                        if !StorageTransferReleasePolicy.standard.allowsCloudReplacement {
+                            Text(StorageTransferReleaseError.cloudReplacementUnavailable.localizedDescription)
+                                .foregroundStyle(PomoGemTheme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         if canCancel, onCancelLocalTransfer == nil {
                             Button("切り替えを取り消す") { confirmsTransferCancellation = true }
                                 .buttonStyle(PomoGemSecondaryButtonStyle())
@@ -2360,7 +2393,7 @@ private struct PersistenceLaunchStatusView: View {
                         .buttonStyle(PomoGemSecondaryButtonStyle())
                     }
                     if onCancelLocalTransfer != nil, showsLocalTransferCancellation {
-                        Text("置き換えが始まる前なので、この端末の切り替えを取り消して元の保存先へ戻れます。取り消した後はアプリの再起動が必要です。")
+                        Text(localTransferCancellationExplanation)
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                         Button("この端末の切り替えを取り消す") {
@@ -2388,7 +2421,7 @@ private struct PersistenceLaunchStatusView: View {
             case .localOnly:
                 Alert(
                     title: Text("このiPhoneだけに保存しますか？"),
-                    message: Text("記録をiCloudへ送信せず、このiPhoneに保存します。アプリを削除すると端末内の記録は失われます。後で設定からiCloud同期を始めるときは、iCloudの記録を使うか、このiPhoneの記録でiCloudを置き換えるかを選べます。二つの記録は統合されません。"),
+                    message: Text("記録をiCloudへ送信せず、このiPhoneに保存します。アプリを削除すると端末内の記録は失われます。後で設定からiCloudの記録を取り込み、端末の記録を置き換えて同期を始められます。端末の記録でiCloudを置き換える操作は現在利用できず、二つの記録も統合されません。"),
                     primaryButton: .cancel(Text("キャンセル")),
                     secondaryButton: .default(Text("このiPhoneだけで始める")) {
                         onChooseLocalOnly?()
@@ -2397,7 +2430,7 @@ private struct PersistenceLaunchStatusView: View {
             case .cancelPendingTransfer:
                 Alert(
                     title: Text("この端末の切り替えを取り消しますか？"),
-                    message: Text("元の記録を残して、この端末で始めた保存先の切り替えを取り消します。取り消し後にアプリを終了して開き直してください。"),
+                    message: Text(localTransferCancellationExplanation),
                     primaryButton: .cancel(Text("戻る")),
                     secondaryButton: .destructive(Text("切り替えを取り消す")) {
                         onCancelLocalTransfer?()
@@ -2416,6 +2449,13 @@ private struct PersistenceLaunchStatusView: View {
             understandsRefreshDataLoss = false
             confirmsTransferCancellation = false
         }
+    }
+
+    private var localTransferCancellationExplanation: String {
+        if retainsTransferCopyOnCancellation {
+            return "元の保存先とiCloudの記録を残して、取り込みを取り消せます。途中までのコピーも保護のため端末に保持します。取り消した後はアプリを終了して開き直し、改めて切り替えを開始してください。"
+        }
+        return "置き換えが始まる前なので、この端末の切り替えを取り消して元の保存先へ戻れます。取り消した後はアプリを終了して開き直してください。"
     }
 
     private func storageChoiceDisclosure(

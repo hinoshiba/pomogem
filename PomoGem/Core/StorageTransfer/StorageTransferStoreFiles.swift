@@ -123,6 +123,16 @@ struct StorageTransferStoreFiles {
         return try makeReaderCopy(manifest: manifest, source: directory(for: .frozen))
     }
 
+    /// Cancelling an import may republish only the original, still unchanged
+    /// source selection. This reads the sealed evidence without opening stores.
+    func requireUnchangedFrozenSource(selection: PersistenceDeploymentSelection) throws {
+        guard let frozen = try loadFrozenManifest(selection: selection) else {
+            throw StorageTransferStoreFileError.invalidManifest
+        }
+        try requireInventory(frozen, directory: directory(for: .frozen), exclusive: true)
+        try requireInventory(frozen, directory: sourceDirectory, exclusive: false)
+    }
+
     /// A closed, not-yet-sealed destination can be verified without opening
     /// the original staged files. A prior seal remains authoritative if present.
     func makeStagedReaderCopy(destination: PersistenceDeploymentSelection) throws -> [URL] {

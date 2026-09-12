@@ -67,11 +67,11 @@ final class StorageTransferControllerTests: XCTestCase {
         XCTAssertEqual(controller.error, StorageTransferError.activeTimer.localizedDescription)
         XCTAssertFalse(controller.isStarting)
         XCTAssertTrue(controller.isAvailable)
-        controller.start(.enableCloudReplacingCloud)
+        controller.start(.disableCloudKeepingCopy)
         XCTAssertNil(controller.error)
         XCTAssertTrue(controller.isStarting)
         await fulfillment(of: [gate.started], timeout: 3)
-        XCTAssertEqual(choices, [.enableCloudKeepingCloud, .enableCloudReplacingCloud])
+        XCTAssertEqual(choices, [.enableCloudKeepingCloud, .disableCloudKeepingCopy])
         gate.release()
         await fulfillment(of: [returned], timeout: 3)
     }
@@ -88,6 +88,18 @@ final class StorageTransferControllerTests: XCTestCase {
         await Task.yield()
         XCTAssertEqual(newOperationCalls, 0)
         XCTAssertFalse(controller.isAvailable)
+    }
+
+    func testUnavailableReplacementCannotInvokeEvenAnInstalledOperation() async {
+        let controller = StorageTransferController()
+        var calls = 0
+        controller.install { _ in calls += 1 }
+        controller.start(.enableCloudReplacingCloud)
+        await Task.yield()
+        XCTAssertEqual(calls, 0)
+        XCTAssertFalse(controller.isStarting)
+        XCTAssertTrue(controller.isAvailable)
+        XCTAssertEqual(controller.error, StorageTransferReleaseError.cloudReplacementUnavailable.localizedDescription)
     }
 
     private func waitUntil(_ condition: @MainActor () -> Bool, file: StaticString = #filePath,

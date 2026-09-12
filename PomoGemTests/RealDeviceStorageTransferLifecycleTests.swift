@@ -230,7 +230,10 @@ private final class DevelopmentTransferRunner {
             try Task.checkCancellation()
             try lease.check()
         }
-        let runtime = try StorageTransferRuntime.live()
+        // The enclosing physical Debug Development opt-in and isolated host
+        // checks are mandatory. The ordinary app factory remains unavailable
+        // for destructive replacement, including in Debug builds.
+        let runtime = try StorageTransferRuntime.liveForIsolatedTesting()
         if phase == .backupProof {
             try await backupProof(runtime: runtime, validate: validate)
         } else if phase == .recoverAfterUninstall {

@@ -163,7 +163,9 @@ jobs:
         run: |
           set -euo pipefail
           app_bundle="${RUNNER_TEMP}/DerivedData-CI-Release/Build/Products/Release-iphonesimulator/PomoGem.app"
-          forbidden_release_tokens='POMOGEM_UI_TEST_|POMOGEM_LOCAL_PREVIEW|POMOGEM_RUN_40_YEAR_PERSISTENCE'
+          # An emitted dedicated factory name is evidence of an accidental
+          # Debug hook. Its absence does not prove the runtime policy is safe.
+          forbidden_release_tokens='POMOGEM_UI_TEST_|POMOGEM_LOCAL_PREVIEW|POMOGEM_RUN_40_YEAR_PERSISTENCE|liveForIsolatedTesting'
 
           set +e
           matches=$(LC_ALL=C grep -R -a -l -E "$forbidden_release_tokens" "$app_bundle")

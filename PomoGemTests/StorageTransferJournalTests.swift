@@ -71,6 +71,38 @@ final class StorageTransferJournalTests: XCTestCase {
         }
     }
 
+    func testImportCancellationRetainsCopiesOnlyBeforePromotionForEveryChoiceAndRefresh() throws {
+        let prior = try XCTUnwrap(ActiveAccountLocalBinding(namespace: AccountDataNamespace(), accountFingerprint: digest))
+        let next = try XCTUnwrap(ActiveAccountLocalBinding(namespace: AccountDataNamespace(), accountFingerprint: digest))
+        let refresh = try StorageTransferJournal(choice: .enableCloudKeepingCloud,
+            source: .cloud(binding: prior), destination: .cloud(binding: next), cloudBinding: next)
+        let requests = try StorageTransferChoice.allCases.map { try request($0) }
+        for initial in requests + [refresh] {
+            var journal = initial
+            for phase in StorageTransferJournal.Phase.allCases {
+                if phase != .requested {
+                    journal = try journal.advancing(to: phase,
+                        sourceDigest: phase == .sourceSaved ? digest : nil,
+                        destinationDigest: phase == .destinationSaved ? digest : nil,
+                        remoteRecoveryTransactionID: phase == .recoveryCopySaved && journal.choice.replacesCloud
+                            ? journal.transactionID : nil)
+                }
+                let mayRetain = !journal.choice.replacesCloud
+                    && [StorageTransferJournal.Phase.preparingDestination, .destinationSaved].contains(phase)
+                XCTAssertEqual(journal.retainsImportOnCancellation, mayRetain, "Choice: \(journal.choice), phase: \(phase)")
+                XCTAssertEqual(journal.permitsCancellation, phase < .preparingDestination || mayRetain)
+                let reopened = try JSONDecoder().decode(StorageTransferJournal.self, from: JSONEncoder().encode(journal))
+                try reopened.validate()
+                XCTAssertEqual(reopened.retainsImportOnCancellation, mayRetain)
+                XCTAssertEqual(reopened, journal)
+                if mayRetain {
+                    XCTAssertNil(reopened.remoteRecoveryTransactionID,
+                        "Retaining an imported copy never grants remote replacement authority")
+                }
+            }
+        }
+    }
+
     func testStaleOrDuplicateCallbackCannotAdvanceJournalOrChangeSnapshot() throws {
         let store = StorageTransferJournalStore(directory: try directory())
         let initial = try request(.disableCloudKeepingCopy)

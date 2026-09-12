@@ -19,6 +19,11 @@ final class StorageTransferController {
     /// another transaction while the first account check is suspended.
     func start(_ choice: StorageTransferChoice) {
         guard !isStarting, task == nil, let operation else { return }
+        do { try StorageTransferReleasePolicy.standard.validate(choice) }
+        catch {
+            self.error = error.localizedDescription
+            return
+        }
         error = nil
         isStarting = true
         task = Task { @MainActor [weak self] in
@@ -105,8 +110,10 @@ private struct StorageTransferChoiceView: View {
                     }
                     Section("このiPhoneのデータを残す") {
                         Text("現在iCloudにあるPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータに置き換えます。同じApple Accountの他の端末にも影響します。")
-                        Text("他の端末のPomoGemを終了し、最新版へ更新してください。古い版やオフラインの端末が後から接続すると、古いデータが再び届く可能性があります。")
+                        Text(StorageTransferReleaseError.cloudReplacementUnavailable.localizedDescription)
+                            .accessibilityIdentifier("storage-switch.replace-cloud-unavailable")
                         Button("このiPhoneのデータで置き換える", role: .destructive) { choice = .enableCloudReplacingCloud }
+                            .disabled(!StorageTransferReleasePolicy.standard.allowsCloudReplacement)
                             .accessibilityIdentifier("storage-switch.replace-cloud")
                     }
                     Section {
@@ -151,7 +158,8 @@ private struct StorageTransferConfirmationView: View {
                     Button(choice == .disableCloudKeepingCopy ? "コピーしてiCloudを解除" : "置き換えてiCloudを有効にする",
                            role: choice == .disableCloudKeepingCopy ? nil : .destructive,
                            action: confirmed)
-                        .disabled(choice != .disableCloudKeepingCopy && !understandsDeletion)
+                        .disabled((choice.replacesCloud && !StorageTransferReleasePolicy.standard.allowsCloudReplacement)
+                                  || (choice != .disableCloudKeepingCopy && !understandsDeletion))
                         .accessibilityIdentifier("storage-switch.confirm")
                 }
             }

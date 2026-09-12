@@ -100,7 +100,15 @@ struct StorageTransferJournal: Codable, Equatable, Sendable {
         // A remote recovery copy is not a request to delete. Once destination
         // preparation is durably authorized, replacement must resume instead
         // of falling back to a writable old cloud mirror.
-        phase < .preparingDestination
+        phase < .preparingDestination || retainsImportOnCancellation
+    }
+
+    /// Copying from iCloud never erases remote data. Before promotion starts,
+    /// a stale imported snapshot can be abandoned only by retaining every
+    /// local copy. Replacement and promotion never acquire this right.
+    var retainsImportOnCancellation: Bool {
+        !choice.replacesCloud
+            && phase >= .preparingDestination && phase < .destinationVerified
     }
 
     func validate() throws {

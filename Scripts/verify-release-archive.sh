@@ -894,11 +894,14 @@ scan_release_binary() {
     fail "$label release-string scan produced no auditable output"
   fi
 
+  # The dedicated factory name also occurs inside an unstripped Swift symbol.
+  # Missing strings alone are not proof of the runtime's default-deny policy.
   for marker in \
     'POMOGEM_LOCAL_PREVIEW' \
     'POMOGEM_UI_TEST_' \
     'POMOGEM_REAL_' \
     'POMOGEM_RUN_40_YEAR_PERSISTENCE' \
+    'liveForIsolatedTesting' \
     'FortyYearPersistentUITestFixture' \
     'FortyYearDebugScenario' \
     'FortyYearPersistenceHarness' \

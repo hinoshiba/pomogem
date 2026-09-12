@@ -271,6 +271,91 @@ final class CloudOfflineAccessStateTests: XCTestCase {
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: foreign.path).isEmpty)
     }
 
+    func testOSAliasAboveSandboxAllowsDurableReceiptWithoutChangingAlias() throws {
+        let f = try fixture()
+        let parent = f.directory.deletingLastPathComponent()
+        let systemRoot = parent.appendingPathComponent("system", isDirectory: true)
+        let sandbox = systemRoot.appendingPathComponent("containers/app", isDirectory: true)
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        let alias = parent.appendingPathComponent("os-alias", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: systemRoot)
+        let aliasedSandbox = alias.appendingPathComponent("containers/app", isDirectory: true)
+        let support = aliasedSandbox.appendingPathComponent("Library/Application Support", isDirectory: true)
+        // This has the physical device's /var -> ... -> sandbox shape. The
+        // former root-to-leaf walk rejected the alias before creating state.
+        let state = try CloudOfflineAccessState(applicationSupportDirectory: support, sandboxRoot: aliasedSandbox)
+        let receipt = try state.recordVerifiedOnline(binding: f.binding, datasetGenerationID: UUID(),
+            resetBaseline: marker(), expectedReceipt: nil)
+        let restarted = try CloudOfflineAccessState(applicationSupportDirectory: support, sandboxRoot: aliasedSandbox)
+        XCTAssertEqual(try restarted.load(), receipt)
+        let physicalState = try CloudOfflineAccessState(directory:
+            sandbox.appendingPathComponent("Library/Application Support/CloudOffline", isDirectory: true))
+        XCTAssertEqual(try physicalState.load(), receipt)
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: alias.path), systemRoot.path)
+    }
+
+    func testSandboxAnchorStillRejectsEveryLinkedOwnedDirectory() throws {
+        for linkedComponent in ["Library", "Library/Application Support", "Library/Application Support/CloudOffline"] {
+            let f = try fixture()
+            let parent = f.directory.deletingLastPathComponent()
+            let sandbox = parent.appendingPathComponent("sandbox", isDirectory: true)
+            let link = sandbox.appendingPathComponent(linkedComponent, isDirectory: true)
+            try FileManager.default.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let foreign = parent.appendingPathComponent("foreign", isDirectory: true)
+            try FileManager.default.createDirectory(at: foreign, withIntermediateDirectories: false)
+            let sentinel = foreign.appendingPathComponent("sentinel")
+            let original = Data("must remain unchanged".utf8)
+            try original.write(to: sentinel)
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: foreign)
+            XCTAssertThrowsError(try CloudOfflineAccessState(applicationSupportDirectory:
+                sandbox.appendingPathComponent("Library/Application Support", isDirectory: true), sandboxRoot: sandbox)) {
+                XCTAssertEqual($0 as? CloudOfflineAccessStateError, .unsafeDirectory)
+            }
+            XCTAssertEqual(try Data(contentsOf: sentinel), original)
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: foreign.path), ["sentinel"])
+        }
+    }
+
+    func testSandboxOwnedAncestorReplacementAfterInitializationCannotRedirectRevocation() throws {
+        let f = try fixture()
+        let parent = f.directory.deletingLastPathComponent()
+        let sandbox = parent.appendingPathComponent("sandbox", isDirectory: true)
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: false)
+        let library = sandbox.appendingPathComponent("Library", isDirectory: true)
+        let support = library.appendingPathComponent("Application Support", isDirectory: true)
+        let state = try CloudOfflineAccessState(applicationSupportDirectory: support, sandboxRoot: sandbox)
+        try state.recordVerifiedOnline(binding: f.binding, datasetGenerationID: nil,
+            resetBaseline: nil, expectedReceipt: nil)
+        let originalBytes = try Data(contentsOf: state.directory.appendingPathComponent("access-v1.json"))
+        let retired = sandbox.appendingPathComponent("retained-library", isDirectory: true)
+        try FileManager.default.moveItem(at: library, to: retired)
+        let foreign = parent.appendingPathComponent("foreign", isDirectory: true)
+        try FileManager.default.createDirectory(at: foreign, withIntermediateDirectories: false)
+        try FileManager.default.createSymbolicLink(at: library, withDestinationURL: foreign)
+        XCTAssertThrowsError(try state.load())
+        XCTAssertThrowsError(try state.revoke(binding: f.binding, reason: .accountChanged))
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: foreign.path).isEmpty)
+        XCTAssertEqual(try Data(contentsOf: retired.appendingPathComponent("Application Support/CloudOffline/access-v1.json")),
+            originalBytes)
+    }
+
+    func testSandboxAnchorMustExistBeDirectoryAndContainSupportWithoutBeingALink() throws {
+        let f = try fixture()
+        let parent = f.directory.deletingLastPathComponent()
+        let sandbox = parent.appendingPathComponent("sandbox", isDirectory: true)
+        let support = sandbox.appendingPathComponent("Library/Application Support", isDirectory: true)
+        XCTAssertThrowsError(try CloudOfflineAccessState(applicationSupportDirectory: support, sandboxRoot: sandbox))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: sandbox.path))
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: false)
+        XCTAssertThrowsError(try CloudOfflineAccessState(applicationSupportDirectory:
+            parent.appendingPathComponent("sandbox-sibling/Library/Application Support"), sandboxRoot: sandbox))
+        let alias = parent.appendingPathComponent("sandbox-alias", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: sandbox)
+        XCTAssertThrowsError(try CloudOfflineAccessState(applicationSupportDirectory:
+            alias.appendingPathComponent("Library/Application Support"), sandboxRoot: alias))
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: sandbox.path).isEmpty)
+    }
+
     func testLegacyMountedCopyCanBeAdoptedOfflineWithoutClaimingFreshOnlineOrKnownLineage() throws {
         let f = try fixture()
         let baseline = marker()

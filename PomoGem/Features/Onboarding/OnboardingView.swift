@@ -301,7 +301,7 @@ private struct ValuePage: View {
 
     private var storageDetail: String {
         if persistenceMode == .localOnly {
-            return "記録はこのiPhoneに保存します。後で設定からiCloudを有効にするときは、端末とiCloudのどちらのデータを残すか選べます。JSON書き出しは保管用で、アプリへ戻す機能はありません。"
+            return "記録はこのiPhoneに保存します。後でiCloudの記録を使う場合は、設定から端末の記録が置き換わることを確認して切り替えられます。端末の記録でiCloudを置き換える操作は現在利用できません。JSON書き出しは保管用で、アプリへ戻す機能はありません。"
         }
         if isCloudOffline {
             return "現在は端末に保存済みのデータを使っています。まだ届いていないiCloudのデータは、接続回復後に確認します。"

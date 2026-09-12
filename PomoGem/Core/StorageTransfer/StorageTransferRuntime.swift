@@ -23,6 +23,26 @@ enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
     }
 }
 
+enum StorageTransferRetainedCancellationAdmission {
+    static func validate(journal: StorageTransferJournal,
+                         checkpoint: StorageTransferRuntimeCheckpoint,
+                         currentProcessID: UUID, cloudMirrorWasOpened: Bool,
+                         selection: PersistenceDeploymentSelectionState) throws {
+        try checkpoint.validate(journal: journal)
+        guard journal.retainsImportOnCancellation,
+              selection == .selected(journal.source) else { throw StorageTransferError.staleTransaction }
+        guard !cloudMirrorWasOpened,
+              checkpoint.requestingProcessID != currentProcessID,
+              checkpoint.verifiedCloudProcessID != currentProcessID else {
+            throw StorageTransferRuntimeError.relaunchRequired
+        }
+    }
+}
+
+enum StorageTransferResumeOutcome: Equatable {
+    case noPending, completed, cancelledRetainingImport
+}
+
 /// Runtime effects are only entered behind the launch host's scene/account
 /// lease. A process that has opened a cloud mirror cannot erase a zone or move
 /// its SQLite files. A fresh launch is an explicit part of this transfer flow.
@@ -31,16 +51,38 @@ final class StorageTransferRuntime {
     private static let processID = UUID()
     private let store: StorageTransferJournalStore
     private let root: URL
+    private let releasePolicy: StorageTransferReleasePolicy
+    private let storeDirectory: URL?
+    private let readSourceSelection: @MainActor () -> PersistenceDeploymentSelectionState
 
-    init(store: StorageTransferJournalStore, root: URL) {
+    init(store: StorageTransferJournalStore, root: URL,
+         releasePolicy: StorageTransferReleasePolicy = .standard,
+         storeDirectory: URL? = nil,
+         readSourceSelection: @escaping @MainActor () -> PersistenceDeploymentSelectionState = {
+             PersistenceDeploymentState.load()
+         }) {
         self.store = store
         self.root = root
+        self.releasePolicy = releasePolicy
+        self.storeDirectory = storeDirectory
+        self.readSourceSelection = readSourceSelection
     }
 
     static func live() throws -> StorageTransferRuntime {
+        try live(releasePolicy: .standard)
+    }
+
+    #if DEBUG
+    static func liveForIsolatedTesting() throws -> StorageTransferRuntime {
+        try live(releasePolicy: .isolatedTesting)
+    }
+    #endif
+
+    private static func live(releasePolicy: StorageTransferReleasePolicy) throws -> StorageTransferRuntime {
         let support = try FileManager.default.url(for: .applicationSupportDirectory,
             in: .userDomainMask, appropriateFor: nil, create: true)
-        return Self(store: try .live(), root: support.appendingPathComponent("StorageTransfer", isDirectory: true))
+        return Self(store: try .live(), root: support.appendingPathComponent("StorageTransfer", isDirectory: true),
+                    releasePolicy: releasePolicy)
     }
 
     func pendingLocalJournal() throws -> StorageTransferJournal? { try store.load() }
@@ -187,6 +229,7 @@ final class StorageTransferRuntime {
                sourceContext: ModelContext,
                validateAccess: @escaping @MainActor () throws -> Void) async throws {
         try validateAccess()
+        try releasePolicy.validate(choice)
         try requireNoPendingRemoteCancellation()
         guard try store.load() == nil, !sourceContext.hasChanges,
               try FocusCloudSyncStore.canonicalActive(context: sourceContext) == nil else {
@@ -229,11 +272,26 @@ final class StorageTransferRuntime {
         try store.begin(journal)
     }
 
+    @discardableResult
     func resumePendingTransfer(validateAccess: @escaping @MainActor () throws -> Void,
-                               trackContainer: @escaping @MainActor (ModelContainer, Bool) -> Void) async throws {
+                               trackContainer: @escaping @MainActor (ModelContainer, Bool) -> Void) async throws -> StorageTransferResumeOutcome {
         try requireNoPendingRemoteCancellation()
-        guard let initial = try store.load() else { return }
+        guard let initial = try store.load() else { return .noPending }
         try initial.validate()
+        // A durable cancellation is an accepted request, even if the process
+        // ended before clearing pending-v1. Never resume import or promotion
+        // behind that request, and never reinterpret a different journal.
+        if let retained = try cleanup().retainedCancellationJournal(transactionID: initial.transactionID) {
+            guard retained == initial,
+                  try cancelRetainingImportIfApplicable(expectedTransactionID: initial.transactionID,
+                                                        validateAccess: validateAccess) else {
+                throw StorageTransferError.staleTransaction
+            }
+            return .cancelledRetainingImport
+        }
+        // Preserve every checkpoint and backup. Even a same-transaction resume
+        // on another installation must not reach zone deletion or promotion.
+        try releasePolicy.validate(initial.choice)
         let files = try files(initial)
         let saved = try checkpoint(files, journal: initial)
         guard saved.requestingProcessID != Self.processID,
@@ -283,6 +341,7 @@ final class StorageTransferRuntime {
         try await StorageTransferCoordinator(store: store, effects: effects).resume(
             transactionID: initial.transactionID, validateTransfer: validate)
         try resumeLocalCleanup(validateAccess: validateAccess)
+        return .completed
     }
 
     /// Best-effort remote garbage collection runs after the verified cloud
@@ -320,6 +379,8 @@ final class StorageTransferRuntime {
 
     func cancelPendingTransfer(expectedTransactionID: UUID,
                                validateAccess: @escaping @MainActor () throws -> Void) async throws {
+        if try cancelRetainingImportIfApplicable(expectedTransactionID: expectedTransactionID,
+                                                 validateAccess: validateAccess) { return }
         guard let journal = try store.load(), journal.transactionID == expectedTransactionID,
               journal.permitsCancellation else { throw StorageTransferError.staleTransaction }
         let lease = StorageTransferAccountLease(center: .default)
@@ -339,7 +400,8 @@ final class StorageTransferRuntime {
     /// after another device has advanced control-v1.
     func cancelPendingTransfer(expectedTransactionID: UUID, recovery: StorageTransferRemoteRecovery,
                                validateAccess: @escaping @MainActor () throws -> Void) async throws {
-        try validateAccess()
+        if try cancelRetainingImportIfApplicable(expectedTransactionID: expectedTransactionID,
+                                                 validateAccess: validateAccess) { return }
         guard var journal = try store.load(), journal.transactionID == expectedTransactionID,
               journal.permitsCancellation else { throw StorageTransferError.staleTransaction }
         let files = try files(journal)
@@ -412,6 +474,70 @@ final class StorageTransferRuntime {
         try store.cancel(journal)
     }
 
+    /// Abandon only the local request, retaining its complete import tree. This
+    /// synchronous path neither opens a container nor contacts iCloud; the next
+    /// source mount still needs its ordinary account and dataset admission.
+    private func cancelRetainingImportIfApplicable(expectedTransactionID: UUID,
+                                                  validateAccess: @escaping @MainActor () throws -> Void) throws -> Bool {
+        try Task.checkCancellation()
+        try validateAccess()
+        if try acknowledgeRetainedCancellation(expectedTransactionID: expectedTransactionID,
+                                               validateAccess: validateAccess) { return true }
+        guard let journal = try store.load(), journal.retainsImportOnCancellation else { return false }
+        guard journal.transactionID == expectedTransactionID else { throw StorageTransferError.staleTransaction }
+        let files = try files(journal)
+        let saved = try checkpoint(files, journal: journal)
+        let cleanup = try cleanup()
+        let validate = {
+            try Task.checkCancellation()
+            try validateAccess()
+            guard try self.store.load() == journal,
+                  try self.checkpoint(files, journal: journal) == saved else {
+                throw StorageTransferError.staleTransaction
+            }
+            try self.validateRetainedCancellation(journal: journal, checkpoint: saved, files: files)
+        }
+        try validate()
+        try cleanup.requireCapacityForNewTransfer(transactionID: expectedTransactionID, mayCreateRemotePayload: false)
+        _ = try cleanup.enqueueCancellation(journal: journal, cancelledControl: nil)
+        try validate()
+        try store.cancel(journal)
+        return true
+    }
+
+    /// A lost local reply can be retried, but never consume a later pending
+    /// transaction or authorize a different source selection.
+    private func acknowledgeRetainedCancellation(expectedTransactionID: UUID,
+                                                 validateAccess: () throws -> Void) throws -> Bool {
+        guard try store.load() == nil,
+              let journal = try cleanup().retainedCancellationJournal(transactionID: expectedTransactionID) else {
+            return false
+        }
+        try validateAccess()
+        try Task.checkCancellation()
+        let files = try files(journal)
+        try validateRetainedCancellation(journal: journal,
+            checkpoint: checkpoint(files, journal: journal), files: files)
+        guard try store.load() == nil else { throw StorageTransferError.staleTransaction }
+        return true
+    }
+
+    private func validateRetainedCancellation(journal: StorageTransferJournal,
+                                              checkpoint: StorageTransferRuntimeCheckpoint,
+                                              files: StorageTransferStoreFiles) throws {
+        try requireNoPendingRemoteCancellation()
+        try StorageTransferRetainedCancellationAdmission.validate(journal: journal, checkpoint: checkpoint,
+            currentProcessID: Self.processID, cloudMirrorWasOpened: StorageTransferProcessState.cloudMirrorWasOpened,
+            selection: readSourceSelection())
+        if let committed = try store.committedSelection() {
+            guard committed.selection == journal.source, committed.transactionID != journal.transactionID else {
+                throw StorageTransferError.staleTransaction
+            }
+        }
+        try StorageTransferPersistence.requireAllReleased()
+        try files.requireUnchangedFrozenSource(selection: journal.source)
+    }
+
     func cancelRemoteTransfer(binding: ActiveAccountLocalBinding, expectedTransactionID: UUID,
                               validateAccess: @escaping @MainActor () throws -> Void) async throws {
         if let intent = try pendingRemoteCancellationIntent() {
@@ -440,6 +566,7 @@ final class StorageTransferRuntime {
     func recoverRemoteTransfer(binding: ActiveAccountLocalBinding, expectedTransactionID: UUID,
                                validateAccess: @escaping @MainActor () throws -> Void) async throws {
         try validateAccess()
+        try releasePolicy.validate(.enableCloudReplacingCloud)
         try requireNoPendingRemoteCancellation()
         guard !StorageTransferProcessState.cloudMirrorWasOpened else { throw StorageTransferRuntimeError.relaunchRequired }
         if let journal = try store.load() {
@@ -513,6 +640,7 @@ final class StorageTransferRuntime {
 
     private func saveRecovery(_ journal: StorageTransferJournal,
                               validate: @escaping @MainActor () throws -> Void) async throws -> StorageTransferRecoveryManifest {
+        try releasePolicy.validate(journal.choice)
         let files = try files(journal)
         guard let digest = journal.sourceDigest else { throw StorageTransferError.invalidJournal }
         let payload = try StorageTransferPayloadStore(files: files).bytes(expectedDigest: digest)
@@ -543,6 +671,7 @@ final class StorageTransferRuntime {
     private func prepareDestination(_ journal: StorageTransferJournal,
                                     validate: @escaping @MainActor () throws -> Void,
                                     track: @escaping @MainActor (ModelContainer, Bool) -> Void) async throws -> String {
+        try releasePolicy.validate(journal.choice)
         let files = try files(journal)
         var checkpoint = try checkpoint(files, journal: journal)
         guard let digest = journal.sourceDigest else { throw StorageTransferError.invalidJournal }
@@ -707,6 +836,7 @@ final class StorageTransferRuntime {
 
     private func promote(_ journal: StorageTransferJournal,
                          validate: @escaping @MainActor () throws -> Void) async throws {
+        try releasePolicy.validate(journal.choice)
         guard !StorageTransferProcessState.cloudMirrorWasOpened else { throw StorageTransferRuntimeError.relaunchRequired }
         let files = try files(journal)
         try StorageTransferPersistence.requireAllReleased()
@@ -808,7 +938,8 @@ final class StorageTransferRuntime {
         StorageTransferRemoteRecovery(backend: StorageTransferRemoteRecoveryCloudKit(validateAccess: validate), validateAccess: validate)
     }
     private func files(_ journal: StorageTransferJournal) throws -> StorageTransferStoreFiles {
-        try StorageTransferStoreFiles(transactionID: journal.transactionID, transferRoot: root)
+        try StorageTransferStoreFiles(transactionID: journal.transactionID, transferRoot: root,
+                                      storeDirectory: storeDirectory)
     }
     private func checkpointFile(_ files: StorageTransferStoreFiles) throws -> StorageTransferStateFile<StorageTransferRuntimeCheckpoint> {
         try StorageTransferStateFile(url: files.transactionDirectory.appendingPathComponent("runtime-v1.json"))

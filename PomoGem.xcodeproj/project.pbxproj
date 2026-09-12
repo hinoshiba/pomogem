@@ -78,6 +78,7 @@
 		53FE675CF48B37882F6017A3 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC92C18D8E0837F496656397 /* Theme.swift */; };
 		5669E1873627D0F098F108BF /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EED7C76A33B9A41894714705 /* PaywallView.swift */; };
 		57BB587F88E885764BB97E19 /* PostDropProgressAccessibilityPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE24992BDBEA2EE11809580B /* PostDropProgressAccessibilityPresentationTests.swift */; };
+		581BF532CC5FED036DFA1199 /* StorageTransferReleasePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E7CF4F91BDE09ADC6345E82 /* StorageTransferReleasePolicyTests.swift */; };
 		5CA6B00BA26DECF78BFBF6C9 /* StorageTransferStoreFilesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DC88D84ADDBABCA34AF2AE3 /* StorageTransferStoreFilesTests.swift */; };
 		5DB48410BC347FAE6BD91C78 /* FocusCompletionFailureRecoveryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88643D553679C84D93A636AE /* FocusCompletionFailureRecoveryUITests.swift */; };
 		5E521D17EFF0330DC4D121CD /* CriticalFlowAdversarialUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 553C936224E8783AF264B56A /* CriticalFlowAdversarialUITests.swift */; };
@@ -183,6 +184,7 @@
 		E105F7B8C90D3B25DBF3B861 /* FortyYearDebugScenarioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B5D3DADE9BB942B8D5A6E7 /* FortyYearDebugScenarioTests.swift */; };
 		E2B7506FAB263874D88CD2DC /* StrataMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB33553E11FE75154EDC5E34 /* StrataMath.swift */; };
 		E3850FBAACB7458D01C975F7 /* CloudLaunchDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = B285BE664C5A6D83DD62638F /* CloudLaunchDeadline.swift */; };
+		E3A94155E59E48383899488D /* StorageTransferReleasePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF6143A14611EAA4A51FB4FB /* StorageTransferReleasePolicy.swift */; };
 		E42BBCABF5296E22F948E14B /* StorageTransferJournalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71587FDB738B4B796B69A5A5 /* StorageTransferJournalTests.swift */; };
 		E439AF0CE89CCF2D1B6227D3 /* StorageTransferRuntimeState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F4502C5BED8F8E1C6436946 /* StorageTransferRuntimeState.swift */; };
 		E59840D5770474D6631626E7 /* PomoGemStorageSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 032193B5B041D1E354E34CA7 /* PomoGemStorageSnapshot.swift */; };
@@ -262,6 +264,7 @@
 		0AFF5B62C575F1F138A51D0C /* RealDeviceStorageTransferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealDeviceStorageTransferTests.swift; sourceTree = "<group>"; };
 		0B4D2704A867D651C6A15FB7 /* CloudOfflineHostPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudOfflineHostPolicy.swift; sourceTree = "<group>"; };
 		0CB634DC37D02EBA2DDFCBA8 /* UsagePurposeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsagePurposeTests.swift; sourceTree = "<group>"; };
+		0E7CF4F91BDE09ADC6345E82 /* StorageTransferReleasePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferReleasePolicyTests.swift; sourceTree = "<group>"; };
 		10EFFABB27F8DBC43A8CD172 /* AccumulationOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationOverviewView.swift; sourceTree = "<group>"; };
 		123F29DD48209F44DCBF4C6E /* AccumulationPlanProjectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationPlanProjectionTests.swift; sourceTree = "<group>"; };
 		126E2BF9A3F46E163EA9B93E /* CloudStorageTransferCloudKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudStorageTransferCloudKitTests.swift; sourceTree = "<group>"; };
@@ -453,6 +456,7 @@
 		FE10FA71F90EB663584AB5E6 /* ZenMaruGothic-Black.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "ZenMaruGothic-Black.ttf"; sourceTree = "<group>"; };
 		FE24992BDBEA2EE11809580B /* PostDropProgressAccessibilityPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDropProgressAccessibilityPresentationTests.swift; sourceTree = "<group>"; };
 		FE6330E992C4131296B0D702 /* StrataMathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataMathTests.swift; sourceTree = "<group>"; };
+		FF6143A14611EAA4A51FB4FB /* StorageTransferReleasePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferReleasePolicy.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -556,6 +560,7 @@
 				9270B3F7CC918D0D65A344B9 /* StorageTransferPartialDestinationAdapters.swift */,
 				5717D8DB966629633F7FABBD /* StorageTransferPartialDestinationRecovery.swift */,
 				BE26DF765364BDD5BA91FCC4 /* StorageTransferPersistence.swift */,
+				FF6143A14611EAA4A51FB4FB /* StorageTransferReleasePolicy.swift */,
 				5886D322F2E38AF563B7573B /* StorageTransferRemoteCancellation.swift */,
 				62CC4AB5C52221A9AA9963A2 /* StorageTransferRemoteRecovery.swift */,
 				304682ED2010B4AFADAD2F75 /* StorageTransferRemoteRecoveryCloudKit.swift */,
@@ -754,6 +759,7 @@
 				27496E9EE92C3E8D3CF86EC9 /* StorageTransferPartialDestinationAdaptersTests.swift */,
 				F1C49C1800BB44F23D164299 /* StorageTransferPartialDestinationRecoveryTests.swift */,
 				3A649EB4D46EB1C08F6C5390 /* StorageTransferPersistenceTests.swift */,
+				0E7CF4F91BDE09ADC6345E82 /* StorageTransferReleasePolicyTests.swift */,
 				4A685876A7C82B782212F7D9 /* StorageTransferRemoteCancellationTests.swift */,
 				45B56B164A5E838876543CF2 /* StorageTransferRemoteRecoveryCloudKitTests.swift */,
 				8B0B429F0E04F66A86FAEAB4 /* StorageTransferRemoteRecoveryTests.swift */,
@@ -1130,6 +1136,7 @@
 				97C40694E5E1F098EBDF58EC /* StorageTransferPartialDestinationRecovery.swift in Sources */,
 				827A82540869BCDB67A6AA53 /* StorageTransferPersistence.swift in Sources */,
 				DDB9D8B798FE60015991DB33 /* StorageTransferProcessState.swift in Sources */,
+				E3A94155E59E48383899488D /* StorageTransferReleasePolicy.swift in Sources */,
 				776BED0A5077A7B33C1CC07D /* StorageTransferRemoteCancellation.swift in Sources */,
 				37FAB3C994EA4258FCA5C58B /* StorageTransferRemoteRecovery.swift in Sources */,
 				DC702BF0089B8AB32FE1E788 /* StorageTransferRemoteRecoveryCloudKit.swift in Sources */,
@@ -1219,6 +1226,7 @@
 				7613D2576284961963B7CD12 /* StorageTransferPartialDestinationAdaptersTests.swift in Sources */,
 				7366125AB929F93B1DAE9461 /* StorageTransferPartialDestinationRecoveryTests.swift in Sources */,
 				090194E639DC73AD1DCDFC78 /* StorageTransferPersistenceTests.swift in Sources */,
+				581BF532CC5FED036DFA1199 /* StorageTransferReleasePolicyTests.swift in Sources */,
 				D21B81FD494AA6289A138104 /* StorageTransferRemoteCancellationTests.swift in Sources */,
 				81F50A1A79524A83109E5C76 /* StorageTransferRemoteRecoveryCloudKitTests.swift in Sources */,
 				D30E90CE72722B13C71CA071 /* StorageTransferRemoteRecoveryTests.swift in Sources */,

@@ -16,7 +16,7 @@ final class StorageTransferCleanupTests: XCTestCase {
         let sourceStore: URL
     }
 
-    private func fixture(replacesCloud: Bool = false, refreshingCloud: Bool = false,
+    private func fixture(replacesCloud: Bool = false, refreshingCloud: Bool = false, keepingCloud: Bool = false,
                          stoppingAt: StorageTransferJournal.Phase = .sourceRetired) throws -> Fixture {
         let parent = FileManager.default.temporaryDirectory.appendingPathComponent("CleanupTests-\(UUID())")
         let root = parent.appendingPathComponent("StorageTransfer", isDirectory: true)
@@ -27,10 +27,10 @@ final class StorageTransferCleanupTests: XCTestCase {
         let cloud = PersistenceDeploymentSelection.cloud(binding: binding)
         let previousCloud = PersistenceDeploymentSelection.cloud(binding: try XCTUnwrap(
             ActiveAccountLocalBinding(namespace: AccountDataNamespace(), accountFingerprint: account)))
-        var journal = try StorageTransferJournal(choice: refreshingCloud ? .enableCloudKeepingCloud
+        var journal = try StorageTransferJournal(choice: refreshingCloud || keepingCloud ? .enableCloudKeepingCloud
                 : replacesCloud ? .enableCloudReplacingCloud : .disableCloudKeepingCopy,
-            source: refreshingCloud ? previousCloud : replacesCloud ? local : cloud,
-            destination: refreshingCloud || replacesCloud ? cloud : local, cloudBinding: binding)
+            source: refreshingCloud ? previousCloud : replacesCloud || keepingCloud ? local : cloud,
+            destination: refreshingCloud || replacesCloud || keepingCloud ? cloud : local, cloudBinding: binding)
         let manifest = replacesCloud ? try StorageTransferRecoveryManifest(transactionID: journal.transactionID,
             accountFingerprint: account, payload: userBytes) : nil
         let digest = StorageTransferRecoverySchema.digest(userBytes)
@@ -382,6 +382,161 @@ final class StorageTransferCleanupTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: activeSource), userBytes)
         XCTAssertNil(try f.store.committedSelection())
         XCTAssertTrue(try cleaner.pendingReceipts().isEmpty)
+    }
+
+    func testLateImportCancellationRetainsEveryCopyAcrossRestartAndNeverCallsRemoteCleanup() async throws {
+        for mode in 0..<3 {
+            for phase in [StorageTransferJournal.Phase.preparingDestination, .destinationSaved] {
+                let f = try fixture(refreshingCloud: mode == 2, keepingCloud: mode == 1, stoppingAt: phase)
+                let staged = f.transaction.appendingPathComponent("staged", isDirectory: true)
+                try FileManager.default.createDirectory(at: staged, withIntermediateDirectories: true)
+                let stagedStore: URL
+                switch f.journal.destination {
+                case .cloud(let binding):
+                    stagedStore = PersistenceStoreTopology.accountStoreURLs(accountNamespace: binding.namespace, directory: staged)[0]
+                case .localOnly(let namespace):
+                    stagedStore = PersistenceStoreTopology.localOnlyPersistentStoreURLs(namespace: namespace, directory: staged)[0]
+                }
+                let importedBytes = Data("new imported data absent from the frozen source".utf8)
+                try importedBytes.write(to: stagedStore)
+                let assets = staged.appendingPathComponent(stagedStore.deletingPathExtension().lastPathComponent + "_ckAssets/nested")
+                try FileManager.default.createDirectory(at: assets, withIntermediateDirectories: true)
+                try importedBytes.write(to: assets.appendingPathComponent("asset.bin"))
+                let reader = f.transaction.appendingPathComponent("reader/" + UUID().uuidString.lowercased())
+                try FileManager.default.createDirectory(at: reader, withIntermediateDirectories: true)
+                try importedBytes.write(to: reader.appendingPathComponent(stagedStore.lastPathComponent))
+                let activeSource = f.root.deletingLastPathComponent().appendingPathComponent(f.sourceStore.lastPathComponent)
+                try userBytes.write(to: activeSource)
+                let foreign = f.root.appendingPathComponent(UUID().uuidString.lowercased(), isDirectory: true)
+                try FileManager.default.createDirectory(at: foreign, withIntermediateDirectories: false)
+                try importedBytes.write(to: foreign.appendingPathComponent("payload-v1.json"))
+                let before = try treeBytes(f.transaction)
+                let cleaner = try cleanup(f)
+                let receipt = try cleaner.enqueueCancellation(journal: f.journal, cancelledControl: nil)
+                XCTAssertTrue(receipt.retainsLocalCopies)
+                XCTAssertFalse(receipt.localRemoved)
+                XCTAssertFalse(receipt.isComplete)
+                XCTAssertNil(receipt.recoveryManifest)
+                XCTAssertThrowsError(try receipt.recordingLocalRemoval())
+                XCTAssertEqual(try cleaner.enqueueCancellation(journal: f.journal, cancelledControl: nil), receipt)
+                try cleaner.runLocal(transactionID: f.journal.transactionID)
+                XCTAssertEqual(try f.store.load(), f.journal)
+                XCTAssertEqual(try treeBytes(f.transaction), before)
+                try f.store.cancel(f.journal)
+
+                let queue = f.root.appendingPathComponent("cleanup-\(f.journal.transactionID.uuidString.lowercased()).json")
+                let queueBytes = try Data(contentsOf: queue)
+                try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 0)], ofItemAtPath: queue.path)
+                let restarted = try cleanup(f)
+                for _ in 0..<2 { try restarted.runLocal(transactionID: f.journal.transactionID) }
+                let backend = CleanupRemoteFake(account: account)
+                let result = try await restarted.retryRemoteCleanup(expectedBinding: f.journal.cloudBinding,
+                    recovery: StorageTransferRemoteRecovery(backend: backend, validateAccess: {}), validateAccess: {})
+                XCTAssertEqual(result, StorageTransferCleanupRetryResult())
+                XCTAssertEqual(backend.verifications, 0)
+                XCTAssertNil(backend.control)
+                XCTAssertEqual(try restarted.retainedCancellationJournal(transactionID: f.journal.transactionID), f.journal)
+                XCTAssertEqual(try restarted.pendingReceipts(), [receipt])
+                XCTAssertEqual(try Data(contentsOf: queue), queueBytes)
+                XCTAssertEqual(try treeBytes(f.transaction), before)
+                XCTAssertEqual(try Data(contentsOf: activeSource), userBytes)
+                XCTAssertEqual(try Data(contentsOf: foreign.appendingPathComponent("payload-v1.json")), importedBytes)
+                XCTAssertNil(try f.store.load())
+                XCTAssertNil(try f.store.committedSelection())
+            }
+        }
+    }
+
+    func testRetainedCancellationCannotBeForgedIntoTheEarlyCancellationDeletionGrant() throws {
+        for keepingCloud in [false, true] {
+            let f = try fixture(keepingCloud: keepingCloud, stoppingAt: .preparingDestination)
+            let cleaner = try cleanup(f)
+            let receipt = try cleaner.enqueueCancellation(journal: f.journal, cancelledControl: nil)
+            let encoder = JSONEncoder()
+            var json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoder.encode(receipt)) as? [String: Any])
+            let journal = try JSONSerialization.jsonObject(with: encoder.encode(f.journal))
+            json["authorization"] = ["cancelled": ["journal": journal, "control": NSNull()]]
+            let forgedBytes = try JSONSerialization.data(withJSONObject: json)
+            let forged = try JSONDecoder().decode(StorageTransferCleanupReceipt.self, from: forgedBytes)
+            XCTAssertThrowsError(try forged.validate())
+            try forgedBytes.write(to: f.root.appendingPathComponent("cleanup-\(f.journal.transactionID.uuidString.lowercased()).json"))
+            let before = try treeBytes(f.transaction)
+            XCTAssertThrowsError(try cleaner.runLocal(transactionID: f.journal.transactionID))
+            XCTAssertEqual(try treeBytes(f.transaction), before)
+            XCTAssertEqual(try f.store.load(), f.journal)
+        }
+        for phase in [StorageTransferJournal.Phase.destinationVerified, .selectionCommitted, .sourceRetired] {
+            for keepingCloud in [false, true] {
+                let f = try fixture(keepingCloud: keepingCloud, stoppingAt: phase)
+                XCTAssertThrowsError(try cleanup(f).enqueueCancellation(journal: f.journal, cancelledControl: nil))
+                XCTAssertEqual(try Data(contentsOf: f.sourceStore), userBytes)
+            }
+        }
+    }
+
+    func testRetainedImportDoesNotBlockUnrelatedLegitimateLocalCleanup() throws {
+        let retained = try fixture(keepingCloud: true, stoppingAt: .destinationSaved)
+        let cleaner = try cleanup(retained)
+        let receipt = try cleaner.enqueueCancellation(journal: retained.journal, cancelledControl: nil)
+        try retained.store.cancel(retained.journal)
+        let other = try fixture()
+        _ = try cleanup(other).enqueue(journal: other.journal, recoveryManifest: nil)
+        try other.store.finish(other.journal)
+        let otherQueueName = "cleanup-\(other.journal.transactionID.uuidString.lowercased()).json"
+        let transferred = retained.root.appendingPathComponent(other.transaction.lastPathComponent)
+        try FileManager.default.moveItem(at: other.transaction, to: transferred)
+        try FileManager.default.moveItem(at: other.root.appendingPathComponent(otherQueueName),
+            to: retained.root.appendingPathComponent(otherQueueName))
+        let before = try treeBytes(retained.transaction)
+        for entry in try cleaner.pendingReceipts() {
+            try cleaner.runLocal(transactionID: entry.transactionID)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: transferred.path))
+        XCTAssertEqual(try cleaner.pendingReceipts(), [receipt])
+        XCTAssertEqual(try treeBytes(retained.transaction), before)
+    }
+
+    func testRetainedImportQueueCapacityRefusesCancellationWithoutLosingPendingEvidenceOrEvictingCopies() throws {
+        let f = try fixture(stoppingAt: .preparingDestination)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        var retainedIDs = Set<UUID>()
+        for _ in 0..<StorageTransferCleanup.maximumReceipts {
+            var journal = try StorageTransferJournal(choice: f.journal.choice, source: f.journal.source,
+                destination: f.journal.destination, cloudBinding: f.journal.cloudBinding,
+                startedAt: Date(timeIntervalSince1970: 0))
+            journal = try journal.advancing(to: .sourceSaved, sourceDigest: StorageTransferRecoverySchema.digest(userBytes))
+            journal = try journal.advancing(to: .recoveryCopySaved).advancing(to: .preparingDestination)
+            let receipt = try StorageTransferCleanupReceipt(cancelledJournal: journal, control: nil, ownedDirectories: [])
+            let directory = f.root.appendingPathComponent(journal.transactionID.uuidString.lowercased())
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+            try userBytes.write(to: directory.appendingPathComponent("payload-v1.json"))
+            try encoder.encode(receipt).write(to: f.root.appendingPathComponent("cleanup-\(journal.transactionID.uuidString.lowercased()).json"))
+            retainedIDs.insert(journal.transactionID)
+        }
+        let cleaner = try cleanup(f)
+        let before = try treeBytes(f.root)
+        XCTAssertThrowsError(try cleaner.enqueueCancellation(journal: f.journal, cancelledControl: nil)) {
+            XCTAssertEqual($0 as? StorageTransferCleanupError, .limitExceeded)
+        }
+        let pending = try cleaner.pendingReceipts()
+        XCTAssertEqual(Set(pending.map(\.transactionID)), retainedIDs)
+        try cleaner.runLocal(transactionID: XCTUnwrap(pending.first).transactionID)
+        XCTAssertEqual(try treeBytes(f.root), before)
+        XCTAssertEqual(try f.store.load(), f.journal)
+    }
+
+    private func treeBytes(_ directory: URL) throws -> [String: Data] {
+        let entries = try XCTUnwrap(FileManager.default.enumerator(at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey]))
+        var result: [String: Data] = [:]
+        for case let url as URL in entries {
+            let relative = String(url.path.dropFirst(directory.path.count + 1))
+            if try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true {
+                result[relative + "/"] = Data()
+            } else { result[relative] = try Data(contentsOf: url) }
+        }
+        return result
     }
 
     func testPossibleUnacknowledgedUploadRequiresExactCancelledFenceBeforeLocalCancellation() async throws {

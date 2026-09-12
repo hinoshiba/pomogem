@@ -22,34 +22,33 @@ final class StorageTransferSettingsUITests: XCTestCase {
         app?.terminate()
     }
 
-    func testEnableOffersBothAuthoritiesAndCancellingDoesNothing() {
+    func testEnableShowsAvailableCloudAuthorityAndUnavailableReplacementWithoutMutating() {
         launch("local")
         openChoices()
         XCTAssertTrue(reveal(app.buttons["storage-switch.keep-cloud"]))
         XCTAssertTrue(reveal(app.buttons["storage-switch.replace-cloud"]))
+        XCTAssertFalse(app.buttons["storage-switch.replace-cloud"].isEnabled)
         let noMerge = text(containing: "2つの保存先のデータは結合しません")
         XCTAssertTrue(reveal(noMerge, upwards: false))
-        attach("Enable — separate data authorities")
+        attach("Enable — cloud authority and unavailable replacement")
         app.navigationBars["iCloudを有効にする"].buttons["キャンセル"].tap()
         assertNoOperation()
     }
 
-    func testBothDestructiveChoicesStartUncheckedAndBackDiscardsAcknowledgment() {
+    func testKeepingCloudStartsUncheckedAndBackDiscardsAcknowledgment() {
         launch("local")
         openChoices()
-        for identifier in ["storage-switch.keep-cloud", "storage-switch.replace-cloud"] {
-            openConfirmation(identifier)
-            assertUncheckedConfirmation()
-            let checkbox = app.switches["storage-switch.confirm-data-loss"]
-            acknowledgeDeletion()
-            XCTAssertEqual(checkbox.value as? String, "1")
-            XCTAssertTrue(app.buttons["storage-switch.confirm"].isEnabled)
-            app.navigationBars["最後の確認"].buttons["戻る"].tap()
-            XCTAssertTrue(app.navigationBars["iCloudを有効にする"].waitForExistence(timeout: 4))
-            openConfirmation(identifier)
-            assertUncheckedConfirmation()
-            app.navigationBars["最後の確認"].buttons["戻る"].tap()
-        }
+        openConfirmation("storage-switch.keep-cloud")
+        assertUncheckedConfirmation()
+        let checkbox = app.switches["storage-switch.confirm-data-loss"]
+        acknowledgeDeletion()
+        XCTAssertEqual(checkbox.value as? String, "1")
+        XCTAssertTrue(app.buttons["storage-switch.confirm"].isEnabled)
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.navigationBars["iCloudを有効にする"].waitForExistence(timeout: 4))
+        openConfirmation("storage-switch.keep-cloud")
+        assertUncheckedConfirmation()
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
         app.navigationBars["iCloudを有効にする"].buttons["キャンセル"].tap()
         assertNoOperation()
     }
@@ -65,19 +64,22 @@ final class StorageTransferSettingsUITests: XCTestCase {
         assertAccepted("enableCloudKeepingCloud")
     }
 
-    func testReplacingCloudExplainsOtherDevicesAndRecoveryCopyBeforeConfirmation() {
+    func testReplacingCloudIsDisabledWithReasonAndCannotOpenConfirmation() {
         launch("local")
         openChoices()
-        XCTAssertTrue(reveal(text(containing: "同じApple Accountの他の端末にも影響します")))
-        XCTAssertTrue(reveal(text(containing: "古い版やオフラインの端末")))
-        openConfirmation("storage-switch.replace-cloud")
-        XCTAssertTrue(reveal(text(containing: "復旧用コピーをiCloudに保存")))
-        XCTAssertTrue(text(containing: "このiPhoneだけの過去の記録も含まれます").exists)
-        assertUncheckedConfirmation()
-        attach("Replace cloud — data loss and recovery disclosure")
-        acknowledgeDeletion()
-        app.buttons["storage-switch.confirm"].tap()
-        assertAccepted("enableCloudReplacingCloud")
+        let reason = app.staticTexts["storage-switch.replace-cloud-unavailable"]
+        XCTAssertTrue(reveal(reason))
+        XCTAssertTrue(reason.label.contains("複数端末での同時操作"))
+        XCTAssertTrue(reason.label.contains("一時的に利用できません"))
+        let replacement = app.buttons["storage-switch.replace-cloud"]
+        XCTAssertTrue(reveal(replacement))
+        XCTAssertFalse(replacement.isEnabled)
+        replacement.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertFalse(app.navigationBars["最後の確認"].exists)
+        XCTAssertFalse(app.buttons["storage-switch.confirm"].exists)
+        attach("Replace cloud — unavailable with retained-data explanation")
+        app.navigationBars["iCloudを有効にする"].buttons["キャンセル"].tap()
+        assertNoOperation()
     }
 
     func testDisablingKeepsCloudAndRequiresExplicitCopyConfirmation() {
@@ -126,10 +128,15 @@ final class StorageTransferSettingsUITests: XCTestCase {
         let replaceCloud = app.buttons["storage-switch.replace-cloud"]
         XCTAssertTrue(reveal(replaceCloud))
         assertTouchTarget(replaceCloud)
-        attach("AX5 enable — replace cloud")
-        replaceCloud.tap()
+        XCTAssertFalse(replaceCloud.isEnabled)
+        let reason = app.staticTexts["storage-switch.replace-cloud-unavailable"]
+        XCTAssertTrue(reveal(reason, upwards: false))
+        XCTAssertTrue(reason.label.contains("複数端末での同時操作"))
+        attach("AX5 enable — unavailable replacement reason")
+        // The available choice is above the replacement section just checked.
+        openConfirmation("storage-switch.keep-cloud", upwards: false)
         XCTAssertTrue(app.navigationBars["最後の確認"].waitForExistence(timeout: 4))
-        XCTAssertTrue(reveal(text(containing: "復旧用コピーをiCloudに保存")))
+        XCTAssertTrue(reveal(text(containing: "このiPhoneだけにあるPomoGemのデータを削除します")))
         let checkbox = app.switches["storage-switch.confirm-data-loss"]
         XCTAssertTrue(reveal(checkbox))
         assertTouchTarget(checkbox)
@@ -140,7 +147,7 @@ final class StorageTransferSettingsUITests: XCTestCase {
         XCTAssertTrue(reveal(confirm))
         assertTouchTarget(confirm)
         XCTAssertTrue(confirm.isEnabled)
-        attach("AX5 replace — explicit acknowledgment and action")
+        attach("AX5 retain cloud — explicit acknowledgment and action")
         try auditDescriptionsAndTraits()
         app.navigationBars["最後の確認"].buttons["戻る"].tap()
         app.navigationBars["iCloudを有効にする"].buttons["キャンセル"].tap()
@@ -451,9 +458,9 @@ final class StorageTransferSettingsUITests: XCTestCase {
         XCTAssertTrue(presented)
     }
 
-    private func openConfirmation(_ identifier: String) {
+    private func openConfirmation(_ identifier: String, upwards: Bool = true) {
         let choice = app.buttons[identifier]
-        if !reveal(choice) { XCTAssertTrue(reveal(choice, upwards: false)) }
+        if !reveal(choice, upwards: upwards) { XCTAssertTrue(reveal(choice, upwards: !upwards)) }
         choice.tap()
         XCTAssertTrue(app.navigationBars["最後の確認"].waitForExistence(timeout: 4))
     }
@@ -506,7 +513,14 @@ final class StorageTransferSettingsUITests: XCTestCase {
                 let top = app.navigationBars.allElementsBoundByIndex.filter(\.isHittable).map(\.frame.maxY).max() ?? 0
                 let bottom = app.windows.firstMatch.frame.maxY - 40
                 if frame.minY >= top && frame.maxY <= bottom { return true }
-                if frame.minY < top { app.swipeDown(); continue }
+                // Once the target is visible, correct toward the viewport
+                // regardless of the original search direction. A full swipe
+                // can leap past a tall AX5 row and oscillate across both edges.
+                let correction = frame.minY < top ? top - frame.minY + 12 : bottom - frame.maxY - 12
+                let distance = min(160, max(60, abs(correction))) * (correction < 0 ? -1 : 1)
+                let start = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)))
+                continue
             }
             if upwards { app.swipeUp() } else { app.swipeDown() }
         }

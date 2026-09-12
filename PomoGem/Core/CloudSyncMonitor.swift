@@ -746,7 +746,7 @@ struct CloudSyncSettingsSection: View {
                     .foregroundStyle(PomoGemTheme.amber)
             }
 
-            Text("iCloudを使う場合は、下の保存先の設定から切り替えられます。端末とiCloudのどちらのデータを残すかを確認して選んでください。アプリを削除すると、このiPhoneだけに保存した記録は失われます。")
+            Text("iCloudの記録を使う場合は、下の保存先の設定で端末の記録が置き換わることを確認して切り替えられます。端末の記録でiCloudを置き換える操作は現在利用できません。アプリを削除すると、このiPhoneだけに保存した記録は失われます。")
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)

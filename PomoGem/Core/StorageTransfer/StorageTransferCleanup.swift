@@ -21,6 +21,7 @@ struct StorageTransferCleanupReceipt: Codable, Equatable, Sendable {
     enum Authorization: Codable, Equatable, Sendable {
         case committed
         case cancelled(journal: StorageTransferJournal, control: StorageTransferRecoveryControl?)
+        case cancelledRetainingImport(journal: StorageTransferJournal)
         case remoteCancelled(control: StorageTransferRecoveryControl)
     }
     let formatVersion: Int
@@ -70,7 +71,12 @@ struct StorageTransferCleanupReceipt: Codable, Equatable, Sendable {
     init(cancelledJournal journal: StorageTransferJournal, control: StorageTransferRecoveryControl?,
          ownedDirectories: [String]) throws {
         formatVersion = 1
-        authorization = .cancelled(journal: journal, control: control)
+        if journal.retainsImportOnCancellation {
+            guard control == nil else { throw StorageTransferCleanupError.invalidReceipt }
+            authorization = .cancelledRetainingImport(journal: journal)
+        } else {
+            authorization = .cancelled(journal: journal, control: control)
+        }
         transactionID = journal.transactionID
         source = journal.source
         committedSelection = nil
@@ -108,8 +114,14 @@ struct StorageTransferCleanupReceipt: Codable, Equatable, Sendable {
         switch authorization {
         case .committed: committedSelection?.selection
         case let .cancelled(journal, _): journal.destination
+        case let .cancelledRetainingImport(journal): journal.destination
         case .remoteCancelled: nil
         }
+    }
+
+    var retainsLocalCopies: Bool {
+        if case .cancelledRetainingImport = authorization { return true }
+        return false
     }
 
     func validate() throws {
@@ -132,7 +144,8 @@ struct StorageTransferCleanupReceipt: Codable, Equatable, Sendable {
         case let .cancelled(journal, control):
             try journal.validate()
             try control?.validate()
-            guard journal.permitsCancellation, transactionID == journal.transactionID,
+            guard journal.permitsCancellation, !journal.retainsImportOnCancellation,
+                  transactionID == journal.transactionID,
                   source == journal.source, committedSelection == nil,
                   sourceDigest == journal.sourceDigest, cloudBinding == journal.cloudBinding,
                   recoveryManifest == control?.manifest else { throw StorageTransferCleanupError.invalidReceipt }
@@ -148,6 +161,15 @@ struct StorageTransferCleanupReceipt: Codable, Equatable, Sendable {
                 guard !journal.choice.replacesCloud || journal.phase == .requested else {
                     throw StorageTransferCleanupError.invalidReceipt
                 }
+            }
+        case let .cancelledRetainingImport(journal):
+            try journal.validate()
+            guard journal.retainsImportOnCancellation,
+                  transactionID == journal.transactionID, source == journal.source,
+                  committedSelection == nil, sourceDigest == journal.sourceDigest,
+                  cloudBinding == journal.cloudBinding, recoveryManifest == nil,
+                  !localRemoved, remoteRemoved, remoteAttemptCount == 0, revision == 0 else {
+                throw StorageTransferCleanupError.invalidReceipt
             }
         case let .remoteCancelled(control):
             try control.validate()
@@ -194,6 +216,7 @@ struct StorageTransferCleanupReceipt: Codable, Equatable, Sendable {
 
     func recordingLocalRemoval() throws -> Self {
         try validate()
+        guard !retainsLocalCopies else { throw StorageTransferCleanupError.invalidReceipt }
         guard !localRemoved else { return self }
         var next = self
         next.localRemoved = true
@@ -318,8 +341,9 @@ final class StorageTransferCleanup {
         }
     }
 
-    /// Persist before JournalStore.cancel. A cancellation receipt authorizes
-    /// only temporary copies; source and destination model-root files are
+    /// Persist before JournalStore.cancel. Early cancellation authorizes only
+    /// temporary-copy cleanup; late nonreplacement cancellation retains its
+    /// entire tree indefinitely. Source and destination model-root files are
     /// untouched. A possible backup upload requires the acknowledged exact
     /// cancelled control returned by RemoteRecovery's cancellation operation.
     @discardableResult
@@ -386,6 +410,9 @@ final class StorageTransferCleanup {
     /// subset of the authorized temporary tree for the next attempt.
     func runLocal(transactionID: UUID) throws {
         guard let receipt = try load(transactionID: transactionID) else { return }
+        // A cancelled import may contain changes absent from its old snapshot
+        // or from the server. This receipt grants retention, never deletion.
+        guard !receipt.retainsLocalCopies else { return }
         try localGate()
         if !receipt.localRemoved {
             let entries = try inventory(receipt)
@@ -397,6 +424,12 @@ final class StorageTransferCleanup {
             try write(receipt.recordingLocalRemoval(), replacing: receipt)
         }
         try removeCompleted(transactionID: transactionID)
+    }
+
+    func retainedCancellationJournal(transactionID: UUID) throws -> StorageTransferJournal? {
+        guard let receipt = try load(transactionID: transactionID),
+              case let .cancelledRetainingImport(journal) = receipt.authorization else { return nil }
+        return journal
     }
 
     /// Every remote manifest survives successful cleanup. An in-flight create

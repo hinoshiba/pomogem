@@ -333,6 +333,41 @@ final class StorageTransferPartialDestinationRecoveryTests: XCTestCase {
         XCTAssertEqual(f.backend.deleteCount, 1)
     }
 
+    func testHeldDeleteCanArriveAfterAnotherExecutorCommitsRequiringReleaseContainment() async throws {
+        let f = try await fixture()
+        // The first executor has finished exporting exactly the chosen graph.
+        // A second installation can currently regard that full graph as a
+        // valid partial-recovery subset of the same transaction's backup.
+        f.backend.current = try observation(rawRows(f.original))
+        let attempt = UUID()
+        _ = try await f.coordinator.prepare(attemptID: attempt, manifest: f.manifest)
+        let gate = PartialRecoveryHeldDelete(started: expectation(description: "second executor submitted delete"))
+        f.backend.waitBeforeDelete = { await gate.wait() }
+        let deleting = Task { try await f.coordinator.resume(attemptID: attempt, manifest: f.manifest) }
+        defer { gate.release(); deleting.cancel() }
+        await fulfillment(of: [gate.started], timeout: 3)
+
+        let firstExecutor = StorageTransferRemoteRecovery(backend: f.remote, validateAccess: {})
+        XCTAssertEqual(f.backend.current.rows.count, rawRows(f.original).count)
+        _ = try await firstExecutor.commitReplacement(manifest: f.manifest,
+            verifiedDestinationSHA256: f.manifest.payloadSHA256)
+        XCTAssertEqual(f.remote.control?.control.phase, .committed)
+        gate.release()
+        do {
+            _ = try await deleting.value
+            XCTFail("The second executor must detect the stale control after its delayed operation")
+        } catch { XCTAssertEqual(error as? StorageTransferRecoveryError, .staleControl) }
+
+        // This intentionally documents the unprotected low-level algorithm,
+        // using only memory fakes. The post-await rejection cannot undo the
+        // delete. Re-enabling the ordinary runtime without resolving this race
+        // must fail this containment regression, not imply all-device safety.
+        XCTAssertTrue(f.backend.current.confirmsAbsence)
+        XCTAssertEqual(f.backend.deleteCount, 1)
+        XCTAssertEqual(f.remote.control?.control.phase, .committed)
+        XCTAssertFalse(StorageTransferReleasePolicy.standard.allowsCloudReplacement)
+    }
+
     func testQuiescenceFailureAndUnacknowledgedIntentPreventDestructiveCall() async throws {
         let f = try await fixture()
         let attempt = UUID()
@@ -384,6 +419,7 @@ private final class PartialRecoveryDestinationFake: StorageTransferPartialDestin
     var deleteCount = 0
     var loseAcknowledgment = false
     var beforeDelete: (() -> Void)?
+    var waitBeforeDelete: (() async -> Void)?
     init(current: StorageTransferPartialDestinationObservation, absent: StorageTransferPartialDestinationObservation) {
         self.current = current
         self.absent = absent
@@ -392,10 +428,35 @@ private final class PartialRecoveryDestinationFake: StorageTransferPartialDestin
     func deleteZone(_ id: StorageTransferManagedZoneID) async throws -> StorageTransferManagedZoneDeleteAcknowledgment {
         try id.validate()
         beforeDelete?()
+        await waitBeforeDelete?()
         deleteCount += 1
         current = absent
         if loseAcknowledgment { loseAcknowledgment = false; throw Failure.transport }
         return .deleted(id)
+    }
+}
+
+@MainActor
+private final class PartialRecoveryHeldDelete {
+    let started: XCTestExpectation
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var isReleased = false
+
+    init(started: XCTestExpectation) { self.started = started }
+
+    func wait() async {
+        guard !isReleased else { started.fulfill(); return }
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            started.fulfill()
+        }
+    }
+
+    func release() {
+        isReleased = true
+        let held = continuation
+        continuation = nil
+        held?.resume()
     }
 }
 
