@@ -2530,6 +2530,11 @@ final class Prefs {
     var isPro: Bool = false
     var keepScreenAwake: Bool = true
     var preferredFocusMinutes: Int = Constants.Timer.twentyFiveMinutes
+    /// Additive precision for the existing minutes preference. Old clients
+    /// still read/write minutes; their next minute mutation invalidates this
+    /// extension instead of attaching an old seconds value to a new choice.
+    var preferredFocusSeconds: Int?
+    var preferredFocusSecondsMutationID: UUID?
     var timerDisplayModeRawValue: String = TimerDisplayMode.ringAndTime.rawValue
     /// Synced user intent. Local AppStorage mirrors these values for fast UI
     /// startup, while CloudKit makes another or replacement iPhone reopen the
@@ -2616,6 +2621,7 @@ enum PrefsSyncError: LocalizedError, Equatable {
     case revisionLimitReached
     case conflictingStampedValues
     case tooManyPhysicalRows
+    case invalidFocusDuration
 
     var errorDescription: String? {
         switch self {
@@ -2625,6 +2631,8 @@ enum PrefsSyncError: LocalizedError, Equatable {
             "同じ同期履歴を持つ設定内容が一致しないため、変更せず保持しました。サポートへお問い合わせください。"
         case .tooManyPhysicalRows:
             "設定の同期コピーが安全に確認できる上限を超えたため、変更せず保持しました。サポートへお問い合わせください。"
+        case .invalidFocusDuration:
+            "集中時間は1分から360分の範囲で指定してください。"
         }
     }
 }
@@ -2668,6 +2676,7 @@ enum PrefsSyncPolicy {
         let showsThemeNameExternally: Bool
         let keepScreenAwake: Bool
         let preferredFocusMinutes: Int
+        let preferredFocusSeconds: Int
         let timerDisplayMode: TimerDisplayMode
         let hasCompletedOnboarding: Bool
         let usagePurposeRawValue: String
@@ -2752,6 +2761,9 @@ enum PrefsSyncPolicy {
             keepScreenAwake: keepAwake?.keepScreenAwake ?? true,
             preferredFocusMinutes: focusMinutes?.preferredFocusMinutes
                 ?? Constants.Timer.twentyFiveMinutes,
+            preferredFocusSeconds: focusMinutes.map {
+                attachedFocusSeconds(in: $0) ?? $0.preferredFocusMinutes * 60
+            } ?? Constants.Timer.twentyFiveMinutes * 60,
             timerDisplayMode: TimerDisplayMode.resolved(
                 timerDisplay?.timerDisplayModeRawValue
                     ?? TimerDisplayMode.ringAndTime.rawValue
@@ -3134,6 +3146,52 @@ enum PrefsSyncPolicy {
         )
     }
 
+    /// Uses the existing preference stamp, preserving ordering with clients
+    /// that only understand minutes. The caller saves (or rolls back) together
+    /// with its other UI changes; this helper never changes another writer.
+    @discardableResult
+    static func setPreferredFocusSeconds(
+        _ totalSeconds: Int,
+        context: ModelContext,
+        writerID: String = FocusDeviceIdentity.current(),
+        currentEpochID: UUID?,
+        currentDay: String = FairnessPolicy.deviceDayKey(for: .now),
+        canonicalID: UUID = SyncMaintenanceCanonicalIDs.preferences,
+        mutationID: UUID = UUID()
+    ) throws -> Prefs {
+        guard (Constants.Timer.customMinimumMinutes * 60
+               ... Constants.Timer.customMaximumMinutes * 60).contains(totalSeconds) else {
+            throw PrefsSyncError.invalidFocusDuration
+        }
+        return try mutate(
+            .preferredFocusMinutes,
+            context: context,
+            writerID: writerID,
+            currentEpochID: currentEpochID,
+            currentDay: currentDay,
+            canonicalID: canonicalID,
+            mutationID: mutationID
+        ) { value in
+            value.preferredFocusMinutes = totalSeconds / 60
+            value.preferredFocusSeconds = totalSeconds
+            value.preferredFocusSecondsMutationID = mutationID
+        }
+    }
+
+    /// Invalid or unattached optional values remain raw exportable evidence,
+    /// but never override the valid legacy minutes choice.
+    private static func attachedFocusSeconds(in value: Prefs) -> Int? {
+        guard let seconds = value.preferredFocusSeconds,
+              (Constants.Timer.customMinimumMinutes * 60
+               ... Constants.Timer.customMaximumMinutes * 60).contains(seconds),
+              seconds / 60 == value.preferredFocusMinutes,
+              let anchor = value.preferredFocusSecondsMutationID,
+              anchor == value.preferredFocusMinutesMutationID,
+              (1...maximumSupportedRevision).contains(value.preferredFocusMinutesRevision)
+        else { return nil }
+        return seconds
+    }
+
     static func winner(for group: Group, in values: [Prefs]) throws -> Prefs? {
         let candidates = values.filter { validStamp(for: group, in: $0) != nil }
         let versioned = candidates.filter {
@@ -3145,6 +3203,10 @@ enum PrefsSyncPolicy {
         }
         guard byExactStamp.values.allSatisfy({ copies in
             guard let first = copies.first else { return true }
+            if group == .preferredFocusMinutes,
+               Set(copies.compactMap { attachedFocusSeconds(in: $0) }).count > 1 {
+                return false
+            }
             return copies.dropFirst().allSatisfy {
                 groupValueEquals(group, first, $0)
             }
@@ -3180,6 +3242,14 @@ enum PrefsSyncPolicy {
             if left.mutationID != right.mutationID {
                 return (left.mutationID?.uuidString ?? "")
                     < (right.mutationID?.uuidString ?? "")
+            }
+            if group == .preferredFocusMinutes {
+                // An old client can copy a new client's minutes and stamp
+                // without knowing the additive fields. Keep the precision
+                // supplied by another copy of that exact same mutation.
+                let leftHasSeconds = attachedFocusSeconds(in: lhs) != nil
+                let rightHasSeconds = attachedFocusSeconds(in: rhs) != nil
+                if leftHasSeconds != rightHasSeconds { return !leftHasSeconds }
             }
             return lhs.syncRecordID.uuidString < rhs.syncRecordID.uuidString
         }
@@ -3337,6 +3407,12 @@ enum PrefsSyncPolicy {
         case .preferredFocusMinutes:
             if target.preferredFocusMinutes != source.preferredFocusMinutes {
                 target.preferredFocusMinutes = source.preferredFocusMinutes
+            }
+            if target.preferredFocusSeconds != source.preferredFocusSeconds {
+                target.preferredFocusSeconds = source.preferredFocusSeconds
+            }
+            if target.preferredFocusSecondsMutationID != source.preferredFocusSecondsMutationID {
+                target.preferredFocusSecondsMutationID = source.preferredFocusSecondsMutationID
             }
         case .timerDisplayMode:
             if target.timerDisplayModeRawValue != source.timerDisplayModeRawValue {

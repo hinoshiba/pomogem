@@ -76,6 +76,20 @@ enum PrefsConsumerPolicy {
 
     @MainActor
     @discardableResult
+    static func setPreferredFocusSeconds(
+        _ totalSeconds: Int,
+        context: ModelContext,
+        markers: [ActivityResetSnapshot]
+    ) throws -> Prefs {
+        try PrefsSyncPolicy.setPreferredFocusSeconds(
+            totalSeconds,
+            context: context,
+            currentEpochID: currentEpochID(from: markers)
+        )
+    }
+
+    @MainActor
+    @discardableResult
     static func ensureWriterRow(
         context: ModelContext,
         markers: [ActivityResetSnapshot]
@@ -130,6 +144,8 @@ enum PrefsConsumerPolicy {
             String(value.isPro),
             String(value.keepScreenAwake),
             String(value.preferredFocusMinutes),
+            value.preferredFocusSeconds.map(String.init) ?? "legacy",
+            value.preferredFocusSecondsMutationID?.uuidString ?? "legacy",
             value.timerDisplayModeRawValue,
             String(value.hasCompletedOnboarding),
             value.usagePurposeRawValue,

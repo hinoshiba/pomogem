@@ -1,9 +1,9 @@
-# App Store Connect entry plan — version 1.0
+# App Store Connect entry plan
 
-Prepared: 2026-09-06 for PomoGem 1.0 (5).
+Initial preparation: 2026-09-06 for PomoGem 1.0 (5). Storage, offline access and Pro duration instructions below are updated for the 1.0.2 candidate; this is not a new upload or submission record.
 New record created and verified on 2026-09-06: Apple ID `6809139517`.
 SKU `pomogem-ios`, primary language Japanese, bundle ID `com.hinoshiba.pomogem`.
-The registered Japanese name is ポモジェム：ポモドーロタイマー. This record is not publicly available.
+The registered Japanese name is ポモジェム：ポモドーロタイマー. Historical submissions and their results are recorded separately in the release records.
 [Open the new App Store Connect version](https://appstoreconnect.apple.com/apps/6809139517/distribution/ios/version/inflight).
 Creation does not complete its IAP, production schema, distribution signing, pricing, or submission.
 
@@ -126,7 +126,7 @@ statusは公開前と各更新時に再監査します。新しいstorefrontの�
 | Review screenshot | `pending_live_price_capture`。新商品のStoreKit実価格を取得後に `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png` を撮影・検証してConnectへ登録 |
 | Review notes | `AppStore/iap-review-notes-connect.txt` |
 
-Unlockは無料の25分／45分／60分／90分以外の任意の1〜360分と、まとまり粒の月刻印です。share cardは無料／Proともロゴと公式サイトを常設します。subscription、trial、
+Unlockは無料の25分／45分／60分／90分以外の任意の1分00秒〜360分00秒と、まとまり粒の月刻印です。次候補では分・秒の数字入力とホイールで指定します。share cardは無料／Proともロゴと公式サイトを常設します。subscription、trial、
 external purchase、独自serverはありません。purchase、pending、cancel、restore、revocationと、
 entitlement反映後にtransactionをfinishすることをSandboxで検証します。初回IAPはversion 1.0と同じ
 submissionへ追加します。
@@ -145,7 +145,7 @@ database、4種類の瓶用projectionは端末内だけに保存します。運�
 なしで全基本機能を使え、iCloudへ自動uploadしません。share／exportは利用者の明示操作です。1.0は
 rare reward用operations containerもdirect CloudKit一括削除も提供せず、app削除とAppleのiCloud
 ストレージ管理を案内します。現在のJSON exportは全11種類の出荷対象SwiftData modelを対象にします。
-JSONを再importする機能はなく、local-only dataのiCloud移行や機種変更時の継続には使えません。
+JSONを再importする機能はなく、このファイルによる復元・移行には対応しません。明示的な保存先切り替えも、このJSONを読み込む処理ではありません。
 ただしsupport mailがAppleのoptional disclosure条件を満たさない運用なら、Email Addressを
 App Functionality（customer support）、linked to user、not trackingとして申告します。Publish直前に
 `AppStore/app-privacy.md`、production binaryのnetwork／dependency、CloudKit access権限と実際のmail
@@ -154,43 +154,47 @@ Widgetにrequired-reason API宣言がないことをarchive内で照合します
 
 ## Private iCloud account boundary
 
-Version 1.0は、最初の`ModelContainer`を作る前に「iCloudで同期」と「このiPhoneのみ」を同格で提示し、
-どちらも推奨扱いにしません。iCloudは、テーマ名、成果memo、記録、設定、進行中timerがApple Accountの
-private iCloudへ保存されること、選択時と各launch／resumeにonline確認が必要なことを表示し、利用者の
-確認後だけ確定します。同じ画面からPrivacy Policyを開けます。local-onlyも端末限定、変更不可、削除／
-JSON制約を確認後に確定します。
+最初の保存領域を作る前に「iCloudで同期」と「このiPhoneのみ」を同格で提示します。iCloudへ保存する
+テーマ名、成果memo、記録、設定、進行中timerと、初回取得・同期再開のonline確認、offline利用の条件を
+説明し、利用者の確認後に確定します。同じ画面からPrivacy Policyを開けます。local-onlyも端末限定、
+明示的な切り替え、app削除／JSON制約を確認して選びます。
 
-- 保存先選択はVersion 1.0では変更できず、local-onlyからiCloudへ自動切替／upload／mergeしない
 - local-onlyは専用random namespaceとCloudKit `.none`のstoreを使い、Apple Account／networkなしで
-  25分／45分／60分／90分、記録、瓶、設定など全基本機能を利用できる
-- local-onlyで後からiCloudを始めるには、必要ならJSONを書き出した後にappを削除・再installして選び直す。
-  app削除でlocal記録は消え、JSONは再importできず、移行や記録継続には使えない
-- cloud modeではhost appが`ModelContainer`を作る前に`CKContainer.accountStatus()`と`userRecordID()`を
-  確認し、private databaseの全record zoneをread-only fetchしてfresh CloudKit requestを完了する。
-  fetch後に`userRecordID()`を再取得して前後一致を要求し、検証済みaccountのSHA-256 fingerprintと
-  random local namespaceを厳密に照合する
+  基本機能を利用できる。iCloudへ自動切替／upload／mergeしない
+- SettingsからiCloudを有効にするときは「iCloudのデータを使う」。端末だけのテーマ・記録・設定を
+  削除してcloud内容に置き換える。最後の削除確認checkは未選択から始まり、二つの記録を結合しない
+- iCloud解除は確認できた内容をこのiPhoneへコピーして検証後に確定。cloud側にもdataを残す。
+  解除後の端末変更は同期されない。端末dataでcloud全体を置き換える操作と、その復旧再開は通常Releaseで禁止
+- 切り替えには通信と案内どおりのapp終了・再起動が必要。app自体を削除しないよう案内する。
+  確認中にcloudが変わった場合は保持して停止し、許可された取消しでは元dataと途中コピーを残す場合がある。
+  このコピーは利用者向けUndoではない。別世代を再取得するときも端末未送信dataの削除確認を別途要求する
+- 同期用containerを作る前にaccount・保存先・切り替え状態・リセット履歴を確認する。通常起動の
+  control読み取りは`accountStatus → identity → 対象control取得 → identity`の順で実行し、通信確認にも
+  その応答を使う。namespace照合、controlの2回比較、画面公開直前の再検証を省略しない
 - cloud cache、端末内projection、focus復旧／deferred state、maintenance checkpoint、reset適用状態を
-  同じnamespaceで分離する
-- iCloud選択時は各launch／resumeに同じonline確認を行う。通信不可、identity不明、別accountは旧accountへ
-  fallbackせず保存領域を開かない。fail closed時も保存済みdataを削除しない
-- cloud container作成後も、サーバーで観測したリセット履歴以上の世代が端末へ届くまでRootとwriterを
-  公開しない。履歴確認はread-onlyで期限付きとし、全記録の同期完了を保証する表示はしない
-- 現在の候補ではiCloudの通常resetを一時的に利用不可とし、記録保護の理由を表示する。
-  local-only通常resetは維持し、審査メモ・Privacy・release手順へ同じ制限を反映する
-- A→BはBへ自動切替せずblockし、元のAでonline確認できた場合だけ同じA namespaceを再び開く
-- account-change通知またはbackgroundで旧containerをunmountし、foregroundで再検証する
-- Widgetはaccount-neutralな起動導線だけを表示し、App Group、iCloud、記録、質量、テーマ名、瓶画像を
-  読まない。OSの再描画時期へ依存せず、描画cache自体に別accountのdataを置かない
-- Live Activityは明示的な集中開始時だけ生成し、アプリ名、選択時間、残り時間、実行状態だけを表示する。
-  payloadはランダムなsession UUIDと数値状態に限定し、theme名、memo、質量、Apple Account、CloudKit
-  dataを含めない。端末内更新だけを使い、Settingsのlocal toggleとOS設定の両方を尊重する
-- OSへ予約済みのlocal notificationはprocess停止中のaccount変更を再検証できないため、終了通知へ
-  テーマ名を一切含めない。旧timerの共通文面が一度届く可能性はUX上の既知残余として実機確認する
+  同じnamespaceで分離する。Proの追加optional秒数と変更参照も既存Prefsの選択保存先に保持・同期する
+- 初回は観測したリセット世代以上の履歴が端末へ届くまでRootとwriterを公開しない。初回取得の
+  非同期確認には30秒、利用済み端末には12秒の期限がある。接続確認を全記録の送受信完了とは表示しない
+- 以前に確認できた完全な端末storeと利用記録が条件を満たす場合は、同じstoreを同期なしで開いて
+  timer・記録・設定を利用できる。オフラインでの変更を端末へ保存し、「このiPhoneに保存・同期は待機中」と表示する
+- account変更はoffline利用を失効させる。未対応の履歴不一致や切り替え処理をoffline許可で迂回しない。
+  通信回復時はaccount・保存先・履歴を確認して同期再開へ進む。自動削除や混在修復で起動を続けない
+- 同じprocessで一度でも同期用storeを開いた場合、退役後に同じfileを同期なしで開かない。
+  online利用後のbackground復帰などではapp終了・再起動が必要になり得る。時間切れでは再試行を案内する
+- 同期なしで利用中の画面は通常のbackground移行で保持する。復帰時に利用条件を再確認し、
+  account変更の通知・失効では表示とwriterを止める。保存済みdataは自動削除しない
+- iCloudの通常resetは一時的に利用不可とし理由を表示。local-only通常resetは維持する
+- app削除はlocal-onlyの記録とcloudへ未送信の変更を失わせる。JSON再import・このfileによる復元や移行は未対応
+- Widgetはaccount-neutralな起動導線だけを表示し、App Group、iCloud、記録、質量、テーマ名、瓶画像を読まない
+- Live Activityはアプリ名、選択時間、残り時間、実行状態だけを表示。秒単位の指定時間も分・秒で示し、
+  payloadへtheme名、memo、質量、Apple Account、CloudKit dataを含めない。端末内更新で設定とOS許可を尊重する
+- OSへ予約済みのlocal notificationはprocess停止中のaccount変更を再検証できないため、
+  終了通知へテーマ名を含めない。旧timerの共通文面が一度届く可能性は既知の制約として扱う
 
-これらはlocal実装／test sourceの状態です。署名済み実機で同格の初回二択、local-onlyのApple Account／
-networkなし全基本機能、選択の不変性、iCloud選択時の各launch／resume online確認、A→B block→A復帰、
-account-neutral通知／Widget、Live Activityの開始・pause・resume・cancel・期限到達・手動dismiss・設定OFF、
-account切替中も個人化dataが表示されないことまで完走するまではproduction品質を検証済みとは扱いません。
+これは候補の実装契約です。既存の単体試験、専用host、通常画面の実機試験の結果を分けて記録し、
+実施していない二端末・account変更・全データ受領を合格と扱いません。過去のbuildの署名・提出も、
+次候補のRelease artifactの検証結果とは分けます。記録は`Docs/OfflineCloudMode.md`、
+`Docs/StorageModeTransfer.md`と各release recordを参照してください。
 
 ## CloudKit source schema and replica safety gate
 

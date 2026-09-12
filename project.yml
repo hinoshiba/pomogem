@@ -8,8 +8,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.10"
-    MARKETING_VERSION: "1.0.1"
-    CURRENT_PROJECT_VERSION: "7"
+    MARKETING_VERSION: "1.0.2"
+    CURRENT_PROJECT_VERSION: "8"
     TARGETED_DEVICE_FAMILY: "1"
     GENERATE_INFOPLIST_FILE: true
     ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -132,6 +132,8 @@ targets:
     platform: iOS
     sources:
       - path: PomoGemUITests
+      - path: PomoGem/Resources/Products.storekit
+        buildPhase: resources
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1"

@@ -182,6 +182,84 @@ final class PomoGemStorageSnapshotTests: XCTestCase {
         }
     }
 
+    func testLegacyPreferencesSnapshotKeepsReceiptBytesAndImportsNilPrecision() throws {
+        let source = try fixture()
+        var legacy = try PomoGemStorageSnapshot.capture(from: ModelContext(source))
+        let index = try XCTUnwrap(legacy.records.firstIndex { $0.entity == "Prefs" })
+        legacy.records[index].fields.removeValue(forKey: "preferredFocusSeconds")
+        legacy.records[index].fields.removeValue(forKey: "preferredFocusSecondsMutationID")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("legacy.json")
+        let receipt = try legacy.write(to: file)
+        let bytes = try Data(contentsOf: file)
+        let decoded = try PomoGemStorageSnapshot.read(from: file, expectedDigest: receipt.sha256)
+        XCTAssertEqual(decoded, legacy, "Do not rewrite a hash-bound recovery payload during decode")
+        let target = try container()
+        let imported = try decoded.importIntoEmpty(target.mainContext)
+        XCTAssertEqual(imported, receipt)
+        XCTAssertEqual(try Data(contentsOf: file), bytes)
+        let reader = ModelContext(target)
+        let preferences = try XCTUnwrap(reader.fetch(FetchDescriptor<Prefs>()).first)
+        XCTAssertNil(preferences.preferredFocusSeconds)
+        XCTAssertNil(preferences.preferredFocusSecondsMutationID)
+        let readback = try PomoGemStorageSnapshot.capture(from: reader)
+        XCTAssertTrue(try decoded.isEquivalent(to: readback))
+        XCTAssertTrue(try readback.isEquivalent(to: decoded))
+    }
+
+    func testPartialOrWrongTypedPrecisionSnapshotFieldsStillFailBeforeInsertion() throws {
+        let source = try fixture()
+        let original = try PomoGemStorageSnapshot.capture(from: ModelContext(source))
+        let index = try XCTUnwrap(original.records.firstIndex { $0.entity == "Prefs" })
+        for mutation in 0...4 {
+            var value = original
+            switch mutation {
+            case 0: value.records[index].fields.removeValue(forKey: "preferredFocusSeconds")
+            case 1: value.records[index].fields.removeValue(forKey: "preferredFocusSecondsMutationID")
+            case 2: value.records[index].fields["preferredFocusSeconds"] = .string("90")
+            case 3: value.records[index].fields["preferredFocusSecondsMutationID"] = .integer(1)
+            default:
+                value.records[index].fields.removeValue(forKey: "preferredFocusSeconds")
+                value.records[index].fields.removeValue(forKey: "preferredFocusSecondsMutationID")
+                value.records[index].fields["unknownOptionalField"] = .null
+            }
+            let target = try container()
+            XCTAssertThrowsError(try value.importIntoEmpty(target.mainContext))
+            XCTAssertFalse(target.mainContext.hasChanges)
+            XCTAssertEqual(try target.mainContext.fetchCount(FetchDescriptor<Prefs>()), 0)
+        }
+    }
+
+    func testPrecisePreferencesAndStaleAnchorSurvivePhysicalSnapshotRoundTrip() throws {
+        let source = try container()
+        let context = source.mainContext
+        context.autosaveEnabled = false
+        let stamp = UUID()
+        let precise = Prefs(preferredFocusMinutes: 1, settingsWriterID: "precise-writer")
+        precise.preferredFocusMinutesRevision = 1
+        precise.preferredFocusMinutesMutationID = stamp
+        precise.preferredFocusSeconds = 95
+        precise.preferredFocusSecondsMutationID = stamp
+        let stale = Prefs(preferredFocusMinutes: 2, settingsWriterID: "legacy-writer")
+        stale.preferredFocusMinutesRevision = 2
+        stale.preferredFocusMinutesMutationID = UUID()
+        stale.preferredFocusSeconds = 95
+        stale.preferredFocusSecondsMutationID = stamp
+        context.insert(precise)
+        context.insert(stale)
+        try context.save()
+        let snapshot = try PomoGemStorageSnapshot.capture(from: ModelContext(source))
+        let target = try container()
+        _ = try snapshot.importIntoEmpty(target.mainContext)
+        let readback = try PomoGemStorageSnapshot.capture(from: ModelContext(target))
+        XCTAssertTrue(try snapshot.isEquivalent(to: readback))
+        let values = try ModelContext(target).fetch(FetchDescriptor<Prefs>())
+        XCTAssertEqual(Set(values.compactMap(\.preferredFocusSeconds)), [95])
+        XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: values, currentEpochID: nil).preferredFocusSeconds, 120)
+    }
+
     func testBrokenOrRewiredPhysicalRelationshipsAreNotEquivalent() throws {
         let source = try fixture()
         let original = try PomoGemStorageSnapshot.capture(from: ModelContext(source))

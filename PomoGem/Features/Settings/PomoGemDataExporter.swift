@@ -840,6 +840,8 @@ private struct PrefsExportRecord: Encodable {
     let legacyIsProIgnored: Bool
     let keepScreenAwake: Bool
     let preferredFocusMinutes: Int
+    let preferredFocusSeconds: Int?
+    let preferredFocusSecondsMutationID: UUID?
     let timerDisplayModeRawValue: String
     let hasCompletedOnboarding: Bool
     let usagePurposeRawValue: String
@@ -894,6 +896,8 @@ private struct PrefsExportRecord: Encodable {
         legacyIsProIgnored = false
         keepScreenAwake = value.keepScreenAwake
         preferredFocusMinutes = value.preferredFocusMinutes
+        preferredFocusSeconds = value.preferredFocusSeconds
+        preferredFocusSecondsMutationID = value.preferredFocusSecondsMutationID
         timerDisplayModeRawValue = value.timerDisplayModeRawValue
         hasCompletedOnboarding = value.hasCompletedOnboarding
         usagePurposeRawValue = value.usagePurposeRawValue
