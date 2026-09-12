@@ -289,6 +289,7 @@ struct PomoGemApp: App {
 private final class PomoGemPersistenceSession: Identifiable {
     let id = UUID()
     let container: ModelContainer
+    let viewLifetime: PersistenceViewContainerLifetime
     let mode: PersistenceLaunchMode
     let startupError: String?
     let safetyNotice: String?
@@ -306,12 +307,39 @@ private final class PomoGemPersistenceSession: Identifiable {
         isCloudOffline: Bool = false
     ) {
         self.container = container
+        self.viewLifetime = PersistenceViewContainerLifetime(container: container)
         self.mode = mode
         self.startupError = startupError
         self.safetyNotice = safetyNotice
         self.persistentFixtureActionRawValue = persistentFixtureActionRawValue
         self.accountNamespace = accountNamespace
         self.isCloudOffline = isCloudOffline
+    }
+}
+
+/// Retains only the store owner while SwiftUI finishes using the old view
+/// graph. A ModelContext in the environment does not keep its container alive
+/// through every Query update during full-screen presentation teardown.
+///
+/// This lifetime grants no session authority and holds no Host callbacks.
+/// Clearing the active session rejects old transfer requests; the inherited
+/// environment keeps Query consumers safe until their graph is released.
+final class PersistenceViewContainerLifetime {
+    let container: ModelContainer
+
+    init(container: ModelContainer) {
+        self.container = container
+    }
+}
+
+private struct PersistenceViewContainerLifetimeKey: EnvironmentKey {
+    static let defaultValue: PersistenceViewContainerLifetime? = nil
+}
+
+extension EnvironmentValues {
+    var persistenceViewContainerLifetime: PersistenceViewContainerLifetime? {
+        get { self[PersistenceViewContainerLifetimeKey.self] }
+        set { self[PersistenceViewContainerLifetimeKey.self] = newValue }
     }
 }
 
@@ -499,6 +527,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         return CloudConnectionSessionContent { loadedContent(current) }
             .id(current.id)
             .modelContainer(current.container)
+            .environment(\.persistenceViewContainerLifetime, current.viewLifetime)
             .environment(\.isCloudOfflineSession, current.isCloudOffline)
             .environment(\.cloudConnectionPresentation, connectionPresentation(for: current))
             .task(id: scenePhase) {
@@ -2248,6 +2277,9 @@ private struct PomoGemPersistenceLaunchHost: View {
         if let container = session?.container {
             containerLifetimes.track(container)
         }
+        // Invalidate admission now. The old SwiftUI graph independently owns
+        // its container lifetime until Query and presented content disappear.
+        // The weak tracker still blocks another mount until actual release.
         session = nil
     }
 
