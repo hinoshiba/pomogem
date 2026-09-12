@@ -1056,12 +1056,14 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
     }
 
     private func tap(_ element: XCUIElement) throws {
+        // Reading a missing element's identifier in the failure message would
+        // resolve its snapshot before require evaluates the waiting condition.
         let ready = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == true AND enabled == true AND hittable == true"),
             object: element
         )
         try require(XCTWaiter.wait(for: [ready], timeout: 10) == .completed,
-                    "A required UI control is missing, disabled, or obscured: \(element.identifier).")
+                    "A required UI control is missing, disabled, or obscured.")
         element.tap()
     }
 
@@ -1070,7 +1072,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
             if element.exists && element.isHittable { return }
             if direction == .up { app!.swipeUp() } else { app!.swipeDown() }
         }
-        try require(element.exists && element.isHittable, "Could not reveal required content: \(element.identifier).")
+        try require(element.exists && element.isHittable, "Could not reveal required content.")
     }
 
     private func remainingHydrationTime(until deadline: Date) throws -> TimeInterval {
