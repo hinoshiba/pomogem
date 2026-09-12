@@ -23,6 +23,9 @@ Apple teamの実際のaccess、mail運用を照合して最終回答します。
   埋め込まない。選択時と各launch／resumeで`accountStatus`と`userRecordID`を確認し、private databaseの
   全record zoneをread-only fetchしてonline accessを確かめる。通信不可、account不明、別accountの場合は
   保存領域を開かないが、保存済みdataは削除しない
+- 画面公開前に同じprivate databaseのリセット履歴をread-only取得し、サーバーで観測した世代以上の
+  履歴が端末へ届くまで期限付きで待機する。全記録の同期完了は保証しない。iCloud選択時の通常resetは
+  記録保護のため一時停止し、local-onlyの通常resetは維持する。新しい送信先や運営者向け収集は追加しない
 - `AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`の4種類は端末内だけの表示用projectionで、
   同期元記録から再構築しCloudKitへuploadしない
 - 瓶用のCore Motionはその場で処理し、保存・送信しない

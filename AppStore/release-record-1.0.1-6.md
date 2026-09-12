@@ -5,6 +5,18 @@ This is the build and upload evidence. Subsequent submission status is tracked i
 [release PR #8](https://github.com/hinoshiba/pomogem/pull/8) and App Store Connect;
 upload success does not imply approval or public availability.
 
+## Cancellation addendum — 2026-09-12
+
+The App Review cancellation action was performed after the physical-device audit
+reproduced a reset-history ordering defect. The version item returned to Ready
+for Review; final cancellation processing still needs confirmation in App Store
+Connect before selecting a replacement. Build 6 must not be resubmitted.
+The replacement candidate is [1.0.1 (7)](release-record-1.0.1-7.md), currently in
+preparation. This addendum preserves the original build/upload evidence and
+immutable source tag below; it does not claim build 7 has been uploaded or approved.
+
+## Original build and upload evidence
+
 - App Store ID: `6809139517`; app and Widget identifiers remain
   `com.hinoshiba.pomogem` and `com.hinoshiba.pomogem.widgets`.
 - Exact archived source commit: `7720b3ee1e5108a8588036453db4af71de73284d`.

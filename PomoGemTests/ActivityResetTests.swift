@@ -93,6 +93,115 @@ final class ActivityResetTests: XCTestCase {
         )
     }
 
+    func testCloudResetRejectsFreshReplicaBeforeMutationAndPreservesDelayedHistory() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let originalResetDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let localResetDate = originalResetDate.addingTimeInterval(86_400)
+        let remoteEpoch = UUID(uuidString: "30000000-0000-0000-0000-000000000001")!
+        let localEpoch = UUID(uuidString: "30000000-0000-0000-0000-000000000002")!
+        let originalSessionID = UUID(uuidString: "40000000-0000-0000-0000-000000000001")!
+        let preferences = Prefs(manualDayKey: "2023-11-15", manualUsedToday: 2)
+        context.insert(preferences)
+        try context.save()
+
+        // A reinstall can have preferences before its server reset history
+        // arrives. The production entry point must reject the request before
+        // accepting a sequence-0 marker or resetting existing local values.
+        XCTAssertFalse(ActivityResetAdmissionPolicy.permitsUserReset(in: .cloudKit))
+        XCTAssertThrowsError(try ActivityResetStore.beginUserInitiatedReset(
+            context: context,
+            persistenceMode: .cloudKit,
+            deviceID: "reinstalled-device",
+            now: localResetDate,
+            epochID: localEpoch
+        )) { error in
+            XCTAssertEqual(error as? ActivityResetStoreError, .cloudResetUnavailable)
+        }
+        XCTAssertFalse(context.hasChanges)
+        XCTAssertTrue(try ActivityResetStore.snapshots(context: context).isEmpty)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<StudySession>()).isEmpty)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<Prefs>()), 1)
+        XCTAssertEqual(preferences.manualDayKey, "2023-11-15")
+        XCTAssertEqual(preferences.manualUsedToday, 2)
+
+        // These rows already existed on the server before the rejected action.
+        // Their delayed import must remain usable, with no falsely accepted
+        // new generation whose completions could then be compacted away.
+        context.insert(ActivityResetMarker(
+            epochID: remoteEpoch,
+            sequence: 9,
+            resetAt: originalResetDate,
+            writerDeviceID: "previous-installation"
+        ))
+        let originalSessionStart = originalResetDate.addingTimeInterval(60)
+        context.insert(StudySession(
+            id: originalSessionID,
+            startAt: originalSessionStart,
+            endAt: originalSessionStart.addingTimeInterval(1_500),
+            seconds: 1_500,
+            source: .timer,
+            grams: 250,
+            deviceDayKey: FairnessPolicy.deviceDayKey(for: originalSessionStart),
+            dataEpochID: remoteEpoch
+        ))
+        try context.save()
+
+        let hydratedMarkers = try ActivityResetStore.snapshots(context: context)
+        let visibleIDs = Set(try context.fetch(FetchDescriptor<StudySession>())
+            .filter { ActivityResetPolicy.isCurrent($0.dataEpochID, markers: hydratedMarkers) }
+            .map(\.id))
+        XCTAssertEqual(visibleIDs, [originalSessionID])
+        try SeedData.bootstrap(context: context)
+        let retainedIDs = Set(try context.fetch(FetchDescriptor<StudySession>()).map(\.id))
+        XCTAssertEqual(retainedIDs, [originalSessionID])
+        XCTAssertEqual(try ActivityResetStore.latestEpochID(context: context), remoteEpoch)
+    }
+
+    func testCloudResetAlsoRejectsAnAlreadyHydratedReplicaWithoutMutation() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let existing = try ActivityResetStore.beginReset(context: context, deviceID: "old-device")
+        try context.save()
+        let before = try ActivityResetStore.snapshots(context: context)
+
+        XCTAssertThrowsError(try ActivityResetStore.beginUserInitiatedReset(
+            context: context,
+            persistenceMode: .cloudKit,
+            deviceID: "current-device"
+        )) { error in
+            XCTAssertEqual(error as? ActivityResetStoreError, .cloudResetUnavailable)
+        }
+
+        XCTAssertFalse(context.hasChanges)
+        XCTAssertEqual(try ActivityResetStore.snapshots(context: context), before)
+        XCTAssertEqual(try ActivityResetStore.latestEpochID(context: context), existing.epochID)
+    }
+
+    func testLocalOnlyUserResetRetainsExistingEpochOrdering() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let original = try ActivityResetStore.beginReset(context: context, deviceID: "local-device")
+        try context.save()
+        let originalEpoch = original.epochID
+        let originalSequence = original.sequence
+
+        XCTAssertTrue(ActivityResetAdmissionPolicy.permitsUserReset(in: .localOnly))
+        let accepted = try ActivityResetStore.beginUserInitiatedReset(
+            context: context,
+            persistenceMode: .localOnly,
+            deviceID: "local-device"
+        )
+        try context.save()
+
+        let markers = try ActivityResetStore.snapshots(context: context)
+        XCTAssertEqual(markers.count, 2)
+        XCTAssertEqual(accepted.sequence, originalSequence + 1)
+        XCTAssertEqual(try ActivityResetStore.latestEpochID(context: context), accepted.epochID)
+        XCTAssertEqual(ActivityResetPolicy.state(of: originalEpoch, markers: markers), .stale)
+        XCTAssertEqual(ActivityResetPolicy.state(of: accepted.epochID, markers: markers), .current)
+    }
+
     func testFutureWallClockCannotOverrideHigherLamportSequence() {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let valid = ActivityResetSnapshot(

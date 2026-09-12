@@ -896,6 +896,15 @@ struct SettingsView: View {
             }
 
             Button("表示中の記録をリセット", role: .destructive) { showResetData = true }
+                .disabled(!ActivityResetAdmissionPolicy.permitsUserReset(in: persistenceMode))
+                .accessibilityIdentifier("settings.activity-reset")
+
+            if !ActivityResetAdmissionPolicy.permitsUserReset(in: persistenceMode) {
+                Text(ActivityResetAdmissionPolicy.cloudResetUnavailableMessage)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .accessibilityIdentifier("settings.activity-reset-unavailable")
+            }
 
             if CompleteDataDeletionReleasePolicy.isEnabled,
                persistenceMode != .localOnly {
@@ -957,9 +966,9 @@ struct SettingsView: View {
     }
 
     private var dataStorageDisclosure: String {
-        let contents = "書き出しファイルには、テーマ名・成果メモ・設定・タイマー整合用のランダムな端末識別子と、以前リセットした旧世代を含む、この端末で利用可能な全11種類の出荷対象保存データが入ります。SNS用の共有画像とは異なります。保存先を確認してください。通常のリセット後はテーマとアプリ設定が残ります。"
+        let contents = "書き出しファイルには、テーマ名・成果メモ・設定・タイマー整合用のランダムな端末識別子と、以前リセットした旧世代を含む、この端末で利用可能な全11種類の出荷対象保存データが入ります。SNS用の共有画像とは異なります。保存先を確認してください。"
         if persistenceMode == .localOnly {
-            return contents + " 端末内の物理データはアプリの削除で消去できます。JSONは保管用で、アプリへ再読込したりiCloudの記録へ移行したりする機能はありません。"
+            return contents + " 通常のリセット後はテーマとアプリ設定が残ります。端末内の物理データはアプリの削除で消去できます。JSONは保管用で、アプリへ再読込したりiCloudの記録へ移行したりする機能はありません。"
         }
         return contents + " 端末内の物理データはアプリの削除、iCloud側はAppleのiCloudストレージ管理から削除できます。"
     }
@@ -1568,10 +1577,15 @@ struct SettingsView: View {
     }
 
     private func resetStudyData() {
+        guard ActivityResetAdmissionPolicy.permitsUserReset(in: persistenceMode) else {
+            settingsError = ActivityResetAdmissionPolicy.cloudResetUnavailableMessage
+            return
+        }
         let marker: ActivityResetMarker
         do {
-            marker = try ActivityResetStore.beginReset(
+            marker = try ActivityResetStore.beginUserInitiatedReset(
                 context: modelContext,
+                persistenceMode: persistenceMode,
                 deviceID: FocusDeviceIdentity.current()
             )
         } catch {

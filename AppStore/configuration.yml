@@ -8,7 +8,7 @@ store_localizations:
 app_store_id: 6809139517
 app_store_listing_status: not_public
 marketing_version: "1.0.1"
-build_number: "6"
+build_number: "7"
 copyright: "2026 hinoshiba"
 website_host: pomogem.hinoshiba.com
 app_bundle_id: com.hinoshiba.pomogem
@@ -204,6 +204,16 @@ i_cloud_sync:
     primary: lamport_sequence
     supported_sequence_range: 0...1000000
     wall_clock_role: display_and_audit_metadata_only
+    cloud_user_reset: temporarily_unavailable
+    local_only_user_reset: available
+  cloud_history_preflight:
+    before_root_publication: true
+    remote_read: complete_private_custom_zone_changes_reset_marker_fields_only
+    local_admission: same_or_newer_full_marker_order
+    deadline_seconds: 90
+    failure_behavior: keep_root_unpublished_without_deleting_data
+    verifies_all_user_data_hydrated: false
+    persistent_change_token_cache: false
   maintenance:
     projection_rebuild_beyond_home_512_row_window: true
     local_projection_compaction: allowed_rebuildable_device_only_data

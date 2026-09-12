@@ -173,6 +173,10 @@ JSON制約を確認後に確定します。
   同じnamespaceで分離する
 - iCloud選択時は各launch／resumeに同じonline確認を行う。通信不可、identity不明、別accountは旧accountへ
   fallbackせず保存領域を開かない。fail closed時も保存済みdataを削除しない
+- cloud container作成後も、サーバーで観測したリセット履歴以上の世代が端末へ届くまでRootとwriterを
+  公開しない。履歴確認はread-onlyで期限付きとし、全記録の同期完了を保証する表示はしない
+- 現在の候補ではiCloudの通常resetを一時的に利用不可とし、記録保護の理由を表示する。
+  local-only通常resetは維持し、審査メモ・Privacy・release手順へ同じ制限を反映する
 - A→BはBへ自動切替せずblockし、元のAでonline確認できた場合だけ同じA namespaceを再び開く
 - account-change通知またはbackgroundで旧containerをunmountし、foregroundで再検証する
 - Widgetはaccount-neutralな起動導線だけを表示し、App Group、iCloud、記録、質量、テーマ名、瓶画像を

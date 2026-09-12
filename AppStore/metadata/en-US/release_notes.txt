@@ -1,3 +1,6 @@
+- Fixed an error that prevented previously saved iCloud data from opening.
+- New records now wait for the observed iCloud reset history to reach the device, protecting records during initial loading.
+- Resetting displayed records is temporarily unavailable in iCloud mode to protect your records. Reset remains available when using This iPhone Only.
 - Improved iCloud connection checks, retries, and guidance when a connection cannot be established.
 - Fixed setup or data loading getting stuck when responding to notification permission prompts or returning to the app.
 - Improved iCloud handoff and completion for timers that have been paused and resumed many times.

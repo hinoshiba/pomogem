@@ -26,9 +26,6 @@ enum CompleteDataDeletionSystemError: LocalizedError {
 /// ModelConfigurations and their known SQLite/Core Data sidecars. Callers must
 /// pass configuration URLs, never a directory discovered from user input.
 enum CompleteDataDeletionPersistentStoreCleaner {
-    private static let sidecarSuffixes = ["", "-shm", "-wal"]
-    private static let supportSuffixes = ["_SUPPORT", "_ckAssets"]
-
     static func removeStores(
         at storeURLs: [URL],
         fileManager: FileManager = .default
@@ -38,21 +35,32 @@ enum CompleteDataDeletionPersistentStoreCleaner {
             throw CompleteDataDeletionSystemError.unsafePersistentStoreURL
         }
 
+        var existingArtifacts: [URL] = []
         for storeURL in uniqueURLs {
             try validateStoreURL(storeURL)
             for artifact in artifacts(for: storeURL) {
-                guard fileManager.fileExists(atPath: artifact.path) else { continue }
-                let values = try artifact.resourceValues(forKeys: [.isSymbolicLinkKey])
-                guard values.isSymbolicLink != true else {
+                guard artifactExists(artifact, fileManager: fileManager) else { continue }
+                let values = try artifact.resourceValues(forKeys: [
+                    .isSymbolicLinkKey, .isDirectoryKey, .isRegularFileKey
+                ])
+                let hasExpectedType = artifact.hasDirectoryPath
+                    ? values.isDirectory == true
+                    : values.isRegularFile == true
+                guard values.isSymbolicLink != true, hasExpectedType else {
                     throw CompleteDataDeletionSystemError.unsafePersistentStoreURL
                 }
-                try fileManager.removeItem(at: artifact)
+                existingArtifacts.append(artifact)
             }
+        }
+        // Validate every companion before deleting anything. A malformed or
+        // linked sidecar must not leave the otherwise valid primary store gone.
+        for artifact in existingArtifacts {
+            try fileManager.removeItem(at: artifact)
         }
 
         let remains = uniqueURLs.contains { storeURL in
             artifacts(for: storeURL).contains {
-                fileManager.fileExists(atPath: $0.path)
+                artifactExists($0, fileManager: fileManager)
             }
         }
         guard !remains else {
@@ -88,16 +96,12 @@ enum CompleteDataDeletionPersistentStoreCleaner {
     }
 
     static func artifacts(for storeURL: URL) -> [URL] {
-        let store = storeURL.standardizedFileURL
-        let parent = store.deletingLastPathComponent()
-        let filename = store.lastPathComponent
-        let sqlite = sidecarSuffixes.map {
-            parent.appendingPathComponent(filename + $0, isDirectory: false)
-        }
-        let support = supportSuffixes.map {
-            parent.appendingPathComponent(filename + $0, isDirectory: true)
-        }
-        return sqlite + support
+        PersistenceStoreArtifactLayout.artifacts(for: storeURL)
+    }
+
+    private static func artifactExists(_ url: URL, fileManager: FileManager) -> Bool {
+        fileManager.fileExists(atPath: url.path)
+            || (try? fileManager.destinationOfSymbolicLink(atPath: url.path)) != nil
     }
 
     private static func validateStoreURL(_ storeURL: URL) throws {

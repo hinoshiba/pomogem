@@ -488,6 +488,48 @@ struct PersistenceContainerRetirementPollBudget: Equatable, Sendable {
     }
 }
 
+/// Exact SQLite/Core Data companions derived from a store's filename stem.
+/// Framework versions use both extension-qualified and extension-free names;
+/// keep scanning and complete deletion on the same finite set of spellings.
+enum PersistenceStoreArtifactLayout {
+    struct Variant: Sendable {
+        let prefix: String
+        let suffix: String
+        let isDirectory: Bool
+        let isPrimaryStore: Bool
+    }
+
+    static let variants: [Variant] = [
+        .init(prefix: "", suffix: ".store", isDirectory: false, isPrimaryStore: true),
+        .init(prefix: "", suffix: ".store-wal", isDirectory: false, isPrimaryStore: false),
+        .init(prefix: "", suffix: ".store-shm", isDirectory: false, isPrimaryStore: false),
+        .init(prefix: "", suffix: ".store-journal", isDirectory: false, isPrimaryStore: false),
+        .init(prefix: "", suffix: ".store_SUPPORT", isDirectory: true, isPrimaryStore: false),
+        .init(prefix: "", suffix: ".store.ckAssetFiles", isDirectory: true, isPrimaryStore: false),
+        .init(prefix: "", suffix: ".store_ckAssets", isDirectory: true, isPrimaryStore: false),
+        .init(prefix: "", suffix: "_ckAssets", isDirectory: true, isPrimaryStore: false),
+        .init(prefix: ".", suffix: "_SUPPORT", isDirectory: true, isPrimaryStore: false)
+    ]
+
+    static func artifacts(for storeURL: URL) -> [URL] {
+        let store = storeURL.standardizedFileURL
+        let parent = store.deletingLastPathComponent()
+        let filename = store.lastPathComponent
+        let stem = store.deletingPathExtension().lastPathComponent
+        return variants.map { variant in
+            // Scanning recognizes our shipping .store names; derivation must
+            // still preserve the caller's exact primary URL and extension.
+            let name = variant.suffix.hasPrefix(".store")
+                ? filename + String(variant.suffix.dropFirst(".store".count))
+                : variant.prefix + stem + variant.suffix
+            return parent.appendingPathComponent(
+                name,
+                isDirectory: variant.isDirectory
+            )
+        }
+    }
+}
+
 /// Owns the physical SwiftData store boundary.
 ///
 /// User-authored activity is synchronized through the existing `PomoGem`
@@ -549,10 +591,10 @@ enum PersistenceStoreTopology {
         }
     }
 
-    /// Exact application-owned persistence artifacts. Callers may derive the
-    /// standard SQLite `-wal`/`-shm` siblings for each store URL. This list is
-    /// intentionally limited to app data and the pre-split migration sidecar;
-    /// it never includes a complete-deletion receipt or retry journal.
+    /// Exact store and migration URLs. The persistent-store cleaner derives
+    /// each store's finite SQLite/Core Data companion list from the shared
+    /// artifact layout. This list never includes a complete-deletion receipt
+    /// or retry journal.
     static func deletionArtifactURLs(
         for mode: PersistenceLaunchMode,
         accountNamespace: AccountDataNamespace? = nil
@@ -908,12 +950,13 @@ enum PersistenceStoreTopology {
                 || name.hasPrefix("\(storeName)-")
                 || name.hasPrefix("\(storeName)_")
                 || name.hasPrefix("\(storeName).")
+                || name == "\(base)_ckAssets"
+                || name == ".\(base)_SUPPORT"
         }
         return isLegacyOrUnnamespaced
-            || name.hasPrefix("\(cloudStoreName)-")
-            || name.hasPrefix("\(localProjectionStoreName)-")
-            || name.hasPrefix("\(localOnlySourceStoreName)-")
-            || name.hasPrefix("\(localOnlyProjectionStoreName)-")
+            || legacyBases.contains { base in
+                name.hasPrefix("\(base)-") || name.hasPrefix(".\(base)-")
+            }
             || name.hasPrefix(".pomogem-local-projection-")
     }
 
@@ -926,26 +969,17 @@ enum PersistenceStoreTopology {
             (localProjectionStoreName, .cloud, .projection),
             (cloudStoreName, .cloud, .source)
         ]
-        let suffixes: [(String, Bool, Bool)] = [
-            (".store", false, true),
-            (".store-wal", false, false),
-            (".store-shm", false, false),
-            (".store-journal", false, false),
-            (".store_SUPPORT", true, false),
-            (".store.ckAssetFiles", true, false)
-        ]
         for (base, kind, role) in bases {
-            let prefix = "\(base)-"
-            guard name.hasPrefix(prefix) else { continue }
-            for (suffix, expectsDirectory, isPrimaryStore) in suffixes
-            where name.hasSuffix(suffix) {
+            for variant in PersistenceStoreArtifactLayout.variants {
+                let prefix = "\(variant.prefix)\(base)-"
+                guard name.hasPrefix(prefix), name.hasSuffix(variant.suffix) else { continue }
                 let start = name.index(
                     name.startIndex,
                     offsetBy: prefix.count
                 )
                 let end = name.index(
                     name.endIndex,
-                    offsetBy: -suffix.count
+                    offsetBy: -variant.suffix.count
                 )
                 guard start < end,
                       let namespace = AccountDataNamespace(
@@ -957,11 +991,10 @@ enum PersistenceStoreTopology {
                     kind: kind,
                     role: role,
                     namespace: namespace,
-                    expectsDirectory: expectsDirectory,
-                    isPrimaryStore: isPrimaryStore
+                    expectsDirectory: variant.isDirectory,
+                    isPrimaryStore: variant.isPrimaryStore
                 )
             }
-            return nil
         }
         return nil
     }

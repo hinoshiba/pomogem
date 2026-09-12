@@ -1,11 +1,13 @@
 # iCloud同期の起動エラー調査と検証
 
-更新日: 2026-09-11
+更新日: 2026-09-12
 
 「保存領域を確認できません」は、保存データを開く前の検証が止まったことを示す見出しです。
 見出しだけでは、通信、Apple Account、端末内の保存方式設定のどれが原因かは確定できません。
-この文書はソースレビューの結果と配布版での確認手順をまとめます。報告端末のログ、Apple Account、
-CloudKit Productionの実データは確認していないため、その端末の原因を特定済みとは扱いません。
+この文書はソースレビュー、許可された検証用実機での再現結果、配布候補の確認手順をまとめます。
+実機で再現した問題と、遅延到着順序をテストで再現した問題を区別します。修正後の実サービスでの
+同期・再インストール復元がすべて合格したという記録ではありません。進行中の実機監査は
+[実機監査記録](RealDeviceICloudAudit.md)で別に管理します。
 
 ## 表示と実装の対応
 
@@ -20,6 +22,7 @@ CloudKit Productionの実データは確認していないため、その端末�
 | 保存領域を確認できません | `.blocked`。以前のコンテナの解放待ちがtimeoutした場合 | 本文に「保存領域が完全に閉じたことを確認できません」と表示。古いコンテナが残ったまま新しいものを開かない |
 | 保存領域を確認できません | `.blocked`。完全削除の試作機能のpreflightが拒否した場合 | Version 1.0では`CompleteDataDeletionReleasePolicy.isEnabled == false`で到達しない |
 | 保存領域を準備できませんでした | `.failed`。上記以外の保存設定・`ModelContainer`作成エラー | ローカルファイル、空き容量、モデル構成、移行などを調べる |
+| 保存領域を準備できませんでした | `.failed`。`CloudActivityHistoryPreflight`で履歴取得・端末への反映待ちが失敗した場合 | 本文の履歴確認案内を確認。画面公開と新規記録の作成を止め、既存データは削除しない |
 | iCloudの状態を確認できません | Settingsの`CloudAccountAvailability.unavailable` | 起動ゲートの見出しとは別の、接続可否表示 |
 
 起動時のアカウント照合は[CloudSyncMonitor.swift](../PomoGem/Core/CloudSyncMonitor.swift)、
@@ -27,6 +30,51 @@ CloudKit Productionの実データは確認していないため、その端末�
 が担当します。Settingsの接続可能表示は、全データのアップロード・ダウンロード完了を保証しません。
 Core DataのCloudKit同期はシステムによる非同期処理です。
 ([Apple: Syncing a Core Data Store with CloudKit](https://developer.apple.com/documentation/coredata/syncing-a-core-data-store-with-cloudkit))
+
+## 実機で再現した保存ファイルの誤判定
+
+検証用実機では、保存先選択と起動済み記録が一致し、端末の主storeとCloudKitサーバーの双方に
+テスト用のテーマと設定が存在する状態でも、起動時のファイル検査がCloudKitの補助directoryを
+未知の保存履歴として拒否しました。容量不足や別アカウントを示す事例ではありません。
+
+`<stem>`をstoreのファイル名から`.store`を除いた部分とすると、実機で観測した構成には
+`<stem>.store`、`<stem>.store-wal`、`<stem>.store-shm`のほか、`<stem>_ckAssets/`と
+`.<stem>_SUPPORT/`がありました。実際の保存先、namespace、アカウント識別子は公開しません。
+
+修正では、ファイル検査と削除用の補助処理が同じ有限の命名規則を参照します。追加の認識対象には
+`<stem>.store-journal`、`<stem>.store_SUPPORT/`、`<stem>.store.ckAssetFiles/`、
+`<stem>.store_ckAssets/`も含みます。未知の名前や不正なnamespaceまで許可する変更ではなく、
+ファイル／directoryの種別とsymbolic linkの検証は維持します。
+
+これらの補助directoryを手動で削除して起動させることは、通常の復旧手順ではありません。SQLite本体、
+WAL、CloudKit補助データを一組の既存保存領域として保持し、認識側を修正します。削除用補助処理の
+修正はアプリ内のCloudKit一括削除機能を有効化するものではありません。修正後の実機再検証結果は
+監査記録へ別途残します。
+
+## リセット履歴の到着前に新規記録を作る問題
+
+実機のReleaseホスト上で、本番の保存・世代判定・保守処理に遅延到着順序を与えた回帰テストでは、
+以前の高いsequenceのリセット履歴が届く前に作った記録が、後着履歴によって非表示となり、物理削除
+されました。新しいリセット操作をしなくても、履歴なしの`nil`世代、部分的に届いた古い世代での手動記録、
+進行中タイマーと所有権に同じ問題を再現しました。これは実サービスの自然な配送順序での再現とは区別します。
+
+現在の対策では、iCloud選択時の「表示中の記録をリセット」を一時的に利用不可とし、書き込みや通知の
+変更前に拒否します。local-onlyでは引き続き利用できます。既存のリセット履歴を削除したり、時刻から
+旧記録の世代を推測して書き換えたりはしません。
+
+さらに[CloudActivityHistoryPreflight](../PomoGem/Core/CloudActivityHistoryPreflight.swift)は、各cloud mountで
+`RootView`を公開する前に、private custom zoneの全ページからリセット履歴の必要なfieldだけを読みます。
+アカウントを前後で照合し、サーバーで観測したwinnerと同じか新しい履歴が端末へ届くまで待ちます。
+順序は`sequence`、`writerDeviceID`、`epochID`、`id`で決め、時刻の丸め差を認可条件にしません。
+読み取り専用のfresh `ModelContext`で反映を確認し、通信失敗、不完全な応答、キャンセル、期限切れでは
+画面を公開しません。履歴preflight自体の上限は90秒で、その他の起動時アカウント検証とは別の期限です。
+
+全記録のdownload完了を待つ仕組みではありません。query indexへ依存せず全zone変更を読むため、
+記憶量はマーカー中心に制限しても、読み取り時間は記録数に応じて増えます。変更tokenの永続cacheは
+導入していません。この確認だけで、まだサーバーへ届いていない別端末の変更や、既に誤った世代へ
+保存された記録の復元まで保証することはできません。
+([Apple: Reading CloudKit Records for Core Data](https://developer.apple.com/documentation/coredata/reading-cloudkit-records-for-core-data)、
+[Apple: CKFetchRecordZoneChangesOperation](https://developer.apple.com/documentation/cloudkit/ckfetchrecordzonechangesoperation))
 
 ## ソースレビューで確認した問題
 
@@ -188,6 +236,11 @@ Simulatorのunit testは、失敗分類、待機期限、キャンセル、ア�
   再試行し、同じ保存先の既存記録が残ることを確認する。新しい空のstoreへ切り替わらないことも調べる。
 - [ ] 起動途中、特にコンテナ作成後の確認中にbackgroundへ移動して通信を切り、再開・再試行する。
   古い確認処理が画面や新しい起動結果を書き換えず、未承認のコンテナが引き継がれないことを確認する。
+- [ ] 実機が作成したCloudKit補助directoryを保持したまま再起動し、認識対象の補助ファイルだけで
+  recovery gateへ入らないことを確認する。不正な種別、symbolic link、未知の保存履歴は拒否を維持する。
+- [ ] 既存のリセット履歴がある新規・再インストール・再開時に、履歴反映前は新規記録を作れず、
+  反映後の手動記録とタイマーが保守処理後も残ることを確認する。失敗・期限切れ時も既存記録は消さない。
+- [ ] iCloudの通常リセットが利用不可と理由を表示し、local-onlyのリセットは引き続き機能することを確認する。
 - [ ] 通信が遅い場合と一時的に失敗する場合に、一定時間で復旧または操作可能なエラー表示へ進むこと、
   再試行が無限に続かず、再試行ボタンの連打で確認処理が増殖しないことを確認する。
 - [ ] 検証用端末でApple AccountをAからBへ変更し、Aの保存領域が表示・更新されないことを確認する。
