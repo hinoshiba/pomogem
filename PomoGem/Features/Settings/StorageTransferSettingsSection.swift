@@ -9,11 +9,28 @@ final class StorageTransferController {
     private(set) var isStarting = false
     private(set) var error: String?
     private var operation: Operation?
+    private var registrationID: UUID?
     private var task: Task<Void, Never>?
 
     var isAvailable: Bool { operation != nil && !isStarting }
 
-    func install(_ operation: @escaping Operation) { self.operation = operation }
+    @discardableResult
+    func install(_ operation: @escaping Operation) -> UUID {
+        let id = UUID()
+        self.operation = operation
+        registrationID = id
+        return id
+    }
+
+    /// A registered operation captures its Root and model context. Detach it
+    /// as that Root disappears so an idle controller cannot retain a retired
+    /// persistence session. A confirmed operation already owns its own copy;
+    /// it must finish its durable handoff without being cancelled or unlocked.
+    func uninstall(registrationID: UUID) {
+        guard self.registrationID == registrationID else { return }
+        operation = nil
+        self.registrationID = nil
+    }
 
     /// Only a confirmed choice reaches this method. A second tap cannot launch
     /// another transaction while the first account check is suspended.

@@ -15,6 +15,58 @@ extension EnvironmentValues {
     }
 }
 
+/// Presentation values only. No persistence session or container is retained
+/// here; account/recovery actions stay with the existing Host admission owner.
+struct CloudConnectionPresentation {
+    let sessionID: UUID
+    let isChecking: Bool
+    let message: String
+    let retry: (() -> Void)?
+    var recoveryKind: CloudOfflineRecoveryKind? = nil
+    var reviewRecovery: (() -> Void)? = nil
+}
+
+private struct CloudConnectionPresentationKey: EnvironmentKey {
+    static let defaultValue: CloudConnectionPresentation? = nil
+}
+
+extension EnvironmentValues {
+    var cloudConnectionPresentation: CloudConnectionPresentation? {
+        get { self[CloudConnectionPresentationKey.self] }
+        set { self[CloudConnectionPresentationKey.self] = newValue }
+    }
+}
+
+/// Shared by the session's Root and its full-screen focus/break presentations.
+/// Keep the content's structural identity stable when connectivity changes.
+struct CloudConnectionSessionContent<Content: View>: View {
+    @Environment(\.cloudConnectionPresentation) private var presentation
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        // An outer safeAreaInset is insufficient around Root's ZStack and
+        // nested NavigationStack: UIKit can still place its toolbar beneath
+        // the inset's buttons. Allocate separate layout space instead.
+        VStack(spacing: 0) {
+            if let presentation {
+                CloudOfflineBanner(isChecking: presentation.isChecking,
+                    message: presentation.message, retry: presentation.retry,
+                    recoveryKind: presentation.recoveryKind,
+                    reviewRecovery: presentation.reviewRecovery)
+                    .id(presentation.sessionID)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .zIndex(1)
+            }
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
 /// A network path is only a retry hint. It never proves an Apple Account,
 /// CloudKit availability, dataset generation, or successful synchronization.
 @MainActor @Observable

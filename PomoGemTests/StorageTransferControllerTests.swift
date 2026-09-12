@@ -3,6 +3,81 @@ import XCTest
 
 @MainActor
 final class StorageTransferControllerTests: XCTestCase {
+    func testUninstallReleasesRootAndItsRetiringContainer() throws {
+        let controller = StorageTransferController()
+        let lifetimes = PersistenceContainerLifetimeTracker<TransferControllerContainer>()
+        var owner: TransferControllerOwner? = TransferControllerOwner(controller: controller)
+        weak var retainedOwner = owner
+        weak var retainedContainer = owner?.container
+        lifetimes.track(owner!.container)
+        let registrationID = owner!.install()
+
+        // Match Root's ownership: its controller stores an operation capturing
+        // Root, which owns both that controller and the mounted container.
+        owner = nil
+        XCTAssertNotNil(retainedOwner)
+        XCTAssertNotNil(retainedContainer)
+        XCTAssertThrowsError(try lifetimes.requireAllReleased())
+
+        controller.uninstall(registrationID: registrationID)
+        XCTAssertNil(retainedOwner)
+        XCTAssertNil(retainedContainer)
+        try lifetimes.requireAllReleased()
+        XCTAssertFalse(controller.isAvailable)
+        controller.start(.enableCloudKeepingCloud)
+        XCTAssertFalse(controller.isStarting)
+    }
+
+    func testReappearingRootReinstallsAndStaleDisappearanceCannotDetachIt() async {
+        let controller = StorageTransferController()
+        let oldRegistration = controller.install { _ in XCTFail("Old Root must be detached") }
+        controller.uninstall(registrationID: oldRegistration)
+        XCTAssertFalse(controller.isAvailable)
+
+        let invoked = expectation(description: "reappearing Root accepted choice")
+        _ = controller.install { _ in invoked.fulfill() }
+        controller.uninstall(registrationID: oldRegistration)
+        XCTAssertTrue(controller.isAvailable)
+        controller.start(.enableCloudKeepingCloud)
+        await fulfillment(of: [invoked], timeout: 3)
+        XCTAssertTrue(controller.isStarting)
+    }
+
+    func testUninstallPreservesAcceptedOperationAndReleasesItsContainerAfterHandoff() async {
+        let controller = StorageTransferController()
+        let lifetimes = PersistenceContainerLifetimeTracker<TransferControllerContainer>()
+        let gate = TransferControllerGate(started: expectation(description: "accepted operation entered"))
+        let returned = expectation(description: "accepted operation finished handoff")
+        var owner: TransferControllerOwner? = TransferControllerOwner(controller: controller)
+        weak var retainedOwner = owner
+        weak var retainedContainer = owner?.container
+        lifetimes.track(owner!.container)
+        let registrationID = controller.install { [acceptedOwner = owner!] _ in
+            await gate.wait()
+            XCTAssertFalse(Task.isCancelled, "View disappearance must not cancel a confirmed transfer")
+            acceptedOwner.operationCount += 1
+            returned.fulfill()
+        }
+        controller.start(.enableCloudKeepingCloud)
+        await fulfillment(of: [gate.started], timeout: 3)
+        owner = nil
+        controller.uninstall(registrationID: registrationID)
+        XCTAssertTrue(controller.isStarting)
+        XCTAssertFalse(controller.isAvailable)
+        XCTAssertNotNil(retainedOwner)
+        XCTAssertNotNil(retainedContainer)
+        XCTAssertTrue(lifetimes.hasLiveContainers, "Retirement must still wait for a confirmed operation")
+
+        controller.install { _ in XCTFail("Reinstallation cannot unlock the accepted operation") }
+        controller.start(.disableCloudKeepingCopy)
+        gate.release()
+        await fulfillment(of: [returned], timeout: 3)
+        await waitUntil { retainedOwner == nil }
+        XCTAssertNil(retainedContainer)
+        XCTAssertFalse(lifetimes.hasLiveContainers)
+        XCTAssertTrue(controller.isStarting, "The host still owns the durable transfer boundary")
+    }
+
     func testNoInstalledOperationCannotStart() {
         let controller = StorageTransferController()
         XCTAssertFalse(controller.isAvailable)
@@ -109,6 +184,25 @@ final class StorageTransferControllerTests: XCTestCase {
             try? await Task.sleep(for: .milliseconds(10))
         }
         XCTAssertTrue(condition(), "Controller did not settle within its test deadline", file: file, line: line)
+    }
+}
+
+@MainActor
+private final class TransferControllerContainer {}
+
+@MainActor
+private final class TransferControllerOwner {
+    let controller: StorageTransferController
+    let container = TransferControllerContainer()
+    var operationCount = 0
+
+    init(controller: StorageTransferController) { self.controller = controller }
+
+    func install() -> UUID {
+        controller.install { [self] _ in
+            operationCount += 1
+            withExtendedLifetime(container) {}
+        }
     }
 }
 

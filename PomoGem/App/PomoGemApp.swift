@@ -1,4 +1,5 @@
 import CloudKit
+import Observation
 import OSLog
 import SwiftData
 import SwiftUI
@@ -21,6 +22,21 @@ enum PersistenceSceneTransitionAction: Equatable {
 
 enum PersistenceOfflineResumeAction: Equatable {
     case keepOffline, retryConnection, retireSession
+}
+
+/// Invalidating an expired attempt also changes SwiftUI's task ID. That ID
+/// change cancels old work; it must not implicitly request another launch if
+/// container cleanup finishes before SwiftUI starts the replacement task.
+struct PersistenceLaunchAttemptGate {
+    private var suppressedAutomaticAttempt: Int?
+
+    mutating func suppressAutomaticStart(for attempt: Int) {
+        suppressedAutomaticAttempt = attempt
+    }
+
+    func allowsPreparation(for attempt: Int) -> Bool {
+        suppressedAutomaticAttempt != attempt
+    }
 }
 
 /// Keeps first presentation independent from the CloudKit account boundary.
@@ -288,6 +304,7 @@ struct PomoGemApp: App {
 private final class PomoGemPersistenceSession: Identifiable {
     let id = UUID()
     let container: ModelContainer
+    let viewLifetime: PersistenceViewContainerLifetime
     let mode: PersistenceLaunchMode
     let startupError: String?
     let safetyNotice: String?
@@ -305,12 +322,39 @@ private final class PomoGemPersistenceSession: Identifiable {
         isCloudOffline: Bool = false
     ) {
         self.container = container
+        self.viewLifetime = PersistenceViewContainerLifetime(container: container)
         self.mode = mode
         self.startupError = startupError
         self.safetyNotice = safetyNotice
         self.persistentFixtureActionRawValue = persistentFixtureActionRawValue
         self.accountNamespace = accountNamespace
         self.isCloudOffline = isCloudOffline
+    }
+}
+
+/// Retains only the store owner while SwiftUI finishes using the old view
+/// graph. A ModelContext in the environment does not keep its container alive
+/// through every Query update during full-screen presentation teardown.
+///
+/// This lifetime grants no session authority and holds no Host callbacks.
+/// Clearing the active session rejects old transfer requests; the inherited
+/// environment keeps Query consumers safe until their graph is released.
+final class PersistenceViewContainerLifetime {
+    let container: ModelContainer
+
+    init(container: ModelContainer) {
+        self.container = container
+    }
+}
+
+private struct PersistenceViewContainerLifetimeKey: EnvironmentKey {
+    static let defaultValue: PersistenceViewContainerLifetime? = nil
+}
+
+extension EnvironmentValues {
+    var persistenceViewContainerLifetime: PersistenceViewContainerLifetime? {
+        get { self[PersistenceViewContainerLifetimeKey.self] }
+        set { self[PersistenceViewContainerLifetimeKey.self] = newValue }
     }
 }
 
@@ -358,6 +402,20 @@ final class PersistenceContainerLifetimeTracker<Container: AnyObject> {
     }
 }
 
+/// A captured SwiftUI view value can keep State's previous value alive after
+/// its location changes. All Host copies must instead share this reference so
+/// clearing the session also clears it from in-flight retirement callbacks.
+@MainActor
+@Observable
+final class PersistenceSessionHolder<Session: AnyObject & Identifiable> {
+    var session: Session?
+
+    func resolve(_ id: Session.ID) -> Session? {
+        guard let session, session.id == id else { return nil }
+        return session
+    }
+}
+
 @MainActor
 private struct PomoGemPersistenceLaunchHost: View {
     private static let persistenceLogger = Logger(
@@ -378,9 +436,14 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     @Environment(\.scenePhase) private var scenePhase
-    @State private var session: PomoGemPersistenceSession?
+    @State private var sessionHolder = PersistenceSessionHolder<PomoGemPersistenceSession>()
+    private var session: PomoGemPersistenceSession? {
+        get { sessionHolder.session }
+        nonmutating set { sessionHolder.session = newValue }
+    }
     @State private var launchState: LaunchState = .preparing("保存方式を確認しています")
     @State private var launchAttempt = 0
+    @State private var launchAttemptGate = PersistenceLaunchAttemptGate()
     @State private var isPreparing = false
     @State private var requestedCloudSelection = false
     @State private var canChooseLocalOnly = false
@@ -458,8 +521,16 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     private var offlineContinuationAction: (() -> Void)? {
-        guard canContinueOffline else { return nil }
+        guard canContinueOffline, canStartOfflineContinuation else { return nil }
         return { requestOfflineUse() }
+    }
+
+    private var canStartOfflineContinuation: Bool {
+        guard session == nil, !isPreparing, !isQuiescingAccountChange,
+              !requiresStorageTransferRelaunch else { return false }
+        return CloudOfflineHostPolicy.offlineMountDecision(
+            cloudMirrorWasOpened: StorageTransferProcessState.cloudMirrorWasOpened,
+            hasLiveContainers: containerLifetimes.hasLiveContainers) == .allow
     }
 
     private func sessionContent(_ current: PomoGemPersistenceSession) -> some View {
@@ -469,11 +540,12 @@ private struct PomoGemPersistenceLaunchHost: View {
         let cleanupID = current.mode == .cloudKit && !current.isCloudOffline && current.startupError == nil
             ? current.id : nil
         let cleanupNamespace = current.accountNamespace
-        return loadedContent(current)
+        return CloudConnectionSessionContent { loadedContent(current) }
             .id(current.id)
             .modelContainer(current.container)
+            .environment(\.persistenceViewContainerLifetime, current.viewLifetime)
             .environment(\.isCloudOfflineSession, current.isCloudOffline)
-            .safeAreaInset(edge: .top, spacing: 0) { connectionBanner(for: current) }
+            .environment(\.cloudConnectionPresentation, connectionPresentation(for: current))
             .task(id: scenePhase) {
                 if let cleanupID, let cleanupNamespace {
                     await retryStorageTransferCleanup(sessionID: cleanupID, namespace: cleanupNamespace)
@@ -481,19 +553,20 @@ private struct PomoGemPersistenceLaunchHost: View {
             }
     }
 
-    @ViewBuilder
-    private func connectionBanner(for current: PomoGemPersistenceSession) -> some View {
+    private func connectionPresentation(for current: PomoGemPersistenceSession) -> CloudConnectionPresentation? {
         if current.isCloudOffline {
             let notice = offlineRecovery.notice?.sessionID == current.id ? offlineRecovery.notice : nil
-            CloudOfflineBanner(isChecking: isCheckingOfflineConnection, message: offlineMessage,
+            return CloudConnectionPresentation(sessionID: current.id,
+                isChecking: isCheckingOfflineConnection, message: offlineMessage,
                 retry: { retryOfflineConnection() }, recoveryKind: notice?.kind,
                 reviewRecovery: notice?.kind == .storageTransfer ? {
                     if let notice { requestOfflineRecoveryReview(expectedNotice: notice) }
                 } : nil)
         } else if current.mode == .cloudKit, networkPath.isOffline == true {
-            CloudOfflineBanner(isChecking: false,
+            return CloudConnectionPresentation(sessionID: current.id, isChecking: false,
                 message: "通信の回復を待っています。端末への記録は続けられます。", retry: nil)
         }
+        return nil
     }
 
     @MainActor
@@ -596,7 +669,8 @@ private struct PomoGemPersistenceLaunchHost: View {
     private func baseRootContent(
         _ session: PomoGemPersistenceSession
     ) -> some View {
-        RootView(
+        let sessionID = session.id
+        return RootView(
             persistenceStartupError: session.startupError,
             persistenceMode: session.mode,
             persistenceSafetyNotice: session.safetyNotice,
@@ -604,10 +678,10 @@ private struct PomoGemPersistenceLaunchHost: View {
                 await rebuildAfterCompleteDeletion()
             },
             prepareStorageTransfer: { choice in
-                try await prepareStorageTransfer(choice, session: session)
+                try await prepareStorageTransfer(choice, sessionID: sessionID)
             },
             unmountForStorageTransfer: {
-                unmountForStorageTransfer(sessionID: session.id)
+                unmountForStorageTransfer(sessionID: sessionID)
             }
         )
     }
@@ -615,6 +689,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     private func preparePersistenceIfNeeded() async {
         let attempt = launchAttempt
         guard session == nil, !isQuiescingAccountChange else { return }
+        guard launchAttemptGate.allowsPreparation(for: attempt) else { return }
         guard !requiresStorageTransferRelaunch else { return }
         isPreparing = true
         canContinueOffline = false
@@ -981,6 +1056,12 @@ private struct PomoGemPersistenceLaunchHost: View {
                 launchState = .blocked(message(for: reason))
             }
         } catch is CancellationError {
+            // Record lifecycle values only; never account identifiers, model
+            // contents or store paths. Cancellation must be distinguishable
+            // from a watchdog expiry when diagnosing a retained loading view.
+            Self.persistenceLogger.info(
+                "Launch cancelled attempt=\(attempt) current=\(launchAttempt) taskCancelled=\(Task.isCancelled) active=\(scenePhase == .active) quiescing=\(isQuiescingAccountChange) ownsDeadline=\(ownedDeadline != nil && cloudLaunchDeadline === ownedDeadline)"
+            )
             return
         } catch let error as CloudOfflineSessionError {
             guard launchAttempt == attempt, !Task.isCancelled else { return }
@@ -1331,16 +1412,24 @@ private struct PomoGemPersistenceLaunchHost: View {
 
     private func beginCloudLaunchDeadline(attempt: Int, hasExistingStore: Bool) -> CloudLaunchDeadline {
         cloudLaunchDeadline?.cancel()
+        Self.persistenceLogger.info(
+            "Launch deadline started attempt=\(attempt) existingStore=\(hasExistingStore) mirrorOpened=\(StorageTransferProcessState.cloudMirrorWasOpened)"
+        )
         var expiryGeneration: Int?
         let deadline = CloudLaunchDeadline(timeout: hasExistingStore
             ? CloudLaunchDeadline.existingStoreTimeout : CloudLaunchDeadline.initialStoreTimeout,
             invalidateAttempt: {
+                Self.persistenceLogger.info(
+                    "Launch deadline expired attempt=\(attempt) current=\(launchAttempt) hasSession=\(session != nil)"
+                )
                 guard launchAttempt == attempt, session == nil else { return }
-                // The replacement task sees the quiescence gate before any
-                // asynchronous cleanup. A stale network result cannot publish.
+                // Cleanup and SwiftUI task replacement can run in either
+                // order. Suppress this invalidation generation even after
+                // quiescence ends; a retry/fallback requests a new generation.
                 isQuiescingAccountChange = true
                 isPreparing = false
                 launchAttempt += 1
+                launchAttemptGate.suppressAutomaticStart(for: launchAttempt)
                 expiryGeneration = launchAttempt
             }, onExpiry: {
                 guard let expiryGeneration, launchAttempt == expiryGeneration,
@@ -1611,7 +1700,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     private func requestOfflineUse() {
-        guard !isPreparing, !requiresStorageTransferRelaunch,
+        guard canStartOfflineContinuation,
               case let .selected(.cloud(binding)) = PersistenceDeploymentState.load(),
               offlineCopyIsEligible(binding: binding) else { return }
         offlineFallbackRequested = true
@@ -1749,8 +1838,11 @@ private struct PomoGemPersistenceLaunchHost: View {
 
     private func prepareStorageTransfer(
         _ choice: StorageTransferChoice,
-        session sourceSession: PomoGemPersistenceSession
+        sessionID: UUID
     ) async throws {
+        guard let sourceSession = sessionHolder.resolve(sessionID) else {
+            throw StorageTransferError.staleTransaction
+        }
         guard !sourceSession.isCloudOffline else {
             throw StorageTransferRuntimeError.cloudCopyStillPending
         }
@@ -2207,6 +2299,7 @@ private struct PomoGemPersistenceLaunchHost: View {
 
     private func beginContainerRetirement() {
         didTimeOutContainerRetirement = false
+        canContinueOffline = false
         // Cloud-backed RootView is absent while the account is revalidated.
         // Pause any process-local completion loop so it cannot resume on the
         // foreground edge without its Stop UI. Durable recovery restarts an
@@ -2215,6 +2308,9 @@ private struct PomoGemPersistenceLaunchHost: View {
         if let container = session?.container {
             containerLifetimes.track(container)
         }
+        // Invalidate admission now. The old SwiftUI graph independently owns
+        // its container lifetime until Query and presented content disappear.
+        // The weak tracker still blocks another mount until actual release.
         session = nil
     }
 

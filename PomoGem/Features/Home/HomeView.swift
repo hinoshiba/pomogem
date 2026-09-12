@@ -49,6 +49,7 @@ struct HomeView: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
     @Environment(\.aggregateProjectionPresentation)
     private var aggregateProjectionPresentation
     @ScaledMetric(relativeTo: .subheadline) private var homeMenuFontSize: CGFloat = 15
@@ -598,17 +599,20 @@ struct HomeView: View {
             continueRewardDropIfPossible()
             recoverPendingRewardReceipt()
         }) { configuration in
-            FocusView(
-                subject: configuration.subject,
-                duration: configuration.duration,
-                dataEpochID: currentActivityEpochID
-            )
+            CloudConnectionSessionContent {
+                FocusView(
+                    subject: configuration.subject,
+                    duration: configuration.duration,
+                    dataEpochID: currentActivityEpochID
+                )
+            }
             .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .fullScreenCover(item: $breakConfiguration, onDismiss: {
             recoverPendingRewardReceipt()
         }) { configuration in
-            BreakTimerView(recovery: configuration)
+            CloudConnectionSessionContent { BreakTimerView(recovery: configuration) }
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .sheet(isPresented: $showHomeMenu) {
             homeMenuSheet
@@ -1054,7 +1058,7 @@ struct HomeView: View {
             VStack(spacing: 4) {
                 jarMetricPill(jarMetricSummary)
                 if aggregateProjectionPresentation.isCloudVerificationPending {
-                    Text("iCloudを再確認中")
+                    Text(isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを再確認中")
                         .font(.system(size: 9, weight: .bold, design: .rounded))
                         .foregroundStyle(Color.white.opacity(0.68))
                 }
@@ -1120,9 +1124,14 @@ struct HomeView: View {
 
     private var homeMenuAccessibilitySummary: String {
         if aggregateProjectionPresentation.isCloudVerificationPending {
-            return "iCloudの累計を再集計中。この端末で確認済みの集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
+            let status = isCloudOfflineSession ? "このiPhoneの累計を確認中" : "iCloudの累計を再集計中"
+            return "\(status)。この端末で確認済みの集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
         }
         return "累計\(formattedMass(totalGrams))、集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
+    }
+
+    private var projectionVerificationTitle: String {
+        isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを再集計中"
     }
 
     private var effortProgressSnapshot: EffortProgressSnapshot {
@@ -1268,7 +1277,7 @@ struct HomeView: View {
                 ProgressView()
                     .tint(PomoGemTheme.amber)
                     .accessibilityHidden(true)
-                Text("iCloudを再集計中")
+                Text(projectionVerificationTitle)
                     .font(.headline.weight(.bold))
                 Text("この端末で確認できた記録だけを表示しています。")
                     .font(.caption)
@@ -1276,7 +1285,7 @@ struct HomeView: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(
-                "iCloudを再集計中。この端末で確認できた記録だけを表示しています"
+                "\(projectionVerificationTitle)。この端末で確認できた記録だけを表示しています"
             )
         } else if dynamicTypeSize.isAccessibilitySize {
             // The bottle is a fixed visual canvas. At accessibility text sizes,
@@ -2057,7 +2066,7 @@ struct HomeView: View {
             .isCloudVerificationPending
         return Label {
             VStack(alignment: .leading, spacing: 4) {
-                Text(isStillVerifying ? "iCloudを再集計中" : "集計を更新しました")
+                Text(isStillVerifying ? projectionVerificationTitle : "集計を更新しました")
                     .font(.headline.weight(.black))
                 Text(
                     isStillVerifying
@@ -2068,7 +2077,7 @@ struct HomeView: View {
                     .foregroundStyle(PomoGemTheme.muted)
             }
         } icon: {
-            Image(systemName: "icloud.and.arrow.down")
+            Image(systemName: isCloudOfflineSession ? "checklist" : "icloud.and.arrow.down")
                 .foregroundStyle(PomoGemTheme.amber)
         }
         .padding(.horizontal, 11)
@@ -2078,7 +2087,7 @@ struct HomeView: View {
         .accessibilityIdentifier("reward.projection-verification-pending")
         .accessibilityLabel(
             isStillVerifying
-                ? "iCloudを再集計中。今回の\(offer.grams)グラムは保存済みです。生涯合計は確認後に表示します"
+                ? "\(projectionVerificationTitle)。今回の\(offer.grams)グラムは保存済みです。生涯合計は確認後に表示します"
                 : "集計を更新しました。今回の\(offer.grams)グラムは保存済みです。更新前の生涯合計は再利用しません"
         )
     }
@@ -3934,7 +3943,7 @@ struct HomeView: View {
                 || !canPublishBreakOfferProjection(offer)
         )
             ? (aggregateProjectionPresentation.isCloudVerificationPending
-                ? "iCloudを再集計中。今回の記録は保存済みです。生涯合計は確認後に表示します"
+                ? "\(projectionVerificationTitle)。今回の記録は保存済みです。生涯合計は確認後に表示します"
                 : "集計を更新しました。今回の記録は保存済みです。更新前の生涯合計は再利用しません")
             : PostDropProgressAccessibilityPresentation.description(
                 effortProgress: offer.effortProgress,

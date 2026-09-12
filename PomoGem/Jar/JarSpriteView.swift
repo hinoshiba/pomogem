@@ -61,7 +61,8 @@ enum JarAccessibilityPresentation {
         prismPebbleCount rawPrismPebbleCount: Int,
         fusionProgressDescription: String?,
         projectionIsLowerBound: Bool,
-        projectionIsUnverified: Bool = false
+        projectionIsUnverified: Bool = false,
+        isCloudOfflineSession: Bool = false
     ) -> String {
         let totalGrams = max(0, rawTotalGrams)
         let pebbleCount = max(0, rawPebbleCount)
@@ -91,7 +92,9 @@ enum JarAccessibilityPresentation {
         let rareSuffix = rare.isEmpty ? "" : "、\(rare)"
         let massDescription: String
         if projectionIsUnverified {
-            massDescription = "iCloudの集計を再確認中。この端末で確認できた粒を表示"
+            massDescription = isCloudOfflineSession
+                ? "このiPhoneの集計を確認中。確認できた粒を表示"
+                : "iCloudの集計を再確認中。この端末で確認できた粒を表示"
         } else if projectionIsLowerBound {
             massDescription = "現在確認できた集中時間の質量：\(formattedMass(totalGrams))以上、集計整理中"
         } else {
@@ -131,6 +134,7 @@ struct JarSpriteView: View {
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
     @StateObject private var motionObserver: JarMotionObserver
 #if targetEnvironment(macCatalyst)
     @State private var catalystGestureOwnership = JarDragGestureOwnership()
@@ -326,7 +330,8 @@ struct JarSpriteView: View {
             prismPebbleCount: prismPebbleCount,
             fusionProgressDescription: fusionProgressDescription,
             projectionIsLowerBound: projectionIsLowerBound,
-            projectionIsUnverified: projectionIsUnverified
+            projectionIsUnverified: projectionIsUnverified,
+            isCloudOfflineSession: isCloudOfflineSession
         )
     }
 
