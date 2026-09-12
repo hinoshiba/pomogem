@@ -1,4 +1,5 @@
 import CloudKit
+import Observation
 import OSLog
 import SwiftData
 import SwiftUI
@@ -358,6 +359,20 @@ final class PersistenceContainerLifetimeTracker<Container: AnyObject> {
     }
 }
 
+/// A captured SwiftUI view value can keep State's previous value alive after
+/// its location changes. All Host copies must instead share this reference so
+/// clearing the session also clears it from in-flight retirement callbacks.
+@MainActor
+@Observable
+final class PersistenceSessionHolder<Session: AnyObject & Identifiable> {
+    var session: Session?
+
+    func resolve(_ id: Session.ID) -> Session? {
+        guard let session, session.id == id else { return nil }
+        return session
+    }
+}
+
 @MainActor
 private struct PomoGemPersistenceLaunchHost: View {
     private static let persistenceLogger = Logger(
@@ -378,7 +393,11 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     @Environment(\.scenePhase) private var scenePhase
-    @State private var session: PomoGemPersistenceSession?
+    @State private var sessionHolder = PersistenceSessionHolder<PomoGemPersistenceSession>()
+    private var session: PomoGemPersistenceSession? {
+        get { sessionHolder.session }
+        nonmutating set { sessionHolder.session = newValue }
+    }
     @State private var launchState: LaunchState = .preparing("保存方式を確認しています")
     @State private var launchAttempt = 0
     @State private var isPreparing = false
@@ -605,7 +624,8 @@ private struct PomoGemPersistenceLaunchHost: View {
     private func baseRootContent(
         _ session: PomoGemPersistenceSession
     ) -> some View {
-        RootView(
+        let sessionID = session.id
+        return RootView(
             persistenceStartupError: session.startupError,
             persistenceMode: session.mode,
             persistenceSafetyNotice: session.safetyNotice,
@@ -613,10 +633,10 @@ private struct PomoGemPersistenceLaunchHost: View {
                 await rebuildAfterCompleteDeletion()
             },
             prepareStorageTransfer: { choice in
-                try await prepareStorageTransfer(choice, session: session)
+                try await prepareStorageTransfer(choice, sessionID: sessionID)
             },
             unmountForStorageTransfer: {
-                unmountForStorageTransfer(sessionID: session.id)
+                unmountForStorageTransfer(sessionID: sessionID)
             }
         )
     }
@@ -1758,8 +1778,11 @@ private struct PomoGemPersistenceLaunchHost: View {
 
     private func prepareStorageTransfer(
         _ choice: StorageTransferChoice,
-        session sourceSession: PomoGemPersistenceSession
+        sessionID: UUID
     ) async throws {
+        guard let sourceSession = sessionHolder.resolve(sessionID) else {
+            throw StorageTransferError.staleTransaction
+        }
         guard !sourceSession.isCloudOffline else {
             throw StorageTransferRuntimeError.cloudCopyStillPending
         }
