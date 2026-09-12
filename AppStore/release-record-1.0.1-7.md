@@ -32,12 +32,21 @@ That device deployment uses Apple Development signing and is not App Store
 distribution evidence. Pre-number-bump test results are not a completed build 7
 archive or upload check.
 
-The final fixed source commit and CI run are pending. After the candidate is
-committed and verified, record the Xcode/SDK versions, Release archive result,
-Organizer validation, strict distribution verification, exported IPA SHA-256,
-and executable/dSYM UUID agreement. Identify the exported payload separately
-from any later upload staging payload. Create the immutable `v1.0.1-build7` tag
-on the archived source only after successful upload; do not move the build 6 tag.
+The latest full Debug suite passed 811 tests with four intentional opt-in skips
+and zero failures. Build 7 Release static analysis passed for the app and Widget;
+production binaries contained no test or preview entry points. The physical
+Release audit separately exercises real server upload, reinstall and import,
+timer recovery, theme deletion, local-only reset and isolation, and historical
+reset generations. See that audit for the exact boundaries of each case.
+
+PR #9 GitHub CI could not start because of an account payment or Actions spending
+limit; no runner or test step executed. Local validation is not a passing CI run.
+Record the final archived source commit, Xcode/SDK versions, Release archive
+result, Organizer validation, strict distribution verification, exported IPA
+SHA-256, and executable/dSYM UUID agreement after those steps execute. Identify
+the exported payload separately from any later upload staging payload. Create
+the immutable `v1.0.1-build7` tag on the archived source only after successful
+upload; do not move the build 6 tag.
 
 Upload, Apple processing, build selection, revised metadata/Review Notes save
 and reload, submission, and approval/public availability each require their own

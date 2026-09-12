@@ -10,7 +10,7 @@ import XCTest
 /// POMOGEM_SWIFTDATA_PHASE=seed | seed-reset-history | observe | restore
 /// POMOGEM_AUDIT_PREFIX=PomoGemAudit-20260912A (reuse across the round trip)
 /// POMOGEM_AUDIT_TIMEOUT_SECONDS=240 (30...600)
-/// POMOGEM_SWIFTDATA_EXPORT_HOLD_SECONDS=120 (seed phases only, 0...120)
+/// POMOGEM_SWIFTDATA_EXPORT_HOLD_SECONDS=120 (seed/observe phases, 0...120)
 ///
 /// Independently verify the signed Release host uses CloudKit Production. Keep
 /// the ordinary app at its initial storage chooser, then terminate the host
@@ -25,7 +25,9 @@ import XCTest
 /// that the shipping iCloud reset button is available. Confirm the uploaded
 /// marker fingerprints with the independent server evidence test, then uninstall
 /// and use the ordinary UI restore phase to exercise the shipping history gate.
-/// observe recognizes this dataset through its local manifest; hosted restore
+/// observe recognizes this dataset through its local manifest and retains the
+/// reopened container for the bounded export hold without changing any rows;
+/// local evidence alone does not acknowledge a server upload. Hosted restore
 /// continues to expect the ordinary seed dataset without reset markers.
 @MainActor
 final class RealDeviceSwiftDataLifecycleTests: XCTestCase {
@@ -127,18 +129,6 @@ final class RealDeviceSwiftDataLifecycleTests: XCTestCase {
                 report.createdSourceRows = resetHistory ? 6 : 3
                 report.local = try snapshot(container: container, prefix: prefix, resetHistory: resetHistory)
                 guard report.local?.matchesExpectedData == true else { throw Failure.incompleteLocalEvidence }
-                stage = "allowFrameworkExport"
-                let holdDeadline = min(deadline, clock.now.advanced(by: .seconds(exportHold)))
-                let holdStart = clock.now
-                while clock.now < holdDeadline {
-                    try Task.checkCancellation()
-                    try requireInitialChooser()
-                    try await Task.sleep(for: .seconds(1))
-                }
-                report.exportHoldSeconds = Int(holdStart.duration(to: clock.now).components.seconds)
-                // This delay is not an upload acknowledgment. The independent
-                // server evidence runner must confirm before app removal.
-                report.requiresIndependentUploadEvidence = true
             } else {
                 stage = "waitForSwiftDataImport"
                 repeat {
@@ -151,6 +141,22 @@ final class RealDeviceSwiftDataLifecycleTests: XCTestCase {
                     try await Task.sleep(for: .seconds(1))
                 } while true
                 report.importObservedInFreshStore = phase == .restore && plan.createdFresh
+            }
+            if phase.createsSeed || phase == .observe {
+                stage = "allowFrameworkExport"
+                let holdDeadline = min(deadline, clock.now.advanced(by: .seconds(exportHold)))
+                let holdStart = clock.now
+                while clock.now < holdDeadline {
+                    try Task.checkCancellation()
+                    try requireInitialChooser()
+                    try await Task.sleep(for: .seconds(1))
+                }
+                report.exportHoldSeconds = Int(holdStart.duration(to: clock.now).components.seconds)
+                // Reopening an existing replica also needs time for framework
+                // export: matching local rows must not immediately retire it.
+                // This delay is not an upload acknowledgment. The independent
+                // server evidence runner must confirm before app removal.
+                report.requiresIndependentUploadEvidence = true
             }
             stage = "finalAccount"
             guard try await verifiedAccount(deadline: deadline) == identity else { throw Failure.accountChanged }

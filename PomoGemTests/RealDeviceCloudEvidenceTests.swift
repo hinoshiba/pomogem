@@ -1,4 +1,5 @@
 import CloudKit
+import CoreData
 import CryptoKit
 import Foundation
 import XCTest
@@ -146,6 +147,53 @@ final class RealDeviceCloudEvidenceTests: XCTestCase {
         XCTAssertGreaterThan(oversized.count, 4_096)
         XCTAssertEqual(EvidenceRow.decodeSource(oversized as NSData).value, "unknown")
         XCTAssertEqual(EvidenceRow.decodeSource(oversized as NSData).encoding, "oversizedData")
+    }
+
+    func testSessionSourceDecoderAcceptsOnlyExactKnownSourceDictionaries() throws {
+        for source in ["timer", "manual", "timerDemoted"] {
+            let data = try NSKeyedArchiver.archivedData(
+                withRootObject: ["source": source] as NSDictionary, requiringSecureCoding: true
+            )
+            let decoded = EvidenceRow.decodeSource(data as NSData)
+            XCTAssertEqual(decoded.value, source)
+            XCTAssertEqual(decoded.encoding, "keyedArchiveSourceDictionary")
+        }
+        let invalid: [NSDictionary] = [
+            [:], ["source": "unknown"], ["other": "manual"],
+            ["source": "manual", "extra": "manual"], ["source": ["manual"]],
+            ["source": ["source": "manual"]], ["source": 1]
+        ]
+        for dictionary in invalid {
+            let data = try NSKeyedArchiver.archivedData(withRootObject: dictionary, requiringSecureCoding: true)
+            let decoded = EvidenceRow.decodeSource(data as NSData)
+            XCTAssertEqual(decoded.value, "unknown")
+            XCTAssertEqual(decoded.encoding, "keyedArchiveInvalidSourceDictionary")
+        }
+    }
+
+    func testSessionSourceDecoderReadsActualSyntheticCoreDataArchive() throws {
+        // Captured from the real framework for the synthetic enum {source: manual}.
+        // Contains no user content, model/account identifiers, or signing data.
+        let encoded = """
+        YnBsaXN0MDDUAQIDBAUGBwpYJHZlcnNpb25ZJGFyY2hpdmVyVCR0b3BYJG9iamVjdHMSAAGGoF8Q
+        D05TS2V5ZWRBcmNoaXZlctEICVRyb290gAGrCwwXHSIjKS4vMzRVJG51bGzVDQ4PEBESExQVFlZ2
+        YWx1ZXNWJGNsYXNzXXNlYXJjaE1hcHBpbmdaZW1wdHlUb2tlbld2ZXJzaW9ugAiACoACgAcQAdQO
+        GBkRGhscFlZsZW5ndGhUa2V5c4AGEAGAA9IeDh8hWk5TLm9iamVjdHOhIIAEgAVWc291cmNl0iQl
+        JidaJGNsYXNzbmFtZVgkY2xhc3Nlc1dOU0FycmF5oiYoWE5TT2JqZWN00iQlKitfEBtOU0tub3du
+        S2V5c01hcHBpbmdTdHJhdGVneTGjLC0oXxAbTlNLbm93bktleXNNYXBwaW5nU3RyYXRlZ3kxXxAa
+        TlNLbm93bktleXNNYXBwaW5nU3RyYXRlZ3lfEChfX2VtcHR5X3Nsb3RfdG9rZW5fNGMyNF85OGRj
+        X2FjMWVfYjc3M19f0h4OMCGhMYAJgAVWbWFudWFs0iQlNTZfEBZOU0tub3duS2V5c0RpY3Rpb25h
+        cnkxpTc4OTooXxAWTlNLbm93bktleXNEaWN0aW9uYXJ5MV8QFU5TS25vd25LZXlzRGljdGlvbmFy
+        eV8QE05TTXV0YWJsZURpY3Rpb25hcnlcTlNEaWN0aW9uYXJ5AAgAEQAaACQAKQAyADcASQBMAFEA
+        UwBfAGUAcAB3AH4AjACXAJ8AoQCjAKUApwCpALIAuQC+AMAAwgDEAMkA1ADWANgA2gDhAOYA8QD6
+        AQIBBQEOARMBMQE1AVMBcAGbAaABogGkAaYBrQGyAcsB0QHqAgICGAAAAAAAAAIBAAAAAAAAADsA
+        AAAAAAAAAAAAAAAAAAIl
+        """
+        let data = try XCTUnwrap(Data(base64Encoded: encoded, options: [.ignoreUnknownCharacters]))
+        XCTAssertEqual(data.count, 699)
+        let decoded = EvidenceRow.decodeSource(data as NSData)
+        XCTAssertEqual(decoded.value, "manual")
+        XCTAssertEqual(decoded.encoding, "keyedArchiveSourceDictionary")
     }
 
     func testSessionSourceDecoderKeepsKnownFormatsAndReportsOnlyRootKinds() throws {
@@ -550,13 +598,21 @@ private struct EvidenceRow {
             if let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) {
                 if let value = plist as? String, allowed.contains(value) { return (value, "propertyListString") }
                 if let archive = plist as? [String: Any], archive["$archiver"] as? String == "NSKeyedArchiver" {
-                    // A CloudKit transformable payload can be an
-                    // NSString archive. Decode only that secure class, bounded
-                    // above, and accept only the three actual SessionSource values.
-                    if let value = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSString.self, from: data) {
-                        return allowed.contains(value as String)
-                            ? (value as String, "keyedArchiveString")
-                            : ("unknown", "keyedArchiveUnknownString")
+                    // Core Data's observed transformable archive is a dictionary
+                    // subclass containing only {source: <raw value>}. Public base
+                    // classes permit secure subclass decoding without private APIs.
+                    if let object = try? NSKeyedUnarchiver.unarchivedObject(
+                        ofClasses: [NSDictionary.self, NSArray.self, NSString.self, NSNumber.self], from: data
+                    ) {
+                        if let value = object as? String {
+                            return allowed.contains(value)
+                                ? (value, "keyedArchiveString") : ("unknown", "keyedArchiveUnknownString")
+                        }
+                        if let dictionary = object as? NSDictionary {
+                            guard dictionary.count == 1, let value = dictionary["source"] as? String,
+                                  allowed.contains(value) else { return ("unknown", "keyedArchiveInvalidSourceDictionary") }
+                            return (value, "keyedArchiveSourceDictionary")
+                        }
                     }
                     return ("unknown", "keyedArchiveUnsupported")
                 }

@@ -6,7 +6,7 @@ import XCTest
 ///   POMOGEM_REAL_ICLOUD_PHASE=seed | relaunch | restore | reset | mount-existing
 ///     | timer-running | timer-paused | local-seed | local-relaunch | local-reset
 ///     | offline | timer-start-for-uninstall | timer-restore
-///     | theme-delete | theme-delete-restore
+///     | theme-delete | theme-delete-restore | theme-deleted-relaunch
 ///   POMOGEM_REAL_ICLOUD_RUN_PREFIX=<unique 8...24 ASCII letters/digits/hyphens>
 /// Run one matching test at a time, preserving the same prefix. Run restore only
 /// after independently uninstalling/reinstalling the app, before the reset phase.
@@ -14,11 +14,15 @@ import XCTest
 /// must be unavailable. Local-seed requires a separate clean installation;
 /// local-reset explicitly performs the destructive visible-record reset there.
 /// Timer phases require the cloud audit theme and no already-running timer.
-/// Offline requires an existing cloud installation and externally enforced
-/// network loss. Timer-start-for-uninstall deliberately leaves a paused active
+/// Offline starts ONLINE with an existing cloud installation. Activate external
+/// network loss only after POMOGEM_REAL_NETWORK_ARM_READY appears; the runner
+/// waits 45 seconds before relaunching the terminated target. An OS certificate
+/// or launch failure is not evidence of the app's offline behavior.
+/// Timer-start-for-uninstall deliberately leaves a paused active
 /// timer; confirm its server upload before uninstalling and running timer-restore.
 /// Run theme-delete after timer phases. Before uninstalling for theme-delete-restore,
 /// independently verify the original Subject record's uploaded deletion tombstone.
+/// Theme-deleted-relaunch only verifies an already deleted theme across two launches.
 /// Do not configure StoreKitConfigurationFile, UITargetAppEnvironmentVariables,
 /// or fixture launch arguments in the .xctestrun file. No audit flags are passed
 /// to the app. Restore requires fresh storage selection and remote hydration;
@@ -38,6 +42,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         case timerRestore = "timer-restore"
         case themeDelete = "theme-delete"
         case themeDeleteRestore = "theme-delete-restore"
+        case themeDeletedRelaunch = "theme-deleted-relaunch"
     }
     private enum AuditFailure: Error { case failed }
     private enum ScrollDirection { case up, down }
@@ -272,8 +277,16 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try cancelAuditTimerAndRequireDurableHome()
     }
 
-    func testOfflineCloudLaunchFailsWithoutLocalFallback() throws {
+    func testOfflineCloudLaunchFailsWithoutLocalFallback() async throws {
         try select(.offline)
+        _ = launchRealApplication()
+        try requireHome()
+        // iOS may need the network to trust this development-signed runner and
+        // target. Finish both initial launches before the operator enables loss.
+        app!.terminate()
+        NSLog("POMOGEM_REAL_NETWORK_ARM_READY")
+        try await Task.sleep(for: .seconds(45))
+        NSLog("POMOGEM_REAL_NETWORK_RELAUNCH_BEGIN")
         let app = launchRealApplication()
         let networkFailure = app.staticTexts.matching(NSCompoundPredicate(orPredicateWithSubpredicates: [
             NSPredicate(format: "label CONTAINS %@", "iCloudに接続できません。"),
@@ -428,6 +441,17 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         retainEvidence(failure: false)
     }
 
+    func testDeletedCloudThemeRemainsDeletedAcrossTwoRelaunches() throws {
+        try select(.themeDeletedRelaunch)
+        for _ in 0..<2 {
+            _ = launchRealApplication()
+            try requireHome()
+            try require(!focusTimer.exists, "Deleted-theme verification requires the completed timer audit.")
+            try assertDeletedThemeAndRetainedData()
+        }
+        retainEvidence(failure: false)
+    }
+
     func testLocalOnlyRelaunchRetainsThemeRecordAndSetting() throws {
         try select(.localRelaunch)
         _ = launchRealApplication()
@@ -502,13 +526,22 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         // The independent server phase proves the original physical tombstone;
         // UI absence alone cannot establish that CloudKit imported that row.
         let picker = app.buttons["home.subject-picker"]
-        try scrollTo(picker, direction: .down)
-        try require(!picker.label.contains(themeName), "Home must stop selecting the deleted theme.")
-        try tap(picker)
-        let manage = app.buttons["テーマを管理"]
-        try require(manage.waitForExistence(timeout: 5), "The real theme menu must be open before checking absence.")
-        try require(!app.buttons[themeName].exists, "The deleted theme must not be selectable from Home.")
-        try tap(manage)
+        let launcher = app.buttons["home.focus-launcher"]
+        try scrollTo(launcher, direction: .down)
+        if launcher.label == "テーマを選んではじめる" {
+            // Deleting the final theme removes the picker entirely. The exact
+            // empty-state launcher opens Settings without starting a timer.
+            try require(!picker.exists, "Home with no selected theme must show the documented empty-theme state.")
+            try tap(launcher)
+        } else {
+            try scrollTo(picker, direction: .down)
+            try require(!picker.label.contains(themeName), "Home must stop selecting the deleted theme.")
+            try tap(picker)
+            let manage = app.buttons["テーマを管理"]
+            try require(manage.waitForExistence(timeout: 5), "The real theme menu must be open before checking absence.")
+            try require(!app.buttons[themeName].exists, "The deleted theme must not be selectable from Home.")
+            try tap(manage)
+        }
         try require(app.navigationBars["設定"].waitForExistence(timeout: 5), "Theme management must open Settings.")
         try scrollTo(app.buttons["テーマを追加"], direction: .down, attempts: 24)
         try require(!app.buttons[themeName].exists, "The deleted theme must not return in Settings.")
