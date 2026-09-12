@@ -15,14 +15,21 @@ App Store Connectで無効化し、ブランチ・タグの変更によるビル
 
 ## 今回の候補と識別子
 
-今回の更新候補はPomoGem 1.0.1 (7)です。1.0 (5)と同じApp Store record、Bundle ID、IAP、
+今回のupload済み候補はPomoGem 1.0.1 (7)です。1.0 (5)と同じApp Store record、Bundle ID、IAP、
 CloudKit containerを使用します。Apple IDは`6809139517`、SKUは`pomogem-ios`、
 登録名は「ポモジェム：ポモドーロタイマー」です。初回登録・提出結果は
 `AppStore/release-record-1.0-5.md`、build 6のupload・取消履歴は
 `AppStore/release-record-1.0.1-6.md`、今回の準備・検証・提出状態は
 `AppStore/release-record-1.0.1-7.md`を参照します。
-build 6は実機監査で記録保護の問題を再現したため審査取消操作を行いました。build 7を選択する前に
-App Store Connectで取消処理の完了を再確認します。build 7は準備中で、upload／審査送信済みとは扱いません。
+build 6は実機監査で記録保護の問題を再現したため審査取消操作を行いました。次候補を選択する前に
+App Store Connectで取消処理の完了を再確認します。build 7は固定commit
+`e4aee83b5e70aa9ae078ff37ad90626bb8becc97`からArchiveし、配布payloadの検証とApple Validateに合格、
+Organizerのupload時刻は2026-09-12 11:56 JST、完了表示の確認は11:57 JSTです。upload後に
+`v1.0.1-build7`を作成・pushし、上記Archive元を指すことを確認しました。後続の記録更新・merge・機能追加の
+commitとArchive元を区別し、このtagを移動しません。
+その後、SettingsでiCloudの有効／無効を切り替え、削除対象を明示して選ぶ機能の追加依頼を受けたため、
+build 7は審査送信せず保留します。次候補の実装・検証とbuild番号は未確定です。Apple側の処理完了・
+versionへの選択は未確認で、Connect作業は利用者のログイン待ちです。
 登録済みでも公開前は`app_store_listing_status: not_public`を保持し、Webは「近日公開」のまま
 Smart App Bannerを表示しません。実際に公開・ダウンロード可能になってからstatusを`public`へ変更し、
 同じ数値IDのSmart App Bannerを追加して検証します。

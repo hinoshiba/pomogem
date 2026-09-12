@@ -4,23 +4,33 @@ PomoGemの現行候補と、初回1.0 (5)以降の履歴を区別したチェッ
 Apple上の登録・実機検証は分けて確認します。以前のアプリに対するupload／価格／schema／登録済みの証拠は新アプリへ転用しません。
 過去の結果は`Docs/LEGACY_RELEASE_PROVENANCE.md`に分離しています。
 
-## 2026-09-12 の1.0.1 (7)差し替え準備
+## 2026-09-12 の1.0.1 (7) upload記録と次候補待ち
 
 build 6は実機監査でreset履歴の問題を再現したため審査取消操作を行い、version itemはReady for Reviewへ
-戻りました。以下はbuild 7だけの提出条件です。後続の2026-09-06欄と過去のチェック済み項目は、
+戻りました。以下はbuild 7だけの記録です。upload後にSettingsのiCloud有効／無効切替と削除対象の明示選択を
+追加する依頼を受けたため、build 7は審査送信せず、次候補の実装・検証を進めます。次のbuild番号は未確定です。
+後続の2026-09-06欄と過去のチェック済み項目は、
 build 7の合格・upload・提出の証拠には使いません。現行状態は
 [release-record-1.0.1-7.md](release-record-1.0.1-7.md)、実機監査の範囲と残件は
 [RealDeviceICloudAudit.md](../Docs/RealDeviceICloudAudit.md)に記録します。
 
 - [ ] build 6の審査取消が完了していることをApp Store Connectで再確認
-- [ ] 最終commitのbuild 7で生成project、CI、実機の必要ケース、Release Archive／distribution payloadを検証
-- [ ] iCloud保存領域の再起動、履歴反映前の記録保護、cloud reset一時停止、local-only reset継続を確認
+- [x] Archive元`e4aee83b5e70aa9ae078ff37ad90626bb8becc97`のbuild 7で生成project・Release Archiveを検証し、
+  別途exportしたIPAと実際のupload-staging IPAの双方でstrict distribution検証に合格。app／Widgetの実行fileとdSYMのUUIDも一致
+- [x] ローカルのDebug全815件（811成功・明示opt-in 4skip・失敗0）、current-file readiness、Release静的解析を確認
+- [ ] Archive元のGitHub CIを実行完了。run `34668002596`は支払い／Actions上限によりrunner起動前に失敗し、未実行
+- [x] Apple Development署名のRelease実機でiCloud保存領域の再起動、履歴反映前の記録保護、
+  cloud reset一時停止、local-only reset継続、実通信断からの非破壊復旧を確認。App Store配布版の実機試験とは区別
+- [x] Apple Validate（2026-09-12 11:43 JST）とOrganizerのbuild 7 uploadを確認（記録時刻11:56 JST、完了表示確認11:57 JST）
+- [x] upload後に`v1.0.1-build7`を作成・pushし、上記Archive元のcommitを指すことを確認
 - [ ] 改訂したja-JP／en-US更新内容とReview NotesをConnectへ保存・再読込し、公開Privacy文面も一致させる
 - [ ] 既存screenshotを署名済みReleaseと比較し、差がある画像だけを更新。旧captureのversion・hashを新規撮影扱いにしない
-- [ ] 正しいbuild 7の処理完了とversionへの選択を確認し、提出・公開状態を個別に記録
+- [ ] build 7のApple処理結果を確認。build 7は選択・審査送信せず、次候補のbuild選択・提出・公開を別に記録
 
 `AppStore/configuration.yml`の既知blockerは、実行または判断の証拠なしに解除しません。
 今回の1台の試験を、2台同期・account切替・StoreKit・accessibility全項目の合格とは扱いません。
+今後のConnectでの処理完了確認・metadata保存・次候補のbuild選択／審査送信は、利用者のログイン待ちです。
+後続の記録更新／merge commitはArchive元とは別に扱い、source tagは上記の固定commitを指します。
 
 ## 2026-09-06 の再登録・提出作業
 
