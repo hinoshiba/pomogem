@@ -270,10 +270,15 @@ final class StorageTransferCloudMountControlReaderTests: XCTestCase {
 
     func testRuntimeStillReadsControlTwiceAndRejectsAChangedFinalGeneration() async throws {
         let f = try fixture()
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("MountRuntime-\(UUID())")
-        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let parent = FileManager.default.temporaryDirectory.appendingPathComponent("MountRuntime-\(UUID())", isDirectory: true)
+        let directory = parent.appendingPathComponent("StorageTransfer", isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: parent) }
         let store = StorageTransferJournalStore(directory: directory)
         let runtime = StorageTransferRuntime(store: store, root: directory)
+        // Reach the real control-admission path only after the production
+        // directory/intent gate accepts this isolated fixture.
+        let pendingIntent = try runtime.pendingRemoteCancellationIntent()
+        XCTAssertNil(pendingIntent)
         let newer = try StorageTransferRecoveryManifest(transactionID: UUID(), accountFingerprint: f.binding.accountFingerprint,
             payload: Data("new ordinary mount fence".utf8), previousDatasetGenerationID: UUID())
         f.script.responses = [.success(try response(f.control)), .success(try response(StorageTransferRecoveryControl(manifest: newer).cancelling()))]
@@ -281,7 +286,10 @@ final class StorageTransferCloudMountControlReaderTests: XCTestCase {
             try await runtime.preflightCloudMount(binding: f.binding, controlClient: f.script.client,
                 accountDefaults: f.defaults, validateAccess: {})
             XCTFail("The later dataset observation must invalidate initial admission")
-        } catch { XCTAssertEqual(error as? StorageTransferRuntimeError, .remoteRecoveryRequired) }
+        } catch {
+            XCTAssertEqual(error as? StorageTransferRuntimeError, .remoteRecoveryRequired,
+                           "Unexpected error type: \(type(of: error))")
+        }
         XCTAssertEqual(f.script.requestedIDs, Array(repeating: StorageTransferRecoveryCloudCodec.controlID, count: 2))
         XCTAssertEqual(f.script.standaloneProbes, 0)
         XCTAssertEqual(f.script.calls.count, 8)
@@ -289,18 +297,24 @@ final class StorageTransferCloudMountControlReaderTests: XCTestCase {
 
     func testRuntimeUsesItsOwnPendingAuthorityBeforeAnyInjectedTransportRead() async throws {
         let f = try fixture()
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("MountRuntimePending-\(UUID())")
-        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let parent = FileManager.default.temporaryDirectory.appendingPathComponent("MountRuntimePending-\(UUID())", isDirectory: true)
+        let directory = parent.appendingPathComponent("StorageTransfer", isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: parent) }
         let store = StorageTransferJournalStore(directory: directory)
         let journal = try StorageTransferJournal(choice: .disableCloudKeepingCopy, source: .cloud(binding: f.binding),
             destination: .localOnly(namespace: AccountDataNamespace()), cloudBinding: f.binding)
         try store.begin(journal)
         let runtime = StorageTransferRuntime(store: store, root: directory)
+        let pendingIntent = try runtime.pendingRemoteCancellationIntent()
+        XCTAssertNil(pendingIntent)
         do {
             try await runtime.preflightCloudMount(binding: f.binding, controlClient: f.script.client,
                 accountDefaults: f.defaults, validateAccess: {})
             XCTFail("Custom Runtime journal must gate its own control reader")
-        } catch { XCTAssertEqual(error as? StorageTransferRuntimeError, .remoteRecoveryRequired) }
+        } catch {
+            XCTAssertEqual(error as? StorageTransferRuntimeError, .remoteRecoveryRequired,
+                           "Unexpected error type: \(type(of: error))")
+        }
         XCTAssertTrue(f.script.calls.isEmpty)
         XCTAssertEqual(try store.load(), journal)
     }
