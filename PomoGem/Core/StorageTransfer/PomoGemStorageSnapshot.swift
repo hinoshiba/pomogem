@@ -75,6 +75,23 @@ struct PomoGemStorageSnapshot: Codable, Sendable, Equatable {
         Dictionary(uniqueKeysWithValues: entities.map { ($0.name, $0.descriptors) })
     }
 
+    /// Only this known additive pair may be absent from an older format-1
+    /// payload. Keep the original dictionary/encoded bytes for receipt hashes;
+    /// use nil defaults only when validating, importing or comparing its graph.
+    /// Missing one member, any other missing field, and unknown fields still
+    /// fail schema validation instead of being silently filled or discarded.
+    nonisolated private static func fieldsIncludingLegacyDefaults(
+        entity: String, fields: [String: Scalar]
+    ) -> [String: Scalar] {
+        guard entity == "Prefs",
+              fields["preferredFocusSeconds"] == nil,
+              fields["preferredFocusSecondsMutationID"] == nil else { return fields }
+        var result = fields
+        result["preferredFocusSeconds"] = .null
+        result["preferredFocusSecondsMutationID"] = .null
+        return result
+    }
+
     @MainActor static func validateSchema(_ schema: Schema) throws {
         guard Set(schema.entities.map(\.name)) == Set(modelNames) else { throw Failure.schemaMismatch }
         for entity in schema.entities {
@@ -234,7 +251,9 @@ struct PomoGemStorageSnapshot: Codable, Sendable, Equatable {
                 try Task.checkCancellation()
                 guard let object = objects[row.reference],
                       let entity = Self.entities.first(where: { $0.name == row.entity }),
-                      entity.capture(object) == row.fields,
+                      entity.capture(object) == Self.fieldsIncludingLegacyDefaults(
+                        entity: row.entity, fields: row.fields
+                      ),
                       try Self.captureRelationships(object, references: ids) == row.relationships
                 else { throw Failure.verificationFailed }
             }
@@ -289,8 +308,9 @@ struct PomoGemStorageSnapshot: Codable, Sendable, Equatable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         func fields(_ row: Record) throws -> [String: Scalar] {
-            guard dateTolerance > 0 else { return row.fields }
-            return try row.fields.mapValues { value in
+            let values = Self.fieldsIncludingLegacyDefaults(entity: row.entity, fields: row.fields)
+            guard dateTolerance > 0 else { return values }
+            return try values.mapValues { value in
                 guard case let .dateBits(bits) = value else { return value }
                 let date = Double(bitPattern: bits)
                 guard date.isFinite, (date / dateTolerance).isFinite else { throw Failure.invalidSnapshot }
@@ -477,11 +497,17 @@ private extension StorageSnapshotScalarConvertible { static var storageOptional:
             count = { try $0.fetchCount(FetchDescriptor<Model>()) }
             enumerate = { context, visit in try context.enumerate(FetchDescriptor<Model>(), batchSize: 256) { try visit($0) } }
             capture = { value in Dictionary(uniqueKeysWithValues: fields.map { ($0.descriptor.name, $0.capture(value as! Model)) }) }
-            validate = { values in
+            validate = { rawValues in
+                let values = PomoGemStorageSnapshot.fieldsIncludingLegacyDefaults(
+                    entity: String(describing: type), fields: rawValues
+                )
                 guard Set(values.keys) == Set(fields.map { $0.descriptor.name }) else { throw Failure.schemaMismatch }
                 for field in fields { try field.validate(values[field.descriptor.name]!) }
             }
-            insert = { values, context in
+            insert = { rawValues, context in
+                let values = PomoGemStorageSnapshot.fieldsIncludingLegacyDefaults(
+                    entity: String(describing: type), fields: rawValues
+                )
                 let model = try factory()
                 for field in fields { try field.restore(model, values[field.descriptor.name]!) }
                 context.insert(model)
@@ -645,6 +671,8 @@ private extension StorageSnapshotScalarConvertible { static var storageOptional:
             Field<Prefs>("isPro", \.isPro),
             Field<Prefs>("keepScreenAwake", \.keepScreenAwake),
             Field<Prefs>("preferredFocusMinutes", \.preferredFocusMinutes),
+            Field<Prefs>("preferredFocusSeconds", \.preferredFocusSeconds),
+            Field<Prefs>("preferredFocusSecondsMutationID", \.preferredFocusSecondsMutationID),
             Field<Prefs>("timerDisplayModeRawValue", \.timerDisplayModeRawValue),
             Field<Prefs>("hasCompletedOnboarding", \.hasCompletedOnboarding),
             Field<Prefs>("usagePurposeRawValue", \.usagePurposeRawValue),

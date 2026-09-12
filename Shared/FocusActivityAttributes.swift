@@ -7,6 +7,15 @@ enum FocusActivityConstants {
     static let widgetKind = "PomoGemFocusLiveActivity"
     static let secondsPerMinute = 60
     static let dismissalDelay: TimeInterval = 2 * 60
+
+    static func durationLabel(seconds: Int) -> String {
+        let value = max(0, seconds)
+        let minutes = value / secondsPerMinute
+        let remainder = value % secondsPerMinute
+        if remainder == 0 { return "\(minutes)分" }
+        if minutes == 0 { return "\(remainder)秒" }
+        return "\(minutes)分\(remainder)秒"
+    }
 }
 
 /// The single source of truth shared by the app and Live Activity extension.

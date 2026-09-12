@@ -226,6 +226,8 @@ final class PomoGemDataExporterTests: XCTestCase {
         prefs.keepScreenAwakeMutationID = preferenceMutationIDs[7]
         prefs.preferredFocusMinutesRevision = 19
         prefs.preferredFocusMinutesMutationID = preferenceMutationIDs[8]
+        prefs.preferredFocusSeconds = 47 * 60 + 35
+        prefs.preferredFocusSecondsMutationID = preferenceMutationIDs[8]
         prefs.timerDisplayModeRevision = 20
         prefs.timerDisplayModeMutationID = preferenceMutationIDs[9]
         prefs.usagePurposeRevision = 21
@@ -413,6 +415,10 @@ final class PomoGemDataExporterTests: XCTestCase {
         XCTAssertEqual(exportedPrefs["legacyIsProIgnored"] as? Bool, false)
         XCTAssertEqual(exportedPrefs["syncRecordID"] as? String, prefsSyncRecordID.uuidString)
         XCTAssertEqual(exportedPrefs["settingsWriterID"] as? String, "account-device-writer")
+        XCTAssertEqual(exportedPrefs["preferredFocusMinutes"] as? Int, 47)
+        XCTAssertEqual(exportedPrefs["preferredFocusSeconds"] as? Int, 47 * 60 + 35)
+        XCTAssertEqual(exportedPrefs["preferredFocusSecondsMutationID"] as? String,
+                       preferenceMutationIDs[8].uuidString)
         let stampKeys = [
             "sound", "haptics", "rareReward", "reminderEnabled", "reminderTime",
             "shareIncludesManual", "externalTheme", "keepScreenAwake",

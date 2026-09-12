@@ -107,7 +107,6 @@ struct HomeView: View {
     @State private var localMembershipProjectionIsComplete = true
     @State private var conflictedAggregateRootIDs = Set<UUID>()
     @State private var selectedDuration: PomodoroDuration = .twentyFiveMinutes
-    @State private var customMinutes = 40
     @State private var focusConfiguration: FocusConfiguration?
     @State private var showHomeMenu = false
     @State private var showAccumulationOverview = false
@@ -646,7 +645,11 @@ struct HomeView: View {
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showCustomDuration) {
-            CustomDurationView(minutes: $customMinutes, onConfirm: confirmCustomDuration)
+            CustomDurationView(
+                initialSeconds: selectedDuration.seconds,
+                onConfirm: confirmCustomDuration
+            )
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
                 .presentationDetents(customDurationSheetDetents)
                 .presentationDragIndicator(.visible)
         }
@@ -694,10 +697,7 @@ struct HomeView: View {
     }
 
     private var customDurationSheetDetents: Set<PresentationDetent> {
-        if dynamicTypeSize.isAccessibilitySize || verticalSizeClass == .compact {
-            return [.large]
-        }
-        return [.height(390), .large]
+        [.large]
     }
 
     private var lifecycleContent: some View {
@@ -1436,7 +1436,7 @@ struct HomeView: View {
         Button {
             selectDuration(duration)
         } label: {
-            let title = "\(duration.minutes ?? customMinutes)分"
+            let title = duration.displayLabel
             if selectedDuration == duration {
                 Label(title, systemImage: "checkmark")
             } else {
@@ -1522,7 +1522,7 @@ struct HomeView: View {
 #if DEBUG
         if selectedDuration == .demo { return "12秒" }
 #endif
-        return "\(selectedDuration.minutes ?? customMinutes)分"
+        return selectedDuration.displayLabel
     }
 
     private var homeMenu: some View {
@@ -2798,15 +2798,12 @@ struct HomeView: View {
     }
 
     private func restorePreferredDuration() {
-        guard let preferred = resolvedPreferences?.preferredFocusMinutes else {
+        guard let preferred = resolvedPreferences?.preferredFocusSeconds else {
             return
         }
-        let restored = PomodoroDuration(minutes: preferred)
+        let restored = PomodoroDuration(totalSeconds: preferred)
+        guard restored.isValid else { return }
         if restored.requiresPro {
-            customMinutes = min(
-                max(preferred, Constants.Timer.customMinimumMinutes),
-                Constants.Timer.customMaximumMinutes
-            )
             selectedDuration = purchase.isPro ? restored : .twentyFiveMinutes
         } else {
             selectedDuration = restored
@@ -2819,13 +2816,20 @@ struct HomeView: View {
         showCustomDuration = true
     }
 
-    private func confirmCustomDuration() {
-        selectedDuration = PomodoroDuration(minutes: customMinutes)
-        persistPreferredFocusMinutes(
-            customMinutes,
+    private func confirmCustomDuration(_ totalSeconds: Int) -> Bool {
+        guard purchase.isPro else {
+            router.showToast("Proの購入状態を確認してください", symbol: "lock")
+            return false
+        }
+        let duration = PomodoroDuration(totalSeconds: totalSeconds)
+        guard duration.isValid else { return false }
+        guard persistPreferredFocusSeconds(
+            totalSeconds,
             failureMessage: "集中時間を保存できませんでした"
-        )
+        ) else { return false }
+        selectedDuration = duration
         showCustomDuration = false
+        return true
     }
 
     private func shareCompletedStratum(_ request: PendingStratumCelebration) {
@@ -2860,9 +2864,11 @@ struct HomeView: View {
 
     private func selectDuration(_ duration: PomodoroDuration) {
         selectedDuration = duration
-        guard let minutes = duration.minutes else { return }
-        persistPreferredFocusMinutes(
-            minutes,
+#if DEBUG
+        if duration == .demo { return }
+#endif
+        _ = persistPreferredFocusSeconds(
+            duration.seconds,
             failureMessage: "集中時間を保存できませんでした"
         )
     }
@@ -2873,36 +2879,39 @@ struct HomeView: View {
             return
         }
         selectedDuration = duration
-        persistPreferredFocusMinutes(
-            duration.minutes ?? Constants.Timer.twentyFiveMinutes,
-            failureMessage: "前回使った時間として保存できませんでした"
-        )
+        if duration.isValid,
+           duration.seconds >= Constants.Timer.customMinimumMinutes * Constants.Timer.secondsPerMinute {
+            _ = persistPreferredFocusSeconds(
+                duration.seconds,
+                failureMessage: "前回使った時間として保存できませんでした"
+            )
+        }
         focusConfiguration = FocusConfiguration(subject: subject, duration: duration)
     }
 
-    private func persistPreferredFocusMinutes(
-        _ minutes: Int,
+    private func persistPreferredFocusSeconds(
+        _ totalSeconds: Int,
         failureMessage: String
-    ) {
+    ) -> Bool {
         guard let resolvedPreferences else {
             router.showToast(failureMessage, symbol: "exclamationmark.triangle")
-            return
+            return false
         }
-        guard resolvedPreferences.preferredFocusMinutes != minutes else {
-            return
+        guard resolvedPreferences.preferredFocusSeconds != totalSeconds else {
+            return true
         }
         do {
-            try PrefsConsumerPolicy.mutate(
-                .preferredFocusMinutes,
+            try PrefsConsumerPolicy.setPreferredFocusSeconds(
+                totalSeconds,
                 context: modelContext,
                 markers: resetSnapshots
-            ) {
-                $0.preferredFocusMinutes = minutes
-            }
+            )
             try modelContext.save()
+            return true
         } catch {
             modelContext.rollback()
             router.showToast(failureMessage, symbol: "exclamationmark.triangle")
+            return false
         }
     }
 
@@ -4621,51 +4630,6 @@ private struct ManualButton: View {
         .accessibilityLabel("\(title)、\(grams)グラム加算")
         .accessibilityHint(isEnabled ? "内容の確認へ進みます" : "本日の手動追加上限です")
         .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-}
-
-private struct CustomDurationView: View {
-    @Binding var minutes: Int
-    let onConfirm: () -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    VStack(spacing: 8) {
-                        SectionEyebrow(text: "POMOGEM PRO")
-                        Text("集中時間を選ぶ").font(PomoGemTheme.brand(26))
-                    }
-                    Text("\(minutes):00")
-                        .font(.system(size: 54, weight: .heavy, design: .rounded))
-                        .monospacedDigit()
-                    Slider(
-                        value: Binding(get: { Double(minutes) }, set: { minutes = Int($0.rounded()) }),
-                        in: Double(Constants.Timer.customMinimumMinutes)...Double(Constants.Timer.customMaximumMinutes),
-                        step: 1
-                    )
-                    .tint(PomoGemTheme.amber)
-                    .accessibilityLabel("集中時間")
-                    .accessibilityValue("\(minutes)分")
-                    Button("この時間にする", action: onConfirm)
-                        .buttonStyle(PomoGemPrimaryButtonStyle())
-                }
-                .frame(maxWidth: .infinity)
-                .padding(24)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .background(NightBackground())
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    PomoGemSheetCloseButton(
-                        accessibilityIdentifier: "custom-timer.close"
-                    ) {
-                        dismiss()
-                    }
-                }
-            }
-        }
     }
 }
 

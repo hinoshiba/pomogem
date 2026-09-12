@@ -1,6 +1,6 @@
 # ポモジェム公式版 — ローカルArchive／App Storeリリース手順
 
-更新日: 2026-09-12
+更新日: 2026-09-13
 
 この手順は、許可済みMacのXcode OrganizerからiPhone版をArchive、Validate、Uploadするための
 正本です。Mac／Mac Catalyst版は作成しません。
@@ -15,7 +15,12 @@ App Store Connectで無効化し、ブランチ・タグの変更によるビル
 
 ## 今回の候補と識別子
 
-今回のupload済み候補はPomoGem 1.0.1 (7)です。1.0 (5)と同じApp Store record、Bundle ID、IAP、
+次の候補はPomoGem 1.0.2 (8)です。2026-09-13にApp Store Connectで既存1.0.1 (7)の
+「配信準備完了」を確認しました。以下のbuild 7の提出履歴を保持し、その後のiCloud修正と
+Proタイマーの分・秒指定を含む新候補は、別PRをマージしてからArchive・検証・提出します。
+現在の状態は`AppStore/release-record-1.0.2-8.md`を参照してください。build 8はまだupload・提出していません。
+
+直前のupload済み版はPomoGem 1.0.1 (7)です。1.0 (5)と同じApp Store record、Bundle ID、IAP、
 CloudKit containerを使用します。Apple IDは`6809139517`、SKUは`pomogem-ios`、
 登録名は「ポモジェム：ポモドーロタイマー」です。初回登録・提出結果は
 `AppStore/release-record-1.0-5.md`、build 6のupload・取消履歴は
@@ -29,8 +34,8 @@ Organizerのupload時刻は2026-09-12 11:56 JST、完了表示の確認は11:57 
 commitとArchive元を区別し、このtagを移動しません。
 利用者の並列提出指示に従い、処理済みbuild 7を選択し、ja-JP／en-USの更新内容とReview Notesを
 保存・再読込で照合して2026-09-12 16:26 JSTに審査へ提出しました。
-提出IDは`7f746a75-2605-47c5-83d5-48ee76b40b2c`で、1.0.1 (7)の「審査待ち」を確認済みです。
-SettingsのiCloud切り替えは開発・検証中で、この提出には含みません。次の機能版のbuild番号は未確定です。
+提出IDは`7f746a75-2605-47c5-83d5-48ee76b40b2c`で、提出時に1.0.1 (7)の「審査待ち」を確認しました。
+SettingsのiCloud切り替えと後続のオフライン修正は、このbuild 7には含みません。
 公開Privacyの更新はGitHub Actionsの支払い／上限エラーで未配信のままです。
 登録済みでも公開前は`app_store_listing_status: not_public`を保持し、Webは「近日公開」のまま
 Smart App Bannerを表示しません。実際に公開・ダウンロード可能になってからstatusを`public`へ変更し、

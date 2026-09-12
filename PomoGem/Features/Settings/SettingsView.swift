@@ -74,6 +74,7 @@ struct SettingsView: View {
     @State private var subjectPendingDeletionRecordCount: Int?
     @State private var showResetData = false
     @State private var showFontLicense = false
+    @State private var showCustomDuration = false
     @State private var notificationError: String?
     @State private var notificationPreferenceIntents =
         NotificationPreferenceIntentGate()
@@ -182,6 +183,16 @@ struct SettingsView: View {
                     onSave: addSubject
                 )
             }
+        }
+        .sheet(isPresented: $showCustomDuration) {
+            CustomDurationView(
+                initialSeconds: resolvedPreferences?.preferredFocusSeconds
+                    ?? Constants.Timer.twentyFiveMinutes * Constants.Timer.secondsPerMinute,
+                onConfirm: confirmPreferredFocusSeconds
+            )
+            .environment(\.dynamicTypeSize, dynamicTypeSize)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showFontLicense) {
             FontLicenseView()
@@ -538,15 +549,20 @@ struct SettingsView: View {
                     }
                     .frame(minHeight: 44)
 
-                    Picker("既定の集中時間", selection: preferredFocusMinutesBinding) {
-                        ForEach(
-                            Constants.Timer.customMinimumMinutes ... Constants.Timer.customMaximumMinutes,
-                            id: \.self
-                        ) { minutes in
-                            Text("\(minutes)分").tag(minutes)
-                        }
+                    Button {
+                        showCustomDuration = true
+                    } label: {
+                        SettingLabel(
+                            title: "既定の集中時間",
+                            subtitle: PomodoroDuration(
+                                totalSeconds: resolvedPreferences?.preferredFocusSeconds
+                                    ?? Constants.Timer.twentyFiveMinutes * Constants.Timer.secondsPerMinute
+                            ).displayLabel,
+                            symbol: "timer"
+                        )
                     }
-                    .pickerStyle(.navigationLink)
+                    .accessibilityIdentifier("settings.preferred-focus-duration")
+                    .accessibilityHint("分と秒を入力、またはスクロールして設定します")
                     .frame(minHeight: 44)
                 }
             } else {
@@ -1180,24 +1196,6 @@ struct SettingsView: View {
         }
     }
 
-    private var preferredFocusMinutesBinding: Binding<Int> {
-        Binding(
-            get: {
-                min(
-                    max(
-                        resolvedPreferences?.preferredFocusMinutes
-                            ?? Constants.Timer.twentyFiveMinutes,
-                        Constants.Timer.customMinimumMinutes
-                    ),
-                    Constants.Timer.customMaximumMinutes
-                )
-            },
-            set: { minutes in
-                updatePreferredFocusMinutes(minutes)
-            }
-        )
-    }
-
     private var timerDisplayModeBinding: Binding<TimerDisplayMode> {
         Binding(
             get: {
@@ -1442,27 +1440,30 @@ struct SettingsView: View {
         }
     }
 
-    private func updatePreferredFocusMinutes(_ minutes: Int) {
-        guard let resolvedPreferences else { return }
-        let normalized = min(
-            max(minutes, Constants.Timer.customMinimumMinutes),
-            Constants.Timer.customMaximumMinutes
-        )
-        guard resolvedPreferences.preferredFocusMinutes != normalized else {
-            return
+    private func confirmPreferredFocusSeconds(_ totalSeconds: Int) -> Bool {
+        guard purchase.isPro else {
+            router.showToast("Proの購入状態を確認してください", symbol: "lock")
+            return false
+        }
+        guard let resolvedPreferences,
+              PomodoroDuration(totalSeconds: totalSeconds).isValid else { return false }
+        if resolvedPreferences.preferredFocusSeconds == totalSeconds {
+            showCustomDuration = false
+            return true
         }
         do {
-            try PrefsConsumerPolicy.mutate(
-                .preferredFocusMinutes,
+            try PrefsConsumerPolicy.setPreferredFocusSeconds(
+                totalSeconds,
                 context: modelContext,
                 markers: resetSnapshots
-            ) {
-                $0.preferredFocusMinutes = normalized
-            }
+            )
             try modelContext.save()
+            showCustomDuration = false
+            return true
         } catch {
             modelContext.rollback()
-            settingsError = "既定の集中時間を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+            router.showToast("既定の集中時間を保存できませんでした", symbol: "exclamationmark.triangle")
+            return false
         }
     }
 

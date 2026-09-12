@@ -7,8 +7,8 @@ store_localizations:
   - en-US
 app_store_id: 6809139517
 app_store_listing_status: not_public
-marketing_version: "1.0.1"
-build_number: "7"
+marketing_version: "1.0.2"
+build_number: "8"
 copyright: "2026 hinoshiba"
 website_host: pomogem.hinoshiba.com
 app_bundle_id: com.hinoshiba.pomogem
@@ -78,7 +78,17 @@ i_cloud_sync:
     options:
       - icloud_sync_after_confirmation
       - this_iphone_only
-    immutable_in_version_1: true
+    later_changes: explicit_settings_confirmation_only
+  settings_storage_changes:
+    enable_icloud: verify_cloud_copy_then_replace_local_only_data_without_merging
+    enable_deletion_acknowledgment: initially_unselected_and_required
+    disable_icloud: verify_copy_to_this_iphone_and_retain_cloud_data
+    replace_all_cloud_data_with_local_data: prohibited_in_standard_debug_and_release
+    resume_destructive_cloud_replacement: prohibited_in_standard_debug_and_release
+    cancellation: permitted_predestructive_phases_only
+    nonreplacement_copy_cancellation: retain_source_cloud_and_intermediate_copies
+    requires_network: true
+    process_restart: follow_in_app_instructions_without_uninstalling
   access_without_icloud: all_basic_features_via_explicit_this_iphone_only_choice
   local_only:
     requires_apple_account: false
@@ -94,7 +104,7 @@ i_cloud_sync:
     - records
     - settings
     - active_timer
-  account_verification: account_status_pre_and_post_probe_user_record_id_match_and_read_only_private_zone_fetch_at_selection_and_each_launch_or_resume
+  account_verification: fresh_account_status_identity_read_only_control_fetch_identity_match_before_mirroring
   developer_access_assumption: no_access_or_retention_by_developer
   source_models:
     - Subject
@@ -182,16 +192,31 @@ i_cloud_sync:
     offline_multi_device_global_hard_cap: false
     disclosure: app_ui_and_review_notes
   account_boundary:
-    identity_resolution: fail_closed_before_model_container
+    identity_resolution: fresh_online_verification_before_mirroring_container
     local_namespace: random_bound_to_initial_verified_apple_account
     identity_evidence:
       - ckcontainer_account_status
       - ckcontainer_user_record_id
     persisted_binding: initial_sha256_fingerprint_and_random_namespace
-    remount_rule: exact_fingerprint_and_namespace_match_only
-    offline_reuse: disabled
+    remount_rule: exact_binding_or_explicit_committed_storage_transfer_authority
+    offline_reuse: conditional_existing_complete_store_pair_with_valid_bound_receipt
+    offline_receipt_origin: verified_online_or_exact_legacy_successful_mount
+    offline_requirements:
+      - exact_selected_and_successfully_mounted_cloud_binding
+      - valid_schema_and_complete_existing_store_pair
+      - no_pending_transfer_or_remote_cancellation_intent
+      - nonrevoked_receipt_for_the_same_binding
+      - no_mirroring_container_opened_in_the_current_process
+      - all_previous_store_lifetimes_retired_before_offline_mount
+    offline_mode: same_cloud_store_urls_opened_without_sync_not_local_only_selection
+    offline_changes: saved_on_this_iphone_while_sync_waits
+    offline_current_account_or_latest_server_data_verified: false
+    offline_background_return: retain_admitted_session_and_revalidate_local_conditions
+    positive_account_revocation: persist_until_fresh_online_verification
     different_account_behavior: fail_closed_without_deleting_data
-    missing_network_behavior: fail_closed_without_deleting_data
+    missing_network_behavior: allow_eligible_offline_copy_otherwise_keep_protected_gate_without_deleting_data
+    reconnect_rule: fresh_account_dataset_and_reset_history_checks_before_mirroring
+    connection_check_proves_all_data_uploaded: false
     inconsistent_persistence_history_behavior: recovery_gate_without_fresh_choice_or_overwrite
     committed_selection_with_zero_store_files: valid_one_time_mount_crash_boundary
     widget_surface: account_neutral_launcher_without_user_data
@@ -209,9 +234,14 @@ i_cloud_sync:
   cloud_history_preflight:
     before_root_publication: true
     remote_read: complete_private_custom_zone_changes_reset_marker_fields_only
-    local_admission: same_or_newer_full_marker_order
-    deadline_seconds: 90
-    failure_behavior: keep_root_unpublished_without_deleting_data
+    initial_local_admission: same_or_newer_full_marker_order
+    existing_replica_before_mirroring: known_recorded_baseline_or_fresh_local_winner_matches_remote
+    history_reader_timeout_seconds: 90
+    launch_absolute_timeout_seconds:
+      exact_successfully_mounted_complete_store_pair: 12
+      initial_store: 30
+    failure_behavior: block_mirroring_preserve_data_and_allow_only_independently_eligible_offline_copy
+    timeout_after_mirroring_opened: offer_online_retry_without_same_process_offline_fallback
     verifies_all_user_data_hydrated: false
     persistent_change_token_cache: false
   maintenance:
@@ -275,7 +305,7 @@ oss_publication:
     - store_and_web_marketing_images
   owner_decision_required: publish_as_mixed_license_or_relicense_and_replace_excluded_assets
 release_blockers:
-  - signed clean-install testing must verify the equal first-launch choices, both confirmations, immutable selection, and the complete local-only basic experience without an Apple Account or network
+  - candidate signed-device testing must verify equal first-launch choices and both confirmations, explicit enable/disable confirmations and initially unselected deletion acknowledgment, verified destination copies and retained cloud data on disable, offline eligibility/revocation/reconnect and pending-upload disclosures, and complete local-only basic use without an Apple Account or network; record untested cases as pending
   - owner must accept the focus partition trade-off that materialized completions survive delayed cancellation
   - owner must accept the fail-closed interactive recovery ceiling when more than 256 corrupt active logical timer sessions precede a valid session, or ship a versioned reversible quarantine design
   - Japan paid-IAP operator disclosure and pre-purchase legal presentation require owner or qualified legal determination

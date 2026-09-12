@@ -22,12 +22,16 @@ FEATURES
 
 POMOGEM PRO
 
-PomoGem Pro is a one-time, non-consumable In-App Purchase. It unlocks every other focus duration from 1 to 360 minutes beyond the free 25-, 45-, 60-, and 90-minute presets, plus month labels on grouped pebbles. There is no subscription, free trial, or automatic renewal.
+PomoGem Pro is a one-time, non-consumable In-App Purchase. It unlocks custom durations from 1 minute 00 seconds to 360 minutes 00 seconds, beyond the free presets, plus month labels on grouped pebbles. Enter minutes and seconds numerically or choose them with scroll wheels. Update both devices to the latest version before handing off a timer set with seconds. There is no subscription, free trial, or automatic renewal.
 
 PRIVACY
 
 PomoGem has no advertising, tracking, analytics service, or developer account system. At first launch, you choose between two equal storage options. “This iPhone only” keeps all app data on the device and supports all basic features without an Apple Account or network connection. It never automatically switches to or uploads to iCloud.
 
-If you confirm iCloud sync, theme names, achievement notes, activity records, settings, and the active timer are stored in your Apple Account's private iCloud storage and synchronized between compatible iPhones. PomoGem verifies the Apple Account online at each launch or resume to prevent account data from being mixed. If the network is unavailable or a different account is active, the app pauses access to those records without deleting them.
+If you confirm iCloud sync, theme names, achievement notes, records, settings, and the active timer sync through your Apple Account's private iCloud storage between compatible iPhones. Initial loading and resuming sync require online account and storage checks.
 
-The storage choice cannot be changed in version 1.0. Deleting and reinstalling the app erases on-device-only data. JSON export is not importable and cannot be used to migrate that data to iCloud or continue it on another device. Sharing and data export happen only when you choose them.
+When previously verified device data meets the access conditions, you can use timers and records offline in iCloud mode. Changes stay on this iPhone while sync waits. Account changes or conflicting history can block access to protect your data. Returning to the app after online use may require quitting and reopening it. A successful connection check does not confirm that every record has uploaded.
+
+Change storage in Settings. Enabling iCloud can use the existing iCloud data, deleting and replacing this iPhone's local-only themes, records, and settings. The two histories are not merged. Disabling iCloud copies verified data to this iPhone and keeps the iCloud data. Replacing all iCloud data with this iPhone's data is unavailable to protect records.
+
+Storage changes require a connection and app restarts as instructed. Do not delete the app during a transfer. Deleting it erases local-only records and changes not yet uploaded to iCloud. Exported JSON cannot be imported into PomoGem to restore or migrate records. Sharing and export happen only when you choose them.

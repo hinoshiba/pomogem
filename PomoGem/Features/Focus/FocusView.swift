@@ -921,7 +921,7 @@ struct FocusView: View {
 #if DEBUG
         if duration == .demo { return "12秒デモ" }
 #endif
-        return "\(duration.minutes ?? 0)分集中"
+        return "\(duration.displayLabel)集中"
     }
 
     private var timerModeLabel: String {

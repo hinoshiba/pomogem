@@ -212,8 +212,8 @@ required_lines = (
     "secondary_category: Education",
     "- ja-JP",
     "- en-US",
-    'marketing_version: "1.0.1"',
-    'build_number: "7"',
+    'marketing_version: "1.0.2"',
+    'build_number: "8"',
     'copyright: "2026 hinoshiba"',
     "website_host: pomogem.hinoshiba.com",
     "app_bundle_id: com.hinoshiba.pomogem",
@@ -355,7 +355,7 @@ if "rare_rewards: disabled" not in configuration_lines:
     fail("version 1.0 rare-reward release gate must remain disabled")
 
 project = (ROOT / "project.yml").read_text(encoding="utf-8")
-for line in ('MARKETING_VERSION: "1.0.1"', 'CURRENT_PROJECT_VERSION: "7"'):
+for line in ('MARKETING_VERSION: "1.0.2"', 'CURRENT_PROJECT_VERSION: "8"'):
     if line not in project:
         fail(f"project.yml version does not match App Store configuration: {line}")
 

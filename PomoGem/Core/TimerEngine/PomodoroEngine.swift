@@ -3,7 +3,10 @@ import Foundation
 enum PomodoroDuration: Hashable, Codable, Sendable {
     case twentyFiveMinutes
     case sixtyMinutes
+    /// Keep this case's synthesized Codable payload in minutes for existing
+    /// local and iCloud recovery data. Precise durations use an additive case.
     case custom(minutes: Int)
+    case customSeconds(totalSeconds: Int)
 
 #if DEBUG
     case demo
@@ -16,6 +19,8 @@ enum PomodoroDuration: Hashable, Codable, Sendable {
         .custom(minutes: Constants.Timer.ninetyMinutes)
     ]
 
+    /// An exact whole-minute duration, never a rounded value. Consumers that
+    /// present or persist arbitrary durations must use seconds instead.
     var minutes: Int? {
         switch self {
         case .twentyFiveMinutes:
@@ -24,6 +29,10 @@ enum PomodoroDuration: Hashable, Codable, Sendable {
             Constants.Timer.sixtyMinutes
         case let .custom(minutes):
             minutes
+        case let .customSeconds(totalSeconds):
+            totalSeconds.isMultiple(of: Constants.Timer.secondsPerMinute)
+                ? totalSeconds / Constants.Timer.secondsPerMinute
+                : nil
 #if DEBUG
         case .demo:
             nil
@@ -33,13 +42,29 @@ enum PomodoroDuration: Hashable, Codable, Sendable {
 
     var seconds: Int {
         switch self {
+        case let .customSeconds(totalSeconds):
+            return totalSeconds
 #if DEBUG
         case .demo:
-            Constants.Timer.demoSeconds
+            return Constants.Timer.demoSeconds
 #endif
         default:
-            (minutes ?? 0) * Constants.Timer.secondsPerMinute
+            // A synthesized Codable value can contain any Int. Presentation
+            // must not trap before the admission checks reject invalid data.
+            let result = (minutes ?? 0).multipliedReportingOverflow(
+                by: Constants.Timer.secondsPerMinute
+            )
+            return result.overflow ? 0 : result.partialValue
         }
+    }
+
+    var displayLabel: String {
+        guard isValid else { return "設定できない時間" }
+        let wholeMinutes = seconds / Constants.Timer.secondsPerMinute
+        let remainder = seconds % Constants.Timer.secondsPerMinute
+        if wholeMinutes == 0 { return "\(remainder)秒" }
+        if remainder == 0 { return "\(wholeMinutes)分" }
+        return "\(wholeMinutes)分\(remainder)秒"
     }
 
     var grams: Int {
@@ -59,9 +84,17 @@ enum PomodoroDuration: Hashable, Codable, Sendable {
     }
 
     var isValid: Bool {
-        guard case let .custom(minutes) = self else { return true }
-        return (Constants.Timer.customMinimumMinutes ... Constants.Timer.customMaximumMinutes)
-            .contains(minutes)
+        switch self {
+        case let .custom(minutes):
+            return (Constants.Timer.customMinimumMinutes ... Constants.Timer.customMaximumMinutes)
+                .contains(minutes)
+        case let .customSeconds(totalSeconds):
+            let minimumSeconds = Constants.Timer.customMinimumMinutes * Constants.Timer.secondsPerMinute
+            let maximumSeconds = Constants.Timer.customMaximumMinutes * Constants.Timer.secondsPerMinute
+            return (minimumSeconds ... maximumSeconds).contains(totalSeconds)
+        default:
+            return true
+        }
     }
 
     init(minutes: Int) {
@@ -75,10 +108,22 @@ enum PomodoroDuration: Hashable, Codable, Sendable {
         }
     }
 
+    /// Whole minutes keep their existing representation; invalid input stays
+    /// invalid rather than being clamped into a different timer duration.
+    init(totalSeconds: Int) {
+        if totalSeconds.isMultiple(of: Constants.Timer.secondsPerMinute) {
+            self.init(minutes: totalSeconds / Constants.Timer.secondsPerMinute)
+        } else {
+            self = .customSeconds(totalSeconds: totalSeconds)
+        }
+    }
+
     var normalized: PomodoroDuration {
         switch self {
         case let .custom(minutes):
             PomodoroDuration(minutes: minutes)
+        case let .customSeconds(totalSeconds):
+            PomodoroDuration(totalSeconds: totalSeconds)
         default:
             self
         }

@@ -11,6 +11,10 @@
 テーマの追加・編集・並べ替え・削除はSettingsの一つの「テーマ」一覧で行います。短時間で完走を確認する場合は、
 ポモジェムPro購入後に Homeの時間表示 → 「自由な時間を設定」 で1分を設定してください。無料状態の最短
 timerは25分です。hidden demo/debug menuはRelease buildにありません。
+Proの設定画面は分・秒の数字入力とホイールに対応し、1分00秒〜360分00秒を指定できます。
+入力中にtimerは開始せず、取消では既定時間を変えません。確定して保存できた場合だけ選択時間へ反映します。
+秒単位timerの引き継ぎは両端末の更新が必要と画面に表示します。秒数は記録に保持し、瓶の質量は
+完了した分ごとに10gです（1分30秒は90秒の記録、10g）。
 
 集中・休憩画面は4方向に対応し、横向きでは時計と操作を左右に配置します。
 Settings → 集中 → 「タイマーの既定の向き」で、自動／上／右／下／左を選べます。初期値は自動で、
@@ -26,7 +30,7 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
 - Product ID: `com.hinoshiba.pomogem.pro.lifetime`
 - Type: Non-Consumable
 - Entry: Homeの時間表示 → 「自由な時間を設定」、またはSettings → ポモジェムPro
-- Unlocks: 無料の25分／45分／60分／90分以外の任意の1〜360分、まとまり粒の月刻印
+- Unlocks: 無料の25分／45分／60分／90分以外の任意の1分00秒〜360分00秒を秒単位で指定、まとまり粒の月刻印
 - Restore: purchase screenの「購入を復元」
 - Pricing: United States USD 0.99 base price; Japan JPY 100 custom price; other available storefronts use Apple's automatically generated local equivalent
 - Availability: App and IAP are available in 148 of 175 storefronts. Austria, Belgium, Bulgaria, Croatia, Cyprus, Czech Republic, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Ireland, Italy, Latvia, Lithuania, Luxembourg, Malta, Netherlands, Poland, Portugal, Romania, Slovakia, Slovenia, Spain, and Sweden are excluded. United Kingdom, Norway, and Switzerland remain included; automatic availability for new storefronts is enabled.
@@ -41,10 +45,15 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
 
 - SwiftData private CloudKit: iCloudを選び確認した場合だけ、テーマ名、成果memo、記録、設定、進行中
   timerを含む7種類の同期元modelを一つのprivate containerへ保存し、同じApple Accountの対応iPhone間で
-  同期。選択時と各launch／resumeで`CKContainer.accountStatus`、`userRecordID`、private databaseの
-  read-only record-zone fetchとfetch前後の`userRecordID`一致を確認。さらに、サーバーで観測したリセット履歴と
-  同じか新しい世代が端末へ届くまでHomeを開かない。履歴確認には待機期限があり、失敗時は記録を変更せず
-  再試行を案内する。この確認は全記録の同期完了を保証するものではない。独自loginなし
+  同期。初回取得と同期再開にはaccount・保存先・リセット履歴をオンラインで確認する。通常起動の
+  control取得を通信確認にも使い、取得前後のidentity一致と画面公開前の再検証を行う。
+  初回はサーバーで観測したリセット履歴以上の世代が端末へ届くまでwriterを公開しない。
+  待機には期限があり、接続確認は全記録の送受信完了を保証しない。独自loginなし
+- Offline in iCloud mode: 確認済みの端末dataが利用条件を満たせば、同じ端末storeを同期なしで開き、
+  timer・記録・設定を利用できる。「このiPhoneに保存・同期は待機中」と表示する。通信が戻れば
+  account・保存先・リセット履歴を確認して同期再開へ進む。account変更や未対応の履歴不一致では停止し、
+  記録の自動削除・修復はしない。同期用storeを一度開いたprocessでbackgroundから戻る場合などは、
+  安全にoffline用storeへ切り替えられず、app終了・再起動を案内する
 - This iPhone only: 全ての基本機能をApple Account／networkなしで利用可能。専用random namespaceの
   local storeだけへ保存し、iCloudへ自動切替／uploadしない
 - Local projection: 瓶とまとまり粒に使う`AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`は
@@ -72,11 +81,22 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
 - Photos add-only: 利用者が静止画の保存を選んだ場合だけrequest
 - StoreKit 2: productとverified entitlementの確認。独自purchase serverなし
 
-保存先の選択はVersion 1.0では変更できません。「このiPhoneのみ」から後でiCloudを開始するには、必要に
-応じてJSONを書き出した後にappを削除・再installして選び直す必要があり、削除時にlocal記録は失われます。
-JSONは再importできず、移行や記録継続には使えません。iCloudを選択済みの起動／再開時はonlineで同じ
-Apple Accountを検証し、通信不可、account不明、別accountの場合は保存領域を開かずfail closedにします。
-この処理は保存済みdataを削除しません。
+## 保存先切り替えの確認
+
+- 実行中・一時停止中のtimerを終了して、Settings →「iCloudを有効にする」→「iCloudのデータを使う」。
+  端末だけのテーマ・記録・設定を削除してiCloudの内容に置き換える。二つの記録を結合せず、最後の
+  削除確認checkは未選択で始まる。戻る・取消・仮選択だけでは開始しない。
+- iCloud利用中はSettings →「iCloudを解除する」→「このiPhoneへ引き継ぐ」。確認できたcloud内容を
+  端末へコピーし、検証後に同期を解除する。cloud側のdataは残り、解除後の端末変更は同期されない。
+- 端末dataでiCloud全体を置き換える選択肢は理由を表示して無効化。受付済み・別端末の置き換えの
+  復旧再開も通常のReleaseでは拒否する。既存dataや復旧用コピーを削除して停止を解除しない。
+- 切り替えには通信と、案内に従ったapp終了・再起動が必要。app自体を削除しないよう表示する。
+  確認中にcloud内容が変わり一致しない場合は保持して停止し、許可された取り込み途中の取消では
+  元data・cloud・途中コピーを保持して再起動を案内する。この保持コピーは利用者向けUndoではない。
+
+別端末で完了した保存先の世代と端末が一致しない場合、明示的な再取得には端末の未送信変更を失う
+確認が別途必要です。「復旧手順」を読むだけでは削除へ同意した扱いにしません。
+app削除はlocal-onlyの記録とcloudへ未送信の変更を消去します。JSONは再importできず、復元・移行には使えません。
 
 direct CloudKit一括削除UIと削除用launch gateは無効です。記録保護のため、iCloud選択時のSettings →
 「表示中の記録をリセット」は一時的に利用できず、理由を表示します。「このiPhoneだけに保存」では

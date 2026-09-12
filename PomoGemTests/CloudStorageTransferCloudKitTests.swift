@@ -40,6 +40,40 @@ final class CloudStorageTransferCloudKitTests: XCTestCase {
         XCTAssertThrowsError(try decoder.decode(mismatched))
     }
 
+    func testAdditivePreferencePrecisionDecodesLegacyAbsenceAndExactNewFields() throws {
+        let decoder = CloudStorageTransferRecordDecoder()
+        let legacy = record("Prefs")
+        let old = try decoder.decode(legacy)
+        XCTAssertEqual(old.fields["preferredFocusSeconds"], .null)
+        XCTAssertEqual(old.fields["preferredFocusSecondsMutationID"], .null)
+        let mutationID = UUID()
+        legacy["CD_preferredFocusSeconds"] = NSNumber(value: 95)
+        legacy["CD_preferredFocusSecondsMutationID"] = mutationID.uuidString as NSString
+        let precise = try decoder.decode(legacy)
+        XCTAssertEqual(precise.fields["preferredFocusSeconds"], .integer(95))
+        XCTAssertEqual(precise.fields["preferredFocusSecondsMutationID"], .uuid(mutationID))
+        // Transport preserves stale/quarantined scalar evidence. Only the
+        // preference resolver decides whether an anchor belongs to a stamp.
+        legacy["CD_preferredFocusSeconds"] = NSNumber(value: -99)
+        XCTAssertEqual(try decoder.decode(legacy).fields["preferredFocusSeconds"], .integer(-99))
+    }
+
+    func testMalformedOptionalPreferencePrecisionIsNotTreatedAsMissing() throws {
+        let decoder = CloudStorageTransferRecordDecoder()
+        let malformedSeconds: [CKRecordValue] = ["95" as NSString, NSNumber(value: true), NSNumber(value: 95.5)]
+        for malformed in malformedSeconds {
+            let value = record("Prefs")
+            value["CD_preferredFocusSeconds"] = malformed
+            XCTAssertThrowsError(try decoder.decode(value))
+        }
+        let malformedAnchors: [CKRecordValue] = ["not-a-uuid" as NSString, NSNumber(value: 1)]
+        for malformed in malformedAnchors {
+            let value = record("Prefs")
+            value["CD_preferredFocusSecondsMutationID"] = malformed
+            XCTAssertThrowsError(try decoder.decode(value))
+        }
+    }
+
     func testScalarTransportPreservesLargeIntegerAndRejectsInvalidNumbers() throws {
         let decoder = CloudStorageTransferRecordDecoder()
         let source = record("ActivityResetMarker")

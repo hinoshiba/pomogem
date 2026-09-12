@@ -1,7 +1,5 @@
-- Fixed an error that prevented previously saved iCloud data from opening.
-- New records now wait for the observed iCloud reset history to reach the device, protecting records during initial loading.
-- Resetting displayed records is temporarily unavailable in iCloud mode to protect your records. Reset remains available when using This iPhone Only.
-- Improved iCloud connection checks, retries, and guidance when a connection cannot be established.
-- Fixed setup or data loading getting stuck when responding to notification permission prompts or returning to the app.
-- Improved iCloud handoff and completion for timers that have been paused and resumed many times.
-- Fixed newer timer notifications or Live Activities being removed after notification settings changed or records were reset.
+- Set Pro focus durations with numeric minute and second input or scroll wheels, from 1 minute 00 seconds to 360 minutes 00 seconds.
+- Enable or disable iCloud from Settings. Enabling uses iCloud data to replace this iPhone's local data. Disabling copies data to this iPhone and keeps it in iCloud. Replacing all iCloud data with this iPhone's data remains unavailable.
+- Use timers and records offline in iCloud mode when previously verified device data meets the access conditions. Changes are saved on this iPhone while sync waits.
+- Improved connection checks, retries, and timer presentation when returning to the app. Depending on the state, you may need to quit and reopen the app as instructed.
+- The three-manual-records-per-day limit now applies to this device independently of usage synced from other devices.
