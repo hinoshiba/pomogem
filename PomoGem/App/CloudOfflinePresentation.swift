@@ -47,6 +47,8 @@ struct CloudOfflineBanner: View {
     let isChecking: Bool
     let message: String
     let retry: (() -> Void)?
+    var recoveryKind: CloudOfflineRecoveryKind? = nil
+    var reviewRecovery: (() -> Void)? = nil
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showsDetails = false
 
@@ -79,7 +81,28 @@ struct CloudOfflineBanner: View {
 
             Spacer(minLength: 0)
 
-            if let retry {
+            if recoveryKind != nil {
+                Button {
+                    showsDetails = true
+                } label: {
+                    Group {
+                        if dynamicTypeSize.isAccessibilitySize {
+                            Image(systemName: "exclamationmark.icloud")
+                                .font(.system(size: 20))
+                        } else {
+                            Text("復旧手順")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 10))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("端末の記録を保持して復旧手順を表示")
+                .accessibilityIdentifier("cloud-offline-recovery-details")
+            } else if let retry {
                 Button(action: retry) {
                     Group {
                         if dynamicTypeSize.isAccessibilitySize {
@@ -128,9 +151,24 @@ struct CloudOfflineBanner: View {
                             .accessibilityIdentifier("cloud-offline-details-pending")
                         Text(CloudOfflineAccessPolicy.accessDescription)
                             .accessibilityIdentifier("cloud-offline-details-account")
-                        Text("通信が戻ったら「同期を再開」で接続を確認できます。")
+                        if recoveryKind == nil {
+                            Text("通信が戻ったら「同期を再開」で接続を確認できます。")
+                        }
                         Text("同じアカウントとデータを確認できるまで、iCloudとの同期は始まりません。")
                             .accessibilityIdentifier("cloud-offline-details-recovery")
+                        if recoveryKind == .storageTransfer, let reviewRecovery {
+                            Text("端末の記録を保持して、この画面を閉じて利用を続けられます。復旧手順へ進むと現在の記録画面を閉じ、iCloudの状態を確認します。データの置き換えや削除には、その後の確認が必要です。")
+                                .accessibilityIdentifier("cloud-offline-recovery-disclosure")
+                            Button("復旧手順を確認", action: reviewRecovery)
+                                .buttonStyle(PomoGemPrimaryButtonStyle())
+                                .disabled(isChecking)
+                                .accessibilityIdentifier("cloud-offline-review-recovery")
+                        } else if recoveryKind == .resetHistory {
+                            Text("記録の履歴が異なるため、自動で結合・送信できません。この画面を閉じて端末への記録を続けるか、設定の「データを書き出す」で記録を保存してください。同期の復旧についてはサポートへご相談ください。この操作で端末やiCloudの記録は削除しません。")
+                                .accessibilityIdentifier("cloud-offline-history-options")
+                            Link("サポートを見る", destination: AppLinks.support)
+                                .buttonStyle(PomoGemSecondaryButtonStyle())
+                        }
                     } else {
                         // A normally mirrored store also uses this banner when
                         // the path goes offline. It does not use manual retry

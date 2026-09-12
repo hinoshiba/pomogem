@@ -269,6 +269,80 @@ final class StorageTransferSettingsUITests: XCTestCase {
         assertNoOperation()
     }
 
+    func testOfflineRecoveryDetailsCanCloseWithoutRetiringOrAcceptingAnyTransfer() {
+        launch("offlineRecovery")
+        assertCompactOfflineBanner(expectsRetry: false)
+        let entry = app.buttons["cloud-offline-recovery-details"]
+        XCTAssertTrue(entry.isHittable)
+        assertTouchTarget(entry)
+        entry.tap()
+        XCTAssertTrue(app.navigationBars["同期の状態"].waitForExistence(timeout: 4))
+        let disclosure = app.staticTexts["cloud-offline-recovery-disclosure"]
+        XCTAssertTrue(reveal(disclosure))
+        XCTAssertTrue(disclosure.label.contains("データの置き換えや削除には、その後の確認が必要です"))
+        closeOfflineDetails()
+        let reviewState = app.staticTexts["cloud-offline.recovery-fixture-state"]
+        XCTAssertTrue(reveal(reviewState, upwards: false))
+        XCTAssertEqual(reviewState.label, "reviewCalls=0")
+        assertNoOperation()
+        openOfflineDetails()
+        let review = app.buttons["cloud-offline-review-recovery"]
+        XCTAssertTrue(reveal(review))
+        assertTouchTarget(review)
+        review.doubleTap()
+        let waiting = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == false"), object: review)
+        XCTAssertEqual(XCTWaiter.wait(for: [waiting], timeout: 4), .completed)
+        closeOfflineDetails()
+        XCTAssertTrue(reveal(reviewState, upwards: false))
+        XCTAssertEqual(reviewState.label, "reviewCalls=1")
+        assertNoOperation()
+    }
+
+    func testAX5OfflineRecoveryDisclosureAndExplicitReviewRemainReachable() throws {
+        launch("offlineRecovery", accessibility5: true)
+        assertCompactOfflineBanner(expectsRetry: false)
+        let entry = app.buttons["cloud-offline-recovery-details"]
+        XCTAssertTrue(entry.isHittable)
+        assertTouchTarget(entry)
+        attach("AX5 offline — retained copy and recovery instructions")
+        entry.tap()
+        XCTAssertTrue(app.navigationBars["同期の状態"].waitForExistence(timeout: 4))
+        let disclosure = app.staticTexts["cloud-offline-recovery-disclosure"]
+        XCTAssertTrue(reveal(disclosure))
+        XCTAssertGreaterThan(disclosure.frame.height, 100)
+        XCTAssertGreaterThan(disclosure.frame.width, app.windows.firstMatch.frame.width * 0.75)
+        let review = app.buttons["cloud-offline-review-recovery"]
+        XCTAssertTrue(reveal(review))
+        assertTouchTarget(review)
+        XCTAssertTrue(review.isEnabled)
+        attach("AX5 offline — explicit review before any later data-loss consent")
+        try auditDescriptionsAndTraits()
+        closeOfflineDetails()
+        let reviewState = app.staticTexts["cloud-offline.recovery-fixture-state"]
+        XCTAssertTrue(reveal(reviewState, upwards: false))
+        XCTAssertEqual(reviewState.label, "reviewCalls=0")
+        assertNoOperation()
+    }
+
+    func testResetHistoryConflictKeepsExportAndSupportChoicesWithoutInventingRefreshConsent() {
+        launch("offlineHistory")
+        assertCompactOfflineBanner(expectsRetry: false)
+        app.buttons["cloud-offline-recovery-details"].tap()
+        XCTAssertTrue(app.navigationBars["同期の状態"].waitForExistence(timeout: 4))
+        let options = app.staticTexts["cloud-offline-history-options"]
+        XCTAssertTrue(reveal(options))
+        XCTAssertTrue(options.label.contains("自動で結合・送信できません"))
+        XCTAssertTrue(options.label.contains("設定の「データを書き出す」"))
+        XCTAssertFalse(app.buttons["cloud-offline-review-recovery"].exists)
+        XCTAssertFalse(app.buttons["storage-refresh-confirm"].exists)
+        attach("Reset-history difference — keep local copy and export/support options")
+        closeOfflineDetails()
+        let reviewState = app.staticTexts["cloud-offline.recovery-fixture-state"]
+        XCTAssertTrue(reveal(reviewState, upwards: false))
+        XCTAssertEqual(reviewState.label, "reviewCalls=0")
+        assertNoOperation()
+    }
+
     private func launch(_ scenario: String, accessibility5: Bool = false) {
         app?.terminate()
         app = XCUIApplication()

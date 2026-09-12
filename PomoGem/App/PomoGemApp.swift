@@ -371,6 +371,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         case blocked(String)
         case failed(String)
         case relaunchRequired(String)
+        case offlineRelaunchRequired(String)
         case remoteRecovery(String, canCancel: Bool)
         case datasetRefresh(String)
     }
@@ -394,6 +395,8 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var remoteRecoveryAction: RemoteRecoveryAction?
     @State private var cloudLaunchDeadline: CloudLaunchDeadline?
     @State private var offlineFallbackRequested = false
+    @State private var requestedOnlineCloudLaunch = false
+    @State private var offlineRecovery = CloudOfflineRecoveryPresentation()
     @State private var canContinueOffline = false
     @State private var isCheckingOfflineConnection = false
     @State private var offlineRevocationWriteFailed = false
@@ -441,6 +444,7 @@ private struct PomoGemPersistenceLaunchHost: View {
 
     private var launchStatusContent: some View {
         PersistenceLaunchStatusView(state: launchState, onRetry: retryLaunch,
+            onRetryOnline: requestOnlineCloudRetry,
             onChooseCloud: chooseCloudStorage, onChooseLocalOnly: localOnlySelectionAction,
             onRecoverTransfer: { requestRemoteRecovery(.resume) },
             onCancelTransfer: { requestRemoteRecovery(.cancel) },
@@ -476,8 +480,12 @@ private struct PomoGemPersistenceLaunchHost: View {
     @ViewBuilder
     private func connectionBanner(for current: PomoGemPersistenceSession) -> some View {
         if current.isCloudOffline {
+            let notice = offlineRecovery.notice?.sessionID == current.id ? offlineRecovery.notice : nil
             CloudOfflineBanner(isChecking: isCheckingOfflineConnection, message: offlineMessage,
-                retry: { retryOfflineConnection() })
+                retry: { retryOfflineConnection() }, recoveryKind: notice?.kind,
+                reviewRecovery: notice?.kind == .storageTransfer ? {
+                    if let notice { requestOfflineRecoveryReview(expectedNotice: notice) }
+                } : nil)
         } else if current.mode == .cloudKit, networkPath.isOffline == true {
             CloudOfflineBanner(isChecking: false,
                 message: "通信の回復を待っています。端末への記録は続けられます。", retry: nil)
@@ -791,8 +799,11 @@ private struct PomoGemPersistenceLaunchHost: View {
             if let expectedCloudBinding {
                 canContinueOffline = offlineCopyIsEligible(binding: expectedCloudBinding)
             }
+            let explicitOnlineRetry = requestedOnlineCloudLaunch
+            requestedOnlineCloudLaunch = false
             if let expectedCloudBinding,
-               offlineFallbackRequested || networkPath.isOffline == true {
+               CloudOfflineHostPolicy.prefersOfflineLaunch(explicitOnlineRetry: explicitOnlineRetry,
+                   requestedOfflineFallback: offlineFallbackRequested, networkIsOffline: networkPath.isOffline) {
                 let wasFallback = offlineFallbackRequested
                 offlineFallbackRequested = false
                 if try await openOfflineSession(binding: expectedCloudBinding, attempt: attempt) { return }
@@ -957,7 +968,10 @@ private struct PomoGemPersistenceLaunchHost: View {
         } catch let error as CloudOfflineSessionError {
             guard launchAttempt == attempt, !Task.isCancelled else { return }
             canContinueOffline = false
-            requireStorageTransferRelaunch(message: error.localizedDescription)
+            // Restart is mandatory only to open this copy with .none. A later
+            // online .cloud mount may still use all ordinary admission gates.
+            AccountScopedLocalState.deactivate()
+            launchState = .offlineRelaunchRequired(error.localizedDescription)
         } catch let error as StorageTransferRuntimeError {
             guard launchAttempt == attempt, !Task.isCancelled else { return }
             refreshLocalTransferCancellationTarget()
@@ -1374,6 +1388,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         try AccountScopedLocalState.activate(binding)
         session = PomoGemPersistenceSession(container: container, mode: .cloudKit,
             accountNamespace: binding.namespace, isCloudOffline: true)
+        offlineRecovery.notice = nil
         requestedCloudSelection = false
         canChooseLocalOnly = false
         // Local device timers are permitted; this is not an account/network
@@ -1463,8 +1478,59 @@ private struct PomoGemPersistenceLaunchHost: View {
                 guard launchAttempt == attempt, session?.id == sessionID,
                       offlineConnectionAttempt == retryID else { return }
                 revokeOfflineForAccountError(error, binding: binding)
+                guard launchAttempt == attempt, session?.id == sessionID,
+                      offlineConnectionAttempt == retryID else { return }
+                if let kind = CloudOfflineHostPolicy.recoveryKind(after: error) {
+                    offlineRecovery.notice = .init(kind: kind, sessionID: sessionID, binding: binding)
+                }
                 offlineMessage = error.localizedDescription
             }
+        }
+    }
+
+    private func requestOnlineCloudRetry() {
+        guard session == nil, !isPreparing, !isQuiescingAccountChange,
+              !requiresStorageTransferRelaunch, scenePhase == .active,
+              case .selected(.cloud) = PersistenceDeploymentState.load() else { return }
+        offlineFallbackRequested = false
+        requestedOnlineCloudLaunch = true
+        // Claim the action before returning to SwiftUI so a second tap cannot
+        // create a competing attempt while the view task is being scheduled.
+        isPreparing = true
+        launchState = .preparing("オンラインで保存領域を再確認しています")
+        launchAttempt += 1
+    }
+
+    private func requestOfflineRecoveryReview(expectedNotice: CloudOfflineRecoveryPresentation.Notice) {
+        guard let current = session, current.isCloudOffline, !isPreparing,
+              !isCheckingOfflineConnection, !isQuiescingAccountChange,
+              !requiresStorageTransferRelaunch, scenePhase == .active,
+              UIApplication.shared.applicationState == .active,
+              case let .selected(.cloud(binding)) = PersistenceDeploymentState.load(),
+              current.accountNamespace == binding.namespace,
+              offlineRecovery.takeReview(expectedNotice: expectedNotice, sessionID: current.id, binding: binding) else { return }
+        cancelOfflineConnectionCheck()
+        offlineFallbackRequested = false
+        requestedOnlineCloudLaunch = true
+        NotificationManager.shared.suspendTimerSchedulingForAccountBoundary()
+        beginContainerRetirement()
+        launchState = .preparing("記録を保持したままiCloudの復旧手順を確認しています")
+        isQuiescingAccountChange = true
+        launchAttempt += 1
+        let generation = launchAttempt
+        Task { @MainActor in
+            let retirement = await waitForContainerRetirement(generation: generation)
+            guard launchAttempt == generation else { return }
+            isQuiescingAccountChange = false
+            guard retirement == .retired else {
+                didTimeOutContainerRetirement = retirement == .timedOut
+                launchState = .blocked(PersistenceContainerRetirementError.previousContainerStillActive.localizedDescription)
+                return
+            }
+            // The complete online launch independently rereads account, remote
+            // control and history. Existing recovery/refresh consent follows;
+            // reviewing the instructions never approves replacement or erase.
+            launchAttempt += 1
         }
     }
 
@@ -2181,6 +2247,7 @@ private struct PersistenceLaunchStatusView: View {
 
     let state: PomoGemPersistenceLaunchHost.LaunchState
     let onRetry: () -> Void
+    let onRetryOnline: () -> Void
     let onChooseCloud: () -> Void
     let onChooseLocalOnly: (() -> Void)?
     let onRecoverTransfer: () -> Void
@@ -2260,6 +2327,13 @@ private struct PersistenceLaunchStatusView: View {
                                 .buttonStyle(PomoGemSecondaryButtonStyle())
                                 .accessibilityIdentifier("storage-transfer-cancel")
                         }
+                    } else if case .offlineRelaunchRequired = state {
+                        Text("オフラインで開くにはアプリの再起動が必要です。通信が戻った場合は、この画面からオンラインで確認し直せます。")
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("オンラインで再試行", action: onRetryOnline)
+                            .buttonStyle(PomoGemPrimaryButtonStyle())
+                            .accessibilityIdentifier("cloud-offline-online-retry")
                     } else if case .relaunchRequired = state {
                         Text("この画面から再試行せず、アプリを終了して開き直してください。")
                             .font(.caption)
@@ -2381,7 +2455,7 @@ private struct PersistenceLaunchStatusView: View {
     private var showsLocalTransferCancellation: Bool {
         switch state {
         case .blocked, .failed, .remoteRecovery: true
-        case .choosingStorage, .preparing, .relaunchRequired, .datasetRefresh: false
+        case .choosingStorage, .preparing, .relaunchRequired, .offlineRelaunchRequired, .datasetRefresh: false
         }
     }
 
@@ -2397,6 +2471,8 @@ private struct PersistenceLaunchStatusView: View {
             "保存領域を準備できませんでした"
         case .relaunchRequired:
             "アプリを開き直してください"
+        case .offlineRelaunchRequired:
+            "オフラインで開くには再起動が必要です"
         case .remoteRecovery:
             "保存先の切り替えを復旧します"
         case .datasetRefresh:
@@ -2409,7 +2485,8 @@ private struct PersistenceLaunchStatusView: View {
         case .choosingStorage:
             "有効にすると、同じApple AccountのiPhone間で記録を同期します。利用しない場合は、このiPhoneだけに保存でき、記録はiCloudへ送信されません。"
         case let .preparing(message), let .blocked(message), let .failed(message),
-             let .relaunchRequired(message), let .remoteRecovery(message, _), let .datasetRefresh(message):
+             let .relaunchRequired(message), let .offlineRelaunchRequired(message),
+             let .remoteRecovery(message, _), let .datasetRefresh(message):
             message
         }
     }
@@ -2424,7 +2501,7 @@ private struct PersistenceLaunchStatusView: View {
             "externaldrive.badge.exclamationmark"
         case .failed:
             "externaldrive.badge.exclamationmark"
-        case .relaunchRequired:
+        case .relaunchRequired, .offlineRelaunchRequired:
             "arrow.clockwise"
         case .remoteRecovery:
             "icloud.and.arrow.down"

@@ -4,6 +4,29 @@ enum CloudOfflineMountDecision: Equatable, Sendable {
     case allow, relaunchRequired, awaitContainerRetirement
 }
 
+enum CloudOfflineRecoveryKind: Equatable, Sendable {
+    case storageTransfer, resetHistory
+}
+
+/// A presentation hint bound to the currently published local copy. Consuming
+/// the explicit review action is synchronous, so double taps and old sheets
+/// cannot retire another session. It grants no cloud or deletion authority.
+struct CloudOfflineRecoveryPresentation: Equatable, Sendable {
+    struct Notice: Equatable, Sendable {
+        let kind: CloudOfflineRecoveryKind
+        let sessionID: UUID
+        let binding: ActiveAccountLocalBinding
+    }
+    var notice: Notice?
+
+    mutating func takeReview(expectedNotice: Notice, sessionID: UUID, binding: ActiveAccountLocalBinding) -> Bool {
+        guard let notice, notice == expectedNotice, notice.kind == .storageTransfer,
+              notice.sessionID == sessionID, notice.binding == binding else { return false }
+        self.notice = nil
+        return true
+    }
+}
+
 enum CloudOfflineSessionError: Error, LocalizedError {
     case relaunchRequired
 
@@ -16,6 +39,22 @@ enum CloudOfflineSessionError: Error, LocalizedError {
 /// access by itself: the durable receipt, selected account namespace, exact
 /// store pair, scene lease, and transfer/intent gates still have to succeed.
 enum CloudOfflineHostPolicy {
+    static func recoveryKind(after error: Error) -> CloudOfflineRecoveryKind? {
+        switch error {
+        case StorageTransferRuntimeError.remoteRecoveryRequired,
+             StorageTransferRuntimeError.datasetRefreshRequired: .storageTransfer
+        case CloudActivityHistoryPreflightError.offlineHistoryChanged: .resetHistory
+        default: nil
+        }
+    }
+
+    /// Explicit online retry changes only the preferred launch route. It does
+    /// not permit .none after a mirror or bypass the usual online preflights.
+    static func prefersOfflineLaunch(explicitOnlineRetry: Bool, requestedOfflineFallback: Bool,
+                                     networkIsOffline: Bool?) -> Bool {
+        !explicitOnlineRetry && (requestedOfflineFallback || networkIsOffline == true)
+    }
+
     static func hasEstablishedCloudStore(
         selection: PersistenceDeploymentSelectionState,
         mountState: PersistenceDeploymentMountState,

@@ -7,13 +7,22 @@ enum StorageTransferSettingsUITestFixture {
     private static let environmentKey = "POMOGEM_UI_TEST_STORAGE_TRANSFER"
 
     enum Scenario: String {
-        case local, cloud, offline, cloudNetworkWaiting, activeTimer, exporting, deleting, unavailable
+        case local, cloud, offline, offlineRecovery, offlineHistory, cloudNetworkWaiting, activeTimer, exporting, deleting, unavailable
+
+        var isOffline: Bool { self == .offline || self == .offlineRecovery || self == .offlineHistory }
+        var recoveryKind: CloudOfflineRecoveryKind? {
+            switch self {
+            case .offlineRecovery: .storageTransfer
+            case .offlineHistory: .resetHistory
+            default: nil
+            }
+        }
 
         var mode: PersistenceLaunchMode {
-            self == .cloud || self == .offline || self == .cloudNetworkWaiting ? .cloudKit : .localOnly
+            self == .cloud || isOffline || self == .cloudNetworkWaiting ? .cloudKit : .localOnly
         }
         var otherWorkIsActive: Bool {
-            self == .offline || self == .cloudNetworkWaiting || self == .activeTimer || self == .exporting || self == .deleting
+            isOffline || self == .cloudNetworkWaiting || self == .activeTimer || self == .exporting || self == .deleting
         }
     }
 
@@ -32,6 +41,7 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
     @State private var calls = 0
     @State private var lastChoice = "none"
     @State private var offlineRetryCalls = 0
+    @State private var recoveryReviewCalls = 0
     @State private var isCheckingOfflineConnection = false
 
     var body: some View {
@@ -50,12 +60,14 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                 Section {
                     Text(verbatim: "calls=\(calls);choice=\(lastChoice);starting=\(controller.isStarting)")
                         .accessibilityIdentifier("storage-switch.fixture-state")
-                    if scenario == .offline {
+                    if scenario.isOffline {
                         Text(verbatim: "retryCalls=\(offlineRetryCalls);checking=\(isCheckingOfflineConnection)")
                             .accessibilityIdentifier("cloud-offline.fixture-state")
+                        Text(verbatim: "reviewCalls=\(recoveryReviewCalls)")
+                            .accessibilityIdentifier("cloud-offline.recovery-fixture-state")
                     }
                 }
-                if scenario == .offline {
+                if scenario.isOffline {
                     CloudSyncSettingsSection(persistenceMode: .cloudKit)
                 }
                 StorageTransferSettingsSection(
@@ -66,9 +78,9 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
             }
             .navigationTitle("設定")
         }
-        .environment(\.isCloudOfflineSession, scenario == .offline)
+        .environment(\.isCloudOfflineSession, scenario.isOffline)
         .safeAreaInset(edge: .top, spacing: 0) {
-            if scenario == .offline {
+            if scenario.isOffline {
                 CloudOfflineBanner(isChecking: isCheckingOfflineConnection,
                     message: "通信を確認できないため、端末のデータで利用を続けています。変更は端末に保存されます。",
                     retry: {
@@ -77,7 +89,11 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                         // must prevent subsequent taps from calling us again.
                         offlineRetryCalls += 1
                         isCheckingOfflineConnection = true
-                    })
+                    }, recoveryKind: scenario.recoveryKind, reviewRecovery: scenario == .offlineRecovery ? {
+                        guard recoveryReviewCalls == 0 else { return }
+                        recoveryReviewCalls += 1
+                        isCheckingOfflineConnection = true
+                    } : nil)
             } else if scenario == .cloudNetworkWaiting {
                 // Only the production banner's native-mirroring presentation
                 // is exercised here. No monitor, network, or store is started.

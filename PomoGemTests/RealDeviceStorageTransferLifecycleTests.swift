@@ -10,6 +10,13 @@ import XCTest
 /// Environment strings are additional opt-ins, never entitlement evidence.
 /// Each phase runs in a new hosted XCTest process with the ordinary app using
 /// LOCAL_PREVIEW. Runtime process/mirror guards are never reset or bypassed.
+/// read-only-probe checks the production reader without writing models.
+/// backup-proof independently downloads the acknowledged replacing backup;
+/// recover-after-uninstall requires its externally retained payload/account/
+/// previous-namespace SHA256 values in POMOGEM_TRANSFER_EXPECTED_PAYLOAD_SHA,
+/// POMOGEM_TRANSFER_EXPECTED_ACCOUNT_SHA and POMOGEM_TRANSFER_PREVIOUS_NAMESPACE_SHA.
+/// The runner must verify the original backup before a separately authorized
+/// uninstall; these phases neither uninstall the app nor restore host files.
 @MainActor
 final class RealDeviceStorageTransferLifecycleTests: XCTestCase {
     func testDevelopmentStorageTransferPhase() async throws {
@@ -63,11 +70,22 @@ private enum DevelopmentTransferPhase: String, Codable {
     case recoverRemote = "recover-remote", cancelRemote = "cancel-remote"
     case noneWriteProbe = "none-write-probe", mirrorExportProbe = "mirror-export-probe"
     case sameProcessProbe = "same-process-probe", sameProcessExport = "same-process-export"
+    case readOnlyProbe = "read-only-probe"
+    // Requires an externally preserved, exact pending backup receipt.
+    case backupProof = "backup-proof"
+    case recoverAfterUninstall = "recover-after-uninstall"
 }
 
 private enum DevelopmentTransferFailure: String, Error {
     case deadline, precondition, differentPendingTransaction, differentProcessRequired
     case missingAuditState, unexpectedResult, snapshotMismatch, invalidFixture
+}
+
+private struct DevelopmentTransferUninstallProof: Codable, Equatable {
+    let transactionID: UUID
+    let payloadSHA256: String
+    let accountSHA256: String
+    let priorNamespaceSHA256: String
 }
 
 private struct DevelopmentTransferState: Codable, Equatable {
@@ -86,6 +104,7 @@ private struct DevelopmentTransferState: Codable, Equatable {
     var noneProbeControl: StorageTransferRecoveryControl?
     var noneProbeExpectedDigest: String?
     var sameProcessProbeExpectedDigest: String?
+    var reinstallProof: DevelopmentTransferUninstallProof?
 }
 
 private struct DevelopmentTransferReport: Encodable {
@@ -127,6 +146,16 @@ private struct DevelopmentTransferReport: Encodable {
     var initialMirrorSetupAcknowledged: Bool?
     var noneContainerReleaseProven: Bool?
     var nativeCloudEventCounts: [String: Int]?
+    var allElevenModelsPopulated: Bool?
+    var freshInstallWithoutLocalStores: Bool?
+    var sameAccountNewNamespace: Bool?
+    var pendingRemotePreflightRefused: Bool?
+    var recoveredGenerationCommitted: Bool?
+    var readOnlyConfigurationsDisallowSave: Bool?
+    var readOnlySnapshotMatchesRetainedSource: Bool?
+    var readOnlyMarkerMatchesRetainedSource: Bool?
+    var readOnlyReaderReleased: Bool?
+    var cloudUnchangedByReadOnlyReader: Bool?
     var sourceSnapshotDigest: String?
     var localGraphMatchesFixture = false
     var serverGraphMatchesLocal = false
@@ -151,6 +180,8 @@ private final class DevelopmentTransferRunner {
     private let runID: UUID
     private let phase: DevelopmentTransferPhase
     private let expectedTransactionID: UUID?
+    private let suppliedReinstallProof: DevelopmentTransferUninstallProof?
+    private let wasInitialStateAbsent: Bool
     private let directory: URL
     private let stateFile: StorageTransferStateFile<DevelopmentTransferState>
     private var state: DevelopmentTransferState
@@ -160,11 +191,25 @@ private final class DevelopmentTransferRunner {
         self.runID = runID
         self.phase = phase
         self.expectedTransactionID = expectedTransactionID
+        if phase == .recoverAfterUninstall {
+            let environment = ProcessInfo.processInfo.environment
+            guard let transactionID = expectedTransactionID,
+                  let payload = environment["POMOGEM_TRANSFER_EXPECTED_PAYLOAD_SHA"],
+                  let account = environment["POMOGEM_TRANSFER_EXPECTED_ACCOUNT_SHA"],
+                  let namespace = environment["POMOGEM_TRANSFER_PREVIOUS_NAMESPACE_SHA"],
+                  [payload, account, namespace].allSatisfy(AppleAccountFingerprint.isValid) else {
+                throw DevelopmentTransferFailure.precondition
+            }
+            suppliedReinstallProof = DevelopmentTransferUninstallProof(transactionID: transactionID,
+                payloadSHA256: payload, accountSHA256: account, priorNamespaceSHA256: namespace)
+        } else { suppliedReinstallProof = nil }
         let documents = try FileManager.default.url(for: .documentDirectory,
             in: .userDomainMask, appropriateFor: nil, create: true)
         directory = documents.appendingPathComponent("StorageTransferDevelopmentAudit", isDirectory: true)
         stateFile = try StorageTransferStateFile(url: directory.appendingPathComponent("state-v1.json"))
-        state = try stateFile.load() ?? DevelopmentTransferState(version: 1, runID: runID)
+        let initialState = try stateFile.load()
+        wasInitialStateAbsent = initialState == nil
+        state = initialState ?? DevelopmentTransferState(version: 1, runID: runID)
         guard state.version == 1, state.runID == runID else { throw DevelopmentTransferFailure.missingAuditState }
         report = DevelopmentTransferReport(processNonce: Self.processNonce, phase: phase.rawValue)
     }
@@ -186,7 +231,13 @@ private final class DevelopmentTransferRunner {
             try lease.check()
         }
         let runtime = try StorageTransferRuntime.live()
-        if phase == .sameProcessProbe {
+        if phase == .backupProof {
+            try await backupProof(runtime: runtime, validate: validate)
+        } else if phase == .recoverAfterUninstall {
+            try await recoverAfterUninstall(runtime: runtime, validate: validate)
+        } else if phase == .readOnlyProbe {
+            try await readOnlyProbe(runtime: runtime, validate: validate)
+        } else if phase == .sameProcessProbe {
             try await sameProcessProbe(runtime: runtime, validate: validate)
         } else if phase == .sameProcessExport {
             try await mirrorExportProbe(runtime: runtime, sameProcessExpected: true, validate: validate)
@@ -826,6 +877,214 @@ private final class DevelopmentTransferRunner {
         report.sameStoreSynchronizationDisabledHoldSeconds = Int(ProcessInfo.processInfo.systemUptime - started)
     }
 
+    private func readOnlyProbe(runtime: StorageTransferRuntime,
+                               validate: @escaping @MainActor () throws -> Void) async throws {
+        guard try runtime.pendingLocalJournal() == nil,
+              let digest = state.expectedDestinationDigest,
+              state.expectedDestinationCloudOnly == false,
+              case let .selected(selection) = PersistenceDeploymentState.load(),
+              case let .cloud(binding) = selection,
+              PersistenceStoreTopology.persistenceArtifactHistory().hasExactCompleteStorePair(for: selection) else {
+            throw DevelopmentTransferFailure.precondition
+        }
+        let expected = try PomoGemStorageSnapshot.read(from: directory.appendingPathComponent("expected-destination-v1.json"), expectedDigest: digest)
+        _ = try await AppleAccountBoundaryResolver().resolve(expectedBinding: binding)
+        try await runtime.preflightCloudMount(binding: binding, validateAccess: validate)
+        let control = try await runtime.remoteRecoveryStatus(binding: binding, validateAccess: validate)
+        guard control?.blocksWriters != true else { throw DevelopmentTransferFailure.differentPendingTransaction }
+        let before = try await CloudStorageTransferCloudKit().readSnapshot(expectedBinding: binding, validateTransfer: validate)
+        guard try expected.isEquivalent(to: before.snapshot, entities: PomoGemStorageSnapshot.cloudModelNames,
+            normalizeEmptyRelationships: true, dateTolerance: 0.001) else { throw DevelopmentTransferFailure.snapshotMismatch }
+        let lifetimes = PersistenceContainerLifetimeTracker<ModelContainer>()
+        let events = DevelopmentTransferCloudEvents()
+        defer { report.nativeCloudEventCounts = events.snapshot() }
+        events.setStage("readOnlyHeld")
+        try await observeReadOnlyStore(binding: binding, expected: expected, lifetimes: lifetimes, validate: validate)
+        let releaseDeadline = ProcessInfo.processInfo.systemUptime + 10
+        while lifetimes.hasLiveContainers, ProcessInfo.processInfo.systemUptime < releaseDeadline {
+            try validate()
+            try await Task.sleep(for: .milliseconds(200))
+        }
+        try lifetimes.requireAllReleased()
+        report.readOnlyReaderReleased = true
+        guard !StorageTransferProcessState.cloudMirrorWasOpened,
+              PersistenceDeploymentState.load() == .selected(selection),
+              try await runtime.remoteRecoveryStatus(binding: binding, validateAccess: validate) == control else {
+            throw DevelopmentTransferFailure.precondition
+        }
+        let after = try await CloudStorageTransferCloudKit().readSnapshot(expectedBinding: binding, validateTransfer: validate)
+        report.cloudUnchangedByReadOnlyReader = try before.snapshot.isEquivalent(to: after.snapshot,
+            entities: PomoGemStorageSnapshot.cloudModelNames, normalizeEmptyRelationships: true)
+        guard report.cloudUnchangedByReadOnlyReader == true else { throw DevelopmentTransferFailure.snapshotMismatch }
+        report.sourceSnapshotDigest = digest
+        report.serverRecordCounts = after.snapshot.recordCounts
+        report.accountStable = true
+        report.disposition = "readOnlyProductionFactoryRetainedSourceAndCloud"
+    }
+
+    private func observeReadOnlyStore(binding: ActiveAccountLocalBinding, expected: PomoGemStorageSnapshot,
+                                      lifetimes: PersistenceContainerLifetimeTracker<ModelContainer>,
+                                      validate: @escaping @MainActor () throws -> Void) async throws {
+        let configurations = PersistenceStoreTopology.readOnlyCloudConfigurations(accountNamespace: binding.namespace)
+        report.readOnlyConfigurationsDisallowSave = configurations.count == 2 && configurations.allSatisfy { !$0.allowsSave }
+        guard report.readOnlyConfigurationsDisallowSave == true else { throw DevelopmentTransferFailure.precondition }
+        let reader = try PersistenceStoreTopology.makeReadOnlyCloudContainer(accountNamespace: binding.namespace)
+        lifetimes.track(reader)
+        defer { withExtendedLifetime(reader) {} }
+        guard !reader.mainContext.autosaveEnabled else { throw DevelopmentTransferFailure.precondition }
+        report.runtimeConstructedContainers = 1
+        let context = ModelContext(reader)
+        context.autosaveEnabled = false
+        let markers = try expected.records.filter { $0.entity == "ActivityResetMarker" }.map { record in
+            guard case let .uuid(id)? = record.fields["id"], case let .uuid(epoch)? = record.fields["epochID"],
+                  case let .integer(sequence)? = record.fields["sequence"], case let .dateBits(bits)? = record.fields["resetAt"],
+                  case let .string(writer)? = record.fields["writerDeviceID"] else { throw DevelopmentTransferFailure.invalidFixture }
+            return ActivityResetSnapshot(id: id, epochID: epoch, sequence: sequence,
+                resetAt: Date(timeIntervalSinceReferenceDate: Double(bitPattern: bits)), writerDeviceID: writer)
+        }
+        report.readOnlyMarkerMatchesRetainedSource = try ActivityResetStore.latestSnapshot(context: context)
+            == ActivityResetPolicy.currentMarker(from: markers)
+        let snapshot = try PomoGemStorageSnapshot.capture(from: context)
+        report.readOnlySnapshotMatchesRetainedSource = try expected.isEquivalent(to: snapshot, normalizeEmptyRelationships: true)
+        guard report.readOnlyMarkerMatchesRetainedSource == true, report.readOnlySnapshotMatchesRetainedSource == true else {
+            throw DevelopmentTransferFailure.snapshotMismatch
+        }
+        report.sourceRecordCounts = snapshot.recordCounts
+        report.stage = "holdingProductionReadOnlyStore"
+        _ = try publish()
+        try await Task.sleep(for: .seconds(10))
+        try validate()
+        guard !StorageTransferProcessState.cloudMirrorWasOpened,
+              try expected.isEquivalent(to: PomoGemStorageSnapshot.capture(from: ModelContext(reader)), normalizeEmptyRelationships: true) else {
+            throw DevelopmentTransferFailure.snapshotMismatch
+        }
+    }
+
+    private func backupProof(runtime: StorageTransferRuntime,
+        validate: @escaping @MainActor () throws -> Void) async throws {
+        let journal = try pinnedJournal(runtime)
+        guard journal.choice == .enableCloudReplacingCloud, journal.phase == .preparingDestination,
+              let sourceDigest = journal.sourceDigest, let expectedDigest = state.expectedDestinationDigest,
+              state.expectedDestinationCloudOnly == false else { throw DevelopmentTransferFailure.precondition }
+        _ = try await AppleAccountBoundaryResolver().resolve(expectedBinding: journal.cloudBinding)
+        guard let control = try await runtime.remoteRecoveryStatus(binding: journal.cloudBinding, validateAccess: validate),
+              control.phase == .replacing, control.manifest.transactionID == journal.transactionID,
+              control.manifest.payloadSHA256 == sourceDigest else { throw DevelopmentTransferFailure.differentPendingTransaction }
+        let recovery = StorageTransferRemoteRecovery(backend: StorageTransferRemoteRecoveryCloudKit(validateAccess: validate), validateAccess: validate)
+        let recovered = try await recovery.recover(manifest: control.manifest)
+        let localBytes = try StorageTransferPayloadStore(files: StorageTransferStoreFiles(transactionID: journal.transactionID)).bytes(expectedDigest: sourceDigest)
+        guard recovered.bytes == localBytes, recovered.envelope.control == control else { throw DevelopmentTransferFailure.snapshotMismatch }
+        let snapshot = try JSONDecoder().decode(PomoGemStorageSnapshot.self, from: recovered.bytes)
+        try snapshot.validate()
+        let expected = try PomoGemStorageSnapshot.read(from: directory.appendingPathComponent("expected-destination-v1.json"), expectedDigest: expectedDigest)
+        // The expected graph was captured from the source context at begin.
+        // The acknowledged local payload is compared byte-for-byte above;
+        // no one-off seed values or reconstructed expected rows are used here.
+        guard snapshot.recordCounts.count == PomoGemStorageSnapshot.modelNames.count,
+              snapshot.recordCounts.values.allSatisfy({ $0 > 0 }),
+              try snapshot.isEquivalent(to: expected) else { throw DevelopmentTransferFailure.snapshotMismatch }
+        let server = try await CloudStorageTransferCloudKit().readSnapshot(expectedBinding: journal.cloudBinding, validateTransfer: validate)
+        guard try snapshot.isEquivalent(to: server.snapshot, entities: PomoGemStorageSnapshot.cloudModelNames,
+                  normalizeEmptyRelationships: true, dateTolerance: 0.001),
+              try await runtime.remoteRecoveryStatus(binding: journal.cloudBinding, validateAccess: validate) == control,
+              try runtime.pendingLocalJournal() == journal else { throw DevelopmentTransferFailure.snapshotMismatch }
+        let proof = DevelopmentTransferUninstallProof(transactionID: journal.transactionID, payloadSHA256: sourceDigest,
+            accountSHA256: StorageTransferRecoverySchema.digest(Data(journal.cloudBinding.accountFingerprint.utf8)),
+            priorNamespaceSHA256: StorageTransferRecoverySchema.digest(Data(journal.cloudBinding.namespace.rawValue.utf8)))
+        try writeExactAuditPayload(recovered.bytes, name: "uninstall-server-backup-v1.json", digest: sourceDigest)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let proofURL = directory.appendingPathComponent("uninstall-backup-proof-v1.json")
+        guard !FileManager.default.fileExists(atPath: proofURL.path) else { throw DevelopmentTransferFailure.precondition }
+        try encoder.encode(proof).write(to: proofURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        let previous = state; state.reinstallProof = proof; try stateFile.save(state, replacing: previous)
+        report.transactionID = journal.transactionID
+        report.journalPhase = journal.phase.rawValue
+        report.remotePhase = control.phase.rawValue
+        report.sourceSnapshotDigest = sourceDigest
+        report.payloadByteExact = true
+        report.localGraphMatchesFixture = true
+        report.serverGraphMatchesLocal = true
+        report.allElevenModelsPopulated = true
+        report.sourceRecordCounts = snapshot.recordCounts
+        report.serverRecordCounts = server.snapshot.recordCounts
+        report.accountStable = true
+        report.disposition = "replacingBackupAllElevenByteExactBeforeUninstall"
+    }
+
+    private func recoverAfterUninstall(runtime: StorageTransferRuntime,
+        validate: @escaping @MainActor () throws -> Void) async throws {
+        guard wasInitialStateAbsent, let proof = suppliedReinstallProof,
+              expectedTransactionID == proof.transactionID,
+              PersistenceDeploymentState.load() == .unselected,
+              PersistenceDeploymentState.loadMountState() == .unrecorded,
+              !PersistenceStoreTopology.persistenceArtifactHistory().hasAnyArtifact,
+              try runtime.pendingLocalJournal() == nil, state.expectedDestinationDigest == nil,
+              state.runtimeTransactionID == nil, state.sourceSnapshotDigest == nil else {
+            throw DevelopmentTransferFailure.precondition
+        }
+        let binding = try await AppleAccountBoundaryResolver().resolve().binding
+        guard StorageTransferRecoverySchema.digest(Data(binding.accountFingerprint.utf8)) == proof.accountSHA256,
+              StorageTransferRecoverySchema.digest(Data(binding.namespace.rawValue.utf8)) != proof.priorNamespaceSHA256,
+              let control = try await runtime.remoteRecoveryStatus(binding: binding, validateAccess: validate),
+              control.phase == .replacing, control.manifest.transactionID == proof.transactionID,
+              control.manifest.payloadSHA256 == proof.payloadSHA256 else { throw DevelopmentTransferFailure.differentPendingTransaction }
+        report.freshInstallWithoutLocalStores = true
+        report.sameAccountNewNamespace = true
+        do {
+            try await runtime.preflightCloudMount(binding: binding, validateAccess: validate)
+            throw DevelopmentTransferFailure.unexpectedResult
+        } catch StorageTransferRuntimeError.remoteRecoveryRequired {
+            report.pendingRemotePreflightRefused = true
+        }
+        guard !StorageTransferProcessState.cloudMirrorWasOpened,
+              !PersistenceStoreTopology.persistenceArtifactHistory().hasAnyArtifact else { throw DevelopmentTransferFailure.unexpectedResult }
+        let recovery = StorageTransferRemoteRecovery(backend: StorageTransferRemoteRecoveryCloudKit(validateAccess: validate), validateAccess: validate)
+        let recovered = try await recovery.recover(manifest: control.manifest)
+        guard recovered.envelope.control == control,
+              StorageTransferRecoverySchema.digest(recovered.bytes) == proof.payloadSHA256 else { throw DevelopmentTransferFailure.snapshotMismatch }
+        let snapshot = try JSONDecoder().decode(PomoGemStorageSnapshot.self, from: recovered.bytes)
+        try snapshot.validate()
+        guard snapshot.recordCounts.count == PomoGemStorageSnapshot.modelNames.count,
+              snapshot.recordCounts.values.allSatisfy({ $0 > 0 }) else { throw DevelopmentTransferFailure.snapshotMismatch }
+        try writeExactAuditPayload(recovered.bytes, name: "expected-destination-v1.json", digest: proof.payloadSHA256)
+        try await runtime.recoverRemoteTransfer(binding: binding, expectedTransactionID: proof.transactionID, validateAccess: validate)
+        guard let journal = try runtime.pendingLocalJournal(), journal.transactionID == proof.transactionID,
+              journal.phase == .requested, journal.cloudBinding == binding,
+              journal.destination == .cloud(binding: binding), case .localOnly = journal.source,
+              !PersistenceStoreTopology.persistenceArtifactHistory().hasAnyArtifact else { throw DevelopmentTransferFailure.unexpectedResult }
+        let previous = state
+        state.reinstallProof = proof
+        state.runtimeTransactionID = proof.transactionID
+        state.expectedDestinationDigest = proof.payloadSHA256
+        state.expectedDestinationCloudOnly = false
+        try stateFile.save(state, replacing: previous)
+        do {
+            try await runtime.resumePendingTransfer(validateAccess: validate, trackContainer: { _, _ in })
+            throw DevelopmentTransferFailure.unexpectedResult
+        } catch StorageTransferRuntimeError.relaunchRequired {
+            report.disposition = "serverBackupRecoveredSameProcessResumeRefused"
+        }
+        guard !StorageTransferProcessState.cloudMirrorWasOpened else { throw DevelopmentTransferFailure.unexpectedResult }
+        report.transactionID = proof.transactionID
+        report.journalPhase = journal.phase.rawValue
+        report.remotePhase = control.phase.rawValue
+        report.sourceSnapshotDigest = proof.payloadSHA256
+        report.payloadByteExact = true
+        report.allElevenModelsPopulated = true
+        report.sourceRecordCounts = snapshot.recordCounts
+        report.accountStable = true
+    }
+
+    private func writeExactAuditPayload(_ bytes: Data, name: String, digest: String) throws {
+        let destination = directory.appendingPathComponent(name)
+        guard !FileManager.default.fileExists(atPath: destination.path),
+              StorageTransferRecoverySchema.digest(bytes) == digest else { throw DevelopmentTransferFailure.precondition }
+        try bytes.write(to: destination, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        let handle = try FileHandle(forWritingTo: destination)
+        try handle.synchronize(); try handle.close()
+        _ = try PomoGemStorageSnapshot.read(from: destination, expectedDigest: digest)
+    }
+
     private func verify(runtime: StorageTransferRuntime,
                         validate: @escaping @MainActor () throws -> Void) async throws {
         guard try runtime.pendingLocalJournal() == nil,
@@ -854,6 +1113,24 @@ private final class DevelopmentTransferRunner {
             entities: PomoGemStorageSnapshot.cloudModelNames, normalizeEmptyRelationships: true, dateTolerance: 0.001)
         guard report.serverGraphMatchesLocal else { throw DevelopmentTransferFailure.snapshotMismatch }
         report.accountStable = true
+        if let proof = state.reinstallProof {
+            guard case .cloud = selection, state.expectedDestinationDigest == proof.payloadSHA256,
+                  StorageTransferRecoverySchema.digest(Data(binding.accountFingerprint.utf8)) == proof.accountSHA256,
+                  StorageTransferRecoverySchema.digest(Data(binding.namespace.rawValue.utf8)) != proof.priorNamespaceSHA256,
+                  let control = try await runtime.remoteRecoveryStatus(binding: binding, validateAccess: validate),
+                  control.phase == .committed, control.manifest.transactionID == proof.transactionID,
+                  control.manifest.payloadSHA256 == proof.payloadSHA256,
+                  control.datasetGenerationID == proof.transactionID else { throw DevelopmentTransferFailure.unexpectedResult }
+            let admission = try runtime.localDatasetAdmission(binding: binding)
+            guard admission == StorageTransferDatasetAdmission(binding: binding, datasetGenerationID: proof.transactionID),
+                  snapshot.recordCounts.count == PomoGemStorageSnapshot.modelNames.count,
+                  snapshot.recordCounts.values.allSatisfy({ $0 > 0 }) else {
+                throw DevelopmentTransferFailure.unexpectedResult
+            }
+            report.recoveredGenerationCommitted = true
+            report.allElevenModelsPopulated = true
+            report.sameAccountNewNamespace = true
+        }
         report.disposition = "completeServerGraphEqualsLocal"
     }
 
