@@ -7,6 +7,9 @@ import XCTest
 ///     | timer-running | timer-paused | local-seed | local-relaunch | local-reset
 ///     | offline | timer-start-for-uninstall | timer-restore
 ///     | theme-delete | theme-delete-restore | theme-deleted-relaunch
+///     | offline-online | offline-use | offline-relaunch | offline-recover | offline-warm
+/// Offline-use phases accept POMOGEM_REAL_ICLOUD_THEME_NAME only in the runner
+/// to select an existing independently retained synthetic Development theme.
 ///   POMOGEM_REAL_ICLOUD_RUN_PREFIX=<unique 8...24 ASCII letters/digits/hyphens>
 /// Run one matching test at a time, preserving the same prefix. Run restore only
 /// after independently uninstalling/reinstalling the app, before the reset phase.
@@ -18,6 +21,9 @@ import XCTest
 /// network loss only after POMOGEM_REAL_NETWORK_ARM_READY appears; the runner
 /// waits 45 seconds before relaunching the terminated target. An OS certificate
 /// or launch failure is not evidence of the app's offline behavior.
+/// Offline-warm keeps a real running timer open through the loss window, then
+/// backgrounds/activates the same process. Restore external networking during
+/// its POMOGEM_REAL_NETWORK_RESTORE_READY window before the explicit online retry.
 /// Timer-start-for-uninstall deliberately leaves a paused active
 /// timer; confirm its server upload before uninstalling and running timer-restore.
 /// Run theme-delete after timer phases. Before uninstalling for theme-delete-restore,
@@ -38,6 +44,9 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         case localRelaunch = "local-relaunch"
         case localReset = "local-reset"
         case offline
+        case offlineOnline = "offline-online", offlineUse = "offline-use"
+        case offlineRelaunch = "offline-relaunch", offlineRecover = "offline-recover"
+        case offlineWarm = "offline-warm"
         case timerStartForUninstall = "timer-start-for-uninstall"
         case timerRestore = "timer-restore"
         case themeDelete = "theme-delete"
@@ -65,7 +74,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         }
         let permittedKeys: Set<String> = [
             "POMOGEM_REAL_ICLOUD_AUDIT", "POMOGEM_REAL_ICLOUD_PHASE",
-            "POMOGEM_REAL_ICLOUD_RUN_PREFIX"
+            "POMOGEM_REAL_ICLOUD_RUN_PREFIX", "POMOGEM_REAL_ICLOUD_THEME_NAME"
         ]
         let unexpectedFlags = environment.keys.filter {
             ($0.hasPrefix("POMOGEM_") && !permittedKeys.contains($0))
@@ -79,6 +88,13 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try require(prefix.range(of: "^[A-Za-z0-9-]{8,24}$", options: .regularExpression) != nil,
                     "Supply a unique 8...24-character ASCII run prefix; reuse it for all phases.")
         themeName = "PomoGemAudit-\(prefix)"
+        if let existingName = environment["POMOGEM_REAL_ICLOUD_THEME_NAME"] {
+            try require([.offlineOnline, .offlineUse, .offlineRelaunch, .offlineRecover, .offlineWarm].contains(phase!),
+                        "An existing synthetic theme override is limited to explicit offline audit phases.")
+            try require(existingName.range(of: "^[A-Za-z0-9 -]{8,64}$", options: .regularExpression) != nil,
+                        "Use an exact bounded synthetic ASCII theme name from the independently retained source snapshot.")
+            themeName = existingName
+        }
 #endif
     }
 
@@ -277,34 +293,217 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try cancelAuditTimerAndRequireDurableHome()
     }
 
-    func testOfflineCloudLaunchFailsWithoutLocalFallback() async throws {
+    func testOfflineCloudLaunchUsesPreviouslyVerifiedLocalCopy() async throws {
         try select(.offline)
         _ = launchRealApplication()
         try requireHome()
+        try require(!offlineBanner.exists,
+                    "The network arm window requires a verified online session before external network loss.")
         // iOS may need the network to trust this development-signed runner and
         // target. Finish both initial launches before the operator enables loss.
         app!.terminate()
         NSLog("POMOGEM_REAL_NETWORK_ARM_READY")
         try await Task.sleep(for: .seconds(45))
         NSLog("POMOGEM_REAL_NETWORK_RELAUNCH_BEGIN")
+        let started = ProcessInfo.processInfo.systemUptime
         let app = launchRealApplication()
-        let networkFailure = app.staticTexts.matching(NSCompoundPredicate(orPredicateWithSubpredicates: [
-            NSPredicate(format: "label CONTAINS %@", "iCloudに接続できません。"),
-            NSPredicate(format: "label CONTAINS %@", "iCloudの確認に時間がかかっています。")
-        ])).firstMatch
-        try require(networkFailure.waitForExistence(timeout: 120),
-                    "External network loss must produce the real iCloud network/timeout error, not a storage-layout, configuration, or account error.")
-        try require(app.staticTexts["保存領域を確認できません"].exists,
-                    "Offline launch must remain at the protected cloud storage gate.")
-        try require(app.buttons["もう一度試す"].exists && app.buttons["もう一度試す"].isEnabled,
-                    "The genuine network failure must provide a retry action.")
-        try require(!app.buttons["メニュー"].exists && !app.buttons["onboarding.next"].exists,
-                    "An unverified offline cloud store must not publish Home or new onboarding.")
+        try requireOfflineAuditHome(timeout: 30)
+        try requireOfflineBanner()
+        recordOfflineLaunchTiming(started: started, expectation: "verifiedCacheNetworkLoss")
+        try require(!app.staticTexts["保存領域を確認できません"].exists,
+                    "The previously verified cache must remain usable during independently applied network loss.")
         try require(!app.buttons["iCloudに保存して同期"].exists
                     && !app.buttons["このiPhoneだけに保存"].exists
                     && !app.buttons["このiPhoneだけで始める"].exists,
                     "An existing cloud installation must not offer a replacement local store or new storage choice.")
         retainEvidence(failure: false)
+    }
+
+    func testNormalOnlineCloudLaunchForOfflineAudit() throws {
+        try select(.offlineOnline)
+        let started = ProcessInfo.processInfo.systemUptime
+        _ = launchRealApplication()
+        try requireOfflineAuditHome(timeout: 30)
+        recordOfflineLaunchTiming(started: started, expectation: "onlineBaseline")
+        try require(!offlineBanner.exists, "The independently online baseline must publish a verified cloud session, not silently time out to an offline copy.")
+        try selectAuditTheme()
+        try openSettingsAndRequireRealCloud(timeout: 30)
+        try checkKeepAwake(expected: false)
+        try returnHome(from: "設定")
+        retainEvidence(failure: false)
+    }
+
+    /// The runner remains online until the ordinary app and runner have both
+    /// launched. The operator applies real network loss during the explicit
+    /// arm window, and independently saves the condition receipt.
+    func testRealOfflineColdLaunchAllowsManualRecordAndTimerAcrossRelaunch() async throws {
+        try select(.offlineUse)
+        _ = launchRealApplication()
+        try requireOfflineAuditHome(timeout: 30)
+        try require(!offlineBanner.exists, "The network arm window requires the verified online baseline first.")
+        try selectAuditTheme()
+        app!.terminate()
+        NSLog("POMOGEM_REAL_NETWORK_ARM_READY")
+        try await Task.sleep(for: .seconds(45))
+        NSLog("POMOGEM_REAL_NETWORK_RELAUNCH_BEGIN")
+        let started = ProcessInfo.processInfo.systemUptime
+        _ = launchRealApplication()
+        try requireOfflineAuditHome(timeout: 30)
+        try requireOfflineBanner()
+        recordOfflineLaunchTiming(started: started, expectation: "coldNetworkLoss")
+        try selectAuditTheme()
+        try openLog()
+        try require(!auditHistoryRow.exists, "The chosen synthetic theme must not already have the 30-minute manual row this phase creates.")
+        try returnHome(from: "記録")
+        try addAuditManualRecord()
+        try openLog()
+        try scrollTo(auditHistoryRow, attempts: 24)
+        try require(auditHistoryRow.exists, "The real offline manual save must immediately appear in history.")
+        try returnHome(from: "記録")
+        // Returning from another app must retain the admitted offline session;
+        // activate() deliberately does not terminate/relaunch the target.
+        XCUIDevice.shared.press(.home)
+        app!.activate()
+        try requireOfflineAuditHome(timeout: 10)
+        try requireOfflineBanner()
+        try selectAuditTheme()
+        try openLog()
+        try scrollTo(auditHistoryRow, attempts: 24)
+        try require(auditHistoryRow.exists, "An offline foreground transition must retain the manually saved row.")
+        try returnHome(from: "記録")
+        try startRealTwentyFiveMinuteTimer()
+        _ = try requireRunningCountdown()
+        try tap(app!.buttons["一時停止"])
+        try requireFocus(paused: true)
+        let paused = try timerRemainingSeconds()
+        XCUIDevice.shared.press(.home)
+        app!.activate()
+        try requireFocus(paused: true, timeout: 10)
+        try requireOfflineBanner()
+        let resumedFromBackgroundPaused = try timerRemainingSeconds()
+        try require(resumedFromBackgroundPaused == paused,
+                    "A paused offline timer must keep its exact remainder across background/foreground.")
+        _ = launchRealApplication()
+        try requireFocus(paused: true, timeout: 30)
+        try requireOfflineBanner()
+        let restoredPaused = try timerRemainingSeconds()
+        try require(restoredPaused == paused,
+                    "A real offline timer must retain its exact paused remainder across process termination.")
+        try tap(app!.buttons["再開する"])
+        _ = try requireRunningCountdown()
+        try cancelAuditTimerAndRequireDurableHome()
+        try requireOfflineBanner()
+        try selectAuditTheme()
+        try openLog()
+        try scrollTo(auditHistoryRow, attempts: 24)
+        try require(auditHistoryRow.exists, "The offline manual row must survive the timer's stop and another cold process launch.")
+        retainEvidence(failure: false)
+    }
+
+    func testOfflineManualRecordRemainsAfterIndependentColdRelaunch() throws {
+        try select(.offlineRelaunch)
+        let started = ProcessInfo.processInfo.systemUptime
+        _ = launchRealApplication()
+        try requireOfflineAuditHome(timeout: 30)
+        try requireOfflineBanner()
+        recordOfflineLaunchTiming(started: started, expectation: "offlineColdRelaunchAfterWrites")
+        try require(!focusTimer.exists, "The previously cancelled offline timer must remain cancelled.")
+        try selectAuditTheme()
+        try openLog()
+        try scrollTo(auditHistoryRow, attempts: 24)
+        try require(auditHistoryRow.exists, "The real offline manual row must survive an independently scheduled fresh process.")
+        retainEvidence(failure: false)
+    }
+
+    func testNetworkLossDuringTimerAndWarmOnlineRetryRetainPausedTime() async throws {
+        try select(.offlineWarm)
+        _ = launchRealApplication()
+        try requireOfflineAuditHome(timeout: 30)
+        try require(!offlineBanner.exists && !focusTimer.exists,
+                    "The warm network test requires a verified online Home without an active timer.")
+        try selectAuditTheme()
+        try startRealTwentyFiveMinuteTimer()
+        let beforeLoss = try requireRunningCountdown()
+        NSLog("POMOGEM_REAL_NETWORK_ARM_READY")
+        try await Task.sleep(for: .seconds(45))
+        let duringLoss = try requireRunningCountdown()
+        try require(duringLoss < beforeLoss - 30,
+                    "The ordinary cloud timer must keep counting while external network loss is active.")
+        try tap(app!.buttons["一時停止"])
+        try requireFocus(paused: true, timeout: 10)
+        let paused = try timerRemainingSeconds()
+        XCUIDevice.shared.press(.home)
+        app!.activate()
+        let onlineRetry = app!.buttons["cloud-offline-online-retry"]
+        try require(onlineRetry.waitForExistence(timeout: 30) && onlineRetry.isEnabled,
+                    "When a prior cloud mirror prevents offline reopening, a bounded notice must still allow an explicit online retry.")
+        try require(!app!.buttons["iCloudに保存して同期"].exists
+                    && !app!.buttons["このiPhoneだけに保存"].exists,
+                    "The warm retry notice must not replace the initialized data with fresh storage selection.")
+        retainEvidence(failure: false)
+        NSLog("POMOGEM_REAL_NETWORK_RESTORE_READY")
+        try await Task.sleep(for: .seconds(45))
+        try tap(onlineRetry)
+        try requireFocus(paused: true, timeout: 30)
+        let afterRecovery = try timerRemainingSeconds()
+        try require(afterRecovery == paused,
+                    "The explicit online retry must restore the same paused countdown without restarting the app.")
+        try require(!offlineBanner.exists,
+                    "Successful online recovery must finish the guarded cloud mount.")
+        retainEvidence(failure: false)
+        try cancelAuditTimerAndRequireDurableHome()
+    }
+
+    func testOnlineRecoveryRetainsOfflineManualRecord() throws {
+        try select(.offlineRecover)
+        let started = ProcessInfo.processInfo.systemUptime
+        _ = launchRealApplication()
+        try requireOfflineAuditHome(timeout: 30)
+        recordOfflineLaunchTiming(started: started, expectation: "onlineRecovery")
+        try require(!offlineBanner.exists, "After independently restoring connectivity, normal startup must verify its cloud session within the connection budget.")
+        try require(!focusTimer.exists, "The cancelled offline timer must not return during cloud import.")
+        try selectAuditTheme()
+        try openSettingsAndRequireRealCloud(timeout: 30)
+        try checkKeepAwake(expected: false)
+        try returnHome(from: "設定")
+        try openLog()
+        try scrollTo(auditHistoryRow, attempts: 24)
+        try require(auditHistoryRow.exists, "Reconnecting must retain the exact offline manual activity in the ordinary UI.")
+        retainEvidence(failure: false)
+    }
+
+    private var offlineBanner: XCUIElement {
+        app!.buttons["cloud-offline-details"]
+    }
+
+    private func requireOfflineAuditHome(timeout: TimeInterval) throws {
+        let home = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: app!.buttons["メニュー"])
+        try require(XCTWaiter.wait(for: [home], timeout: timeout) == .completed,
+                    "Cached cloud data must publish usable Home within the bounded launch allowance.")
+        try require(!app!.buttons["onboarding.next"].exists && !app!.buttons["iCloudに保存して同期"].exists,
+                    "Existing cloud data must not be replaced by onboarding or a new storage chooser.")
+    }
+
+    private func requireOfflineBanner() throws {
+        try require(offlineBanner.waitForExistence(timeout: 5), "The ordinary offline session must clearly disclose local saving and delayed synchronization.")
+        try require(offlineBanner.label.contains("このiPhoneに保存・iCloud同期は待機中"),
+                    "The banner must show the user-facing offline persistence explanation.")
+        try require(app!.buttons["cloud-offline-retry"].exists,
+                    "A cold offline copy must expose its guarded reconnect action, independently of a normally mirrored store's network notice.")
+    }
+
+    private func recordOfflineLaunchTiming(started: TimeInterval, expectation: String) {
+        let elapsed = ProcessInfo.processInfo.systemUptime - started
+        let values: [String: Any] = ["phase": expectation, "elapsedFromXCUIApplicationLaunchToHomeSeconds": elapsed,
+            "offlineBannerPresent": offlineBanner.exists, "usesShippingHost": true,
+            "networkConditionMustBeIndependentlyVerified": true, "timingIncludesXCTestLaunchOverhead": true]
+        let data = (try? JSONSerialization.data(withJSONObject: values, options: [.sortedKeys])) ?? Data()
+        let item = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+        item.name = "real-offline-launch-timing"
+        item.lifetime = .keepAlways
+        add(item)
+        NSLog("POMOGEM_REAL_OFFLINE_LAUNCH phase=%@ elapsed=%.3f banner=%@", expectation, elapsed, offlineBanner.exists ? "true" : "false")
     }
 
     func testStartRealTimerAndPreserveItForUninstall() throws {
@@ -595,9 +794,9 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try require((1400...1500).contains(remaining), "The initial countdown must match a real 25-minute timer.")
     }
 
-    private func requireFocus(paused: Bool) throws {
+    private func requireFocus(paused: Bool, timeout: TimeInterval = 120) throws {
         let app = app!
-        try require(focusTimer.waitForExistence(timeout: 120),
+        try require(focusTimer.waitForExistence(timeout: timeout),
                     "The persisted timer must open automatically; missing recovery or an unexpected handoff offer is a failure.")
         let subject = app.staticTexts["focus.subject"]
         try require(waitForLabel(subject, containing: themeName), "Recovered focus must retain its original audit theme.")

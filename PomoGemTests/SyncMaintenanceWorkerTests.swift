@@ -533,7 +533,8 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
             manualDayKey: day,
             manualUsedToday: 1,
             soundOn: true,
-            activityEpochID: nil
+            activityEpochID: nil,
+            settingsWriterID: "device-a"
         ))
         context.insert(Prefs(
             id: UUID(),
@@ -541,7 +542,8 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
             manualUsedToday: 2,
             soundOn: false,
             reminderEnabled: true,
-            activityEpochID: nil
+            activityEpochID: nil,
+            settingsWriterID: "device-a"
         ))
         let unknownEpochID = UUID()
         context.insert(Prefs(
@@ -588,6 +590,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         let resolved = try PrefsSyncPolicy.resolvedState(
             in: prefs,
             currentEpochID: nil,
+            writerID: "device-a",
             currentDay: day
         )
         XCTAssertEqual(resolved.manualUsedToday, 2)
@@ -598,6 +601,139 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         )
         XCTAssertNotNil(prefs.first { $0.activityEpochID == unknownEpochID })
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<StudySession>()), 300)
+    }
+
+    func testManualQuotaKeepsOtherDeviceAvailableAfterOfflineCountersArrive() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let day = FairnessPolicy.deviceDayKey(for: now)
+        let deviceA = Prefs(manualDayKey: day, manualUsedToday: 3,
+            settingsWriterID: "device-a")
+        let deviceB = Prefs(manualDayKey: day, manualUsedToday: 0,
+            settingsWriterID: "device-b")
+        context.insert(deviceA)
+        context.insert(deviceB)
+        try context.save()
+
+        for rows in [[deviceA, deviceB], [deviceB, deviceA]] {
+            let a = try PrefsSyncPolicy.resolvedState(in: rows, currentEpochID: nil,
+                writerID: "device-a", currentDay: day)
+            let b = try PrefsSyncPolicy.resolvedState(in: rows, currentEpochID: nil,
+                writerID: "device-b", currentDay: day)
+            XCTAssertEqual(a.manualUsedToday, 3)
+            XCTAssertFalse(FairnessPolicy.consumeManualEntry(
+                state: ManualCounterState(dayKey: day, usedToday: a.manualUsedToday), at: now).isAllowed)
+            XCTAssertEqual(b.manualUsedToday, 0)
+            XCTAssertTrue(FairnessPolicy.consumeManualEntry(
+                state: ManualCounterState(dayKey: day, usedToday: b.manualUsedToday), at: now).isAllowed)
+        }
+
+        let b = try PrefsSyncPolicy.resolvedState(in: [deviceA, deviceB], currentEpochID: nil,
+            writerID: "device-b", currentDay: day)
+        let decision = FairnessPolicy.consumeManualEntry(
+            state: ManualCounterState(dayKey: day, usedToday: b.manualUsedToday), at: now)
+        let writer = try PrefsSyncPolicy.ensureWriterRow(context: context,
+            writerID: "device-b", currentEpochID: nil)
+        writer.manualDayKey = decision.state.dayKey
+        writer.manualUsedToday = decision.state.usedToday
+        try context.save()
+
+        let reader = ModelContext(container)
+        reader.autosaveEnabled = false
+        let reopened = try PrefsSyncPolicy.fetchBounded(from: reader)
+        XCTAssertEqual(reopened.count, 2)
+        XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: reopened, currentEpochID: nil,
+            writerID: "device-a", currentDay: day).manualUsedToday, 3)
+        XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: reopened, currentEpochID: nil,
+            writerID: "device-b", currentDay: day).manualUsedToday, 1)
+    }
+
+    func testPreferenceEditDoesNotCopyAnotherDevicesManualQuota() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let day = "2027-01-15"
+        let deviceA = Prefs(manualDayKey: day, manualUsedToday: 3,
+            settingsWriterID: "device-a")
+        let deviceB = Prefs(manualDayKey: day, manualUsedToday: 1,
+            settingsWriterID: "device-b")
+        context.insert(deviceA)
+        context.insert(deviceB)
+        try context.save()
+        let foreignBefore = prefsFingerprint(deviceA)
+
+        let writer = try PrefsSyncPolicy.mutate(.sound, context: context,
+            writerID: "device-b", currentEpochID: nil, currentDay: day) {
+                $0.soundOn = false
+            }
+        try context.save()
+        XCTAssertTrue(writer === deviceB)
+        XCTAssertEqual(writer.manualUsedToday, 1)
+        XCTAssertEqual(deviceA.manualUsedToday, 3)
+        XCTAssertEqual(prefsFingerprint(deviceA), foreignBefore)
+        let reader = ModelContext(container)
+        reader.autosaveEnabled = false
+        let reopened = try PrefsSyncPolicy.fetchBounded(from: reader)
+        XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: reopened, currentEpochID: nil,
+            writerID: "device-b", currentDay: day).manualUsedToday, 1)
+        XCTAssertFalse(try PrefsSyncPolicy.resolvedState(in: reopened, currentEpochID: nil,
+            writerID: "device-a", currentDay: day).soundOn,
+            "The shared setting still converges independently of the per-device quota")
+    }
+
+    func testUnattributedLegacyQuotaIsRetainedWithoutClaimingTheNewDevice() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let day = "2027-01-15"
+        let legacy = Prefs(manualDayKey: day, manualUsedToday: 3,
+            hasCompletedOnboarding: true)
+        let foreign = Prefs(manualDayKey: day, manualUsedToday: 2,
+            settingsWriterID: "device-a")
+        context.insert(legacy)
+        context.insert(foreign)
+        try context.save()
+
+        XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: [legacy, foreign], currentEpochID: nil,
+            writerID: "device-b", currentDay: day).manualUsedToday, 0)
+        let writer = try PrefsSyncPolicy.mutate(.keepScreenAwake, context: context,
+            writerID: "device-b", currentEpochID: nil, currentDay: day) {
+                $0.keepScreenAwake = false
+            }
+        try context.save()
+        XCTAssertEqual(writer.settingsWriterID, "device-b")
+        XCTAssertEqual(writer.manualUsedToday, 0)
+        XCTAssertTrue(writer.hasCompletedOnboarding)
+        XCTAssertEqual(legacy.settingsWriterID, "")
+        XCTAssertEqual(legacy.manualUsedToday, 3)
+        XCTAssertEqual(foreign.manualUsedToday, 2)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<Prefs>()), 3)
+        XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: [legacy], currentEpochID: nil,
+            writerID: "", currentDay: day).manualUsedToday, 0)
+    }
+
+    func testOwnedQuotaDuplicatesUseMaximumOnlyWithinCurrentDayAndEpoch() throws {
+        let day = "2027-01-15"
+        let epoch = UUID()
+        let rows = [
+            Prefs(manualDayKey: day, manualUsedToday: 1, activityEpochID: epoch,
+                settingsWriterID: "device-b"),
+            Prefs(manualDayKey: day, manualUsedToday: 2, activityEpochID: epoch,
+                settingsWriterID: "device-b"),
+            Prefs(manualDayKey: "2027-01-14", manualUsedToday: 3, activityEpochID: epoch,
+                settingsWriterID: "device-b"),
+            Prefs(manualDayKey: day, manualUsedToday: 3,
+                settingsWriterID: "device-b"),
+            Prefs(manualDayKey: day, manualUsedToday: 3, activityEpochID: epoch,
+                settingsWriterID: "device-a")
+        ]
+        for values in [rows, Array(rows.reversed())] {
+            XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: values, currentEpochID: epoch,
+                writerID: "device-b", currentDay: day).manualUsedToday, 2)
+            XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: values, currentEpochID: epoch,
+                writerID: "device-b", currentDay: "2027-01-16").manualUsedToday, 0)
+            XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: values, currentEpochID: UUID(),
+                writerID: "device-b", currentDay: day).manualUsedToday, 0)
+        }
     }
 
     func testSessionDuplicateAtPageBoundaryIsResolvedWithoutSourceMutation() async throws {

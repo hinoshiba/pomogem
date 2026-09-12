@@ -3,6 +3,20 @@ import CoreFoundation
 import Foundation
 import SwiftData
 
+/// Absence of a receipt is not a verified observation of an empty history.
+enum CloudActivityHistoryRecordedBaseline: Equatable, Sendable {
+    case unavailable
+    case observed(ActivityResetSnapshot?)
+
+    init(receipt: CloudOfflineAccessReceipt?) {
+        guard let receipt, receipt.origin != .revokedWithoutBaseline else {
+            self = .unavailable
+            return
+        }
+        self = .observed(receipt.resetBaseline)
+    }
+}
+
 /// A reachable account is insufficient to authorize new activity: the local
 /// store must have imported at least the reset history observed on the server.
 enum CloudActivityHistoryAdmissionPolicy {
@@ -17,10 +31,31 @@ enum CloudActivityHistoryAdmissionPolicy {
         if local.epochID != remote.epochID { return local.epochID.uuidString > remote.epochID.uuidString }
         return local.id.uuidString >= remote.id.uuidString
     }
+
+    static func recordedBaselineMatches(
+        _ recordedBaseline: CloudActivityHistoryRecordedBaseline,
+        remote: ActivityResetSnapshot?
+    ) -> Bool {
+        guard case let .observed(marker) = recordedBaseline else { return false }
+        return CloudActivityHistoryPreflight.sameOfflineHistory(marker, remote)
+    }
+
+    /// A past observation can authorize unchanged server history. Otherwise a
+    /// fresh local winner must exactly match: an arbitrary newer local reset
+    /// alone is not authority to supersede the current server generation.
+    static func permitsExistingReplica(
+        recordedBaseline: CloudActivityHistoryRecordedBaseline,
+        currentLocal: ActivityResetSnapshot?,
+        remote: ActivityResetSnapshot?
+    ) -> Bool {
+        recordedBaselineMatches(recordedBaseline, remote: remote)
+            || CloudActivityHistoryPreflight.sameOfflineHistory(currentLocal, remote)
+    }
 }
 
 enum CloudActivityHistoryPreflightError: Error, LocalizedError, Equatable {
     case timedOut, malformedHistory, incompleteHistory, unsupportedZone, historyLimit, localHistoryUnavailable
+    case offlineHistoryChanged
     case cloud(CloudAccountVerificationFailure)
 
     var errorDescription: String? {
@@ -30,6 +65,8 @@ enum CloudActivityHistoryPreflightError: Error, LocalizedError, Equatable {
         case .cloud(let failure): failure.errorDescription
         case .localHistoryUnavailable:
             "端末に届いたiCloudの履歴を確認できませんでした。再試行してください。"
+        case .offlineHistoryChanged:
+            "別の端末で記録の履歴が変更されています。このiPhoneで保存した記録を守るため、同期を停止しています。端末の記録は保持しています。"
         case .malformedHistory, .incompleteHistory, .unsupportedZone, .historyLimit:
             "iCloudの記録の履歴を安全に確認できませんでした。記録を保護するため保存領域をまだ開いていません。アプリを最新版へ更新し、再試行してください。"
         }
@@ -80,6 +117,78 @@ struct CloudActivityHistoryPreflight {
             reader.autosaveEnabled = false
             do { return try ActivityResetStore.latestSnapshot(context: reader) }
             catch { throw CloudActivityHistoryPreflightError.localHistoryUnavailable }
+        }
+    }
+
+    /// The strict recorded-baseline path used while a `.none` session is live.
+    /// Its local reset history cannot receive CloudKit imports in that session.
+    func verifyOfflineBaseline(_ baseline: ActivityResetSnapshot?,
+                               expectedBinding: ActiveAccountLocalBinding,
+                               validateMount: () throws -> Void) async throws {
+        try await verifyExistingReplicaBeforeMirroring(recordedBaseline: .observed(baseline),
+            expectedBinding: expectedBinding,
+            readCurrentLocalMarker: { throw CloudActivityHistoryPreflightError.offlineHistoryChanged },
+            validateMount: validateMount)
+    }
+
+    /// Run for every established cache before constructing a new mirror,
+    /// including older releases with no offline receipt. A cloud mount never
+    /// proves native history was exported. The callback reads only the current
+    /// local marker using an unpublished, read-only context; it must not hydrate
+    /// or repair the source to make this comparison pass. Callers retain exact
+    /// account/store/scene leases and track and retire the reader container.
+    /// This does not stop an already-live mirror's autonomous reconnection.
+    func verifyExistingReplicaBeforeMirroring(
+        recordedBaseline: CloudActivityHistoryRecordedBaseline,
+        expectedBinding: ActiveAccountLocalBinding,
+        readCurrentLocalMarker: @MainActor () throws -> ActivityResetSnapshot?,
+        validateMount: () throws -> Void
+    ) async throws {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        func validate() throws {
+            try Task.checkCancellation()
+            try validateMount()
+            guard ProcessInfo.processInfo.systemUptime < deadline else {
+                throw CloudActivityHistoryPreflightError.timedOut
+            }
+        }
+        try validate()
+        let client = client
+        try await cloudHistoryWithDeadline(deadline) {
+            try await client.verifyAccount(expectedBinding)
+        }
+        try validate()
+        let markers = try await cloudHistoryWithDeadline(deadline) {
+            try await client.readMarkers()
+        }
+        try validate()
+        try await cloudHistoryWithDeadline(deadline) {
+            try await client.verifyAccount(expectedBinding)
+        }
+        try validate()
+        let remote = ActivityResetPolicy.currentMarker(from: markers)
+        if CloudActivityHistoryAdmissionPolicy.recordedBaselineMatches(recordedBaseline, remote: remote) { return }
+        let local: ActivityResetSnapshot?
+        do { local = try readCurrentLocalMarker() }
+        catch is CancellationError { throw CancellationError() }
+        catch let error as CloudActivityHistoryPreflightError { throw error }
+        catch { throw CloudActivityHistoryPreflightError.localHistoryUnavailable }
+        try validate()
+        guard CloudActivityHistoryAdmissionPolicy.permitsExistingReplica(
+            recordedBaseline: recordedBaseline, currentLocal: local, remote: remote) else {
+            throw CloudActivityHistoryPreflightError.offlineHistoryChanged
+        }
+    }
+
+    nonisolated static func sameOfflineHistory(_ local: ActivityResetSnapshot?,
+                                              _ remote: ActivityResetSnapshot?) -> Bool {
+        switch (local, remote) {
+        case (nil, nil): return true
+        case let (local?, remote?):
+            return ActivityResetPolicy.isSupported(local) && ActivityResetPolicy.isSupported(remote)
+                && local.id == remote.id && local.epochID == remote.epochID
+                && local.sequence == remote.sequence && local.writerDeviceID == remote.writerDeviceID
+        default: return false
         }
     }
 

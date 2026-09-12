@@ -2,6 +2,8 @@
 
 Status: completed for the scoped single-device cases below. Broader release coverage remains unverified as listed under Scope and limitations. This record distinguishes an actual server round trip from a deterministic replay of import order. A passing account check is not evidence that user records uploaded or restored.
 
+This is the historical audit for the fixes included in 1.0.1 (7). In particular, its offline-launch case verified the previous protected error screen; it does not verify the new offline local-access behavior. Current feature coverage is recorded in [OfflineCloudMode.md](OfflineCloudMode.md) and [StorageModeTransfer.md](StorageModeTransfer.md).
+
 ## Test setup
 
 - Date: 2026-09-12
@@ -50,7 +52,7 @@ Each identity comparison uses the baseline for its own case. Authorized purges s
 
 ## Release containment
 
-Cancellation of the App Review submission for 1.0.1 (6) was requested after the reset regression reproduced. The UI returned the version item to Ready for Review; final submission cancellation processing must be rechecked. A replacement must not be submitted until the corrected behavior and required device cases have evidence.
+After the reset regression reproduced, 1.0.1 (6) was removed from review and its Developer Rejected status was verified. The corrected 1.0.1 (7) was submitted and reached Waiting for Review on 2026-09-12. See the [build 7 release record](../AppStore/release-record-1.0.1-7.md) for that separate submission. The new storage-mode switching and offline access changes are not included in that build.
 
 The current corrective patch makes the cloud visible-record reset unavailable before it can change markers, preferences, local timers, notifications, or cleanup state. Local-only reset remains available. This containment does not by itself establish safe admission of activity before initial CloudKit hydration.
 

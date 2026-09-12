@@ -207,16 +207,17 @@ enum PersistenceDeploymentStateError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .selectionAlreadyMade:
-            "保存方式はこのバージョンでは変更できません。"
+            "保存先は既に選択されています。変更するときは、設定の「iCloudと保存先」から確認してください。"
         case .invalidPersistedSelection:
             "保存方式の設定を安全に確認できません。"
         }
     }
 }
 
-/// Installation-level storage contract. A local-only choice is intentionally
-/// sticky: version 1 never changes it to CloudKit or uploads its rows. Moving
-/// to CloudKit requires deleting/reinstalling the app after an optional export.
+/// The original installation choice is retained for migration provenance.
+/// Only a verified storage-transfer transaction can supersede it, using one
+/// atomic selection/mount receipt outside UserDefaults. A malformed new receipt
+/// fails closed instead of silently reopening the older store.
 @MainActor
 enum PersistenceDeploymentState {
     private static let selectionKey = "persistence.deployment-selection.v1"
@@ -226,6 +227,11 @@ enum PersistenceDeploymentState {
     static func load(
         defaults: UserDefaults = .standard
     ) -> PersistenceDeploymentSelectionState {
+        switch transferredSelection(defaults: defaults) {
+        case let .committed(value): return .selected(value.selection)
+        case .invalid: return .invalid
+        case .absent: break
+        }
         guard let data = defaults.data(forKey: selectionKey) else {
             return .unselected
         }
@@ -263,6 +269,11 @@ enum PersistenceDeploymentState {
     static func loadMountState(
         defaults: UserDefaults = .standard
     ) -> PersistenceDeploymentMountState {
+        switch transferredSelection(defaults: defaults) {
+        case let .committed(value): return .mounted(value.selection)
+        case .invalid: return .invalid
+        case .absent: break
+        }
         guard let data = defaults.data(forKey: mountedSelectionKey) else {
             return .unrecorded
         }
@@ -285,6 +296,7 @@ enum PersistenceDeploymentState {
         guard load(defaults: defaults) == .selected(selection) else {
             throw PersistenceDeploymentStateError.invalidPersistedSelection
         }
+        if case .committed = transferredSelection(defaults: defaults) { return }
         switch loadMountState(defaults: defaults) {
         case .unrecorded:
             let encoder = JSONEncoder()
@@ -298,6 +310,27 @@ enum PersistenceDeploymentState {
         case .mounted, .invalid:
             throw PersistenceDeploymentStateError.invalidPersistedSelection
         }
+    }
+
+    static func hasVerifiedTransferReceipt(defaults: UserDefaults = .standard) -> Bool {
+        if case .committed = transferredSelection(defaults: defaults) { return true }
+        return false
+    }
+
+    private enum TransferredSelection {
+        case absent, committed(StorageTransferCommittedSelection), invalid
+    }
+
+    private static func transferredSelection(defaults: UserDefaults) -> TransferredSelection {
+        // Injected defaults suites are isolated unit-test/preview contracts;
+        // they must never consult the real installation's on-disk receipt.
+        guard defaults === UserDefaults.standard else { return .absent }
+        do {
+            if let receipt = try StorageTransferJournalStore.live().committedSelection() {
+                return .committed(receipt)
+            }
+            return .absent
+        } catch { return .invalid }
     }
 
 }
@@ -319,7 +352,8 @@ extension PersistenceDeploymentState {
         mountState: PersistenceDeploymentMountState,
         artifactHistory: PersistenceArtifactHistory,
         hasCloudRegistryHistory: Bool,
-        hasCloudBindingHistory: Bool
+        hasCloudBindingHistory: Bool,
+        hasVerifiedTransferReceipt: Bool = false
     ) -> PersistenceDeploymentValidation {
         switch selectionState {
         case .invalid:
@@ -359,8 +393,8 @@ extension PersistenceDeploymentState {
                     )),
                   !artifactHistory.hasInvalidArtifact,
                   artifactHistory.cloud.isEmpty,
-                  !hasCloudRegistryHistory,
-                  !hasCloudBindingHistory
+                  (!hasCloudRegistryHistory || hasVerifiedTransferReceipt),
+                  (!hasCloudBindingHistory || hasVerifiedTransferReceipt)
             else { return .recoveryRequired }
             guard !artifactHistory.localOnly.isEmpty else {
                 return mountState == .unrecorded
@@ -781,6 +815,60 @@ enum PersistenceStoreTopology {
                 cloudKitDatabase: .none
             )
         ]
+    }
+
+    /// Reuses the existing account's exact store URLs and configuration names,
+    /// with CloudKit disabled. This does not select local-only mode or create
+    /// another dataset. The launch host must prove a complete prior mount,
+    /// offline admission, and retirement of every previous store handle.
+    static func offlineCloudConfigurations(
+        accountNamespace: AccountDataNamespace
+    ) -> [ModelConfiguration] {
+        let urls = accountStoreURLs(accountNamespace: accountNamespace)
+        return [
+            ModelConfiguration(cloudStoreName, schema: cloudSchema,
+                url: urls[0], cloudKitDatabase: .none),
+            ModelConfiguration(localProjectionStoreName, schema: localProjectionSchema,
+                url: urls[1], cloudKitDatabase: .none)
+        ]
+    }
+
+    static func makeOfflineCloudContainer(
+        accountNamespace: AccountDataNamespace
+    ) throws -> ModelContainer {
+        try ModelContainer(for: shippingSchema,
+            configurations: offlineCloudConfigurations(accountNamespace: accountNamespace))
+    }
+
+    /// Apple's read-only ModelConfiguration prevents persistence writes. Keep
+    /// the full shipping graph and its original store routing, with CloudKit
+    /// explicitly disabled, solely to inspect an already-existing cache.
+    /// https://developer.apple.com/videos/play/wwdc2023/10196/
+    static func readOnlyCloudConfigurations(
+        accountNamespace: AccountDataNamespace,
+        directory: URL? = nil
+    ) -> [ModelConfiguration] {
+        let urls = accountStoreURLs(accountNamespace: accountNamespace, directory: directory)
+        return [
+            ModelConfiguration(cloudStoreName, schema: cloudSchema,
+                url: urls[0], allowsSave: false, cloudKitDatabase: .none),
+            ModelConfiguration(localProjectionStoreName, schema: localProjectionSchema,
+                url: urls[1], allowsSave: false, cloudKitDatabase: .none)
+        ]
+    }
+
+    /// The host proves exact completed selection/pair/account and absence of
+    /// app writers before calling; no migration, UI or source saves run here.
+    /// Track this reader until all its contexts retire before opening a mirror.
+    /// Read-only access does not drain earlier native CloudKit operations.
+    static func makeReadOnlyCloudContainer(
+        accountNamespace: AccountDataNamespace,
+        directory: URL? = nil
+    ) throws -> ModelContainer {
+        let container = try ModelContainer(for: shippingSchema,
+            configurations: readOnlyCloudConfigurations(accountNamespace: accountNamespace, directory: directory))
+        container.mainContext.autosaveEnabled = false
+        return container
     }
 
     static func localOnlyConfigurations(

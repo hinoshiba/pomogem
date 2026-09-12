@@ -51,8 +51,10 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppRouter.self) private var router
     @Environment(CompleteDataDeletionController.self) private var completeDeletion
+    @Environment(StorageTransferController.self) private var storageTransfer
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
     @Query private var storedSubjects: [Subject]
     @Query private var preferences: [Prefs]
     @Query private var activityResetMarkers: [ActivityResetMarker]
@@ -138,6 +140,14 @@ struct SettingsView: View {
             }
             sensorySection
             CloudSyncSettingsSection(persistenceMode: persistenceMode)
+            StorageTransferSettingsSection(
+                persistenceMode: persistenceMode,
+                controller: storageTransfer,
+                otherWorkIsActive: isCloudOfflineSession || isExportingData || completeDeletion.hasStarted
+                    || router.focusPresentationIsActive || router.recoveredFocus != nil
+                    || router.deferredFocusRecovery != nil || router.recoveredBreak != nil
+                    || router.cloudFocusRecoveryOffer != nil
+            )
             notificationSection
             shareSection
             proSection

@@ -4,17 +4,17 @@ Updated 2026-09-12. Archive, distribution verification, Apple validation, and
 upload completed. Organizer lists the upload at 11:56 JST; its success was
 observed at 11:57 JST (02:57:13 UTC).
 
-Status: held after upload for the newly requested Settings iCloud switching
-feature with an explicit choice of data to delete. Build 7 will not be submitted
-to App Review. No build 7 review submission was made during this work, and no
-next build number has been assigned. Apple processing and version selection
-remain unconfirmed; upload does not establish approval or public availability.
+Status: submitted on 2026-09-12 at 16:26 JST and confirmed Waiting for Review.
+Submission ID: `7f746a75-2605-47c5-83d5-48ee76b40b2c`.
+The user requested parallel submission of the tested sync correction while the
+Settings iCloud switching feature remains under development. Build 7 contains
+none of that new feature or its additional recovery schema. Approval and public
+availability remain unconfirmed; no next feature build number is assigned.
 
 ## Replacement scope
 
-- Replaces review candidate 1.0.1 (6), for which cancellation was requested. The action
-  returned the version item to Ready for Review; final cancellation processing
-  must be confirmed in App Store Connect before the next candidate is selected.
+- Replaces review candidate 1.0.1 (6). App Store Connect confirmed Developer
+  Rejected before build 7 was selected and submitted.
 - Preserves version 1.0.1, the existing app and Widget identifiers, App Store
   record, CloudKit container and schema, purchase product, prices, and regions.
 - Corrects recognition of Core Data's existing CloudKit companion directories
@@ -82,16 +82,20 @@ PR #9 CI for the archived source, run
 failed before starting because of an account payment or Actions spending limit;
 no runner or test step executed. Local validation is not a passing CI run.
 
-Upload acceptance is recorded above. The new storage-switch request supersedes
-submission of this candidate; implementation and testing will precede a new
-candidate. Its build number, archive, upload, and submission are not established
-by this record. Further App Store Connect work awaits the user's login, including
-confirmation of build 6's cancellation processing. Processing, future build
-selection, revised metadata/Review Notes save and reload, submission, and
-approval/public availability each require their own observed result.
-Existing automatic release after approval is a configuration, not evidence of
-approval or publication. The checked-in public Privacy correction still requires
-deployment and verification of the served page.
+Apple processing completed and build 7 was selected for version 1.0.1. The
+revised Japanese and English release notes and Review Notes were saved and
+matched their local sources after reload. The final submission contained one
+item, iOS app 1.0.1 (7); the success message and submission detail both confirmed
+Waiting for Review at 16:26 JST. Existing automatic release after approval was
+preserved; it is not evidence of approval or publication.
+
+The checked-in public Privacy correction still requires deployment. Pages run
+34669415266 attempt 2 was retried during submission preparation, but again
+failed before any runner step due to payment/spending limits; deploy was skipped.
+The served policy still differs from the corrected local page. This remains an
+open follow-up and is not represented as a passing release check. The separate
+storage-switch feature, additional schema, archive and future submission require
+their own validation and release record.
 
 Known release blockers remain in `AppStore/configuration.yml`.
 `check-oss-readiness.sh --release` still fails on those blockers. The full-history

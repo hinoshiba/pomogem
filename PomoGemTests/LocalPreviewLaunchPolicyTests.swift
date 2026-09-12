@@ -4,6 +4,101 @@ import XCTest
 @testable import PomoGem
 
 final class LocalPreviewLaunchPolicyTests: XCTestCase {
+    func testPublishedOfflineRootSurvivesOrdinaryBackgroundAndRevalidatesEveryForeground() {
+        for phase in [ScenePhase.inactive, .background, .inactive, .active, .inactive, .background, .active] {
+            XCTAssertEqual(PersistenceLaunchScenePolicy.action(
+                phase: phase, hasSession: true, isPreparing: false,
+                isQuiescingAccountChange: false, usesCloudAccountBoundary: true,
+                hasRetiringContainers: true, isCloudOfflineSession: true),
+                phase == .active ? .revalidateOfflineSession : .none)
+        }
+    }
+
+    func testOfflineFlagCannotKeepAnUnpublishedCandidateOrBypassAccountRetirement() {
+        for phase in [ScenePhase.inactive, .background] {
+            for hasCandidate in [false, true] {
+                XCTAssertEqual(PersistenceLaunchScenePolicy.action(
+                    phase: phase, hasSession: false, isPreparing: true,
+                    isQuiescingAccountChange: false, usesCloudAccountBoundary: true,
+                    hasRetiringContainers: hasCandidate, isCloudOfflineSession: true), .retireCloudSession)
+            }
+        }
+        for phase in [ScenePhase.inactive, .background, .active] {
+            XCTAssertEqual(PersistenceLaunchScenePolicy.action(
+                phase: phase, hasSession: true, isPreparing: false,
+                isQuiescingAccountChange: true, usesCloudAccountBoundary: true,
+                hasRetiringContainers: true, isCloudOfflineSession: true), .none,
+                "An in-progress account retirement owns cleanup; foreground must not reauthorize its Root")
+        }
+    }
+
+    func testOfflineForegroundStillRevalidatesWhenPersistedModeNoLongerUsesCloudBoundary() {
+        XCTAssertEqual(PersistenceLaunchScenePolicy.action(
+            phase: .active, hasSession: true, isPreparing: false,
+            isQuiescingAccountChange: false, usesCloudAccountBoundary: false,
+            isCloudOfflineSession: true), .revalidateOfflineSession,
+            "A changed selection cannot make an old offline Root skip its admission check")
+    }
+
+    func testOfflineResumeKeepsLocalCopyWithoutNetworkAndRequestsBoundedRetryForOtherPaths() {
+        let fixture = OfflineResumeFixture()
+        let paths: [(Bool?, PersistenceOfflineResumeAction)] = [
+            (true, .keepOffline), (false, .retryConnection), (nil, .retryConnection)
+        ]
+        for (network, expected) in paths {
+            XCTAssertEqual(fixture.action(network: network), expected)
+        }
+    }
+
+    func testOfflineResumeRejectsMissingObservationsOrChangedSessionBinding() {
+        let fixture = OfflineResumeFixture()
+        XCTAssertEqual(fixture.action(conditions: nil), .retireSession)
+        XCTAssertEqual(PersistenceLaunchScenePolicy.offlineResumeAction(
+            sessionNamespace: fixture.binding.namespace, activeBinding: fixture.binding,
+            conditions: fixture.conditions(), receipt: nil, revocationWriteFailed: false,
+            networkIsOffline: true), .retireSession)
+        for namespace in [nil, AccountDataNamespace()] {
+            XCTAssertEqual(PersistenceLaunchScenePolicy.offlineResumeAction(
+                sessionNamespace: namespace, activeBinding: fixture.binding,
+                conditions: fixture.conditions(), receipt: fixture.receipt(), revocationWriteFailed: false,
+                networkIsOffline: true), .retireSession)
+        }
+        let sameNamespaceDifferentAccount = ActiveAccountLocalBinding(namespace: fixture.binding.namespace,
+            accountFingerprint: String(repeating: "b", count: 64))!
+        for activeBinding in [nil, sameNamespaceDifferentAccount] {
+            XCTAssertEqual(PersistenceLaunchScenePolicy.offlineResumeAction(
+                sessionNamespace: fixture.binding.namespace, activeBinding: activeBinding,
+                conditions: fixture.conditions(), receipt: fixture.receipt(), revocationWriteFailed: false,
+                networkIsOffline: false), .retireSession)
+        }
+        XCTAssertEqual(fixture.action(revocationWriteFailed: true), .retireSession)
+    }
+
+    func testOfflineResumeRejectsRevocationChangedSelectionAndPendingWorkBeforeRetry() {
+        let fixture = OfflineResumeFixture()
+        for revocation in [CloudOfflineRevocationReason.accountChanged, .accountMismatch, .noAccount, .restricted] {
+            XCTAssertEqual(fixture.action(receipt: fixture.receipt(revocation: revocation)), .retireSession)
+        }
+        let local = PersistenceDeploymentSelection.localOnly(namespace: AccountDataNamespace())
+        let otherCloud = PersistenceDeploymentSelection.cloud(binding: ActiveAccountLocalBinding(
+            namespace: AccountDataNamespace(), accountFingerprint: String(repeating: "b", count: 64))!)
+        let invalidConditions = [
+            fixture.conditions(selection: .invalid), fixture.conditions(selection: .unselected),
+            fixture.conditions(selection: .selected(local)), fixture.conditions(selection: .selected(otherCloud)),
+            fixture.conditions(mount: .unrecorded), fixture.conditions(mount: .invalid),
+            fixture.conditions(mount: .mounted(otherCloud)), fixture.conditions(complete: false),
+            fixture.conditions(pendingTransfer: true), fixture.conditions(pendingIntent: true),
+            fixture.conditions(validSchema: false)
+        ]
+        for conditions in invalidConditions {
+            XCTAssertEqual(fixture.action(conditions: conditions), .retireSession)
+        }
+        let malformed = CloudOfflineAccessReceipt(revisionID: UUID(), binding: fixture.binding,
+            origin: .verifiedOnline, isDatasetGenerationKnown: false, datasetGenerationID: nil,
+            resetBaseline: nil, wasUsedOffline: true, revocation: nil)
+        XCTAssertEqual(fixture.action(receipt: malformed), .retireSession)
+    }
+
     func testFirstActiveSceneRetriesBeforeStorageSelection() {
         XCTAssertEqual(
             PersistenceLaunchScenePolicy.action(
@@ -439,6 +534,39 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
             ),
             .cloudKit
         )
+    }
+}
+
+private struct OfflineResumeFixture {
+    let binding = ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+        accountFingerprint: String(repeating: "a", count: 64))!
+
+    func conditions(selection: PersistenceDeploymentSelectionState? = nil,
+                    mount: PersistenceDeploymentMountState? = nil,
+                    complete: Bool = true, pendingTransfer: Bool = false,
+                    pendingIntent: Bool = false, validSchema: Bool = true) -> CloudOfflineAccessConditions {
+        CloudOfflineAccessConditions(selection: selection ?? .selected(.cloud(binding: binding)),
+            mountState: mount ?? .mounted(.cloud(binding: binding)), hasExactCompleteStorePair: complete,
+            hasPendingTransfer: pendingTransfer, hasPendingRemoteIntent: pendingIntent, isSchemaValid: validSchema)
+    }
+
+    func receipt(revocation: CloudOfflineRevocationReason? = nil) -> CloudOfflineAccessReceipt {
+        CloudOfflineAccessReceipt(revisionID: UUID(), binding: binding, origin: .verifiedOnline,
+            isDatasetGenerationKnown: true, datasetGenerationID: nil, resetBaseline: nil,
+            wasUsedOffline: true, revocation: revocation)
+    }
+
+    func action(network: Bool? = true, receipt suppliedReceipt: CloudOfflineAccessReceipt? = nil,
+                revocationWriteFailed: Bool = false) -> PersistenceOfflineResumeAction {
+        PersistenceLaunchScenePolicy.offlineResumeAction(sessionNamespace: binding.namespace,
+            activeBinding: binding, conditions: conditions(), receipt: suppliedReceipt ?? receipt(),
+            revocationWriteFailed: revocationWriteFailed, networkIsOffline: network)
+    }
+
+    func action(conditions: CloudOfflineAccessConditions?) -> PersistenceOfflineResumeAction {
+        PersistenceLaunchScenePolicy.offlineResumeAction(sessionNamespace: binding.namespace,
+            activeBinding: binding, conditions: conditions, receipt: receipt(),
+            revocationWriteFailed: false, networkIsOffline: true)
     }
 }
 

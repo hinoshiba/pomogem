@@ -2708,6 +2708,7 @@ enum PrefsSyncPolicy {
     static func resolvedState(
         in values: [Prefs],
         currentEpochID: UUID?,
+        writerID: String = FocusDeviceIdentity.current(),
         currentDay: String = FairnessPolicy.deviceDayKey(for: .now)
     ) throws -> ResolvedState {
         guard values.count <= maximumPhysicalRows else {
@@ -2727,10 +2728,11 @@ enum PrefsSyncPolicy {
         let currentValues = values.filter {
             $0.activityEpochID == currentEpochID
         }
-        let manualUsedToday = currentValues
-            .filter { $0.manualDayKey == currentDay }
-            .map(\.manualUsedToday)
-            .max() ?? 0
+        let manualUsedToday = manualUsage(
+            in: currentValues,
+            writerID: writerID,
+            currentDay: currentDay
+        )
         return ResolvedState(
             manualDayKey: currentDay,
             manualUsedToday: manualUsedToday,
@@ -3014,10 +3016,11 @@ enum PrefsSyncPolicy {
             copy(group: group, from: winner, to: writer)
         }
 
-        let todayMaximum = currentValues
-            .filter { $0.manualDayKey == currentDay }
-            .map(\.manualUsedToday)
-            .max() ?? 0
+        let todayMaximum = manualUsage(
+            in: currentValues,
+            writerID: writerID,
+            currentDay: currentDay
+        )
         if writer.manualDayKey != currentDay { writer.manualDayKey = currentDay }
         if writer.manualUsedToday != todayMaximum {
             writer.manualUsedToday = todayMaximum
@@ -3042,6 +3045,23 @@ enum PrefsSyncPolicy {
         }
         if writer.isPro { writer.isPro = false }
         return writer
+    }
+
+    /// The manual allowance belongs to this device, unlike synchronized
+    /// settings. Keep the maximum only among physical copies of its writer.
+    /// Legacy rows without a writer retain their raw counters, but cannot be
+    /// attributed to this device after import; the first owned row starts a
+    /// fresh allowance instead of inheriting an unknown device's usage.
+    private static func manualUsage(
+        in currentEpochValues: [Prefs],
+        writerID: String,
+        currentDay: String
+    ) -> Int {
+        guard !writerID.isEmpty else { return 0 }
+        return max(0, currentEpochValues.lazy
+            .filter { $0.settingsWriterID == writerID && $0.manualDayKey == currentDay }
+            .map(\.manualUsedToday)
+            .max() ?? 0)
     }
 
     /// Applies one explicit mutation to the device-owned row. The closure runs
