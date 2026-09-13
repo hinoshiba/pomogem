@@ -6,7 +6,7 @@ store_localizations:
   - ja-JP
   - en-US
 app_store_id: 6809139517
-app_store_listing_status: not_public
+app_store_listing_status: public
 marketing_version: "1.0.2"
 build_number: "9"
 copyright: "2026 hinoshiba"
