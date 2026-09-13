@@ -302,7 +302,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         try verifyCompletionDropAfterRewardDismissal(reduceMotion: false)
     }
 
-    func testReducedMotionCompletionSettlesOnePebbleAfterRewardDismissalWithoutFalling() throws {
+    func testReducedMotionCompletionDropsOnePebbleAfterRewardDismissalAndDoesNotReplay() throws {
         try verifyCompletionDropAfterRewardDismissal(reduceMotion: true)
     }
 
@@ -373,7 +373,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(stopCompletionAlertIfPresented(in: app))
         let dismiss = app.buttons["休憩の提案を閉じる"]
         XCTAssertTrue(dismiss.waitForExistence(timeout: 20))
-        XCTAssertTrue(dismiss.isHittable)
+        XCTAssertTrue(waitForHittable(dismiss, timeout: 5))
         // Observe for a full second: a delayed Home sync must not slip the
         // already-saved reward into the scene underneath the open card.
         try assertCompletionPresentationUnchanged(from: probe, matching: initial, duration: 1)
@@ -387,15 +387,10 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         let landed = try waitForLandedCompletion(from: probe, after: initial, timeout: 10)
         XCTAssertEqual(landed.records.split(separator: ",").count, 1)
         XCTAssertTrue(landed.records.hasSuffix(":250"), landed.records)
-        if reduceMotion {
-            XCTAssertEqual(landed.fall, 0, accuracy: 0.5,
-                           "Reduce Motion must settle the reward without a vertical fall")
-        } else {
-            XCTAssertGreaterThan(landed.fall, 60,
-                                 "A count change alone must not stand in for an observed fall")
-        }
+        XCTAssertGreaterThan(landed.fall, 60,
+                             "Both motion settings must show the earned pebble fall before landing")
         retainScreenshot(named: reduceMotion
-            ? "Reduced Motion — one settled earned pebble"
+            ? "Reduced Motion — first earned pebble fall and landing"
             : "First earned pebble — observed fall and landing")
 
         openMenuAction(containing: "設定")

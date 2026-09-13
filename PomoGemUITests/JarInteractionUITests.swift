@@ -17,24 +17,25 @@ final class JarInteractionUITests: XCTestCase {
     func testCompletedPebbleBouncesWithoutChangingTheRecord() throws {
         try verifyCompletedPebbleTap(
             reduceMotion: false,
-            minimumRise: 60,
-            attachmentName: "Aurora jar — three-diameter tap launch"
+            attachmentName: "Aurora jar — physical tap bounce"
         )
     }
 
-    func testReducedMotionTapStillMovesOnePebbleWithoutChangingTheRecord() throws {
+    func testReducedMotionTapHasTheSameBounceWithoutChangingTheRecord() throws {
         try verifyCompletedPebbleTap(
             reduceMotion: true,
-            minimumRise: 24,
-            attachmentName: "Aurora jar — reduced-motion one-axis contact"
+            attachmentName: "Aurora jar — Reduce Motion physical tap bounce"
         )
     }
 
     private func verifyCompletedPebbleTap(
         reduceMotion: Bool,
-        minimumRise: Double,
         attachmentName: String
     ) throws {
+        // The probe measures vertical rise; the former 60 pt threshold measured
+        // total two-dimensional travel. Require two normal gem diameters upward
+        // using the same criterion for both system motion preferences.
+        let minimumRise = 46.0
         let app = XCUIApplication()
         activeApp = app
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
@@ -111,9 +112,7 @@ final class JarInteractionUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(
             bounced.bounceRise,
             minimumRise,
-            reduceMotion
-                ? "Reduce Motion must retain an unmistakable, bounded direct-tap response"
-                : "An unobstructed tapped gem must travel about three of its own diameters"
+            "An unobstructed tapped gem must rise at least two diameters upward in either motion setting"
         )
 
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

@@ -4,7 +4,6 @@ import UIKit
 
 enum JarMotionSamplingMode: Equatable {
     case stopped
-    case shakeOnly
     case tiltAndShake
 }
 
@@ -42,7 +41,9 @@ enum JarMotionActivationPolicy {
             sceneIsActive: sceneIsActive,
             hasPhysicalContent: hasPhysicalContent
         ) else { return .stopped }
-        return reduceMotion ? .shakeOnly : .tiltAndShake
+        // Reduce Motion changes decorative effects in the scene. The jar's
+        // physical response to direct interaction remains the same.
+        return .tiltAndShake
     }
 }
 
@@ -277,7 +278,6 @@ struct JarSpriteView: View {
         .modifier(JarAccessibilityInteractionModifier(
             scene: scene,
             isInteractive: hasPhysicalContent,
-            reduceMotion: reduceMotion,
             aggregateID: inspectableAggregateID,
             onInspectAggregate:
                 onAggregateAccessibilityAction ?? onAggregateTapped
@@ -313,7 +313,7 @@ struct JarSpriteView: View {
         }
 #endif
         .onDisappear {
-            scene.cancelReducedMotionInteractionPresentation()
+            scene.cancelInteractionPresentation()
             motionObserver.stop()
         }
     }
@@ -340,16 +340,9 @@ struct JarSpriteView: View {
             return "まだ粒はありません。集中を完走するか成果を積むと、瓶に粒が入ります"
         }
 #if targetEnvironment(macCatalyst)
-        let base = reduceMotion
-            ? "瓶をクリックすると近くの粒が一方向に短く動いて戻ります"
-            : "瓶をクリックすると粒が跳ねます。左右にドラッグするか、VoiceOverのカスタムアクションでも粒を動かせます"
+        let base = "瓶をクリックすると粒が跳ねます。左右にドラッグするか、VoiceOverのカスタムアクションでも粒を動かせます"
 #else
-        let base: String
-        if reduceMotion {
-            base = "ダブルタップすると近くの粒が一方向に短く動いて戻ります。軽く振って動かすこともできます。自動で転がる動きはありません"
-        } else {
-            base = "瓶をタップすると数秒だけ1粒が大きく跳ね、ぶつかった周囲の粒も自然に動いて止まります。その間はiPhoneを傾けたり、軽く振ったりして動かせます"
-        }
+        let base = "瓶をタップすると数秒だけ1粒が大きく跳ね、ぶつかった周囲の粒も自然に動いて止まります。その間はiPhoneを傾けたり、軽く振ったりして動かせます"
 #endif
         guard inspectableAggregateID != nil else { return base }
         return "\(base)。「最新のまとまり粒の内訳を見る」アクションで、保存されている粒数や質量などを確認できます"
@@ -374,7 +367,7 @@ struct JarSpriteView: View {
     private func updateMotionBehavior(reduceMotion: Bool) {
         scene.reduceMotion = reduceMotion
         if scenePhase != .active {
-            scene.cancelReducedMotionInteractionPresentation()
+            scene.cancelInteractionPresentation()
         }
 #if targetEnvironment(macCatalyst)
         // Catalyst has no device tilt. Drag and accessibility actions are the
@@ -389,13 +382,11 @@ struct JarSpriteView: View {
         )
         switch samplingMode {
         case .stopped:
-            scene.cancelReducedMotionInteractionPresentation()
+            scene.cancelInteractionPresentation()
             // `stop` also restores the scene's default downward gravity. This
-            // matters when accessibility, app lifecycle, or an empty bottle no
+            // matters when interaction, app lifecycle, or an empty bottle no
             // longer needs the sensor while a prior tilt is still applied.
             motionObserver.stop()
-        case .shakeOnly:
-            motionObserver.start(scene: scene, appliesGravity: false)
         case .tiltAndShake:
             motionObserver.start(scene: scene, appliesGravity: true)
         }
@@ -541,7 +532,6 @@ struct JarDragGestureOwnership {
 private struct JarAccessibilityInteractionModifier: ViewModifier {
     let scene: JarScene
     let isInteractive: Bool
-    let reduceMotion: Bool
     let aggregateID: UUID?
     let onInspectAggregate: ((UUID) -> Void)?
 
@@ -556,10 +546,7 @@ private struct JarAccessibilityInteractionModifier: ViewModifier {
                 .accessibilityAction(named: "瓶の粒を動かす") {
                     performBounce()
                 }
-                .modifier(JarDirectionalAccessibilityModifier(
-                    scene: scene,
-                    enabled: !reduceMotion
-                ))
+                .modifier(JarDirectionalAccessibilityModifier(scene: scene))
                 .modifier(JarAggregateAccessibilityModifier(
                     aggregateID: aggregateID,
                     onInspectAggregate: onInspectAggregate
@@ -573,7 +560,7 @@ private struct JarAccessibilityInteractionModifier: ViewModifier {
         guard scene.bouncePebbles() else { return }
         UIAccessibility.post(
             notification: .announcement,
-            argument: reduceMotion ? "近くの粒が短く動きました" : "瓶の粒が跳ねました"
+            argument: "瓶の粒が跳ねました"
         )
     }
 }
@@ -597,21 +584,15 @@ private struct JarAggregateAccessibilityModifier: ViewModifier {
 
 private struct JarDirectionalAccessibilityModifier: ViewModifier {
     let scene: JarScene
-    let enabled: Bool
 
-    @ViewBuilder
     func body(content: Content) -> some View {
-        if enabled {
-            content
-                .accessibilityAction(named: "瓶の粒を左へ動かす") {
-                    scene.nudge(horizontal: -1)
-                }
-                .accessibilityAction(named: "瓶の粒を右へ動かす") {
-                    scene.nudge(horizontal: 1)
-                }
-        } else {
-            content
-        }
+        content
+            .accessibilityAction(named: "瓶の粒を左へ動かす") {
+                scene.nudge(horizontal: -1)
+            }
+            .accessibilityAction(named: "瓶の粒を右へ動かす") {
+                scene.nudge(horizontal: 1)
+            }
     }
 }
 

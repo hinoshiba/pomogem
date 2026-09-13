@@ -468,7 +468,7 @@ Reward Bridge／Receiptの追加targeted回帰:
 - 主要導線の敵対的UI再検証 2/2合格。手動追加、資格合格、Overview、記録、GIF共有、設定、Pro説明を往復してHomeへ復帰し、画面維持設定も変更後に元の値へ戻せることを検証
 - 無料の25分・45分・60分・90分の実タイマーは、同じ開始→一時停止→再開→中断を4/4で再検証する。既存の25分・60分は2/2で通過し、中断後も粒・質量を増やさないことを確認済み。英語`PAUSED`を「一時停止」へ統一し、同義の中断操作を下部「今日はここまで」1件に統合
 - テーマ削除の明示cancelは、修正前AXで`exists=false / frame=absent`を検出。system `confirmationDialog`へ背景タップだけで戻らせず、削除／キャンセルを同時表示するalertへ変更した。修正後は`exists=true / hittable=true / 288×48pt`、cancel後の存続と再確認後の削除を1/1で実操作
-- Reduce Motion targeted回帰 73/73合格。通常粒・集約粒・融合直後の結晶を決定論的な安全位置へ静置し、速度／角速度を0にしたまま意味上の着地だけを完了すること、非Reduce Motion経路を変えないことを検証
+- 旧Reduce Motion方針のtargeted回帰は73/73合格し、粒を安全位置へ静置することを検証した。現在の瓶は下記のとおり、Reduce Motionに関係なく同じ物理挙動を使う
 - 固定AX5敵対的監査 1/1合格。Home、Menu、Overviewの「いま／結晶／年月」の5画面に対して、コントラスト・タップ領域・説明・文字切れ・traitsの25監査を通し、Overviewを閉じてHomeへ戻るところまで検証
 - system Dynamic Type監査 1/1合格。テスト専用サイズ固定を使わず、XCTestが文字サイズを実際に変更しながらHome→Menu→Overviewの主要導線を検証
 - 瓶の局所タップ実UI test 1/1合格。SpriteKitの実着地座標へタップし、1.2秒以内に8pt以上の上昇と反応sequence更新を確認。前後で1粒・250g・元record ID/gramsが完全一致し、表示だけの操作が実績を変更しないことを検証
@@ -579,7 +579,7 @@ CとDの差は視覚的レアだけに限定し、Dでも本人はいつでも`q
 - 完走保存障害時、復元情報を保持してHomeへ退避し、常設カードから再試行。DEBUG限定の実save faultでrollback、raw 0→1行、再起動非重複を検証
 - 結晶化保存障害時、source 10件の変更とaggregate挿入を同一transactionで完全rollbackし、常設カードから明示再試行。DEBUG限定の実save faultでloose 10件→aggregate 1件→再起動後も同一1件、2,500g、元source UUID集合の不変を検証
 - 旧`SeedData.bootstrap`は本番呼び出しを持たない状態を維持。部分同期下で競合親を作り得る一括migrationは再有効化せず、既存配布storeを移行する場合だけ有界batch workerとして別途実装する
-- Reduce Motionでは粒を落下アニメーションの開始位置へ置かず、通常粒・集約粒・融合直後の結晶を安全な着地位置へ直接静置。質量・保存・Reward Receipt・結晶化の意味は通常経路と同一に保つ
+- Reduce Motionの有効・無効に関係なく、瓶の粒は同じ物理挙動で跳ね、落下し、傾きやシェイクにも反応する。Reduce Motionはカメラ、光、粒子、結晶形成などの装飾演出に適用し、質量・保存・Reward Receipt・結晶化の意味は変えない
 - 最大文字サイズではOverviewのレンズをsegmented controlからmenu pickerへ切り替え、棚・要約・週KPIを1列化。Home／Menu／Overviewの主要画面はAX5の25監査とsystem Dynamic Type変更監査を通過
 
 リリース前の最優先課題:
