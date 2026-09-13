@@ -1,9 +1,10 @@
-# PomoGem 1.0.2 (9) — upload完了・審査提出待ち
+# PomoGem 1.0.2 (9) — 審査提出完了
 
 更新日: 2026-09-13。build 9のArchive、配布payload検証、Apple Validate、uploadは完了しました。
 Xcode Organizerで「App upload complete: PomoGem 1.0.2 (9) uploaded」と同日11:22 JSTの
-upload履歴を確認しました。App Store Connectでの処理完了と選択ビルドは未確認で、
-build 9の審査提出はまだ行っていません。
+upload履歴を確認しました。App Store Connectで処理済みbuild 9を選択し、同日11:39 JSTに
+審査へ提出しました。提出受付画面でiOS 1.0.2 (9)の「審査待ち」と提出日時を確認しました。
+これはAppleの承認や公開完了を意味しません。
 
 Xcode Organizerで既存1.0.2 (8)の「Uploaded to Apple」と同日10:01 JSTのupload履歴を
 確認したため、修正候補のbuild numberを9へ増やしました。build 8の審査状態やCloudKit schemaの
@@ -46,7 +47,38 @@ hostの署名済みCloudKit／APNs環境はProduction／productionで、Widget�
 Organizerのupload成功を確認した後、不変tag `v1.0.2-build9`を作成・pushし、上記の正確なArchive元を
 指すことを確認しました。この記録を含む後続commitとArchive元を区別し、tagを移動しません。
 
-## ソース検証と残作業
+## Prefs追加schemaの確認
+
+2026-09-13 11:33 JSTにCloudKit Consoleで`iCloud.com.hinoshiba.pomogem`を開き、
+DevelopmentとProductionの両方で`CD_Prefs`が70 fieldを持ち、次の型・indexが一致することを確認しました。
+
+| Field | 型 | Index |
+| --- | --- | --- |
+| `CD_preferredFocusSeconds` | Int(64) | Queryable、Sortable |
+| `CD_preferredFocusSecondsMutationID` | String | Queryable、Searchable、Sortable |
+
+ProductionのSchema Historyには同日09:52 JSTの`CD_Prefs`の2 field変更・5 index作成があり、
+今回の確認前に配備されていたことを照合しました。この作業ではschemaの変更・再配備を行っていません。
+これは両環境のschemaと配備履歴の確認であり、実機2台の秒単位送受信の成功を意味しません。
+
+## App Store Connectの差し替えと審査提出
+
+2026-09-13 11:34 JSTにTestFlightでbuild 9のupload status「終了」とbuild status
+「提出準備完了」を確認しました。既存1.0.2 (8)には同日10:11 JSTの審査提出と「審査待ち」があり、
+今回の修正へ差し替えるためその提出を取り消しました。「デベロッパにより却下済み」を確認してから
+build 9を選び、保存後に提出準備状態へ戻ることを確認しました。
+
+日本語・英語の「このバージョンの最新情報」を正本から保存し、ページ再読込後に両方の全文が
+一致することを確認しました。末尾改行を除き日本語452文字、英語924文字です。
+Review Notesは既存の正本3022文字を維持し、再読込後の全文一致を確認しました。
+選択ビルドも9であることを再確認しました。
+
+承認後の自動公開と全利用者への即時配信という既存設定を維持しました。screenshots、審査連絡先、
+App Privacy、IAP、価格、提供地域は変更していません。
+11:39 JSTに提出し、「1項目が提出されました」という成功表示に続いて提出受付画面を開き、
+対象がiOS 1.0.2 (9)、状態が「審査待ち」、提出日時が2026-09-13 11:39 JSTであることを照合しました。
+
+## ソース検証と検証範囲
 
 最新mainへ統合した粒の修正commit `410e172`で、iPhoneシミュレータの統合ビルドと試験が成功しました。
 単体試験は1,222件中1,216件成功・6件スキップ・失敗0件です。対象UI試験4件もすべて成功し、
@@ -64,13 +96,6 @@ Release static analyzerも成功しました。
 
 GitHub Actionsはaccountの支払い・利用上限の理由でjob自体を開始できませんでした。上記は
 ローカル検証の結果で、hosted CIが成功したことを示しません。
-
-ブラウザの自動操作が拡張機能UIで停止しているため、App Store ConnectとCloudKit Consoleの
-以下の確認・操作は完了していません。upload成功を審査への提出やschema配布完了として扱いません。
-
-- Prefs追加2属性のCloudKit Development/Production状態を確認する。現在は未確認であり、
-  以前のschema証拠やbuild 8・9のupload成功を配布完了の証拠として転用しない。
-- Apple側のbuild処理完了、App Store Connectの選択ビルド、更新内容とReview Notesを保存・再読込で照合し、審査へ提出する。
 
 `AppStore/configuration.yml`の既知のrelease blockerは未解決のまま保持します。current-file readinessは
 full-historyの合格を意味せず、過去のGit identity metadataに対する既知の監査失敗も解決済みとは扱いません。

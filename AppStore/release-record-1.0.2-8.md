@@ -1,11 +1,12 @@
-# PomoGem 1.0.2 (8) — upload確認と準備履歴
+# PomoGem 1.0.2 (8) — build 9への差し替えで審査取消
 
 更新日: 2026-09-13。Xcode Organizerで1.0.2 (8)の「Uploaded to Apple」と
-同日10:01 JSTのupload履歴を確認しました。これにより、準備時点の「未提出」という記録のうち
-upload未完了の状態を更新します。App Store Connectの処理完了、選択ビルド、審査への提出状態、
-CloudKit schemaの配布完了は、このOrganizer表示からは確認できません。
+同日10:01 JSTのupload履歴を確認しました。別途App Store Connectで同日10:11 JSTの
+1.0.2 (8)の審査提出と「審査待ち」を確認しました。粒の修正を含むbuild 9へ差し替えるため
+その提出を取り消し、「デベロッパにより却下済み」を確認しました。
 
-粒の動作修正を含む次の候補は[1.0.2 (9)](release-record-1.0.2-9.md)です。build 8を再利用しません。
+差し替え後の[1.0.2 (9)](release-record-1.0.2-9.md)は同日11:39 JSTに審査へ提出し、
+「審査待ち」を確認しました。build 8を再利用しません。
 以下にはbuild 8の準備時点の変更内容と検証記録を保持します。
 
 準備時にApp Store Connectで既存1.0.1 (7)の「配信準備完了」を確認しました。build 7のArchive元は
@@ -36,7 +37,8 @@ Release Archive、実際の配布ペイロードの署名・バージョン・�
 既存buildの合格を新候補へ転用しません。
 
 準備時にはCloudKit Consoleの再ログインが必要で、追加schemaの公開を確認できませんでした。
-現在のDevelopment/Production状態は改めて確認が必要です。旧端末では秒付きタイマーの引き継ぎや
+その後、2026-09-13 11:33 JSTにDevelopment/Productionの型・indexと既存の配備履歴を確認しました。
+詳細は[build 9の記録](release-record-1.0.2-9.md)に保持します。旧端末では秒付きタイマーの引き継ぎや
 検出ができないため、端末間で使う前に全端末を対応版へ更新する案内を表示します。
 
 詳細は[Proタイマーの互換性](../Docs/ProTimerPrecision.md)を参照してください。
