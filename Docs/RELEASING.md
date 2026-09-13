@@ -15,14 +15,18 @@ App Store Connectで無効化し、ブランチ・タグの変更によるビル
 
 ## 今回の候補と識別子
 
-次の候補はPomoGem 1.0.2 (9)です。2026-09-13にXcode Organizerで1.0.2 (8)の
-「Uploaded to Apple」と同日10:01 JSTのupload履歴を確認したため、build numberを増やします。
-upload履歴だけでは審査への提出、Apple側の処理完了、CloudKit schemaの配布状態は確認できません。
-build 8までのiCloud修正とProタイマーの分・秒指定に、視差効果設定に関係なく粒を同じように
-跳ねさせる修正を加え、PRをマージしてからArchive・検証・提出します。
-現在の状態は`AppStore/release-record-1.0.2-9.md`を参照してください。build 9はまだupload・提出していません。
+最新のupload済み候補はPomoGem 1.0.2 (9)です。build 8までのiCloud修正とProタイマーの分・秒指定に、
+視差効果設定に関係なく粒を同じように跳ねさせる修正を加えました。PR #13のmerge commit
+`9c256136f7b9d4190da5800723acec0273bd6b27`をcleanな状態でArchiveし、2026-09-13 11:14 JSTに成功しました。
+Apple Validateは11:16 JSTに成功し、別途exportしたIPAと実際のupload-staging IPAの厳格な配布検証、
+元ArchiveとdSYMのUUID照合も成功しました。Organizerで11:22 JSTの「PomoGem 1.0.2 (9) uploaded」を
+確認した後、同じArchive元を指す不変tag `v1.0.2-build9`を作成・pushしました。
+Apple側の処理完了、App Store Connectの選択ビルド、Prefs追加2属性のCloudKit
+Development/Production状態は未確認です。build 9の審査提出はまだ行っていません。
+現在の状態は`AppStore/release-record-1.0.2-9.md`を参照してください。
 
-直前のupload済み版はPomoGem 1.0.2 (8)です。その確認と準備履歴は
+一つ前のupload済み版はPomoGem 1.0.2 (8)です。Organizerで同日10:01 JSTのupload履歴を確認したため、
+今回のbuild numberを9へ増やしました。build 8の確認と準備履歴は
 `AppStore/release-record-1.0.2-8.md`に保持します。2026-09-13にApp Store Connectで
 1.0.1 (7)の「配信準備完了」を確認しました。1.0 (5)と同じApp Store record、Bundle ID、IAP、
 CloudKit containerを使用します。Apple IDは`6809139517`、SKUは`pomogem-ios`、
