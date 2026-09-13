@@ -57,10 +57,34 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         add(attachment)
         app.navigationBars["タイマーの表示"].buttons.element(boundBy: 0).tap()
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+
+        let firstPreset = app.buttons["settings.focus-preset.25"]
+        XCTAssertTrue(scrollUntilHittable(firstPreset, attempts: 20))
+        let presetColumnX = firstPreset.frame.minX
+        for minutes in [25, 45, 60, 90] {
+            let preset = app.buttons["settings.focus-preset.\(minutes)"]
+            XCTAssertTrue(scrollUntilHittable(preset, attempts: 12))
+            XCTAssertEqual(preset.label, "\(minutes)分")
+            XCTAssertGreaterThanOrEqual(preset.frame.height, 43.5)
+            XCTAssertEqual(preset.frame.minX, presetColumnX, accuracy: 1,
+                           "Large text duration presets must use one column")
+            preset.tap()
+            XCTAssertEqual(preset.value as? String, "選択中")
+        }
+        let customTimer = app.buttons["settings.custom-timer"]
+        XCTAssertTrue(scrollUntilHittable(customTimer, attempts: 12))
+        XCTAssertGreaterThanOrEqual(customTimer.frame.height, 43.5)
+        XCTAssertEqual(customTimer.value as? String, "未選択")
+        let durationAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        durationAttachment.name = "AX5 Settings duration presets and reachable Pro custom option"
+        durationAttachment.lifetime = .keepAlways
+        add(durationAttachment)
+
         app.navigationBars["設定"].buttons.element(boundBy: 0).tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
         let launcher = app.buttons["home.focus-launcher"]
         XCTAssertTrue(scrollUntilHittable(launcher, attempts: 12))
+        XCTAssertTrue(launcher.label.contains("90分集中する"))
         launcher.tap()
         XCTAssertTrue(app.descendants(matching: .any)["focus.timer-display"].firstMatch
             .waitForExistence(timeout: 8))
