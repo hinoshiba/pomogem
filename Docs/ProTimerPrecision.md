@@ -1,7 +1,8 @@
 # Proタイマーの分・秒指定と互換性
 
-更新日: 2026-09-13。開発中の追加機能を説明する文書です。提出済みのビルドに含まれることや、
-本追加の実機・画面・iCloud同期試験が完了したことを示しません。
+更新日: 2026-09-13。この機能を含む1.0.2 (9)は同日11:39 JSTに審査へ提出し、「審査待ち」を
+確認しました。提出とschema照合の証拠は[build 9のrelease record](../AppStore/release-record-1.0.2-9.md)に
+保持します。Appleの承認・公開や、実機2台の秒単位送受信の完了を示すものではありません。
 
 Homeと設定で、Proの集中時間を数値入力またはスクロールで指定します。範囲は1分0秒〜360分0秒
 （60〜21,600秒）です。入力途中の空欄・範囲外・整数オーバーフローは確定できず、閉じるだけでは
@@ -34,13 +35,20 @@ Prefsには任意の`preferredFocusSeconds`と`preferredFocusSecondsMutationID`�
 端数秒タイマーの引き継ぎ・検出・同時開始の抑止は保証できません。旧版が既存の記録を保持することと、
 新しいタイマーを利用できることは別です。更新後も通信断中の全端末排他を保証する機能ではありません。
 
-Prefsの追加属性にはCloudKit Production schemaへの反映が別途必要です。タイマーpayloadが既存の
-Bytes属性に収まることだけを理由に、設定の同期まで準備済みとは扱いません。
+Prefsの追加属性については、2026-09-13 11:33 JSTにCloudKit Consoleの
+`iCloud.com.hinoshiba.pomogem`でDevelopmentとProductionの`CD_Prefs`（両方70 field）を確認しました。
+`CD_preferredFocusSeconds`はInt(64)でQueryable／Sortable、`CD_preferredFocusSecondsMutationID`は
+StringでQueryable／Searchable／Sortableが両環境で一致しました。ProductionのSchema Historyには
+同日09:52 JSTの2 field変更・5 index作成があり、確認前に配備されていました。
+今回の確認作業でschemaの変更・再配備は行っていません。schema確認と実機2台での送受信は別の証拠であり、
+後者は未検証です。タイマーpayloadが既存のBytes属性に収まることだけを理由に、設定同期の実通信まで
+合格したとは扱いません。
 
 ## 検証状況
 
 2026-09-13の中央単体試験は1,260件中1,254件成功、6件は別条件で実行するためスキップ、失敗0件でした。
-次の新規テストと既存の保存・同期・書き出し回帰を含みます。旧SQLiteの移行2ケースも成功しました。画面・実機・CloudKitの追加検証は継続中です。
+次の新規テストと既存の保存・同期・書き出し回帰を含みます。旧SQLiteの移行2ケースも成功しました。
+後述の画面試験と上記の両環境schema照合も成功しています。実機2台の秒単位送受信は未検証です。
 
 - `PomodoroSecondPrecisionTests`: 旧JSON、整数分の旧decoder互換、境界値、無料／Pro判定、
   ローカル保存・停止・再開とiCloud payloadの復元、異常payloadの拒否。
