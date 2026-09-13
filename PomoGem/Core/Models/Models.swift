@@ -5,9 +5,12 @@ enum SessionSource: String, Codable, CaseIterable, Sendable {
     case timer
     case manual
     case timerDemoted
+    /// Completed Screen Time usage thresholds; never a timer or rare draw.
+    case screenTime
 
-    var isMeasured: Bool { self == .timer }
+    var isMeasured: Bool { self == .timer || self == .screenTime }
     var isSelfReported: Bool { !isMeasured }
+    var displayName: String { self == .screenTime ? "Screen Time" : (isMeasured ? "実測" : "自己申告") }
 }
 
 enum PebbleKind: String, Codable, CaseIterable, Sendable {
@@ -653,6 +656,8 @@ enum StudySessionIntegrityPolicy {
             // deterministic timer completion.
             return seconds.isMultiple(of: Constants.Timer.secondsPerMinute)
                 && grams == StudySession.grams(for: seconds)
+        case .screenTime:
+            return seconds == 600 && grams == StudySession.grams(for: 600)
         case .manual:
             // The product has only these three explicit manual-entry choices.
             // Requiring the paired duration and mass prevents a corrupted row
@@ -993,8 +998,9 @@ enum StudySessionSyncPolicy {
     private static func sourceSafetyRank(_ source: SessionSource) -> Int {
         switch source {
         case .timer: 0
-        case .manual: 1
-        case .timerDemoted: 2
+        case .screenTime: 1
+        case .manual: 2
+        case .timerDemoted: 3
         }
     }
 

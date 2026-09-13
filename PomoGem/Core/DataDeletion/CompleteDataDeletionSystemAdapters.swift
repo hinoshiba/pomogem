@@ -417,6 +417,11 @@ final class SystemCompleteDataDeletionDeviceState: CompleteDataDeletionDeviceSta
     }
 
     func clearDeviceState() async throws {
+        ScreenTimeController.shared.suspendForContextRetirement()
+        let screenTimeStore = ScreenTimeStore()
+        try screenTimeStore.eraseAllData {
+            ScreenTimeMonitoring(store: screenTimeStore).stop()
+        }
         // Invalidate in-flight adds before clearing OS state so a suspended
         // timer/return-reminder request cannot reappear after deletion.
         await NotificationManager.shared.cancelAllTimerNotifications()

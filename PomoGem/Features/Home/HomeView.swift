@@ -77,6 +77,7 @@ struct HomeView: View {
     @AppStorage(AccountScopedLocalState.defaultsKey(base: HomeAtmosphere.storageKey))
     private var homeAtmosphereRawValue = HomeAtmosphere.aurora.rawValue
     @State private var scene = JarScene()
+    @ObservedObject private var screenTime = ScreenTimeController.shared
     @State private var sceneInitialized = false
     @State private var homeIsVisible = false
     @State private var rewardDropRevealIsPending = false
@@ -707,6 +708,8 @@ struct HomeView: View {
             rewardDropRevealIsPending = false
             restorePreferredDuration()
             configureScene()
+            screenTime.reload()
+            scene.setScreenTimeObstacles(totalUnits: screenTime.negativeGemCount)
             refreshAcceptedAggregateRoots()
             refreshAchievementProjection()
             refreshAchievementCount()
@@ -757,6 +760,10 @@ struct HomeView: View {
 
     private var observedContent: some View {
         lifecycleContent
+        .onChange(of: screenTime.negativeGemCount) { _, count in
+            guard homeIsVisible else { return }
+            scene.updateScreenTimeObstacles(totalUnits: count)
+        }
         .onChange(of: sessionChangeTokens) { _, _ in
             syncScene()
             scheduleTiltHintIfNeeded()
@@ -2549,9 +2556,13 @@ struct HomeView: View {
         let canRevealDrop = !rewardDropRevealIsPending
             && breakOffer == nil
             && !rewardDropSurfaceIsObscured
+        for id in ScreenTimeGemDropStore.load()
+        where scene.hasLandedPebble(withID: id) || representedSessionIDs.contains(id) {
+            ScreenTimeGemDropStore.remove(id)
+        }
         let awaitingDropIDs = Set(pendingReceipts.filter {
             $0.dropPhase == .awaitingLanding
-        }.map(\.id))
+        }.map(\.id)).union(ScreenTimeGemDropStore.load())
         let heldIDs = Set(pendingReceipts.filter {
             $0.isAwaitingAcknowledgement || ($0.requiresDrop && !canRevealDrop)
         }.map(\.id)).union(looseSessions.filter(hasLocalCompletionMarker).map(\.id))
@@ -2622,13 +2633,23 @@ struct HomeView: View {
 
     private func refreshRewardSessionBackfill() -> Bool {
         let receipts = PendingRewardReceiptStore.load().filter(\.requiresDrop)
-        guard !receipts.isEmpty else { return true }
+        let screenTimeIDs = ScreenTimeGemDropStore.load()
+        guard !receipts.isEmpty || !screenTimeIDs.isEmpty else { return true }
         do {
-            let resolved = try HomeProjectionPolicy.pendingRewardSessionCandidates(
+            var resolved = try HomeProjectionPolicy.pendingRewardSessionCandidates(
                 for: receipts,
                 context: modelContext,
                 resetMarkers: resetSnapshots
             )
+            for id in screenTimeIDs {
+                if let session = try BoundedHistoryPolicy.resolvedSession(
+                    id: id, epochID: currentActivityEpochID, context: modelContext
+                ), session.source == .screenTime, StudySessionIntegrityPolicy.isSupported(session) {
+                    resolved.append(session)
+                } else {
+                    ScreenTimeGemDropStore.remove(id)
+                }
+            }
             let resolvedIDs = Set(resolved.map(\.id))
             // Keep a just-landed older reward visible for this Home generation.
             // Removing its receipt must not immediately remove its jar body.
@@ -2636,7 +2657,7 @@ struct HomeView: View {
                 !resolvedIDs.contains($0.id)
             }
             rewardSessionBackfill = Array(
-                (resolved + retained).prefix(PendingRewardReceiptStore.maximumPendingCount)
+                (resolved + retained).prefix(PendingRewardReceiptStore.maximumPendingCount + ScreenTimeGemDropStore.maximumCount)
             )
             rewardSessionBackfillGeneration = HomeSceneSessionSnapshotGeneration(
                 aggregateProjectionPresentation
@@ -3320,6 +3341,11 @@ struct HomeView: View {
             && rareRewardMode.usesEnhancedPresentation
         router.showToast(message, symbol: usesRareSymbol ? "sparkles" : "scalemass")
 
+        if descriptor.source == .screenTime {
+            ScreenTimeGemDropStore.remove(descriptor.id)
+            syncScene()
+            return
+        }
         if PendingRewardReceiptStore.load().contains(where: {
             $0.id == descriptor.id && $0.dropPhase == .awaitingLanding
         }) {

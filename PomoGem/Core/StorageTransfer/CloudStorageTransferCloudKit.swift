@@ -257,7 +257,7 @@ struct CloudStorageTransferRecordDecoder: Sendable {
     static func enumValue(_ value: CKRecordValue, property: String) throws -> String {
         let allowed: Set<String>
         switch property {
-        case "source": allowed = ["timer", "manual", "timerDemoted"]
+        case "source": allowed = ["timer", "manual", "timerDemoted", "screenTime"]
         case "pebbleKind": allowed = ["normal", "gold", "prism"]
         case "kind": allowed = ["perfectScore", "examPass", "workMilestone"]
         default: throw CloudStorageTransferCloudError.unsupportedSchema

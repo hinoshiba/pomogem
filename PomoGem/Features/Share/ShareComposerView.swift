@@ -219,7 +219,7 @@ struct ShareComposerView: View {
             // legacy membership can remove a synchronized session candidate.
             selected = compactLooseSessions
         } else {
-            selected = includeManual ? scopedSessions : scopedSessions.filter { $0.source == .timer }
+            selected = includeManual ? scopedSessions : scopedSessions.filter { $0.source.isMeasured }
         }
         return selected
     }
@@ -308,7 +308,7 @@ struct ShareComposerView: View {
     /// conservative: they are only included when self-reporting is enabled, so
     /// their unknown composition is disclosed as self-reported.
     private var selectedIncludesSelfReportedFocus: Bool {
-        selectedSessions.contains { $0.source != .timer }
+        selectedSessions.contains { $0.source.isSelfReported }
             || selectedAggregates.contains { $0.manualPebbleCount > 0 }
             || selectedHasUnknownSelfReportComposition
     }
@@ -460,7 +460,7 @@ struct ShareComposerView: View {
 
     private var hasExcludedSelfReportedContent: Bool {
         guard !includeManual else { return false }
-        if scopedSessions.contains(where: { $0.source != .timer }) {
+        if scopedSessions.contains(where: { $0.source.isSelfReported }) {
             return true
         }
         return scopedAggregates.contains {
@@ -1183,7 +1183,7 @@ struct ShareComposerView: View {
            scopedAggregates.contains(where: { $0.manualPebbleCount > 0 }) {
             return "この結晶には自己申告が含まれます。「自己申告を含める」をオンにすると、結晶全体の正確な質量をカードにできます。"
         }
-        if !includeManual, scopedSessions.contains(where: { $0.source != .timer }) {
+        if !includeManual, scopedSessions.contains(where: { $0.source.isSelfReported }) {
             return "自己申告を含めると、この期間の瓶をカードにできます。"
         }
         return "集中を完走すると、瓶の画像とグラム数を一緒に残せます。"
@@ -1538,7 +1538,7 @@ struct ShareComposerView: View {
         let capturedAchievements = scopedAchievements.map(ShareAchievementVisual.init)
         let capturedAggregates = selectedAggregates
         let capturedGrams = selectedTotalGrams
-        let capturedIncludesSelfReportedFocus = capturedSessions.contains { $0.source != .timer }
+        let capturedIncludesSelfReportedFocus = capturedSessions.contains { $0.source.isSelfReported }
             || capturedAggregates.contains { $0.manualPebbleCount > 0 }
             || selectedHasUnknownSelfReportComposition
         let capturedPeriod = effectivePeriodLabel
@@ -2494,7 +2494,7 @@ struct ShareCardView: View {
     }
     private var measuredCount: Int {
         NonnegativeIntPolicy.sum(
-            [sessions.filter { $0.source == .timer }.count]
+            [sessions.filter { $0.source.isMeasured }.count]
                 + unlinkedAggregates.map(\.measuredPebbleCount)
         )
     }

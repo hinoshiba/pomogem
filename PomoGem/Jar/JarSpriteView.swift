@@ -319,7 +319,7 @@ struct JarSpriteView: View {
     }
 
     private var accessibilityValue: String {
-        JarAccessibilityPresentation.value(
+        let studyValue = JarAccessibilityPresentation.value(
             totalGrams: totalGrams,
             pebbleCount: pebbleCount,
             achievementCount: achievementCount,
@@ -333,6 +333,10 @@ struct JarSpriteView: View {
             projectionIsUnverified: projectionIsUnverified,
             isCloudOfflineSession: isCloudOfflineSession
         )
+        guard let obstacles = scene.screenTimeObstacleAccessibilityDescription else {
+            return studyValue
+        }
+        return "\(studyValue)、\(obstacles)"
     }
 
     private var accessibilityHint: String {

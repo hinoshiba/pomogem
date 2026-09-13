@@ -210,9 +210,18 @@ require(
 )
 require(app_entitlements.get("com.apple.developer.icloud-services") == ["CloudKit"], "app iCloud services entitlement must contain only CloudKit")
 require(
-    "com.apple.security.application-groups" not in app_entitlements,
-    "main app must not retain the removed App Group entitlement",
+    app_entitlements.get("com.apple.security.application-groups") == ["group.com.hinoshiba.pomogem"],
+    "main app must use only the Screen Time App Group",
 )
+require(app_entitlements.get("com.apple.developer.family-controls") is True, "Screen Time requires Family Controls")
+monitor_entitlements = load("PomoGemScreenTimeMonitor/PomoGemScreenTimeMonitor.entitlements")
+require(monitor_entitlements == {
+    "com.apple.security.application-groups": ["group.com.hinoshiba.pomogem"],
+    "com.apple.developer.family-controls": True,
+}, "monitor entitlement scope must remain device-only")
+monitor_manifest = load("PomoGemScreenTimeMonitor/PrivacyInfo.xcprivacy")
+require(monitor_manifest.get("NSPrivacyTracking") is False, "monitor must not track users")
+require(monitor_manifest.get("NSPrivacyCollectedDataTypes") == [], "monitor must not collect data")
 
 widget_entitlements = load("PomoGemWidgets/PomoGemWidgets.entitlements")
 for forbidden in (

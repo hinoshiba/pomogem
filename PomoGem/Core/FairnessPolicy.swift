@@ -266,7 +266,7 @@ enum FairnessPolicy {
     }
 
     static func isIncludedInShareByDefault(source: SessionSource) -> Bool {
-        source == .timer
+        source.isMeasured
     }
 
     /// Atomically reserves the lifetime-only bedrock import. The preference is

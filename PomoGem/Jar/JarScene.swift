@@ -99,7 +99,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                     "//drop.dust",
                     "//drop.spark",
                     "//drop.anticipation",
-                    "//drop.anticipation.rare"
+                    "//drop.anticipation.rare",
+                    "//obstacle.fusion"
                 ] {
                     worldNode.enumerateChildNodes(withName: effectName) { node, _ in
                         node.removeFromParent()
@@ -240,6 +241,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private(set) var visualStrata: [JarStratumVisual] = []
     private(set) var bedrock: JarBedrockVisual?
     private(set) var historyDescriptors: [PebbleDescriptor] = []
+    /// Device-local distraction history is supplied independently from every
+    /// persisted study projection. Rebuilding study bodies preserves it.
+    private(set) var screenTimeObstacleUnitCount = 0
     private(set) var isIdlePaused = false
     private(set) var isBakeInProgress = false
     private(set) var isCapacityReliefActive = false
@@ -365,9 +369,19 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     var physicalPebbleCount: Int { livePebbles.count }
+    var screenTimeObstaclePhysicalCount: Int {
+        livePebbles.filter { $0.descriptor.isScreenTimeObstacle }.count
+    }
+    var screenTimeObstacleAccessibilityDescription: String? {
+        guard screenTimeObstacleUnitCount > 0 else { return nil }
+        return "寄り道の黒い石\(screenTimeObstaclePhysicalCount)個、10分の石\(screenTimeObstacleUnitCount.formatted())個分。勉強の積み上げには含まれません"
+    }
+    private var studyPhysicalBodyCount: Int {
+        livePebbles.filter { !$0.descriptor.isScreenTimeObstacle }.count
+    }
     var physicalAggregateCount: Int { livePebbles.filter { $0.descriptor.isAggregate }.count }
     var representedPebbleCount: Int {
-        livePebbles.reduce(0) {
+        livePebbles.filter { !$0.descriptor.isScreenTimeObstacle }.reduce(0) {
             $0 + ($1.descriptor.aggregate?.pebbleCount ?? ($1.descriptor.isAchievement ? 0 : 1))
         }
     }
@@ -381,6 +395,150 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     func hasLandedPebble(withID id: UUID) -> Bool {
         livePebbles.contains { $0.descriptor.id == id && $0.hasLanded }
+    }
+
+    /// Establishes a quiet baseline when Home loads its device-local ledger.
+    /// Calling this with zero is the explicit obstacle-reset operation.
+    func setScreenTimeObstacles(totalUnits: Int) {
+        updateScreenTimeObstacles(totalUnits: totalUnits, animated: false)
+    }
+
+    /// Reconcile only the black stream. Decimal carries replace black roots;
+    /// they never request a study fusion or issue a study landing callback.
+    func updateScreenTimeObstacles(totalUnits: Int, animated: Bool = true) {
+        let previousTotal = screenTimeObstacleUnitCount
+        screenTimeObstacleUnitCount = max(0, totalUnits)
+        let desired = ScreenTimeObstacleProjection.visibleDescriptors(
+            totalUnits: screenTimeObstacleUnitCount
+        ).map(PebbleDescriptor.init(screenTimeObstacle:))
+        let desiredIDs = Set(desired.map(\.id))
+        let oldIDs = Set(allPebbleNodes.filter { $0.descriptor.isScreenTimeObstacle }
+            .map { $0.descriptor.id })
+            .union(dropQueue.filter { $0.descriptor.isScreenTimeObstacle }.map { $0.descriptor.id })
+        let removedIDs = oldIDs.subtracting(desiredIDs)
+        let removedBodies = livePebbles.filter { removedIDs.contains($0.descriptor.id) }
+        if !removedIDs.isEmpty || previousTotal != screenTimeObstacleUnitCount {
+            worldNode.childNode(withName: "obstacle.fusion")?.removeFromParent()
+        }
+        if !removedIDs.isEmpty {
+            // A tap's pending impulse must not keep referencing a root that a
+            // decimal carry has replaced underneath the gesture.
+            if let activeTapMotion, removedIDs.contains(activeTapMotion.pebbleID) {
+                finishActiveTapMotion(forceReturn: false)
+            }
+            dropQueue.removeAll { removedIDs.contains($0.descriptor.id) }
+            allPebbleNodes.filter { removedIDs.contains($0.descriptor.id) }
+                .forEach { $0.removeFromParent() }
+            acceptedPebbleIDs.subtract(removedIDs)
+            mutedLandingIDs.subtract(removedIDs)
+            aboveEntryPebbleIDs.subtract(removedIDs)
+        }
+
+        if !animated || screenTimeObstacleUnitCount < previousTotal {
+            let queuedObstacleIDs = Set(dropQueue.filter { $0.descriptor.isScreenTimeObstacle }
+                .map { $0.descriptor.id })
+            dropQueue.removeAll { $0.descriptor.isScreenTimeObstacle }
+            acceptedPebbleIDs.subtract(queuedObstacleIDs)
+            mutedLandingIDs.subtract(queuedObstacleIDs)
+        }
+
+        let existingIDs = Set(allPebbleNodes.map { $0.descriptor.id })
+            .union(dropQueue.map { $0.descriptor.id })
+        let additions = desired.filter { !existingIDs.contains($0.id) }
+        let shouldDrop = animated && screenTimeObstacleUnitCount > previousTotal
+        if shouldDrop {
+            let carriedID = presentScreenTimeObstacleCarry(
+                removedBodies: removedBodies,
+                additions: additions
+            )
+            for descriptor in additions where descriptor.id != carriedID {
+                enqueue(descriptor, delay: 0, origin: .interior)
+            }
+        } else {
+            for (index, descriptor) in additions.enumerated() {
+                acceptedPebbleIDs.insert(descriptor.id)
+                let node = PebbleNode(
+                    descriptor: descriptor,
+                    reduceMotion: reduceMotion,
+                    rareRewardMode: rareRewardMode
+                )
+                let diameter = node.radius * 2
+                let columns = max(1, Int(interiorRect.width / diameter))
+                node.position = CGPoint(
+                    x: min(interiorRect.maxX - node.radius,
+                        interiorRect.minX + node.radius + CGFloat(index % columns) * diameter),
+                    y: min(interiorRect.maxY - node.radius,
+                        currentFloorY + node.radius + CGFloat(index / columns) * diameter)
+                )
+                node.zRotation = deterministicAngle(for: descriptor.id)
+                node.markLanded()
+                worldNode.addChild(node)
+            }
+        }
+        guard !removedIDs.isEmpty || !additions.isEmpty || previousTotal != screenTimeObstacleUnitCount else { return }
+        publishPhysicalContentChangeIfNeeded(force: true)
+        resetIdleObservation()
+        resumeSimulation()
+    }
+
+    /// A decimal carry has a small, black-only formation gesture. The old
+    /// shapes are nonphysical copies; the resulting black root is immediately
+    /// the sole physics body, so animation can never duplicate credited units.
+    private func presentScreenTimeObstacleCarry(
+        removedBodies: [PebbleNode],
+        additions: [PebbleDescriptor]
+    ) -> UUID? {
+        guard !reduceMotion,
+              removedBodies.count >= 2,
+              let destination = additions.first(where: { candidate in
+                  guard let target = candidate.screenTimeObstacle else { return false }
+                  return !target.isHistoryPile && removedBodies.allSatisfy {
+                      ($0.descriptor.screenTimeObstacle?.level ?? target.level) < target.level
+                  }
+              })
+        else { return nil }
+        let center = removedBodies.reduce(CGPoint.zero) {
+            CGPoint(x: $0.x + $1.position.x, y: $0.y + $1.position.y)
+        }
+        let point = CGPoint(
+            x: center.x / CGFloat(removedBodies.count),
+            y: center.y / CGFloat(removedBodies.count)
+        )
+        let effect = SKNode()
+        effect.name = "obstacle.fusion"
+        worldNode.addChild(effect)
+        for source in removedBodies {
+            guard let obstacle = source.descriptor.screenTimeObstacle else { continue }
+            let fragment = SKShapeNode()
+            ScreenTimeObstacleAppearance.apply(to: fragment, descriptor: obstacle, radius: source.radius)
+            fragment.position = source.position
+            fragment.zRotation = source.zRotation
+            fragment.zPosition = JarZPosition.pebble
+            effect.addChild(fragment)
+            fragment.run(.group([
+                .move(to: point, duration: 0.28),
+                .scale(to: 0.25, duration: 0.28),
+                .fadeOut(withDuration: 0.28)
+            ]))
+        }
+        effect.run(.sequence([.wait(forDuration: 0.3), .removeFromParent()]))
+        let node = PebbleNode(
+            descriptor: destination,
+            reduceMotion: reduceMotion,
+            rareRewardMode: rareRewardMode
+        )
+        let range = allowedHorizontalRange(at: point.y, radius: node.radius)
+        node.position = CGPoint(
+            x: min(max(point.x, range.lowerBound), range.upperBound),
+            y: min(max(point.y + 12, currentFloorY + node.radius + 6), interiorRect.maxY - node.radius)
+        )
+        node.setScale(0.4)
+        node.alpha = 0.25
+        node.physicsBody?.velocity = CGVector(dx: 0, dy: 32)
+        node.run(.group([.scale(to: 1, duration: 0.28), .fadeIn(withDuration: 0.28)]))
+        acceptedPebbleIDs.insert(destination.id)
+        worldNode.addChild(node)
+        return destination.id
     }
     /// Observation-only test seam: a tap must actively drive exactly one body.
     /// Other gems move only when SpriteKit resolves a real contact.
@@ -537,18 +695,23 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         worldNode.children
             .compactMap { $0 as? PebbleNode }
             .forEach { $0.removeFromParent() }
+        worldNode.childNode(withName: "obstacle.fusion")?.removeFromParent()
 
         var cursorX = interiorRect.minX
         var cursorY = currentFloorY
         var rowHeight = CGFloat.zero
 
         let combinedDescriptors = historyDescriptors + descriptors.filter {
-            !persistedBakedPebbleIDs.contains($0.id)
-        }
+            !persistedBakedPebbleIDs.contains($0.id) && !$0.isScreenTimeObstacle
+        } + ScreenTimeObstacleProjection.visibleDescriptors(
+            totalUnits: screenTimeObstacleUnitCount
+        ).map(PebbleDescriptor.init(screenTimeObstacle:))
         let uniqueDescriptors = combinedDescriptors.filter {
             acceptedPebbleIDs.insert($0.id).inserted
         }
-        let initiallyVisible = uniqueDescriptors.prefix(Constants.Jar.maxPhysicsBodies)
+        let studyDescriptors = uniqueDescriptors.filter { !$0.isScreenTimeObstacle }
+        let initiallyVisible = Array(studyDescriptors.prefix(Constants.Jar.maxPhysicsBodies))
+            + uniqueDescriptors.filter(\.isScreenTimeObstacle)
         for descriptor in initiallyVisible {
             let node = PebbleNode(
                 descriptor: descriptor,
@@ -570,7 +733,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             worldNode.addChild(node)
             cursorX += node.radius * 2
         }
-        let overflow = uniqueDescriptors.dropFirst(initiallyVisible.count)
+        let overflow = studyDescriptors.dropFirst(Constants.Jar.maxPhysicsBodies)
         let now = ProcessInfo.processInfo.systemUptime
         for descriptor in overflow {
             mutedLandingIDs.insert(descriptor.id)
@@ -2125,7 +2288,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             )
         )
         resumeSimulation()
-        reportApproachingCapacity()
+        if !descriptor.isScreenTimeObstacle { reportApproachingCapacity() }
         return true
     }
 
@@ -2157,7 +2320,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             return
         }
 
-        if physicalPebbleCount >= Constants.Jar.maxPhysicsBodies {
+        if !dropQueue[0].descriptor.isScreenTimeObstacle,
+           studyPhysicalBodyCount >= Constants.Jar.maxPhysicsBodies {
             if !beginBakeIfNeeded(force: true) {
                 if !hasReportedHardLimit {
                     hasReportedHardLimit = true
@@ -2506,7 +2670,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // Aggregate formation already has one completion event/toast. Its
         // physical landing keeps sound, haptics and dust but must not masquerade
         // as a newly earned study session at the feature boundary.
-        if !pebble.descriptor.isAggregate {
+        if !pebble.descriptor.isAggregate && !pebble.descriptor.isScreenTimeObstacle {
             onLanding?(
                 JarLandingEvent(
                     pebble: pebble.descriptor,

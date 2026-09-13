@@ -1016,7 +1016,7 @@ struct LogView: View {
     }
 
     private var summaryGrid: some View {
-        let measured = filteredSessions.filter { $0.source == .timer }
+        let measured = filteredSessions.filter { $0.source.isMeasured }
         let totalMinutes = NonnegativeIntPolicy.sum(
             filteredSessions.map(\.seconds)
         ) / 60
@@ -2436,7 +2436,7 @@ private struct HistoryRow: View {
             ZStack {
                 Circle()
                     .fill(pebbleColor)
-                if session.source != .timer {
+                if session.source.isSelfReported {
                     Circle().stroke(.white.opacity(0.72), style: StrokeStyle(lineWidth: 1.4, dash: [3, 3]))
                 } else {
                     Circle().fill(RadialGradient(colors: [.white.opacity(0.48), .clear], center: .topLeading, startRadius: 0, endRadius: 15))
@@ -2459,7 +2459,7 @@ private struct HistoryRow: View {
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
                 Text("+\(session.grams)g").font(.system(.subheadline, design: .rounded, weight: .bold))
-                Text(session.source == .timer ? "実測" : "自己申告")
+                Text(session.source.displayName)
                     .font(.caption2)
                     .foregroundStyle(PomoGemTheme.muted)
             }
@@ -2471,7 +2471,7 @@ private struct HistoryRow: View {
     }
 
     private var historyAccessibilityLabel: String {
-        let source = session.source == .timer ? "実測" : "自己申告"
+        let source = session.source.displayName
         let date = session.endAt.formatted(date: .long, time: .shortened)
         let batch = RareRewardPresentationPolicy
             .counts(session.rareRewardCounts)
