@@ -6,7 +6,7 @@
 「ポモジェムPro」で解放します。シェアカードには、プランにかかわらずポモジェムのロゴと
 公式サイトを表示します。
 
-PomoGemは新しいアプリとしてリリース準備中です。App Store・IAP・CloudKitの識別子を新設し、
+PomoGemは[App Store](https://apps.apple.com/app/id6809139517)で配信中です。App Store・IAP・CloudKitの識別子を新設し、
 以前の開発版のデータや購入権利は自動移行しません。公開先と未完了のrelease gateは
 [App Store設定](AppStore/configuration.yml)と[リリース手順](Docs/RELEASING.md)で管理します。
 

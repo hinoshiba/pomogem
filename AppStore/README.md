@@ -23,8 +23,10 @@ APIのcredentialやdownloadしたprofileは置きません。
 `metadata/`です。旧アプリのApp Store Connect登録、アップロード、課金価格、CloudKit schemaは
 新アプリの完了証拠には使いません。2026-09-06に新App Store record（Apple ID `6809139517`、
 SKU `pomogem-ios`、bundle ID `com.hinoshiba.pomogem`、日本語名「ポモジェム：ポモドーロタイマー」）を
-作成・確認し、実値を`configuration.yml`へ記録しました。公開・ダウンロード可能にはまだなっていないため、
-`app_store_listing_status: not_public`を保持し、Webは「近日公開」のままSmart App Bannerを表示しません。
+作成・確認し、実値を`configuration.yml`へ記録しました。2026-09-13に日本・米国の公開listingで
+1.0.1の配信を確認しました。[App Store](https://apps.apple.com/app/id6809139517)へのリンクと
+Smart App BannerをWebに表示し、`app_store_listing_status: public`とします。
+公開準備中の1.0.2とは区別します。
 
 5枚の掲載画像はPomoGem 1.0 (5)のproduction UIから再撮影済みです。実行結果とファイルのhashは
 `screenshots/README.md`に記録します。新IAPの実StoreKit価格を取得できるまでは
