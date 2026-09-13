@@ -979,6 +979,51 @@ final class PersistenceStoreTopologyTests: XCTestCase {
         ).hasInvalidArtifact)
     }
 
+    func testDefaultPersistentStoreURLsStayInPrivateApplicationSupport() throws {
+        // The test host carries the Screen Time App Group entitlement. An
+        // upgrade must keep using the pre-App-Group store location, including
+        // alternate mounts and deletion, without moving or creating stores.
+        let privateDirectory = try XCTUnwrap(FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first).standardizedFileURL.resolvingSymlinksInPath()
+        let namespace = AccountDataNamespace()
+        let cloudURLs = PersistenceStoreTopology.shippingPersistentStoreURLs(
+            accountNamespace: namespace
+        )
+        let localURLs = PersistenceStoreTopology.localOnlyPersistentStoreURLs(
+            namespace: namespace
+        )
+        let offlineURLs = PersistenceStoreTopology.offlineCloudConfigurations(
+            accountNamespace: namespace
+        ).map(\.url)
+        let readOnlyURLs = PersistenceStoreTopology.readOnlyCloudConfigurations(
+            accountNamespace: namespace
+        ).map(\.url)
+        let simulatorURLs = try PersistenceStoreTopology.persistentStoreURLs(
+            for: .persistentSimulator
+        )
+        let deletionURLs = try PersistenceStoreTopology.deletionArtifactURLs(
+            for: .cloudKit,
+            accountNamespace: namespace
+        ) + PersistenceStoreTopology.deletionArtifactURLs(
+            for: .localOnly,
+            accountNamespace: namespace
+        )
+
+        XCTAssertEqual(offlineURLs, cloudURLs)
+        XCTAssertEqual(readOnlyURLs, cloudURLs)
+        for url in cloudURLs + localURLs + offlineURLs + readOnlyURLs
+            + simulatorURLs + deletionURLs {
+            XCTAssertEqual(
+                url.deletingLastPathComponent()
+                    .standardizedFileURL.resolvingSymlinksInPath(),
+                privateDirectory,
+                "Study storage must not follow the Screen Time App Group."
+            )
+        }
+    }
+
     func testAccountNamespacesIsolateStoreURLsDefaultsKeysAndWidgetFiles() throws {
         let namespaceA = try XCTUnwrap(AccountDataNamespace(
             rawValue: "50000000-0000-4000-8000-000000000005"

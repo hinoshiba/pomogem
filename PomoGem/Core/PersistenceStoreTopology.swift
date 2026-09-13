@@ -998,9 +998,14 @@ enum PersistenceStoreTopology {
     }
 
     private static var defaultStoreDirectory: URL {
+        // Study stores predate the Screen Time App Group and belong to the
+        // app's private container. Automatic group discovery would redirect
+        // an existing installation to an empty shared directory while its
+        // deployment receipts still describe the original private stores.
         ModelConfiguration(
             cloudStoreName,
             schema: cloudSchema,
+            groupContainer: .none,
             cloudKitDatabase: .none
         ).url.deletingLastPathComponent()
     }
@@ -1170,12 +1175,14 @@ enum PersistenceStoreTopology {
                 simulatorCloudStoreName,
                 schema: cloudSchema,
                 isStoredInMemoryOnly: false,
+                groupContainer: .none,
                 cloudKitDatabase: .none
             ),
             ModelConfiguration(
                 simulatorLocalProjectionStoreName,
                 schema: localProjectionSchema,
                 isStoredInMemoryOnly: false,
+                groupContainer: .none,
                 cloudKitDatabase: .none
             )
         ]
@@ -1199,6 +1206,7 @@ enum PersistenceStoreTopology {
             simulatorCloudStoreName,
             schema: shippingSchema,
             isStoredInMemoryOnly: false,
+            groupContainer: .none,
             cloudKitDatabase: .none
         )
     }
