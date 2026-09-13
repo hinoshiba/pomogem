@@ -153,18 +153,16 @@ final class TimerOrientationSelection {
     private var sessionOrder: [AnyHashable] = []
 
     func state(for sessionID: AnyHashable, defaultOrientation: TimerDefaultOrientation) -> TimerOrientationState {
-        if let state = states[sessionID] { return state }
-        let state = TimerOrientationState(defaultOrientation: defaultOrientation)
-        states[sessionID] = state
-        sessionOrder.append(sessionID)
-        // Retain recent recovery choices without growing with timer history.
-        if sessionOrder.count > 8 { states.removeValue(forKey: sessionOrder.removeFirst()) }
-        return state
+        // SwiftUI eagerly constructs disposable @State initial values whenever
+        // a parent recomputes. Reading one must not evict a live timer's choice.
+        states[sessionID] ?? TimerOrientationState(defaultOrientation: defaultOrientation)
     }
 
     func update(_ state: TimerOrientationState, for sessionID: AnyHashable) {
-        guard states[sessionID] != nil else { return }
+        if states[sessionID] == nil { sessionOrder.append(sessionID) }
         states[sessionID] = state
+        // Retain recent recovery choices without growing with timer history.
+        if sessionOrder.count > 8 { states.removeValue(forKey: sessionOrder.removeFirst()) }
     }
 }
 
@@ -174,7 +172,6 @@ final class TimerOrientationController {
         didSet { selection.update(state, for: sessionID) }
     }
     @ObservationIgnored private let sessionID: AnyHashable
-    @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let selection: TimerOrientationSelection
     @ObservationIgnored private weak var windowScene: UIWindowScene?
     private(set) var interfaceOrientation: UIInterfaceOrientation = .portrait
@@ -186,7 +183,6 @@ final class TimerOrientationController {
     init(sessionID: AnyHashable, selection: TimerOrientationSelection? = nil, defaults: UserDefaults = .standard) {
         let selection = selection ?? .shared
         self.sessionID = sessionID
-        self.defaults = defaults
         self.selection = selection
         state = selection.state(for: sessionID, defaultOrientation: TimerOrientationPreference.load(defaults: defaults))
     }
@@ -223,7 +219,9 @@ final class TimerOrientationController {
         if active, !isObserving {
             isPresented = true
             requestedDirection = nil
-            state = selection.state(for: sessionID, defaultOrientation: TimerOrientationPreference.load(defaults: defaults))
+            // The live controller owns its selection even if the bounded
+            // recovery cache has expired. Inactivity must not reset it.
+            selection.update(state, for: sessionID)
             UIDevice.current.beginGeneratingDeviceOrientationNotifications()
             isObserving = true
         } else if !active, isObserving {

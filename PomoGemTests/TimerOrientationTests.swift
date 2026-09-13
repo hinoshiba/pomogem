@@ -31,6 +31,48 @@ final class TimerOrientationTests: XCTestCase {
         XCTAssertFalse(fresh.state.isManual)
     }
 
+    @MainActor
+    func testDiscardedViewInitialValuesDoNotEvictTheRunningTimersManualChoice() throws {
+        let (defaults, domain) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let selection = TimerOrientationSelection()
+        let sessionID = UUID()
+        let running = TimerOrientationController(sessionID: sessionID, selection: selection, defaults: defaults)
+        running.rotate()
+
+        for _ in 0..<20 {
+            _ = TimerOrientationController(sessionID: UUID(), selection: selection, defaults: defaults)
+        }
+
+        let recovered = TimerOrientationController(sessionID: sessionID, selection: selection, defaults: defaults)
+        XCTAssertEqual(recovered.state.direction, .right)
+        XCTAssertTrue(recovered.state.isManual)
+    }
+
+    @MainActor
+    func testReactivatingTheLiveTimerPreservesItsChoiceEvenAfterRecoveryCacheEviction() throws {
+        let (defaults, domain) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let selection = TimerOrientationSelection()
+        let sessionID = UUID()
+        let running = TimerOrientationController(sessionID: sessionID, selection: selection, defaults: defaults)
+        running.setActive(true)
+        running.rotate()
+        running.setActive(false)
+        for _ in 0..<9 {
+            let anotherTimer = TimerOrientationController(sessionID: UUID(), selection: selection, defaults: defaults)
+            anotherTimer.rotate()
+        }
+
+        running.setActive(true)
+        defer { running.disappear() }
+        XCTAssertEqual(running.state.direction, .right)
+        XCTAssertTrue(running.state.isManual)
+        let recovered = TimerOrientationController(sessionID: sessionID, selection: selection, defaults: defaults)
+        XCTAssertEqual(recovered.state.direction, .right)
+        XCTAssertTrue(recovered.state.isManual)
+    }
+
     func testEverySavedDefaultCanBeLoadedFromThePersistentPreferences() throws {
         let (defaults, domain) = try isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: domain) }
