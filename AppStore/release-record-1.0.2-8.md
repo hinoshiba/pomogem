@@ -1,11 +1,17 @@
-# PomoGem 1.0.2 (8) — 提出準備
+# PomoGem 1.0.2 (8) — upload確認と準備履歴
 
-更新日: 2026-09-13。新候補は未提出です。
+更新日: 2026-09-13。Xcode Organizerで1.0.2 (8)の「Uploaded to Apple」と
+同日10:01 JSTのupload履歴を確認しました。これにより、準備時点の「未提出」という記録のうち
+upload未完了の状態を更新します。App Store Connectの処理完了、選択ビルド、審査への提出状態、
+CloudKit schemaの配布完了は、このOrganizer表示からは確認できません。
 
-App Store Connectで既存1.0.1 (7)の「配信準備完了」を確認しました。build 7のArchive元は
+粒の動作修正を含む次の候補は[1.0.2 (9)](release-record-1.0.2-9.md)です。build 8を再利用しません。
+以下にはbuild 8の準備時点の変更内容と検証記録を保持します。
+
+準備時にApp Store Connectで既存1.0.1 (7)の「配信準備完了」を確認しました。build 7のArchive元は
 `e4aee83`で、その後のiCloudオフライン修正と今回のProタイマー変更は含まれません。
-PR #11は`c3995aa`としてマージ済みです。今回の変更を別PRでマージしてから、そのマージ済み
-ソースを1.0.2 (8)としてArchive・検証・提出します。既存のbuild 7タグは変更しません。
+PR #11は`c3995aa`、Proタイマー変更のPR #12は`627237b`としてマージ済みです。
+既存のbuild 7タグは変更しません。
 
 ## 今回の変更
 
@@ -24,12 +30,13 @@ CLI StoreKitTest初期化のエラーと途中の試験環境・ヘルパー失�
 修正後に5件を再実行しました。
 実App Store購入・実機2台の秒単位送受信を検証済みとはしません。
 
-提出前には、Prefs追加2属性のCloudKit Development/Production確認、マージ済みcommitの
+準備時に予定した確認は、Prefs追加2属性のCloudKit Development/Production確認、マージ済みcommitの
 Release Archive、実際の配布ペイロードの署名・バージョン・権限・dSYM照合、Apple側処理完了と
-選択ビルドの一致を確認します。既存buildの合格を新候補へ転用しません。
+選択ビルドの一致です。今回のOrganizer確認だけで、これらすべての完了を示したことにはしません。
+既存buildの合格を新候補へ転用しません。
 
-CloudKit Consoleは再ログインが必要な状態で、現在は追加schemaを公開できていません。
-この状態で追加フィールドを持つ候補を提出しません。旧端末では秒付きタイマーの引き継ぎや
+準備時にはCloudKit Consoleの再ログインが必要で、追加schemaの公開を確認できませんでした。
+現在のDevelopment/Production状態は改めて確認が必要です。旧端末では秒付きタイマーの引き継ぎや
 検出ができないため、端末間で使う前に全端末を対応版へ更新する案内を表示します。
 
 詳細は[Proタイマーの互換性](../Docs/ProTimerPrecision.md)を参照してください。

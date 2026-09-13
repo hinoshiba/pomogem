@@ -810,11 +810,9 @@ struct HomeView: View {
             applySensoryPreferences()
             restorePreferredDuration()
         }
-        .onChange(of: reduceMotion) { _, enabled in
+        .onChange(of: reduceMotion) { _, _ in
             cancelTiltHintPresentation()
-            if !enabled || voiceOverEnabled {
-                scheduleTiltHintIfNeeded()
-            }
+            scheduleTiltHintIfNeeded()
         }
         .onChange(of: voiceOverEnabled) { _, enabled in
             cancelTiltHintPresentation()
@@ -3651,8 +3649,7 @@ struct HomeView: View {
         let hasSeenCurrentHint = isVoiceOverHint ? didSeeVoiceOverTapHint : didSeeTapHint
         guard !hasSeenCurrentHint,
               !isJarEmpty,
-              tiltHintTask == nil,
-              isVoiceOverHint || !reduceMotion
+              tiltHintTask == nil
         else { return }
         tiltHintTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(700))
@@ -3676,18 +3673,11 @@ struct HomeView: View {
 
     private var jarInteractionHintText: String {
         if voiceOverEnabled {
-            return reduceMotion
-                ? "瓶をダブルタップすると近くの粒が一方向に短く動いて戻ります"
-                : "瓶をダブルタップすると粒が跳ねます。VoiceOverのカスタムアクションで左右にも動かせます"
+            return "瓶をダブルタップすると粒が跳ねます。VoiceOverのカスタムアクションで左右にも動かせます"
         }
 #if targetEnvironment(macCatalyst)
-        return reduceMotion
-            ? "瓶をタップすると近くの粒が一方向に短く動いて戻ります"
-            : "瓶をタップすると粒が跳ね、左右にドラッグすると転がります"
+        return "瓶をタップすると粒が跳ね、左右にドラッグすると転がります"
 #else
-        if reduceMotion {
-            return "瓶をタップすると近くの粒が一方向に動き、軽く振ると複数の粒が動きます"
-        }
         return "瓶をタップすると粒が跳ね、iPhoneを傾けると転がります"
 #endif
     }
@@ -4912,9 +4902,9 @@ private struct FortyYearPersistentFixtureProbe: View {
 /// A stateful, explicit-UI-test-only readout of the live SpriteKit
 /// presentation. XCUITest cannot reliably sample a transient position from a
 /// `TimelineView`: accessibility snapshots can be delivered after the pebble
-/// has already settled. This probe therefore retains the two-dimensional
-/// displacement observed by the app's render loop. A no-op tap cannot advance
-/// the sequence or its displacement.
+/// has already settled. This probe therefore retains the upward travel
+/// observed by the app's render loop. A no-op tap cannot advance the sequence
+/// or its rise.
 ///
 /// It is compiled out of Release and is mounted only when both local-preview
 /// and UI-test launch flags are present, so ordinary VoiceOver users never see
@@ -4928,13 +4918,8 @@ private struct JarUITestPresentationProbe: View {
     @State private var records = ""
     @State private var trackedRecords: String?
     @State private var bounceSequence = 0
-    @State private var lastNormalSceneSequence = 0
+    @State private var lastSceneSequence = 0
     @State private var bounceRise: CGFloat = 0
-    @State private var bounceStartPosition: CGPoint?
-    @State private var bounceLeaderID: UUID?
-    @State private var isTrackingBounce = false
-    @State private var isTrackingReducedMotionRattle = false
-    @State private var previousPositionByPebbleID: [UUID: CGPoint] = [:]
     @State private var targetX: CGFloat = 0.5
     @State private var targetY: CGFloat = 0.88
     @State private var dropSequence = 0
@@ -5001,82 +4986,23 @@ private struct JarUITestPresentationProbe: View {
 
         if trackedRecords != currentRecords {
             trackedRecords = currentRecords
-            lastNormalSceneSequence = Int(
+            lastSceneSequence = Int(
                 truncatingIfNeeded: scene.tapPresentationSequence
             )
             bounceRise = 0
-            bounceStartPosition = nil
-            bounceLeaderID = nil
-            isTrackingBounce = false
-            isTrackingReducedMotionRattle = false
-            previousPositionByPebbleID = [:]
         }
 
-        defer {
-            previousPositionByPebbleID = Dictionary(
-                uniqueKeysWithValues: pebbles.map {
-                    ($0.descriptor.id, $0.position)
-                }
-            )
-        }
-
-        // Normal-motion travel is captured on SpriteKit's own physics frames.
+        // Upward travel is captured on SpriteKit's own physics frames for both
+        // Reduce Motion settings.
         // Polling only from this SwiftUI task can miss the start of a fast arc
-        // under UI automation and substantially under-report its displacement.
-        if !scene.reduceMotion {
-            let sceneSequence = Int(truncatingIfNeeded: scene.tapPresentationSequence)
-            if sceneSequence > lastNormalSceneSequence {
-                bounceSequence += sceneSequence - lastNormalSceneSequence
-                bounceRise = 0
-            }
-            lastNormalSceneSequence = sceneSequence
-            // Keep the legacy `bounceRise` wire key for existing UI tooling;
-            // the physical path now validates total two-dimensional travel.
-            bounceRise = max(
-                bounceRise,
-                scene.tapPresentationMaximumDisplacement
-            )
-            isTrackingBounce = false
-            isTrackingReducedMotionRattle = false
-            bounceStartPosition = nil
-            bounceLeaderID = nil
-            return
+        // under UI automation and substantially under-report its rise.
+        let sceneSequence = Int(truncatingIfNeeded: scene.tapPresentationSequence)
+        if sceneSequence > lastSceneSequence {
+            bounceSequence += sceneSequence - lastSceneSequence
+            bounceRise = 0
         }
-
-        if !isTrackingBounce {
-            if let rattledPebble = pebbles.first(where: {
-                $0.action(forKey: "jar.reducedMotion.tapRattle") != nil
-            }) {
-                bounceSequence += 1
-                bounceStartPosition = previousPositionByPebbleID[
-                    rattledPebble.descriptor.id
-                ] ?? rattledPebble.position
-                bounceLeaderID = rattledPebble.descriptor.id
-                bounceRise = 0
-                isTrackingBounce = true
-                isTrackingReducedMotionRattle = true
-            }
-        }
-
-        guard isTrackingBounce,
-              let bounceStartPosition,
-              let bounceLeaderID,
-              let leader = pebbles.first(where: { $0.descriptor.id == bounceLeaderID })
-        else { return }
-
-        let displacement = hypot(
-            leader.position.x - bounceStartPosition.x,
-            leader.position.y - bounceStartPosition.y
-        )
-        bounceRise = max(bounceRise, displacement)
-        let presentationEnded = isTrackingReducedMotionRattle
-            && leader.action(forKey: "jar.reducedMotion.tapRattle") == nil
-        if presentationEnded {
-            isTrackingBounce = false
-            isTrackingReducedMotionRattle = false
-            self.bounceStartPosition = nil
-            self.bounceLeaderID = nil
-        }
+        lastSceneSequence = sceneSequence
+        bounceRise = max(bounceRise, scene.tapPresentationMaximumRise)
     }
 
     private func collectPebbles(from node: SKNode, into pebbles: inout [PebbleNode]) {

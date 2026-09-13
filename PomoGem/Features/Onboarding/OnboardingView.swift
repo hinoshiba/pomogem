@@ -408,7 +408,6 @@ private struct OnboardingPebble: View {
 
 private struct TrialDropPage: View {
     @Binding var dropped: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -433,7 +432,7 @@ private struct TrialDropPage: View {
                     )
 
                 VStack(spacing: 12) {
-                    if (reduceMotion || voiceOverEnabled), !dropped, !isDropping {
+                    if voiceOverEnabled, !dropped, !isDropping {
                         Text("ためしの一粒は任意です。記録を作らず、「次へ」でそのまま進めます。")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
@@ -441,10 +440,8 @@ private struct TrialDropPage: View {
                             .fixedSize(horizontal: false, vertical: true)
                         Button("動きを使わず一粒を試す", action: completeWithoutAnimation)
                             .buttonStyle(PomoGemPrimaryButtonStyle())
-                        if !reduceMotion {
-                            Button("着地演出を試す", action: startDrop)
-                                .buttonStyle(PomoGemSecondaryButtonStyle())
-                        }
+                        Button("着地演出を試す", action: startDrop)
+                            .buttonStyle(PomoGemSecondaryButtonStyle())
                     } else if showsRecoveryActions, !dropped {
                         Text("着地を確認できませんでした。記録には影響しません。")
                             .font(.caption)
@@ -483,15 +480,10 @@ private struct TrialDropPage: View {
             }
             scene.configureBase(strata: [], bedrock: nil, showsMonthLabels: false)
         }
-        .onChange(of: reduceMotion) { _, enabled in
-            guard enabled, isDropping, !dropped else { return }
-            completeWithoutAnimation()
-        }
         .task(id: activeDropID) {
             guard let expectedID = activeDropID,
                   isDropping,
-                  !dropped,
-                  !reduceMotion
+                  !dropped
             else { return }
             try? await Task.sleep(for: .milliseconds(2_500))
             guard !Task.isCancelled,
@@ -517,14 +509,9 @@ private struct TrialDropPage: View {
         showsRecoveryActions = false
         let pebble = tutorialPebble()
         activeDropID = pebble.id
-        if reduceMotion {
-            scene.restore(pebbles: [pebble])
-            completeDrop(announcement: "一粒を積みました。次へ進めます")
-        } else {
-            isDropping = true
-            scene.restore(pebbles: [])
-            scene.drop(pebble)
-        }
+        isDropping = true
+        scene.restore(pebbles: [])
+        scene.drop(pebble)
     }
 
     private func completeWithoutAnimation() {
