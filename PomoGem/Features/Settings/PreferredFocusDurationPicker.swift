@@ -82,22 +82,20 @@ struct PreferredFocusDurationPicker: View {
     private var customDurationButton: some View {
         Button(action: onCustomDuration) {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 8) {
-                    Text("カスタム時間")
-                        .font(.headline)
-                        .foregroundStyle(PomoGemTheme.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("Pro")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(PomoGemTheme.amber)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(PomoGemTheme.amber.opacity(0.12), in: Capsule())
-                        .fixedSize()
-                    Spacer(minLength: 0)
-                    Image(systemName: isCustomSelected ? "checkmark.circle.fill" : (isPro ? "chevron.right" : "lock.fill"))
-                        .font(.body)
-                        .foregroundStyle(isCustomSelected ? PomoGemTheme.amber : PomoGemTheme.muted)
+                if dynamicTypeSize.isAccessibilitySize {
+                    customDurationTitle
+                    HStack {
+                        proBadge
+                        Spacer(minLength: 8)
+                        customDurationIndicator
+                    }
+                } else {
+                    HStack(alignment: .top, spacing: 8) {
+                        customDurationTitle
+                        proBadge
+                        Spacer(minLength: 0)
+                        customDurationIndicator
+                    }
                 }
 
                 if isCustomSelected {
@@ -126,6 +124,29 @@ struct PreferredFocusDurationPicker: View {
             ? "分と秒を入力、またはスクロールして設定します"
             : "ポモジェムProのプランを表示します")
         .accessibilityIdentifier(isPro ? "settings.preferred-focus-duration" : "settings.custom-timer")
+    }
+
+    private var customDurationTitle: some View {
+        Text("カスタム時間")
+            .font(.headline)
+            .foregroundStyle(PomoGemTheme.text)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var proBadge: some View {
+        Text("Pro")
+            .font(.caption.weight(.bold))
+            .foregroundStyle(PomoGemTheme.amber)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(PomoGemTheme.amber.opacity(0.12), in: Capsule())
+            .fixedSize()
+    }
+
+    private var customDurationIndicator: some View {
+        Image(systemName: isCustomSelected ? "checkmark.circle.fill" : (isPro ? "chevron.right" : "lock.fill"))
+            .font(.body)
+            .foregroundStyle(isCustomSelected ? PomoGemTheme.amber : PomoGemTheme.muted)
     }
 
     private func tileBackground(isSelected: Bool) -> some View {
