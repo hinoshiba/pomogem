@@ -144,17 +144,33 @@ final class ProCustomDurationUITests: XCTestCase {
         let preference = app.buttons["settings.preferred-focus-duration"]
         XCTAssertTrue(reveal(preference))
         XCTAssertTrue(preference.label.contains("25分30秒"))
+        XCTAssertEqual(preference.value as? String, "選択中")
+        for minutes in [25, 45, 60, 90] {
+            let preset = app.buttons["settings.focus-preset.\(minutes)"]
+            XCTAssertTrue(preset.exists)
+            XCTAssertEqual(preset.value as? String, "未選択")
+        }
         preference.tap()
         XCTAssertTrue(app.textFields["custom-timer.seconds-input"].waitForExistence(timeout: 5))
-        try replaceInput("seconds", with: "0")
-        try finishKeyboard()
+        XCTAssertEqual(app.textFields["custom-timer.minutes-input"].value as? String, "25")
+        XCTAssertEqual(app.textFields["custom-timer.seconds-input"].value as? String, "30")
         let confirm = app.buttons["custom-timer.confirm"]
         XCTAssertTrue(reveal(confirm))
         confirm.tap()
         XCTAssertTrue(preference.waitForExistence(timeout: 5))
-        XCTAssertTrue(preference.label.contains("25分"))
-        XCTAssertFalse(preference.label.contains("30秒"))
-        screenshot("Pro duration — Settings saves exact whole-minute correction")
+        XCTAssertTrue(preference.label.contains("25分30秒"))
+        XCTAssertEqual(preference.value as? String, "選択中")
+
+        let twentyFiveMinutes = app.buttons["settings.focus-preset.25"]
+        XCTAssertTrue(reveal(twentyFiveMinutes))
+        twentyFiveMinutes.tap()
+        XCTAssertEqual(twentyFiveMinutes.value as? String, "選択中")
+        for minutes in [45, 60, 90] {
+            XCTAssertEqual(app.buttons["settings.focus-preset.\(minutes)"].value as? String, "未選択")
+        }
+        XCTAssertTrue(reveal(preference))
+        XCTAssertEqual(preference.value as? String, "未選択")
+        screenshot("Pro duration — Settings preset clears fractional seconds")
         app.navigationBars["設定"].buttons.element(boundBy: 0).tap()
         XCTAssertTrue(app.buttons["home.duration-picker"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["home.duration-picker"].label.contains("25分"))

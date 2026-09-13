@@ -530,60 +530,21 @@ struct SettingsView: View {
             .accessibilityIdentifier("settings.timer-default-orientation")
             .accessibilityHint("新しい集中・休憩タイマーを開く向きを選べます")
 
-            if purchase.isPro {
-                if resolvedPreferences != nil {
-                    Group {
-                        if dynamicTypeSize.isAccessibilitySize {
-                            VStack(alignment: .leading, spacing: 8) {
-                                SettingLabel(title: "任意のタイマー時間", subtitle: Constants.UIStrings.customDurationRange, symbol: "timer")
-                                proAvailabilityLabel
-                                    .padding(.leading, 40)
-                            }
+            if let resolvedPreferences {
+                PreferredFocusDurationPicker(
+                    preferredSeconds: resolvedPreferences.preferredFocusSeconds,
+                    isPro: purchase.isPro,
+                    onSelectPreset: { duration in
+                        _ = savePreferredFocusSeconds(duration.seconds)
+                    },
+                    onCustomDuration: {
+                        if purchase.isPro {
+                            showCustomDuration = true
                         } else {
-                            HStack(spacing: 10) {
-                                SettingLabel(title: "任意のタイマー時間", subtitle: Constants.UIStrings.customDurationRange, symbol: "timer")
-                                Spacer(minLength: 8)
-                                proAvailabilityLabel
-                            }
+                            router.presentPaywall(from: .customTimer)
                         }
                     }
-                    .frame(minHeight: 44)
-
-                    Button {
-                        showCustomDuration = true
-                    } label: {
-                        SettingLabel(
-                            title: "既定の集中時間",
-                            subtitle: PomodoroDuration(
-                                totalSeconds: resolvedPreferences?.preferredFocusSeconds
-                                    ?? Constants.Timer.twentyFiveMinutes * Constants.Timer.secondsPerMinute
-                            ).displayLabel,
-                            symbol: "timer"
-                        )
-                    }
-                    .accessibilityIdentifier("settings.preferred-focus-duration")
-                    .accessibilityHint("分と秒を入力、またはスクロールして設定します")
-                    .frame(minHeight: 44)
-                }
-            } else {
-                Button {
-                    router.presentPaywall(from: .customTimer)
-                } label: {
-                    HStack(spacing: 10) {
-                        SettingLabel(title: "任意のタイマー時間", subtitle: Constants.UIStrings.customDurationRange, symbol: "timer")
-                        Spacer(minLength: 8)
-                        Text("Pro")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(PomoGemTheme.amber)
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                    }
-                    .frame(minHeight: 44)
-                }
-                .buttonStyle(PomoGemBareButtonStyle())
-                .accessibilityIdentifier("settings.custom-timer")
-                .accessibilityHint("ポモジェムProのプランを表示します")
+                )
             }
         }
     }
@@ -1207,13 +1168,6 @@ struct SettingsView: View {
         )
     }
 
-    private var proAvailabilityLabel: some View {
-        Text("利用可能")
-            .font(.caption.weight(.bold))
-            .foregroundStyle(PomoGemTheme.amber)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
     private var reminderTimeBinding: Binding<Date> {
         Binding(
             get: {
@@ -1445,10 +1399,17 @@ struct SettingsView: View {
             router.showToast("Proの購入状態を確認してください", symbol: "lock")
             return false
         }
+        guard savePreferredFocusSeconds(totalSeconds) else { return false }
+        showCustomDuration = false
+        return true
+    }
+
+    private func savePreferredFocusSeconds(_ totalSeconds: Int) -> Bool {
+        let duration = PomodoroDuration(totalSeconds: totalSeconds)
         guard let resolvedPreferences,
-              PomodoroDuration(totalSeconds: totalSeconds).isValid else { return false }
+              duration.isValid,
+              !duration.requiresPro || purchase.isPro else { return false }
         if resolvedPreferences.preferredFocusSeconds == totalSeconds {
-            showCustomDuration = false
             return true
         }
         do {
@@ -1458,7 +1419,6 @@ struct SettingsView: View {
                 markers: resetSnapshots
             )
             try modelContext.save()
-            showCustomDuration = false
             return true
         } catch {
             modelContext.rollback()
