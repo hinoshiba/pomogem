@@ -308,8 +308,17 @@ final class TimerOrientationUITests: XCTestCase {
         focusManualDirection: String? = nil
     ) -> XCUIElement {
         _ = startFocus(duration: "12秒、DEMO")
+        if focusManualDirection != nil {
+            // Native scene checks take time. Freeze the 12-second fixture so
+            // its completion cannot remove the timer during a direction check.
+            app.buttons["一時停止"].tap()
+            XCTAssertTrue(waitForHittable(app.buttons["再開する"]))
+        }
         assertDirection(expectedDirection)
-        if let focusManualDirection { rotate(to: focusManualDirection) }
+        if let focusManualDirection {
+            rotate(to: focusManualDirection)
+            app.buttons["再開する"].tap()
+        }
         let stop = app.buttons["focus.completion-alert.stop"]
         XCTAssertTrue(stop.waitForExistence(timeout: 25))
         XCTAssertTrue(reveal(stop, towardStart: false))
