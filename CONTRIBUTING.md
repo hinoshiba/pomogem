@@ -34,5 +34,8 @@ MIT Licenseで提供することに同意するものとします。名称・bra
 開発とリリースにはローカルのXcodeを使用します。PRのCIは署名なしのビルドと検証を行い、
 maintainerのApple Accountやcredentialを必要としません。変更後は関連する検証を実行し、
 差分を確認してgit commitとgit pushを行い、共通PRテンプレートで提出してください。
-プロジェクトの公開連絡先とmaintainerのcommitメールアドレスは`support@hinoshiba.com`です。
+プロジェクトの公開連絡先は`support@hinoshiba.com`です。maintainerのcommit／annotated tagには
+公開承認済みの`kai.openclaw01@gmail.com`を使用できます。連絡先とcommit identityは別に扱います。
+外部contributorは公開用のメールまたはGitHubのnoreplyメールを使用してください。未承認の個人用
+メールproviderのアドレスは検査で止まるため、その場合はGitHubのnoreplyメールを使用します。
 履歴を含む公開監査は`./Scripts/check-oss-readiness.sh`で別途実行します。

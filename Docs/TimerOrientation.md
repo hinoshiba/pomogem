@@ -45,6 +45,10 @@
 画像は端末を縦に固定して手動で切り替えたときの向きをそのまま収録しています。
 上・右・下・左は、画面内でタイマーの上辺が向く方向です。
 
+この文書で参照する画面画像9枚は、Simulatorの実UIをXCTest添付として収録したものです。
+本プロジェクトが保有する画像の権利は[MIT License](../LICENSE)で許諾します。
+個別のファイル名・出所・SHA-256は[画像台帳](../ASSET_LICENSES.md)に記録しています。
+
 | 上（縦） | 右（横） |
 |---|---|
 | ![集中タイマー・上](images/timer-orientation/timer-up.png) | ![集中タイマー・右](images/timer-orientation/timer-right.png) |

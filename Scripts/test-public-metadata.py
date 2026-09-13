@@ -14,14 +14,24 @@ from pathlib import Path
 from unittest import mock
 
 sys.dont_write_bytecode = True
-from public_mailbox_policy import APPROVED_PERSONAL_EMAILS, has_unapproved_personal_mailbox
+from public_mailbox_policy import has_unapproved_personal_mailbox
 
 SCRIPTS = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location("public_git_metadata", SCRIPTS / "check-git-public-metadata.py")
 assert SPEC is not None and SPEC.loader is not None
 METADATA = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(METADATA)
-APPROVED = next(iter(APPROVED_PERSONAL_EMAILS)).encode("ascii")
+APPROVED = b"support@hinoshiba.com"
+APPROVED_MAILBOXES = (APPROVED, b"kai.openclaw01@gmail.com", b"s.k.noe@hinoshiba.com")
+CONTRIBUTOR_EMAIL = b"contributor@example.org"
+GITHUB_EMAILS = (
+    b"contributor@users.noreply.github.com",
+    b"123456+contributor@users.noreply.github.com",
+    b"49699333+dependabot[bot]@users.noreply.github.com",
+    b"41898282+github-actions[bot]@users.noreply.github.com",
+    b"dependabot[bot]@users.noreply.github.com",
+    b"noreply@github.com",
+)
 OTHER = b"unapproved-person" + b"@" + b"gmail.com"
 OID = b"1" * 40
 
@@ -41,32 +51,41 @@ def run_command(arguments: list[str], *, cwd: Path, data: bytes = b"") -> tuple[
 
 class MailboxPolicyTests(unittest.TestCase):
     def test_exact_address_case_and_prose_punctuation(self) -> None:
-        for content in (APPROVED, APPROVED.upper(), b"<" + APPROVED + b">",
-                        b"Contact " + APPROVED + b". Next sentence.",
-                        b"mailto:" + APPROVED + b"?subject=Help"):
-            with self.subTest(content=content):
-                self.assertFalse(has_unapproved_personal_mailbox(content))
+        for email in APPROVED_MAILBOXES:
+            for content in (email, email.upper(), b"<" + email + b">",
+                            b"Contact " + email + b". Next sentence.",
+                            b"mailto:" + email + b"?subject=Help"):
+                with self.subTest(content=content):
+                    self.assertFalse(has_unapproved_personal_mailbox(content))
 
     def test_aliases_prefixes_suffixes_and_embedded_addresses_are_not_approved(self) -> None:
-        local, domain = APPROVED.split(b"@")
-        for content in (b"other." + APPROVED, local + b"+tag@" + domain,
-                        APPROVED + b".example.org", APPROVED + b"_other",
-                        b"other@" + APPROVED, APPROVED + b"@example.org",
-                        b"other/" + APPROVED, b"!" + APPROVED,
-                        "別人".encode() + APPROVED):
-            with self.subTest(content=content):
-                self.assertTrue(has_unapproved_personal_mailbox(content))
+        for email in APPROVED_MAILBOXES:
+            local, domain = email.split(b"@")
+            for content in (b"other." + email, local + b"+tag@" + domain,
+                            email + b".example.org", email + b"_other",
+                            b"other@" + email, email + b"@example.org",
+                            b"other/" + email, b"!" + email,
+                            "別人".encode() + email):
+                with self.subTest(content=content):
+                    self.assertTrue(has_unapproved_personal_mailbox(content))
 
     def test_an_approved_address_does_not_hide_another_on_the_same_line(self) -> None:
-        for content in (APPROVED + b" " + OTHER, OTHER + b"; " + APPROVED,
-                        b"\0\xff" + APPROVED + b"\0binary\0" + OTHER.upper() + b"\0"):
-            self.assertTrue(has_unapproved_personal_mailbox(content))
+        for email in APPROVED_MAILBOXES + GITHUB_EMAILS + (CONTRIBUTOR_EMAIL,):
+            for content in (email + b" " + OTHER, OTHER + b"; " + email,
+                            b"\0\xff" + email + b"\0binary\0" + OTHER.upper() + b"\0"):
+                self.assertTrue(has_unapproved_personal_mailbox(content))
 
     def test_all_previously_blocked_provider_families_remain_blocked(self) -> None:
         for domain in (b"gmail.com", b"googlemail.com", b"icloud.com", b"me.com", b"mac.com",
                        b"outlook.com", b"hotmail.com", b"live.com", b"yahoo.com",
-                       b"yahoo.co.jp", b"proton.com", b"protonmail.com"):
+                       b"yahoo.co.jp", b"proton.com", b"protonmail.com", b"hinoshiba.com"):
             self.assertTrue(has_unapproved_personal_mailbox(b"person" + b"@" + domain))
+
+    def test_public_contributor_and_github_noreply_addresses_pass_content_scans(self) -> None:
+        for email in (CONTRIBUTOR_EMAIL,) + GITHUB_EMAILS:
+            self.assertFalse(has_unapproved_personal_mailbox(email))
+            for encoding, bom in (("utf-16-le", b"\xff\xfe"), ("utf-16-be", b"\xfe\xff")):
+                self.assertFalse(has_unapproved_personal_mailbox(bom + email.decode().encode(encoding)))
 
     def test_binary_safe_and_large_nonmatching_content(self) -> None:
         self.assertFalse(has_unapproved_personal_mailbox(b"\0\xff\0" + APPROVED + b"\0\xfe"))
@@ -75,27 +94,47 @@ class MailboxPolicyTests(unittest.TestCase):
 
     def test_utf16_mailboxes_are_checked_even_inside_a_binary_history_batch(self) -> None:
         for encoding, bom in (("utf-16-le", b"\xff\xfe"), ("utf-16-be", b"\xfe\xff")):
-            approved = bom + (APPROVED.decode() + "\n").encode(encoding)
-            rejected = bom + (OTHER.decode() + "\n").encode(encoding)
-            for prefix in (b"", b"0123456789 blob 100\n"):
-                self.assertFalse(has_unapproved_personal_mailbox(prefix + approved))
-                self.assertTrue(has_unapproved_personal_mailbox(prefix + rejected))
-            for text in ("other." + APPROVED.decode(), APPROVED.decode() + ".example.org",
-                         APPROVED.decode() + " " + OTHER.decode()):
-                self.assertTrue(has_unapproved_personal_mailbox(bom + text.encode(encoding)))
+            for email in APPROVED_MAILBOXES:
+                approved = bom + (email.decode() + "\n").encode(encoding)
+                rejected = bom + (OTHER.decode() + "\n").encode(encoding)
+                for prefix in (b"", b"0123456789 blob 100\n"):
+                    self.assertFalse(has_unapproved_personal_mailbox(prefix + approved))
+                    self.assertTrue(has_unapproved_personal_mailbox(prefix + rejected))
+                for text in ("other." + email.decode(), email.decode() + ".example.org",
+                             email.decode() + " " + OTHER.decode()):
+                    self.assertTrue(has_unapproved_personal_mailbox(bom + text.encode(encoding)))
 
 
 class GitIdentityTests(unittest.TestCase):
     def identity(self, email: bytes = APPROVED, kind: bytes = b"author") -> bytes:
         return kind + b" Maintainer <" + email + b"> 1788000000 +0900"
 
-    def test_only_complete_approved_metadata_identities_pass(self) -> None:
-        for email in METADATA.ALLOWED_EMAILS:
-            self.assertEqual(METADATA.validate_identity(OID, b"commit", self.identity(email.encode())), "")
-        self.assertEqual(METADATA.validate_identity(OID, b"commit", self.identity(APPROVED.upper())), "")
-        for email in (OTHER, b"other." + APPROVED, APPROVED + b".invalid", b" " + APPROVED,
-                      b"someone" + b"@" + b"example.org"):
-            self.assertTrue(METADATA.validate_identity(OID, b"commit", self.identity(email)))
+    def test_approved_and_public_contributor_identities_pass(self) -> None:
+        for email in APPROVED_MAILBOXES + (CONTRIBUTOR_EMAIL,) + GITHUB_EMAILS:
+            for kind in (b"author", b"committer", b"tagger"):
+                with self.subTest(email=email, kind=kind):
+                    self.assertEqual(METADATA.validate_identity(OID, b"commit", self.identity(email, kind)), "")
+                    self.assertEqual(METADATA.validate_identity(OID, b"commit", self.identity(email.upper(), kind)), "")
+
+    def test_unapproved_personal_metadata_and_aliases_remain_rejected(self) -> None:
+        for approved in APPROVED_MAILBOXES:
+            local, domain = approved.split(b"@")
+            for email in (OTHER, b"other." + approved, local + b"+tag@" + domain,
+                          approved + b".invalid", b"person@" + domain,
+                          b"other'" + approved, b"other`" + approved):
+                with self.subTest(email=email):
+                    error = METADATA.validate_identity(OID, b"commit", self.identity(email))
+                    self.assertIn("use a GitHub noreply address", error)
+
+    def test_malformed_email_addresses_are_rejected(self) -> None:
+        for email in (b" " + APPROVED, b"missing-at.example.org", b"person@localhost",
+                      b"person..name@example.org", b".person@example.org", b"person.@example.org",
+                      b"person name@example.org", b"person@example..org", b"person@-example.org",
+                      b"person@example-.org", b"person@example.org.", b"person@@example.org",
+                      b"robot[bot]@example.org", "投稿者@example.org".encode(),
+                      b"a" * 65 + b"@example.org", b"person@" + b"a" * 64 + b".org"):
+            with self.subTest(email=email):
+                self.assertTrue(METADATA.validate_identity(OID, b"commit", self.identity(email)))
 
     def test_malformed_identity_fields_are_rejected(self) -> None:
         valid = self.identity()
@@ -198,18 +237,39 @@ class ScannerIntegrationTests(unittest.TestCase):
         inventory.write_bytes(malformed_tag + b"\n")
         self.assertNotEqual(self.command(*check)[0], 0)
 
+    def test_contributor_and_bot_commits_pass_both_raw_history_checks(self) -> None:
+        self.git("init", "--quiet")
+        tree = self.git("mktree")
+        objects = []
+        for email in APPROVED_MAILBOXES + (CONTRIBUTOR_EMAIL,) + GITHUB_EMAILS:
+            identity = b" Contributor <" + email + b"> 1788000000 +0900"
+            commit = self.git("hash-object", "-w", "-t", "commit", "--stdin", data=
+                              b"tree " + tree + b"\nauthor" + identity + b"\ncommitter" + identity + b"\n\nContribution\n")
+            tag = self.git("hash-object", "-w", "-t", "tag", "--stdin", data=
+                           b"object " + commit + b"\ntype commit\ntag review\ntagger" + identity + b"\n\nReviewed\n")
+            objects.extend((commit, tag))
+        inventory = self.directory / "objects"
+        inventory.write_bytes(b"\n".join(objects) + b"\n")
+        check = (sys.executable, str(SCRIPTS / "check-git-public-metadata.py"), str(inventory))
+        self.assertEqual(self.command(*check)[0], 0)
+        batch = self.directory / "batch"
+        batch.write_bytes(self.git("cat-file", "--batch", data=inventory.read_bytes()))
+        scan = (sys.executable, str(SCRIPTS / "public_mailbox_policy.py"), "--git-batch", str(batch))
+        self.assertEqual(self.command(*scan)[0], 0)
+
     def test_approved_email_does_not_exempt_credentials_from_existing_regex(self) -> None:
         shell = (SCRIPTS / "check-oss-readiness.sh").read_text()
         match = re.search(r"^credential_value_pattern='([^']+)'$", shell, re.MULTILINE)
         self.assertIsNotNone(match)
         assert match is not None
         file = self.directory / "candidate"
-        file.write_bytes(APPROVED + b" " + b"ghp_" + b"A" * 30)
-        status, _, _ = self.command("rg", "-a", "-q", "--", match.group(1), str(file))
-        self.assertEqual(status, 0)
-        file.write_bytes(APPROVED + b" " + b"PRIVATE " + b"KEY-----")
-        status, _, _ = self.command("rg", "-a", "-q", "-F", "--", "PRIVATE " + "KEY-----", str(file))
-        self.assertEqual(status, 0)
+        for email in APPROVED_MAILBOXES + (CONTRIBUTOR_EMAIL,) + GITHUB_EMAILS:
+            file.write_bytes(email + b" " + b"ghp_" + b"A" * 30)
+            status, _, _ = self.command("rg", "-a", "-q", "--", match.group(1), str(file))
+            self.assertEqual(status, 0)
+            file.write_bytes(email + b" " + b"PRIVATE " + b"KEY-----")
+            status, _, _ = self.command("rg", "-a", "-q", "-F", "--", "PRIVATE " + "KEY-----", str(file))
+            self.assertEqual(status, 0)
 
 
 if __name__ == "__main__":

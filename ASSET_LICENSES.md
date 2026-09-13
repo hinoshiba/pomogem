@@ -1,11 +1,14 @@
 # Asset license register
 
-この台帳は、ソースコードのMIT Licenseとは別に扱う画像・フォントを記録します。
+この台帳は、画像・フォントごとの出所とライセンスを記録します。
 ハッシュは公開直前に`Scripts/check-oss-readiness.sh`で再確認します。
 
 ## 適用範囲
 
 - ソースコードと通常文書には`LICENSE`のMIT Licenseが適用されます。
+- 下表で「MIT License」としたタイマー方向の説明用画面画像9枚について、本プロジェクトが
+  保有する権利を`LICENSE`のMIT Licenseで許諾します。ブランド素材向けの開発用限定許諾は
+  この9枚には適用しません。フォントやAppleの素材自体を再許諾するものではありません。
 - Zen Maru GothicにはSIL Open Font License 1.1が適用されます。全文は
   `LICENSE-fonts.txt`を参照してください。
 - 下表で「All rights reserved」とした「ポモジェム」「PomoGem」固有の視覚素材は
@@ -62,6 +65,15 @@ StoreKit設定ファイルなしでUS storefrontの実価格$0.99を表示して
 | App Store画面 05 | `AppStore/screenshots/ja-JP/05-iCloud-and-privacy.png` | PomoGem 1.0 (5)のproduction UIをDebug-only deterministic fixtureで2026-09-06に新規capture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `0aaaf14b32c8b5834cbf9bd2eadbe1fff37f59409cdf818bb0471f87356cf97d` |
 | IAP審査画面 | `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png` | PomoGem 1.0 (5)のproduction UIで新商品の実StoreKit価格を2026-09-06にcapture。Product.products、StoreKit設定なし、JA UI／US storefront $0.99。購入未実行、1284×2778 RGB PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `d1cba699d99ef7f34cebe0e1261f7fd6616003138a4c01aa9e0ded2555aa52c0` |
 | Zen Maru Gothic Black | `PomoGem/Resources/Fonts/ZenMaruGothic-Black.ttf`、`http_dists/public/ZenMaruGothic-Black.ttf` | Copyright 2021 The Zen Maru Gothic Project Authors | SIL Open Font License 1.1。`LICENSE-fonts.txt`参照 | `6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f` |
+| タイマー既定方向の設定画面 | `Docs/images/timer-orientation/default-orientation-settings.png` | 2026-09-09、iPhone 17 Pro / iOS 26.5 Simulatorの実UIをXCTestでcapture。テスト専用の空の保存領域を使用、加工・合成なし。詳細は Docs/TimerOrientation.md | Copyright 2026 hinoshiba. MIT License（本プロジェクトが保有する権利） | `c40006bc617c4f1d44accc932a02ec92089146655d963cc7a172e825dd41ba78` |
+| 集中タイマー・上 | `Docs/images/timer-orientation/timer-up.png` | 2026-09-09、iPhone 17 Pro / iOS 26.5 Simulatorの実UIをXCTestでcapture。テスト専用の空の保存領域と初期テーマ「英語」を使用、加工・合成なし。詳細は Docs/TimerOrientation.md | Copyright 2026 hinoshiba. MIT License（本プロジェクトが保有する権利） | `964d36dd4a65cf12e94c9066bdf41c4dd7a7051f0713d663919ecacd9bffea99` |
+| 集中タイマー・右 | `Docs/images/timer-orientation/timer-right.png` | 2026-09-09、iPhone 17 Pro / iOS 26.5 Simulatorの実UIをXCTestでcapture。テスト専用の空の保存領域と初期テーマ「英語」を使用、加工・合成なし。詳細は Docs/TimerOrientation.md | Copyright 2026 hinoshiba. MIT License（本プロジェクトが保有する権利） | `bd8ecfc38f16bd4dbc58eba7be33cc079f349d93e599c6b794e149ea5d2bb50d` |
+| 集中タイマー・下 | `Docs/images/timer-orientation/timer-down.png` | 2026-09-09、iPhone 17 Pro / iOS 26.5 Simulatorの実UIをXCTestでcapture。テスト専用の空の保存領域と初期テーマ「英語」を使用、加工・合成なし。詳細は Docs/TimerOrientation.md | Copyright 2026 hinoshiba. MIT License（本プロジェクトが保有する権利） | `f6569b315513ac91fdf8304b4768c7892418a23b498a976c995b9a61ce8e83de` |
+| 集中タイマー・左 | `Docs/images/timer-orientation/timer-left.png` | 2026-09-09、iPhone 17 Pro / iOS 26.5 Simulatorの実UIをXCTestでcapture。テスト専用の空の保存領域と初期テーマ「英語」を使用、加工・合成なし。詳細は Docs/TimerOrientation.md | Copyright 2026 hinoshiba. MIT License（本プロジェクトが保有する権利） | `444ff92eaa283f2ab8c7c6fb7a3c8bbed14e2adc373310360273155f82b96818` |
+| 休憩タイマー・上 | `Docs/images/timer-orientation/break-up.png` | 2026-09-09、iPhone 17 Pro / iOS 26.5 Simulatorの実UIをXCTestでcapture。テスト専用の空の保存領域と初期テーマ「英語」を使用、加工・合成なし。詳細は Docs/TimerOrientation.md | Copyright 2026 hinoshiba. MIT License（本プロジェクトが保有する権利） | `34457201d06351eb8364545edcce124d3a085f87f594bd137f723820d21e030c` |
+| 休憩タイマー・右 | `Docs/images/timer-orientation/break-right.png` | 2026-09-09、iPhone 17 Pro / iOS 26.5 Simulatorの実UIをXCTestでcapture。テスト専用の空の保存領域と初期テーマ「英語」を使用、加工・合成なし。詳細は Docs/TimerOrientation.md | Copyright 2026 hinoshiba. MIT License（本プロジェクトが保有する権利） | `6b7bfbef91884aed505ebb937d84214fc75435e644af4a1304cf623293bed245` |
+| 休憩タイマー・下 | `Docs/images/timer-orientation/break-down.png` | 2026-09-09、iPhone 17 Pro / iOS 26.5 Simulatorの実UIをXCTestでcapture。テスト専用の空の保存領域と初期テーマ「英語」を使用、加工・合成なし。詳細は Docs/TimerOrientation.md | Copyright 2026 hinoshiba. MIT License（本プロジェクトが保有する権利） | `f7973db86f9ccb3278b1a61c2c8b95649d42cb3273b0849546be51c2b258ce3e` |
+| 休憩タイマー・左 | `Docs/images/timer-orientation/break-left.png` | 2026-09-09、iPhone 17 Pro / iOS 26.5 Simulatorの実UIをXCTestでcapture。テスト専用の空の保存領域と初期テーマ「英語」を使用、加工・合成なし。詳細は Docs/TimerOrientation.md | Copyright 2026 hinoshiba. MIT License（本プロジェクトが保有する権利） | `482cc6fb71c22e66886db4f38a4641648ad5c2154c2420dce658bb448f3f805e` |
 
-生成経緯とpromptの要約は`PomoGem/Resources/GENERATED-ASSETS.md`に記録しています。
+AI生成素材の生成経緯とpromptの要約は`PomoGem/Resources/GENERATED-ASSETS.md`に記録しています。
 SF Symbolsは`Image(systemName:)`で参照し、書き出したSymbol画像を同梱していません。

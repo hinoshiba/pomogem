@@ -21,7 +21,12 @@ Store listingから確認できる公開識別子で、credentialではありま
 `oss_publication.repository_visibility`を実態に合わせて更新します。
 Pagesの配信先は改名で変化しないrepository IDで制限します。
 
-公開する連絡先と今後のcommit／annotated tagのメールは`support@hinoshiba.com`に統一します。
+公開するサポート連絡先は`support@hinoshiba.com`です。maintainerのcommit／annotated tagには
+公開承認済みの`kai.openclaw01@gmail.com`を使用できます。過去のcommitと公開監査記録に含まれる
+この完全一致アドレスも公開対象です。サポート連絡先としては使用しません。
+過去の作者identityにある`s.k.noe@hinoshiba.com`も公開承認済みとして保持します。
+外部contributorの公開用メールとGitHubのnoreply identityは、サポート連絡先とは別に検査します。
+未承認の個人用メールproviderのアドレスは引き続き検出し、GitHubのnoreply identityを案内します。
 PRでは現在のファイルと新規commitのidentityを検証し、履歴全体の監査は独立して実行します。
 過去の監査結果や履歴の変更に関する記録はrepository外で管理します。
 
