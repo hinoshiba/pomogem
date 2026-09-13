@@ -178,6 +178,8 @@ struct PebbleDescriptor: Identifiable {
     let radius: CGFloat
     let createdAt: Date
     let isTutorial: Bool
+    /// Rendering-only obstacle metadata never enters the study data model.
+    let screenTimeObstacle: ScreenTimeObstacleDescriptor?
 
     init(
         id: UUID = UUID(),
@@ -191,7 +193,8 @@ struct PebbleDescriptor: Identifiable {
         grams: Int,
         radius: CGFloat? = nil,
         createdAt: Date = .now,
-        isTutorial: Bool = false
+        isTutorial: Bool = false,
+        screenTimeObstacle: ScreenTimeObstacleDescriptor? = nil
     ) {
         self.id = id
         self.subjectName = subjectName
@@ -217,6 +220,7 @@ struct PebbleDescriptor: Identifiable {
         self.radius = aggregate == nil ? (radius ?? massDerivedRadius) : massDerivedRadius
         self.createdAt = createdAt
         self.isTutorial = isTutorial
+        self.screenTimeObstacle = screenTimeObstacle
     }
 
     init(session: StudySession) {
@@ -264,8 +268,9 @@ struct PebbleDescriptor: Identifiable {
 
     var isAchievement: Bool { achievementKind != nil }
     var isAggregate: Bool { aggregate != nil }
+    var isScreenTimeObstacle: Bool { screenTimeObstacle != nil }
     var aggregateLevel: Int { aggregate?.level ?? 0 }
-    var participatesInAggregation: Bool { !isAchievement && !isTutorial }
+    var participatesInAggregation: Bool { !isAchievement && !isTutorial && !isScreenTimeObstacle }
     var participatesInBake: Bool { participatesInAggregation }
 
     /// UUID identifies the stored row, not an immutable rendering snapshot.
@@ -285,6 +290,7 @@ struct PebbleDescriptor: Identifiable {
             && radius == other.radius
             && createdAt == other.createdAt
             && isTutorial == other.isTutorial
+            && screenTimeObstacle == other.screenTimeObstacle
     }
 
     /// Kept compact enough for the landing card and VoiceOver. This is only
@@ -298,8 +304,9 @@ struct PebbleDescriptor: Identifiable {
     }
 
     var isMeasured: Bool {
+        guard !isScreenTimeObstacle else { return false }
         return switch source {
-        case .timer:
+        case .timer, .screenTime:
             true
         case .manual, .timerDemoted:
             false
@@ -307,13 +314,16 @@ struct PebbleDescriptor: Identifiable {
     }
 
     var accessibilityDescription: String {
+        if let screenTimeObstacle {
+            return screenTimeObstacle.accessibilityDescription
+        }
         if let aggregate {
             return "\(aggregate.accessibilityDescription)、\(grams)グラム"
         }
         if let achievementKind {
             return "\(subjectName)、\(achievementKind.title)の記念石、質量には含まれません"
         }
-        let measurement = isMeasured ? "実測" : "自己申告"
+        let measurement = source == .screenTime ? "Screen Time" : (isMeasured ? "実測" : "自己申告")
         let material: String
         let presentationKind = RareRewardPresentationPolicy.kind(kind)
         switch presentationKind {
@@ -326,6 +336,7 @@ struct PebbleDescriptor: Identifiable {
     }
 
     var aggregateSource: AggregateSource {
+        precondition(!isScreenTimeObstacle, "Screen Time obstacles cannot enter study aggregation")
         if let aggregate {
             return AggregateSource(
                 id: id,
@@ -382,7 +393,7 @@ struct PebbleDescriptor: Identifiable {
             return Constants.Jar.measuredRadius * Constants.Jar.achievementRadiusScale
         }
         return switch source {
-        case .timer, .timerDemoted:
+        case .timer, .timerDemoted, .screenTime:
             PebbleRadiusPolicy.measuredRadius(grams: grams)
         case .manual:
             // Manual buttons are 30/60/120 minutes and the model stores 10 g/min.
@@ -505,7 +516,8 @@ final class PebbleNode: SKShapeNode {
     func setEarlyEffortSpotlight(_ enabled: Bool) {
         guard !descriptor.isTutorial,
               !descriptor.isAchievement,
-              !descriptor.isAggregate else {
+              !descriptor.isAggregate,
+              !descriptor.isScreenTimeObstacle else {
             earlyEffortAuraNode?.removeFromParent()
             earlyEffortAuraNode = nil
             earlyEffortBloomNode?.removeFromParent()
@@ -617,6 +629,7 @@ final class PebbleNode: SKShapeNode {
         aggregateCountNode?.zRotation = -zRotation
         achievementMarkBackdropNode?.zRotation = -zRotation
         achievementMarkNode?.zRotation = -zRotation
+        childNode(withName: "obstacle.count")?.zRotation = -zRotation
     }
 
     private func configurePhysics() {
@@ -641,6 +654,10 @@ final class PebbleNode: SKShapeNode {
         lineWidth = Constants.Jar.outlineWidth
         lineJoin = .round
         zPosition = JarZPosition.pebble
+        if let obstacle = descriptor.screenTimeObstacle {
+            ScreenTimeObstacleAppearance.apply(to: self, descriptor: obstacle, radius: radius)
+            return
+        }
         addContactShadow()
 
         if let aggregate = descriptor.aggregate {

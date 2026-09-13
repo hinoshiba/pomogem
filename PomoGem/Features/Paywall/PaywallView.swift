@@ -6,6 +6,7 @@ enum PaywallContext {
     case settings
     case customTimer
     case aggregateLabels
+    case screenTimeApps
 }
 
 struct PaywallView: View {
@@ -100,6 +101,8 @@ struct PaywallView: View {
             "任意の集中時間を選べます。"
         case .aggregateLabels:
             "まとまり粒に、積み上げた月を刻めます。"
+        case .screenTimeApps:
+            "勉強時間を記録するアプリを、数の制限なく選べます。"
         case .settings:
             "集中のリズムと、残し方をもっと自由に。"
         }
@@ -117,6 +120,12 @@ struct PaywallView: View {
                 symbol: "circle.hexagongrid.fill",
                 title: "まとまり粒の月刻印",
                 detail: "積み重ねた月を残す"
+            )
+            Divider().overlay(PomoGemTheme.glassEdge.opacity(0.08))
+            PaywallFeature(
+                symbol: "apps.iphone",
+                title: "勉強アプリ数が無制限",
+                detail: "スクリーンタイム連携。無料は5つまで"
             )
         }
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 18))

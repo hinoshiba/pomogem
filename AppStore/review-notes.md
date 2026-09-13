@@ -30,7 +30,7 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
 - Product ID: `com.hinoshiba.pomogem.pro.lifetime`
 - Type: Non-Consumable
 - Entry: Homeの時間表示 → 「自由な時間を設定」、またはSettings → ポモジェムPro
-- Unlocks: 無料の25分／45分／60分／90分以外の任意の1分00秒〜360分00秒を秒単位で指定、まとまり粒の月刻印
+- Unlocks: 無料の25分／45分／60分／90分以外の任意の1分00秒〜360分00秒を秒単位で指定、まとまり粒の月刻印、スクリーンタイムの勉強アプリ数無制限（無料5つ）
 - Restore: purchase screenの「購入を復元」
 - Pricing: United States USD 0.99 base price; Japan JPY 100 custom price; other available storefronts use Apple's automatically generated local equivalent
 - Availability: App and IAP are available in 148 of 175 storefronts. Austria, Belgium, Bulgaria, Croatia, Cyprus, Czech Republic, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Ireland, Italy, Latvia, Lithuania, Luxembourg, Malta, Netherlands, Poland, Portugal, Romania, Slovakia, Slovenia, Spain, and Sweden are excluded. United Kingdom, Norway, and Switzerland remain included; automatic availability for new storefronts is enabled.
@@ -42,6 +42,17 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
 提供せず、完走時はテーマ色の通常粒を保存します。
 
 ## Apple services and permissions
+
+- Screen Time（次期候補）: Settings → スクリーンタイム →「アクセスを許可」でindividual authorizationを
+  許可します。勉強アプリと記録先テーマを選び、記録をオンにして「保存」。複数の選択アプリをまたぐ合計
+  10分ごとに、復帰後の瓶へ600秒・100gぶんの通常gemを追加します。無料は勉強アプリ5つまで、Proは無制限。
+  「黒いgem」側のアプリは無料でも無制限で、別に合計10分ごとに黒い障害物を追加します。黒同士だけで
+  結合し、学習時間・共有画像には含めません。二つの集合は重複不可、カテゴリ／Webは選択不可です。
+  アプリの選択と黒いgemはApp Groupの端末内台帳だけに保存し、tokenをCloudKitやJSON exportへ渡しません。
+  10分未満の端数は日付変更・設定変更・停止でリセットし、timer中は学習側を休止して二重加算を防ぎます。
+  OS通知には遅延があり、アクセス拒否や監視失敗は設定へ表示します。実機での確認手順と配布前に必要な
+  本体・Monitor拡張のFamily Controls distribution承認は[ScreenTimeGems.md](../Docs/ScreenTimeGems.md)に記載。
+  この追記はApp Store Connectへの転記・Apple承認・実機検証の完了を示しません。
 
 - SwiftData private CloudKit: iCloudを選び確認した場合だけ、テーマ名、成果memo、記録、設定、進行中
   timerを含む7種類の同期元modelを一つのprivate containerへ保存し、同じApple Accountの対応iPhone間で

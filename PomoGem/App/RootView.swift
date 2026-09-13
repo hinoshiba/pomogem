@@ -344,6 +344,8 @@ struct RootView: View {
     private var wrappedNotifications = false
     @AppStorage(AccountScopedLocalState.defaultsKey(base: "activity.last-applied-reset-epoch")) private var lastAppliedResetEpoch = ""
     @State private var router = AppRouter()
+    // Preserve the owner of this persistence host while a replacement mounts.
+    @State private var screenTimeContextKey = AccountScopedLocalState.defaultsKey(base: "screen-time-owner")
     @State private var isBootstrapped = false
     @State private var viewTasks = ViewTaskScope()
     @State private var isFinishingOnboarding = false
@@ -679,6 +681,12 @@ struct RootView: View {
                     .zIndex(100)
             }
         }
+        .modifier(ScreenTimeIntegrationModifier(
+            isReady: isFirstFramePresented && !isDataDeletionQuiesced && !storageTransfer.isStarting,
+            timerPresented: router.focusPresentationIsActive,
+            contextKey: screenTimeContextKey,
+            dataEpochID: PrefsConsumerPolicy.currentEpochID(from: resetSnapshots)
+        ))
         .environment(router)
         .environment(completeDeletion)
         .environment(storageTransfer)
@@ -1755,6 +1763,7 @@ struct RootView: View {
         DeferredFocusCompletionStore.clear()
         PendingStratumCelebrationStore.removeAll()
         PendingRewardReceiptStore.removeAll()
+        ScreenTimeGemDropStore.removeAll()
         FocusRestCadenceStore.removeAll()
         UserDefaults.standard.removeObject(
             forKey: AccountScopedLocalState.defaultsKey(

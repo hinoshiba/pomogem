@@ -116,7 +116,7 @@ jobs:
             exit 1
           fi
 
-      - name: Build Release app and Widget without signing
+      - name: Build Release app, Widget, and Screen Time monitor without signing
         shell: bash
         run: |
           set -euo pipefail
@@ -134,14 +134,18 @@ jobs:
 
           app_bundle="$release_derived_data/Build/Products/Release-iphonesimulator/PomoGem.app"
           widget_bundle="$app_bundle/PlugIns/PomoGemWidgets.appex"
+          monitor_bundle="$app_bundle/PlugIns/PomoGemScreenTimeMonitor.appex"
           main_binary="$app_bundle/PomoGem"
           widget_binary="$widget_bundle/PomoGemWidgets"
+          monitor_binary="$monitor_bundle/PomoGemScreenTimeMonitor"
 
           for required_path in \
             "$app_bundle" \
             "$widget_bundle" \
+            "$monitor_bundle" \
             "$main_binary" \
-            "$widget_binary"
+            "$widget_binary" \
+            "$monitor_binary"
           do
             if [[ ! -e "$required_path" ]]; then
               echo "Missing Release product: $required_path" >&2
@@ -149,7 +153,7 @@ jobs:
             fi
           done
 
-          for binary in "$main_binary" "$widget_binary"; do
+          for binary in "$main_binary" "$widget_binary" "$monitor_binary"; do
             file_description=$(file -b "$binary")
             echo "$binary: $file_description"
             if [[ "$file_description" != *Mach-O* ]]; then
@@ -182,7 +186,7 @@ jobs:
             exit "$grep_status"
           fi
 
-          echo "Release app and embedded Widget contain no forbidden hook tokens."
+          echo "Release app and embedded extensions contain no forbidden hook tokens."
 
       - name: Select an available iPhone Simulator
         shell: bash

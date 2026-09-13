@@ -56,6 +56,9 @@ targets:
     entitlements:
       path: PomoGem/PomoGem.entitlements
       properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups:
+          - group.com.hinoshiba.pomogem
         aps-environment: $(APS_ENVIRONMENT)
         com.apple.developer.icloud-container-identifiers:
           - iCloud.com.hinoshiba.pomogem
@@ -79,6 +82,10 @@ targets:
           APS_ENVIRONMENT: production
           ICLOUD_CONTAINER_ENVIRONMENT: Production
     dependencies:
+      - target: PomoGemScreenTimeMonitor
+        embed: true
+        destinationFilters:
+          - iOS
       - target: PomoGemWidgets
         embed: true
         destinationFilters:
@@ -113,6 +120,42 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.pomogem.widgets
         PRODUCT_NAME: PomoGemWidgets
         SKIP_INSTALL: true
+  PomoGemScreenTimeMonitor:
+    type: app-extension
+    platform: iOS
+    info:
+      path: PomoGemScreenTimeMonitor/Info.plist
+      properties:
+        CFBundleDisplayName: ポモジェム スクリーンタイム
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.deviceactivity.monitor-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ScreenTimeMonitorExtension
+    sources:
+      - path: PomoGemScreenTimeMonitor
+        excludes:
+          - PomoGemScreenTimeMonitor.entitlements
+      - path: Shared/ScreenTimePolicy.swift
+      - path: Shared/ScreenTimeStore.swift
+      - path: Shared/ScreenTimeMonitoring.swift
+    entitlements:
+      path: PomoGemScreenTimeMonitor/PomoGemScreenTimeMonitor.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups:
+          - group.com.hinoshiba.pomogem
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MACCATALYST: false
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: false
+        CODE_SIGN_STYLE: Automatic
+        PRODUCT_BUNDLE_IDENTIFIER: com.hinoshiba.pomogem.screentimemonitor
+        PRODUCT_NAME: PomoGemScreenTimeMonitor
+        SKIP_INSTALL: true
+        APPLICATION_EXTENSION_API_ONLY: true
   PomoGemTests:
     type: bundle.unit-test
     platform: iOS

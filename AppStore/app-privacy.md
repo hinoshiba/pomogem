@@ -109,3 +109,18 @@ App Managerが最終決定・Publishします。
 
 新しいnetwork endpoint、SDK、permission、data retention、Widget accessを追加した時点で、このdraftを
 無効として再回答します。
+
+## Screen Time追加時の再監査
+
+次期候補はFamily Controlsの個人認証とDevice Activity Monitorを追加する。利用者が
+選択・有効化したアプリの利用が10分に達したイベントだけを処理し、アプリ名・Bundle IDの
+取得やDeviceActivityReportからのデータ搬出は行わない。設定・不透明トークン・到達台帳・
+黒い石は本体と監視拡張のApp Group内に保持し、バックアップ・CloudKit・共有・ログへ出さない。
+学習の確定済み10分/100gだけを通常記録へ取り込み、本人がiCloudを選んだ場合はそのprivate
+CloudKitへ同期する。運営者のサーバー、解析SDK、追跡処理の追加はない。
+
+WidgetのApp Group非使用は維持する。監視拡張のPrivacy Manifestもtracking=false、
+collected data types=[]とする。端末内処理だけではAppleのデータ収集に該当しないが、
+配布前に実際のarchive・Family Controls配布権限・公開ポリシーとApp Store Connectの
+最新質問を再確認する。Screen Timeの設定、未取込情報、黒い石は現在のJSON書き出しと
+保存先移行に含まれないことをアプリと公開ポリシーで明示する。

@@ -136,6 +136,7 @@ struct SettingsView: View {
         List {
             subjectsSection
             focusSection
+            screenTimeSection
             if RareRewardReleasePolicy.isEnabled {
                 rarePebbleSection
             }
@@ -757,6 +758,21 @@ struct SettingsView: View {
         }
     }
 
+    private var screenTimeSection: some View {
+        Section("アプリの利用時間") {
+            NavigationLink {
+                ScreenTimeSettingsView()
+            } label: {
+                SettingLabel(
+                    title: "スクリーンタイム",
+                    subtitle: "10分ごとに勉強のgem・黒いgemを積む",
+                    symbol: "hourglass"
+                )
+            }
+            .accessibilityIdentifier("settings.screen-time")
+        }
+    }
+
     private var proSection: some View {
         Section {
             Button {
@@ -768,7 +784,7 @@ struct SettingsView: View {
                         .frame(width: 28)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(Constants.UIStrings.paywallTitle).font(.headline)
-                        Text(purchase.isPro ? "利用中" : "任意時間・まとまり粒の月刻印")
+                        Text(purchase.isPro ? "利用中" : "任意時間・月刻印・勉強アプリ数の無制限")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                     }

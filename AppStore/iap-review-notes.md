@@ -10,7 +10,9 @@ Type: Non-Consumable
 
 PomoGem Pro is a one-time, non-consumable purchase. It unlocks every other focus timer from
 1 to 360 minutes beyond the free 25-, 45-, 60-, and 90-minute presets, plus month labels on
-grouped pebbles. Share cards retain PomoGem branding for every user. There is no subscription,
+grouped pebbles, and an unlimited number of learning apps for Screen Time recording (five apps
+on the free plan). Apps selected for black distraction gems are unlimited on both plans.
+Share cards retain PomoGem branding for every user. There is no subscription,
 free trial, external payment, account login, or custom purchase server.
 
 Review steps:
@@ -24,13 +26,20 @@ Review steps:
 5. The paywall displays the storefront price returned by StoreKit. The link labeled
    “価格・提供条件・販売者情報を確認” opens the pre-purchase terms and seller information.
 6. “購入を復元” (Restore Purchases) is at the bottom of the same screen.
+7. On an authorized iPhone, Settings → “スクリーンタイム” → “勉強のgem” accepts up to five
+   learning apps for free. After purchase or restore, more than five can be selected and saved.
+   Category and website selections are not accepted. “黒いgem” app selection is unlimited without purchase.
 
 Use the paywall showing the live `Product.displayPrice` as the IAP review screenshot.
 The first non-consumable is submitted together with app version 1.0.
+The Screen Time addition is for the next candidate. It requires Family Controls distribution
+approval for the host and monitor extension, plus signed-device verification before submission.
+The historical review image above must be refreshed to include the added Pro feature.
 
 ## 日本語
 
-ポモジェムProは1回限りの買い切りです。無料の25分・45分・60分・90分以外の任意の1〜360分タイマーと、まとまり粒の月刻印を解放します。
+ポモジェムProは1回限りの買い切りです。無料の25分・45分・60分・90分以外の任意の1〜360分タイマー、まとまり粒の月刻印、スクリーンタイムの勉強アプリ数無制限（無料5つ）を解放します。
+黒いgem用のアプリ数は無料でも無制限です。
 シェアカードのポモジェムロゴと公式サイトは、無料／Proとも常に表示します。subscription、trial、
 外部決済、独自purchase serverはありません。
 
@@ -45,6 +54,11 @@ The first non-consumable is submitted together with app version 1.0.
 5. PaywallはStoreKitから取得したlocal priceを表示し、「価格・提供条件・販売者情報を確認」から
    購入前の販売条件を開けます。
 6. 「購入を復元」は同じ画面の下部にあります。
+7. 許可済みiPhoneで設定 →「スクリーンタイム」→「勉強のgem」を開き、無料では5アプリまで、
+   購入・復元後は6アプリ以上を選択・保存できることを確認します。「黒いgem」は購入不要で無制限です。
+
+スクリーンタイム追加は次期候補です。提出前に本体・Monitor拡張のFamily Controls配布権限承認と
+署名済み実機検証を行い、冒頭の過去の審査画像も新しいPro機能を含む画像へ更新します。
 
 独自loginやreview用accountは不要です。初回Non-Consumableなのでversion 1.0と同じsubmissionへ追加します。
 Sandboxで購入、承認待ち、cancel、復元、revocationを確認し、審査用screenshotは上記paywallで
