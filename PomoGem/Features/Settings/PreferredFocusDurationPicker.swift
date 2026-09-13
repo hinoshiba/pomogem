@@ -70,11 +70,13 @@ struct PreferredFocusDurationPicker: View {
         }
         .buttonStyle(PomoGemBareButtonStyle())
         .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
         .accessibilityLabel(duration.displayLabel)
         .accessibilityValue(isSelected ? "選択中" : "未選択")
         .accessibilityHint("既定の集中時間に設定します")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("settings.focus-preset.\(duration.seconds / Constants.Timer.secondsPerMinute)")
+        .accessibilityAction { onSelectPreset(duration) }
     }
 
     private var customDurationButton: some View {
