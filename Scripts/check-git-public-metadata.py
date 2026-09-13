@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 
 sys.dont_write_bytecode = True
-from public_mailbox_policy import has_unapproved_personal_mailbox
+from public_mailbox_policy import APPROVED_PERSONAL_EMAILS, PRIVATE_DOMAIN
 
 
 # Contributors keep their own public identity. Personal-provider addresses use
@@ -116,7 +116,12 @@ def validate_identity(object_id: bytes, object_type: bytes, line: bytes) -> str:
     if (len(email_bytes) > 254 or len(email_bytes.split(b"@", 1)[0]) > 64
             or not (PUBLIC_EMAIL.fullmatch(email_bytes) or GITHUB_BOT_EMAIL.fullmatch(email_bytes))):
         return f"{oid} {kind.decode('ascii')} email is malformed"
-    if has_unapproved_personal_mailbox(email_bytes):
+    # Identity headers already give us the complete mailbox. Prose scanning
+    # treats quotes/backticks as formatting, so do not use it to tokenize an
+    # identity whose local part may legitimately contain those characters.
+    domain = email_bytes.rsplit(b"@", 1)[1]
+    if (PRIVATE_DOMAIN.match(b"@" + domain)
+            and email_bytes.decode("ascii").casefold() not in APPROVED_PERSONAL_EMAILS):
         return (f"{oid} {kind.decode('ascii')} personal email is not approved; "
                 "use a GitHub noreply address or obtain publication approval")
     return ""

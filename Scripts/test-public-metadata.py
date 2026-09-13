@@ -120,7 +120,8 @@ class GitIdentityTests(unittest.TestCase):
         for approved in APPROVED_MAILBOXES:
             local, domain = approved.split(b"@")
             for email in (OTHER, b"other." + approved, local + b"+tag@" + domain,
-                          approved + b".invalid", b"person@" + domain):
+                          approved + b".invalid", b"person@" + domain,
+                          b"other'" + approved, b"other`" + approved):
                 with self.subTest(email=email):
                     error = METADATA.validate_identity(OID, b"commit", self.identity(email))
                     self.assertIn("use a GitHub noreply address", error)
