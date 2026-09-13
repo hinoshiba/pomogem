@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when reachable raw Git identity metadata uses an unapproved email."""
+"""Check raw Git identities for malformed or unapproved personal mailboxes."""
 
 from __future__ import annotations
 
@@ -10,11 +10,22 @@ import tempfile
 from pathlib import Path
 
 sys.dont_write_bytecode = True
-from public_mailbox_policy import APPROVED_PERSONAL_EMAILS
+from public_mailbox_policy import has_unapproved_personal_mailbox
 
 
-# Reuse the exact project-contact allowlist for raw author/committer metadata.
-ALLOWED_EMAILS = APPROVED_PERSONAL_EMAILS
+# Contributors keep their own public identity. Personal-provider addresses use
+# the same exact approval policy as file contents; GitHub noreply is an option
+# for contributors who do not want to publish a personal mailbox.
+EMAIL_ATOM = rb"[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+"
+DOMAIN_LABEL = rb"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+PUBLIC_EMAIL = re.compile(
+    EMAIL_ATOM + rb"(?:\." + EMAIL_ATOM + rb")*@"
+    + DOMAIN_LABEL + rb"(?:\." + DOMAIN_LABEL + rb")+\Z"
+)
+GITHUB_BOT_EMAIL = re.compile(
+    rb"(?:[0-9]+\+)?[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+    rb"\[bot\]@users\.noreply\.github\.com\Z", re.IGNORECASE,
+)
 OBJECT_ID = re.compile(rb"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 IDENTITY = re.compile(
     rb"(author|committer|tagger) ([^<>\x00-\x1f\x7f]+) <([^<>\x00-\x1f\x7f]+)> "
@@ -102,12 +113,12 @@ def validate_identity(object_id: bytes, object_type: bytes, line: bytes) -> str:
     if not name.strip() or int(hours) > 23 or int(minutes) > 59:
         rendered = line.decode("utf-8", "backslashreplace")
         return f"{oid} has malformed {object_type.decode('ascii')} identity: {rendered!r}"
-    try:
-        email = email_bytes.decode("ascii")
-    except UnicodeDecodeError:
-        return f"{oid} {kind.decode('ascii')} email is not ASCII"
-    if email.casefold() not in ALLOWED_EMAILS:
-        return f"{oid} {kind.decode('ascii')} email is not approved"
+    if (len(email_bytes) > 254 or len(email_bytes.split(b"@", 1)[0]) > 64
+            or not (PUBLIC_EMAIL.fullmatch(email_bytes) or GITHUB_BOT_EMAIL.fullmatch(email_bytes))):
+        return f"{oid} {kind.decode('ascii')} email is malformed"
+    if has_unapproved_personal_mailbox(email_bytes):
+        return (f"{oid} {kind.decode('ascii')} personal email is not approved; "
+                "use a GitHub noreply address or obtain publication approval")
     return ""
 
 
