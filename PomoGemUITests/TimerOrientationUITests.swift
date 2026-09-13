@@ -1,8 +1,8 @@
 import UIKit
 import XCTest
 
-/// Exercises the timer's four content orientations independently of the
-/// portrait-only Home scene, including the manual fallback for rotation lock.
+/// Exercises native timer scene rotation, including manual rotation while
+/// locked and the upside-down content fallback on unsupported iPhones.
 @MainActor
 final class TimerOrientationUITests: XCTestCase {
     private var app: XCUIApplication!
@@ -194,6 +194,8 @@ final class TimerOrientationUITests: XCTestCase {
         let directions: [(UIDeviceOrientation, String)] = [
             (.portrait, "上"),
             (.landscapeLeft, "右"),
+            // Opposite landscapes have identical bounds and safe-area sizes.
+            (.landscapeRight, "左"),
             (.portraitUpsideDown, "下"),
             (.landscapeRight, "左")
         ]
@@ -207,9 +209,34 @@ final class TimerOrientationUITests: XCTestCase {
         }
         try assertCountdownContinued(timer, from: initialSeconds, since: started)
         cancelFocusAndVerifyHome()
-        let homeFrame = app.windows.firstMatch.frame
-        XCTAssertGreaterThan(homeFrame.height, homeFrame.width,
-                             "Timer rotation must not rotate the Home scene")
+    }
+
+    func testPausedManualLandscapeSurvivesBackgroundAndResume() throws {
+        launch()
+        let timer = startFocus(duration: "25分")
+        app.buttons["一時停止"].tap()
+        XCTAssertTrue(waitForHittable(app.buttons["再開する"]))
+        let pausedSeconds = try remainingSeconds(timer)
+        rotate(to: "右")
+
+        XCUIDevice.shared.press(.home)
+        let backgrounded = XCTNSPredicateExpectation(predicate: NSPredicate { [self] _, _ in
+            app.state == .runningBackground || app.state == .runningBackgroundSuspended
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [backgrounded], timeout: 8), .completed)
+        // The physical device now points the other way. Returning to the app
+        // must restore its manual scene choice and retain the paused timer.
+        XCUIDevice.shared.orientation = .landscapeRight
+        app.activate()
+
+        assertDirection("右")
+        XCTAssertTrue(waitForHittable(app.buttons["再開する"], timeout: 8))
+        XCTAssertFalse(app.buttons["一時停止"].exists)
+        XCTAssertTrue(app.buttons["timer.rotation.automatic"].exists,
+                      "Backgrounding must preserve the timer's manual selection")
+        XCTAssertEqual(try remainingSeconds(timer), pausedSeconds,
+                       "Restoring the native scene must not resume or restart the timer")
+        cancelFocusAndVerifyHome()
     }
 
     func testBreakManualCycleKeepsDeadlineAndCapturesFourLayouts() throws {
@@ -226,8 +253,9 @@ final class TimerOrientationUITests: XCTestCase {
             XCTAssertTrue(waitForHittable(app.buttons["休憩をスキップ"].firstMatch))
             retainScreenshot(named: "break-\(layout.1)")
         }
-        rotate(to: "上")
         try assertCountdownContinued(timer, from: initialSeconds, since: started)
+        // Leave the break while its scene is still landscape so Home's
+        // portrait restoration cannot pass merely because the timer was upright.
         skipBreakAndVerifyHome()
     }
 
@@ -280,8 +308,17 @@ final class TimerOrientationUITests: XCTestCase {
         focusManualDirection: String? = nil
     ) -> XCUIElement {
         _ = startFocus(duration: "12秒、DEMO")
+        if focusManualDirection != nil {
+            // Native scene checks take time. Freeze the 12-second fixture so
+            // its completion cannot remove the timer during a direction check.
+            app.buttons["一時停止"].tap()
+            XCTAssertTrue(waitForHittable(app.buttons["再開する"]))
+        }
         assertDirection(expectedDirection)
-        if let focusManualDirection { rotate(to: focusManualDirection) }
+        if let focusManualDirection {
+            rotate(to: focusManualDirection)
+            app.buttons["再開する"].tap()
+        }
         let stop = app.buttons["focus.completion-alert.stop"]
         XCTAssertTrue(stop.waitForExistence(timeout: 25))
         XCTAssertTrue(reveal(stop, towardStart: false))
@@ -305,6 +342,7 @@ final class TimerOrientationUITests: XCTestCase {
         skipBreak.tap()
         XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 8))
         XCTAssertFalse(app.buttons["timer.rotate"].exists)
+        assertWindowOrientation(isLandscape: false)
     }
 
     private func useStoredDefaultOrientation() {
@@ -391,6 +429,7 @@ final class TimerOrientationUITests: XCTestCase {
         // duration picker, so also clean it up when Home's toolbar is visible.
         dismissPresentedTimerIfNeeded()
         XCTAssertTrue(waitForHittable(menu, timeout: 8))
+        assertWindowOrientation(isLandscape: false)
     }
 
     @discardableResult
@@ -431,6 +470,33 @@ final class TimerOrientationUITests: XCTestCase {
         )
         XCTAssertEqual(XCTWaiter.wait(for: [expected], timeout: 6), .completed,
                        "Expected timer orientation \(direction), got \(String(describing: rotate.value))")
+        let isLandscape = direction == "右" || direction == "左"
+        assertWindowOrientation(isLandscape: isLandscape)
+        let nativeScene = XCTNSPredicateExpectation(predicate: NSPredicate { [self] _, _ in
+            guard let native = sceneInterfaceOrientation else { return false }
+            if direction == "右" { return native == .landscapeRight }
+            if direction == "左" { return native == .landscapeLeft }
+            if direction == "下" { return native == .portraitUpsideDown || native == .portrait }
+            return native == .portrait
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [nativeScene], timeout: 6), .completed,
+                       "The timer must rotate UIWindowScene, including the system gesture edges")
+    }
+
+    private var sceneInterfaceOrientation: UIInterfaceOrientation? {
+        let marker = app.staticTexts["timer.interface-orientation"]
+        guard marker.exists, let rawValue = Int(marker.label) else { return nil }
+        return UIInterfaceOrientation(rawValue: rawValue)
+    }
+
+    private func assertWindowOrientation(isLandscape: Bool) {
+        let expected = XCTNSPredicateExpectation(predicate: NSPredicate { [self] _, _ in
+            let frame = app.windows.firstMatch.frame
+            guard frame.width > 0, frame.height > 0 else { return false }
+            return isLandscape ? frame.width > frame.height : frame.height > frame.width
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [expected], timeout: 8), .completed,
+                       "Expected a native \(isLandscape ? "landscape" : "portrait") window, got \(app.windows.firstMatch.frame)")
     }
 
     private func assertAccessibleRotationControl() {
@@ -472,14 +538,19 @@ final class TimerOrientationUITests: XCTestCase {
     }
 
     private func cancelFocusAndVerifyHome() {
+        let timerWasLandscape = app.windows.firstMatch.frame.width > app.windows.firstMatch.frame.height
         let cancel = app.buttons["今日はここまで"].firstMatch
         XCTAssertTrue(reveal(cancel, towardStart: false))
         cancel.tap()
         let alert = app.alerts["今日はここまで"]
         XCTAssertTrue(alert.waitForExistence(timeout: 3))
+        assertWindowOrientation(isLandscape: timerWasLandscape)
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(alert.frame),
+                      "The system cancellation alert must fit the timer's native scene")
         alert.buttons["今日はここまで"].tap()
         XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 8))
         XCTAssertFalse(app.buttons["timer.rotate"].exists)
+        assertWindowOrientation(isLandscape: false)
     }
 
     private func dismissPresentedTimerIfNeeded() {
@@ -532,15 +603,15 @@ final class TimerOrientationUITests: XCTestCase {
                     scrollSurface = container
                 }
             }
-            // The scene remains portrait while its ScrollView rotates. Move
-            // along the content's vertical axis when Dynamic Type needs scroll.
+            // Native landscape uses the window's ordinary vertical axis.
+            // Only an unsupported upside-down scene retains a content transform.
             let rotationControl = app.buttons["timer.rotate"]
             let direction = rotationControl.exists ? rotationControl.value as? String : nil
-            switch (direction, towardStart) {
-            case ("右", false), ("左", true): scrollSurface.swipeRight()
-            case ("右", true), ("左", false): scrollSurface.swipeLeft()
-            case ("下", false), ("上", true), (nil, true): scrollSurface.swipeDown()
-            default: scrollSurface.swipeUp()
+            let isUpsideDownFallback = direction == "下" && sceneInterfaceOrientation == .portrait
+            if towardStart != isUpsideDownFallback {
+                scrollSurface.swipeDown()
+            } else {
+                scrollSurface.swipeUp()
             }
         }
         return element.exists && element.isHittable

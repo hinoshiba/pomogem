@@ -45,8 +45,8 @@ enum TimerOrientationPreference {
 }
 
 /// Directions describe where the top of the timer points on an upright phone.
-/// Rotating the contents also supports upside down on Face ID iPhones, whose
-/// system interface does not support portraitUpsideDown.
+/// The scene rotates with the timer wherever UIKit supports the direction.
+/// Content rotation supplies only the difference from the actual scene geometry.
 enum TimerOrientation: Int, CaseIterable {
     case up, right, down, left
 
@@ -70,6 +70,34 @@ enum TimerOrientation: Int, CaseIterable {
         case .landscapeRight: self = .left
         default: return nil
         }
+    }
+
+    var interfaceOrientation: UIInterfaceOrientation {
+        switch self {
+        case .up: .portrait
+        case .right: .landscapeRight
+        case .down: .portraitUpsideDown
+        case .left: .landscapeLeft
+        }
+    }
+
+    var interfaceMask: UIInterfaceOrientationMask {
+        UIInterfaceOrientationMask(rawValue: 1 << interfaceOrientation.rawValue)
+    }
+
+    init?(interfaceOrientation: UIInterfaceOrientation) {
+        switch interfaceOrientation {
+        case .portrait: self = .up
+        case .landscapeRight: self = .right
+        case .portraitUpsideDown: self = .down
+        case .landscapeLeft: self = .left
+        default: return nil
+        }
+    }
+
+    func relative(to interfaceOrientation: UIInterfaceOrientation) -> Self {
+        let sceneDirection = Self(interfaceOrientation: interfaceOrientation) ?? .up
+        return Self(rawValue: (rawValue - sceneDirection.rawValue + 4) % 4)!
     }
 
     func contentSize(in available: CGSize) -> CGSize {
@@ -125,18 +153,16 @@ final class TimerOrientationSelection {
     private var sessionOrder: [AnyHashable] = []
 
     func state(for sessionID: AnyHashable, defaultOrientation: TimerDefaultOrientation) -> TimerOrientationState {
-        if let state = states[sessionID] { return state }
-        let state = TimerOrientationState(defaultOrientation: defaultOrientation)
-        states[sessionID] = state
-        sessionOrder.append(sessionID)
-        // Retain recent recovery choices without growing with timer history.
-        if sessionOrder.count > 8 { states.removeValue(forKey: sessionOrder.removeFirst()) }
-        return state
+        // SwiftUI eagerly constructs disposable @State initial values whenever
+        // a parent recomputes. Reading one must not evict a live timer's choice.
+        states[sessionID] ?? TimerOrientationState(defaultOrientation: defaultOrientation)
     }
 
     func update(_ state: TimerOrientationState, for sessionID: AnyHashable) {
-        guard states[sessionID] != nil else { return }
+        if states[sessionID] == nil { sessionOrder.append(sessionID) }
         states[sessionID] = state
+        // Retain recent recovery choices without growing with timer history.
+        if sessionOrder.count > 8 { states.removeValue(forKey: sessionOrder.removeFirst()) }
     }
 }
 
@@ -146,27 +172,56 @@ final class TimerOrientationController {
         didSet { selection.update(state, for: sessionID) }
     }
     @ObservationIgnored private let sessionID: AnyHashable
-    @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let selection: TimerOrientationSelection
     @ObservationIgnored private weak var windowScene: UIWindowScene?
+    private(set) var interfaceOrientation: UIInterfaceOrientation = .portrait
     @ObservationIgnored private var isObserving = false
+    @ObservationIgnored private var isPresented = false
+    @ObservationIgnored private var requestedDirection: TimerOrientation?
+    @ObservationIgnored private var requestGeneration = 0
 
     init(sessionID: AnyHashable, selection: TimerOrientationSelection? = nil, defaults: UserDefaults = .standard) {
         let selection = selection ?? .shared
         self.sessionID = sessionID
-        self.defaults = defaults
         self.selection = selection
         state = selection.state(for: sessionID, defaultOrientation: TimerOrientationPreference.load(defaults: defaults))
     }
 
     func attach(to scene: UIWindowScene?) {
-        windowScene = scene
+        if windowScene !== scene {
+            releaseScene()
+            windowScene = scene
+        }
+        updateGeometry()
         refresh()
+    }
+
+    func updateGeometry() {
+        guard let windowScene else { return }
+        interfaceOrientation = windowScene.effectiveGeometry.interfaceOrientation
+    }
+
+    func disappear() {
+        isPresented = false
+        setActive(false)
+        releaseScene()
+    }
+
+    private func releaseScene() {
+        requestGeneration += 1
+        requestedDirection = nil
+        if let windowScene {
+            TimerSceneOrientation.shared.release(windowScene, owner: self)
+        }
     }
 
     func setActive(_ active: Bool) {
         if active, !isObserving {
-            state = selection.state(for: sessionID, defaultOrientation: TimerOrientationPreference.load(defaults: defaults))
+            isPresented = true
+            requestedDirection = nil
+            // The live controller owns its selection even if the bounded
+            // recovery cache has expired. Inactivity must not reset it.
+            selection.update(state, for: sessionID)
             UIDevice.current.beginGeneratingDeviceOrientationNotifications()
             isObserving = true
         } else if !active, isObserving {
@@ -195,12 +250,43 @@ final class TimerOrientationController {
     func refresh() {
         guard isObserving, windowScene?.activationState == .foregroundActive else { return }
         state.receive(UIDevice.current.orientation, isLocked: isLocked)
+        requestSceneOrientation()
     }
 
-    func rotate() { state.rotate() }
+    func rotate() {
+        state.rotate()
+        requestSceneOrientation()
+    }
 
     func followDevice() {
         state.followDevice(UIDevice.current.orientation, isLocked: isLocked)
+        requestSceneOrientation()
+    }
+
+    private func requestSceneOrientation() {
+        guard isPresented, isObserving, let windowScene,
+              windowScene.activationState == .foregroundActive,
+              requestedDirection != state.direction else { return }
+        let direction = state.direction
+        requestedDirection = direction
+        requestGeneration += 1
+        let generation = requestGeneration
+        // Keep portrait available when UIKit rejects upside down on an iPhone
+        // without a Home button. All other directions use native scene rotation.
+        let mask: UIInterfaceOrientationMask = direction == .down
+            ? [.portrait, .portraitUpsideDown] : direction.interfaceMask
+        TimerSceneOrientation.shared.claim(windowScene, owner: self, mask: mask)
+        windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: direction.interfaceMask)) { [weak self, weak windowScene] _ in
+            guard let self, let windowScene, self.isPresented,
+                  self.requestGeneration == generation,
+                  TimerSceneOrientation.shared.isOwner(self, of: windowScene) else { return }
+            if direction == .down {
+                // The platform cannot move its system UI to an unsupported
+                // edge. Restore portrait and retain the readable 180° fallback.
+                windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            }
+            self.updateGeometry()
+        }
     }
 }
 
@@ -209,14 +295,11 @@ struct TimerLayoutContext {
     let isLandscape: Bool
 }
 
-/// The outer scene stays upright. Use its safe rectangle before swapping axes,
-/// so the camera cutout and home indicator remain clear in every direction.
+/// Lay out in the scene's safe rectangle. Native rotation moves the system UI;
+/// only any unsupported remainder (notably upside down) rotates the contents.
 /// The timer engine lives above this container and is never re-created on turn.
 struct TimerOrientationContainer<Content: View>: View {
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
-    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
-    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
     @State private var orientation: TimerOrientationController
     let content: (TimerLayoutContext) -> Content
 
@@ -228,21 +311,32 @@ struct TimerOrientationContainer<Content: View>: View {
     var body: some View {
         GeometryReader { proxy in
             let direction = orientation.state.direction
-            let size = direction.contentSize(in: proxy.size)
+            let residual = direction.relative(to: orientation.interfaceOrientation)
+            let size = residual.contentSize(in: proxy.size)
             content(TimerLayoutContext(size: size, isLandscape: direction.isLandscape))
                 .environment(orientation)
                 .frame(width: size.width, height: size.height)
-                .rotationEffect(.degrees(orientation.state.rotationDegrees))
+                .rotationEffect(.degrees(residual.degrees))
                 .frame(width: proxy.size.width, height: proxy.size.height)
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: direction)
         }
         .background {
-            TimerWindowSceneReader { orientation.attach(to: $0) }
+            TimerWindowSceneReader(onChange: { orientation.attach(to: $0) },
+                                   onGeometryChange: { orientation.updateGeometry() })
                 .frame(width: 0, height: 0)
                 .accessibilityHidden(true)
         }
+        .overlay(alignment: .topLeading) {
+#if DEBUG
+            if LocalPreviewLaunchPolicy.isUITestMode(environment: ProcessInfo.processInfo.environment, isDebugBuild: true) {
+                Text(verbatim: "\(orientation.interfaceOrientation.rawValue)")
+                    .font(.system(size: 1))
+                    .accessibilityIdentifier("timer.interface-orientation")
+                    .allowsHitTesting(false)
+            }
+#endif
+        }
         .onAppear { orientation.setActive(scenePhase == .active) }
-        .onDisappear { orientation.setActive(false) }
+        .onDisappear { orientation.disappear() }
         .onChange(of: scenePhase) { _, phase in
             orientation.setActive(phase == .active)
         }
@@ -283,29 +377,63 @@ struct TimerRotationControls: View {
     }
 }
 
-private struct TimerWindowSceneReader: UIViewRepresentable {
+private struct TimerWindowSceneReader: UIViewControllerRepresentable {
     let onChange: (UIWindowScene?) -> Void
+    let onGeometryChange: () -> Void
 
-    func makeUIView(context: Context) -> SceneView {
-        let view = SceneView()
-        view.onChange = onChange
-        return view
+    func makeUIViewController(context: Context) -> SceneController {
+        let controller = SceneController()
+        controller.onChange = onChange
+        controller.onGeometryChange = onGeometryChange
+        return controller
     }
 
-    func updateUIView(_ uiView: SceneView, context: Context) {
-        uiView.onChange = onChange
+    func updateUIViewController(_ controller: SceneController, context: Context) {
+        controller.onChange = onChange
+        controller.onGeometryChange = onGeometryChange
+    }
+
+    final class SceneController: UIViewController {
+        var onChange: ((UIWindowScene?) -> Void)?
+        var onGeometryChange: (() -> Void)?
+
+        override func loadView() {
+            let sceneView = SceneView()
+            sceneView.onWindowChange = { [weak self] in
+                guard let self else { return }
+                self.onChange?(self.view.window?.windowScene)
+            }
+            view = sceneView
+        }
+
+        override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            publishGeometry()
+        }
+
+        override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+            super.viewWillTransition(to: size, with: coordinator)
+            // Also observe 180° transitions, whose final bounds and safe-area
+            // insets can match the previous landscape orientation exactly.
+            coordinator.animate(alongsideTransition: { [weak self] _ in
+                self?.publishGeometry()
+            }, completion: { [weak self] _ in
+                self?.publishGeometry()
+            })
+        }
+
+        private func publishGeometry() {
+            DispatchQueue.main.async { [weak self] in self?.onGeometryChange?() }
+        }
     }
 
     final class SceneView: UIView {
-        var onChange: ((UIWindowScene?) -> Void)?
+        var onWindowChange: (() -> Void)?
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
             // Avoid publishing Observable state during SwiftUI's view update.
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                onChange?(window?.windowScene)
-            }
+            DispatchQueue.main.async { [weak self] in self?.onWindowChange?() }
         }
     }
 }

@@ -37,6 +37,9 @@ targets:
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeRight
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationPortraitUpsideDown
         UIStatusBarStyle: UIStatusBarStyleLightContent
         UIUserInterfaceStyle: Dark
         NSPhotoLibraryAddUsageDescription: シェアカードを写真に保存します。
