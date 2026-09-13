@@ -252,6 +252,8 @@ enum LocalPreviewLaunchPolicy {
 @main
 @MainActor
 struct PomoGemApp: App {
+    @UIApplicationDelegateAdaptor(PomoGemAppDelegate.self) private var appDelegate
+
     init() {
         switch LocalPreviewLaunchPolicy.persistenceModeForCurrentProcess {
         case .cloudKit:

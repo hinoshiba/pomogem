@@ -217,6 +217,74 @@ final class TimerOrientationTests: XCTestCase {
         }
     }
 
+    func testNativeInterfaceDirectionsMatchThePhysicalTimerDirections() {
+        // UIKit names landscape interface orientations opposite to the device
+        // sensor: a camera on the left needs clockwise content rotation.
+        let expectations: [(UIDeviceOrientation, TimerOrientation, UIInterfaceOrientation, UIInterfaceOrientationMask)] = [
+            (.portrait, .up, .portrait, .portrait),
+            (.landscapeLeft, .right, .landscapeRight, .landscapeRight),
+            (.portraitUpsideDown, .down, .portraitUpsideDown, .portraitUpsideDown),
+            (.landscapeRight, .left, .landscapeLeft, .landscapeLeft)
+        ]
+
+        for (device, direction, interface, mask) in expectations {
+            XCTAssertEqual(TimerOrientation(deviceOrientation: device), direction)
+            XCTAssertEqual(direction.interfaceOrientation, interface)
+            XCTAssertEqual(direction.interfaceMask, mask)
+            XCTAssertEqual(TimerOrientation(interfaceOrientation: interface), direction)
+        }
+        XCTAssertNil(TimerOrientation(interfaceOrientation: .unknown))
+    }
+
+    func testNativeRotationLeavesNoExtraContentRotationOrSecondAxisSwap() {
+        let portraitSafeSize = CGSize(width: 393, height: 759)
+        let landscapeSafeSize = CGSize(width: 734, height: 372)
+
+        for direction in TimerOrientation.allCases {
+            let available = direction.isLandscape ? landscapeSafeSize : portraitSafeSize
+            let residual = direction.relative(to: direction.interfaceOrientation)
+
+            XCTAssertEqual(residual, .up,
+                           "A completed native turn must not rotate the timer a second time")
+            XCTAssertEqual(residual.contentSize(in: available), available,
+                           "UIKit already changed the landscape scene's width and height")
+        }
+
+        XCTAssertEqual(TimerOrientation.down.relative(to: .portrait), .down,
+                       "An unsupported upside-down scene retains the readable 180-degree fallback")
+        XCTAssertEqual(TimerOrientation.down.relative(to: .portrait).contentSize(in: portraitSafeSize),
+                       portraitSafeSize)
+        XCTAssertEqual(TimerOrientation.right.relative(to: .unknown), .right,
+                       "Before the scene attaches, use the original portrait coordinate system")
+    }
+
+    func testRelativeRotationPreservesTheDesiredPhysicalTopForEveryNativeSceneDirection() {
+        let sceneAngles: [(UIInterfaceOrientation, CGFloat)] = [
+            (.portrait, 0),
+            (.landscapeRight, .pi / 2),
+            (.portraitUpsideDown, .pi),
+            (.landscapeLeft, -.pi / 2)
+        ]
+        let timerTops: [(TimerOrientation, CGPoint)] = [
+            (.up, CGPoint(x: 0, y: -1)),
+            (.right, CGPoint(x: 1, y: 0)),
+            (.down, CGPoint(x: 0, y: 1)),
+            (.left, CGPoint(x: -1, y: 0))
+        ]
+
+        for (interface, sceneAngle) in sceneAngles {
+            for (direction, expectedTop) in timerTops {
+                let residual = direction.relative(to: interface)
+                let actualTop = CGPoint(x: 0, y: -1)
+                    .applying(CGAffineTransform(rotationAngle: residual.degrees * .pi / 180))
+                    .applying(CGAffineTransform(rotationAngle: sceneAngle))
+
+                XCTAssertEqual(actualTop.x, expectedTop.x, accuracy: 0.0001)
+                XCTAssertEqual(actualTop.y, expectedTop.y, accuracy: 0.0001)
+            }
+        }
+    }
+
     func testManualRotationCyclesThroughAllFourDirectionsAndHoldsItsSelection() {
         var state = TimerOrientationState()
 
@@ -346,6 +414,36 @@ final class TimerOrientationTests: XCTestCase {
                 let transform = CGAffineTransform(
                     rotationAngle: direction.degrees * .pi / 180
                 )
+                let corners = [
+                    CGPoint(x: -size.width / 2, y: -size.height / 2),
+                    CGPoint(x: size.width / 2, y: -size.height / 2),
+                    CGPoint(x: size.width / 2, y: size.height / 2),
+                    CGPoint(x: -size.width / 2, y: size.height / 2)
+                ].map { $0.applying(transform) }
+
+                for corner in corners {
+                    XCTAssertEqual(abs(corner.x), available.width / 2, accuracy: 0.0001)
+                    XCTAssertEqual(abs(corner.y), available.height / 2, accuracy: 0.0001)
+                }
+            }
+        }
+    }
+
+    func testNativeAndFallbackLayoutsStayInsideEachActualSceneSafeRectangle() {
+        // Landscape safe areas are not simply the portrait dimensions swapped:
+        // the camera cutout and home indicator occupy different screen edges.
+        let scenes: [(UIInterfaceOrientation, CGSize)] = [
+            (.portrait, CGSize(width: 393, height: 759)),
+            (.landscapeRight, CGSize(width: 734, height: 372)),
+            (.portraitUpsideDown, CGSize(width: 393, height: 759)),
+            (.landscapeLeft, CGSize(width: 734, height: 372))
+        ]
+
+        for (interface, available) in scenes {
+            for direction in TimerOrientation.allCases {
+                let residual = direction.relative(to: interface)
+                let size = residual.contentSize(in: available)
+                let transform = CGAffineTransform(rotationAngle: residual.degrees * .pi / 180)
                 let corners = [
                     CGPoint(x: -size.width / 2, y: -size.height / 2),
                     CGPoint(x: size.width / 2, y: -size.height / 2),

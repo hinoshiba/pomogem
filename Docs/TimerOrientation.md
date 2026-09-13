@@ -29,16 +29,27 @@
 - iOS 17/18には同じ公開照会APIがないため、UIKitが通知する端末の向きに追従します。
   手動切替は全対応OSで利用できます。Control Centerの回転ロックと通知の組合せは実機確認が必要です。
 - ロック状態やセンサ通知の有無にかかわらず、手動操作へ到達できるよう回転アイコンを常設します。
-- Face ID搭載iPhoneではシステムの上下逆表示がサポートされないため、アプリのシーンは縦向きのまま、
-  タイマーの内容と操作領域を回転します。安全領域を確保してから幅と高さを交換します。
-  システムの確認ダイアログやタイマー以外の画面は通常の縦向きです。
+- 上・右・左では、公開APIの
+  [`requestGeometryUpdate`](https://developer.apple.com/documentation/uikit/uiwindowscene/requestgeometryupdate(_:errorhandler:))
+  を使い、タイマーの向きに合わせてwindow scene自体を回転します。ホームインジケータ、
+  システムジェスチャーの端、確認ダイアログもそのシーンの向きを使います。
+- 下はシステムへ上下逆表示を要求し、対応しない端末では通常の縦向きに戻してタイマーの内容だけを180度回転します。
+  ホームボタンのないiPhoneは上下逆表示に対応しないため、この向きではシステムUIの端は反転しません。
   [Apple: supportedInterfaceOrientations](https://developer.apple.com/documentation/uikit/uiviewcontroller/supportedinterfaceorientations)
+- レイアウトは実際のシーンの安全領域と向きを使い、タイマーの指定方向との差だけを補正します。
+  横向きのシーンで内容をさらに90度回転させたり、幅と高さを二重に交換したりしません。
+- Control Centerや通知センターによる一時的な非アクティブ化ではシーンの向きを保持します。
+  タイマーを閉じたときだけ縦へ戻し、Home・設定は通常の縦向きで表示します。
+  画面の再生成時は、前のタイマーの遅延した復元処理が新しいタイマーの向きを上書きしないようにします。
 - UIKitの端末方向通知は表示中かつアクティブな間だけ購読し、非アクティブ化・画面の破棄で停止します。
   端末から届く向きとタイマー中の一時的な手動選択はメモリだけに保持します。
   新しい権限要求、CloudKit同期、外部送信はありません。
   [Apple: beginGeneratingDeviceOrientationNotifications](https://developer.apple.com/documentation/uikit/uidevice/begingeneratingdeviceorientationnotifications())
 
-## レイアウト画像
+## レイアウト画像（2026-09-09時点）
+
+以下はシーン全体の回転へ変更する前の内容回転方式の記録です。
+現在の横向きではホームインジケータも横画面の下辺へ移り、安全領域に応じてレイアウトが調整されます。
 
 日本語・iPhone 17 Pro / iOS 26.5 Simulatorの実画面です。テスト専用の空の保存領域と初期テーマ
 「英語」を使用しています。写真加工・合成はしていません。
@@ -73,10 +84,13 @@
 | リポジトリ検査 | `check-oss-readiness.sh --current`、`validate-site.py`、`xcodegen generate`、`git diff --check`成功 |
 
 `TimerOrientationTests`は方向対応、ロック時の抑止、手動保持と自動復帰、回転角の短い補間、
-安全領域、画面を再生成した場合の向きの継承を検証します。既定値の保存、未設定・不正値の
+安全領域、画面を再生成した場合の向きの継承を検証します。
+シーンの実際の向きとの組合せ、UIKitの左右対応、二重回転を避ける補正も検証します。既定値の保存、未設定・不正値の
 自動への復帰、新しいタイマーへの適用、一時的な選択との分離、完全削除後の初期値も検証します。
 `TimerOrientationUITests`は実際の端末方向通知、手動4方向、稼働中・停止中の残り時間、
-休憩、最大文字サイズ、Reduce Motion、瓶への復帰を検証し、上の画像をXCTest添付として残します。
+休憩、最大文字サイズ、Reduce Motion、瓶への復帰を検証し、画面画像をXCTest添付として残します。
+方向のラベルだけでなく、実際のwindowの縦横とUIWindowSceneの向き、確認ダイアログの表示中の向き、
+横向きでタイマーを閉じた後のHomeの縦復帰を検証します。
 既定値設定の5択、アプリ再起動での保持、集中から休憩へ進むときの既定値適用、
 最大文字サイズでの設定操作にも対応しています。
 ロック分岐のUIテストはDebug専用の入力であり、実機のControl Center操作を検証したものではありません。

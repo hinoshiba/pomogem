@@ -173,6 +173,7 @@
 		BB4684F22CCCFCD20ADAA7FC /* FocusCloudSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C1A3EC45EA14A6C5E689533 /* FocusCloudSyncTests.swift */; };
 		BEC49C8A6B23FED0360345C0 /* StorageTransferManagedZoneDeletion.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDD1811C7C7AD4CEC6C59C7F /* StorageTransferManagedZoneDeletion.swift */; };
 		BEF371ED4930286E44B1E2A1 /* AccumulationPlanProjectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123F29DD48209F44DCBF4C6E /* AccumulationPlanProjectionTests.swift */; };
+		BF7DD5350DC9AC367DB53339 /* TimerSceneOrientation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC30199EBC23F0C5AAE235B6 /* TimerSceneOrientation.swift */; };
 		BFEDE3F131BBB58B6252245A /* CloudLaunchDeadlineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21C0823291E12749CF291866 /* CloudLaunchDeadlineTests.swift */; };
 		C1A6F71A16C201FA8B534B8B /* TimerOrientationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04E9E2DA32B1E56F9400B993 /* TimerOrientationTests.swift */; };
 		C31D583787B341043A788CED /* PomoGemWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E75DF8EA8E1254BF65A52583 /* PomoGemWidgets.appex */; platformFilters = (ios, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -444,6 +445,7 @@
 		A503997D8D710D5C186A1C85 /* StorageTransferRuntimeStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferRuntimeStateTests.swift; sourceTree = "<group>"; };
 		A6DACC9E7792C2200EE2C699 /* StorageTransferJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferJournal.swift; sourceTree = "<group>"; };
 		A81DCEA1C2A2133E7484C8F8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AC30199EBC23F0C5AAE235B6 /* TimerSceneOrientation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerSceneOrientation.swift; sourceTree = "<group>"; };
 		ADF5BCA0711AAB36E6E1FED3 /* FocusActivityDurationLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusActivityDurationLabelTests.swift; sourceTree = "<group>"; };
 		AFDE9F0BB6142B51EBA85B6F /* RealDeviceStorageTransferLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealDeviceStorageTransferLifecycleTests.swift; sourceTree = "<group>"; };
 		B02EEB7A35DBF9383CDAA5C6 /* PomoGem.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PomoGem.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1005,6 +1007,7 @@
 				92EBDAB5B4D9A6C881E284CA /* StorageTransferHostCloudPublicationGate.swift */,
 				DAFDB3F62B4EB377D79BA48D /* StorageTransferProcessState.swift */,
 				FC92C18D8E0837F496656397 /* Theme.swift */,
+				AC30199EBC23F0C5AAE235B6 /* TimerSceneOrientation.swift */,
 				5365DD134569D0BA0958D3E2 /* ViewTaskScope.swift */,
 			);
 			path = App;
@@ -1329,6 +1332,7 @@
 				53FE675CF48B37882F6017A3 /* Theme.swift in Sources */,
 				1DA315121C0364E0A70DEE9E /* TimerDefaultOrientationSettingsView.swift in Sources */,
 				36692E1841949143EDE1393D /* TimerOrientationContainer.swift in Sources */,
+				BF7DD5350DC9AC367DB53339 /* TimerSceneOrientation.swift in Sources */,
 				987A5B495CFF5E4AF0963713 /* UITestFaultInjection.swift in Sources */,
 				729A9DC32833D190C3788565 /* UsagePurpose.swift in Sources */,
 				64EFCFE12308AE584188A2BA /* ViewTaskScope.swift in Sources */,

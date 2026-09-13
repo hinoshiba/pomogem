@@ -47,6 +47,7 @@ struct TimerDefaultOrientationSettingsView: View {
             Section {
                 Text("集中・休憩の両方に使います。タイマー画面で一時的に向きを変えても、この既定値は変わりません。")
                 Text("このiPhoneに保存され、アプリを再起動しても引き継がれます。")
+                Text("ホームボタンのないiPhoneでは、「下」はタイマーの内容だけが上下逆になり、ホームバーなどの向きは変わりません。")
             }
             .font(.subheadline)
             .foregroundStyle(PomoGemTheme.muted)
