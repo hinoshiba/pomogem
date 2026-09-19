@@ -53,14 +53,18 @@ final class ScreenTimeMonitoring {
     private let store: ScreenTimeStore
     private let center: ScreenTimeActivityCenterDriving
     private let authorizationStatus: () -> AuthorizationStatus
+    /// nil waits for the monitoring lock forever, which only the app may do.
+    private let lockTimeout: TimeInterval?
 
     init(
         store: ScreenTimeStore,
         center: ScreenTimeActivityCenterDriving = DeviceActivityCenter(),
+        lockTimeout: TimeInterval? = nil,
         authorizationStatus: @escaping () -> AuthorizationStatus = { AuthorizationCenter.shared.authorizationStatus }
     ) {
         self.store = store
         self.center = center
+        self.lockTimeout = lockTimeout
         self.authorizationStatus = authorizationStatus
     }
 
@@ -68,9 +72,10 @@ final class ScreenTimeMonitoring {
     convenience init(
         store: ScreenTimeStore,
         center: ScreenTimeActivityCenterDriving = DeviceActivityCenter(),
+        lockTimeout: TimeInterval? = nil,
         authorization: @escaping () -> Bool
     ) {
-        self.init(store: store, center: center,
+        self.init(store: store, center: center, lockTimeout: lockTimeout,
                   authorizationStatus: { authorization() ? .approved : .denied })
     }
 
@@ -96,7 +101,7 @@ final class ScreenTimeMonitoring {
     /// session for usage they already opted into.
     func invalidateAuthorizationIfNeeded() throws {
         do {
-            try store.withMonitoringLock {
+            try store.withMonitoringLock(timeout: lockTimeout) {
                 guard authorizationStatus() == .denied else { return }
                 let generation = ScreenTimeMonitoringGeneration(try store.snapshot())
                 stop()
@@ -113,7 +118,7 @@ final class ScreenTimeMonitoring {
     @discardableResult
     func synchronize(now: Date = Date()) throws -> Bool {
         do {
-            return try store.withMonitoringLock {
+            return try store.withMonitoringLock(timeout: lockTimeout) {
                 try synchronizeLocked(now: now)
             }
         } catch is ScreenTimeMonitoringSuperseded {

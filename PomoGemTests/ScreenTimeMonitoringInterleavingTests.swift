@@ -162,6 +162,39 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         }
     }
 
+    /// With a bound, a blocked registration pass is skipped instead of holding
+    /// the extension in flock until the OS kills it.
+    func testBoundedLockWaitSkipsTheRegistrationPassInsteadOfBlocking() throws {
+        try withFixture(installed: .none) { store, center, original, ledgerURL in
+            let root = ledgerURL.deletingLastPathComponent().deletingLastPathComponent()
+            let holder = ScreenTimeStore(directory: root)
+            let held = expectation(description: "The app holds the monitoring lock")
+            let release = DispatchSemaphore(value: 0)
+            defer { release.signal() }
+            DispatchQueue.global().async {
+                try? holder.withMonitoringLock {
+                    held.fulfill()
+                    _ = release.wait(timeout: .now() + 30)
+                }
+            }
+            wait(for: [held], timeout: 10)
+            let monitor = ScreenTimeMonitoring(store: store, center: center, lockTimeout: 0.3,
+                                               authorization: { true })
+
+            let began = Date()
+            XCTAssertThrowsError(try monitor.synchronize(now: now)) { error in
+                guard case ScreenTimeError.unavailable = error else {
+                    return XCTFail("Unexpected error: \(error)")
+                }
+            }
+            XCTAssertLessThan(Date().timeIntervalSince(began), 10)
+            XCTAssertEqual(center.startedNames, [])
+            XCTAssertEqual(center.stopCalls, [])
+            // The skipped pass leaves the ledger for the next callback.
+            XCTAssertEqual(try store.snapshot().runs.map(\.id), original.runs.map(\.id))
+        }
+    }
+
     /// A freshly launched monitor extension process can read .notDetermined
     /// before Family Controls has answered. Acting on it would throw the user's
     /// opaque selections away, and only a new picker session can restore them.

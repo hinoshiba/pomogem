@@ -186,6 +186,45 @@ final class ScreenTimeMonitoringTests: XCTestCase {
         XCTAssertEqual(reopened.runs[0].highestThreshold, 100)
     }
 
+    /// The monitor extension shares the monitoring lock with an app that iOS can
+    /// suspend while it holds it. An unbounded flock(LOCK_EX) there ends with the
+    /// extension killed for running too long, so it must be able to give up.
+    func testBoundedMonitoringLockWaitGivesUpWhileAnotherProcessHoldsIt() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let holder = ScreenTimeStore(directory: directory)
+        let held = expectation(description: "Another process holds the monitoring lock")
+        let release = DispatchSemaphore(value: 0)
+        var releasedOnce = false
+        defer { if !releasedOnce { release.signal() } }
+        DispatchQueue.global().async {
+            try? holder.withMonitoringLock {
+                held.fulfill()
+                _ = release.wait(timeout: .now() + 30)
+            }
+        }
+        wait(for: [held], timeout: 10)
+
+        // A separate descriptor, exactly as the extension process opens it.
+        let waiting = ScreenTimeStore(directory: directory)
+        let began = Date()
+        XCTAssertThrowsError(try waiting.withMonitoringLock(timeout: 0.3) { XCTFail("Must not enter") }) { error in
+            guard case ScreenTimeError.unavailable = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(began), 10)
+
+        release.signal()
+        releasedOnce = true
+        // The bounded wait still takes the lock once the holder is done.
+        var entered = false
+        for _ in 0..<50 where !entered {
+            _ = try? waiting.withMonitoringLock(timeout: 1) { entered = true }
+        }
+        XCTAssertTrue(entered)
+    }
+
     func testMissingAppGroupFailsClosedAndCorruptionIsNeverOverwritten() throws {
         XCTAssertThrowsError(try ScreenTimeStore(directory: nil).snapshot())
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

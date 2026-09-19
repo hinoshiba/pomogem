@@ -1,7 +1,13 @@
 import DeviceActivity
+import Foundation
 
 final class ScreenTimeMonitorExtension: DeviceActivityMonitor {
-    private let monitoring = ScreenTimeMonitoring(store: ScreenTimeStore())
+    /// The app can be suspended while it holds the monitoring lock. Give up
+    /// after this bound and let the next callback retry instead of being killed
+    /// for blocking in flock.
+    private static let monitoringLockTimeout: TimeInterval = 5
+    private let monitoring = ScreenTimeMonitoring(store: ScreenTimeStore(),
+                                                  lockTimeout: monitoringLockTimeout)
 
     override func intervalDidStart(for activity: DeviceActivityName) {
         super.intervalDidStart(for: activity)

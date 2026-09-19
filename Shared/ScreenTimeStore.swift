@@ -46,16 +46,35 @@ final class ScreenTimeStore {
 
     /// Serialize registration across the app and extension separately from the
     /// receipt lock. Framework calls can trigger callbacks that write receipts.
-    func withMonitoringLock<T>(_ operation: () throws -> T) throws -> T {
+    /// `timeout` bounds the wait and throws `unavailable` instead: the app can
+    /// be suspended while it holds this lock, and a monitor extension that
+    /// blocks in flock waiting for it is killed for running too long.
+    func withMonitoringLock<T>(timeout: TimeInterval? = nil, _ operation: () throws -> T) throws -> T {
         guard let directory else { throw ScreenTimeError.unavailable }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let path = directory.appendingPathComponent("monitoring.lock").path
         let descriptor = open(path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
         guard descriptor >= 0 else { throw ScreenTimeError.unavailable }
         defer { close(descriptor) }
-        guard flock(descriptor, LOCK_EX) == 0 else { throw ScreenTimeError.unavailable }
+        try Self.lockExclusively(descriptor, timeout: timeout)
         defer { flock(descriptor, LOCK_UN) }
         return try operation()
+    }
+
+    private static let monitoringLockPollInterval: TimeInterval = 0.05
+
+    private static func lockExclusively(_ descriptor: Int32, timeout: TimeInterval?) throws {
+        guard let timeout else {
+            guard flock(descriptor, LOCK_EX) == 0 else { throw ScreenTimeError.unavailable }
+            return
+        }
+        let deadline = Date().addingTimeInterval(max(0, timeout))
+        while true {
+            if flock(descriptor, LOCK_EX | LOCK_NB) == 0 { return }
+            guard errno == EWOULDBLOCK else { throw ScreenTimeError.unavailable }
+            guard Date() < deadline else { throw ScreenTimeError.unavailable }
+            Thread.sleep(forTimeInterval: monitoringLockPollInterval)
+        }
     }
 
     private func withState<T>(write: Bool, discardingExisting: Bool = false, _ operation: (inout ScreenTimeState) throws -> T) throws -> T {
