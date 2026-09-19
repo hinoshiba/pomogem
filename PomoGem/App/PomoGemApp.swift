@@ -44,6 +44,29 @@ struct PersistenceLaunchAttemptGate {
 /// following active transition must always retry an unloaded launch, including
 /// before the user has selected a storage mode.
 enum PersistenceLaunchScenePolicy {
+    /// Inactivity and superseded work are lifecycle interruptions, not failed
+    /// account verification. Keep the preparation screen until activation
+    /// starts a fresh attempt, without offering recovery for a normal launch.
+    static func requireActiveAttempt(
+        generationMatches: Bool,
+        phase: ScenePhase,
+        applicationState: UIApplication.State
+    ) throws {
+        try Task.checkCancellation()
+        guard generationMatches, phase == .active, applicationState == .active else {
+            throw CancellationError()
+        }
+    }
+
+    static func shouldResumeDeferredPreparation(
+        phase: ScenePhase,
+        isWaitingForActivation: Bool,
+        hasSession: Bool,
+        isPreparing: Bool
+    ) -> Bool {
+        isWaitingForActivation && phase == .active && !hasSession && !isPreparing
+    }
+
     static func action(
         phase: ScenePhase,
         hasSession: Bool,
@@ -447,6 +470,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var launchAttempt = 0
     @State private var launchAttemptGate = PersistenceLaunchAttemptGate()
     @State private var isPreparing = false
+    @State private var isWaitingForLaunchActivation = false
     @State private var requestedCloudSelection = false
     @State private var canChooseLocalOnly = false
     @State private var mustDestroyPersistentStores = false
@@ -506,6 +530,23 @@ private struct PomoGemPersistenceLaunchHost: View {
         }
         .onChange(of: scenePhase) { _, phase in
             handleScenePhaseChange(phase)
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+                .receive(on: RunLoop.main)
+        ) { _ in
+            // SwiftUI and UIKit can report activation in either order. If the
+            // scene callback ran first, retry once UIKit is also ready. A
+            // running preparation, published session, or settled choice/error
+            // must not restart when the second activation notification arrives.
+            guard PersistenceLaunchScenePolicy.shouldResumeDeferredPreparation(
+                phase: scenePhase,
+                isWaitingForActivation: isWaitingForLaunchActivation,
+                hasSession: session != nil,
+                isPreparing: isPreparing
+            ) else { return }
+            isWaitingForLaunchActivation = false
+            handleScenePhaseChange(.active)
         }
     }
 
@@ -693,6 +734,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         guard session == nil, !isQuiescingAccountChange else { return }
         guard launchAttemptGate.allowsPreparation(for: attempt) else { return }
         guard !requiresStorageTransferRelaunch else { return }
+        isWaitingForLaunchActivation = false
         isPreparing = true
         canContinueOffline = false
         var ownedDeadline: CloudLaunchDeadline?
@@ -735,6 +777,9 @@ private struct PomoGemPersistenceLaunchHost: View {
                 session = try makeLocalSession(mode: mode)
                 return
             }
+            // Even an empty transfer-cleanup queue validates foreground
+            // access. Defer before entering it on the initial inactive frame.
+            try requireActiveLaunchAttempt(attempt, checkpoint: "before-launch-preparation")
             let transferRuntime = try StorageTransferRuntime.live()
             try transferRuntime.resumeLocalCleanup(validateAccess: {
                 try requireActiveLaunchAttempt(attempt, checkpoint: "during-transfer-copy-cleanup")
@@ -881,10 +926,8 @@ private struct PomoGemPersistenceLaunchHost: View {
                 return
             }
 
-            // Present an unselected storage choice, and mount an already
-            // selected local-only store, without waiting for the first active
-            // scene callback. Only access to an Apple Account needs an active
-            // foreground application.
+            // Transfer recovery may have suspended since the entry check.
+            // Confirm the foreground again before starting account access.
             guard scenePhase == .active else {
                 launchState = .preparing("Apple Accountを確認できるまでお待ちください")
                 return
@@ -1058,6 +1101,10 @@ private struct PomoGemPersistenceLaunchHost: View {
                 launchState = .blocked(message(for: reason))
             }
         } catch is CancellationError {
+            if launchAttempt == attempt, !Task.isCancelled, !isQuiescingAccountChange {
+                isWaitingForLaunchActivation = scenePhase != .active
+                    || UIApplication.shared.applicationState != .active
+            }
             // Record lifecycle values only; never account identifiers, model
             // contents or store paths. Cancellation must be distinguishable
             // from a watchdog expiry when diagnosing a retained loading view.
@@ -1730,8 +1777,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         attempt: Int,
         checkpoint: StaticString
     ) throws {
-        try Task.checkCancellation()
-        try cloudLaunchDeadline?.check()
+        try requireActiveLaunchAttempt(attempt, checkpoint: checkpoint)
         let decision = CloudMountAuthorizationPolicy.evaluate(
             expectedBinding: expectedBinding,
             verifiedBinding: verifiedBinding,
@@ -1756,16 +1802,17 @@ private struct PomoGemPersistenceLaunchHost: View {
     ) throws {
         try Task.checkCancellation()
         try cloudLaunchDeadline?.check()
-        guard launchAttempt == attempt,
-              scenePhase == .active,
-              UIApplication.shared.applicationState == .active
-        else {
-            Self.persistenceLogger.error(
+        do {
+            try PersistenceLaunchScenePolicy.requireActiveAttempt(
+                generationMatches: launchAttempt == attempt,
+                phase: scenePhase,
+                applicationState: UIApplication.shared.applicationState
+            )
+        } catch {
+            Self.persistenceLogger.info(
                 "Cloud launch became inactive at \(String(describing: checkpoint), privacy: .public)"
             )
-            throw AppleAccountBoundaryResolutionError.blocked(
-                .identityUnavailable
-            )
+            throw error
         }
     }
 
