@@ -1,4 +1,5 @@
 import DeviceActivity
+import FamilyControls
 import Foundation
 import XCTest
 @testable import PomoGem
@@ -158,6 +159,51 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
             XCTAssertFalse(result.runs.contains(where: \.active))
             XCTAssertNotNil(result.monitoringError)
             XCTAssertEqual(result.pendingLearningReceipts(limit: 10).count, 1)
+        }
+    }
+
+    /// A freshly launched monitor extension process can read .notDetermined
+    /// before Family Controls has answered. Acting on it would throw the user's
+    /// opaque selections away, and only a new picker session can restore them.
+    func testNotDeterminedAuthorizationNeitherRecordsNorInvalidates() throws {
+        try withFixture(installed: .complete) { store, center, original, _ in
+            let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                               authorizationStatus: { .notDetermined })
+
+            try monitor.handleThreshold(eventName: "1",
+                                        activityName: original.runs[0].activityPrefix + "0", now: now)
+            XCTAssertNoThrow(try monitor.invalidateAuthorizationIfNeeded())
+            XCTAssertFalse(try monitor.synchronize(now: now))
+
+            let result = try store.snapshot()
+            XCTAssertTrue(result.configuration.enabled)
+            XCTAssertEqual(result.configuration.themeID, original.configuration.themeID)
+            XCTAssertNil(result.monitoringError)
+            XCTAssertEqual(result.runs.count, 1)
+            XCTAssertTrue(result.runs[0].active)
+            // The callback is ignored, not awarded.
+            XCTAssertEqual(result.runs[0].highestThreshold, 0)
+            // Nothing is torn down while the status is still unknown.
+            XCTAssertEqual(center.stopCalls, [])
+            XCTAssertEqual(center.startedNames, [])
+        }
+    }
+
+    func testDeniedAuthorizationStillInvalidatesTheSelections() throws {
+        try withFixture(installed: .complete) { store, center, original, _ in
+            let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                               authorizationStatus: { .denied })
+
+            try monitor.handleThreshold(eventName: "1",
+                                        activityName: original.runs[0].activityPrefix + "0", now: now)
+
+            let result = try store.snapshot()
+            XCTAssertFalse(result.configuration.enabled)
+            XCTAssertTrue(result.configuration.learningSelection.applicationTokens.isEmpty)
+            XCTAssertFalse(result.runs.contains(where: \.active))
+            XCTAssertTrue(result.monitoringError?.contains("選び直して") == true)
+            XCTAssertEqual(center.stopCalls.count, 1)
+            XCTAssertFalse(try XCTUnwrap(center.stopCalls.first).isEmpty)
         }
     }
 

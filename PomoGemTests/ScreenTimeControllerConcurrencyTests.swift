@@ -107,6 +107,34 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertEqual(controller.configuration, configuration)
     }
 
+    /// AuthorizationCenter can answer .notDetermined before Family Controls has
+    /// loaded at a cold launch. Treating that as a revocation throws away the
+    /// saved opaque selections, which only a new picker session can restore.
+    func testTransientNotDeterminedStatusDoesNotRevokeSavedSelections() async throws {
+        let store = try makeStore()
+        let driver = Driver(store: store)
+        var status = AuthorizationStatus.notDetermined
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: driver, authorization: { status })
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        let runID = try XCTUnwrap(store.snapshot().runs.first?.id)
+
+        await controller.reconcile(isPro: false, timerRunning: false)
+        try await controller.waitForPendingOperations()
+        var state = try store.snapshot()
+        XCTAssertTrue(state.configuration.enabled)
+        XCTAssertNil(state.monitoringError)
+        XCTAssertTrue(state.runs.contains { $0.id == runID && $0.active })
+
+        status = .denied
+        await controller.reconcile(isPro: false, timerRunning: false)
+        try await controller.waitForPendingOperations()
+        state = try store.snapshot()
+        XCTAssertFalse(state.configuration.enabled)
+        XCTAssertFalse(state.runs.contains(where: \.active))
+        XCTAssertTrue(state.monitoringError?.contains("選び直して") == true)
+    }
+
     func testRetirementImmediatelyFencesReceiptsAndOldCompletionCannotPublishIntoNewOwner() async throws {
         let store = try makeStore()
         let driver = Driver(store: store)

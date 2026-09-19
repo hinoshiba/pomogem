@@ -52,20 +52,29 @@ final class ScreenTimeMonitoring {
     static let prefix = "pomogem.screen-time."
     private let store: ScreenTimeStore
     private let center: ScreenTimeActivityCenterDriving
-    private let authorization: () -> Bool
+    private let authorizationStatus: () -> AuthorizationStatus
 
     init(
         store: ScreenTimeStore,
         center: ScreenTimeActivityCenterDriving = DeviceActivityCenter(),
-        authorization: @escaping () -> Bool = { ScreenTimeMonitoring.isAuthorized }
+        authorizationStatus: @escaping () -> AuthorizationStatus = { AuthorizationCenter.shared.authorizationStatus }
     ) {
         self.store = store
         self.center = center
-        self.authorization = authorization
+        self.authorizationStatus = authorizationStatus
     }
 
-    static var isAuthorized: Bool {
-        let status = AuthorizationCenter.shared.authorizationStatus
+    /// For callers that only distinguish "approved" from "revoked".
+    convenience init(
+        store: ScreenTimeStore,
+        center: ScreenTimeActivityCenterDriving = DeviceActivityCenter(),
+        authorization: @escaping () -> Bool
+    ) {
+        self.init(store: store, center: center,
+                  authorizationStatus: { authorization() ? .approved : .denied })
+    }
+
+    static func isAuthorized(_ status: AuthorizationStatus) -> Bool {
         if status == .approved { return true }
         if #available(iOS 26.4, *), status == .approvedWithDataAccess { return true }
         return false
@@ -81,10 +90,14 @@ final class ScreenTimeMonitoring {
         center.stopMonitoring(ours)
     }
 
+    /// Only an explicit denial invalidates. A monitor extension process that has
+    /// just been launched to deliver a callback can still read .notDetermined,
+    /// and wiping the opaque selections then would cost the user a new picker
+    /// session for usage they already opted into.
     func invalidateAuthorizationIfNeeded() throws {
         do {
             try store.withMonitoringLock {
-                guard !authorization() else { return }
+                guard authorizationStatus() == .denied else { return }
                 let generation = ScreenTimeMonitoringGeneration(try store.snapshot())
                 stop()
                 try store.update {
@@ -111,7 +124,11 @@ final class ScreenTimeMonitoring {
     private func synchronizeLocked(now: Date) throws -> Bool {
         var state = try store.snapshot()
         let initialGeneration = ScreenTimeMonitoringGeneration(state)
-        if !authorization() {
+        let status = authorizationStatus()
+        if !Self.isAuthorized(status) {
+            // Skip the pass while the status is still unknown; never register
+            // and never invalidate on anything but a denial.
+            guard status == .denied else { return false }
             stop()
             try store.update {
                 try initialGeneration.requireCurrent($0)
@@ -249,8 +266,10 @@ final class ScreenTimeMonitoring {
     }
 
     func handleThreshold(eventName: String, activityName: String, now: Date = Date()) throws {
-        guard authorization() else {
-            try invalidateAuthorizationIfNeeded()
+        let status = authorizationStatus()
+        guard Self.isAuthorized(status) else {
+            // An unknown status means "ask again later": no award, no wipe.
+            if status == .denied { try invalidateAuthorizationIfNeeded() }
             return
         }
         guard activityName.hasPrefix(Self.prefix), let threshold = Int(eventName) else { return }

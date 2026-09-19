@@ -198,7 +198,10 @@ final class ScreenTimeController: ObservableObject {
                     }
                     state.pruneConsumedRuns()
                 }
-                if !Self.isAuthorized(authorization()) { state.invalidateAuthorization() }
+                // Only an explicit denial voids the selections: the status can
+                // read .notDetermined before Family Controls answers at a cold
+                // launch, and a wipe there costs a new picker session.
+                if authorization() == .denied { state.invalidateAuthorization() }
             }
             reload()
             return lease
