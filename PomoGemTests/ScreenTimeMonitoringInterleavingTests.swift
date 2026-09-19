@@ -263,6 +263,76 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         }
     }
 
+    func testEmptyCenterRegistersTheSchedulerAndEveryBatchOfTheNewRun() throws {
+        try withFixture(installed: .none, learningApplications: 2) { store, center, original, _ in
+            let monitor = ScreenTimeMonitoring(store: store, center: center, authorization: { true })
+
+            XCTAssertTrue(try monitor.synchronize(now: now))
+
+            let result = try store.snapshot()
+            // The pre-existing run is retired: none of its batches survived.
+            XCTAssertEqual(result.runs.count, 1)
+            let run = try XCTUnwrap(result.runs.first)
+            XCTAssertNotEqual(run.id, original.runs[0].id)
+            XCTAssertEqual(run.lane, .learning)
+            XCTAssertTrue(run.active)
+            XCTAssertNil(result.monitoringError)
+            // One scheduler plus every batch of the new run, in batch order.
+            XCTAssertEqual(center.startedNames, [ScreenTimeMonitoring.schedulerName(epoch: result.epoch)]
+                + (0..<ScreenTimePolicy.batchesPerLane).map { run.activityPrefix + String($0) })
+            XCTAssertEqual(center.startCount, 1 + ScreenTimePolicy.batchesPerLane)
+            XCTAssertEqual(center.stopCalls, [])
+        }
+    }
+
+    func testSupersededGenerationLeavesTheBatchLoopWithoutWritingOrStopping() throws {
+        try withFixture(installed: .none, learningApplications: 2) { store, center, original, ledgerURL in
+            var replacement = original
+            replacement.contextKey = "replacement-owner"
+            replacement.negativeGemCount = 12
+            var replacementBytes: Data?
+            center.onStartName = { name in
+                guard name.hasSuffix(".4") else { return }
+                try store.update { $0 = replacement }
+                replacementBytes = try Data(contentsOf: ledgerURL)
+            }
+            let monitor = ScreenTimeMonitoring(store: store, center: center, authorization: { true })
+
+            XCTAssertFalse(try monitor.synchronize(now: now))
+
+            // Scheduler plus batches 0...4, then the superseded check stops it.
+            XCTAssertEqual(center.startCount, 6)
+            XCTAssertEqual(center.startedNames.filter { $0.hasSuffix(".5") }, [])
+            XCTAssertEqual(try Data(contentsOf: ledgerURL), try XCTUnwrap(replacementBytes))
+            XCTAssertEqual(try store.snapshot().contextKey, "replacement-owner")
+            XCTAssertNil(try store.snapshot().monitoringError)
+            XCTAssertEqual(center.stopCalls, [])
+        }
+    }
+
+    func testCenterFailureInsideTheBatchLoopStopsOnlyWhatWasRegistered() throws {
+        try withFixture(installed: .none, learningApplications: 2) { store, center, _, _ in
+            center.onStartName = { name in
+                if name.hasSuffix(".4") { throw RegistrationFailure() }
+            }
+            let monitor = ScreenTimeMonitoring(store: store, center: center, authorization: { true })
+
+            XCTAssertThrowsError(try monitor.synchronize(now: now)) { error in
+                XCTAssertTrue(error is RegistrationFailure)
+            }
+
+            XCTAssertEqual(center.startCount, 6)
+            // The failed registration never installed, so the teardown covers
+            // the scheduler and batches 0...3 — and is never an empty array.
+            XCTAssertEqual(center.stopCalls.count, 1)
+            XCTAssertEqual(try XCTUnwrap(center.stopCalls.first).count, 5)
+            XCTAssertEqual(center.installedNames, [])
+            let result = try store.snapshot()
+            XCTAssertFalse(result.runs.contains(where: \.active))
+            XCTAssertNotNil(result.monitoringError)
+        }
+    }
+
     /// Which of our activities the OS already holds when the pass starts.
     fileprivate enum FixtureInstallation {
         /// Today's run is registered, but the daily scheduler is not.
@@ -273,8 +343,24 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         case none
     }
 
+    /// Inert placeholder tokens. Real Family Controls tokens only come from the
+    /// picker, but nothing here reaches the OS: the fake center throws the
+    /// events away, so the tokens only have to make a lane look configured.
+    private func makeLearningSelection(count: Int) throws -> FamilyActivitySelection {
+        let tokens = (0..<count).map { index in
+            "{\"data\":\"\(Data([UInt8(index), 1, 2, 3]).base64EncodedString())\"}"
+        }.joined(separator: ",")
+        let json = """
+        {"untokenizedApplicationIdentifiers":[],"categoryTokens":[],"includeEntireCategory":false,\
+        "webDomainTokens":[],"untokenizedWebDomainIdentifiers":[],"untokenizedCategoryIdentifiers":[],\
+        "applicationTokens":[\(tokens)]}
+        """
+        return try JSONDecoder().decode(FamilyActivitySelection.self, from: Data(json.utf8))
+    }
+
     private func withFixture(
         installed: FixtureInstallation = .runBatches,
+        learningApplications: Int = 0,
         _ body: (ScreenTimeStore, FakeActivityCenter, ScreenTimeState, URL) throws -> Void
     ) throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -286,6 +372,9 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         initial.contextIsActive = true
         initial.configuration.enabled = true
         initial.configuration.themeID = UUID()
+        if learningApplications > 0 {
+            initial.configuration.learningSelection = try makeLearningSelection(count: learningApplications)
+        }
         let calendar = Calendar.current
         let dayStart = calendar.startOfDay(for: now)
         initial.runs = [ScreenTimeRun(
