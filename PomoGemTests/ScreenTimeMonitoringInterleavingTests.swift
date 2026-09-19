@@ -161,7 +161,41 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         }
     }
 
+    func testSteadyStateSynchronizeKeepsTheInstalledRegistrationInstalled() throws {
+        try withFixture(installed: .complete) { store, center, original, _ in
+            let expected = Set((0..<ScreenTimePolicy.batchesPerLane).map {
+                original.runs[0].activityPrefix + String($0)
+            } + [ScreenTimeMonitoring.schedulerName(epoch: original.epoch)])
+            XCTAssertEqual(center.installedNames, expected)
+            let monitor = ScreenTimeMonitoring(store: store, center: center, authorization: { true })
+
+            XCTAssertTrue(try monitor.synchronize(now: now))
+
+            // Nothing changed, so nothing may be torn down or re-registered. A
+            // stopMonitoring([]) here would stop every activity on the device.
+            XCTAssertEqual(center.stopCalls, [])
+            XCTAssertEqual(center.startedNames, [])
+            XCTAssertEqual(center.installedNames, expected)
+            let result = try store.snapshot()
+            XCTAssertEqual(result.runs.count, 1)
+            XCTAssertEqual(result.runs[0].id, original.runs[0].id)
+            XCTAssertTrue(result.runs[0].active)
+            XCTAssertNil(result.monitoringError)
+        }
+    }
+
+    /// Which of our activities the OS already holds when the pass starts.
+    fileprivate enum FixtureInstallation {
+        /// Today's run is registered, but the daily scheduler is not.
+        case runBatches
+        /// Steady state: every batch of today's run plus the daily scheduler.
+        case complete
+        /// A fresh device, or a center that lost our registration.
+        case none
+    }
+
     private func withFixture(
+        installed: FixtureInstallation = .runBatches,
         _ body: (ScreenTimeStore, FakeActivityCenter, ScreenTimeState, URL) throws -> Void
     ) throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -187,9 +221,14 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         try store.update { $0 = initial }
         // A pre-existing run needs no manufactured Family Controls tokens. All
         // calls use this fake center; no OS registration or permission is used.
-        let center = FakeActivityCenter(activities: (0..<ScreenTimePolicy.batchesPerLane).map {
-            DeviceActivityName(initial.runs[0].activityPrefix + String($0))
-        })
+        var names: [String] = []
+        if installed != .none {
+            names = (0..<ScreenTimePolicy.batchesPerLane).map { initial.runs[0].activityPrefix + String($0) }
+        }
+        if installed == .complete {
+            names.append(ScreenTimeMonitoring.schedulerName(epoch: initial.epoch))
+        }
+        let center = FakeActivityCenter(activities: names.map(DeviceActivityName.init(rawValue:)))
         try body(store, center, initial, directory.appendingPathComponent("ScreenTime/ledger.json"))
     }
 }
@@ -197,12 +236,19 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
 private struct RegistrationFailure: Error {}
 
 private final class FakeActivityCenter: ScreenTimeActivityCenterDriving {
-    private let installed: [DeviceActivityName]
+    private var installed: [DeviceActivityName]
     var onActivities: (() -> Void)?
     var onStop: (() -> Void)?
     var onStart: (() throws -> Void)?
-    private(set) var startCount = 0
-    private(set) var stopCount = 0
+    /// Called with every started activity name, unlike `onStart` which keeps the
+    /// no-argument shape the older interleaving tests rely on.
+    var onStartName: ((String) throws -> Void)?
+    private(set) var startedNames: [String] = []
+    /// Every stopMonitoring argument, so a `[]` teardown is visible to tests.
+    private(set) var stopCalls: [[String]] = []
+    var startCount: Int { startedNames.count }
+    var stopCount: Int { stopCalls.count }
+    var installedNames: Set<String> { Set(installed.map(\.rawValue)) }
 
     init(activities: [DeviceActivityName]) { installed = activities }
 
@@ -214,7 +260,12 @@ private final class FakeActivityCenter: ScreenTimeActivityCenterDriving {
     }
 
     func stopMonitoring(_ activities: [DeviceActivityName]) {
-        stopCount += 1
+        stopCalls.append(activities.map(\.rawValue))
+        // Mirrors DeviceActivityCenter: the argument defaults to [] and an empty
+        // array stops EVERY activity, not none.
+        // https://developer.apple.com/documentation/deviceactivity/deviceactivitycenter/stopmonitoring(_:)
+        if activities.isEmpty { installed.removeAll() }
+        else { installed.removeAll { activities.contains($0) } }
         let callback = onStop
         onStop = nil
         callback?()
@@ -225,7 +276,9 @@ private final class FakeActivityCenter: ScreenTimeActivityCenterDriving {
         during schedule: DeviceActivitySchedule,
         events: [DeviceActivityEvent.Name: DeviceActivityEvent]
     ) throws {
-        startCount += 1
+        startedNames.append(activity.rawValue)
         try onStart?()
+        try onStartName?(activity.rawValue)
+        if !installed.contains(activity) { installed.append(activity) }
     }
 }

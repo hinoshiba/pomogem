@@ -71,8 +71,14 @@ final class ScreenTimeMonitoring {
         return false
     }
 
+    /// Never call stopMonitoring with an empty array: the framework treats that
+    /// as "stop every activity", including other clients' and our own healthy
+    /// registration.
+    /// https://developer.apple.com/documentation/deviceactivity/deviceactivitycenter/stopmonitoring(_:)
     func stop() {
-        center.stopMonitoring(center.activities.filter { $0.rawValue.hasPrefix(Self.prefix) })
+        let ours = center.activities.filter { $0.rawValue.hasPrefix(Self.prefix) }
+        guard !ours.isEmpty else { return }
+        center.stopMonitoring(ours)
     }
 
     func invalidateAuthorizationIfNeeded() throws {
@@ -125,7 +131,7 @@ final class ScreenTimeMonitoring {
         let calendar = Calendar.current
         let dayStart = calendar.startOfDay(for: now)
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart)!
-        let installed = Set(center.activities.map(\.rawValue))
+        var installed = Set(center.activities.map(\.rawValue))
         let supportsPastActivity: Bool
         if #available(iOS 17.4, *) { supportsPastActivity = true }
         else { supportsPastActivity = false }
@@ -177,9 +183,15 @@ final class ScreenTimeMonitoring {
             (0..<ScreenTimePolicy.batchesPerLane).map { run.activityPrefix + String($0) }
         } + [schedulerName])
         try generation.requireCurrent(store.snapshot())
-        center.stopMonitoring(center.activities.filter {
+        let stale = center.activities.filter {
             $0.rawValue.hasPrefix(Self.prefix) && !desiredNames.contains($0.rawValue)
-        })
+        }
+        if !stale.isEmpty {
+            center.stopMonitoring(stale)
+            // The teardown changes what the OS holds, so the re-registration
+            // guards below must not trust the pre-teardown snapshot.
+            installed = Set(center.activities.map(\.rawValue))
+        }
         do {
             try generation.requireCurrent(store.snapshot())
             if !installed.contains(schedulerName) {
