@@ -200,7 +200,7 @@ final class ScreenTimeMonitoringTests: XCTestCase {
     }
 
     @MainActor
-    func testControllerPublishesNothingBeforeThePersistenceOwnerIsBound() throws {
+    func testControllerPublishesNothingBeforeThePersistenceOwnerIsBound() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = ScreenTimeStore(directory: directory)
@@ -212,13 +212,13 @@ final class ScreenTimeMonitoringTests: XCTestCase {
         XCTAssertNil(controller.configuration.themeID)
         XCTAssertEqual(controller.negativeGemCount, 0)
         XCTAssertFalse(controller.isMonitoring)
-        try controller.bindContext(contextKey: "test-owner", dataEpochID: nil)
+        try await controller.bindContext(contextKey: "test-owner", dataEpochID: nil)
         XCTAssertEqual(controller.negativeGemCount, 42)
         XCTAssertEqual(controller.configuration.themeID, state.configuration.themeID)
     }
 
     @MainActor
-    func testControllerRejectsLedgerFromAnotherOwnerOrEpochOnReload() throws {
+    func testControllerRejectsLedgerFromAnotherOwnerOrEpochOnReload() async throws {
         for changesOwner in [true, false] {
             let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             defer { try? FileManager.default.removeItem(at: directory) }
@@ -227,7 +227,7 @@ final class ScreenTimeMonitoringTests: XCTestCase {
             state.negativeGemCount = 12
             try store.update { $0 = state }
             let controller = ScreenTimeController(store: store, currentContextKey: { "test-owner" })
-            try controller.bindContext(contextKey: "test-owner", dataEpochID: nil)
+            try await controller.bindContext(contextKey: "test-owner", dataEpochID: nil)
             XCTAssertEqual(controller.negativeGemCount, 12)
             try store.update {
                 if changesOwner { $0.contextKey = "another-owner" }
@@ -243,7 +243,7 @@ final class ScreenTimeMonitoringTests: XCTestCase {
     }
 
     @MainActor
-    func testRetiredHostsCleanupCannotSuspendTheNewOwner() throws {
+    func testRetiredHostsCleanupCannotSuspendTheNewOwner() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = ScreenTimeStore(directory: directory)
@@ -252,11 +252,11 @@ final class ScreenTimeMonitoringTests: XCTestCase {
         state.negativeGemCount = 27
         try store.update { $0 = state }
         let controller = ScreenTimeController(store: store, currentContextKey: { "new-owner" })
-        try controller.bindContext(contextKey: "new-owner", dataEpochID: nil)
-        controller.suspendForContextRetirement(contextKey: "old-owner")
+        try await controller.bindContext(contextKey: "new-owner", dataEpochID: nil)
+        controller.suspendForContextRetirement(contextKey: "old-owner", dataEpochID: nil)
         XCTAssertEqual(controller.negativeGemCount, 27)
         XCTAssertTrue(try store.snapshot().contextIsActive)
-        controller.suspendForContextRetirement(contextKey: "new-owner")
+        controller.suspendForContextRetirement(contextKey: "new-owner", dataEpochID: nil)
         XCTAssertEqual(controller.negativeGemCount, 0)
         XCTAssertNil(controller.configuration.themeID)
         XCTAssertFalse(controller.configuration.enabled)
@@ -264,10 +264,11 @@ final class ScreenTimeMonitoringTests: XCTestCase {
         controller.reload()
         XCTAssertEqual(controller.negativeGemCount, 0)
         XCTAssertNil(controller.configuration.themeID)
+        try await controller.waitForPendingOperations()
     }
 
     @MainActor
-    func testGlobalOwnerChangeImmediatelyHidesOldDataAndRejectsOldMutationsBeforeRebind() throws {
+    func testGlobalOwnerChangeImmediatelyHidesOldDataAndRejectsOldMutationsBeforeRebind() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = ScreenTimeStore(directory: directory)
@@ -276,26 +277,27 @@ final class ScreenTimeMonitoringTests: XCTestCase {
         try store.update { $0 = state }
         var currentOwner = "test-owner"
         let controller = ScreenTimeController(store: store, currentContextKey: { currentOwner })
-        try controller.bindContext(contextKey: "test-owner", dataEpochID: nil)
+        try await controller.bindContext(contextKey: "test-owner", dataEpochID: nil)
         XCTAssertEqual(controller.negativeGemCount, 31)
         currentOwner = "next-owner"
         controller.reload()
         XCTAssertEqual(controller.negativeGemCount, 0)
         XCTAssertNil(controller.configuration.themeID)
         XCTAssertFalse(controller.configuration.enabled)
-        XCTAssertThrowsError(try controller.resetActivityData())
-        XCTAssertThrowsError(try controller.save(configuration: ScreenTimeConfiguration(), isPro: false))
-        XCTAssertThrowsError(try controller.bindContext(contextKey: "test-owner", dataEpochID: nil))
-        controller.reconcile(isPro: false, timerRunning: true)
+        do { try await controller.resetActivityData(); XCTFail("Retired owner must not reset") } catch {}
+        do { try await controller.save(configuration: ScreenTimeConfiguration(), isPro: false); XCTFail("Retired owner must not save") } catch {}
+        do { try await controller.bindContext(contextKey: "test-owner", dataEpochID: nil); XCTFail("Retired owner must not bind") } catch {}
+        await controller.reconcile(isPro: false, timerRunning: true)
         let untouched = try store.snapshot()
         XCTAssertEqual(untouched.contextKey, "test-owner")
         XCTAssertEqual(untouched.negativeGemCount, 31)
         XCTAssertFalse(untouched.learningPausedByTimer)
         XCTAssertTrue(untouched.configuration.enabled)
-        controller.suspendForContextRetirement(contextKey: "test-owner")
+        controller.suspendForContextRetirement(contextKey: "test-owner", dataEpochID: nil)
         let retired = try store.snapshot()
         XCTAssertFalse(retired.contextIsActive)
         XCTAssertFalse(retired.runs.contains(where: \.active))
         XCTAssertEqual(retired.negativeGemCount, 31)
+        try await controller.waitForPendingOperations()
     }
 }

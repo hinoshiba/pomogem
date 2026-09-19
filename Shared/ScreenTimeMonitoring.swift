@@ -2,15 +2,67 @@ import DeviceActivity
 import FamilyControls
 import Foundation
 
+protocol ScreenTimeActivityCenterDriving {
+    var activities: [DeviceActivityName] { get }
+    func stopMonitoring(_ activities: [DeviceActivityName])
+    func startMonitoring(
+        _ activity: DeviceActivityName,
+        during schedule: DeviceActivitySchedule,
+        events: [DeviceActivityEvent.Name: DeviceActivityEvent]
+    ) throws
+}
+
+extension DeviceActivityCenter: ScreenTimeActivityCenterDriving {}
+
+/// Identifies registration inputs without including concurrently arriving
+/// receipts. The main app can retire a run or reset its owner while an OS call
+/// holds the separate monitoring lock, so every later write must revalidate.
+private struct ScreenTimeMonitoringGeneration: Equatable {
+    let epoch: UUID
+    let contextKey: String?
+    let dataEpochID: UUID?
+    let contextIsActive: Bool
+    let configuration: ScreenTimeConfiguration
+    let learningPausedByTimer: Bool
+    let learningAllowedBySubscription: Bool
+    let activeRunIDs: Set<UUID>
+
+    init(_ state: ScreenTimeState) {
+        epoch = state.epoch
+        contextKey = state.contextKey
+        dataEpochID = state.dataEpochID
+        contextIsActive = state.contextIsActive
+        configuration = state.configuration
+        learningPausedByTimer = state.learningPausedByTimer
+        learningAllowedBySubscription = state.learningAllowedBySubscription
+        activeRunIDs = Set(state.runs.filter(\.active).map(\.id))
+    }
+
+    func requireCurrent(_ state: ScreenTimeState) throws {
+        guard self == Self(state) else { throw ScreenTimeMonitoringSuperseded() }
+    }
+}
+
+private struct ScreenTimeMonitoringSuperseded: Error {}
+
 /// Public Screen Time APIs only. One dated registration per lane/batch prevents
 /// delayed events from being mistaken for another day's usage. A recurring
 /// scheduler installs the next dated day even while the app isn't running.
 final class ScreenTimeMonitoring {
     static let prefix = "pomogem.screen-time."
     private let store: ScreenTimeStore
-    private let center = DeviceActivityCenter()
+    private let center: ScreenTimeActivityCenterDriving
+    private let authorization: () -> Bool
 
-    init(store: ScreenTimeStore) { self.store = store }
+    init(
+        store: ScreenTimeStore,
+        center: ScreenTimeActivityCenterDriving = DeviceActivityCenter(),
+        authorization: @escaping () -> Bool = { ScreenTimeMonitoring.isAuthorized }
+    ) {
+        self.store = store
+        self.center = center
+        self.authorization = authorization
+    }
 
     static var isAuthorized: Bool {
         let status = AuthorizationCenter.shared.authorizationStatus
@@ -24,30 +76,47 @@ final class ScreenTimeMonitoring {
     }
 
     func invalidateAuthorizationIfNeeded() throws {
-        try store.withMonitoringLock {
-            guard !Self.isAuthorized else { return }
-            stop()
-            try store.update { $0.invalidateAuthorization() }
+        do {
+            try store.withMonitoringLock {
+                guard !authorization() else { return }
+                let generation = ScreenTimeMonitoringGeneration(try store.snapshot())
+                stop()
+                try store.update {
+                    try generation.requireCurrent($0)
+                    $0.invalidateAuthorization()
+                }
+            }
+        } catch is ScreenTimeMonitoringSuperseded {
+            // A newer opt-in/reset owns the ledger now.
         }
     }
 
     @discardableResult
     func synchronize(now: Date = Date()) throws -> Bool {
-        try store.withMonitoringLock {
-            try synchronizeLocked(now: now)
+        do {
+            return try store.withMonitoringLock {
+                try synchronizeLocked(now: now)
+            }
+        } catch is ScreenTimeMonitoringSuperseded {
+            return false
         }
     }
 
     private func synchronizeLocked(now: Date) throws -> Bool {
         var state = try store.snapshot()
-        if !Self.isAuthorized {
+        let initialGeneration = ScreenTimeMonitoringGeneration(state)
+        if !authorization() {
             stop()
-            try store.update { $0.invalidateAuthorization() }
+            try store.update {
+                try initialGeneration.requireCurrent($0)
+                $0.invalidateAuthorization()
+            }
             return false
         }
         guard state.configuration.enabled, state.contextKey != nil, state.contextIsActive else {
             stop()
             try store.update { state in
+                try initialGeneration.requireCurrent(state)
                 for index in state.runs.indices { state.runs[index].active = false }
                 state.pruneConsumedRuns()
             }
@@ -61,6 +130,7 @@ final class ScreenTimeMonitoring {
         if #available(iOS 17.4, *) { supportsPastActivity = true }
         else { supportsPastActivity = false }
         state = try store.update { state in
+            try initialGeneration.requireCurrent(state)
             // Capture continuity before retiring yesterday's dated run. The
             // foreground app and the extension must reach the same decision.
             let previousRuns = state.runs
@@ -101,19 +171,23 @@ final class ScreenTimeMonitoring {
             state.monitoringError = nil
             return state
         }
+        let generation = ScreenTimeMonitoringGeneration(state)
         let schedulerName = Self.schedulerName(epoch: state.epoch)
         let desiredNames = Set(state.runs.filter(\.active).flatMap { run in
             (0..<ScreenTimePolicy.batchesPerLane).map { run.activityPrefix + String($0) }
         } + [schedulerName])
+        try generation.requireCurrent(store.snapshot())
         center.stopMonitoring(center.activities.filter {
             $0.rawValue.hasPrefix(Self.prefix) && !desiredNames.contains($0.rawValue)
         })
         do {
+            try generation.requireCurrent(store.snapshot())
             if !installed.contains(schedulerName) {
                 try center.startMonitoring(DeviceActivityName(schedulerName), during: DeviceActivitySchedule(
                     intervalStart: DateComponents(hour: 0, minute: 0, second: 0),
                     intervalEnd: DateComponents(hour: 23, minute: 59, second: 59), repeats: true
-                ))
+                ), events: [:])
+                try generation.requireCurrent(store.snapshot())
             }
             for run in state.runs where run.active {
                 let selection = run.lane == .learning ? state.configuration.learningSelection : state.configuration.distractionSelection
@@ -141,14 +215,19 @@ final class ScreenTimeMonitoring {
                     }
                     // Recheck the generation after each framework call; callbacks
                     // from stopped/changed configurations cannot award receipts.
-                    guard try store.snapshot().runs.contains(where: { $0.id == run.id && $0.active }) else { return false }
+                    try generation.requireCurrent(store.snapshot())
                     try center.startMonitoring(DeviceActivityName(name), during: schedule, events: events)
+                    try generation.requireCurrent(store.snapshot())
                 }
             }
+            try generation.requireCurrent(store.snapshot())
             return state.runs.contains(where: \.active)
+        } catch is ScreenTimeMonitoringSuperseded {
+            return false
         } catch {
             stop()
             try store.update { state in
+                try generation.requireCurrent(state)
                 for index in state.runs.indices { state.runs[index].active = false }
                 state.monitoringError = "スクリーンタイムの監視を開始できませんでした。もう一度お試しください。"
                 state.pruneConsumedRuns()
@@ -158,7 +237,7 @@ final class ScreenTimeMonitoring {
     }
 
     func handleThreshold(eventName: String, activityName: String, now: Date = Date()) throws {
-        guard Self.isAuthorized else {
+        guard authorization() else {
             try invalidateAuthorizationIfNeeded()
             return
         }

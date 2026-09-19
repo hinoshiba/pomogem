@@ -55,6 +55,11 @@ OSの通知は即時・完全な到達を保証するものとして扱わず、
 Appleの同時監視上限はアプリと拡張を合わせて20です。
 [Apple: excessiveActivities](https://developer.apple.com/documentation/deviceactivity/deviceactivitycenter/monitoringerror/excessiveactivities)
 
+監視の登録・停止は専用の直列処理で実行し、OSからの応答待ちで画面を止めません。
+設定画面は反映中の状態を表示し、保存中の重複操作や編集内容の取り違えを防ぎます。
+タイマー開始、無料枠を超えたPro失効、記録のリセット、保存先の退役では、OS処理の完了を待たずに
+古い到達通知を受け付けなくします。古い処理の完了を新しい保存先やリセット世代へ反映しません。
+
 ## 保存と境界
 
 選択したアプリのopaque token、監視世代、未取り込みの到達記録、黒いgemの数は、アプリとDevice Activity

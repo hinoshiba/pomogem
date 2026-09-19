@@ -12,84 +12,142 @@ final class ScreenTimeController: ObservableObject {
     @Published private(set) var negativeGemCount = 0
     @Published private(set) var learningPausedByTimer = false
     @Published private(set) var isMonitoring = false
+    @Published private(set) var isSaving = false
+    @Published private(set) var isResetting = false
+    @Published private(set) var isUpdatingMonitoring = false
     let store: ScreenTimeStore
-    private let monitoring: ScreenTimeMonitoring
+    private let worker: ScreenTimeMonitoringWorker
     private let currentContextKey: () -> String
-    private var isPro = false
-    private struct ContextBinding: Equatable {
-        let contextKey: String
-        let dataEpochID: UUID?
+    private let authorization: () -> AuthorizationStatus
+    private var lease: ScreenTimeContextLease?
+    private var bindingTask: Task<Void, Error>?
+    private var bindingConfirmed = false
+    private var operationIDs: Set<UUID> = []
+    private var isErasing = false
 
-        func matches(_ state: ScreenTimeState) -> Bool {
-            state.contextKey == contextKey && state.dataEpochID == dataEpochID
-        }
+    enum OperationError: LocalizedError {
+        case busy
+        var errorDescription: String? { "スクリーンタイムの設定を反映中です。完了するまでお待ちください。" }
     }
-    private var contextBinding: ContextBinding?
-    private var isBound: Bool { contextBinding?.contextKey == currentContextKey() }
 
     init(
         store: ScreenTimeStore = ScreenTimeStore(),
         currentContextKey: @escaping () -> String = {
             AccountScopedLocalState.defaultsKey(base: "screen-time-owner")
-        }
+        },
+        monitoring: ScreenTimeMonitoringDriving? = nil,
+        authorization: @escaping () -> AuthorizationStatus = { AuthorizationCenter.shared.authorizationStatus }
     ) {
         self.store = store
         self.currentContextKey = currentContextKey
-        self.monitoring = ScreenTimeMonitoring(store: store)
+        self.authorization = authorization
+        worker = ScreenTimeMonitoringWorker(store: store, monitoring: monitoring ?? ScreenTimeMonitoring(store: store))
         reload()
     }
 
-    /// Call when the app has resolved its account and activity reset epoch.
-    /// A new owner must explicitly opt in; previous owners' tokens are erased.
-    func bindContext(contextKey: String, dataEpochID: UUID?) throws {
-        guard contextKey == currentContextKey() else { throw ScreenTimeError.unboundContext }
-        let binding = ContextBinding(contextKey: contextKey, dataEpochID: dataEpochID)
-        if contextBinding != binding {
-            contextBinding = nil
-            clearPublishedState()
+    func isBound(contextKey: String, dataEpochID: UUID?) -> Bool {
+        !isErasing && bindingConfirmed && lease?.binding == ScreenTimeContextBinding(contextKey: contextKey, dataEpochID: dataEpochID)
+            && contextKey == currentContextKey()
+    }
+
+    /// A changed owner or activity epoch revokes queued work before the first
+    /// await. A new owner always starts with empty opt-in settings.
+    func bindContext(contextKey: String, dataEpochID: UUID?) async throws {
+        guard !isErasing, contextKey == currentContextKey() else { throw ScreenTimeError.unboundContext }
+        let binding = ScreenTimeContextBinding(contextKey: contextKey, dataEpochID: dataEpochID)
+        if lease?.binding == binding {
+            if let bindingTask { try await bindingTask.value }
+            guard isBound(contextKey: contextKey, dataEpochID: dataEpochID) else { throw ScreenTimeError.unboundContext }
+            reload()
+            return
         }
-        try store.withMonitoringLock {
-            let previous = try store.snapshot()
-            if previous.contextKey != contextKey || previous.dataEpochID != dataEpochID {
-                monitoring.stop()
-                try store.update { state in
-                    state = ScreenTimeState()
-                    state.contextKey = contextKey
-                    state.dataEpochID = dataEpochID
+        suspendForContextRetirement()
+        let newLease = ScreenTimeContextLease(binding: binding)
+        lease = newLease
+        bindingConfirmed = false
+        let operation = beginOperation()
+        let worker = worker
+        let task = Task { @MainActor in
+            defer { endOperation(operation) }
+            do {
+                try await worker.perform {
+                    try worker.store.withMonitoringLock {
+                        let previous = try newLease.whileCurrent { try worker.store.snapshot() }
+                        if !binding.matches(previous) {
+                            worker.monitoring.stop()
+                            try newLease.whileCurrent {
+                                try worker.store.update { state in
+                                    state = ScreenTimeState()
+                                    state.contextKey = binding.contextKey
+                                    state.dataEpochID = binding.dataEpochID
+                                }
+                            }
+                        }
+                        try newLease.whileCurrent { try worker.store.update { $0.contextIsActive = true } }
+                    }
                 }
+                guard self.lease === newLease, !isErasing, contextKey == currentContextKey() else {
+                    throw ScreenTimeError.unboundContext
+                }
+                bindingConfirmed = true
+                bindingTask = nil
+                reload()
+            } catch {
+                if self.lease === newLease {
+                    newLease.invalidate()
+                    self.lease = nil
+                    bindingConfirmed = false
+                    bindingTask = nil
+                    clearPublishedState()
+                }
+                throw error
             }
-            try store.update { $0.contextIsActive = true }
         }
-        contextBinding = binding
-        reload()
+        bindingTask = task
+        try await task.value
     }
 
     func requestAuthorization() async {
+        guard let lease = try? boundLease() else {
+            monitoringError = ScreenTimeError.unboundContext.localizedDescription
+            return
+        }
+        let operation = beginOperation()
+        defer { endOperation(operation) }
         do {
-            guard isBound, contextBinding?.matches(try store.snapshot()) == true else {
-                throw ScreenTimeError.unboundContext
+            let worker = worker
+            try await worker.perform {
+                try lease.whileCurrent {
+                    guard lease.binding.matches(try worker.store.snapshot()) else { throw ScreenTimeError.unboundContext }
+                }
+                try worker.monitoring.invalidateAuthorizationIfNeeded()
             }
-            // A renewed grant does not make previously issued tokens valid.
-            try monitoring.invalidateAuthorizationIfNeeded()
+            try requireCurrent(lease)
             try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+            try requireCurrent(lease)
             reload()
         } catch {
+            guard (try? requireCurrent(lease)) != nil else { return }
             reload()
             monitoringError = "スクリーンタイムへのアクセスが許可されませんでした。設定を確認してください。"
         }
     }
 
-    func save(configuration newConfiguration: ScreenTimeConfiguration, isPro: Bool) throws {
+    func save(configuration newConfiguration: ScreenTimeConfiguration, isPro: Bool) async throws {
+        guard !isSaving, !isResetting, !isErasing else { throw OperationError.busy }
         try ScreenTimePolicy.validate(newConfiguration, isPro: isPro)
-        if newConfiguration.enabled {
-            guard isBound else { throw ScreenTimeError.unboundContext }
-            guard ScreenTimeMonitoring.isAuthorized else { throw ScreenTimeError.unauthorized }
+        let lease = try boundLease()
+        if newConfiguration.enabled, !Self.isAuthorized(authorization()) { throw ScreenTimeError.unauthorized }
+        isSaving = true
+        let operation = beginOperation()
+        defer {
+            if self.lease === lease { isSaving = false }
+            endOperation(operation)
         }
-        self.isPro = isPro
-        try store.withMonitoringLock { try store.update { state in
-            guard isBound, contextBinding?.matches(state) == true, state.contextIsActive else {
-                throw ScreenTimeError.unboundContext
-            }
+        // Only the short receipt lock is taken here. Mark changed runs inactive
+        // before yielding so callbacks cannot award against superseded settings.
+        try store.update { state in
+            try validate(state, lease: lease)
             let old = state.configuration
             for index in state.runs.indices {
                 let lane = state.runs[index].lane
@@ -102,44 +160,76 @@ final class ScreenTimeController: ObservableObject {
             state.learningAllowedBySubscription = isPro || newConfiguration.learningSelection.applicationTokens.count <= ScreenTimePolicy.freeLearningApplicationLimit
             state.monitoringError = nil
             state.pruneConsumedRuns()
-        } }
-        do { isMonitoring = try monitoring.synchronize() }
-        catch { reload(); throw error }
+        }
         reload()
+        do { try await synchronize(lease) }
+        catch {
+            if self.lease === lease { reload() }
+            throw error
+        }
     }
 
-    func reconcile(isPro: Bool, timerRunning: Bool) {
-        self.isPro = isPro
-        guard isBound else { reload(); return }
+    func reconcile(isPro: Bool, timerRunning: Bool) async {
+        guard let lease = updatePolicy(isPro: isPro, timerRunning: timerRunning) else { return }
+        await finishReconciliation(lease)
+    }
+
+    /// SwiftUI change handlers call this synchronously so even a rapid
+    /// pause/resume closes the old run before another UI event is delivered.
+    func reconcileInBackground(contextKey: String, dataEpochID: UUID?, isPro: Bool, timerRunning: Bool) {
+        guard isBound(contextKey: contextKey, dataEpochID: dataEpochID),
+              let lease = updatePolicy(isPro: isPro, timerRunning: timerRunning) else { return }
+        Task { await finishReconciliation(lease) }
+    }
+
+    private func updatePolicy(isPro: Bool, timerRunning: Bool) -> ScreenTimeContextLease? {
+        guard let lease = try? boundLease() else { reload(); return nil }
         do {
-            try store.withMonitoringLock { try store.update { state in
-                guard isBound, contextBinding?.matches(state) == true, state.contextIsActive else {
-                    throw ScreenTimeError.unboundContext
-                }
+            // Never wait for the monitoring lock to close the receipt gate.
+            try store.update { state in
+                try validate(state, lease: lease)
                 state.learningPausedByTimer = timerRunning
                 state.learningAllowedBySubscription = isPro || state.configuration.learningSelection.applicationTokens.count <= ScreenTimePolicy.freeLearningApplicationLimit
-                if !ScreenTimeMonitoring.isAuthorized {
-                    state.invalidateAuthorization()
+                // Keep this retirement even if a later resume arrives before
+                // the OS returns. The old run must not count timer usage.
+                if timerRunning || !state.learningAllowedBySubscription {
+                    for index in state.runs.indices where state.runs[index].lane == .learning {
+                        state.runs[index].active = false
+                    }
+                    state.pruneConsumedRuns()
                 }
-            } }
-            isMonitoring = try monitoring.synchronize()
+                if !Self.isAuthorized(authorization()) { state.invalidateAuthorization() }
+            }
             reload()
+            return lease
         } catch {
+            monitoringError = error.localizedDescription
+            return nil
+        }
+    }
+
+    private func finishReconciliation(_ lease: ScreenTimeContextLease) async {
+        guard (try? requireCurrent(lease)) != nil else { return }
+        let operation = beginOperation()
+        defer { endOperation(operation) }
+        do { try await synchronize(lease) }
+        catch {
+            guard self.lease === lease else { return }
             isMonitoring = false
             monitoringError = error.localizedDescription
         }
     }
 
     func reload() {
-        authorizationStatus = AuthorizationCenter.shared.authorizationStatus
-        authorizationGranted = ScreenTimeMonitoring.isAuthorized
-        guard let contextBinding, contextBinding.contextKey == currentContextKey() else {
+        authorizationStatus = authorization()
+        authorizationGranted = Self.isAuthorized(authorizationStatus)
+        guard bindingConfirmed, let lease, lease.binding.contextKey == currentContextKey() else {
             clearPublishedState()
             return
         }
         do {
             let state = try store.snapshot()
-            guard contextBinding.matches(state), state.contextIsActive else {
+            guard lease.binding.matches(state), state.contextIsActive else {
                 clearPublishedState()
                 return
             }
@@ -159,49 +249,132 @@ final class ScreenTimeController: ObservableObject {
         }
     }
 
-    func resetActivityData() throws {
-        try store.withMonitoringLock {
-            guard isBound, contextBinding?.matches(try store.snapshot()) == true else {
-                throw ScreenTimeError.unboundContext
-            }
-            monitoring.stop()
-            try store.update { state in
-                let contextKey = state.contextKey
-                let dataEpochID = state.dataEpochID
-                let contextIsActive = state.contextIsActive
-                state = ScreenTimeState()
-                state.contextKey = contextKey
-                state.dataEpochID = dataEpochID
-                state.contextIsActive = contextIsActive
+    func resetActivityData() async throws {
+        guard !isResetting, !isErasing else { throw OperationError.busy }
+        let oldLease = try boundLease()
+        oldLease.invalidate()
+        let lease = ScreenTimeContextLease(binding: oldLease.binding)
+        self.lease = lease
+        clearPublishedState()
+        isSaving = false
+        isResetting = true
+        let operation = beginOperation()
+        defer {
+            if self.lease === lease { isResetting = false }
+            endOperation(operation)
+        }
+        // Close the receipt gate now; stopping registrations may take time.
+        try store.update { state in
+            try validate(state, lease: lease)
+            state = ScreenTimeState()
+            state.contextKey = lease.binding.contextKey
+            state.dataEpochID = lease.binding.dataEpochID
+            state.contextIsActive = true
+        }
+        let worker = worker
+        try await worker.perform {
+            try worker.store.withMonitoringLock {
+                try lease.whileCurrent {
+                    guard lease.binding.matches(try worker.store.snapshot()) else { throw ScreenTimeError.unboundContext }
+                }
+                worker.monitoring.stop()
             }
         }
+        try requireCurrent(lease)
         reload()
     }
 
-    func suspendForContextRetirement(contextKey expectedContextKey: String? = nil) {
-        guard let retiringBinding = contextBinding,
-              expectedContextKey == nil || expectedContextKey == retiringBinding.contextKey else { return }
-        contextBinding = nil
-        // Clear synchronously, before disk or framework work. A retiring host
-        // must never leave its selected apps or stones in a new host's first frame.
+    func suspendForContextRetirement(contextKey: String, dataEpochID: UUID?) {
+        guard lease?.binding == ScreenTimeContextBinding(contextKey: contextKey, dataEpochID: dataEpochID) else { return }
+        suspendForContextRetirement()
+    }
+
+    func suspendForContextRetirement() {
+        guard let retiring = lease else { return }
+        retiring.invalidate()
+        lease = nil
+        bindingTask = nil
+        bindingConfirmed = false
         clearPublishedState()
-        do {
-            try store.withMonitoringLock {
-                // The namespace may already have advanced before the next host
-                // binds. Retire the old ledger when it still matches; a new
-                // owner's ledger is protected by the stored owner+epoch check.
-                guard retiringBinding.matches(try store.snapshot()) else { return }
-                monitoring.stop()
-                try store.update { state in
-                    state.contextIsActive = false
-                    for index in state.runs.indices { state.runs[index].active = false }
-                    state.pruneConsumedRuns()
-                }
-            }
-        } catch {
-            // Ownership could not be confirmed. Keep presentation empty; do not
-            // stop another host's registrations using an unverified old cleanup.
+        isSaving = false
+        isResetting = false
+        operationIDs.removeAll()
+        isUpdatingMonitoring = false
+        // Fence delayed callbacks immediately without waiting for registration.
+        try? store.update { state in
+            guard retiring.binding.matches(state) else { return }
+            state.contextIsActive = false
+            for index in state.runs.indices { state.runs[index].active = false }
+            state.pruneConsumedRuns()
         }
+        worker.retire(retiring.binding)
+    }
+
+    /// Awaited by complete deletion before other device state is erased. No
+    /// suspended save/bind can re-create registrations after this barrier.
+    func eraseAllData() async throws {
+        guard !isErasing else { throw OperationError.busy }
+        isErasing = true
+        defer { isErasing = false }
+        suspendForContextRetirement()
+        let worker = worker
+        try await worker.perform {
+            try worker.store.eraseAllData { worker.monitoring.stop() }
+        }
+    }
+
+    /// A barrier for lifecycle cleanup and deterministic regression tests.
+    func waitForPendingOperations() async throws {
+        try await worker.perform {}
+    }
+
+    private func synchronize(_ lease: ScreenTimeContextLease) async throws {
+        let worker = worker
+        try await worker.perform {
+            try lease.whileCurrent {
+                let state = try worker.store.snapshot()
+                guard lease.binding.matches(state), state.contextIsActive else { throw ScreenTimeError.unboundContext }
+            }
+            _ = try worker.monitoring.synchronize(now: .now)
+        }
+        try requireCurrent(lease)
+        // Read the current ledger instead of publishing an old command snapshot.
+        reload()
+    }
+
+    private func boundLease() throws -> ScreenTimeContextLease {
+        guard let lease else { throw ScreenTimeError.unboundContext }
+        try requireCurrent(lease)
+        return lease
+    }
+
+    private func requireCurrent(_ lease: ScreenTimeContextLease) throws {
+        guard !isErasing, bindingConfirmed, self.lease === lease, lease.binding.contextKey == currentContextKey() else {
+            throw ScreenTimeError.unboundContext
+        }
+    }
+
+    private func validate(_ state: ScreenTimeState, lease: ScreenTimeContextLease) throws {
+        try requireCurrent(lease)
+        guard lease.binding.matches(state), state.contextIsActive else { throw ScreenTimeError.unboundContext }
+    }
+
+    private static func isAuthorized(_ status: AuthorizationStatus) -> Bool {
+        if status == .approved { return true }
+        if #available(iOS 26.4, *), status == .approvedWithDataAccess { return true }
+        return false
+    }
+
+    private func beginOperation() -> UUID {
+        let id = UUID()
+        operationIDs.insert(id)
+        isUpdatingMonitoring = true
+        return id
+    }
+
+    private func endOperation(_ id: UUID) {
+        operationIDs.remove(id)
+        isUpdatingMonitoring = !operationIDs.isEmpty
     }
 
     private func clearPublishedState() {

@@ -34,26 +34,32 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
         content
             .task(id: taskKey) {
                 guard isReady, scenePhase == .active else { return }
-                refresh(forceReconcile: true)
+                await refresh(forceReconcile: true)
                 while !Task.isCancelled {
                     do { try await Task.sleep(for: .seconds(3)) }
                     catch { return }
                     guard !Task.isCancelled else { return }
-                    refresh()
+                    await refresh()
                 }
             }
             .onChange(of: timerPresented) { _, _ in
                 guard isReady, isCurrentOwner else { return }
-                controller.reconcile(isPro: purchase.isPro, timerRunning: timerRunning)
+                controller.reconcileInBackground(
+                    contextKey: contextKey, dataEpochID: dataEpochID,
+                    isPro: purchase.isPro, timerRunning: timerRunning
+                )
             }
             .onChange(of: purchase.isPro) { _, _ in
                 guard isReady, isCurrentOwner else { return }
-                controller.reconcile(isPro: purchase.isPro, timerRunning: timerRunning)
+                controller.reconcileInBackground(
+                    contextKey: contextKey, dataEpochID: dataEpochID,
+                    isPro: purchase.isPro, timerRunning: timerRunning
+                )
             }
             .onChange(of: isReady) { _, ready in
-                if !ready { controller.suspendForContextRetirement(contextKey: contextKey) }
+                if !ready { controller.suspendForContextRetirement(contextKey: contextKey, dataEpochID: dataEpochID) }
             }
-            .onDisappear { controller.suspendForContextRetirement(contextKey: contextKey) }
+            .onDisappear { controller.suspendForContextRetirement(contextKey: contextKey, dataEpochID: dataEpochID) }
             .alert("Screen Timeの記録を保留しています", isPresented: Binding(
                 get: { importError != nil }, set: { if !$0 { importError = nil } }
             )) {
@@ -64,26 +70,37 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
     }
 
     @MainActor
-    private func refresh(forceReconcile: Bool = false) {
+    private var canContinueRefresh: Bool {
+        !Task.isCancelled && isCurrentOwner
+            && controller.isBound(contextKey: contextKey, dataEpochID: dataEpochID)
+    }
+
+    @MainActor
+    private func refresh(forceReconcile: Bool = false) async {
         guard isReady, scenePhase == .active else { return }
         guard isCurrentOwner else {
-            controller.suspendForContextRetirement(contextKey: contextKey)
+            controller.suspendForContextRetirement(contextKey: contextKey, dataEpochID: dataEpochID)
             return
         }
         do {
             let bindingKey = "\(contextKey):\(dataEpochID?.uuidString ?? "legacy")"
             if forceReconcile || lastBoundKey != bindingKey {
-                try controller.bindContext(contextKey: contextKey, dataEpochID: dataEpochID)
+                try await controller.bindContext(contextKey: contextKey, dataEpochID: dataEpochID)
+                guard canContinueRefresh else { return }
                 lastBoundKey = bindingKey
             } else {
                 controller.reload()
             }
-            try retireDeletedLearningThemeIfNeeded()
+            guard canContinueRefresh else { return }
+            try await retireDeletedLearningThemeIfNeeded()
+            guard canContinueRefresh else { return }
             let monitoringKey = "\(bindingKey):\(purchase.isPro):\(timerRunning):\(controller.authorizationGranted):\(FairnessPolicy.deviceDayKey(for: .now))"
             if forceReconcile || lastMonitoringKey != monitoringKey {
-                controller.reconcile(isPro: purchase.isPro, timerRunning: timerRunning)
+                await controller.reconcile(isPro: purchase.isPro, timerRunning: timerRunning)
+                guard canContinueRefresh else { return }
                 lastMonitoringKey = monitoringKey
             }
+            guard canContinueRefresh else { return }
             // Keep the saved animation backlog bounded, while every usage
             // receipt remains durable in the extension until acknowledged.
             let freeSlots = ScreenTimeGemDropStore.maximumCount - ScreenTimeGemDropStore.load().count
@@ -106,7 +123,9 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
         } catch {
             // Missing signing/App Group is explained in the opt-in settings,
             // never an alert at ordinary launch for users who did not enable it.
-            guard controller.configuration.enabled else { return }
+            guard !Task.isCancelled, isCurrentOwner,
+                  controller.isBound(contextKey: contextKey, dataEpochID: dataEpochID),
+                  controller.configuration.enabled else { return }
             if lastPresentedError != error.localizedDescription {
                 lastPresentedError = error.localizedDescription
                 importError = error.localizedDescription
@@ -115,7 +134,7 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
     }
 
     @MainActor
-    private func retireDeletedLearningThemeIfNeeded() throws {
+    private func retireDeletedLearningThemeIfNeeded() async throws {
         guard controller.authorizationGranted,
               let themeID = controller.configuration.themeID,
               !controller.configuration.learningSelection.applicationTokens.isEmpty else { return }
@@ -132,6 +151,6 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
         if configuration.distractionSelection.applicationTokens.isEmpty { configuration.enabled = false }
         // Existing receipts retain the original theme ID; future use is no
         // longer silently attributed to a theme the user has removed.
-        try controller.save(configuration: configuration, isPro: purchase.isPro)
+        try await controller.save(configuration: configuration, isPro: purchase.isPro)
     }
 }

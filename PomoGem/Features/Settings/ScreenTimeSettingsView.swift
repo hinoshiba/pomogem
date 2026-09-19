@@ -88,7 +88,7 @@ struct ScreenTimeSettingsView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存", action: save)
-                    .disabled(isRequestingAuthorization || validationMessage != nil)
+                    .disabled(isRequestingAuthorization || controller.isSaving || controller.isResetting || validationMessage != nil)
                     .accessibilityIdentifier("screen-time.save")
             }
         }
@@ -202,7 +202,7 @@ struct ScreenTimeSettingsView: View {
     private var recordingSection: some View {
         Section {
             Toggle("アプリの利用時間を記録", isOn: $draft.enabled)
-                .disabled(!controller.authorizationGranted && !draft.enabled)
+                .disabled(controller.isSaving || controller.isResetting || (!controller.authorizationGranted && !draft.enabled))
                 .accessibilityHint("アプリとテーマを選び、保存すると反映されます")
                 .accessibilityIdentifier("screen-time.enabled")
 
@@ -216,7 +216,15 @@ struct ScreenTimeSettingsView: View {
                     .accessibilityAddTraits(.isStaticText)
                     .accessibilityIdentifier("screen-time.monitoring-error")
             }
-            if controller.isMonitoring {
+            if controller.isUpdatingMonitoring {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("スクリーンタイムの設定を反映中…")
+                        .font(.subheadline)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("screen-time.updating")
+            } else if controller.isMonitoring {
                 Label(monitoringStatusText, systemImage: "checkmark.circle")
                     .font(.subheadline)
                     .foregroundStyle(PomoGemTheme.muted)
@@ -254,6 +262,7 @@ struct ScreenTimeSettingsView: View {
                     Text(subject.safeDisplayName).tag(Optional(subject.id))
                 }
             }
+            .disabled(controller.isSaving || controller.isResetting)
             .accessibilityIdentifier("screen-time.theme")
 
             if !purchase.isPro {
@@ -330,6 +339,7 @@ struct ScreenTimeSettingsView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
             .frame(minHeight: 44)
+            .disabled(controller.isSaving || controller.isResetting || isRequestingAuthorization)
             .accessibilityIdentifier("screen-time.reset")
         } footer: {
             Text("アプリの選択・未取り込みの利用記録・黒いgemを削除し、自動記録を停止します。保存済みの勉強時間と通常gemは残ります。")
@@ -382,7 +392,7 @@ struct ScreenTimeSettingsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PomoGemBareButtonStyle())
-        .disabled(!controller.authorizationGranted || isRequestingAuthorization)
+        .disabled(!controller.authorizationGranted || isRequestingAuthorization || controller.isSaving || controller.isResetting)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(lane.title)のアプリを選ぶ")
         .accessibilityValue("\(count)アプリ選択中")
@@ -399,25 +409,31 @@ struct ScreenTimeSettingsView: View {
     }
 
     private func save() {
-        guard validationMessage == nil else { return }
-        do {
-            try controller.save(configuration: draft, isPro: purchase.isPro)
-            draft = controller.configuration
-            if controller.monitoringError == nil {
-                router.showToast("スクリーンタイムの設定を保存しました", symbol: "checkmark")
+        guard validationMessage == nil, !controller.isSaving, !controller.isResetting else { return }
+        let configuration = draft
+        let isPro = purchase.isPro
+        Task {
+            do {
+                try await controller.save(configuration: configuration, isPro: isPro)
+                draft = controller.configuration
+                if controller.monitoringError == nil {
+                    router.showToast("スクリーンタイムの設定を保存しました", symbol: "checkmark")
+                }
+            } catch {
+                saveError = error.localizedDescription
             }
-        } catch {
-            saveError = error.localizedDescription
         }
     }
 
     private func reset() {
-        do {
-            try controller.resetActivityData()
-            draft = controller.configuration
-            router.showToast("スクリーンタイムの内容をリセットしました", symbol: "checkmark")
-        } catch {
-            saveError = error.localizedDescription
+        Task {
+            do {
+                try await controller.resetActivityData()
+                draft = controller.configuration
+                router.showToast("スクリーンタイムの内容をリセットしました", symbol: "checkmark")
+            } catch {
+                saveError = error.localizedDescription
+            }
         }
     }
 }
