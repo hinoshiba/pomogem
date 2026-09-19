@@ -1,6 +1,16 @@
 import DeviceActivity
 import FamilyControls
 import Foundation
+import os
+
+/// Console evidence for registration on a real device (filter by this
+/// subsystem). Counts, durations and framework error cases only: never run or
+/// event identifiers, opaque tokens, thresholds or gem counts.
+enum ScreenTimeLog {
+    static let subsystem = "com.hinoshiba.pomogem"
+    static let category = "screen-time"
+    static let monitoring = Logger(subsystem: subsystem, category: category)
+}
 
 protocol ScreenTimeActivityCenterDriving {
     var activities: [DeviceActivityName] { get }
@@ -92,6 +102,7 @@ final class ScreenTimeMonitoring {
     func stop() {
         let ours = center.activities.filter { $0.rawValue.hasPrefix(Self.prefix) }
         guard !ours.isEmpty else { return }
+        ScreenTimeLog.monitoring.info("stop activities=\(ours.count, privacy: .public)")
         center.stopMonitoring(ours)
     }
 
@@ -123,16 +134,24 @@ final class ScreenTimeMonitoring {
             }
         } catch is ScreenTimeMonitoringSuperseded {
             return false
+        } catch ScreenTimeError.unavailable {
+            // Usually the other process holding the monitoring lock. The next
+            // callback or the daily scheduler retries.
+            ScreenTimeLog.monitoring.info("synchronize skipped reason=unavailable")
+            throw ScreenTimeError.unavailable
         }
     }
 
     private func synchronizeLocked(now: Date) throws -> Bool {
+        let began = Date()
         var state = try store.snapshot()
         let initialGeneration = ScreenTimeMonitoringGeneration(state)
         let status = authorizationStatus()
         if !Self.isAuthorized(status) {
             // Skip the pass while the status is still unknown; never register
             // and never invalidate on anything but a denial.
+            ScreenTimeLog.monitoring.info(
+                "synchronize skipped authorization=\(status == .denied ? "denied" : "unknown", privacy: .public)")
             guard status == .denied else { return false }
             stop()
             try store.update {
@@ -142,6 +161,7 @@ final class ScreenTimeMonitoring {
             return false
         }
         guard state.configuration.enabled, state.contextKey != nil, state.contextIsActive else {
+            ScreenTimeLog.monitoring.info("synchronize stopping reason=inactive")
             stop()
             try store.update { state in
                 try initialGeneration.requireCurrent(state)
@@ -208,6 +228,8 @@ final class ScreenTimeMonitoring {
         let stale = center.activities.filter {
             $0.rawValue.hasPrefix(Self.prefix) && !desiredNames.contains($0.rawValue)
         }
+        let stoppedCount = stale.count
+        var startedCount = 0
         if !stale.isEmpty {
             center.stopMonitoring(stale)
             // The teardown changes what the OS holds, so the re-registration
@@ -221,6 +243,7 @@ final class ScreenTimeMonitoring {
                     intervalStart: DateComponents(hour: 0, minute: 0, second: 0),
                     intervalEnd: DateComponents(hour: 23, minute: 59, second: 59), repeats: true
                 ), events: [:])
+                startedCount += 1
                 try generation.requireCurrent(store.snapshot())
             }
             for run in state.runs where run.active {
@@ -251,14 +274,25 @@ final class ScreenTimeMonitoring {
                     // from stopped/changed configurations cannot award receipts.
                     try generation.requireCurrent(store.snapshot())
                     try center.startMonitoring(DeviceActivityName(name), during: schedule, events: events)
+                    startedCount += 1
                     try generation.requireCurrent(store.snapshot())
                 }
             }
             try generation.requireCurrent(store.snapshot())
+            Self.log("synchronize finished", stopped: stoppedCount, started: startedCount, since: began)
             return state.runs.contains(where: \.active)
         } catch is ScreenTimeMonitoringSuperseded {
+            Self.log("synchronize superseded", stopped: stoppedCount, started: startedCount, since: began)
             return false
         } catch {
+            // DeviceActivityCenter.MonitoringError describes only the framework
+            // refusal (excessiveActivities, intervalTooLong, ...).
+            ScreenTimeLog.monitoring.error("""
+                synchronize failed stopped=\(stoppedCount, privacy: .public) \
+                started=\(startedCount, privacy: .public) \
+                ms=\(Self.elapsedMilliseconds(since: began), privacy: .public) \
+                error=\(String(describing: error), privacy: .public)
+                """)
             stop()
             try store.update { state in
                 try generation.requireCurrent(state)
@@ -293,4 +327,15 @@ final class ScreenTimeMonitoring {
     }
 
     static func schedulerName(epoch: UUID) -> String { prefix + "scheduler." + epoch.uuidString }
+
+    private static func log(_ message: String, stopped: Int, started: Int, since: Date) {
+        ScreenTimeLog.monitoring.info("""
+            \(message, privacy: .public) stopped=\(stopped, privacy: .public) \
+            started=\(started, privacy: .public) ms=\(elapsedMilliseconds(since: since), privacy: .public)
+            """)
+    }
+
+    private static func elapsedMilliseconds(since: Date) -> Int {
+        Int((Date().timeIntervalSince(since) * 1_000).rounded())
+    }
 }

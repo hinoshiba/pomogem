@@ -186,6 +186,13 @@ final class ScreenTimeMonitoringTests: XCTestCase {
         XCTAssertEqual(reopened.runs[0].highestThreshold, 100)
     }
 
+    /// The device runbook and AppStore/submission-checklist filter Console by
+    /// this subsystem and category; keep them in step with the documentation.
+    func testDiagnosticsChannelMatchesTheDocumentedConsoleFilter() {
+        XCTAssertEqual(ScreenTimeLog.subsystem, "com.hinoshiba.pomogem")
+        XCTAssertEqual(ScreenTimeLog.category, "screen-time")
+    }
+
     /// The monitor extension shares the monitoring lock with an app that iOS can
     /// suspend while it holds it. An unbounded flock(LOCK_EX) there ends with the
     /// extension killed for running too long, so it must be able to give up.

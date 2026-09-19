@@ -65,6 +65,9 @@ Appleの同時監視上限はアプリと拡張を合わせて20です。
 選択したアプリのopaque token、監視世代、未取り込みの到達記録、黒いgemの数は、アプリとDevice Activity
 Monitor拡張だけが共有するApp Groupの端末内台帳へ保存し、バックアップ対象から除外します。
 tokenや黒いgemはSwiftData、CloudKit、解析ログ、JSON書き出しへ送りません。
+監視の登録・停止の結果と拡張が受け取ったコールバックの種別は、件数・所要時間・OSのエラー種別だけを
+os.Logger（subsystem `com.hinoshiba.pomogem`、category `screen-time`）へ出力します。
+run ID、token、到達した段数、黒いgemの数は出力しません。
 通常の勉強記録を保存するSwiftDataは、従来どおりアプリ本体のApplication Supportに置きます。
 App Group追加による保存先の自動変更を避け、既存の記録と保存先設定を維持します。
 選択・未取り込みの到達記録・黒いgemは、保存先を切り替える際にも引き継ぎません。
