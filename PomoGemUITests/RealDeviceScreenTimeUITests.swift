@@ -146,6 +146,8 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
     /// prompt). While it is set, the system-modal probe stays silent so the
     /// authorization step is not skipped by its own prompt.
     private var isDrivingSystemPrompt = false
+    /// The picker category that last yielded an application, tried first next time.
+    private var lastPickerCategory: String?
 
     // MARK: - opt-in
 
@@ -328,7 +330,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "screen-time.enabled must become operable once access is granted.",
                     evidence: "authorize-toggle")
         try require(!app.staticTexts["screen-time.monitoring-error"].exists,
-                    "Granting access must not leave a monitoring error: \(app.staticTexts["screen-time.monitoring-error"].label).",
+                    "Granting access must not leave a monitoring error: \(labelIfPresent(app.staticTexts["screen-time.monitoring-error"])).",
                     evidence: "authorize-error")
         note("AUTHORIZE PASS: status=\(after), screen-time.enabled operable, no monitoring error.")
     }
@@ -569,7 +571,9 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             note(String(format: "SAVE MEASUREMENT: screen-time.updating appeared %.3f s after tapping 保存.", appearedAfter))
             attach(string: String(format: "%.3f", appearedAfter), name: "save-updating-appeared-seconds")
             sawBackButtonHittableWhileUpdating = backButton.exists && backButton.isEnabled && backButton.isHittable
-            note("SAVE: while updating — back button exists=\(backButton.exists) hittable=\(sawBackButtonHittableWhileUpdating) label=\(backButton.exists ? backButton.label : "-"); 保存 enabled=\(save.isEnabled); リセット enabled=\(app.buttons["screen-time.reset"].isEnabled)")
+            let reset = app.buttons["screen-time.reset"]
+            let resetState = reset.exists ? "\(reset.isEnabled)" : "<absent>"
+            note("SAVE: while updating — back button exists=\(backButton.exists) hittable=\(sawBackButtonHittableWhileUpdating) label=\(backButton.exists ? backButton.label : "-"); 保存 enabled=\(save.isEnabled); リセット enabled=\(resetState)")
             capture("save-updating-visible")
         } else {
             note("SAVE MEASUREMENT: screen-time.updating was never sampled within 6 s. Either registration completed faster than XCUITest could poll, or the row never appeared — see the following state.")
@@ -593,10 +597,11 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                         evidence: "save-updating-stuck")
         }
 
+        // The 1.5 s bound is judged at the very END of the phase: a progress row
+        // that was merely sampled late still leaves every other measurement —
+        // duration, duplicate prevention, final status — worth collecting, and
+        // a run that stops here reports nothing at all.
         if appearedAfter != nil {
-            try require(sawUpdating,
-                        String(format: "screen-time.updating must appear within 1.5 s of tapping 保存; it took %.3f s.", appearedAfter ?? -1),
-                        evidence: "save-updating-late")
             try require(sawBackButtonHittableWhileUpdating,
                         "The navigation bar back button must stay hittable while the registration runs — that is the point of PR #24.",
                         evidence: "save-back-blocked")
@@ -653,6 +658,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         _ = XCTWaiter.wait(for: [gone], timeout: 180)
         try guardAgainstSystemAlert("save-updating-settled")
         let final = recordSettingsState(app, label: "save-after")
+        scrollSettingsToTop(app)
         let monitoring = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "自動記録中")).firstMatch
         try require(monitoring.waitForExistence(timeout: 30),
                     "After a successful save the status must read 自動記録中 (or 黒いgemを自動記録中); the screen shows \(final).",
@@ -662,12 +668,18 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "Monitoring must not report 自動記録は停止中です after a successful save.",
                     evidence: "save-stopped")
         try require(!app.staticTexts["screen-time.monitoring-error"].exists,
-                    "A successful save must leave no screen-time.monitoring-error: \(app.staticTexts["screen-time.monitoring-error"].label).",
+                    "A successful save must leave no screen-time.monitoring-error: \(labelIfPresent(app.staticTexts["screen-time.monitoring-error"])).",
                     evidence: "save-monitoring-error")
         try require(save.isEnabled,
                     "保存 must be re-enabled once the registration has settled.",
                     evidence: "save-left-disabled")
         note("SAVE COMPLETE. learning=\(describeCount(selectionCount(app, lane: .learning))) distraction=\(describeCount(selectionCount(app, lane: .distraction)))")
+
+        if appearedAfter != nil {
+            try require(sawUpdating,
+                        String(format: "screen-time.updating must appear within 1.5 s of tapping 保存; it was first sampled %.3f s in. Every other measurement in this transcript was taken and is valid.", appearedAfter ?? -1),
+                        evidence: "save-updating-late")
+        }
 
         // Everything above has run. A phase that never sampled the progress
         // row has not measured the registration, and must not be cited as
@@ -854,7 +866,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "The timer-pause notice must disappear once no timer is running.",
                     evidence: "timer-pause-notice-sticky")
         try require(!app.staticTexts["screen-time.monitoring-error"].exists,
-                    "Re-registration after a cancelled timer must not raise a monitoring error: \(app.staticTexts["screen-time.monitoring-error"].label).",
+                    "Re-registration after a cancelled timer must not raise a monitoring error: \(labelIfPresent(app.staticTexts["screen-time.monitoring-error"])).",
                     evidence: "timer-pause-error")
         note("TIMER-PAUSE: post-timer status = \(resumed.label), no monitoring error.")
 
@@ -917,7 +929,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                         "Relaunch \(round) changed the black-gem total: \(describeCount(blackBefore)) → \(describeCount(negativeGemCount(relaunched))).",
                         evidence: "relaunch-\(round)-black")
             try require(!relaunched.staticTexts["screen-time.monitoring-error"].exists,
-                        "Relaunch \(round) raised a monitoring error: \(relaunched.staticTexts["screen-time.monitoring-error"].label).",
+                        "Relaunch \(round) raised a monitoring error: \(labelIfPresent(relaunched.staticTexts["screen-time.monitoring-error"])).",
                         evidence: "relaunch-\(round)-error")
             note("RELAUNCH \(round) PASS: status, selections, black gems and Home totals unchanged.")
         }
@@ -1072,7 +1084,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "Reset must clear the black-gem total: \(describeCount(negativeGemCount(app))).",
                     evidence: "reset-black")
         try require(!app.staticTexts["screen-time.monitoring-error"].exists,
-                    "Reset must not leave a monitoring error: \(app.staticTexts["screen-time.monitoring-error"].label).",
+                    "Reset must not leave a monitoring error: \(labelIfPresent(app.staticTexts["screen-time.monitoring-error"])).",
                     evidence: "reset-error")
 
         try returnToHome(app, from: "スクリーンタイム")
@@ -1121,6 +1133,8 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             note("STOPPED: the app did not open on Home. This suite never chooses a store or completes onboarding.")
             throw XCTSkip("The installation is not in the audited state (\(reached)); a human must decide how to proceed.")
         }
+        acknowledgeCompletionAlertIfPresent(app)
+        dismissCloudFocusOfferIfPresent(app)
     }
 
     /// 「保存領域を確認できません」 handling, governed by
@@ -1172,7 +1186,38 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         }
     }
 
+    /// The 設定 list is long and `reveal`'s `.fast` flings can carry a lazily
+    /// materialised row past the viewport without it ever being sampled.
+    /// 設定 → 「アプリの利用時間」 sits high in the list, so scroll to the TOP
+    /// first and then step down slowly, sampling after every step.
+    @discardableResult
+    private func revealSettingsRow(_ element: XCUIElement, in application: XCUIApplication) -> Bool {
+        // `isHittable` is the authority here: SwiftUI reports List row frames
+        // in a space that does not always line up with the window, so pure
+        // frame arithmetic declares a row "settled" while it sits under the
+        // navigation bar (or vice versa). A row that XCTest can hit is a row
+        // that is on screen and not obscured.
+        func settled() -> Bool {
+            guard element.exists else { return false }
+            let frame = element.frame
+            guard frame.height > 0, frame.width > 0 else { return false }
+            return element.isHittable
+        }
+        if settled() { return true }
+        for _ in 0..<8 {
+            application.swipeDown(velocity: .fast)
+            if settled() { return true }
+        }
+        for _ in 0..<24 {
+            application.swipeUp(velocity: .slow)
+            if settled() { return true }
+        }
+        return settled()
+    }
+
     private func openScreenTimeSettings(_ app: XCUIApplication) throws {
+        acknowledgeCompletionAlertIfPresent(app)
+        dismissCloudFocusOfferIfPresent(app)
         if app.navigationBars["スクリーンタイム"].exists { return }
         if !app.navigationBars["設定"].exists {
             try tap(app.buttons["メニュー"], "Home menu")
@@ -1185,8 +1230,11 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                 throw AuditFailure.stopped
             }
         }
+        dismissCloudFocusOfferIfPresent(app)
         let entry = app.descendants(matching: .any)["settings.screen-time"].firstMatch
-        _ = reveal(entry)
+        _ = revealSettingsRow(entry, in: app)
+        dismissCloudFocusOfferIfPresent(app)
+        _ = revealSettingsRow(entry, in: app)
         try tap(entry, "settings.screen-time")
         guard app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 20) else {
             capture("screen-time-missing")
@@ -1248,6 +1296,12 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         let updating = app.descendants(matching: .any)["screen-time.updating"].firstMatch
         note("[\(label)] screen-time.updating present=\(updating.exists) label=\(updating.exists ? updating.label : "-")")
 
+        // The reads above end at `screen-time.negative-total`, i.e. with the
+        // List scrolled to the BOTTOM — and the status line, the monitoring
+        // error and 記録先のテーマ all live at the TOP. Sampling them from down
+        // there reports every one of them as absent, which reads exactly like
+        // "the app shows no status at all". Go back up first.
+        scrollSettingsToTop(app)
         for text in ["自動記録中", "黒いgemを自動記録中", "自動記録は停止中です。",
                      "タイマーの計測中は、勉強アプリの自動記録を休止しています。",
                      "スクリーンタイムの許可が解除されました"] {
@@ -1265,6 +1319,13 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         capture("settings-\(label)")
         dumpHierarchy(app, name: "settings-\(label)")
         return statusLabel
+    }
+
+    /// The スクリーンタイム screen is a pushed view, not a sheet, so scrolling it
+    /// past its top is harmless — unlike the picker sheet.
+    private func scrollSettingsToTop(_ app: XCUIApplication) {
+        for _ in 0..<10 { app.swipeDown(velocity: .fast) }
+        pause(1)
     }
 
     private func themePicker(_ app: XCUIApplication) -> XCUIElement {
@@ -1342,8 +1403,12 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             XCTFail("screen-time.theme must be operable to choose a recording theme.")
             throw AuditFailure.stopped
         }
-        if let themeName, describeValue(picker).contains(themeName) {
-            note("THEME: \(themeName) is already selected.")
+        // The row publishes the chosen theme in its LABEL (「記録先のテーマ、<name>」)
+        // and leaves `value` empty, so checking only the value re-opened the
+        // sheet on every run for a theme that was already selected.
+        if let themeName,
+           describeValue(picker).contains(themeName) || picker.label.contains(themeName) {
+            note("THEME: \(themeName) is already selected (\(picker.label)).")
             return themeName
         }
         picker.tap()
@@ -1355,11 +1420,11 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         var chosenLabel = ""
         if let themeName {
             let match = app.buttons.matching(NSPredicate(format: "label == %@", themeName)).firstMatch
-            if match.exists && match.isHittable { chosen = match; chosenLabel = themeName }
+            if isOnScreen(match, in: app) { chosen = match; chosenLabel = themeName }
         } else {
             for candidate in app.buttons.allElementsBoundByIndex.prefix(40) {
                 let label = candidate.label
-                guard !label.isEmpty, !excluded.contains(label), candidate.isHittable else { continue }
+                guard !label.isEmpty, !excluded.contains(label), isOnScreen(candidate, in: app) else { continue }
                 chosen = candidate
                 chosenLabel = label
                 break
@@ -1372,10 +1437,12 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             XCTFail("No selectable theme was offered by screen-time.theme. Options seen: \(available). Create a theme through the ordinary UI first.")
             throw AuditFailure.stopped
         }
-        chosen.tap()
+        // A coordinate tap: a sheet button whose activation point the runtime
+        // cannot derive raises "Activation point invalid" from `tap()` itself.
+        chosen.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         pause(1)
         let value = describeValue(themePicker(app))
-        note("THEME: selected \(chosenLabel); screen-time.theme value=\(value)")
+        note("THEME: selected \(chosenLabel); screen-time.theme value=\(value) label=\(themePicker(app).label)")
         return chosenLabel
     }
 
@@ -1390,10 +1457,21 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             note("TOGGLE: screen-time.enabled is already \(on ? "on" : "off").")
             return
         }
-        toggle.tap()
-        pause(1)
+        // `screen-time.enabled` is the whole SwiftUI row (label + control), so a
+        // tap on its centre lands on the text and changes nothing. Aim at the
+        // inner UISwitch — or, if the row publishes none, at its trailing edge.
+        let inner = toggle.switches.firstMatch
+        for attempt in 0..<3 where describeValue(toggle) != wanted {
+            if inner.exists, inner.isHittable, attempt == 0 {
+                inner.tap()
+            } else {
+                toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+            }
+            pause(1.5)
+            note("TOGGLE: attempt \(attempt + 1) left screen-time.enabled at \(describeValue(toggle)).")
+        }
         try require(describeValue(toggle) == wanted,
-                    "screen-time.enabled did not move to \(wanted); it reads \(describeValue(toggle)).",
+                    "screen-time.enabled did not move to \(wanted); it reads \(describeValue(toggle)). Validation footer: \(validationFooter(app)).",
                     evidence: "toggle-stuck")
         note("TOGGLE: screen-time.enabled set to \(wanted).")
     }
@@ -1469,24 +1547,250 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
     /// several element types and expands category disclosure rows first.
     private func tickApplication(_ app: XCUIApplication, named name: String) -> Bool {
         if setApplication(app, named: name, selected: true) { return true }
-        // Category rows hide their applications until expanded.
-        for row in categoryRows(app).prefix(12) {
-            guard row.exists, row.isHittable else { continue }
-            note("PICKER: expanding category row \"\(row.label)\" while looking for \(name).")
-            row.tap()
-            pause(2)
-            if setApplication(app, named: name, selected: true) { return true }
+        // Apple's picker opens on a list of CATEGORIES, not applications. The
+        // row itself is one big button that toggles the WHOLE category — the
+        // thing the app refuses with 「カテゴリやWebサイトは選べません…」 — and the
+        // only control that opens the category is the trailing chevron
+        // ("進む"), which is a SIBLING of that button, drawn over its trailing
+        // edge. Tapping rows (the previous implementation) therefore selected
+        // categories and never reached a single application.
+        let titles = pickerCategoryTitles(app)
+        note("PICKER: \(titles.count) category row(s) offered: \(titles.joined(separator: " | "))")
+        guard !titles.isEmpty else {
+            capture("picker-no-categories")
+            dumpHierarchy(app, name: "picker-no-categories")
+            return false
         }
-        // Last resort: scroll the sheet and retry.
-        for _ in 0..<8 {
-            app.swipeUp(velocity: .fast)
-            pause(1)
-            if setApplication(app, named: name, selected: true) { return true }
+        // Apple's category order is not the order the apps are in: the one that
+        // answered last time is by far the likeliest, and trying it first turns
+        // an eleven-category sweep into a single expansion.
+        var order = titles
+        if let remembered = lastPickerCategory, let index = order.firstIndex(of: remembered) {
+            order.remove(at: index)
+            order.insert(remembered, at: 0)
+        }
+        for title in order {
+            scrollPickerToTop(app)
+            guard setPickerCategory(app, titled: title, expanded: true) else { continue }
+            // The application rows of an expanded category are `Switch`es; log
+            // them so a name that is simply not in this picker can be told from
+            // one the harness failed to reach.
+            let offered = labels(of: app.switches)
+                .filter { !$0.isEmpty && $0 != "アプリの利用時間を記録" }
+            note("PICKER: \"\(title)\" offers: \(offered.prefix(24).joined(separator: " | "))")
+            var found = setApplication(app, named: name, selected: true)
+            var sweeps = 0
+            while !found, sweeps < 6 {
+                sweeps += 1
+                app.swipeUp(velocity: .slow)
+                pause(1)
+                found = setApplication(app, named: name, selected: true)
+            }
+            scrollPickerToTop(app)
+            setPickerCategory(app, titled: title, expanded: false)
+            if found {
+                lastPickerCategory = title
+                note("PICKER: \(name) ticked inside category \"\(title)\".")
+                return true
+            }
+            note("PICKER: \(name) is not in \"\(title)\".")
         }
         note("PICKER: \(name) was not addressable.")
         capture("picker-missing-\(name)")
         dumpHierarchy(app, name: "picker-missing-\(name)")
         return false
+    }
+
+    /// A category row, matched whether or not it is currently selected: the
+    /// picker appends 「、すべて」 to the label of a fully selected category.
+    private func pickerCategoryRow(_ app: XCUIApplication, titled title: String) -> XCUIElement {
+        app.buttons.matching(
+            NSPredicate(format: "label == %@ OR label BEGINSWITH %@", title, title + "、")
+        ).firstMatch
+    }
+
+    private func onPickerCategoryList(_ app: XCUIApplication, siblings: [String]) -> Bool {
+        siblings.contains { pickerCategoryRow(app, titled: $0).exists }
+    }
+
+    /// Scrolls the picker list back to its first row and STOPS there. A flick
+    /// past the top offset is taken by the sheet as an interactive dismissal,
+    /// which leaves every row unhittable while キャンセル still works — that is
+    /// what stranded the black-gem lane before this stopped at the anchor row.
+    private func scrollPickerToTop(_ app: XCUIApplication) {
+        let anchor = app.buttons["すべてのアプリおよびカテゴリ"]
+        for _ in 0..<12 {
+            if pickerRowIsUsable(anchor, in: app) { break }
+            app.swipeDown(velocity: .slow)
+            pause(0.5)
+        }
+        pause(0.5)
+    }
+
+    /// `isHittable` is not safe on a picker row: a row whose frame is partly
+    /// outside the window raises "Activation point invalid and no suggested hit
+    /// points", which is a test failure rather than a `false`. Judge these rows
+    /// by geometry instead.
+    private func pickerRowIsUsable(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+        guard element.exists else { return false }
+        let box = element.frame
+        guard box.height > 8, box.width > 8 else { return false }
+        let window = app.windows.firstMatch.frame
+        guard window.height > 0 else { return false }
+        // The sheet's search toolbar floats over the bottom ~190 pt of the list,
+        // so a row that ends inside it is on screen but not tappable.
+        return box.minY >= window.minY + 130 && box.maxY <= window.maxY - 190
+    }
+
+    /// Brings a category row on screen without ever reading a frame off an
+    /// element that may be mid-animation: `isHittable` is false — not a thrown
+    /// snapshot failure — for a row that is missing or off screen.
+    private func revealPickerCategory(_ app: XCUIApplication, titled title: String) -> Bool {
+        for attempt in 0..<22 {
+            if pickerRowIsUsable(pickerCategoryRow(app, titled: title), in: app) {
+                pause(0.5)
+                return true
+            }
+            if attempt == 0 {
+                scrollPickerToTop(app)
+            } else {
+                app.swipeUp(velocity: .slow)
+                pause(0.5)
+            }
+        }
+        return false
+    }
+
+    /// The category rows of Apple's picker: a wide, identifier-less button
+    /// with a trailing `chevron.right` sibling on the same line. The settings
+    /// screen underneath also owns chevrons, but its rows all carry a
+    /// `screen-time.*` identifier, so the identifier test separates them.
+    private func pickerCategoryTitles(_ app: XCUIApplication) -> [String] {
+        var titles: [String] = []
+        func harvest() {
+            let chevrons = app.images.matching(identifier: "chevron.right")
+                .allElementsBoundByIndex
+                .filter { $0.exists && $0.frame.width > 0 }
+            for button in app.buttons.allElementsBoundByIndex {
+                guard button.exists, button.identifier.isEmpty else { continue }
+                let frame = button.frame
+                guard frame.width > 200, frame.height > 0, !button.label.isEmpty else { continue }
+                guard chevrons.contains(where: {
+                    let chevron = $0.frame
+                    return chevron.midY > frame.minY && chevron.midY < frame.maxY
+                        && chevron.minX > frame.midX
+                }) else { continue }
+                let title = button.label.components(separatedBy: "、").first ?? button.label
+                // 「すべてのアプリおよびカテゴリ」 has no disclosure of its own; a
+                // neighbouring row's chevron can drift into its line as the list
+                // reflows, and "opening" it selects EVERY app and category —
+                // which the app then refuses, disabling 反映.
+                guard title != "すべてのアプリおよびカテゴリ" else { continue }
+                if !title.isEmpty, !titles.contains(title) { titles.append(title) }
+            }
+        }
+        scrollPickerToTop(app)
+        harvest()
+        for _ in 0..<6 {
+            let before = titles.count
+            app.swipeUp(velocity: .slow)
+            pause(1)
+            harvest()
+            if titles.count == before { break }
+        }
+        scrollPickerToTop(app)
+        return titles
+    }
+
+    /// Geometry-only "can this be tapped": `isHittable` raises
+    /// "Activation point invalid and no suggested hit points" — a test failure,
+    /// not a `false` — for an element the runtime cannot derive a hit point for.
+    private func isOnScreen(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+        guard element.exists else { return false }
+        let box = element.frame
+        guard box.width > 4, box.height > 4 else { return false }
+        let window = app.windows.firstMatch.frame
+        guard window.height > 0 else { return false }
+        return box.minY >= window.minY && box.maxY <= window.maxY
+            && box.minX >= window.minX && box.maxX <= window.maxX
+    }
+
+    /// True while the app is refusing the draft because a category or Web
+    /// domain is selected — the state that disables 反映.
+    private func pickerRejectsCategorySelection(_ app: XCUIApplication) -> Bool {
+        app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "カテゴリやWebサイトは選べません")
+        ).firstMatch.exists
+    }
+
+    /// The trailing disclosure chevron ("進む") that sits on the same line as
+    /// a category row. It is a SIBLING of the row button, not a descendant.
+    /// Collapsed it is taller than wide; expanded it is rotated, so
+    /// `width > height` is the disclosure state.
+    private func pickerChevron(_ app: XCUIApplication, onRowAt frame: CGRect) -> XCUIElement? {
+        app.images.matching(identifier: "chevron.right")
+            .allElementsBoundByIndex
+            .first {
+                guard $0.exists else { return false }
+                let box = $0.frame
+                return box.width > 0 && box.midY > frame.minY && box.midY < frame.maxY
+                    && box.minX > frame.midX
+            }
+    }
+
+    /// Expands or collapses one category IN PLACE. Apple's picker does not push
+    /// a screen: the chevron toggles an inline disclosure and the category's
+    /// applications appear directly underneath as `Switch` rows. The row itself
+    /// selects the WHOLE category — the gesture the app refuses with
+    /// 「カテゴリやWebサイトは選べません…」 — so the chevron is the only usable
+    /// control here. (The previous implementation tapped rows, which is why it
+    /// only ever produced whole-category selections.)
+    @discardableResult
+    private func setPickerCategory(
+        _ app: XCUIApplication, titled title: String, expanded: Bool
+    ) -> Bool {
+        guard revealPickerCategory(app, titled: title) else {
+            note("PICKER: category \"\(title)\" is not on screen.")
+            return false
+        }
+        let row = pickerCategoryRow(app, titled: title)
+        guard pickerRowIsUsable(row, in: app) else { return false }
+        guard let chevron = pickerChevron(app, onRowAt: row.frame) else {
+            note("PICKER: category \"\(title)\" has no disclosure chevron.")
+            return false
+        }
+        let box = chevron.frame
+        guard box.width > 0, box.height > 0 else { return false }
+        if (box.width > box.height) == expanded { return true }
+        let rejectedBefore = pickerRejectsCategorySelection(app)
+        chevron.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        pause(2)
+        if !rejectedBefore, pickerRejectsCategorySelection(app) {
+            // The tap landed on the row, not the chevron, and selected the whole
+            // category. Undo it before it disables 反映 for the rest of the phase.
+            note("PICKER: the tap on \"\(title)\" SELECTED a whole category (反映 would be refused); undoing it.")
+            let undo = pickerCategoryRow(app, titled: title)
+            if pickerRowIsUsable(undo, in: app) { undo.tap(); pause(2) }
+            if pickerRejectsCategorySelection(app) {
+                capture("picker-category-selection-stuck-\(title)")
+                dumpHierarchy(app, name: "picker-category-selection-stuck")
+                note("PICKER: the whole-category selection on \"\(title)\" could not be undone.")
+            }
+            return false
+        }
+        let again = pickerCategoryRow(app, titled: title)
+        guard pickerRowIsUsable(again, in: app),
+              let now = pickerChevron(app, onRowAt: again.frame) else {
+            note("PICKER: the chevron tap on \"\(title)\" left no readable disclosure state.")
+            return false
+        }
+        let nowExpanded = now.frame.width > now.frame.height
+        guard nowExpanded == expanded else {
+            note("PICKER: the chevron tap on \"\(title)\" did not \(expanded ? "expand" : "collapse") it.")
+            return false
+        }
+        note("PICKER: \(expanded ? "expanded" : "collapsed") category \"\(title)\".")
+        return true
     }
 
     private func untickApplication(_ app: XCUIApplication, named name: String) -> Bool {
@@ -1512,13 +1816,37 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
     /// callers build their `ticked` arrays from this boolean and assert on
     /// their length, so a miscount was reported as an app defect.
     private func setApplication(_ app: XCUIApplication, named name: String, selected: Bool) -> Bool {
-        let predicate = NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", name, name)
+        // An EXPANDED category publishes its applications as `Switch` rows that
+        // do carry a value ("0"/"1"), so an exact-label switch is both the most
+        // specific match (「メモ」 must not hit 「ボイスメモ」) and the only one
+        // whose state can be read back directly instead of inferred from the
+        // sheet's counter.
+        let exact = app.switches.matching(NSPredicate(format: "label == %@", name)).firstMatch
+        if exact.exists {
+            _ = reveal(exact)
+            if pickerRowIsUsable(exact, in: app) {
+                let wanted = selected ? "1" : "0"
+                if describeValue(exact) == wanted {
+                    note("PICKER: \(name) is already \(selected ? "selected" : "cleared").")
+                    return true
+                }
+                let before = pickerSelectionCount(app)
+                exact.tap()
+                pause(1)
+                let value = describeValue(exact)
+                note("PICKER: toggled \(name) (switch) value=\(value) count \(describeCount(before)) → \(describeCount(pickerSelectionCount(app)))")
+                return value == wanted
+            }
+        }
+        // Only an EXACT label may fall through to the generic path: 「メモ」 must
+        // never be satisfied by 「ボイスメモ」.
+        let predicate = NSPredicate(format: "label == %@ OR value == %@", name, name)
         let queries: [XCUIElementQuery] = [app.cells, app.switches, app.buttons, app.staticTexts, app.images]
         for query in queries {
             let element = query.matching(predicate).firstMatch
             guard element.exists else { continue }
             _ = reveal(element)
-            guard element.isHittable else { continue }
+            guard pickerRowIsUsable(element, in: app) else { continue }
             guard let before = pickerSelectionCount(app) else {
                 note("PICKER: the sheet's 「<n>アプリ選択中」 counter is unreadable; \(name) cannot be verified.")
                 return false
@@ -1561,26 +1889,35 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
     }
 
     /// Attempts to select an entire category, which the app must refuse.
+    /// The category row IS the toggle (see `tickApplication`), so tapping the
+    /// row — not the trailing chevron — is exactly the rejected gesture.
     private func selectWholeCategory(_ app: XCUIApplication) -> Bool {
-        for row in categoryRows(app).prefix(12) {
-            guard row.exists, row.isHittable else { continue }
-            // A category header usually carries its own selection control as a
-            // sibling image/button; try the row's leading edge first.
-            let leading = row.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5))
-            leading.tap()
+        let message = NSPredicate(format: "label CONTAINS %@", "カテゴリやWebサイトは選べません")
+        for title in pickerCategoryTitles(app).prefix(6) {
+            let row = app.buttons.matching(NSPredicate(format: "label == %@", title)).firstMatch
+            guard reveal(row), row.exists, row.isHittable else { continue }
+            row.tap()
             pause(2)
-            if app.staticTexts.matching(
-                NSPredicate(format: "label CONTAINS %@", "カテゴリやWebサイトは選べません")
-            ).firstMatch.exists {
-                note("PICKER: whole-category selection reproduced via row \"\(row.label)\".")
+            if app.staticTexts.matching(message).firstMatch.exists {
+                note("PICKER: whole-category selection reproduced via row \"\(title)\".")
                 capture("picker-category-selected")
+                dumpHierarchy(app, name: "picker-category-selected")
                 return true
             }
             // Undo whatever that tap did before trying the next row.
-            leading.tap()
+            let undo = app.buttons.matching(NSPredicate(format: "label == %@", title)).firstMatch
+            if undo.exists, undo.isHittable { undo.tap() }
             pause(1)
         }
         return false
+    }
+
+    /// Clears a whole-category selection left behind by `selectWholeCategory`.
+    private func deselectWholeCategory(_ app: XCUIApplication, titled title: String) {
+        let row = app.buttons.matching(NSPredicate(format: "label == %@", title)).firstMatch
+        guard reveal(row), row.exists, row.isHittable else { return }
+        row.tap()
+        pause(2)
     }
 
     // MARK: - authorization prompt (REMOTE system view)
@@ -2226,6 +2563,13 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         throw XCTSkip("needs human: a passcode/PIN prompt appeared and this suite never enters one.")
     }
 
+    /// `label` on an element that does not exist raises "Failed to get matching
+    /// snapshot", and Swift builds a `require` message eagerly — so a passing
+    /// assertion crashed on the text describing its own failure.
+    private func labelIfPresent(_ element: XCUIElement) -> String {
+        element.exists ? element.label : "<absent>"
+    }
+
     private func describeValue(_ element: XCUIElement) -> String {
         guard element.exists else { return "<missing>" }
         if let value = element.value as? String { return value }
@@ -2270,15 +2614,90 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         throw XCTSkip(message)
     }
 
+    /// PomoGem's focus-completion alert (`focus.completion-alert.stop`,
+    /// 「終了アラートを止める」). A timer that ended while the app was closed
+    /// replays sound/haptics over Home on the next launch; the overlay leaves
+    /// 「メニュー」 in the tree but with an invalid activation point, so every
+    /// later tap fails with "Activation point invalid".
+    ///
+    /// Acknowledging it only stops the alert — the completed session and its
+    /// gem are already recorded, nothing is discarded.
+    @discardableResult
+    private func acknowledgeCompletionAlertIfPresent(_ application: XCUIApplication) -> Bool {
+        let stop = application.buttons["focus.completion-alert.stop"]
+        guard stop.waitForExistence(timeout: 3) else { return false }
+        capture("focus-completion-alert")
+        dumpHierarchy(application, name: "focus-completion-alert")
+        guard stop.isHittable else {
+            note("FOCUS ALERT: 「終了アラートを止める」 is on screen but not addressable; nothing was tapped.")
+            return false
+        }
+        stop.tap()
+        pause(2)
+        note("FOCUS ALERT: a focus-completion alert was replaying over Home; acknowledged it with 「終了アラートを止める」 (stops sound/haptics only, the record was already committed).")
+        return true
+    }
+
+    /// PomoGem's OWN cloud-focus recovery offer (`RootView`'s
+    /// 「iCloudに進行中のタイマーがあります」 / 「保存済みの進行中タイマーがあります」 alert).
+    /// It is raised asynchronously after launch whenever the account carries an
+    /// in-flight focus session, so it can land on top of any screen and make
+    /// everything under it untappable. This is an APP alert, not a SpringBoard
+    /// system alert — `currentSystemModal()` does not see it.
+    ///
+    /// Only 「あとで」 (the `.cancel` button) is ever tapped: it dismisses the
+    /// offer and records the id as dismissed. 「この端末で続ける」 would ADOPT the
+    /// remote timer onto this phone and is never tapped by this suite.
+    @discardableResult
+    private func dismissCloudFocusOfferIfPresent(_ application: XCUIApplication) -> Bool {
+        var dismissed = false
+        for _ in 0..<3 {
+            let offer = application.alerts.matching(
+                NSPredicate(format: "label CONTAINS %@", "進行中のタイマー")
+            ).firstMatch
+            guard offer.exists else { break }
+            // Read the title BEFORE tapping: once the alert is dismissed the
+            // query no longer resolves and `label` raises.
+            let title = offer.label
+            capture("cloud-focus-offer")
+            dumpHierarchy(application, name: "cloud-focus-offer")
+            let later = offer.buttons["あとで"]
+            guard later.exists, later.isHittable else {
+                note("APP ALERT: 「\(title)」 is on screen but 「あとで」 is not addressable; nothing was tapped.")
+                break
+            }
+            later.tap()
+            dismissed = true
+            note("APP ALERT: dismissed PomoGem's own cloud focus recovery offer 「\(title)」 with 「あとで」 (「この端末で続ける」 is never tapped).")
+            pause(1)
+        }
+        return dismissed
+    }
+
     private func tap(_ element: XCUIElement, _ description: String) throws {
         let ready = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == true AND enabled == true AND hittable == true"),
             object: element
         )
-        guard XCTWaiter.wait(for: [ready], timeout: 20) == .completed else {
-            capture("unreachable-\(description)")
-            XCTFail("Required control is missing, disabled or obscured: \(description).")
-            throw AuditFailure.stopped
+        if XCTWaiter.wait(for: [ready], timeout: 20) != .completed {
+            // An app-owned modal (the cloud focus recovery offer) is the one
+            // thing that makes an otherwise present control untappable here.
+            // Dismiss it with 「あとで」 and give the control one more window.
+            var cleared = app.map { acknowledgeCompletionAlertIfPresent($0) } ?? false
+            cleared = (app.map { dismissCloudFocusOfferIfPresent($0) } ?? false) || cleared
+            // Any scrolling attempted while the modal was up was absorbed by
+            // it, so re-reveal the control before waiting again.
+            if cleared, let application = app { _ = revealSettingsRow(element, in: application) }
+            let retry = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == true AND enabled == true AND hittable == true"),
+                object: element
+            )
+            guard cleared, XCTWaiter.wait(for: [retry], timeout: 20) == .completed else {
+                capture("unreachable-\(description)")
+                if let app { dumpHierarchy(app, name: "unreachable-\(description)") }
+                XCTFail("Required control is missing, disabled or obscured: \(description).")
+                throw AuditFailure.stopped
+            }
         }
         element.tap()
     }
@@ -2311,7 +2730,10 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             }
             if upwards { application.swipeUp(velocity: .fast) } else { application.swipeDown(velocity: .fast) }
         }
-        return element.exists
+        // `.fast` flings can carry a lazily materialised row straight past the
+        // viewport without it ever being sampled. Fall back to the slow,
+        // top-down sweep before giving up.
+        return revealSettingsRow(element, in: application)
     }
 
     /// The sanctioned XCTest sleep: an inverted expectation that always
