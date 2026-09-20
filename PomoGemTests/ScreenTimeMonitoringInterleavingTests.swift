@@ -333,6 +333,54 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         }
     }
 
+    /// A skipped midnight pass leaves the day with no run at all, and the daily
+    /// scheduler would not call back again for ~24 h. Any later callback
+    /// repairs it instead of losing the whole day.
+    func testALaneCallbackRepairsADayWhoseSchedulerPassWasSkipped() throws {
+        try withFixture(installed: .none, learningApplications: 2) { store, center, original, _ in
+            // The midnight pass never ran: nothing of ours is registered and
+            // the ledger holds no run for today.
+            try store.update { $0.runs = [] }
+            let monitor = ScreenTimeMonitoring(store: store, center: center, authorization: { true })
+
+            try monitor.handleInterval(activityName: original.runs[0].activityPrefix + "0", now: now)
+
+            let result = try store.snapshot()
+            XCTAssertEqual(result.runs.count, 1)
+            XCTAssertTrue(try XCTUnwrap(result.runs.first).active)
+            XCTAssertEqual(center.startCount, 1 + ScreenTimePolicy.batchesPerLane)
+        }
+    }
+
+    func testAThresholdCallbackAlsoRepairsAMissingRunWithoutAwardingTheStaleOne() throws {
+        try withFixture(installed: .none, learningApplications: 2) { store, center, original, _ in
+            try store.update { $0.runs = [] }
+            let monitor = ScreenTimeMonitoring(store: store, center: center, authorization: { true })
+
+            try monitor.handleThreshold(eventName: "1",
+                                        activityName: original.runs[0].activityPrefix + "0", now: now)
+
+            XCTAssertEqual(center.startCount, 1 + ScreenTimePolicy.batchesPerLane)
+            // The callback named a run the ledger no longer holds, so the
+            // repaired run starts empty.
+            XCTAssertEqual(try store.snapshot().runs.first?.highestThreshold, 0)
+        }
+    }
+
+    func testASteadyStateLaneCallbackStartsNoRepairPass() throws {
+        try withFixture(installed: .complete) { store, center, original, _ in
+            let monitor = ScreenTimeMonitoring(store: store, center: center, authorization: { true })
+
+            try monitor.handleInterval(activityName: original.runs[0].activityPrefix + "0", now: now)
+            try monitor.handleThreshold(eventName: "1",
+                                        activityName: original.runs[0].activityPrefix + "0", now: now)
+
+            XCTAssertEqual(center.startedNames, [])
+            XCTAssertEqual(center.stopCalls, [])
+            XCTAssertEqual(try store.snapshot().runs.count, 1)
+        }
+    }
+
     /// Which of our activities the OS already holds when the pass starts.
     fileprivate enum FixtureInstallation {
         /// Today's run is registered, but the daily scheduler is not.

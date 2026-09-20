@@ -330,13 +330,37 @@ final class ScreenTimeMonitoring {
         let recorded = try store.record(runID: runID, threshold: threshold, now: now)
         ScreenTimeLog.monitoring.notice(
             "threshold \(recorded ? "recorded" : "ignored reason=ledger", privacy: .public)")
+        repairMissingRunIfNeeded(now: now)
     }
 
     func handleInterval(activityName: String, now: Date = Date()) throws {
         let state = try store.snapshot()
-        guard state.configuration.enabled, state.contextKey != nil, state.contextIsActive, state.monitoringError == nil,
-              activityName == Self.schedulerName(epoch: state.epoch) else { return }
+        guard state.configuration.enabled, state.contextKey != nil, state.contextIsActive,
+              state.monitoringError == nil else { return }
+        guard activityName == Self.schedulerName(epoch: state.epoch) else {
+            // A lane's own interval boundary is another chance to repair a day
+            // whose scheduler pass was skipped.
+            repairMissingRunIfNeeded(now: now)
+            return
+        }
         _ = try synchronize(now: now)
+    }
+
+    /// A bounded monitoring-lock wait turns a contended pass into a skipped one,
+    /// and the daily scheduler only calls back at 00:00:00 and 23:59:59 — so a
+    /// midnight pass lost to the app's own registration would otherwise leave
+    /// the whole day uncollected. Any later callback that finds no active run
+    /// for today repairs it with one bounded pass. A day in which no callback
+    /// arrives at all has no trigger and still waits for the next scheduler
+    /// interval or for the user to open the app.
+    private func repairMissingRunIfNeeded(now: Date) {
+        guard let state = try? store.snapshot(), state.configuration.enabled,
+              state.contextKey != nil, state.contextIsActive,
+              state.monitoringError == nil else { return }
+        let dayStart = Calendar.current.startOfDay(for: now)
+        guard !state.runs.contains(where: { $0.active && $0.dayStart == dayStart }) else { return }
+        ScreenTimeLog.monitoring.notice("repair pass reason=no-active-run")
+        _ = try? synchronize(now: now)
     }
 
     static func schedulerName(epoch: UUID) -> String { prefix + "scheduler." + epoch.uuidString }
