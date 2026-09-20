@@ -122,8 +122,18 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         var menuLabel: String
         var jarValue: String
 
+        /// Home re-aggregates asynchronously after every foreground. While it is
+        /// doing so the jar and the メニュー summary say 「確認中」 and report only
+        /// the pebbles this device has already confirmed — a DIFFERENT, smaller
+        /// number than the settled total (4 vs 11 on this phone). Comparing that
+        /// transient against a settled baseline is what made the first
+        /// usage-learning run report "11 → 4" as a gem change.
+        var isSettling: Bool {
+            menuLabel.contains("確認中") || jarValue.contains("確認中")
+        }
+
         var summary: String {
-            "pebbles=\(pebbles) grams=\(grams)\(gramsAreExact ? "" : " (rounded kg — not exact)") menu=\"\(menuLabel)\" jar=\"\(jarValue)\""
+            "pebbles=\(pebbles) grams=\(grams)\(gramsAreExact ? "" : " (rounded kg — not exact)")\(isSettling ? " [確認中 — NOT comparable]" : "") menu=\"\(menuLabel)\" jar=\"\(jarValue)\""
         }
     }
 
@@ -716,6 +726,10 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
 
         let before = readHomeTotals(app, label: "usage-learning-before")
         note("USAGE-LEARNING baseline: \(before.summary)")
+        if before.isSettling {
+            try skipWithEvidence("usage-learning-home-unsettled",
+                                 "Home never left 確認中 before the usage window, so a +1粒 step cannot be measured against it.")
+        }
 
         try burnUsage(app, label: "usage-learning")
 
@@ -805,6 +819,8 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                         "A black gem must not change the study totals on Home: \(homeBaseline.pebbles) → \(homeAfter.pebbles).",
                         evidence: "usage-distraction-home-changed")
             note("USAGE-DISTRACTION PASS: exactly one black gem, no second increment, Home study totals unchanged (\(homeAfter.summary)).")
+        } else if homeAfter.isSettling || homeBaseline.isSettling {
+            note("USAGE-DISTRACTION PENDING: the Home study totals could not be compared — at least one reading was still 確認中 (baseline \(homeBaseline.summary); after \(homeAfter.summary)).")
         } else if homeAfter.pebbles == homeBaseline.pebbles {
             note("USAGE-DISTRACTION PASS: exactly one black gem, no second increment, Home study totals unchanged (\(homeAfter.summary)) with \(learningSelected) learning app(s) still selected.")
         } else {
@@ -1201,6 +1217,21 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             guard element.exists else { return false }
             let frame = element.frame
             guard frame.height > 0, frame.width > 0 else { return false }
+            // `isHittable` does not answer `false` for a row whose activation
+            // point falls outside the screen: it raises "Activation point
+            // invalid and no suggested hit points based on element frame",
+            // which XCTest records as a test FAILURE. That is what killed the
+            // first usage-distraction run while it scrolled back up from
+            // screen-time.negative-total to screen-time.learning-apps. So ask
+            // only once the row's own centre is demonstrably inside the
+            // window and below the navigation bar; otherwise keep scrolling.
+            let window = application.windows.firstMatch.frame
+            guard window.width > 0, window.height > 0 else { return false }
+            let centre = CGPoint(x: frame.midX, y: frame.midY)
+            guard window.contains(centre) else { return false }
+            let top = application.navigationBars.allElementsBoundByIndex
+                .map(\.frame).filter { $0.height > 0 }.map(\.maxY).max() ?? window.minY
+            guard centre.y > top, centre.y < window.maxY - 36 else { return false }
             return element.isHittable
         }
         if settled() { return true }
@@ -2019,7 +2050,27 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
 
     // MARK: - Home totals
 
-    private func readHomeTotals(_ app: XCUIApplication, label: String) -> HomeTotals {
+    /// Reads Home and waits for the aggregate to settle. An unsettled reading
+    /// (「確認中」) is a smaller, non-comparable number, so every caller gets the
+    /// settled one or an explicit note that it never settled.
+    private func readHomeTotals(_ app: XCUIApplication, label: String, settleSeconds: Double = 120) -> HomeTotals {
+        let deadline = Date().addingTimeInterval(settleSeconds)
+        var attempt = 0
+        var totals = readHomeTotalsOnce(app, label: label)
+        while totals.isSettling, Date() < deadline {
+            attempt += 1
+            pause(min(10, max(1, deadline.timeIntervalSinceNow)))
+            totals = readHomeTotalsOnce(app, label: "\(label)-settle\(attempt)")
+        }
+        if totals.isSettling {
+            note("[\(label)] HOME TOTALS never left 確認中 within \(Int(settleSeconds)) s — the reading is NOT comparable.")
+        } else if attempt > 0 {
+            note("[\(label)] HOME TOTALS settled after \(attempt) extra sample(s).")
+        }
+        return totals
+    }
+
+    private func readHomeTotalsOnce(_ app: XCUIApplication, label: String) -> HomeTotals {
         let jar = app.buttons["瓶"].exists
             ? app.buttons["瓶"]
             : app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "瓶")).firstMatch
@@ -2148,7 +2199,12 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             try guardAgainstSystemAlert("poll-home-\(cycle)")
             if !app.buttons["メニュー"].exists { try? returnToHome(app, from: "unknown") }
             let totals = readHomeTotals(app, label: "poll-\(cycle)")
-            if totals.pebbles != baseline.pebbles {
+            if totals.isSettling {
+                // Never treat the 確認中 transient as a change: it reports only
+                // the already-confirmed pebbles, which is smaller than the
+                // settled baseline.
+                note("POLL \(cycle): Home is still 確認中 (\(totals.pebbles) confirmed) — not comparable, skipping this sample.")
+            } else if totals.pebbles != baseline.pebbles {
                 capture("poll-changed-\(cycle)")
                 return (totals, Date().timeIntervalSince(start))
             }
