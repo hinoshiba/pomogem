@@ -252,7 +252,7 @@ struct ScreenTimeSettingsView: View {
                 Text(validationMessage)
                     .foregroundStyle(.red)
             } else if !controller.isBoundToContext {
-                Text("記録の準備が完了していないため、自動記録を有効にする変更は保存できません。オフにする変更はいつでも保存できます。")
+                Text(ScreenTimeDraftPolicy.unboundFooterMessage)
             } else {
                 Text("変更は右上の「保存」で反映します。記録を再開できないときも、保存から再試行できます。")
             }
@@ -486,15 +486,23 @@ enum ScreenTimeDraftPolicy {
         return !hasUserEdits || draftIsEmpty
     }
 
-    /// Turning the feature OFF must always be possible, including when the
-    /// context can never bind — a missing App Group entitlement or an
-    /// unreadable ledger — because that save has no opaque selection to lose
-    /// and the controller refuses it anyway with an explained error. Only a
-    /// save that would ENABLE recording waits for the binding, since its draft
-    /// may still be the controller's empty published configuration.
+    /// 保存 stays enabled while the context is unbound and the draft is OFF so
+    /// the user gets the concrete reason from the 「設定を完了できませんでした」
+    /// alert instead of a mute greyed-out control. It does NOT mean the save
+    /// succeeds: `ScreenTimeController.save` starts with `boundLease()`, which
+    /// throws `unboundContext` for every save while unbound. A save that would
+    /// ENABLE recording is blocked outright, because its draft may still be
+    /// the controller's empty published configuration and saving that would
+    /// destroy opaque selections only a new picker session could restore.
     static func blocksSave(bound: Bool, draftEnabled: Bool) -> Bool {
         !bound && draftEnabled
     }
+
+    /// What the footer says while the context is unbound. It must describe the
+    /// button's real effect — an explanation — and never promise a save the
+    /// controller refuses.
+    static let unboundFooterMessage =
+        "記録の準備が完了していないため、いまは変更を保存できません。「保存」を押すと、理由をお知らせします。"
 }
 
 private enum ScreenTimeSelectionLane: String, Identifiable {

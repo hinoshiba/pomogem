@@ -82,20 +82,22 @@ final class ScreenTimeSettingsUITests: XCTestCase {
 
     /// The Simulator build carries no entitlements, so the App Group container
     /// is nil and the Screen Time ledger can never bind. That must be explained
-    /// on screen, and it must never trap the user with the feature on: a save
-    /// that only switches recording OFF stays available.
-    func testUnavailableContextIsExplainedAndSwitchingOffStaysAvailable() {
+    /// on screen, and 保存 stays pressable so the user is told why — the button
+    /// is an explanation, not a save that will succeed, and the footer has to
+    /// say so: `ScreenTimeController.save` refuses EVERY save while unbound,
+    /// including one that only switches recording off.
+    func testUnavailableContextIsExplainedAndSaveStatesWhyItCannotComplete() {
         launchAndOpenSettings()
         let reason = app.staticTexts["screen-time.monitoring-error"]
         XCTAssertTrue(reveal(reason), "An unbound context must state a reason, not only grey 保存 out")
         XCTAssertTrue(reason.label.contains("スクリーンタイム"))
-        XCTAssertTrue(reveal(text(containing: "オフにする変更はいつでも保存できます")),
-                      "The footer must not promise a retry from a button the user cannot press")
+        XCTAssertTrue(reveal(text(containing: "いまは変更を保存できません")),
+                      "The footer must not promise a save the controller always refuses")
         attach("Screen Time — unavailable context is explained")
 
         let save = app.buttons["screen-time.save"]
         XCTAssertTrue(save.waitForExistence(timeout: 6))
-        XCTAssertTrue(save.isEnabled, "Switching the feature off must never be blocked")
+        XCTAssertTrue(save.isEnabled, "保存 stays pressable so the reason can be shown")
         save.tap()
         let alert = app.alerts["設定を完了できませんでした"]
         XCTAssertTrue(alert.waitForExistence(timeout: 6))

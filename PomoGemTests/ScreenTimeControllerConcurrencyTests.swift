@@ -945,4 +945,29 @@ final class ScreenTimeSettingsDraftTests: XCTestCase {
         XCTAssertFalse(ScreenTimeDraftPolicy.blocksSave(bound: true, draftEnabled: true))
         XCTAssertFalse(ScreenTimeDraftPolicy.blocksSave(bound: true, draftEnabled: false))
     }
+
+    /// 保存 staying enabled for an OFF draft is an explanation, not a save that
+    /// works: `save()` begins with `boundLease()`, which throws for every save
+    /// while unbound. The footer must describe that and not promise otherwise.
+    func testTheUnboundFooterDoesNotPromiseASaveTheControllerAlwaysRefuses() async throws {
+        XCTAssertFalse(ScreenTimeDraftPolicy.unboundFooterMessage.contains("保存できます"),
+                       "No save succeeds while the context is unbound")
+        XCTAssertFalse(ScreenTimeDraftPolicy.blocksSave(bound: false, draftEnabled: false),
+                       "The button stays pressable so the reason can be shown")
+
+        let store = try makeStore()
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: driver, authorization: { .approved })
+        XCTAssertFalse(controller.isBoundToContext)
+        var off = ScreenTimeConfiguration()
+        off.enabled = false
+        do {
+            try await controller.save(configuration: off, isPro: false)
+            XCTFail("An unbound save must not succeed, not even one that only turns recording off")
+        } catch {
+            XCTAssertEqual(error.localizedDescription,
+                           ScreenTimeError.unboundContext.localizedDescription)
+        }
+    }
 }
