@@ -856,6 +856,16 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             try skipWithEvidence("timer-pause-timer-running",
                                  "A focus timer is already running; the timer phase must begin from a quiet Home.")
         }
+        // Home re-aggregates after every foreground; while it does,
+        // home.focus-launcher is DISABLED and the Home controls report frames
+        // XCTest cannot derive a hit point from. Wait it out before driving
+        // anything on Home.
+        let homeBefore = readHomeTotals(app, label: "timer-pause-home-before")
+        note("TIMER-PAUSE: Home before the timer = \(homeBefore.summary)")
+        guard waitForHomeReady(app) else {
+            try skipWithEvidence("timer-pause-home-not-ready",
+                                 "Home never left 「このiPhoneの集計を確認中」 / home.focus-launcher stayed disabled, so the 25-minute timer could not be started. Nothing was changed.")
+        }
         if let themeName { try selectHomeTheme(app, named: themeName) }
         try startTwentyFiveMinuteTimer(app)
         capture("timer-pause-running")
@@ -866,7 +876,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         // status string on the Screen Time settings screen is genuinely
         // unreachable from XCUITest while a timer runs.
         let escapes = ["メニュー", "設定", "閉じる", "戻る", "瓶へ戻る", "ホーム"]
-        let reachable = escapes.filter { app.buttons[$0].exists && app.buttons[$0].isHittable }
+        let reachable = escapes.filter { safelyHittable(app.buttons[$0], in: app) }
         note("TIMER-PAUSE: affordances back to Home while the timer runs = \(reachable.isEmpty ? "<none>" : reachable.joined(separator: " | "))")
 
         try cancelTimer(app)
@@ -908,6 +918,10 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         let learningBefore = selectionCount(app, lane: .learning)
         let distractionBefore = selectionCount(app, lane: .distraction)
         let blackBefore = negativeGemCount(app)
+        // selectionCount/negativeGemCount leave the List scrolled to the
+        // BOTTOM, and the status line lives at the TOP — sampling it from down
+        // there reports 自動記録中 as absent and skips a healthy phase.
+        scrollSettingsToTop(app)
         let monitoringBefore = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "自動記録中")).firstMatch
         guard monitoringBefore.exists else {
             try skipWithEvidence("relaunch-not-monitoring",
@@ -960,11 +974,8 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         try reachHome(app)
         try openScreenTimeSettings(app)
         let before = recordSettingsState(app, label: "revoke-before")
-        guard before.contains("許可済み") else {
-            try skipWithEvidence("revoke-not-authorized",
-                                 "Screen Time access is already not granted (\(before)); there is nothing to revoke.")
-        }
         let blackBefore = negativeGemCount(app)
+        scrollSettingsToTop(app)
         note("REVOKE baseline: status=\(before) learning=\(describeCount(selectionCount(app, lane: .learning))) distraction=\(describeCount(selectionCount(app, lane: .distraction))) blackGems=\(describeCount(blackBefore))")
 
         let settings = XCUIApplication(bundleIdentifier: Self.preferencesID)
@@ -974,29 +985,37 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                                  "PomoGem's Screen Time access toggle could not be located in 設定 → スクリーンタイム from XCUITest. Nothing in iOS Settings was changed; hand this phase to a human.")
         }
         note("REVOKE: found access toggle label=\(toggle.label) value=\(describeValue(toggle))")
+
+        // A previous attempt may have been halted by XCTest between the
+        // revoke and the restore (`require` raises an ObjC exception with
+        // continueAfterFailure = false, which SKIPS Swift `defer` — that is
+        // how revoke-3 left this toggle off). Put it back before anything
+        // else, and say so.
+        if describeValue(toggle) == "0" {
+            note("REVOKE: the toggle was already OFF at the start of this phase — restoring it before doing anything else.")
+            try setPreferencesToggle(settings, toggle, on: true, label: "revoke-precondition-on")
+            pause(5)
+            app.activate()
+            pause(5)
+            if !app.navigationBars["スクリーンタイム"].exists {
+                try reachHome(app)
+                try openScreenTimeSettings(app)
+            }
+            _ = recordSettingsState(app, label: "revoke-precondition-restored")
+            settings.activate()
+            pause(2)
+        }
+
         guard describeValue(toggle) == "1" else {
             leavePreferences(settings)
-            try skipWithEvidence("revoke-toggle-already-off",
-                                 "The located toggle (\(toggle.label)) is already off; the app reported granted access, so this is not the right control. Nothing was changed.")
+            try skipWithEvidence("revoke-toggle-not-on",
+                                 "The located toggle (\(toggle.label)) could not be brought to ON, so the revoke phase cannot run. Value=\(describeValue(toggle)).")
         }
 
         try setPreferencesToggle(settings, toggle, on: false, label: "revoke-off")
+        let revokedAt = Date()
 
-        var restored = false
-        defer {
-            if !restored {
-                note("REVOKE CLEANUP: restoring PomoGem's Screen Time access toggle to ON.")
-                let settingsApp = XCUIApplication(bundleIdentifier: Self.preferencesID)
-                settingsApp.activate()
-                pause(2)
-                let located = (try? openScreenTimeAccessToggle(in: settingsApp)) ?? nil
-                if let located, describeValue(located) == "0" {
-                    try? setPreferencesToggle(settingsApp, located, on: true, label: "revoke-cleanup-on")
-                }
-                leavePreferences(settingsApp)
-            }
-        }
-
+        // ---- observe the revoked state (NO throwing assertions here) ----
         app.activate()
         pause(3)
         if !app.navigationBars["スクリーンタイム"].exists {
@@ -1004,34 +1023,41 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             try openScreenTimeSettings(app)
         }
         let revoked = recordSettingsState(app, label: "revoke-after-off")
+        scrollSettingsToTop(app)
         let revokedMessage = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "スクリーンタイムの許可が解除されました")
         ).firstMatch
-        let statusSaysNeeded = app.staticTexts["screen-time.authorization-status"].label.contains("許可が必要")
-        try require(revokedMessage.waitForExistence(timeout: 60) || statusSaysNeeded,
-                    "Revoking Screen Time access must surface the revoked state in PomoGem; the screen shows \(revoked).",
-                    evidence: "revoke-no-message")
-        note("REVOKE: revokedMessage=\(revokedMessage.exists) statusSaysNeeded=\(statusSaysNeeded) status=\(revoked)")
-        try require(selectionCount(app, lane: .learning) == 0,
-                    "Revocation must clear the learning selection (Apple voids the opaque tokens): \(describeCount(selectionCount(app, lane: .learning))).",
-                    evidence: "revoke-learning-retained")
-        try require(selectionCount(app, lane: .distraction) == 0,
-                    "Revocation must clear the black-gem selection: \(describeCount(selectionCount(app, lane: .distraction))).",
-                    evidence: "revoke-distraction-retained")
-        try require(negativeGemCount(app) == blackBefore,
-                    "Revocation must retain the recorded black-gem total: \(describeCount(blackBefore)) → \(describeCount(negativeGemCount(app))).",
-                    evidence: "revoke-black-lost")
-        note("REVOKE PASS: selections cleared, black-gem total retained.")
+        let sawRevokedMessage = revokedMessage.waitForExistence(timeout: 90)
+        let statusSaysNeeded = app.staticTexts["screen-time.authorization-status"].exists
+            && app.staticTexts["screen-time.authorization-status"].label.contains("許可が必要")
+        let learningAfterRevoke = selectionCount(app, lane: .learning)
+        let distractionAfterRevoke = selectionCount(app, lane: .distraction)
+        let blackAfterRevoke = negativeGemCount(app)
+        let secondsToRevokedState = Date().timeIntervalSince(revokedAt)
+        capture("revoke-observed")
+        dumpHierarchy(app, name: "revoke-observed")
+        note("REVOKE OBSERVED after \(String(format: "%.1f", secondsToRevokedState)) s: revokedMessage=\(sawRevokedMessage) statusSaysNeeded=\(statusSaysNeeded) status=\(revoked) learning=\(describeCount(learningAfterRevoke)) distraction=\(describeCount(distractionAfterRevoke)) blackGems=\(describeCount(blackAfterRevoke))")
 
-        // Re-allow.
+        // ---- ALWAYS restore the toggle before any assertion ----
         settings.activate()
         pause(2)
-        guard let again = try openScreenTimeAccessToggle(in: settings) else {
-            try skipWithEvidence("revoke-restore-toggle-not-found",
-                                 "The Screen Time access toggle could not be located again to restore it. RESTORE IT BY HAND: 設定 → スクリーンタイム → PomoGem → ON.")
+        var restoredToggle = (try? openScreenTimeAccessToggle(in: settings)) ?? nil
+        if restoredToggle == nil { restoredToggle = toggle }
+        var restored = false
+        if let again = restoredToggle {
+            do {
+                try setPreferencesToggle(settings, again, on: true, label: "revoke-on")
+                restored = describeValue(again) == "1"
+            } catch {
+                note("REVOKE: restoring the toggle threw: \(error).")
+            }
         }
-        try setPreferencesToggle(settings, again, on: true, label: "revoke-on")
-        restored = true
+        capture("revoke-toggle-restored")
+        note("REVOKE: iOS access toggle restored to ON = \(restored).")
+        if !restored {
+            try skipWithEvidence("revoke-restore-failed",
+                                 "needs human: PomoGem's Screen Time access toggle could NOT be restored from XCUITest. RESTORE IT BY HAND: 設定 → スクリーンタイム → スクリーンタイムにアクセス可能なアプリ → ポモジェム → ON.")
+        }
 
         app.activate()
         pause(3)
@@ -1040,16 +1066,33 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             try openScreenTimeSettings(app)
         }
         let reallowed = recordSettingsState(app, label: "revoke-after-on")
+        scrollSettingsToTop(app)
         let status = app.staticTexts["screen-time.authorization-status"]
         let grantedAgain = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == true AND label CONTAINS %@", "許可済み"),
             object: status
         )
-        let isGranted = XCTWaiter.wait(for: [grantedAgain], timeout: 60) == .completed
+        let isGranted = XCTWaiter.wait(for: [grantedAgain], timeout: 90) == .completed
         note("REVOKE: after re-allowing, status=\(isGranted ? status.label : reallowed)")
+
+        // ---- now judge ----
+        try require(sawRevokedMessage || statusSaysNeeded,
+                    "Revoking Screen Time access must surface the revoked state in PomoGem; \(String(format: "%.0f", secondsToRevokedState)) s after the iOS toggle went OFF the screen still showed \(revoked). (The iOS toggle was restored to ON before this assertion.)",
+                    evidence: "revoke-no-message")
+        try require(learningAfterRevoke == 0,
+                    "Revocation must clear the learning selection (Apple voids the opaque tokens): \(describeCount(learningAfterRevoke)).",
+                    evidence: "revoke-learning-retained")
+        try require(distractionAfterRevoke == 0,
+                    "Revocation must clear the black-gem selection: \(describeCount(distractionAfterRevoke)).",
+                    evidence: "revoke-distraction-retained")
+        try require(blackAfterRevoke == blackBefore,
+                    "Revocation must retain the recorded black-gem total: \(describeCount(blackBefore)) → \(describeCount(blackAfterRevoke)).",
+                    evidence: "revoke-black-lost")
+        note("REVOKE PASS: selections cleared, black-gem total retained.")
+
         if !isGranted {
             try skipWithEvidence("revoke-reallow-needs-prompt",
-                                 "Restored the iOS toggle to ON, but PomoGem still reports \(status.label). Apple may require a fresh in-app authorization; run the `authorize` phase next. The iOS toggle IS back ON.")
+                                 "Restored the iOS toggle to ON, but PomoGem still reports \(status.exists ? status.label : "<missing>"). Apple may require a fresh in-app authorization; run the `authorize` phase next. The iOS toggle IS back ON.")
         }
         try require(selectionCount(app, lane: .learning) == 0,
                     "Re-allowing must not resurrect the voided selections.",
@@ -1081,6 +1124,11 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         capture("reset-confirmation")
         try tap(alert.buttons["リセット"], "リセット")
 
+        // screen-time.reset sits at the BOTTOM of the List; the status line is
+        // at the TOP. Go back up before waiting for it, or the wait times out
+        // against a row that is simply off screen.
+        pause(2)
+        scrollSettingsToTop(app)
         let cleared = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == true AND label CONTAINS %@", "自動記録は停止中です"),
             object: app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "自動記録は停止中です")).firstMatch
@@ -1746,6 +1794,75 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             && box.minX >= window.minX && box.maxX <= window.maxX
     }
 
+    /// `isHittable`, but asked only when the element's own geometry can
+    /// produce a hit point. Asking it blind raises "Activation point invalid
+    /// and no suggested hit points based on element frame", which XCTest
+    /// records as a test FAILURE rather than answering `false` — that is what
+    /// killed the first timer-pause run on Home while the jar was still
+    /// re-aggregating and every Home control reported an `inf` frame.
+    private func safelyHittable(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+        guard isOnScreen(element, in: app) else { return false }
+        return element.isHittable
+    }
+
+    /// Home re-aggregates the device-wide totals after every foreground. While
+    /// it does, the jar reads 「このiPhoneの集計を確認中」, `home.focus-launcher`
+    /// is DISABLED and the Home controls report unusable frames. Nothing on
+    /// Home can be driven until that clears.
+    /// A finished focus session leaves a DURABLE receipt
+    /// (`PendingRewardReceiptStore`) and Home presents it as the
+    /// `reward.bridge` panel 「集中を記録しました。」. While it is up,
+    /// `home.focus-launcher` is DISABLED (HomeView.swift:1510, hint
+    /// 「積み上げ結果を閉じると使えます」), so no new timer can be started —
+    /// and the receipt survives relaunches, so waiting does not clear it.
+    /// Only `reward.dismiss` (「閉じる」) is ever tapped: the gem it represents
+    /// is already saved (「今回の …g は保存済みです」). 「5分休憩する」 and the
+    /// share chip are never tapped.
+    @discardableResult
+    private func dismissRewardBridgeIfPresent(_ application: XCUIApplication) -> Bool {
+        var dismissed = false
+        for _ in 0..<3 {
+            let close = application.buttons["reward.dismiss"]
+            guard close.exists else { break }
+            _ = reveal(element: close, in: application)
+            guard safelyHittable(close, in: application) else {
+                note("HOME: reward.dismiss is on screen but not addressable; nothing was tapped.")
+                break
+            }
+            capture("reward-bridge")
+            dumpHierarchy(application, name: "reward-bridge")
+            close.tap()
+            dismissed = true
+            note("HOME: closed the pending reward panel with 「閉じる」 (reward.dismiss).")
+            pause(3)
+        }
+        return dismissed
+    }
+
+    @discardableResult
+    private func waitForHomeReady(_ application: XCUIApplication, timeout: TimeInterval = 180) -> Bool {
+        let launcher = application.buttons["home.focus-launcher"]
+        let deadline = Date().addingTimeInterval(timeout)
+        var last = "<never sampled>"
+        repeat {
+            dismissRewardBridgeIfPresent(application)
+            let aggregating = application.descendants(matching: .any).matching(
+                NSPredicate(format: "label CONTAINS %@", "集計を確認中")
+            ).firstMatch.exists
+            let enabled = launcher.exists && launcher.isEnabled
+            last = "aggregating=\(aggregating) launcherExists=\(launcher.exists) launcherEnabled=\(enabled) hittable=\(safelyHittable(launcher, in: application))"
+            if !aggregating, enabled, safelyHittable(launcher, in: application) {
+                note("HOME: ready for input — \(last)")
+                return true
+            }
+            pause(3)
+        } while Date() < deadline
+        note("HOME: never became ready within \(Int(timeout)) s — \(last)")
+        capture("home-not-ready")
+        dumpHierarchy(application, name: "home-not-ready")
+        return false
+    }
+
     /// True while the app is refusing the draft because a category or Web
     /// domain is selected — the state that disables 反映.
     private func pickerRejectsCategorySelection(_ app: XCUIApplication) -> Bool {
@@ -2078,7 +2195,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
 
         var menuLabel = "<missing>"
         let menu = app.buttons["メニュー"]
-        if menu.exists && menu.isHittable {
+        if safelyHittable(menu, in: app) {
             menu.tap()
             let summary = app.descendants(matching: .any).matching(
                 NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "集中", "粒")
@@ -2086,7 +2203,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             if summary.waitForExistence(timeout: 10) { menuLabel = summary.label }
             capture("home-totals-\(label)")
             let close = app.buttons["home.menu.close"]
-            if close.exists && close.isHittable {
+            if safelyHittable(close, in: app) {
                 close.tap()
             } else {
                 app.swipeDown(velocity: .fast)
@@ -2313,14 +2430,14 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
     private func selectHomeTheme(_ app: XCUIApplication, named name: String) throws {
         let picker = app.buttons["home.subject-picker"]
         _ = reveal(picker)
-        guard picker.exists, picker.isHittable else {
+        guard safelyHittable(picker, in: app) else {
             note("TIMER: home.subject-picker is not reachable; the current theme is used.")
             return
         }
         picker.tap()
         pause(1)
         let theme = app.buttons[name]
-        if theme.waitForExistence(timeout: 5) && theme.isHittable {
+        if theme.waitForExistence(timeout: 5) && safelyHittable(theme, in: app) {
             theme.tap()
             pause(1)
             note("TIMER: selected theme \(name) on Home.")
@@ -2354,7 +2471,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
     private func cancelTimer(_ app: XCUIApplication) throws {
         let stop = app.buttons["今日はここまで"]
         _ = reveal(stop)
-        try require(stop.exists && stop.isHittable,
+        try require(safelyHittable(stop, in: app),
                     "The timer must offer its ordinary 今日はここまで cancellation.",
                     evidence: "timer-no-cancel")
         stop.tap()
@@ -2385,7 +2502,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         ).firstMatch
         var found = false
         for _ in 0..<10 {
-            if screenTime.exists && screenTime.isHittable { found = true; break }
+            if safelyHittable(screenTime, in: settings) { found = true; break }
             settings.swipeUp(velocity: .fast)
             pause(1)
         }
@@ -2404,6 +2521,38 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         let appPredicate = NSPredicate(format: "label CONTAINS %@ OR label CONTAINS %@", "ポモジェム", "PomoGem")
         if let toggle = findAccessSwitch(settings, matching: appPredicate) { return toggle }
 
+        // iOS 26 lists the app under 「スクリーンタイムにアクセス可能なアプリ」 as a
+        // Cell whose IDENTIFIER (not label) is the app name; the switch is
+        // either inside that cell or on the page it opens.
+        let rowPredicate = NSPredicate(
+            format: "identifier CONTAINS %@ OR identifier CONTAINS %@ OR label CONTAINS %@ OR label CONTAINS %@",
+            "ポモジェム", "PomoGem", "ポモジェム", "PomoGem"
+        )
+        let row = settings.cells.matching(rowPredicate).firstMatch
+        if row.exists, reveal(element: row, in: settings) {
+            let inner = row.switches.firstMatch
+            if inner.exists, safelyHittable(inner, in: settings) {
+                note("SETTINGS: the access switch is inside the 「\(row.identifier)」 row.")
+                return inner
+            }
+            if safelyHittable(row, in: settings) {
+                note("SETTINGS: opening the 「\(row.identifier)」 row to look for its access toggle.")
+                row.tap()
+                pause(3)
+                try guardAgainstPasscode(settings)
+                capture("preferences-app-row")
+                dumpHierarchy(settings, name: "preferences-app-row")
+                if let toggle = findAccessSwitch(settings, matching: appPredicate) { return toggle }
+                let anySwitch = settings.switches.firstMatch
+                if anySwitch.exists, safelyHittable(anySwitch, in: settings) {
+                    note("SETTINGS: using the only switch on the 「\(row.identifier)」 page: \(anySwitch.label).")
+                    return anySwitch
+                }
+                let back = settings.navigationBars.firstMatch.buttons.firstMatch
+                if safelyHittable(back, in: settings) { back.tap(); pause(2) }
+            }
+        }
+
         // iOS nests the list of apps with Screen Time access one level deeper
         // on some releases. Drill into any row whose label mentions the app or
         // the access list, then search again.
@@ -2413,7 +2562,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         )
         for query in [settings.cells, settings.buttons] {
             for row in query.matching(drillPredicate).allElementsBoundByIndex.prefix(6) {
-                guard row.exists, reveal(element: row, in: settings), row.isHittable else { continue }
+                guard row.exists, reveal(element: row, in: settings), safelyHittable(row, in: settings) else { continue }
                 note("SETTINGS: drilling into \"\(row.label)\" to look for the access toggle.")
                 row.tap()
                 pause(3)
@@ -2422,7 +2571,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                 dumpHierarchy(settings, name: "preferences-drill")
                 if let toggle = findAccessSwitch(settings, matching: appPredicate) { return toggle }
                 let back = settings.navigationBars.firstMatch.buttons.firstMatch
-                if back.exists && back.isHittable { back.tap(); pause(2) }
+                if safelyHittable(back, in: settings) { back.tap(); pause(2) }
             }
         }
         capture("preferences-toggle-not-found")
@@ -2436,7 +2585,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             let toggle = settings.switches.matching(predicate).firstMatch
             if toggle.exists {
                 _ = reveal(element: toggle, in: settings)
-                if toggle.isHittable { return toggle }
+                if safelyHittable(toggle, in: settings) { return toggle }
             }
             settings.swipeUp(velocity: .fast)
             pause(1)
@@ -2456,22 +2605,62 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             return
         }
         capture("\(label)-before")
-        toggle.tap()
-        pause(2)
-        try guardAgainstPasscode(settings)
-        // A confirmation sheet may appear; answer it affirmatively, since this
-        // is exactly the operator-authorized action.
-        if settings.alerts.count > 0 || settings.sheets.count > 0 {
-            dumpHierarchy(settings, name: "\(label)-confirmation")
-            let titles = on ? Self.affirmatives : ["解除", "オフにする", "確認", "OK", "許可しない", "Turn Off", "Remove"]
-            if let button = firstHittableButton(in: settings, titles: titles) {
-                note("SETTINGS: confirming with \"\(button.label)\".")
-                button.tap()
-                pause(2)
-            } else {
-                note("SETTINGS: a confirmation appeared with no recognised button: \(labels(of: settings.buttons).joined(separator: " | "))")
+        // iOS reports a Settings switch row as ONE element spanning the icon,
+        // the label and the control, so `tap()` lands on the LABEL, where the
+        // row does nothing (revoke-2: "did not move to 0; it reads 1" with the
+        // switch untouched). The trailing control has to be aimed at — and the
+        // row must be scrolled INTO VIEW first, because the frame XCTest
+        // reports for an off-screen row is in content space and the derived
+        // coordinate then lands somewhere else entirely (revoke-4).
+        // Only this one row is ever touched.
+        for attempt in 1...6 {
+            guard describeValue(toggle) != wanted else { break }
+            _ = reveal(element: toggle, in: settings)
+            let box = toggle.frame
+            let window = settings.windows.firstMatch.frame
+            note("SETTINGS: attempt \(attempt) on \(toggle.label) — value=\(describeValue(toggle)) frame=\(box) window=\(window) onScreen=\(isOnScreen(toggle, in: settings))")
+            guard isOnScreen(toggle, in: settings) else {
+                settings.swipeUp(velocity: .slow)
+                pause(1)
+                continue
             }
+            switch attempt {
+            case 1:
+                toggle.tap()
+            case 2:
+                toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+            case 3:
+                toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.84, dy: 0.5)).tap()
+            case 4:
+                // A UISwitch also answers a swipe in the wanted direction.
+                if on { toggle.swipeRight() } else { toggle.swipeLeft() }
+            case 5:
+                dumpHierarchy(settings, name: "\(label)-settings-hierarchy")
+                inventory(settings, name: "\(label)-settings")
+                let inner = toggle.descendants(matching: .switch).firstMatch
+                if inner.exists, isOnScreen(inner, in: settings) {
+                    note("SETTINGS: tapping the inner switch element \(inner.frame).")
+                    inner.tap()
+                } else {
+                    settings.coordinate(withNormalizedOffset: .zero)
+                        .withOffset(CGVector(dx: box.maxX - 24, dy: box.midY)).tap()
+                }
+            default:
+                settings.coordinate(withNormalizedOffset: .zero)
+                    .withOffset(CGVector(dx: box.maxX - 24, dy: box.midY)).tap()
+            }
+            pause(0.6)
+            let inner = toggle.descendants(matching: .switch).firstMatch
+            note("SETTINGS: attempt \(attempt) immediately after the tap — row value=\(describeValue(toggle)) innerSwitch=\(inner.exists ? describeValue(inner) : "<none>")")
+            capture("\(label)-attempt\(attempt)")
+            pause(3)
+            note("SETTINGS: attempt \(attempt) 3 s later — row value=\(describeValue(toggle)) innerSwitch=\(inner.exists ? describeValue(inner) : "<none>")")
+            try guardAgainstPasscode(settings)
+            // A confirmation may appear mid-loop; answering it here stops the
+            // next attempt from tapping outside it and cancelling it.
+            answerPreferencesConfirmation(settings, on: on, label: "\(label)-attempt\(attempt)")
         }
+        answerPreferencesConfirmation(settings, on: on, label: label)
         capture("\(label)-after")
         let settled = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value == %@", wanted), object: toggle
@@ -2480,6 +2669,23 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "PomoGem's Screen Time access toggle did not move to \(wanted); it reads \(describeValue(toggle)).",
                     evidence: "\(label)-stuck")
         note("SETTINGS: \(toggle.label) set to \(wanted).")
+    }
+
+    /// Answers a confirmation sheet/alert raised by the access toggle. This is
+    /// exactly the operator-authorized action, so it is answered affirmatively;
+    /// nothing else in Settings is ever confirmed.
+    private func answerPreferencesConfirmation(_ settings: XCUIApplication, on: Bool, label: String) {
+        guard settings.alerts.count > 0 || settings.sheets.count > 0 else { return }
+        dumpHierarchy(settings, name: "\(label)-confirmation")
+        capture("\(label)-confirmation")
+        let titles = on ? Self.affirmatives : ["解除", "オフにする", "確認", "OK", "許可しない", "Turn Off", "Remove"]
+        if let button = firstHittableButton(in: settings, titles: titles) {
+            note("SETTINGS: confirming with \"\(button.label)\".")
+            button.tap()
+            pause(2)
+        } else {
+            note("SETTINGS: a confirmation appeared with no recognised button: \(labels(of: settings.buttons).joined(separator: " | "))")
+        }
     }
 
     private func leavePreferences(_ settings: XCUIApplication) {
@@ -2606,8 +2812,15 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
     /// This suite never enters a passcode.
     private func guardAgainstPasscode(_ application: XCUIApplication) throws {
         let springboard = XCUIApplication(bundleIdentifier: Self.springboardID)
-        let predicate = NSPredicate(format: "label CONTAINS %@ OR label CONTAINS %@ OR label CONTAINS %@",
-                                    "パスコード", "Passcode", "PIN")
+        // A REAL passcode prompt owns a secure entry field, or says "enter".
+        // Matching a bare "パスコード" also matches ordinary Settings prose —
+        // 「スクリーンタイムの設定を厳重に管理するにはパスコードを使用します。」 sits on
+        // the スクリーンタイム page itself and stopped a healthy revoke run
+        // (revoke-1) although no prompt was ever shown.
+        let predicate = NSPredicate(
+            format: "label CONTAINS %@ OR label CONTAINS %@ OR label CONTAINS %@ OR label CONTAINS %@",
+            "パスコードを入力", "パスコードの入力", "Enter Passcode", "Enter PIN"
+        )
         let present = springboard.secureTextFields.count > 0
             || application.secureTextFields.count > 0
             || springboard.descendants(matching: .any).matching(predicate).firstMatch.exists
@@ -2730,12 +2943,21 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         return dismissed
     }
 
+    /// Polls for "exists && enabled && hittable" WITHOUT ever asking
+    /// `hittable` blind: an `XCTNSPredicateExpectation` on `hittable` raises
+    /// the same "Activation point invalid" failure as the property does.
+    private func waitUntilTappable(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        guard let application = app else { return false }
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if element.exists, element.isEnabled, safelyHittable(element, in: application) { return true }
+            pause(0.5)
+        } while Date() < deadline
+        return false
+    }
+
     private func tap(_ element: XCUIElement, _ description: String) throws {
-        let ready = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "exists == true AND enabled == true AND hittable == true"),
-            object: element
-        )
-        if XCTWaiter.wait(for: [ready], timeout: 20) != .completed {
+        if !waitUntilTappable(element, timeout: 20) {
             // An app-owned modal (the cloud focus recovery offer) is the one
             // thing that makes an otherwise present control untappable here.
             // Dismiss it with 「あとで」 and give the control one more window.
@@ -2744,11 +2966,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             // Any scrolling attempted while the modal was up was absorbed by
             // it, so re-reveal the control before waiting again.
             if cleared, let application = app { _ = revealSettingsRow(element, in: application) }
-            let retry = XCTNSPredicateExpectation(
-                predicate: NSPredicate(format: "exists == true AND enabled == true AND hittable == true"),
-                object: element
-            )
-            guard cleared, XCTWaiter.wait(for: [retry], timeout: 20) == .completed else {
+            guard cleared, waitUntilTappable(element, timeout: 20) else {
                 capture("unreachable-\(description)")
                 if let app { dumpHierarchy(app, name: "unreachable-\(description)") }
                 XCTFail("Required control is missing, disabled or obscured: \(description).")
@@ -2774,7 +2992,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         for _ in 0..<attempts {
             if element.exists {
                 let top = application.navigationBars.allElementsBoundByIndex
-                    .filter(\.isHittable).map(\.frame.maxY).max() ?? 0
+                    .map(\.frame).filter { $0.height > 0 }.map(\.maxY).max() ?? 0
                 let bottom = application.windows.firstMatch.frame.maxY - 36
                 let frame = element.frame
                 if frame.height > 0, frame.width > 0 {
