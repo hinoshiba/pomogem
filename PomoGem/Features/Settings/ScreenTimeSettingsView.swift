@@ -88,7 +88,9 @@ struct ScreenTimeSettingsView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存", action: save)
-                    .disabled(!controller.isBoundToContext || isRequestingAuthorization
+                    .disabled(ScreenTimeDraftPolicy.blocksSave(
+                        bound: controller.isBoundToContext, draftEnabled: draft.enabled
+                    ) || isRequestingAuthorization
                               || controller.isSaving || controller.isResetting || validationMessage != nil)
                     .accessibilityIdentifier("screen-time.save")
             }
@@ -212,7 +214,7 @@ struct ScreenTimeSettingsView: View {
                 .accessibilityHint("アプリとテーマを選び、保存すると反映されます")
                 .accessibilityIdentifier("screen-time.enabled")
 
-            if let message = controller.monitoringError {
+            if let message = controller.monitoringError ?? controller.bindingError {
                 Label(message, systemImage: "exclamationmark.triangle")
                     .font(.subheadline)
                     .foregroundStyle(.red)
@@ -249,6 +251,8 @@ struct ScreenTimeSettingsView: View {
             if let validationMessage {
                 Text(validationMessage)
                     .foregroundStyle(.red)
+            } else if !controller.isBoundToContext {
+                Text("記録の準備が完了していないため、自動記録を有効にする変更は保存できません。オフにする変更はいつでも保存できます。")
             } else {
                 Text("変更は右上の「保存」で反映します。記録を再開できないときも、保存から再試行できます。")
             }
@@ -480,6 +484,16 @@ enum ScreenTimeDraftPolicy {
     static func shouldReseed(bound: Bool, hasUserEdits: Bool, draftIsEmpty: Bool) -> Bool {
         guard bound else { return false }
         return !hasUserEdits || draftIsEmpty
+    }
+
+    /// Turning the feature OFF must always be possible, including when the
+    /// context can never bind — a missing App Group entitlement or an
+    /// unreadable ledger — because that save has no opaque selection to lose
+    /// and the controller refuses it anyway with an explained error. Only a
+    /// save that would ENABLE recording waits for the binding, since its draft
+    /// may still be the controller's empty published configuration.
+    static func blocksSave(bound: Bool, draftEnabled: Bool) -> Bool {
+        !bound && draftEnabled
     }
 }
 

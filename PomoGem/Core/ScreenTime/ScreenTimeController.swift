@@ -19,6 +19,12 @@ final class ScreenTimeController: ObservableObject {
     /// owner. The settings screen must not seed a draft — or offer 保存 —
     /// from that empty state, or a save would erase the opaque selections.
     @Published private(set) var isBoundToContext = false
+    /// Why the last bind failed, for a context that can never bind: a missing
+    /// App Group entitlement or an unreadable ledger leaves `isBoundToContext`
+    /// false forever, and `monitoringError` is cleared with the rest of the
+    /// published state. Without this the settings screen would show a greyed
+    /// 保存 and no reason at all.
+    @Published private(set) var bindingError: String?
     let store: ScreenTimeStore
     private let worker: ScreenTimeMonitoringWorker
     private let currentContextKey: () -> String
@@ -104,6 +110,7 @@ final class ScreenTimeController: ObservableObject {
                 }
                 bindingConfirmed = true
                 bindingTask = nil
+                bindingError = nil
                 reload()
             } catch {
                 if self.lease === newLease {
@@ -112,6 +119,8 @@ final class ScreenTimeController: ObservableObject {
                     bindingConfirmed = false
                     bindingTask = nil
                     clearPublishedState()
+                    // After clearPublishedState, which nils monitoringError.
+                    bindingError = error.localizedDescription
                 }
                 throw error
             }
@@ -378,6 +387,7 @@ final class ScreenTimeController: ObservableObject {
         operationIDs.removeAll()
         isUpdatingMonitoring = false
         unsettledAuthorizationSince = nil
+        bindingError = nil
         // Fence delayed callbacks immediately without waiting for registration.
         try? store.update { state in
             guard retiring.binding.matches(state) else { return }

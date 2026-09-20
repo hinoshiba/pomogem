@@ -713,4 +713,50 @@ final class ScreenTimeSettingsDraftTests: XCTestCase {
         XCTAssertTrue(controller.isBoundToContext)
         XCTAssertTrue(controller.configuration.enabled)
     }
+
+    /// A context that can never bind — no App Group container, an unreadable
+    /// ledger — leaves isBoundToContext false forever. reload() clears
+    /// monitoringError with the rest of the published state, so without a
+    /// separate published reason the settings screen shows a disabled 保存 and
+    /// no explanation at all.
+    func testAFailedBindingPublishesTheReasonAndASuccessfulOneClearsIt() async throws {
+        let store = try makeStore()
+        let path = try XCTUnwrap(directories.last).appendingPathComponent("ScreenTime/ledger.json")
+        let original = try Data(contentsOf: path)
+        try Data("corrupt".utf8).write(to: path)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: Driver(store: store), authorization: { .approved })
+        do {
+            try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+            XCTFail("A corrupt ledger must not bind")
+        } catch {}
+        XCTAssertNil(controller.monitoringError, "The published state is cleared for an unbound context")
+        XCTAssertEqual(controller.bindingError, ScreenTimeError.corruptedState.localizedDescription)
+
+        try original.write(to: path)
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        XCTAssertNil(controller.bindingError)
+    }
+
+    func testAMissingAppGroupContainerPublishesTheUnavailableReason() async throws {
+        let store = ScreenTimeStore(directory: nil)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: Driver(store: store), authorization: { .approved })
+        do {
+            try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+            XCTFail("A missing App Group container must not bind")
+        } catch {}
+        XCTAssertFalse(controller.isBoundToContext)
+        XCTAssertEqual(controller.bindingError, ScreenTimeError.unavailable.localizedDescription)
+    }
+
+    /// Revoked permission, a removed theme or a context that can never bind
+    /// must never trap the user with the feature switched on.
+    func testSwitchingTheFeatureOffIsNeverBlockedByAnUnboundContext() {
+        XCTAssertTrue(ScreenTimeDraftPolicy.blocksSave(bound: false, draftEnabled: true),
+                      "An enabling save may be built on the controller's empty published configuration")
+        XCTAssertFalse(ScreenTimeDraftPolicy.blocksSave(bound: false, draftEnabled: false))
+        XCTAssertFalse(ScreenTimeDraftPolicy.blocksSave(bound: true, draftEnabled: true))
+        XCTAssertFalse(ScreenTimeDraftPolicy.blocksSave(bound: true, draftEnabled: false))
+    }
 }

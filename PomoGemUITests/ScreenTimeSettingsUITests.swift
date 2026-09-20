@@ -80,6 +80,30 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         assertResetConfirmationCanBeCancelled()
     }
 
+    /// The Simulator build carries no entitlements, so the App Group container
+    /// is nil and the Screen Time ledger can never bind. That must be explained
+    /// on screen, and it must never trap the user with the feature on: a save
+    /// that only switches recording OFF stays available.
+    func testUnavailableContextIsExplainedAndSwitchingOffStaysAvailable() {
+        launchAndOpenSettings()
+        let reason = app.staticTexts["screen-time.monitoring-error"]
+        XCTAssertTrue(reveal(reason), "An unbound context must state a reason, not only grey 保存 out")
+        XCTAssertTrue(reason.label.contains("スクリーンタイム"))
+        XCTAssertTrue(reveal(text(containing: "オフにする変更はいつでも保存できます")),
+                      "The footer must not promise a retry from a button the user cannot press")
+        attach("Screen Time — unavailable context is explained")
+
+        let save = app.buttons["screen-time.save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 6))
+        XCTAssertTrue(save.isEnabled, "Switching the feature off must never be blocked")
+        save.tap()
+        let alert = app.alerts["設定を完了できませんでした"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 6))
+        attach("Screen Time — save reports the unbound context")
+        alert.buttons["閉じる"].tap()
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 4))
+    }
+
     private func launchAndOpenSettings() {
         app.launch()
         let menu = app.buttons["メニュー"]
