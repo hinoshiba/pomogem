@@ -1,9 +1,117 @@
 import Foundation
 import SwiftUI
+import UIKit
 import XCTest
 @testable import PomoGem
 
 final class LocalPreviewLaunchPolicyTests: XCTestCase {
+    func testLaunchWaitsForBothLifecycleSignalsWithoutReportingAnAccountError() {
+        for phase in [ScenePhase.inactive, .background, .active] {
+            for applicationState in [UIApplication.State.inactive, .background, .active] {
+                if phase == .active, applicationState == .active {
+                    XCTAssertNoThrow(try PersistenceLaunchScenePolicy.requireActiveAttempt(
+                        generationMatches: true, phase: phase, applicationState: applicationState))
+                } else {
+                    XCTAssertThrowsError(try PersistenceLaunchScenePolicy.requireActiveAttempt(
+                        generationMatches: true, phase: phase, applicationState: applicationState)) { error in
+                        XCTAssertTrue(error is CancellationError,
+                            "Waiting for activation must not become a storage or account failure")
+                    }
+                }
+            }
+        }
+    }
+
+    func testSupersededLaunchCannotResumeWhenBothLifecycleSignalsAreActive() {
+        XCTAssertThrowsError(try PersistenceLaunchScenePolicy.requireActiveAttempt(
+            generationMatches: false, phase: .active, applicationState: .active)) { error in
+            XCTAssertTrue(error is CancellationError)
+        }
+    }
+
+    func testCancelledLaunchCannotResumeWhenBothLifecycleSignalsAreActive() async {
+        let task = Task { () -> Bool in
+            withUnsafeCurrentTask { $0?.cancel() }
+            do {
+                try PersistenceLaunchScenePolicy.requireActiveAttempt(
+                    generationMatches: true, phase: .active, applicationState: .active)
+                return false
+            } catch {
+                return error is CancellationError
+            }
+        }
+        let wasCancelled = await task.value
+        XCTAssertTrue(wasCancelled)
+    }
+
+    func testEitherActivationNotificationOrderResumesDeferredLaunchExactlyOnce() {
+        enum ActivationEvent { case scene, application }
+        let orders: [[ActivationEvent]] = [[.scene, .application], [.application, .scene]]
+        for order in orders {
+            var phase = ScenePhase.inactive
+            var applicationState = UIApplication.State.inactive
+            var isWaitingForActivation = false
+            var mountedSessions = 0
+
+            func prepare() {
+                isWaitingForActivation = false
+                do {
+                    try PersistenceLaunchScenePolicy.requireActiveAttempt(
+                        generationMatches: true, phase: phase, applicationState: applicationState)
+                    mountedSessions += 1
+                } catch {
+                    XCTAssertTrue(error is CancellationError)
+                    isWaitingForActivation = true
+                }
+            }
+
+            prepare() // SwiftUI may start the first task before either signal.
+            XCTAssertTrue(isWaitingForActivation)
+            XCTAssertEqual(mountedSessions, 0)
+            for event in order + [.application] {
+                switch event {
+                case .scene:
+                    phase = .active
+                case .application:
+                    applicationState = .active
+                    guard PersistenceLaunchScenePolicy.shouldResumeDeferredPreparation(
+                        phase: phase, isWaitingForActivation: isWaitingForActivation,
+                        hasSession: mountedSessions > 0, isPreparing: false) else {
+                        continue
+                    }
+                }
+                let action = PersistenceLaunchScenePolicy.action(
+                    phase: phase, hasSession: mountedSessions > 0, isPreparing: false,
+                    isQuiescingAccountChange: false, usesCloudAccountBoundary: true)
+                if action == .preparePersistence { prepare() }
+                if phase != .active || applicationState != .active {
+                    XCTAssertEqual(mountedSessions, 0)
+                }
+            }
+            XCTAssertEqual(mountedSessions, 1)
+            XCTAssertFalse(isWaitingForActivation)
+        }
+    }
+
+    func testUIKitActivationOnlyRestartsDeferredUnloadedPreparation() {
+        XCTAssertTrue(PersistenceLaunchScenePolicy.shouldResumeDeferredPreparation(
+            phase: .active, isWaitingForActivation: true, hasSession: false, isPreparing: false))
+        for phase in [ScenePhase.inactive, .background] {
+            XCTAssertFalse(PersistenceLaunchScenePolicy.shouldResumeDeferredPreparation(
+                phase: phase, isWaitingForActivation: true, hasSession: false, isPreparing: false))
+        }
+        let settledOrOwned: [(String, Bool, Bool, Bool)] = [
+            ("A settled choice or error must await user action", false, false, false),
+            ("Running preparation already owns launch", true, false, true),
+            ("A published session must stay mounted", true, true, false)
+        ]
+        for (reason, isWaiting, hasSession, isPreparing) in settledOrOwned {
+            XCTAssertFalse(PersistenceLaunchScenePolicy.shouldResumeDeferredPreparation(
+                phase: .active, isWaitingForActivation: isWaiting,
+                hasSession: hasSession, isPreparing: isPreparing), reason)
+        }
+    }
+
     func testPublishedOfflineRootSurvivesOrdinaryBackgroundAndRevalidatesEveryForeground() {
         for phase in [ScenePhase.inactive, .background, .inactive, .active, .inactive, .background, .active] {
             XCTAssertEqual(PersistenceLaunchScenePolicy.action(
