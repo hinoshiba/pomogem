@@ -1,5 +1,11 @@
 import XCTest
 
+/// The app's free learning ceiling (`ScreenTimePolicy.freeLearningApplicationLimit`).
+/// The UI test target does not link the app module, so it is restated here; the
+/// on-screen 「無料では勉強アプリを5つまで選べます」 string the limits phase asserts
+/// is what keeps the two honest.
+private let screenTimeFreeLearningLimit = 5
+
 /// Opt-in audit of the shipping Screen Time surface on a real, explicitly
 /// authorized iPhone. Family Controls individual authorization, Apple's
 /// FamilyActivityPicker and DeviceActivity threshold delivery cannot be
@@ -360,6 +366,15 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             try skipWithEvidence("limits-picker-not-addressable",
                                  "Only \(ticked.count) of 6 applications could be ticked in Apple's FamilyActivityPicker from XCUITest (remote view). Hand the 6-app ceiling check to a human or drive it through iPhone Mirroring. Ticked: \(ticked.joined(separator: ", ")).")
         }
+        // The sheet seeds from the saved selection, so the app's own counter —
+        // not the number of taps — decides whether the ceiling is exceeded.
+        let selectedInSheet = pickerSelectionCount(app)
+        note("LIMITS: the sheet reports \(describeCount(selectedInSheet)) selected app(s).")
+        guard let selectedInSheet, selectedInSheet > screenTimeFreeLearningLimit else {
+            cancelPicker(app)
+            try skipWithEvidence("limits-selection-not-over-ceiling",
+                                 "The picker sheet reports \(describeCount(selectedInSheet)) selected app(s) after ticking \(ticked.count); the free-tier ceiling is \(screenTimeFreeLearningLimit) and cannot be judged from that state.")
+        }
 
         let overLimitMessage = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "無料では勉強アプリを5つまで選べます")
@@ -372,10 +387,16 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     evidence: "limits-apply-enabled")
         note("LIMITS PASS: 6 learning apps ⇒ 反映 disabled + free-tier message shown.")
 
-        // Back down to five: the picker must become applicable again.
-        let removed = untickApplication(app, named: ticked[5])
-        note("LIMITS: unticking \(ticked[5]) succeeded=\(removed)")
-        if removed {
+        // Back down to the ceiling: the picker must become applicable again.
+        var removed = false
+        var remaining = selectedInSheet
+        for name in ticked.reversed() where remaining > screenTimeFreeLearningLimit {
+            guard untickApplication(app, named: name) else { continue }
+            removed = true
+            remaining = pickerSelectionCount(app) ?? remaining
+        }
+        note("LIMITS: unticked down to \(remaining) app(s); anyRemoved=\(removed)")
+        if removed, remaining == screenTimeFreeLearningLimit {
             let enabled = XCTNSPredicateExpectation(
                 predicate: NSPredicate(format: "enabled == true"), object: apply
             )
@@ -385,9 +406,9 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             try require(!overLimitMessage.exists,
                         "The free-tier message must disappear once five apps remain.",
                         evidence: "limits-message-sticky")
-            note("LIMITS PASS: 5 learning apps ⇒ 反映 enabled, message cleared.")
+            note("LIMITS PASS: \(remaining) learning apps ⇒ 反映 enabled, message cleared.")
         } else {
-            note("LIMITS PENDING: the ≤5 recovery could not be driven because the tick could not be reversed from XCUITest.")
+            note("LIMITS PENDING: the ≤\(screenTimeFreeLearningLimit) recovery could not be driven from XCUITest; the sheet still reports \(remaining) selected app(s).")
         }
 
         // Category / Web selection must be refused.
@@ -1412,6 +1433,24 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         setApplication(app, named: name, selected: false)
     }
 
+    /// The sheet's own live 「<n>アプリ選択中」 counter (ScreenTimeAppSelectionSheet's
+    /// bottom inset). Apple's picker rows are a remote view that publishes
+    /// neither `isSelected` nor a value, so this counter is the only evidence
+    /// the app gives for what is ticked inside it.
+    private func pickerSelectionCount(_ app: XCUIApplication) -> Int? {
+        let element = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "アプリ選択中")
+        ).firstMatch
+        guard element.exists else { return nil }
+        return firstInteger(in: element.label, pattern: "([0-9][0-9,]*)アプリ選択中")
+    }
+
+    /// Returns true only when the sheet's counter actually moved the way the
+    /// caller asked. The old short-circuit required BOTH `isSelected` and a
+    /// "1"/"0" value, which the remote rows never publish, so an already-ticked
+    /// row was tapped again — i.e. UNTICKED — and reported as success. The
+    /// callers build their `ticked` arrays from this boolean and assert on
+    /// their length, so a miscount was reported as an app defect.
     private func setApplication(_ app: XCUIApplication, named name: String, selected: Bool) -> Bool {
         let predicate = NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", name, name)
         let queries: [XCUIElementQuery] = [app.cells, app.switches, app.buttons, app.staticTexts, app.images]
@@ -1420,15 +1459,31 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             guard element.exists else { continue }
             _ = reveal(element)
             guard element.isHittable else { continue }
-            let before = describeValue(element)
-            if element.isSelected == selected, before == (selected ? "1" : "0") {
-                note("PICKER: \(name) is already \(selected ? "selected" : "cleared").")
-                return true
+            guard let before = pickerSelectionCount(app) else {
+                note("PICKER: the sheet's 「<n>アプリ選択中」 counter is unreadable; \(name) cannot be verified.")
+                return false
             }
             element.tap()
             pause(1)
-            note("PICKER: tapped \(name) (\(element.elementType.rawValue)) value \(before) → \(describeValue(element)) selected=\(element.isSelected)")
-            return true
+            let after = pickerSelectionCount(app)
+            note("PICKER: tapped \(name) (\(element.elementType.rawValue)) count \(before) → \(describeCount(after))")
+            guard let after else {
+                note("PICKER: the counter became unreadable after tapping \(name).")
+                return false
+            }
+            let wanted = selected ? 1 : -1
+            if after == before + wanted { return true }
+            if after == before - wanted {
+                // The row was already in the requested state and this tap
+                // reversed it. Put it back before reporting the state reached.
+                element.tap()
+                pause(1)
+                let restored = pickerSelectionCount(app)
+                note("PICKER: \(name) was already \(selected ? "selected" : "cleared"); restored count \(describeCount(restored)).")
+                return restored == before
+            }
+            note("PICKER: tapping \(name) did not move the counter (\(before) → \(after)); not addressable.")
+            return false
         }
         return false
     }
