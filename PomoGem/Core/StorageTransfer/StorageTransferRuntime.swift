@@ -295,28 +295,101 @@ final class StorageTransferRuntime {
         let status = try await readControl()
         try validate()
         try validateControlAccount(status, binding: binding)
-        guard let status, !status.blocksWriters, status.datasetGenerationID == expectedGenerationID,
-              let destinationBinding = ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
-                  accountFingerprint: binding.accountFingerprint) else { throw StorageTransferError.staleTransaction }
-        // DIFFERENCE 2: the divergent device cache is the source and its data
-        // becomes the new generation, so this choice replaces the cloud dataset.
+        guard let status, !status.blocksWriters, status.datasetGenerationID == expectedGenerationID else {
+            throw StorageTransferError.staleTransaction
+        }
+        // DIFFERENCE 2 and 3 live in the shared tail below: the divergent
+        // device cache is the source and becomes the new generation, and
+        // unlike a refresh the transaction stages a recovery copy of the
+        // device payload on the server before anything is deleted.
+        try await openDeviceOverwriteTransaction(binding: binding, baseline: status,
+            readControl: readControl, validate: validate)
+    }
+
+    /// P0-2. Start a NEW iCloud lineage from this device when the server has
+    /// none at all.
+    ///
+    /// `refreshCloudDataset` and `overwriteCloudDataset` both fence against a
+    /// displayed committed generation, so neither can be reached when the
+    /// control record is absent - which is precisely the state the reported
+    /// device is stuck in. There is nothing to fence against and nothing a CAS
+    /// could protect: `stage()` already encodes exactly this rule by requiring
+    /// `previousDatasetGenerationID == nil` when the control record is absent
+    /// (StorageTransferRemoteRecovery.swift, the `envelope == nil` arm).
+    ///
+    /// This is the SAME operation as the overwrite, with a nil expected
+    /// generation, behind the SAME policy bit
+    /// (`allowsDatasetOverwriteFromDevice`, still false in `standard`).
+    func startCloudLineageFromDevice(binding: ActiveAccountLocalBinding,
+                                     validateAccess: @escaping @MainActor () throws -> Void) async throws {
+        try await startCloudLineageFromDevice(binding: binding,
+            verifyAccount: {
+                try await AppleAccountBoundaryResolver().resolve(expectedBinding: binding).binding
+            }, readControl: {
+                try await self.remoteRecoveryStatus(binding: binding, validateAccess: validateAccess)
+            }, validateAccess: validateAccess)
+    }
+
+    func startCloudLineageFromDevice(binding: ActiveAccountLocalBinding,
+                                     verifyAccount: @escaping @MainActor () async throws -> ActiveAccountLocalBinding,
+                                     readControl: @escaping @MainActor () async throws -> StorageTransferRecoveryControl?,
+                                     validateAccess: @escaping @MainActor () throws -> Void) async throws {
+        // The release gate is the FIRST statement, exactly as in the overwrite:
+        // a closed bit must not cost a network round trip or create a file.
+        try releasePolicy.validate(.overwriteCloudFromDevice)
+        let validate: @MainActor () throws -> Void = {
+            try Task.checkCancellation()
+            try validateAccess()
+            try self.requireNoPendingRemoteCancellation()
+            guard try self.store.load() == nil, !StorageTransferProcessState.cloudMirrorWasOpened else {
+                throw StorageTransferRuntimeError.relaunchRequired
+            }
+        }
+        try validate()
+        let verifiedBinding = try await verifyAccount()
+        try validate()
+        guard verifiedBinding == binding else { throw StorageTransferRecoveryError.identityMismatch }
+        let status = try await readControl()
+        try validate()
+        try validateControlAccount(status, binding: binding)
+        // The ONLY difference from `overwriteCloudDataset`: this entry point
+        // requires the absence of a lineage instead of an exact match with a
+        // displayed one. A pending transfer still blocks, and the moment ANY
+        // committed generation exists the request is refused so it has to go
+        // through the ordinary generation-fenced CAS instead.
+        guard status?.blocksWriters != true, status?.datasetGenerationID == nil else {
+            throw StorageTransferError.staleTransaction
+        }
+        try await openDeviceOverwriteTransaction(binding: binding, baseline: status,
+            readControl: readControl, validate: validate)
+    }
+
+    /// The shared tail of both device -> iCloud entry points. `baseline` is
+    /// optional on purpose: a nil baseline is the durable record that this
+    /// installation observed an EMPTY ledger, which is what lets the staged
+    /// manifest carry `previousDatasetGenerationID == nil` and satisfy
+    /// `stage()`'s create-if-absent rule.
+    private func openDeviceOverwriteTransaction(binding: ActiveAccountLocalBinding,
+                                                baseline: StorageTransferRecoveryControl?,
+                                                readControl: @escaping @MainActor () async throws -> StorageTransferRecoveryControl?,
+                                                validate: @escaping @MainActor () throws -> Void) async throws {
+        guard let destinationBinding = ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+            accountFingerprint: binding.accountFingerprint) else { throw StorageTransferError.staleTransaction }
         let journal = try StorageTransferJournal(choice: .overwriteCloudFromDevice,
             source: .cloud(binding: binding), destination: .cloud(binding: destinationBinding),
             cloudBinding: destinationBinding)
         try requireNoArtifacts(selection: journal.destination)
-        // DIFFERENCE 3: unlike a refresh, this transaction stages a recovery
-        // copy of the device payload on the server before anything is deleted.
         try cleanup().requireCapacityForNewTransfer(transactionID: journal.transactionID, mayCreateRemotePayload: true)
         let file = try checkpointFile(files(journal))
         var checkpoint = StorageTransferRuntimeCheckpoint(transactionID: journal.transactionID,
             requestingProcessID: Self.processID)
         checkpoint.didObserveBaselineControl = true
-        checkpoint.baselineControl = status
+        checkpoint.baselineControl = baseline
         try file.save(checkpoint, replacing: nil)
         let after = try await readControl()
         try validate()
         try validateControlAccount(after, binding: binding)
-        guard after == status else { throw StorageTransferError.staleTransaction }
+        guard after == baseline else { throw StorageTransferError.staleTransaction }
         try validate()
         try store.begin(journal)
     }
