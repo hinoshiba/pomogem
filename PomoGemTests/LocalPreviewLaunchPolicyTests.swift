@@ -1005,6 +1005,42 @@ final class LaunchActivationWatchdogTests: XCTestCase {
             LaunchActivationWatchdogPolicy.blockedMessage(progress: .nothingCommitted)))
     }
 
+    /// The watchdog makes the retry screen reachable before the recorded
+    /// selection is even read, so its 「もう一度試す」 must not stand in for the
+    /// storage choice the user has never been shown.
+    func testARetryAfterATimeoutNeverStandsInForTheStorageChoice() async {
+        let host = DeferredLaunchHostModel(phase: .active, applicationState: .inactive)
+        host.storageModeIsUnselected = true
+        host.startLaunchAttempt(timeout: 0.05)
+        await host.awaitRetryScreen()
+        XCTAssertTrue(host.offersRetry)
+        XCTAssertFalse(host.didConfirmCloudSelection)
+
+        host.tapRetry()
+        XCTAssertFalse(host.requestedCloudSelection,
+            "A lifecycle timeout must not commit an unselected device to iCloud")
+
+        // The same retry does resume a cloud launch the user did confirm.
+        host.chooseCloudStorage()
+        XCTAssertTrue(host.requestedCloudSelection)
+        host.tapRetry()
+        XCTAssertTrue(host.requestedCloudSelection)
+    }
+
+    func testRetryOnlyRestoresACloudSelectionTheUserMade() {
+        XCTAssertFalse(LaunchRetryConsentPolicy.restoresPendingCloudSelection(
+            storageModeIsUnselected: true, didConfirmCloudSelection: false),
+            "No storage mode and no confirmation: the retry must ask first")
+        XCTAssertTrue(LaunchRetryConsentPolicy.restoresPendingCloudSelection(
+            storageModeIsUnselected: true, didConfirmCloudSelection: true),
+            "A confirmed iCloud choice is resumed, not asked again")
+        for didConfirm in [true, false] {
+            XCTAssertFalse(LaunchRetryConsentPolicy.restoresPendingCloudSelection(
+                storageModeIsUnselected: false, didConfirmCloudSelection: didConfirm),
+                "A recorded storage mode needs no pending selection")
+        }
+    }
+
     func testWatchdogArmsOnlyForAWaitNobodyElseOwnsAndKeepsOneBudget() {
         var expiries: [Int] = []
         let watchdog = LaunchActivationWatchdog()
@@ -1146,6 +1182,10 @@ private final class DeferredLaunchHostModel {
     private var timeout: TimeInterval = 30
 
     var launchProgress = LaunchActivationWatchdogPolicy.LaunchProgress.nothingCommitted
+    /// No storage mode recorded yet, as on a first launch.
+    var storageModeIsUnselected = false
+    private(set) var requestedCloudSelection = false
+    private(set) var didConfirmCloudSelection = false
     var expectedBlockedMessage: String {
         LaunchActivationWatchdogPolicy.blockedMessage(progress: launchProgress)
     }
@@ -1213,7 +1253,18 @@ private final class DeferredLaunchHostModel {
         startLaunchAttempt(timeout: timeout)
     }
 
+    /// The storage-choice screen's iCloud button, behind its confirmation.
+    func chooseCloudStorage() {
+        requestedCloudSelection = true
+        didConfirmCloudSelection = true
+    }
+
     func tapRetry() {
+        if LaunchRetryConsentPolicy.restoresPendingCloudSelection(
+            storageModeIsUnselected: storageModeIsUnselected,
+            didConfirmCloudSelection: didConfirmCloudSelection) {
+            requestedCloudSelection = true
+        }
         watchdog.cancel()
         attempt += 1
         screen = .preparing("保存領域を再確認しています")

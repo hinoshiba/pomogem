@@ -106,6 +106,24 @@ enum LaunchActivationWatchdogPolicy {
     }
 }
 
+/// 「もう一度試す」 re-runs the launch the user asked for. On a device that has
+/// not selected a storage mode yet, the retry used to assume iCloud: it set the
+/// pending cloud selection so the next attempt would resolve the Apple Account
+/// and record `.cloud`, skipping the storage-choice screen and its
+/// confirmation alert. That assumption is safe only for a retry of a cloud
+/// launch the user already confirmed. A lifecycle timeout — the watchdog's own
+/// retry screen, reachable before any selection is even read — must not imply
+/// cloud intent; its retry falls back to the storage-choice screen, which asks
+/// first.
+enum LaunchRetryConsentPolicy {
+    static func restoresPendingCloudSelection(
+        storageModeIsUnselected: Bool,
+        didConfirmCloudSelection: Bool
+    ) -> Bool {
+        storageModeIsUnselected && didConfirmCloudSelection
+    }
+}
+
 /// The host wiring for that wait, kept out of the SwiftUI view so the arm /
 /// disarm / expiry order is ordinary product code the tests drive directly.
 /// `LaunchActivationWatchdogPolicy` stays the pure decision table; this type

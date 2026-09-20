@@ -475,6 +475,9 @@ private struct PomoGemPersistenceLaunchHost: View {
     // Sticky for the process: a later attempt cannot undo a storage mode an
     // earlier one already recorded, so the watchdog screen must not promise it.
     @State private var didCommitStorageSelection = false
+    // The user's own iCloud choice in this process. A retry may resume that
+    // choice; no interruption of any kind may manufacture it.
+    @State private var didConfirmCloudSelection = false
     @State private var canChooseLocalOnly = false
     @State private var mustDestroyPersistentStores = false
     @State private var pendingDestructionNamespace: AccountDataNamespace?
@@ -2157,7 +2160,16 @@ private struct PomoGemPersistenceLaunchHost: View {
             isPreparing = false
         }
         guard !isPreparing else { return }
+        let storageModeIsUnselected: Bool
         if case .unselected = PersistenceDeploymentState.load() {
+            storageModeIsUnselected = true
+        } else {
+            storageModeIsUnselected = false
+        }
+        if LaunchRetryConsentPolicy.restoresPendingCloudSelection(
+            storageModeIsUnselected: storageModeIsUnselected,
+            didConfirmCloudSelection: didConfirmCloudSelection
+        ) {
             requestedCloudSelection = true
         }
         launchState = .preparing("保存領域を再確認しています")
@@ -2171,6 +2183,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             return
         }
         requestedCloudSelection = true
+        didConfirmCloudSelection = true
         launchState = .preparing("Apple Accountを安全に確認しています")
         launchAttempt += 1
     }
