@@ -430,7 +430,11 @@ final class StorageTransferRuntime {
         guard try FocusCloudSyncStore.canonicalActive(context: sourceContext) == nil else { throw StorageTransferError.activeTimer }
         let control = try await remoteRecoveryStatus(binding: binding, validateAccess: validateAccess)
         guard control?.blocksWriters != true else { throw StorageTransferRuntimeError.remoteRecoveryRequired }
-        try requireNoArtifacts(selection: destination)
+        // P1-5. Turning iCloud on from Settings resolves an EXISTING namespace,
+        // so a device that used iCloud before and went local-only can still own
+        // that namespace's cloud store files. Nothing has happened on the
+        // server; the copy must ask for a clean-up, not report a replacement.
+        try requireNoArtifacts(selection: destination, error: .leftoverLocalStores)
         let journal = try StorageTransferJournal(choice: choice, source: source,
             destination: destination, cloudBinding: binding)
         try cleanup().requireCapacityForNewTransfer(transactionID: journal.transactionID,
@@ -1251,12 +1255,7 @@ final class StorageTransferRuntime {
     /// state - never evidence that the iCloud dataset changed.
     private func requireNoArtifacts(selection: PersistenceDeploymentSelection,
                                     error: StorageTransferRuntimeError = .leftoverLocalStores) throws {
-        let urls = try PersistenceStoreTopology.persistentStoreURLs(for: selection.storageLaunchMode,
-            accountNamespace: selection.storageNamespace)
-        for url in urls.flatMap({ PersistenceStoreArtifactLayout.artifacts(for: $0) }) {
-            var info = stat()
-            guard lstat(url.path, &info) != 0, errno == ENOENT else { throw error }
-        }
+        try StorageTransferStoreArtifactPrecondition.requireNone(selection: selection, error: error)
     }
 }
 

@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// The outcome of comparing this installation's dataset admission receipt with
@@ -67,5 +68,25 @@ enum StorageTransferAdmissionPolicy {
                 datasetGenerationID: serverGenerationID, cloudScope: scope))
         }
         return .admitted
+    }
+}
+
+/// The "no store files may exist here" precondition, extracted from the
+/// runtime so each call site's meaning is separately expressible and testable.
+///
+/// It used to raise `datasetRefreshRequired` everywhere, which is how merely
+/// enabling iCloud from Settings - with an old cloud store left over from a
+/// previous stint on this same device - could tell the user that another
+/// device had replaced their iCloud data while the server was untouched.
+@MainActor
+enum StorageTransferStoreArtifactPrecondition {
+    static func requireNone(selection: PersistenceDeploymentSelection,
+                            error: StorageTransferRuntimeError) throws {
+        let urls = try PersistenceStoreTopology.persistentStoreURLs(for: selection.storageLaunchMode,
+            accountNamespace: selection.storageNamespace)
+        for url in urls.flatMap({ PersistenceStoreArtifactLayout.artifacts(for: $0) }) {
+            var info = stat()
+            guard lstat(url.path, &info) != 0, errno == ENOENT else { throw error }
+        }
     }
 }
