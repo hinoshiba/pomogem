@@ -11,12 +11,29 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
     let dataEpochID: UUID?
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
-    @ObservedObject private var controller = ScreenTimeController.shared
+    @ObservedObject private var controller: ScreenTimeController
     @State private var purchase = PurchaseManager.shared
     @State private var importError: String?
     @State private var lastPresentedError: String?
     @State private var lastBoundKey: String?
     @State private var lastMonitoringKey: String?
+
+    /// Production always uses the shared controller; the parameter exists so a
+    /// mount/unmount regression test can drive a temporary ledger instead of
+    /// the App Group one.
+    init(
+        isReady: Bool,
+        timerPresented: Bool,
+        contextKey: String,
+        dataEpochID: UUID?,
+        controller: ScreenTimeController = .shared
+    ) {
+        self.isReady = isReady
+        self.timerPresented = timerPresented
+        self.contextKey = contextKey
+        self.dataEpochID = dataEpochID
+        _controller = ObservedObject(wrappedValue: controller)
+    }
 
     private var isCurrentOwner: Bool {
         contextKey == AccountScopedLocalState.defaultsKey(base: "screen-time-owner")
@@ -56,10 +73,15 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
                     isPro: purchase.isPro, timerRunning: timerRunning
                 )
             }
+            // Deliberately no `.onDisappear` retirement: PomoGemApp drops the
+            // cloud session on every ordinary backgrounding, which removes this
+            // view. Collection belongs to the OS extension and must continue
+            // while the app is not running. A changed owner or activity epoch
+            // is retired by bindContext, by the owner guard in refresh(), by
+            // the readiness change below, and by reset / complete deletion.
             .onChange(of: isReady) { _, ready in
                 if !ready { controller.suspendForContextRetirement(contextKey: contextKey, dataEpochID: dataEpochID) }
             }
-            .onDisappear { controller.suspendForContextRetirement(contextKey: contextKey, dataEpochID: dataEpochID) }
             .alert("Screen Timeの記録を保留しています", isPresented: Binding(
                 get: { importError != nil }, set: { if !$0 { importError = nil } }
             )) {

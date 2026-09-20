@@ -1,6 +1,8 @@
 import FamilyControls
 import Foundation
 import ManagedSettings
+import SwiftUI
+import UIKit
 import XCTest
 @testable import PomoGem
 
@@ -336,4 +338,153 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertTrue(driver.events.isEmpty)
     }
 
+}
+
+/// The root Screen Time modifier lives inside the cloud persistence session,
+/// which PomoGemApp drops on every ordinary backgrounding. Collection itself
+/// belongs to the OS extension, so view teardown must not retire the context.
+@MainActor
+final class ScreenTimeIntegrationLifecycleTests: XCTestCase {
+    private final class Driver: ScreenTimeMonitoringDriving {
+        let store: ScreenTimeStore
+        private let lock = NSLock()
+        private var stops = 0
+
+        init(store: ScreenTimeStore) { self.store = store }
+        var stopCount: Int { lock.lock(); defer { lock.unlock() }; return stops }
+        func stop() { lock.lock(); stops += 1; lock.unlock() }
+        func invalidateAuthorizationIfNeeded() throws {}
+        func synchronize(now: Date) throws -> Bool {
+            try store.withMonitoringLock { try store.snapshot().runs.contains(where: \.active) }
+        }
+    }
+
+    private final class MountProbe: ObservableObject {
+        @Published var isMounted = true
+        var onUnmounted: (() -> Void)?
+    }
+
+    private struct Host: View {
+        @ObservedObject var probe: MountProbe
+        let controller: ScreenTimeController
+        let contextKey: String
+        let dataEpochID: UUID?
+
+        var body: some View {
+            Group {
+                if probe.isMounted {
+                    Color.clear
+                        .modifier(ScreenTimeIntegrationModifier(
+                            isReady: true, timerPresented: false,
+                            contextKey: contextKey, dataEpochID: dataEpochID,
+                            controller: controller
+                        ))
+                        .onDisappear { probe.onUnmounted?() }
+                } else {
+                    Color.clear
+                }
+            }
+            .environment(\.scenePhase, .active)
+        }
+    }
+
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+    private var directories: [URL] = []
+
+    override func tearDown() {
+        for directory in directories { try? FileManager.default.removeItem(at: directory) }
+        directories.removeAll()
+        super.tearDown()
+    }
+
+    private func makeStore(owner: String, epoch: UUID) throws -> ScreenTimeStore {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        directories.append(directory)
+        let store = ScreenTimeStore(directory: directory)
+        var state = ScreenTimeState()
+        state.contextKey = owner
+        state.dataEpochID = epoch
+        state.contextIsActive = true
+        state.configuration.enabled = true
+        state.configuration.themeID = UUID()
+        state.runs = [ScreenTimeRun(
+            lane: .learning, dayStart: start, dayEnd: start.addingTimeInterval(86_400),
+            startedAt: start, timeZoneID: "UTC", includesPastActivity: false,
+            themeID: state.configuration.themeID
+        )]
+        try store.update { $0 = state }
+        return store
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 10, _ description: String, _ condition: () throws -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if try condition() { return }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTFail("Timed out waiting: \(description)")
+    }
+
+    func testOrdinaryUnmountKeepsTheContextArmedWhileTheAppIsNotRunning() async throws {
+        let owner = AccountScopedLocalState.defaultsKey(base: "screen-time-owner")
+        let epoch = UUID()
+        let store = try makeStore(owner: owner, epoch: epoch)
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(
+            store: store, currentContextKey: { owner }, monitoring: driver, authorization: { .approved }
+        )
+        let runID = try XCTUnwrap(store.snapshot().runs.first?.id)
+        let probe = MountProbe()
+        let unmounted = expectation(description: "SwiftUI removed the Screen Time host view")
+        unmounted.assertForOverFulfill = false
+        probe.onUnmounted = { unmounted.fulfill() }
+
+        let scene = try XCTUnwrap(
+            UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        )
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = UIHostingController(rootView: Host(
+            probe: probe, controller: controller, contextKey: owner, dataEpochID: epoch
+        ))
+        window.isHidden = false
+        defer {
+            probe.onUnmounted = nil
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+
+        try await waitUntil("the modifier binds the context") {
+            controller.isBound(contextKey: owner, dataEpochID: epoch)
+        }
+        try await controller.waitForPendingOperations()
+        XCTAssertTrue(try store.snapshot().runs.contains { $0.id == runID && $0.active })
+
+        // PomoGemApp sets session = nil on .background, which removes RootView.
+        probe.isMounted = false
+        await fulfillment(of: [unmounted], timeout: 5)
+        try await Task.sleep(for: .milliseconds(300))
+        try await controller.waitForPendingOperations()
+
+        let state = try store.snapshot()
+        XCTAssertTrue(state.contextIsActive, "Background collection must survive the view leaving the screen")
+        XCTAssertTrue(state.runs.contains { $0.id == runID && $0.active })
+        XCTAssertEqual(driver.stopCount, 0, "Leaving the foreground must not stop the registered activities")
+        XCTAssertTrue(controller.isBound(contextKey: owner, dataEpochID: epoch))
+
+        // A threshold that arrives in the extension while the app is away.
+        try store.record(runID: runID, threshold: 1, now: start.addingTimeInterval(601))
+        XCTAssertEqual(try store.pendingLearningReceipts().count, 1)
+
+        probe.isMounted = true
+        try await waitUntil("the same binding is restored on the next foreground") {
+            controller.isBound(contextKey: owner, dataEpochID: epoch)
+        }
+        try await controller.waitForPendingOperations()
+        let resumed = try store.snapshot()
+        XCTAssertEqual(resumed.runs.first?.id, runID, "The foreground must reuse the run the extension counted against")
+        XCTAssertTrue(resumed.contextIsActive)
+        XCTAssertEqual(driver.stopCount, 0)
+    }
 }
