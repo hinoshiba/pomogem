@@ -485,6 +485,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var retainsTransferCopyOnCancellation = false
     @State private var remoteRecoveryAction: RemoteRecoveryAction?
     @State private var cloudLaunchDeadline: CloudLaunchDeadline?
+    @State private var launchActivationDeadline: CloudLaunchDeadline?
     @State private var offlineFallbackRequested = false
     @State private var requestedOnlineCloudLaunch = false
     @State private var offlineRecovery = CloudOfflineRecoveryPresentation()
@@ -546,6 +547,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 isPreparing: isPreparing
             ) else { return }
             isWaitingForLaunchActivation = false
+            cancelLaunchActivationDeadline()
             handleScenePhaseChange(.active)
         }
     }
@@ -735,6 +737,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         guard launchAttemptGate.allowsPreparation(for: attempt) else { return }
         guard !requiresStorageTransferRelaunch else { return }
         isWaitingForLaunchActivation = false
+        cancelLaunchActivationDeadline()
         isPreparing = true
         canContinueOffline = false
         var ownedDeadline: CloudLaunchDeadline?
@@ -1104,6 +1107,10 @@ private struct PomoGemPersistenceLaunchHost: View {
             if launchAttempt == attempt, !Task.isCancelled, !isQuiescingAccountChange {
                 isWaitingForLaunchActivation = scenePhase != .active
                     || UIApplication.shared.applicationState != .active
+                // iOS can hold its own modal over the app for as long as it
+                // likes, so neither activation signal is guaranteed to arrive.
+                // Bound the wait rather than keep an actionless spinner.
+                if isWaitingForLaunchActivation { armLaunchActivationDeadline(attempt: attempt) }
             }
             // Record lifecycle values only; never account identifiers, model
             // contents or store paths. Cancellation must be distinguishable
@@ -1796,6 +1803,83 @@ private struct PomoGemPersistenceLaunchHost: View {
         }
     }
 
+    /// The documented launch budget for the recorded storage selection: 12 s
+    /// once this device established a cloud store, 30 s otherwise. Reading it
+    /// touches only local selection files, never the account or the network.
+    private func selectedCloudLaunchTimeout() -> TimeInterval {
+        let selection = PersistenceDeploymentState.load()
+        let hasExactCompleteStorePair: Bool
+        if case let .selected(.cloud(binding)) = selection {
+            hasExactCompleteStorePair = PersistenceStoreTopology.persistenceArtifactHistory()
+                .hasExactCompleteStorePair(for: .cloud(binding: binding))
+        } else {
+            hasExactCompleteStorePair = false
+        }
+        return CloudOfflineHostPolicy.launchTimeout(selection: selection,
+            mountState: PersistenceDeploymentState.loadMountState(),
+            hasExactCompleteStorePair: hasExactCompleteStorePair)
+    }
+
+    /// Covers the window between the first lifecycle checkpoint and the
+    /// account deadline, where a deferred attempt has already returned and
+    /// nothing else is armed. Storage-transfer recovery keeps running outside
+    /// any launch budget: it is progressing work with its own relaunch
+    /// contract, and interrupting it would change transfer semantics.
+    private func armLaunchActivationDeadline(attempt: Int) {
+        cancelLaunchActivationDeadline()
+        guard case let .bounded(timeout) = LaunchActivationWatchdogPolicy.waitOutcome(
+            phase: scenePhase,
+            applicationState: UIApplication.shared.applicationState,
+            timeout: selectedCloudLaunchTimeout()
+        ) else { return }
+        Self.persistenceLogger.info(
+            "Launch activation wait armed attempt=\(attempt) timeout=\(timeout)"
+        )
+        launchActivationDeadline = CloudLaunchDeadline(
+            timeout: timeout,
+            invalidateAttempt: {},
+            onExpiry: { endLaunchActivationWait(attempt: attempt) }
+        )
+    }
+
+    private func armLaunchActivationDeadlineIfDeferred() {
+        guard isWaitingForLaunchActivation, session == nil, !isPreparing,
+              !isQuiescingAccountChange, !requiresStorageTransferRelaunch,
+              launchActivationDeadline == nil else { return }
+        armLaunchActivationDeadline(attempt: launchAttempt)
+    }
+
+    private func cancelLaunchActivationDeadline() {
+        launchActivationDeadline?.cancel()
+        launchActivationDeadline = nil
+    }
+
+    /// Expiry is a lifecycle observation, not an account or storage result:
+    /// it selects no storage mode, opens nothing and revokes nothing. The
+    /// offline affordance still has to pass the ordinary eligibility gate,
+    /// and taking it revalidates every condition again.
+    private func endLaunchActivationWait(attempt: Int) {
+        launchActivationDeadline = nil
+        guard LaunchActivationWatchdogPolicy.presentsRetryScreen(
+            generationMatches: launchAttempt == attempt,
+            hasSession: session != nil,
+            isWaitingForActivation: isWaitingForLaunchActivation,
+            isPreparing: isPreparing,
+            isQuiescingAccountChange: isQuiescingAccountChange,
+            requiresStorageTransferRelaunch: requiresStorageTransferRelaunch,
+            phase: scenePhase,
+            applicationState: UIApplication.shared.applicationState
+        ) else { return }
+        isWaitingForLaunchActivation = false
+        if case let .selected(.cloud(binding)) = PersistenceDeploymentState.load() {
+            canContinueOffline = offlineCopyIsEligible(binding: binding)
+        }
+        Self.persistenceLogger.info(
+            "Launch activation wait expired attempt=\(attempt) offlineOffered=\(canContinueOffline)"
+        )
+        launchState = .blocked(LaunchActivationWatchdogPolicy.blockedMessage)
+    }
+
     private func requireActiveLaunchAttempt(
         _ attempt: Int,
         checkpoint: StaticString
@@ -2051,6 +2135,7 @@ private struct PomoGemPersistenceLaunchHost: View {
 
     private func retryLaunch() {
         guard !requiresStorageTransferRelaunch else { return }
+        cancelLaunchActivationDeadline()
         if isQuiescingAccountChange {
             guard !containerLifetimes.hasLiveContainers else {
                 launchState = .blocked(
@@ -2194,6 +2279,16 @@ private struct PomoGemPersistenceLaunchHost: View {
             cancelOfflineConnectionCheck()
             cloudLaunchDeadline?.cancel()
             cloudLaunchDeadline = nil
+        }
+        if phase == .background {
+            // The OS owns a suspended process; it must not be blamed for a
+            // wait the user never saw.
+            cancelLaunchActivationDeadline()
+        } else if phase == .inactive {
+            // Returning from the background behind the same system modal
+            // never reaches .active, so this transition is the only chance to
+            // arm the wait. An already armed budget is never restarted.
+            armLaunchActivationDeadlineIfDeferred()
         }
         guard !requiresStorageTransferRelaunch else {
             NotificationManager.shared.cancelFocusReturnReminder()
