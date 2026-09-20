@@ -3684,6 +3684,22 @@ enum StorageTransferOverwriteLaunchUITestScenario {
     /// ONLY that bit — the door this gate governs is the one that closes
     /// Docs/MultiDeviceCloudSafety.md defect 2.
     case remoteResumeOpen
+    /// P0-2, the shipping build. The server has no transfer ledger at all, so
+    /// the screen offers starting a lineage from this device or staying
+    /// offline — and the first of those is DISABLED with its reason, because
+    /// `allowsDatasetOverwriteFromDevice` is still false.
+    case lineageUnavailable
+    /// The same screen with that one bit raised, so the consent flow behind
+    /// the door can actually be exercised. The offline route is deliberately
+    /// ineligible here, so the 「otherwise explain」 branch is covered too.
+    case lineageUnavailableEnabled
+    /// Explanation only: this device's receipt was earned in the other
+    /// CloudKit environment. Nothing destructive is on this screen.
+    case environmentMismatch
+    /// Explanation only: the local ledger is missing AND the server turned out
+    /// to have no committed generation either, so 「iCloudから再取得」 cannot be
+    /// built. The offline route is ineligible in this fixture.
+    case localLedgerMissingExplain
 }
 
 struct StorageTransferOverwriteLaunchUITestFixtureView: View {
@@ -3696,6 +3712,11 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
     /// instead of only proving the door is closed.
     @State private var previewRetries = 0
     @State private var recoverCalls = 0
+    /// P0-2. The two choices on the `.cloudLineageUnavailable` screen, counted
+    /// separately from the two on `.datasetRefresh`: a test that proves one of
+    /// them did not fire must not be satisfied by the other's counter.
+    @State private var lineageCalls = 0
+    @State private var offlineCalls = 0
 
     var body: some View {
         PersistenceLaunchStatusView(
@@ -3705,6 +3726,7 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
             onRecoverTransfer: { recoverCalls += 1 }, onCancelTransfer: {},
             onRefreshDataset: { refreshCalls += 1 },
             onOverwriteDataset: { overwriteCalls += 1 },
+            onStartCloudLineage: offersLineageStart ? { lineageCalls += 1 } : nil,
             onExportDeviceData: offersExport ? { exportCalls += 1 } : nil,
             onRetryCloudPreview: offersPreviewRetry ? { previewRetries += 1 } : nil,
             cloudPreview: cloudPreview,
@@ -3713,13 +3735,15 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
             overwritePhase: scenario == .inProgress ? .preparingDestination : nil,
             releasePolicy: releasePolicy,
             onCancelLocalTransfer: nil, retainsTransferCopyOnCancellation: false,
-            onContinueOffline: nil)
+            onContinueOffline: offersOffline ? { offlineCalls += 1 } : nil)
             .safeAreaInset(edge: .bottom) {
                 VStack {
                     Text(verbatim: "calls=0;choice=none;starting=false")
                         .accessibilityIdentifier("storage-switch.fixture-state")
                     Text(verbatim: "refresh=\(refreshCalls);overwrite=\(overwriteCalls);export=\(exportCalls);previewRetries=\(previewRetries);recover=\(recoverCalls)")
                         .accessibilityIdentifier("storage-overwrite.fixture-state")
+                    Text(verbatim: "lineage=\(lineageCalls);offline=\(offlineCalls)")
+                        .accessibilityIdentifier("storage-lineage.fixture-state")
                     // PLAN Step 6 asks for the RAW and the FILTERED witness
                     // count, so a reviewer can see that the ignore list moved a
                     // writer rather than that a writer was absent.
@@ -3732,6 +3756,18 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
 
     /// A failed read is offered a re-read; a successful or absent one is not.
     private var offersPreviewRetry: Bool { scenario == .previewFailed }
+
+    /// The host passes nil when the action cannot run at all. Only the lineage
+    /// screen ever has it, and nothing else in this fixture may receive it.
+    private var offersLineageStart: Bool {
+        scenario == .lineageUnavailable || scenario == .lineageUnavailableEnabled
+    }
+
+    /// Eligibility for the offline continuation is a property of the device's
+    /// verified local copy, not of the stop reason, so both shapes appear.
+    private var offersOffline: Bool {
+        scenario == .lineageUnavailable || scenario == .environmentMismatch
+    }
 
     private var cloudPreviewFailed: Bool { scenario == .previewFailed && previewRetries == 0 }
 
@@ -3746,6 +3782,15 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
                             canCancel: true)
         case .choice, .otherDevices, .previewFailed:
             .datasetRefresh(StorageTransferRuntimeError.datasetRefreshRequired.localizedDescription)
+        case .lineageUnavailable, .lineageUnavailableEnabled:
+            .cloudLineageUnavailable(
+                StorageTransferRuntimeError.cloudLineageUnavailable.localizedDescription)
+        case .environmentMismatch:
+            .datasetExplanation(.environmentMismatch,
+                StorageTransferRuntimeError.cloudEnvironmentMismatch.localizedDescription)
+        case .localLedgerMissingExplain:
+            .datasetExplanation(.localLedgerMissing,
+                StorageTransferRuntimeError.localLedgerMissing.localizedDescription)
         }
     }
 
@@ -3759,11 +3804,12 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
     /// prohibition it is meant to exercise around.
     private var releasePolicy: StorageTransferReleasePolicy {
         switch scenario {
-        case .otherDevices, .previewFailed:
+        case .otherDevices, .previewFailed, .lineageUnavailableEnabled:
             .isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)
         case .remoteResumeOpen:
             .isolatedTestingPolicy(allowsRemoteResumeBeforeReplacing: true)
-        case .choice, .blocked, .inProgress, .remoteResumeClosed:
+        case .choice, .blocked, .inProgress, .remoteResumeClosed, .lineageUnavailable,
+             .environmentMismatch, .localLedgerMissingExplain:
             .standard
         }
     }
@@ -3782,7 +3828,11 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
             previewRetries == 0 ? nil
                 : Self.preview(subjects: 9, sessions: 312, stones: 28,
                                latest: Self.date(2026, 9, 18), otherDeviceIDs: 1)
-        case .blocked, .inProgress, .remoteResumeClosed, .remoteResumeOpen:
+        case .blocked, .inProgress, .remoteResumeClosed, .remoteResumeOpen,
+             .lineageUnavailable, .lineageUnavailableEnabled, .environmentMismatch,
+             .localLedgerMissingExplain:
+            // There is nothing to enumerate on these screens, and none of them
+            // carries a control that a pre-flight could gate.
             nil
         }
     }
@@ -3792,7 +3842,9 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
         case .choice, .otherDevices, .previewFailed:
             Self.preview(subjects: 12, sessions: 480, stones: 36,
                          latest: Self.date(2026, 9, 20), otherDeviceIDs: 0)
-        case .blocked, .inProgress, .remoteResumeClosed, .remoteResumeOpen:
+        case .blocked, .inProgress, .remoteResumeClosed, .remoteResumeOpen,
+             .lineageUnavailable, .lineageUnavailableEnabled, .environmentMismatch,
+             .localLedgerMissingExplain:
             nil
         }
     }

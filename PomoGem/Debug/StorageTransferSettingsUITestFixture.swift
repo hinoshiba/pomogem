@@ -26,6 +26,16 @@ enum StorageTransferSettingsUITestFixture {
         /// `.remoteRecovery`, whose 「復旧を続ける」 door is gated by the resume
         /// bit — not by the legacy `allowsCloudReplacement`.
         case remoteResumeClosed, remoteResumeOpen
+        /// P0-2. The screen the reported iPhone actually needs: the server has
+        /// no transfer ledger, so the two honest choices are starting a lineage
+        /// from this device or staying offline. `lineageUnavailable` is the
+        /// shipping build (the first door disabled with its reason);
+        /// `lineageUnavailableEnabled` raises only
+        /// `allowsDatasetOverwriteFromDevice` so the consent flow is reachable.
+        case lineageUnavailable, lineageUnavailableEnabled
+        /// The two explanation-only screens. Neither carries any destructive
+        /// control, in any policy.
+        case environmentMismatch, localLedgerMissingExplain
         /// PLAN Step 9 / §6.5. The non-blocking banner a committed device ->
         /// iCloud replacement raises when the one post-commit comparison finds
         /// user records the committed payload did not hold.
@@ -40,6 +50,10 @@ enum StorageTransferSettingsUITestFixture {
             case .overwriteInProgress: .inProgress
             case .remoteResumeClosed: .remoteResumeClosed
             case .remoteResumeOpen: .remoteResumeOpen
+            case .lineageUnavailable: .lineageUnavailable
+            case .lineageUnavailableEnabled: .lineageUnavailableEnabled
+            case .environmentMismatch: .environmentMismatch
+            case .localLedgerMissingExplain: .localLedgerMissingExplain
             default: nil
             }
         }

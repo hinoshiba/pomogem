@@ -413,6 +413,167 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         assertOverwriteFixture(refresh: 0, overwrite: 0, export: 0)
     }
 
+    // MARK: - 5. P0-2 — 「iCloudの管理情報が見つかりません」
+
+    /// The state the reported iPhone is actually in. The screen must offer
+    /// exactly two choices, describe both, and start neither by being read.
+    func testTheLineageScreenOffersBothChoicesAndStartsNothing() {
+        launch("lineageUnavailable")
+        XCTAssertTrue(app.staticTexts["iCloudの管理情報が見つかりません"].waitForExistence(timeout: 6))
+
+        let startExplanation = app.staticTexts["storage-lineage-start-explanation"]
+        XCTAssertTrue(reveal(startExplanation))
+        XCTAssertTrue(startExplanation.label.contains("このiPhoneの記録は削除しません"))
+
+        let start = app.buttons["storage-lineage-start"]
+        XCTAssertTrue(reveal(start, upwards: false))
+        XCTAssertFalse(start.isEnabled, "The shipping build keeps the start-from-device door closed")
+
+        let offlineExplanation = app.staticTexts["storage-lineage-offline-explanation"]
+        XCTAssertTrue(reveal(offlineExplanation, upwards: false))
+        XCTAssertTrue(offlineExplanation.label.contains("iCloudへ送信せず"))
+        XCTAssertTrue(reveal(app.buttons["cloud-offline-continue"], upwards: false))
+
+        // The two doors of the OTHER screen must not be on this one: there is
+        // no lineage to refresh from and none to overwrite.
+        XCTAssertFalse(app.buttons["storage-refresh-confirm"].exists)
+        XCTAssertFalse(app.buttons["storage-overwrite-confirm"].exists)
+        attach("Lineage unavailable — two choices, neither started")
+        assertNoOperation()
+        assertLineageFixture(lineage: 0, offline: 0)
+    }
+
+    /// The disabled door still says WHY, so the screen is an explanation
+    /// rather than a greyed-out control with no account of itself.
+    func testTheDisabledLineageDoorExplainsWhy() {
+        launch("lineageUnavailable")
+        let reason = app.staticTexts["storage-lineage-start-unavailable"]
+        XCTAssertTrue(reveal(reason, upwards: false))
+        XCTAssertTrue(reason.label.contains("いまは利用できません"))
+        XCTAssertFalse(app.buttons["storage-lineage-start"].isEnabled)
+        // Tapping a disabled door opens nothing.
+        app.buttons["storage-lineage-start"]
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertFalse(app.navigationBars["最後の確認"].exists)
+        assertLineageFixture(lineage: 0, offline: 0)
+    }
+
+    /// The published door. Nothing destructive may fire without the sheet's
+    /// own acknowledgement, and 「戻る」 must discard it.
+    func testTheLineageStartRequiresItsOwnAcknowledgement() {
+        launch("lineageUnavailableEnabled")
+        let start = app.buttons["storage-lineage-start"]
+        XCTAssertTrue(reveal(start, upwards: false))
+        XCTAssertTrue(start.isEnabled, "The premise of this test: this door CAN open")
+        start.tap()
+        XCTAssertTrue(app.navigationBars["最後の確認"].waitForExistence(timeout: 4))
+
+        let warning = app.staticTexts["storage-lineage-warning"]
+        XCTAssertTrue(reveal(warning))
+        XCTAssertTrue(warning.label.contains("新しいiCloudのデータ"))
+        XCTAssertTrue(reveal(app.staticTexts["storage-lineage-other-builds"]))
+        let toggle = app.switches["storage-lineage-confirm-data-loss"]
+        XCTAssertTrue(reveal(toggle, upwards: false))
+        XCTAssertEqual(toggle.value as? String, "0")
+        let confirm = app.buttons["storage-lineage-sheet-confirm"]
+        XCTAssertTrue(reveal(confirm, upwards: false))
+        XCTAssertFalse(confirm.isEnabled, "Opening the sheet is not consent")
+
+        acknowledge("storage-lineage-confirm-data-loss")
+        XCTAssertTrue(reveal(confirm, upwards: false))
+        XCTAssertTrue(confirm.isEnabled)
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.buttons["storage-lineage-start"].waitForExistence(timeout: 4))
+        assertLineageFixture(lineage: 0, offline: 0)
+
+        // Re-opened, the acknowledgement is unchecked again; only the second
+        // one, given now, starts the request.
+        app.buttons["storage-lineage-start"].tap()
+        XCTAssertTrue(app.navigationBars["最後の確認"].waitForExistence(timeout: 4))
+        let reopened = app.switches["storage-lineage-confirm-data-loss"]
+        XCTAssertTrue(reveal(reopened, upwards: false))
+        XCTAssertEqual(reopened.value as? String, "0",
+                       "戻る discards the acknowledgement; it is never remembered")
+        acknowledge("storage-lineage-confirm-data-loss")
+        let confirmAgain = app.buttons["storage-lineage-sheet-confirm"]
+        XCTAssertTrue(reveal(confirmAgain, upwards: false))
+        confirmAgain.tap()
+        attach("Lineage start — acknowledged once, requested once")
+        assertLineageFixture(lineage: 1, offline: 0)
+        assertNoOperation()
+        assertOverwriteFixture(refresh: 0, overwrite: 0, export: 0)
+    }
+
+    /// When the offline route is not eligible the screen says so instead of
+    /// showing a control that would do nothing.
+    func testAnIneligibleOfflineRouteIsExplainedRatherThanOffered() {
+        launch("lineageUnavailableEnabled")
+        let explanation = app.staticTexts["storage-lineage-offline-explanation"]
+        XCTAssertTrue(reveal(explanation, upwards: false))
+        XCTAssertTrue(explanation.label.contains("確認済みデータ"))
+        XCTAssertFalse(app.buttons["cloud-offline-continue"].exists)
+        assertLineageFixture(lineage: 0, offline: 0)
+    }
+
+    /// The two explanation-only screens carry no destructive control at all,
+    /// in any policy: no start, no refresh, no overwrite, no sheet.
+    func testTheExplanationScreensOfferNothingDestructive() {
+        for scenario in ["environmentMismatch", "localLedgerMissingExplain"] {
+            launch(scenario)
+            let explanation = app.staticTexts["storage-dataset-explanation"]
+            XCTAssertTrue(reveal(explanation), scenario)
+            XCTAssertTrue(explanation.label.contains("削除していません"), scenario)
+            for identifier in ["storage-lineage-start", "storage-refresh-confirm",
+                               "storage-overwrite-confirm", "storage-transfer-recover"] {
+                XCTAssertFalse(app.buttons[identifier].exists, "\(scenario): \(identifier)")
+            }
+            XCTAssertTrue(reveal(app.buttons["もう一度試す"], upwards: false), scenario)
+            attach("Explanation only — \(scenario)")
+            assertNoOperation()
+            assertLineageFixture(lineage: 0, offline: 0)
+        }
+        // And the offline route appears only where it is eligible.
+        launch("environmentMismatch")
+        XCTAssertTrue(reveal(app.buttons["cloud-offline-continue"], upwards: false))
+        launch("localLedgerMissingExplain")
+        XCTAssertTrue(reveal(app.staticTexts["storage-dataset-explanation"]))
+        XCTAssertFalse(app.buttons["cloud-offline-continue"].exists)
+    }
+
+    /// AX5 on the screen that carries the only action, including its sheet.
+    func testAX5LineageScreenKeepsBothChoicesAndTheConfirmationReachable() throws {
+        launch("lineageUnavailableEnabled", accessibility5: true)
+        let startExplanation = app.staticTexts["storage-lineage-start-explanation"]
+        XCTAssertTrue(reveal(startExplanation))
+        XCTAssertGreaterThan(startExplanation.frame.width,
+            app.windows.firstMatch.frame.width * 0.65,
+            "The explanation must keep a readable line width instead of collapsing")
+        let start = app.buttons["storage-lineage-start"]
+        XCTAssertTrue(reveal(start, upwards: false))
+        assertTouchTarget(start)
+        XCTAssertTrue(reveal(app.staticTexts["storage-lineage-offline-explanation"], upwards: false))
+        attach("AX5 lineage unavailable — both choices reachable")
+        try auditDescriptionsAndTraits()
+
+        XCTAssertTrue(reveal(start, upwards: false))
+        start.tap()
+        XCTAssertTrue(app.navigationBars["最後の確認"].waitForExistence(timeout: 6))
+        let toggle = app.switches["storage-lineage-confirm-data-loss"]
+        XCTAssertTrue(reveal(toggle, upwards: false))
+        assertTouchTarget(toggle)
+        XCTAssertGreaterThan(toggle.frame.height, 100,
+            "The confirmation must actually inherit AX5, not silently reset to normal text")
+        acknowledge("storage-lineage-confirm-data-loss")
+        let confirm = app.buttons["storage-lineage-sheet-confirm"]
+        XCTAssertTrue(reveal(confirm, upwards: false))
+        assertTouchTarget(confirm)
+        attach("AX5 lineage 「最後の確認」")
+        try auditDescriptionsAndTraits()
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.buttons["storage-lineage-start"].waitForExistence(timeout: 6))
+        assertLineageFixture(lineage: 0, offline: 0)
+    }
+
     // MARK: - Helpers
 
     private func launch(_ scenario: String, accessibility5: Bool = false) {
@@ -457,6 +618,16 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         let state = app.staticTexts["storage-overwrite.late-arrival-fixture-state"]
         XCTAssertTrue(reveal(state, upwards: false))
         let expected = "settingsCalls=\(settingsCalls);shown=\(shown)"
+        let matched = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", expected), object: state)
+        XCTAssertEqual(XCTWaiter.wait(for: [matched], timeout: 5), .completed,
+            "Expected \(expected), saw \(state.label)")
+    }
+
+    private func assertLineageFixture(lineage: Int, offline: Int) {
+        let state = app.staticTexts["storage-lineage.fixture-state"]
+        XCTAssertTrue(reveal(state, upwards: false))
+        let expected = "lineage=\(lineage);offline=\(offline)"
         let matched = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "label == %@", expected), object: state)
         XCTAssertEqual(XCTWaiter.wait(for: [matched], timeout: 5), .completed,
