@@ -121,43 +121,33 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
     /// reported as a failed Apple Account verification, because the blocked
     /// screen is reached before an offline candidate has been evaluated and
     /// therefore carries no recovery action at all.
+    ///
+    /// Driven through `DeferredLaunchHostModel`, which owns the flags the host
+    /// owns: reverting the assignment in the host's `catch is CancellationError`
+    /// arm, or removing the activation receiver, now fails this test instead of
+    /// leaving the suite green.
     func testHalfActivatedLaunchFrameDefersInsteadOfBlockingOnTheAccount() {
-        var isPreparing = true
-        var isWaitingForActivation = false
-        var mountedSessions = 0
+        let host = DeferredLaunchHostModel()
+        host.phase = .active              // SwiftUI already reports .active
+        host.applicationState = .inactive // UIKit has not posted didBecomeActive
 
-        // The scene is active but UIKit has not posted didBecomeActive yet.
-        XCTAssertThrowsError(try PersistenceLaunchScenePolicy.requireActiveAttempt(
-            generationMatches: true, phase: .active, applicationState: .inactive)) { error in
-            XCTAssertTrue(error is CancellationError,
-                "A pending UIKit activation must not be reported as an unavailable identity")
-            // The CancellationError catch records the wait, then the attempt's
-            // defer releases its own preparation flag.
-            isWaitingForActivation = true
-            isPreparing = false
-        }
-        XCTAssertTrue(isWaitingForActivation)
-        XCTAssertFalse(isPreparing)
+        host.startLaunchAttempt()
+        XCTAssertEqual(host.mountedSessions, 0,
+            "A pending UIKit activation must not be reported as an unavailable identity")
+        XCTAssertEqual(host.screen, .preparing)
+        XCTAssertTrue(host.isWaitingForActivation, "The catch must record the wait it depends on")
+        XCTAssertFalse(host.isPreparing, "The attempt's defer must release its own flag")
 
         // No further scene-phase change can arrive: the phase is already
         // active. Only the UIKit notification can restart this launch.
-        XCTAssertTrue(PersistenceLaunchScenePolicy.shouldResumeDeferredPreparation(
-            phase: .active, isWaitingForActivation: isWaitingForActivation,
-            hasSession: mountedSessions > 0, isPreparing: isPreparing))
-        isWaitingForActivation = false
-        XCTAssertEqual(PersistenceLaunchScenePolicy.action(
-            phase: .active, hasSession: false, isPreparing: isPreparing,
-            isQuiescingAccountChange: false, usesCloudAccountBoundary: true),
-            .preparePersistence)
-        XCTAssertNoThrow(try PersistenceLaunchScenePolicy.requireActiveAttempt(
-            generationMatches: true, phase: .active, applicationState: .active))
-        mountedSessions += 1
+        host.deliverActivationNotification()
+        XCTAssertEqual(host.mountedSessions, 1)
+        XCTAssertEqual(host.screen, .home)
+        XCTAssertFalse(host.isWaitingForActivation)
 
         // A duplicate activation notification must not start a second launch.
-        XCTAssertFalse(PersistenceLaunchScenePolicy.shouldResumeDeferredPreparation(
-            phase: .active, isWaitingForActivation: isWaitingForActivation,
-            hasSession: mountedSessions > 0, isPreparing: false))
-        XCTAssertEqual(mountedSessions, 1)
+        host.deliverActivationNotification()
+        XCTAssertEqual(host.mountedSessions, 1)
     }
 
     /// The catch used to derive "I am waiting" purely from the lifecycle state
