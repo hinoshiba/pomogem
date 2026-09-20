@@ -1981,7 +1981,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         AccountScopedLocalState.deactivate()
         // The user is told to quit and reopen the app; no session mounts again
         // in this process, so nothing else would retire the Screen Time lease.
-        ScreenTimeController.shared.suspendForContextRetirement()
+        ScreenTimeOwnerBoundaryPolicy.retire(for: .storageTransferRelaunch)
         NotificationManager.shared.cancelFocusReturnReminder()
         beginContainerRetirement()
         isQuiescingAccountChange = false
@@ -2193,7 +2193,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         // afterwards, so retire the lease here: otherwise the ledger keeps
         // contextIsActive = true and the extension keeps recording receipts
         // and black gems under an owner this app has already deactivated.
-        ScreenTimeController.shared.suspendForContextRetirement()
+        ScreenTimeOwnerBoundaryPolicy.retire(for: .accountIdentityChange)
         beginContainerRetirement()
         launchState = .preparing("Apple Accountの変更を確認しています")
         isQuiescingAccountChange = true

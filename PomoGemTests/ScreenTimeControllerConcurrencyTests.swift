@@ -736,6 +736,63 @@ final class ScreenTimeIntegrationLifecycleTests: XCTestCase {
         XCTAssertTrue(resumed.contextIsActive)
         XCTAssertEqual(driver.stopCount, 0)
     }
+
+    /// 147da0d compensated for the removed `.onDisappear` retirement with two
+    /// explicit call sites in PomoGemApp (accountIdentityDidChange and
+    /// requireStorageTransferRelaunch). Nothing pinned the rule those sites
+    /// encode, so the F5 removal could fail closed→open without any test
+    /// noticing. Both now go through ScreenTimeOwnerBoundaryPolicy, and this
+    /// drives it against a mounted host and a real temporary ledger — both
+    /// directions, since the harmful mistake is retiring on an ordinary
+    /// backgrounding just as much as not retiring on an owner boundary.
+    func testOnlyAnOwnerBoundaryRetiresTheLeaseOfAMountedHost() async throws {
+        let owner = AccountScopedLocalState.defaultsKey(base: "screen-time-owner")
+        let epoch = UUID()
+        let store = try makeStore(owner: owner, epoch: epoch)
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(
+            store: store, currentContextKey: { owner }, monitoring: driver, authorization: { .approved }
+        )
+        let runID = try XCTUnwrap(store.snapshot().runs.first?.id)
+        let probe = MountProbe()
+        let scene = try XCTUnwrap(
+            UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        )
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = UIHostingController(rootView: Host(
+            probe: probe, controller: controller, contextKey: owner, dataEpochID: epoch
+        ))
+        window.isHidden = false
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        try await waitUntil("the modifier binds the context") {
+            controller.isBound(contextKey: owner, dataEpochID: epoch)
+        }
+        try await controller.waitForPendingOperations()
+
+        for transition in ScreenTimeOwnerBoundaryPolicy.HostTransition.allCases
+        where !ScreenTimeOwnerBoundaryPolicy.retiresLease(for: transition) {
+            ScreenTimeOwnerBoundaryPolicy.retire(for: transition, on: controller)
+            try await controller.waitForPendingOperations()
+            XCTAssertTrue(try store.snapshot().contextIsActive,
+                          "\(transition) leaves the OS collecting; the lease must stay armed")
+            XCTAssertTrue(try store.snapshot().runs.contains { $0.id == runID && $0.active })
+            XCTAssertEqual(driver.stopCount, 0)
+            XCTAssertTrue(controller.isBound(contextKey: owner, dataEpochID: epoch))
+        }
+
+        ScreenTimeOwnerBoundaryPolicy.retire(for: .accountIdentityChange, on: controller)
+        try await controller.waitForPendingOperations()
+        let state = try store.snapshot()
+        XCTAssertFalse(state.contextIsActive,
+                       "A changed owner must fence the ledger before RootView disappears")
+        XCTAssertFalse(state.runs.contains(where: \.active))
+        XCTAssertFalse(controller.isBound(contextKey: owner, dataEpochID: epoch))
+        XCTAssertTrue(ScreenTimeOwnerBoundaryPolicy.retiresLease(for: .storageTransferRelaunch),
+                      "The other call site relies on the same rule")
+    }
 }
 
 /// The settings screen seeds its draft from the controller. While the context

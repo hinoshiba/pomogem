@@ -513,3 +513,46 @@ final class ScreenTimeController: ObservableObject {
         isMonitoring = false
     }
 }
+
+/// Where the host must retire the Screen Time lease itself.
+///
+/// The ledger lives in the App Group, outside the persistence container, so it
+/// does not follow an account or storage boundary. F5 removed the
+/// `.onDisappear` retirement from the root modifier — collection belongs to the
+/// OS extension and has to continue while the app is not running — which leaves
+/// exactly two transitions where RootView goes away and nothing mounts
+/// afterwards to notice that the owner has changed. Declaring both here keeps
+/// the rule and its call sites from drifting apart, and states the other
+/// direction too: an ordinary backgrounding must NOT retire.
+enum ScreenTimeOwnerBoundaryPolicy {
+    enum HostTransition: CaseIterable {
+        /// CKAccountChanged: RootView is dropped in the same turn.
+        case accountIdentityChange
+        /// An accepted storage transfer: the user is told to quit and reopen,
+        /// so no session mounts again in this process.
+        case storageTransferRelaunch
+        /// PomoGemApp drops the cloud session on `.background`, which removes
+        /// RootView for an owner that has not changed.
+        case backgroundedSession
+        /// The same owner remounting on the next foreground.
+        case sessionRemount
+    }
+
+    static func retiresLease(for transition: HostTransition) -> Bool {
+        switch transition {
+        case .accountIdentityChange, .storageTransferRelaunch:
+            return true
+        case .backgroundedSession, .sessionRemount:
+            return false
+        }
+    }
+
+    @MainActor
+    static func retire(
+        for transition: HostTransition,
+        on controller: ScreenTimeController = .shared
+    ) {
+        guard retiresLease(for: transition) else { return }
+        controller.suspendForContextRetirement()
+    }
+}
