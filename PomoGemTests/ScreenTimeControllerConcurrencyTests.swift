@@ -230,6 +230,33 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertFalse(driver.events.contains("stop"))
     }
 
+    /// PomoGemApp declares an owner boundary — an Apple Account change
+    /// (accountIdentityDidChange) or an accepted storage transfer
+    /// (requireStorageTransferRelaunch) — and drops RootView in the same turn,
+    /// with no new session mounting afterwards. The no-argument retirement is
+    /// what those two paths call; ordinary backgrounding must not use it.
+    func testOwnerBoundaryRetirementFencesTheLedgerAndStopsTheRegistrations() async throws {
+        let store = try makeStore()
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: driver, authorization: { .approved })
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        let runID = try XCTUnwrap(store.snapshot().runs.first?.id)
+
+        controller.suspendForContextRetirement()
+        try await controller.waitForPendingOperations()
+
+        let state = try store.snapshot()
+        XCTAssertFalse(state.contextIsActive, "The extension must stop recording for a retired owner")
+        XCTAssertFalse(state.runs.contains(where: \.active))
+        XCTAssertFalse(controller.isBoundToContext)
+        XCTAssertTrue(driver.events.contains("stop"),
+                      "The activities of a retired owner must not stay registered")
+        try store.record(runID: runID, threshold: 1, now: start.addingTimeInterval(601))
+        XCTAssertTrue(try store.pendingLearningReceipts().isEmpty)
+        XCTAssertEqual(try store.snapshot().negativeGemCount, 9)
+    }
+
     func testRetirementImmediatelyFencesReceiptsAndOldCompletionCannotPublishIntoNewOwner() async throws {
         let store = try makeStore()
         let driver = Driver(store: store)

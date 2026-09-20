@@ -1899,6 +1899,9 @@ private struct PomoGemPersistenceLaunchHost: View {
         cancellableLocalTransferID = nil
         retainsTransferCopyOnCancellation = false
         AccountScopedLocalState.deactivate()
+        // The user is told to quit and reopen the app; no session mounts again
+        // in this process, so nothing else would retire the Screen Time lease.
+        ScreenTimeController.shared.suspendForContextRetirement()
         NotificationManager.shared.cancelFocusReturnReminder()
         beginContainerRetirement()
         isQuiescingAccountChange = false
@@ -2104,6 +2107,13 @@ private struct PomoGemPersistenceLaunchHost: View {
         // Clearing the cross-process binding first makes widget/local state
         // fail closed while RootView disappears and its tasks are cancelled.
         AccountScopedLocalState.beginCloudBoundary()
+        // The Screen Time ledger lives outside the container, so it does not
+        // follow. RootView — and with it the modifier that would notice a
+        // changed owner — is removed in this same turn and nothing mounts
+        // afterwards, so retire the lease here: otherwise the ledger keeps
+        // contextIsActive = true and the extension keeps recording receipts
+        // and black gems under an owner this app has already deactivated.
+        ScreenTimeController.shared.suspendForContextRetirement()
         beginContainerRetirement()
         launchState = .preparing("Apple Accountの変更を確認しています")
         isQuiescingAccountChange = true
