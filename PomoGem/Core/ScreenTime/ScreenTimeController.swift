@@ -276,9 +276,12 @@ final class ScreenTimeController: ObservableObject {
     ///
     /// `.denied` is the user answering 「許可しない」 and is settled at once.
     /// `.notDetermined` needs the settling window AND a ledger that could not
-    /// exist without an approval: `save()` refuses to write
-    /// `configuration.enabled` while the status is not approved, so an enabled
-    /// configuration is the ledger's own record that access had been granted.
+    /// exist without an approval (`ScreenTimeState.recordsAnApproval`): an
+    /// enabled configuration, or a saved application token the picker could
+    /// only have produced under an approval. Recording being switched off does
+    /// not protect the stored tokens — the OS voids them either way, and a
+    /// ledger left holding them would arm a re-registration that matches no
+    /// application the next time the user turns recording back on.
     ///
     /// The window is only meaningful while the refresh loop is actually
     /// observing. Call `beginAuthorizationObservation()` whenever that loop
@@ -291,7 +294,7 @@ final class ScreenTimeController: ObservableObject {
             return
         }
         guard let state = try? store.snapshot(), lease.binding.matches(state),
-              state.contextIsActive, state.configuration.enabled else {
+              state.contextIsActive, state.recordsAnApproval else {
             resetAuthorizationSettling()
             return
         }

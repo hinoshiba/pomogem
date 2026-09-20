@@ -141,6 +141,18 @@ struct ScreenTimeState: Codable {
     var learningAllowedBySubscription = true
     var monitoringError: String?
 
+    /// Evidence in the ledger that a Family Controls approval once existed.
+    /// `ScreenTimeController.save` refuses to write `enabled` while the status
+    /// is not approved, and FamilyActivityPicker cannot hand out an
+    /// application token without one — so either is proof enough to treat a
+    /// settled not-approved status as a revocation. Recording being switched
+    /// off does not make the stored opaque tokens any less voided by the OS.
+    var recordsAnApproval: Bool {
+        configuration.enabled
+            || !configuration.learningSelection.applicationTokens.isEmpty
+            || !configuration.distractionSelection.applicationTokens.isEmpty
+    }
+
     mutating func record(runID: UUID, threshold: Int, now: Date) {
         guard (1...ScreenTimePolicy.maximumDailyThreshold).contains(threshold),
               let index = runs.firstIndex(where: { $0.id == runID && $0.active }),

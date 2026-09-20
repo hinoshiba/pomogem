@@ -304,6 +304,40 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertTrue(driver.events.contains("stop"))
     }
 
+    /// Docs/ScreenTimeGems.md promises that a confirmed revocation clears the
+    /// stale selections on BOTH lanes. The check used to require
+    /// `configuration.enabled`, so a user who had merely switched recording
+    /// off kept opaque tokens the OS had already voided: re-allowing access
+    /// and turning recording back on then registered events that could never
+    /// fire, and no gem would ever arrive again.
+    func testARevocationWhileRecordingIsOffStillClearsTheVoidedSelections() async throws {
+        let store = try makeStore()
+        // Synthetic opaque values stay in this test's temporary ledger; no OS
+        // app selection is fabricated and nothing reaches Family Controls.
+        let token = try JSONDecoder().decode(
+            ApplicationToken.self, from: JSONEncoder().encode(["data": Data([7])]))
+        try store.update { state in
+            state.configuration.enabled = false
+            state.configuration.learningSelection.applicationTokens = [token]
+            for index in state.runs.indices { state.runs[index].active = false }
+        }
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: driver, authorization: { .notDetermined },
+                                              authorizationSettlingWindow: 0,
+                                              authorizationSettlingObservations: 1)
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+
+        await controller.invalidateAuthorizationIfRevoked()
+        await controller.invalidateAuthorizationIfRevoked()
+        try await controller.waitForPendingOperations()
+        let state = try store.snapshot()
+        XCTAssertTrue(state.configuration.learningSelection.applicationTokens.isEmpty,
+                      "A revocation voids the tokens whether or not recording was on")
+        XCTAssertTrue(state.monitoringError?.contains("選び直して") == true)
+        XCTAssertTrue(driver.events.contains("stop"))
+    }
+
     /// A user who never granted access has the same .notDetermined status. The
     /// ledger has nothing an approval could have written, so nothing is wiped
     /// and no 解除 message is shown.
