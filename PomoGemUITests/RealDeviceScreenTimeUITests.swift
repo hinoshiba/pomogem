@@ -1050,8 +1050,19 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             return reached ? "home" : "storage-blocked-after-retry"
         case .offlineContinue:
             let offline = app.buttons["cloud-offline-continue"]
-            guard offline.exists && offline.isHittable else {
-                note("STORAGE: cloud-offline-continue is not present on this screen.")
+            // 「端末のデータでオフライン利用」 is gated on `canStartOfflineContinuation`,
+            // which is false while the launch task still holds `isPreparing` and
+            // while a previous container has not been released. Both clear
+            // asynchronously *after* `launchState = .blocked(...)` renders, so a
+            // single `exists` sample right after the heading appears can miss a
+            // button that is about to be offered. Poll instead, and keep the
+            // settled hierarchy either way. Nothing else on this screen is ever
+            // tapped: no 「もう一度試す」, no refresh, no local-only choice.
+            let appeared = offline.waitForExistence(timeout: 60)
+            capture("storage-blocked-settled")
+            dumpHierarchy(app, name: "storage-blocked-settled")
+            guard appeared, offline.isHittable else {
+                note("STORAGE: cloud-offline-continue did not appear within 60 s (exists=\(offline.exists)). The only non-destructive action is unavailable; no other button was tapped.")
                 return "storage-blocked"
             }
             offline.tap()
