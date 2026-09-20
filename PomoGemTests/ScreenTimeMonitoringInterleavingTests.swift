@@ -187,7 +187,13 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
                     return XCTFail("Unexpected error: \(error)")
                 }
             }
-            XCTAssertLessThan(Date().timeIntervalSince(began), 10)
+            let elapsed = Date().timeIntervalSince(began)
+            // The bound is what F3(a) exists for: a DeviceActivityMonitor
+            // callback that blocks is killed, and the extension's own bound is
+            // 5 s. A ceiling loose enough to pass a hard-coded 8 s deadline
+            // would not pin the property at all.
+            XCTAssertGreaterThanOrEqual(elapsed, 0.3, "A timeout of 0 must not pass either")
+            XCTAssertLessThan(elapsed, 2)
             XCTAssertEqual(center.startedNames, [])
             XCTAssertEqual(center.stopCalls, [])
             // The skipped pass leaves the ledger for the next callback.
@@ -381,6 +387,31 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         }
     }
 
+    /// stop() must never call center.stopMonitoring([]): DeviceActivityCenter
+    /// reads an empty array as "stop EVERY activity", including this app's
+    /// other lanes, the daily scheduler and other clients'. When an
+    /// invalidation arrives while none of ours is registered — an earlier
+    /// registration failed, or the extension is called after a teardown —
+    /// there is nothing to stop, so the call must not be made at all.
+    func testInvalidationWithNoRegistrationOfOursStopsNothing() throws {
+        try withFixture(installed: .none, foreignActivities: ["another.client.daily"]) { store, center, _, _ in
+            let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                               authorizationStatus: { .denied })
+
+            try monitor.invalidateAuthorizationIfNeeded()
+
+            XCTAssertEqual(center.stopCalls, [],
+                           "An empty stopMonitoring would stop every activity on the device")
+            XCTAssertEqual(center.installedNames, ["another.client.daily"])
+            // The guard is about the framework call: the ledger is still
+            // invalidated, so the user is asked to grant access and reselect.
+            let result = try store.snapshot()
+            XCTAssertFalse(result.configuration.enabled)
+            XCTAssertFalse(result.runs.contains(where: \.active))
+            XCTAssertTrue(result.monitoringError?.contains("選び直して") == true)
+        }
+    }
+
     /// Which of our activities the OS already holds when the pass starts.
     fileprivate enum FixtureInstallation {
         /// Today's run is registered, but the daily scheduler is not.
@@ -409,6 +440,9 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
     private func withFixture(
         installed: FixtureInstallation = .runBatches,
         learningApplications: Int = 0,
+        /// Activities another DeviceActivity client holds. stopMonitoring([])
+        /// would take these down too, so they make that mistake observable.
+        foreignActivities: [String] = [],
         _ body: (ScreenTimeStore, FakeActivityCenter, ScreenTimeState, URL) throws -> Void
     ) throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -444,7 +478,9 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         if installed == .complete {
             names.append(ScreenTimeMonitoring.schedulerName(epoch: initial.epoch))
         }
-        let center = FakeActivityCenter(activities: names.map(DeviceActivityName.init(rawValue:)))
+        let center = FakeActivityCenter(
+            activities: (names + foreignActivities).map(DeviceActivityName.init(rawValue:))
+        )
         try body(store, center, initial, directory.appendingPathComponent("ScreenTime/ledger.json"))
     }
 }

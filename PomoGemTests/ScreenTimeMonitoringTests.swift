@@ -242,7 +242,13 @@ final class ScreenTimeMonitoringTests: XCTestCase {
                 return XCTFail("Unexpected error: \(error)")
             }
         }
-        XCTAssertLessThan(Date().timeIntervalSince(began), 10)
+        let elapsed = Date().timeIntervalSince(began)
+        // Pin the elapsed time against the bound that was asked for, not just
+        // against "not infinite": the extension's real bound is 5 s, and an
+        // implementation that ignored `timeout` for a hard-coded 8 s deadline
+        // would be killed on device while a 10 s ceiling stayed green.
+        XCTAssertGreaterThanOrEqual(elapsed, 0.3, "A timeout of 0 must not pass either")
+        XCTAssertLessThan(elapsed, 2)
 
         release.signal()
         releasedOnce = true
