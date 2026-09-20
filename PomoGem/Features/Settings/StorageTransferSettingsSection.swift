@@ -194,6 +194,8 @@ private struct StorageTransferConfirmationView: View {
             "このiPhoneだけにあるPomoGemのデータを削除します。iCloudのデータは残ります。削除後に元の端末データへ戻すことはできません。"
         case .enableCloudReplacingCloud:
             "iCloudにあるPomoGemのデータを削除します。このiPhoneのデータを残して同期を有効にします。削除するiCloudデータを元に戻すことはできません。"
+        case .overwriteCloudFromDevice:
+            "現在iCloudにあるPomoGemのテーマ・記録・設定をすべて削除し、この端末のデータに置き換えます。削除するiCloudのデータを元に戻すことはできません。"
         }
     }
 }

@@ -148,7 +148,10 @@ struct StorageTransferRuntimeCheckpoint: Codable, Equatable {
                 guard importedPayloadDigest == journal.sourceDigest else { throw StorageTransferError.invalidJournal }
             case .enableCloudKeepingCloud:
                 guard verifiedCloudProcessID != nil else { throw StorageTransferError.invalidJournal }
-            case .enableCloudReplacingCloud:
+            // Both replacement kinds destroy the remote dataset, so both need
+            // the acknowledged local import AND an independent process's proof
+            // that the new namespace was mirrored back out of CloudKit.
+            case .enableCloudReplacingCloud, .overwriteCloudFromDevice:
                 guard importedPayloadDigest == journal.sourceDigest,
                       verifiedCloudProcessID != nil else { throw StorageTransferError.invalidJournal }
             }
