@@ -14,7 +14,10 @@ import UIKit
 /// The budget covers the wait for activation only. Storage-transfer recovery
 /// keeps running without a launch deadline: it is progressing work with its
 /// own relaunch contract, and interrupting it would change transfer semantics.
-/// Expiry is a lifecycle observation, never an account or storage result.
+/// Expiry is a lifecycle observation, never an account or storage result — but
+/// it can interrupt a launch that already committed a storage mode or opened a
+/// mirrored store, so the screen only promises what that launch can still
+/// prove (see `LaunchProgress`).
 enum LaunchActivationWatchdogPolicy {
     enum WaitOutcome: Equatable, Sendable {
         /// On screen without activation. Bound the wait; the user is looking
@@ -26,12 +29,49 @@ enum LaunchActivationWatchdogPolicy {
         case unbounded
     }
 
-    /// Claims no account result and reports no change to the stored records or
-    /// the selected storage mode, because expiry proves neither.
-    static let blockedMessage = """
-        起動を続けられませんでした。iPhoneの画面にiOSの確認（Apple Accountのサインインなど）が出ている場合は、\
-        先にそれを完了するか閉じてから「もう一度試す」を押してください。記録や保存先の設定は変更していません。
-        """
+    /// How far the interrupted launch had already got. The watchdog is armed
+    /// from the generic cancellation catch, which is the landing point for
+    /// every checkpoint — including the ones *after*
+    /// `PersistenceDeploymentState.select` has recorded a storage mode and
+    /// after a CloudKit mirror has been opened. The reassurance that nothing
+    /// changed is true only for the wait the watchdog was designed for, the
+    /// deferral before any of that work runs.
+    enum LaunchProgress: Equatable, Sendable {
+        /// No storage mode was committed and no mirrored store was opened in
+        /// this process, so expiry leaves the device exactly as it was.
+        case nothingCommitted
+        /// This process already recorded a storage mode or opened a mirrored
+        /// store. Expiry cannot promise those away; it only proves that the
+        /// launch stopped, and a relaunch is the dependable next step.
+        case storageWorkCommitted
+    }
+
+    static func launchProgress(
+        didCommitStorageSelection: Bool,
+        cloudMirrorWasOpened: Bool
+    ) -> LaunchProgress {
+        didCommitStorageSelection || cloudMirrorWasOpened
+            ? .storageWorkCommitted
+            : .nothingCommitted
+    }
+
+    /// Claims no account result. It reports no change to the stored records or
+    /// the selected storage mode only when this process committed neither.
+    static func blockedMessage(progress: LaunchProgress) -> String {
+        let interruption = """
+            起動を続けられませんでした。iPhoneの画面にiOSの確認（Apple Accountのサインインなど）が出ている場合は、\
+            先にそれを完了するか閉じてから「もう一度試す」を押してください。
+            """
+        switch progress {
+        case .nothingCommitted:
+            return interruption + "記録や保存先の設定は変更していません。"
+        case .storageWorkCommitted:
+            return interruption + """
+                記録は削除していません。ただしこの起動では保存先の準備が途中まで進んでいるため、\
+                アプリを終了して開き直すほうが確実です。
+                """
+        }
+    }
 
     static func waitOutcome(
         phase: ScenePhase,

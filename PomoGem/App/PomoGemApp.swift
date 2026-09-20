@@ -472,6 +472,9 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var isPreparing = false
     @State private var isWaitingForLaunchActivation = false
     @State private var requestedCloudSelection = false
+    // Sticky for the process: a later attempt cannot undo a storage mode an
+    // earlier one already recorded, so the watchdog screen must not promise it.
+    @State private var didCommitStorageSelection = false
     @State private var canChooseLocalOnly = false
     @State private var mustDestroyPersistentStores = false
     @State private var pendingDestructionNamespace: AccountDataNamespace?
@@ -977,6 +980,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             try PersistenceDeploymentState.select(.cloud(
                 binding: resolvedBoundary.binding
             ))
+            didCommitStorageSelection = true
             try requireCloudMountAuthorization(
                 expectedBinding: resolvedBoundary.binding,
                 verifiedBinding: resolvedBoundary.binding,
@@ -1860,9 +1864,10 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     /// Expiry is a lifecycle observation, not an account or storage result:
-    /// it selects no storage mode, opens nothing and revokes nothing. The
-    /// offline affordance still has to pass the ordinary eligibility gate,
-    /// and taking it revalidates every condition again.
+    /// it selects no storage mode, opens nothing and revokes nothing itself.
+    /// The launch it interrupts may already have done so, which is what the
+    /// message reports. The offline affordance still has to pass the ordinary
+    /// eligibility gate, and taking it revalidates every condition again.
     private func endLaunchActivationWait(attempt: Int) {
         guard launchActivationWatchdog.settleExpiry(
             generation: attempt,
@@ -1872,10 +1877,16 @@ private struct PomoGemPersistenceLaunchHost: View {
         if case let .selected(.cloud(binding)) = PersistenceDeploymentState.load() {
             canContinueOffline = offlineCopyIsEligible(binding: binding)
         }
-        Self.persistenceLogger.info(
-            "Launch activation wait expired attempt=\(attempt) offlineOffered=\(canContinueOffline)"
+        let progress = LaunchActivationWatchdogPolicy.launchProgress(
+            didCommitStorageSelection: didCommitStorageSelection,
+            cloudMirrorWasOpened: StorageTransferProcessState.cloudMirrorWasOpened
         )
-        launchState = .blocked(LaunchActivationWatchdogPolicy.blockedMessage)
+        Self.persistenceLogger.info(
+            "Launch activation wait expired attempt=\(attempt) offlineOffered=\(canContinueOffline) progress=\(String(describing: progress))"
+        )
+        launchState = .blocked(
+            LaunchActivationWatchdogPolicy.blockedMessage(progress: progress)
+        )
     }
 
     private func requireActiveLaunchAttempt(
@@ -2171,6 +2182,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             try PersistenceDeploymentState.select(
                 .localOnly(namespace: namespace)
             )
+            didCommitStorageSelection = true
             AccountScopedLocalState.activateLocalOnly(namespace: namespace)
             requestedCloudSelection = false
             canChooseLocalOnly = false

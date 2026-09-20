@@ -962,6 +962,49 @@ final class LaunchActivationWatchdogTests: XCTestCase {
 
     /// The arming, disarming and expiry order is product code, not test
     /// scaffolding: drive `LaunchActivationWatchdog` itself.
+    /// The watchdog is armed from the generic cancellation catch, which is
+    /// also where a launch lands after it has recorded a storage mode or
+    /// opened a CloudKit mirror. The screen must not promise those away.
+    func testTheRetryScreenOnlyPromisesWhatTheInterruptedLaunchCanProve() {
+        let unchanged = LaunchActivationWatchdogPolicy.blockedMessage(progress: .nothingCommitted)
+        XCTAssertTrue(unchanged.contains("記録や保存先の設定は変更していません"),
+            "A wait that ran before any storage work may still reassure the user")
+
+        for (didCommitStorageSelection, cloudMirrorWasOpened) in
+            [(true, false), (false, true), (true, true)] {
+            XCTAssertEqual(LaunchActivationWatchdogPolicy.launchProgress(
+                didCommitStorageSelection: didCommitStorageSelection,
+                cloudMirrorWasOpened: cloudMirrorWasOpened), .storageWorkCommitted)
+        }
+        XCTAssertEqual(LaunchActivationWatchdogPolicy.launchProgress(
+            didCommitStorageSelection: false, cloudMirrorWasOpened: false), .nothingCommitted)
+
+        let committed = LaunchActivationWatchdogPolicy.blockedMessage(progress: .storageWorkCommitted)
+        XCTAssertFalse(committed.contains("変更していません"),
+            "A launch that already recorded a storage mode or opened a mirror changed something")
+        XCTAssertTrue(committed.contains("記録は削除していません"))
+        XCTAssertTrue(committed.contains("開き直す"),
+            "An opened mirror already forces a relaunch before offline use")
+        // Both messages still name the cause and the remedy.
+        for message in [unchanged, committed] {
+            XCTAssertTrue(message.contains("起動を続けられませんでした"))
+            XCTAssertTrue(message.contains("Apple Accountのサインイン"))
+            XCTAssertTrue(message.contains("もう一度試す"))
+        }
+    }
+
+    /// Both messages reach the screen through the same expiry path.
+    func testCommittedStorageWorkChangesTheRetryScreenText() async {
+        let host = DeferredLaunchHostModel(phase: .active, applicationState: .inactive)
+        host.launchProgress = .storageWorkCommitted
+        host.startLaunchAttempt(timeout: 0.05)
+        await host.awaitRetryScreen()
+        XCTAssertEqual(host.screen, .blocked(
+            LaunchActivationWatchdogPolicy.blockedMessage(progress: .storageWorkCommitted)))
+        XCTAssertNotEqual(host.screen, .blocked(
+            LaunchActivationWatchdogPolicy.blockedMessage(progress: .nothingCommitted)))
+    }
+
     func testWatchdogArmsOnlyForAWaitNobodyElseOwnsAndKeepsOneBudget() {
         var expiries: [Int] = []
         let watchdog = LaunchActivationWatchdog()
@@ -1102,7 +1145,10 @@ private final class DeferredLaunchHostModel {
     private(set) var retryScreenPresentations = 0
     private var timeout: TimeInterval = 30
 
-    var expectedBlockedMessage: String { LaunchActivationWatchdogPolicy.blockedMessage }
+    var launchProgress = LaunchActivationWatchdogPolicy.LaunchProgress.nothingCommitted
+    var expectedBlockedMessage: String {
+        LaunchActivationWatchdogPolicy.blockedMessage(progress: launchProgress)
+    }
     var offersRetry: Bool { if case .blocked = screen { return true } else { return false } }
     var offersOfflineContinuation: Bool {
         offersRetry && canContinueOffline && !isPreparing && !hasSession
