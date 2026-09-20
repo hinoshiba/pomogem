@@ -96,6 +96,10 @@ struct StorageTransferRuntimeCheckpoint: Codable, Equatable {
         // Restoring a server payload must not grant authority over a previous
         // installation's source path. Runtime separately proves that this new
         // local-only namespace has no files before it may skip source retirement.
+        // Deliberately NOT relaxed for `.overwriteCloudFromDevice`: its second
+        // journal shape `(.localOnly, .cloud)` exists precisely so a reinstall
+        // keeps satisfying this rule. A cloud-source overwrite owns a real store
+        // and must retire it, so it can never claim a server origin.
         if recoveredFromServer {
             guard journal.choice.replacesCloud,
                   case .localOnly = journal.source else { throw StorageTransferError.invalidJournal }
