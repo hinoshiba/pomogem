@@ -108,7 +108,7 @@ final class StorageTransferRuntime {
         let support = try FileManager.default.url(for: .applicationSupportDirectory,
             in: .userDomainMask, appropriateFor: nil, create: true)
         return Self(store: try .live(), root: support.appendingPathComponent("StorageTransfer", isDirectory: true),
-                    releasePolicy: releasePolicy)
+                    releasePolicy: releasePolicy, cloudScope: .current())
     }
 
     func pendingLocalJournal() throws -> StorageTransferJournal? { try store.load() }
@@ -116,7 +116,7 @@ final class StorageTransferRuntime {
     /// A local receipt of a prior preflight; callers still need a fresh remote
     /// check before authorizing a CloudKit mirror.
     func localDatasetAdmission(binding: ActiveAccountLocalBinding) throws -> StorageTransferDatasetAdmission? {
-        let value = try admissionFile(binding).load()
+        let value = try loadAdmission(binding).value
         guard value == nil || value?.binding == binding else { throw StorageTransferError.staleTransaction }
         return value
     }
@@ -174,7 +174,7 @@ final class StorageTransferRuntime {
         try validateControlAccount(status, binding: binding)
         guard status?.blocksWriters != true else { throw StorageTransferRuntimeError.remoteRecoveryRequired }
         let file = try admissionFile(binding)
-        let found = try file.load()
+        let (found, isLegacy) = try loadAdmission(binding)
         switch StorageTransferAdmissionPolicy.decide(found: found, binding: binding,
             scope: cloudScope, serverGenerationID: status?.datasetGenerationID) {
         case .admitted:
@@ -183,7 +183,8 @@ final class StorageTransferRuntime {
             throw error
         case let .rescope(value):
             try validate()
-            try file.save(value, replacing: found)
+            try file.save(value, replacing: isLegacy ? nil : found)
+            if isLegacy { try retireLegacyAdmission(binding) }
         case .enrol:
             // An old cache can join the legacy dataset only. After a remotely
             // committed replacement, only an actually absent cache may enroll.
@@ -1125,15 +1126,51 @@ final class StorageTransferRuntime {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         return try StorageTransferRecoverySchema.digest(encoder.encode(value))
     }
-    /// The receipt's file name. Exposed so tests address the exact same file
-    /// the runtime does instead of hard-coding a name that can drift.
+    /// The receipt's file name, scoped by the CloudKit environment this build
+    /// talks to. Exposed so tests address the exact same file the runtime does
+    /// instead of hard-coding a name that can drift.
+    ///
+    /// An unknown scope keeps the legacy, unscoped name: that name IS the
+    /// legacy receipt, and giving it a third spelling would orphan it.
     static func admissionFileName(namespace: AccountDataNamespace,
                                   scope: StorageTransferCloudScope) -> String {
-        "admission-\(namespace.rawValue).json"
+        guard let component = scope.fileNameComponent else {
+            return "admission-\(namespace.rawValue).json"
+        }
+        return "admission-\(component)-\(namespace.rawValue).json"
     }
     private func admissionFile(_ binding: ActiveAccountLocalBinding) throws -> StorageTransferStateFile<StorageTransferDatasetAdmission> {
         try StorageTransferStateFile(url: root.appendingPathComponent(
             Self.admissionFileName(namespace: binding.namespace, scope: cloudScope)))
+    }
+    private func legacyAdmissionFile(_ binding: ActiveAccountLocalBinding) throws -> StorageTransferStateFile<StorageTransferDatasetAdmission> {
+        try StorageTransferStateFile(url: root.appendingPathComponent(
+            Self.admissionFileName(namespace: binding.namespace, scope: .unknown)))
+    }
+    /// Read the scoped receipt, falling back ONCE to the unscoped receipt a
+    /// build without environment scoping left behind. The fallback record is
+    /// deliberately returned with `cloudScope == nil`, i.e. UNKNOWN: it cannot
+    /// say which environment earned it, and an unknown scope never accuses a
+    /// known one.
+    private func loadAdmission(_ binding: ActiveAccountLocalBinding) throws
+        -> (value: StorageTransferDatasetAdmission?, isLegacy: Bool) {
+        if let scoped = try admissionFile(binding).load() { return (scoped, false) }
+        guard cloudScope.isKnown, let legacy = try legacyAdmissionFile(binding).load() else {
+            return (nil, false)
+        }
+        return (legacy, true)
+    }
+    /// One-time migration. Only ever called after the scoped receipt has been
+    /// written AND read back by `StorageTransferStateFile.save`, so the record
+    /// survives; retiring the unscoped copy is what stops a build in the OTHER
+    /// environment from picking it up and calling it a replacement.
+    private func retireLegacyAdmission(_ binding: ActiveAccountLocalBinding) throws {
+        let legacy = try legacyAdmissionFile(binding)
+        guard legacy.url != (try admissionFile(binding).url) else { return }
+        var info = stat()
+        guard lstat(legacy.url.path, &info) == 0 else { return }
+        guard (info.st_mode & S_IFMT) == S_IFREG else { throw StorageTransferError.unsafePath }
+        try FileManager.default.removeItem(at: legacy.url)
     }
     /// `error` names what the leftover files actually mean at this call site.
     /// The default is the destination precondition of a transfer that has just

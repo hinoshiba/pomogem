@@ -41,4 +41,69 @@ struct StorageTransferCloudScope: Codable, Equatable, Sendable {
         guard isKnown, other.isKnown else { return false }
         return self != other
     }
+
+    /// The file-name component. Only the environment appears: the container
+    /// identifier is a compile-time constant with exactly one value, and the
+    /// stored record carries it, so a future container change is still
+    /// detected by `isProvenDifferent` rather than by silently missing a file.
+    var fileNameComponent: String? {
+        switch environment {
+        case .development: "development"
+        case .production: "production"
+        case .unknown: nil
+        }
+    }
+}
+
+extension StorageTransferCloudScope {
+    /// `PomoGem.entitlements` fills
+    /// `com.apple.developer.icloud-container-environment` from the build
+    /// setting `ICLOUD_CONTAINER_ENVIRONMENT` (project.yml: Debug ->
+    /// Development, Release -> Production). `SecTask*` is not in the public
+    /// iOS SDK, so the signed entitlement cannot be read back at runtime.
+    /// Instead the SAME build setting is expanded into Info.plist under this
+    /// key, which keeps one source of truth in project.yml rather than a
+    /// second mapping that can drift away from the signed value.
+    static let infoDictionaryKey = "POMOGEM_ICLOUD_CONTAINER_ENVIRONMENT"
+
+    /// The mapping of last resort, used only when the entitlement cannot be
+    /// read or is unrecognised. It mirrors `project.yml:79-86`.
+    static var buildConfigurationEnvironment: StorageTransferCloudEnvironment {
+        #if DEBUG
+        .development
+        #else
+        .production
+        #endif
+    }
+
+    /// CloudKit accepts the key as a string; some toolchains hand it back as a
+    /// single-element array. Anything else is not evidence of an environment.
+    static func environment(fromEntitlement value: Any?) -> StorageTransferCloudEnvironment {
+        let text: String?
+        switch value {
+        case let string as String: text = string
+        case let array as [String]: text = array.count == 1 ? array[0] : nil
+        default: text = nil
+        }
+        guard let text, let parsed = StorageTransferCloudEnvironment(rawValue: text),
+              parsed != .unknown else { return buildConfigurationEnvironment }
+        return parsed
+    }
+
+    static func declaredEnvironmentValue(bundle: Bundle = .main,
+                                         key: String = infoDictionaryKey) -> Any? {
+        bundle.object(forInfoDictionaryKey: key)
+    }
+
+    static func resolved(entitlement: Any?,
+                         containerIdentifier: String = CloudSyncConfiguration
+                             .synchronizedDataContainerIdentifier) -> Self {
+        Self(environment: environment(fromEntitlement: entitlement),
+             containerIdentifier: containerIdentifier)
+    }
+
+    /// The scope of the running process. Resolved once: the build setting
+    /// cannot change while the process lives.
+    static func current() -> Self { resolvedForThisProcess }
+    private static let resolvedForThisProcess = resolved(entitlement: declaredEnvironmentValue())
 }
