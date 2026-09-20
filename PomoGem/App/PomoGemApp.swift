@@ -3132,3 +3132,135 @@ struct CloudLaunchTimeoutUITestFixtureView: View {
     }
 }
 #endif
+
+#if DEBUG && targetEnvironment(simulator)
+/// The five launch-host screens a device that was fenced out of the current
+/// iCloud generation can land on, rendered from the shipping
+/// `PersistenceLaunchStatusView` with a call recorder in place of the transfer
+/// runtime. No journal, checkpoint, container, account or CloudKit call exists
+/// in the process, so a passing run is also evidence that reading these
+/// screens starts nothing.
+enum StorageTransferOverwriteLaunchUITestScenario {
+    /// The shipping build: the pre-flight succeeded and found no other writer,
+    /// and the device -> iCloud door is present, described and DISABLED because
+    /// `StorageTransferReleasePolicy.standard` still publishes nothing.
+    case choice
+    /// The published screen with two witnessed other devices.
+    case otherDevices
+    /// The published screen whose server read failed: nobody may authorize
+    /// deleting contents the app never enumerated, so the door stays closed.
+    case previewFailed
+    /// No terminal control record was readable. Explanation, no destructive
+    /// affordance of any kind.
+    case blocked
+    /// A durable device -> iCloud replacement past the point of no return.
+    case inProgress
+}
+
+struct StorageTransferOverwriteLaunchUITestFixtureView: View {
+    let scenario: StorageTransferOverwriteLaunchUITestScenario
+    @State private var refreshCalls = 0
+    @State private var overwriteCalls = 0
+    @State private var exportCalls = 0
+
+    var body: some View {
+        PersistenceLaunchStatusView(
+            state: state,
+            onRetry: {}, onRetryOnline: {}, canRetryOnline: true,
+            onChooseCloud: {}, onChooseLocalOnly: nil,
+            onRecoverTransfer: {}, onCancelTransfer: {},
+            onRefreshDataset: { refreshCalls += 1 },
+            onOverwriteDataset: { overwriteCalls += 1 },
+            onExportDeviceData: offersExport ? { exportCalls += 1 } : nil,
+            cloudPreview: cloudPreview,
+            devicePreview: devicePreview,
+            cloudPreviewFailed: scenario == .previewFailed,
+            overwritePhase: scenario == .inProgress ? .preparingDestination : nil,
+            releasePolicy: releasePolicy,
+            onCancelLocalTransfer: nil, retainsTransferCopyOnCancellation: false,
+            onContinueOffline: nil)
+            .safeAreaInset(edge: .bottom) {
+                VStack {
+                    Text(verbatim: "calls=0;choice=none;starting=false")
+                        .accessibilityIdentifier("storage-switch.fixture-state")
+                    Text(verbatim: "refresh=\(refreshCalls);overwrite=\(overwriteCalls);export=\(exportCalls)")
+                        .accessibilityIdentifier("storage-overwrite.fixture-state")
+                }
+                .font(.caption)
+            }
+    }
+
+    private var state: PomoGemPersistenceLaunchHost.LaunchState {
+        switch scenario {
+        case .blocked:
+            .blocked(StorageTransferRuntimeError.remoteRecoveryRequired.localizedDescription)
+        case .inProgress:
+            .preparing("中断された保存先の切り替えを再開しています")
+        case .choice, .otherDevices, .previewFailed:
+            .datasetRefresh(StorageTransferRuntimeError.datasetRefreshRequired.localizedDescription)
+        }
+    }
+
+    private var offersExport: Bool {
+        scenario == .choice || scenario == .otherDevices || scenario == .previewFailed
+    }
+
+    /// Only the two published scenarios raise the overwrite bit, and they raise
+    /// exactly that one: the legacy `localOnly -> cloud` replacement and the
+    /// remote resume stay closed, so a fixture can never widen the shipping
+    /// prohibition it is meant to exercise around.
+    private var releasePolicy: StorageTransferReleasePolicy {
+        switch scenario {
+        case .otherDevices, .previewFailed:
+            .isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)
+        case .choice, .blocked, .inProgress:
+            .standard
+        }
+    }
+
+    private var cloudPreview: StorageTransferCloudPreview? {
+        switch scenario {
+        case .choice:
+            Self.preview(subjects: 9, sessions: 312, stones: 28,
+                         latest: Self.date(2026, 9, 18), otherDeviceIDs: 0)
+        case .otherDevices:
+            Self.preview(subjects: 9, sessions: 312, stones: 28,
+                         latest: Self.date(2026, 9, 18), otherDeviceIDs: 2)
+        case .previewFailed, .blocked, .inProgress:
+            nil
+        }
+    }
+
+    private var devicePreview: StorageTransferCloudPreview? {
+        switch scenario {
+        case .choice, .otherDevices, .previewFailed:
+            Self.preview(subjects: 12, sessions: 480, stones: 36,
+                         latest: Self.date(2026, 9, 20), otherDeviceIDs: 0)
+        case .blocked, .inProgress:
+            nil
+        }
+    }
+
+    private static func preview(subjects: Int, sessions: Int, stones: Int,
+                                latest: Date, otherDeviceIDs: Int) -> StorageTransferCloudPreview {
+        var counts = Dictionary(uniqueKeysWithValues:
+            PomoGemStorageSnapshot.cloudModelNames.map { ($0, 0) })
+        counts["Subject"] = subjects
+        counts["StudySession"] = sessions
+        counts["AchievementStone"] = stones
+        return StorageTransferCloudPreview(recordCounts: counts, latestRecordAt: latest,
+                                           otherDeviceIDs: otherDeviceIDs, ignoredWriterIDs: 0)
+    }
+
+    private static func date(_ year: Int, _ month: Int, _ day: Int) -> Date {
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = 12
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Tokyo") ?? .gmt
+        return calendar.date(from: components) ?? Date(timeIntervalSinceReferenceDate: 0)
+    }
+}
+#endif

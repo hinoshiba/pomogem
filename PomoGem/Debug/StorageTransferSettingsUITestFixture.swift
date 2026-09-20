@@ -8,6 +8,23 @@ enum StorageTransferSettingsUITestFixture {
 
     enum Scenario: String {
         case offlineNavigation, offlineNavigationRecovered, offlineBreakNavigation, local, cloud, offline, offlineRecovery, offlineHistory, cloudNetworkWaiting, cloudLaunchTimedOut, activeTimer, exporting, deleting, unavailable
+        /// The launch-host screens a fenced device actually lands on. Each one
+        /// renders the shipping `PersistenceLaunchStatusView` with a recorder in
+        /// place of the runtime, so no journal, container or CloudKit call
+        /// exists in the process.
+        case datasetRefreshChoice, datasetRefreshOtherDevices, datasetRefreshPreviewFailed
+        case datasetRefreshBlocked, overwriteInProgress
+
+        var overwriteLaunch: StorageTransferOverwriteLaunchUITestScenario? {
+            switch self {
+            case .datasetRefreshChoice: .choice
+            case .datasetRefreshOtherDevices: .otherDevices
+            case .datasetRefreshPreviewFailed: .previewFailed
+            case .datasetRefreshBlocked: .blocked
+            case .overwriteInProgress: .inProgress
+            default: nil
+            }
+        }
 
         var isOffline: Bool { self == .offline || self == .offlineRecovery || self == .offlineHistory }
         var recoveryKind: CloudOfflineRecoveryKind? {
@@ -63,6 +80,8 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                 startsRecoveredBreak: scenario == .offlineBreakNavigation)
         } else if scenario == .cloudLaunchTimedOut {
             CloudLaunchTimeoutUITestFixtureView()
+        } else if let overwrite = scenario.overwriteLaunch {
+            StorageTransferOverwriteLaunchUITestFixtureView(scenario: overwrite)
         } else {
             settingsContent(scenario)
         }
