@@ -53,7 +53,7 @@ enum CloudDatasetLineageBlock: Equatable, Sendable {
 }
 
 /// The launch screen the host's `StorageTransferRuntimeError` switch actually
-/// produces. It mirrors `PomoGemApp.swift:1135-1148`, which the launch-state
+/// produces. It mirrors `PomoGemApp.swift:1294-1307`, which the launch-state
 /// wiring step will replace with a call to `launchRoute(for:)` so the two can
 /// no longer drift. Until then this is the executable statement of that switch,
 /// and the tests pin every lineage refusal against it.
@@ -109,9 +109,9 @@ enum CloudOfflineHostPolicy {
         }
     }
 
-    /// Which screen `PomoGemApp.swift:1135-1148` builds for a runtime error
+    /// Which screen `PomoGemApp.swift:1294-1307` builds for a runtime error
     /// TODAY. Only `.datasetRefreshRequired` reaches `presentDatasetRefresh`
-    /// (`PomoGemApp.swift:1143`), which is the sole writer of
+    /// (`PomoGemApp.swift:1301-1302`), which is the sole writer of
     /// `storageTransferRefreshGenerationID` and therefore the only producer of
     /// `launchState = .datasetRefresh` — the 「iCloudから再取得」 screen and the
     /// only gate that lets `refreshCloudDataset` run at all. Everything else

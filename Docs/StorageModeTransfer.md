@@ -126,7 +126,7 @@ Production側には転送台帳が無いため比較が成立せず、従来は�
 
 ### 起動画面への割り当て（暫定、次段で解消）
 
-起動hostの`StorageTransferRuntimeError`のswitch（`PomoGemApp.swift:1135-1148`）は、まだ
+起動hostの`StorageTransferRuntimeError`のswitch（`PomoGemApp.swift:1294-1307`）は、まだ
 **旧い名前だけ**を見ています。`presentDatasetRefresh`へ入れるのは`datasetRefreshRequired`
 だけで、それが`storageTransferRefreshGenerationID`を書く唯一の場所＝「iCloudから再取得」画面と
 `refreshCloudDataset`への唯一の入口です。したがって**救済手段を伴う停止理由**
