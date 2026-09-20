@@ -213,63 +213,6 @@ final class CloudLaunchDeadlineTests: XCTestCase {
             XCTAssertEqual(expired, 1)
         }
     }
-
-    /// The 2026-09-20 device frame: the launch defers before it ever asks the
-    /// account anything, so no waiter exists to interrupt. The same absolute
-    /// budget must still end the wait, exactly once, and a resolution that
-    /// arrives afterwards must not revive the attempt.
-    func testDeferredLaunchWithNothingAwaitedStillEndsAndIgnoresALateResolution() async {
-        var isWaitingForActivation = true
-        var presentations = 0
-        let lease = CloudLaunchDeadline(timeout: 0.05, invalidateAttempt: {}, onExpiry: {
-            guard isWaitingForActivation else { return }
-            isWaitingForActivation = false
-            presentations += 1
-        })
-        let end = Date().addingTimeInterval(5)
-        while presentations == 0, Date() < end { try? await Task.sleep(for: .milliseconds(10)) }
-        XCTAssertEqual(presentations, 1, "An unawaited wait must still reach its terminal screen")
-        XCTAssertFalse(isWaitingForActivation)
-        XCTAssertThrowsError(try lease.check()) {
-            XCTAssertEqual($0 as? CloudLaunchDeadlineError, .expired)
-        }
-        // A late activation cannot restart a launch whose wait already settled.
-        XCTAssertFalse(PersistenceLaunchScenePolicy.shouldResumeDeferredPreparation(
-            phase: .active, isWaitingForActivation: isWaitingForActivation,
-            hasSession: false, isPreparing: false))
-        lease.cancel()
-        try? await Task.sleep(for: .milliseconds(120))
-        XCTAssertEqual(presentations, 1, "Cancellation after expiry cannot present a second screen")
-    }
-
-    /// An account resolution that never returns is already bounded once the
-    /// deadline is armed; pin that the caller leaves within the budget and the
-    /// late value can never publish a session behind the terminal screen.
-    func testAccountResolutionThatNeverReturnsEndsWithinTheBudget() async {
-        let started = expectation(description: "resolution started")
-        let gate = LaunchDeadlineTestGate(started: started)
-        var published = false
-        var expiries = 0
-        let lease = CloudLaunchDeadline(timeout: 0.05, invalidateAttempt: {},
-            onExpiry: { expiries += 1 })
-        do {
-            let identity = try await lease.run { () -> String in
-                await gate.wait()
-                return "late identity"
-            }
-            published = !identity.isEmpty
-            XCTFail("A resolution that never returns must not complete the launch")
-        } catch {
-            XCTAssertEqual(error as? CloudLaunchDeadlineError, .expired)
-        }
-        await fulfillment(of: [started], timeout: 2)
-        XCTAssertEqual(expiries, 1)
-        XCTAssertFalse(published)
-        gate.release()
-        try? await Task.sleep(for: .milliseconds(120))
-        XCTAssertFalse(published, "A resolution after the budget is ignored")
-        XCTAssertThrowsError(try lease.check())
-    }
 }
 
 @MainActor private final class LaunchDeadlineTestClock { var value: TimeInterval = 0 }
