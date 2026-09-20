@@ -31,6 +31,14 @@ struct CloudOfflineRecoveryPresentation: Equatable, Sendable {
     }
 }
 
+/// The launch presentations the split dataset-lineage taxonomy maps onto. The
+/// launch host wiring lands in a separate step; until then every new case
+/// reaches the generic blocked screen through the host's existing `default`
+/// arm, which keeps the offline route and never performs a destructive action.
+enum CloudDatasetLineageBlock: Equatable, Sendable {
+    case remoteDatasetOffer, lineageUnavailable, environmentMismatch, localLedgerMissing
+}
+
 enum CloudOfflineSessionError: Error, LocalizedError {
     case relaunchRequired
 
@@ -46,8 +54,35 @@ enum CloudOfflineHostPolicy {
     static func recoveryKind(after error: Error) -> CloudOfflineRecoveryKind? {
         switch error {
         case StorageTransferRuntimeError.remoteRecoveryRequired,
-             StorageTransferRuntimeError.datasetRefreshRequired: .storageTransfer
+             StorageTransferRuntimeError.datasetRefreshRequired,
+             // The four states split out of `datasetRefreshRequired`. All of
+             // them still mean "a storage transfer decision is outstanding",
+             // so the offline fallback offer is unchanged.
+             StorageTransferRuntimeError.datasetReplacedRemotely,
+             StorageTransferRuntimeError.cloudLineageUnavailable,
+             StorageTransferRuntimeError.localLedgerMissing,
+             StorageTransferRuntimeError.cloudEnvironmentMismatch: .storageTransfer
         case CloudActivityHistoryPreflightError.offlineHistoryChanged: .resetHistory
+        default: nil
+        }
+    }
+
+    /// Which launch presentation a dataset-lineage refusal deserves once the
+    /// launch host is wired to the split taxonomy. Kept here, as a pure
+    /// function, so the host change is a lookup rather than a second copy of
+    /// the classification. `leftoverLocalStores` is deliberately absent: it is
+    /// a Settings-time precondition, not a launch-time lineage decision.
+    static func datasetLineageBlock(for error: Error) -> CloudDatasetLineageBlock? {
+        switch error {
+        // A real, terminal, generation-carrying control exists, so the host can
+        // offer 「iCloudから再取得」 and the device -> iCloud overwrite.
+        case StorageTransferRuntimeError.datasetReplacedRemotely: .remoteDatasetOffer
+        // No lineage exists to refresh from. Offering a refresh here is the
+        // dead end the user actually hit: the only honest choices are starting
+        // a lineage from this device, or staying offline.
+        case StorageTransferRuntimeError.cloudLineageUnavailable: .lineageUnavailable
+        case StorageTransferRuntimeError.cloudEnvironmentMismatch: .environmentMismatch
+        case StorageTransferRuntimeError.localLedgerMissing: .localLedgerMissing
         default: nil
         }
     }

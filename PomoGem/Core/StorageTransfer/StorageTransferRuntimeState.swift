@@ -163,7 +163,23 @@ struct StorageTransferRuntimeCheckpoint: Codable, Equatable {
     }
 }
 
+/// This installation's receipt that it was admitted into a specific iCloud
+/// dataset lineage.
+///
+/// `cloudScope` is optional so a receipt written by a build that predates it
+/// still decodes: nil means UNKNOWN, i.e. the receipt cannot say which
+/// container environment earned it. It is upgraded in place the first time the
+/// recorded generation is confirmed against a server in a known scope, and it
+/// is never used to accuse a known scope of being different.
 struct StorageTransferDatasetAdmission: Codable, Equatable {
     let binding: ActiveAccountLocalBinding
     let datasetGenerationID: UUID?
+    var cloudScope: StorageTransferCloudScope?
+
+    init(binding: ActiveAccountLocalBinding, datasetGenerationID: UUID?,
+         cloudScope: StorageTransferCloudScope? = nil) {
+        self.binding = binding
+        self.datasetGenerationID = datasetGenerationID
+        self.cloudScope = cloudScope
+    }
 }

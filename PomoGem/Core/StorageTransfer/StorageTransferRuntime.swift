@@ -5,6 +5,12 @@ import SwiftData
 
 enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
     case relaunchRequired, remoteRecoveryRequired, datasetRefreshRequired
+    /// The four states the old `datasetRefreshRequired` used to collapse into
+    /// one sentence. None of them may claim how many devices exist: the
+    /// control record carries no writer identity, so the app cannot tell its
+    /// own committed generation from anybody else's.
+    case datasetReplacedRemotely, cloudLineageUnavailable, localLedgerMissing
+    case cloudEnvironmentMismatch, leftoverLocalStores
     case cloudCopyStillPending, recoveryNeedsReview
 
     var errorDescription: String? {
@@ -14,7 +20,19 @@ enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
         case .remoteRecoveryRequired:
             "iCloudで未完了のデータ切り替えが見つかりました。復旧が完了するまで通常の同期を停止しています。"
         case .datasetRefreshRequired:
-            "別の端末でiCloudデータが置き換えられました。この端末の古いデータを送信しないよう同期を停止しています。"
+            // Still raised by the launch host for an offline receipt whose
+            // lineage cannot be matched, and by the binding guard below.
+            "iCloudのデータとこの端末の記録の対応を確認できませんでした。古いデータを送信しないよう同期を停止しています。どちらの記録も削除していません。"
+        case .datasetReplacedRemotely:
+            "iCloudのデータが別の記録に置き換えられています。この端末の記録を送らないよう同期を止めています。"
+        case .cloudLineageUnavailable:
+            "iCloud側の管理情報を確認できませんでした。この端末のデータは削除していません。別のビルド（開発用／配布用）で開いた、またはiCloudのアプリデータが削除された可能性があります。このiPhoneのデータでiCloudを使い始めるか、オフラインのまま使うかを選べます。"
+        case .localLedgerMissing:
+            "この端末に、いまのiCloudデータを受け取った記録がありません。古いデータを混ぜないよう同期を停止しています。"
+        case .cloudEnvironmentMismatch:
+            "この端末の記録は、いまのアプリとは別のiCloud環境（開発用／配布用）で作られたものです。iCloudのデータは置き換えられていません。どちらの記録も削除せず、同期だけを停止しています。"
+        case .leftoverLocalStores:
+            "以前のiCloud用データがこの端末に残っているため、iCloudの利用を開始できません。記録が混ざらないよう停止しました。残っているデータを整理してから、もう一度お試しください。"
         case .cloudCopyStillPending:
             "iCloudの全データと端末のコピーがまだ一致しません。通信を確認して再試行してください。"
         case .recoveryNeedsReview:
@@ -54,10 +72,17 @@ final class StorageTransferRuntime {
     private let releasePolicy: StorageTransferReleasePolicy
     private let storeDirectory: URL?
     private let readSourceSelection: @MainActor () -> PersistenceDeploymentSelectionState
+    /// The container/environment THIS build talks to. Dataset generations are
+    /// only comparable inside one scope, so every admission receipt records it.
+    private let cloudScope: StorageTransferCloudScope
+    /// Nil and `.unknown` are the SAME state, and nil is its only stored form:
+    /// a receipt never claims an environment the host could not prove.
+    private var recordedScope: StorageTransferCloudScope? { cloudScope.isKnown ? cloudScope : nil }
 
     init(store: StorageTransferJournalStore, root: URL,
          releasePolicy: StorageTransferReleasePolicy = .standard,
          storeDirectory: URL? = nil,
+         cloudScope: StorageTransferCloudScope = .unknown,
          readSourceSelection: @escaping @MainActor () -> PersistenceDeploymentSelectionState = {
              PersistenceDeploymentState.load()
          }) {
@@ -65,6 +90,7 @@ final class StorageTransferRuntime {
         self.root = root
         self.releasePolicy = releasePolicy
         self.storeDirectory = storeDirectory
+        self.cloudScope = cloudScope
         self.readSourceSelection = readSourceSelection
     }
 
@@ -148,17 +174,27 @@ final class StorageTransferRuntime {
         try validateControlAccount(status, binding: binding)
         guard status?.blocksWriters != true else { throw StorageTransferRuntimeError.remoteRecoveryRequired }
         let file = try admissionFile(binding)
-        let expected = StorageTransferDatasetAdmission(binding: binding, datasetGenerationID: status?.datasetGenerationID)
-        if let found = try file.load() {
-            guard found == expected else { throw StorageTransferRuntimeError.datasetRefreshRequired }
-        } else {
+        let found = try file.load()
+        switch StorageTransferAdmissionPolicy.decide(found: found, binding: binding,
+            scope: cloudScope, serverGenerationID: status?.datasetGenerationID) {
+        case .admitted:
+            break
+        case let .refuse(error):
+            throw error
+        case let .rescope(value):
+            try validate()
+            try file.save(value, replacing: found)
+        case .enrol:
             // An old cache can join the legacy dataset only. After a remotely
             // committed replacement, only an actually absent cache may enroll.
-            if expected.datasetGenerationID != nil {
-                try requireNoArtifacts(selection: .cloud(binding: binding))
+            if status?.datasetGenerationID != nil {
+                try requireNoArtifacts(selection: .cloud(binding: binding),
+                                       error: .localLedgerMissing)
             }
             try validate()
-            try file.save(expected, replacing: nil)
+            try file.save(StorageTransferDatasetAdmission(binding: binding,
+                datasetGenerationID: status?.datasetGenerationID, cloudScope: recordedScope),
+                replacing: nil)
         }
         let after = try await readControl()
         try validate()
@@ -934,7 +970,8 @@ final class StorageTransferRuntime {
             let admission = try admissionFile(binding)
             let previous = try admission.load()
             try admission.save(StorageTransferDatasetAdmission(binding: binding,
-                datasetGenerationID: status?.datasetGenerationID), replacing: previous)
+                datasetGenerationID: status?.datasetGenerationID, cloudScope: recordedScope),
+                replacing: previous)
             recordReplacementWatch(journal: journal, files: files, binding: binding,
                                    generationID: status?.datasetGenerationID)
         }
@@ -1088,15 +1125,27 @@ final class StorageTransferRuntime {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         return try StorageTransferRecoverySchema.digest(encoder.encode(value))
     }
-    private func admissionFile(_ binding: ActiveAccountLocalBinding) throws -> StorageTransferStateFile<StorageTransferDatasetAdmission> {
-        try StorageTransferStateFile(url: root.appendingPathComponent("admission-\(binding.namespace.rawValue).json"))
+    /// The receipt's file name. Exposed so tests address the exact same file
+    /// the runtime does instead of hard-coding a name that can drift.
+    static func admissionFileName(namespace: AccountDataNamespace,
+                                  scope: StorageTransferCloudScope) -> String {
+        "admission-\(namespace.rawValue).json"
     }
-    private func requireNoArtifacts(selection: PersistenceDeploymentSelection) throws {
+    private func admissionFile(_ binding: ActiveAccountLocalBinding) throws -> StorageTransferStateFile<StorageTransferDatasetAdmission> {
+        try StorageTransferStateFile(url: root.appendingPathComponent(
+            Self.admissionFileName(namespace: binding.namespace, scope: cloudScope)))
+    }
+    /// `error` names what the leftover files actually mean at this call site.
+    /// The default is the destination precondition of a transfer that has just
+    /// minted a brand-new namespace, so any artifact there is stale local
+    /// state - never evidence that the iCloud dataset changed.
+    private func requireNoArtifacts(selection: PersistenceDeploymentSelection,
+                                    error: StorageTransferRuntimeError = .leftoverLocalStores) throws {
         let urls = try PersistenceStoreTopology.persistentStoreURLs(for: selection.storageLaunchMode,
             accountNamespace: selection.storageNamespace)
         for url in urls.flatMap({ PersistenceStoreArtifactLayout.artifacts(for: $0) }) {
             var info = stat()
-            guard lstat(url.path, &info) != 0, errno == ENOENT else { throw StorageTransferRuntimeError.datasetRefreshRequired }
+            guard lstat(url.path, &info) != 0, errno == ENOENT else { throw error }
         }
     }
 }
