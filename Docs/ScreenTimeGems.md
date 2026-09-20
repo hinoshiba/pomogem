@@ -81,8 +81,12 @@ tokenや黒いgemはSwiftData、CloudKit、解析ログ、JSON書き出しへ送
 os.Logger（subsystem `com.hinoshiba.pomogem`、category `screen-time`）へ出力します。
 run ID、token、到達した段数、黒いgemの数は出力しません。到達通知が記録されたか、権限・名前・台帳の
 どれで捨てられたかも理由だけを出力します。1回ごとの要約は`.notice`（既定レベル）で出力するため、
-夜間の様子も後から`log show --predicate 'subsystem == "com.hinoshiba.pomogem"'`で確認できます
-（`--info`は不要です。`.info`はメモリ上のリングバッファにしか残りません）。
+夜間の様子も後から読み出せます。iPhoneのログはMac側から取り出します。
+`sudo log collect --device-udid <UDID>`で収集し、
+`log show --archive <収集したファイル> --predicate 'subsystem == "com.hinoshiba.pomogem"'`で読みます。
+Console.appで対象の端末を選んでも同じ内容を確認できます。`log show`は`--archive`を付けない限り
+Mac自身のログを読むため、そのままでは端末の記録は出ません（`--info`は不要です。
+`.info`はメモリ上のリングバッファにしか残りません）。
 通常の勉強記録を保存するSwiftDataは、従来どおりアプリ本体のApplication Supportに置きます。
 App Group追加による保存先の自動変更を避け、既存の記録と保存先設定を維持します。
 選択・未取り込みの到達記録・黒いgemは、保存先を切り替える際にも引き継ぎません。
