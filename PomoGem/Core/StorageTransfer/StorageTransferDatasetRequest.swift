@@ -23,22 +23,6 @@ enum StorageTransferDatasetRequestDirection: String, Codable, Equatable, Sendabl
     case refreshFromCloud
 }
 
-enum StorageTransferSettingsDatasetError: Error, LocalizedError, Equatable {
-    /// Direction (B) is not a replacement of the iCloud dataset, so no release
-    /// bit fences it. This is a SURFACE decision, not a safety fence: the same
-    /// operation stays available from the recovery screen, where it is the only
-    /// way forward a fenced device has. The two Settings doors are published as
-    /// one pair so a half-shipped surface cannot offer a device-side wipe while
-    /// its counterpart is closed, and so the docs describe them together.
-    case refreshFromSettingsUnavailable
-
-    var errorDescription: String? {
-        switch self {
-        case .refreshFromSettingsUnavailable: StorageTransferRefreshCopy.settingsUnavailable
-        }
-    }
-}
-
 enum StorageTransferDatasetRequestError: Error, LocalizedError, Equatable {
     /// The account has no terminal control record, so there is no committed
     /// generation to compare against. Without one the CAS that protects a
@@ -119,13 +103,15 @@ enum StorageTransferDatasetRequestPolicy {
         case .overwriteCloudFromDevice:
             try policy.validate(.overwriteCloudFromDevice)
         case .refreshFromCloud:
-            // Deliberately the SAME bit, and deliberately not a new one. See
-            // `StorageTransferSettingsDatasetError.refreshFromSettingsUnavailable`
-            // for why a direction that needs no fence is still published as a
-            // pair with the one that does.
-            guard policy.allowsDatasetOverwriteFromDevice else {
-                throw StorageTransferSettingsDatasetError.refreshFromSettingsUnavailable
-            }
+            // No bit. PLAN Step 12: this direction discards the DEVICE side and
+            // replaces nothing on the server, so none of the three release bits
+            // is its fence — and the recovery screen already runs the identical
+            // `refreshCloudDataset` with no release check at all. Coupling it
+            // to `allowsDatasetOverwriteFromDevice` would make a non-destructive
+            // operation unusable in Settings purely because its destructive
+            // opposite is unpublished, which is the one direction the user must
+            // always be able to take on a device they want to re-sync.
+            return
         }
     }
 }

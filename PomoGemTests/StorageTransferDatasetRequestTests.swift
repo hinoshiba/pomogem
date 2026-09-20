@@ -126,35 +126,38 @@ final class StorageTransferDatasetRequestTests: XCTestCase {
 
     // MARK: The Settings gate
 
-    func testStandardPolicyPublishesNeitherSettingsDirection() {
+    /// Only the device -> iCloud direction is fenced. PLAN Step 12: direction
+    /// (B) replaces nothing on the server, introduces no journal shape and no
+    /// policy bit, and is the exact operation the recovery screen already runs
+    /// unconditionally — so none of the three release bits is its gate.
+    func testStandardPolicyPublishesOnlyTheNonDestructiveDirection() {
         XCTAssertThrowsError(try StorageTransferDatasetRequestPolicy.validate(
             .overwriteCloudFromDevice, policy: .standard)) { error in
             XCTAssertEqual(error as? StorageTransferReleaseError, .datasetOverwriteUnavailable)
         }
-        XCTAssertThrowsError(try StorageTransferDatasetRequestPolicy.validate(
-            .refreshFromCloud, policy: .standard)) { error in
-            XCTAssertEqual(error as? StorageTransferSettingsDatasetError, .refreshFromSettingsUnavailable)
+        XCTAssertNoThrow(try StorageTransferDatasetRequestPolicy.validate(
+            .refreshFromCloud, policy: .standard),
+            "A direction that deletes nothing on the server must not be fenced by the one that does")
+    }
+
+    func testEveryPolicyPublishesTheRefreshDirectionAndOnlyTheOverwriteBitPublishesTheOverwrite() {
+        for policy in [StorageTransferReleasePolicy.standard,
+                       .isolatedTestingPolicy(allowsCloudReplacement: true),
+                       .isolatedTestingPolicy(allowsRemoteResumeBeforeReplacing: true),
+                       .isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)] {
+            XCTAssertNoThrow(try StorageTransferDatasetRequestPolicy.validate(
+                .refreshFromCloud, policy: policy))
         }
-    }
-
-    func testRaisingTheOverwriteBitPublishesBothSettingsDoors() {
-        let policy = StorageTransferReleasePolicy.isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)
+        for policy in [StorageTransferReleasePolicy.standard,
+                       .isolatedTestingPolicy(allowsCloudReplacement: true),
+                       .isolatedTestingPolicy(allowsRemoteResumeBeforeReplacing: true)] {
+            XCTAssertThrowsError(try StorageTransferDatasetRequestPolicy.validate(
+                .overwriteCloudFromDevice, policy: policy),
+                "Only allowsDatasetOverwriteFromDevice may open the device -> iCloud direction")
+        }
         XCTAssertNoThrow(try StorageTransferDatasetRequestPolicy.validate(
-            .overwriteCloudFromDevice, policy: policy))
-        XCTAssertNoThrow(try StorageTransferDatasetRequestPolicy.validate(
-            .refreshFromCloud, policy: policy))
-    }
-
-    /// Direction (B) is refused from Settings, never described as unavailable
-    /// outright: the recovery screen still offers exactly this operation, and
-    /// a fenced device has no other way forward.
-    func testTheRefusedRefreshDoorPointsAtTheScreenThatStillOffersIt() {
-        let message = StorageTransferSettingsDatasetError
-            .refreshFromSettingsUnavailable.localizedDescription
-        XCTAssertTrue(message.contains("設定から実行できません"))
-        XCTAssertTrue(message.contains("iCloudのデータが置き換わりました"))
-        XCTAssertFalse(message.contains("復旧用コピー"),
-            "This direction stages nothing on the server; it must not promise one")
+            .overwriteCloudFromDevice,
+            policy: .isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)))
     }
 
     /// The durable format is read by a later process. Pin the raw values.

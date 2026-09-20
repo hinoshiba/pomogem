@@ -236,17 +236,16 @@ private struct StorageTransferChoiceView: View {
                 .disabled(!releasePolicy.allowsDatasetOverwriteFromDevice)
                 .accessibilityIdentifier("storage-switch.overwrite-cloud")
             }
+            // Direction (B) carries NO release bit (PLAN Step 12). It deletes
+            // nothing on the server and is the same operation the recovery
+            // screen runs unconditionally; gating it on the opposite,
+            // destructive direction's bit would ship the one thing a user with
+            // a diverged device always needs as a permanently greyed-out row.
             Section(StorageTransferRefreshCopy.settingsTitle) {
                 Text(StorageTransferRefreshCopy.dataLossWarning)
-                if !releasePolicy.allowsDatasetOverwriteFromDevice {
-                    Text(StorageTransferSettingsDatasetError
-                        .refreshFromSettingsUnavailable.localizedDescription)
-                        .accessibilityIdentifier("storage-switch.refresh-from-cloud-unavailable")
-                }
                 Button(StorageTransferRefreshCopy.confirmTitle, role: .destructive) {
                     datasetDirection = .refreshFromCloud
                 }
-                .disabled(!releasePolicy.allowsDatasetOverwriteFromDevice)
                 .accessibilityIdentifier("storage-switch.refresh-from-cloud")
             }
         }

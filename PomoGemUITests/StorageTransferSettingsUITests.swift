@@ -204,19 +204,29 @@ final class StorageTransferSettingsUITests: XCTestCase {
 
     // MARK: Settings direction (B) — iCloudのデータでこの端末を置き換える
 
-    func testSettingsRefreshDoorIsPresentDisabledAndExplainedInCloudMode() {
+    /// PLAN Step 12. Direction (B) replaces nothing on the server and carries
+    /// no release bit, so it is usable in the SHIPPING build — unlike direction
+    /// (A) beside it, which stays disabled while
+    /// `allowsDatasetOverwriteFromDevice` is false. It still acts on nothing by
+    /// tap: 「最後の確認」 owns its own, unchecked acknowledgement.
+    func testSettingsRefreshDoorIsUsableInTheShippingBuildWhileTheOverwriteStaysClosed() {
         launch("cloud")
         openChoices()
-        let reason = app.staticTexts["storage-switch.refresh-from-cloud-unavailable"]
-        XCTAssertTrue(reveal(reason))
-        XCTAssertTrue(reason.label.contains("いまは設定から実行できません"))
+        XCTAssertFalse(app.staticTexts["storage-switch.refresh-from-cloud-unavailable"].exists,
+            "A direction that deletes nothing on the server has no unavailability to explain")
+        let overwrite = app.buttons["storage-switch.overwrite-cloud"]
+        XCTAssertTrue(reveal(overwrite))
+        XCTAssertFalse(overwrite.isEnabled,
+            "The destructive direction is still unpublished in the shipping build")
         let door = app.buttons["storage-switch.refresh-from-cloud"]
         XCTAssertTrue(reveal(door))
-        XCTAssertFalse(door.isEnabled)
-        door.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        XCTAssertFalse(app.navigationBars["最後の確認"].exists)
-        XCTAssertFalse(app.buttons["storage-switch.refresh-from-cloud-confirm"].exists)
-        attach("Settings refresh-from-cloud — present, disabled and explained")
+        XCTAssertTrue(door.isEnabled,
+            "Direction (B) must not be fenced by the opposite direction's release bit")
+        attach("Settings refresh-from-cloud — usable while the overwrite stays closed")
+        openConfirmation("storage-switch.refresh-from-cloud")
+        assertUncheckedDatasetConfirmation("refresh-from-cloud")
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.navigationBars["iCloudと保存先の変更"].waitForExistence(timeout: 4))
         app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
         assertNoOperation()
         assertNoDatasetRequest()
