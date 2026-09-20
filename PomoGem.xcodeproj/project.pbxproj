@@ -23,6 +23,7 @@
 		128570FAED1861610B4E0BCC /* SyncMaintenance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BF84C957F5965D5E7377EAD /* SyncMaintenance.swift */; };
 		12AC4E182FB22BF3688F80C7 /* PomodoroEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7413EEBB67AFE9BC30EF9C7E /* PomodoroEngine.swift */; };
 		13D3B47C5B15D391FBA37000 /* CloudOfflineHostPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B4D2704A867D651C6A15FB7 /* CloudOfflineHostPolicy.swift */; };
+		148D814EC01AF2D8600F3722 /* StorageTransferLateArrivalBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F283F9CEE51B606F5448365 /* StorageTransferLateArrivalBanner.swift */; };
 		17BC30315ED1C468B0A18CAC /* PebbleNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACEBB3395B953447C69946D /* PebbleNode.swift */; };
 		17BEB2E41142345A44CAC93A /* AccessibilityAdversarialUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 405164FE628C5989DD6BDCAE /* AccessibilityAdversarialUITests.swift */; };
 		17FC0F392D238B6D61617A0F /* ProgressCrystal.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE92572890DD4D8BE55C6A58 /* ProgressCrystal.swift */; };
@@ -388,6 +389,7 @@
 		4C82F7F0FD796F8D9446AB8F /* JarWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarWidgets.swift; sourceTree = "<group>"; };
 		4C8318D569F3634174B05480 /* JarSpriteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarSpriteView.swift; sourceTree = "<group>"; };
 		4DC88D84ADDBABCA34AF2AE3 /* StorageTransferStoreFilesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferStoreFilesTests.swift; sourceTree = "<group>"; };
+		4F283F9CEE51B606F5448365 /* StorageTransferLateArrivalBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferLateArrivalBanner.swift; sourceTree = "<group>"; };
 		4FB16E3D6A5C3CCBA74EFC70 /* StorageTransferSettingsUITestFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferSettingsUITestFixture.swift; sourceTree = "<group>"; };
 		50E849952EFAEFD4597EE5ED /* PomoGemApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemApp.swift; sourceTree = "<group>"; };
 		5365DD134569D0BA0958D3E2 /* ViewTaskScope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewTaskScope.swift; sourceTree = "<group>"; };
@@ -1032,6 +1034,7 @@
 				BDFD2F7482C6D59F73C3C3DE /* RootView.swift */,
 				D5DA97C297B2465DCA37429F /* SeedData.swift */,
 				92EBDAB5B4D9A6C881E284CA /* StorageTransferHostCloudPublicationGate.swift */,
+				4F283F9CEE51B606F5448365 /* StorageTransferLateArrivalBanner.swift */,
 				DAFDB3F62B4EB377D79BA48D /* StorageTransferProcessState.swift */,
 				FC92C18D8E0837F496656397 /* Theme.swift */,
 				AC30199EBC23F0C5AAE235B6 /* TimerSceneOrientation.swift */,
@@ -1338,6 +1341,7 @@
 				6C17671D2EC3E55828EBBCE9 /* StorageTransferDatasetRequest.swift in Sources */,
 				B374802FAFF6915313EC83A7 /* StorageTransferHostCloudPublicationGate.swift in Sources */,
 				ADD4DB9F72353D5D81C1A655 /* StorageTransferJournal.swift in Sources */,
+				148D814EC01AF2D8600F3722 /* StorageTransferLateArrivalBanner.swift in Sources */,
 				B815AA2A1D9EC5C421B29582 /* StorageTransferLaunchReader.swift in Sources */,
 				BEC49C8A6B23FED0360345C0 /* StorageTransferManagedZoneDeletion.swift in Sources */,
 				64746653CB3D9567E89EA4FE /* StorageTransferManagedZoneDeletionAdapters.swift in Sources */,

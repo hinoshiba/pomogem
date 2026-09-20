@@ -37,6 +37,12 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
             .contains("「\(StorageTransferOverwriteCopy.retryPreviewTitle)」"))
         XCTAssertFalse(StorageTransferOverwriteCopy.comparisonUnavailable.contains("もう一度試す"),
             "`.datasetRefresh` has no 「もう一度試す」 button to point at")
+        // Settings carries no re-read control of its own: the door IS the
+        // re-read, so that surface names the door.
+        XCTAssertEqual(StorageTransferOverwriteCopy.settingsPreviewUnavailable,
+                       "iCloudの内容を確認できませんでした。通信を確認して、もう一度「このiPhoneのデータで置き換える」を押してください。どちらの記録も削除していません。")
+        XCTAssertTrue(StorageTransferOverwriteCopy.settingsPreviewUnavailable
+            .contains("「\(StorageTransferOverwriteCopy.confirmTitle)」"))
     }
 
     // MARK: - §6.2 Other-device evidence

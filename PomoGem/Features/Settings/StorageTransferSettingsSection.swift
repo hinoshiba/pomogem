@@ -11,11 +11,18 @@ final class StorageTransferController {
     /// relaunch that executes it. See `StorageTransferDatasetRequest`.
     typealias DatasetOperation =
         @MainActor @Sendable (StorageTransferDatasetRequestDirection) async throws -> Void
+    /// The read-only pre-flight the device -> iCloud direction must show BEFORE
+    /// its acknowledgement (PLAN §3 S14). It starts nothing, records nothing
+    /// and opens no container; a failure closes the door rather than opening it
+    /// on an assumption.
+    typealias DatasetPreviewOperation =
+        @MainActor @Sendable () async throws -> StorageTransferDatasetPreviewSummary
 
     private(set) var isStarting = false
     private(set) var error: String?
     private var operation: Operation?
     private var datasetOperation: DatasetOperation?
+    private var datasetPreviewOperation: DatasetPreviewOperation?
     private var registrationID: UUID?
     private var task: Task<Void, Never>?
 
@@ -23,12 +30,21 @@ final class StorageTransferController {
     var isDatasetAvailable: Bool { datasetOperation != nil && !isStarting }
 
     @discardableResult
-    func install(_ operation: @escaping Operation, dataset: DatasetOperation? = nil) -> UUID {
+    func install(_ operation: @escaping Operation, dataset: DatasetOperation? = nil,
+                 datasetPreview: DatasetPreviewOperation? = nil) -> UUID {
         let id = UUID()
         self.operation = operation
         datasetOperation = dataset
+        datasetPreviewOperation = datasetPreview
         registrationID = id
         return id
+    }
+
+    /// Read-only. Surfaced to the view so a failed read can keep the door shut
+    /// with its own message instead of being reported as an empty dataset.
+    func previewDataset() async throws -> StorageTransferDatasetPreviewSummary {
+        guard let datasetPreviewOperation else { throw StorageTransferError.staleTransaction }
+        return try await datasetPreviewOperation()
     }
 
     /// A registered operation captures its Root and model context. Detach it
@@ -39,6 +55,7 @@ final class StorageTransferController {
         guard self.registrationID == registrationID else { return }
         operation = nil
         datasetOperation = nil
+        datasetPreviewOperation = nil
         self.registrationID = nil
     }
 
@@ -120,6 +137,7 @@ struct StorageTransferSettingsSection: View {
                         persistenceMode: persistenceMode,
                         releasePolicy: releasePolicy,
                         offersDatasetDoors: controller.isDatasetAvailable,
+                        previewDataset: { try await controller.previewDataset() },
                         confirmed: { choice in
                             showsChoices = false
                             controller.start(choice)
@@ -151,6 +169,7 @@ private struct StorageTransferChoiceView: View {
     let persistenceMode: PersistenceLaunchMode
     let releasePolicy: StorageTransferReleasePolicy
     let offersDatasetDoors: Bool
+    let previewDataset: @MainActor @Sendable () async throws -> StorageTransferDatasetPreviewSummary
     let confirmed: (StorageTransferChoice) -> Void
     let confirmedDataset: (StorageTransferDatasetRequestDirection) -> Void
     @Environment(\.dismiss) private var dismiss
@@ -160,6 +179,12 @@ private struct StorageTransferChoiceView: View {
     /// be confused with a tentative storage-mode choice, and so the two kinds
     /// of confirmation never share an acknowledgement.
     @State private var datasetDirection: StorageTransferDatasetRequestDirection?
+    /// The pre-flight the device -> iCloud direction must show before its
+    /// acknowledgement. Discarded with every presentation, so a stale reading
+    /// can never be the evidence behind a later confirmation.
+    @State private var overwritePreview: StorageTransferDatasetPreviewSummary?
+    @State private var isReadingOverwritePreview = false
+    @State private var overwritePreviewError: String?
 
     var body: some View {
         NavigationStack {
@@ -207,7 +232,10 @@ private struct StorageTransferChoiceView: View {
                     .dynamicTypeSize(dynamicTypeSize)
             }
             .sheet(item: $datasetDirection) { direction in
-                StorageTransferDatasetConfirmationView(direction: direction) {
+                StorageTransferDatasetConfirmationView(
+                    direction: direction,
+                    preview: direction == .overwriteCloudFromDevice ? overwritePreview : nil
+                ) {
                     confirmedDataset(direction)
                 }
                 .dynamicTypeSize(dynamicTypeSize)
@@ -228,12 +256,24 @@ private struct StorageTransferChoiceView: View {
                     Text(StorageTransferReleaseError.datasetOverwriteUnavailable.localizedDescription)
                         .accessibilityIdentifier("storage-switch.overwrite-cloud-unavailable")
                 }
-                Button(StorageTransferOverwriteCopy.confirmTitle, role: .destructive) {
-                    // Never acts on tap: it presents 「最後の確認」, whose own
-                    // acknowledgement starts unchecked on every presentation.
-                    datasetDirection = .overwriteCloudFromDevice
+                if isReadingOverwritePreview {
+                    ProgressView(StorageTransferOverwriteCopy.comparisonReading)
+                        .accessibilityIdentifier("storage-switch.overwrite-cloud-reading")
                 }
-                .disabled(!releasePolicy.allowsDatasetOverwriteFromDevice)
+                if let overwritePreviewError {
+                    Text(overwritePreviewError)
+                        .foregroundStyle(.red)
+                        .accessibilityIdentifier("storage-switch.overwrite-cloud-preview-error")
+                }
+                Button(StorageTransferOverwriteCopy.confirmTitle, role: .destructive) {
+                    // Never acts on tap, and never opens 「最後の確認」 on an
+                    // assumption: the read-only pre-flight runs FIRST, and the
+                    // confirmation is presented only once it has enumerated
+                    // what would be destroyed. The sheet's own acknowledgement
+                    // starts unchecked on every presentation.
+                    loadOverwritePreviewThenConfirm()
+                }
+                .disabled(!releasePolicy.allowsDatasetOverwriteFromDevice || isReadingOverwritePreview)
                 .accessibilityIdentifier("storage-switch.overwrite-cloud")
             }
             // Direction (B) carries NO release bit (PLAN Step 12). It deletes
@@ -250,6 +290,26 @@ private struct StorageTransferChoiceView: View {
             }
         }
     }
+
+    /// A failed read closes the door with its own message. "We could not look"
+    /// and "there is nothing there" must not be confusable before a deletion,
+    /// so nothing is presented and nothing is armed.
+    private func loadOverwritePreviewThenConfirm() {
+        guard !isReadingOverwritePreview else { return }
+        overwritePreview = nil
+        overwritePreviewError = nil
+        isReadingOverwritePreview = true
+        Task { @MainActor in
+            defer { isReadingOverwritePreview = false }
+            do {
+                overwritePreview = try await previewDataset()
+                datasetDirection = .overwriteCloudFromDevice
+            } catch {
+                overwritePreview = nil
+                overwritePreviewError = StorageTransferOverwriteCopy.settingsPreviewUnavailable
+            }
+        }
+    }
 }
 
 extension StorageTransferChoice: Identifiable { var id: Self { self } }
@@ -262,6 +322,11 @@ extension StorageTransferDatasetRequestDirection: Identifiable { var id: Self { 
 /// can ever arm this one (PLAN §3 S9).
 private struct StorageTransferDatasetConfirmationView: View {
     let direction: StorageTransferDatasetRequestDirection
+    /// Non-nil for the device -> iCloud direction only, and non-nil is the
+    /// precondition for presenting this view at all for that direction: the
+    /// counts and the other-device evidence are what informed consent is
+    /// consent TO (PLAN §3 S14/S15).
+    var preview: StorageTransferDatasetPreviewSummary?
     let confirmed: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var understandsDeletion = false
@@ -273,6 +338,11 @@ private struct StorageTransferDatasetConfirmationView: View {
                     switch direction {
                     case .overwriteCloudFromDevice:
                         paragraph(StorageTransferOverwriteCopy.sheetWarning, suffix: "warning")
+                        // The same two facts the launch screen requires before
+                        // it arms its door: what is on each side, and whether
+                        // another device has written here.
+                        paragraph(comparison, suffix: "comparison")
+                        paragraph(otherDeviceEvidence, suffix: "other-devices")
                         paragraph(StorageTransferOverwriteCopy.recoveryCopy, suffix: "recovery-copy")
                         paragraph(StorageTransferOverwriteCopy.relaunch, suffix: "relaunch")
                         paragraph(StorageTransferOverwriteCopy.notCancellable, suffix: "not-cancellable")
@@ -296,6 +366,23 @@ private struct StorageTransferDatasetConfirmationView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("戻る") { dismiss() } } }
         }
+    }
+
+    /// 「このiPhone: …／iCloud: …」, rendered by the same function as the launch
+    /// screen so the two surfaces cannot disagree about the same dataset.
+    private var comparison: String {
+        StorageTransferOverwriteCopy.side("このiPhone", preview: preview?.device)
+            + "\n" + StorageTransferOverwriteCopy.side("iCloud", preview: preview?.cloud)
+    }
+
+    /// A missing preview is disclosed as a missing preview. Rendering 「見つかり
+    /// ませんでした」 without having read anything would be a false witness on the
+    /// last screen before a deletion. This view is not presented for the
+    /// overwrite direction without one; the fallback exists so it cannot
+    /// become one by accident later.
+    private var otherDeviceEvidence: String {
+        guard let preview else { return StorageTransferOverwriteCopy.otherDevicesUnknown }
+        return StorageTransferOverwriteCopy.otherDevices(preview.cloud.otherDeviceIDs)
     }
 
     private var door: String {

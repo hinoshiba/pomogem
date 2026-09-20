@@ -153,6 +153,18 @@ final class StorageTransferSettingsUITests: XCTestCase {
         let overwriteWarning = app.staticTexts["storage-switch.overwrite-cloud-warning"]
         XCTAssertTrue(reveal(overwriteWarning))
         XCTAssertTrue(overwriteWarning.label.contains("元に戻すことはできません"))
+        // PLAN §3 S14/S15: the counts of what would be destroyed and the
+        // other-device evidence are on the consent screen, not behind it.
+        let comparison = app.staticTexts["storage-switch.overwrite-cloud-comparison"]
+        XCTAssertTrue(reveal(comparison))
+        XCTAssertTrue(comparison.label.contains("このiPhone"))
+        XCTAssertTrue(comparison.label.contains("iCloud"))
+        XCTAssertTrue(comparison.label.contains("テーマ"))
+        XCTAssertTrue(comparison.label.contains("記録"))
+        let evidence = app.staticTexts["storage-switch.overwrite-cloud-other-devices"]
+        XCTAssertTrue(reveal(evidence))
+        XCTAssertTrue(evidence.label.contains("2台"))
+        XCTAssertTrue(evidence.label.contains("未送信"))
         XCTAssertTrue(reveal(app.staticTexts["storage-switch.overwrite-cloud-recovery-copy"]))
         XCTAssertTrue(reveal(app.staticTexts["storage-switch.overwrite-cloud-relaunch"]))
         XCTAssertTrue(reveal(app.staticTexts["storage-switch.overwrite-cloud-not-cancellable"]))
@@ -171,6 +183,47 @@ final class StorageTransferSettingsUITests: XCTestCase {
         attach("Settings overwrite — acknowledged final confirmation")
         app.buttons["storage-switch.overwrite-cloud-confirm"].doubleTap()
         assertDatasetRequested("overwriteCloudFromDevice")
+    }
+
+    /// The evidence is read BEFORE the acknowledgement, and a failed read keeps
+    /// the door shut rather than opening it on an assumption. 「we could not
+    /// look」 and 「there is nothing there」 must not be confusable here.
+    func testSettingsOverwriteReadsTheEvidenceBeforeConsentAndRefusesWhenItCannot() {
+        launch("cloudDatasetDoorsUnreadable")
+        openChoices()
+        let door = app.buttons["storage-switch.overwrite-cloud"]
+        XCTAssertTrue(reveal(door))
+        XCTAssertTrue(door.isEnabled)
+        door.tap()
+        let failure = app.staticTexts["storage-switch.overwrite-cloud-preview-error"]
+        XCTAssertTrue(reveal(failure))
+        XCTAssertTrue(failure.label.contains("iCloudの内容を確認できませんでした"))
+        XCTAssertTrue(failure.label.contains("どちらの記録も削除していません"))
+        XCTAssertFalse(app.navigationBars["最後の確認"].exists,
+            "Nobody may be asked to authorize deleting contents the app failed to enumerate")
+        XCTAssertFalse(app.switches["storage-switch.overwrite-cloud-confirm-data-loss"].exists)
+        attach("Settings overwrite — unreadable iCloud keeps the confirmation closed")
+        // The opposite direction is unaffected: it destroys the device side.
+        XCTAssertTrue(reveal(app.buttons["storage-switch.refresh-from-cloud"]))
+        app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
+        assertPreviewReads(1)
+        assertNoDatasetRequest()
+        assertNoOperation()
+    }
+
+    /// Direction (B) destroys the DEVICE side, so it asks for no server read
+    /// and must not be made to wait for one.
+    func testTheRefreshDirectionNeedsNoServerReadBeforeItsConfirmation() {
+        launch("cloudDatasetDoors")
+        openChoices()
+        openConfirmation("storage-switch.refresh-from-cloud")
+        XCTAssertFalse(app.staticTexts["storage-switch.refresh-from-cloud-comparison"].exists)
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.navigationBars["iCloudと保存先の変更"].waitForExistence(timeout: 4))
+        app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
+        assertPreviewReads(0)
+        assertNoDatasetRequest()
+        assertNoOperation()
     }
 
     func testAX5SettingsOverwriteDoorAndConfirmationRemainReachableAndDescribed() throws {
@@ -826,6 +879,15 @@ final class StorageTransferSettingsUITests: XCTestCase {
     }
 
     private var datasetState: XCUIElement { app.staticTexts["storage-switch.dataset-fixture-state"] }
+
+    private func assertPreviewReads(_ count: Int) {
+        let state = app.staticTexts["storage-switch.preview-fixture-state"]
+        XCTAssertTrue(reveal(state))
+        let matched = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "previewCalls=\(count)"), object: state)
+        XCTAssertEqual(XCTWaiter.wait(for: [matched], timeout: 6), .completed,
+            "Expected previewCalls=\(count), saw \(state.label)")
+    }
 
     private func assertNoDatasetRequest() {
         XCTAssertTrue(reveal(datasetState, upwards: false))

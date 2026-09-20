@@ -203,4 +203,34 @@ final class StorageTransferReplacementWatchTests: XCTestCase {
         XCTAssertEqual(try entries(root), ["replacement-watch-\(other.rawValue).json"])
         XCTAssertNotEqual(namespace.rawValue, other.rawValue)
     }
+
+    // MARK: - What the banner is allowed to say (review-1-3 / 2-3 / 3-3)
+
+    func testOnlyUserRecognizableModelsCanRaiseTheBanner() {
+        XCTAssertEqual(StorageTransferLateArrivalPolicy.reportableModels,
+                       ["AchievementStone", "StudySession", "Subject"])
+        XCTAssertTrue(StorageTransferLateArrivalPolicy.deviceBookkeepingModels
+            .isSubset(of: PomoGemStorageSnapshot.cloudModelNames))
+    }
+
+    /// A single-device account claims its own timer and writes its own mirrored
+    /// timer row on the very mount that evaluates the receipt. Reporting that
+    /// growth would make the account accuse itself on every overwrite.
+    func testThisDevicesOwnBookkeepingGrowthNeverRaisesTheBanner() {
+        XCTAssertNil(StorageTransferLateArrivalPolicy.reportable(
+            .lateArrival(models: ["FocusTimerDeviceClaim", "SyncedFocusTimer", "Prefs"])))
+        XCTAssertNil(StorageTransferLateArrivalPolicy.reportable(.cleared))
+        XCTAssertNil(StorageTransferLateArrivalPolicy.reportable(.noReceipt))
+        XCTAssertNil(StorageTransferLateArrivalPolicy.reportable(.superseded))
+        XCTAssertNil(StorageTransferLateArrivalPolicy.reportable(.deferred))
+        XCTAssertNil(StorageTransferLateArrivalPolicy.reportable(.dropped))
+    }
+
+    func testRecordGrowthIsReportedSortedAndWithoutTheBookkeepingModels() {
+        XCTAssertEqual(StorageTransferLateArrivalPolicy.reportable(
+            .lateArrival(models: ["StudySession", "FocusTimerDeviceClaim", "Subject"])),
+                       ["StudySession", "Subject"])
+        XCTAssertEqual(StorageTransferLateArrivalPolicy.reportable(
+            .lateArrival(models: ["AchievementStone"])), ["AchievementStone"])
+    }
 }

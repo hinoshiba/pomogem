@@ -12,12 +12,24 @@ enum StorageTransferSettingsUITestFixture {
         /// consent flow can be exercised. `cloud` is the shipping screen, where
         /// the same doors render disabled with their reason.
         case cloudDatasetDoors
+        /// The same published doors, but the read-only pre-flight fails. The
+        /// device -> iCloud door must then stay shut with its own message:
+        /// 「we could not look」 and 「there is nothing there」 must not be
+        /// confusable before a deletion.
+        case cloudDatasetDoorsUnreadable
         /// The launch-host screens a fenced device actually lands on. Each one
         /// renders the shipping `PersistenceLaunchStatusView` with a recorder in
         /// place of the runtime, so no journal, container or CloudKit call
         /// exists in the process.
         case datasetRefreshChoice, datasetRefreshOtherDevices, datasetRefreshPreviewFailed
         case datasetRefreshBlocked, overwriteInProgress
+        /// `.remoteRecovery`, whose 「復旧を続ける」 door is gated by the resume
+        /// bit — not by the legacy `allowsCloudReplacement`.
+        case remoteResumeClosed, remoteResumeOpen
+        /// PLAN Step 9 / §6.5. The non-blocking banner a committed device ->
+        /// iCloud replacement raises when the one post-commit comparison finds
+        /// user records the committed payload did not hold.
+        case lateArrival
 
         var overwriteLaunch: StorageTransferOverwriteLaunchUITestScenario? {
             switch self {
@@ -26,6 +38,8 @@ enum StorageTransferSettingsUITestFixture {
             case .datasetRefreshPreviewFailed: .previewFailed
             case .datasetRefreshBlocked: .blocked
             case .overwriteInProgress: .inProgress
+            case .remoteResumeClosed: .remoteResumeClosed
+            case .remoteResumeOpen: .remoteResumeOpen
             default: nil
             }
         }
@@ -40,7 +54,8 @@ enum StorageTransferSettingsUITestFixture {
         }
 
         var mode: PersistenceLaunchMode {
-            self == .cloud || self == .cloudDatasetDoors || isOffline
+            self == .cloud || self == .cloudDatasetDoors
+                || self == .cloudDatasetDoorsUnreadable || self == .lateArrival || isOffline
                 || self == .cloudNetworkWaiting ? .cloudKit : .localOnly
         }
 
@@ -49,7 +64,7 @@ enum StorageTransferSettingsUITestFixture {
         /// remote resume stay closed, so a fixture can never widen the shipping
         /// prohibition it is meant to exercise around.
         var releasePolicy: StorageTransferReleasePolicy {
-            self == .cloudDatasetDoors
+            self == .cloudDatasetDoors || self == .cloudDatasetDoorsUnreadable
                 ? .isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)
                 : .standard
         }
@@ -74,6 +89,9 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
     @State private var lastChoice = "none"
     @State private var datasetCalls = 0
     @State private var lastDatasetDirection = "none"
+    @State private var previewCalls = 0
+    @State private var lateArrivalSettingsCalls = 0
+    @State private var showsLateArrival = true
     @State private var offlineRetryCalls = 0
     @State private var recoveryReviewCalls = 0
     @State private var isCheckingOfflineConnection = false
@@ -113,6 +131,12 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                             .accessibilityIdentifier("storage-switch.fixture-state")
                         Text(verbatim: "dataset=\(lastDatasetDirection);datasetCalls=\(datasetCalls)")
                             .accessibilityIdentifier("storage-switch.dataset-fixture-state")
+                        Text(verbatim: "previewCalls=\(previewCalls)")
+                            .accessibilityIdentifier("storage-switch.preview-fixture-state")
+                        if scenario == .lateArrival {
+                            Text(verbatim: "settingsCalls=\(lateArrivalSettingsCalls);shown=\(showsLateArrival)")
+                                .accessibilityIdentifier("storage-overwrite.late-arrival-fixture-state")
+                        }
                         if scenario.isOffline {
                             Text(verbatim: "retryCalls=\(offlineRetryCalls);checking=\(isCheckingOfflineConnection)")
                                 .accessibilityIdentifier("cloud-offline.fixture-state")
@@ -135,6 +159,7 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
         }
         .environment(\.isCloudOfflineSession, scenario.isOffline)
         .environment(\.cloudConnectionPresentation, presentation(scenario))
+        .environment(\.storageTransferLateArrival, lateArrival(scenario))
         .task {
             guard scenario != .unavailable else { return }
             controller.install({ choice in
@@ -149,8 +174,58 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                 datasetCalls += 1
                 lastDatasetDirection = direction.rawValue
                 try await Task.sleep(for: .seconds(45))
+            }, datasetPreview: {
+                // Stands in for the read-only server snapshot. It records that
+                // it was asked, so a test can prove the evidence is gathered
+                // BEFORE the acknowledgement rather than after it.
+                previewCalls += 1
+                guard scenario != .cloudDatasetDoorsUnreadable else {
+                    throw CloudStorageTransferCloudError.timedOut
+                }
+                return Self.previewSummary
             })
         }
+    }
+
+    /// Two sides whose counts and dates differ, and one witnessed other
+    /// device, so the sheet's comparison and evidence are both non-trivial.
+    private static let previewSummary = StorageTransferDatasetPreviewSummary(
+        cloud: preview(subjects: 9, sessions: 312, stones: 28,
+                       year: 2026, month: 9, day: 18, otherDeviceIDs: 2),
+        device: preview(subjects: 12, sessions: 480, stones: 36,
+                        year: 2026, month: 9, day: 20, otherDeviceIDs: 0))
+
+    private static func preview(subjects: Int, sessions: Int, stones: Int,
+                                year: Int, month: Int, day: Int,
+                                otherDeviceIDs: Int) -> StorageTransferCloudPreview {
+        var counts = Dictionary(uniqueKeysWithValues:
+            PomoGemStorageSnapshot.cloudModelNames.map { ($0, 0) })
+        counts["Subject"] = subjects
+        counts["StudySession"] = sessions
+        counts["AchievementStone"] = stones
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = 12
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        return StorageTransferCloudPreview(
+            recordCounts: counts,
+            latestRecordAt: calendar.date(from: components),
+            otherDeviceIDs: otherDeviceIDs, ignoredWriterIDs: 0)
+    }
+
+    /// Neither action touches data: 「このまま使う」 only hides the banner, and
+    /// 「設定を開く」 only navigates. The recorder proves exactly that.
+    private func lateArrival(
+        _ scenario: StorageTransferSettingsUITestFixture.Scenario
+    ) -> StorageTransferLateArrivalPresentation? {
+        guard scenario == .lateArrival, showsLateArrival else { return nil }
+        return StorageTransferLateArrivalPresentation(
+            sessionID: fixtureSessionID, models: ["StudySession", "Subject"],
+            dismiss: { showsLateArrival = false },
+            openSettings: { lateArrivalSettingsCalls += 1 })
     }
 
     private func presentation(_ scenario: StorageTransferSettingsUITestFixture.Scenario) -> CloudConnectionPresentation? {

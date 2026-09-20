@@ -27,27 +27,78 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
 
     // MARK: - 1. Two symmetric doors, two independent consents
 
+    /// Runs against the PUBLISHED screen (`datasetRefreshOtherDevices`), where
+    /// the overwrite door can actually open. Against the shipping scenario the
+    /// door is unconditionally disabled by the release bit, so every assertion
+    /// below would hold for a reason that has nothing to do with consent — the
+    /// S9 property would be certified by a test that cannot fail for it.
     func testBothDirectionsAreOfferedWithIndependentConsentsAndNeitherStartsAnything() {
-        launch("datasetRefreshChoice")
+        launch("datasetRefreshOtherDevices")
         let refresh = app.buttons["storage-refresh-confirm"]
         let overwrite = app.buttons["storage-overwrite-confirm"]
         XCTAssertTrue(reveal(refresh))
         XCTAssertTrue(reveal(overwrite, upwards: false))
         XCTAssertFalse(refresh.isEnabled, "The iCloud → device door starts unconsented")
-        XCTAssertFalse(overwrite.isEnabled, "The device → iCloud door starts unconsented")
+        XCTAssertTrue(overwrite.isEnabled,
+            "The premise of this test: on the published screen this door CAN open")
 
-        // Ticking one direction's acknowledgement must never enable the other.
+        // Ticking the device-side acknowledgement must not pre-arm the sheet's
+        // own, opposite acknowledgement.
         acknowledge("storage-refresh-confirm-data-loss")
         XCTAssertTrue(reveal(refresh))
         XCTAssertTrue(refresh.isEnabled)
-        XCTAssertTrue(reveal(overwrite, upwards: false))
-        XCTAssertFalse(overwrite.isEnabled,
+        openOverwriteSheet()
+        let sheetToggle = app.switches["storage-overwrite-confirm-data-loss"]
+        XCTAssertTrue(reveal(sheetToggle))
+        XCTAssertEqual(sheetToggle.value as? String, "0",
+            "端末データの削除を確認しました must never arm iCloudを置き換える")
+        let sheetConfirm = app.buttons["storage-overwrite-sheet-confirm"]
+        XCTAssertTrue(reveal(sheetConfirm, upwards: false))
+        XCTAssertFalse(sheetConfirm.isEnabled,
             "One acknowledgement must not authorize the opposite, destructive direction")
+        attach("Dataset refresh — both doors with separate acknowledgements")
 
-        // The overwrite door never acts on tap; it opens a second confirmation.
+        // And the reverse: consenting on the sheet leaves the first screen's
+        // own toggle exactly as the user left it, and starts nothing.
+        acknowledge("storage-overwrite-confirm-data-loss")
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.buttons["storage-overwrite-confirm"].waitForExistence(timeout: 4))
+        let refreshToggle = app.switches["storage-refresh-confirm-data-loss"]
+        XCTAssertTrue(reveal(refreshToggle))
+        XCTAssertEqual(refreshToggle.value as? String, "1")
+        openOverwriteSheet()
+        XCTAssertTrue(reveal(app.switches["storage-overwrite-confirm-data-loss"]))
+        XCTAssertEqual(app.switches["storage-overwrite-confirm-data-loss"].value as? String, "0",
+            "戻る discards the destructive acknowledgement; it is never remembered")
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.buttons["storage-overwrite-confirm"].waitForExistence(timeout: 4))
+        assertNoOperation()
+        assertOverwriteFixture(refresh: 0, overwrite: 0, export: 0)
+    }
+
+    /// The shipping build still offers the door, describes it, and refuses it.
+    func testTheShippingBuildShowsTheOverwriteDoorDisabledWithItsReason() {
+        launch("datasetRefreshChoice")
+        let overwrite = app.buttons["storage-overwrite-confirm"]
+        XCTAssertTrue(reveal(overwrite, upwards: false))
+        XCTAssertFalse(overwrite.isEnabled)
+        let reason = app.staticTexts["storage-overwrite-unavailable"]
+        XCTAssertTrue(reveal(reason))
+        XCTAssertTrue(reason.label.contains("いまは利用できません"))
+        // The device side is not read while this direction is unpublished, so
+        // it is omitted rather than reported as a failed look.
+        let comparison = app.staticTexts["storage-overwrite-comparison"]
+        XCTAssertTrue(reveal(comparison))
+        XCTAssertTrue(comparison.label.contains("iCloud: テーマ"))
+        XCTAssertFalse(comparison.label.contains("このiPhone"))
+        XCTAssertFalse(comparison.label.contains("確認できませんでした"))
         overwrite.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertFalse(app.navigationBars["最後の確認"].exists)
-        attach("Dataset refresh — both doors with separate acknowledgements")
+        // PLAN Step 6: the raw and the FILTERED witness count are both stated,
+        // so a writer the ignore list moved is visible as moved, not as absent.
+        XCTAssertTrue(reveal(writerState, upwards: false))
+        XCTAssertEqual(writerState.label, "others=0;ignored=1")
+        attach("Dataset refresh — shipping build keeps the overwrite closed")
         assertNoOperation()
         assertOverwriteFixture(refresh: 0, overwrite: 0, export: 0)
     }
@@ -105,6 +156,44 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         attach("Dataset refresh — unreadable iCloud keeps the overwrite closed")
         assertNoOperation()
         assertOverwriteFixture(refresh: 0, overwrite: 0, export: 0)
+    }
+
+    /// The failure copy names a control. It has to be on this screen, and it
+    /// has to work: without it the door stays closed for the rest of the launch
+    /// and the only escape is force-quitting the app.
+    func testTheNamedRetryControlExistsAndReArmsTheDoorAfterASuccessfulReRead() {
+        launch("datasetRefreshPreviewFailed")
+        let comparison = app.staticTexts["storage-overwrite-comparison"]
+        XCTAssertTrue(reveal(comparison))
+        let named = "iCloudの内容をもう一度確認"
+        XCTAssertTrue(comparison.label.contains("「\(named)」"),
+            "The instruction must name the control this screen carries")
+        XCTAssertFalse(comparison.label.contains("もう一度試す"),
+            "`.datasetRefresh` has no 「もう一度試す」 button")
+        XCTAssertFalse(app.buttons["もう一度試す"].exists)
+
+        let retry = app.buttons["storage-overwrite-retry-preview"]
+        XCTAssertTrue(reveal(retry))
+        XCTAssertEqual(retry.label, named)
+        XCTAssertTrue(retry.isEnabled)
+        attach("Dataset refresh — the re-read control the failure copy names")
+        retry.tap()
+        assertOverwriteFixture(refresh: 0, overwrite: 0, export: 0, previewRetries: 1)
+
+        // The successful re-read replaces the failure sentence with the real
+        // comparison and re-arms the door it was gating.
+        let rearmed = app.staticTexts["storage-overwrite-comparison"]
+        XCTAssertTrue(reveal(rearmed))
+        XCTAssertTrue(rearmed.label.contains("このiPhone"))
+        XCTAssertTrue(rearmed.label.contains("テーマ"))
+        XCTAssertFalse(rearmed.label.contains("確認できませんでした"))
+        XCTAssertFalse(app.buttons["storage-overwrite-retry-preview"].exists,
+            "A succeeded read is not offered a re-read")
+        let overwrite = app.buttons["storage-overwrite-confirm"]
+        XCTAssertTrue(reveal(overwrite, upwards: false))
+        XCTAssertTrue(overwrite.isEnabled)
+        attach("Dataset refresh — the re-read re-arms the door")
+        assertNoOperation()
     }
 
     // MARK: - 3. The final confirmation sheet
@@ -212,6 +301,75 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         assertOverwriteFixture(refresh: 0, overwrite: 0, export: 0)
     }
 
+    // MARK: - 5b. Resuming another installation's transaction
+
+    /// PLAN §4: the flip is `allowsDatasetOverwriteFromDevice` and
+    /// `allowsRemoteResumeBeforeReplacing`; `allowsCloudReplacement` stays
+    /// false. The 「復旧を続ける」 door is governed by the resume bit, so raising
+    /// ONLY that bit must open it — and the refusal it shows while the bit is
+    /// closed must name that bit, not the legacy prohibition.
+    func testRemoteResumeDoorFollowsItsOwnBitAndNamesItsOwnProhibition() {
+        launch("remoteResumeClosed")
+        let closed = app.buttons["storage-transfer-recover"]
+        XCTAssertTrue(reveal(closed))
+        XCTAssertFalse(closed.isEnabled)
+        let reason = app.staticTexts["storage-transfer-recover-unavailable"]
+        XCTAssertTrue(reveal(reason))
+        XCTAssertTrue(reason.label.contains("別の端末が始めた置き換えを、このiPhoneからは再開できません"))
+        XCTAssertFalse(reason.label.contains("iCloudの置き換えと、その復旧の再開は一時的に利用できません"),
+            "The legacy prohibition no longer governs this action and must not be quoted here")
+        closed.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        attach("Remote recovery — refused, naming the gate that governs it")
+        assertNoOperation()
+        assertOverwriteFixture(refresh: 0, overwrite: 0, export: 0)
+
+        launch("remoteResumeOpen")
+        let open = app.buttons["storage-transfer-recover"]
+        XCTAssertTrue(reveal(open))
+        XCTAssertTrue(open.isEnabled,
+            "Raising only allowsRemoteResumeBeforeReplacing must open the resume door")
+        XCTAssertFalse(app.staticTexts["storage-transfer-recover-unavailable"].exists)
+        attach("Remote recovery — the resume bit alone opens the door")
+        open.tap()
+        assertOverwriteFixture(refresh: 0, overwrite: 0, export: 0, recover: 1)
+        assertNoOperation()
+    }
+
+    // MARK: - 6b. After the replacement: the one late-arrival comparison
+
+    /// PLAN Step 9 / §6.5. `Docs/MultiDeviceCloudSafety.md` defect 1 cannot be
+    /// prevented by this design; this banner is the only thing promised about
+    /// it. It is non-blocking, hedged, and neither of its actions is
+    /// destructive.
+    func testLateArrivalIsDisclosedAsAPossibilityAndNeitherActionTouchesData() {
+        launch("lateArrival")
+        let banner = app.staticTexts["storage-overwrite-late-arrival"]
+        XCTAssertTrue(reveal(banner))
+        XCTAssertTrue(banner.label.contains("他の端末から古い記録が届いた可能性があります"),
+            "A bounded detector must be phrased as a possibility, never as a fact")
+        XCTAssertTrue(banner.label.contains("削除したはずのテーマが戻っていないか確認してください"))
+        // Nothing on it is a destructive control.
+        XCTAssertFalse(app.buttons["storage-overwrite-confirm"].exists)
+        XCTAssertFalse(app.buttons["storage-refresh-confirm"].exists)
+        attach("Late arrival — non-blocking disclosure after a committed replacement")
+
+        let settings = app.buttons["storage-overwrite-late-arrival-settings"]
+        XCTAssertTrue(reveal(settings))
+        XCTAssertEqual(settings.label, "設定を開く")
+        settings.tap()
+        assertLateArrivalFixture(settingsCalls: 1, shown: true)
+
+        let dismiss = app.buttons["storage-overwrite-late-arrival-dismiss"]
+        XCTAssertTrue(reveal(dismiss))
+        XCTAssertEqual(dismiss.label, "このまま使う")
+        dismiss.tap()
+        assertLateArrivalFixture(settingsCalls: 1, shown: false)
+        XCTAssertFalse(app.staticTexts["storage-overwrite-late-arrival"].exists,
+            "「このまま使う」 dismisses the banner and decides nothing about the data")
+        attach("Late arrival — dismissed without any data decision")
+        assertNoOperation()
+    }
+
     // MARK: - 7. AX5
 
     func testAX5OverwriteDoorsAndFinalConfirmationRemainReachableAndDescribed() throws {
@@ -271,6 +429,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
 
     private var state: XCUIElement { app.staticTexts["storage-switch.fixture-state"] }
     private var overwriteState: XCUIElement { app.staticTexts["storage-overwrite.fixture-state"] }
+    private var writerState: XCUIElement { app.staticTexts["storage-overwrite.writer-fixture-state"] }
 
     private func openOverwriteSheet(upwards: Bool = false) {
         let overwrite = app.buttons["storage-overwrite-confirm"]
@@ -294,8 +453,19 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         XCTAssertEqual(state.label, "calls=0;choice=none;starting=false")
     }
 
-    private func assertOverwriteFixture(refresh: Int, overwrite: Int, export: Int) {
-        let expected = "refresh=\(refresh);overwrite=\(overwrite);export=\(export)"
+    private func assertLateArrivalFixture(settingsCalls: Int, shown: Bool) {
+        let state = app.staticTexts["storage-overwrite.late-arrival-fixture-state"]
+        XCTAssertTrue(reveal(state, upwards: false))
+        let expected = "settingsCalls=\(settingsCalls);shown=\(shown)"
+        let matched = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", expected), object: state)
+        XCTAssertEqual(XCTWaiter.wait(for: [matched], timeout: 5), .completed,
+            "Expected \(expected), saw \(state.label)")
+    }
+
+    private func assertOverwriteFixture(refresh: Int, overwrite: Int, export: Int,
+                                        previewRetries: Int = 0, recover: Int = 0) {
+        let expected = "refresh=\(refresh);overwrite=\(overwrite);export=\(export);previewRetries=\(previewRetries);recover=\(recover)"
         let matched = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "label == %@", expected), object: overwriteState)
         XCTAssertEqual(XCTWaiter.wait(for: [matched], timeout: 5), .completed,

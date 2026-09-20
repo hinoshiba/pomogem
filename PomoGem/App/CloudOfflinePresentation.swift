@@ -41,6 +41,9 @@ extension EnvironmentValues {
 /// Keep the content's structural identity stable when connectivity changes.
 struct CloudConnectionSessionContent<Content: View>: View {
     @Environment(\.cloudConnectionPresentation) private var presentation
+    /// Non-blocking, and deliberately above the offline banner: it reports
+    /// something that already happened to the data, not the transport.
+    @Environment(\.storageTransferLateArrival) private var lateArrival
     private let content: Content
 
     init(@ViewBuilder content: () -> Content) {
@@ -52,6 +55,12 @@ struct CloudConnectionSessionContent<Content: View>: View {
         // nested NavigationStack: UIKit can still place its toolbar beneath
         // the inset's buttons. Allocate separate layout space instead.
         VStack(spacing: 0) {
+            if let lateArrival {
+                StorageTransferLateArrivalBanner(presentation: lateArrival)
+                    .id(lateArrival.sessionID)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .zIndex(2)
+            }
             if let presentation {
                 CloudOfflineBanner(isChecking: presentation.isChecking,
                     message: presentation.message, retry: presentation.retry,

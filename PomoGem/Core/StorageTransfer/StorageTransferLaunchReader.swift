@@ -153,6 +153,10 @@ enum StorageTransferOverwriteCopy {
     /// The re-read control the sentence above names. Non-destructive: it
     /// re-arms the read-only pre-flight and nothing else.
     static let retryPreviewTitle = "iCloudの内容をもう一度確認"
+    /// The same failure, in Settings, where the control that re-reads is the
+    /// door itself. Each surface names the control it actually carries.
+    static let settingsPreviewUnavailable =
+        "iCloudの内容を確認できませんでした。通信を確認して、もう一度「\(confirmTitle)」を押してください。どちらの記録も削除していません。"
 
     static let dataLossWarning =
         "iCloudにある現在のPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータで置き換えます。2つのデータは結合しません。削除したiCloudのデータを元に戻すことはできません。同じApple Accountの他の端末は、次に開いたときにこの画面と同じ確認を求められ、その端末だけにある未送信のデータは残りません。"

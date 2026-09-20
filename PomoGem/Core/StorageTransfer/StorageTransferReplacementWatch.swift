@@ -137,3 +137,35 @@ extension StorageTransferStateFile {
         guard unlink(url.path) == 0 || errno == ENOENT else { throw StorageTransferError.unsafePath }
     }
 }
+
+/// What a `.lateArrival` outcome is allowed to say on screen.
+///
+/// The detector compares raw per-model counts, and four of the seven mirrored
+/// models are written by THIS installation as ordinary bookkeeping between the
+/// commit and the next settled mount — a timer claim, a mirrored timer row, a
+/// reset marker, a settings row. Growth in them is this device's own work, not
+/// evidence that another device flushed pre-purge rows, and reporting it would
+/// make a single-device account accuse itself on every overwrite.
+///
+/// The banner names 「削除したはずのテーマ」, so the models it may speak about are
+/// exactly the ones a user recognizes as their records.
+enum StorageTransferLateArrivalPolicy {
+    /// Written by this installation as part of mounting and running, so their
+    /// growth carries no information about a foreign writer.
+    static let deviceBookkeepingModels: Set<String> = [
+        "SyncedFocusTimer", "FocusTimerDeviceClaim", "ActivityResetMarker", "Prefs"
+    ]
+
+    /// The user-recognizable models, in a stable order.
+    static var reportableModels: [String] {
+        PomoGemStorageSnapshot.cloudModelNames.subtracting(deviceBookkeepingModels).sorted()
+    }
+
+    /// nil when nothing may be shown. A non-nil value is always non-empty and
+    /// sorted, so a banner can never appear with nothing behind it.
+    static func reportable(_ outcome: StorageTransferReplacementWatchOutcome) -> [String]? {
+        guard case .lateArrival(let models) = outcome else { return nil }
+        let reportable = models.filter { !deviceBookkeepingModels.contains($0) }.sorted()
+        return reportable.isEmpty ? nil : reportable
+    }
+}

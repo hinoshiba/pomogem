@@ -23,6 +23,24 @@ enum StorageTransferDatasetRequestDirection: String, Codable, Equatable, Sendabl
     case refreshFromCloud
 }
 
+/// The read-only evidence the Settings 「最後の確認」 shows before a device -> iCloud
+/// overwrite is acknowledged.
+///
+/// PLAN §3 S14: nobody may authorize deleting contents the app never
+/// enumerated, and the launch screen already refuses to arm its door until the
+/// server has been read and both sides are on screen. Settings must show the
+/// same two facts — what is on each side, and whether another device has
+/// written here — BEFORE the acknowledgement, not after it.
+struct StorageTransferDatasetPreviewSummary: Equatable, Sendable {
+    /// What the server holds. Always present: the door does not open without it.
+    let cloud: StorageTransferCloudPreview
+    /// This installation's own stores, for the comparison row. nil degrades the
+    /// device side to 「確認できませんでした」 and never gates anything: failing to
+    /// read this iPhone is not a reason to refuse to describe what would be
+    /// destroyed on the server.
+    let device: StorageTransferCloudPreview?
+}
+
 enum StorageTransferDatasetRequestError: Error, LocalizedError, Equatable {
     /// The account has no terminal control record, so there is no committed
     /// generation to compare against. Without one the CAS that protects a

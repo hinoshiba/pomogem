@@ -511,6 +511,11 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var deviceDatasetPreview: StorageTransferCloudPreview?
     @State private var cloudDatasetPreviewFailed = false
     @State private var overwriteInProgressPhase: StorageTransferJournal.Phase?
+    /// PLAN Step 9. Non-blocking banner state, set once per committed
+    /// replacement by the single post-commit comparison and never again: the
+    /// receipt is deleted whatever the outcome.
+    @State private var lateArrivalNotice: StorageTransferLateArrivalPresentation?
+    @State private var evaluatedLateArrivalSessions: Set<UUID> = []
     @State private var isExportingDeviceData = false
     @State private var deviceDataExportURL: URL?
     @State private var deviceDataExportError: String?
@@ -578,6 +583,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             onRefreshDataset: requestDatasetRefresh,
             onOverwriteDataset: requestDatasetOverwrite,
             onExportDeviceData: deviceDataExportAction,
+            onRetryCloudPreview: datasetPreviewRetryAction,
             cloudPreview: cloudDatasetPreview,
             devicePreview: deviceDatasetPreview,
             cloudPreviewFailed: cloudDatasetPreviewFailed,
@@ -615,6 +621,26 @@ private struct PomoGemPersistenceLaunchHost: View {
         return { startDeviceDataExport() }
     }
 
+    /// Offered only on the screen whose copy names it, and only once a read
+    /// has actually failed. Re-reading iCloud deletes nothing on either side.
+    private var datasetPreviewRetryAction: (() -> Void)? {
+        guard case .datasetRefresh = launchState, cloudDatasetPreviewFailed,
+              !isPreparing, !requiresStorageTransferRelaunch,
+              storageTransferRecoveryBinding != nil else { return nil }
+        return { retryDatasetPreview() }
+    }
+
+    private func retryDatasetPreview() {
+        guard case .datasetRefresh = launchState, !isPreparing,
+              !requiresStorageTransferRelaunch,
+              storageTransferRecoveryBinding != nil else { return }
+        cloudDatasetPreview = nil
+        cloudDatasetPreviewFailed = false
+        // A new identity re-fires `.task(id: datasetPreviewRequest)`; the
+        // in-flight read's own staleness check drops whatever it returns.
+        datasetPreviewRequest = UUID()
+    }
+
     private var offlineContinuationAction: (() -> Void)? {
         guard canContinueOffline, canStartOfflineContinuation else { return nil }
         return { requestOfflineUse() }
@@ -641,9 +667,15 @@ private struct PomoGemPersistenceLaunchHost: View {
             .environment(\.persistenceViewContainerLifetime, current.viewLifetime)
             .environment(\.isCloudOfflineSession, current.isCloudOffline)
             .environment(\.cloudConnectionPresentation, connectionPresentation(for: current))
+            .environment(\.storageTransferLateArrival,
+                         lateArrivalNotice?.sessionID == current.id ? lateArrivalNotice : nil)
             .task(id: scenePhase) {
                 if let cleanupID, let cleanupNamespace {
+                    // The first settled cloud mount after a commit is also the
+                    // one chance the late-arrival receipt gets. Evaluated after
+                    // the cleanup queue so a diagnostic never delays it.
                     await retryStorageTransferCleanup(sessionID: cleanupID, namespace: cleanupNamespace)
+                    await evaluateReplacementWatch(sessionID: cleanupID, namespace: cleanupNamespace)
                 }
             }
     }
@@ -682,6 +714,46 @@ private struct PomoGemPersistenceLaunchHost: View {
             // The exact minimal queue survives failure or a scene/account
             // change. The next verified cloud session retries it.
         }
+    }
+
+    /// PLAN Step 9, the one read-only comparison a committed device → iCloud
+    /// replacement is owed.
+    ///
+    /// It runs at the first settled cloud mount after that commit and never
+    /// again: `evaluateReplacementWatch` deletes the receipt whatever the
+    /// outcome, so this can neither repeat nor accumulate a file per namespace.
+    /// It is a DETECTOR, not a fence — it changes nothing, refuses nothing,
+    /// and a device that flushes days later is never caught. With no receipt
+    /// present it costs one `stat` and makes no server call at all.
+    private func evaluateReplacementWatch(sessionID: UUID, namespace: AccountDataNamespace) async {
+        guard scenePhase == .active, session?.id == sessionID,
+              lateArrivalNotice == nil,
+              !evaluatedLateArrivalSessions.contains(sessionID),
+              let binding = AccountScopedLocalState.activeBinding(),
+              binding.namespace == namespace,
+              let runtime = try? StorageTransferRuntime.live() else { return }
+        evaluatedLateArrivalSessions.insert(sessionID)
+        let admitted = try? runtime.localDatasetAdmission(binding: binding)
+        let outcome = await runtime.evaluateReplacementWatch(
+            binding: binding,
+            currentGenerationID: admitted?.datasetGenerationID,
+            validateAccess: {
+                try Task.checkCancellation()
+                guard scenePhase == .active, UIApplication.shared.applicationState == .active,
+                      session?.id == sessionID,
+                      AccountScopedLocalState.activeBinding() == binding else {
+                    throw StorageTransferError.staleTransaction
+                }
+            })
+        guard session?.id == sessionID,
+              let models = StorageTransferLateArrivalPolicy.reportable(outcome) else { return }
+        lateArrivalNotice = StorageTransferLateArrivalPresentation(
+            sessionID: sessionID, models: models,
+            dismiss: { lateArrivalNotice = nil },
+            openSettings: {
+                lateArrivalNotice = nil
+                NotificationCenter.default.post(name: .pomogemOpenStorageSettings, object: nil)
+            })
     }
 
     private var localOnlySelectionAction: (() -> Void)? {
@@ -777,6 +849,9 @@ private struct PomoGemPersistenceLaunchHost: View {
             },
             requestStorageTransferDataset: { direction in
                 try await requestStorageTransferDataset(direction, sessionID: sessionID)
+            },
+            previewStorageTransferDataset: {
+                try await previewStorageTransferDataset(sessionID: sessionID)
             },
             unmountForStorageTransfer: {
                 unmountForStorageTransfer(sessionID: sessionID)
@@ -2066,8 +2141,12 @@ private struct PomoGemPersistenceLaunchHost: View {
             // against. Either way nothing may be recorded.
             throw StorageTransferDatasetRequestError.noCommittedGeneration
         }
-        // PLAN §3 S14: never record an intent to delete contents the app could
-        // not enumerate. The read is read-only and opens no container.
+        // PLAN §3 S14, host side: never record an intent to delete contents
+        // the app could not enumerate, whatever the caller believes it showed.
+        // The evidence the user actually READ came from
+        // `previewStorageTransferDataset`, before the acknowledgement; this
+        // read is the host's own, independent enforcement and opens no
+        // container. Both are read-only and bounded at 45 s.
         if direction == .overwriteCloudFromDevice {
             _ = try await runtime.previewCloudDataset(binding: binding, validateAccess: validate)
             try validate()
@@ -2076,6 +2155,54 @@ private struct PomoGemPersistenceLaunchHost: View {
             direction: direction, binding: binding, datasetGenerationID: generation,
             requestedAt: .now, requestingProcessID: UUID()))
         requireStorageTransferRelaunch(message: datasetRequestRelaunchMessage(direction))
+    }
+
+    /// The read-only pre-flight behind the Settings 「最後の確認」.
+    ///
+    /// One server snapshot and one read of a disposable copy of this device's
+    /// own stores. It opens no container that outlives this call, creates no
+    /// journal or checkpoint, writes nothing to either side and authorizes
+    /// nothing: `requestStorageTransferDataset` re-resolves the account, re-reads
+    /// the control record and re-runs its own S14 read before it records
+    /// anything durable. This exists so the screen can SHOW what the next tap
+    /// would destroy, which is the part S14 is actually about.
+    private func previewStorageTransferDataset(
+        sessionID: UUID
+    ) async throws -> StorageTransferDatasetPreviewSummary {
+        guard let sourceSession = sessionHolder.resolve(sessionID) else {
+            throw StorageTransferError.staleTransaction
+        }
+        guard !sourceSession.isCloudOffline else {
+            throw StorageTransferRuntimeError.cloudCopyStillPending
+        }
+        let attempt = launchAttempt
+        guard case let .selected(source) = PersistenceDeploymentState.load(),
+              case let .cloud(binding) = source else {
+            throw StorageTransferError.staleTransaction
+        }
+        let validate: @MainActor () throws -> Void = {
+            try requireActiveLaunchAttempt(attempt, checkpoint: "during-dataset-preview")
+            guard !requiresStorageTransferRelaunch,
+                  session?.id == sourceSession.id,
+                  PersistenceDeploymentState.load() == .selected(source) else {
+                throw StorageTransferError.staleTransaction
+            }
+        }
+        try validate()
+        let deviceID = FocusDeviceIdentity.current()
+        let cloud = try await StorageTransferRuntime.live().previewCloudDataset(
+            binding: binding, localDeviceID: deviceID, validateAccess: validate)
+        try validate()
+        // Best effort, exactly as on the launch screen: an unreadable device
+        // side degrades the comparison, it never withholds what the SERVER
+        // holds. Skipped while the direction it informs is unpublished, so a
+        // build that cannot run the overwrite never pays for its evidence.
+        let device = StorageTransferReleasePolicy.standard.allowsDatasetOverwriteFromDevice
+            ? try? StorageTransferLaunchReader.captureDevicePreview(
+                selection: source, localDeviceID: deviceID)
+            : nil
+        try validate()
+        return StorageTransferDatasetPreviewSummary(cloud: cloud, device: device)
     }
 
     private func datasetRequestRelaunchMessage(
@@ -2105,6 +2232,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         cloudDatasetPreview = nil
         deviceDatasetPreview = nil
         cloudDatasetPreviewFailed = false
+        lateArrivalNotice = nil
         discardDeviceDataExport()
         AccountScopedLocalState.deactivate()
         NotificationManager.shared.cancelFocusReturnReminder()
@@ -2184,6 +2312,16 @@ private struct PomoGemPersistenceLaunchHost: View {
             cloudDatasetPreviewFailed = true
         }
         guard datasetPreviewRequest == request else { return }
+        // Skipped entirely while the direction it informs is unpublished: the
+        // overwrite door is disabled by `canRequestOverwrite` anyway, and this
+        // call byte-copies both stores, mounts a container and walks every row
+        // of all eleven entities SYNCHRONOUSLY on the main actor — a freeze of
+        // seconds on a large account, paid for a control the user cannot use.
+        // TODO: move it off the main actor once `PomoGemStorageSnapshot.capture`
+        // is no longer `@MainActor`. Both sides of the comparison must keep
+        // being reduced by the same function, so a second, off-main reduction
+        // written just for this screen is not an acceptable substitute.
+        guard StorageTransferReleasePolicy.standard.allowsDatasetOverwriteFromDevice else { return }
         if case let .selected(selection) = PersistenceDeploymentState.load() {
             // Best effort. An unreadable device side degrades the comparison
             // to 「確認できませんでした」; it never gates the destructive door,
@@ -2713,6 +2851,11 @@ private struct PersistenceLaunchStatusView: View {
     /// The non-destructive rescue door. nil while it cannot run (no selection
     /// recorded, or an export is already in flight).
     var onExportDeviceData: (() -> Void)?
+    /// Re-runs the read-only pre-flight. `comparisonUnavailable` names a
+    /// control, and this is it: without it a failed server read leaves the
+    /// destructive door disabled for the rest of the launch with no in-app way
+    /// to re-read iCloud, and the instruction on screen points at nothing.
+    var onRetryCloudPreview: (() -> Void)?
     /// Read-only pre-flight evidence. `cloudPreview == nil` means the iCloud
     /// side was NOT enumerated — either the read is still running or it failed
     /// (`cloudPreviewFailed`). Nobody may authorize deleting contents the app
@@ -2978,6 +3121,14 @@ private struct PersistenceLaunchStatusView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityIdentifier("storage-overwrite-comparison")
+        if cloudPreviewFailed, let onRetryCloudPreview {
+            // Non-destructive: it re-arms the read-only pre-flight and nothing
+            // else. `.datasetRefresh` carries no 「もう一度試す」, so this is the
+            // control the failure sentence above names.
+            Button(StorageTransferOverwriteCopy.retryPreviewTitle, action: onRetryCloudPreview)
+                .buttonStyle(PomoGemSecondaryButtonStyle())
+                .accessibilityIdentifier("storage-overwrite-retry-preview")
+        }
         Text(overwriteOtherDeviceEvidence)
             .font(.caption)
             .foregroundStyle(PomoGemTheme.muted)
@@ -3091,6 +3242,13 @@ private struct PersistenceLaunchStatusView: View {
     private var overwriteComparison: String {
         if cloudPreviewFailed { return StorageTransferOverwriteCopy.comparisonUnavailable }
         guard cloudPreview != nil else { return StorageTransferOverwriteCopy.comparisonReading }
+        // While the device -> iCloud direction is unpublished the host does not
+        // read this iPhone's stores at all, so the device row is omitted rather
+        // than reported as 「確認できませんでした」 — that sentence claims a look
+        // that never happened, on the one screen that must not invent evidence.
+        guard releasePolicy.allowsDatasetOverwriteFromDevice else {
+            return StorageTransferOverwriteCopy.side("iCloud", preview: cloudPreview)
+        }
         return StorageTransferOverwriteCopy.side("このiPhone", preview: devicePreview)
             + "\n" + StorageTransferOverwriteCopy.side("iCloud", preview: cloudPreview)
     }
@@ -3259,6 +3417,14 @@ enum StorageTransferOverwriteLaunchUITestScenario {
     case blocked
     /// A durable device -> iCloud replacement past the point of no return.
     case inProgress
+    /// Another installation's transaction is parked before the destructive
+    /// phase and this device is offered as its executor. Shipping build: the
+    /// resume bit is closed, so the door is refused with its own reason.
+    case remoteResumeClosed
+    /// The same screen with `allowsRemoteResumeBeforeReplacing` raised, and
+    /// ONLY that bit — the door this gate governs is the one that closes
+    /// Docs/MultiDeviceCloudSafety.md defect 2.
+    case remoteResumeOpen
 }
 
 struct StorageTransferOverwriteLaunchUITestFixtureView: View {
@@ -3266,19 +3432,25 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
     @State private var refreshCalls = 0
     @State private var overwriteCalls = 0
     @State private var exportCalls = 0
+    /// The `.previewFailed` scenario re-reads on demand, exactly as the host
+    /// does, so a test can prove the named control re-arms the closed door
+    /// instead of only proving the door is closed.
+    @State private var previewRetries = 0
+    @State private var recoverCalls = 0
 
     var body: some View {
         PersistenceLaunchStatusView(
             state: state,
             onRetry: {}, onRetryOnline: {}, canRetryOnline: true,
             onChooseCloud: {}, onChooseLocalOnly: nil,
-            onRecoverTransfer: {}, onCancelTransfer: {},
+            onRecoverTransfer: { recoverCalls += 1 }, onCancelTransfer: {},
             onRefreshDataset: { refreshCalls += 1 },
             onOverwriteDataset: { overwriteCalls += 1 },
             onExportDeviceData: offersExport ? { exportCalls += 1 } : nil,
+            onRetryCloudPreview: offersPreviewRetry ? { previewRetries += 1 } : nil,
             cloudPreview: cloudPreview,
             devicePreview: devicePreview,
-            cloudPreviewFailed: scenario == .previewFailed,
+            cloudPreviewFailed: cloudPreviewFailed,
             overwritePhase: scenario == .inProgress ? .preparingDestination : nil,
             releasePolicy: releasePolicy,
             onCancelLocalTransfer: nil, retainsTransferCopyOnCancellation: false,
@@ -3287,12 +3459,22 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
                 VStack {
                     Text(verbatim: "calls=0;choice=none;starting=false")
                         .accessibilityIdentifier("storage-switch.fixture-state")
-                    Text(verbatim: "refresh=\(refreshCalls);overwrite=\(overwriteCalls);export=\(exportCalls)")
+                    Text(verbatim: "refresh=\(refreshCalls);overwrite=\(overwriteCalls);export=\(exportCalls);previewRetries=\(previewRetries);recover=\(recoverCalls)")
                         .accessibilityIdentifier("storage-overwrite.fixture-state")
+                    // PLAN Step 6 asks for the RAW and the FILTERED witness
+                    // count, so a reviewer can see that the ignore list moved a
+                    // writer rather than that a writer was absent.
+                    Text(verbatim: "others=\(cloudPreview?.otherDeviceIDs ?? -1);ignored=\(cloudPreview?.ignoredWriterIDs ?? -1)")
+                        .accessibilityIdentifier("storage-overwrite.writer-fixture-state")
                 }
                 .font(.caption)
             }
     }
+
+    /// A failed read is offered a re-read; a successful or absent one is not.
+    private var offersPreviewRetry: Bool { scenario == .previewFailed }
+
+    private var cloudPreviewFailed: Bool { scenario == .previewFailed && previewRetries == 0 }
 
     private var state: PomoGemPersistenceLaunchHost.LaunchState {
         switch scenario {
@@ -3300,6 +3482,9 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
             .blocked(StorageTransferRuntimeError.remoteRecoveryRequired.localizedDescription)
         case .inProgress:
             .preparing("中断された保存先の切り替えを再開しています")
+        case .remoteResumeClosed, .remoteResumeOpen:
+            .remoteRecovery(StorageTransferRuntimeError.remoteRecoveryRequired.localizedDescription,
+                            canCancel: true)
         case .choice, .otherDevices, .previewFailed:
             .datasetRefresh(StorageTransferRuntimeError.datasetRefreshRequired.localizedDescription)
         }
@@ -3317,7 +3502,9 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
         switch scenario {
         case .otherDevices, .previewFailed:
             .isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)
-        case .choice, .blocked, .inProgress:
+        case .remoteResumeOpen:
+            .isolatedTestingPolicy(allowsRemoteResumeBeforeReplacing: true)
+        case .choice, .blocked, .inProgress, .remoteResumeClosed:
             .standard
         }
     }
@@ -3326,11 +3513,17 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
         switch scenario {
         case .choice:
             Self.preview(subjects: 9, sessions: 312, stones: 28,
-                         latest: Self.date(2026, 9, 18), otherDeviceIDs: 0)
+                         latest: Self.date(2026, 9, 18), otherDeviceIDs: 0, ignoredWriterIDs: 1)
         case .otherDevices:
             Self.preview(subjects: 9, sessions: 312, stones: 28,
                          latest: Self.date(2026, 9, 18), otherDeviceIDs: 2)
-        case .previewFailed, .blocked, .inProgress:
+        case .previewFailed:
+            // The re-read succeeds. Nobody may authorize deleting contents the
+            // app never enumerated, so this is the ONLY way the door opens.
+            previewRetries == 0 ? nil
+                : Self.preview(subjects: 9, sessions: 312, stones: 28,
+                               latest: Self.date(2026, 9, 18), otherDeviceIDs: 1)
+        case .blocked, .inProgress, .remoteResumeClosed, .remoteResumeOpen:
             nil
         }
     }
@@ -3340,20 +3533,22 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
         case .choice, .otherDevices, .previewFailed:
             Self.preview(subjects: 12, sessions: 480, stones: 36,
                          latest: Self.date(2026, 9, 20), otherDeviceIDs: 0)
-        case .blocked, .inProgress:
+        case .blocked, .inProgress, .remoteResumeClosed, .remoteResumeOpen:
             nil
         }
     }
 
     private static func preview(subjects: Int, sessions: Int, stones: Int,
-                                latest: Date, otherDeviceIDs: Int) -> StorageTransferCloudPreview {
+                                latest: Date, otherDeviceIDs: Int,
+                                ignoredWriterIDs: Int = 0) -> StorageTransferCloudPreview {
         var counts = Dictionary(uniqueKeysWithValues:
             PomoGemStorageSnapshot.cloudModelNames.map { ($0, 0) })
         counts["Subject"] = subjects
         counts["StudySession"] = sessions
         counts["AchievementStone"] = stones
         return StorageTransferCloudPreview(recordCounts: counts, latestRecordAt: latest,
-                                           otherDeviceIDs: otherDeviceIDs, ignoredWriterIDs: 0)
+                                           otherDeviceIDs: otherDeviceIDs,
+                                           ignoredWriterIDs: ignoredWriterIDs)
     }
 
     private static func date(_ year: Int, _ month: Int, _ day: Int) -> Date {

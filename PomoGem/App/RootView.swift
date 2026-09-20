@@ -338,6 +338,11 @@ struct RootView: View {
     /// it through the same runtime entry point the recovery screen uses.
     let requestStorageTransferDataset:
         (@MainActor @Sendable (StorageTransferDatasetRequestDirection) async throws -> Void)?
+    /// The read-only pre-flight Settings shows BEFORE the device -> iCloud
+    /// acknowledgement. It starts nothing and records nothing; it exists so
+    /// consent is consent to enumerated facts (PLAN §3 S14/S15).
+    let previewStorageTransferDataset:
+        (@MainActor @Sendable () async throws -> StorageTransferDatasetPreviewSummary)?
     let unmountForStorageTransfer: (@MainActor @Sendable () -> Void)?
 
     @Environment(\.modelContext) private var modelContext
@@ -419,6 +424,8 @@ struct RootView: View {
         prepareStorageTransfer: (@MainActor @Sendable (StorageTransferChoice) async throws -> Void)? = nil,
         requestStorageTransferDataset:
             (@MainActor @Sendable (StorageTransferDatasetRequestDirection) async throws -> Void)? = nil,
+        previewStorageTransferDataset:
+            (@MainActor @Sendable () async throws -> StorageTransferDatasetPreviewSummary)? = nil,
         unmountForStorageTransfer: (@MainActor @Sendable () -> Void)? = nil
     ) {
         self.persistenceStartupError = persistenceStartupError
@@ -427,6 +434,7 @@ struct RootView: View {
         self.rebuildPersistenceAfterCompleteDeletion = rebuildPersistenceAfterCompleteDeletion
         self.prepareStorageTransfer = prepareStorageTransfer
         self.requestStorageTransferDataset = requestStorageTransferDataset
+        self.previewStorageTransferDataset = previewStorageTransferDataset
         self.unmountForStorageTransfer = unmountForStorageTransfer
         _activePersistenceSafetyNotice = State(initialValue: persistenceSafetyNotice)
         _aggregateProjectionPresentation = State(
@@ -830,6 +838,14 @@ struct RootView: View {
             .receive(on: RunLoop.main)
         ) { signal in
             handleStoreChangeSignal(signal)
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .pomogemOpenStorageSettings)
+                .receive(on: RunLoop.main)
+        ) { _ in
+            // The late-arrival banner sits above this view and cannot reach the
+            // router. Navigation only: nothing here reads, writes or transfers.
+            router.selectedTab = .settings
         }
         .onChange(of: router.selectedTab) { _, selectedTab in
             guard isFirstFramePresented else { return }
@@ -1490,6 +1506,14 @@ struct RootView: View {
                 // Records the durable request and requires the relaunch. The
                 // host, not this view, owns unmounting from here on.
                 try await request(direction)
+            }
+        }, datasetPreview: previewStorageTransferDataset.map { preview in
+            { @MainActor in
+                // Read-only. Deliberately NOT behind the external-work gate:
+                // looking at what would be destroyed starts nothing, and a
+                // running timer is a reason to refuse the operation, not a
+                // reason to hide the evidence about it.
+                try await preview()
             }
         })
     }
