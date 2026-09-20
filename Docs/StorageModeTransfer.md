@@ -74,6 +74,86 @@ JSON書き出しには再インポート機能がなく、この
 取り込み完了を保証しません。保存先切り替えの全field比較とは別です。一般のCloudKit一括削除UIは
 引き続き無効で、iCloudの「表示中の記録をリセット」も一時停止中です。local-onlyの通常resetは維持します。
 
+## CloudKit環境と端末側状態の分離（2026-09-20 追記）
+
+**端末側の状態は、Development用の実機監査hostと出荷コンテナの間で分離されていませんでした。**
+CloudKitの環境はビルド構成が決める署名entitlement（`ICLOUD_CONTAINER_ENVIRONMENT`、
+Debug→Development／Release→Production）だけで切り替わります。一方、切り替えの受領記録
+（admission receipt）はbundle idだけで決まるアプリコンテナに置かれ、記録にもファイル名にも
+環境の成分がありませんでした。同じbundle idのDebugビルドとReleaseビルドは、まったく別の
+データベースを読みながら1つの受領記録を共有していたことになります。
+
+その結果、Development環境で得た世代IDをProductionのデータベースへ突き付ける状態が起こりえます。
+Production側には転送台帳が無いため比較が成立せず、従来はこれを「別の端末でiCloudデータが
+置き換えられました」と表示していました。実際には置き換えは起きておらず、端末は1台でも発生します。
+
+- 受領記録は`StorageTransferCloudScope`（環境＋container識別子）を持ち、
+  `admission-<環境>-<namespace>.json`として保存します。
+- 環境を持たない旧版の記録は「不明」として読み、世代が一致すれば一度だけ環境付きへ書き直して
+  旧ファイルを撤去します。**不明は既知の環境を否定しません**（別環境だと断定しません）。
+- 環境またはcontainerが確実に異なる場合は「置き換え」ではなく「別環境のビルド」として説明します。
+- 実行時の環境判定は、entitlementを埋めるのと同じビルド設定をInfo.plistへ展開して読みます
+  （iOSの公開SDKでは署名済みentitlementを読み戻せないため）。`#if DEBUG`の対応表は最終手段です。
+- **ファイル名を分けただけでは片方が他方を「見えなくする」だけなので、受領記録が自分の環境に
+  無いときは、同じnamespaceの他環境のファイルも読みます。** 確実に別環境の記録が見つかったら
+  enrol（新規登録）せず`cloudEnvironmentMismatch`で停止します。enrolはこの端末に既にある
+  cloudストアを、その台帳を一度も持っていないデータベースへ同期し始める許可そのものであり、
+  それは同意を伴う`startCloudLineageFromDevice`の仕事で、起動時の点検の仕事ではありません。
+  逆に、**自分の環境の記録が既にある場合は他環境の残骸に妨げられません**（証拠として読むのは
+  自分の環境の記録が無いあいだだけ）。
+- 同じ理由で、enrol時の「保存領域にファイルが残っていないこと」の確認は**サーバ世代の有無に
+  かかわらず常に**行います。サーバ台帳が空のときこそ、既存ストアの参加は端末→iCloudの
+  全面公開になるためです（サーバ世代なし＝`cloudLineageUnavailable`、あり＝`localLedgerMissing`）。
+
+### 停止時の表示の内訳
+
+1つのエラーに潰れていた状態を分けました。いずれも**端末の台数に言及しません**
+（controlレコードには書き込み端末の識別子が無く、自端末が確定させた世代かどうかを判別できないため）。
+
+| 状態 | 条件 | 意味 |
+| --- | --- | --- |
+| `datasetReplacedRemotely` | 端末の記録とサーバの世代がどちらも有り、かつ異なる | iCloudのデータが別の記録に置き換えられている |
+| `cloudLineageUnavailable` | 端末に世代の記録が有り、サーバに転送台帳が無い | iCloud側の管理情報を確認できない。削除は起きていない |
+| `cloudEnvironmentMismatch` | この環境の受領記録が無く、同じnamespaceに**確実に別環境**の受領記録がある（または記録の環境／containerが現在のビルドと確実に異なる） | 別環境のビルドで作られた記録。iCloudは置き換わっていない |
+| `localLedgerMissing` | 受領記録が無く、サーバに世代があり、その保存領域のファイルが残っている | 端末側の台帳が欠けている |
+| `leftoverLocalStores` | 設定からiCloudを有効化する際、その保存領域にファイルが残っている | 端末の整理が必要。サーバ側では何も起きていない |
+
+サーバに台帳が無い場合は、世代を指定する「iCloudから再取得」も「この端末のデータでiCloudを
+置き換える」も成立しません。そのため**サーバに台帳が無いときに限り、この端末のデータで
+新しい系譜を開始する**経路（`startCloudLineageFromDevice`）を追加しました。置き換えと
+**同じポリシービット**（`allowsDatasetOverwriteFromDevice`、通常版では無効）の配下にあり、
+確定済みの世代が1つでも存在する場合は拒否して通常の世代照合経路へ戻します。
+
+### 起動画面への割り当て（暫定、次段で解消）
+
+起動hostの`StorageTransferRuntimeError`のswitch（`PomoGemApp.swift:1135-1148`）は、まだ
+**旧い名前だけ**を見ています。`presentDatasetRefresh`へ入れるのは`datasetRefreshRequired`
+だけで、それが`storageTransferRefreshGenerationID`を書く唯一の場所＝「iCloudから再取得」画面と
+`refreshCloudDataset`への唯一の入口です。したがって**救済手段を伴う停止理由**
+（`datasetReplacedRemotely`と`localLedgerMissing`。どちらもサーバに終端した世代がある）は、
+hostの配線が入るまで`CloudOfflineHostPolicy.launchRoutableRefusal`で**旧い名前のまま投げます**。
+そうしないと、この分割自体が「唯一アプリ内で回復できた状態」から回復手段を奪います。
+
+救済手段の無い停止理由（`cloudLineageUnavailable`、`cloudEnvironmentMismatch`）は従来どおり
+汎用の「保存領域を確認できません」画面へ落ちますが、**文面は自分のものを使います**。この画面の
+操作は「もう一度試す／端末のデータでオフライン利用／サポートを見る」だけなので、**文面は
+この3つ以外を約束しません**。「このiPhoneのデータでiCloudを使い始める」という案内は、その
+操作を実際に出す段（`startCloudLineageFromDevice`の画面）と同じ変更で入れます。
+
+分類そのものは`StorageTransferAdmissionPolicy.decide`と
+`CloudOfflineHostPolicy.datasetLineageBlock`に残っており、配線段ではhostのswitchを
+`CloudOfflineHostPolicy.launchRoute(for:)`の呼び出しへ置き換え、この暫定措置を削除します。
+
+### 運用規則（P2-7、未実装のTODO）
+
+- **実機監査は出荷アプリとは別のbundle id**（例 `com.hinoshiba.pomogem.audit`）で実行すること。
+  そうしない限り、監査で作られた受領記録は出荷アプリのコンテナに残り続けます。
+- **出荷コンテナの上にDebugビルドを入れないこと。** `xcodebuild test -scheme PomoGem`の
+  test actionはDebug構成なので、実機宛に1回走らせるだけでDevelopment環境の状態が混ざります。
+- 上記の別bundle id化はまだ実装していません（本追記はその必要性の記録です）。環境ごとの
+  受領記録の分離と他環境の記録の読み取りは実装済みなので、混ざった場合は
+  「別環境のビルド」として**停止のうえ説明**します（黙って新しい環境へ登録し直すことはしません）。
+
 ## 確認できたことと残る試験
 
 2026-09-12の最新のSimulator単体テスト（Full-07）は1,206件中1,200件成功・明示的な実機専用6件を
