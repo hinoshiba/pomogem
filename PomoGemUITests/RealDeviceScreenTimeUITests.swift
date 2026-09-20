@@ -527,22 +527,47 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "保存 must be enabled once a valid draft exists. Validation footer: \(validationFooter(app)).",
                     evidence: "save-disabled")
 
+        // Resolved once, before the tap: every `.exists` round trip on a
+        // settings screen that hosts a live FamilyActivityPicker row costs real
+        // time, and the busy poll this replaced charged that cost to the app.
         let updating = app.descendants(matching: .any)["screen-time.updating"].firstMatch
+        let navigationBar = app.navigationBars["スクリーンタイム"]
+        let namedBack = navigationBar.buttons["設定"]
+        let backButton = namedBack.exists ? namedBack : navigationBar.buttons.firstMatch
+        let backLabel = backButton.exists ? backButton.label : "<missing>"
         let start = Date()
         save.tap()
 
-        var appearedAfter: TimeInterval?
+        // Responsiveness is asserted here, independently of whether the
+        // progress row is ever sampled. If registration is fast — the expected
+        // outcome of the worker change — the row can appear and vanish inside
+        // a single query round trip, and this phase must still have checked
+        // the property it exists to prove.
+        let staysResponsive = backButton.exists && backButton.isEnabled && backButton.isHittable
+        note("SAVE: immediately after 保存 — back button exists=\(backButton.exists) hittable=\(staysResponsive); 保存 enabled=\(save.isEnabled)")
+        try require(staysResponsive,
+                    "The navigation bar back button (\(backLabel)) must stay hittable from the moment 保存 is tapped — that is the point of PR #24.",
+                    evidence: "save-back-blocked-immediately")
+
+        // One expectation with a 1.5 s timeout instead of a busy poll, so the
+        // bound measures the app rather than XCUITest's snapshot cost.
+        let appeared = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true"), object: updating)
+        let sawUpdating = XCTWaiter.wait(for: [appeared], timeout: 1.5) == .completed
+        var appearedAfter: TimeInterval? = sawUpdating ? Date().timeIntervalSince(start) : nil
         var sawBackButtonHittableWhileUpdating = false
-        while Date().timeIntervalSince(start) < 6 {
-            if updating.exists {
+        if !sawUpdating {
+            // It may simply have completed inside the window. Keep looking so
+            // the vanish measurement below still has something to wait on.
+            let late = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == true"), object: updating)
+            if XCTWaiter.wait(for: [late], timeout: 4.5) == .completed {
                 appearedAfter = Date().timeIntervalSince(start)
-                break
             }
         }
         if let appearedAfter {
             note(String(format: "SAVE MEASUREMENT: screen-time.updating appeared %.3f s after tapping 保存.", appearedAfter))
             attach(string: String(format: "%.3f", appearedAfter), name: "save-updating-appeared-seconds")
-            let backButton = app.navigationBars["スクリーンタイム"].buttons.firstMatch
             sawBackButtonHittableWhileUpdating = backButton.exists && backButton.isEnabled && backButton.isHittable
             note("SAVE: while updating — back button exists=\(backButton.exists) hittable=\(sawBackButtonHittableWhileUpdating) label=\(backButton.exists ? backButton.label : "-"); 保存 enabled=\(save.isEnabled); リセット enabled=\(app.buttons["screen-time.reset"].isEnabled)")
             capture("save-updating-visible")
@@ -568,9 +593,9 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                         evidence: "save-updating-stuck")
         }
 
-        if let appearedAfter {
-            try require(appearedAfter < 1.5,
-                        String(format: "screen-time.updating must appear within 1.5 s of tapping 保存; it took %.3f s.", appearedAfter),
+        if appearedAfter != nil {
+            try require(sawUpdating,
+                        String(format: "screen-time.updating must appear within 1.5 s of tapping 保存; it took %.3f s.", appearedAfter ?? -1),
                         evidence: "save-updating-late")
             try require(sawBackButtonHittableWhileUpdating,
                         "The navigation bar back button must stay hittable while the registration runs — that is the point of PR #24.",
@@ -617,6 +642,12 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         try require(toastEdges <= 1,
                     "A duplicate 保存 must show at most one 「スクリーンタイムの設定を保存しました」 toast; \(toastEdges) were observed.",
                     evidence: "save-duplicate-toasts")
+        // `toastEdges == 0` satisfies the bound vacuously, so the duplicate
+        // claim needs a positive observation behind it: either the second tap
+        // was refused outright, or exactly one save was acknowledged.
+        try require(!secondTapWasOffered || toastEdges == 1,
+                    "Neither duplicate-prevention signal was observed: the second 保存 tap was delivered and no 「スクリーンタイムの設定を保存しました」 toast was seen, so nothing here proves one save ran.",
+                    evidence: "save-duplicate-unproved")
 
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: updating)
         _ = XCTWaiter.wait(for: [gone], timeout: 180)
@@ -637,6 +668,14 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "保存 must be re-enabled once the registration has settled.",
                     evidence: "save-left-disabled")
         note("SAVE COMPLETE. learning=\(describeCount(selectionCount(app, lane: .learning))) distraction=\(describeCount(selectionCount(app, lane: .distraction)))")
+
+        // Everything above has run. A phase that never sampled the progress
+        // row has not measured the registration, and must not be cited as
+        // evidence for the non-blocking claim: report it as unmeasured.
+        if appearedAfter == nil {
+            try skipWithEvidence("save-updating-not-measurable",
+                                 "screen-time.updating was never sampled, so neither its appearance bound nor its duration was measured. The immediate responsiveness check passed and the save itself succeeded; re-run the phase, or measure the registration duration from the device log (subsystem com.hinoshiba.pomogem).")
+        }
     }
 
     // MARK: - P4 usage (learning lane)
