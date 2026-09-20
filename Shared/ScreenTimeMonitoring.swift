@@ -102,7 +102,7 @@ final class ScreenTimeMonitoring {
     func stop() {
         let ours = center.activities.filter { $0.rawValue.hasPrefix(Self.prefix) }
         guard !ours.isEmpty else { return }
-        ScreenTimeLog.monitoring.info("stop activities=\(ours.count, privacy: .public)")
+        ScreenTimeLog.monitoring.notice("stop activities=\(ours.count, privacy: .public)")
         center.stopMonitoring(ours)
     }
 
@@ -137,7 +137,7 @@ final class ScreenTimeMonitoring {
         } catch ScreenTimeError.unavailable {
             // Usually the other process holding the monitoring lock. The next
             // callback or the daily scheduler retries.
-            ScreenTimeLog.monitoring.info("synchronize skipped reason=unavailable")
+            ScreenTimeLog.monitoring.notice("synchronize skipped reason=unavailable")
             throw ScreenTimeError.unavailable
         }
     }
@@ -150,7 +150,7 @@ final class ScreenTimeMonitoring {
         if !Self.isAuthorized(status) {
             // Skip the pass while the status is still unknown; never register
             // and never invalidate on anything but a denial.
-            ScreenTimeLog.monitoring.info(
+            ScreenTimeLog.monitoring.notice(
                 "synchronize skipped authorization=\(status == .denied ? "denied" : "unknown", privacy: .public)")
             guard status == .denied else { return false }
             stop()
@@ -161,7 +161,7 @@ final class ScreenTimeMonitoring {
             return false
         }
         guard state.configuration.enabled, state.contextKey != nil, state.contextIsActive else {
-            ScreenTimeLog.monitoring.info("synchronize stopping reason=inactive")
+            ScreenTimeLog.monitoring.notice("synchronize stopping reason=inactive")
             stop()
             try store.update { state in
                 try initialGeneration.requireCurrent(state)
@@ -304,19 +304,32 @@ final class ScreenTimeMonitoring {
         }
     }
 
+    /// Every exit logs a reason, so the Console evidence on a device tells an
+    /// awarded gem from a silently discarded callback. Reasons only: never a
+    /// run identifier, event name, threshold or gem count.
     func handleThreshold(eventName: String, activityName: String, now: Date = Date()) throws {
         let status = authorizationStatus()
         guard Self.isAuthorized(status) else {
+            ScreenTimeLog.monitoring.notice(
+                "threshold skipped authorization=\(status == .denied ? "denied" : "unknown", privacy: .public)")
             // An unknown status means "ask again later": no award, no wipe.
             if status == .denied { try invalidateAuthorizationIfNeeded() }
             return
         }
-        guard activityName.hasPrefix(Self.prefix), let threshold = Int(eventName) else { return }
+        guard activityName.hasPrefix(Self.prefix), let threshold = Int(eventName) else {
+            ScreenTimeLog.monitoring.notice("threshold ignored reason=name")
+            return
+        }
         let parts = activityName.dropFirst(Self.prefix.count).split(separator: ".")
         guard parts.count == 2, let runID = UUID(uuidString: String(parts[0])),
               let batch = Int(parts[1]), (0..<ScreenTimePolicy.batchesPerLane).contains(batch),
-              ScreenTimePolicy.thresholds(batch: batch).contains(threshold) else { return }
-        try store.record(runID: runID, threshold: threshold, now: now)
+              ScreenTimePolicy.thresholds(batch: batch).contains(threshold) else {
+            ScreenTimeLog.monitoring.notice("threshold ignored reason=name")
+            return
+        }
+        let recorded = try store.record(runID: runID, threshold: threshold, now: now)
+        ScreenTimeLog.monitoring.notice(
+            "threshold \(recorded ? "recorded" : "ignored reason=ledger", privacy: .public)")
     }
 
     func handleInterval(activityName: String, now: Date = Date()) throws {
@@ -329,7 +342,7 @@ final class ScreenTimeMonitoring {
     static func schedulerName(epoch: UUID) -> String { prefix + "scheduler." + epoch.uuidString }
 
     private static func log(_ message: String, stopped: Int, started: Int, since: Date) {
-        ScreenTimeLog.monitoring.info("""
+        ScreenTimeLog.monitoring.notice("""
             \(message, privacy: .public) stopped=\(stopped, privacy: .public) \
             started=\(started, privacy: .public) ms=\(elapsedMilliseconds(since: since), privacy: .public)
             """)

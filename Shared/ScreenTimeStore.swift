@@ -27,8 +27,16 @@ final class ScreenTimeStore {
         try update { $0.acknowledge(Set(ids)) }
     }
 
-    func record(runID: UUID, threshold: Int, now: Date = Date()) throws {
-        try update { $0.record(runID: runID, threshold: threshold, now: now) }
+    /// Returns whether the ledger actually advanced, so the extension can log
+    /// an awarded callback apart from one its fences discarded.
+    @discardableResult
+    func record(runID: UUID, threshold: Int, now: Date = Date()) throws -> Bool {
+        try update { state in
+            let before = state.runs.first { $0.id == runID }?.highestThreshold
+            state.record(runID: runID, threshold: threshold, now: now)
+            let after = state.runs.first { $0.id == runID }?.highestThreshold
+            return after != nil && after != before
+        }
     }
 
     /// Complete app erasure also owns this App Group. Keep both stable locks

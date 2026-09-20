@@ -14,19 +14,19 @@ final class ScreenTimeMonitorExtension: DeviceActivityMonitor {
         // The extension deliberately does no networking, model-container work,
         // application launching, or token logging. Only the callback kind is
         // logged: activity and event names carry the run and the threshold.
-        ScreenTimeLog.monitoring.info("extension callback=intervalDidStart")
+        ScreenTimeLog.monitoring.notice("extension callback=intervalDidStart")
         try? monitoring.handleInterval(activityName: activity.rawValue)
     }
 
     override func intervalDidEnd(for activity: DeviceActivityName) {
         super.intervalDidEnd(for: activity)
-        ScreenTimeLog.monitoring.info("extension callback=intervalDidEnd")
+        ScreenTimeLog.monitoring.notice("extension callback=intervalDidEnd")
         try? monitoring.handleInterval(activityName: activity.rawValue)
     }
 
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
         super.eventDidReachThreshold(event, activity: activity)
-        ScreenTimeLog.monitoring.info("extension callback=threshold")
+        ScreenTimeLog.monitoring.notice("extension callback=threshold")
         try? monitoring.handleThreshold(eventName: event.rawValue, activityName: activity.rawValue)
     }
 }

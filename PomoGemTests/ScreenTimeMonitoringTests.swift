@@ -186,11 +186,33 @@ final class ScreenTimeMonitoringTests: XCTestCase {
         XCTAssertEqual(reopened.runs[0].highestThreshold, 100)
     }
 
-    /// The device runbook and AppStore/submission-checklist filter Console by
-    /// this subsystem and category; keep them in step with the documentation.
+    /// The device runbook filters Console by this subsystem and category; keep
+    /// them in step with Docs/ScreenTimeGems.md.
     func testDiagnosticsChannelMatchesTheDocumentedConsoleFilter() {
         XCTAssertEqual(ScreenTimeLog.subsystem, "com.hinoshiba.pomogem")
         XCTAssertEqual(ScreenTimeLog.category, "screen-time")
+    }
+
+    /// The extension logs "threshold recorded" only when the ledger actually
+    /// advanced. Without a reported outcome a discarded callback and an awarded
+    /// gem look identical in Console, which is the one evidence channel the
+    /// device phase has for a delivery it cannot otherwise observe.
+    func testRecordReportsWhetherTheLedgerAdvanced() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ScreenTimeStore(directory: directory)
+        let state = makeState()
+        let runID = state.runs[0].id
+        try store.update { $0 = state }
+
+        XCTAssertTrue(try store.record(runID: runID, threshold: 1, now: start.addingTimeInterval(601)))
+        // A repeated or lower threshold is a duplicate delivery, not an award.
+        XCTAssertFalse(try store.record(runID: runID, threshold: 1, now: start.addingTimeInterval(602)))
+        // An impossibly early callback is refused by the ledger fences.
+        XCTAssertFalse(try store.record(runID: runID, threshold: 9, now: start.addingTimeInterval(603)))
+        // A run the ledger no longer holds (reset, retirement, another day).
+        XCTAssertFalse(try store.record(runID: UUID(), threshold: 1, now: start.addingTimeInterval(601)))
+        XCTAssertEqual(try store.snapshot().runs[0].highestThreshold, 1)
     }
 
     /// The monitor extension shares the monitoring lock with an app that iOS can
