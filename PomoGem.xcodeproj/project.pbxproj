@@ -124,6 +124,7 @@
 		7D6C7A960DAE6D98765C0855 /* PomoGemDataExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF23306474C1C7B694067BD8 /* PomoGemDataExporter.swift */; };
 		7D6D35E9AE98C9E52CF548F8 /* CloudOfflineAccessState.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED020371DFA1442C08CCD31D /* CloudOfflineAccessState.swift */; };
 		7E609DA4FFF63A35C8FA31DB /* PomoGemLogo.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC5D4F1A16DE0265ED6EBF24 /* PomoGemLogo.swift */; };
+		7E9E08ECC1C63FFD1EC1BB66 /* StorageTransferConsentEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABFBC083147B7D2FD341A493 /* StorageTransferConsentEvidenceTests.swift */; };
 		7ED2EF2BEFDE44798E640A27 /* IntegrationConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = A46EC111083ACA7C8AC45F2B /* IntegrationConstants.swift */; };
 		81F50A1A79524A83109E5C76 /* StorageTransferRemoteRecoveryCloudKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45B56B164A5E838876543CF2 /* StorageTransferRemoteRecoveryCloudKitTests.swift */; };
 		827A5E1202E74FB391153A04 /* RuntimeFlowAuditUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4EF78A2F31B9E452F76E31F /* RuntimeFlowAuditUITests.swift */; };
@@ -479,6 +480,7 @@
 		A503997D8D710D5C186A1C85 /* StorageTransferRuntimeStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferRuntimeStateTests.swift; sourceTree = "<group>"; };
 		A6DACC9E7792C2200EE2C699 /* StorageTransferJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferJournal.swift; sourceTree = "<group>"; };
 		A81DCEA1C2A2133E7484C8F8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		ABFBC083147B7D2FD341A493 /* StorageTransferConsentEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferConsentEvidenceTests.swift; sourceTree = "<group>"; };
 		AC30199EBC23F0C5AAE235B6 /* TimerSceneOrientation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerSceneOrientation.swift; sourceTree = "<group>"; };
 		ADF5BCA0711AAB36E6E1FED3 /* FocusActivityDurationLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusActivityDurationLabelTests.swift; sourceTree = "<group>"; };
 		AFDE9F0BB6142B51EBA85B6F /* RealDeviceStorageTransferLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealDeviceStorageTransferLifecycleTests.swift; sourceTree = "<group>"; };
@@ -903,6 +905,7 @@
 				BC8098012B640205A9689EB9 /* StorageTransferCloudMountControlReaderTests.swift */,
 				8427F5A59D0BFAC4AD858847 /* StorageTransferCloudPreviewTests.swift */,
 				309EEEAE86F7DA78EA6C5841 /* StorageTransferCloudScopeTests.swift */,
+				ABFBC083147B7D2FD341A493 /* StorageTransferConsentEvidenceTests.swift */,
 				FB130FAA896BC2C5EC57C722 /* StorageTransferControllerTests.swift */,
 				289C1F805E39D63CA9639146 /* StorageTransferCoordinatorTests.swift */,
 				2C30CF10E3988DB96AE814A1 /* StorageTransferDatasetRequestTests.swift */,
@@ -1478,6 +1481,7 @@
 				C6D9C527071AA17F6281CD02 /* StorageTransferCloudMountControlReaderTests.swift in Sources */,
 				EA6B1FFC7201FD78B6EC2C90 /* StorageTransferCloudPreviewTests.swift in Sources */,
 				ADD121AA11447EDF633F01FC /* StorageTransferCloudScopeTests.swift in Sources */,
+				7E9E08ECC1C63FFD1EC1BB66 /* StorageTransferConsentEvidenceTests.swift in Sources */,
 				F27B08589B9D4D68B3150489 /* StorageTransferControllerTests.swift in Sources */,
 				F3979B5796E291D42C8176DF /* StorageTransferCoordinatorTests.swift in Sources */,
 				F07ADFF433EB5D230E610F5E /* StorageTransferDatasetRequestTests.swift in Sources */,

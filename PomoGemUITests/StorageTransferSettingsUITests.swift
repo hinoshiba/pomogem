@@ -211,17 +211,71 @@ final class StorageTransferSettingsUITests: XCTestCase {
         assertNoOperation()
     }
 
-    /// Direction (B) destroys the DEVICE side, so it asks for no server read
-    /// and must not be made to wait for one.
-    func testTheRefreshDirectionNeedsNoServerReadBeforeItsConfirmation() {
+    /// review-1-2 / review-2-4. Direction (B) destroys the DEVICE side and
+    /// stages no recovery copy anywhere (`retireSource` removes the source
+    /// store family after `selectionCommitted`), and W6 opened it to accounts
+    /// with no transfer ledger — the accounts whose iCloud side is most likely
+    /// to be empty. It therefore reads the server before its confirmation and
+    /// shows what it would re-fetch from, exactly as direction (A) does.
+    func testTheRefreshDirectionReadsTheICloudSideBeforeItsConfirmation() {
         launch("cloudDatasetDoors")
         openChoices()
         openConfirmation("storage-switch.refresh-from-cloud")
-        XCTAssertFalse(app.staticTexts["storage-switch.refresh-from-cloud-comparison"].exists)
+        let comparison = app.staticTexts["storage-switch.refresh-from-cloud-comparison"]
+        XCTAssertTrue(reveal(comparison))
+        XCTAssertTrue(comparison.label.contains("iCloud: テーマ"), "saw: \(comparison.label)")
+        XCTAssertFalse(app.staticTexts["storage-switch.refresh-from-cloud-empty-cloud"].exists,
+            "This account's server side is not empty; the loud warning is for the one that is")
+        assertUncheckedDatasetConfirmation("refresh-from-cloud")
         app.navigationBars["最後の確認"].buttons["戻る"].tap()
         XCTAssertTrue(app.navigationBars["iCloudと保存先の変更"].waitForExistence(timeout: 4))
         app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
-        assertPreviewReads(0)
+        assertPreviewReads(1)
+        assertNoDatasetRequest()
+        assertNoOperation()
+    }
+
+    /// The shape in which 「iCloudのデータは残ります」 is true and still leaves
+    /// the user with an empty app and no copy anywhere: PomoGem's data deleted
+    /// from iOS Settings, months of records still on the device.
+    func testTheRefreshDirectionSaysSoWhenTheServerSideIsEmpty() {
+        launch("cloudDatasetDoorsEmptyCloud")
+        openChoices()
+        openConfirmation("storage-switch.refresh-from-cloud")
+        let comparison = app.staticTexts["storage-switch.refresh-from-cloud-comparison"]
+        XCTAssertTrue(reveal(comparison))
+        XCTAssertTrue(comparison.label.contains("記録件数: 0"), "saw: \(comparison.label)")
+        let empty = app.staticTexts["storage-switch.refresh-from-cloud-empty-cloud"]
+        XCTAssertTrue(reveal(empty))
+        XCTAssertTrue(empty.label.contains("1件も見つかりませんでした"))
+        XCTAssertTrue(empty.label.contains("元に戻すことはできません"))
+        attach("Settings refresh-from-cloud — the server side is empty")
+        assertUncheckedDatasetConfirmation("refresh-from-cloud")
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.navigationBars["iCloudと保存先の変更"].waitForExistence(timeout: 4))
+        app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
+        assertPreviewReads(1)
+        assertNoDatasetRequest()
+        assertNoOperation()
+    }
+
+    /// A failed read keeps direction (B)'s confirmation closed too, and names
+    /// the control this door actually carries rather than the other one's.
+    func testTheRefreshDirectionRefusesToConfirmWhenItCouldNotLook() {
+        launch("cloudDatasetDoorsUnreadable")
+        openChoices()
+        let door = app.buttons["storage-switch.refresh-from-cloud"]
+        XCTAssertTrue(reveal(door))
+        door.tap()
+        let failure = app.staticTexts["storage-switch.refresh-from-cloud-preview-error"]
+        XCTAssertTrue(reveal(failure))
+        XCTAssertTrue(failure.label.contains("iCloudから再取得"), "saw: \(failure.label)")
+        XCTAssertTrue(failure.label.contains("どちらの記録も削除していません"))
+        XCTAssertFalse(app.navigationBars["最後の確認"].exists,
+            "Nobody may be asked to discard this device's only copy on an unread server")
+        attach("Settings refresh-from-cloud — unreadable iCloud keeps the confirmation closed")
+        app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
+        assertPreviewReads(1)
         assertNoDatasetRequest()
         assertNoOperation()
     }
@@ -277,6 +331,12 @@ final class StorageTransferSettingsUITests: XCTestCase {
             "Direction (B) must not be fenced by the opposite direction's release bit")
         attach("Settings refresh-from-cloud — usable while the overwrite stays closed")
         openConfirmation("storage-switch.refresh-from-cloud")
+        let comparison = app.staticTexts["storage-switch.refresh-from-cloud-comparison"]
+        XCTAssertTrue(reveal(comparison))
+        XCTAssertTrue(comparison.label.contains("iCloud: テーマ"), "saw: \(comparison.label)")
+        XCTAssertFalse(comparison.label.contains("このiPhone:"),
+            "The device side is not read while the direction that needs it is unpublished, "
+            + "so 「確認できませんでした」 would claim a look that never happened")
         assertUncheckedDatasetConfirmation("refresh-from-cloud")
         app.navigationBars["最後の確認"].buttons["戻る"].tap()
         XCTAssertTrue(app.navigationBars["iCloudと保存先の変更"].waitForExistence(timeout: 4))
@@ -294,6 +354,7 @@ final class StorageTransferSettingsUITests: XCTestCase {
         XCTAssertTrue(refreshWarning.label.contains("未送信の端末データは失われ"))
         XCTAssertTrue(refreshWarning.label.contains("iCloudのデータは残ります"))
         XCTAssertTrue(reveal(app.staticTexts["storage-switch.refresh-from-cloud-relaunch"]))
+        XCTAssertTrue(reveal(app.staticTexts["storage-switch.refresh-from-cloud-comparison"]))
         assertUncheckedDatasetConfirmation("refresh-from-cloud")
         acknowledgeDataset("refresh-from-cloud")
         attach("Settings refresh-from-cloud — acknowledged final confirmation")

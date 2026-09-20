@@ -275,25 +275,34 @@ final class StorageTransferAdmissionTaxonomyTests: XCTestCase {
         }
     }
 
-    /// ROOT-CAUSE §6.2. A refusal may not promise an action no screen in this
-    /// build can offer. `cloudLineageUnavailable` now HAS its screen — the two
-    /// consented choices — so its sentence may name them; every other refusal
-    /// still may not, because the screen it reaches carries no such control.
-    func testOnlyTheRefusalWithAScreenPromisesItsAction() {
+    /// ROOT-CAUSE §6.2, tightened by review-2-5. A refusal may not promise an
+    /// action no screen in this build can offer — and 「has a screen」 is not
+    /// enough, because `.cloudLineageUnavailable`'s screen ships its door
+    /// permanently disabled while `allowsDatasetOverwriteFromDevice` is false.
+    /// No stop reason names a control now; the screen's own closing sentence
+    /// is derived from that bit.
+    func testNoRefusalPromisesAnActionTheShippingBuildRefuses() {
         for error in [StorageTransferRuntimeError.datasetRefreshRequired, .datasetReplacedRemotely,
-                      .localLedgerMissing, .cloudEnvironmentMismatch, .leftoverLocalStores] {
+                      .localLedgerMissing, .cloudEnvironmentMismatch, .leftoverLocalStores,
+                      .cloudLineageUnavailable] {
             let text = error.localizedDescription
             for promise in ["iCloudを使い始める", "iCloudを置き換える", "再取得"] {
                 XCTAssertFalse(text.contains(promise),
-                    "\(error) promises 「\(promise)」, which the screen it reaches does not offer")
+                    "\(error) promises 「\(promise)」, which the screen it reaches may not offer")
             }
         }
-        // And the one that does: the sentence removed while the screen did not
-        // exist is back, in the same change that ships the buttons.
-        let lineage = StorageTransferRuntimeError.cloudLineageUnavailable.localizedDescription
-        XCTAssertTrue(lineage.contains("このiPhoneのデータでiCloudを使い始めるか、オフラインのまま使うかを選べます。"),
-            "The restored sentence must name exactly the two choices the screen offers")
         XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .cloudLineageUnavailable),
                        .lineageUnavailable, "and that screen must be the one it reaches")
+        // The shipping policy is what decides the sentence. All three bits are
+        // false, so the screen may not state the start-from-device choice.
+        XCTAssertFalse(StorageTransferReleasePolicy.standard.allowsDatasetOverwriteFromDevice,
+                       "the premise: the named control is NOT enabled in a shipping build")
+        let shipping = StorageTransferLineageCopy.screenMessage(
+            offersLineageStart: StorageTransferReleasePolicy.standard.allowsDatasetOverwriteFromDevice)
+        XCTAssertFalse(shipping.contains("選べます"))
+        XCTAssertTrue(shipping.contains("もう一度試す"))
+        XCTAssertTrue(StorageTransferLineageCopy.screenMessage(offersLineageStart: true)
+            .contains("このiPhoneのデータでiCloudを使い始めるか、オフラインのまま使うかを選べます。"),
+            "and only a build that publishes the door may state that choice")
     }
 }

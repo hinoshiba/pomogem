@@ -135,16 +135,24 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
                           "iCloudのデータが置き換わりました")
     }
 
-    /// Only the no-lineage state may name the action it offers, because only
-    /// it has a screen carrying that action.
-    func testTheLineageScreenIsTheOnlyRefusalThatNamesItsOwnAction() {
-        XCTAssertTrue(StorageTransferRuntimeError.cloudLineageUnavailable.localizedDescription
-            .contains("このiPhoneのデータでiCloudを使い始める"))
-        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .cloudLineageUnavailable), .lineageUnavailable)
-        for error in [StorageTransferRuntimeError.cloudEnvironmentMismatch, .localLedgerMissing] {
+    /// review-2-5. No stop reason names a control any more: the sentence that
+    /// does belongs to the SCREEN, which knows whether the build publishes it.
+    /// The screen the no-lineage state reaches is still its own.
+    func testNoStopReasonNamesAControlAndTheScreenBuildsItFromThePolicy() {
+        for error in [StorageTransferRuntimeError.cloudLineageUnavailable,
+                      .cloudEnvironmentMismatch, .localLedgerMissing] {
             XCTAssertFalse(error.localizedDescription.contains("使い始める"),
-                           "\(error) reaches a screen with no such control")
+                           "\(error) must not promise a control the build may ship disabled")
         }
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .cloudLineageUnavailable), .lineageUnavailable)
+        XCTAssertTrue(StorageTransferLineageCopy.screenMessage(offersLineageStart: true)
+            .contains("このiPhoneのデータでiCloudを使い始めるか、オフラインのまま使うかを選べます。"))
+        XCTAssertFalse(StorageTransferLineageCopy.screenMessage(offersLineageStart: false)
+            .contains("選べます"),
+            "While the door ships disabled the screen may not state that choice")
+        XCTAssertTrue(StorageTransferLineageCopy.screenMessage(offersLineageStart: false)
+            .contains("もう一度試す"),
+            "It must instead name a control the screen actually carries")
     }
 
     func testRecoveryReviewIsSingleUseAndCannotRetireAChangedSessionOrAccount() {

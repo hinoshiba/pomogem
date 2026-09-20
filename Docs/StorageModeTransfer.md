@@ -136,7 +136,7 @@ runtimeは**それぞれの名前のまま**投げます。
 | --- | --- | --- |
 | `datasetReplacedRemotely` | `.datasetRefresh`「iCloudのデータが置き換わりました」 | 「iCloudから再取得」と「このiPhoneのデータで置き換える」（各々に独立した同意）、書き出し |
 | `localLedgerMissing`（サーバに確定世代あり） | 同じ`.datasetRefresh`。ただし見出しは「iCloudのデータを受け取った記録がありません」 | 同上。台帳が欠けているのは端末側の事情なので、**置き換えられたとは主張しません** |
-| `cloudLineageUnavailable` | `.cloudLineageUnavailable`「iCloudの管理情報が見つかりません」 | 「このiPhoneのデータでiCloudを使い始める」（「最後の確認」を経て`startCloudLineageFromDevice`）と「オフラインのまま使う」 |
+| `cloudLineageUnavailable` | `.cloudLineageUnavailable`「iCloudの管理情報が見つかりません」 | 「このiPhoneのデータでiCloudを使い始める」（読み取り専用の事前確認が成功してから「最後の確認」を経て`startCloudLineageFromDevice`）、「オフラインのまま使う」、「もう一度試す」 |
 | `cloudEnvironmentMismatch` | 説明のみ「別のiCloud環境のデータです」 | 破壊的操作なし。もう一度試す／オフライン利用／サポート |
 | `localLedgerMissing`かつサーバにも確定世代が無いと判明した場合 | 説明のみ「iCloudのデータを受け取った記録がありません」 | 同上 |
 | `leftoverLocalStores`ほか | 汎用「保存領域を確認できません」 | 同上 |
@@ -146,8 +146,26 @@ runtimeは**それぞれの名前のまま**投げます。
 という**固有の文面**を表示します（P1-4）。救済UIを出せなかったことが利用者にも運用者にも見えます。
 
 「このiPhoneのデータでiCloudを使い始める」は、`allowsDatasetOverwriteFromDevice`が無効な通常版では
-**理由付きで無効表示**になります。確定済みの世代が1つでも存在する場合は`startCloudLineageFromDevice`
+**理由付きで無効表示**になります（文面はこの操作専用の`StorageTransferLineageCopy.startUnavailable`。
+「置き換え」を説明する文面は、この画面の他のすべての文が「置き換えではない」と言っているため使いません）。
+確定済みの世代が1つでも存在する場合は`startCloudLineageFromDevice`
 自身が拒否するので、画面が読んだ「台帳が無い」という前提は実行時に必ず再検証されます。
+
+**controlレコードが無いことは、iCloudにレコードが無いことではありません。**
+`cloudLineageUnavailable`が証明したのは`PomoGemStorageTransfer-v1/control-v1`の不在だけで、
+`com.apple.coredata.cloudkit.zone`については何も言っていません。一方
+`startCloudLineageFromDevice`は`replacesCloud == true`のjournal（`.overwriteCloudFromDevice`）を
+開くため、`prepareDestination`がミラー済みzoneを削除します。復旧用コピーは**送信側**（この端末）の
+ペイロードなので、削除されるiCloud側の行はどこにも退避されません。したがってこの画面も
+`.datasetRefresh`と同じく、読み取り専用の`previewCloudDataset`が成功するまで扉を開けません
+（PLAN §3 S14）。件数と他端末の痕跡は同意より前に画面と「最後の確認」の両方に表示します。
+
+この画面には「もう一度試す」も置きます。通常版ではこの扉が常に無効で、オフライン用の
+確認済みコピーが無い端末（`.enrol` + `requireNoArtifacts`でこの停止理由に至る経路そのもの）では
+オフラインの扉も出ないため、これが無いと**アプリを強制終了する以外に再試行の手段がありません**。
+画面の本文末尾の一文も`allowsDatasetOverwriteFromDevice`から組み立てます
+（`StorageTransferLineageCopy.screenMessage(offersLineageStart:)`）。無効なビルドで
+「使い始めるか、オフラインのまま使うかを選べます」と書いてから次の段落で断るのを避けるためです。
 
 ### 管理情報（転送台帳）が無いアカウント
 
@@ -163,14 +181,27 @@ runtimeは**それぞれの名前のまま**投げます。
 
 `refreshCloudDatasetWithoutLineage`は`refreshCloudDataset`のCASを「台帳が無いこと」の要求に
 置き換えただけで、journalは同じ`enableCloudKeepingCloud`です。新しいnamespaceを作り、
-通常のenrol経路でCloudKitからミラーし直し、元のnamespaceのストアはjournalが復旧用コピーを
-残したまま退役させます。**サーバには一切書きません**（`mayCreateRemotePayload: false`）。
+通常のenrol経路でCloudKitからミラーし直し、元のnamespaceのストアを退役させます。
+**サーバには一切書きません**（`mayCreateRemotePayload: false`）。
+`enableCloudKeepingCloud`の`retainsImportOnCancellation`が成り立つのは
+`preparingDestination`から`destinationVerified`までの間だけで、照合後は
+`StorageTransferStoreFiles.retireSource`が元のストア一式を削除します。つまり
+**この方向に恒久的な復旧用コピーはありません**。
 `StorageTransferCloudAuthorityFence`は取引の間ずっとcontrolレコードが**無いまま**であることを
 要求するので、途中で他端末が系譜を公開した場合はミラーせずに停止します。
 
 設定画面の事前確認では、サーバ側を「iCloud側の管理情報なし（記録件数: n）」と表示します
 （件数は読み取り専用スナップショットの実測値）。端末→iCloudの「最後の確認」には、
 この操作が「置き換え」ではなく**新しく使い始める**操作である旨の段落を追加します。
+
+iCloud→端末の方向も、**同じ読み取り専用の事前確認**を経てから「最後の確認」を開きます。
+この方向は端末側を捨てる操作で恒久的な復旧用コピーが無く、台帳の無いアカウント
+（＝iCloud側が空である可能性がいちばん高い集団）にも開放されたため、
+「iCloudのデータは残ります」だけでは**どれだけ残るのか**を述べていないからです。
+読み取ったサーバ側が**0件**だった場合は、専用の段落
+（`StorageTransferRefreshCopy.cloudSideEmpty`）で「1件も見つからなかったこと」と
+「元に戻せないこと」を同意より前に明示します。読み取りに失敗した場合は確認画面を開かず、
+その方向自身のボタン名（「iCloudから再取得」）を含む文面で閉じたままにします。
 
 `StorageTransferDatasetRequestError`に残る`transferInFlight`は、サーバで転送が進行中のときだけです。
 

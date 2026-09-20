@@ -135,6 +135,21 @@ enum StorageTransferRefreshCopy {
 
     static let requestAccepted =
         "iCloudのデータでこの端末を置き換える手続きを受け付けました。アプリスイッチャーでPomoGemを終了し、もう一度開いてください。iCloudのデータは削除しません。"
+
+    /// review-1-2 / review-2-4. This direction deletes the DEVICE side and
+    /// stages no recovery copy anywhere, so the user may not be asked to
+    /// authorize it without being told what is actually on the side they are
+    /// about to fetch from. The read is read-only and gates nothing else.
+    static let settingsPreviewUnavailable =
+        "iCloudの内容を確認できませんでした。通信を確認して、もう一度「\(confirmTitle)」を押してください。どちらの記録も削除していません。"
+
+    /// The one shape that turns this direction into silent data loss: the
+    /// account's iCloud side holds no PomoGem record at all — the state
+    /// ROOT-CAUSE §6.2 names when the app's data is deleted from iOS Settings.
+    /// 「iCloudのデータは残ります」 is true and useless there, so the empty side
+    /// is stated in its own paragraph, before the acknowledgement.
+    static let cloudSideEmpty =
+        "iCloud側には、このアプリの記録が1件も見つかりませんでした。このまま実行すると、この端末のテーマ・記録・設定は削除され、元に戻すことはできません。中止して、先に設定から記録を書き出すか、他の端末の同期が終わるのをお待ちください。"
 }
 
 /// The fixed Japanese copy for the device → iCloud overwrite. It lives beside
@@ -267,8 +282,7 @@ enum StorageTransferOverwriteCopy {
     /// imply a lineage that does not exist.
     static func cloudSideWithoutLineage(preview: StorageTransferCloudPreview?) -> String {
         guard let preview else { return side("iCloud", preview: nil) }
-        let total = preview.recordCounts.values.reduce(0, +)
-        return "iCloud側の管理情報なし（記録件数: \(total)）"
+        return "iCloud側の管理情報なし（記録件数: \(preview.totalRecordCount)）"
     }
 
     static func side(_ label: String, preview: StorageTransferCloudPreview?) -> String {
@@ -296,8 +310,38 @@ enum StorageTransferLineageCopy {
 
     static let title = "iCloudの管理情報が見つかりません"
     static let startDoorTitle = "このiPhoneのデータでiCloudを使い始める"
+    /// review-1-1 / review-2-2. The missing thing is the transfer CONTROL
+    /// record, not the account's records: `refreshCloudDatasetWithoutLineage`
+    /// exists precisely because rows under a missing control record are real
+    /// and mirrorable. This sentence therefore says what the action does to
+    /// them, and the screen renders the enumerated counts beside it.
     static let startExplanation =
-        "iCloud側に、このアプリが使っている管理情報が見つかりません。このiPhoneの記録をiCloudへ送信し、新しいiCloudのデータとして使い始めます。このiPhoneの記録は削除しません。"
+        "iCloud側に、このアプリが使っている管理情報が見つかりません。このiPhoneの記録をiCloudへ送信し、新しいiCloudのデータとして使い始めます。このiPhoneの記録は削除しません。iCloudに残っている記録は削除され、このiPhoneのデータで置き換えられます。"
+
+    /// review-2-7. The reason the door is closed, phrased for THIS door.
+    /// `StorageTransferReleaseError.datasetOverwriteUnavailable` describes the
+    /// 「置き換え」 operation and promises a 復旧用コピー that this path never
+    /// stages, on a screen whose every other sentence says the operation is
+    /// not a replacement.
+    static let startUnavailable =
+        "このiPhoneのデータでiCloudを使い始める操作は、いまは利用できません。この端末の記録は削除せず、そのまま保持します。"
+
+    /// review-2-5. The stop reason itself promises nothing: the screen's
+    /// closing sentence is built by the host from the release policy, because
+    /// while `allowsDatasetOverwriteFromDevice` is false the door it would
+    /// name ships permanently disabled.
+    static let stopReason =
+        "iCloud側の管理情報を確認できませんでした。この端末のデータは削除していません。別のビルド（開発用／配布用）で開いた、またはiCloudのアプリデータが削除された可能性があります。"
+    static let startAndOfflineChoices =
+        "このiPhoneのデータでiCloudを使い始めるか、オフラインのまま使うかを選べます。"
+    static let retryAndOfflineChoices =
+        "このiPhoneのデータでiCloudを使い始める操作は、いまは利用できません。「もう一度試す」で確認し直すか、オフラインのままお使いください。"
+
+    /// The screen's message. `offersLineageStart` is the release bit, so the
+    /// app never states a choice and then refuses it in the next paragraph.
+    static func screenMessage(offersLineageStart: Bool) -> String {
+        stopReason + (offersLineageStart ? startAndOfflineChoices : retryAndOfflineChoices)
+    }
     static let offlineDoorTitle = "オフラインのまま使う"
     static let offlineExplanation =
         "iCloudへ送信せず、このiPhoneに保存されている記録でそのまま使います。あとでこの画面から、このiPhoneのデータでiCloudを使い始めることもできます。"
@@ -309,13 +353,23 @@ enum StorageTransferLineageCopy {
     // MARK: 「最後の確認」 for the start-from-device action
 
     static let sheetTitle = "最後の確認"
+    /// review-1-1 / review-2-2. The previous wording asserted 「現在のiCloudには、
+    /// このアプリが使えるPomoGemのデータがありません」 — an unverified factual
+    /// claim about the server, on the one screen where an irreversible
+    /// deletion of that server's rows is authorized. `startCloudLineageFromDevice`
+    /// opens an `.overwriteCloudFromDevice` journal whose `replacesCloud` is
+    /// true, so `prepareDestination` purges the mirrored zone; the staged
+    /// recovery copy is this device's payload and backs none of it up.
     static let sheetWarning =
-        "現在のiCloudには、このアプリが使えるPomoGemのデータがありません。このiPhoneのテーマ・記録・設定をiCloudへ送信し、新しいiCloudのデータとして使い始めます。"
+        "iCloud側には、このアプリが使っている管理情報がありません。そのため、この操作は「置き換え」ではなく、このiPhoneのデータでiCloudを新しく使い始める操作になります。いまiCloudに残っている記録は削除し、このiPhoneのテーマ・記録・設定で置き換えます。削除したiCloudのデータを元に戻すことはできません。"
     static let sheetOtherBuilds =
         "同じApple Accountの他の端末や、別のビルド（開発用／配布用）のPomoGemがこのアカウントを使っている場合、それらの端末は次に開いたときにiCloudのデータを取得し直す確認を求められます。その端末だけにある未送信の記録は残りません。"
     static let sheetRelaunch = StorageTransferOverwriteCopy.relaunch
     static let sheetScreenTime = StorageTransferOverwriteCopy.screenTime
-    static let acknowledgement = "このiPhoneのデータをiCloudへ送ること、他の端末に取得し直しを求めることを確認しました"
+    /// It names the deletion, because the action performs one. The previous
+    /// sentence mentioned only sending this iPhone's data and asking other
+    /// devices to re-fetch.
+    static let acknowledgement = "iCloudに残っている記録の削除と、他の端末への影響を確認しました"
     static let sheetConfirm = "iCloudを使い始める"
 
     static let requestAccepted =
@@ -330,11 +384,13 @@ enum StorageTransferLineageCopy {
         "この端末の記録は、いまのアプリとは別のiCloud環境（開発用／配布用）で作られたものです。この画面では、どちらの記録も削除していません。記録を作ったときと同じビルドのPomoGemで開き直すか、サポートの手順をご確認ください。"
 
     static let localLedgerMissingTitle = "iCloudのデータを受け取った記録がありません"
-    /// Reached only when the server ALSO turns out to have no committed
-    /// generation, so the 「iCloudから再取得」 screen cannot be built. Saying
-    /// 「もう一度試す」 is honest here: the generic retry is on this screen.
+    /// review-1-4. This screen is reached only from the SUCCESS branch of
+    /// `presentDatasetRefresh`: the server read worked and reported no
+    /// terminal committed generation. A read that throws produces
+    /// `refreshScreenUnavailable` instead. The copy therefore states what was
+    /// observed and never names a network cause that was not.
     static let localLedgerMissingExplanation =
-        "iCloud側の管理情報を読み取れなかったため、再取得の選択肢を表示できません。通信を確認して「もう一度試す」を押してください。この画面では、どちらの記録も削除していません。"
+        "この端末には、いまiCloudにあるデータを受け取った記録がありません。iCloud側にも、再取得の元になる管理情報は見つかりませんでした。そのため、この画面では再取得の選択肢を表示できません。この画面では、どちらの記録も削除していません。"
 
     // MARK: Settings, when the account has no transfer ledger (W6)
 

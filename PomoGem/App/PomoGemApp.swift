@@ -656,14 +656,25 @@ private struct PomoGemPersistenceLaunchHost: View {
     /// Offered only on the screen whose copy names it, and only once a read
     /// has actually failed. Re-reading iCloud deletes nothing on either side.
     private var datasetPreviewRetryAction: (() -> Void)? {
-        guard case .datasetRefresh = launchState, cloudDatasetPreviewFailed,
+        guard screenArmsItsDoorWithAPreflight, cloudDatasetPreviewFailed,
               !isPreparing, !requiresStorageTransferRelaunch,
               storageTransferRecoveryBinding != nil else { return nil }
         return { retryDatasetPreview() }
     }
 
+    /// The two screens that gate a destructive door on a read-only server
+    /// enumeration (PLAN §3 S14). `.cloudLineageUnavailable` joined them with
+    /// review-1-1 / review-2-2: 「no control record」 says nothing about what
+    /// the account's mirrored zone holds, and starting a lineage deletes it.
+    private var screenArmsItsDoorWithAPreflight: Bool {
+        switch launchState {
+        case .datasetRefresh, .cloudLineageUnavailable: true
+        default: false
+        }
+    }
+
     private func retryDatasetPreview() {
-        guard case .datasetRefresh = launchState, !isPreparing,
+        guard screenArmsItsDoorWithAPreflight, !isPreparing,
               !requiresStorageTransferRelaunch,
               storageTransferRecoveryBinding != nil else { return }
         cloudDatasetPreview = nil
@@ -2382,6 +2393,13 @@ private struct PomoGemPersistenceLaunchHost: View {
     private func requestCloudLineageStart() {
         guard !isPreparing, !requiresStorageTransferRelaunch,
               storageTransferRecoveryBinding != nil,
+              // S14, same as `requestDatasetOverwrite`. The absent control
+              // record is not evidence about the account's records, and this
+              // action deletes them: `.overwriteCloudFromDevice` has
+              // `replacesCloud == true`, so `prepareDestination` purges the
+              // managed zone, and the staged recovery copy is the SOURCE
+              // payload — nothing backs up what is deleted.
+              cloudDatasetPreview != nil,
               storageTransferRefreshGenerationID == nil else { return }
         datasetPreviewRequest = nil
         remoteRecoveryAction = .startLineage
@@ -2397,6 +2415,8 @@ private struct PomoGemPersistenceLaunchHost: View {
               !requiresStorageTransferRelaunch,
               storageTransferRecoveryBinding != nil,
               storageTransferRefreshGenerationID == nil else { return nil }
+        // The view keeps the door disabled until `cloudPreview != nil` as
+        // well; this closure exists so a tap can never outrun that check.
         return { requestCloudLineageStart() }
     }
 
@@ -2437,6 +2457,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         // being reduced by the same function, so a second, off-main reduction
         // written just for this screen is not an acceptable substitute.
         guard StorageTransferReleasePolicy.standard.allowsDatasetOverwriteFromDevice else { return }
+        // Both screens that arm a destructive door show the same comparison.
         if case let .selected(selection) = PersistenceDeploymentState.load() {
             // Best effort. An unreadable device side degrades the comparison
             // to 「確認できませんでした」; it never gates the destructive door,
@@ -2555,9 +2576,14 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     /// P0-2. The screen for `cloudLineageUnavailable` — the state the reported
-    /// iPhone is actually in. The preflight has already read the control record
-    /// to reach this classification, so no second round trip is made here; the
-    /// one action this screen offers re-reads and re-proves the absence itself.
+    /// iPhone is actually in.
+    ///
+    /// review-1-1 / review-2-2. The preflight proved only that the single
+    /// record `PomoGemStorageTransfer-v1/control-v1` is absent. That says
+    /// nothing about `com.apple.coredata.cloudkit.zone`, which the one action
+    /// on this screen deletes, so this screen arms its door exactly the way
+    /// `.datasetRefresh` does: with the read-only `previewCloudDataset`
+    /// enumeration, rendered on screen before any consent is possible.
     private func presentCloudLineageUnavailable(error: StorageTransferRuntimeError) {
         datasetPreviewRequest = nil
         cloudDatasetPreview = nil
@@ -2567,7 +2593,13 @@ private struct PomoGemPersistenceLaunchHost: View {
         // what keeps `requestCloudLineageStart`'s own guard meaningful.
         storageTransferRefreshGenerationID = nil
         storageTransferRecoveryTransactionID = nil
-        launchState = .cloudLineageUnavailable(error.localizedDescription)
+        // review-2-5. The closing sentence names a control, so it is built
+        // against the bit that decides whether this build carries one.
+        launchState = .cloudLineageUnavailable(StorageTransferLineageCopy.screenMessage(
+            offersLineageStart: StorageTransferReleasePolicy.standard.allowsDatasetOverwriteFromDevice))
+        guard storageTransferRecoveryBinding != nil else { return }
+        // Started only after the screen exists, exactly as on `.datasetRefresh`.
+        datasetPreviewRequest = UUID()
     }
 
     private func presentRemoteStorageRecovery(error: StorageTransferRuntimeError, attempt: Int) async {
@@ -3057,6 +3089,10 @@ private struct PersistenceLaunchStatusView: View {
                     Text(message)
                         .foregroundStyle(PomoGemTheme.muted)
                         .multilineTextAlignment(.center)
+                        // review-2-5. The screen's message names a control on
+                        // some states, so a test must be able to read it and
+                        // check it against what this build actually publishes.
+                        .accessibilityIdentifier("storage-launch-message")
 
                     if isPreparing {
                         ProgressView()
@@ -3342,6 +3378,25 @@ private struct PersistenceLaunchStatusView: View {
             .foregroundStyle(PomoGemTheme.muted)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityIdentifier("storage-lineage-start-explanation")
+        // review-1-1 / review-2-2. The counted iCloud side, before any consent
+        // is possible. 「no control record」 is not 「no records」, and this door
+        // deletes the records.
+        Text(lineageComparison)
+            .foregroundStyle(PomoGemTheme.muted)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("storage-lineage-comparison")
+        if cloudPreviewFailed, let onRetryCloudPreview {
+            Button(StorageTransferOverwriteCopy.retryPreviewTitle, action: onRetryCloudPreview)
+                .buttonStyle(PomoGemSecondaryButtonStyle())
+                .accessibilityIdentifier("storage-lineage-retry-preview")
+        }
+        Text(overwriteOtherDeviceEvidence)
+            .font(.caption)
+            .foregroundStyle(PomoGemTheme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("storage-lineage-other-devices")
         Button(StorageTransferLineageCopy.startDoorTitle, role: .destructive) {
             // Never acts on tap. It opens the second screen, whose own
             // acknowledgement starts unchecked on every presentation.
@@ -3352,7 +3407,10 @@ private struct PersistenceLaunchStatusView: View {
         .disabled(!canStartCloudLineage)
         .accessibilityIdentifier("storage-lineage-start")
         if !releasePolicy.allowsDatasetOverwriteFromDevice {
-            Text(StorageTransferReleaseError.datasetOverwriteUnavailable.localizedDescription)
+            // review-2-7. Phrased for THIS door: the overwrite error describes
+            // a 「置き換え」 and a 復旧用コピー, neither of which this screen
+            // is about.
+            Text(StorageTransferLineageCopy.startUnavailable)
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -3373,10 +3431,37 @@ private struct PersistenceLaunchStatusView: View {
                 .buttonStyle(PomoGemSecondaryButtonStyle())
                 .accessibilityIdentifier("cloud-offline-continue")
         }
+        // review-1-3 / review-2-1. Before this branch existed the same stop
+        // reason fell through to `.blocked`, which always carries 「もう一度試す」.
+        // Without it a shipping build whose offline copy is ineligible — the
+        // `.enrol` + `requireNoArtifacts` path that raises this very error —
+        // renders a disabled door and a support link and nothing else, and the
+        // only way to re-attempt is to force-quit the app.
+        Button("もう一度試す", action: onRetry)
+            .buttonStyle(PomoGemSecondaryButtonStyle())
+            .accessibilityIdentifier("storage-lineage-retry")
+        if onChooseLocalOnly != nil {
+            Button("このiPhoneだけで始める") {
+                storageConfirmation = .localOnly
+            }
+            .buttonStyle(PomoGemSecondaryButtonStyle())
+        }
         Link(destination: AppLinks.support) {
             Label("サポートを見る", systemImage: "questionmark.circle")
         }
         .buttonStyle(PomoGemSecondaryButtonStyle())
+    }
+
+    /// The iCloud side of this screen, rendered by the same functions as the
+    /// `.datasetRefresh` comparison so the two surfaces cannot disagree about
+    /// one dataset. The iCloud row never prints a 「最終」 date here: there is
+    /// no control record, so a lineage row would imply one that does not exist.
+    private var lineageComparison: String {
+        if cloudPreviewFailed { return StorageTransferOverwriteCopy.comparisonUnavailable }
+        guard let cloudPreview else { return StorageTransferOverwriteCopy.comparisonReading }
+        let cloud = StorageTransferOverwriteCopy.cloudSideWithoutLineage(preview: cloudPreview)
+        guard releasePolicy.allowsDatasetOverwriteFromDevice else { return cloud }
+        return StorageTransferOverwriteCopy.side("このiPhone", preview: devicePreview) + "\n" + cloud
     }
 
     /// The explanation-only screens. No destructive control of any kind: the
@@ -3414,6 +3499,12 @@ private struct PersistenceLaunchStatusView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         overwriteSheetParagraph(StorageTransferLineageCopy.sheetWarning,
                             identifier: "storage-lineage-warning")
+                        // The same two facts the overwrite sheet restates: what
+                        // is on each side, and whether another device wrote it.
+                        overwriteSheetParagraph(lineageComparison,
+                            identifier: "storage-lineage-sheet-comparison")
+                        overwriteSheetParagraph(overwriteOtherDeviceEvidence,
+                            identifier: "storage-lineage-sheet-other-devices")
                         overwriteSheetParagraph(StorageTransferLineageCopy.sheetOtherBuilds,
                             identifier: "storage-lineage-other-builds")
                         overwriteSheetParagraph(StorageTransferLineageCopy.sheetRelaunch,
@@ -3449,11 +3540,19 @@ private struct PersistenceLaunchStatusView: View {
         }
     }
 
-    /// The door is closed while the feature is unpublished, and while the host
-    /// cannot run it at all. Unlike the overwrite it needs no pre-flight: there
-    /// is no iCloud dataset to enumerate, which is the whole premise.
+    /// S14, identically to `canRequestOverwrite`. The door is closed while the
+    /// feature is unpublished, while the host cannot run it, AND until the
+    /// iCloud side has actually been enumerated.
+    ///
+    /// review-1-1 / review-2-2. The old comment justified skipping the
+    /// pre-flight with 「there is no iCloud dataset to enumerate, which is the
+    /// whole premise」. The premise was wrong: `cloudLineageUnavailable` means
+    /// only that `PomoGemStorageTransfer-v1/control-v1` is absent. The records
+    /// under `com.apple.coredata.cloudkit.zone` can be a whole other device's
+    /// dataset, and this door deletes them with no recovery copy.
     private var canStartCloudLineage: Bool {
         releasePolicy.allowsDatasetOverwriteFromDevice && onStartCloudLineage != nil
+            && cloudPreview != nil
     }
 
     /// 「最後の確認」. Everything the replacement will do, restated in full, with
@@ -3741,6 +3840,15 @@ enum StorageTransferOverwriteLaunchUITestScenario {
     /// the door can actually be exercised. The offline route is deliberately
     /// ineligible here, so the 「otherwise explain」 branch is covered too.
     case lineageUnavailableEnabled
+    /// review-1-3 / review-2-1. The shipping build on a device whose offline
+    /// copy is ALSO ineligible — the combination neither fixture covered, and
+    /// the one that used to render a disabled door and a support link with no
+    /// way out of the screen at all.
+    case lineageUnavailableClosed
+    /// review-1-1 / review-2-2. The published door whose read-only server
+    /// enumeration failed. Nobody may authorize deleting contents the app
+    /// never enumerated, so the door stays shut and the named re-read appears.
+    case lineageUnavailableUnreadable
     /// Explanation only: this device's receipt was earned in the other
     /// CloudKit environment. Nothing destructive is on this screen.
     case environmentMismatch
@@ -3754,7 +3862,8 @@ enum StorageTransferOverwriteLaunchUITestScenario {
     /// scrollable height that the AX5 `.datasetRefresh` tests depend on.
     var showsLineageState: Bool {
         switch self {
-        case .lineageUnavailable, .lineageUnavailableEnabled, .environmentMismatch,
+        case .lineageUnavailable, .lineageUnavailableEnabled, .lineageUnavailableClosed,
+             .lineageUnavailableUnreadable, .environmentMismatch,
              .localLedgerMissingExplain: true
         case .choice, .otherDevices, .previewFailed, .blocked, .inProgress,
              .remoteResumeClosed, .remoteResumeOpen: false
@@ -3821,12 +3930,18 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
     }
 
     /// A failed read is offered a re-read; a successful or absent one is not.
-    private var offersPreviewRetry: Bool { scenario == .previewFailed }
+    private var offersPreviewRetry: Bool {
+        scenario == .previewFailed || scenario == .lineageUnavailableUnreadable
+    }
 
     /// The host passes nil when the action cannot run at all. Only the lineage
     /// screen ever has it, and nothing else in this fixture may receive it.
     private var offersLineageStart: Bool {
-        scenario == .lineageUnavailable || scenario == .lineageUnavailableEnabled
+        switch scenario {
+        case .lineageUnavailable, .lineageUnavailableEnabled, .lineageUnavailableClosed,
+             .lineageUnavailableUnreadable: true
+        default: false
+        }
     }
 
     /// Eligibility for the offline continuation is a property of the device's
@@ -3835,7 +3950,14 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
         scenario == .lineageUnavailable || scenario == .environmentMismatch
     }
 
-    private var cloudPreviewFailed: Bool { scenario == .previewFailed && previewRetries == 0 }
+    /// review-1-3 / review-2-1. The screen must never be a dead end, so one
+    /// scenario deliberately combines the shipping policy with an ineligible
+    /// offline route: `lineageUnavailableClosed` offers neither door.
+
+    private var cloudPreviewFailed: Bool {
+        (scenario == .previewFailed || scenario == .lineageUnavailableUnreadable)
+            && previewRetries == 0
+    }
 
     private var state: PomoGemPersistenceLaunchHost.LaunchState {
         switch scenario {
@@ -3849,9 +3971,12 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
         case .choice, .otherDevices, .previewFailed:
             .datasetRefresh(StorageTransferRuntimeError.datasetRefreshRequired.localizedDescription,
                             claimsReplacement: true)
-        case .lineageUnavailable, .lineageUnavailableEnabled:
-            .cloudLineageUnavailable(
-                StorageTransferRuntimeError.cloudLineageUnavailable.localizedDescription)
+        case .lineageUnavailable, .lineageUnavailableEnabled, .lineageUnavailableClosed,
+             .lineageUnavailableUnreadable:
+            // review-2-5. Built by the same function the host uses, from the
+            // same bit, so a fixture cannot show a promise the policy denies.
+            .cloudLineageUnavailable(StorageTransferLineageCopy.screenMessage(
+                offersLineageStart: releasePolicy.allowsDatasetOverwriteFromDevice))
         case .environmentMismatch:
             .datasetExplanation(.environmentMismatch,
                 StorageTransferRuntimeError.cloudEnvironmentMismatch.localizedDescription)
@@ -3871,12 +3996,13 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
     /// prohibition it is meant to exercise around.
     private var releasePolicy: StorageTransferReleasePolicy {
         switch scenario {
-        case .otherDevices, .previewFailed, .lineageUnavailableEnabled:
+        case .otherDevices, .previewFailed, .lineageUnavailableEnabled,
+             .lineageUnavailableUnreadable:
             .isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)
         case .remoteResumeOpen:
             .isolatedTestingPolicy(allowsRemoteResumeBeforeReplacing: true)
         case .choice, .blocked, .inProgress, .remoteResumeClosed, .lineageUnavailable,
-             .environmentMismatch, .localLedgerMissingExplain:
+             .lineageUnavailableClosed, .environmentMismatch, .localLedgerMissingExplain:
             .standard
         }
     }
@@ -3895,9 +4021,19 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
             previewRetries == 0 ? nil
                 : Self.preview(subjects: 9, sessions: 312, stones: 28,
                                latest: Self.date(2026, 9, 18), otherDeviceIDs: 1)
+        case .lineageUnavailable, .lineageUnavailableEnabled, .lineageUnavailableClosed:
+            // review-1-1 / review-2-2. There IS something to enumerate here:
+            // a missing control record says nothing about the account's rows,
+            // and the door on this screen deletes them. Same shape as the
+            // branch's Settings fixture for a ledger-less account.
+            Self.preview(subjects: 9, sessions: 312, stones: 28,
+                         latest: Self.date(2026, 9, 18), otherDeviceIDs: 1)
+        case .lineageUnavailableUnreadable:
+            previewRetries == 0 ? nil
+                : Self.preview(subjects: 9, sessions: 312, stones: 28,
+                               latest: Self.date(2026, 9, 18), otherDeviceIDs: 1)
         case .blocked, .inProgress, .remoteResumeClosed, .remoteResumeOpen,
-             .lineageUnavailable, .lineageUnavailableEnabled, .environmentMismatch,
-             .localLedgerMissingExplain:
+             .environmentMismatch, .localLedgerMissingExplain:
             // There is nothing to enumerate on these screens, and none of them
             // carries a control that a pre-flight could gate.
             nil
@@ -3906,12 +4042,15 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
 
     private var devicePreview: StorageTransferCloudPreview? {
         switch scenario {
-        case .choice, .otherDevices, .previewFailed:
+        case .choice, .otherDevices, .previewFailed, .lineageUnavailableEnabled,
+             .lineageUnavailableUnreadable:
             Self.preview(subjects: 12, sessions: 480, stones: 36,
                          latest: Self.date(2026, 9, 20), otherDeviceIDs: 0)
         case .blocked, .inProgress, .remoteResumeClosed, .remoteResumeOpen,
-             .lineageUnavailable, .lineageUnavailableEnabled, .environmentMismatch,
+             .lineageUnavailable, .lineageUnavailableClosed, .environmentMismatch,
              .localLedgerMissingExplain:
+            // The host skips the device side while the direction it informs is
+            // unpublished, so the shipping fixtures must not carry one either.
             nil
         }
     }

@@ -41,6 +41,11 @@ struct StorageTransferCloudPreview: Equatable, Sendable {
     /// state and the review notes can state the raw and the filtered number.
     let ignoredWriterIDs: Int
 
+    /// Total rows across the mirrored models. Used where the question is
+    /// simply whether the enumerated side holds anything at all — which is
+    /// what turns 「iCloudのデータは残ります」 into silent data loss.
+    var totalRecordCount: Int { recordCounts.values.reduce(0, +) }
+
     /// The only two models whose writer identifier is a durable witness that a
     /// DIFFERENT installation wrote into this dataset. `SyncedFocusTimer`
     /// is deliberately excluded: its `writerDeviceID` is rewritten by whichever

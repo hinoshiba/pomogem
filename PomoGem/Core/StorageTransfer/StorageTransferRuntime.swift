@@ -26,12 +26,12 @@ enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
         case .datasetReplacedRemotely:
             "iCloudのデータが別の記録に置き換えられています。この端末の記録を送らないよう同期を止めています。"
         case .cloudLineageUnavailable:
-            // The last sentence promises the two choices the launch host now
-            // actually offers on its own `.cloudLineageUnavailable` screen
-            // (start a lineage from this device, or stay offline). It was
-            // removed while that screen did not exist and returns with it; a
-            // stop reason may never promise an action no screen can perform.
-            "iCloud側の管理情報を確認できませんでした。この端末のデータは削除していません。別のビルド（開発用／配布用）で開いた、またはiCloudのアプリデータが削除された可能性があります。このiPhoneのデータでiCloudを使い始めるか、オフラインのまま使うかを選べます。"
+            // review-2-5. The stop reason states only what was observed. The
+            // sentence that names a control belongs to the SCREEN, which knows
+            // whether `allowsDatasetOverwriteFromDevice` actually publishes
+            // that control — see `StorageTransferLineageCopy.screenMessage`.
+            // A refusal may never promise an action the build ships disabled.
+            StorageTransferLineageCopy.stopReason
         case .localLedgerMissing:
             "この端末に、いまのiCloudデータを受け取った記録がありません。古いデータを混ぜないよう同期を停止しています。"
         case .cloudEnvironmentMismatch:

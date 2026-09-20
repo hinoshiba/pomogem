@@ -23,6 +23,11 @@ enum StorageTransferSettingsUITestFixture {
         /// absence and the device → iCloud confirmation says the operation
         /// starts a lineage rather than replacing one.
         case cloudDatasetDoorsNoLineage
+        /// review-1-2 / review-2-4. The account whose iCloud side holds no
+        /// PomoGem record at all — app data deleted from iOS Settings, a cause
+        /// ROOT-CAUSE §6.2 names. Direction (B) would discard the device's only
+        /// copy and mirror down nothing, so its confirmation must say so.
+        case cloudDatasetDoorsEmptyCloud
         /// The launch-host screens a fenced device actually lands on. Each one
         /// renders the shipping `PersistenceLaunchStatusView` with a recorder in
         /// place of the runtime, so no journal, container or CloudKit call
@@ -39,6 +44,11 @@ enum StorageTransferSettingsUITestFixture {
         /// `lineageUnavailableEnabled` raises only
         /// `allowsDatasetOverwriteFromDevice` so the consent flow is reachable.
         case lineageUnavailable, lineageUnavailableEnabled
+        /// review-1-3 / review-2-1 and review-1-1 / review-2-2: the shipping
+        /// build with an ineligible offline route (the screen must still carry
+        /// a working control), and the published door whose read-only server
+        /// enumeration failed (the door must stay shut).
+        case lineageUnavailableClosed, lineageUnavailableUnreadable
         /// The two explanation-only screens. Neither carries any destructive
         /// control, in any policy.
         case environmentMismatch, localLedgerMissingExplain
@@ -58,6 +68,8 @@ enum StorageTransferSettingsUITestFixture {
             case .remoteResumeOpen: .remoteResumeOpen
             case .lineageUnavailable: .lineageUnavailable
             case .lineageUnavailableEnabled: .lineageUnavailableEnabled
+            case .lineageUnavailableClosed: .lineageUnavailableClosed
+            case .lineageUnavailableUnreadable: .lineageUnavailableUnreadable
             case .environmentMismatch: .environmentMismatch
             case .localLedgerMissingExplain: .localLedgerMissingExplain
             default: nil
@@ -76,6 +88,7 @@ enum StorageTransferSettingsUITestFixture {
         var mode: PersistenceLaunchMode {
             self == .cloud || self == .cloudDatasetDoors
                 || self == .cloudDatasetDoorsUnreadable || self == .cloudDatasetDoorsNoLineage
+                || self == .cloudDatasetDoorsEmptyCloud
                 || self == .lateArrival || isOffline
                 || self == .cloudNetworkWaiting ? .cloudKit : .localOnly
         }
@@ -86,7 +99,7 @@ enum StorageTransferSettingsUITestFixture {
         /// prohibition it is meant to exercise around.
         var releasePolicy: StorageTransferReleasePolicy {
             self == .cloudDatasetDoors || self == .cloudDatasetDoorsUnreadable
-                || self == .cloudDatasetDoorsNoLineage
+                || self == .cloudDatasetDoorsNoLineage || self == .cloudDatasetDoorsEmptyCloud
                 ? .isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)
                 : .standard
         }
@@ -204,27 +217,60 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                 guard scenario != .cloudDatasetDoorsUnreadable else {
                     throw CloudStorageTransferCloudError.timedOut
                 }
-                return scenario == .cloudDatasetDoorsNoLineage
-                    ? Self.previewSummaryWithoutLineage : Self.previewSummary
+                // The host captures the device side only while the direction
+                // that needs it is published, so the fixture models the same
+                // gate: a shipping scenario must not invent a device row the
+                // real screen would never have.
+                let readsDeviceSide = scenario.releasePolicy.allowsDatasetOverwriteFromDevice
+                switch scenario {
+                case .cloudDatasetDoorsNoLineage:
+                    return Self.previewSummaryWithoutLineage(readsDeviceSide: readsDeviceSide)
+                case .cloudDatasetDoorsEmptyCloud:
+                    return Self.previewSummaryEmptyCloud(readsDeviceSide: readsDeviceSide)
+                default:
+                    return Self.previewSummary(readsDeviceSide: readsDeviceSide)
+                }
             })
         }
     }
 
     /// Two sides whose counts and dates differ, and one witnessed other
     /// device, so the sheet's comparison and evidence are both non-trivial.
-    private static let previewSummary = StorageTransferDatasetPreviewSummary(
-        cloud: preview(subjects: 9, sessions: 312, stones: 28,
-                       year: 2026, month: 9, day: 18, otherDeviceIDs: 2),
-        device: preview(subjects: 12, sessions: 480, stones: 36,
-                        year: 2026, month: 9, day: 20, otherDeviceIDs: 0))
+    private static func previewSummary(readsDeviceSide: Bool) -> StorageTransferDatasetPreviewSummary {
+        StorageTransferDatasetPreviewSummary(
+            cloud: preview(subjects: 9, sessions: 312, stones: 28,
+                           year: 2026, month: 9, day: 18, otherDeviceIDs: 2),
+            device: deviceSide(readsDeviceSide))
+    }
 
     /// W6. Records on the server, no transfer control record.
-    private static let previewSummaryWithoutLineage = StorageTransferDatasetPreviewSummary(
-        cloud: preview(subjects: 9, sessions: 312, stones: 28,
-                       year: 2026, month: 9, day: 18, otherDeviceIDs: 0),
-        device: preview(subjects: 12, sessions: 480, stones: 36,
-                        year: 2026, month: 9, day: 20, otherDeviceIDs: 0),
-        hasCloudLineage: false)
+    private static func previewSummaryWithoutLineage(
+        readsDeviceSide: Bool
+    ) -> StorageTransferDatasetPreviewSummary {
+        StorageTransferDatasetPreviewSummary(
+            cloud: preview(subjects: 9, sessions: 312, stones: 28,
+                           year: 2026, month: 9, day: 18, otherDeviceIDs: 0),
+            device: deviceSide(readsDeviceSide),
+            hasCloudLineage: false)
+    }
+
+    private static func deviceSide(_ reads: Bool) -> StorageTransferCloudPreview? {
+        reads ? preview(subjects: 12, sessions: 480, stones: 36,
+                        year: 2026, month: 9, day: 20, otherDeviceIDs: 0) : nil
+    }
+
+    /// review-1-2 / review-2-4. Nothing on the server, months of records on
+    /// the device: the shape in which 「iCloudのデータは残ります」 is true and
+    /// still leaves the user with an empty app and no copy anywhere.
+    private static func previewSummaryEmptyCloud(
+        readsDeviceSide: Bool
+    ) -> StorageTransferDatasetPreviewSummary {
+        StorageTransferDatasetPreviewSummary(
+            cloud: preview(subjects: 0, sessions: 0, stones: 0,
+                           year: 2026, month: 9, day: 18, otherDeviceIDs: 0),
+            device: deviceSide(readsDeviceSide),
+            hasCloudLineage: false)
+    }
 
     private static func preview(subjects: Int, sessions: Int, stones: Int,
                                 year: Int, month: Int, day: Int,
