@@ -38,10 +38,31 @@ enum StorageTransferAdmissionPolicy {
     ///     refused every non-terminal control with `remoteRecoveryRequired`,
     ///     so nil here always means "this database has no transfer ledger",
     ///     never "the read failed" (the transport throws in that case).
+    ///   - otherScopeReceipts: receipts filed for this same namespace under a
+    ///     DIFFERENT environment's file name. They are the only evidence this
+    ///     build has that the namespace's lineage belongs somewhere else: the
+    ///     receipt a build reads is chosen by file name, so without this the
+    ///     other environment is simply invisible and `decide` would enrol.
     static func decide(found: StorageTransferDatasetAdmission?,
                        binding: ActiveAccountLocalBinding,
                        scope: StorageTransferCloudScope,
-                       serverGenerationID: UUID?) -> StorageTransferAdmissionDecision {
+                       serverGenerationID: UUID?,
+                       otherScopeReceipts: [StorageTransferDatasetAdmission] = [])
+        -> StorageTransferAdmissionDecision {
+        // Consulted only while this build has no environment-proven receipt of
+        // its own. A receipt that already names THIS scope is authoritative for
+        // this database, and a leftover receipt from another environment must
+        // not block a device that is correctly enrolled here.
+        if (found?.cloudScope?.isKnown ?? false) == false,
+           otherScopeReceipts.contains(where: {
+               ($0.cloudScope ?? .unknown).isProvenDifferent(from: scope)
+           }) {
+            // Enrolling here would mirror every row this device holds into a
+            // database that never held them, with no prompt - the same effect
+            // as `startCloudLineageFromDevice`, which is fenced behind an
+            // explicit choice and a closed policy bit. Refuse and explain.
+            return .refuse(.cloudEnvironmentMismatch)
+        }
         guard let found else { return .enrol }
         // Structurally unreachable: the receipt is filed under its own
         // namespace and a changed account is blocked by the namespace registry

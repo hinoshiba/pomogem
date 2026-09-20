@@ -32,11 +32,33 @@ struct CloudOfflineRecoveryPresentation: Equatable, Sendable {
 }
 
 /// The launch presentations the split dataset-lineage taxonomy maps onto. The
-/// launch host wiring lands in a separate step; until then every new case
-/// reaches the generic blocked screen through the host's existing `default`
-/// arm, which keeps the offline route and never performs a destructive action.
+/// launch host wiring lands in a separate step; until then every case that
+/// carries NO in-app remedy reaches the generic blocked screen through the
+/// host's existing `default` arm, which keeps the offline route and never
+/// performs a destructive action, and every case that DOES carry one keeps the
+/// legacy error name so its screen stays reachable (`launchRoutableRefusal`).
 enum CloudDatasetLineageBlock: Equatable, Sendable {
     case remoteDatasetOffer, lineageUnavailable, environmentMismatch, localLedgerMissing
+
+    /// True when the presentation for this state includes 「iCloudから再取得」,
+    /// i.e. when a terminal, generation-carrying control exists for the host to
+    /// refresh from. Only these states have an in-app remedy today, and only
+    /// these states therefore have to survive the routing shim below.
+    var offersRemoteDataset: Bool {
+        switch self {
+        case .remoteDatasetOffer, .localLedgerMissing: true
+        case .lineageUnavailable, .environmentMismatch: false
+        }
+    }
+}
+
+/// The launch screen the host's `StorageTransferRuntimeError` switch actually
+/// produces. It mirrors `PomoGemApp.swift:1135-1148`, which the launch-state
+/// wiring step will replace with a call to `launchRoute(for:)` so the two can
+/// no longer drift. Until then this is the executable statement of that switch,
+/// and the tests pin every lineage refusal against it.
+enum CloudLaunchRoute: Equatable, Sendable {
+    case relaunch, remoteRecovery, datasetRefresh, blocked
 }
 
 enum CloudOfflineSessionError: Error, LocalizedError {
@@ -85,6 +107,42 @@ enum CloudOfflineHostPolicy {
         case StorageTransferRuntimeError.localLedgerMissing: .localLedgerMissing
         default: nil
         }
+    }
+
+    /// Which screen `PomoGemApp.swift:1135-1148` builds for a runtime error
+    /// TODAY. Only `.datasetRefreshRequired` reaches `presentDatasetRefresh`
+    /// (`PomoGemApp.swift:1143`), which is the sole writer of
+    /// `storageTransferRefreshGenerationID` and therefore the only producer of
+    /// `launchState = .datasetRefresh` — the 「iCloudから再取得」 screen and the
+    /// only gate that lets `refreshCloudDataset` run at all. Everything else
+    /// falls into `default` and becomes the generic 「保存領域を確認できません」
+    /// screen, whose only actions are retry, offline use and support.
+    static func launchRoute(for error: StorageTransferRuntimeError) -> CloudLaunchRoute {
+        switch error {
+        case .relaunchRequired: .relaunch
+        case .remoteRecoveryRequired: .remoteRecovery
+        case .datasetRefreshRequired: .datasetRefresh
+        default: .blocked
+        }
+    }
+
+    /// Name a lineage refusal so the host of THIS build can still present it.
+    ///
+    /// Splitting `datasetRefreshRequired` is only half a change: the host's
+    /// switch has not been taught the new names yet, so a refusal that carries
+    /// the 「iCloudから再取得」 remedy would land in `default` and lose it — a
+    /// permanent dead end for the one lineage state that previously had an
+    /// in-app way out. Until the launch-state wiring step lands, those refusals
+    /// keep the legacy name; the states with no remedy keep their own name and
+    /// their own honest copy, because the screen they reach is unchanged.
+    ///
+    /// Remove this shim together with the host switch. `datasetLineageBlock`
+    /// already classifies what the host will present after that.
+    static func launchRoutableRefusal(_ error: StorageTransferRuntimeError) -> StorageTransferRuntimeError {
+        guard let block = datasetLineageBlock(for: error), block.offersRemoteDataset else {
+            return error
+        }
+        return .datasetRefreshRequired
     }
 
     /// Explicit online retry changes only the preferred launch route. It does

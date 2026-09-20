@@ -9,7 +9,7 @@ import Foundation
 /// lives in the app container, which is keyed by bundle id only, so a
 /// Development build and a Production build of the same bundle id shared one
 /// admission receipt while reading two completely unrelated databases.
-enum StorageTransferCloudEnvironment: String, Codable, Equatable, Sendable {
+enum StorageTransferCloudEnvironment: String, CaseIterable, Codable, Equatable, Sendable {
     case development = "Development"
     case production = "Production"
     /// A receipt written before receipts recorded their environment, or a host

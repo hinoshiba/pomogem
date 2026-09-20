@@ -121,9 +121,12 @@ final class StorageTransferSingleDeviceAdmissionRegressionTests: XCTestCase {
     /// namespace. Reinstall-with-restored-container and a resumed transfer that
     /// never re-ran `promote` land here.
     ///
-    /// FIXED: the replacement IS real, so the case stays a refusal, but it is
-    /// now `datasetReplacedRemotely` and its copy no longer names a device
-    /// count the control record cannot support.
+    /// FIXED: the replacement IS real, so the case stays a refusal. The
+    /// classification is `datasetReplacedRemotely`, but a real replacement is
+    /// one of the two states the launch host can still REMEDY, so the thrown
+    /// error keeps the legacy name until the host is wired to the taxonomy —
+    /// otherwise the 「iCloudから再取得」 screen becomes unreachable. Both halves
+    /// are asserted here; the copy of neither names a device count.
     func testGenerationAdvancedByThisDeviceItselfIsReportedWithoutADeviceClaim() async throws {
         let f = try fixture()
         let first = try committedControl()
@@ -136,10 +139,20 @@ final class StorageTransferSingleDeviceAdmissionRegressionTests: XCTestCase {
         let second = try committedControl(previous: firstGeneration)
         XCTAssertNotEqual(second.datasetGenerationID, firstGeneration)
 
-        await expectRefusal(.datasetReplacedRemotely, {
+        XCTAssertEqual(StorageTransferAdmissionPolicy.decide(
+            found: StorageTransferDatasetAdmission(binding: f.binding, datasetGenerationID: firstGeneration),
+            binding: f.binding, scope: .unknown, serverGenerationID: second.datasetGenerationID),
+            .refuse(.datasetReplacedRemotely),
+            "The classification names the state that is actually true")
+
+        await expectRefusal(.datasetRefreshRequired, {
             try await f.runtime.preflightCloudMount(binding: f.binding,
                 readControl: { second }, validateAccess: {})
         }, "A generation this device advanced itself must still be detected")
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .datasetRefreshRequired), .datasetRefresh,
+                       "and it must still reach the screen that can refresh from that generation")
+        XCTAssertFalse(StorageTransferRuntimeError.datasetReplacedRemotely
+            .localizedDescription.contains("別の端末"))
     }
 
     // MARK: - Raise site StorageTransferRuntime.swift:982 (requireNoArtifacts)
@@ -151,8 +164,11 @@ final class StorageTransferSingleDeviceAdmissionRegressionTests: XCTestCase {
     /// namespace are present. `preflightCloudMount` takes the enrolment branch
     /// and `requireNoArtifacts` refuses (StorageTransferRuntime.swift:157/982).
     ///
-    /// FIXED: this is now `localLedgerMissing` - "this build has never seen the
-    /// current generation" - and no longer borrows the replacement sentence.
+    /// FIXED: this is classified as `localLedgerMissing` - "this build has never
+    /// seen the current generation" - and no longer borrows the replacement
+    /// sentence. The server here DOES carry a terminal generation, so the host
+    /// can still offer 「iCloudから再取得」; the thrown error therefore keeps the
+    /// legacy name until the launch-state wiring lands.
     func testUpgradeWithoutAdmissionFileButWithExistingStoreIsRejected() async throws {
         let f = try fixture()
         let control = try committedControl()
@@ -173,13 +189,53 @@ final class StorageTransferSingleDeviceAdmissionRegressionTests: XCTestCase {
             }
         }
 
-        await expectRefusal(.localLedgerMissing, {
+        await expectRefusal(.datasetRefreshRequired, {
             try await f.runtime.preflightCloudMount(binding: f.binding,
                 readControl: { control }, validateAccess: {})
         }, "An existing local cache must not silently enrol into a newer generation")
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoutableRefusal(.localLedgerMissing),
+                       .datasetRefreshRequired,
+                       "The R2 upgrade case previously reached the refresh offer and must keep it")
+        XCTAssertEqual(CloudOfflineHostPolicy.datasetLineageBlock(for: StorageTransferRuntimeError.localLedgerMissing),
+                       .localLedgerMissing, "and the taxonomy still records which state it is")
 
         XCTAssertNil(try f.admission.load(),
                      "A refused enrolment must not leave an admission receipt behind")
+    }
+
+    /// The same enrolment branch with an EMPTY remote ledger. Before this fix
+    /// the store-artifact precondition ran only when the server reported a
+    /// generation, so an existing local cloud store met a database with no
+    /// ledger at all, preflight returned success, and the host built the mirror
+    /// over that store — publishing the whole device dataset into a database
+    /// that never held it, with no prompt and with
+    /// `allowsDatasetOverwriteFromDevice` still false. That publication is the
+    /// consented `startCloudLineageFromDevice` operation, never a preflight.
+    func testEnrolmentWithAnExistingStoreIsRefusedEvenWhenTheServerHasNoLineage() async throws {
+        let f = try fixture()
+        XCTAssertNil(try f.admission.load(), "Precondition: no receipt under any scope")
+
+        let urls = try PersistenceStoreTopology.persistentStoreURLs(for: .cloudKit,
+                                                                    accountNamespace: f.binding.namespace)
+        let storeURL = try XCTUnwrap(urls.first)
+        try FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        XCTAssertTrue(FileManager.default.createFile(atPath: storeURL.path,
+            contents: Data("device rows nobody consented to publish".utf8)))
+        addTeardownBlock {
+            for artifact in urls.flatMap({ PersistenceStoreArtifactLayout.artifacts(for: $0) }) {
+                try? FileManager.default.removeItem(at: artifact)
+            }
+        }
+
+        await expectRefusal(.cloudLineageUnavailable, {
+            try await f.runtime.preflightCloudMount(binding: f.binding,
+                readControl: { nil }, validateAccess: {})
+        }, "An empty remote ledger must not be joined by an existing local cloud store")
+
+        XCTAssertNil(try f.admission.load(),
+                     "A refused enrolment must not leave an admission receipt behind")
+        XCTAssertNil(try f.store.load())
     }
 
     /// Control case for the test above: the very same upgrade WITHOUT local
@@ -444,23 +500,38 @@ final class StorageTransferRefreshGuardExclusivityTests: XCTestCase {
             datasetGenerationID: deviceRecordedGeneration), replacing: nil)
 
         // Same first symptom as the phone: preflight refuses the mount.
+        var thrown: StorageTransferRuntimeError?
         do {
             try await runtime.preflightCloudMount(binding: binding, readControl: { foreign },
                                                   validateAccess: {})
             XCTFail("A foreign committed generation must still block the mount")
         } catch {
-            XCTAssertEqual(error as? StorageTransferRuntimeError, .datasetReplacedRemotely,
-                "A real replacement keeps its own, now separately named, refusal")
+            thrown = error as? StorageTransferRuntimeError
         }
+        let refusal = try XCTUnwrap(thrown)
 
         // ...but the host guard that decides which screen appears passes.
         XCTAssertFalse(foreign.blocksWriters, "would otherwise route to .remoteRecovery")
         XCTAssertTrue(foreign.isTerminal)
         XCTAssertNotNil(foreign.datasetGenerationID,
                         "PomoGemApp.swift:2014 would offer 「iCloudから再取得」, not the blocked screen")
+
+        // The executable half of that claim, and the reason the split alone is
+        // not enough: `PomoGemApp.swift:1143` routes ONLY
+        // `.datasetRefreshRequired` to `presentDatasetRefresh`, the sole writer
+        // of `storageTransferRefreshGenerationID` and therefore the only route
+        // into `refreshCloudDataset`. If the refusal thrown here ever stops
+        // reaching `.datasetRefresh`, this device loses its only in-app remedy
+        // and 「もう一度試す」 repeats the same refusal forever.
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: refusal), .datasetRefresh,
+            "A genuine remote replacement must reach the 「iCloudから再取得」 screen")
         XCTAssertEqual(CloudOfflineHostPolicy.datasetLineageBlock(
             for: StorageTransferRuntimeError.datasetReplacedRemotely), .remoteDatasetOffer,
             "and the split taxonomy routes exactly this case to that offer")
+        XCTAssertEqual(StorageTransferAdmissionPolicy.decide(found: try file.load(),
+            binding: binding, scope: .unknown, serverGenerationID: foreign.datasetGenerationID),
+            .refuse(.datasetReplacedRemotely),
+            "The state itself is still classified as the replacement it is")
 
         // And the local admission is left untouched either way, so the screen
         // choice is the only observable difference between C5 and no-lineage.

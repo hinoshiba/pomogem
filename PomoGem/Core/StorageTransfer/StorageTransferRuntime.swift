@@ -26,7 +26,13 @@ enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
         case .datasetReplacedRemotely:
             "iCloudのデータが別の記録に置き換えられています。この端末の記録を送らないよう同期を止めています。"
         case .cloudLineageUnavailable:
-            "iCloud側の管理情報を確認できませんでした。この端末のデータは削除していません。別のビルド（開発用／配布用）で開いた、またはiCloudのアプリデータが削除された可能性があります。このiPhoneのデータでiCloudを使い始めるか、オフラインのまま使うかを選べます。"
+            // Says only what this build can actually do. Starting a new iCloud
+            // lineage from this iPhone exists in the runtime
+            // (`startCloudLineageFromDevice`) but is behind a closed policy bit
+            // and has no screen yet, so promising that choice here would repeat
+            // the unfulfillable promise this whole change set is undoing. The
+            // sentence returns with the screen that offers the action.
+            "iCloud側の管理情報を確認できませんでした。この端末のデータは削除していません。別のビルド（開発用／配布用）で開いた、またはiCloudのアプリデータが削除された可能性があります。このまま端末のデータでオフラインで使い続けられます。"
         case .localLedgerMissing:
             "この端末に、いまのiCloudデータを受け取った記録がありません。古いデータを混ぜないよう同期を停止しています。"
         case .cloudEnvironmentMismatch:
@@ -176,22 +182,28 @@ final class StorageTransferRuntime {
         let file = try admissionFile(binding)
         let (found, isLegacy) = try loadAdmission(binding)
         switch StorageTransferAdmissionPolicy.decide(found: found, binding: binding,
-            scope: cloudScope, serverGenerationID: status?.datasetGenerationID) {
+            scope: cloudScope, serverGenerationID: status?.datasetGenerationID,
+            otherScopeReceipts: try foreignScopedAdmissions(binding)) {
         case .admitted:
             break
         case let .refuse(error):
-            throw error
+            throw CloudOfflineHostPolicy.launchRoutableRefusal(error)
         case let .rescope(value):
             try validate()
             try file.save(value, replacing: isLegacy ? nil : found)
             if isLegacy { try retireLegacyAdmission(binding) }
         case .enrol:
-            // An old cache can join the legacy dataset only. After a remotely
-            // committed replacement, only an actually absent cache may enroll.
-            if status?.datasetGenerationID != nil {
-                try requireNoArtifacts(selection: .cloud(binding: binding),
-                                       error: .localLedgerMissing)
-            }
+            // Unconditional. An existing local cloud store joining a ledger
+            // this build has never recorded is a device -> iCloud publication,
+            // not an enrolment: preflight's success is what authorizes the host
+            // to build the mirror over that very store. When the remote ledger
+            // is EMPTY the publication is total, which is exactly the consented,
+            // policy-gated `startCloudLineageFromDevice`, so it must not happen
+            // by falling through a precondition that only ran for a non-nil
+            // server generation.
+            try requireNoArtifacts(selection: .cloud(binding: binding),
+                error: CloudOfflineHostPolicy.launchRoutableRefusal(
+                    status?.datasetGenerationID == nil ? .cloudLineageUnavailable : .localLedgerMissing))
             try validate()
             try file.save(StorageTransferDatasetAdmission(binding: binding,
                 datasetGenerationID: status?.datasetGenerationID, cloudScope: recordedScope),
@@ -1236,6 +1248,29 @@ final class StorageTransferRuntime {
             return (nil, false)
         }
         return (legacy, true)
+    }
+    /// Every receipt filed for this namespace under an environment OTHER than
+    /// the one this build talks to.
+    ///
+    /// `loadAdmission` deliberately opens one file name, so the other
+    /// environment's receipt is invisible to it - and `retireLegacyAdmission`
+    /// removes the one unscoped file both environments used to share. Without
+    /// this scan, the first build to rescope a receipt makes the other build
+    /// see nothing at all and enrol, which is how a Debug/Release flip could
+    /// publish the whole device dataset into a database that never held it.
+    /// The recorded scope inside the file, not its name, is the evidence.
+    private func foreignScopedAdmissions(_ binding: ActiveAccountLocalBinding) throws
+        -> [StorageTransferDatasetAdmission] {
+        let mine = try admissionFile(binding).url
+        return try StorageTransferCloudEnvironment.allCases.compactMap { environment in
+            let scope = StorageTransferCloudScope(environment: environment,
+                containerIdentifier: cloudScope.containerIdentifier)
+            guard scope.fileNameComponent != nil else { return nil }
+            let url = root.appendingPathComponent(
+                Self.admissionFileName(namespace: binding.namespace, scope: scope))
+            guard url != mine else { return nil }
+            return try StorageTransferStateFile<StorageTransferDatasetAdmission>(url: url).load()
+        }
     }
     /// One-time migration. Only ever called after the scoped receipt has been
     /// written AND read back by `StorageTransferStateFile.save`, so the record

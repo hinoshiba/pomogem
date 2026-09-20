@@ -206,38 +206,82 @@ final class StorageTransferCloudScopeTests: XCTestCase {
                 readControl: { nil }, validateAccess: {})
             XCTFail("A Production database without a ledger must not admit a Development receipt")
         } catch {
-            let observed = error as? StorageTransferRuntimeError
-            XCTAssertTrue(observed == .cloudLineageUnavailable || observed == .cloudEnvironmentMismatch,
-                          "Expected a lineage/environment explanation, got \(String(describing: observed))")
-            XCTAssertNotEqual(observed, .datasetReplacedRemotely)
-            XCTAssertFalse(try XCTUnwrap(observed).localizedDescription.contains("別の端末"))
+            // Exactly one outcome, not "either of two": the receipt on the
+            // reported phone is the UNSCOPED legacy one, which is read as
+            // `.unknown` and never accuses a known environment. The environment
+            // explanation belongs to the post-migration state, pinned by
+            // `testTheOtherEnvironmentsReceiptIsSeenInsteadOfSilentlyEnroling`.
+            XCTAssertEqual(error as? StorageTransferRuntimeError, .cloudLineageUnavailable,
+                           "An unscoped receipt cannot prove an environment difference")
+            XCTAssertFalse(StorageTransferRuntimeError.cloudLineageUnavailable
+                .localizedDescription.contains("別の端末"))
         }
         XCTAssertEqual(try legacy.load(), receipt, "A refusal must not rewrite or retire the receipt")
         XCTAssertNil(try file(f.root, f.binding, scope(.production)).load())
         XCTAssertNil(try f.store.load())
     }
 
-    /// The structural half: once receipts are scoped, the two environments no
-    /// longer see each other's state at all, so neither can accuse the other.
-    func testTheTwoEnvironmentsNoLongerShareAReceipt() async throws {
+    /// The structural half. Scoping the file name stops the two environments
+    /// from CONFUSING each other's generations, but it must not make them blind
+    /// to each other: a build that finds no receipt of its own would otherwise
+    /// enrol, and enrolling is what authorizes the host to mirror this device's
+    /// existing store into a database that never held it — the same publication
+    /// `startCloudLineageFromDevice` fences behind an explicit choice and a
+    /// closed policy bit. The sibling receipt is therefore read as evidence and
+    /// the second environment is refused with an explanation, not admitted.
+    func testTheOtherEnvironmentsReceiptIsSeenInsteadOfSilentlyEnroling() async throws {
         let f = try fixture()
         let developmentControl = try committedControl()
         try await StorageTransferRuntime(store: f.store, root: f.root, cloudScope: scope(.development))
             .preflightCloudMount(binding: f.binding, readControl: { developmentControl },
                                  validateAccess: {})
-        XCTAssertEqual(try file(f.root, f.binding, scope(.development)).load()?.datasetGenerationID,
-                       developmentControl.datasetGenerationID)
+        let developmentReceipt = try XCTUnwrap(try file(f.root, f.binding, scope(.development)).load())
+        XCTAssertEqual(developmentReceipt.datasetGenerationID, developmentControl.datasetGenerationID)
 
-        // The Production build sees no receipt of its own and enrols cleanly
-        // into the Production lineage instead of being blocked by the other
-        // environment's generation.
+        let productionControl = try committedControl()
+        XCTAssertNotEqual(developmentControl.datasetGenerationID, productionControl.datasetGenerationID)
+        let production = StorageTransferRuntime(store: f.store, root: f.root,
+                                                cloudScope: scope(.production))
+        for control in [nil, productionControl] {
+            do {
+                try await production.preflightCloudMount(binding: f.binding,
+                    readControl: { control }, validateAccess: {})
+                XCTFail("A receipt earned in another environment must not be enrolled over")
+            } catch {
+                XCTAssertEqual(error as? StorageTransferRuntimeError, .cloudEnvironmentMismatch,
+                    "The documented 「別環境のビルド」 explanation must actually be reachable")
+            }
+            XCTAssertNil(try file(f.root, f.binding, scope(.production)).load(),
+                         "A refusal writes no receipt for this environment")
+            XCTAssertEqual(try file(f.root, f.binding, scope(.development)).load(), developmentReceipt,
+                           "and never rewrites the other environment's receipt")
+            XCTAssertNil(try f.store.load())
+        }
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoutableRefusal(.cloudEnvironmentMismatch),
+                       .cloudEnvironmentMismatch,
+                       "There is no refresh to offer, so this state keeps its own copy")
+    }
+
+    /// The other direction of the same rule. A build that IS correctly enrolled
+    /// in its own environment must not be blocked by a leftover receipt from
+    /// the other one: the sibling scan is evidence only while this build has no
+    /// environment-proven receipt of its own.
+    func testAProvenReceiptForThisEnvironmentIsNotBlockedByALeftoverSibling() async throws {
+        let f = try fixture()
         let productionControl = try committedControl()
         let production = StorageTransferRuntime(store: f.store, root: f.root,
                                                 cloudScope: scope(.production))
         try await production.preflightCloudMount(binding: f.binding,
             readControl: { productionControl }, validateAccess: {})
+
+        // An audit build later leaves its own receipt behind for the same
+        // namespace. The Production build keeps working.
+        try file(f.root, f.binding, scope(.development)).save(
+            StorageTransferDatasetAdmission(binding: f.binding, datasetGenerationID: UUID(),
+                cloudScope: scope(.development)), replacing: nil)
+        try await production.preflightCloudMount(binding: f.binding,
+            readControl: { productionControl }, validateAccess: {})
         XCTAssertEqual(try file(f.root, f.binding, scope(.production)).load()?.datasetGenerationID,
                        productionControl.datasetGenerationID)
-        XCTAssertNotEqual(developmentControl.datasetGenerationID, productionControl.datasetGenerationID)
     }
 }
