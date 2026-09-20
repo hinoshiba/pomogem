@@ -119,6 +119,22 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
         XCTAssertEqual(Set(expected.map(\.0.self).map { "\($0)" }).count, 10)
     }
 
+    /// `localLedgerMissing` shares the refresh screen with a real remote
+    /// replacement, but not its claim: a missing LOCAL ledger is this device's
+    /// gap, and says nothing about whether the server's dataset was replaced.
+    /// The two titles are therefore different strings.
+    func testTheRefreshScreenOnlyClaimsAReplacementWhenOneWasObserved() {
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .datasetReplacedRemotely), .datasetRefresh)
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .localLedgerMissing), .datasetRefresh)
+        XCTAssertFalse(StorageTransferRuntimeError.localLedgerMissing.localizedDescription
+            .contains("置き換え"),
+            "The local ledger gap must not be reported as a replacement")
+        XCTAssertTrue(StorageTransferRuntimeError.datasetReplacedRemotely.localizedDescription
+            .contains("置き換え"))
+        XCTAssertNotEqual(StorageTransferLineageCopy.localLedgerMissingTitle,
+                          "iCloudのデータが置き換わりました")
+    }
+
     /// Only the no-lineage state may name the action it offers, because only
     /// it has a screen carrying that action.
     func testTheLineageScreenIsTheOnlyRefusalThatNamesItsOwnAction() {

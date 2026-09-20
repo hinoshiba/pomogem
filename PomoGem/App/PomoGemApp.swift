@@ -457,7 +457,10 @@ private struct PomoGemPersistenceLaunchHost: View {
         case offlineRelaunchRequired(String)
         case cloudVerificationTimedOut(String)
         case remoteRecovery(String, canCancel: Bool)
-        case datasetRefresh(String)
+        /// `claimsReplacement` is false for `localLedgerMissing`: the doors on
+        /// this screen are the same, but the server's dataset was not
+        /// necessarily replaced by anybody, and the title may not say it was.
+        case datasetRefresh(String, claimsReplacement: Bool)
         /// P0-2. The server has no transfer ledger at all, so there is nothing
         /// to refresh FROM. Two consented choices, no automatic action.
         case cloudLineageUnavailable(String)
@@ -2535,7 +2538,8 @@ private struct PomoGemPersistenceLaunchHost: View {
             }
             storageTransferRecoveryTransactionID = nil
             storageTransferRefreshGenerationID = generation
-            launchState = .datasetRefresh(error.localizedDescription)
+            launchState = .datasetRefresh(error.localizedDescription,
+                                          claimsReplacement: error != .localLedgerMissing)
             // Started only after the screen exists, so the pre-flight read
             // never delays the non-destructive doors and never runs inside the
             // launch attempt that must end for those doors to be live.
@@ -3612,8 +3616,13 @@ private struct PersistenceLaunchStatusView: View {
             "iCloudの確認に時間がかかっています"
         case .remoteRecovery:
             "保存先の切り替えを復旧します"
-        case .datasetRefresh:
-            "iCloudのデータが置き換わりました"
+        case let .datasetRefresh(_, claimsReplacement):
+            // Only the state that actually observed two different committed
+            // generations may say the dataset was replaced. A missing LOCAL
+            // ledger is the device's gap, not evidence about the server.
+            claimsReplacement
+                ? "iCloudのデータが置き換わりました"
+                : StorageTransferLineageCopy.localLedgerMissingTitle
         case .cloudLineageUnavailable:
             StorageTransferLineageCopy.title
         case let .datasetExplanation(kind, _):
@@ -3630,7 +3639,7 @@ private struct PersistenceLaunchStatusView: View {
         case let .preparing(message), let .blocked(message), let .failed(message),
              let .relaunchRequired(message), let .offlineRelaunchRequired(message),
              let .cloudVerificationTimedOut(message),
-             let .remoteRecovery(message, _), let .datasetRefresh(message),
+             let .remoteRecovery(message, _), let .datasetRefresh(message, _),
              let .cloudLineageUnavailable(message), let .datasetExplanation(_, message):
             message
         }
@@ -3739,6 +3748,18 @@ enum StorageTransferOverwriteLaunchUITestScenario {
     /// to have no committed generation either, so 「iCloudから再取得」 cannot be
     /// built. The offline route is ineligible in this fixture.
     case localLedgerMissingExplain
+
+    /// The four screens this step adds are the only ones whose tests read the
+    /// lineage counters, and an extra line in the fixture's bottom inset costs
+    /// scrollable height that the AX5 `.datasetRefresh` tests depend on.
+    var showsLineageState: Bool {
+        switch self {
+        case .lineageUnavailable, .lineageUnavailableEnabled, .environmentMismatch,
+             .localLedgerMissingExplain: true
+        case .choice, .otherDevices, .previewFailed, .blocked, .inProgress,
+             .remoteResumeClosed, .remoteResumeOpen: false
+        }
+    }
 }
 
 struct StorageTransferOverwriteLaunchUITestFixtureView: View {
@@ -3781,8 +3802,14 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
                         .accessibilityIdentifier("storage-switch.fixture-state")
                     Text(verbatim: "refresh=\(refreshCalls);overwrite=\(overwriteCalls);export=\(exportCalls);previewRetries=\(previewRetries);recover=\(recoverCalls)")
                         .accessibilityIdentifier("storage-overwrite.fixture-state")
-                    Text(verbatim: "lineage=\(lineageCalls);offline=\(offlineCalls)")
-                        .accessibilityIdentifier("storage-lineage.fixture-state")
+                    // Only on the screens whose tests read it. An extra line
+                    // in this inset costs real scrollable height at AX5, and
+                    // the `.datasetRefresh` tests must keep the layout they
+                    // were written against.
+                    if scenario.showsLineageState {
+                        Text(verbatim: "lineage=\(lineageCalls);offline=\(offlineCalls)")
+                            .accessibilityIdentifier("storage-lineage.fixture-state")
+                    }
                     // PLAN Step 6 asks for the RAW and the FILTERED witness
                     // count, so a reviewer can see that the ignore list moved a
                     // writer rather than that a writer was absent.
@@ -3820,7 +3847,8 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
             .remoteRecovery(StorageTransferRuntimeError.remoteRecoveryRequired.localizedDescription,
                             canCancel: true)
         case .choice, .otherDevices, .previewFailed:
-            .datasetRefresh(StorageTransferRuntimeError.datasetRefreshRequired.localizedDescription)
+            .datasetRefresh(StorageTransferRuntimeError.datasetRefreshRequired.localizedDescription,
+                            claimsReplacement: true)
         case .lineageUnavailable, .lineageUnavailableEnabled:
             .cloudLineageUnavailable(
                 StorageTransferRuntimeError.cloudLineageUnavailable.localizedDescription)

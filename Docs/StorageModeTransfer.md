@@ -134,7 +134,8 @@ runtimeは**それぞれの名前のまま**投げます。
 
 | 停止理由 | 画面 | 置かれている操作 |
 | --- | --- | --- |
-| `datasetReplacedRemotely` / `localLedgerMissing` | `.datasetRefresh`「iCloudのデータが置き換わりました」 | 「iCloudから再取得」と「このiPhoneのデータで置き換える」（各々に独立した同意）、書き出し |
+| `datasetReplacedRemotely` | `.datasetRefresh`「iCloudのデータが置き換わりました」 | 「iCloudから再取得」と「このiPhoneのデータで置き換える」（各々に独立した同意）、書き出し |
+| `localLedgerMissing`（サーバに確定世代あり） | 同じ`.datasetRefresh`。ただし見出しは「iCloudのデータを受け取った記録がありません」 | 同上。台帳が欠けているのは端末側の事情なので、**置き換えられたとは主張しません** |
 | `cloudLineageUnavailable` | `.cloudLineageUnavailable`「iCloudの管理情報が見つかりません」 | 「このiPhoneのデータでiCloudを使い始める」（「最後の確認」を経て`startCloudLineageFromDevice`）と「オフラインのまま使う」 |
 | `cloudEnvironmentMismatch` | 説明のみ「別のiCloud環境のデータです」 | 破壊的操作なし。もう一度試す／オフライン利用／サポート |
 | `localLedgerMissing`かつサーバにも確定世代が無いと判明した場合 | 説明のみ「iCloudのデータを受け取った記録がありません」 | 同上 |
