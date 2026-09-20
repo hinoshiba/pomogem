@@ -485,7 +485,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var retainsTransferCopyOnCancellation = false
     @State private var remoteRecoveryAction: RemoteRecoveryAction?
     @State private var cloudLaunchDeadline: CloudLaunchDeadline?
-    @State private var launchActivationDeadline: CloudLaunchDeadline?
+    @State private var launchActivationWatchdog = LaunchActivationWatchdog()
     @State private var offlineFallbackRequested = false
     @State private var requestedOnlineCloudLaunch = false
     @State private var offlineRecovery = CloudOfflineRecoveryPresentation()
@@ -1820,48 +1820,11 @@ private struct PomoGemPersistenceLaunchHost: View {
             hasExactCompleteStorePair: hasExactCompleteStorePair)
     }
 
-    /// Covers the window between the first lifecycle checkpoint and the
-    /// account deadline, where a deferred attempt has already returned and
-    /// nothing else is armed. Storage-transfer recovery keeps running outside
-    /// any launch budget: it is progressing work with its own relaunch
-    /// contract, and interrupting it would change transfer semantics.
-    private func armLaunchActivationDeadline(attempt: Int) {
-        cancelLaunchActivationDeadline()
-        guard case let .bounded(timeout) = LaunchActivationWatchdogPolicy.waitOutcome(
-            phase: scenePhase,
-            applicationState: UIApplication.shared.applicationState,
-            timeout: selectedCloudLaunchTimeout()
-        ) else { return }
-        Self.persistenceLogger.info(
-            "Launch activation wait armed attempt=\(attempt) timeout=\(timeout)"
-        )
-        launchActivationDeadline = CloudLaunchDeadline(
-            timeout: timeout,
-            invalidateAttempt: {},
-            onExpiry: { endLaunchActivationWait(attempt: attempt) }
-        )
-    }
-
-    private func armLaunchActivationDeadlineIfDeferred() {
-        guard isWaitingForLaunchActivation, session == nil, !isPreparing,
-              !isQuiescingAccountChange, !requiresStorageTransferRelaunch,
-              launchActivationDeadline == nil else { return }
-        armLaunchActivationDeadline(attempt: launchAttempt)
-    }
-
-    private func cancelLaunchActivationDeadline() {
-        launchActivationDeadline?.cancel()
-        launchActivationDeadline = nil
-    }
-
-    /// Expiry is a lifecycle observation, not an account or storage result:
-    /// it selects no storage mode, opens nothing and revokes nothing. The
-    /// offline affordance still has to pass the ordinary eligibility gate,
-    /// and taking it revalidates every condition again.
-    private func endLaunchActivationWait(attempt: Int) {
-        launchActivationDeadline = nil
-        guard LaunchActivationWatchdogPolicy.presentsRetryScreen(
-            generationMatches: launchAttempt == attempt,
+    /// The state every watchdog decision reads, sampled now. The generation is
+    /// the attempt currently on screen, so a superseded expiry is discarded.
+    private var launchActivationFrame: LaunchActivationWatchdog.Frame {
+        LaunchActivationWatchdog.Frame(
+            generation: launchAttempt,
             hasSession: session != nil,
             isWaitingForActivation: isWaitingForLaunchActivation,
             isPreparing: isPreparing,
@@ -1869,6 +1832,41 @@ private struct PomoGemPersistenceLaunchHost: View {
             requiresStorageTransferRelaunch: requiresStorageTransferRelaunch,
             phase: scenePhase,
             applicationState: UIApplication.shared.applicationState
+        )
+    }
+
+    private var endsLaunchActivationWait: LaunchActivationWatchdog.Expiry {
+        { attempt in endLaunchActivationWait(attempt: attempt) }
+    }
+
+    /// Covers the window between the first lifecycle checkpoint and the
+    /// account deadline, where a deferred attempt has already returned and
+    /// nothing else is armed. Storage-transfer recovery keeps running outside
+    /// any launch budget: it is progressing work with its own relaunch
+    /// contract, and interrupting it would change transfer semantics.
+    private func armLaunchActivationDeadline(attempt: Int) {
+        guard launchActivationWatchdog.armForDeferredAttempt(
+            frame: launchActivationFrame,
+            timeout: selectedCloudLaunchTimeout(),
+            expire: endsLaunchActivationWait
+        ) else { return }
+        Self.persistenceLogger.info(
+            "Launch activation wait armed attempt=\(attempt) timeout=\(launchActivationWatchdog.armedTimeout ?? 0)"
+        )
+    }
+
+    private func cancelLaunchActivationDeadline() {
+        launchActivationWatchdog.cancel()
+    }
+
+    /// Expiry is a lifecycle observation, not an account or storage result:
+    /// it selects no storage mode, opens nothing and revokes nothing. The
+    /// offline affordance still has to pass the ordinary eligibility gate,
+    /// and taking it revalidates every condition again.
+    private func endLaunchActivationWait(attempt: Int) {
+        guard launchActivationWatchdog.settleExpiry(
+            generation: attempt,
+            frame: launchActivationFrame
         ) else { return }
         isWaitingForLaunchActivation = false
         if case let .selected(.cloud(binding)) = PersistenceDeploymentState.load() {
@@ -2280,16 +2278,16 @@ private struct PomoGemPersistenceLaunchHost: View {
             cloudLaunchDeadline?.cancel()
             cloudLaunchDeadline = nil
         }
-        if phase == .background {
-            // The OS owns a suspended process; it must not be blamed for a
-            // wait the user never saw.
-            cancelLaunchActivationDeadline()
-        } else if phase == .inactive {
-            // Returning from the background behind the same system modal
-            // never reaches .active, so this transition is the only chance to
-            // arm the wait. An already armed budget is never restarted.
-            armLaunchActivationDeadlineIfDeferred()
-        }
+        // The OS owns a suspended process and must not be blamed for a wait
+        // the user never saw; returning to the foreground behind the same
+        // system modal never reaches .active, so the inactive transition is
+        // the only chance to re-arm. An armed budget is never restarted.
+        launchActivationWatchdog.handleScenePhaseChange(
+            phase,
+            frame: launchActivationFrame,
+            timeout: selectedCloudLaunchTimeout(),
+            expire: endsLaunchActivationWait
+        )
         guard !requiresStorageTransferRelaunch else {
             NotificationManager.shared.cancelFocusReturnReminder()
             return

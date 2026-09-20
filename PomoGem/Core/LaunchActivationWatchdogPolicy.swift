@@ -65,3 +65,149 @@ enum LaunchActivationWatchdogPolicy {
         return phase != .active || applicationState != .active
     }
 }
+
+/// The host wiring for that wait, kept out of the SwiftUI view so the arm /
+/// disarm / expiry order is ordinary product code the tests drive directly.
+/// `LaunchActivationWatchdogPolicy` stays the pure decision table; this type
+/// owns the single budget and the sequence the host applies it in.
+@MainActor
+final class LaunchActivationWatchdog {
+    /// Everything the decisions read, sampled by the host at the call site.
+    /// `generation` is the launch attempt the host is currently running.
+    struct Frame: Equatable, Sendable {
+        var generation: Int
+        var hasSession: Bool
+        var isWaitingForActivation: Bool
+        var isPreparing: Bool
+        var isQuiescingAccountChange: Bool
+        var requiresStorageTransferRelaunch: Bool
+        var phase: ScenePhase
+        var applicationState: UIApplication.State
+
+        init(
+            generation: Int,
+            hasSession: Bool,
+            isWaitingForActivation: Bool,
+            isPreparing: Bool,
+            isQuiescingAccountChange: Bool,
+            requiresStorageTransferRelaunch: Bool,
+            phase: ScenePhase,
+            applicationState: UIApplication.State
+        ) {
+            self.generation = generation
+            self.hasSession = hasSession
+            self.isWaitingForActivation = isWaitingForActivation
+            self.isPreparing = isPreparing
+            self.isQuiescingAccountChange = isQuiescingAccountChange
+            self.requiresStorageTransferRelaunch = requiresStorageTransferRelaunch
+            self.phase = phase
+            self.applicationState = applicationState
+        }
+    }
+
+    typealias Expiry = @MainActor (Int) -> Void
+    typealias DeadlineFactory =
+        @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> CloudLaunchDeadline
+
+    private let makeDeadline: DeadlineFactory
+    private var deadline: CloudLaunchDeadline?
+    private(set) var armedGeneration: Int?
+    private(set) var armedTimeout: TimeInterval?
+
+    init(makeDeadline: @escaping DeadlineFactory = { timeout, expire in
+        CloudLaunchDeadline(timeout: timeout, invalidateAttempt: {}, onExpiry: expire)
+    }) {
+        self.makeDeadline = makeDeadline
+    }
+
+    var isArmed: Bool { deadline != nil }
+
+    /// Identity of the running budget. One wait keeps one absolute budget, so
+    /// a test can prove a transition did not silently restart it.
+    var armedDeadline: CloudLaunchDeadline? { deadline }
+
+    /// The generic cancellation catch: this attempt deferred and returned, so
+    /// its wait starts now. Any earlier budget belonged to an earlier wait.
+    @discardableResult
+    func armForDeferredAttempt(
+        frame: Frame,
+        timeout: @autoclosure () -> TimeInterval,
+        expire: @escaping Expiry
+    ) -> Bool {
+        cancel()
+        return arm(frame: frame, timeout: timeout(), expire: expire)
+    }
+
+    /// Returning from the background behind the same system modal never
+    /// reaches `.active`, so a foreground-inactive transition is the only
+    /// chance to re-arm a disarmed wait. A running budget is never restarted,
+    /// and a launch something else already owns is never bounded.
+    @discardableResult
+    func armIfStillDeferred(
+        frame: Frame,
+        timeout: @autoclosure () -> TimeInterval,
+        expire: @escaping Expiry
+    ) -> Bool {
+        guard deadline == nil, frame.isWaitingForActivation, !frame.hasSession,
+              !frame.isPreparing, !frame.isQuiescingAccountChange,
+              !frame.requiresStorageTransferRelaunch else { return false }
+        return arm(frame: frame, timeout: timeout(), expire: expire)
+    }
+
+    /// `.background` hands the process to the OS and must not be blamed for a
+    /// wait nobody saw. `.active` is disarmed by the host's own activation
+    /// handling, which starts a fresh attempt.
+    func handleScenePhaseChange(
+        _ phase: ScenePhase,
+        frame: Frame,
+        timeout: @autoclosure () -> TimeInterval,
+        expire: @escaping Expiry
+    ) {
+        if phase == .background {
+            cancel()
+        } else if phase == .inactive {
+            armIfStillDeferred(frame: frame, timeout: timeout(), expire: expire)
+        }
+    }
+
+    func cancel() {
+        deadline?.cancel()
+        clearArmedState()
+    }
+
+    /// The budget fired. Only a still-deferred, still-unpublished launch of
+    /// the same generation may take the screen; everything else already owns
+    /// it. The budget is spent either way and is never re-armed here.
+    func settleExpiry(generation: Int, frame: Frame) -> Bool {
+        clearArmedState()
+        return LaunchActivationWatchdogPolicy.presentsRetryScreen(
+            generationMatches: frame.generation == generation,
+            hasSession: frame.hasSession,
+            isWaitingForActivation: frame.isWaitingForActivation,
+            isPreparing: frame.isPreparing,
+            isQuiescingAccountChange: frame.isQuiescingAccountChange,
+            requiresStorageTransferRelaunch: frame.requiresStorageTransferRelaunch,
+            phase: frame.phase,
+            applicationState: frame.applicationState
+        )
+    }
+
+    private func arm(frame: Frame, timeout: TimeInterval, expire: @escaping Expiry) -> Bool {
+        guard case let .bounded(bounded) = LaunchActivationWatchdogPolicy.waitOutcome(
+            phase: frame.phase,
+            applicationState: frame.applicationState,
+            timeout: timeout
+        ) else { return false }
+        let generation = frame.generation
+        armedGeneration = generation
+        armedTimeout = bounded
+        deadline = makeDeadline(bounded) { expire(generation) }
+        return true
+    }
+
+    private func clearArmedState() {
+        deadline = nil
+        armedGeneration = nil
+        armedTimeout = nil
+    }
+}

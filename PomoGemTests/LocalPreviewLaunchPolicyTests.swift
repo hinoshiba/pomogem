@@ -905,18 +905,19 @@ final class LaunchActivationWatchdogTests: XCTestCase {
 
         await host.awaitRetryScreen()
 
-        XCTAssertEqual(host.screen, .blocked(LaunchActivationWatchdogPolicy.blockedMessage))
+        XCTAssertEqual(host.screen, .blocked(host.expectedBlockedMessage))
         XCTAssertTrue(host.offersRetry, "The protected screen must offer もう一度試す")
         XCTAssertTrue(host.offersOfflineContinuation,
             "An eligible device keeps its オフライン利用 affordance")
         XCTAssertEqual(host.retryScreenPresentations, 1)
         XCTAssertFalse(host.isWaitingForActivation)
 
-        // The system alert is finally answered. A late activation cannot
-        // silently replace the settled screen; only an explicit retry may.
+        // The system alert is finally answered. The settled screen is no
+        // longer waiting for activation, so the UIKit activation notification
+        // is inert; only an explicit retry restarts from this screen.
         host.applicationState = .active
         host.deliverActivationNotification()
-        XCTAssertEqual(host.screen, .blocked(LaunchActivationWatchdogPolicy.blockedMessage))
+        XCTAssertEqual(host.screen, .blocked(host.expectedBlockedMessage))
         XCTAssertEqual(host.launchAttempts, 1)
         host.tapRetry()
         XCTAssertEqual(host.launchAttempts, 2)
@@ -927,10 +928,10 @@ final class LaunchActivationWatchdogTests: XCTestCase {
     func testActivationBeforeTheBudgetEndsCancelsItWithoutAnyRetryScreen() async {
         let host = DeferredLaunchHostModel(phase: .active, applicationState: .inactive)
         host.startLaunchAttempt(timeout: 0.05)
-        XCTAssertTrue(host.hasArmedWatchdog)
+        XCTAssertTrue(host.watchdog.isArmed)
         host.applicationState = .active
         host.deliverActivationNotification()
-        XCTAssertFalse(host.hasArmedWatchdog, "Activation disarms the wait budget")
+        XCTAssertFalse(host.watchdog.isArmed, "Activation disarms the wait budget")
         XCTAssertEqual(host.screen, .home)
         try? await Task.sleep(for: .milliseconds(200))
         XCTAssertEqual(host.retryScreenPresentations, 0)
@@ -940,22 +941,109 @@ final class LaunchActivationWatchdogTests: XCTestCase {
     func testBackgroundedWaitIsDisarmedAndRepeatedInactivityNeverResetsTheBudget() {
         let host = DeferredLaunchHostModel(phase: .active, applicationState: .inactive)
         host.startLaunchAttempt(timeout: 30)
-        let armed = host.armedWatchdog
+        let armed = host.watchdog.armedDeadline
         XCTAssertNotNil(armed)
+        XCTAssertEqual(host.watchdog.armedTimeout, 30)
         for _ in 0..<3 {
             host.handleScenePhaseChange(.inactive)
-            XCTAssertTrue(host.armedWatchdog === armed,
+            XCTAssertTrue(host.watchdog.armedDeadline === armed,
                 "One absolute budget per wait; an inactive transition must not restart it")
         }
         host.handleScenePhaseChange(.background)
-        XCTAssertFalse(host.hasArmedWatchdog, "The OS owns a suspended process")
+        XCTAssertFalse(host.watchdog.isArmed, "The OS owns a suspended process")
         XCTAssertEqual(host.retryScreenPresentations, 0)
         // Returning to the foreground behind the same alert re-arms the wait.
         host.phase = .inactive
         host.handleScenePhaseChange(.inactive)
-        XCTAssertTrue(host.hasArmedWatchdog)
-        XCTAssertFalse(host.armedWatchdog === armed)
-        host.cancelWatchdog()
+        XCTAssertTrue(host.watchdog.isArmed)
+        XCTAssertFalse(host.watchdog.armedDeadline === armed)
+        host.watchdog.cancel()
+    }
+
+    /// The arming, disarming and expiry order is product code, not test
+    /// scaffolding: drive `LaunchActivationWatchdog` itself.
+    func testWatchdogArmsOnlyForAWaitNobodyElseOwnsAndKeepsOneBudget() {
+        var expiries: [Int] = []
+        let watchdog = LaunchActivationWatchdog()
+        let deferred = LaunchActivationWatchdog.Frame(generation: 7, hasSession: false,
+            isWaitingForActivation: true, isPreparing: false, isQuiescingAccountChange: false,
+            requiresStorageTransferRelaunch: false, phase: .inactive, applicationState: .inactive)
+
+        XCTAssertTrue(watchdog.armForDeferredAttempt(frame: deferred, timeout: 30,
+            expire: { expiries.append($0) }))
+        XCTAssertEqual(watchdog.armedGeneration, 7)
+        XCTAssertEqual(watchdog.armedTimeout, 30)
+        let budget = watchdog.armedDeadline
+
+        // A second inactive transition re-uses the same absolute budget.
+        XCTAssertFalse(watchdog.armIfStillDeferred(frame: deferred, timeout: 30,
+            expire: { expiries.append($0) }))
+        XCTAssertTrue(watchdog.armedDeadline === budget)
+
+        // Anything that already owns the screen refuses a fresh budget.
+        watchdog.cancel()
+        XCTAssertFalse(watchdog.isArmed)
+        let owned: [(String, WritableKeyPath<LaunchActivationWatchdog.Frame, Bool>, Bool)] = [
+            ("A published session", \.hasSession, true),
+            ("A settled screen is no longer waiting", \.isWaitingForActivation, false),
+            ("A running preparation owns the launch", \.isPreparing, true),
+            ("Account quiescence owns the screen", \.isQuiescingAccountChange, true),
+            ("A storage-transfer relaunch owns the screen", \.requiresStorageTransferRelaunch, true)
+        ]
+        for (reason, keyPath, value) in owned {
+            var frame = deferred
+            frame[keyPath: keyPath] = value
+            XCTAssertFalse(watchdog.armIfStillDeferred(frame: frame, timeout: 30,
+                expire: { expiries.append($0) }), reason)
+            XCTAssertFalse(watchdog.isArmed, reason)
+        }
+
+        // A suspended process is never bounded, whichever entry point asks.
+        var backgrounded = deferred
+        backgrounded.phase = .background
+        XCTAssertFalse(watchdog.armForDeferredAttempt(frame: backgrounded, timeout: 30,
+            expire: { expiries.append($0) }))
+        XCTAssertFalse(watchdog.armIfStillDeferred(frame: backgrounded, timeout: 30,
+            expire: { expiries.append($0) }))
+        XCTAssertTrue(expiries.isEmpty)
+    }
+
+    func testWatchdogScenePhaseWiringDisarmsOnBackgroundAndRearmsOnInactive() {
+        let watchdog = LaunchActivationWatchdog()
+        var frame = LaunchActivationWatchdog.Frame(generation: 3, hasSession: false,
+            isWaitingForActivation: true, isPreparing: false, isQuiescingAccountChange: false,
+            requiresStorageTransferRelaunch: false, phase: .inactive, applicationState: .inactive)
+        watchdog.handleScenePhaseChange(.inactive, frame: frame, timeout: 30, expire: { _ in })
+        let budget = watchdog.armedDeadline
+        XCTAssertNotNil(budget)
+
+        watchdog.handleScenePhaseChange(.inactive, frame: frame, timeout: 30, expire: { _ in })
+        XCTAssertTrue(watchdog.armedDeadline === budget, "One absolute budget per wait")
+
+        frame.phase = .background
+        watchdog.handleScenePhaseChange(.background, frame: frame, timeout: 30, expire: { _ in })
+        XCTAssertFalse(watchdog.isArmed)
+
+        // .active is the host's own business: the watchdog never arms there.
+        frame.phase = .active
+        frame.applicationState = .active
+        watchdog.handleScenePhaseChange(.active, frame: frame, timeout: 30, expire: { _ in })
+        XCTAssertFalse(watchdog.isArmed)
+    }
+
+    func testWatchdogExpirySpendsTheBudgetAndRefusesASupersededGeneration() {
+        let watchdog = LaunchActivationWatchdog()
+        let frame = LaunchActivationWatchdog.Frame(generation: 4, hasSession: false,
+            isWaitingForActivation: true, isPreparing: false, isQuiescingAccountChange: false,
+            requiresStorageTransferRelaunch: false, phase: .active, applicationState: .inactive)
+        watchdog.armForDeferredAttempt(frame: frame, timeout: 30, expire: { _ in })
+        XCTAssertFalse(watchdog.settleExpiry(generation: 3, frame: frame),
+            "A budget from a superseded attempt cannot take the screen")
+        XCTAssertFalse(watchdog.isArmed, "The budget is spent either way")
+
+        watchdog.armForDeferredAttempt(frame: frame, timeout: 30, expire: { _ in })
+        XCTAssertTrue(watchdog.settleExpiry(generation: 4, frame: frame))
+        XCTAssertFalse(watchdog.isArmed)
     }
 
     func testAnOwnedLaunchOrSettledScreenNeverGetsTheRetryScreen() {
@@ -991,9 +1079,11 @@ final class LaunchActivationWatchdogTests: XCTestCase {
     }
 }
 
-/// Mirrors the launch host's wiring for the deferred-activation window: the
-/// SwiftUI view task, the CancellationError catch, the UIKit activation
-/// notification, the scene-phase transitions and the retry button.
+/// Mirrors the launch host's *launch-state* effects for the deferred-activation
+/// window — the SwiftUI view task, the CancellationError catch, the UIKit
+/// activation notification, the scene-phase transitions and the retry button.
+/// The arm / disarm / expiry decisions are NOT re-implemented here: they are
+/// driven through the product's own `LaunchActivationWatchdog`.
 @MainActor
 private final class DeferredLaunchHostModel {
     enum Screen: Equatable { case preparing(String), blocked(String), home }
@@ -1002,6 +1092,7 @@ private final class DeferredLaunchHostModel {
     var applicationState: UIApplication.State
     var screen: Screen = .preparing("保存方式を確認しています")
     var offlineCopyIsEligible = false
+    let watchdog = LaunchActivationWatchdog()
     private(set) var isWaitingForActivation = false
     private(set) var isPreparing = false
     private(set) var hasSession = false
@@ -1009,12 +1100,19 @@ private final class DeferredLaunchHostModel {
     private(set) var attempt = 0
     private(set) var launchAttempts = 0
     private(set) var retryScreenPresentations = 0
-    private(set) var armedWatchdog: CloudLaunchDeadline?
+    private var timeout: TimeInterval = 30
 
-    var hasArmedWatchdog: Bool { armedWatchdog != nil }
+    var expectedBlockedMessage: String { LaunchActivationWatchdogPolicy.blockedMessage }
     var offersRetry: Bool { if case .blocked = screen { return true } else { return false } }
     var offersOfflineContinuation: Bool {
         offersRetry && canContinueOffline && !isPreparing && !hasSession
+    }
+
+    private var frame: LaunchActivationWatchdog.Frame {
+        LaunchActivationWatchdog.Frame(generation: attempt, hasSession: hasSession,
+            isWaitingForActivation: isWaitingForActivation, isPreparing: isPreparing,
+            isQuiescingAccountChange: false, requiresStorageTransferRelaunch: false,
+            phase: phase, applicationState: applicationState)
     }
 
     init(phase: ScenePhase, applicationState: UIApplication.State) {
@@ -1023,8 +1121,9 @@ private final class DeferredLaunchHostModel {
     }
 
     func startLaunchAttempt(timeout: TimeInterval) {
+        self.timeout = timeout
         launchAttempts += 1
-        cancelWatchdog()
+        watchdog.cancel()
         isWaitingForActivation = false
         isPreparing = true
         defer { isPreparing = false }
@@ -1036,7 +1135,9 @@ private final class DeferredLaunchHostModel {
         } catch {
             isWaitingForActivation = phase != .active || applicationState != .active
             guard isWaitingForActivation else { return }
-            armWatchdog(attempt: attempt, timeout: timeout)
+            isPreparing = false
+            watchdog.armForDeferredAttempt(frame: frame, timeout: timeout,
+                expire: { [weak self] in self?.endWait(attempt: $0) })
         }
     }
 
@@ -1052,59 +1153,32 @@ private final class DeferredLaunchHostModel {
             phase: phase, isWaitingForActivation: isWaitingForActivation,
             hasSession: hasSession, isPreparing: isPreparing) else { return }
         isWaitingForActivation = false
-        cancelWatchdog()
+        watchdog.cancel()
         handleScenePhaseChange(.active)
     }
 
     func handleScenePhaseChange(_ next: ScenePhase) {
         phase = next
-        if next == .background {
-            cancelWatchdog()
-        } else if next == .inactive {
-            armWatchdogIfDeferred()
-        }
+        watchdog.handleScenePhaseChange(next, frame: frame, timeout: timeout,
+            expire: { [weak self] in self?.endWait(attempt: $0) })
         guard next == .active, !hasSession, !isPreparing else { return }
         attempt += 1
         screen = .preparing("保存方式を確認しています")
-        startLaunchAttempt(timeout: 0.05)
+        startLaunchAttempt(timeout: timeout)
     }
 
     func tapRetry() {
-        cancelWatchdog()
+        watchdog.cancel()
         attempt += 1
         screen = .preparing("保存領域を再確認しています")
-        startLaunchAttempt(timeout: 0.05)
-    }
-
-    private func armWatchdogIfDeferred() {
-        guard isWaitingForActivation, !hasSession, !isPreparing,
-              armedWatchdog == nil else { return }
-        armWatchdog(attempt: attempt, timeout: 30)
-    }
-
-    private func armWatchdog(attempt: Int, timeout: TimeInterval) {
-        cancelWatchdog()
-        guard case let .bounded(bounded) = LaunchActivationWatchdogPolicy.waitOutcome(
-            phase: phase, applicationState: applicationState, timeout: timeout) else { return }
-        armedWatchdog = CloudLaunchDeadline(timeout: bounded, invalidateAttempt: {},
-            onExpiry: { [weak self] in self?.endWait(attempt: attempt) })
-    }
-
-    func cancelWatchdog() {
-        armedWatchdog?.cancel()
-        armedWatchdog = nil
+        startLaunchAttempt(timeout: timeout)
     }
 
     private func endWait(attempt: Int) {
-        armedWatchdog = nil
-        guard LaunchActivationWatchdogPolicy.presentsRetryScreen(
-            generationMatches: self.attempt == attempt, hasSession: hasSession,
-            isWaitingForActivation: isWaitingForActivation, isPreparing: isPreparing,
-            isQuiescingAccountChange: false, requiresStorageTransferRelaunch: false,
-            phase: phase, applicationState: applicationState) else { return }
+        guard watchdog.settleExpiry(generation: attempt, frame: frame) else { return }
         isWaitingForActivation = false
         canContinueOffline = offlineCopyIsEligible
-        screen = .blocked(LaunchActivationWatchdogPolicy.blockedMessage)
+        screen = .blocked(expectedBlockedMessage)
         retryScreenPresentations += 1
     }
 }
