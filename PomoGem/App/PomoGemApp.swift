@@ -58,6 +58,28 @@ enum PersistenceLaunchScenePolicy {
         }
     }
 
+    /// What a `CancellationError` caught by the launch attempt must do. The
+    /// two resume paths both need a signal that a fully active app has already
+    /// spent: `.onChange(of: scenePhase)` needs a transition, and the
+    /// `didBecomeActiveNotification` receiver needs `isWaitingForActivation`,
+    /// which it reads before this catch can set it. Deriving only a flag from
+    /// the lifecycle state — as the catch used to — therefore strands the
+    /// launch whenever the throw propagates across an await and the app
+    /// becomes active in between.
+    enum DeferredLaunchResolution: Equatable {
+        /// Not active yet: record the wait and let activation restart it.
+        case waitForActivation
+        /// Already fully active: no resume trigger is left, restart now.
+        case restartImmediately
+    }
+
+    static func deferredLaunchResolution(
+        phase: ScenePhase,
+        applicationState: UIApplication.State
+    ) -> DeferredLaunchResolution {
+        phase == .active && applicationState == .active ? .restartImmediately : .waitForActivation
+    }
+
     static func shouldResumeDeferredPreparation(
         phase: ScenePhase,
         isWaitingForActivation: Bool,
@@ -1101,16 +1123,27 @@ private struct PomoGemPersistenceLaunchHost: View {
                 launchState = .blocked(message(for: reason))
             }
         } catch is CancellationError {
+            var resolution = PersistenceLaunchScenePolicy.DeferredLaunchResolution.waitForActivation
             if launchAttempt == attempt, !Task.isCancelled, !isQuiescingAccountChange {
-                isWaitingForLaunchActivation = scenePhase != .active
-                    || UIApplication.shared.applicationState != .active
+                resolution = PersistenceLaunchScenePolicy.deferredLaunchResolution(
+                    phase: scenePhase,
+                    applicationState: UIApplication.shared.applicationState
+                )
+                isWaitingForLaunchActivation = resolution == .waitForActivation
             }
             // Record lifecycle values only; never account identifiers, model
             // contents or store paths. Cancellation must be distinguishable
             // from a watchdog expiry when diagnosing a retained loading view.
             Self.persistenceLogger.info(
-                "Launch cancelled attempt=\(attempt) current=\(launchAttempt) taskCancelled=\(Task.isCancelled) active=\(scenePhase == .active) quiescing=\(isQuiescingAccountChange) ownsDeadline=\(ownedDeadline != nil && cloudLaunchDeadline === ownedDeadline)"
+                "Launch cancelled attempt=\(attempt) current=\(launchAttempt) taskCancelled=\(Task.isCancelled) active=\(scenePhase == .active) quiescing=\(isQuiescingAccountChange) ownsDeadline=\(ownedDeadline != nil && cloudLaunchDeadline === ownedDeadline) resolution=\(String(describing: resolution))"
             )
+            // A cancellation raised deep inside awaited CloudKit work is
+            // observed after actor hops, so the activation this attempt was
+            // waiting for may already have arrived: `.onChange(of: scenePhase)`
+            // has no transition left to report and the didBecomeActive receiver
+            // has already run against a false waiting flag. Restart here rather
+            // than leave the launch on a 「準備中」 spinner with no control.
+            if resolution == .restartImmediately { handleScenePhaseChange(.active) }
             return
         } catch let error as CloudOfflineSessionError {
             guard launchAttempt == attempt, !Task.isCancelled else { return }
