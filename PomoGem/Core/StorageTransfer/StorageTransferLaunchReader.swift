@@ -122,6 +122,28 @@ extension PomoGemDataExportAppInfo {
     }
 }
 
+/// The fixed Japanese copy for the iCloud → device direction — 「iCloudから再取得」
+/// — kept here so both surfaces that offer it quote one text. It destroys the
+/// DEVICE side, never the server side, and says so in every sentence.
+enum StorageTransferRefreshCopy {
+    static let settingsTitle = "iCloudのデータでこの端末を置き換える"
+    static let dataLossWarning =
+        "この端末のテーマ・記録・設定を削除し、現在のiCloudのデータに置き換えます。未送信の端末データは失われ、iCloudのデータとは結合されません。iCloudのデータは残ります。"
+    static let relaunch = "処理の途中で、アプリの終了と再起動をお願いします。アプリ自体は削除しないでください。"
+    static let acknowledgement = "端末データの削除を確認しました"
+    static let confirmTitle = "iCloudから再取得"
+
+    /// The Settings surface only. The operation itself is not prohibited: the
+    /// recovery screen still offers it, because a fenced device has no other
+    /// way forward. This sentence must therefore point at that screen instead
+    /// of claiming the operation is unavailable.
+    static let settingsUnavailable =
+        "iCloudのデータでこの端末を置き換える操作は、いまは設定から実行できません。起動時に「iCloudのデータが置き換わりました」と表示された場合は、その画面から実行できます。端末のデータは削除せず保持します。"
+
+    static let requestAccepted =
+        "iCloudのデータでこの端末を置き換える手続きを受け付けました。アプリスイッチャーでPomoGemを終了し、もう一度開いてください。iCloudのデータは削除しません。"
+}
+
 /// The fixed Japanese copy for the device → iCloud overwrite. It lives beside
 /// the runtime rather than inside a view so the launch host, Settings and the
 /// review notes quote one text, and so a reviewer can diff the shipped strings

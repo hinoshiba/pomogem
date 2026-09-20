@@ -862,6 +862,11 @@ private struct PomoGemPersistenceLaunchHost: View {
                     switch request.direction {
                     case .overwriteCloudFromDevice:
                         remoteRecoveryAction = .overwrite(request.datasetGenerationID)
+                    case .refreshFromCloud:
+                        // The EXISTING refresh, with no second implementation:
+                        // the same action the recovery screen's
+                        // 「iCloudから再取得」 dispatches.
+                        remoteRecoveryAction = .refresh(request.datasetGenerationID)
                     }
                 }
             }
@@ -2078,6 +2083,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     ) -> String {
         switch direction {
         case .overwriteCloudFromDevice: StorageTransferOverwriteCopy.requestAccepted
+        case .refreshFromCloud: StorageTransferRefreshCopy.requestAccepted
         }
     }
 
@@ -2945,7 +2951,8 @@ private struct PersistenceLaunchStatusView: View {
     @ViewBuilder
     private var datasetRefreshDoors: some View {
         doorHeader("iCloudのデータを使う")
-        Text("この端末のテーマ・記録・設定を削除し、現在のiCloudのデータに置き換えます。未送信の端末データは失われ、iCloudのデータとは結合されません。iCloudのデータは残ります。")
+        // One text, quoted by both surfaces that offer this direction.
+        Text(StorageTransferRefreshCopy.dataLossWarning)
             .foregroundStyle(PomoGemTheme.muted)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityIdentifier("storage-refresh-data-loss-warning")

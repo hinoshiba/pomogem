@@ -215,9 +215,10 @@ private struct StorageTransferChoiceView: View {
         }
     }
 
-    /// PLAN Step 11. Direction (A) only; `storage-switch.replace-cloud` — the
-    /// legacy `localOnly -> cloud` replacement — is untouched and still keyed
-    /// off its own, separate bit in the enable branch below.
+    /// PLAN Steps 11-12. The two directional dataset doors, in the order the
+    /// plan lists them. `storage-switch.replace-cloud` — the legacy
+    /// `localOnly -> cloud` replacement — is untouched and still keyed off its
+    /// own, separate bit in the enable branch below.
     @ViewBuilder
     private var datasetDoors: some View {
         if offersDatasetDoors {
@@ -234,6 +235,19 @@ private struct StorageTransferChoiceView: View {
                 }
                 .disabled(!releasePolicy.allowsDatasetOverwriteFromDevice)
                 .accessibilityIdentifier("storage-switch.overwrite-cloud")
+            }
+            Section(StorageTransferRefreshCopy.settingsTitle) {
+                Text(StorageTransferRefreshCopy.dataLossWarning)
+                if !releasePolicy.allowsDatasetOverwriteFromDevice {
+                    Text(StorageTransferSettingsDatasetError
+                        .refreshFromSettingsUnavailable.localizedDescription)
+                        .accessibilityIdentifier("storage-switch.refresh-from-cloud-unavailable")
+                }
+                Button(StorageTransferRefreshCopy.confirmTitle, role: .destructive) {
+                    datasetDirection = .refreshFromCloud
+                }
+                .disabled(!releasePolicy.allowsDatasetOverwriteFromDevice)
+                .accessibilityIdentifier("storage-switch.refresh-from-cloud")
             }
         }
     }
@@ -257,14 +271,24 @@ private struct StorageTransferDatasetConfirmationView: View {
         NavigationStack {
             List {
                 Section {
-                    paragraph(StorageTransferOverwriteCopy.sheetWarning, suffix: "warning")
-                    paragraph(StorageTransferOverwriteCopy.recoveryCopy, suffix: "recovery-copy")
-                    paragraph(StorageTransferOverwriteCopy.relaunch, suffix: "relaunch")
-                    paragraph(StorageTransferOverwriteCopy.notCancellable, suffix: "not-cancellable")
-                    paragraph(StorageTransferOverwriteCopy.screenTime, suffix: "screen-time")
-                    Toggle(StorageTransferOverwriteCopy.acknowledgement, isOn: $understandsDeletion)
+                    switch direction {
+                    case .overwriteCloudFromDevice:
+                        paragraph(StorageTransferOverwriteCopy.sheetWarning, suffix: "warning")
+                        paragraph(StorageTransferOverwriteCopy.recoveryCopy, suffix: "recovery-copy")
+                        paragraph(StorageTransferOverwriteCopy.relaunch, suffix: "relaunch")
+                        paragraph(StorageTransferOverwriteCopy.notCancellable, suffix: "not-cancellable")
+                        paragraph(StorageTransferOverwriteCopy.screenTime, suffix: "screen-time")
+                    case .refreshFromCloud:
+                        // No recovery-copy paragraph: this direction stages
+                        // nothing on the server and deletes nothing there. The
+                        // device side is what is discarded, and it has no
+                        // backup — saying otherwise would be a false promise.
+                        paragraph(StorageTransferRefreshCopy.dataLossWarning, suffix: "warning")
+                        paragraph(StorageTransferRefreshCopy.relaunch, suffix: "relaunch")
+                    }
+                    Toggle(acknowledgement, isOn: $understandsDeletion)
                         .accessibilityIdentifier(identifier("confirm-data-loss"))
-                    Button(StorageTransferOverwriteCopy.sheetConfirm, role: .destructive, action: confirmed)
+                    Button(confirmTitle, role: .destructive, action: confirmed)
                         .disabled(!understandsDeletion)
                         .accessibilityIdentifier(identifier("confirm"))
                 }
@@ -278,6 +302,23 @@ private struct StorageTransferDatasetConfirmationView: View {
     private var door: String {
         switch direction {
         case .overwriteCloudFromDevice: "overwrite-cloud"
+        case .refreshFromCloud: "refresh-from-cloud"
+        }
+    }
+
+    /// Each direction names the side it destroys. The two sentences are
+    /// deliberately not interchangeable.
+    private var acknowledgement: String {
+        switch direction {
+        case .overwriteCloudFromDevice: StorageTransferOverwriteCopy.acknowledgement
+        case .refreshFromCloud: StorageTransferRefreshCopy.acknowledgement
+        }
+    }
+
+    private var confirmTitle: String {
+        switch direction {
+        case .overwriteCloudFromDevice: StorageTransferOverwriteCopy.sheetConfirm
+        case .refreshFromCloud: StorageTransferRefreshCopy.confirmTitle
         }
     }
 
@@ -299,7 +340,9 @@ private struct StorageTransferConfirmationView: View {
             List {
                 Section {
                     Text(message)
-                    if choice == .enableCloudReplacingCloud {
+                    // Every choice that replaces the iCloud dataset stages a
+                    // recovery copy first, not only the legacy one.
+                    if choice.replacesCloud {
                         Text("置き換えるデータの復旧用コピーをiCloudに保存し、受領を確認してから削除を始めます。復旧用コピーには、このiPhoneだけの過去の記録も含まれます。処理完了後に復旧用コピーを削除します。通信が途切れた場合は、削除の再試行までiCloudに残ることがあります。")
                     }
                     if choice != .disableCloudKeepingCopy {
@@ -309,7 +352,14 @@ private struct StorageTransferConfirmationView: View {
                     Button(choice == .disableCloudKeepingCopy ? "コピーしてiCloudを解除" : "置き換えてiCloudを有効にする",
                            role: choice == .disableCloudKeepingCopy ? nil : .destructive,
                            action: confirmed)
-                        .disabled((choice.replacesCloud && !StorageTransferReleasePolicy.standard.allowsCloudReplacement)
+                        // Per choice, not per bit: the three release bits are
+                        // independent, so asking the policy about THIS choice
+                        // is the only gate that stays correct as cases are
+                        // added. `.overwriteCloudFromDevice` never reaches this
+                        // view — Settings routes it through its own directional
+                        // confirmation — but it must not be gated on the legacy
+                        // bit if it ever does.
+                        .disabled(((try? StorageTransferReleasePolicy.standard.validate(choice)) == nil)
                                   || (choice != .disableCloudKeepingCopy && !understandsDeletion))
                         .accessibilityIdentifier("storage-switch.confirm")
                 }

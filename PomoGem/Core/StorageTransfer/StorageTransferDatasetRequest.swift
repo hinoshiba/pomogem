@@ -15,6 +15,28 @@ import Foundation
 enum StorageTransferDatasetRequestDirection: String, Codable, Equatable, Sendable {
     /// Device -> iCloud. Routed to `StorageTransferRuntime.overwriteCloudDataset`.
     case overwriteCloudFromDevice
+    /// iCloud -> device. Routed to the EXISTING
+    /// `StorageTransferRuntime.refreshCloudDataset`, the exact operation and
+    /// journal 「iCloudから再取得」 already performs on the recovery screen. It
+    /// introduces no journal shape and no policy bit: it does not replace the
+    /// iCloud dataset, so none of the three release bits is its fence.
+    case refreshFromCloud
+}
+
+enum StorageTransferSettingsDatasetError: Error, LocalizedError, Equatable {
+    /// Direction (B) is not a replacement of the iCloud dataset, so no release
+    /// bit fences it. This is a SURFACE decision, not a safety fence: the same
+    /// operation stays available from the recovery screen, where it is the only
+    /// way forward a fenced device has. The two Settings doors are published as
+    /// one pair so a half-shipped surface cannot offer a device-side wipe while
+    /// its counterpart is closed, and so the docs describe them together.
+    case refreshFromSettingsUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .refreshFromSettingsUnavailable: StorageTransferRefreshCopy.settingsUnavailable
+        }
+    }
 }
 
 enum StorageTransferDatasetRequestError: Error, LocalizedError, Equatable {
@@ -96,6 +118,14 @@ enum StorageTransferDatasetRequestPolicy {
         switch direction {
         case .overwriteCloudFromDevice:
             try policy.validate(.overwriteCloudFromDevice)
+        case .refreshFromCloud:
+            // Deliberately the SAME bit, and deliberately not a new one. See
+            // `StorageTransferSettingsDatasetError.refreshFromSettingsUnavailable`
+            // for why a direction that needs no fence is still published as a
+            // pair with the one that does.
+            guard policy.allowsDatasetOverwriteFromDevice else {
+                throw StorageTransferSettingsDatasetError.refreshFromSettingsUnavailable
+            }
         }
     }
 }

@@ -131,12 +131,46 @@ final class StorageTransferDatasetRequestTests: XCTestCase {
             .overwriteCloudFromDevice, policy: .standard)) { error in
             XCTAssertEqual(error as? StorageTransferReleaseError, .datasetOverwriteUnavailable)
         }
+        XCTAssertThrowsError(try StorageTransferDatasetRequestPolicy.validate(
+            .refreshFromCloud, policy: .standard)) { error in
+            XCTAssertEqual(error as? StorageTransferSettingsDatasetError, .refreshFromSettingsUnavailable)
+        }
     }
 
-    func testRaisingTheOverwriteBitPublishesTheSettingsOverwriteDoor() {
+    func testRaisingTheOverwriteBitPublishesBothSettingsDoors() {
         let policy = StorageTransferReleasePolicy.isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)
         XCTAssertNoThrow(try StorageTransferDatasetRequestPolicy.validate(
             .overwriteCloudFromDevice, policy: policy))
+        XCTAssertNoThrow(try StorageTransferDatasetRequestPolicy.validate(
+            .refreshFromCloud, policy: policy))
+    }
+
+    /// Direction (B) is refused from Settings, never described as unavailable
+    /// outright: the recovery screen still offers exactly this operation, and
+    /// a fenced device has no other way forward.
+    func testTheRefusedRefreshDoorPointsAtTheScreenThatStillOffersIt() {
+        let message = StorageTransferSettingsDatasetError
+            .refreshFromSettingsUnavailable.localizedDescription
+        XCTAssertTrue(message.contains("設定から実行できません"))
+        XCTAssertTrue(message.contains("iCloudのデータが置き換わりました"))
+        XCTAssertFalse(message.contains("復旧用コピー"),
+            "This direction stages nothing on the server; it must not promise one")
+    }
+
+    /// The durable format is read by a later process. Pin the raw values.
+    func testDirectionRawValuesAreTheDurableFormat() {
+        XCTAssertEqual(StorageTransferDatasetRequestDirection.overwriteCloudFromDevice.rawValue,
+                       "overwriteCloudFromDevice")
+        XCTAssertEqual(StorageTransferDatasetRequestDirection.refreshFromCloud.rawValue,
+                       "refreshFromCloud")
+    }
+
+    func testARecordedRefreshRequestRoundTripsUnchanged() throws {
+        let f = try fixture()
+        let recorded = request(f, direction: .refreshFromCloud)
+        try f.runtime.recordDatasetRequest(recorded)
+        XCTAssertEqual(try f.runtime.consumeDatasetRequest(), recorded)
+        XCTAssertNil(try f.store.load())
     }
 
     /// The legacy `localOnly -> cloud` replacement bit must not open the new
