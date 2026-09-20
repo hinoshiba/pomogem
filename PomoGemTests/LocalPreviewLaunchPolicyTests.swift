@@ -112,6 +112,78 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
         }
     }
 
+    /// Regression for the 2026-09-20 device launch that stopped on
+    /// 「保存領域を確認できません」 with the identityUnavailable text and offered no
+    /// offline action. The app was launched by XCUITest, so SwiftUI already
+    /// reported `.active` while UIKit was still `.inactive`, and the launch
+    /// preparation entered the transfer-cleanup check in that frame. That
+    /// half-activated frame must stay a lifecycle interruption: it cannot be
+    /// reported as a failed Apple Account verification, because the blocked
+    /// screen is reached before an offline candidate has been evaluated and
+    /// therefore carries no recovery action at all.
+    func testHalfActivatedLaunchFrameDefersInsteadOfBlockingOnTheAccount() {
+        var isPreparing = true
+        var isWaitingForActivation = false
+        var mountedSessions = 0
+
+        // The scene is active but UIKit has not posted didBecomeActive yet.
+        XCTAssertThrowsError(try PersistenceLaunchScenePolicy.requireActiveAttempt(
+            generationMatches: true, phase: .active, applicationState: .inactive)) { error in
+            XCTAssertTrue(error is CancellationError,
+                "A pending UIKit activation must not be reported as an unavailable identity")
+            // The CancellationError catch records the wait, then the attempt's
+            // defer releases its own preparation flag.
+            isWaitingForActivation = true
+            isPreparing = false
+        }
+        XCTAssertTrue(isWaitingForActivation)
+        XCTAssertFalse(isPreparing)
+
+        // No further scene-phase change can arrive: the phase is already
+        // active. Only the UIKit notification can restart this launch.
+        XCTAssertTrue(PersistenceLaunchScenePolicy.shouldResumeDeferredPreparation(
+            phase: .active, isWaitingForActivation: isWaitingForActivation,
+            hasSession: mountedSessions > 0, isPreparing: isPreparing))
+        isWaitingForActivation = false
+        XCTAssertEqual(PersistenceLaunchScenePolicy.action(
+            phase: .active, hasSession: false, isPreparing: isPreparing,
+            isQuiescingAccountChange: false, usesCloudAccountBoundary: true),
+            .preparePersistence)
+        XCTAssertNoThrow(try PersistenceLaunchScenePolicy.requireActiveAttempt(
+            generationMatches: true, phase: .active, applicationState: .active))
+        mountedSessions += 1
+
+        // A duplicate activation notification must not start a second launch.
+        XCTAssertFalse(PersistenceLaunchScenePolicy.shouldResumeDeferredPreparation(
+            phase: .active, isWaitingForActivation: isWaitingForActivation,
+            hasSession: mountedSessions > 0, isPreparing: false))
+        XCTAssertEqual(mountedSessions, 1)
+    }
+
+    /// The deferred resume is gated on `isPreparing`, so a superseded attempt
+    /// must never be the one that records the wait: its generation guard fails
+    /// first and its successor owns both flags. Pins that a stale attempt
+    /// cannot strand an unloaded launch behind a preparation flag it no
+    /// longer owns.
+    func testSupersededAttemptNeitherRecordsNorConsumesTheDeferredResume() {
+        // A superseded attempt is interrupted for the same lifecycle reason,
+        // so it cannot be distinguished by its error and must not act on it.
+        XCTAssertThrowsError(try PersistenceLaunchScenePolicy.requireActiveAttempt(
+            generationMatches: false, phase: .active, applicationState: .inactive)) { error in
+            XCTAssertTrue(error is CancellationError)
+        }
+        // While its successor prepares, the activation notification is ignored;
+        // the successor's own defer and catch decide what happens next.
+        XCTAssertFalse(PersistenceLaunchScenePolicy.shouldResumeDeferredPreparation(
+            phase: .active, isWaitingForActivation: true, hasSession: false, isPreparing: true),
+            "A running preparation owns the launch; a stale attempt must not restart it")
+        // And the successor is always started by the generation change itself.
+        XCTAssertEqual(PersistenceLaunchScenePolicy.action(
+            phase: .active, hasSession: false, isPreparing: true,
+            isQuiescingAccountChange: false, usesCloudAccountBoundary: true),
+            .preparePersistence)
+    }
+
     func testPublishedOfflineRootSurvivesOrdinaryBackgroundAndRevalidatesEveryForeground() {
         for phase in [ScenePhase.inactive, .background, .inactive, .active, .inactive, .background, .active] {
             XCTAssertEqual(PersistenceLaunchScenePolicy.action(
