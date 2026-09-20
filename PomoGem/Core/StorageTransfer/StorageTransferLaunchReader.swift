@@ -269,3 +269,67 @@ enum StorageTransferOverwriteCopy {
         return "\(label): \(body)（最終 \(comparisonFormatter.string(from: latest))）"
     }
 }
+
+/// The fixed Japanese copy for the launch screens the split dataset-lineage
+/// taxonomy reaches (ROOT-CAUSE §6.2). Kept beside the other two copy holders
+/// so every sentence a stop reason can produce is diffable in one place.
+///
+/// Two of the three screens are explanation-only. The third — 「iCloudの管理情報が
+/// 見つかりません」 — is the state the reported iPhone is actually in, and it is
+/// the only one that carries an action: starting a NEW iCloud lineage from this
+/// device. That action is destructive to nothing on this device and to nothing
+/// on the server (there is no lineage to destroy), but it does publish this
+/// device's whole dataset, so it sits behind 「最後の確認」 and the same closed
+/// `allowsDatasetOverwriteFromDevice` bit as the overwrite.
+enum StorageTransferLineageCopy {
+    // MARK: 「iCloudの管理情報が見つかりません」
+
+    static let title = "iCloudの管理情報が見つかりません"
+    static let startDoorTitle = "このiPhoneのデータでiCloudを使い始める"
+    static let startExplanation =
+        "iCloud側に、このアプリが使っている管理情報が見つかりません。このiPhoneの記録をiCloudへ送信し、新しいiCloudのデータとして使い始めます。このiPhoneの記録は削除しません。"
+    static let offlineDoorTitle = "オフラインのまま使う"
+    static let offlineExplanation =
+        "iCloudへ送信せず、このiPhoneに保存されている記録でそのまま使います。あとでこの画面から、このiPhoneのデータでiCloudを使い始めることもできます。"
+    /// Offered only when the offline route is actually eligible. When it is
+    /// not, the screen says why instead of showing a control that does nothing.
+    static let offlineUnavailable =
+        "オフラインで利用するための確認済みデータが、この端末にまだありません。通信が使えるときに一度開いてください。どちらの記録も削除していません。"
+
+    // MARK: 「最後の確認」 for the start-from-device action
+
+    static let sheetTitle = "最後の確認"
+    static let sheetWarning =
+        "現在のiCloudには、このアプリが使えるPomoGemのデータがありません。このiPhoneのテーマ・記録・設定をiCloudへ送信し、新しいiCloudのデータとして使い始めます。"
+    static let sheetOtherBuilds =
+        "同じApple Accountの他の端末や、別のビルド（開発用／配布用）のPomoGemがこのアカウントを使っている場合、それらの端末は次に開いたときにiCloudのデータを取得し直す確認を求められます。その端末だけにある未送信の記録は残りません。"
+    static let sheetRelaunch = StorageTransferOverwriteCopy.relaunch
+    static let sheetScreenTime = StorageTransferOverwriteCopy.screenTime
+    static let acknowledgement = "このiPhoneのデータをiCloudへ送ること、他の端末に取得し直しを求めることを確認しました"
+    static let sheetConfirm = "iCloudを使い始める"
+
+    static let requestAccepted =
+        "このiPhoneのデータでiCloudを使い始める手続きを受け付けました。アプリスイッチャーでPomoGemを終了し、もう一度開いてください。アプリ自体は削除しないでください。"
+
+    // MARK: The explanation-only screens
+
+    static let environmentMismatchTitle = "別のiCloud環境のデータです"
+    /// No door of any kind: nothing this build can run is meaningful against a
+    /// database it does not talk to. It says what to do OUTSIDE the app.
+    static let environmentMismatchExplanation =
+        "この端末の記録は、いまのアプリとは別のiCloud環境（開発用／配布用）で作られたものです。この画面では、どちらの記録も削除していません。記録を作ったときと同じビルドのPomoGemで開き直すか、サポートの手順をご確認ください。"
+
+    static let localLedgerMissingTitle = "iCloudのデータを受け取った記録がありません"
+    /// Reached only when the server ALSO turns out to have no committed
+    /// generation, so the 「iCloudから再取得」 screen cannot be built. Saying
+    /// 「もう一度試す」 is honest here: the generic retry is on this screen.
+    static let localLedgerMissingExplanation =
+        "iCloud側の管理情報を読み取れなかったため、再取得の選択肢を表示できません。通信を確認して「もう一度試す」を押してください。この画面では、どちらの記録も削除していません。"
+
+    /// P1-4 (ROOT-CAUSE §6.1). The catch arm of `presentDatasetRefresh` used to
+    /// put the CAUGHT error's own text on the generic blocked screen, which
+    /// hid — from the user and from the operator — that the rescue UI could not
+    /// be built at all. The failure now names itself.
+    static let refreshScreenUnavailable =
+        "iCloud側の情報を読み取れなかったため、復旧の選択肢を表示できません。通信を確認して、もう一度お試しください。どちらの記録も削除していません。"
+}

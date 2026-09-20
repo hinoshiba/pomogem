@@ -145,11 +145,11 @@ final class StorageTransferSingleDeviceAdmissionRegressionTests: XCTestCase {
             .refuse(.datasetReplacedRemotely),
             "The classification names the state that is actually true")
 
-        await expectRefusal(.datasetRefreshRequired, {
+        await expectRefusal(.datasetReplacedRemotely, {
             try await f.runtime.preflightCloudMount(binding: f.binding,
                 readControl: { second }, validateAccess: {})
         }, "A generation this device advanced itself must still be detected")
-        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .datasetRefreshRequired), .datasetRefresh,
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .datasetReplacedRemotely), .datasetRefresh,
                        "and it must still reach the screen that can refresh from that generation")
         XCTAssertFalse(StorageTransferRuntimeError.datasetReplacedRemotely
             .localizedDescription.contains("別の端末"))
@@ -189,12 +189,12 @@ final class StorageTransferSingleDeviceAdmissionRegressionTests: XCTestCase {
             }
         }
 
-        await expectRefusal(.datasetRefreshRequired, {
+        await expectRefusal(.localLedgerMissing, {
             try await f.runtime.preflightCloudMount(binding: f.binding,
                 readControl: { control }, validateAccess: {})
         }, "An existing local cache must not silently enrol into a newer generation")
-        XCTAssertEqual(CloudOfflineHostPolicy.launchRoutableRefusal(.localLedgerMissing),
-                       .datasetRefreshRequired,
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .localLedgerMissing),
+                       .datasetRefresh,
                        "The R2 upgrade case previously reached the refresh offer and must keep it")
         XCTAssertEqual(CloudOfflineHostPolicy.datasetLineageBlock(for: StorageTransferRuntimeError.localLedgerMissing),
                        .localLedgerMissing, "and the taxonomy still records which state it is")

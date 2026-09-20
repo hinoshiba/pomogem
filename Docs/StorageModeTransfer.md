@@ -124,25 +124,29 @@ Production側には転送台帳が無いため比較が成立せず、従来は�
 **同じポリシービット**（`allowsDatasetOverwriteFromDevice`、通常版では無効）の配下にあり、
 確定済みの世代が1つでも存在する場合は拒否して通常の世代照合経路へ戻します。
 
-### 起動画面への割り当て（暫定、次段で解消）
+### 起動画面への割り当て
 
-起動hostの`StorageTransferRuntimeError`のswitch（`PomoGemApp.swift:1294-1307`）は、まだ
-**旧い名前だけ**を見ています。`presentDatasetRefresh`へ入れるのは`datasetRefreshRequired`
-だけで、それが`storageTransferRefreshGenerationID`を書く唯一の場所＝「iCloudから再取得」画面と
-`refreshCloudDataset`への唯一の入口です。したがって**救済手段を伴う停止理由**
-（`datasetReplacedRemotely`と`localLedgerMissing`。どちらもサーバに終端した世代がある）は、
-hostの配線が入るまで`CloudOfflineHostPolicy.launchRoutableRefusal`で**旧い名前のまま投げます**。
-そうしないと、この分割自体が「唯一アプリ内で回復できた状態」から回復手段を奪います。
+起動hostは`StorageTransferRuntimeError`を直接switchしません。
+`CloudOfflineHostPolicy.launchRoute(for:)`の戻り値（`CloudLaunchRoute`）でswitchするので、
+分類は1か所にあり、新しい停止理由が黙って汎用画面へ落ちることはありません。暫定措置だった
+`launchRoutableRefusal`（救済手段を伴う停止理由を旧い名前で投げ直すshim）は削除し、
+runtimeは**それぞれの名前のまま**投げます。
 
-救済手段の無い停止理由（`cloudLineageUnavailable`、`cloudEnvironmentMismatch`）は従来どおり
-汎用の「保存領域を確認できません」画面へ落ちますが、**文面は自分のものを使います**。この画面の
-操作は「もう一度試す／端末のデータでオフライン利用／サポートを見る」だけなので、**文面は
-この3つ以外を約束しません**。「このiPhoneのデータでiCloudを使い始める」という案内は、その
-操作を実際に出す段（`startCloudLineageFromDevice`の画面）と同じ変更で入れます。
+| 停止理由 | 画面 | 置かれている操作 |
+| --- | --- | --- |
+| `datasetReplacedRemotely` / `localLedgerMissing` | `.datasetRefresh`「iCloudのデータが置き換わりました」 | 「iCloudから再取得」と「このiPhoneのデータで置き換える」（各々に独立した同意）、書き出し |
+| `cloudLineageUnavailable` | `.cloudLineageUnavailable`「iCloudの管理情報が見つかりません」 | 「このiPhoneのデータでiCloudを使い始める」（「最後の確認」を経て`startCloudLineageFromDevice`）と「オフラインのまま使う」 |
+| `cloudEnvironmentMismatch` | 説明のみ「別のiCloud環境のデータです」 | 破壊的操作なし。もう一度試す／オフライン利用／サポート |
+| `localLedgerMissing`かつサーバにも確定世代が無いと判明した場合 | 説明のみ「iCloudのデータを受け取った記録がありません」 | 同上 |
+| `leftoverLocalStores`ほか | 汎用「保存領域を確認できません」 | 同上 |
 
-分類そのものは`StorageTransferAdmissionPolicy.decide`と
-`CloudOfflineHostPolicy.datasetLineageBlock`に残っており、配線段ではhostのswitchを
-`CloudOfflineHostPolicy.launchRoute(for:)`の呼び出しへ置き換え、この暫定措置を削除します。
+`.datasetRefresh`の組み立てに失敗した場合（iCloud側の読み取り自体ができなかった場合）は、
+捕まえたエラーの文面ではなく「iCloud側の情報を読み取れなかったため、復旧の選択肢を表示できません」
+という**固有の文面**を表示します（P1-4）。救済UIを出せなかったことが利用者にも運用者にも見えます。
+
+「このiPhoneのデータでiCloudを使い始める」は、`allowsDatasetOverwriteFromDevice`が無効な通常版では
+**理由付きで無効表示**になります。確定済みの世代が1つでも存在する場合は`startCloudLineageFromDevice`
+自身が拒否するので、画面が読んだ「台帳が無い」という前提は実行時に必ず再検証されます。
 
 ### 運用規則（P2-7、未実装のTODO）
 

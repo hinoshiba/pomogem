@@ -212,59 +212,88 @@ final class StorageTransferAdmissionTaxonomyTests: XCTestCase {
         XCTAssertNil(CloudOfflineHostPolicy.datasetLineageBlock(for: StorageTransferRuntimeError.datasetRefreshRequired))
     }
 
-    /// The host switch, as it stands. `presentDatasetRefresh` is the sole
-    /// writer of `storageTransferRefreshGenerationID` and the sole producer of
-    /// `launchState = .datasetRefresh`, and only `.datasetRefreshRequired`
-    /// reaches it. Everything else becomes the generic blocked screen.
-    func testTheLaunchRouteMirrorsTheHostSwitch() {
+    /// The host's routing table. `PomoGemApp.swift` calls exactly this
+    /// function and switches on its result, so this is the switch rather than
+    /// a copy of it. `presentDatasetRefresh` is the sole writer of
+    /// `storageTransferRefreshGenerationID` and the sole producer of
+    /// `launchState = .datasetRefresh`.
+    func testTheLaunchRouteIsTotalOverEveryRuntimeError() {
         XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .relaunchRequired), .relaunch)
         XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .remoteRecoveryRequired), .remoteRecovery)
         XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .datasetRefreshRequired), .datasetRefresh)
-        for error in [StorageTransferRuntimeError.datasetReplacedRemotely, .cloudLineageUnavailable,
-                      .localLedgerMissing, .cloudEnvironmentMismatch, .leftoverLocalStores,
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .datasetReplacedRemotely), .datasetRefresh)
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .localLedgerMissing), .datasetRefresh)
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .cloudLineageUnavailable), .lineageUnavailable)
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .cloudEnvironmentMismatch), .environmentMismatch)
+        // No in-app remedy: the generic screen, whose only actions are retry,
+        // offline use and support.
+        for error in [StorageTransferRuntimeError.leftoverLocalStores,
                       .cloudCopyStillPending, .recoveryNeedsReview] {
             XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: error), .blocked,
-                           "\(error) has no arm of its own in the host switch yet")
+                           "\(error) carries no remedy and keeps the generic screen")
         }
     }
 
-    /// The invariant that makes the split safe to ship before the host is
-    /// wired: a refusal whose presentation CARRIES 「iCloudから再取得」 must
-    /// still reach the screen that can produce it. Any new taxonomy state that
-    /// forgets this recreates the permanent dead end the split was meant to end.
-    func testEveryRemedyCarryingRefusalStillReachesTheRefreshScreen() {
-        // The legacy name is the one the host already routes; it is the target
-        // of the shim, not a subject of it.
-        XCTAssertEqual(CloudOfflineHostPolicy.launchRoutableRefusal(.datasetRefreshRequired),
-                       .datasetRefreshRequired)
-        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .datasetRefreshRequired), .datasetRefresh)
-
+    /// The invariant the split exists to protect: a refusal whose presentation
+    /// CARRIES 「iCloudから再取得」 must reach the screen that can produce it.
+    /// Any new taxonomy state that forgets this recreates the permanent dead
+    /// end the split was meant to end. It is asserted against the REAL host
+    /// route now that the host calls `launchRoute(for:)` itself.
+    func testEveryRemedyCarryingRefusalReachesTheRefreshScreen() {
         for error in [StorageTransferRuntimeError.datasetReplacedRemotely,
                       .cloudLineageUnavailable, .localLedgerMissing, .cloudEnvironmentMismatch] {
-            let routable = CloudOfflineHostPolicy.launchRoutableRefusal(error)
-            guard CloudOfflineHostPolicy.datasetLineageBlock(for: error)?.offersRemoteDataset == true else {
-                XCTAssertEqual(routable, error, "\(error) offers no remedy and keeps its own copy")
-                XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: routable), .blocked)
+            let block = CloudOfflineHostPolicy.datasetLineageBlock(for: error)
+            guard block?.offersRemoteDataset == true else {
+                XCTAssertNotEqual(CloudOfflineHostPolicy.launchRoute(for: error), .datasetRefresh,
+                    "\(error) has no lineage to refresh from and must not claim that screen")
+                XCTAssertNotEqual(CloudOfflineHostPolicy.launchRoute(for: error), .blocked,
+                    "\(error) still gets a screen of its own, not the generic dead end")
                 continue
             }
-            XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: routable), .datasetRefresh,
+            XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: error), .datasetRefresh,
                            "\(error) carries an in-app remedy and must keep reaching it")
+        }
+        // The legacy name is still thrown by the binding guard and by the
+        // offline receipt path, and it still reaches the same screen.
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .datasetRefreshRequired), .datasetRefresh)
+    }
+
+    /// The routing shim `launchRoutableRefusal` is gone: the runtime throws
+    /// each refusal under its own name and the host routes it. This test
+    /// states the property the shim used to provide, directly on the two
+    /// functions that now provide it.
+    func testTheSplitNamesSurviveAllTheWayToTheScreen() {
+        for (error, route) in [
+            (StorageTransferRuntimeError.datasetReplacedRemotely, CloudLaunchRoute.datasetRefresh),
+            (.localLedgerMissing, .datasetRefresh),
+            (.cloudLineageUnavailable, .lineageUnavailable),
+            (.cloudEnvironmentMismatch, .environmentMismatch)
+        ] {
+            XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: error), route)
+            XCTAssertEqual(CloudOfflineHostPolicy.datasetLineageBlock(for: error)?.launchRoute, route,
+                           "the classification and the host route are one function")
         }
     }
 
     /// ROOT-CAUSE §6.2. A refusal may not promise an action no screen in this
-    /// build can offer: `startCloudLineageFromDevice` exists but is behind a
-    /// closed policy bit with no entry point, and the blocked screen's only
-    /// actions are retry, offline use and support.
-    func testNoRefusalPromisesAnActionThisBuildCannotOffer() {
+    /// build can offer. `cloudLineageUnavailable` now HAS its screen — the two
+    /// consented choices — so its sentence may name them; every other refusal
+    /// still may not, because the screen it reaches carries no such control.
+    func testOnlyTheRefusalWithAScreenPromisesItsAction() {
         for error in [StorageTransferRuntimeError.datasetRefreshRequired, .datasetReplacedRemotely,
-                      .cloudLineageUnavailable, .localLedgerMissing, .cloudEnvironmentMismatch,
-                      .leftoverLocalStores] {
+                      .localLedgerMissing, .cloudEnvironmentMismatch, .leftoverLocalStores] {
             let text = error.localizedDescription
             for promise in ["iCloudを使い始める", "iCloudを置き換える", "再取得"] {
                 XCTAssertFalse(text.contains(promise),
-                    "\(error) promises 「\(promise)」, which no screen in this build offers")
+                    "\(error) promises 「\(promise)」, which the screen it reaches does not offer")
             }
         }
+        // And the one that does: the sentence removed while the screen did not
+        // exist is back, in the same change that ships the buttons.
+        let lineage = StorageTransferRuntimeError.cloudLineageUnavailable.localizedDescription
+        XCTAssertTrue(lineage.contains("このiPhoneのデータでiCloudを使い始めるか、オフラインのまま使うかを選べます。"),
+            "The restored sentence must name exactly the two choices the screen offers")
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .cloudLineageUnavailable),
+                       .lineageUnavailable, "and that screen must be the one it reaches")
     }
 }

@@ -26,13 +26,12 @@ enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
         case .datasetReplacedRemotely:
             "iCloudのデータが別の記録に置き換えられています。この端末の記録を送らないよう同期を止めています。"
         case .cloudLineageUnavailable:
-            // Says only what this build can actually do. Starting a new iCloud
-            // lineage from this iPhone exists in the runtime
-            // (`startCloudLineageFromDevice`) but is behind a closed policy bit
-            // and has no screen yet, so promising that choice here would repeat
-            // the unfulfillable promise this whole change set is undoing. The
-            // sentence returns with the screen that offers the action.
-            "iCloud側の管理情報を確認できませんでした。この端末のデータは削除していません。別のビルド（開発用／配布用）で開いた、またはiCloudのアプリデータが削除された可能性があります。このまま端末のデータでオフラインで使い続けられます。"
+            // The last sentence promises the two choices the launch host now
+            // actually offers on its own `.cloudLineageUnavailable` screen
+            // (start a lineage from this device, or stay offline). It was
+            // removed while that screen did not exist and returns with it; a
+            // stop reason may never promise an action no screen can perform.
+            "iCloud側の管理情報を確認できませんでした。この端末のデータは削除していません。別のビルド（開発用／配布用）で開いた、またはiCloudのアプリデータが削除された可能性があります。このiPhoneのデータでiCloudを使い始めるか、オフラインのまま使うかを選べます。"
         case .localLedgerMissing:
             "この端末に、いまのiCloudデータを受け取った記録がありません。古いデータを混ぜないよう同期を停止しています。"
         case .cloudEnvironmentMismatch:
@@ -191,7 +190,10 @@ final class StorageTransferRuntime {
         case .admitted:
             break
         case let .refuse(error):
-            throw CloudOfflineHostPolicy.launchRoutableRefusal(error)
+            // Thrown under its own name. The launch host routes it through
+            // `CloudOfflineHostPolicy.launchRoute(for:)`, so every refusal that
+            // carries an in-app remedy reaches the screen that offers it.
+            throw error
         case let .rescope(value):
             try validate()
             try file.save(value, replacing: isLegacy ? nil : found)
@@ -206,8 +208,7 @@ final class StorageTransferRuntime {
             // by falling through a precondition that only ran for a non-nil
             // server generation.
             try requireNoArtifacts(selection: .cloud(binding: binding),
-                error: CloudOfflineHostPolicy.launchRoutableRefusal(
-                    status?.datasetGenerationID == nil ? .cloudLineageUnavailable : .localLedgerMissing))
+                error: status?.datasetGenerationID == nil ? .cloudLineageUnavailable : .localLedgerMissing)
             try validate()
             try file.save(StorageTransferDatasetAdmission(binding: binding,
                 datasetGenerationID: status?.datasetGenerationID, cloudScope: recordedScope),

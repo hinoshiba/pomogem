@@ -31,34 +31,51 @@ struct CloudOfflineRecoveryPresentation: Equatable, Sendable {
     }
 }
 
-/// The launch presentations the split dataset-lineage taxonomy maps onto. The
-/// launch host wiring lands in a separate step; until then every case that
-/// carries NO in-app remedy reaches the generic blocked screen through the
-/// host's existing `default` arm, which keeps the offline route and never
-/// performs a destructive action, and every case that DOES carry one keeps the
-/// legacy error name so its screen stays reachable (`launchRoutableRefusal`).
+/// The launch presentations the split dataset-lineage taxonomy maps onto. Every
+/// case now has a screen of its own: `launchRoute(for:)` below is what the
+/// launch host switches on, so a state added here without an arm there fails
+/// to compile rather than silently falling into the generic blocked screen.
 enum CloudDatasetLineageBlock: Equatable, Sendable {
     case remoteDatasetOffer, lineageUnavailable, environmentMismatch, localLedgerMissing
 
     /// True when the presentation for this state includes 「iCloudから再取得」,
     /// i.e. when a terminal, generation-carrying control exists for the host to
-    /// refresh from. Only these states have an in-app remedy today, and only
-    /// these states therefore have to survive the routing shim below.
+    /// refresh from. These are the states whose refusal MUST reach
+    /// `.datasetRefresh`; losing that is the permanent dead end the split was
+    /// meant to end, and `StorageTransferAdmissionTaxonomyTests` pins it.
     var offersRemoteDataset: Bool {
         switch self {
         case .remoteDatasetOffer, .localLedgerMissing: true
         case .lineageUnavailable, .environmentMismatch: false
         }
     }
+
+    /// The screen this block is presented on. One function, so the host switch
+    /// and the classification cannot disagree.
+    var launchRoute: CloudLaunchRoute {
+        switch self {
+        case .remoteDatasetOffer, .localLedgerMissing: .datasetRefresh
+        case .lineageUnavailable: .lineageUnavailable
+        case .environmentMismatch: .environmentMismatch
+        }
+    }
 }
 
-/// The launch screen the host's `StorageTransferRuntimeError` switch actually
-/// produces. It mirrors `PomoGemApp.swift:1294-1307`, which the launch-state
-/// wiring step will replace with a call to `launchRoute(for:)` so the two can
-/// no longer drift. Until then this is the executable statement of that switch,
-/// and the tests pin every lineage refusal against it.
+/// The launch screen a `StorageTransferRuntimeError` is presented on. The host
+/// no longer switches on the error itself: `PomoGemApp.swift` switches on THIS
+/// value, so the classification lives in one testable place and a new stop
+/// reason cannot quietly inherit the generic blocked screen.
 enum CloudLaunchRoute: Equatable, Sendable {
-    case relaunch, remoteRecovery, datasetRefresh, blocked
+    case relaunch, remoteRecovery, datasetRefresh
+    /// 「iCloudの管理情報が見つかりません」. The server has no transfer ledger at
+    /// all, so there is nothing to refresh FROM. The screen offers the two
+    /// honest choices instead: start a lineage from this device, or stay
+    /// offline. Both are consented; neither happens by arriving here.
+    case lineageUnavailable
+    /// Explanation only. This device's receipt was earned in another CloudKit
+    /// environment, so no dataset operation in this build is meaningful.
+    case environmentMismatch
+    case blocked
 }
 
 enum CloudOfflineSessionError: Error, LocalizedError {
@@ -109,40 +126,27 @@ enum CloudOfflineHostPolicy {
         }
     }
 
-    /// Which screen `PomoGemApp.swift:1294-1307` builds for a runtime error
-    /// TODAY. Only `.datasetRefreshRequired` reaches `presentDatasetRefresh`
-    /// (`PomoGemApp.swift:1301-1302`), which is the sole writer of
+    /// Which screen the launch host builds for a runtime error.
+    ///
+    /// `PomoGemApp.swift` calls exactly this function and switches on the
+    /// result, so this IS the host's routing table rather than a copy of it.
+    /// `.datasetRefresh` reaches `presentDatasetRefresh`, the sole writer of
     /// `storageTransferRefreshGenerationID` and therefore the only producer of
     /// `launchState = .datasetRefresh` — the 「iCloudから再取得」 screen and the
-    /// only gate that lets `refreshCloudDataset` run at all. Everything else
-    /// falls into `default` and becomes the generic 「保存領域を確認できません」
-    /// screen, whose only actions are retry, offline use and support.
+    /// only gate that lets `refreshCloudDataset` run at all. `.blocked` is the
+    /// generic 「保存領域を確認できません」 screen, whose only actions are
+    /// retry, offline use and support.
     static func launchRoute(for error: StorageTransferRuntimeError) -> CloudLaunchRoute {
+        if let block = datasetLineageBlock(for: error) { return block.launchRoute }
         switch error {
-        case .relaunchRequired: .relaunch
-        case .remoteRecoveryRequired: .remoteRecovery
-        case .datasetRefreshRequired: .datasetRefresh
-        default: .blocked
+        case .relaunchRequired: return .relaunch
+        case .remoteRecoveryRequired: return .remoteRecovery
+        case .datasetRefreshRequired: return .datasetRefresh
+        // `leftoverLocalStores`, `cloudCopyStillPending` and
+        // `recoveryNeedsReview` are not lineage decisions: they carry no
+        // in-app remedy and keep the generic screen and its offline route.
+        default: return .blocked
         }
-    }
-
-    /// Name a lineage refusal so the host of THIS build can still present it.
-    ///
-    /// Splitting `datasetRefreshRequired` is only half a change: the host's
-    /// switch has not been taught the new names yet, so a refusal that carries
-    /// the 「iCloudから再取得」 remedy would land in `default` and lose it — a
-    /// permanent dead end for the one lineage state that previously had an
-    /// in-app way out. Until the launch-state wiring step lands, those refusals
-    /// keep the legacy name; the states with no remedy keep their own name and
-    /// their own honest copy, because the screen they reach is unchanged.
-    ///
-    /// Remove this shim together with the host switch. `datasetLineageBlock`
-    /// already classifies what the host will present after that.
-    static func launchRoutableRefusal(_ error: StorageTransferRuntimeError) -> StorageTransferRuntimeError {
-        guard let block = datasetLineageBlock(for: error), block.offersRemoteDataset else {
-            return error
-        }
-        return .datasetRefreshRequired
     }
 
     /// Explicit online retry changes only the preferred launch route. It does

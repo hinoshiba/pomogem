@@ -85,6 +85,52 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
         }
     }
 
+    /// The launch host switches on `launchRoute(for:)` itself, so this table
+    /// is the host's routing rather than a description of it. Every case of
+    /// `StorageTransferRuntimeError` is listed: a new stop reason must be
+    /// given a screen deliberately, not inherit the generic blocked one by
+    /// falling through a `default`.
+    func testLaunchRouteCoversEveryRuntimeErrorCase() {
+        let expected: [(StorageTransferRuntimeError, CloudLaunchRoute)] = [
+            (.relaunchRequired, .relaunch),
+            (.remoteRecoveryRequired, .remoteRecovery),
+            // Still thrown by the binding guard and the offline receipt path.
+            (.datasetRefreshRequired, .datasetRefresh),
+            // The two refusals that carry 「iCloudから再取得」: a terminal,
+            // generation-carrying control exists for the host to refresh from.
+            (.datasetReplacedRemotely, .datasetRefresh),
+            (.localLedgerMissing, .datasetRefresh),
+            // No lineage to refresh FROM. Its own screen, with the two
+            // consented choices, instead of a door that cannot open.
+            (.cloudLineageUnavailable, .lineageUnavailable),
+            // Another CloudKit environment's receipt: explanation only.
+            (.cloudEnvironmentMismatch, .environmentMismatch),
+            // Not lineage decisions; the generic screen keeps its offline route.
+            (.leftoverLocalStores, .blocked),
+            (.cloudCopyStillPending, .blocked),
+            (.recoveryNeedsReview, .blocked)
+        ]
+        for (error, route) in expected {
+            XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: error), route,
+                           "\(error) must reach \(route)")
+        }
+        // A total table: every case above, and nothing missing. Adding a case
+        // to the error without adding it here fails this count.
+        XCTAssertEqual(Set(expected.map(\.0.self).map { "\($0)" }).count, 10)
+    }
+
+    /// Only the no-lineage state may name the action it offers, because only
+    /// it has a screen carrying that action.
+    func testTheLineageScreenIsTheOnlyRefusalThatNamesItsOwnAction() {
+        XCTAssertTrue(StorageTransferRuntimeError.cloudLineageUnavailable.localizedDescription
+            .contains("このiPhoneのデータでiCloudを使い始める"))
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .cloudLineageUnavailable), .lineageUnavailable)
+        for error in [StorageTransferRuntimeError.cloudEnvironmentMismatch, .localLedgerMissing] {
+            XCTAssertFalse(error.localizedDescription.contains("使い始める"),
+                           "\(error) reaches a screen with no such control")
+        }
+    }
+
     func testRecoveryReviewIsSingleUseAndCannotRetireAChangedSessionOrAccount() {
         let binding = binding()
         let sessionID = UUID()

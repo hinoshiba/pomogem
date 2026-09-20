@@ -257,9 +257,9 @@ final class StorageTransferCloudScopeTests: XCTestCase {
                            "and never rewrites the other environment's receipt")
             XCTAssertNil(try f.store.load())
         }
-        XCTAssertEqual(CloudOfflineHostPolicy.launchRoutableRefusal(.cloudEnvironmentMismatch),
-                       .cloudEnvironmentMismatch,
-                       "There is no refresh to offer, so this state keeps its own copy")
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .cloudEnvironmentMismatch),
+                       .environmentMismatch,
+                       "There is no refresh to offer, so this state gets its own explanation screen")
     }
 
     /// The other direction of the same rule. A build that IS correctly enrolled
