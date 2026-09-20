@@ -301,6 +301,33 @@ final class StorageTransferSettingsUITests: XCTestCase {
         assertDatasetRequested("refreshFromCloud")
     }
 
+    /// W6. An account with records in iCloud but NO transfer control record —
+    /// the ordinary state of an account that was never transferred. Both doors
+    /// stay usable; the comparison names the absence instead of printing a
+    /// 「最終」 row that implies a lineage, and the device → iCloud confirmation
+    /// says the operation STARTS a lineage rather than replacing one.
+    func testSettingsDoorsStayUsableForAnAccountWithNoTransferLedger() {
+        launch("cloudDatasetDoorsNoLineage")
+        openChoices()
+        openConfirmation("storage-switch.overwrite-cloud")
+        let comparison = app.staticTexts["storage-switch.overwrite-cloud-comparison"]
+        XCTAssertTrue(reveal(comparison))
+        XCTAssertTrue(comparison.label.contains("このiPhone: テーマ"))
+        XCTAssertTrue(comparison.label.contains("iCloud側の管理情報なし（記録件数: "))
+        XCTAssertFalse(comparison.label.contains("iCloud: テーマ"),
+            "A dataset with no ledger must not be rendered as one that has it")
+        let starts = app.staticTexts["storage-switch.overwrite-cloud-starts-lineage"]
+        XCTAssertTrue(reveal(starts))
+        XCTAssertTrue(starts.label.contains("新しく使い始める"))
+        assertUncheckedDatasetConfirmation("overwrite-cloud")
+        acknowledgeDataset("overwrite-cloud")
+        attach("Settings overwrite — an account with no transfer ledger")
+        app.buttons["storage-switch.overwrite-cloud-confirm"].doubleTap()
+        // One request, recorded through the SAME durable mechanism; the launch
+        // host dispatches it to `startCloudLineageFromDevice`.
+        assertDatasetRequested("overwriteCloudFromDevice")
+    }
+
     /// PLAN §3 S9. The two opposite directions destroy opposite datasets, so
     /// acknowledging one must never arm the other. Each confirmation owns its
     /// own state and every presentation starts unchecked.

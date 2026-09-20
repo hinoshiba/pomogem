@@ -261,6 +261,16 @@ enum StorageTransferOverwriteCopy {
     /// 「テーマ12・記録480・成果36（最終 2026年9月20日）」. Only the three models a
     /// user recognizes are named; the remaining mirrored models are counted by
     /// the runtime but would not help someone decide.
+    /// W6. The iCloud row when the server holds records but no transfer
+    /// control record. The count still comes from the read-only snapshot — it
+    /// is the honest answer to 「what is over there」 — but the row does not
+    /// imply a lineage that does not exist.
+    static func cloudSideWithoutLineage(preview: StorageTransferCloudPreview?) -> String {
+        guard let preview else { return side("iCloud", preview: nil) }
+        let total = preview.recordCounts.values.reduce(0, +)
+        return "iCloud側の管理情報なし（記録件数: \(total)）"
+    }
+
     static func side(_ label: String, preview: StorageTransferCloudPreview?) -> String {
         guard let preview else { return "\(label): 確認できませんでした" }
         let counts = preview.recordCounts
@@ -325,6 +335,15 @@ enum StorageTransferLineageCopy {
     /// 「もう一度試す」 is honest here: the generic retry is on this screen.
     static let localLedgerMissingExplanation =
         "iCloud側の管理情報を読み取れなかったため、再取得の選択肢を表示できません。通信を確認して「もう一度試す」を押してください。この画面では、どちらの記録も削除していません。"
+
+    // MARK: Settings, when the account has no transfer ledger (W6)
+
+    /// Shown in the device → iCloud 「最後の確認」 when the pre-flight found
+    /// records on the server but NO transfer control record. The sheet's first
+    /// paragraph says the iCloud dataset is deleted and replaced; with no
+    /// ledger that is not the whole truth, because this direction STARTS one.
+    static let settingsStartsLineage =
+        "iCloud側には、このアプリが使っている管理情報がありません。そのため、この操作は「置き換え」ではなく、このiPhoneのデータでiCloudを新しく使い始める操作になります。iCloudに残っている記録は、このiPhoneのデータで置き換えられます。"
 
     /// P1-4 (ROOT-CAUSE §6.1). The catch arm of `presentDatasetRefresh` used to
     /// put the CAUGHT error's own text on the generic blocked screen, which

@@ -550,6 +550,10 @@ private struct PomoGemPersistenceLaunchHost: View {
         /// refuses the moment any committed generation exists, so the absence
         /// is re-proved by the runtime rather than trusted from this value.
         case startLineage
+        /// The same shape in the opposite direction (W6): iCloud → device for
+        /// an account with no transfer ledger. It replaces nothing on the
+        /// server and carries no release bit, exactly like `.refresh`.
+        case refreshWithoutLineage
     }
 
     var body: some View {
@@ -957,16 +961,25 @@ private struct PomoGemPersistenceLaunchHost: View {
             // cannot be honoured is dropped rather than retried.
             if let request = try transferRuntime.consumeDatasetRequest() {
                 if remoteRecoveryAction == nil,
-                   PersistenceDeploymentState.load() == .selected(.cloud(binding: request.binding)) {
-                    storageTransferRecoveryBinding = request.binding
-                    switch request.direction {
-                    case .overwriteCloudFromDevice:
-                        remoteRecoveryAction = .overwrite(request.datasetGenerationID)
-                    case .refreshFromCloud:
+                   case let .selected(.cloud(requestBinding)) = PersistenceDeploymentState.load(),
+                   // A nil generation is the durable record that Settings
+                   // observed an EMPTY ledger, which most healthy accounts
+                   // have (W6). Each direction then dispatches to the entry
+                   // point that REQUIRES that absence and re-proves it.
+                   let dispatch = request.dispatch(for: requestBinding) {
+                    storageTransferRecoveryBinding = requestBinding
+                    switch dispatch {
+                    case let .overwriteCloudDataset(generation):
+                        remoteRecoveryAction = .overwrite(generation)
+                    case .startCloudLineageFromDevice:
+                        remoteRecoveryAction = .startLineage
+                    case let .refreshCloudDataset(generation):
                         // The EXISTING refresh, with no second implementation:
                         // the same action the recovery screen's
                         // 「iCloudから再取得」 dispatches.
-                        remoteRecoveryAction = .refresh(request.datasetGenerationID)
+                        remoteRecoveryAction = .refresh(generation)
+                    case .refreshCloudDatasetWithoutLineage:
+                        remoteRecoveryAction = .refreshWithoutLineage
                     }
                 }
             }
@@ -1005,6 +1018,15 @@ private struct PomoGemPersistenceLaunchHost: View {
                         try requireActiveLaunchAttempt(attempt, checkpoint: "during-dataset-overwrite")
                     })
                     completionMessage = StorageTransferOverwriteCopy.requestAccepted
+                case .refreshWithoutLineage:
+                    guard let binding = storageTransferRecoveryBinding else { throw StorageTransferError.staleTransaction }
+                    // Same journal as the generation-fenced refresh, with the
+                    // CAS replaced by the requirement that there is nothing to
+                    // CAS against. It refuses the moment a lineage appears.
+                    try await transferRuntime.refreshCloudDatasetWithoutLineage(binding: binding,
+                        validateAccess: {
+                        try requireActiveLaunchAttempt(attempt, checkpoint: "during-dataset-refresh-no-lineage")
+                    })
                 case .startLineage:
                     guard let binding = storageTransferRecoveryBinding else { throw StorageTransferError.staleTransaction }
                     // Same policy bit and same journal shape as the overwrite.
@@ -2177,12 +2199,19 @@ private struct PomoGemPersistenceLaunchHost: View {
         guard verified == binding else { throw StorageTransferRecoveryError.identityMismatch }
         let status = try await runtime.remoteRecoveryStatus(binding: binding, validateAccess: validate)
         try validate()
-        guard let status, status.isTerminal, let generation = status.datasetGenerationID else {
-            // Either another device is mid-replacement (the launch fence owns
-            // that case) or this account has no committed generation to CAS
-            // against. Either way nothing may be recorded.
-            throw StorageTransferDatasetRequestError.noCommittedGeneration
+        guard status?.blocksWriters != true else {
+            // Another device is mid-replacement. The launch fence owns that
+            // state and presents the recovery screen; nothing is recorded here.
+            throw StorageTransferDatasetRequestError.transferInFlight
         }
+        // W6. nil is a first-class answer, not a refusal: most healthy
+        // single-generation accounts have no transfer control record at all,
+        // and both directions have an entry point that REQUIRES its absence
+        // (`startCloudLineageFromDevice` / `refreshCloudDatasetWithoutLineage`).
+        // Recording nil records exactly what was observed; the executing
+        // process re-reads the control record and refuses the moment a
+        // committed generation exists.
+        let generation = status?.datasetGenerationID
         // PLAN §3 S14, host side: never record an intent to delete contents
         // the app could not enumerate, whatever the caller believes it showed.
         // The evidence the user actually READ came from
@@ -2232,8 +2261,17 @@ private struct PomoGemPersistenceLaunchHost: View {
         }
         try validate()
         let deviceID = FocusDeviceIdentity.current()
-        let cloud = try await StorageTransferRuntime.live().previewCloudDataset(
+        let runtime = try StorageTransferRuntime.live()
+        let cloud = try await runtime.previewCloudDataset(
             binding: binding, localDeviceID: deviceID, validateAccess: validate)
+        try validate()
+        // W6. One extra single-record read, beside the snapshot that is
+        // already being taken: whether the account has a transfer ledger
+        // changes what the device → iCloud direction DOES (replace a lineage,
+        // or start the first one), so the screen may not omit it. Read-only,
+        // and it gates nothing — a missing ledger closes no door.
+        let lineage = try await runtime.remoteRecoveryStatus(binding: binding,
+            validateAccess: validate)?.datasetGenerationID != nil
         try validate()
         // Best effort, exactly as on the launch screen: an unreadable device
         // side degrades the comparison, it never withholds what the SERVER
@@ -2244,7 +2282,8 @@ private struct PomoGemPersistenceLaunchHost: View {
                 selection: source, localDeviceID: deviceID)
             : nil
         try validate()
-        return StorageTransferDatasetPreviewSummary(cloud: cloud, device: device)
+        return StorageTransferDatasetPreviewSummary(cloud: cloud, device: device,
+                                                    hasCloudLineage: lineage)
     }
 
     private func datasetRequestRelaunchMessage(

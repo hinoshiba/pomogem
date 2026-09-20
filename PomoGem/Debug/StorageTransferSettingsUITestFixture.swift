@@ -17,6 +17,12 @@ enum StorageTransferSettingsUITestFixture {
         /// 「we could not look」 and 「there is nothing there」 must not be
         /// confusable before a deletion.
         case cloudDatasetDoorsUnreadable
+        /// W6. The same published doors for an account that has records in
+        /// iCloud but NO transfer control record — the ordinary state of an
+        /// account that was never transferred. The comparison names the
+        /// absence and the device → iCloud confirmation says the operation
+        /// starts a lineage rather than replacing one.
+        case cloudDatasetDoorsNoLineage
         /// The launch-host screens a fenced device actually lands on. Each one
         /// renders the shipping `PersistenceLaunchStatusView` with a recorder in
         /// place of the runtime, so no journal, container or CloudKit call
@@ -69,7 +75,8 @@ enum StorageTransferSettingsUITestFixture {
 
         var mode: PersistenceLaunchMode {
             self == .cloud || self == .cloudDatasetDoors
-                || self == .cloudDatasetDoorsUnreadable || self == .lateArrival || isOffline
+                || self == .cloudDatasetDoorsUnreadable || self == .cloudDatasetDoorsNoLineage
+                || self == .lateArrival || isOffline
                 || self == .cloudNetworkWaiting ? .cloudKit : .localOnly
         }
 
@@ -79,6 +86,7 @@ enum StorageTransferSettingsUITestFixture {
         /// prohibition it is meant to exercise around.
         var releasePolicy: StorageTransferReleasePolicy {
             self == .cloudDatasetDoors || self == .cloudDatasetDoorsUnreadable
+                || self == .cloudDatasetDoorsNoLineage
                 ? .isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)
                 : .standard
         }
@@ -196,7 +204,8 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                 guard scenario != .cloudDatasetDoorsUnreadable else {
                     throw CloudStorageTransferCloudError.timedOut
                 }
-                return Self.previewSummary
+                return scenario == .cloudDatasetDoorsNoLineage
+                    ? Self.previewSummaryWithoutLineage : Self.previewSummary
             })
         }
     }
@@ -208,6 +217,14 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                        year: 2026, month: 9, day: 18, otherDeviceIDs: 2),
         device: preview(subjects: 12, sessions: 480, stones: 36,
                         year: 2026, month: 9, day: 20, otherDeviceIDs: 0))
+
+    /// W6. Records on the server, no transfer control record.
+    private static let previewSummaryWithoutLineage = StorageTransferDatasetPreviewSummary(
+        cloud: preview(subjects: 9, sessions: 312, stones: 28,
+                       year: 2026, month: 9, day: 18, otherDeviceIDs: 0),
+        device: preview(subjects: 12, sessions: 480, stones: 36,
+                        year: 2026, month: 9, day: 20, otherDeviceIDs: 0),
+        hasCloudLineage: false)
 
     private static func preview(subjects: Int, sessions: Int, stones: Int,
                                 year: Int, month: Int, day: Int,

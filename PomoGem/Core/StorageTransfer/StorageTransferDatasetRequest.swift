@@ -39,19 +39,30 @@ struct StorageTransferDatasetPreviewSummary: Equatable, Sendable {
     /// read this iPhone is not a reason to refuse to describe what would be
     /// destroyed on the server.
     let device: StorageTransferCloudPreview?
+    /// W6. False when the server has records but NO transfer control record,
+    /// which is the ordinary state of an account that was never transferred.
+    /// The comparison then says so instead of printing a 「最終」 row that
+    /// implies a lineage the server does not have, and the confirmation adds
+    /// the paragraph that describes what each direction does without one.
+    var hasCloudLineage = true
 }
 
 enum StorageTransferDatasetRequestError: Error, LocalizedError, Equatable {
-    /// The account has no terminal control record, so there is no committed
-    /// generation to compare against. Without one the CAS that protects a
-    /// dataset from being replaced out from under a newer generation cannot be
-    /// formed, and nothing may be recorded.
-    case noCommittedGeneration
+    /// A transfer is in flight on the server (the control record exists and is
+    /// not terminal), so this device may not record a direction of its own:
+    /// the launch fence owns that state and will present the recovery screen.
+    ///
+    /// It no longer covers "the account has no control record at all". W6: most
+    /// healthy single-generation accounts have none, and refusing both doors
+    /// for that reason made the Settings feature unusable for exactly the
+    /// accounts that are FINE. A nil lineage is now carried as nil and
+    /// dispatched to the entry point that requires its absence.
+    case transferInFlight
 
     var errorDescription: String? {
         switch self {
-        case .noCommittedGeneration:
-            "iCloudのデータの世代を確認できないため、この操作はまだ実行できません。通信を確認してからもう一度お試しください。どちらの記録も削除していません。"
+        case .transferInFlight:
+            "iCloudで未完了のデータ切り替えが進んでいるため、この操作はまだ実行できません。完了してから、もう一度お試しください。どちらの記録も削除していません。"
         }
     }
 }
@@ -71,10 +82,14 @@ struct StorageTransferDatasetRequest: Codable, Equatable, Sendable {
     /// The cloud binding Settings was mounted against. A request is ignored
     /// unless the next launch selects exactly this binding.
     let binding: ActiveAccountLocalBinding
-    /// The committed generation the user was shown. A dataset that moved on
-    /// between the confirmation and the relaunch fails the CAS rather than
-    /// replacing something nobody saw.
-    let datasetGenerationID: UUID
+    /// The committed generation the user was shown, or nil when the account
+    /// had no transfer ledger at all and the screen said so. A dataset that
+    /// moved on between the confirmation and the relaunch fails the CAS rather
+    /// than replacing something nobody saw; a nil is likewise re-proved by the
+    /// entry point it dispatches to (`startCloudLineageFromDevice` /
+    /// `refreshCloudDatasetWithoutLineage`), both of which refuse the moment
+    /// any committed generation exists.
+    let datasetGenerationID: UUID?
     let requestedAt: Date
     /// Diagnostic only. The executing process is deliberately a different one.
     let requestingProcessID: UUID
@@ -82,7 +97,7 @@ struct StorageTransferDatasetRequest: Codable, Equatable, Sendable {
     init(formatVersion: Int = Self.currentFormatVersion,
          direction: StorageTransferDatasetRequestDirection,
          binding: ActiveAccountLocalBinding,
-         datasetGenerationID: UUID,
+         datasetGenerationID: UUID?,
          requestedAt: Date,
          requestingProcessID: UUID) {
         self.formatVersion = formatVersion
@@ -104,6 +119,41 @@ struct StorageTransferDatasetRequest: Codable, Equatable, Sendable {
     /// request written for another binding is dropped, never translated.
     func authorizes(binding candidate: ActiveAccountLocalBinding) -> Bool {
         binding == candidate
+    }
+}
+
+/// Which runtime entry point a consumed request runs. Pure and exhaustive, so
+/// the nil-lineage dispatch — the whole point of W6 — is provable without a
+/// container, an account or a CloudKit call.
+enum StorageTransferDatasetDispatch: Equatable, Sendable {
+    case overwriteCloudDataset(expectedGenerationID: UUID)
+    /// Device → iCloud with no ledger to fence against. Same policy bit.
+    case startCloudLineageFromDevice
+    case refreshCloudDataset(expectedGenerationID: UUID)
+    /// iCloud → device with no ledger to fence against. No policy bit, for
+    /// the same reason the generation-fenced refresh has none.
+    case refreshCloudDatasetWithoutLineage
+}
+
+extension StorageTransferDatasetRequest {
+    /// nil when this request does not authorize `binding`. A request written
+    /// for another binding is dropped, never translated.
+    ///
+    /// The generation is carried, not trusted: each entry point re-reads the
+    /// control record and refuses — a `.some` that no longer matches fails the
+    /// CAS, and a `.none` that has since become a lineage is refused outright.
+    func dispatch(for binding: ActiveAccountLocalBinding) -> StorageTransferDatasetDispatch? {
+        guard authorizes(binding: binding) else { return nil }
+        switch (direction, datasetGenerationID) {
+        case let (.overwriteCloudFromDevice, .some(generation)):
+            return .overwriteCloudDataset(expectedGenerationID: generation)
+        case (.overwriteCloudFromDevice, .none):
+            return .startCloudLineageFromDevice
+        case let (.refreshFromCloud, .some(generation)):
+            return .refreshCloudDataset(expectedGenerationID: generation)
+        case (.refreshFromCloud, .none):
+            return .refreshCloudDatasetWithoutLineage
+        }
     }
 }
 

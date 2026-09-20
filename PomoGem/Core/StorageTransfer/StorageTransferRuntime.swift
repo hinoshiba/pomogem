@@ -251,9 +251,84 @@ final class StorageTransferRuntime {
         let status = try await readControl()
         try validate()
         try validateControlAccount(status, binding: binding)
-        guard let status, !status.blocksWriters, status.datasetGenerationID == expectedGenerationID,
-              let destinationBinding = ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
-                  accountFingerprint: binding.accountFingerprint) else { throw StorageTransferError.staleTransaction }
+        guard let status, !status.blocksWriters,
+              status.datasetGenerationID == expectedGenerationID else {
+            throw StorageTransferError.staleTransaction
+        }
+        try await openCloudRefreshTransaction(binding: binding, baseline: status,
+            readControl: readControl, validate: validate)
+    }
+
+    /// W6. The iCloud → device direction for an account whose server has NO
+    /// transfer ledger at all — which is most healthy single-generation
+    /// accounts: they were never transferred, so nothing ever wrote a control
+    /// record, `remoteRecoveryStatus` returns nil and `refreshCloudDataset`'s
+    /// non-optional `expectedGenerationID` can never be formed.
+    ///
+    /// This is `refreshCloudDataset` with the CAS replaced by the ASSERTION
+    /// that there is nothing to CAS against, exactly as
+    /// `startCloudLineageFromDevice` is to `overwriteCloudDataset`. It is the
+    /// SAME journal (`.enableCloudKeepingCloud`), so it takes the same route:
+    /// a fresh destination namespace with no store artifacts, mirrored down
+    /// from CloudKit through the ordinary enrol path, the old namespace's
+    /// stores retired by the journal with the recovery copy the existing
+    /// refresh keeps. It NEVER writes to the server, never stages a payload
+    /// and never merges: `mayCreateRemotePayload: false` and the
+    /// authority fence below refuse the moment any control record appears.
+    ///
+    /// It carries no release bit for the same reason the generation-fenced
+    /// direction carries none (PLAN Step 12): it deletes nothing on the server.
+    func refreshCloudDatasetWithoutLineage(binding: ActiveAccountLocalBinding,
+                                           validateAccess: @escaping @MainActor () throws -> Void) async throws {
+        try await refreshCloudDatasetWithoutLineage(binding: binding,
+            verifyAccount: {
+                try await AppleAccountBoundaryResolver().resolve(expectedBinding: binding).binding
+            }, readControl: {
+                try await self.remoteRecoveryStatus(binding: binding, validateAccess: validateAccess)
+            }, validateAccess: validateAccess)
+    }
+
+    func refreshCloudDatasetWithoutLineage(binding: ActiveAccountLocalBinding,
+                                           verifyAccount: @escaping @MainActor () async throws -> ActiveAccountLocalBinding,
+                                           readControl: @escaping @MainActor () async throws -> StorageTransferRecoveryControl?,
+                                           validateAccess: @escaping @MainActor () throws -> Void) async throws {
+        let validate: @MainActor () throws -> Void = {
+            try Task.checkCancellation()
+            try validateAccess()
+            try self.requireNoPendingRemoteCancellation()
+            guard try self.store.load() == nil, !StorageTransferProcessState.cloudMirrorWasOpened else {
+                throw StorageTransferRuntimeError.relaunchRequired
+            }
+        }
+        try validate()
+        let verifiedBinding = try await verifyAccount()
+        try validate()
+        guard verifiedBinding == binding else { throw StorageTransferRecoveryError.identityMismatch }
+        let status = try await readControl()
+        try validate()
+        try validateControlAccount(status, binding: binding)
+        // The ONLY difference from `refreshCloudDataset`: the absence of a
+        // lineage is required instead of an exact match with a displayed one.
+        // The moment ANY committed generation exists the request is refused so
+        // it has to go through the ordinary generation-fenced CAS instead.
+        guard status?.blocksWriters != true, status?.datasetGenerationID == nil else {
+            throw StorageTransferError.staleTransaction
+        }
+        try await openCloudRefreshTransaction(binding: binding, baseline: status,
+            readControl: readControl, validate: validate)
+    }
+
+    /// The shared tail of both iCloud → device entry points. A nil `baseline`
+    /// is the durable record that this installation observed an EMPTY ledger;
+    /// `StorageTransferCloudAuthorityFence` then requires the control record to
+    /// STAY absent for the whole transaction, so a lineage published by another
+    /// device mid-flight stops this one instead of being mirrored over.
+    private func openCloudRefreshTransaction(binding: ActiveAccountLocalBinding,
+                                             baseline: StorageTransferRecoveryControl?,
+                                             readControl: @escaping @MainActor () async throws -> StorageTransferRecoveryControl?,
+                                             validate: @escaping @MainActor () throws -> Void) async throws {
+        guard let destinationBinding = ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+            accountFingerprint: binding.accountFingerprint) else { throw StorageTransferError.staleTransaction }
         let journal = try StorageTransferJournal(choice: .enableCloudKeepingCloud,
             source: .cloud(binding: binding), destination: .cloud(binding: destinationBinding),
             cloudBinding: destinationBinding)
@@ -263,12 +338,12 @@ final class StorageTransferRuntime {
         var checkpoint = StorageTransferRuntimeCheckpoint(transactionID: journal.transactionID,
             requestingProcessID: Self.processID)
         checkpoint.didObserveBaselineControl = true
-        checkpoint.baselineControl = status
+        checkpoint.baselineControl = baseline
         try file.save(checkpoint, replacing: nil)
         let after = try await readControl()
         try validate()
         try validateControlAccount(after, binding: binding)
-        guard after == status else { throw StorageTransferError.staleTransaction }
+        guard after == baseline else { throw StorageTransferError.staleTransaction }
         try validate()
         try store.begin(journal)
     }

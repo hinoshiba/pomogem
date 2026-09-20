@@ -338,6 +338,13 @@ private struct StorageTransferDatasetConfirmationView: View {
                     switch direction {
                     case .overwriteCloudFromDevice:
                         paragraph(StorageTransferOverwriteCopy.sheetWarning, suffix: "warning")
+                        if preview?.hasCloudLineage == false {
+                            // W6. There is no lineage to replace, so the
+                            // sentence above is not the whole truth: this
+                            // direction STARTS one. Said before the toggle.
+                            paragraph(StorageTransferLineageCopy.settingsStartsLineage,
+                                      suffix: "starts-lineage")
+                        }
                         // The same two facts the launch screen requires before
                         // it arms its door: what is on each side, and whether
                         // another device has written here.
@@ -353,6 +360,11 @@ private struct StorageTransferDatasetConfirmationView: View {
                         // device side is what is discarded, and it has no
                         // backup — saying otherwise would be a false promise.
                         paragraph(StorageTransferRefreshCopy.dataLossWarning, suffix: "warning")
+                        // No lineage-specific paragraph: this direction asks
+                        // for no server read at all (PLAN Step 12), so it has
+                        // no evidence about the ledger to state, and what it
+                        // DOES for the user is identical either way — the
+                        // device side is discarded and re-fetched from iCloud.
                         paragraph(StorageTransferRefreshCopy.relaunch, suffix: "relaunch")
                     }
                     Toggle(acknowledgement, isOn: $understandsDeletion)
@@ -371,8 +383,11 @@ private struct StorageTransferDatasetConfirmationView: View {
     /// 「このiPhone: …／iCloud: …」, rendered by the same function as the launch
     /// screen so the two surfaces cannot disagree about the same dataset.
     private var comparison: String {
-        StorageTransferOverwriteCopy.side("このiPhone", preview: preview?.device)
-            + "\n" + StorageTransferOverwriteCopy.side("iCloud", preview: preview?.cloud)
+        let cloud = preview?.hasCloudLineage == false
+            ? StorageTransferOverwriteCopy.cloudSideWithoutLineage(preview: preview?.cloud)
+            : StorageTransferOverwriteCopy.side("iCloud", preview: preview?.cloud)
+        return StorageTransferOverwriteCopy.side("このiPhone", preview: preview?.device)
+            + "\n" + cloud
     }
 
     /// A missing preview is disclosed as a missing preview. Rendering 「見つかり
