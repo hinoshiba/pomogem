@@ -135,6 +135,11 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
     private var storageAction: StorageAction = .none
     private var transcript: [String] = []
     private var attachmentIndex = 0
+    /// Set only while this suite is deliberately driving a SpringBoard-owned
+    /// prompt it is allowed to answer (Apple's Family Controls authorization
+    /// prompt). While it is set, the system-modal probe stays silent so the
+    /// authorization step is not skipped by its own prompt.
+    private var isDrivingSystemPrompt = false
 
     // MARK: - opt-in
 
@@ -581,6 +586,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             pause(0.25)
         }
         capture("save-duplicate-settled")
+        try guardAgainstSystemAlert("save-duplicate-window")
         note("SAVE: toast appearances observed during the duplicate window = \(toastEdges).")
         attach(string: "\(toastEdges)", name: "save-duplicate-toast-count")
 
@@ -593,6 +599,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
 
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: updating)
         _ = XCTWaiter.wait(for: [gone], timeout: 180)
+        try guardAgainstSystemAlert("save-updating-settled")
         let final = recordSettingsState(app, label: "save-after")
         let monitoring = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "自動記録中")).firstMatch
         try require(monitoring.waitForExistence(timeout: 30),
@@ -1004,8 +1011,12 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         let onboarding = app.buttons["onboarding.next"]
         let blocked = app.staticTexts["保存領域を確認できません"]
         var reached = "unknown"
+        var systemModal: SystemModal?
         let deadline = Date().addingTimeInterval(180)
         repeat {
+            // A SpringBoard modal is checked FIRST: it covers the app's own
+            // screen, so anything classified underneath it would be untappable.
+            if let modal = currentSystemModal() { systemModal = modal; reached = "system-alert"; break }
             if menu.exists { reached = "home"; break }
             if blocked.exists { reached = "storage-blocked"; break }
             if cloudChoice.exists || localChoice.exists { reached = "storage-choice"; break }
@@ -1018,8 +1029,13 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         }
 
         note("ENTRY SCREEN: \(reached)")
+        note("ENTRY system alert: \(systemModal?.summary ?? describeSystemModal())")
         capture("entry-\(reached)")
         dumpHierarchy(app, name: "entry-\(reached)")
+        if let systemModal {
+            recordSystemModal(systemModal, context: "entry")
+            throw XCTSkip("system alert: \(systemModal.title) — needs human")
+        }
         guard reached == "home" else {
             note("STOPPED: the app did not open on Home. This suite never chooses a store or completes onboarding.")
             throw XCTSkip("The installation is not in the audited state (\(reached)); a human must decide how to proceed.")
@@ -1302,11 +1318,13 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
     }
 
     private func waitForToastToClear(_ app: XCUIApplication) throws {
+        try guardAgainstSystemAlert("wait-toast")
         let toast = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "スクリーンタイムの設定を保存しました")
         ).firstMatch
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: toast)
         let cleared = XCTWaiter.wait(for: [gone], timeout: 30) == .completed
+        try guardAgainstSystemAlert("wait-toast-settled")
         note("SAVE: first-save toast cleared=\(cleared)")
     }
 
@@ -1459,6 +1477,11 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             return
         }
         note("AUTHORIZATION: tapping screen-time.authorize now.")
+        // Apple's Family Controls prompt is itself a SpringBoard modal, and it
+        // is the ONE system prompt this suite is authorized to answer, so the
+        // system-modal probe is muted for the duration of this helper.
+        isDrivingSystemPrompt = true
+        defer { isDrivingSystemPrompt = false }
         authorize.tap()
 
         let springboard = XCUIApplication(bundleIdentifier: Self.springboardID)
@@ -1632,6 +1655,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             while Date() < deadline {
                 pause(min(30, max(1, deadline.timeIntervalSinceNow)))
                 ticks += 1
+                try guardAgainstSystemAlert("\(label)-usage-tick\(ticks)")
                 if target.state != .runningForeground {
                     note("\(label.uppercased()): \(bundleID) left the foreground; re-activating.")
                     target.activate()
@@ -1663,12 +1687,13 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         _ app: XCUIApplication,
         baseline: HomeTotals,
         minutes: Double
-    ) -> (HomeTotals, TimeInterval)? {
+    ) throws -> (HomeTotals, TimeInterval)? {
         let start = Date()
         let deadline = start.addingTimeInterval(minutes * 60)
         var cycle = 0
         repeat {
             cycle += 1
+            try guardAgainstSystemAlert("poll-home-\(cycle)")
             if !app.buttons["メニュー"].exists { try? returnToHome(app, from: "unknown") }
             let totals = readHomeTotals(app, label: "poll-\(cycle)")
             if totals.pebbles != baseline.pebbles {
@@ -1689,7 +1714,8 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         baseline: HomeTotals,
         minutes: Double
     ) throws -> (HomeTotals, TimeInterval) {
-        if let result = scanHomeTotals(app, baseline: baseline, minutes: minutes) { return result }
+        try guardAgainstSystemAlert("poll-home-start")
+        if let result = try scanHomeTotals(app, baseline: baseline, minutes: minutes) { return result }
         capture("poll-timeout")
         XCTFail("No Home totals change was observed within \(Int(minutes)) minutes after \(usageMinutes) minutes of learning-app usage. Baseline \(baseline.summary). DeviceActivity delivery may simply be late — re-run the poll before calling this a defect.")
         throw AuditFailure.stopped
@@ -1704,7 +1730,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         guard expectNone else {
             return try pollForHomeTotalsChange(app, baseline: baseline, minutes: minutes)
         }
-        let result = scanHomeTotals(app, baseline: baseline, minutes: minutes)
+        let result = try scanHomeTotals(app, baseline: baseline, minutes: minutes)
         if result == nil { note("POLL: no second Home totals increment in \(Int(minutes)) minutes, as required.") }
         return result
     }
@@ -1719,6 +1745,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         var cycle = 0
         repeat {
             cycle += 1
+            try guardAgainstSystemAlert("poll-black-\(cycle)")
             if !app.navigationBars["スクリーンタイム"].exists {
                 try reachHome(app)
                 try openScreenTimeSettings(app)
@@ -1754,6 +1781,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         var cycle = 0
         repeat {
             cycle += 1
+            try guardAgainstSystemAlert("poll-black-\(cycle)")
             if !app.navigationBars["スクリーンタイム"].exists {
                 try reachHome(app)
                 try openScreenTimeSettings(app)
@@ -1993,6 +2021,78 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             if inSheet.exists && inSheet.isHittable { return inSheet }
         }
         return nil
+    }
+
+    // MARK: - system (SpringBoard) modals
+
+    /// An iOS system modal (「iCloudにサインイン」, a passcode prompt, an
+    /// App Store dialog...) is owned by SpringBoard, not by PomoGem. It covers
+    /// the app completely while being INVISIBLE to `app.buttons[...]`, so a
+    /// classification built only from the app's hierarchy reports "unknown"
+    /// and every tap silently misses. Probe SpringBoard directly instead.
+    /// This suite NEVER taps, answers or dismisses a system modal.
+    private struct SystemModal {
+        let kind: String
+        let title: String
+        let buttons: [String]
+        let hasSecureField: Bool
+        let hierarchy: String
+
+        var summary: String {
+            let buttonList = buttons.isEmpty ? "<none>" : buttons.joined(separator: " | ")
+            let secure = hasSecureField ? " (secure text field present — password/passcode entry)" : ""
+            return "\(kind) 「\(title)」 buttons: \(buttonList)\(secure)"
+        }
+    }
+
+    private func currentSystemModal() -> SystemModal? {
+        guard !isDrivingSystemPrompt else { return nil }
+        let springboard = XCUIApplication(bundleIdentifier: Self.springboardID)
+        let hasSecureField = springboard.secureTextFields.count > 0
+        let element: XCUIElement
+        let kind: String
+        if springboard.alerts.count > 0 {
+            element = springboard.alerts.firstMatch
+            kind = "alert"
+        } else if springboard.sheets.count > 0 {
+            element = springboard.sheets.firstMatch
+            kind = "sheet"
+        } else if hasSecureField {
+            element = springboard.windows.firstMatch
+            kind = "secure-entry"
+        } else {
+            return nil
+        }
+        let texts = labels(of: element.staticTexts).filter { !$0.isEmpty }
+        let ownLabel = element.exists ? element.label : ""
+        let title = [ownLabel, texts.first ?? ""].first(where: { !$0.isEmpty }) ?? "<untitled>"
+        return SystemModal(
+            kind: kind,
+            title: title,
+            buttons: labels(of: element.buttons).filter { !$0.isEmpty },
+            hasSecureField: hasSecureField,
+            hierarchy: element.debugDescription
+        )
+    }
+
+    /// One line for a classification report: the modal, or `<none>`.
+    private func describeSystemModal() -> String {
+        currentSystemModal()?.summary ?? "<none>"
+    }
+
+    private func recordSystemModal(_ modal: SystemModal, context: String) {
+        note("SYSTEM ALERT at \(context): \(modal.summary)")
+        capture("system-alert-\(context)")
+        attach(string: modal.hierarchy, name: "system-alert-\(context)-hierarchy")
+        note("STOPPED: an iOS system modal is on top of the app; this suite never taps, answers or dismisses one.")
+    }
+
+    /// Skips the phase — with a screenshot, the modal's hierarchy and its
+    /// title/buttons in the transcript — when a SpringBoard modal is up.
+    private func guardAgainstSystemAlert(_ context: String) throws {
+        guard let modal = currentSystemModal() else { return }
+        recordSystemModal(modal, context: context)
+        throw XCTSkip("system alert: \(modal.title) — needs human")
     }
 
     /// This suite never enters a passcode.
