@@ -914,7 +914,8 @@ final class LaunchActivationWatchdogTests: XCTestCase {
 
         // The system alert is finally answered. The settled screen is no
         // longer waiting for activation, so the UIKit activation notification
-        // is inert; only an explicit retry restarts from this screen.
+        // is inert. (A scene activation is a different signal and does restart
+        // the launch; see testDismissingTheSystemAlertRestartsTheLaunchItself.)
         host.applicationState = .active
         host.deliverActivationNotification()
         XCTAssertEqual(host.screen, .blocked(host.expectedBlockedMessage))
@@ -1003,6 +1004,29 @@ final class LaunchActivationWatchdogTests: XCTestCase {
             LaunchActivationWatchdogPolicy.blockedMessage(progress: .storageWorkCommitted)))
         XCTAssertNotEqual(host.screen, .blocked(
             LaunchActivationWatchdogPolicy.blockedMessage(progress: .nothingCommitted)))
+    }
+
+    /// The real device frame is `(scenePhase .inactive, applicationState
+    /// .inactive)`: iOS owns the foreground with its Apple Account alert.
+    /// Closing that alert activates the scene, and a sessionless launch screen
+    /// always restarts on activation — the user does not have to press
+    /// 「もう一度試す」, and the retry screen is not preserved for them.
+    func testDismissingTheSystemAlertRestartsTheLaunchItself() async {
+        let host = DeferredLaunchHostModel(phase: .inactive, applicationState: .inactive)
+        host.startLaunchAttempt(timeout: 0.05)
+        XCTAssertTrue(host.watchdog.isArmed)
+        await host.awaitRetryScreen()
+        XCTAssertEqual(host.screen, .blocked(host.expectedBlockedMessage))
+        XCTAssertEqual(host.launchAttempts, 1)
+
+        // The alert is dismissed: .inactive -> .active, with no tap at all.
+        host.applicationState = .active
+        host.handleScenePhaseChange(.active)
+        XCTAssertEqual(host.screen, .home,
+            "Activation restarts an unpublished launch; the blocked screen is replaced")
+        XCTAssertEqual(host.launchAttempts, 2)
+        XCTAssertEqual(host.retryScreenPresentations, 1)
+        XCTAssertFalse(host.watchdog.isArmed)
     }
 
     /// The watchdog makes the retry screen reachable before the recorded
