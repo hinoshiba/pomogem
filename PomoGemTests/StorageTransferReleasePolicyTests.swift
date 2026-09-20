@@ -260,6 +260,23 @@ final class StorageTransferReleasePolicyTests: XCTestCase {
     }
     #endif
 
+    func testOverwriteEntryPointRefusesBeforeResolvingTheAccountOrReadingControl() async throws {
+        let (root, store, runtime, binding) = try fixture()
+        let before = try FileManager.default.contentsOfDirectory(atPath: root.path).sorted()
+        var accountChecks = 0
+        var reads = 0
+        do {
+            try await runtime.overwriteCloudDataset(binding: binding, expectedGenerationID: UUID(),
+                verifyAccount: { accountChecks += 1; return binding },
+                readControl: { reads += 1; return nil }, validateAccess: {})
+            XCTFail("The ordinary Runtime must refuse a dataset overwrite")
+        } catch { XCTAssertEqual(error as? StorageTransferReleaseError, .datasetOverwriteUnavailable) }
+        XCTAssertEqual(accountChecks, 0)
+        XCTAssertEqual(reads, 0)
+        XCTAssertNil(try store.load())
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path).sorted(), before)
+    }
+
     #if DEBUG
     func testServerOriginResumeIsRefusedWhileOnlyTheOverwriteBitIsOpen() async throws {
         let (root, store, _, binding) = try fixture()

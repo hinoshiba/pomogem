@@ -219,6 +219,71 @@ final class StorageTransferRuntime {
         try store.begin(journal)
     }
 
+    /// Explicitly confirmed replacement of the current iCloud dataset with this
+    /// device's data - the opposite direction of `refreshCloudDataset`, and the
+    /// only way a device that is already bound to the account but fenced out of
+    /// the current generation can publish its own records. Only the same
+    /// account's displayed committed generation can authorize this request.
+    func overwriteCloudDataset(binding: ActiveAccountLocalBinding, expectedGenerationID: UUID,
+                               validateAccess: @escaping @MainActor () throws -> Void) async throws {
+        try await overwriteCloudDataset(binding: binding, expectedGenerationID: expectedGenerationID,
+            verifyAccount: {
+                try await AppleAccountBoundaryResolver().resolve(expectedBinding: binding).binding
+            }, readControl: {
+                try await self.remoteRecoveryStatus(binding: binding, validateAccess: validateAccess)
+            }, validateAccess: validateAccess)
+    }
+
+    /// A clone of `refreshCloudDataset` with the same seams and the same two
+    /// read control discipline. Exactly three differences, each marked below.
+    func overwriteCloudDataset(binding: ActiveAccountLocalBinding, expectedGenerationID: UUID,
+                               verifyAccount: @escaping @MainActor () async throws -> ActiveAccountLocalBinding,
+                               readControl: @escaping @MainActor () async throws -> StorageTransferRecoveryControl?,
+                               validateAccess: @escaping @MainActor () throws -> Void) async throws {
+        // DIFFERENCE 1: the release gate is the FIRST statement, before any
+        // file is created, any account is resolved and any remote call is made.
+        try releasePolicy.validate(.overwriteCloudFromDevice)
+        let validate: @MainActor () throws -> Void = {
+            try Task.checkCancellation()
+            try validateAccess()
+            try self.requireNoPendingRemoteCancellation()
+            guard try self.store.load() == nil, !StorageTransferProcessState.cloudMirrorWasOpened else {
+                throw StorageTransferRuntimeError.relaunchRequired
+            }
+        }
+        try validate()
+        let verifiedBinding = try await verifyAccount()
+        try validate()
+        guard verifiedBinding == binding else { throw StorageTransferRecoveryError.identityMismatch }
+        let status = try await readControl()
+        try validate()
+        try validateControlAccount(status, binding: binding)
+        guard let status, !status.blocksWriters, status.datasetGenerationID == expectedGenerationID,
+              let destinationBinding = ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+                  accountFingerprint: binding.accountFingerprint) else { throw StorageTransferError.staleTransaction }
+        // DIFFERENCE 2: the divergent device cache is the source and its data
+        // becomes the new generation, so this choice replaces the cloud dataset.
+        let journal = try StorageTransferJournal(choice: .overwriteCloudFromDevice,
+            source: .cloud(binding: binding), destination: .cloud(binding: destinationBinding),
+            cloudBinding: destinationBinding)
+        try requireNoArtifacts(selection: journal.destination)
+        // DIFFERENCE 3: unlike a refresh, this transaction stages a recovery
+        // copy of the device payload on the server before anything is deleted.
+        try cleanup().requireCapacityForNewTransfer(transactionID: journal.transactionID, mayCreateRemotePayload: true)
+        let file = try checkpointFile(files(journal))
+        var checkpoint = StorageTransferRuntimeCheckpoint(transactionID: journal.transactionID,
+            requestingProcessID: Self.processID)
+        checkpoint.didObserveBaselineControl = true
+        checkpoint.baselineControl = status
+        try file.save(checkpoint, replacing: nil)
+        let after = try await readControl()
+        try validate()
+        try validateControlAccount(after, binding: binding)
+        guard after == status else { throw StorageTransferError.staleTransaction }
+        try validate()
+        try store.begin(journal)
+    }
+
     private func validateControlAccount(_ control: StorageTransferRecoveryControl?,
                                         binding: ActiveAccountLocalBinding) throws {
         try control?.validate()
@@ -642,7 +707,11 @@ final class StorageTransferRuntime {
         if let receipt = try payload.acknowledgedReceipt() { return receipt.sha256 }
         try validate()
         let snapshot = try StorageTransferPersistence.snapshotFrozenSource(journal: journal, files: files)
-        if journal.choice == .disableCloudKeepingCopy {
+        // S11. Deliberately skipped for both replacement kinds and for a
+        // refresh: an overwrite exists precisely because this device's data has
+        // diverged from the current iCloud dataset. Requiring equality here
+        // would make the operation impossible, not safer.
+        if journal.choice.requiresCloudEqualityOfFrozenSource {
             try await requireCloudEquals(snapshot, binding: journal.cloudBinding, validate: validate)
         }
         try validate()

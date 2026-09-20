@@ -75,4 +75,31 @@ final class StorageTransferPersistenceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: files.storeURLs(for: selection, location: .source)[0].path))
         XCTAssertThrowsError(try StorageTransferPersistence.makeContainer(selection: selection, urls: urls, cloudEnabled: true))
     }
+
+    /// S10. The one case that deliberately drops the obsolete cloud cache is a
+    /// cloud-sourced refresh; a device -> iCloud overwrite keeps that cache as
+    /// its payload, so an active or paused canonical timer must still abort it
+    /// before any remote call is made.
+    @MainActor
+    func testOnlyACloudSourcedRefreshDiscardsTheObsoleteCacheAndItsTimerCheck() throws {
+        let account = String(repeating: "a", count: 64)
+        let previous = try XCTUnwrap(ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+                                                               accountFingerprint: account))
+        let destination = try XCTUnwrap(ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+                                                                  accountFingerprint: account))
+        let cloud = PersistenceDeploymentSelection.cloud(binding: previous)
+        let local = PersistenceDeploymentSelection.localOnly(namespace: AccountDataNamespace())
+        let refresh = try StorageTransferJournal(choice: .enableCloudKeepingCloud, source: cloud,
+            destination: .cloud(binding: destination), cloudBinding: destination)
+        let overwrite = try StorageTransferJournal(choice: .overwriteCloudFromDevice, source: cloud,
+            destination: .cloud(binding: destination), cloudBinding: destination)
+        let reinstall = try StorageTransferJournal(choice: .overwriteCloudFromDevice, source: local,
+            destination: .cloud(binding: destination), cloudBinding: destination)
+        let disable = try StorageTransferJournal(choice: .disableCloudKeepingCopy, source: cloud,
+            destination: local, cloudBinding: previous)
+        XCTAssertTrue(StorageTransferPersistence.discardsObsoleteCloudCache(journal: refresh))
+        XCTAssertFalse(StorageTransferPersistence.discardsObsoleteCloudCache(journal: overwrite))
+        XCTAssertFalse(StorageTransferPersistence.discardsObsoleteCloudCache(journal: reinstall))
+        XCTAssertFalse(StorageTransferPersistence.discardsObsoleteCloudCache(journal: disable))
+    }
 }

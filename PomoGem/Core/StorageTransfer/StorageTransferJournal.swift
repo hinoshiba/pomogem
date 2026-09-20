@@ -17,6 +17,14 @@ enum StorageTransferChoice: String, Codable, CaseIterable, Sendable {
     var replacesCloud: Bool {
         self == .enableCloudReplacingCloud || self == .overwriteCloudFromDevice
     }
+
+    /// Whether the frozen source must be proven equal to the current iCloud
+    /// dataset before it is captured. Only a disable-with-copy must: an
+    /// overwrite deliberately destroys a divergent - usually newer - remote
+    /// dataset, so requiring equality would make the operation impossible.
+    /// Skipping this precondition IS the definition of an overwrite, and it is
+    /// an explicit decision here rather than an accident at the call site.
+    var requiresCloudEqualityOfFrozenSource: Bool { self == .disableCloudKeepingCopy }
 }
 
 enum StorageTransferError: Error, LocalizedError, Equatable {
