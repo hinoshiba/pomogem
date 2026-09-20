@@ -35,7 +35,15 @@ final class ScreenTimeController: ObservableObject {
     /// after it has survived this window, so a cold launch cannot throw away
     /// opaque selections that only a new picker session could restore.
     private let authorizationSettlingWindow: TimeInterval
+    /// The window must measure CONTINUOUS observation, never wall clock. This
+    /// controller is a singleton that outlives the foreground refresh loop, so
+    /// a stamp left behind by an interrupted pass would otherwise let a single
+    /// post-resume sample satisfy a window that spans the whole background gap.
+    /// Requiring several consecutive not-approved passes as well keeps the
+    /// decision independent of how often the loop happens to run.
+    private let authorizationSettlingObservations: Int
     private var unsettledAuthorizationSince: Date?
+    private var unsettledAuthorizationObservations = 0
     private var lease: ScreenTimeContextLease? { didSet { publishBindingState() } }
     private var bindingTask: Task<Void, Error>?
     private var bindingConfirmed = false { didSet { publishBindingState() } }
@@ -54,12 +62,14 @@ final class ScreenTimeController: ObservableObject {
         },
         monitoring: ScreenTimeMonitoringDriving? = nil,
         authorization: @escaping () -> AuthorizationStatus = { AuthorizationCenter.shared.authorizationStatus },
-        authorizationSettlingWindow: TimeInterval = 10
+        authorizationSettlingWindow: TimeInterval = 10,
+        authorizationSettlingObservations: Int = 4
     ) {
         self.store = store
         self.currentContextKey = currentContextKey
         self.authorization = authorization
         self.authorizationSettlingWindow = authorizationSettlingWindow
+        self.authorizationSettlingObservations = max(1, authorizationSettlingObservations)
         worker = ScreenTimeMonitoringWorker(store: store, monitoring: monitoring ?? ScreenTimeMonitoring(store: store))
         reload()
     }
@@ -245,6 +255,17 @@ final class ScreenTimeController: ObservableObject {
         }
     }
 
+    /// Starts a new authorization-observation session. SwiftUI tears the
+    /// foreground refresh loop down on every deactivation while this controller
+    /// is a singleton that survives it, so the loop must announce its restart:
+    /// otherwise a stamp recorded by one interrupted pass makes the settling
+    /// window measure the whole background gap, and the very first
+    /// `.notDetermined` read after a resume — exactly when the transient value
+    /// is expected — would destroy the opaque selections.
+    func beginAuthorizationObservation() {
+        resetAuthorizationSettling()
+    }
+
     /// The foreground refresh loop calls this on every pass. `reconcile` only
     /// reacts to an approved → not-approved transition inside one process run,
     /// so a revocation performed while the app was not running (iOS Settings →
@@ -258,26 +279,32 @@ final class ScreenTimeController: ObservableObject {
     /// exist without an approval: `save()` refuses to write
     /// `configuration.enabled` while the status is not approved, so an enabled
     /// configuration is the ledger's own record that access had been granted.
+    ///
+    /// The window is only meaningful while the refresh loop is actually
+    /// observing. Call `beginAuthorizationObservation()` whenever that loop
+    /// starts, so the elapsed time cannot include a gap the app spent away.
     func invalidateAuthorizationIfRevoked(now: Date = .now) async {
         guard let lease = try? boundLease() else { return }
         let status = authorization()
         guard !Self.isAuthorized(status) else {
-            unsettledAuthorizationSince = nil
+            resetAuthorizationSettling()
             return
         }
         guard let state = try? store.snapshot(), lease.binding.matches(state),
               state.contextIsActive, state.configuration.enabled else {
-            unsettledAuthorizationSince = nil
+            resetAuthorizationSettling()
             return
         }
         if status != .denied {
+            unsettledAuthorizationObservations += 1
             guard let since = unsettledAuthorizationSince else {
                 unsettledAuthorizationSince = now
                 return
             }
-            guard now.timeIntervalSince(since) >= authorizationSettlingWindow else { return }
+            guard now.timeIntervalSince(since) >= authorizationSettlingWindow,
+                  unsettledAuthorizationObservations >= authorizationSettlingObservations else { return }
         }
-        unsettledAuthorizationSince = nil
+        resetAuthorizationSettling()
         let operation = beginOperation()
         defer { endOperation(operation) }
         do {
@@ -386,7 +413,7 @@ final class ScreenTimeController: ObservableObject {
         isResetting = false
         operationIDs.removeAll()
         isUpdatingMonitoring = false
-        unsettledAuthorizationSince = nil
+        resetAuthorizationSettling()
         bindingError = nil
         // Fence delayed callbacks immediately without waiting for registration.
         try? store.update { state in
@@ -463,6 +490,11 @@ final class ScreenTimeController: ObservableObject {
     private func endOperation(_ id: UUID) {
         operationIDs.remove(id)
         isUpdatingMonitoring = !operationIDs.isEmpty
+    }
+
+    private func resetAuthorizationSettling() {
+        unsettledAuthorizationSince = nil
+        unsettledAuthorizationObservations = 0
     }
 
     private func publishBindingState() {

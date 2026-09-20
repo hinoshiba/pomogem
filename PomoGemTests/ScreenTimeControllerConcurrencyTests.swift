@@ -146,7 +146,8 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         let driver = Driver(store: store)
         let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
                                               monitoring: driver, authorization: { .notDetermined },
-                                              authorizationSettlingWindow: 0)
+                                              authorizationSettlingWindow: 0,
+                                              authorizationSettlingObservations: 1)
         try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
 
         // The first observation is the cold-launch window: nothing is touched.
@@ -195,6 +196,63 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertFalse(driver.events.contains("stop"))
     }
 
+    /// F5 removed the `.onDisappear` retirement and `taskKey` carries
+    /// `scenePhase == .active`, so the 3 s refresh loop is torn down on every
+    /// deactivation while `ScreenTimeController.shared` — and the settling
+    /// stamp it holds — survives. A stamp left by one interrupted pass must
+    /// not let a single post-resume `.notDetermined` read wipe the opaque
+    /// selections: that read is exactly the transient value the window exists
+    /// to tolerate, and only a new FamilyActivityPicker session could undo it.
+    func testAStaleSettlingStampCannotBeSettledByOneObservationAfterAGap() async throws {
+        let store = try makeStore()
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: driver, authorization: { .notDetermined })
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+
+        // One pass, then the scene deactivates and the loop is cancelled.
+        await controller.invalidateAuthorizationIfRevoked(now: base)
+        XCTAssertTrue(try store.snapshot().configuration.enabled)
+
+        // Two minutes later `.task(id:)` restarts and observes once.
+        controller.beginAuthorizationObservation()
+        await controller.invalidateAuthorizationIfRevoked(now: base.addingTimeInterval(120))
+        try await controller.waitForPendingOperations()
+        XCTAssertTrue(try store.snapshot().configuration.enabled,
+                      "One post-resume .notDetermined sample must not void the opaque selections")
+        XCTAssertTrue(try store.snapshot().runs.contains(where: \.active))
+        XCTAssertNil(try store.snapshot().monitoringError)
+        XCTAssertFalse(driver.events.contains("stop"))
+    }
+
+    /// Even without a restart announcement the window must not be satisfiable
+    /// by elapsed wall clock alone: the process can be suspended between two
+    /// passes, so the decision needs several consecutive observations too.
+    func testTheSettlingWindowNeedsConsecutiveObservationsNotOnlyElapsedTime() async throws {
+        let store = try makeStore()
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: driver, authorization: { .notDetermined })
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+
+        await controller.invalidateAuthorizationIfRevoked(now: base)
+        await controller.invalidateAuthorizationIfRevoked(now: base.addingTimeInterval(600))
+        try await controller.waitForPendingOperations()
+        XCTAssertTrue(try store.snapshot().configuration.enabled,
+                      "Ten minutes of wall clock across two samples is not ten seconds of observation")
+        XCTAssertFalse(driver.events.contains("stop"))
+
+        // The 3 s foreground cadence supplies the missing observations.
+        await controller.invalidateAuthorizationIfRevoked(now: base.addingTimeInterval(603))
+        XCTAssertTrue(try store.snapshot().configuration.enabled)
+        await controller.invalidateAuthorizationIfRevoked(now: base.addingTimeInterval(606))
+        try await controller.waitForPendingOperations()
+        XCTAssertFalse(try store.snapshot().configuration.enabled)
+        XCTAssertTrue(driver.events.contains("stop"))
+    }
+
     func testDeniedAuthorizationDoesNotWaitForTheSettlingWindow() async throws {
         let store = try makeStore()
         let driver = Driver(store: store)
@@ -219,7 +277,8 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         let driver = Driver(store: store)
         let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
                                               monitoring: driver, authorization: { .notDetermined },
-                                              authorizationSettlingWindow: 0)
+                                              authorizationSettlingWindow: 0,
+                                              authorizationSettlingObservations: 1)
         try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
 
         await controller.invalidateAuthorizationIfRevoked()

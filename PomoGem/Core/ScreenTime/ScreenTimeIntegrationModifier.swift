@@ -52,6 +52,12 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
         content
             .task(id: taskKey) {
                 guard isReady, scenePhase == .active else { return }
+                // `taskKey` carries `scenePhase == .active`, so this loop is
+                // torn down on every deactivation while the controller is a
+                // singleton that survives it. Announce the new observation
+                // session: the settling window must measure continuous
+                // foreground samples, never the gap the app spent away.
+                controller.beginAuthorizationObservation()
                 await refresh(forceReconcile: true)
                 while !Task.isCancelled {
                     do { try await Task.sleep(for: .seconds(3)) }
