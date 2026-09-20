@@ -1,0 +1,219 @@
+import Foundation
+import SwiftData
+
+/// Read-only access to THIS device's on-disk stores from the launch host, at a
+/// point where no session exists and the user has consented to nothing.
+///
+/// Two screens need it, both strictly before any destructive decision:
+///
+/// * the pre-flight comparison, so the device side of 「このiPhone / iCloud」 is a
+///   counted fact rather than an assumption, and
+/// * `storage-refresh-export`, the rescue door `Docs/MultiDeviceCloudSafety.md`
+///   asks for on behalf of the generation that is about to lose.
+///
+/// Every read happens against a **disposable copy** produced by the existing
+/// `StorageTransferStoreFiles.makeFrozenReaderCopy`, mounted with CloudKit
+/// disabled, under a throwaway transfer root in the temporary directory. The
+/// real stores are only ever read and hashed, never opened, renamed or
+/// written; the copy and its root are removed before this type returns. No
+/// journal is created, no checkpoint is written, no CloudKit call is made, and
+/// nothing here can authorize a transfer.
+@MainActor
+enum StorageTransferLaunchReader {
+    /// A failure is always surfaced. "We could not look" and "there is nothing
+    /// there" must never be confusable on a screen that offers a deletion.
+    enum Failure: Error, LocalizedError, Equatable {
+        case unavailable
+        var errorDescription: String? {
+            "この端末の記録を読み取れませんでした。記録は変更していません。"
+        }
+    }
+
+    /// The device side of the comparison is reduced by the **same** function as
+    /// the iCloud side (`StorageTransferCloudPreview.make`), over the same
+    /// mirrored models, so the two rows a user compares are computed
+    /// identically and a difference between them is a difference in the data.
+    /// `otherDeviceIDs` is meaningless for a local snapshot and is ignored by
+    /// the UI; only the counts and the newest dated row are read from it.
+    static func captureDevicePreview(selection: PersistenceDeploymentSelection,
+                                     localDeviceID: String = FocusDeviceIdentity.current())
+        throws -> StorageTransferCloudPreview {
+        try withDisposableReader(selection: selection) { container in
+            let context = ModelContext(container)
+            context.autosaveEnabled = false
+            let snapshot = try PomoGemStorageSnapshot.capture(from: context)
+            return StorageTransferCloudPreview.make(snapshot: snapshot, localDeviceID: localDeviceID)
+        }
+    }
+
+    /// Writes the ordinary Settings export from the disposable copy. The
+    /// resulting file lives in `PomoGemDataExporter`'s own owned temporary
+    /// namespace, not in the reader root, so removing the reader cannot take
+    /// the user's rescue copy with it.
+    /// The reader root is removed only after the export has finished. A
+    /// `@ModelActor` keeps its container — and therefore these files — alive
+    /// across the suspension, so the copy must outlive the await rather than
+    /// the synchronous scope that created it.
+    static func exportDeviceData(selection: PersistenceDeploymentSelection,
+                                 appInfo: PomoGemDataExportAppInfo = .current) async throws -> URL {
+        let root = readerRoot(id: UUID())
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            removeReaderRoots()
+        }
+        let worker = try autoreleasepool { () throws -> PomoGemDataExportWorker in
+            let files = try StorageTransferStoreFiles(transactionID: UUID(), transferRoot: root)
+            let urls = try files.makeFrozenReaderCopy(selection: selection)
+            let container = try StorageTransferPersistence.makeContainer(
+                selection: selection, urls: urls, cloudEnabled: false)
+            return PomoGemDataExportWorker(modelContainer: container)
+        }
+        return try await worker.export(appInfo: appInfo).fileURL
+    }
+
+    /// Mounts a throwaway copy, hands it to `body`, and removes the copy.
+    /// Synchronous and wrapped in an autorelease pool so the container is gone
+    /// before the next caller reaches `requireAllReleased()`; a reader that
+    /// outlived its scope would otherwise refuse the real transfer later.
+    private static func withDisposableReader<T>(selection: PersistenceDeploymentSelection,
+                                                _ body: (ModelContainer) throws -> T) throws -> T {
+        let root = readerRoot(id: UUID())
+        defer { try? FileManager.default.removeItem(at: root) }
+        return try autoreleasepool {
+            let files = try StorageTransferStoreFiles(transactionID: UUID(), transferRoot: root)
+            let urls = try files.makeFrozenReaderCopy(selection: selection)
+            let container = try StorageTransferPersistence.makeContainer(
+                selection: selection, urls: urls, cloudEnabled: false)
+            return try body(container)
+        }
+    }
+
+    private static let readerRootPrefix = "storage-transfer-launch-reader-"
+
+    private static func readerRoot(id: UUID) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent(readerRootPrefix + id.uuidString.lowercased(), isDirectory: true)
+            .standardizedFileURL
+    }
+
+    /// Only this type's own, name-and-UUID-matched roots are ever removed, so a
+    /// malformed path can never turn cleanup into a broad delete.
+    private static func removeReaderRoots() {
+        let manager = FileManager.default
+        let temporary = manager.temporaryDirectory.standardizedFileURL
+        guard let children = try? manager.contentsOfDirectory(at: temporary,
+            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+            options: [.skipsHiddenFiles]) else { return }
+        for child in children {
+            let name = child.lastPathComponent
+            guard name.hasPrefix(readerRootPrefix),
+                  UUID(uuidString: String(name.dropFirst(readerRootPrefix.count))) != nil,
+                  let values = try? child.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+                  values.isDirectory == true, values.isSymbolicLink != true else { continue }
+            try? manager.removeItem(at: child)
+        }
+    }
+}
+
+extension PomoGemDataExportAppInfo {
+    static var current: Self {
+        Self(version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
+             build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown")
+    }
+}
+
+/// The fixed Japanese copy for the device → iCloud overwrite. It lives beside
+/// the runtime rather than inside a view so the launch host, Settings and the
+/// review notes quote one text, and so a reviewer can diff the shipped strings
+/// against the approved wording in one place.
+enum StorageTransferOverwriteCopy {
+    static let comparisonReading = "iCloudの内容を確認しています"
+    static let comparisonUnavailable =
+        "iCloudの内容を確認できませんでした。通信を確認して「もう一度試す」を押してください。どちらの記録も削除していません。"
+    static let deviceSideUnavailable = "このiPhoneの内容を確認できませんでした。"
+
+    static let dataLossWarning =
+        "iCloudにある現在のPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータで置き換えます。2つのデータは結合しません。削除したiCloudのデータを元に戻すことはできません。同じApple Accountの他の端末は、次に開いたときにこの画面と同じ確認を求められ、その端末だけにある未送信のデータは残りません。"
+
+    static let exportTitle = "先にこの端末の記録を書き出す"
+    static let exportNote = "書き出したファイルはPomoGemに読み込めません。記録の控えとして保存します。"
+    static let confirmTitle = "このiPhoneのデータで置き換える"
+
+    /// Rendered instead of either §6.2 variant while no server read has
+    /// succeeded. Both approved variants claim that a search happened; saying
+    /// 「見つかりませんでした」 before anything was read would be a false witness on
+    /// the one screen where a deletion is chosen. The destructive door is
+    /// disabled in exactly this state.
+    static let otherDevicesUnknown =
+        "iCloudの記録をまだ読み取れていないため、このiPhone以外の端末が書き込んでいるかどうかは分かりません。"
+
+    /// Absence of evidence is disclosed as absence of evidence. A device that
+    /// has never written a witnessed row does not appear here, so a zero is
+    /// never phrased as a guarantee that no other device exists.
+    static func otherDevices(_ count: Int) -> String {
+        guard count >= 1 else {
+            return "iCloudの記録には、このiPhone以外の端末は見つかりませんでした。ただし、これは他の端末が存在しない証明ではありません。まだ一度も記録を送っていない端末は分かりません。同じApple Accountの他の端末でPomoGemを開いている場合は、先に終了してください。"
+        }
+        return "iCloudの記録には、このiPhone以外の端末（\(count)台）が書き込んだ記録があります。置き換えると、それらの端末は次に開いたときに「iCloudのデータが置き換わりました」の画面になり、その端末だけにある未送信の記録は失われます。置き換える前に、その端末でPomoGemを開いて同期を終わらせておくと、失われる記録を減らせます。"
+    }
+
+    // MARK: 「最後の確認」
+
+    static let sheetTitle = "最後の確認"
+    static let sheetWarning =
+        "現在iCloudにあるPomoGemのテーマ・記録・設定をすべて削除し、この端末のデータに置き換えます。削除するiCloudのデータを元に戻すことはできません。"
+    static let recoveryCopy =
+        "置き換えるデータの復旧用コピーをiCloudに保存し、受領を確認してから削除を始めます。復旧用コピーには、このiPhoneだけの過去の記録も含まれます。処理完了後に復旧用コピーを削除します。通信が途切れた場合は、削除の再試行までiCloudに残ることがあります。"
+    static let relaunch = "処理の途中で、アプリの終了と再起動をお願いします。アプリ自体は削除しないでください。"
+    static let notCancellable = "iCloudの削除を始めたあとは取り消せません。中断しても、次に開いたときに続きから再開します。"
+    static let screenTime = "スクリーンタイムの連携を使っている場合は、監視を停止し、対応する設定と端末内の台帳を初期化します。"
+    static let acknowledgement = "iCloudのデータの削除と、他の端末への影響を確認しました"
+    static let sheetConfirm = "iCloudを置き換える"
+
+    // MARK: Progress and relaunch
+
+    static let requestAccepted =
+        "このiPhoneのデータでiCloudを置き換える手続きを受け付けました。アプリスイッチャーでPomoGemを終了し、もう一度開いてください。復旧用コピーの保存が終わるまで、iCloudの削除は始めません。"
+
+    /// Derived from the durable journal phase, never from an optimistic guess
+    /// about an in-flight effect.
+    static func progress(_ phase: StorageTransferJournal.Phase) -> String {
+        switch phase {
+        case .requested, .sourceSaved:
+            "このiPhoneのデータを確認しています"
+        case .recoveryCopySaved:
+            "復旧用コピーをiCloudに保存しました。置き換えを始めます"
+        case .preparingDestination:
+            "iCloudのデータを置き換えています。アプリを閉じても、次に開いたときに続きから再開します"
+        case .destinationSaved, .destinationVerified:
+            "置き換えた内容を照合しています"
+        case .selectionCommitted, .sourceRetired:
+            "置き換えを完了しています"
+        }
+    }
+
+    // MARK: `.blocked`
+
+    static let blockedExplanation =
+        "iCloudの状態を確認できていません。通信を確認して「もう一度試す」を押すと、iCloudのデータを再取得するか、このiPhoneのデータでiCloudを置き換えるかを選べます。この画面では、どちらの記録も削除していません。"
+
+    // MARK: The comparison row
+
+    private static let comparisonFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.setLocalizedDateFormatFromTemplate("Md")
+        return formatter
+    }()
+
+    /// 「テーマ12・記録480・成果36（最終 9月20日）」. Only the three models a user
+    /// recognizes are named; the remaining mirrored models are counted by the
+    /// runtime but would not help someone decide.
+    static func side(_ label: String, preview: StorageTransferCloudPreview?) -> String {
+        guard let preview else { return "\(label): 確認できませんでした" }
+        let counts = preview.recordCounts
+        let body = "テーマ\(counts["Subject"] ?? 0)・記録\(counts["StudySession"] ?? 0)・成果\(counts["AchievementStone"] ?? 0)"
+        guard let latest = preview.latestRecordAt else { return "\(label): \(body)（日付のある記録なし）" }
+        return "\(label): \(body)（最終 \(comparisonFormatter.string(from: latest))）"
+    }
+}

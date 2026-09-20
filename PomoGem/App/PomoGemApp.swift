@@ -503,7 +503,25 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var suspendedAccountBinding = AccountScopedLocalState
         .pendingPreviousBinding()
 
-    private enum RemoteRecoveryAction { case resume, cancel, refresh(UUID), cancelPending(UUID) }
+    /// Read-only pre-flight evidence for the `.datasetRefresh` screen. None of
+    /// it authorizes anything: it only decides what the screen may say and
+    /// whether the destructive door may be armed at all.
+    @State private var datasetPreviewRequest: UUID?
+    @State private var cloudDatasetPreview: StorageTransferCloudPreview?
+    @State private var deviceDatasetPreview: StorageTransferCloudPreview?
+    @State private var cloudDatasetPreviewFailed = false
+    @State private var overwriteInProgressPhase: StorageTransferJournal.Phase?
+    @State private var isExportingDeviceData = false
+    @State private var deviceDataExportURL: URL?
+    @State private var deviceDataExportError: String?
+
+    private enum RemoteRecoveryAction {
+        case resume, cancel, refresh(UUID), cancelPending(UUID)
+        /// Device → iCloud. Carries the exact committed generation the screen
+        /// displayed, so a dataset that moved on between reading and tapping
+        /// fails the CAS instead of replacing something the user never saw.
+        case overwrite(UUID)
+    }
 
     var body: some View {
         Group {
@@ -558,9 +576,43 @@ private struct PomoGemPersistenceLaunchHost: View {
             onRecoverTransfer: { requestRemoteRecovery(.resume) },
             onCancelTransfer: { requestRemoteRecovery(.cancel) },
             onRefreshDataset: requestDatasetRefresh,
+            onOverwriteDataset: requestDatasetOverwrite,
+            onExportDeviceData: deviceDataExportAction,
+            cloudPreview: cloudDatasetPreview,
+            devicePreview: deviceDatasetPreview,
+            cloudPreviewFailed: cloudDatasetPreviewFailed,
+            overwritePhase: overwriteInProgressPhase,
             onCancelLocalTransfer: localTransferCancellationAction,
             retainsTransferCopyOnCancellation: retainsTransferCopyOnCancellation,
             onContinueOffline: offlineContinuationAction)
+            .task(id: datasetPreviewRequest) { await loadDatasetPreviews() }
+            .sheet(isPresented: Binding(
+                get: { deviceDataExportURL != nil },
+                set: { if !$0 { discardDeviceDataExport() } }
+            )) {
+                if let deviceDataExportURL {
+                    PomoGemDataExportShareSheet(fileURL: deviceDataExportURL) { _ in
+                        discardDeviceDataExport()
+                    }
+                }
+            }
+            .alert("書き出せませんでした", isPresented: Binding(
+                get: { deviceDataExportError != nil },
+                set: { if !$0 { deviceDataExportError = nil } }
+            )) {
+                Button("閉じる", role: .cancel) {}
+            } message: {
+                Text(deviceDataExportError ?? "")
+            }
+    }
+
+    /// The rescue door `Docs/MultiDeviceCloudSafety.md` asks for on behalf of
+    /// the generation that is about to lose. Offered only on the screen that
+    /// offers a replacement, and never while one export is already running.
+    private var deviceDataExportAction: (() -> Void)? {
+        guard case .datasetRefresh = launchState, !isExportingDeviceData,
+              deviceDataExportURL == nil, !requiresStorageTransferRelaunch else { return nil }
+        return { startDeviceDataExport() }
     }
 
     private var offlineContinuationAction: (() -> Void)? {
@@ -824,6 +876,13 @@ private struct PomoGemPersistenceLaunchHost: View {
                         expectedGenerationID: generation, validateAccess: {
                         try requireActiveLaunchAttempt(attempt, checkpoint: "during-dataset-refresh")
                     })
+                case let .overwrite(generation):
+                    guard let binding = storageTransferRecoveryBinding else { throw StorageTransferError.staleTransaction }
+                    try await transferRuntime.overwriteCloudDataset(binding: binding,
+                        expectedGenerationID: generation, validateAccess: {
+                        try requireActiveLaunchAttempt(attempt, checkpoint: "during-dataset-overwrite")
+                    })
+                    completionMessage = StorageTransferOverwriteCopy.requestAccepted
                 case let .cancelPending(transactionID):
                     let retainsCopy = try transferRuntime.pendingLocalJournal()?.retainsImportOnCancellation == true
                     try await transferRuntime.cancelPendingTransfer(expectedTransactionID: transactionID,
@@ -845,6 +904,8 @@ private struct PomoGemPersistenceLaunchHost: View {
             cancellableLocalTransferID = pendingTransfer?.permitsCancellation == true
                 ? pendingTransfer?.transactionID : nil
             retainsTransferCopyOnCancellation = pendingTransfer?.retainsImportOnCancellation == true
+            overwriteInProgressPhase = pendingTransfer?.choice == .overwriteCloudFromDevice
+                ? pendingTransfer?.phase : nil
             if pendingTransfer != nil {
                 canChooseLocalOnly = false
                 guard scenePhase == .active else {
@@ -1945,6 +2006,11 @@ private struct PomoGemPersistenceLaunchHost: View {
         storageTransferRefreshGenerationID = nil
         cancellableLocalTransferID = nil
         retainsTransferCopyOnCancellation = false
+        datasetPreviewRequest = nil
+        cloudDatasetPreview = nil
+        deviceDatasetPreview = nil
+        cloudDatasetPreviewFailed = false
+        discardDeviceDataExport()
         AccountScopedLocalState.deactivate()
         NotificationManager.shared.cancelFocusReturnReminder()
         beginContainerRetirement()
@@ -1967,9 +2033,100 @@ private struct PomoGemPersistenceLaunchHost: View {
         guard !isPreparing, !requiresStorageTransferRelaunch,
               storageTransferRecoveryBinding != nil,
               let generation = storageTransferRefreshGenerationID else { return }
+        datasetPreviewRequest = nil
         remoteRecoveryAction = .refresh(generation)
         launchState = .preparing("iCloudからの再取得を準備しています")
         launchAttempt += 1
+    }
+
+    /// The twin of `requestDatasetRefresh` in the opposite direction. Reached
+    /// only from the 「最後の確認」 sheet's own acknowledged action, and only once
+    /// the read-only pre-flight has enumerated what would be destroyed (S14).
+    ///
+    /// TODO(ping-pong brake): two fenced devices can overwrite each other in
+    /// turn, because after a commit the losing device lands on this same screen
+    /// with the same two doors (PLAN §7 window 3). A brake — refusing a new
+    /// overwrite when this device's own admission was itself replaced within
+    /// the last N minutes — was deliberately NOT added: it would also block a
+    /// legitimate retry, and the owner has not chosen N. Until then the loop is
+    /// disclosed in the copy and detected once by `evaluateReplacementWatch`,
+    /// not prevented. Documented in Docs/MultiDeviceCloudSafety.md (PR 3).
+    private func requestDatasetOverwrite() {
+        guard !isPreparing, !requiresStorageTransferRelaunch,
+              storageTransferRecoveryBinding != nil,
+              cloudDatasetPreview != nil,
+              let generation = storageTransferRefreshGenerationID else { return }
+        datasetPreviewRequest = nil
+        remoteRecoveryAction = .overwrite(generation)
+        launchState = .preparing("この端末のデータでiCloudを置き換える準備をしています")
+        launchAttempt += 1
+    }
+
+    /// One read-only server snapshot plus one read of a disposable copy of this
+    /// device's own stores. Opens no container that outlives this call, creates
+    /// no journal or checkpoint, and writes nothing to either side. A failure
+    /// is surfaced as a failure: "we could not look" and "there is nothing
+    /// there" must not be confusable on a screen that offers a deletion.
+    private func loadDatasetPreviews() async {
+        guard let request = datasetPreviewRequest,
+              let binding = storageTransferRecoveryBinding else { return }
+        let deviceID = FocusDeviceIdentity.current()
+        // The server side runs first: it is the side that gates the
+        // destructive door, and it is the side that can be slow for a reason
+        // the user can act on. The device side copies and hashes this
+        // installation's stores on the main actor, so it must not sit in front
+        // of the evidence the screen exists to show.
+        do {
+            let preview = try await StorageTransferRuntime.live().previewCloudDataset(
+                binding: binding, localDeviceID: deviceID,
+                validateAccess: { try requireDatasetPreviewRequest(request) })
+            guard datasetPreviewRequest == request else { return }
+            cloudDatasetPreview = preview
+            cloudDatasetPreviewFailed = false
+        } catch {
+            guard datasetPreviewRequest == request else { return }
+            cloudDatasetPreview = nil
+            cloudDatasetPreviewFailed = true
+        }
+        guard datasetPreviewRequest == request else { return }
+        if case let .selected(selection) = PersistenceDeploymentState.load() {
+            // Best effort. An unreadable device side degrades the comparison
+            // to 「確認できませんでした」; it never gates the destructive door,
+            // which is about what the SERVER holds.
+            deviceDatasetPreview = try? StorageTransferLaunchReader.captureDevicePreview(
+                selection: selection, localDeviceID: deviceID)
+        }
+    }
+
+    private func requireDatasetPreviewRequest(_ request: UUID) throws {
+        guard datasetPreviewRequest == request, !requiresStorageTransferRelaunch,
+              !Task.isCancelled else {
+            throw StorageTransferError.staleTransaction
+        }
+    }
+
+    private func startDeviceDataExport() {
+        guard !isExportingDeviceData, deviceDataExportURL == nil else { return }
+        guard case let .selected(selection) = PersistenceDeploymentState.load() else {
+            deviceDataExportError = StorageTransferLaunchReader.Failure.unavailable.localizedDescription
+            return
+        }
+        isExportingDeviceData = true
+        Task { @MainActor in
+            defer { isExportingDeviceData = false }
+            do {
+                deviceDataExportURL = try await StorageTransferLaunchReader
+                    .exportDeviceData(selection: selection)
+            } catch {
+                deviceDataExportError = error.localizedDescription
+            }
+        }
+    }
+
+    private func discardDeviceDataExport() {
+        guard let url = deviceDataExportURL else { return }
+        deviceDataExportURL = nil
+        try? PomoGemDataExporter.removeExport(at: url)
     }
 
     private func requestLocalTransferCancellation(_ target: UUID) {
@@ -1985,13 +2142,19 @@ private struct PomoGemPersistenceLaunchHost: View {
             let journal = try StorageTransferRuntime.live().pendingLocalJournal()
             cancellableLocalTransferID = journal?.permitsCancellation == true ? journal?.transactionID : nil
             retainsTransferCopyOnCancellation = journal?.retainsImportOnCancellation == true
+            overwriteInProgressPhase = journal?.choice == .overwriteCloudFromDevice ? journal?.phase : nil
         } catch {
             cancellableLocalTransferID = nil
             retainsTransferCopyOnCancellation = false
+            overwriteInProgressPhase = nil
         }
     }
 
     private func presentDatasetRefresh(error: StorageTransferRuntimeError, attempt: Int) async {
+        datasetPreviewRequest = nil
+        cloudDatasetPreview = nil
+        deviceDatasetPreview = nil
+        cloudDatasetPreviewFailed = false
         guard let binding = storageTransferRecoveryBinding else {
             launchState = .blocked(error.localizedDescription)
             return
@@ -2017,6 +2180,10 @@ private struct PomoGemPersistenceLaunchHost: View {
             storageTransferRecoveryTransactionID = nil
             storageTransferRefreshGenerationID = generation
             launchState = .datasetRefresh(error.localizedDescription)
+            // Started only after the screen exists, so the pre-flight read
+            // never delays the non-destructive doors and never runs inside the
+            // launch attempt that must end for those doors to be live.
+            datasetPreviewRequest = UUID()
         } catch {
             guard launchAttempt == attempt, !Task.isCancelled else { return }
             storageTransferRefreshGenerationID = nil
@@ -2445,13 +2612,41 @@ private struct PersistenceLaunchStatusView: View {
     let onRecoverTransfer: () -> Void
     let onCancelTransfer: () -> Void
     let onRefreshDataset: () -> Void
+    /// Opens the 「最後の確認」 sheet's confirmed request. The button on this
+    /// screen never calls it: only the second screen's own acknowledgement can.
+    var onOverwriteDataset: () -> Void = {}
+    /// The non-destructive rescue door. nil while it cannot run (no selection
+    /// recorded, or an export is already in flight).
+    var onExportDeviceData: (() -> Void)?
+    /// Read-only pre-flight evidence. `cloudPreview == nil` means the iCloud
+    /// side was NOT enumerated — either the read is still running or it failed
+    /// (`cloudPreviewFailed`). Nobody may authorize deleting contents the app
+    /// never enumerated, so the overwrite door stays closed while it is nil.
+    var cloudPreview: StorageTransferCloudPreview?
+    var devicePreview: StorageTransferCloudPreview?
+    var cloudPreviewFailed = false
+    /// Non-nil only while a device → iCloud replacement this installation
+    /// started is durably in flight; drives the phase-aware progress copy.
+    var overwritePhase: StorageTransferJournal.Phase?
+    /// Injected so a Debug simulator fixture can render the published screen.
+    /// The app always passes `.standard`, where every bit is still false.
+    var releasePolicy: StorageTransferReleasePolicy = .standard
     let onCancelLocalTransfer: (() -> Void)?
     let retainsTransferCopyOnCancellation: Bool
     let onContinueOffline: (() -> Void)?
 
+    /// A sheet is presented in its own hosting controller and does not inherit
+    /// a `dynamicTypeSize` that an ancestor set explicitly. The last screen
+    /// before an irreversible deletion must be readable at the size the user
+    /// actually chose, so the current size is read here and re-applied below.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var storageConfirmation: StorageConfirmation?
     @State private var confirmsTransferCancellation = false
     @State private var understandsRefreshDataLoss = false
+    /// The two directions must never share a consent. This one lives on the
+    /// second screen and is discarded every time that screen opens or closes.
+    @State private var understandsOverwriteDataLoss = false
+    @State private var presentsOverwriteConfirmation = false
 
     var body: some View {
         ZStack {
@@ -2473,6 +2668,22 @@ private struct PersistenceLaunchStatusView: View {
                         ProgressView()
                             .tint(PomoGemTheme.amber)
                             .accessibilityLabel(message)
+                        if let overwritePhase {
+                            // Derived from the durable journal phase, never
+                            // from an optimistic guess about an in-flight
+                            // effect, so a relaunch shows the same sentence.
+                            Text(StorageTransferOverwriteCopy.progress(overwritePhase))
+                                .foregroundStyle(PomoGemTheme.muted)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("storage-overwrite-progress")
+                            Text(StorageTransferOverwriteCopy.notCancellable)
+                                .font(.caption)
+                                .foregroundStyle(PomoGemTheme.muted)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("storage-overwrite-not-cancellable")
+                        }
                     } else if isChoosingStorage {
                         storageChoiceDisclosure(
                             symbol: "icloud.fill",
@@ -2502,15 +2713,7 @@ private struct PersistenceLaunchStatusView: View {
                         }
                         .buttonStyle(PomoGemSecondaryButtonStyle())
                     } else if case .datasetRefresh = state {
-                        Text("この端末のテーマ・記録・設定を削除し、現在のiCloudのデータに置き換えます。未送信の端末データは失われ、iCloudのデータとは結合されません。iCloudのデータは残ります。")
-                            .foregroundStyle(PomoGemTheme.muted)
-                            .accessibilityIdentifier("storage-refresh-data-loss-warning")
-                        Toggle("端末データの削除を確認しました", isOn: $understandsRefreshDataLoss)
-                            .accessibilityIdentifier("storage-refresh-confirm-data-loss")
-                        Button("iCloudから再取得", role: .destructive, action: onRefreshDataset)
-                            .buttonStyle(PomoGemPrimaryButtonStyle())
-                            .disabled(!understandsRefreshDataLoss)
-                            .accessibilityIdentifier("storage-refresh-confirm")
+                        datasetRefreshDoors
                     } else if case let .remoteRecovery(_, canCancel) = state {
                         Button("復旧を続ける", action: onRecoverTransfer)
                             .buttonStyle(PomoGemPrimaryButtonStyle())
@@ -2621,10 +2824,163 @@ private struct PersistenceLaunchStatusView: View {
         } message: {
             Text("元のiCloudの記録を残して、この切り替えを取り消します。データの置き換えが始まっている場合は取り消せません。")
         }
+        .sheet(isPresented: $presentsOverwriteConfirmation) {
+            overwriteConfirmationSheet
+        }
         .onChange(of: state) { _, _ in
             understandsRefreshDataLoss = false
+            understandsOverwriteDataLoss = false
+            presentsOverwriteConfirmation = false
             confirmsTransferCancellation = false
         }
+    }
+
+    /// The `.datasetRefresh` screen a device that was fenced out of the current
+    /// iCloud generation lands on. It offers both directions, each with its own
+    /// unchecked acknowledgement on its own `@State`, plus the non-destructive
+    /// rescue door in between. Reading either explanation is never consent, and
+    /// consenting to one direction never arms the other.
+    @ViewBuilder
+    private var datasetRefreshDoors: some View {
+        doorHeader("iCloudのデータを使う")
+        Text("この端末のテーマ・記録・設定を削除し、現在のiCloudのデータに置き換えます。未送信の端末データは失われ、iCloudのデータとは結合されません。iCloudのデータは残ります。")
+            .foregroundStyle(PomoGemTheme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("storage-refresh-data-loss-warning")
+        Toggle("端末データの削除を確認しました", isOn: $understandsRefreshDataLoss)
+            .accessibilityIdentifier("storage-refresh-confirm-data-loss")
+        Button("iCloudから再取得", role: .destructive, action: onRefreshDataset)
+            .buttonStyle(PomoGemPrimaryButtonStyle())
+            .disabled(!understandsRefreshDataLoss)
+            .accessibilityIdentifier("storage-refresh-confirm")
+
+        doorHeader("このiPhoneのデータを使う")
+        Text(overwriteComparison)
+            .foregroundStyle(PomoGemTheme.muted)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("storage-overwrite-comparison")
+        Text(overwriteOtherDeviceEvidence)
+            .font(.caption)
+            .foregroundStyle(PomoGemTheme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("storage-overwrite-other-devices")
+        Text(StorageTransferOverwriteCopy.dataLossWarning)
+            .foregroundStyle(PomoGemTheme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("storage-overwrite-data-loss-warning")
+        if let onExportDeviceData {
+            Button(StorageTransferOverwriteCopy.exportTitle, action: onExportDeviceData)
+                .buttonStyle(PomoGemSecondaryButtonStyle())
+                .accessibilityIdentifier("storage-refresh-export")
+            Text(StorageTransferOverwriteCopy.exportNote)
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("storage-refresh-export-note")
+        }
+        Button(StorageTransferOverwriteCopy.confirmTitle, role: .destructive) {
+            // Never acts on tap. It opens the second screen, whose own
+            // acknowledgement starts unchecked on every presentation.
+            understandsOverwriteDataLoss = false
+            presentsOverwriteConfirmation = true
+        }
+        .buttonStyle(PomoGemPrimaryButtonStyle())
+        .disabled(!canRequestOverwrite)
+        .accessibilityIdentifier("storage-overwrite-confirm")
+        if !releasePolicy.allowsDatasetOverwriteFromDevice {
+            Text(StorageTransferReleaseError.datasetOverwriteUnavailable.localizedDescription)
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("storage-overwrite-unavailable")
+        }
+    }
+
+    /// 「最後の確認」. Everything the replacement will do, restated in full, with
+    /// its own unchecked toggle and its own destructive action. 「戻る」 starts
+    /// nothing and discards the acknowledgement.
+    private var overwriteConfirmationSheet: some View {
+        NavigationStack {
+            ZStack {
+                NightBackground()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        overwriteSheetParagraph(StorageTransferOverwriteCopy.sheetWarning,
+                            identifier: "storage-overwrite-warning")
+                        overwriteSheetParagraph(overwriteOtherDeviceEvidence,
+                            identifier: "storage-overwrite-sheet-other-devices")
+                        overwriteSheetParagraph(StorageTransferOverwriteCopy.recoveryCopy,
+                            identifier: "storage-overwrite-recovery-copy")
+                        overwriteSheetParagraph(StorageTransferOverwriteCopy.relaunch,
+                            identifier: "storage-overwrite-relaunch")
+                        overwriteSheetParagraph(StorageTransferOverwriteCopy.notCancellable,
+                            identifier: "storage-overwrite-not-cancellable")
+                        overwriteSheetParagraph(StorageTransferOverwriteCopy.screenTime,
+                            identifier: "storage-overwrite-screen-time")
+                        Toggle(StorageTransferOverwriteCopy.acknowledgement,
+                               isOn: $understandsOverwriteDataLoss)
+                            .accessibilityIdentifier("storage-overwrite-confirm-data-loss")
+                        Button(StorageTransferOverwriteCopy.sheetConfirm, role: .destructive) {
+                            presentsOverwriteConfirmation = false
+                            onOverwriteDataset()
+                        }
+                        .buttonStyle(PomoGemPrimaryButtonStyle())
+                        .disabled(!understandsOverwriteDataLoss)
+                        .accessibilityIdentifier("storage-overwrite-sheet-confirm")
+                    }
+                    .frame(maxWidth: 520)
+                    .padding(24)
+                }
+            }
+            .dynamicTypeSize(dynamicTypeSize)
+            .navigationTitle(StorageTransferOverwriteCopy.sheetTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("戻る") {
+                        understandsOverwriteDataLoss = false
+                        presentsOverwriteConfirmation = false
+                    }
+                }
+            }
+        }
+    }
+
+    private func overwriteSheetParagraph(_ text: String, identifier: String) -> some View {
+        Text(text)
+            .foregroundStyle(PomoGemTheme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier(identifier)
+    }
+
+    private func doorHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.headline)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 8)
+    }
+
+    /// S14. The destructive door is closed until the iCloud side has actually
+    /// been enumerated, and while the feature is unpublished. The device side
+    /// only degrades the comparison: failing to read this iPhone is not a
+    /// reason to refuse to describe what would be destroyed on the server.
+    private var canRequestOverwrite: Bool {
+        releasePolicy.allowsDatasetOverwriteFromDevice && cloudPreview != nil
+    }
+
+    private var overwriteComparison: String {
+        if cloudPreviewFailed { return StorageTransferOverwriteCopy.comparisonUnavailable }
+        guard cloudPreview != nil else { return StorageTransferOverwriteCopy.comparisonReading }
+        return StorageTransferOverwriteCopy.side("このiPhone", preview: devicePreview)
+            + "\n" + StorageTransferOverwriteCopy.side("iCloud", preview: cloudPreview)
+    }
+
+    private var overwriteOtherDeviceEvidence: String {
+        guard let cloudPreview else { return StorageTransferOverwriteCopy.otherDevicesUnknown }
+        return StorageTransferOverwriteCopy.otherDevices(cloudPreview.otherDeviceIDs)
     }
 
     private var localTransferCancellationExplanation: String {
