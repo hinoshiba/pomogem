@@ -160,4 +160,40 @@ final class StorageTransferCloudAuthorityFenceTests: XCTestCase {
             accountFingerprint: account, payload: bytes, previousDatasetGenerationID: UUID())
         XCTAssertThrowsError(try checkpoint.validate(journal: journal))
     }
+
+    // MARK: - Device -> iCloud overwrite
+
+    func testOverwriteCannotAdoptAnotherTransactionWithIdenticalDataAndGeneration() throws {
+        let (journal, checkpoint) = try fixture(choice: .overwriteCloudFromDevice, phase: .destinationVerified)
+        let own = try StorageTransferRecoveryControl(manifest: XCTUnwrap(checkpoint.recoveryManifest))
+        let committed = try advance(own, to: .committed)
+        try StorageTransferCloudAuthorityFence.validate(observed: committed, journal: journal, checkpoint: checkpoint)
+        let later = try control(phase: .cancelled, previousGeneration: committed.datasetGenerationID)
+        XCTAssertEqual(later.datasetGenerationID, committed.datasetGenerationID)
+        XCTAssertEqual(later.manifest.payloadSHA256, committed.manifest.payloadSHA256)
+        XCTAssertThrowsError(try StorageTransferCloudAuthorityFence.validate(observed: later,
+            journal: journal, checkpoint: checkpoint))
+    }
+
+    func testCommittedOverwriteIsRefusedBeforeIndependentDestinationVerification() throws {
+        for phase in [StorageTransferJournal.Phase.sourceSaved, .preparingDestination, .destinationSaved] {
+            let (journal, checkpoint) = try fixture(choice: .overwriteCloudFromDevice, phase: phase)
+            let own = try StorageTransferRecoveryControl(manifest: XCTUnwrap(checkpoint.recoveryManifest))
+            XCTAssertThrowsError(try StorageTransferCloudAuthorityFence.validate(
+                observed: advance(own, to: .committed), journal: journal, checkpoint: checkpoint),
+                "Phase: \(phase)")
+        }
+        // The overwrite owns control-v1 exactly as the legacy replacement does:
+        // through its in-flight phases it accepts only its own manifest.
+        let (journal, checkpoint) = try fixture(choice: .overwriteCloudFromDevice, phase: .preparingDestination)
+        let own = try StorageTransferRecoveryControl(manifest: XCTUnwrap(checkpoint.recoveryManifest))
+        for phase in [StorageTransferRecoveryControl.Phase.staging, .backupVerified, .replacing] {
+            try StorageTransferCloudAuthorityFence.validate(observed: advance(own, to: phase),
+                journal: journal, checkpoint: checkpoint)
+        }
+        XCTAssertThrowsError(try StorageTransferCloudAuthorityFence.validate(observed: nil,
+            journal: journal, checkpoint: checkpoint))
+        XCTAssertThrowsError(try StorageTransferCloudAuthorityFence.validate(observed: try own.cancelling(),
+            journal: journal, checkpoint: checkpoint))
+    }
 }

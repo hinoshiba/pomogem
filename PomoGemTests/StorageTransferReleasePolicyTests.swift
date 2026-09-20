@@ -95,7 +95,7 @@ final class StorageTransferReleasePolicyTests: XCTestCase {
         do {
             try await runtime.recoverRemoteTransfer(binding: binding, expectedTransactionID: UUID(), validateAccess: {})
             XCTFail("A fresh installation must not become another destructive executor")
-        } catch { XCTAssertEqual(error as? StorageTransferReleaseError, .cloudReplacementUnavailable) }
+        } catch { XCTAssertEqual(error as? StorageTransferReleaseError, .remoteReplacementResumeUnavailable) }
         XCTAssertNil(try store.load())
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path).sorted(), before)
     }
@@ -257,6 +257,24 @@ final class StorageTransferReleasePolicyTests: XCTestCase {
         for choice in StorageTransferChoice.allCases { XCTAssertNoThrow(try isolated.validate(choice)) }
         XCTAssertEqual(StorageTransferReleasePolicy.standard,
                        StorageTransferReleasePolicy.isolatedTestingPolicy())
+    }
+    #endif
+
+    #if DEBUG
+    func testServerOriginResumeIsRefusedWhileOnlyTheOverwriteBitIsOpen() async throws {
+        let (root, store, _, binding) = try fixture()
+        let runtime = StorageTransferRuntime(store: store, root: root,
+            releasePolicy: .isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true))
+        let before = try FileManager.default.contentsOfDirectory(atPath: root.path).sorted()
+        do {
+            try await runtime.recoverRemoteTransfer(binding: binding,
+                expectedTransactionID: UUID(), validateAccess: {})
+            XCTFail("Publishing the overwrite must not publish resuming another device's work")
+        } catch {
+            XCTAssertEqual(error as? StorageTransferReleaseError, .remoteReplacementResumeUnavailable)
+        }
+        XCTAssertNil(try store.load())
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path).sorted(), before)
     }
     #endif
 }

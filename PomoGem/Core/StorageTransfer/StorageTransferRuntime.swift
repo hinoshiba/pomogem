@@ -570,7 +570,9 @@ final class StorageTransferRuntime {
     func recoverRemoteTransfer(binding: ActiveAccountLocalBinding, expectedTransactionID: UUID,
                                validateAccess: @escaping @MainActor () throws -> Void) async throws {
         try validateAccess()
-        try releasePolicy.validate(.enableCloudReplacingCloud)
+        // Refuse a closed resume bit before any remote read, then refuse again
+        // on the observed phase below: the phase, not the kind, is the gate.
+        try releasePolicy.requireRemoteResumeIsPublished()
         try requireNoPendingRemoteCancellation()
         guard !StorageTransferProcessState.cloudMirrorWasOpened else { throw StorageTransferRuntimeError.relaunchRequired }
         if let journal = try store.load() {
@@ -583,6 +585,11 @@ final class StorageTransferRuntime {
               control.manifest.transactionID == expectedTransactionID, control.blocksWriters else {
             throw StorageTransferError.staleTransaction
         }
+        // Only .staging / .backupVerified may be adopted. The backupVerified ->
+        // replacing CAS elects exactly one executor of the zone deletion, so a
+        // later arrival observing .replacing is refused rather than becoming a
+        // second executor (Docs/MultiDeviceCloudSafety.md defect 2).
+        try releasePolicy.validateRemoteResume(control.phase)
         let recovered = try await recovery.recover(manifest: control.manifest)
         try validateAccess()
         let snapshot = try JSONDecoder().decode(PomoGemStorageSnapshot.self, from: recovered.bytes)
@@ -592,7 +599,7 @@ final class StorageTransferRuntime {
         // legacy rows. Never invent a path to another installation's cache.
         let source = PersistenceDeploymentSelection.localOnly(namespace: AccountDataNamespace())
         let journal = try StorageTransferJournal(transactionID: expectedTransactionID,
-            choice: .enableCloudReplacingCloud, source: source,
+            choice: .overwriteCloudFromDevice, source: source,
             destination: .cloud(binding: binding), cloudBinding: binding)
         try requireNoArtifacts(selection: source)
         try requireNoArtifacts(selection: journal.destination)
