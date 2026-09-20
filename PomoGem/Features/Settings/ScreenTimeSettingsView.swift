@@ -7,7 +7,7 @@ import SwiftUI
 struct ScreenTimeSettingsView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.scenePhase) private var scenePhase
-    @ObservedObject private var controller = ScreenTimeController.shared
+    @ObservedObject private var controller: ScreenTimeController
     @State private var purchase = PurchaseManager.shared
     @Query private var storedSubjects: [Subject]
     @State private var draft: ScreenTimeConfiguration
@@ -17,8 +17,16 @@ struct ScreenTimeSettingsView: View {
     @State private var isResetConfirmationPresented = false
     @State private var hasUserEdits = false
 
-    init() {
-        _draft = State(initialValue: ScreenTimeController.shared.configuration)
+    /// Production always uses the shared controller; the parameter exists so
+    /// the Simulator UI-test fixture can drive a temporary ledger that really
+    /// binds. Without entitlements the shared controller's App Group container
+    /// is nil and `isBoundToContext` can never become true, which would leave
+    /// the unbound -> bound draft re-seed with no automated coverage at all.
+    @MainActor
+    init(controller: ScreenTimeController? = nil) {
+        let controller = controller ?? .shared
+        _controller = ObservedObject(wrappedValue: controller)
+        _draft = State(initialValue: controller.configuration)
         var descriptor = FetchDescriptor<Subject>(sortBy: [
             SortDescriptor(\Subject.sortOrder),
             SortDescriptor(\Subject.createdAt),

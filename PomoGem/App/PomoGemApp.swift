@@ -672,6 +672,8 @@ private struct PomoGemPersistenceLaunchHost: View {
 #if DEBUG && targetEnvironment(simulator)
         if StorageTransferSettingsUITestFixture.isActiveForCurrentProcess {
             StorageTransferSettingsUITestFixtureLaunchView()
+        } else if ScreenTimeSettingsUITestFixture.isActiveForCurrentProcess {
+            ScreenTimeSettingsUITestFixtureLaunchView()
         } else if FortyYearPersistentUITestFixture.showsOverviewForCurrentProcess {
             if LocalPreviewLaunchPolicy.forcesAccessibility5(
                 environment: ProcessInfo.processInfo.environment,
