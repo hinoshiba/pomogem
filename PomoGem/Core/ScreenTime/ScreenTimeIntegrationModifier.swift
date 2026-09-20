@@ -21,18 +21,19 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
     /// Production always uses the shared controller; the parameter exists so a
     /// mount/unmount regression test can drive a temporary ledger instead of
     /// the App Group one.
+    @MainActor
     init(
         isReady: Bool,
         timerPresented: Bool,
         contextKey: String,
         dataEpochID: UUID?,
-        controller: ScreenTimeController = .shared
+        controller: ScreenTimeController? = nil
     ) {
         self.isReady = isReady
         self.timerPresented = timerPresented
         self.contextKey = contextKey
         self.dataEpochID = dataEpochID
-        _controller = ObservedObject(wrappedValue: controller)
+        _controller = ObservedObject(wrappedValue: controller ?? .shared)
     }
 
     private var isCurrentOwner: Bool {

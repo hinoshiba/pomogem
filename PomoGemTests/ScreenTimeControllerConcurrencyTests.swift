@@ -488,3 +488,109 @@ final class ScreenTimeIntegrationLifecycleTests: XCTestCase {
         XCTAssertEqual(driver.stopCount, 0)
     }
 }
+
+/// The settings screen seeds its draft from the controller. While the context
+/// is not bound the controller publishes an EMPTY configuration, and saving
+/// that would destroy opaque application tokens only a new picker session can
+/// restore.
+@MainActor
+final class ScreenTimeSettingsDraftTests: XCTestCase {
+    private final class Driver: ScreenTimeMonitoringDriving {
+        let store: ScreenTimeStore
+        init(store: ScreenTimeStore) { self.store = store }
+        func stop() {}
+        func invalidateAuthorizationIfNeeded() throws {}
+        func synchronize(now: Date) throws -> Bool {
+            try store.withMonitoringLock { try store.snapshot().runs.contains(where: \.active) }
+        }
+    }
+
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+    private var directories: [URL] = []
+
+    override func tearDown() {
+        for directory in directories { try? FileManager.default.removeItem(at: directory) }
+        directories.removeAll()
+        super.tearDown()
+    }
+
+    private func makeStore(owner: String = "owner") throws -> ScreenTimeStore {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        directories.append(directory)
+        let store = ScreenTimeStore(directory: directory)
+        var state = ScreenTimeState()
+        state.contextKey = owner
+        state.contextIsActive = true
+        state.configuration.enabled = true
+        state.configuration.themeID = UUID()
+        state.negativeGemCount = 9
+        state.runs = [ScreenTimeRun(
+            lane: .learning, dayStart: start, dayEnd: start.addingTimeInterval(86_400),
+            startedAt: start, timeZoneID: "UTC", includesPastActivity: false,
+            themeID: state.configuration.themeID
+        )]
+        try store.update { $0 = state }
+        return store
+    }
+
+    func testDraftIsNeverSeededFromAnUnboundController() {
+        for hasUserEdits in [false, true] {
+            for draftIsEmpty in [false, true] {
+                XCTAssertFalse(ScreenTimeDraftPolicy.shouldReseed(
+                    bound: false, hasUserEdits: hasUserEdits, draftIsEmpty: draftIsEmpty
+                ), "An unbound controller publishes an empty configuration")
+            }
+        }
+    }
+
+    func testBindingSeedsTheDraftOnlyWhileTheUserHasNotEdited() {
+        XCTAssertTrue(ScreenTimeDraftPolicy.shouldReseed(bound: true, hasUserEdits: false, draftIsEmpty: true))
+        XCTAssertTrue(ScreenTimeDraftPolicy.shouldReseed(bound: true, hasUserEdits: false, draftIsEmpty: false))
+        XCTAssertFalse(ScreenTimeDraftPolicy.shouldReseed(bound: true, hasUserEdits: true, draftIsEmpty: false),
+                       "Edits the user can see must survive a late binding")
+        XCTAssertTrue(ScreenTimeDraftPolicy.shouldReseed(bound: true, hasUserEdits: true, draftIsEmpty: true),
+                      "An empty draft has nothing to lose and would otherwise stay empty")
+    }
+
+    func testIsBoundToContextFollowsAdmissionRetirementAndErase() async throws {
+        let store = try makeStore()
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: Driver(store: store), authorization: { .approved })
+        XCTAssertFalse(controller.isBoundToContext, "A freshly created controller has no lease yet")
+
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        XCTAssertTrue(controller.isBoundToContext)
+
+        // Reset keeps the same owner bound; 保存 must stay available afterwards.
+        try await controller.resetActivityData()
+        XCTAssertTrue(controller.isBoundToContext)
+
+        controller.suspendForContextRetirement(contextKey: "owner", dataEpochID: nil)
+        XCTAssertFalse(controller.isBoundToContext)
+
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        XCTAssertTrue(controller.isBoundToContext)
+        try await controller.eraseAllData()
+        XCTAssertFalse(controller.isBoundToContext)
+    }
+
+    func testFailedBindingLeavesTheContextUnbound() async throws {
+        let store = try makeStore()
+        let path = try XCTUnwrap(directories.last).appendingPathComponent("ScreenTime/ledger.json")
+        let original = try Data(contentsOf: path)
+        try Data("corrupt".utf8).write(to: path)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: Driver(store: store), authorization: { .approved })
+        do {
+            try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+            XCTFail("A corrupt ledger must not bind")
+        } catch {}
+        XCTAssertFalse(controller.isBoundToContext)
+        XCTAssertEqual(controller.configuration, ScreenTimeConfiguration())
+
+        try original.write(to: path)
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        XCTAssertTrue(controller.isBoundToContext)
+        XCTAssertTrue(controller.configuration.enabled)
+    }
+}

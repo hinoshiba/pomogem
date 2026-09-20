@@ -15,13 +15,17 @@ final class ScreenTimeController: ObservableObject {
     @Published private(set) var isSaving = false
     @Published private(set) var isResetting = false
     @Published private(set) var isUpdatingMonitoring = false
+    /// The published configuration is empty until the ledger admits this
+    /// owner. The settings screen must not seed a draft — or offer 保存 —
+    /// from that empty state, or a save would erase the opaque selections.
+    @Published private(set) var isBoundToContext = false
     let store: ScreenTimeStore
     private let worker: ScreenTimeMonitoringWorker
     private let currentContextKey: () -> String
     private let authorization: () -> AuthorizationStatus
-    private var lease: ScreenTimeContextLease?
+    private var lease: ScreenTimeContextLease? { didSet { publishBindingState() } }
     private var bindingTask: Task<Void, Error>?
-    private var bindingConfirmed = false
+    private var bindingConfirmed = false { didSet { publishBindingState() } }
     private var operationIDs: Set<UUID> = []
     private var isErasing = false
 
@@ -378,6 +382,11 @@ final class ScreenTimeController: ObservableObject {
     private func endOperation(_ id: UUID) {
         operationIDs.remove(id)
         isUpdatingMonitoring = !operationIDs.isEmpty
+    }
+
+    private func publishBindingState() {
+        let bound = bindingConfirmed && lease != nil
+        if isBoundToContext != bound { isBoundToContext = bound }
     }
 
     private func clearPublishedState() {
