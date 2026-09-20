@@ -51,6 +51,10 @@ final class StorageTransferRuntime {
     private static let processID = UUID()
     private let store: StorageTransferJournalStore
     private let root: URL
+    /// The directory this feature owns. Exposed so a small state file that
+    /// belongs beside `admission-*.json` can be built without widening the
+    /// runtime's surface any further.
+    var featureRoot: URL { root }
     private let releasePolicy: StorageTransferReleasePolicy
     private let storeDirectory: URL?
     private let readSourceSelection: @MainActor () -> PersistenceDeploymentSelectionState

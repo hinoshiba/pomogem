@@ -5,19 +5,28 @@ import SwiftUI
 @Observable
 final class StorageTransferController {
     typealias Operation = @MainActor @Sendable (StorageTransferChoice) async throws -> Void
+    /// The two directional dataset operations. They do not go through
+    /// `begin`: a mounted cloud session has already opened the CloudKit
+    /// mirror, so they record a durable request and ask for the deliberate
+    /// relaunch that executes it. See `StorageTransferDatasetRequest`.
+    typealias DatasetOperation =
+        @MainActor @Sendable (StorageTransferDatasetRequestDirection) async throws -> Void
 
     private(set) var isStarting = false
     private(set) var error: String?
     private var operation: Operation?
+    private var datasetOperation: DatasetOperation?
     private var registrationID: UUID?
     private var task: Task<Void, Never>?
 
     var isAvailable: Bool { operation != nil && !isStarting }
+    var isDatasetAvailable: Bool { datasetOperation != nil && !isStarting }
 
     @discardableResult
-    func install(_ operation: @escaping Operation) -> UUID {
+    func install(_ operation: @escaping Operation, dataset: DatasetOperation? = nil) -> UUID {
         let id = UUID()
         self.operation = operation
+        datasetOperation = dataset
         registrationID = id
         return id
     }
@@ -29,6 +38,7 @@ final class StorageTransferController {
     func uninstall(registrationID: UUID) {
         guard self.registrationID == registrationID else { return }
         operation = nil
+        datasetOperation = nil
         self.registrationID = nil
     }
 
@@ -53,6 +63,32 @@ final class StorageTransferController {
             self?.task = nil
         }
     }
+
+    /// Only an acknowledged direction reaches this method. The policy is passed
+    /// in rather than read from `.standard` so the Debug UI-test fixture can
+    /// exercise the published flow with exactly one bit raised; every other
+    /// caller passes `.standard`, and the runtime entry point that finally runs
+    /// the direction re-validates `.standard` for itself.
+    func startDataset(_ direction: StorageTransferDatasetRequestDirection,
+                      policy: StorageTransferReleasePolicy = .standard) {
+        guard !isStarting, task == nil, let datasetOperation else { return }
+        do { try StorageTransferDatasetRequestPolicy.validate(direction, policy: policy) }
+        catch {
+            self.error = error.localizedDescription
+            return
+        }
+        error = nil
+        isStarting = true
+        task = Task { @MainActor [weak self] in
+            do {
+                try await datasetOperation(direction)
+            } catch {
+                self?.error = error.localizedDescription
+                self?.isStarting = false
+            }
+            self?.task = nil
+        }
+    }
 }
 
 /// A navigation choice followed by a specific confirmation makes the losing
@@ -62,6 +98,9 @@ struct StorageTransferSettingsSection: View {
     let persistenceMode: PersistenceLaunchMode
     let controller: StorageTransferController
     let otherWorkIsActive: Bool
+    /// Injected so the Debug UI-test fixture can exercise a published door with
+    /// exactly one bit raised. Every shipping caller uses the default.
+    var releasePolicy: StorageTransferReleasePolicy = .standard
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showsChoices = false
 
@@ -77,10 +116,19 @@ struct StorageTransferSettingsSection: View {
                 // List flattens Section into rows. Attach presentation to the
                 // concrete entry row so its presenter remains in the hierarchy.
                 .sheet(isPresented: $showsChoices) {
-                    StorageTransferChoiceView(persistenceMode: persistenceMode) { choice in
-                        showsChoices = false
-                        controller.start(choice)
-                    }
+                    StorageTransferChoiceView(
+                        persistenceMode: persistenceMode,
+                        releasePolicy: releasePolicy,
+                        offersDatasetDoors: controller.isDatasetAvailable,
+                        confirmed: { choice in
+                            showsChoices = false
+                            controller.start(choice)
+                        },
+                        confirmedDataset: { direction in
+                            showsChoices = false
+                            controller.startDataset(direction, policy: releasePolicy)
+                        }
+                    )
                     .dynamicTypeSize(dynamicTypeSize)
                 }
                 if controller.isStarting {
@@ -101,10 +149,17 @@ struct StorageTransferSettingsSection: View {
 
 private struct StorageTransferChoiceView: View {
     let persistenceMode: PersistenceLaunchMode
+    let releasePolicy: StorageTransferReleasePolicy
+    let offersDatasetDoors: Bool
     let confirmed: (StorageTransferChoice) -> Void
+    let confirmedDataset: (StorageTransferDatasetRequestDirection) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var choice: StorageTransferChoice?
+    /// Its own presentation state, so a tentative dataset direction can never
+    /// be confused with a tentative storage-mode choice, and so the two kinds
+    /// of confirmation never share an acknowledgement.
+    @State private var datasetDirection: StorageTransferDatasetRequestDirection?
 
     var body: some View {
         NavigationStack {
@@ -116,6 +171,7 @@ private struct StorageTransferChoiceView: View {
                         Button("このiPhoneへ引き継ぐ") { choice = .disableCloudKeepingCopy }
                             .accessibilityIdentifier("storage-switch.disable-keep-copy")
                     }
+                    datasetDoors
                 } else {
                     Section {
                         Text("残すデータを選んでください。2つの保存先のデータは結合しません。")
@@ -141,18 +197,96 @@ private struct StorageTransferChoiceView: View {
                     Text("通信状態やデータ量によって時間がかかります。安全のため、画面の案内に従ってアプリを終了し、開き直す手順があります。アプリ自体は削除しないでください。中断した場合は、次回起動時に復旧画面を表示します。")
                 }
             }
-            .navigationTitle(persistenceMode == .cloudKit ? "iCloudを解除" : "iCloudを有効にする")
+            // The cloud-mode screen no longer only unlinks iCloud: it also
+            // offers the generation-fenced device -> iCloud replacement.
+            .navigationTitle(persistenceMode == .cloudKit ? "iCloudと保存先の変更" : "iCloudを有効にする")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { dismiss() } } }
             .sheet(item: $choice) { selected in
                 StorageTransferConfirmationView(choice: selected) { confirmed(selected) }
                     .dynamicTypeSize(dynamicTypeSize)
             }
+            .sheet(item: $datasetDirection) { direction in
+                StorageTransferDatasetConfirmationView(direction: direction) {
+                    confirmedDataset(direction)
+                }
+                .dynamicTypeSize(dynamicTypeSize)
+            }
+        }
+    }
+
+    /// PLAN Step 11. Direction (A) only; `storage-switch.replace-cloud` — the
+    /// legacy `localOnly -> cloud` replacement — is untouched and still keyed
+    /// off its own, separate bit in the enable branch below.
+    @ViewBuilder
+    private var datasetDoors: some View {
+        if offersDatasetDoors {
+            Section("このiPhoneのデータでiCloudを置き換える") {
+                Text(StorageTransferOverwriteCopy.dataLossWarning)
+                if !releasePolicy.allowsDatasetOverwriteFromDevice {
+                    Text(StorageTransferReleaseError.datasetOverwriteUnavailable.localizedDescription)
+                        .accessibilityIdentifier("storage-switch.overwrite-cloud-unavailable")
+                }
+                Button(StorageTransferOverwriteCopy.confirmTitle, role: .destructive) {
+                    // Never acts on tap: it presents 「最後の確認」, whose own
+                    // acknowledgement starts unchecked on every presentation.
+                    datasetDirection = .overwriteCloudFromDevice
+                }
+                .disabled(!releasePolicy.allowsDatasetOverwriteFromDevice)
+                .accessibilityIdentifier("storage-switch.overwrite-cloud")
+            }
         }
     }
 }
 
 extension StorageTransferChoice: Identifiable { var id: Self { self } }
+extension StorageTransferDatasetRequestDirection: Identifiable { var id: Self { self } }
+
+/// 「最後の確認」 for a directional dataset replacement. Everything the direction
+/// will do, restated in full, with its own unchecked acknowledgement and its
+/// own destructive action. A fresh instance is built for every presentation, so
+/// 戻る discards the acknowledgement and no other confirmation in this screen
+/// can ever arm this one (PLAN §3 S9).
+private struct StorageTransferDatasetConfirmationView: View {
+    let direction: StorageTransferDatasetRequestDirection
+    let confirmed: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var understandsDeletion = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    paragraph(StorageTransferOverwriteCopy.sheetWarning, suffix: "warning")
+                    paragraph(StorageTransferOverwriteCopy.recoveryCopy, suffix: "recovery-copy")
+                    paragraph(StorageTransferOverwriteCopy.relaunch, suffix: "relaunch")
+                    paragraph(StorageTransferOverwriteCopy.notCancellable, suffix: "not-cancellable")
+                    paragraph(StorageTransferOverwriteCopy.screenTime, suffix: "screen-time")
+                    Toggle(StorageTransferOverwriteCopy.acknowledgement, isOn: $understandsDeletion)
+                        .accessibilityIdentifier(identifier("confirm-data-loss"))
+                    Button(StorageTransferOverwriteCopy.sheetConfirm, role: .destructive, action: confirmed)
+                        .disabled(!understandsDeletion)
+                        .accessibilityIdentifier(identifier("confirm"))
+                }
+            }
+            .navigationTitle("最後の確認")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("戻る") { dismiss() } } }
+        }
+    }
+
+    private var door: String {
+        switch direction {
+        case .overwriteCloudFromDevice: "overwrite-cloud"
+        }
+    }
+
+    private func identifier(_ suffix: String) -> String { "storage-switch.\(door)-\(suffix)" }
+
+    private func paragraph(_ text: String, suffix: String) -> some View {
+        Text(text).accessibilityIdentifier(identifier(suffix))
+    }
+}
 
 private struct StorageTransferConfirmationView: View {
     let choice: StorageTransferChoice

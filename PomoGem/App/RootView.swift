@@ -332,6 +332,12 @@ struct RootView: View {
     let persistenceSafetyNotice: String?
     let rebuildPersistenceAfterCompleteDeletion: @MainActor @Sendable () async -> Void
     let prepareStorageTransfer: (@MainActor @Sendable (StorageTransferChoice) async throws -> Void)?
+    /// PLAN Steps 11-12. A directional dataset replacement cannot start in this
+    /// process: the session has already opened the CloudKit mirror. The host
+    /// records a durable request and asks for the deliberate relaunch that runs
+    /// it through the same runtime entry point the recovery screen uses.
+    let requestStorageTransferDataset:
+        (@MainActor @Sendable (StorageTransferDatasetRequestDirection) async throws -> Void)?
     let unmountForStorageTransfer: (@MainActor @Sendable () -> Void)?
 
     @Environment(\.modelContext) private var modelContext
@@ -411,6 +417,8 @@ struct RootView: View {
         persistenceSafetyNotice: String? = nil,
         rebuildPersistenceAfterCompleteDeletion: @escaping @MainActor @Sendable () async -> Void = {},
         prepareStorageTransfer: (@MainActor @Sendable (StorageTransferChoice) async throws -> Void)? = nil,
+        requestStorageTransferDataset:
+            (@MainActor @Sendable (StorageTransferDatasetRequestDirection) async throws -> Void)? = nil,
         unmountForStorageTransfer: (@MainActor @Sendable () -> Void)? = nil
     ) {
         self.persistenceStartupError = persistenceStartupError
@@ -418,6 +426,7 @@ struct RootView: View {
         self.persistenceSafetyNotice = persistenceSafetyNotice
         self.rebuildPersistenceAfterCompleteDeletion = rebuildPersistenceAfterCompleteDeletion
         self.prepareStorageTransfer = prepareStorageTransfer
+        self.requestStorageTransferDataset = requestStorageTransferDataset
         self.unmountForStorageTransfer = unmountForStorageTransfer
         _activePersistenceSafetyNotice = State(initialValue: persistenceSafetyNotice)
         _aggregateProjectionPresentation = State(
@@ -1443,7 +1452,7 @@ struct RootView: View {
     @MainActor
     private func installStorageTransferOperation() {
         guard let prepareStorageTransfer, let unmountForStorageTransfer else { return }
-        storageTransferRegistrationID = storageTransfer.install { choice in
+        storageTransferRegistrationID = storageTransfer.install({ choice in
             guard !isDataDeletionQuiesced,
                   !router.focusPresentationIsActive,
                   router.recoveredFocus == nil,
@@ -1464,7 +1473,25 @@ struct RootView: View {
             acceptedResetCleanupTask = nil
             await quiesceForCompleteDataDeletion()
             unmountForStorageTransfer()
-        }
+        }, dataset: requestStorageTransferDataset.map { request in
+            { @MainActor direction in
+                // The same external-work gate the choice operation applies. A
+                // dataset direction writes no journal here, but it does end the
+                // session, so an active or recovered timer must still block it.
+                guard !isDataDeletionQuiesced,
+                      !router.focusPresentationIsActive,
+                      router.recoveredFocus == nil,
+                      router.deferredFocusRecovery == nil,
+                      router.recoveredBreak == nil,
+                      try FocusCloudSyncStore.canonicalActive(context: modelContext) == nil else {
+                    throw StorageTransferError.activeTimer
+                }
+                if modelContext.hasChanges { try modelContext.save() }
+                // Records the durable request and requires the relaunch. The
+                // host, not this view, owns unmounting from here on.
+                try await request(direction)
+            }
+        })
     }
 
     @MainActor

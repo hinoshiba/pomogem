@@ -87,8 +87,15 @@ final class StorageTransferSettingsUITests: XCTestCase {
         openChoices()
         XCTAssertTrue(text(containing: "iCloud側のデータは残ります").waitForExistence(timeout: 4))
         XCTAssertTrue(reveal(text(containing: "解除後の変更は他の端末へ同期されません")))
+        // Deliberately updated by PLAN Step 11. The legacy localOnly -> cloud
+        // replacement stays absent in cloud mode and stays disabled on its own
+        // bit; the NEW, generation-fenced device -> iCloud door is what cloud
+        // mode gains, and in this phase it is present and refused.
         XCTAssertFalse(app.buttons["storage-switch.keep-cloud"].exists)
         XCTAssertFalse(app.buttons["storage-switch.replace-cloud"].exists)
+        let overwrite = app.buttons["storage-switch.overwrite-cloud"]
+        XCTAssertTrue(reveal(overwrite))
+        XCTAssertFalse(overwrite.isEnabled)
         openConfirmation("storage-switch.disable-keep-copy")
         XCTAssertTrue(text(containing: "このiPhoneにコピーしたデータと、iCloudのデータの両方が残ります").exists)
         XCTAssertFalse(app.switches["storage-switch.confirm-data-loss"].exists)
@@ -96,13 +103,98 @@ final class StorageTransferSettingsUITests: XCTestCase {
         XCTAssertTrue(confirm.isEnabled)
         XCTAssertEqual(confirm.label, "コピーしてiCloudを解除")
         app.navigationBars["最後の確認"].buttons["戻る"].tap()
-        app.navigationBars["iCloudを解除"].buttons["キャンセル"].tap()
+        app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
         assertNoOperation()
+        assertNoDatasetRequest()
         openChoices()
         openConfirmation("storage-switch.disable-keep-copy")
         attach("Disable — both copies remain")
         app.buttons["storage-switch.confirm"].tap()
         assertAccepted("disableCloudKeepingCopy")
+    }
+
+    // MARK: Settings direction (A) — この端末のデータでiCloudを置き換える
+
+    /// The shipping build. The door exists, is described, and is refused:
+    /// `StorageTransferReleasePolicy.standard.allowsDatasetOverwriteFromDevice`
+    /// is false, so nothing about it can be started from Settings.
+    func testSettingsOverwriteDoorIsPresentDisabledAndExplainedInCloudMode() {
+        launch("cloud")
+        openChoices()
+        XCTAssertTrue(app.navigationBars["iCloudと保存先の変更"].waitForExistence(timeout: 4))
+        XCTAssertFalse(app.buttons["storage-switch.keep-cloud"].exists)
+        XCTAssertFalse(app.buttons["storage-switch.replace-cloud"].exists)
+        let reason = app.staticTexts["storage-switch.overwrite-cloud-unavailable"]
+        XCTAssertTrue(reveal(reason))
+        XCTAssertTrue(reason.label.contains("いまは利用できません"))
+        XCTAssertTrue(reason.label.contains("削除せず保持します"))
+        let door = app.buttons["storage-switch.overwrite-cloud"]
+        XCTAssertTrue(reveal(door))
+        XCTAssertFalse(door.isEnabled)
+        door.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertFalse(app.navigationBars["最後の確認"].exists)
+        XCTAssertFalse(app.buttons["storage-switch.overwrite-cloud-confirm"].exists)
+        attach("Settings overwrite — present, disabled and explained")
+        app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
+        assertNoOperation()
+        assertNoDatasetRequest()
+    }
+
+    /// The door never acts on tap: it opens 「最後の確認」, whose acknowledgement is
+    /// its own state, starts unchecked on every presentation and is discarded
+    /// by 戻る. Only the acknowledged action records exactly one request.
+    func testSettingsOverwriteNeedsItsOwnAcknowledgmentAndRecordsOneRequest() {
+        launch("cloudDatasetDoors")
+        openChoices()
+        openConfirmation("storage-switch.overwrite-cloud")
+        XCTAssertTrue(reveal(text(containing: "現在iCloudにあるPomoGemのテーマ・記録・設定をすべて削除し")))
+        XCTAssertTrue(reveal(app.staticTexts["storage-switch.overwrite-cloud-recovery-copy"]))
+        XCTAssertTrue(reveal(app.staticTexts["storage-switch.overwrite-cloud-relaunch"]))
+        XCTAssertTrue(reveal(app.staticTexts["storage-switch.overwrite-cloud-not-cancellable"]))
+        assertUncheckedDatasetConfirmation("overwrite-cloud")
+        acknowledgeDataset("overwrite-cloud")
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.navigationBars["iCloudと保存先の変更"].waitForExistence(timeout: 4))
+        app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
+        assertNoDatasetRequest()
+        assertNoOperation()
+
+        openChoices()
+        openConfirmation("storage-switch.overwrite-cloud")
+        assertUncheckedDatasetConfirmation("overwrite-cloud")
+        acknowledgeDataset("overwrite-cloud")
+        attach("Settings overwrite — acknowledged final confirmation")
+        app.buttons["storage-switch.overwrite-cloud-confirm"].doubleTap()
+        assertDatasetRequested("overwriteCloudFromDevice")
+    }
+
+    func testAX5SettingsOverwriteDoorAndConfirmationRemainReachableAndDescribed() throws {
+        launch("cloudDatasetDoors", accessibility5: true)
+        openChoices()
+        let door = app.buttons["storage-switch.overwrite-cloud"]
+        XCTAssertTrue(reveal(door))
+        assertTouchTarget(door)
+        XCTAssertTrue(door.isEnabled)
+        attach("AX5 Settings overwrite — reachable door")
+        try auditDescriptionsAndTraits()
+        openConfirmation("storage-switch.overwrite-cloud")
+        let checkbox = app.switches["storage-switch.overwrite-cloud-confirm-data-loss"]
+        XCTAssertTrue(reveal(checkbox))
+        assertTouchTarget(checkbox)
+        XCTAssertGreaterThan(checkbox.frame.height, 100,
+            "The modal must actually inherit AX5, not silently reset to normal text")
+        XCTAssertEqual(checkbox.value as? String, "0")
+        acknowledgeDataset("overwrite-cloud")
+        let confirm = app.buttons["storage-switch.overwrite-cloud-confirm"]
+        XCTAssertTrue(reveal(confirm))
+        assertTouchTarget(confirm)
+        XCTAssertTrue(confirm.isEnabled)
+        attach("AX5 Settings overwrite — explicit acknowledgment and action")
+        try auditDescriptionsAndTraits()
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
+        assertNoDatasetRequest()
+        assertNoOperation()
     }
 
     func testBusyOrUnavailableEntryCannotOpenChoices() {
@@ -170,7 +262,10 @@ final class StorageTransferSettingsUITests: XCTestCase {
         XCTAssertGreaterThan(confirm.frame.height, 100, "The modal must actually inherit AX5")
         try auditDescriptionsAndTraits()
         app.navigationBars["最後の確認"].buttons["戻る"].tap()
-        app.navigationBars["iCloudを解除"].buttons["キャンセル"].tap()
+        // The cloud-mode screen is no longer only about unlinking iCloud, so
+        // its title moved with PLAN Step 11. This assertion is the only line
+        // of this test that changed.
+        app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
         assertNoOperation()
     }
 
@@ -613,11 +708,51 @@ final class StorageTransferSettingsUITests: XCTestCase {
         XCTAssertEqual(entry.label, "iCloudを解除する")
         XCTAssertFalse(entry.isEnabled)
         entry.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        XCTAssertFalse(app.navigationBars["iCloudを解除"].exists)
+        XCTAssertFalse(app.navigationBars["iCloudと保存先の変更"].exists)
         XCTAssertFalse(app.buttons["storage-switch.disable-keep-copy"].exists)
         XCTAssertFalse(app.buttons["storage-switch.keep-cloud"].exists)
         XCTAssertFalse(app.buttons["storage-switch.replace-cloud"].exists)
         XCTAssertFalse(app.buttons["storage-switch.confirm"].exists)
+        // PLAN Step 11/12: an offline session must not reach either dataset
+        // door. Docs/OfflineCloudMode.md forbids using an offline launch as a
+        // detour, and both directions are online-only by construction.
+        XCTAssertFalse(app.buttons["storage-switch.overwrite-cloud"].exists)
+        XCTAssertFalse(app.buttons["storage-switch.overwrite-cloud-confirm"].exists)
+        assertNoDatasetRequest()
+    }
+
+    private var datasetState: XCUIElement { app.staticTexts["storage-switch.dataset-fixture-state"] }
+
+    private func assertNoDatasetRequest() {
+        XCTAssertTrue(reveal(datasetState, upwards: false))
+        XCTAssertEqual(datasetState.label, "dataset=none;datasetCalls=0")
+    }
+
+    private func assertDatasetRequested(_ direction: String) {
+        let recorded = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "dataset=\(direction);datasetCalls=1"),
+            object: datasetState
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [recorded], timeout: 5), .completed)
+        XCTAssertFalse(app.buttons["settings.storage-switch"].isEnabled)
+    }
+
+    private func assertUncheckedDatasetConfirmation(_ door: String) {
+        let checkbox = app.switches["storage-switch.\(door)-confirm-data-loss"]
+        XCTAssertTrue(reveal(checkbox))
+        XCTAssertEqual(checkbox.value as? String, "0")
+        let confirm = app.buttons["storage-switch.\(door)-confirm"]
+        XCTAssertTrue(reveal(confirm))
+        XCTAssertFalse(confirm.isEnabled)
+    }
+
+    private func acknowledgeDataset(_ door: String) {
+        let checkbox = app.switches["storage-switch.\(door)-confirm-data-loss"]
+        if !reveal(checkbox) { XCTAssertTrue(reveal(checkbox, upwards: false)) }
+        checkbox.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        let checked = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: checkbox)
+        XCTAssertEqual(XCTWaiter.wait(for: [checked], timeout: 3), .completed)
+        XCTAssertTrue(app.buttons["storage-switch.\(door)-confirm"].isEnabled)
     }
 
     private func openChoices() {

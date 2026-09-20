@@ -775,6 +775,9 @@ private struct PomoGemPersistenceLaunchHost: View {
             prepareStorageTransfer: { choice in
                 try await prepareStorageTransfer(choice, sessionID: sessionID)
             },
+            requestStorageTransferDataset: { direction in
+                try await requestStorageTransferDataset(direction, sessionID: sessionID)
+            },
             unmountForStorageTransfer: {
                 unmountForStorageTransfer(sessionID: sessionID)
             }
@@ -847,6 +850,20 @@ private struct PomoGemPersistenceLaunchHost: View {
                 try requireActiveLaunchAttempt(attempt, checkpoint: "after-remote-cancellation-resume")
                 requireStorageTransferRelaunch(message: "切り替えを取り消しました。元の記録を保護したまま、アプリを終了して開き直してください。")
                 return
+            }
+            // A direction confirmed in Settings before the relaunch this host
+            // required. Read once and deleted in the same breath, whatever it
+            // held: nothing destructive has happened yet, so a request that
+            // cannot be honoured is dropped rather than retried.
+            if let request = try transferRuntime.consumeDatasetRequest() {
+                if remoteRecoveryAction == nil,
+                   PersistenceDeploymentState.load() == .selected(.cloud(binding: request.binding)) {
+                    storageTransferRecoveryBinding = request.binding
+                    switch request.direction {
+                    case .overwriteCloudFromDevice:
+                        remoteRecoveryAction = .overwrite(request.datasetGenerationID)
+                    }
+                }
             }
             if let action = remoteRecoveryAction {
                 remoteRecoveryAction = nil
@@ -1989,6 +2006,78 @@ private struct PomoGemPersistenceLaunchHost: View {
                 requireStorageTransferRelaunch()
             }
             throw error
+        }
+    }
+
+    /// PLAN Step 11. Settings cannot run a dataset direction itself: this
+    /// process has already opened the CloudKit mirror, and both entry points
+    /// refuse such a process on purpose. So the confirmed direction is recorded
+    /// durably and a deliberate relaunch is required; the next launch consumes
+    /// the request before any container exists and runs the SAME entry point
+    /// the recovery screen runs.
+    ///
+    /// Nothing destructive happens here. No journal, no checkpoint, no zone and
+    /// no store is touched; the only write is the request file, and dropping it
+    /// at any later point simply means the user repeats the confirmation.
+    private func requestStorageTransferDataset(
+        _ direction: StorageTransferDatasetRequestDirection,
+        sessionID: UUID
+    ) async throws {
+        guard let sourceSession = sessionHolder.resolve(sessionID) else {
+            throw StorageTransferError.staleTransaction
+        }
+        guard !sourceSession.isCloudOffline else {
+            throw StorageTransferRuntimeError.cloudCopyStillPending
+        }
+        // Closed features record nothing at all. The runtime entry point that
+        // finally executes the direction validates the policy again.
+        try StorageTransferDatasetRequestPolicy.validate(direction, policy: .standard)
+        let attempt = launchAttempt
+        guard case let .selected(source) = PersistenceDeploymentState.load(),
+              case let .cloud(binding) = source else {
+            throw StorageTransferError.staleTransaction
+        }
+        let runtime = try StorageTransferRuntime.live()
+        let validate: @MainActor () throws -> Void = {
+            try requireActiveLaunchAttempt(attempt, checkpoint: "during-dataset-request")
+            guard !requiresStorageTransferRelaunch,
+                  session?.id == sourceSession.id,
+                  source.storageLaunchMode == sourceSession.mode,
+                  source.storageNamespace == sourceSession.accountNamespace,
+                  PersistenceDeploymentState.load() == .selected(source) else {
+                throw StorageTransferError.staleTransaction
+            }
+        }
+        try validate()
+        let verified = try await AppleAccountBoundaryResolver()
+            .resolve(expectedBinding: binding).binding
+        try validate()
+        guard verified == binding else { throw StorageTransferRecoveryError.identityMismatch }
+        let status = try await runtime.remoteRecoveryStatus(binding: binding, validateAccess: validate)
+        try validate()
+        guard let status, status.isTerminal, let generation = status.datasetGenerationID else {
+            // Either another device is mid-replacement (the launch fence owns
+            // that case) or this account has no committed generation to CAS
+            // against. Either way nothing may be recorded.
+            throw StorageTransferDatasetRequestError.noCommittedGeneration
+        }
+        // PLAN §3 S14: never record an intent to delete contents the app could
+        // not enumerate. The read is read-only and opens no container.
+        if direction == .overwriteCloudFromDevice {
+            _ = try await runtime.previewCloudDataset(binding: binding, validateAccess: validate)
+            try validate()
+        }
+        try runtime.recordDatasetRequest(StorageTransferDatasetRequest(
+            direction: direction, binding: binding, datasetGenerationID: generation,
+            requestedAt: .now, requestingProcessID: UUID()))
+        requireStorageTransferRelaunch(message: datasetRequestRelaunchMessage(direction))
+    }
+
+    private func datasetRequestRelaunchMessage(
+        _ direction: StorageTransferDatasetRequestDirection
+    ) -> String {
+        switch direction {
+        case .overwriteCloudFromDevice: StorageTransferOverwriteCopy.requestAccepted
         }
     }
 

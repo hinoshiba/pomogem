@@ -8,6 +8,10 @@ enum StorageTransferSettingsUITestFixture {
 
     enum Scenario: String {
         case offlineNavigation, offlineNavigationRecovered, offlineBreakNavigation, local, cloud, offline, offlineRecovery, offlineHistory, cloudNetworkWaiting, cloudLaunchTimedOut, activeTimer, exporting, deleting, unavailable
+        /// Cloud mode with the Settings dataset doors PUBLISHED, so their
+        /// consent flow can be exercised. `cloud` is the shipping screen, where
+        /// the same doors render disabled with their reason.
+        case cloudDatasetDoors
         /// The launch-host screens a fenced device actually lands on. Each one
         /// renders the shipping `PersistenceLaunchStatusView` with a recorder in
         /// place of the runtime, so no journal, container or CloudKit call
@@ -36,7 +40,18 @@ enum StorageTransferSettingsUITestFixture {
         }
 
         var mode: PersistenceLaunchMode {
-            self == .cloud || isOffline || self == .cloudNetworkWaiting ? .cloudKit : .localOnly
+            self == .cloud || self == .cloudDatasetDoors || isOffline
+                || self == .cloudNetworkWaiting ? .cloudKit : .localOnly
+        }
+
+        /// Exactly one bit, and only for the one scenario that exercises a
+        /// published door. The legacy `localOnly -> cloud` replacement and the
+        /// remote resume stay closed, so a fixture can never widen the shipping
+        /// prohibition it is meant to exercise around.
+        var releasePolicy: StorageTransferReleasePolicy {
+            self == .cloudDatasetDoors
+                ? .isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)
+                : .standard
         }
         var otherWorkIsActive: Bool {
             isOffline || self == .cloudNetworkWaiting || self == .activeTimer || self == .exporting || self == .deleting
@@ -57,6 +72,8 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
     @State private var controller = StorageTransferController()
     @State private var calls = 0
     @State private var lastChoice = "none"
+    @State private var datasetCalls = 0
+    @State private var lastDatasetDirection = "none"
     @State private var offlineRetryCalls = 0
     @State private var recoveryReviewCalls = 0
     @State private var isCheckingOfflineConnection = false
@@ -94,6 +111,8 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                     Section {
                         Text(verbatim: "calls=\(calls);choice=\(lastChoice);starting=\(controller.isStarting)")
                             .accessibilityIdentifier("storage-switch.fixture-state")
+                        Text(verbatim: "dataset=\(lastDatasetDirection);datasetCalls=\(datasetCalls)")
+                            .accessibilityIdentifier("storage-switch.dataset-fixture-state")
                         if scenario.isOffline {
                             Text(verbatim: "retryCalls=\(offlineRetryCalls);checking=\(isCheckingOfflineConnection)")
                                 .accessibilityIdentifier("cloud-offline.fixture-state")
@@ -107,7 +126,8 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                     StorageTransferSettingsSection(
                         persistenceMode: scenario.mode,
                         controller: controller,
-                        otherWorkIsActive: scenario.otherWorkIsActive
+                        otherWorkIsActive: scenario.otherWorkIsActive,
+                        releasePolicy: scenario.releasePolicy
                     )
                 }
                 .navigationTitle("設定")
@@ -117,13 +137,19 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
         .environment(\.cloudConnectionPresentation, presentation(scenario))
         .task {
             guard scenario != .unavailable else { return }
-            controller.install { choice in
+            controller.install({ choice in
                 calls += 1
                 lastChoice = choice.rawValue
                 // The accepted fake request stays busy while the test inspects
                 // the UI. No operation performs a save or a source change.
                 try await Task.sleep(for: .seconds(45))
-            }
+            }, dataset: { direction in
+                // Records the direction only. Nothing writes a dataset request
+                // file, reads CloudKit, or asks for a relaunch in this process.
+                datasetCalls += 1
+                lastDatasetDirection = direction.rawValue
+                try await Task.sleep(for: .seconds(45))
+            })
         }
     }
 
