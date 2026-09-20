@@ -353,8 +353,11 @@ final class ScreenTimeMonitoring {
 
     func handleInterval(activityName: String, now: Date = Date()) throws {
         let state = try store.snapshot()
-        guard state.configuration.enabled, state.contextKey != nil, state.contextIsActive,
-              state.monitoringError == nil else { return }
+        // Deliberately NOT gated on `state.monitoringError`: nothing inside the
+        // extension ever clears that field, and the daily scheduler pass is
+        // precisely the retry that would. Gating it here latched a single
+        // failed registration into a whole day with no collection at all.
+        guard state.configuration.enabled, state.contextKey != nil, state.contextIsActive else { return }
         guard activityName == Self.schedulerName(epoch: state.epoch) else {
             // A lane's own interval boundary is another chance to repair a day
             // whose scheduler pass was skipped.
@@ -372,13 +375,27 @@ final class ScreenTimeMonitoring {
     /// arrives at all has no trigger and still waits for the next scheduler
     /// interval or for the user to open the app.
     private func repairMissingRunIfNeeded(now: Date) {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: now)
         guard let state = try? store.snapshot(), state.configuration.enabled,
               state.contextKey != nil, state.contextIsActive,
-              state.monitoringError == nil else { return }
-        let dayStart = Calendar.current.startOfDay(for: now)
-        guard !state.runs.contains(where: { $0.active && $0.dayStart == dayStart }) else { return }
+              !state.runs.contains(where: { $0.active && $0.dayStart == dayStart }),
+              // At most one REFUSED attempt per device day. This runs on every
+              // threshold and on every lane interval boundary, so a framework
+              // refusal (excessiveActivities and friends) would otherwise be
+              // retried on ordinary traffic all day. A pass skipped for lock
+              // contention is not an attempt and does not consume the day.
+              state.lastRepairAttemptAt.map { calendar.startOfDay(for: $0) != dayStart } ?? true
+        else { return }
         ScreenTimeLog.monitoring.notice("repair pass reason=no-active-run")
-        _ = try? synchronize(now: now)
+        do {
+            _ = try synchronize(now: now)
+        } catch ScreenTimeError.unavailable {
+            // The other process holds the monitoring lock; the next callback
+            // or the daily scheduler retries.
+        } catch {
+            try? store.update { $0.lastRepairAttemptAt = now }
+        }
     }
 
     static func schedulerName(epoch: UUID) -> String { prefix + "scheduler." + epoch.uuidString }

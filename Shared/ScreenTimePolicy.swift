@@ -140,6 +140,11 @@ struct ScreenTimeState: Codable {
     var learningPausedByTimer = false
     var learningAllowedBySubscription = true
     var monitoringError: String?
+    /// When the monitor extension last ran a repair pass that the framework
+    /// refused. A short-lived extension process has no memory of its own, so
+    /// without this a refused registration would be retried on every threshold
+    /// callback for the rest of the day.
+    var lastRepairAttemptAt: Date?
 
     /// Evidence in the ledger that a Family Controls approval once existed.
     /// `ScreenTimeController.save` refuses to write `enabled` while the status
@@ -231,6 +236,7 @@ struct ScreenTimeState: Codable {
 
     var isValid: Bool {
         guard version == 1, negativeGemCount >= 0,
+              lastRepairAttemptAt?.timeIntervalSince1970.isFinite != false,
               Set(runs.map(\.id)).count == runs.count,
               runs.filter(\.active).count <= ScreenTimeLane.allCases.count else { return false }
         return runs.allSatisfy { run in

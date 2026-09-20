@@ -471,6 +471,60 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         }
     }
 
+    /// fd873b7 made every threshold and every lane interval boundary able to
+    /// run a full registration inside the monitor extension, and both that
+    /// path and `handleInterval` were gated on `state.monitoringError == nil`.
+    /// Nothing inside the extension clears that field, so one refused pass
+    /// latched the extension out of every later one — including the daily
+    /// scheduler callback that exists to re-register — until the user next
+    /// opened the app.
+    func testALatchedMonitoringErrorDoesNotBlockTheSchedulerPass() throws {
+        try withFixture(installed: .none, learningApplications: 2) { store, center, initial, _ in
+            try store.update { state in
+                state.monitoringError = "previous failure"
+                for index in state.runs.indices { state.runs[index].active = false }
+            }
+            let monitor = ScreenTimeMonitoring(store: store, center: center, authorization: { true })
+
+            try monitor.handleInterval(
+                activityName: ScreenTimeMonitoring.schedulerName(epoch: initial.epoch), now: now)
+            XCTAssertGreaterThan(center.startCount, 0,
+                                 "A stale monitoringError must not skip the daily re-registration")
+            XCTAssertNil(try store.snapshot().monitoringError)
+            XCTAssertTrue(try store.snapshot().runs.contains(where: \.active))
+        }
+    }
+
+    /// The other side of the same change: once the framework has refused, the
+    /// repair must not be retried on every later callback. The extension has
+    /// no memory across processes, so the day is recorded in the ledger.
+    func testARefusedRepairIsNotRetriedOnEveryLaterCallbackThatDay() throws {
+        try withFixture(installed: .none, learningApplications: 2) { store, center, _, _ in
+            try store.update { state in
+                for index in state.runs.indices { state.runs[index].active = false }
+            }
+            center.onStartName = { _ in throw RegistrationFailure() }
+            let monitor = ScreenTimeMonitoring(store: store, center: center, authorization: { true })
+
+            try monitor.handleInterval(activityName: "pomogem.screen-time.other.0", now: now)
+            let afterFirst = center.startCount
+            XCTAssertGreaterThan(afterFirst, 0)
+            XCTAssertNotNil(try store.snapshot().monitoringError)
+
+            try monitor.handleInterval(activityName: "pomogem.screen-time.other.0",
+                                       now: now.addingTimeInterval(600))
+            try monitor.handleThreshold(eventName: "1", activityName: "pomogem.screen-time.other.0",
+                                        now: now.addingTimeInterval(1_200))
+            XCTAssertEqual(center.startCount, afterFirst,
+                           "A refused registration must not be retried on ordinary threshold traffic")
+
+            try monitor.handleInterval(activityName: "pomogem.screen-time.other.0",
+                                       now: now.addingTimeInterval(86_400))
+            XCTAssertGreaterThan(center.startCount, afterFirst,
+                                 "The next device day gets its own attempt")
+        }
+    }
+
     private func makeLearningSelection(count: Int) throws -> FamilyActivitySelection {
         let tokens = (0..<count).map { index in
             "{\"data\":\"\(Data([UInt8(index), 1, 2, 3]).base64EncodedString())\"}"
