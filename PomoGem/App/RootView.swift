@@ -1490,7 +1490,13 @@ struct RootView: View {
             await quiesceForCompleteDataDeletion()
             unmountForStorageTransfer()
         }, dataset: requestStorageTransferDataset.map { request in
-            { @MainActor direction in
+            // `@Sendable` is written out rather than left to the conversion:
+            // `StorageTransferController.DatasetOperation` is
+            // `@MainActor @Sendable`, and converting a closure that does not
+            // declare it is a data-race warning. The captures are this
+            // `@MainActor` view's own state, which the isolation already
+            // protects.
+            { @MainActor @Sendable direction in
                 // The same external-work gate the choice operation applies. A
                 // dataset direction writes no journal here, but it does end the
                 // session, so an active or recovered timer must still block it.
@@ -1508,7 +1514,7 @@ struct RootView: View {
                 try await request(direction)
             }
         }, datasetPreview: previewStorageTransferDataset.map { preview in
-            { @MainActor in
+            { @MainActor @Sendable in
                 // Read-only. Deliberately NOT behind the external-work gate:
                 // looking at what would be destroyed starts nothing, and a
                 // running timer is a reason to refuse the operation, not a
