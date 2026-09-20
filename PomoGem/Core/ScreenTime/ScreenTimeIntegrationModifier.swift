@@ -115,6 +115,11 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
                 controller.reload()
             }
             guard canContinueRefresh else { return }
+            // A revocation performed while the app was not running reads as a
+            // plain .notDetermined status with no transition to react to, so
+            // this pass — not reconcile — is what notices it.
+            await controller.invalidateAuthorizationIfRevoked()
+            guard canContinueRefresh else { return }
             try await retireDeletedLearningThemeIfNeeded()
             guard canContinueRefresh else { return }
             let monitoringKey = "\(bindingKey):\(purchase.isPro):\(timerRunning):\(controller.authorizationGranted):\(FairnessPolicy.deviceDayKey(for: .now))"

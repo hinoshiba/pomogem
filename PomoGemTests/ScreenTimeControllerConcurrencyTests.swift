@@ -137,6 +137,99 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertTrue(state.monitoringError?.contains("選び直して") == true)
     }
 
+    /// Revoking access (iOS Settings → スクリーンタイム → アクセス, or
+    /// AuthorizationCenter.revokeAuthorization) returns the status to
+    /// .notDetermined, not .denied, and a revocation performed while the app
+    /// was not running gives reconcile no transition to react to.
+    func testSettledNotDeterminedAuthorizationClearsTheSelectionsAndExplainsWhy() async throws {
+        let store = try makeStore()
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: driver, authorization: { .notDetermined },
+                                              authorizationSettlingWindow: 0)
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+
+        // The first observation is the cold-launch window: nothing is touched.
+        await controller.invalidateAuthorizationIfRevoked()
+        XCTAssertTrue(try store.snapshot().configuration.enabled)
+        XCTAssertTrue(try store.snapshot().runs.contains(where: \.active))
+        XCTAssertFalse(driver.events.contains("stop"))
+
+        await controller.invalidateAuthorizationIfRevoked()
+        try await controller.waitForPendingOperations()
+        let state = try store.snapshot()
+        XCTAssertFalse(state.configuration.enabled)
+        XCTAssertFalse(state.runs.contains(where: \.active))
+        XCTAssertTrue(state.monitoringError?.contains("選び直して") == true)
+        XCTAssertEqual(controller.monitoringError, state.monitoringError)
+        XCTAssertTrue(driver.events.contains("stop"),
+                      "Registrations carrying voided tokens must not stay armed")
+
+        // The cleared configuration is not re-invalidated on every later pass.
+        await controller.invalidateAuthorizationIfRevoked()
+        await controller.invalidateAuthorizationIfRevoked()
+        try await controller.waitForPendingOperations()
+        XCTAssertEqual(driver.events.filter { $0 == "stop" }.count, 1)
+    }
+
+    func testTransientNotDeterminedAtColdLaunchKeepsTheSelections() async throws {
+        let store = try makeStore()
+        let driver = Driver(store: store)
+        var status = AuthorizationStatus.notDetermined
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: driver, authorization: { status })
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+
+        // Two passes inside the default settling window, as a cold launch has.
+        await controller.invalidateAuthorizationIfRevoked()
+        await controller.invalidateAuthorizationIfRevoked()
+        XCTAssertTrue(try store.snapshot().configuration.enabled)
+
+        status = .approved
+        await controller.invalidateAuthorizationIfRevoked()
+        try await controller.waitForPendingOperations()
+        let state = try store.snapshot()
+        XCTAssertTrue(state.configuration.enabled)
+        XCTAssertNil(state.monitoringError)
+        XCTAssertTrue(state.runs.contains(where: \.active))
+        XCTAssertFalse(driver.events.contains("stop"))
+    }
+
+    func testDeniedAuthorizationDoesNotWaitForTheSettlingWindow() async throws {
+        let store = try makeStore()
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: driver, authorization: { .denied })
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+
+        await controller.invalidateAuthorizationIfRevoked()
+        try await controller.waitForPendingOperations()
+        let state = try store.snapshot()
+        XCTAssertFalse(state.configuration.enabled)
+        XCTAssertTrue(state.monitoringError?.contains("選び直して") == true)
+        XCTAssertTrue(driver.events.contains("stop"))
+    }
+
+    /// A user who never granted access has the same .notDetermined status. The
+    /// ledger has nothing an approval could have written, so nothing is wiped
+    /// and no 解除 message is shown.
+    func testANeverEnabledLedgerIsNotTreatedAsARevocation() async throws {
+        let store = try makeStore()
+        try store.update { $0.configuration.enabled = false }
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: driver, authorization: { .notDetermined },
+                                              authorizationSettlingWindow: 0)
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+
+        await controller.invalidateAuthorizationIfRevoked()
+        await controller.invalidateAuthorizationIfRevoked()
+        try await controller.waitForPendingOperations()
+        XCTAssertNil(try store.snapshot().monitoringError)
+        XCTAssertNil(controller.monitoringError)
+        XCTAssertFalse(driver.events.contains("stop"))
+    }
+
     func testRetirementImmediatelyFencesReceiptsAndOldCompletionCannotPublishIntoNewOwner() async throws {
         let store = try makeStore()
         let driver = Driver(store: store)

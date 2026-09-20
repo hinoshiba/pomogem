@@ -23,6 +23,13 @@ final class ScreenTimeController: ObservableObject {
     private let worker: ScreenTimeMonitoringWorker
     private let currentContextKey: () -> String
     private let authorization: () -> AuthorizationStatus
+    /// FamilyControls reports a REVOKED authorization as `.notDetermined` — the
+    /// same value a process reads before the framework has answered and the one
+    /// a user who never opted in has. Treat `.notDetermined` as settled only
+    /// after it has survived this window, so a cold launch cannot throw away
+    /// opaque selections that only a new picker session could restore.
+    private let authorizationSettlingWindow: TimeInterval
+    private var unsettledAuthorizationSince: Date?
     private var lease: ScreenTimeContextLease? { didSet { publishBindingState() } }
     private var bindingTask: Task<Void, Error>?
     private var bindingConfirmed = false { didSet { publishBindingState() } }
@@ -40,11 +47,13 @@ final class ScreenTimeController: ObservableObject {
             AccountScopedLocalState.defaultsKey(base: "screen-time-owner")
         },
         monitoring: ScreenTimeMonitoringDriving? = nil,
-        authorization: @escaping () -> AuthorizationStatus = { AuthorizationCenter.shared.authorizationStatus }
+        authorization: @escaping () -> AuthorizationStatus = { AuthorizationCenter.shared.authorizationStatus },
+        authorizationSettlingWindow: TimeInterval = 10
     ) {
         self.store = store
         self.currentContextKey = currentContextKey
         self.authorization = authorization
+        self.authorizationSettlingWindow = authorizationSettlingWindow
         worker = ScreenTimeMonitoringWorker(store: store, monitoring: monitoring ?? ScreenTimeMonitoring(store: store))
         reload()
     }
@@ -227,6 +236,67 @@ final class ScreenTimeController: ObservableObject {
         }
     }
 
+    /// The foreground refresh loop calls this on every pass. `reconcile` only
+    /// reacts to an approved → not-approved transition inside one process run,
+    /// so a revocation performed while the app was not running (iOS Settings →
+    /// スクリーンタイム → アクセス, or `AuthorizationCenter.revokeAuthorization`)
+    /// would otherwise never be noticed: the status simply reads
+    /// `.notDetermined` from the first tick, the stored opaque tokens are dead,
+    /// and every re-registration would arm events that match no application.
+    ///
+    /// `.denied` is the user answering 「許可しない」 and is settled at once.
+    /// `.notDetermined` needs the settling window AND a ledger that could not
+    /// exist without an approval: `save()` refuses to write
+    /// `configuration.enabled` while the status is not approved, so an enabled
+    /// configuration is the ledger's own record that access had been granted.
+    func invalidateAuthorizationIfRevoked(now: Date = .now) async {
+        guard let lease = try? boundLease() else { return }
+        let status = authorization()
+        guard !Self.isAuthorized(status) else {
+            unsettledAuthorizationSince = nil
+            return
+        }
+        guard let state = try? store.snapshot(), lease.binding.matches(state),
+              state.contextIsActive, state.configuration.enabled else {
+            unsettledAuthorizationSince = nil
+            return
+        }
+        if status != .denied {
+            guard let since = unsettledAuthorizationSince else {
+                unsettledAuthorizationSince = now
+                return
+            }
+            guard now.timeIntervalSince(since) >= authorizationSettlingWindow else { return }
+        }
+        unsettledAuthorizationSince = nil
+        let operation = beginOperation()
+        defer { endOperation(operation) }
+        do {
+            try store.update { state in
+                try validate(state, lease: lease)
+                state.invalidateAuthorization()
+            }
+            // The registrations carry tokens the OS has already voided. Stop
+            // them so a later re-approval registers a fresh selection instead
+            // of reviving events that can never fire.
+            let worker = worker
+            try await worker.perform {
+                try worker.store.withMonitoringLock {
+                    try lease.whileCurrent {
+                        guard lease.binding.matches(try worker.store.snapshot()) else {
+                            throw ScreenTimeError.unboundContext
+                        }
+                    }
+                    worker.monitoring.stop()
+                }
+            }
+        } catch {
+            // A retired or replaced owner owns the ledger now; reload reports.
+        }
+        guard (try? requireCurrent(lease)) != nil else { return }
+        reload()
+    }
+
     func reload() {
         authorizationStatus = authorization()
         authorizationGranted = Self.isAuthorized(authorizationStatus)
@@ -307,6 +377,7 @@ final class ScreenTimeController: ObservableObject {
         isResetting = false
         operationIDs.removeAll()
         isUpdatingMonitoring = false
+        unsettledAuthorizationSince = nil
         // Fence delayed callbacks immediately without waiting for registration.
         try? store.update { state in
             guard retiring.binding.matches(state) else { return }
