@@ -859,9 +859,50 @@ final class StorageTransferRuntime {
             let previous = try admission.load()
             try admission.save(StorageTransferDatasetAdmission(binding: binding,
                 datasetGenerationID: status?.datasetGenerationID), replacing: previous)
+            recordReplacementWatch(journal: journal, files: files, binding: binding,
+                                   generationID: status?.datasetGenerationID)
         }
         try validate()
         try files.promoteStaged(destination: journal.destination, manifest: manifest)
+    }
+
+    /// PLAN Step 9. Leave a receipt so the next settled mount can look ONCE for
+    /// rows a device the purge could not fence pushed in afterwards. A
+    /// detector, never a fence, and never destructive. Failing to write it must
+    /// not fail an otherwise complete commit, so every error is swallowed here
+    /// on purpose: losing a diagnostic is strictly better than losing a
+    /// promotion that already deleted and re-exported the dataset.
+    private func recordReplacementWatch(journal: StorageTransferJournal,
+                                        files: StorageTransferStoreFiles,
+                                        binding: ActiveAccountLocalBinding,
+                                        generationID: UUID?) {
+        guard journal.choice.replacesCloud, let generationID else { return }
+        do {
+            // Already computed by captureSource; no new traversal of the store.
+            guard let receipt = try StorageTransferPayloadStore(files: files).acknowledgedReceipt() else { return }
+            try StorageTransferReplacementWatchStore(root: root, namespace: binding.namespace)
+                .record(datasetGenerationID: generationID,
+                        committedCounts: receipt.recordCounts, committedAt: Date())
+        } catch { }
+    }
+
+    /// PLAN Step 9, the one read-only comparison. The host calls this at the
+    /// first settled cloud mount after a commit; a `.lateArrival` outcome is
+    /// non-blocking banner state only. The receipt is removed whatever the
+    /// result, so this can never run twice for one commit.
+    func evaluateReplacementWatch(binding: ActiveAccountLocalBinding,
+                                  currentGenerationID: UUID?,
+                                  locallyAuthoredSinceCommit: [String: Int] = [:],
+                                  timeout: TimeInterval = StorageTransferCloudPreviewPolicy.timeout,
+                                  validateAccess: @escaping @MainActor () throws -> Void) async -> StorageTransferReplacementWatchOutcome {
+        guard let store = try? StorageTransferReplacementWatchStore(root: root, namespace: binding.namespace) else {
+            return .noReceipt
+        }
+        return await store.evaluate(currentGenerationID: currentGenerationID,
+                                    locallyAuthoredSinceCommit: locallyAuthoredSinceCommit) {
+            try await CloudStorageTransferCloudKit(timeout: timeout)
+                .readSnapshot(expectedBinding: binding, validateTransfer: validateAccess).snapshot.recordCounts
+        }
     }
 
     private func requireStableCloudCopy(context: ModelContext, binding: ActiveAccountLocalBinding,
