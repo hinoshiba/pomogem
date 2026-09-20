@@ -148,6 +148,31 @@ runtimeは**それぞれの名前のまま**投げます。
 **理由付きで無効表示**になります。確定済みの世代が1つでも存在する場合は`startCloudLineageFromDevice`
 自身が拒否するので、画面が読んだ「台帳が無い」という前提は実行時に必ず再検証されます。
 
+### 管理情報（転送台帳）が無いアカウント
+
+転送を一度もしていないアカウントには、転送のcontrolレコードが**そもそもありません**。
+以前は設定画面の両方向とも「世代を確認できない」として拒否していたため、
+**健全なアカウントほど使えない**状態でした。現在は世代をnilのまま記録し、
+起動時に「台帳が無いこと」を要求する入口へ振り分けます（`StorageTransferDatasetRequest.dispatch(for:)`）。
+
+| 方向 | 世代あり | 世代なし（nil） |
+|---|---|---|
+| 端末→iCloud | `overwriteCloudDataset`（世代のCAS） | `startCloudLineageFromDevice`（同じポリシービット。確定済み世代が1つでもあれば拒否） |
+| iCloud→端末 | `refreshCloudDataset`（世代のCAS） | `refreshCloudDatasetWithoutLineage`（ポリシービット無し） |
+
+`refreshCloudDatasetWithoutLineage`は`refreshCloudDataset`のCASを「台帳が無いこと」の要求に
+置き換えただけで、journalは同じ`enableCloudKeepingCloud`です。新しいnamespaceを作り、
+通常のenrol経路でCloudKitからミラーし直し、元のnamespaceのストアはjournalが復旧用コピーを
+残したまま退役させます。**サーバには一切書きません**（`mayCreateRemotePayload: false`）。
+`StorageTransferCloudAuthorityFence`は取引の間ずっとcontrolレコードが**無いまま**であることを
+要求するので、途中で他端末が系譜を公開した場合はミラーせずに停止します。
+
+設定画面の事前確認では、サーバ側を「iCloud側の管理情報なし（記録件数: n）」と表示します
+（件数は読み取り専用スナップショットの実測値）。端末→iCloudの「最後の確認」には、
+この操作が「置き換え」ではなく**新しく使い始める**操作である旨の段落を追加します。
+
+`StorageTransferDatasetRequestError`に残る`transferInFlight`は、サーバで転送が進行中のときだけです。
+
 ### 運用規則（P2-7、未実装のTODO）
 
 - **実機監査は出荷アプリとは別のbundle id**（例 `com.hinoshiba.pomogem.audit`）で実行すること。
