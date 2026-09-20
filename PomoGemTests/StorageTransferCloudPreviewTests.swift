@@ -133,6 +133,52 @@ final class StorageTransferCloudPreviewTests: XCTestCase {
         XCTAssertNil(StorageTransferCloudPreview.make(snapshot: snapshot([]), localDeviceID: localDeviceID).latestRecordAt)
     }
 
+    /// review-1-2 / review-2-1. The iCloud side of the comparison can only
+    /// ever contain the 7 mirrored models; the device side is captured from
+    /// BOTH stores and therefore also holds the four local-only projection
+    /// models, whose timestamps (`Stratum.bakedAt`, `Bedrock.importedAt`,
+    /// `AggregatePebble.createdAt/periodStart/periodEnd`) are rewritten
+    /// whenever the projection is rebuilt — effectively "now". Deriving
+    /// 「最終」 from them would render a stale device as the newer side on the
+    /// one screen where an irreversible deletion is chosen.
+    func testLatestRecordDateIgnoresLocalOnlyModelsTheServerCanNeverHold() {
+        let mirrored = Date(timeIntervalSinceReferenceDate: 1_000)
+        let localOnly = Date(timeIntervalSinceReferenceDate: 9_000)
+        let preview = StorageTransferCloudPreview.make(snapshot: snapshot([
+            record("StudySession", ["endAt": date(mirrored)]),
+            record("Stratum", ["bakedAt": date(localOnly)]),
+            record("Bedrock", ["importedAt": date(localOnly)]),
+            record("AggregatePebble", ["createdAt": date(localOnly),
+                                       "periodStart": date(localOnly),
+                                       "periodEnd": date(localOnly)]),
+            record("GachaState", ["updatedAt": date(localOnly)])
+        ]), localDeviceID: localDeviceID)
+        XCTAssertEqual(preview.latestRecordAt, mirrored,
+            "Both sides of the comparison must be reduced over the same mirrored models")
+        for name in ["Stratum", "Bedrock", "AggregatePebble", "GachaState"] {
+            XCTAssertFalse(PomoGemStorageSnapshot.cloudModelNames.contains(name), name)
+        }
+    }
+
+    /// review-3-5. `AggregatePebble.periodEnd` is the END of the covered
+    /// period and `SyncedFocusTimer.scheduledEndAt` is a future deadline, so a
+    /// raw maximum is not a 「最終記録」 at all. A timestamp the clock has not
+    /// reached cannot be evidence about which dataset is newer.
+    func testLatestRecordDateIgnoresTimestampsInTheFuture() {
+        let now = Date(timeIntervalSinceReferenceDate: 5_000)
+        let past = Date(timeIntervalSinceReferenceDate: 4_000)
+        let future = Date(timeIntervalSinceReferenceDate: 90_000)
+        let preview = StorageTransferCloudPreview.make(snapshot: snapshot([
+            record("StudySession", ["endAt": date(past)]),
+            record("SyncedFocusTimer", ["scheduledEndAt": date(future)])
+        ]), localDeviceID: localDeviceID, now: now)
+        XCTAssertEqual(preview.latestRecordAt, past)
+        // Exactly `now` is not in the future and stays eligible.
+        XCTAssertEqual(StorageTransferCloudPreview.make(snapshot: snapshot([
+            record("StudySession", ["endAt": date(now)])
+        ]), localDeviceID: localDeviceID, now: now).latestRecordAt, now)
+    }
+
     func testANonFiniteDateIsIgnoredInsteadOfBecomingTheLatestRecordDate() {
         let real = Date(timeIntervalSinceReferenceDate: 5_000)
         let preview = StorageTransferCloudPreview.make(snapshot: snapshot([

@@ -2810,14 +2810,21 @@ private struct PersistenceLaunchStatusView: View {
                     } else if case .datasetRefresh = state {
                         datasetRefreshDoors
                     } else if case let .remoteRecovery(_, canCancel) = state {
+                        // Resuming a transaction this installation did not
+                        // start is fenced by `allowsRemoteResumeBeforeReplacing`
+                        // (`recoverRemoteTransfer` gates on exactly that bit),
+                        // not by the legacy `allowsCloudReplacement`. Reading
+                        // the injected policy, not `.standard`, keeps this
+                        // screen and the runtime naming the same prohibition.
                         Button("復旧を続ける", action: onRecoverTransfer)
                             .buttonStyle(PomoGemPrimaryButtonStyle())
-                            .disabled(!StorageTransferReleasePolicy.standard.allowsCloudReplacement)
+                            .disabled(!releasePolicy.allowsRemoteResumeBeforeReplacing)
                             .accessibilityIdentifier("storage-transfer-recover")
-                        if !StorageTransferReleasePolicy.standard.allowsCloudReplacement {
-                            Text(StorageTransferReleaseError.cloudReplacementUnavailable.localizedDescription)
+                        if !releasePolicy.allowsRemoteResumeBeforeReplacing {
+                            Text(StorageTransferReleaseError.remoteReplacementResumeUnavailable.localizedDescription)
                                 .foregroundStyle(PomoGemTheme.muted)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("storage-transfer-recover-unavailable")
                         }
                         if canCancel, onCancelLocalTransfer == nil {
                             Button("切り替えを取り消す") { confirmsTransferCancellation = true }
@@ -2854,7 +2861,8 @@ private struct PersistenceLaunchStatusView: View {
                             // have no lineage to act against. This screen
                             // therefore explains what the next attempt offers
                             // and carries NO destructive affordance of its own.
-                            Text(StorageTransferOverwriteCopy.blockedExplanation)
+                            Text(StorageTransferOverwriteCopy.blockedExplanation(
+                                offersOverwrite: releasePolicy.allowsDatasetOverwriteFromDevice))
                                 .font(.caption)
                                 .foregroundStyle(PomoGemTheme.muted)
                                 .multilineTextAlignment(.center)

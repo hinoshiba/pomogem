@@ -13,10 +13,24 @@ struct StorageTransferCloudPreview: Equatable, Sendable {
     /// key is present, including models with zero rows. Local-only models are
     /// excluded because the server never holds them.
     let recordCounts: [String: Int]
-    /// The newest finite timestamp carried by any date field of any mirrored
-    /// row, or nil when the dataset holds no dated row. This is a property of
-    /// the DATA, not a sync clock: CloudKit modification times are deliberately
-    /// not read here.
+    /// The newest finite, non-future timestamp carried by any date field of a
+    /// **mirrored** row, or nil when the dataset holds no such row. This is a
+    /// property of the DATA, not a sync clock: CloudKit modification times are
+    /// deliberately not read here.
+    ///
+    /// Two restrictions make the two sides of the comparison comparable, and
+    /// both are load-bearing rather than tidy:
+    ///
+    /// * **Mirrored models only.** The iCloud side can only ever hold the 7
+    ///   mirrored models; the device side is captured from BOTH stores and also
+    ///   holds `AggregatePebble`, `Stratum`, `Bedrock` and `GachaState`, whose
+    ///   timestamps are derivation times rewritten whenever the projection is
+    ///   rebuilt — effectively "now". Including them would render a stale
+    ///   device as the newer side.
+    /// * **Nothing in the future.** `AggregatePebble.periodEnd` is the END of a
+    ///   covered period and `SyncedFocusTimer.scheduledEndAt` is a deadline, so
+    ///   a raw maximum is not a 「最終記録」. A timestamp the clock has not
+    ///   reached is not evidence about which dataset is newer.
     let latestRecordAt: Date?
     /// Distinct writer identifiers other than this device, after the
     /// synthetic/audit ignore list. Absence of evidence is not evidence of
@@ -41,6 +55,7 @@ struct StorageTransferCloudPreview: Equatable, Sendable {
     /// UI copy and the review notes can be checked against it.
     static func make(snapshot: PomoGemStorageSnapshot,
                      localDeviceID: String,
+                     now: Date = .now,
                      ignoring ignoredIDs: Set<String> = StorageTransferCloudPreviewPolicy.ignoredWriterIDs) -> Self {
         let local = StorageTransferCloudPreviewPolicy.normalize(localDeviceID)
         var counts = Dictionary(uniqueKeysWithValues: PomoGemStorageSnapshot.cloudModelNames.map { ($0, 0) })
@@ -48,13 +63,20 @@ struct StorageTransferCloudPreview: Equatable, Sendable {
         var others: Set<String> = []
         var ignored: Set<String> = []
         for row in snapshot.records {
-            if counts[row.entity] != nil { counts[row.entity, default: 0] += 1 }
-            for value in row.fields.values {
-                guard case .dateBits(let bits) = value else { continue }
-                let interval = Double(bitPattern: bits)
-                guard interval.isFinite else { continue }
-                let date = Date(timeIntervalSinceReferenceDate: interval)
-                if let current = latest { latest = max(current, date) } else { latest = date }
+            // Counts and dates are both restricted to the mirrored models, in
+            // one branch, so the two cannot drift apart again: the device side
+            // and the iCloud side must be reduced over the same models or the
+            // comparison a deletion is chosen from is not a comparison.
+            if counts[row.entity] != nil {
+                counts[row.entity, default: 0] += 1
+                for value in row.fields.values {
+                    guard case .dateBits(let bits) = value else { continue }
+                    let interval = Double(bitPattern: bits)
+                    guard interval.isFinite else { continue }
+                    let date = Date(timeIntervalSinceReferenceDate: interval)
+                    guard date <= now else { continue }
+                    if let current = latest { latest = max(current, date) } else { latest = date }
+                }
             }
             guard let field = witnessFields[row.entity],
                   case .string(let raw)? = row.fields[field] else { continue }

@@ -133,13 +133,6 @@ enum StorageTransferRefreshCopy {
     static let acknowledgement = "端末データの削除を確認しました"
     static let confirmTitle = "iCloudから再取得"
 
-    /// The Settings surface only. The operation itself is not prohibited: the
-    /// recovery screen still offers it, because a fenced device has no other
-    /// way forward. This sentence must therefore point at that screen instead
-    /// of claiming the operation is unavailable.
-    static let settingsUnavailable =
-        "iCloudのデータでこの端末を置き換える操作は、いまは設定から実行できません。起動時に「iCloudのデータが置き換わりました」と表示された場合は、その画面から実行できます。端末のデータは削除せず保持します。"
-
     static let requestAccepted =
         "iCloudのデータでこの端末を置き換える手続きを受け付けました。アプリスイッチャーでPomoGemを終了し、もう一度開いてください。iCloudのデータは削除しません。"
 }
@@ -150,9 +143,16 @@ enum StorageTransferRefreshCopy {
 /// against the approved wording in one place.
 enum StorageTransferOverwriteCopy {
     static let comparisonReading = "iCloudの内容を確認しています"
+    /// It must name a control that is on THIS screen. `.datasetRefresh` carries
+    /// no 「もう一度試す」 — that button exists only on `.blocked`/`.failed` — so
+    /// pointing at it would leave a user on a flaky connection reading an
+    /// instruction they cannot follow, with no in-app way to re-read iCloud
+    /// and the destructive door permanently disabled behind a missing preview.
     static let comparisonUnavailable =
-        "iCloudの内容を確認できませんでした。通信を確認して「もう一度試す」を押してください。どちらの記録も削除していません。"
-    static let deviceSideUnavailable = "このiPhoneの内容を確認できませんでした。"
+        "iCloudの内容を確認できませんでした。通信を確認して「\(retryPreviewTitle)」を押してください。どちらの記録も削除していません。"
+    /// The re-read control the sentence above names. Non-destructive: it
+    /// re-arms the read-only pre-flight and nothing else.
+    static let retryPreviewTitle = "iCloudの内容をもう一度確認"
 
     static let dataLossWarning =
         "iCloudにある現在のPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータで置き換えます。2つのデータは結合しません。削除したiCloudのデータを元に戻すことはできません。同じApple Accountの他の端末は、次に開いたときにこの画面と同じ確認を求められ、その端末だけにある未送信のデータは残りません。"
@@ -216,21 +216,47 @@ enum StorageTransferOverwriteCopy {
 
     // MARK: `.blocked`
 
-    static let blockedExplanation =
-        "iCloudの状態を確認できていません。通信を確認して「もう一度試す」を押すと、iCloudのデータを再取得するか、このiPhoneのデータでiCloudを置き換えるかを選べます。この画面では、どちらの記録も削除していません。"
+    /// The honest 「explain, do not offer」 screen. It may only promise what the
+    /// next screen can actually offer: while
+    /// `StorageTransferReleasePolicy.allowsDatasetOverwriteFromDevice` is false
+    /// the overwrite door there is permanently disabled, so naming it here
+    /// would send a user to a greyed-out control and leave the direction that
+    /// discards THEIR device data as the only door they can open.
+    static func blockedExplanation(offersOverwrite: Bool) -> String {
+        guard offersOverwrite else {
+            return "iCloudの状態を確認できていません。通信を確認して「もう一度試す」を押すと、iCloudのデータを再取得できます。この画面では、どちらの記録も削除していません。"
+        }
+        return "iCloudの状態を確認できていません。通信を確認して「もう一度試す」を押すと、iCloudのデータを再取得するか、このiPhoneのデータでiCloudを置き換えるかを選べます。この画面では、どちらの記録も削除していません。"
+    }
+
+    // MARK: Late arrival (§6.5)
+
+    /// PLAN Step 9's non-blocking banner. A hedged detector, never a claim of
+    /// fact: `Docs/MultiDeviceCloudSafety.md` defect 1 cannot be prevented, and
+    /// a device that flushes days later is never caught. Neither offered action
+    /// is destructive.
+    static let lateArrival =
+        "置き換えの後に、他の端末から古い記録が届いた可能性があります。削除したはずのテーマが戻っていないか確認してください。もう一度この端末のデータで置き換えることもできます。"
+    static let lateArrivalOpenSettings = "設定を開く"
+    static let lateArrivalDismiss = "このまま使う"
 
     // MARK: The comparison row
 
+    /// The year is part of the evidence, not decoration: without it a device
+    /// last used in September 2025 and a dataset from September 2026 render two
+    /// days apart, and this date is the only recency signal on the screen where
+    /// an irreversible deletion is chosen. The format is explicit rather than
+    /// templated so the rendered string is pinnable by a unit test.
     private static let comparisonFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ja_JP")
-        formatter.setLocalizedDateFormatFromTemplate("Md")
+        formatter.dateFormat = "y年M月d日"
         return formatter
     }()
 
-    /// 「テーマ12・記録480・成果36（最終 9月20日）」. Only the three models a user
-    /// recognizes are named; the remaining mirrored models are counted by the
-    /// runtime but would not help someone decide.
+    /// 「テーマ12・記録480・成果36（最終 2026年9月20日）」. Only the three models a
+    /// user recognizes are named; the remaining mirrored models are counted by
+    /// the runtime but would not help someone decide.
     static func side(_ label: String, preview: StorageTransferCloudPreview?) -> String {
         guard let preview else { return "\(label): 確認できませんでした" }
         let counts = preview.recordCounts
