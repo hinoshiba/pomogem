@@ -147,27 +147,31 @@ final class ScreenTimeMonitoring {
         var state = try store.snapshot()
         let initialGeneration = ScreenTimeMonitoringGeneration(state)
         let status = authorizationStatus()
+        let ledgerWantsMonitoring = state.configuration.enabled
+            && state.contextKey != nil && state.contextIsActive
         if !Self.isAuthorized(status) {
-            // Skip the pass while the status is still unknown; never register
-            // and never invalidate on anything but a denial.
+            // Never register and never invalidate on anything but a denial
+            // while the status is unknown. The teardown half still runs: this
+            // is the ONLY stop path for a save that turns recording off and
+            // for the timer pausing the learning lane, and a ledger that says
+            // "off" must not leave our activities installed — they keep the
+            // OS watching the user's apps and hold the shared 20-activity
+            // budget. A revoked authorization also reads .notDetermined.
             ScreenTimeLog.monitoring.notice(
                 "synchronize skipped authorization=\(status == .denied ? "denied" : "unknown", privacy: .public)")
-            guard status == .denied else { return false }
-            stop()
-            try store.update {
-                try initialGeneration.requireCurrent($0)
-                $0.invalidateAuthorization()
+            if status == .denied {
+                stop()
+                try store.update {
+                    try initialGeneration.requireCurrent($0)
+                    $0.invalidateAuthorization()
+                }
+            } else if !ledgerWantsMonitoring {
+                try stopAndDeactivate(initialGeneration)
             }
             return false
         }
-        guard state.configuration.enabled, state.contextKey != nil, state.contextIsActive else {
-            ScreenTimeLog.monitoring.notice("synchronize stopping reason=inactive")
-            stop()
-            try store.update { state in
-                try initialGeneration.requireCurrent(state)
-                for index in state.runs.indices { state.runs[index].active = false }
-                state.pruneConsumedRuns()
-            }
+        guard ledgerWantsMonitoring else {
+            try stopAndDeactivate(initialGeneration)
             return false
         }
         let calendar = Calendar.current
@@ -301,6 +305,20 @@ final class ScreenTimeMonitoring {
                 state.pruneConsumedRuns()
             }
             throw error
+        }
+    }
+
+    /// Takes our registrations down and closes the receipt gate. Reached both
+    /// from an approved pass whose ledger says the feature is off and from a
+    /// pass with an unknown status, which may register nothing but must still
+    /// honour a save that switched recording off.
+    private func stopAndDeactivate(_ generation: ScreenTimeMonitoringGeneration) throws {
+        ScreenTimeLog.monitoring.notice("synchronize stopping reason=inactive")
+        stop()
+        try store.update { state in
+            try generation.requireCurrent(state)
+            for index in state.runs.indices { state.runs[index].active = false }
+            state.pruneConsumedRuns()
         }
     }
 

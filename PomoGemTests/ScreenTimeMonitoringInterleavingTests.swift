@@ -425,6 +425,52 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
     /// Inert placeholder tokens. Real Family Controls tokens only come from the
     /// picker, but nothing here reaches the OS: the fake center throws the
     /// events away, so the tokens only have to make a lane look configured.
+    /// `synchronize` is the ONLY teardown path for a save that turns recording
+    /// off (that save skips the authorization check entirely) and for the
+    /// timer pausing the learning lane. A status that is neither approved nor
+    /// denied — the transient cold-launch value, and the value FamilyControls
+    /// reports for a REVOKED authorization — used to return before the
+    /// teardown branch, so the ledger said "off" while every dated activity
+    /// stayed installed, still watching the user's apps and still holding part
+    /// of the shared 20-activity budget.
+    func testAnUnknownAuthorizationStatusStillStopsAnOffLedgersActivities() throws {
+        try withFixture(installed: .complete, learningApplications: 2,
+                        foreignActivities: ["other.client.daily"]) { store, center, _, _ in
+            try store.update { $0.configuration.enabled = false }
+            let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                               authorizationStatus: { .notDetermined })
+
+            XCTAssertFalse(try monitor.synchronize(now: now))
+            XCTAssertEqual(center.installedNames, ["other.client.daily"],
+                           "A ledger that says the feature is off must leave none of our activities installed")
+            XCTAssertFalse(try store.snapshot().runs.contains(where: \.active))
+            XCTAssertFalse(center.stopCalls.contains([]),
+                           "stopMonitoring([]) would take every other client's activities down too")
+            XCTAssertEqual(center.startCount, 0, "An unknown status must never register")
+            XCTAssertEqual(try store.snapshot().configuration.learningSelection.applicationTokens.count, 2,
+                           "Only an explicit denial may void the opaque selections")
+        }
+    }
+
+    /// The other half of the same branch: while the ledger still wants
+    /// monitoring, an unknown status changes nothing at all. Registering would
+    /// need an approval and invalidating would cost a new picker session.
+    func testAnUnknownAuthorizationStatusLeavesAnArmedLedgerUntouched() throws {
+        try withFixture(installed: .complete, learningApplications: 2) { store, center, _, _ in
+            let before = try store.snapshot()
+            let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                               authorizationStatus: { .notDetermined })
+
+            XCTAssertFalse(try monitor.synchronize(now: now))
+            XCTAssertEqual(center.startCount, 0)
+            XCTAssertEqual(center.stopCount, 0)
+            let after = try store.snapshot()
+            XCTAssertEqual(after.configuration, before.configuration)
+            XCTAssertTrue(after.runs.contains(where: \.active))
+            XCTAssertNil(after.monitoringError)
+        }
+    }
+
     private func makeLearningSelection(count: Int) throws -> FamilyActivitySelection {
         let tokens = (0..<count).map { index in
             "{\"data\":\"\(Data([UInt8(index), 1, 2, 3]).base64EncodedString())\"}"
