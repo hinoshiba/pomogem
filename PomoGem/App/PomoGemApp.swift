@@ -2753,6 +2753,19 @@ private struct PersistenceLaunchStatusView: View {
                             .multilineTextAlignment(.center)
                             .accessibilityIdentifier("storage-transfer-relaunch-required")
                     } else {
+                        if case .blocked = state {
+                            // `.blocked` means no terminal control record with a
+                            // generation id was readable, so a replacement would
+                            // have no lineage to act against. This screen
+                            // therefore explains what the next attempt offers
+                            // and carries NO destructive affordance of its own.
+                            Text(StorageTransferOverwriteCopy.blockedExplanation)
+                                .font(.caption)
+                                .foregroundStyle(PomoGemTheme.muted)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("storage-refresh-blocked-explanation")
+                        }
                         Button("もう一度試す", action: onRetry)
                             .buttonStyle(PomoGemPrimaryButtonStyle())
                         if let onContinueOffline {
