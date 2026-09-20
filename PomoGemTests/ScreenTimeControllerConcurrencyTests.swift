@@ -173,6 +173,10 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertEqual(driver.events.filter { $0 == "stop" }.count, 1)
     }
 
+    /// `now` is injectable precisely so the window never depends on how fast
+    /// the machine runs the test. Every pass below states its own time, and
+    /// the companion test pins the production 10 s constant from the other
+    /// side, so neither the default window nor this case is left unmeasured.
     func testTransientNotDeterminedAtColdLaunchKeepsTheSelections() async throws {
         let store = try makeStore()
         let driver = Driver(store: store)
@@ -180,20 +184,52 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
                                               monitoring: driver, authorization: { status })
         try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
 
-        // Two passes inside the default settling window, as a cold launch has.
-        await controller.invalidateAuthorizationIfRevoked()
-        await controller.invalidateAuthorizationIfRevoked()
-        XCTAssertTrue(try store.snapshot().configuration.enabled)
+        // The foreground cadence is 3 s, so a cold launch inside the default
+        // 10 s window is four passes. None of them may touch the selections.
+        for offset in [0.0, 3, 6, 9] {
+            await controller.invalidateAuthorizationIfRevoked(now: base.addingTimeInterval(offset))
+            XCTAssertTrue(try store.snapshot().configuration.enabled,
+                          "A cold launch must survive the whole settling window (t+\(offset) s)")
+        }
 
         status = .approved
-        await controller.invalidateAuthorizationIfRevoked()
+        await controller.invalidateAuthorizationIfRevoked(now: base.addingTimeInterval(12))
         try await controller.waitForPendingOperations()
         let state = try store.snapshot()
         XCTAssertTrue(state.configuration.enabled)
         XCTAssertNil(state.monitoringError)
         XCTAssertTrue(state.runs.contains(where: \.active))
         XCTAssertFalse(driver.events.contains("stop"))
+    }
+
+    /// The production default is the one value no other test exercises: the
+    /// siblings inject 0. Pin it, so shortening or lengthening the window is a
+    /// deliberate edit rather than a silent change to what a revoked
+    /// authorization costs the user.
+    func testTheDefaultSettlingWindowInvalidatesAfterTenSecondsOfObservation() async throws {
+        let store = try makeStore()
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: driver, authorization: { .notDetermined })
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+
+        for offset in [0.0, 3, 6, 9] {
+            await controller.invalidateAuthorizationIfRevoked(now: base.addingTimeInterval(offset))
+        }
+        try await controller.waitForPendingOperations()
+        XCTAssertTrue(try store.snapshot().configuration.enabled,
+                      "Nine seconds of observation is inside the 10 s window")
+
+        await controller.invalidateAuthorizationIfRevoked(now: base.addingTimeInterval(12))
+        try await controller.waitForPendingOperations()
+        let state = try store.snapshot()
+        XCTAssertFalse(state.configuration.enabled)
+        XCTAssertFalse(state.runs.contains(where: \.active))
+        XCTAssertTrue(state.monitoringError?.contains("選び直して") == true)
+        XCTAssertTrue(driver.events.contains("stop"))
     }
 
     /// F5 removed the `.onDisappear` retirement and `taskKey` carries
