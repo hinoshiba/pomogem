@@ -383,6 +383,9 @@ final class ScreenTimeCallbackDiagnosticsTests: XCTestCase {
             "thresholdsIgnoredByName":0,"thresholdsUnknownAuthorization":1,\
             "thresholdsDenied":0,"statusUnknownAtCallback":3}
             """
+        // `thresholdsUnknownAuthorization` is the bucket that used to read as
+        // a verdict on a callback. It is gone, and a ledger the phone already
+        // holds still decodes — the key is simply not asked for.
         let decoded = try JSONDecoder().decode(
             ScreenTimeCallbackCounters.self, from: Data(legacy.utf8)
         )

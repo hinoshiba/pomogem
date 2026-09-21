@@ -534,6 +534,159 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         }
     }
 
+    // MARK: - what an unreadable authorization is allowed to decide
+
+    /// The defect the 2026-09-21 device run named. The OS measured the usage,
+    /// delivered the threshold, and the extension threw the gem away because
+    /// the process it was delivered into could not read the approval the user
+    /// had already given. The award now happens, and the ledger's own fences
+    /// are what stop the SECOND delivery of the same threshold — not the
+    /// authorization read, which never had anything to do with it.
+    func testAThresholdWithAnUnknownStatusIsRecordedAndThenRefusedByTheLedger() throws {
+        try withFixture(installed: .complete) { store, center, original, _ in
+            let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                               host: .monitorExtension,
+                                               authorizationStatus: { .notDetermined })
+            let name = original.runs[0].activityPrefix + "0"
+
+            // The run started 1_200 s before `now`, so thresholds 1 and 2 are
+            // due, 3 is not, and a repeat of 1 is already awarded.
+            try monitor.handleThreshold(eventName: "1", activityName: name, now: now)
+            XCTAssertEqual(try store.snapshot().runs[0].highestThreshold, 1)
+            try monitor.handleThreshold(eventName: "1", activityName: name, now: now)
+            try monitor.handleThreshold(eventName: "3", activityName: name, now: now)
+            try monitor.handleThreshold(eventName: "2", activityName: name, now: now)
+
+            let result = try store.snapshot()
+            XCTAssertEqual(result.runs[0].highestThreshold, 2,
+                           "No double counting, and no credit for a threshold still in the future")
+            let counters = try XCTUnwrap(result.callbackCounters)
+            XCTAssertEqual(counters.thresholds, 4)
+            XCTAssertEqual(counters.thresholdsRecorded, 2)
+            XCTAssertEqual(counters.thresholdsIgnoredByLedger, 2)
+            XCTAssertEqual(counters.thresholdsDenied, 0)
+            XCTAssertEqual(counters.statusUnknownAtCallback, 4,
+                           "Every one of them was received by a process that could not read the status")
+            // Nothing about the selections or the registration was touched.
+            XCTAssertTrue(result.configuration.enabled)
+            XCTAssertNil(result.monitoringError)
+            XCTAssertEqual(center.stopCalls, [])
+            XCTAssertEqual(center.startedNames, [])
+        }
+    }
+
+    /// The registration half of the same change, and the reason it matters at
+    /// midnight: the daily scheduler callback is what installs the new day's
+    /// run, and inside the extension it is the only process awake to do it. A
+    /// status the extension cannot read used to skip that pass entirely, so a
+    /// rollover that no foreground pass happened to follow lost the whole day.
+    func testAnUnknownStatusInTheExtensionStillRegisters() throws {
+        try withFixture(installed: .none, learningApplications: 2) { store, center, _, _ in
+            let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                               host: .monitorExtension,
+                                               authorizationStatus: { .notDetermined })
+
+            XCTAssertTrue(try monitor.synchronize(now: now))
+
+            let result = try store.snapshot()
+            XCTAssertEqual(center.startCount, 1 + ScreenTimePolicy.batchesPerLane)
+            XCTAssertTrue(result.runs.contains(where: \.active))
+            XCTAssertNil(result.monitoringError)
+            XCTAssertEqual(result.configuration.learningSelection.applicationTokens.count, 2)
+        }
+    }
+
+    /// A scheduler callback in the same process, reaching `synchronize` the
+    /// way the OS does. Proceeding means the FRAMEWORK gets to answer, so its
+    /// refusal — `.unauthorized` or any other `MonitoringError` — has to land
+    /// on the existing failure path: registrations stopped, every run
+    /// inactive, 監視エラー shown. What it must never do is void the opaque
+    /// selections, which only a `.denied` may do and which only a new picker
+    /// session could restore.
+    func testAnUnknownStatusThatTheFrameworkRefusesFailsWithoutVoidingTheSelections() throws {
+        try withFixture(installed: .none, learningApplications: 2,
+                        foreignActivities: ["another.client.daily"]) { store, center, initial, _ in
+            center.onStartName = { name in
+                if name.hasSuffix(".2") { throw RegistrationFailure() }
+            }
+            let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                               host: .monitorExtension,
+                                               authorizationStatus: { .notDetermined })
+
+            XCTAssertThrowsError(try monitor.handleInterval(
+                activityName: ScreenTimeMonitoring.schedulerName(epoch: initial.epoch), now: now
+            )) { error in
+                XCTAssertTrue(error is RegistrationFailure)
+            }
+
+            let result = try store.snapshot()
+            XCTAssertNotNil(result.monitoringError)
+            XCTAssertFalse(result.runs.contains(where: \.active))
+            XCTAssertTrue(result.configuration.enabled,
+                          "A framework refusal is not a revocation")
+            XCTAssertEqual(result.configuration.learningSelection.applicationTokens.count, 2,
+                           "Only an explicit denial may void the opaque selections")
+            XCTAssertFalse(center.stopCalls.contains([]),
+                           "stopMonitoring([]) would take every other client's activities down too")
+            XCTAssertEqual(center.installedNames, ["another.client.daily"])
+        }
+    }
+
+    /// The teardown half survives in the extension too: a ledger that says
+    /// recording is off must not leave our activities installed, whatever the
+    /// status read said, because they keep the OS watching the user's apps and
+    /// hold part of the shared 20-activity budget.
+    func testAnUnknownStatusInTheExtensionStillStopsAnOffLedgersActivities() throws {
+        try withFixture(installed: .complete, learningApplications: 2,
+                        foreignActivities: ["other.client.daily"]) { store, center, _, _ in
+            try store.update { $0.configuration.enabled = false }
+            let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                               host: .monitorExtension,
+                                               authorizationStatus: { .notDetermined })
+
+            XCTAssertFalse(try monitor.synchronize(now: now))
+
+            XCTAssertEqual(center.installedNames, ["other.client.daily"])
+            XCTAssertEqual(center.startCount, 0)
+            let result = try store.snapshot()
+            XCTAssertFalse(result.runs.contains(where: \.active))
+            XCTAssertEqual(result.configuration.learningSelection.applicationTokens.count, 2)
+        }
+    }
+
+    /// And the one answer that still decides everything, on both entry points
+    /// the extension has. A denial voids the opaque selections (Apple has
+    /// already invalidated them), stops the registration and asks the user to
+    /// grant access and select again.
+    func testADeniedStatusStillInvalidatesFromEitherExtensionCallback() throws {
+        for viaThreshold in [false, true] {
+            try withFixture(installed: .complete, learningApplications: 2) { store, center, original, _ in
+                let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                                   host: .monitorExtension,
+                                                   authorizationStatus: { .denied })
+
+                if viaThreshold {
+                    try monitor.handleThreshold(
+                        eventName: "1", activityName: original.runs[0].activityPrefix + "0", now: now
+                    )
+                } else {
+                    XCTAssertFalse(try monitor.synchronize(now: now))
+                }
+
+                let result = try store.snapshot()
+                XCTAssertFalse(result.configuration.enabled)
+                XCTAssertTrue(result.configuration.learningSelection.applicationTokens.isEmpty)
+                XCTAssertFalse(result.runs.contains(where: \.active))
+                XCTAssertEqual(result.runs.first?.highestThreshold ?? 0, 0,
+                               "A denied callback awards nothing")
+                XCTAssertTrue(result.monitoringError?.contains("選び直して") == true)
+                XCTAssertEqual(center.stopCalls.count, 1)
+                XCTAssertFalse(try XCTUnwrap(center.stopCalls.first).isEmpty)
+                XCTAssertEqual(center.startCount, 0)
+            }
+        }
+    }
+
     private func makeLearningSelection(count: Int) throws -> FamilyActivitySelection {
         let tokens = (0..<count).map { index in
             "{\"data\":\"\(Data([UInt8(index), 1, 2, 3]).base64EncodedString())\"}"
