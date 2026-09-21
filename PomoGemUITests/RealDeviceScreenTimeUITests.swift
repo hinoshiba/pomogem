@@ -1383,11 +1383,10 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
     /// first and then step down slowly, sampling after every step.
     @discardableResult
     private func revealSettingsRow(_ element: XCUIElement, in application: XCUIApplication) -> Bool {
-        // `isHittable` is the authority here: SwiftUI reports List row frames
-        // in a space that does not always line up with the window, so pure
-        // frame arithmetic declares a row "settled" while it sits under the
-        // navigation bar (or vice versa). A row that XCTest can hit is a row
-        // that is on screen and not obscured.
+        // SwiftUI reports List row frames in a space that does not always line
+        // up with the window, so pure frame arithmetic can call a row
+        // "settled" while it sits under the navigation bar. Hence the extra
+        // nav-bar gate below, on top of the geometry `safelyHittable` applies.
         func settled() -> Bool {
             guard element.exists else { return false }
             let frame = element.frame
@@ -1395,11 +1394,17 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             // `isHittable` does not answer `false` for a row whose activation
             // point falls outside the screen: it raises "Activation point
             // invalid and no suggested hit points based on element frame",
-            // which XCTest records as a test FAILURE. That is what killed the
-            // first usage-distraction run while it scrolled back up from
-            // screen-time.negative-total to screen-time.learning-apps. So ask
-            // only once the row's own centre is demonstrably inside the
-            // window and below the navigation bar; otherwise keep scrolling.
+            // which XCTest records as a test FAILURE. This function used to
+            // ask it once the row's CENTRE was inside the window, and that was
+            // not enough — it still raised, and it cost a whole
+            // usage-distraction run while scrolling back up from
+            // screen-time.negative-total to screen-time.learning-apps. A
+            // centre inside the window says nothing about a row whose frame
+            // straddles an edge, which is precisely the row being scrolled
+            // into view. So the question is never asked directly here:
+            // `safelyHittable` asks it only for an element whose WHOLE frame
+            // is inside the window, which is the state that can produce a hit
+            // point; until then the answer is simply "keep scrolling".
             let window = application.windows.firstMatch.frame
             guard window.width > 0, window.height > 0 else { return false }
             let centre = CGPoint(x: frame.midX, y: frame.midY)
@@ -1407,7 +1412,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             let top = application.navigationBars.allElementsBoundByIndex
                 .map(\.frame).filter { $0.height > 0 }.map(\.maxY).max() ?? window.minY
             guard centre.y > top, centre.y < window.maxY - 36 else { return false }
-            return element.isHittable
+            return safelyHittable(element, in: application)
         }
         if settled() { return true }
         for _ in 0..<8 {
