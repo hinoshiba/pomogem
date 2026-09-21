@@ -120,7 +120,7 @@ enum CloudOfflineHostPolicy {
         case .networkUnavailable, .serviceUnavailable, .timedOut, .quota:
             return true
         case .noAccount, .restricted, .temporarilyUnavailable, .configuration,
-             .permission, .accountChanged, .unknown:
+             .permission, .identityUnstable, .unknown:
             return false
         }
     }
@@ -129,6 +129,9 @@ enum CloudOfflineHostPolicy {
     /// record/schema errors and cancellation cannot be promoted into identity
     /// evidence merely because their descriptions mention an account.
     static func revocationReason(for error: Error) -> CloudOfflineRevocationReason? {
+        // The only comparison between the live verified identity and the
+        // stored binding lives in the boundary resolver. Its verdict is the
+        // only thing that can assert "a different Apple Account".
         if case AppleAccountBoundaryResolutionError.blocked(.accountMismatch) = error {
             return .accountMismatch
         }
@@ -136,7 +139,11 @@ enum CloudOfflineHostPolicy {
         switch failure.kind {
         case .noAccount: return .noAccount
         case .restricted: return .restricted
-        case .accountChanged: return .accountChanged
+        // Two identity reads inside one proof that disagreed with each other
+        // never touched the stored binding. Treating that as durable identity
+        // evidence is exactly the promotion this function's contract forbids;
+        // the retried proof, and its comparison, decide instead.
+        case .identityUnstable: return nil
         default: return nil
         }
     }

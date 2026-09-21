@@ -80,7 +80,7 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
             NSError(domain: "fixture", code: 1, userInfo: [NSLocalizedDescriptionKey: "datasetRefreshRequired"])]
         for error in otherErrors { XCTAssertNil(CloudOfflineHostPolicy.recoveryKind(after: error)) }
         for kind in [CloudAccountVerificationFailure.Kind.networkUnavailable, .serviceUnavailable,
-                     .quota, .timedOut, .noAccount, .restricted, .accountChanged] {
+                     .quota, .timedOut, .noAccount, .restricted, .identityUnstable] {
             for error in wrappers(failure(kind)) { XCTAssertNil(CloudOfflineHostPolicy.recoveryKind(after: error)) }
         }
     }
@@ -189,7 +189,7 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
         ]
         let denied: [CloudAccountVerificationFailure.Kind] = [
             .noAccount, .restricted, .temporarilyUnavailable, .configuration,
-            .permission, .accountChanged, .unknown
+            .permission, .identityUnstable, .unknown
         ]
         for kind in allowed + denied {
             for wrapped in wrappers(failure(kind)) {
@@ -228,7 +228,7 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
 
     func testPositiveIdentityFailuresRevokeThroughEveryRealWrapper() {
         let cases: [(CloudAccountVerificationFailure.Kind, CloudOfflineRevocationReason)] = [
-            (.noAccount, .noAccount), (.restricted, .restricted), (.accountChanged, .accountChanged)
+            (.noAccount, .noAccount), (.restricted, .restricted)
         ]
         for (kind, expected) in cases {
             for wrapped in wrappers(failure(kind)) {
@@ -249,11 +249,80 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
             XCTAssertNil(CloudOfflineHostPolicy.revocationReason(for: error))
         }
         for kind in [CloudAccountVerificationFailure.Kind.networkUnavailable, .serviceUnavailable,
-                     .timedOut, .quota, .temporarilyUnavailable, .configuration, .permission, .unknown] {
+                     .timedOut, .quota, .temporarilyUnavailable, .configuration, .permission,
+                     .identityUnstable, .unknown] {
             for wrapped in wrappers(failure(kind)) {
                 XCTAssertNil(CloudOfflineHostPolicy.revocationReason(for: wrapped))
             }
         }
+    }
+
+    /// The device receipt recovered on 2026-09-21 carried `accountChanged`
+    /// while every other artifact said the account was unchanged. That reason
+    /// could be written by a proof whose two identity reads disagreed with
+    /// each other — a comparison of two momentary values that never looked at
+    /// the stored binding. Only the resolver's own verdict may revoke.
+    func testAnIdentityThatDisagreedWithItselfIsTransientAndNeverRevokes() {
+        let unstable = CloudAccountVerificationFailure(kind: .identityUnstable,
+            stage: .identityAfterProbe)
+        for wrapped in wrappers(unstable) {
+            XCTAssertNil(CloudOfflineHostPolicy.revocationReason(for: wrapped),
+                "An identity read that disagreed with itself compared nothing to the stored binding")
+            XCTAssertFalse(CloudOfflineHostPolicy.allowsOfflineFallback(after: wrapped),
+                "Refusing to revoke must not also relax the fail-closed launch route")
+        }
+        // The same proof is worth repeating once: nothing about it says which
+        // account is signed in, and no server asked the app to wait.
+        XCTAssertEqual(CloudAccountIdentityVerifier.nextAttemptDelay(after: unstable, defaultDelay: 0), 0)
+        XCTAssertEqual(CloudAccountIdentityVerifier.nextAttemptDelay(after: unstable, defaultDelay: 0.5), 0.5)
+        XCTAssertEqual(CloudAccountIdentityVerifier.nextAttemptDelay(after: unstable, defaultDelay: 90), 3)
+        for invalid in [TimeInterval.nan, -1, -TimeInterval.infinity] {
+            XCTAssertNil(CloudAccountIdentityVerifier.nextAttemptDelay(after: unstable, defaultDelay: invalid))
+        }
+        // Reasons that really are a positive account state keep revoking, and
+        // keep their own retry rules.
+        for kind in [CloudAccountVerificationFailure.Kind.noAccount, .restricted, .unknown, .quota] {
+            XCTAssertNil(CloudAccountIdentityVerifier.nextAttemptDelay(
+                after: failure(kind), defaultDelay: 0.5), "\(kind)")
+        }
+        XCTAssertEqual(CloudAccountIdentityVerifier.nextAttemptDelay(
+            after: failure(.networkUnavailable), defaultDelay: 0.5), 0.5)
+    }
+
+    /// The reasons that survive are exactly the ones a comparison or a
+    /// positive account state produced. `accountChanged` is still decodable so
+    /// receipts already on a phone keep their meaning, but nothing writes it.
+    func testOnlyComparedOrPositiveAccountStatesRemainWritableRevocationReasons() {
+        let mismatch = AppleAccountBoundaryResolutionError.blocked(.accountMismatch)
+        XCTAssertEqual(CloudOfflineHostPolicy.revocationReason(for: mismatch), .accountMismatch)
+        XCTAssertEqual(CloudOfflineHostPolicy.revocationReason(
+            for: failure(.noAccount)), .noAccount)
+        XCTAssertEqual(CloudOfflineHostPolicy.revocationReason(
+            for: failure(.restricted)), .restricted)
+        var written: Set<CloudOfflineRevocationReason> = []
+        for kind in allKinds {
+            for wrapped in wrappers(failure(kind)) {
+                if let reason = CloudOfflineHostPolicy.revocationReason(for: wrapped) {
+                    written.insert(reason)
+                }
+            }
+        }
+        for blocked in [AppleAccountBoundaryBlockReason.accountMismatch, .identityUnavailable,
+                        .invalidVerifiedIdentity, .invalidStoredRegistry] {
+            if let reason = CloudOfflineHostPolicy.revocationReason(
+                for: AppleAccountBoundaryResolutionError.blocked(blocked)) {
+                written.insert(reason)
+            }
+        }
+        XCTAssertEqual(written, [.accountMismatch, .noAccount, .restricted])
+        XCTAssertFalse(written.contains(.accountChanged),
+            "No classified failure may write the reason that compared nothing")
+    }
+
+    private var allKinds: [CloudAccountVerificationFailure.Kind] {
+        [.noAccount, .restricted, .temporarilyUnavailable, .networkUnavailable,
+         .serviceUnavailable, .configuration, .permission, .quota,
+         .identityUnstable, .timedOut, .unknown]
     }
 
     func testUnclassifiedErrorsAndErrorTextCannotBeUsedAsAuthorization() {
