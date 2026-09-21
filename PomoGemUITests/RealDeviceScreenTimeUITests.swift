@@ -95,6 +95,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         case relaunch
         case revoke
         case reset
+        case screenTimeSettingsReadout = "screen-time-settings-readout"
     }
 
     private enum StorageAction: String {
@@ -269,6 +270,132 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         recordSettingsState(app, label: "dump")
         inventory(app, name: "dump-settings")
         note("DUMP COMPLETE: the settings screen was recorded and nothing was changed.")
+    }
+
+    // MARK: - read-only iOS Settings readout
+
+    /// Walks 設定 → スクリーンタイム and READS the one OS-side condition that
+    /// decides whether iOS is measuring app usage at all
+    /// (「アプリとWebサイトのアクティビティ」), plus whichever app names the
+    /// page's own activity summary happens to show.
+    ///
+    /// This phase is **read-only by construction**: it taps only rows that
+    /// NAVIGATE (the スクリーンタイム row, and the activity row when that row is
+    /// a disclosure rather than a control). It never taps a switch, never
+    /// answers a confirmation, never types, and never presses any
+    /// 「…をオンにする」/「…をオフにする」 button — a switch's state is read from
+    /// its value in place. It changes no setting, so it can be run at any
+    /// point of the audit without disturbing what the other phases measure.
+    ///
+    /// It answers H2(d) from `pr24/CALLBACK-DIAGNOSIS.md`: if app activity is
+    /// OFF, the DeviceActivity extension can never be called no matter what
+    /// PomoGem registered, and every counter in the diagnostics mirror is
+    /// expected to be zero for reasons that have nothing to do with this app.
+    func testReadScreenTimeStateInIOSSettings() throws {
+        try select(.screenTimeSettingsReadout)
+        let settings = XCUIApplication(bundleIdentifier: Self.preferencesID)
+        settings.terminate()
+        settings.activate()
+        pause(3)
+        try guardAgainstPasscode(settings)
+        capture("readout-preferences-root")
+
+        let screenTimeRow = settings.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@", "スクリーンタイム")
+        ).firstMatch
+        var reachedScreenTime = false
+        for _ in 0..<12 {
+            if safelyHittable(screenTimeRow, in: settings) { reachedScreenTime = true; break }
+            settings.swipeUp(velocity: .fast)
+            pause(1)
+        }
+        guard reachedScreenTime else {
+            capture("readout-no-screen-time-row")
+            dumpHierarchy(settings, name: "readout-no-screen-time-row")
+            leavePreferences(settings)
+            try skipWithEvidence(
+                "readout-screen-time-row-missing",
+                "The スクリーンタイム row in 設定 was not addressable from XCUITest, so the OS-side state could not be read. Nothing in 設定 was changed."
+            )
+        }
+        screenTimeRow.tap()
+        pause(3)
+        try guardAgainstPasscode(settings)
+        capture("readout-screen-time-page")
+        dumpHierarchy(settings, name: "readout-screen-time-page")
+        inventory(settings, name: "readout-screen-time-page")
+
+        let activityTitle = "アプリとWebサイトのアクティビティ"
+        let activityPredicate = NSPredicate(
+            format: "label CONTAINS %@ OR identifier CONTAINS %@", activityTitle, activityTitle
+        )
+
+        // A switch answers the question WITHOUT a tap.
+        var verdict = "unknown"
+        var evidenceLine = "no element carrying 「\(activityTitle)」 was found on the スクリーンタイム page"
+        let activitySwitch = settings.switches.matching(activityPredicate).firstMatch
+        if activitySwitch.exists {
+            _ = reveal(element: activitySwitch, in: settings)
+            let raw = describeValue(activitySwitch)
+            verdict = raw == "1" ? "ON" : (raw == "0" ? "OFF" : "unreadable(\(raw))")
+            evidenceLine = "switch 「\(activitySwitch.label)」 value=\(raw) on the スクリーンタイム page (not tapped)"
+            note("READOUT: \(activityTitle) = \(verdict) — \(evidenceLine)")
+        }
+
+        // Otherwise the row is a disclosure; opening it is navigation, and the
+        // page it opens carries either the switch or the 「…をオンにする」
+        // invitation that only appears while the feature is OFF.
+        if verdict == "unknown" {
+            let row = settings.descendants(matching: .any).matching(activityPredicate).firstMatch
+            if row.exists, reveal(element: row, in: settings), safelyHittable(row, in: settings) {
+                let detail = describeValue(row)
+                note("READOUT: 「\(activityTitle)」 is a row (label=\(row.label) value=\(detail)); opening it to read its page. Nothing on it will be tapped.")
+                row.tap()
+                pause(3)
+                try guardAgainstPasscode(settings)
+                capture("readout-activity-page")
+                dumpHierarchy(settings, name: "readout-activity-page")
+                inventory(settings, name: "readout-activity-page")
+
+                let pageSwitch = settings.switches.firstMatch
+                if pageSwitch.exists {
+                    _ = reveal(element: pageSwitch, in: settings)
+                    let raw = describeValue(pageSwitch)
+                    verdict = raw == "1" ? "ON" : (raw == "0" ? "OFF" : "unreadable(\(raw))")
+                    evidenceLine = "switch 「\(pageSwitch.label)」 value=\(raw) on the 「\(activityTitle)」 page (not tapped)"
+                } else {
+                    let turnOn = settings.descendants(matching: .any).matching(
+                        NSPredicate(format: "label CONTAINS %@", "をオンにする")
+                    ).firstMatch
+                    if turnOn.exists {
+                        verdict = "OFF"
+                        evidenceLine = "the page offers 「\(turnOn.label)」, which iOS shows only while the feature is off (NOT tapped)"
+                    } else if !detail.isEmpty {
+                        verdict = detail.contains("オン") ? "ON" : (detail.contains("オフ") ? "OFF" : "unknown")
+                        evidenceLine = "the row's own detail text was \(detail)"
+                    }
+                }
+                note("READOUT: \(activityTitle) = \(verdict) — \(evidenceLine)")
+            }
+        }
+
+        // Whatever app names this page shows, in either direction.
+        let wanted = ["計算機", "メモ", "ボイスメモ"]
+        var seen = Set<String>()
+        var harvested: [String] = []
+        for pass in 0..<10 {
+            for label in labels(of: settings.staticTexts) where !label.isEmpty {
+                if seen.insert(label).inserted { harvested.append(label) }
+            }
+            if pass < 9 { settings.swipeUp(velocity: .slow); pause(1) }
+        }
+        attach(string: harvested.joined(separator: "\n"), name: "readout-visible-texts")
+        let hits = wanted.filter { name in harvested.contains { $0 == name || $0.contains(name) } }
+        note("READOUT: activity-list app names present: \(hits.isEmpty ? "<none of 計算機 / メモ / ボイスメモ>" : hits.joined(separator: ", ")) (scanned \(harvested.count) distinct visible texts).")
+
+        capture("readout-final")
+        leavePreferences(settings)
+        note("READOUT COMPLETE: \(activityTitle)=\(verdict); appNames=\(hits.isEmpty ? "none" : hits.joined(separator: "+")). No iOS setting was changed, no switch and no confirmation was tapped.")
     }
 
     // MARK: - P0 baseline
