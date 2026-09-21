@@ -526,7 +526,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             NotificationCenter.default.publisher(for: .CKAccountChanged)
                 .receive(on: RunLoop.main)
         ) { _ in
-            accountIdentityDidChange()
+            quiesceForPossibleAccountChange()
         }
         .onChange(of: scenePhase) { _, phase in
             handleScenePhaseChange(phase)
@@ -1761,7 +1761,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         canContinueOffline = false
         do { try CloudOfflineAccessState().revoke(binding: binding, reason: reason) }
         catch { offlineRevocationWriteFailed = true }
-        if session != nil { accountIdentityDidChange() }
+        if session != nil { quiesceForPossibleAccountChange() }
     }
 
     private func cancelOfflineConnectionCheck() {
@@ -2131,15 +2131,25 @@ private struct PomoGemPersistenceLaunchHost: View {
         }
     }
 
-    private func accountIdentityDidChange() {
+    /// Close the live account boundary because the account MIGHT have changed,
+    /// and start a fresh launch that will resolve the identity again.
+    ///
+    /// `.CKAccountChanged` is posted for every movement of account state —
+    /// signing in or out, iCloud being switched on or off for this app, a
+    /// token refresh, an availability transition. It carries no identity, so
+    /// it compares nothing against the stored binding and is not evidence that
+    /// another Apple Account is signed in. Quiescing here stays fail-closed:
+    /// scheduling is suspended, the cross-process binding is cleared, the
+    /// containers are retired and nothing reopens until a complete boundary
+    /// resolution succeeds. The durable receipt is deliberately left alone;
+    /// when the account really did change, that resolution returns
+    /// `.blocked(.accountMismatch)` and `revokeOfflineForAccountError` records
+    /// it with the reason that a comparison actually produced.
+    private func quiesceForPossibleAccountChange() {
         canContinueOffline = false
         cancelOfflineConnectionCheck()
         cloudLaunchDeadline?.cancel()
         cloudLaunchDeadline = nil
-        if case let .selected(.cloud(binding)) = PersistenceDeploymentState.load() {
-            do { try CloudOfflineAccessState().revoke(binding: binding, reason: .accountChanged) }
-            catch { offlineRevocationWriteFailed = true }
-        }
         guard !requiresStorageTransferRelaunch else { return }
         guard usesCloudAccountBoundary else { return }
         // Reject every late request from the old view hierarchy before the
