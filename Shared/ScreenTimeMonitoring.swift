@@ -24,6 +24,28 @@ protocol ScreenTimeActivityCenterDriving {
 
 extension DeviceActivityCenter: ScreenTimeActivityCenterDriving {}
 
+/// Which process a `ScreenTimeMonitoring` runs in — and therefore what a
+/// Family Controls status of "neither approved nor denied" is allowed to mean
+/// there.
+///
+/// In the APP it is an answer. The app is the process the user authorized, it
+/// reads `AuthorizationCenter` on the main run loop with FamilyControls fully
+/// loaded, and `ScreenTimeController` already watches that status across a
+/// settling window to tell a real revocation from a transient value.
+///
+/// In the monitor extension it is not an answer at all. The OS spawns that
+/// process on demand to deliver one callback and tears it down again; on the
+/// 2026-09-21 device run it read `.notDetermined` for EVERY threshold — 2 of 2,
+/// both lanes — while the app read 許可済み at the same minute, so every gem the
+/// OS had measured was discarded by a process that simply could not see the
+/// approval. Inside the extension the status therefore gates nothing but an
+/// explicit `.denied`: the OS only delivers callbacks for a registration an
+/// authorized app made, and `ScreenTimeState.record` still owns every award.
+enum ScreenTimeMonitoringHost {
+    case app
+    case monitorExtension
+}
+
 /// Identifies registration inputs without including concurrently arriving
 /// receipts. The main app can retire a run or reset its owner while an OS call
 /// holds the separate monitoring lock, so every later write must revalidate.
@@ -65,16 +87,19 @@ final class ScreenTimeMonitoring {
     private let authorizationStatus: () -> AuthorizationStatus
     /// nil waits for the monitoring lock forever, which only the app may do.
     private let lockTimeout: TimeInterval?
+    private let host: ScreenTimeMonitoringHost
 
     init(
         store: ScreenTimeStore,
         center: ScreenTimeActivityCenterDriving = DeviceActivityCenter(),
         lockTimeout: TimeInterval? = nil,
+        host: ScreenTimeMonitoringHost = .app,
         authorizationStatus: @escaping () -> AuthorizationStatus = { AuthorizationCenter.shared.authorizationStatus }
     ) {
         self.store = store
         self.center = center
         self.lockTimeout = lockTimeout
+        self.host = host
         self.authorizationStatus = authorizationStatus
     }
 
@@ -83,9 +108,10 @@ final class ScreenTimeMonitoring {
         store: ScreenTimeStore,
         center: ScreenTimeActivityCenterDriving = DeviceActivityCenter(),
         lockTimeout: TimeInterval? = nil,
+        host: ScreenTimeMonitoringHost = .app,
         authorization: @escaping () -> Bool
     ) {
-        self.init(store: store, center: center, lockTimeout: lockTimeout,
+        self.init(store: store, center: center, lockTimeout: lockTimeout, host: host,
                   authorizationStatus: { authorization() ? .approved : .denied })
     }
 
@@ -156,26 +182,45 @@ final class ScreenTimeMonitoring {
         let status = authorizationStatus()
         let ledgerWantsMonitoring = state.configuration.enabled
             && state.contextKey != nil && state.contextIsActive
-        if !Self.isAuthorized(status) {
-            // Never register and never invalidate on anything but a denial
-            // while the status is unknown. The teardown half still runs: this
-            // is the ONLY stop path for a save that turns recording off and
-            // for the timer pausing the learning lane, and a ledger that says
-            // "off" must not leave our activities installed — they keep the
-            // OS watching the user's apps and hold the shared 20-activity
-            // budget. A revoked authorization also reads .notDetermined.
-            ScreenTimeLog.monitoring.notice(
-                "synchronize skipped authorization=\(status == .denied ? "denied" : "unknown", privacy: .public)")
-            if status == .denied {
-                stop()
-                try store.update {
-                    try initialGeneration.requireCurrent($0)
-                    $0.invalidateAuthorization()
-                }
-            } else if !ledgerWantsMonitoring {
-                try stopAndDeactivate(initialGeneration)
+        if status == .denied {
+            // The one authorization answer that decides anything. Apple voids
+            // the opaque selections on a revocation, so the ledger has to be
+            // told, and our activities have to come down.
+            ScreenTimeLog.monitoring.notice("synchronize skipped authorization=denied")
+            stop()
+            try store.update {
+                try initialGeneration.requireCurrent($0)
+                $0.invalidateAuthorization()
             }
             return false
+        }
+        if !Self.isAuthorized(status), host == .app {
+            // The app CAN read the status, so an unknown one here is a real
+            // observation: registering would need an approval this process did
+            // not see, and `ScreenTimeController`'s settling window is what
+            // turns a persistent unknown into a revocation. Never invalidate
+            // from here — a revoked authorization also reads .notDetermined,
+            // and one transient read would cost the user a picker session.
+            // The teardown half still runs: this is the ONLY stop path for a
+            // save that turns recording off and for the timer pausing the
+            // learning lane, and a ledger that says "off" must not leave our
+            // activities installed — they keep the OS watching the user's apps
+            // and hold the shared 20-activity budget.
+            ScreenTimeLog.monitoring.notice("synchronize skipped authorization=unknown")
+            if !ledgerWantsMonitoring { try stopAndDeactivate(initialGeneration) }
+            return false
+        }
+        if !Self.isAuthorized(status) {
+            // The extension cannot read the status (see
+            // `ScreenTimeMonitoringHost`), so an unknown one says nothing and
+            // must not skip the daily re-registration the scheduler callback
+            // exists to perform: skipping it left a whole day with no
+            // registration whenever the extension, and only the extension, was
+            // awake for the rollover. Proceed and let the framework answer —
+            // if DeviceActivityCenter refuses, .unauthorized like any other
+            // error, the catch below stops monitoring, deactivates every run
+            // and shows 監視エラー.
+            ScreenTimeLog.monitoring.notice("synchronize authorization=unknown reason=proceed")
         }
         guard ledgerWantsMonitoring else {
             try stopAndDeactivate(initialGeneration)
@@ -342,22 +387,39 @@ final class ScreenTimeMonitoring {
     /// Every exit logs a reason, so the Console evidence on a device tells an
     /// awarded gem from a silently discarded callback. Reasons only: never a
     /// run identifier, event name, threshold or gem count.
+    ///
+    /// Only an explicit `.denied` stops the award. This runs in the on-demand
+    /// monitor extension, where the status a synchronous read returns is not
+    /// evidence about the user's authorization at all (see
+    /// `ScreenTimeMonitoringHost`): on 2026-09-21 the phone answered
+    /// `.notDetermined` for every single threshold while the app read 許可済み,
+    /// and gating the award on it discarded every gem the OS had measured,
+    /// silently, with the settings screen still saying 自動記録中.
+    ///
+    /// Nothing is loosened by proceeding. The OS delivers a threshold only for
+    /// an activity an authorized app registered, a revoked authorization voids
+    /// the opaque selections so no registration of ours survives it, and every
+    /// fence that decides an award still belongs to `ScreenTimeState.record`:
+    /// an active run, a bound and active context, recording enabled, enough
+    /// elapsed time in the run's own window, a strictly higher threshold, and
+    /// the learning lane's timer/subscription conditions.
     func handleThreshold(eventName: String, activityName: String, now: Date = Date()) throws {
         let kind = ScreenTimeActivityKind(activityName: activityName)
         let status = authorizationStatus()
-        guard Self.isAuthorized(status) else {
-            let denied = status == .denied
-            count(threshold: denied ? .denied : .unknownAuthorization, now: now)
+        // Observation, not a gate: it says which process could read the
+        // authorization, beside whatever the ledger then decided.
+        let statusUnknown = !Self.isAuthorized(status) && status != .denied
+        guard status != .denied else {
+            count(threshold: .denied, statusUnknown: false, now: now)
             ScreenTimeLog.monitoring.notice("""
                 threshold skipped kind=\(kind.rawValue, privacy: .public) \
-                authorization=\(denied ? "denied" : "unknown", privacy: .public)
+                authorization=denied
                 """)
-            // An unknown status means "ask again later": no award, no wipe.
-            if denied { try invalidateAuthorizationIfNeeded() }
+            try invalidateAuthorizationIfNeeded()
             return
         }
         guard activityName.hasPrefix(Self.prefix), let threshold = Int(eventName) else {
-            count(threshold: .ignoredByName, now: now)
+            count(threshold: .ignoredByName, statusUnknown: statusUnknown, now: now)
             ScreenTimeLog.monitoring.notice(
                 "threshold ignored kind=\(kind.rawValue, privacy: .public) reason=name")
             return
@@ -366,16 +428,18 @@ final class ScreenTimeMonitoring {
         guard parts.count == 2, let runID = UUID(uuidString: String(parts[0])),
               let batch = Int(parts[1]), (0..<ScreenTimePolicy.batchesPerLane).contains(batch),
               ScreenTimePolicy.thresholds(batch: batch).contains(threshold) else {
-            count(threshold: .ignoredByName, now: now)
+            count(threshold: .ignoredByName, statusUnknown: statusUnknown, now: now)
             ScreenTimeLog.monitoring.notice(
                 "threshold ignored kind=\(kind.rawValue, privacy: .public) reason=name")
             return
         }
         let recorded = try store.record(runID: runID, threshold: threshold, now: now)
-        count(threshold: recorded ? .recorded : .ignoredByLedger, now: now)
+        count(threshold: recorded ? .recorded : .ignoredByLedger,
+              statusUnknown: statusUnknown, now: now)
         ScreenTimeLog.monitoring.notice("""
             threshold \(recorded ? "recorded" : "ignored reason=ledger", privacy: .public) \
-            kind=\(kind.rawValue, privacy: .public)
+            kind=\(kind.rawValue, privacy: .public) \
+            authorization=\(statusUnknown ? "unknown" : "approved", privacy: .public)
             """)
         repairMissingRunIfNeeded(now: now)
     }
@@ -424,8 +488,11 @@ final class ScreenTimeMonitoring {
         store.countCallback { $0.countIntervalCallback(kind: kind, phase: phase, now: now) }
     }
 
-    private func count(threshold outcome: ScreenTimeCallbackCounters.ThresholdOutcome, now: Date) {
-        store.countCallback { $0.countThresholdCallback(outcome, now: now) }
+    private func count(threshold outcome: ScreenTimeCallbackCounters.ThresholdOutcome,
+                       statusUnknown: Bool, now: Date) {
+        store.countCallback {
+            $0.countThresholdCallback(outcome, statusUnknown: statusUnknown, now: now)
+        }
     }
 
     /// A bounded monitoring-lock wait turns a contended pass into a skipped one,

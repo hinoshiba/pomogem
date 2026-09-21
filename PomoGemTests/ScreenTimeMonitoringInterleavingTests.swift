@@ -201,18 +201,23 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         }
     }
 
-    /// A freshly launched monitor extension process can read .notDetermined
-    /// before Family Controls has answered. Acting on it would throw the user's
-    /// opaque selections away, and only a new picker session can restore them.
-    func testNotDeterminedAuthorizationNeitherRecordsNorInvalidates() throws {
+    /// A monitor extension process spawned on demand to deliver one callback
+    /// can read .notDetermined although the user granted access — on the
+    /// 2026-09-21 device run it did so for EVERY threshold, in both lanes,
+    /// while the app read 許可済み at the same minute. Acting on that value
+    /// either way is wrong: wiping the opaque selections costs a picker
+    /// session, and discarding the callback costs the gem the OS measured.
+    /// So it decides nothing at all — the award is recorded, and nothing is
+    /// invalidated or torn down.
+    func testNotDeterminedAuthorizationRecordsTheAwardAndInvalidatesNothing() throws {
         try withFixture(installed: .complete) { store, center, original, _ in
             let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                               host: .monitorExtension,
                                                authorizationStatus: { .notDetermined })
 
             try monitor.handleThreshold(eventName: "1",
                                         activityName: original.runs[0].activityPrefix + "0", now: now)
             XCTAssertNoThrow(try monitor.invalidateAuthorizationIfNeeded())
-            XCTAssertFalse(try monitor.synchronize(now: now))
 
             let result = try store.snapshot()
             XCTAssertTrue(result.configuration.enabled)
@@ -220,9 +225,9 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
             XCTAssertNil(result.monitoringError)
             XCTAssertEqual(result.runs.count, 1)
             XCTAssertTrue(result.runs[0].active)
-            // The callback is ignored, not awarded.
-            XCTAssertEqual(result.runs[0].highestThreshold, 0)
-            // Nothing is torn down while the status is still unknown.
+            // The whole point: the threshold the OS delivered is awarded.
+            XCTAssertEqual(result.runs[0].highestThreshold, 1)
+            // And nothing is torn down on a status that answered nothing.
             XCTAssertEqual(center.stopCalls, [])
             XCTAssertEqual(center.startedNames, [])
         }
@@ -437,7 +442,7 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         try withFixture(installed: .complete, learningApplications: 2,
                         foreignActivities: ["other.client.daily"]) { store, center, _, _ in
             try store.update { $0.configuration.enabled = false }
-            let monitor = ScreenTimeMonitoring(store: store, center: center,
+            let monitor = ScreenTimeMonitoring(store: store, center: center, host: .app,
                                                authorizationStatus: { .notDetermined })
 
             XCTAssertFalse(try monitor.synchronize(now: now))
@@ -452,13 +457,17 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         }
     }
 
-    /// The other half of the same branch: while the ledger still wants
-    /// monitoring, an unknown status changes nothing at all. Registering would
-    /// need an approval and invalidating would cost a new picker session.
+    /// The other half of the same branch, IN THE APP: while the ledger still
+    /// wants monitoring, an unknown status changes nothing at all. The app is
+    /// the process that can read the status, so registering would need an
+    /// approval it did not see, and invalidating would cost a picker session.
+    /// The extension makes the opposite choice, because there the same value
+    /// is not an observation — see
+    /// `testAnUnknownStatusInTheExtensionStillRegisters`.
     func testAnUnknownAuthorizationStatusLeavesAnArmedLedgerUntouched() throws {
         try withFixture(installed: .complete, learningApplications: 2) { store, center, _, _ in
             let before = try store.snapshot()
-            let monitor = ScreenTimeMonitoring(store: store, center: center,
+            let monitor = ScreenTimeMonitoring(store: store, center: center, host: .app,
                                                authorizationStatus: { .notDetermined })
 
             XCTAssertFalse(try monitor.synchronize(now: now))

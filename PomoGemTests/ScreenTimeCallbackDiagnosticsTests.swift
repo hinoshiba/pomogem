@@ -52,7 +52,7 @@ final class ScreenTimeCallbackDiagnosticsTests: XCTestCase {
     func testCountersSurviveALedgerRoundTrip() throws {
         var state = ScreenTimeState()
         state.countIntervalCallback(kind: .scheduler, phase: .start, now: now)
-        state.countThresholdCallback(.unknownAuthorization, now: now)
+        state.countThresholdCallback(.recorded, statusUnknown: true, now: now)
         let decoded = try JSONDecoder().decode(
             ScreenTimeState.self, from: JSONEncoder().encode(state)
         )
@@ -105,14 +105,17 @@ final class ScreenTimeCallbackDiagnosticsTests: XCTestCase {
 
     // MARK: - threshold callbacks
 
-    /// H1 in the diagnosis: a freshly spawned extension process reading
-    /// `.notDetermined` drops the whole callback, silently. The drop is
-    /// deliberate and stays (only `.denied` may wipe anything), but it must
-    /// leave a count behind, because it is indistinguishable from "the OS never
-    /// delivered a threshold at all" in every artefact the audit could collect.
-    func testUnknownAuthorizationIsCountedAndStillAwardsNothing() throws {
+    /// H1, confirmed on the phone and then fixed: a freshly spawned extension
+    /// process reading `.notDetermined` used to drop the whole callback,
+    /// silently. It no longer does — the award is recorded — but the reading is
+    /// still worth a number, because it is the one thing the counters could say
+    /// and no other artefact the audit could collect could. It is an
+    /// OBSERVATION beside the outcome, never an outcome of its own: the same
+    /// callback is counted as `recorded` too, and the two do not sum.
+    func testAnUnknownStatusIsObservedBesideTheOutcomeItDoesNotDecide() throws {
         try withLedger { store, initial in
             let monitor = ScreenTimeMonitoring(store: store, center: FakeCenter(),
+                                               host: .monitorExtension,
                                                authorizationStatus: { .notDetermined })
 
             try monitor.handleThreshold(
@@ -121,14 +124,35 @@ final class ScreenTimeCallbackDiagnosticsTests: XCTestCase {
 
             let counters = try XCTUnwrap(try store.snapshot().callbackCounters)
             XCTAssertEqual(counters.thresholds, 1)
-            XCTAssertEqual(counters.thresholdsUnknownAuthorization, 1)
-            XCTAssertEqual(counters.thresholdsRecorded, 0)
+            XCTAssertEqual(counters.statusUnknownAtCallback, 1)
+            XCTAssertEqual(counters.thresholdsRecorded, 1)
+            XCTAssertEqual(counters.thresholdsIgnoredByLedger, 0)
+            XCTAssertEqual(counters.thresholdsDenied, 0)
             XCTAssertEqual(counters.lastCallbackAt, now)
-            // Behaviour is unchanged: no award, no wipe, no teardown.
+            // The gem the OS measured is awarded, and nothing is wiped.
             let state = try store.snapshot()
-            XCTAssertEqual(state.runs[0].highestThreshold, 0)
+            XCTAssertEqual(state.runs[0].highestThreshold, 1)
             XCTAssertTrue(state.configuration.enabled)
             XCTAssertNil(state.monitoringError)
+        }
+    }
+
+    /// An approved process is the other side of the same observation: the
+    /// count must stay at zero, or "the extension cannot read the approval"
+    /// would read as true on every device.
+    func testAnApprovedStatusIsNotCountedAsUnknown() throws {
+        try withLedger { store, initial in
+            let monitor = ScreenTimeMonitoring(store: store, center: FakeCenter(),
+                                               host: .monitorExtension,
+                                               authorization: { true })
+
+            try monitor.handleThreshold(
+                eventName: "1", activityName: initial.runs[0].activityPrefix + "0", now: now
+            )
+
+            let counters = try XCTUnwrap(try store.snapshot().callbackCounters)
+            XCTAssertEqual(counters.thresholdsRecorded, 1)
+            XCTAssertEqual(counters.statusUnknownAtCallback, 0)
         }
     }
 
@@ -144,7 +168,8 @@ final class ScreenTimeCallbackDiagnosticsTests: XCTestCase {
             let counters = try XCTUnwrap(try store.snapshot().callbackCounters)
             XCTAssertEqual(counters.thresholds, 1)
             XCTAssertEqual(counters.thresholdsDenied, 1)
-            XCTAssertEqual(counters.thresholdsUnknownAuthorization, 0)
+            XCTAssertEqual(counters.statusUnknownAtCallback, 0,
+                           "A denial is an answer, not an unreadable status")
             // The existing revocation behaviour is untouched.
             XCTAssertFalse(try store.snapshot().configuration.enabled)
         }
@@ -270,14 +295,16 @@ final class ScreenTimeCallbackDiagnosticsTests: XCTestCase {
     func testCounterLogLineCarriesCountsAndReasonsOnly() {
         var counters = ScreenTimeCallbackCounters()
         counters.countInterval(kind: .scheduler, phase: .start, at: now.addingTimeInterval(-90))
-        counters.countThreshold(.unknownAuthorization, at: now.addingTimeInterval(-30))
+        counters.countThreshold(.recorded, statusUnknown: true, at: now.addingTimeInterval(-30))
         let line = counters.logDescription(now: now)
 
         XCTAssertTrue(line.hasPrefix("callbacks "), line)
         XCTAssertTrue(line.contains("schedulerStart=1"), line)
         XCTAssertTrue(line.contains("laneStart=0"), line)
         XCTAssertTrue(line.contains("threshold=1"), line)
-        XCTAssertTrue(line.contains("unknownAuth=1"), line)
+        XCTAssertTrue(line.contains("statusUnknown=1"), line)
+        XCTAssertFalse(line.contains("unknownAuth="),
+                       "The bucket that used to read as a verdict is gone: \(line)")
         XCTAssertTrue(line.contains("lastAgeSec=30"), line)
         XCTAssertEqual(ScreenTimeCallbackCounters().logDescription(now: now).contains("lastAgeSec=-1"),
                        true)
@@ -354,14 +381,14 @@ final class ScreenTimeCallbackDiagnosticsTests: XCTestCase {
             "schedulerIntervalEnds":0,"laneIntervalEnds":0,"otherIntervalEnds":0,\
             "thresholds":1,"thresholdsRecorded":0,"thresholdsIgnoredByLedger":0,\
             "thresholdsIgnoredByName":0,"thresholdsUnknownAuthorization":1,\
-            "thresholdsDenied":0}
+            "thresholdsDenied":0,"statusUnknownAtCallback":3}
             """
         let decoded = try JSONDecoder().decode(
             ScreenTimeCallbackCounters.self, from: Data(legacy.utf8)
         )
         XCTAssertEqual(decoded.schedulerIntervalStarts, 2)
         XCTAssertEqual(decoded.thresholds, 1)
-        XCTAssertEqual(decoded.thresholdsUnknownAuthorization, 1)
+        XCTAssertEqual(decoded.statusUnknownAtCallback, 3)
         XCTAssertEqual(decoded.generation, 0)
         XCTAssertNil(decoded.epoch)
         XCTAssertNil(decoded.dayStart)
@@ -537,7 +564,7 @@ final class ScreenTimeCallbackDiagnosticsTests: XCTestCase {
                 "schedulerIntervalStarts", "laneIntervalStarts", "otherIntervalStarts",
                 "schedulerIntervalEnds", "laneIntervalEnds", "otherIntervalEnds",
                 "thresholds", "thresholdsRecorded", "thresholdsIgnoredByLedger",
-                "thresholdsIgnoredByName", "thresholdsUnknownAuthorization", "thresholdsDenied",
+                "thresholdsIgnoredByName", "thresholdsDenied", "statusUnknownAtCallback",
                 "lastCallbackAt", "lastLaneIntervalStartAt", "lastSchedulerIntervalStartAt",
                 "lastThresholdAt", "lastCallbackAgeSec", "laneIntervalStartAgeSec",
                 "schedulerIntervalStartAgeSec", "thresholdAgeSec"

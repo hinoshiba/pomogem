@@ -184,10 +184,11 @@ struct ScreenTimeState: Codable {
 
     mutating func countThresholdCallback(
         _ outcome: ScreenTimeCallbackCounters.ThresholdOutcome,
+        statusUnknown: Bool = false,
         now: Date
     ) {
         var counters = countersForCallback(at: now)
-        counters.countThreshold(outcome, at: now)
+        counters.countThreshold(outcome, statusUnknown: statusUnknown, at: now)
         callbackCounters = counters
     }
 

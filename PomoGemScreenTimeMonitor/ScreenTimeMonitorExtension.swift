@@ -6,8 +6,15 @@ final class ScreenTimeMonitorExtension: DeviceActivityMonitor {
     /// after this bound and let the next callback retry instead of being killed
     /// for blocking in flock.
     private static let monitoringLockTimeout: TimeInterval = 5
+    /// `host: .monitorExtension` is what tells `ScreenTimeMonitoring` that a
+    /// Family Controls status read HERE is not evidence about the user's
+    /// authorization: this process is spawned on demand to deliver one
+    /// callback, and on a real device it answered `.notDetermined` for every
+    /// threshold while the app read 許可済み. Only an explicit `.denied` is
+    /// acted on; the ledger still owns every award.
     private let monitoring = ScreenTimeMonitoring(store: ScreenTimeStore(),
-                                                  lockTimeout: monitoringLockTimeout)
+                                                  lockTimeout: monitoringLockTimeout,
+                                                  host: .monitorExtension)
 
     override func intervalDidStart(for activity: DeviceActivityName) {
         super.intervalDidStart(for: activity)

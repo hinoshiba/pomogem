@@ -89,11 +89,11 @@ struct ScreenTimeCallbackCounters: Codable, Equatable {
         case ignoredByLedger
         /// The activity or event name is not one of ours.
         case ignoredByName
-        /// `AuthorizationStatus` was not approved and not `.denied`. A freshly
-        /// spawned extension process can read this before Family Controls has
-        /// answered, and the callback is dropped without an award or a wipe.
-        case unknownAuthorization
-        /// Family Controls says the user revoked access.
+        /// Family Controls says the user revoked access. The ONLY authorization
+        /// outcome, because it is the only authorization answer: a status that
+        /// is neither approved nor denied is not a decision and no longer
+        /// decides anything — it is counted apart, as
+        /// `statusUnknownAtCallback`, beside whatever the ledger then did.
         case denied
     }
 
@@ -118,8 +118,15 @@ struct ScreenTimeCallbackCounters: Codable, Equatable {
     var thresholdsRecorded = 0
     var thresholdsIgnoredByLedger = 0
     var thresholdsIgnoredByName = 0
-    var thresholdsUnknownAuthorization = 0
     var thresholdsDenied = 0
+    /// How many threshold callbacks arrived in a process that could not read
+    /// its own Family Controls authorization — the status was neither approved
+    /// nor denied. An OBSERVATION, not an outcome: the callback went on to be
+    /// recorded or refused by the ledger like any other, and is counted there
+    /// too. On the 2026-09-21 device run this was true of every threshold
+    /// while the app itself read 許可済み, which is why it is worth a number of
+    /// its own — and why it is no longer allowed to be a verdict.
+    var statusUnknownAtCallback = 0
     /// Any callback. The three below are per kind, because one shared instant
     /// cannot say whether it was a scheduler interval (which fires at 00:00
     /// whatever else happens) or the lane interval the audit is looking for.
@@ -155,8 +162,8 @@ struct ScreenTimeCallbackCounters: Codable, Equatable {
         thresholdsRecorded = try count(.thresholdsRecorded)
         thresholdsIgnoredByLedger = try count(.thresholdsIgnoredByLedger)
         thresholdsIgnoredByName = try count(.thresholdsIgnoredByName)
-        thresholdsUnknownAuthorization = try count(.thresholdsUnknownAuthorization)
         thresholdsDenied = try count(.thresholdsDenied)
+        statusUnknownAtCallback = try count(.statusUnknownAtCallback)
         lastCallbackAt = try date(.lastCallbackAt)
         lastLaneIntervalStartAt = try date(.lastLaneIntervalStartAt)
         lastSchedulerIntervalStartAt = try date(.lastSchedulerIntervalStartAt)
@@ -191,15 +198,21 @@ struct ScreenTimeCallbackCounters: Codable, Equatable {
         lastCallbackAt = now
     }
 
-    mutating func countThreshold(_ outcome: ThresholdOutcome, at now: Date) {
+    /// `statusUnknown` is counted BESIDE the outcome, never instead of it: a
+    /// process that cannot read its own authorization has said nothing about
+    /// the callback, so the callback still has whatever outcome the ledger
+    /// gave it.
+    mutating func countThreshold(
+        _ outcome: ThresholdOutcome, statusUnknown: Bool = false, at now: Date
+    ) {
         Self.increment(&thresholds)
         switch outcome {
         case .recorded: Self.increment(&thresholdsRecorded)
         case .ignoredByLedger: Self.increment(&thresholdsIgnoredByLedger)
         case .ignoredByName: Self.increment(&thresholdsIgnoredByName)
-        case .unknownAuthorization: Self.increment(&thresholdsUnknownAuthorization)
         case .denied: Self.increment(&thresholdsDenied)
         }
+        if statusUnknown { Self.increment(&statusUnknownAtCallback) }
         lastThresholdAt = now
         lastCallbackAt = now
     }
@@ -216,7 +229,7 @@ struct ScreenTimeCallbackCounters: Codable, Equatable {
         [generation, schedulerIntervalStarts, laneIntervalStarts, otherIntervalStarts,
          schedulerIntervalEnds, laneIntervalEnds, otherIntervalEnds,
          thresholds, thresholdsRecorded, thresholdsIgnoredByLedger,
-         thresholdsIgnoredByName, thresholdsUnknownAuthorization, thresholdsDenied]
+         thresholdsIgnoredByName, thresholdsDenied, statusUnknownAtCallback]
     }
 
     private var allDates: [Date?] {
@@ -243,7 +256,7 @@ struct ScreenTimeCallbackCounters: Codable, Equatable {
             laneEnd=\(laneIntervalEnds) otherEnd=\(otherIntervalEnds) \
             threshold=\(thresholds) recorded=\(thresholdsRecorded) \
             ignoredLedger=\(thresholdsIgnoredByLedger) ignoredName=\(thresholdsIgnoredByName) \
-            unknownAuth=\(thresholdsUnknownAuthorization) denied=\(thresholdsDenied) \
+            denied=\(thresholdsDenied) statusUnknown=\(statusUnknownAtCallback) \
             lastAgeSec=\(age(lastCallbackAt)) laneStartAgeSec=\(age(lastLaneIntervalStartAt)) \
             schedulerStartAgeSec=\(age(lastSchedulerIntervalStartAt)) \
             thresholdAgeSec=\(age(lastThresholdAt))

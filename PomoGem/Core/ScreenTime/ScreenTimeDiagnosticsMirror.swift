@@ -148,7 +148,7 @@ final class ScreenTimeDiagnosticsMirror {
 struct ScreenTimeDiagnosticsReport: Codable, Equatable {
     /// Bumped when a field is added, renamed or given a new meaning, so a file
     /// pulled off a phone can be read against the right description.
-    static let schemaVersion = 1
+    static let schemaVersion = 2
 
     /// What one lane's registration looks like in the ledger this pass read.
     struct LaneSchedule: Codable, Equatable {
@@ -198,8 +198,12 @@ struct ScreenTimeDiagnosticsReport: Codable, Equatable {
         var thresholdsRecorded: Int
         var thresholdsIgnoredByLedger: Int
         var thresholdsIgnoredByName: Int
-        var thresholdsUnknownAuthorization: Int
         var thresholdsDenied: Int
+        /// An observation, not an outcome: how many of the thresholds above
+        /// arrived in a process that could not read its own Family Controls
+        /// authorization. Each one is also counted under whatever the ledger
+        /// decided, so this never sums with the outcomes.
+        var statusUnknownAtCallback: Int
         var lastCallbackAt: String?
         var lastLaneIntervalStartAt: String?
         var lastSchedulerIntervalStartAt: String?
@@ -272,8 +276,8 @@ struct ScreenTimeDiagnosticsReport: Codable, Equatable {
             thresholdsRecorded: counters.thresholdsRecorded,
             thresholdsIgnoredByLedger: counters.thresholdsIgnoredByLedger,
             thresholdsIgnoredByName: counters.thresholdsIgnoredByName,
-            thresholdsUnknownAuthorization: counters.thresholdsUnknownAuthorization,
             thresholdsDenied: counters.thresholdsDenied,
+            statusUnknownAtCallback: counters.statusUnknownAtCallback,
             lastCallbackAt: instant(counters.lastCallbackAt),
             lastLaneIntervalStartAt: instant(counters.lastLaneIntervalStartAt),
             lastSchedulerIntervalStartAt: instant(counters.lastSchedulerIntervalStartAt),
