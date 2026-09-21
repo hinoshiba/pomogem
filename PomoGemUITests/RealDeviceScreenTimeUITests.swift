@@ -1485,9 +1485,13 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         // The row publishes the chosen theme in its LABEL (「記録先のテーマ、<name>」)
         // and leaves `value` empty, so checking only the value re-opened the
         // sheet on every run for a theme that was already selected.
+        // Never touch `label` without the same guard `describeValue` applies:
+        // an accessor on an element a re-laying-out hierarchy has just dropped
+        // raises "Failed to get matching snapshot", which XCTest records as a
+        // test FAILURE rather than `exists == false`.
         if let themeName,
-           describeValue(picker).contains(themeName) || picker.label.contains(themeName) {
-            note("THEME: \(themeName) is already selected (\(picker.label)).")
+           describeValue(picker).contains(themeName) || labelIfPresent(picker).contains(themeName) {
+            note("THEME: \(themeName) is already selected (\(labelIfPresent(picker))).")
             return themeName
         }
         picker.tap()
@@ -1530,9 +1534,15 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         for _ in 0..<12 {
             pause(1)
             let row = app.buttons["screen-time.theme"]
+            // `waitForExistence` only asserts existence at the instant it
+            // returns; every accessor after it issues a FRESH query, and a
+            // fresh query against a collapsing hierarchy is exactly what
+            // raises "Failed to get matching snapshot" out of the accessor.
+            // Both reads below are therefore guarded, and a poll that misses
+            // simply tries again instead of killing the phase.
             guard row.waitForExistence(timeout: 3) else { continue }
             value = describeValue(row)
-            settledLabel = row.label
+            settledLabel = labelIfPresent(row)
             if settledLabel.contains(chosenLabel) || value.contains(chosenLabel) { break }
         }
         note("THEME: selected \(chosenLabel); screen-time.theme value=\(value) label=\(settledLabel)")

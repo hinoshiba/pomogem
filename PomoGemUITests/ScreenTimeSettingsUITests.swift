@@ -95,10 +95,22 @@ final class ScreenTimeSettingsUITests: XCTestCase {
     /// is an explanation, not a save that will succeed, and the footer has to
     /// say so: `ScreenTimeController.save` refuses EVERY save while unbound,
     /// including one that only switches recording off.
-    func testUnavailableContextIsExplainedAndSaveStatesWhyItCannotComplete() {
+    ///
+    /// The premise is a BUILD property, not a property of the Simulator: on
+    /// this Xcode's runtime the container only stays nil when the build passed
+    /// `CODE_SIGNING_ALLOWED=NO`. CI does (`.github/workflows/ci.yml`); a plain
+    /// `xcodebuild test -scheme PomoGem -destination 'platform=iOS
+    /// Simulator,…'` does not, and this test used to go red there with a
+    /// message that pointed at the settings UI instead of at the flag. It now
+    /// says so and skips.
+    func testUnavailableContextIsExplainedAndSaveStatesWhyItCannotComplete() throws {
         launchAndOpenSettings()
         let reason = app.staticTexts["screen-time.monitoring-error"]
-        XCTAssertTrue(reveal(reason), "An unbound context must state a reason, not only grey 保存 out")
+        if !reveal(reason) {
+            try skipIfTheLedgerBound()
+            XCTFail("An unbound context must state a reason, not only grey 保存 out")
+            return
+        }
         XCTAssertTrue(reason.label.contains("スクリーンタイム"))
         XCTAssertTrue(reveal(text(containing: "いまは変更を保存できません")),
                       "The footer must not promise a save the controller always refuses")
@@ -259,6 +271,27 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         alert.buttons["キャンセル"].tap()
         XCTAssertFalse(alert.exists)
         XCTAssertTrue(app.navigationBars["スクリーンタイム"].exists)
+    }
+
+    /// The footer the settings screen shows once the ledger IS bound. It is
+    /// the only positive, on-screen evidence this suite can read that the App
+    /// Group container resolved, so the skip below never hides a real
+    /// regression in the unbound explanation — it fires only when the opposite
+    /// state is actually on screen.
+    private static let boundFooter = "変更は右上の「保存」で反映します"
+
+    private func skipIfTheLedgerBound() throws {
+        // A failed `reveal` leaves the list scrolled to the bottom and this
+        // footer sits above the reset section, so look upwards first.
+        let footer = text(containing: Self.boundFooter)
+        guard reveal(footer, upwards: false) || reveal(footer) else { return }
+        attach("Screen Time — the ledger bound, so the unavailable case is unreachable")
+        throw XCTSkip(
+            "This build's App Group container resolves, so the Screen Time ledger binds and the "
+            + "unavailable-context case cannot be reached at all. The premise holds only for a "
+            + "build with no entitlements: pass CODE_SIGNING_ALLOWED=NO, as CI does "
+            + "(.github/workflows/ci.yml)."
+        )
     }
 
     private func text(containing fragment: String) -> XCUIElement {
