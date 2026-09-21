@@ -14,7 +14,8 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
                 XCTAssertEqual(attempt, 2, "The expired attempt must lose authorization before presenting recovery")
                 recovery = CloudOfflineHostPolicy.timeoutRecoveryAction(
                     cloudMirrorWasOpened: mirrorOpened, hasExistingStore: true,
-                    containersRetired: false, sceneIsActive: true)
+                    containersRetired: false, sceneIsActive: true,
+                    hasUnresolvedAccountStateMovement: false)
             }, now: { now })
         defer { deadline.cancel() }
         now = 11
@@ -30,12 +31,14 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
         for retired in [false, true] {
             XCTAssertEqual(CloudOfflineHostPolicy.timeoutRecoveryAction(
                 cloudMirrorWasOpened: mirrorOpened, hasExistingStore: true,
-                containersRetired: retired, sceneIsActive: true), .retryOnline)
+                containersRetired: retired, sceneIsActive: true,
+                hasUnresolvedAccountStateMovement: false), .retryOnline)
             XCTAssertEqual(CloudOfflineHostPolicy.offlineMountDecision(
                 cloudMirrorWasOpened: mirrorOpened, hasLiveContainers: !retired), .relaunchRequired)
         }
         XCTAssertFalse(CloudOfflineHostPolicy.prefersOfflineLaunch(explicitOnlineRetry: true,
-            requestedOfflineFallback: false, networkIsOffline: nil))
+            requestedOfflineFallback: false, networkIsOffline: nil,
+            hasUnresolvedAccountStateMovement: false))
         XCTAssertEqual(attempt, 2)
     }
 
@@ -45,11 +48,20 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
                 for active in [false, true] {
                     let action = CloudOfflineHostPolicy.timeoutRecoveryAction(
                         cloudMirrorWasOpened: false, hasExistingStore: hasStore,
-                        containersRetired: retired, sceneIsActive: active)
+                        containersRetired: retired, sceneIsActive: active,
+                        hasUnresolvedAccountStateMovement: false)
                     XCTAssertEqual(action, hasStore && retired && active ? .openOfflineCopy : .remainBlocked)
                     XCTAssertEqual(CloudOfflineHostPolicy.timeoutRecoveryAction(
                         cloudMirrorWasOpened: true, hasExistingStore: hasStore,
-                        containersRetired: retired, sceneIsActive: active), .retryOnline)
+                        containersRetired: retired, sceneIsActive: active,
+                        hasUnresolvedAccountStateMovement: false), .retryOnline)
+                    // An unresolved account-state movement keeps every one of
+                    // these combinations online: the expiry is not an answer
+                    // about who is signed in.
+                    XCTAssertEqual(CloudOfflineHostPolicy.timeoutRecoveryAction(
+                        cloudMirrorWasOpened: false, hasExistingStore: hasStore,
+                        containersRetired: retired, sceneIsActive: active,
+                        hasUnresolvedAccountStateMovement: true), .retryOnline)
                 }
             }
         }
@@ -60,9 +72,11 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
         for path in paths {
             for fallback in [false, true] {
                 XCTAssertFalse(CloudOfflineHostPolicy.prefersOfflineLaunch(explicitOnlineRetry: true,
-                    requestedOfflineFallback: fallback, networkIsOffline: path))
+                    requestedOfflineFallback: fallback, networkIsOffline: path,
+                    hasUnresolvedAccountStateMovement: false))
                 XCTAssertEqual(CloudOfflineHostPolicy.prefersOfflineLaunch(explicitOnlineRetry: false,
-                    requestedOfflineFallback: fallback, networkIsOffline: path), fallback || path == true)
+                    requestedOfflineFallback: fallback, networkIsOffline: path,
+                    hasUnresolvedAccountStateMovement: false), fallback || path == true)
                 XCTAssertEqual(CloudOfflineHostPolicy.offlineMountDecision(cloudMirrorWasOpened: true,
                     hasLiveContainers: false), .relaunchRequired)
             }
@@ -336,6 +350,69 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
             XCTAssertFalse(CloudOfflineHostPolicy.allowsOfflineFallback(after: error))
             XCTAssertNil(CloudOfflineHostPolicy.revocationReason(for: error))
         }
+    }
+
+    /// The notification that started the device incident. It is posted for
+    /// sign-in and sign-out, for iCloud being switched on or off for this app,
+    /// for token refreshes and for availability transitions, and it carries no
+    /// identity — so on no selection at all may it write to the durable
+    /// receipt. Before this was extracted, the decision lived inside a private
+    /// View and nothing could reach it.
+    func testABareAccountStateNotificationNeverAuthorizesARevocation() {
+        let selections: [PersistenceDeploymentSelectionState] = [
+            .selected(.cloud(binding: binding())),
+            .selected(.localOnly(namespace: AccountDataNamespace())),
+            .unselected, .invalid
+        ]
+        for selection in selections {
+            XCTAssertEqual(CloudOfflineHostPolicy.reactionToAccountStateNotification(
+                selection: selection), .quiesceOnly, "\(selection)")
+        }
+    }
+
+    /// The offline route opens the local copy on the receipt alone. While a
+    /// movement of account state is unresolved, the receipt cannot say who is
+    /// signed in, so no combination of an offline network path, an offline
+    /// fallback request or an expiry may take that route.
+    func testAnUnresolvedAccountStateMovementWithdrawsEveryOfflineLaunchRoute() {
+        let paths: [Bool?] = [true, false, nil]
+        for path in paths {
+            for fallback in [false, true] {
+                for retry in [false, true] {
+                    XCTAssertFalse(CloudOfflineHostPolicy.prefersOfflineLaunch(
+                        explicitOnlineRetry: retry, requestedOfflineFallback: fallback,
+                        networkIsOffline: path, hasUnresolvedAccountStateMovement: true),
+                        "path=\(String(describing: path)) fallback=\(fallback) retry=\(retry)")
+                }
+                // Same inputs, movement resolved: the ordinary rule returns.
+                XCTAssertEqual(CloudOfflineHostPolicy.prefersOfflineLaunch(
+                    explicitOnlineRetry: false, requestedOfflineFallback: fallback,
+                    networkIsOffline: path, hasUnresolvedAccountStateMovement: false),
+                    fallback || path == true)
+            }
+        }
+    }
+
+    /// The blocked launch says why the local copy is not on offer, but only
+    /// when that is actually the reason. A failure that would not have opened
+    /// the copy anyway, and a receipt that is not eligible, keep their own
+    /// message rather than blaming an account change for them.
+    func testTheWithdrawnOfflineDoorIsExplainedOnlyWhenItIsWhatIsMissing() {
+        let recoverable: Error = CloudLaunchDeadlineError.expired
+        let message = CloudOfflineHostPolicy.unresolvedAccountMovementMessage(
+            after: recoverable, hasUnresolvedAccountStateMovement: true,
+            offlineCopyWouldOtherwiseBeEligible: true)
+        XCTAssertNotNil(message)
+        XCTAssertTrue(message?.contains("もう一度試す") == true)
+        XCTAssertNil(CloudOfflineHostPolicy.unresolvedAccountMovementMessage(
+            after: recoverable, hasUnresolvedAccountStateMovement: false,
+            offlineCopyWouldOtherwiseBeEligible: true))
+        XCTAssertNil(CloudOfflineHostPolicy.unresolvedAccountMovementMessage(
+            after: recoverable, hasUnresolvedAccountStateMovement: true,
+            offlineCopyWouldOtherwiseBeEligible: false))
+        XCTAssertNil(CloudOfflineHostPolicy.unresolvedAccountMovementMessage(
+            after: failure(.noAccount), hasUnresolvedAccountStateMovement: true,
+            offlineCopyWouldOtherwiseBeEligible: true))
     }
 
     private func binding() -> ActiveAccountLocalBinding {
