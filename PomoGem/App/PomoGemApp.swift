@@ -980,6 +980,15 @@ private struct PomoGemPersistenceLaunchHost: View {
                 attempt: attempt,
                 checkpoint: "after-initial-identity"
             )
+            // The live identity has now been verified and resolved to exactly
+            // the stored binding. That is the comparison a revocation written
+            // without one was always missing, so retract it here — before the
+            // transfer/lineage preflights, which can block this launch long
+            // before any mount could clear it.
+            if let expectedCloudBinding, expectedCloudBinding == resolvedBoundary.binding {
+                retractUnprovenRevocation(confirmedBinding: resolvedBoundary.binding)
+                canContinueOffline = offlineCopyIsEligible(binding: resolvedBoundary.binding)
+            }
             requestedCloudSelection = false
             canChooseLocalOnly = false
             if let suspendedAccountBinding,
@@ -1613,8 +1622,11 @@ private struct PomoGemPersistenceLaunchHost: View {
             }
             do {
                 try await deadline.run(validate: validate) {
-                    _ = try await AppleAccountBoundaryResolver().resolve(expectedBinding: binding)
+                    let boundary = try await AppleAccountBoundaryResolver().resolve(expectedBinding: binding)
                     try validate()
+                    if boundary.binding == binding {
+                        retractUnprovenRevocation(confirmedBinding: binding)
+                    }
                     let runtime = try StorageTransferRuntime.live()
                     try await runtime.preflightCloudMount(binding: binding, validateAccess: validate)
                     guard let receipt = try CloudOfflineAccessState().load(), receipt.binding == binding else {
@@ -1754,6 +1766,23 @@ private struct PomoGemPersistenceLaunchHost: View {
               offlineCopyIsEligible(binding: binding) else { return }
         offlineFallbackRequested = true
         launchAttempt += 1
+    }
+
+    /// Drop a revocation that no identity comparison ever supported, now that
+    /// one has been made and agrees with the stored binding. Only the reasons
+    /// `CloudOfflineAccessPolicy.isRetractableByConfirmedIdentity` allows are
+    /// touched; a confirmed mismatch, a signed-out account and a restricted
+    /// account are untouched and still require a successful cloud mount.
+    /// A failed write is not fatal — the receipt simply stays as it was.
+    private func retractUnprovenRevocation(confirmedBinding: ActiveAccountLocalBinding) {
+        do {
+            _ = try CloudOfflineAccessState()
+                .clearRevocationAfterConfirmedIdentity(confirmedBinding: confirmedBinding)
+        } catch {
+            Self.persistenceLogger.notice(
+                "Offline receipt revocation retraction failed"
+            )
+        }
     }
 
     private func revokeOfflineForAccountError(_ error: Error, binding: ActiveAccountLocalBinding) {

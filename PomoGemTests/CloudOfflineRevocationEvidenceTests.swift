@@ -166,6 +166,102 @@ final class CloudOfflineRevocationEvidenceTests: XCTestCase {
         XCTAssertEqual(try f.state.load()?.revocation, .accountMismatch)
     }
 
+    // MARK: - Retracting a revocation that nothing ever proved
+
+    /// The escape hatch for a phone already in the bad state. A launch that
+    /// verifies the identity and resolves it to the stored binding retracts
+    /// the `accountChanged` record, so offline use is available again even
+    /// though the launch itself may still be blocked further down (a lineage
+    /// or transfer preflight can fail long before any mount could clear it).
+    func testAConfirmedSameAccountRetractsARevocationNoComparisonEverSupported() async throws {
+        let f = try await fixture()
+        try f.state.markOfflineOpened(binding: f.binding, conditions: conditions(f.binding))
+        let used = try XCTUnwrap(f.state.load())
+        try f.state.revoke(binding: f.binding, reason: .accountChanged)
+        let revoked = try XCTUnwrap(f.state.load())
+        XCTAssertEqual(CloudOfflineAccessPolicy.blockReason(
+            conditions: conditions(f.binding), receipt: revoked), .revoked(.accountChanged))
+
+        let resolved = try await resolver(defaults: f.defaults, identities: ["stored-account"])
+            .resolve(expectedBinding: f.binding)
+        XCTAssertEqual(resolved.binding, f.binding)
+        let healed = try XCTUnwrap(f.state.clearRevocationAfterConfirmedIdentity(
+            confirmedBinding: resolved.binding))
+
+        XCTAssertNil(healed.revocation)
+        XCTAssertNil(CloudOfflineAccessPolicy.blockReason(
+            conditions: conditions(f.binding), receipt: healed))
+        // Only the revocation goes. The verified baseline the receipt is
+        // worth keeping must survive verbatim, including the offline use that
+        // makes later history checks mandatory.
+        XCTAssertEqual(healed.origin, used.origin)
+        XCTAssertEqual(healed.isDatasetGenerationKnown, used.isDatasetGenerationKnown)
+        XCTAssertEqual(healed.datasetGenerationID, used.datasetGenerationID)
+        XCTAssertEqual(healed.resetBaseline, used.resetBaseline)
+        XCTAssertTrue(healed.wasUsedOffline)
+        XCTAssertNotEqual(healed.revisionID, revoked.revisionID)
+        XCTAssertEqual(try CloudOfflineAccessState(directory: f.state.directory).load(), healed)
+        // Nothing left to retract, and the operation is not a way to mint a
+        // second clean revision out of an already-valid receipt.
+        XCTAssertNil(try f.state.clearRevocationAfterConfirmedIdentity(confirmedBinding: f.binding))
+        XCTAssertEqual(try f.state.load(), healed)
+    }
+
+    /// The reasons a comparison or a positive account state produced are not
+    /// retractable by any number of confirmed identities: they still require
+    /// a successful cloud mount through `recordVerifiedOnline`.
+    func testAConfirmedSameAccountNeverRetractsAMismatchSignOutOrRestriction() async throws {
+        for reason in [CloudOfflineRevocationReason.accountMismatch, .noAccount, .restricted] {
+            let f = try await fixture()
+            try f.state.revoke(binding: f.binding, reason: reason)
+            let revoked = try XCTUnwrap(f.state.load())
+            let resolved = try await resolver(defaults: f.defaults, identities: ["stored-account"])
+                .resolve(expectedBinding: f.binding)
+            XCTAssertNil(try f.state.clearRevocationAfterConfirmedIdentity(
+                confirmedBinding: resolved.binding), "\(reason)")
+            XCTAssertEqual(try f.state.load(), revoked, "\(reason)")
+            XCTAssertEqual(CloudOfflineAccessPolicy.blockReason(
+                conditions: conditions(f.binding), receipt: revoked), .revoked(reason))
+            XCTAssertFalse(CloudOfflineAccessPolicy.isRetractableByConfirmedIdentity(reason))
+        }
+        XCTAssertTrue(CloudOfflineAccessPolicy.isRetractableByConfirmedIdentity(.accountChanged))
+    }
+
+    /// A confirmed identity for a DIFFERENT account retracts nothing — the
+    /// receipt belongs to the account it names, and this operation is not a
+    /// path for one account to reopen another's local copy.
+    func testAConfirmedIdentityForAnotherAccountRetractsNothing() async throws {
+        let f = try await fixture()
+        try f.state.revoke(binding: f.binding, reason: .accountChanged)
+        let revoked = try XCTUnwrap(f.state.load())
+        let others = [
+            try XCTUnwrap(ActiveAccountLocalBinding(namespace: f.binding.namespace,
+                accountFingerprint: String(repeating: "b", count: 64))),
+            try XCTUnwrap(ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+                accountFingerprint: f.binding.accountFingerprint))
+        ]
+        for other in others {
+            XCTAssertNil(try f.state.clearRevocationAfterConfirmedIdentity(confirmedBinding: other))
+            XCTAssertEqual(try f.state.load(), revoked)
+        }
+    }
+
+    /// A revocation written before any online check has no baseline to return
+    /// to. Retracting it would leave a receipt claiming nothing at all, so it
+    /// is left exactly as it is and the ordinary online path still applies.
+    func testARevocationRecordedBeforeAnyOnlineCheckIsNotRetractable() async throws {
+        let f = try await fixture()
+        let directory = f.state.directory.deletingLastPathComponent()
+            .appendingPathComponent("Second-\(UUID())", isDirectory: true)
+            .appendingPathComponent("CloudOffline", isDirectory: true)
+        let fresh = try CloudOfflineAccessState(directory: directory)
+        try fresh.revoke(binding: f.binding, reason: .accountChanged)
+        let revoked = try XCTUnwrap(fresh.load())
+        XCTAssertEqual(revoked.origin, .revokedWithoutBaseline)
+        XCTAssertNil(try fresh.clearRevocationAfterConfirmedIdentity(confirmedBinding: f.binding))
+        XCTAssertEqual(try fresh.load(), revoked)
+    }
+
     /// A signed-out or managed-restricted account is a positive statement
     /// about account state, not an ambiguous read. Those still revoke.
     func testSignedOutAndRestrictedAccountsStillRevokeUnchanged() async throws {
