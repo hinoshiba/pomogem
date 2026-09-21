@@ -6,15 +6,19 @@ final class ScreenTimeMonitorExtension: DeviceActivityMonitor {
     /// after this bound and let the next callback retry instead of being killed
     /// for blocking in flock.
     private static let monitoringLockTimeout: TimeInterval = 5
-    /// `host: .monitorExtension` is what tells `ScreenTimeMonitoring` that a
+    /// `forMonitorExtension` is what tells `ScreenTimeMonitoring` that a
     /// Family Controls status read HERE is not evidence about the user's
     /// authorization: this process is spawned on demand to deliver one
     /// callback, and on a real device it answered `.notDetermined` for every
     /// threshold while the app read 許可済み. Only an explicit `.denied` is
     /// acted on; the ledger still owns every award.
-    private let monitoring = ScreenTimeMonitoring(store: ScreenTimeStore(),
-                                                  lockTimeout: monitoringLockTimeout,
-                                                  host: .monitorExtension)
+    ///
+    /// It is a factory rather than a `host:` argument because this file is not
+    /// linked into `PomoGemTests`: nothing here can be observed by a test, so
+    /// the choice lives in `Shared/ScreenTimeMonitoring.swift`, where
+    /// `testTheMonitorExtensionIsBuiltForTheExtensionHost` pins it.
+    private let monitoring = ScreenTimeMonitoring.forMonitorExtension(
+        store: ScreenTimeStore(), lockTimeout: monitoringLockTimeout)
 
     override func intervalDidStart(for activity: DeviceActivityName) {
         super.intervalDidStart(for: activity)

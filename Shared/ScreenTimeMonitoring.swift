@@ -87,7 +87,11 @@ final class ScreenTimeMonitoring {
     private let authorizationStatus: () -> AuthorizationStatus
     /// nil waits for the monitoring lock forever, which only the app may do.
     private let lockTimeout: TimeInterval?
-    private let host: ScreenTimeMonitoringHost
+    /// Readable so a test can pin it. `synchronizeLocked` is the only reader,
+    /// and the value it reads decides whether a whole day gets registered, so
+    /// "which host was this built for" has to be observable without inferring
+    /// it from that one branch.
+    let host: ScreenTimeMonitoringHost
 
     init(
         store: ScreenTimeStore,
@@ -113,6 +117,25 @@ final class ScreenTimeMonitoring {
     ) {
         self.init(store: store, center: center, lockTimeout: lockTimeout, host: host,
                   authorizationStatus: { authorization() ? .approved : .denied })
+    }
+
+    /// The monitor extension's one construction, written HERE rather than at
+    /// its call site in `PomoGemScreenTimeMonitor` so that it can be tested.
+    /// That target is not linked into `PomoGemTests` — `project.yml` gives the
+    /// unit tests only their own sources and the app host — so a `host:`
+    /// argument written over there is invisible to every test in the
+    /// repository, and deleting it silently returns the extension to app
+    /// semantics: `synchronizeLocked` would again skip the daily
+    /// re-registration whenever it reads a status it cannot read, which on the
+    /// 2026-09-21 device run was every callback.
+    static func forMonitorExtension(
+        store: ScreenTimeStore,
+        center: ScreenTimeActivityCenterDriving = DeviceActivityCenter(),
+        lockTimeout: TimeInterval,
+        authorizationStatus: @escaping () -> AuthorizationStatus = { AuthorizationCenter.shared.authorizationStatus }
+    ) -> ScreenTimeMonitoring {
+        ScreenTimeMonitoring(store: store, center: center, lockTimeout: lockTimeout,
+                             host: .monitorExtension, authorizationStatus: authorizationStatus)
     }
 
     static func isAuthorized(_ status: AuthorizationStatus) -> Bool {

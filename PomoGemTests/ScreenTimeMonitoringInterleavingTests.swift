@@ -209,27 +209,34 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
     /// session, and discarding the callback costs the gem the OS measured.
     /// So it decides nothing at all — the award is recorded, and nothing is
     /// invalidated or torn down.
+    ///
+    /// Both hosts, because the award must not depend on which process the
+    /// callback was delivered into: `handleThreshold` reads `host` nowhere, and
+    /// asserting only the extension would let a later host gate through with
+    /// the suite green.
     func testNotDeterminedAuthorizationRecordsTheAwardAndInvalidatesNothing() throws {
-        try withFixture(installed: .complete) { store, center, original, _ in
-            let monitor = ScreenTimeMonitoring(store: store, center: center,
-                                               host: .monitorExtension,
-                                               authorizationStatus: { .notDetermined })
+        for host in [ScreenTimeMonitoringHost.app, .monitorExtension] {
+            try withFixture(installed: .complete) { store, center, original, _ in
+                let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                                   host: host,
+                                                   authorizationStatus: { .notDetermined })
 
-            try monitor.handleThreshold(eventName: "1",
-                                        activityName: original.runs[0].activityPrefix + "0", now: now)
-            XCTAssertNoThrow(try monitor.invalidateAuthorizationIfNeeded())
+                try monitor.handleThreshold(eventName: "1",
+                                            activityName: original.runs[0].activityPrefix + "0", now: now)
+                XCTAssertNoThrow(try monitor.invalidateAuthorizationIfNeeded())
 
-            let result = try store.snapshot()
-            XCTAssertTrue(result.configuration.enabled)
-            XCTAssertEqual(result.configuration.themeID, original.configuration.themeID)
-            XCTAssertNil(result.monitoringError)
-            XCTAssertEqual(result.runs.count, 1)
-            XCTAssertTrue(result.runs[0].active)
-            // The whole point: the threshold the OS delivered is awarded.
-            XCTAssertEqual(result.runs[0].highestThreshold, 1)
-            // And nothing is torn down on a status that answered nothing.
-            XCTAssertEqual(center.stopCalls, [])
-            XCTAssertEqual(center.startedNames, [])
+                let result = try store.snapshot()
+                XCTAssertTrue(result.configuration.enabled)
+                XCTAssertEqual(result.configuration.themeID, original.configuration.themeID)
+                XCTAssertNil(result.monitoringError)
+                XCTAssertEqual(result.runs.count, 1)
+                XCTAssertTrue(result.runs[0].active)
+                // The whole point: the threshold the OS delivered is awarded.
+                XCTAssertEqual(result.runs[0].highestThreshold, 1)
+                // And nothing is torn down on a status that answered nothing.
+                XCTAssertEqual(center.stopCalls, [])
+                XCTAssertEqual(center.startedNames, [])
+            }
         }
     }
 
@@ -542,36 +549,43 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
     /// had already given. The award now happens, and the ledger's own fences
     /// are what stop the SECOND delivery of the same threshold — not the
     /// authorization read, which never had anything to do with it.
+    ///
+    /// Run for both hosts: the ledger's fences are what decide here, and they
+    /// are the same in either process. The host only starts deciding once a
+    /// threshold finds no run for today — see
+    /// `testAThresholdWithAnUnknownStatusRepairsADayWhoseSchedulerPassWasSkipped`.
     func testAThresholdWithAnUnknownStatusIsRecordedAndThenRefusedByTheLedger() throws {
-        try withFixture(installed: .complete) { store, center, original, _ in
-            let monitor = ScreenTimeMonitoring(store: store, center: center,
-                                               host: .monitorExtension,
-                                               authorizationStatus: { .notDetermined })
-            let name = original.runs[0].activityPrefix + "0"
+        for host in [ScreenTimeMonitoringHost.app, .monitorExtension] {
+            try withFixture(installed: .complete) { store, center, original, _ in
+                let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                                   host: host,
+                                                   authorizationStatus: { .notDetermined })
+                let name = original.runs[0].activityPrefix + "0"
 
-            // The run started 1_200 s before `now`, so thresholds 1 and 2 are
-            // due, 3 is not, and a repeat of 1 is already awarded.
-            try monitor.handleThreshold(eventName: "1", activityName: name, now: now)
-            XCTAssertEqual(try store.snapshot().runs[0].highestThreshold, 1)
-            try monitor.handleThreshold(eventName: "1", activityName: name, now: now)
-            try monitor.handleThreshold(eventName: "3", activityName: name, now: now)
-            try monitor.handleThreshold(eventName: "2", activityName: name, now: now)
+                // The run started 1_200 s before `now`, so thresholds 1 and 2 are
+                // due, 3 is not, and a repeat of 1 is already awarded.
+                try monitor.handleThreshold(eventName: "1", activityName: name, now: now)
+                XCTAssertEqual(try store.snapshot().runs[0].highestThreshold, 1)
+                try monitor.handleThreshold(eventName: "1", activityName: name, now: now)
+                try monitor.handleThreshold(eventName: "3", activityName: name, now: now)
+                try monitor.handleThreshold(eventName: "2", activityName: name, now: now)
 
-            let result = try store.snapshot()
-            XCTAssertEqual(result.runs[0].highestThreshold, 2,
-                           "No double counting, and no credit for a threshold still in the future")
-            let counters = try XCTUnwrap(result.callbackCounters)
-            XCTAssertEqual(counters.thresholds, 4)
-            XCTAssertEqual(counters.thresholdsRecorded, 2)
-            XCTAssertEqual(counters.thresholdsIgnoredByLedger, 2)
-            XCTAssertEqual(counters.thresholdsDenied, 0)
-            XCTAssertEqual(counters.statusUnknownAtCallback, 4,
-                           "Every one of them was received by a process that could not read the status")
-            // Nothing about the selections or the registration was touched.
-            XCTAssertTrue(result.configuration.enabled)
-            XCTAssertNil(result.monitoringError)
-            XCTAssertEqual(center.stopCalls, [])
-            XCTAssertEqual(center.startedNames, [])
+                let result = try store.snapshot()
+                XCTAssertEqual(result.runs[0].highestThreshold, 2,
+                               "No double counting, and no credit for a threshold still in the future")
+                let counters = try XCTUnwrap(result.callbackCounters)
+                XCTAssertEqual(counters.thresholds, 4)
+                XCTAssertEqual(counters.thresholdsRecorded, 2)
+                XCTAssertEqual(counters.thresholdsIgnoredByLedger, 2)
+                XCTAssertEqual(counters.thresholdsDenied, 0)
+                XCTAssertEqual(counters.statusUnknownAtCallback, 4,
+                               "Every one of them was received by a process that could not read the status")
+                // Nothing about the selections or the registration was touched.
+                XCTAssertTrue(result.configuration.enabled)
+                XCTAssertNil(result.monitoringError)
+                XCTAssertEqual(center.stopCalls, [])
+                XCTAssertEqual(center.startedNames, [])
+            }
         }
     }
 
@@ -684,6 +698,134 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
                 XCTAssertFalse(try XCTUnwrap(center.stopCalls.first).isEmpty)
                 XCTAssertEqual(center.startCount, 0)
             }
+        }
+    }
+
+    // MARK: - which process a monitoring was built for
+
+    /// `host` defaults to `.app`, and that default is what the app itself
+    /// runs on: `ScreenTimeController` constructs its monitoring without the
+    /// argument. Nothing else observes the default — every other test passes
+    /// `host:` explicitly — so flipping it to `.monitorExtension` used to
+    /// leave the whole Screen Time suite green while making the APP register
+    /// Screen Time monitoring on a status it could not read, which is exactly
+    /// what `synchronizeLocked`'s app branch exists to refuse.
+    func testTheDefaultHostIsTheAppAndRegistersNothingUnderAnUnknownStatus() throws {
+        try withFixture(installed: .none, learningApplications: 2) { store, center, _, _ in
+            try store.update { state in
+                for index in state.runs.indices { state.runs[index].active = false }
+            }
+            let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                               authorizationStatus: { .notDetermined })
+            // Both initialisers default the same way; the convenience one maps
+            // `false` to `.denied`, so only the structural check can see its
+            // default at all.
+            let convenience = ScreenTimeMonitoring(store: store, center: center,
+                                                   authorization: { true })
+
+            XCTAssertEqual(monitor.host, .app)
+            XCTAssertEqual(convenience.host, .app)
+            XCTAssertFalse(try monitor.synchronize(now: now))
+            XCTAssertEqual(center.startCount, 0,
+                           "A process that CAN read the status must not register on one it did not see approved")
+            let result = try store.snapshot()
+            XCTAssertFalse(result.runs.contains(where: \.active))
+            XCTAssertNil(result.monitoringError)
+            XCTAssertEqual(result.configuration.learningSelection.applicationTokens.count, 2,
+                           "Only an explicit denial may void the opaque selections")
+        }
+    }
+
+    /// The other end of the same wiring. `ScreenTimeMonitorExtension` is not
+    /// linked into this test target, so a `host:` argument written at its call
+    /// site is unobservable here and deleting it is silent; the choice
+    /// therefore lives in `ScreenTimeMonitoring.forMonitorExtension`, which the
+    /// extension calls and this test pins — structurally, and by the behaviour
+    /// the argument buys: the daily re-registration still happens on a status
+    /// the extension cannot read.
+    func testTheMonitorExtensionIsBuiltForTheExtensionHost() throws {
+        try withFixture(installed: .none, learningApplications: 2) { store, center, _, _ in
+            try store.update { state in
+                for index in state.runs.indices { state.runs[index].active = false }
+            }
+            let monitor = ScreenTimeMonitoring.forMonitorExtension(
+                store: store, center: center, lockTimeout: 5,
+                authorizationStatus: { .notDetermined }
+            )
+
+            XCTAssertEqual(monitor.host, .monitorExtension)
+            XCTAssertTrue(try monitor.synchronize(now: now))
+            XCTAssertEqual(center.startCount, 1 + ScreenTimePolicy.batchesPerLane)
+            XCTAssertTrue(try store.snapshot().runs.contains(where: \.active))
+        }
+    }
+
+    // MARK: - the repair pass an unreadable status can now reach
+
+    /// Awarding the gem under an unreadable status also made the repair pass
+    /// reachable from a threshold in the extension: before it, `handleThreshold`
+    /// returned at the authorization gate, so a day whose midnight scheduler
+    /// pass was skipped could only be recovered by a lane interval boundary or
+    /// by the user opening the app. A threshold that finds no active run for
+    /// today now registers the whole day — scheduler plus every batch of the
+    /// configured lane — and the stale run's threshold is not carried into it.
+    func testAThresholdWithAnUnknownStatusRepairsADayWhoseSchedulerPassWasSkipped() throws {
+        try withFixture(installed: .none, learningApplications: 2) { store, center, original, _ in
+            try store.update { $0.runs = [] }
+            let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                               host: .monitorExtension,
+                                               authorizationStatus: { .notDetermined })
+
+            try monitor.handleThreshold(eventName: "1",
+                                        activityName: original.runs[0].activityPrefix + "0", now: now)
+
+            XCTAssertEqual(center.startCount, 1 + ScreenTimePolicy.batchesPerLane,
+                           "The threshold that found no run for today must register the day")
+            let result = try store.snapshot()
+            XCTAssertTrue(result.runs.contains(where: \.active))
+            XCTAssertEqual(result.runs.first?.highestThreshold, 0,
+                           "The repaired run must not inherit the retired run's threshold")
+            XCTAssertNil(result.monitoringError)
+            let counters = try XCTUnwrap(result.callbackCounters)
+            XCTAssertEqual(counters.thresholds, 1)
+            XCTAssertEqual(counters.thresholdsIgnoredByLedger, 1,
+                           "The run the threshold named is gone; only the repair survives it")
+            XCTAssertEqual(counters.statusUnknownAtCallback, 1)
+        }
+    }
+
+    /// And the fence on that new reach. The repair runs a full registration,
+    /// so a framework refusal lands on the failure path — stopped, every run
+    /// inactive, 監視エラー — and must not be retried on every later threshold
+    /// the same day. The extension has no memory across processes, so the day
+    /// is recorded in the ledger; the next device day gets its own attempt.
+    func testARefusedRepairFromAnUnknownStatusThresholdIsNotRetriedThatDay() throws {
+        try withFixture(installed: .none, learningApplications: 2) { store, center, original, _ in
+            try store.update { $0.runs = [] }
+            center.onStartName = { _ in throw RegistrationFailure() }
+            let monitor = ScreenTimeMonitoring(store: store, center: center,
+                                               host: .monitorExtension,
+                                               authorizationStatus: { .notDetermined })
+            let name = original.runs[0].activityPrefix + "0"
+
+            try monitor.handleThreshold(eventName: "1", activityName: name, now: now)
+            let afterFirst = center.startCount
+            XCTAssertGreaterThan(afterFirst, 0)
+            let refused = try store.snapshot()
+            XCTAssertNotNil(refused.monitoringError)
+            XCTAssertFalse(refused.runs.contains(where: \.active))
+            XCTAssertEqual(refused.configuration.learningSelection.applicationTokens.count, 2,
+                           "A framework refusal is not a revocation")
+
+            try monitor.handleThreshold(eventName: "1", activityName: name,
+                                        now: now.addingTimeInterval(600))
+            XCTAssertEqual(center.startCount, afterFirst,
+                           "A refused repair must not be retried on ordinary threshold traffic")
+
+            try monitor.handleThreshold(eventName: "1", activityName: name,
+                                        now: now.addingTimeInterval(86_400))
+            XCTAssertGreaterThan(center.startCount, afterFirst,
+                                 "The next device day gets its own attempt")
         }
     }
 

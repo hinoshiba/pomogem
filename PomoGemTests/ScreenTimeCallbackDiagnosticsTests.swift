@@ -112,28 +112,35 @@ final class ScreenTimeCallbackDiagnosticsTests: XCTestCase {
     /// and no other artefact the audit could collect could. It is an
     /// OBSERVATION beside the outcome, never an outcome of its own: the same
     /// callback is counted as `recorded` too, and the two do not sum.
+    ///
+    /// Counted the same in either process, because the unreadable status is an
+    /// observation and `handleThreshold` reads `host` nowhere: a count that
+    /// only held for `.monitorExtension` would be a gate wearing an
+    /// observation's name.
     func testAnUnknownStatusIsObservedBesideTheOutcomeItDoesNotDecide() throws {
-        try withLedger { store, initial in
-            let monitor = ScreenTimeMonitoring(store: store, center: FakeCenter(),
-                                               host: .monitorExtension,
-                                               authorizationStatus: { .notDetermined })
+        for host in [ScreenTimeMonitoringHost.app, .monitorExtension] {
+            try withLedger { store, initial in
+                let monitor = ScreenTimeMonitoring(store: store, center: FakeCenter(),
+                                                   host: host,
+                                                   authorizationStatus: { .notDetermined })
 
-            try monitor.handleThreshold(
-                eventName: "1", activityName: initial.runs[0].activityPrefix + "0", now: now
-            )
+                try monitor.handleThreshold(
+                    eventName: "1", activityName: initial.runs[0].activityPrefix + "0", now: now
+                )
 
-            let counters = try XCTUnwrap(try store.snapshot().callbackCounters)
-            XCTAssertEqual(counters.thresholds, 1)
-            XCTAssertEqual(counters.statusUnknownAtCallback, 1)
-            XCTAssertEqual(counters.thresholdsRecorded, 1)
-            XCTAssertEqual(counters.thresholdsIgnoredByLedger, 0)
-            XCTAssertEqual(counters.thresholdsDenied, 0)
-            XCTAssertEqual(counters.lastCallbackAt, now)
-            // The gem the OS measured is awarded, and nothing is wiped.
-            let state = try store.snapshot()
-            XCTAssertEqual(state.runs[0].highestThreshold, 1)
-            XCTAssertTrue(state.configuration.enabled)
-            XCTAssertNil(state.monitoringError)
+                let counters = try XCTUnwrap(try store.snapshot().callbackCounters)
+                XCTAssertEqual(counters.thresholds, 1)
+                XCTAssertEqual(counters.statusUnknownAtCallback, 1)
+                XCTAssertEqual(counters.thresholdsRecorded, 1)
+                XCTAssertEqual(counters.thresholdsIgnoredByLedger, 0)
+                XCTAssertEqual(counters.thresholdsDenied, 0)
+                XCTAssertEqual(counters.lastCallbackAt, now)
+                // The gem the OS measured is awarded, and nothing is wiped.
+                let state = try store.snapshot()
+                XCTAssertEqual(state.runs[0].highestThreshold, 1)
+                XCTAssertTrue(state.configuration.enabled)
+                XCTAssertNil(state.monitoringError)
+            }
         }
     }
 
