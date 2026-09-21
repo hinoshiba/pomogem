@@ -52,7 +52,10 @@ final class ScreenTimeStore {
         try? update { operation(&$0) }
     }
 
-    private var ledgerExists: Bool {
+    /// Whether a ledger is already on disk. Both readers that must not CREATE
+    /// one ask this first: the extension's callback counting, and the app's
+    /// read-only diagnostics mirror.
+    var ledgerExists: Bool {
         guard let directory else { return false }
         return FileManager.default.fileExists(
             atPath: directory.appendingPathComponent("ledger.json").path

@@ -232,6 +232,7 @@
 		EBC0CD9CB312A4C332A52889 /* StorageTransferCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6529191CFF72FFD406038E5B /* StorageTransferCleanup.swift */; };
 		EC756FBB0F108A7E2FA29232 /* LocalPreviewLaunchPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6C6D396C5FB8FF2FEC27957 /* LocalPreviewLaunchPolicyTests.swift */; };
 		ECC0CC7314E35D33520215A1 /* FocusCloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = F876E41FCE0D77EC75DBC1DF /* FocusCloudSync.swift */; };
+		ECFC76046DC60E912E2CCB19 /* ScreenTimeDiagnosticsMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB1AFB92AF52C05F37507557 /* ScreenTimeDiagnosticsMirror.swift */; };
 		EDD291E0A2639D3BA303ABED /* CompleteDataDeletionFileStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93826561EFF75F9231D4FA19 /* CompleteDataDeletionFileStateStore.swift */; };
 		EF9A8F2DEB9578262AD1E14A /* PersistenceFrameworkArtifactTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F49B587DE83A0369D3E30D76 /* PersistenceFrameworkArtifactTests.swift */; };
 		F08AAF9718C62F7929EB9F67 /* FortyYearPersistentUITestFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C4741B2BC35EDA4111889D3 /* FortyYearPersistentUITestFixture.swift */; };
@@ -487,6 +488,7 @@
 		C7F444E317993ECB2656CB2A /* StrataRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataRenderer.swift; sourceTree = "<group>"; };
 		C9E64D7EC1B176F2D176D0D4 /* CloudActivityHistoryPreflightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudActivityHistoryPreflightTests.swift; sourceTree = "<group>"; };
 		CAB36DAA45CD3F662E33B306 /* CompleteDataDeletionSystemAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompleteDataDeletionSystemAdapters.swift; sourceTree = "<group>"; };
+		CB1AFB92AF52C05F37507557 /* ScreenTimeDiagnosticsMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeDiagnosticsMirror.swift; sourceTree = "<group>"; };
 		CC8710978C9D7210E418F881 /* StorageTransferAccountNamespaceAuthority.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferAccountNamespaceAuthority.swift; sourceTree = "<group>"; };
 		CCBD8430AE174859A2FC6B6D /* StorageTransferRuntimeAdmissionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferRuntimeAdmissionTests.swift; sourceTree = "<group>"; };
 		CD7BA595ACB195819AF7A8D3 /* RareRewardLedgerV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RareRewardLedgerV2.swift; sourceTree = "<group>"; };
@@ -982,6 +984,7 @@
 			isa = PBXGroup;
 			children = (
 				FCBDC63A7E428DA4AEC2DA39 /* ScreenTimeController.swift */,
+				CB1AFB92AF52C05F37507557 /* ScreenTimeDiagnosticsMirror.swift */,
 				13BE379105C9A6C97BF7198D /* ScreenTimeImportCoordinator.swift */,
 				692367EFFE3E11A3BCD6C0EA /* ScreenTimeIntegrationModifier.swift */,
 				F1454E359AC45D44E04BE9D6 /* ScreenTimeMonitoringWorker.swift */,
@@ -1314,6 +1317,7 @@
 				26A13C585B7493B72A6709E4 /* RootView.swift in Sources */,
 				91EC1875681EEE91405F3C8A /* ScreenTimeCallbackDiagnostics.swift in Sources */,
 				0EFB67EFB8E0ACA23F8C7926 /* ScreenTimeController.swift in Sources */,
+				ECFC76046DC60E912E2CCB19 /* ScreenTimeDiagnosticsMirror.swift in Sources */,
 				8C5EEF3EFBBAF90D1B11B0EA /* ScreenTimeImportCoordinator.swift in Sources */,
 				9EEDB2A23B19E4EC537E3B4A /* ScreenTimeIntegrationModifier.swift in Sources */,
 				E07527600A2C598FE07A1032 /* ScreenTimeMonitoring.swift in Sources */,

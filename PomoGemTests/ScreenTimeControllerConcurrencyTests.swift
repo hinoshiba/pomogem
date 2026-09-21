@@ -52,9 +52,14 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeStore(owner: String = "owner", epoch: UUID? = nil) throws -> ScreenTimeStore {
+    private func makeDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         directories.append(directory)
+        return directory
+    }
+
+    private func makeStore(owner: String = "owner", epoch: UUID? = nil, in directory: URL? = nil) throws -> ScreenTimeStore {
+        let directory = directory ?? makeDirectory()
         let store = ScreenTimeStore(directory: directory)
         var state = ScreenTimeState()
         state.contextKey = owner
@@ -575,6 +580,84 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         await controller.reconcile(isPro: true, timerRunning: false)
         try await controller.waitForPendingOperations()
         XCTAssertFalse(try store.snapshot().runs.contains { $0.id == runID && $0.active })
+    }
+
+    // MARK: - the diagnostics mirror
+
+    /// The monitor extension counts the callbacks, but it cannot write into
+    /// the app's container and the App Group ledger it does write cannot be
+    /// pulled off a phone — the 2026-09-20/21 audit read none of it. So the
+    /// app mirrors on its own passes: a save (which synchronizes) and every
+    /// foreground reload.
+    func testEveryReloadAndSynchronizePassMirrorsTheDiagnosticsForADeviceAudit() async throws {
+        let store = try makeStore()
+        let driver = Driver(store: store)
+        let mirror = ScreenTimeDiagnosticsMirror(directory: makeDirectory(), heartbeat: 0)
+        let controller = ScreenTimeController(
+            store: store, currentContextKey: { "owner" }, monitoring: driver,
+            authorization: { .approved }, diagnosticsMirror: mirror
+        )
+        let url = try XCTUnwrap(mirror.fileURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path),
+                       "Nothing is mirrored before an owner is admitted")
+
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+
+        var report = try Self.mirroredReport(at: url)
+        XCTAssertTrue(report.configurationEnabled)
+        XCTAssertTrue(report.contextIsActive)
+        XCTAssertEqual(report.learning.activeRuns, 1)
+        XCTAssertEqual(report.distraction.activeRuns, 0)
+        XCTAssertNil(report.counters, "This ledger has never counted a callback")
+
+        // What the extension writes into the ledger while the app is away
+        // reaches the mirror on the app's next reload, not before.
+        try store.update { $0.countIntervalCallback(kind: .lane, phase: .start, now: Date()) }
+        controller.reload()
+        report = try Self.mirroredReport(at: url)
+        XCTAssertEqual(report.counters?.laneIntervalStarts, 1)
+        XCTAssertEqual(report.counters?.thresholds, 0)
+        XCTAssertEqual(report.counters?.generation, 0)
+
+        // A save goes through synchronize, which ends in the same reload.
+        var configuration = controller.configuration
+        configuration.enabled = false
+        try await controller.save(configuration: configuration, isPro: false)
+        report = try Self.mirroredReport(at: url)
+        XCTAssertFalse(report.configurationEnabled)
+        XCTAssertEqual(report.learning.activeRuns, 0)
+        XCTAssertEqual(report.counters?.laneIntervalStarts, 1)
+    }
+
+    /// Mirroring must not be what creates evidence, the same rule the
+    /// extension's counting follows: with no ledger on disk there is nothing
+    /// to copy, and an empty file would read as "the ledger says nothing".
+    func testTheMirrorWritesNothingWhenTheLedgerIsMissing() async throws {
+        let ledgerDirectory = makeDirectory()
+        let store = try makeStore(in: ledgerDirectory)
+        let driver = Driver(store: store)
+        let mirror = ScreenTimeDiagnosticsMirror(directory: makeDirectory(), heartbeat: 0)
+        let controller = ScreenTimeController(
+            store: store, currentContextKey: { "owner" }, monitoring: driver,
+            authorization: { .approved }, diagnosticsMirror: mirror
+        )
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        let url = try XCTUnwrap(mirror.fileURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+
+        // `ScreenTimeStore` keeps its ledger in a `ScreenTime` subdirectory.
+        try FileManager.default.removeItem(
+            at: ledgerDirectory.appendingPathComponent("ScreenTime/ledger.json")
+        )
+        try FileManager.default.removeItem(at: url)
+        controller.reload()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertFalse(store.ledgerExists, "A read-only mirror never creates a ledger either")
+    }
+
+    private static func mirroredReport(at url: URL) throws -> ScreenTimeDiagnosticsReport {
+        try JSONDecoder().decode(ScreenTimeDiagnosticsReport.self, from: Data(contentsOf: url))
     }
 
     func testAuthorizationWithoutAdmittedOwnerReportsActionableError() async throws {

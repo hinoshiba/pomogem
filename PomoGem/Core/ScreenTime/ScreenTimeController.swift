@@ -27,6 +27,13 @@ final class ScreenTimeController: ObservableObject {
     @Published private(set) var bindingError: String?
     let store: ScreenTimeStore
     private let worker: ScreenTimeMonitoringWorker
+    /// A read-only copy of the callback diagnostics into the app's own
+    /// container. The monitor extension counts the callbacks but cannot write
+    /// there — `Library/Application Support` resolves inside whichever bundle
+    /// asks for it — and the App Group ledger it does write cannot be pulled
+    /// off a phone, so the app mirrors on its own passes. See
+    /// `ScreenTimeDiagnosticsMirror`.
+    private let diagnosticsMirror: ScreenTimeDiagnosticsMirror
     private let currentContextKey: () -> String
     private let authorization: () -> AuthorizationStatus
     /// FamilyControls reports a REVOKED authorization as `.notDetermined` — the
@@ -63,11 +70,13 @@ final class ScreenTimeController: ObservableObject {
         monitoring: ScreenTimeMonitoringDriving? = nil,
         authorization: @escaping () -> AuthorizationStatus = { AuthorizationCenter.shared.authorizationStatus },
         authorizationSettlingWindow: TimeInterval = 10,
-        authorizationSettlingObservations: Int = 4
+        authorizationSettlingObservations: Int = 4,
+        diagnosticsMirror: ScreenTimeDiagnosticsMirror = ScreenTimeDiagnosticsMirror()
     ) {
         self.store = store
         self.currentContextKey = currentContextKey
         self.authorization = authorization
+        self.diagnosticsMirror = diagnosticsMirror
         self.authorizationSettlingWindow = authorizationSettlingWindow
         self.authorizationSettlingObservations = max(1, authorizationSettlingObservations)
         worker = ScreenTimeMonitoringWorker(store: store, monitoring: monitoring ?? ScreenTimeMonitoring(store: store))
@@ -345,6 +354,11 @@ final class ScreenTimeController: ObservableObject {
         }
         do {
             let state = try store.snapshot()
+            // Before the owner guard below, not after: the two fields that
+            // explain a ledger which counts nothing — `enabled` and
+            // `contextIsActive` — are exactly the ones a mirror written only
+            // on the happy path could never show as false.
+            mirrorDiagnostics(state)
             guard lease.binding.matches(state), state.contextIsActive else {
                 clearPublishedState()
                 return
@@ -363,6 +377,20 @@ final class ScreenTimeController: ObservableObject {
             clearPublishedState()
             monitoringError = error.localizedDescription
         }
+    }
+
+    /// Copies the callback diagnostics out of the App Group ledger and into the
+    /// app's own container, where a device audit can fetch them without host
+    /// root and without the unified log. Called from `reload()`, which every
+    /// synchronize pass ends with, so a save, a foreground pass and the
+    /// three-second refresh loop all mirror; the monitor extension never can.
+    ///
+    /// Counting must not be what creates a ledger, and neither must mirroring:
+    /// with no ledger on disk there is nothing to copy and nothing is written,
+    /// the same rule as `ScreenTimeStore.countCallback`.
+    private func mirrorDiagnostics(_ state: ScreenTimeState) {
+        guard store.ledgerExists else { return }
+        diagnosticsMirror.write(state)
     }
 
     func resetActivityData() async throws {

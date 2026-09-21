@@ -433,7 +433,258 @@ final class ScreenTimeCallbackDiagnosticsTests: XCTestCase {
         XCTAssertEqual(ScreenTimeDiagnosticSeconds.clamped(-2.6), -3)
     }
 
+    // MARK: - the mirror a device audit can actually read
+
+    /// The counters live in the App Group ledger because that is the only
+    /// directory the monitor extension shares with the app — and that is why
+    /// the 2026-09-20/21 audit could not read a single one of them. The mirror
+    /// copies them into the app's OWN container, which
+    /// `devicectl device copy from --domain-type appDataContainer` can pull
+    /// with no host root and no unified log.
+    func testTheMirrorCopiesTheCountersAndTheLaneScheduleIntoTheAppContainer() throws {
+        try withMirror { mirror, directory in
+            var state = mirroredState()
+            state.countIntervalCallback(kind: .lane, phase: .start, now: now.addingTimeInterval(-600))
+            state.countThresholdCallback(.ignoredByLedger, now: now.addingTimeInterval(-120))
+
+            mirror.write(state, now: now)
+
+            let url = directory
+                .appendingPathComponent(ScreenTimeDiagnosticsMirror.fileName)
+            XCTAssertEqual(try XCTUnwrap(mirror.fileURL), url)
+            XCTAssertEqual(url.lastPathComponent, "counters.json")
+            XCTAssertEqual(directory.lastPathComponent, "ScreenTimeDiagnostics")
+            let report = try JSONDecoder().decode(
+                ScreenTimeDiagnosticsReport.self, from: Data(contentsOf: url)
+            )
+
+            XCTAssertEqual(report.schemaVersion, ScreenTimeDiagnosticsReport.schemaVersion)
+            XCTAssertEqual(Self.instantFormatter.date(from: try XCTUnwrap(report.writtenAt)), now,
+                           "writtenAt says which pass this file describes")
+            XCTAssertTrue(report.configurationEnabled)
+            XCTAssertTrue(report.contextIsActive)
+            let counters = try XCTUnwrap(report.counters)
+            XCTAssertEqual(counters.laneIntervalStarts, 1)
+            XCTAssertEqual(counters.thresholds, 1)
+            XCTAssertEqual(counters.thresholdsIgnoredByLedger, 1)
+            XCTAssertEqual(counters.thresholdsRecorded, 0)
+            XCTAssertEqual(counters.generation, 0)
+            // The ages are what a reader compares against the usage window,
+            // without having to do date arithmetic on the instants.
+            XCTAssertEqual(counters.laneIntervalStartAgeSec, 600)
+            XCTAssertEqual(counters.thresholdAgeSec, 120)
+            XCTAssertEqual(counters.lastCallbackAgeSec, 120)
+            XCTAssertEqual(counters.schedulerIntervalStartAgeSec, -1,
+                           "-1 means that kind of callback was never counted")
+            XCTAssertNil(counters.lastSchedulerIntervalStartAt)
+
+            // The lane's registration, as the ledger holds it: the interval
+            // covers the device day, and a run continued across midnight starts
+            // at 00:00 with past activity included.
+            let run = state.runs[0]
+            XCTAssertEqual(report.learning.activeRuns, 1)
+            XCTAssertEqual(report.learning.intervalStartOffsetSec,
+                           Int(now.timeIntervalSince(run.dayStart)))
+            XCTAssertEqual(report.learning.intervalEndOffsetSec,
+                           Int(now.timeIntervalSince(run.dayEnd)) + 1)
+            XCTAssertEqual(report.learning.runStartedAtOffsetSec, 0,
+                           "0 means the run counts from midnight, i.e. a continued day rollover")
+            XCTAssertEqual(report.learning.includesPastActivity, true)
+            XCTAssertEqual(report.learning.repeats, false)
+            // A lane with no active run says so and carries no schedule.
+            XCTAssertEqual(report.distraction, .inactive)
+            XCTAssertEqual(report.distraction.activeRuns, 0)
+            XCTAssertNil(report.distraction.intervalStartOffsetSec)
+        }
+    }
+
+    /// Unlike the ledger it copies, this file is meant to leave the device.
+    /// Counts, booleans, ISO-8601 instants and second offsets — and nothing
+    /// else. The key set is asserted exactly, so a field added to the ledger
+    /// cannot reach the mirror without this test being updated on purpose.
+    func testTheMirroredFileCarriesCountsBooleansAndInstantsOnly() throws {
+        try withMirror { mirror, directory in
+            var state = mirroredState()
+            state.negativeGemCount = 7
+            state.runs.append(ScreenTimeRun(
+                lane: .distraction, dayStart: state.runs[0].dayStart,
+                dayEnd: state.runs[0].dayEnd, startedAt: now.addingTimeInterval(-3_600),
+                timeZoneID: state.runs[0].timeZoneID, includesPastActivity: false
+            ))
+            state.countIntervalCallback(kind: .scheduler, phase: .start, now: now)
+            state.countIntervalCallback(kind: .lane, phase: .start, now: now)
+            state.countThresholdCallback(.recorded, now: now)
+            XCTAssertTrue(state.isValid)
+
+            mirror.write(state, now: now)
+
+            let data = try Data(contentsOf: try XCTUnwrap(mirror.fileURL))
+            let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            XCTAssertEqual(Set(root.keys), [
+                "schemaVersion", "writtenAt", "configurationEnabled", "contextIsActive",
+                "learning", "distraction", "counters"
+            ])
+            for lane in ["learning", "distraction"] {
+                let schedule = try XCTUnwrap(root[lane] as? [String: Any], lane)
+                XCTAssertEqual(Set(schedule.keys), [
+                    "activeRuns", "intervalStartOffsetSec", "intervalEndOffsetSec",
+                    "runStartedAtOffsetSec", "includesPastActivity", "repeats"
+                ], lane)
+            }
+            let counters = try XCTUnwrap(root["counters"] as? [String: Any])
+            XCTAssertEqual(Set(counters.keys), [
+                "generation", "dayStart",
+                "schedulerIntervalStarts", "laneIntervalStarts", "otherIntervalStarts",
+                "schedulerIntervalEnds", "laneIntervalEnds", "otherIntervalEnds",
+                "thresholds", "thresholdsRecorded", "thresholdsIgnoredByLedger",
+                "thresholdsIgnoredByName", "thresholdsUnknownAuthorization", "thresholdsDenied",
+                "lastCallbackAt", "lastLaneIntervalStartAt", "lastSchedulerIntervalStartAt",
+                "lastThresholdAt", "lastCallbackAgeSec", "laneIntervalStartAgeSec",
+                "schedulerIntervalStartAgeSec", "thresholdAgeSec"
+            ])
+            XCTAssertFalse(counters.keys.contains("epoch"),
+                           "The ledger epoch is an identifier and stays on the device")
+
+            // Every string in the file is an instant, so no identifier can be
+            // hiding in a value either.
+            for (path, value) in Self.scalars(in: root) {
+                if let text = value as? String {
+                    XCTAssertNotNil(Self.instantFormatter.date(from: text), "\(path) = \(text)")
+                } else {
+                    XCTAssertTrue(value is NSNumber, "\(path) is neither a number nor an instant")
+                }
+                XCTAssertFalse(path.lowercased().contains("token"), path)
+                XCTAssertFalse(path.lowercased().contains("gem"), path)
+            }
+
+            // And the identifiers this ledger actually holds are not in the
+            // bytes at all, under any key.
+            let text = try XCTUnwrap(String(data: data, encoding: .utf8)).lowercased()
+            for identifier in [
+                state.epoch.uuidString, state.callbackCounters?.epoch?.uuidString ?? "",
+                try XCTUnwrap(state.configuration.themeID).uuidString,
+                try XCTUnwrap(state.dataEpochID).uuidString,
+                state.runs[0].id.uuidString, state.runs[1].id.uuidString,
+                try XCTUnwrap(state.contextKey)
+            ] where !identifier.isEmpty {
+                XCTAssertFalse(text.contains(identifier.lowercased()), identifier)
+            }
+            // "contextIsActive" is a boolean about the ledger, not the key
+            // itself, so the context KEY is covered by the identifier loop.
+            for forbidden in ["theme", "token", "gem", "receipt", "epoch", "monitoringerror"] {
+                XCTAssertFalse(text.contains(forbidden), forbidden)
+            }
+        }
+    }
+
+    /// The mirror reads the same ledger dates the log line does, so it needs
+    /// the same guard: a finite but absurd instant must not trap, and must not
+    /// be rendered as if it were a real one.
+    func testTheMirrorSurvivesALedgerDateThatIsNotARealInstant() throws {
+        try withMirror { mirror, _ in
+            var state = mirroredState()
+            var counters = ScreenTimeCallbackCounters()
+            counters.laneIntervalStarts = 1
+            counters.lastLaneIntervalStartAt = Date(timeIntervalSince1970: 1e300)
+            counters.lastCallbackAt = Date(timeIntervalSince1970: -1e300)
+            state.callbackCounters = counters
+            XCTAssertTrue(state.isValid, "isValid only asks a stored date to be finite")
+
+            mirror.write(state, now: now)
+
+            let report = try JSONDecoder().decode(
+                ScreenTimeDiagnosticsReport.self,
+                from: Data(contentsOf: try XCTUnwrap(mirror.fileURL))
+            )
+            let mirrored = try XCTUnwrap(report.counters)
+            XCTAssertNil(mirrored.lastLaneIntervalStartAt)
+            XCTAssertNil(mirrored.lastCallbackAt)
+            XCTAssertEqual(mirrored.laneIntervalStartAgeSec, Int.min)
+            XCTAssertEqual(mirrored.lastCallbackAgeSec, Int.max)
+            XCTAssertEqual(mirrored.laneIntervalStarts, 1)
+        }
+    }
+
+    /// The foreground refresh loop reloads every three seconds and almost
+    /// every pass reads an unchanged ledger. Write when something changed, and
+    /// otherwise on the heartbeat, so the file still proves the app ran.
+    func testTheMirrorRewritesOnAChangeOrOnTheHeartbeat() throws {
+        try withMirror(heartbeat: 60) { mirror, _ in
+            let url = try XCTUnwrap(mirror.fileURL)
+            func writtenAt() throws -> String? {
+                try JSONDecoder().decode(
+                    ScreenTimeDiagnosticsReport.self, from: Data(contentsOf: url)
+                ).writtenAt
+            }
+            var state = mirroredState()
+            mirror.write(state, now: now)
+            let first = try writtenAt()
+
+            mirror.write(state, now: now.addingTimeInterval(3))
+            XCTAssertEqual(try writtenAt(), first, "An unchanged ledger does not rewrite the file")
+
+            state.countIntervalCallback(kind: .lane, phase: .start, now: now.addingTimeInterval(6))
+            mirror.write(state, now: now.addingTimeInterval(6))
+            let second = try writtenAt()
+            XCTAssertNotEqual(second, first, "A counted callback is written through at once")
+
+            mirror.write(state, now: now.addingTimeInterval(66))
+            XCTAssertNotEqual(try writtenAt(), second, "The heartbeat proves the app is still running")
+        }
+    }
+
     // MARK: - fixture
+
+    static let instantFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    /// A ledger with everything the mirror must NOT copy: a context key, a
+    /// data epoch, a theme, run identifiers and a black-gem count.
+    private func mirroredState() -> ScreenTimeState {
+        var state = ScreenTimeState()
+        state.contextKey = "test-owner"
+        state.dataEpochID = UUID()
+        state.contextIsActive = true
+        state.configuration.enabled = true
+        state.configuration.themeID = UUID()
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: now)
+        state.runs = [ScreenTimeRun(
+            lane: .learning, dayStart: dayStart,
+            dayEnd: calendar.date(byAdding: .day, value: 1, to: dayStart)!,
+            // A run that continued across midnight starts at 00:00.
+            startedAt: dayStart,
+            timeZoneID: calendar.timeZone.identifier,
+            includesPastActivity: true,
+            themeID: state.configuration.themeID
+        )]
+        return state
+    }
+
+    /// The mirror writes into the app's own container; a temporary directory
+    /// stands in for it so the tests never touch the test host's.
+    private func withMirror(
+        heartbeat: TimeInterval = 0,
+        _ body: (ScreenTimeDiagnosticsMirror, URL) throws -> Void
+    ) rethrows {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathComponent(ScreenTimeDiagnosticsMirror.directoryName, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory.deletingLastPathComponent()) }
+        try body(ScreenTimeDiagnosticsMirror(directory: directory, heartbeat: heartbeat), directory)
+    }
+
+    /// Every leaf of the decoded file, with the key path that reaches it.
+    private static func scalars(in object: [String: Any], at prefix: String = "") -> [(String, Any)] {
+        object.flatMap { key, value -> [(String, Any)] in
+            let path = prefix.isEmpty ? key : "\(prefix).\(key)"
+            if let nested = value as? [String: Any] { return scalars(in: nested, at: path) }
+            return [(path, value)]
+        }
+    }
 
     private func withLedger(
         _ body: (ScreenTimeStore, ScreenTimeState) throws -> Void
