@@ -177,7 +177,7 @@ struct ScreenTimeState: Codable {
         phase: ScreenTimeCallbackCounters.IntervalPhase,
         now: Date
     ) {
-        var counters = callbackCounters ?? ScreenTimeCallbackCounters()
+        var counters = countersForCallback(at: now)
         counters.countInterval(kind: kind, phase: phase, at: now)
         callbackCounters = counters
     }
@@ -186,9 +186,32 @@ struct ScreenTimeState: Codable {
         _ outcome: ScreenTimeCallbackCounters.ThresholdOutcome,
         now: Date
     ) {
-        var counters = callbackCounters ?? ScreenTimeCallbackCounters()
+        var counters = countersForCallback(at: now)
         counters.countThreshold(outcome, at: now)
         callbackCounters = counters
+    }
+
+    /// The counter set this callback belongs in. A count is only readable next
+    /// to what it was counted under, so a new device day or a new ledger epoch
+    /// starts a fresh set with a higher `generation` instead of adding to
+    /// yesterday's totals — otherwise "laneStart=1" on a day when the lane
+    /// interval never started would refute the very hypothesis it is there to
+    /// settle. A set stamped by an older build carries neither stamp; it adopts
+    /// the current ones rather than discarding evidence already on the device.
+    private func countersForCallback(at now: Date) -> ScreenTimeCallbackCounters {
+        let day = Calendar.current.startOfDay(for: now)
+        guard var counters = callbackCounters else {
+            var fresh = ScreenTimeCallbackCounters()
+            fresh.epoch = epoch
+            fresh.dayStart = day
+            return fresh
+        }
+        if counters.epoch == nil { counters.epoch = epoch }
+        if counters.dayStart == nil { counters.dayStart = day }
+        guard counters.epoch == epoch, counters.dayStart == day else {
+            return counters.restarted(epoch: epoch, dayStart: day)
+        }
+        return counters
     }
 
     mutating func record(runID: UUID, threshold: Int, now: Date) {

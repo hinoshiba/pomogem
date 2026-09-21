@@ -858,6 +858,32 @@ final class ScreenTimeSettingsDraftTests: XCTestCase {
                       "An empty draft has nothing to lose and would otherwise stay empty")
     }
 
+    /// 「スクリーンタイムの内容をリセット」 replaces the whole ledger, which used
+    /// to drop the callback counters without a word. That is the one reading
+    /// that exonerates the app — "every counter 0, nothing ever delivered" —
+    /// so the reset must not be able to manufacture it. The counts start over
+    /// (they describe a ledger that no longer exists) but say how many windows
+    /// came before.
+    func testResetStartsTheCallbackCountersOverInsteadOfErasingThatTheyExisted() async throws {
+        let store = try makeStore()
+        try store.update { state in
+            state.countIntervalCallback(kind: .lane, phase: .start, now: Date())
+            state.countThresholdCallback(.recorded, now: Date())
+        }
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                              monitoring: Driver(store: store), authorization: { .approved })
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+
+        try await controller.resetActivityData()
+
+        let counters = try XCTUnwrap(try store.snapshot().callbackCounters,
+                                     "The reset must not erase that counting ever happened")
+        XCTAssertEqual(counters.generation, 1)
+        XCTAssertEqual(counters.laneIntervalStarts, 0)
+        XCTAssertEqual(counters.thresholds, 0)
+        XCTAssertEqual(counters.epoch, try store.snapshot().epoch)
+    }
+
     func testIsBoundToContextFollowsAdmissionRetirementAndErase() async throws {
         let store = try makeStore()
         let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },

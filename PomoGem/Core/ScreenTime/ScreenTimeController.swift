@@ -382,10 +382,17 @@ final class ScreenTimeController: ObservableObject {
         // Close the receipt gate now; stopping registrations may take time.
         try store.update { state in
             try validate(state, lease: lease)
+            // Diagnostics survive the reset as a restarted, zeroed set. Wiping
+            // them outright would make "every counter 0, nothing ever
+            // delivered" — the reading that exonerates the app — a thing the
+            // reset itself can produce. A higher `generation` says the counts
+            // describe the window after a reset, not the ledger's lifetime.
+            let counters = state.callbackCounters
             state = ScreenTimeState()
             state.contextKey = lease.binding.contextKey
             state.dataEpochID = lease.binding.dataEpochID
             state.contextIsActive = true
+            state.callbackCounters = counters?.restarted(epoch: state.epoch, dayStart: nil)
         }
         let worker = worker
         try await worker.perform {

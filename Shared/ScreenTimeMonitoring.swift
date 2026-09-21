@@ -266,17 +266,7 @@ final class ScreenTimeMonitoring {
                 start.timeZone = scheduleCalendar.timeZone
                 end.timeZone = scheduleCalendar.timeZone
                 let schedule = DeviceActivitySchedule(intervalStart: start, intervalEnd: end, repeats: false)
-                // The shape actually handed to the framework, in seconds
-                // relative to this pass. A positive `startOffsetSec` means the
-                // interval was already under way when it was registered, which
-                // is what a lane interval that never starts would look like.
-                // Offsets and durations only: no name, run or token.
-                ScreenTimeLog.monitoring.notice("""
-                    schedule kind=lane \
-                    startOffsetSec=\(Int(now.timeIntervalSince(scheduleCalendar.date(from: start) ?? run.dayStart).rounded()), privacy: .public) \
-                    endOffsetSec=\(Int(now.timeIntervalSince(scheduleCalendar.date(from: end) ?? run.dayEnd).rounded()), privacy: .public) \
-                    repeats=0 pastActivity=\(run.includesPastActivity ? 1 : 0, privacy: .public)
-                    """)
+                var startedForRun = 0
                 for batch in 0..<ScreenTimePolicy.batchesPerLane {
                     let name = run.activityPrefix + String(batch)
                     guard !installed.contains(name) else { continue }
@@ -297,7 +287,16 @@ final class ScreenTimeMonitoring {
                     try generation.requireCurrent(store.snapshot())
                     try center.startMonitoring(DeviceActivityName(name), during: schedule, events: events)
                     startedCount += 1
+                    startedForRun += 1
                     try generation.requireCurrent(store.snapshot())
+                }
+                if let notice = Self.laneScheduleNotice(
+                    started: startedForRun, now: now,
+                    intervalStart: scheduleCalendar.date(from: start) ?? run.dayStart,
+                    intervalEnd: scheduleCalendar.date(from: end) ?? run.dayEnd,
+                    includesPastActivity: run.includesPastActivity
+                ) {
+                    ScreenTimeLog.monitoring.notice("\(notice, privacy: .public)")
                 }
             }
             try generation.requireCurrent(store.snapshot())
@@ -462,6 +461,34 @@ final class ScreenTimeMonitoring {
 
     static func schedulerName(epoch: UUID) -> String {
         prefix + ScreenTimePolicy.schedulerInfix + epoch.uuidString
+    }
+
+    /// The one line that describes a lane registration the way the framework
+    /// received it — and `nil` for a pass that handed the framework nothing.
+    ///
+    /// The distinction is the whole point. Almost every synchronize pass finds
+    /// all eight batches already installed and calls `startMonitoring` zero
+    /// times; a line printed on those passes would still carry an offset
+    /// measured against THIS pass, so a registration made at midnight at
+    /// offset 0 would print `startOffsetSec=43200` at noon and read as "we
+    /// registered half a day into the interval" — the exact hypothesis this
+    /// evidence exists to decide. A positive offset beside a non-zero
+    /// `started` is the real thing. Offsets and counts only: never a name, a
+    /// run, a threshold or a token.
+    static func laneScheduleNotice(
+        started: Int,
+        now: Date,
+        intervalStart: Date,
+        intervalEnd: Date,
+        includesPastActivity: Bool
+    ) -> String? {
+        guard started > 0 else { return nil }
+        return """
+            schedule kind=lane started=\(started) \
+            startOffsetSec=\(ScreenTimeDiagnosticSeconds.between(now, intervalStart)) \
+            endOffsetSec=\(ScreenTimeDiagnosticSeconds.between(now, intervalEnd)) \
+            repeats=0 pastActivity=\(includesPastActivity ? 1 : 0)
+            """
     }
 
     private static func log(_ message: String, stopped: Int, started: Int, since: Date) {

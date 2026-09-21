@@ -580,9 +580,129 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         }
     }
 
+    /// The other half of a registration. `during schedule:` was pinned first,
+    /// but the fake center still dropped `events:`, so nothing asserted that a
+    /// batch carries its own thresholds, the lane's selection, or — the input
+    /// both adversarial reviews built their argument on — the run's
+    /// `includesPastActivity`. Losing any of them is silent on the Simulator
+    /// and costs a whole day of counting on a device.
+    func testEveryLaneBatchRegistersItsOwnThresholdsAndTheLanesSelection() throws {
+        try withFixture(installed: .none, learningApplications: 2) { store, center, original, _ in
+            let monitor = ScreenTimeMonitoring(store: store, center: center, authorization: { true })
+            XCTAssertTrue(try monitor.synchronize(now: now))
+
+            let run = try XCTUnwrap(try store.snapshot().runs.first(where: \.active))
+            XCTAssertFalse(run.includesPastActivity, "A same-day run continues nothing")
+            for batch in 0..<ScreenTimePolicy.batchesPerLane {
+                let registration = try XCTUnwrap(center.startedSchedules.first {
+                    $0.name == run.activityPrefix + String(batch)
+                })
+                let thresholds = ScreenTimePolicy.thresholds(batch: batch)
+                XCTAssertEqual(Set(registration.events.keys.map(\.rawValue)),
+                               Set(thresholds.map(String.init)),
+                               "batch \(batch) must carry exactly its own thresholds")
+                for threshold in thresholds {
+                    let event = try XCTUnwrap(
+                        registration.events[DeviceActivityEvent.Name(String(threshold))]
+                    )
+                    XCTAssertEqual(event.threshold,
+                                   DateComponents(minute: threshold * ScreenTimePolicy.minutesPerGem))
+                    XCTAssertEqual(event.applications,
+                                   original.configuration.learningSelection.applicationTokens)
+                    XCTAssertTrue(event.categories.isEmpty)
+                    XCTAssertTrue(event.webDomains.isEmpty)
+                    if #available(iOS 17.4, *) {
+                        XCTAssertEqual(event.includesPastActivity, run.includesPastActivity)
+                    }
+                }
+            }
+            // The day-boundary activity is a clock, never a counter.
+            let scheduler = try XCTUnwrap(center.startedSchedules.first {
+                $0.name == ScreenTimeMonitoring.schedulerName(epoch: original.epoch)
+            })
+            XCTAssertTrue(scheduler.events.isEmpty)
+        }
+    }
+
+    /// The day-rollover case. A run that continues yesterday's registration
+    /// must register events that say so, or the 00:00 -> first-foreground
+    /// window stops being counted — the regression the reviews rejected the
+    /// "clamp intervalStart to now" fix for. Nothing asserted it until now.
+    @available(iOS 17.4, *)
+    func testADayRolloverRegistrationSaysItIncludesPastActivity() throws {
+        try withFixture(installed: .none, learningApplications: 2, runDaysAgo: 1) { store, center, _, _ in
+            let monitor = ScreenTimeMonitoring(store: store, center: center, authorization: { true })
+            XCTAssertTrue(try monitor.synchronize(now: now))
+
+            let run = try XCTUnwrap(try store.snapshot().runs.first(where: \.active))
+            XCTAssertTrue(run.includesPastActivity,
+                          "Yesterday's active run is the continuity this case exists for")
+            let lanes = center.startedSchedules.filter { $0.name.hasPrefix(run.activityPrefix) }
+            XCTAssertEqual(lanes.count, ScreenTimePolicy.batchesPerLane)
+            for registration in lanes {
+                XCTAssertFalse(registration.events.isEmpty)
+                for event in registration.events.values {
+                    XCTAssertTrue(event.includesPastActivity)
+                }
+            }
+        }
+    }
+
+    // MARK: - what the schedule notice may claim
+
+    /// An ordinary foreground pass finds every batch installed and hands the
+    /// framework nothing. The evidence line must not appear on such a pass:
+    /// its offsets are measured against the CURRENT instant, so a registration
+    /// made at midnight at offset 0 would print a large positive offset at
+    /// noon and read as "we registered mid-interval" — the hypothesis the line
+    /// exists to decide.
+    func testAPassThatReInstallsNothingRegistersNothingAndSaysNothing() throws {
+        try withFixture(installed: .complete, learningApplications: 2) { store, center, _, _ in
+            let monitor = ScreenTimeMonitoring(store: store, center: center, authorization: { true })
+            XCTAssertTrue(try monitor.synchronize(now: now))
+
+            XCTAssertEqual(center.startCount, 0, "Nothing was handed to the framework")
+            XCTAssertTrue(center.startedSchedules.isEmpty)
+            XCTAssertNil(ScreenTimeMonitoring.laneScheduleNotice(
+                started: 0, now: now, intervalStart: now.addingTimeInterval(-43_200),
+                intervalEnd: now.addingTimeInterval(43_199), includesPastActivity: true
+            ))
+        }
+    }
+
+    func testLaneScheduleNoticeCountsWhatItRegisteredAndSurvivesAnAbsurdLedgerDate() throws {
+        let line = try XCTUnwrap(ScreenTimeMonitoring.laneScheduleNotice(
+            started: ScreenTimePolicy.batchesPerLane, now: now,
+            intervalStart: now.addingTimeInterval(-43_200),
+            intervalEnd: now.addingTimeInterval(43_199),
+            includesPastActivity: true
+        ))
+        XCTAssertTrue(line.hasPrefix("schedule kind=lane started=8 "), line)
+        XCTAssertTrue(line.contains("startOffsetSec=43200"), line)
+        XCTAssertTrue(line.contains("endOffsetSec=-43199"), line)
+        XCTAssertTrue(line.contains("repeats=0 pastActivity=1"), line)
+
+        // `Int(_: Double)` traps outside Int64, and `ScreenTimeState.isValid`
+        // only asks a stored date to be finite. A corrupted or hand-edited
+        // ledger must not crash the app and the extension from a log line.
+        let absurd = try XCTUnwrap(ScreenTimeMonitoring.laneScheduleNotice(
+            started: 1, now: now,
+            intervalStart: Date(timeIntervalSinceReferenceDate: -.greatestFiniteMagnitude),
+            intervalEnd: Date(timeIntervalSinceReferenceDate: .greatestFiniteMagnitude),
+            includesPastActivity: false
+        ))
+        XCTAssertTrue(absurd.contains("startOffsetSec=\(Int.max)"), absurd)
+        XCTAssertTrue(absurd.contains("endOffsetSec=\(Int.min)"), absurd)
+    }
+
     private func withFixture(
         installed: FixtureInstallation = .runBatches,
         learningApplications: Int = 0,
+        /// How many days before `now` the pre-existing run belongs to. A run
+        /// dated yesterday is what `ScreenTimeRolloverPolicy` reads as
+        /// continuity, so it is the only way to reach a registration whose
+        /// events carry `includesPastActivity: true`.
+        runDaysAgo: Int = 0,
         /// Activities another DeviceActivity client holds. stopMonitoring([])
         /// would take these down too, so they make that mistake observable.
         foreignActivities: [String] = [],
@@ -601,12 +721,13 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
             initial.configuration.learningSelection = try makeLearningSelection(count: learningApplications)
         }
         let calendar = Calendar.current
-        let dayStart = calendar.startOfDay(for: now)
+        let today = calendar.startOfDay(for: now)
+        let dayStart = calendar.date(byAdding: .day, value: -runDaysAgo, to: today)!
         initial.runs = [ScreenTimeRun(
             lane: .learning,
             dayStart: dayStart,
             dayEnd: calendar.date(byAdding: .day, value: 1, to: dayStart)!,
-            startedAt: now.addingTimeInterval(-1_200),
+            startedAt: runDaysAgo == 0 ? now.addingTimeInterval(-1_200) : dayStart,
             timeZoneID: calendar.timeZone.identifier,
             includesPastActivity: false,
             themeID: initial.configuration.themeID
@@ -639,10 +760,16 @@ private final class FakeActivityCenter: ScreenTimeActivityCenterDriving {
     /// no-argument shape the older interleaving tests rely on.
     var onStartName: ((String) throws -> Void)?
     private(set) var startedNames: [String] = []
-    /// The schedule handed to every `startMonitoring`. Until this existed the
-    /// fake discarded `during schedule:` entirely, so no test in the repository
-    /// could see the shape of a registration at all.
-    private(set) var startedSchedules: [(name: String, schedule: DeviceActivitySchedule)] = []
+    /// Everything handed to every `startMonitoring`. Until this existed the
+    /// fake discarded `during schedule:` and `events:` entirely, so no test in
+    /// the repository could see the shape of a registration at all — including
+    /// the `includesPastActivity` that decides whether a day-rollover run
+    /// counts the midnight-to-first-foreground window.
+    private(set) var startedSchedules: [(
+        name: String,
+        schedule: DeviceActivitySchedule,
+        events: [DeviceActivityEvent.Name: DeviceActivityEvent]
+    )] = []
     /// Every stopMonitoring argument, so a `[]` teardown is visible to tests.
     private(set) var stopCalls: [[String]] = []
     var startCount: Int { startedNames.count }
@@ -676,7 +803,7 @@ private final class FakeActivityCenter: ScreenTimeActivityCenterDriving {
         events: [DeviceActivityEvent.Name: DeviceActivityEvent]
     ) throws {
         startedNames.append(activity.rawValue)
-        startedSchedules.append((activity.rawValue, schedule))
+        startedSchedules.append((activity.rawValue, schedule, events))
         try onStart?()
         try onStartName?(activity.rawValue)
         if !installed.contains(activity) { installed.append(activity) }
