@@ -1519,9 +1519,23 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         // A coordinate tap: a sheet button whose activation point the runtime
         // cannot derive raises "Activation point invalid" from `tap()` itself.
         chosen.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        pause(1)
-        let value = describeValue(themePicker(app))
-        note("THEME: selected \(chosenLabel); screen-time.theme value=\(value) label=\(themePicker(app).label)")
+        // The menu dismisses asynchronously. Reading `screen-time.theme` while
+        // the hierarchy is still collapsing raises "Failed to get matching
+        // snapshot" out of the accessor itself — XCTest records that as a test
+        // FAILURE, not as `exists == false`, which is what killed the first
+        // TASK R save run right after both lanes had been drafted. Wait for the
+        // row to come back and for it to publish the theme we picked.
+        var value = "<missing>"
+        var settledLabel = ""
+        for _ in 0..<12 {
+            pause(1)
+            let row = app.buttons["screen-time.theme"]
+            guard row.waitForExistence(timeout: 3) else { continue }
+            value = describeValue(row)
+            settledLabel = row.label
+            if settledLabel.contains(chosenLabel) || value.contains(chosenLabel) { break }
+        }
+        note("THEME: selected \(chosenLabel); screen-time.theme value=\(value) label=\(settledLabel)")
         return chosenLabel
     }
 
