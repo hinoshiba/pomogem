@@ -59,7 +59,7 @@ private struct ScreenTimeMonitoringSuperseded: Error {}
 /// delayed events from being mistaken for another day's usage. A recurring
 /// scheduler installs the next dated day even while the app isn't running.
 final class ScreenTimeMonitoring {
-    static let prefix = "pomogem.screen-time."
+    static let prefix = ScreenTimePolicy.activityPrefix
     private let store: ScreenTimeStore
     private let center: ScreenTimeActivityCenterDriving
     private let authorizationStatus: () -> AuthorizationStatus
@@ -145,6 +145,13 @@ final class ScreenTimeMonitoring {
     private func synchronizeLocked(now: Date) throws -> Bool {
         let began = Date()
         var state = try store.snapshot()
+        // Re-emitted on every pass — save, foreground and the daily scheduler —
+        // so a single live Console session reads the whole callback history
+        // after the fact. Collecting a past window of a device's unified log
+        // needs host root, which a device audit may not have.
+        ScreenTimeLog.monitoring.notice("""
+            \((state.callbackCounters ?? ScreenTimeCallbackCounters()).logDescription(now: now), privacy: .public)
+            """)
         let initialGeneration = ScreenTimeMonitoringGeneration(state)
         let status = authorizationStatus()
         let ledgerWantsMonitoring = state.configuration.enabled
@@ -259,6 +266,17 @@ final class ScreenTimeMonitoring {
                 start.timeZone = scheduleCalendar.timeZone
                 end.timeZone = scheduleCalendar.timeZone
                 let schedule = DeviceActivitySchedule(intervalStart: start, intervalEnd: end, repeats: false)
+                // The shape actually handed to the framework, in seconds
+                // relative to this pass. A positive `startOffsetSec` means the
+                // interval was already under way when it was registered, which
+                // is what a lane interval that never starts would look like.
+                // Offsets and durations only: no name, run or token.
+                ScreenTimeLog.monitoring.notice("""
+                    schedule kind=lane \
+                    startOffsetSec=\(Int(now.timeIntervalSince(scheduleCalendar.date(from: start) ?? run.dayStart).rounded()), privacy: .public) \
+                    endOffsetSec=\(Int(now.timeIntervalSince(scheduleCalendar.date(from: end) ?? run.dayEnd).rounded()), privacy: .public) \
+                    repeats=0 pastActivity=\(run.includesPastActivity ? 1 : 0, privacy: .public)
+                    """)
                 for batch in 0..<ScreenTimePolicy.batchesPerLane {
                     let name = run.activityPrefix + String(batch)
                     guard !installed.contains(name) else { continue }
@@ -326,45 +344,89 @@ final class ScreenTimeMonitoring {
     /// awarded gem from a silently discarded callback. Reasons only: never a
     /// run identifier, event name, threshold or gem count.
     func handleThreshold(eventName: String, activityName: String, now: Date = Date()) throws {
+        let kind = ScreenTimeActivityKind(activityName: activityName)
         let status = authorizationStatus()
         guard Self.isAuthorized(status) else {
-            ScreenTimeLog.monitoring.notice(
-                "threshold skipped authorization=\(status == .denied ? "denied" : "unknown", privacy: .public)")
+            let denied = status == .denied
+            count(threshold: denied ? .denied : .unknownAuthorization, now: now)
+            ScreenTimeLog.monitoring.notice("""
+                threshold skipped kind=\(kind.rawValue, privacy: .public) \
+                authorization=\(denied ? "denied" : "unknown", privacy: .public)
+                """)
             // An unknown status means "ask again later": no award, no wipe.
-            if status == .denied { try invalidateAuthorizationIfNeeded() }
+            if denied { try invalidateAuthorizationIfNeeded() }
             return
         }
         guard activityName.hasPrefix(Self.prefix), let threshold = Int(eventName) else {
-            ScreenTimeLog.monitoring.notice("threshold ignored reason=name")
+            count(threshold: .ignoredByName, now: now)
+            ScreenTimeLog.monitoring.notice(
+                "threshold ignored kind=\(kind.rawValue, privacy: .public) reason=name")
             return
         }
         let parts = activityName.dropFirst(Self.prefix.count).split(separator: ".")
         guard parts.count == 2, let runID = UUID(uuidString: String(parts[0])),
               let batch = Int(parts[1]), (0..<ScreenTimePolicy.batchesPerLane).contains(batch),
               ScreenTimePolicy.thresholds(batch: batch).contains(threshold) else {
-            ScreenTimeLog.monitoring.notice("threshold ignored reason=name")
+            count(threshold: .ignoredByName, now: now)
+            ScreenTimeLog.monitoring.notice(
+                "threshold ignored kind=\(kind.rawValue, privacy: .public) reason=name")
             return
         }
         let recorded = try store.record(runID: runID, threshold: threshold, now: now)
-        ScreenTimeLog.monitoring.notice(
-            "threshold \(recorded ? "recorded" : "ignored reason=ledger", privacy: .public)")
+        count(threshold: recorded ? .recorded : .ignoredByLedger, now: now)
+        ScreenTimeLog.monitoring.notice("""
+            threshold \(recorded ? "recorded" : "ignored reason=ledger", privacy: .public) \
+            kind=\(kind.rawValue, privacy: .public)
+            """)
         repairMissingRunIfNeeded(now: now)
     }
 
-    func handleInterval(activityName: String, now: Date = Date()) throws {
+    func handleInterval(
+        activityName: String,
+        phase: ScreenTimeCallbackCounters.IntervalPhase = .start,
+        now: Date = Date()
+    ) throws {
+        // Counted before any fence, and by kind: whether the OS ever starts a
+        // lane's dated, non-repeating interval — as opposed to the recurring
+        // scheduler's — is invisible from inside the app, because
+        // `DeviceActivityCenter.activities` keeps listing the name either way.
+        let kind = ScreenTimeActivityKind(activityName: activityName)
+        count(interval: kind, phase: phase, now: now)
         let state = try store.snapshot()
         // Deliberately NOT gated on `state.monitoringError`: nothing inside the
         // extension ever clears that field, and the daily scheduler pass is
         // precisely the retry that would. Gating it here latched a single
         // failed registration into a whole day with no collection at all.
-        guard state.configuration.enabled, state.contextKey != nil, state.contextIsActive else { return }
+        guard state.configuration.enabled, state.contextKey != nil, state.contextIsActive else {
+            ScreenTimeLog.monitoring.notice("""
+                interval ignored kind=\(kind.rawValue, privacy: .public) \
+                phase=\(phase.rawValue, privacy: .public) reason=ledger
+                """)
+            return
+        }
         guard activityName == Self.schedulerName(epoch: state.epoch) else {
             // A lane's own interval boundary is another chance to repair a day
             // whose scheduler pass was skipped.
+            ScreenTimeLog.monitoring.notice("""
+                interval kind=\(kind.rawValue, privacy: .public) \
+                phase=\(phase.rawValue, privacy: .public) reason=repair-check
+                """)
             repairMissingRunIfNeeded(now: now)
             return
         }
+        ScreenTimeLog.monitoring.notice("""
+            interval kind=scheduler phase=\(phase.rawValue, privacy: .public) reason=synchronize
+            """)
         _ = try synchronize(now: now)
+    }
+
+    private func count(interval kind: ScreenTimeActivityKind,
+                       phase: ScreenTimeCallbackCounters.IntervalPhase, now: Date) {
+        store.countCallback { $0.countIntervalCallback(kind: kind, phase: phase, now: now) }
+    }
+
+    private func count(threshold outcome: ScreenTimeCallbackCounters.ThresholdOutcome, now: Date) {
+        store.countCallback { $0.countThresholdCallback(outcome, now: now) }
     }
 
     /// A bounded monitoring-lock wait turns a contended pass into a skipped one,
@@ -398,7 +460,9 @@ final class ScreenTimeMonitoring {
         }
     }
 
-    static func schedulerName(epoch: UUID) -> String { prefix + "scheduler." + epoch.uuidString }
+    static func schedulerName(epoch: UUID) -> String {
+        prefix + ScreenTimePolicy.schedulerInfix + epoch.uuidString
+    }
 
     private static func log(_ message: String, stopped: Int, started: Int, since: Date) {
         ScreenTimeLog.monitoring.notice("""

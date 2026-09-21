@@ -140,6 +140,7 @@ targets:
         excludes:
           - PomoGemScreenTimeMonitor.entitlements
       - path: Shared/ScreenTimePolicy.swift
+      - path: Shared/ScreenTimeCallbackDiagnostics.swift
       - path: Shared/ScreenTimeStore.swift
       - path: Shared/ScreenTimeMonitoring.swift
     entitlements:

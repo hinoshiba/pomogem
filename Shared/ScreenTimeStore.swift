@@ -39,6 +39,26 @@ final class ScreenTimeStore {
         }
     }
 
+    /// Diagnostics only: bumps counters in a ledger that already exists.
+    ///
+    /// Never creates one. A DeviceActivity callback can reach the extension
+    /// before the app has ever bound a ledger, and a file written there would
+    /// be an owner-less state with a fresh epoch that no user action asked for.
+    /// Never throws either: a callback's real work must not be lost to a
+    /// failed count, and a ledger that cannot be written cannot record its own
+    /// unavailability anyway.
+    func countCallback(_ operation: (inout ScreenTimeState) -> Void) {
+        guard ledgerExists else { return }
+        try? update { operation(&$0) }
+    }
+
+    private var ledgerExists: Bool {
+        guard let directory else { return false }
+        return FileManager.default.fileExists(
+            atPath: directory.appendingPathComponent("ledger.json").path
+        )
+    }
+
     /// Complete app erasure also owns this App Group. Keep both stable locks
     /// while stopping callbacks and replacing even an unreadable ledger.
     func eraseAllData(stoppingMonitoring: () -> Void) throws {

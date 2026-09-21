@@ -32,6 +32,12 @@ enum ScreenTimeError: LocalizedError {
 }
 
 enum ScreenTimePolicy {
+    /// Every DeviceActivity name we register starts with this. One definition,
+    /// so `ScreenTimeMonitoring`, `ScreenTimeRun` and `ScreenTimeActivityKind`
+    /// cannot drift apart over what counts as ours.
+    static let activityPrefix = "pomogem.screen-time."
+    /// What follows the prefix for the one recurring day-boundary activity.
+    static let schedulerInfix = "scheduler."
     static let minutesPerGem = 10
     static let freeLearningApplicationLimit = 5
     // Apple documents a maximum of 20 simultaneous activities. Keep each batch
@@ -101,7 +107,7 @@ struct ScreenTimeRun: Codable, Equatable {
     var observedAt: Date?
     var active = true
 
-    var activityPrefix: String { "pomogem.screen-time.\(id.uuidString)." }
+    var activityPrefix: String { "\(ScreenTimePolicy.activityPrefix)\(id.uuidString)." }
 }
 
 /// Calendar continuity belongs to the existing registration, not to which
@@ -145,6 +151,11 @@ struct ScreenTimeState: Codable {
     /// without this a refused registration would be retried on every threshold
     /// callback for the rest of the day.
     var lastRepairAttemptAt: Date?
+    /// Diagnostics only: how many callbacks the OS delivered and what each one
+    /// did. Optional on purpose — the synthesized decoder does NOT fall back to
+    /// a property's default value, so a non-optional field would make every
+    /// ledger written before it existed decode as `corruptedState`.
+    var callbackCounters: ScreenTimeCallbackCounters?
 
     /// Evidence in the ledger that a Family Controls approval once existed.
     /// `ScreenTimeController.save` refuses to write `enabled` while the status
@@ -156,6 +167,28 @@ struct ScreenTimeState: Codable {
         configuration.enabled
             || !configuration.learningSelection.applicationTokens.isEmpty
             || !configuration.distractionSelection.applicationTokens.isEmpty
+    }
+
+    /// Diagnostics only. Deliberately outside every fence `record` applies:
+    /// what the OS delivered is worth knowing precisely when the ledger refuses
+    /// it, and a counter can neither award a gem nor retire a run.
+    mutating func countIntervalCallback(
+        kind: ScreenTimeActivityKind,
+        phase: ScreenTimeCallbackCounters.IntervalPhase,
+        now: Date
+    ) {
+        var counters = callbackCounters ?? ScreenTimeCallbackCounters()
+        counters.countInterval(kind: kind, phase: phase, at: now)
+        callbackCounters = counters
+    }
+
+    mutating func countThresholdCallback(
+        _ outcome: ScreenTimeCallbackCounters.ThresholdOutcome,
+        now: Date
+    ) {
+        var counters = callbackCounters ?? ScreenTimeCallbackCounters()
+        counters.countThreshold(outcome, at: now)
+        callbackCounters = counters
     }
 
     mutating func record(runID: UUID, threshold: Int, now: Date) {
@@ -237,6 +270,7 @@ struct ScreenTimeState: Codable {
     var isValid: Bool {
         guard version == 1, negativeGemCount >= 0,
               lastRepairAttemptAt?.timeIntervalSince1970.isFinite != false,
+              callbackCounters?.isValid != false,
               Set(runs.map(\.id)).count == runs.count,
               runs.filter(\.active).count <= ScreenTimeLane.allCases.count else { return false }
         return runs.allSatisfy { run in

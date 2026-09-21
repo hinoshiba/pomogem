@@ -537,6 +537,49 @@ final class ScreenTimeMonitoringInterleavingTests: XCTestCase {
         return try JSONDecoder().decode(FamilyActivitySelection.self, from: Data(json.utf8))
     }
 
+    // MARK: - registered schedule shape
+
+    /// A characterisation test, not a verdict. The 2026-09-20/21 device audit
+    /// saw no threshold callback in either lane and could not settle why; one
+    /// live hypothesis is the shape registered here — a dated, non-repeating
+    /// interval whose start is ALWAYS at or before the registration instant,
+    /// which no artefact the audit could collect distinguishes from a healthy
+    /// registration. This pins today's shape so that any change to it is
+    /// deliberate and visible, and so the schedule stops being the one input
+    /// the Screen Time suite never looks at.
+    func testRegisteredScheduleShapeIsPinnedForBothTheLanesAndTheScheduler() throws {
+        try withFixture(installed: .none, learningApplications: 2) { store, center, original, _ in
+            let monitor = ScreenTimeMonitoring(store: store, center: center, authorization: { true })
+            XCTAssertTrue(try monitor.synchronize(now: now))
+
+            let scheduler = try XCTUnwrap(center.startedSchedules.first {
+                $0.name == ScreenTimeMonitoring.schedulerName(epoch: original.epoch)
+            })
+            XCTAssertTrue(scheduler.schedule.repeats)
+            XCTAssertEqual(scheduler.schedule.intervalStart, DateComponents(hour: 0, minute: 0, second: 0))
+            XCTAssertEqual(scheduler.schedule.intervalEnd, DateComponents(hour: 23, minute: 59, second: 59))
+
+            let run = try XCTUnwrap(try store.snapshot().runs.first(where: \.active))
+            let lanes = center.startedSchedules.filter { $0.name.hasPrefix(run.activityPrefix) }
+            XCTAssertEqual(lanes.count, ScreenTimePolicy.batchesPerLane)
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = try XCTUnwrap(TimeZone(identifier: run.timeZoneID))
+            let fields: Set<Calendar.Component> = [.year, .month, .day, .hour, .minute, .second]
+            for lane in lanes {
+                XCTAssertFalse(lane.schedule.repeats)
+                let start = try XCTUnwrap(calendar.date(from: lane.schedule.intervalStart))
+                let end = try XCTUnwrap(calendar.date(from: lane.schedule.intervalEnd))
+                XCTAssertEqual(calendar.dateComponents(fields, from: start),
+                               calendar.dateComponents(fields, from: run.dayStart))
+                XCTAssertEqual(calendar.dateComponents(fields, from: end),
+                               calendar.dateComponents(fields, from: run.dayEnd.addingTimeInterval(-1)))
+                // Today the interval is always already under way: the fixture
+                // registers at noon for a window that opened at midnight.
+                XCTAssertEqual(now.timeIntervalSince(start), 43_200, accuracy: 1)
+            }
+        }
+    }
+
     private func withFixture(
         installed: FixtureInstallation = .runBatches,
         learningApplications: Int = 0,
@@ -596,6 +639,10 @@ private final class FakeActivityCenter: ScreenTimeActivityCenterDriving {
     /// no-argument shape the older interleaving tests rely on.
     var onStartName: ((String) throws -> Void)?
     private(set) var startedNames: [String] = []
+    /// The schedule handed to every `startMonitoring`. Until this existed the
+    /// fake discarded `during schedule:` entirely, so no test in the repository
+    /// could see the shape of a registration at all.
+    private(set) var startedSchedules: [(name: String, schedule: DeviceActivitySchedule)] = []
     /// Every stopMonitoring argument, so a `[]` teardown is visible to tests.
     private(set) var stopCalls: [[String]] = []
     var startCount: Int { startedNames.count }
@@ -629,6 +676,7 @@ private final class FakeActivityCenter: ScreenTimeActivityCenterDriving {
         events: [DeviceActivityEvent.Name: DeviceActivityEvent]
     ) throws {
         startedNames.append(activity.rawValue)
+        startedSchedules.append((activity.rawValue, schedule))
         try onStart?()
         try onStartName?(activity.rawValue)
         if !installed.contains(activity) { installed.append(activity) }
