@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import OSLog
 
 enum CloudOfflineAccessOrigin: String, Codable, Equatable, Sendable {
     case verifiedOnline, legacySuccessfulMount, revokedWithoutBaseline
@@ -152,6 +153,16 @@ private struct CloudOfflineResetBaseline: Codable {
 /// their live mount/scene lease before the synchronous receipt commit.
 @MainActor
 struct CloudOfflineAccessState {
+    /// Every change to the receipt's revocation, and why. Offline access can
+    /// be lost for the rest of a phone's life on one of these writes, so the
+    /// reason must be readable afterwards from the persistent log store
+    /// without the file. Reason names only: no fingerprint, namespace,
+    /// dataset generation, revision or reset identifier is ever logged.
+    private static let logger = Logger(
+        subsystem: "com.hinoshiba.pomogem",
+        category: "CloudOfflineReceipt"
+    )
+
     let directory: URL
     private let directoryAnchor: URL
 
@@ -202,8 +213,9 @@ struct CloudOfflineAccessState {
     /// clears offline-session use, and the only one that can clear ANY
     /// revocation; it is never called by an offline open.
     /// `clearRevocationAfterConfirmedIdentity` can retract the narrower set of
-    /// revocations that a comparison never produced, and nothing else may. This is a mount observation, never an upload acknowledgement:
-    /// later mirror construction must check history even when wasUsedOffline is
+    /// revocations that a comparison never produced, and nothing else may.
+    /// This is a mount observation, never an upload acknowledgement: later
+    /// mirror construction must check history even when wasUsedOffline is
     /// false, because native persistent history may still contain unsent work.
     @discardableResult
     func recordVerifiedOnline(
@@ -218,6 +230,11 @@ struct CloudOfflineAccessState {
             resetBaseline: resetBaseline, wasUsedOffline: false, revocation: nil)
         try value.validate()
         try stateFile().save(value, replacing: expectedReceipt)
+        if let cleared = expectedReceipt?.revocation {
+            Self.logger.notice(
+                "Offline receipt revocation cleared reason=\(cleared.rawValue, privacy: .public) by=verifiedOnlineMount"
+            )
+        }
         return value
     }
 
@@ -278,6 +295,13 @@ struct CloudOfflineAccessState {
             resetBaseline: previous?.resetBaseline, wasUsedOffline: previous?.wasUsedOffline ?? false,
             revocation: reason)
         try stateFile().save(value, replacing: previous)
+        Self.logger.notice(
+            """
+            Offline receipt revoked reason=\(reason.rawValue, privacy: .public) \
+            previousReason=\(previous?.revocation?.rawValue ?? "none", privacy: .public) \
+            hadOnlineBaseline=\(previous?.hasVerifiedOnlineBaseline == true, privacy: .public)
+            """
+        )
     }
 
     /// Retract a revocation that was never evidence of a different account.
@@ -313,6 +337,9 @@ struct CloudOfflineAccessState {
             revocation: nil)
         try value.validate()
         try stateFile().save(value, replacing: previous)
+        Self.logger.notice(
+            "Offline receipt revocation cleared reason=\(reason.rawValue, privacy: .public) by=confirmedIdentity"
+        )
         return value
     }
 

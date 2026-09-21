@@ -1789,7 +1789,12 @@ private struct PomoGemPersistenceLaunchHost: View {
         guard let reason = CloudOfflineHostPolicy.revocationReason(for: error) else { return }
         canContinueOffline = false
         do { try CloudOfflineAccessState().revoke(binding: binding, reason: reason) }
-        catch { offlineRevocationWriteFailed = true }
+        catch {
+            offlineRevocationWriteFailed = true
+            Self.persistenceLogger.notice(
+                "Offline receipt revocation write failed reason=\(reason.rawValue, privacy: .public)"
+            )
+        }
         if session != nil { quiesceForPossibleAccountChange() }
     }
 
@@ -2175,6 +2180,11 @@ private struct PomoGemPersistenceLaunchHost: View {
     /// `.blocked(.accountMismatch)` and `revokeOfflineForAccountError` records
     /// it with the reason that a comparison actually produced.
     private func quiesceForPossibleAccountChange() {
+        // Which of the two paths fired, and when, could previously only be
+        // guessed from the receipt file's timestamp.
+        Self.persistenceLogger.notice(
+            "Account boundary quiesced for a possible account change; the offline receipt is unchanged"
+        )
         canContinueOffline = false
         cancelOfflineConnectionCheck()
         cloudLaunchDeadline?.cancel()
