@@ -756,8 +756,8 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     /// restore the real duration before capturing Home or its completion card.
     /// Export the five named attachments from the xcresult so the set remains
     /// reproducible, then verify against signed Release on a physical device.
-    /// The storage screen can include Simulator-only diagnostics and must be
-    /// recaptured before submission.
+    /// Naturally scroll the storage screen to its privacy explanation so
+    /// Simulator-only diagnostics are outside the captured viewport.
     func testAppStoreScreenshotSetJapaneseReleaseCandidate() {
         // Relaunch the disposable store. Release 1.0 has no rare-reward draw or
         // opt-in surface, keeping this product-page set deterministic.
@@ -839,7 +839,8 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         let jar = app.buttons["瓶"]
         XCTAssertTrue(jar.waitForExistence(timeout: 5))
         XCTAssertTrue(((jar.value as? String) ?? "").contains("1粒"), String(describing: jar.value))
-        waitForUISettle()
+        // Let the ordinary landing toast disappear before retaining the image.
+        waitForUISettle(4_000_000)
         retainScreenshot(named: "ASC_01_home-with-first-pebble")
 
         // 4. Show exact, current accumulation values from the same fixture.
@@ -883,12 +884,39 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             ).firstMatch.exists,
             "Version 1.0 must not expose the experimental cross-container deletion transaction"
         )
-        // Keep the storage row and its privacy explanation together. The
-        // visibility helper already positions this section; another upward
-        // drag can hide the iCloud/local-only label below the navigation bar.
+        // Keep the privacy explanation and the version in the viewport using
+        // ordinary scrolling. SwiftUI exposes LabeledContent as one combined
+        // accessibility row, rather than a standalone version-value element.
         XCTAssertTrue(selectedStorage.waitForExistence(timeout: 3))
+        let version = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label BEGINSWITH %@", "バージョン")
+        ).firstMatch
+        XCTAssertTrue(scrollUntilVisible(version))
         waitForUISettle()
         retainScreenshot(named: "ASC_05_iCloud-and-privacy")
+    }
+
+    /// Captures the production Product.displayPrice without purchasing or
+    /// restoring. Run without a StoreKit configuration file.
+    func testCaptureActualStoreKitPrice() throws {
+        openMenuAction(containing: "設定")
+        let pro = button(containing: "ポモジェムPro")
+        XCTAssertTrue(scrollUntilHittable(pro))
+        pro.tap()
+        let purchase = app.buttons["paywall.purchase"]
+        guard purchase.waitForExistence(timeout: 45) else {
+            retainScreenshot(named: "IAP_live-price-unavailable")
+            throw XCTSkip("The live StoreKit product was not returned; no review price is claimed.")
+        }
+        XCTAssertTrue(purchase.isEnabled)
+        XCTAssertTrue(purchase.label.contains("でProを購入"), purchase.label)
+        XCTAssertTrue(scrollUntilVisible(purchase))
+        waitForUISettle()
+        retainScreenshot(named: "IAP_01-pomogem-pro-live-price")
+        let evidence = XCTAttachment(string: purchase.label)
+        evidence.name = "IAP_live-purchase-label"
+        evidence.lifetime = .keepAlways
+        add(evidence)
     }
 
     /// Retains visual evidence around the first exact decimal carry. The
