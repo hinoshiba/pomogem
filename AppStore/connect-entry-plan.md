@@ -116,7 +116,7 @@ statusは公開前と各更新時に再監査します。新しいstorefrontの�
 | ja-JP name | ポモジェムPro |
 | ja-JP description | 自由な集中時間・月刻印・勉強アプリ数無制限。買い切りです。 |
 | en-US name | PomoGem Pro |
-| en-US description | Custom timers, month labels and unlimited learning apps. |
+| en-US description | Custom timers, month labels, unlimited learning apps. |
 | Base country or region | United States |
 | United States target price | USD 0.99（「約1ドル」の利用可能な標準price point） |
 | Japan custom price | JPY 100 |

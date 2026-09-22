@@ -33,8 +33,12 @@ dependency run alone is not a substitute for the final integration run.
   failures/skips; five listing images and one IAP image visually reviewed.
   Provenance and integrity hashes are in [screenshots/README.md](screenshots/README.md).
 - PR #24's first integration CI exposed an existing duplicate-history pagination
-  regression in `FocusCloudSyncTests`; it is being corrected before merge. A failed
-  run is retained as evidence, not relabeled a pass.
+  bug: tied physical copies could be skipped, allowing an ownership claim despite
+  an invalid duplicate. The fix combines one batched persisted scan with pending
+  inserts, edits and deletions. All 54 FocusCloudSync tests passed, including 390
+  conflict placements and five SQLite predicate/deletion cases. Batch and variant
+  bounds remain 128, with no schema change or implicit save. The failing baseline
+  is retained separately; the final integrated CI still must pass.
 
 An unsigned generic iOS Release archive was built from clean commit
 `4fb75de0efcd79794b4de9a123af799a3db2c3a8` with Xcode 26.6 / XcodeGen 2.45.4.

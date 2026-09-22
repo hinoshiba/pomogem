@@ -324,7 +324,7 @@ in_app_purchases:
         description: 自由な集中時間・月刻印・勉強アプリ数無制限。買い切りです。
       en-US:
         display_name: PomoGem Pro
-        description: Custom timers, month labels and unlimited learning apps.
+        description: Custom timers, month labels, unlimited learning apps.
     price_management: automatic_equivalent_except_japan_override
 version_1_feature_gates:
   rare_rewards: disabled

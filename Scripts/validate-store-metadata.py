@@ -323,6 +323,13 @@ for product_position, start in enumerate(iap_starts):
         fail("configuration.yml in_app_purchases contains an empty product_id")
     iap_product_ids.append(product_id)
     scope = f"in_app_purchases[{product_id}]"
+    localizations = yaml_block(product, 4, "localizations", scope)
+    for locale in ("ja-JP", "en-US"):
+        localized = yaml_block(localizations, 6, locale, f"{scope}.localizations")
+        for field, limit in (("display_name", 30), ("description", 55)):
+            value = yaml_scalar(localized, 8, field, f"{scope}.{locale}")
+            if len(value) > limit:
+                fail(f"configuration.yml {scope}.{locale}.{field} exceeds {limit} characters")
     review_screenshot_status = yaml_scalar(product, 4, "review_screenshot_status", scope)
     if review_screenshot_status not in {"pending_live_price_capture", "captured_live_price"}:
         fail(f"configuration.yml {scope}.review_screenshot_status is invalid")
