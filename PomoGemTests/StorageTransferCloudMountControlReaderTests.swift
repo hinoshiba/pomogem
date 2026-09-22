@@ -134,13 +134,49 @@ final class StorageTransferCloudMountControlReaderTests: XCTestCase {
         XCTAssertEqual(f.script.calls, ["status", "identity", "control", "identity", "status", "identity", "control", "identity"])
     }
 
-    func testChangedIdentityAfterControlFetchIsPositiveRevocationEvidence() async throws {
+    /// Two identity reads that disagreed with each other say the READ was
+    /// unusable, not that another Apple Account signed in: the whole proof,
+    /// control fetch included, is repeated once before anything is concluded.
+    func testIdentityThatDisagreedWithItselfRepeatsTheWholeProofInsteadOfAccusingTheAccount() async throws {
         let f = try fixture()
-        f.script.identityResults = [.success(f.script.identity), .success(CKRecord.ID(recordName: "different-synthetic-account"))]
+        f.script.identityResults = [.success(f.script.identity),
+                                    .success(CKRecord.ID(recordName: "noise-synthetic-account")),
+                                    .success(f.script.identity), .success(f.script.identity)]
+        f.script.responses = [.success(try response(f.control)), .success(try response(f.control))]
+        let actual = try await reader(f).read(expectedBinding: f.binding, validateAccess: {})
+        XCTAssertEqual(actual, f.control)
+        XCTAssertEqual(f.script.requestedIDs.count, 2)
+        XCTAssertEqual(f.script.calls, ["status", "identity", "control", "identity",
+                                        "status", "identity", "control", "identity"])
+    }
+
+    func testIdentityThatNeverAgreesWithItselfStaysATransientVerificationFailure() async throws {
+        let f = try fixture()
+        f.script.identityResults = [.success(f.script.identity),
+                                    .success(CKRecord.ID(recordName: "noise-synthetic-account")),
+                                    .success(CKRecord.ID(recordName: "second-noise-account")),
+                                    .success(CKRecord.ID(recordName: "third-noise-account"))]
+        f.script.responses = [.success(try response(f.control)), .success(try response(f.control))]
         await assertVerification({
             _ = try await self.reader(f).read(expectedBinding: f.binding, validateAccess: {})
-        }, kind: .accountChanged)
-        XCTAssertEqual(f.script.requestedIDs.count, 1)
+        }, kind: .identityUnstable)
+        XCTAssertEqual(f.script.requestedIDs.count, 2)
+    }
+
+    /// The fail-closed half stays exactly where it was: a proof that agrees
+    /// with itself on a DIFFERENT account is a mismatch, not a transient read.
+    func testAStableDifferentIdentityRemainsAConfirmedAccountMismatch() async throws {
+        let f = try fixture()
+        let other = CKRecord.ID(recordName: "different-synthetic-account")
+        f.script.identityResults = Array(repeating: .success(other), count: 4)
+        f.script.responses = [.success(try response(f.control)), .success(try response(f.control))]
+        do {
+            _ = try await reader(f).read(expectedBinding: f.binding, validateAccess: {})
+            XCTFail("A confirmed different account must not return the stored account's control")
+        } catch let error as AppleAccountBoundaryResolutionError {
+            XCTAssertEqual(error, .blocked(.accountMismatch))
+            XCTAssertEqual(CloudOfflineHostPolicy.revocationReason(for: error), .accountMismatch)
+        }
     }
 
     func testSelectedAccountMismatchAndControlPayloadMismatchRemainDistinct() async throws {

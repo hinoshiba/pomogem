@@ -79,7 +79,7 @@ final class CloudOfflineHistoryPreflightTests: XCTestCase {
             let state = OfflineHistoryTestState()
             let expected = binding()
             let failure = CloudAccountVerificationFailure(
-                kind: failingCheck == 1 ? .noAccount : .accountChanged,
+                kind: failingCheck == 1 ? .noAccount : .identityUnstable,
                 stage: failingCheck == 1 ? .accountStatus : .identityAfterProbe)
             let client = CloudActivityHistoryClient(verifyAccount: { supplied in
                 XCTAssertEqual(supplied, expected)

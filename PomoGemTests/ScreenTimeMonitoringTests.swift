@@ -186,6 +186,80 @@ final class ScreenTimeMonitoringTests: XCTestCase {
         XCTAssertEqual(reopened.runs[0].highestThreshold, 100)
     }
 
+    /// The device runbook filters Console by this subsystem and category; keep
+    /// them in step with Docs/ScreenTimeGems.md.
+    func testDiagnosticsChannelMatchesTheDocumentedConsoleFilter() {
+        XCTAssertEqual(ScreenTimeLog.subsystem, "com.hinoshiba.pomogem")
+        XCTAssertEqual(ScreenTimeLog.category, "screen-time")
+    }
+
+    /// The extension logs "threshold recorded" only when the ledger actually
+    /// advanced. Without a reported outcome a discarded callback and an awarded
+    /// gem look identical in Console, which is the one evidence channel the
+    /// device phase has for a delivery it cannot otherwise observe.
+    func testRecordReportsWhetherTheLedgerAdvanced() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ScreenTimeStore(directory: directory)
+        let state = makeState()
+        let runID = state.runs[0].id
+        try store.update { $0 = state }
+
+        XCTAssertTrue(try store.record(runID: runID, threshold: 1, now: start.addingTimeInterval(601)))
+        // A repeated or lower threshold is a duplicate delivery, not an award.
+        XCTAssertFalse(try store.record(runID: runID, threshold: 1, now: start.addingTimeInterval(602)))
+        // An impossibly early callback is refused by the ledger fences.
+        XCTAssertFalse(try store.record(runID: runID, threshold: 9, now: start.addingTimeInterval(603)))
+        // A run the ledger no longer holds (reset, retirement, another day).
+        XCTAssertFalse(try store.record(runID: UUID(), threshold: 1, now: start.addingTimeInterval(601)))
+        XCTAssertEqual(try store.snapshot().runs[0].highestThreshold, 1)
+    }
+
+    /// The monitor extension shares the monitoring lock with an app that iOS can
+    /// suspend while it holds it. An unbounded flock(LOCK_EX) there ends with the
+    /// extension killed for running too long, so it must be able to give up.
+    func testBoundedMonitoringLockWaitGivesUpWhileAnotherProcessHoldsIt() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let holder = ScreenTimeStore(directory: directory)
+        let held = expectation(description: "Another process holds the monitoring lock")
+        let release = DispatchSemaphore(value: 0)
+        var releasedOnce = false
+        defer { if !releasedOnce { release.signal() } }
+        DispatchQueue.global().async {
+            try? holder.withMonitoringLock {
+                held.fulfill()
+                _ = release.wait(timeout: .now() + 30)
+            }
+        }
+        wait(for: [held], timeout: 10)
+
+        // A separate descriptor, exactly as the extension process opens it.
+        let waiting = ScreenTimeStore(directory: directory)
+        let began = Date()
+        XCTAssertThrowsError(try waiting.withMonitoringLock(timeout: 0.3) { XCTFail("Must not enter") }) { error in
+            guard case ScreenTimeError.unavailable = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        let elapsed = Date().timeIntervalSince(began)
+        // Pin the elapsed time against the bound that was asked for, not just
+        // against "not infinite": the extension's real bound is 5 s, and an
+        // implementation that ignored `timeout` for a hard-coded 8 s deadline
+        // would be killed on device while a 10 s ceiling stayed green.
+        XCTAssertGreaterThanOrEqual(elapsed, 0.3, "A timeout of 0 must not pass either")
+        XCTAssertLessThan(elapsed, 2)
+
+        release.signal()
+        releasedOnce = true
+        // The bounded wait still takes the lock once the holder is done.
+        var entered = false
+        for _ in 0..<50 where !entered {
+            _ = try? waiting.withMonitoringLock(timeout: 1) { entered = true }
+        }
+        XCTAssertTrue(entered)
+    }
+
     func testMissingAppGroupFailsClosedAndCorruptionIsNeverOverwritten() throws {
         XCTAssertThrowsError(try ScreenTimeStore(directory: nil).snapshot())
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -200,7 +274,7 @@ final class ScreenTimeMonitoringTests: XCTestCase {
     }
 
     @MainActor
-    func testControllerPublishesNothingBeforeThePersistenceOwnerIsBound() throws {
+    func testControllerPublishesNothingBeforeThePersistenceOwnerIsBound() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = ScreenTimeStore(directory: directory)
@@ -212,13 +286,13 @@ final class ScreenTimeMonitoringTests: XCTestCase {
         XCTAssertNil(controller.configuration.themeID)
         XCTAssertEqual(controller.negativeGemCount, 0)
         XCTAssertFalse(controller.isMonitoring)
-        try controller.bindContext(contextKey: "test-owner", dataEpochID: nil)
+        try await controller.bindContext(contextKey: "test-owner", dataEpochID: nil)
         XCTAssertEqual(controller.negativeGemCount, 42)
         XCTAssertEqual(controller.configuration.themeID, state.configuration.themeID)
     }
 
     @MainActor
-    func testControllerRejectsLedgerFromAnotherOwnerOrEpochOnReload() throws {
+    func testControllerRejectsLedgerFromAnotherOwnerOrEpochOnReload() async throws {
         for changesOwner in [true, false] {
             let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             defer { try? FileManager.default.removeItem(at: directory) }
@@ -227,7 +301,7 @@ final class ScreenTimeMonitoringTests: XCTestCase {
             state.negativeGemCount = 12
             try store.update { $0 = state }
             let controller = ScreenTimeController(store: store, currentContextKey: { "test-owner" })
-            try controller.bindContext(contextKey: "test-owner", dataEpochID: nil)
+            try await controller.bindContext(contextKey: "test-owner", dataEpochID: nil)
             XCTAssertEqual(controller.negativeGemCount, 12)
             try store.update {
                 if changesOwner { $0.contextKey = "another-owner" }
@@ -243,7 +317,7 @@ final class ScreenTimeMonitoringTests: XCTestCase {
     }
 
     @MainActor
-    func testRetiredHostsCleanupCannotSuspendTheNewOwner() throws {
+    func testRetiredHostsCleanupCannotSuspendTheNewOwner() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = ScreenTimeStore(directory: directory)
@@ -252,11 +326,11 @@ final class ScreenTimeMonitoringTests: XCTestCase {
         state.negativeGemCount = 27
         try store.update { $0 = state }
         let controller = ScreenTimeController(store: store, currentContextKey: { "new-owner" })
-        try controller.bindContext(contextKey: "new-owner", dataEpochID: nil)
-        controller.suspendForContextRetirement(contextKey: "old-owner")
+        try await controller.bindContext(contextKey: "new-owner", dataEpochID: nil)
+        controller.suspendForContextRetirement(contextKey: "old-owner", dataEpochID: nil)
         XCTAssertEqual(controller.negativeGemCount, 27)
         XCTAssertTrue(try store.snapshot().contextIsActive)
-        controller.suspendForContextRetirement(contextKey: "new-owner")
+        controller.suspendForContextRetirement(contextKey: "new-owner", dataEpochID: nil)
         XCTAssertEqual(controller.negativeGemCount, 0)
         XCTAssertNil(controller.configuration.themeID)
         XCTAssertFalse(controller.configuration.enabled)
@@ -264,10 +338,11 @@ final class ScreenTimeMonitoringTests: XCTestCase {
         controller.reload()
         XCTAssertEqual(controller.negativeGemCount, 0)
         XCTAssertNil(controller.configuration.themeID)
+        try await controller.waitForPendingOperations()
     }
 
     @MainActor
-    func testGlobalOwnerChangeImmediatelyHidesOldDataAndRejectsOldMutationsBeforeRebind() throws {
+    func testGlobalOwnerChangeImmediatelyHidesOldDataAndRejectsOldMutationsBeforeRebind() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = ScreenTimeStore(directory: directory)
@@ -276,26 +351,27 @@ final class ScreenTimeMonitoringTests: XCTestCase {
         try store.update { $0 = state }
         var currentOwner = "test-owner"
         let controller = ScreenTimeController(store: store, currentContextKey: { currentOwner })
-        try controller.bindContext(contextKey: "test-owner", dataEpochID: nil)
+        try await controller.bindContext(contextKey: "test-owner", dataEpochID: nil)
         XCTAssertEqual(controller.negativeGemCount, 31)
         currentOwner = "next-owner"
         controller.reload()
         XCTAssertEqual(controller.negativeGemCount, 0)
         XCTAssertNil(controller.configuration.themeID)
         XCTAssertFalse(controller.configuration.enabled)
-        XCTAssertThrowsError(try controller.resetActivityData())
-        XCTAssertThrowsError(try controller.save(configuration: ScreenTimeConfiguration(), isPro: false))
-        XCTAssertThrowsError(try controller.bindContext(contextKey: "test-owner", dataEpochID: nil))
-        controller.reconcile(isPro: false, timerRunning: true)
+        do { try await controller.resetActivityData(); XCTFail("Retired owner must not reset") } catch {}
+        do { try await controller.save(configuration: ScreenTimeConfiguration(), isPro: false); XCTFail("Retired owner must not save") } catch {}
+        do { try await controller.bindContext(contextKey: "test-owner", dataEpochID: nil); XCTFail("Retired owner must not bind") } catch {}
+        await controller.reconcile(isPro: false, timerRunning: true)
         let untouched = try store.snapshot()
         XCTAssertEqual(untouched.contextKey, "test-owner")
         XCTAssertEqual(untouched.negativeGemCount, 31)
         XCTAssertFalse(untouched.learningPausedByTimer)
         XCTAssertTrue(untouched.configuration.enabled)
-        controller.suspendForContextRetirement(contextKey: "test-owner")
+        controller.suspendForContextRetirement(contextKey: "test-owner", dataEpochID: nil)
         let retired = try store.snapshot()
         XCTAssertFalse(retired.contextIsActive)
         XCTAssertFalse(retired.runs.contains(where: \.active))
         XCTAssertEqual(retired.negativeGemCount, 31)
+        try await controller.waitForPendingOperations()
     }
 }

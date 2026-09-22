@@ -2138,7 +2138,7 @@ enum CompactShareProjectionPolicy {
                 && summary.manualPebbleCount == 0
                 && summary.measuredPebbleCount == summary.pebbleCount
         }) else { return false }
-        return looseSources.allSatisfy { $0 == .timer }
+        return looseSources.allSatisfy(\.isMeasured)
     }
 
     static func includesLooseSession(
