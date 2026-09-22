@@ -533,7 +533,8 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
             manualDayKey: day,
             manualUsedToday: 1,
             soundOn: true,
-            activityEpochID: nil
+            activityEpochID: nil,
+            settingsWriterID: "device-a"
         ))
         context.insert(Prefs(
             id: UUID(),
@@ -541,7 +542,8 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
             manualUsedToday: 2,
             soundOn: false,
             reminderEnabled: true,
-            activityEpochID: nil
+            activityEpochID: nil,
+            settingsWriterID: "device-a"
         ))
         let unknownEpochID = UUID()
         context.insert(Prefs(
@@ -588,6 +590,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         let resolved = try PrefsSyncPolicy.resolvedState(
             in: prefs,
             currentEpochID: nil,
+            writerID: "device-a",
             currentDay: day
         )
         XCTAssertEqual(resolved.manualUsedToday, 2)
@@ -598,6 +601,139 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         )
         XCTAssertNotNil(prefs.first { $0.activityEpochID == unknownEpochID })
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<StudySession>()), 300)
+    }
+
+    func testManualQuotaKeepsOtherDeviceAvailableAfterOfflineCountersArrive() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let day = FairnessPolicy.deviceDayKey(for: now)
+        let deviceA = Prefs(manualDayKey: day, manualUsedToday: 3,
+            settingsWriterID: "device-a")
+        let deviceB = Prefs(manualDayKey: day, manualUsedToday: 0,
+            settingsWriterID: "device-b")
+        context.insert(deviceA)
+        context.insert(deviceB)
+        try context.save()
+
+        for rows in [[deviceA, deviceB], [deviceB, deviceA]] {
+            let a = try PrefsSyncPolicy.resolvedState(in: rows, currentEpochID: nil,
+                writerID: "device-a", currentDay: day)
+            let b = try PrefsSyncPolicy.resolvedState(in: rows, currentEpochID: nil,
+                writerID: "device-b", currentDay: day)
+            XCTAssertEqual(a.manualUsedToday, 3)
+            XCTAssertFalse(FairnessPolicy.consumeManualEntry(
+                state: ManualCounterState(dayKey: day, usedToday: a.manualUsedToday), at: now).isAllowed)
+            XCTAssertEqual(b.manualUsedToday, 0)
+            XCTAssertTrue(FairnessPolicy.consumeManualEntry(
+                state: ManualCounterState(dayKey: day, usedToday: b.manualUsedToday), at: now).isAllowed)
+        }
+
+        let b = try PrefsSyncPolicy.resolvedState(in: [deviceA, deviceB], currentEpochID: nil,
+            writerID: "device-b", currentDay: day)
+        let decision = FairnessPolicy.consumeManualEntry(
+            state: ManualCounterState(dayKey: day, usedToday: b.manualUsedToday), at: now)
+        let writer = try PrefsSyncPolicy.ensureWriterRow(context: context,
+            writerID: "device-b", currentEpochID: nil)
+        writer.manualDayKey = decision.state.dayKey
+        writer.manualUsedToday = decision.state.usedToday
+        try context.save()
+
+        let reader = ModelContext(container)
+        reader.autosaveEnabled = false
+        let reopened = try PrefsSyncPolicy.fetchBounded(from: reader)
+        XCTAssertEqual(reopened.count, 2)
+        XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: reopened, currentEpochID: nil,
+            writerID: "device-a", currentDay: day).manualUsedToday, 3)
+        XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: reopened, currentEpochID: nil,
+            writerID: "device-b", currentDay: day).manualUsedToday, 1)
+    }
+
+    func testPreferenceEditDoesNotCopyAnotherDevicesManualQuota() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let day = "2027-01-15"
+        let deviceA = Prefs(manualDayKey: day, manualUsedToday: 3,
+            settingsWriterID: "device-a")
+        let deviceB = Prefs(manualDayKey: day, manualUsedToday: 1,
+            settingsWriterID: "device-b")
+        context.insert(deviceA)
+        context.insert(deviceB)
+        try context.save()
+        let foreignBefore = prefsFingerprint(deviceA)
+
+        let writer = try PrefsSyncPolicy.mutate(.sound, context: context,
+            writerID: "device-b", currentEpochID: nil, currentDay: day) {
+                $0.soundOn = false
+            }
+        try context.save()
+        XCTAssertTrue(writer === deviceB)
+        XCTAssertEqual(writer.manualUsedToday, 1)
+        XCTAssertEqual(deviceA.manualUsedToday, 3)
+        XCTAssertEqual(prefsFingerprint(deviceA), foreignBefore)
+        let reader = ModelContext(container)
+        reader.autosaveEnabled = false
+        let reopened = try PrefsSyncPolicy.fetchBounded(from: reader)
+        XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: reopened, currentEpochID: nil,
+            writerID: "device-b", currentDay: day).manualUsedToday, 1)
+        XCTAssertFalse(try PrefsSyncPolicy.resolvedState(in: reopened, currentEpochID: nil,
+            writerID: "device-a", currentDay: day).soundOn,
+            "The shared setting still converges independently of the per-device quota")
+    }
+
+    func testUnattributedLegacyQuotaIsRetainedWithoutClaimingTheNewDevice() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let day = "2027-01-15"
+        let legacy = Prefs(manualDayKey: day, manualUsedToday: 3,
+            hasCompletedOnboarding: true)
+        let foreign = Prefs(manualDayKey: day, manualUsedToday: 2,
+            settingsWriterID: "device-a")
+        context.insert(legacy)
+        context.insert(foreign)
+        try context.save()
+
+        XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: [legacy, foreign], currentEpochID: nil,
+            writerID: "device-b", currentDay: day).manualUsedToday, 0)
+        let writer = try PrefsSyncPolicy.mutate(.keepScreenAwake, context: context,
+            writerID: "device-b", currentEpochID: nil, currentDay: day) {
+                $0.keepScreenAwake = false
+            }
+        try context.save()
+        XCTAssertEqual(writer.settingsWriterID, "device-b")
+        XCTAssertEqual(writer.manualUsedToday, 0)
+        XCTAssertTrue(writer.hasCompletedOnboarding)
+        XCTAssertEqual(legacy.settingsWriterID, "")
+        XCTAssertEqual(legacy.manualUsedToday, 3)
+        XCTAssertEqual(foreign.manualUsedToday, 2)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<Prefs>()), 3)
+        XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: [legacy], currentEpochID: nil,
+            writerID: "", currentDay: day).manualUsedToday, 0)
+    }
+
+    func testOwnedQuotaDuplicatesUseMaximumOnlyWithinCurrentDayAndEpoch() throws {
+        let day = "2027-01-15"
+        let epoch = UUID()
+        let rows = [
+            Prefs(manualDayKey: day, manualUsedToday: 1, activityEpochID: epoch,
+                settingsWriterID: "device-b"),
+            Prefs(manualDayKey: day, manualUsedToday: 2, activityEpochID: epoch,
+                settingsWriterID: "device-b"),
+            Prefs(manualDayKey: "2027-01-14", manualUsedToday: 3, activityEpochID: epoch,
+                settingsWriterID: "device-b"),
+            Prefs(manualDayKey: day, manualUsedToday: 3,
+                settingsWriterID: "device-b"),
+            Prefs(manualDayKey: day, manualUsedToday: 3, activityEpochID: epoch,
+                settingsWriterID: "device-a")
+        ]
+        for values in [rows, Array(rows.reversed())] {
+            XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: values, currentEpochID: epoch,
+                writerID: "device-b", currentDay: day).manualUsedToday, 2)
+            XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: values, currentEpochID: epoch,
+                writerID: "device-b", currentDay: "2027-01-16").manualUsedToday, 0)
+            XCTAssertEqual(try PrefsSyncPolicy.resolvedState(in: values, currentEpochID: UUID(),
+                writerID: "device-b", currentDay: day).manualUsedToday, 0)
+        }
     }
 
     func testSessionDuplicateAtPageBoundaryIsResolvedWithoutSourceMutation() async throws {
@@ -1997,6 +2133,72 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         )
     }
 
+    func testReadOnlyFocusMaintenanceRefreshesDelayedTimerOutsideRootSentinel() async throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let base = Date.now.addingTimeInterval(-600)
+        for index in 0 ..< 64 {
+            let start = base.addingTimeInterval(100 + TimeInterval(index))
+            let timer = try makeFocusTimer(
+                recordID: orderedUUID(21_000 + index),
+                sessionID: orderedUUID(22_000 + index),
+                start: start,
+                updatedAt: start,
+                revision: 1,
+                ownershipSequence: 0,
+                writer: "history-device"
+            )
+            timer.markTerminal(
+                .cancelled,
+                at: start.addingTimeInterval(1),
+                writerDeviceID: "history-device"
+            )
+            context.insert(timer)
+        }
+        try context.save()
+
+        // Root observes only the newest 64 timer rows. An older timer can
+        // legitimately arrive later from a device that was previously offline.
+        var sentinel = FetchDescriptor<SyncedFocusTimer>(sortBy: [
+            SortDescriptor(\SyncedFocusTimer.updatedAt, order: .reverse)
+        ])
+        sentinel.fetchLimit = 64
+        let beforeImport = try context.fetch(sentinel).map(\.policySnapshot)
+        XCTAssertNil(try FocusCloudSyncStore.canonicalActive(context: context))
+
+        let delayedSessionID = orderedUUID(23_000)
+        context.insert(try makeFocusTimer(
+            recordID: orderedUUID(23_001),
+            sessionID: delayedSessionID,
+            start: base,
+            updatedAt: base,
+            revision: 1,
+            ownershipSequence: 0,
+            writer: "previously-offline-device"
+        ))
+        try context.save()
+        XCTAssertEqual(try context.fetch(sentinel).map(\.policySnapshot), beforeImport)
+        XCTAssertEqual(
+            try FocusCloudSyncStore.canonicalActive(context: context)?.sessionID,
+            delayedSessionID
+        )
+
+        let results = try await runFocusMaintenance(
+            container: container,
+            generation: 39,
+            maximumSlices: 8
+        )
+        let completion = try XCTUnwrap(results.last)
+        XCTAssertEqual(completion.disposition, .completed)
+        XCTAssertTrue(
+            completion.mainActorEffects.contains(.reevaluateLocalFocus),
+            "Read-only import verification must wake Root's bounded recovery query"
+        )
+        XCTAssertTrue(results.allSatisfy { $0.audit.saveCount == 0 })
+        XCTAssertEqual(try context.fetch(sentinel).map(\.policySnapshot), beforeImport)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<SyncedFocusTimer>()), 65)
+    }
+
     func testOversizedFocusClaimGroupFailsClosedWithoutSourceCompaction() async throws {
         let container = try makeContainer()
         let context = container.mainContext
@@ -2576,12 +2778,11 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         )
         selectedBefore.payloadData = Data([0xFF, 0x00, 0xFE])
         try context.save()
-        XCTAssertThrowsError(try FocusCloudSyncStore.canonicalActive(context: context)) {
-            XCTAssertEqual(
-                $0 as? FocusCloudSyncError,
-                .timerHistoryRequiresMaintenance
-            )
-        }
+        XCTAssertEqual(
+            try FocusCloudSyncStore.canonicalActive(context: context)?.sessionID,
+            historySessionID,
+            "A corrupt group must not hide a valid multi-page timer history"
+        )
 
         let results = try await runFocusMaintenance(
             container: container,
@@ -2611,12 +2812,11 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
             (try? $0.decodedPayload()) != nil
         })
         XCTAssertTrue(results.allSatisfy { $0.audit.saveCount == 0 })
-        XCTAssertThrowsError(try FocusCloudSyncStore.canonicalActive(context: context)) {
-            XCTAssertEqual(
-                $0 as? FocusCloudSyncError,
-                .timerHistoryRequiresMaintenance
-            )
-        }
+        XCTAssertEqual(
+            try FocusCloudSyncStore.canonicalActive(context: context)?.sessionID,
+            historySessionID,
+            "A corrupt group must not hide a valid multi-page timer history"
+        )
     }
 
     func test129MismatchedRunningAndPendingSessionsDoNotStarveValidTimer() async throws {

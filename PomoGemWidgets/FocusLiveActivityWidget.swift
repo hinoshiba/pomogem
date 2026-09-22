@@ -42,7 +42,9 @@ struct FocusLiveActivityWidget: Widget {
                             Spacer()
                             if context.state.phase != .completed,
                                !context.isStale {
-                                Text("\(context.attributes.durationSeconds / 60)分")
+                                Text(FocusActivityConstants.durationLabel(
+                                    seconds: context.attributes.durationSeconds
+                                ))
                                     .font(.system(size: 11, weight: .medium, design: .rounded))
                                     .foregroundStyle(LivePalette.mutedText)
                             }

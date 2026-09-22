@@ -76,6 +76,20 @@ enum PrefsConsumerPolicy {
 
     @MainActor
     @discardableResult
+    static func setPreferredFocusSeconds(
+        _ totalSeconds: Int,
+        context: ModelContext,
+        markers: [ActivityResetSnapshot]
+    ) throws -> Prefs {
+        try PrefsSyncPolicy.setPreferredFocusSeconds(
+            totalSeconds,
+            context: context,
+            currentEpochID: currentEpochID(from: markers)
+        )
+    }
+
+    @MainActor
+    @discardableResult
     static func ensureWriterRow(
         context: ModelContext,
         markers: [ActivityResetSnapshot]
@@ -130,6 +144,8 @@ enum PrefsConsumerPolicy {
             String(value.isPro),
             String(value.keepScreenAwake),
             String(value.preferredFocusMinutes),
+            value.preferredFocusSeconds.map(String.init) ?? "legacy",
+            value.preferredFocusSecondsMutationID?.uuidString ?? "legacy",
             value.timerDisplayModeRawValue,
             String(value.hasCompletedOnboarding),
             value.usagePurposeRawValue,
@@ -315,6 +331,8 @@ struct RootView: View {
     let persistenceMode: PersistenceLaunchMode
     let persistenceSafetyNotice: String?
     let rebuildPersistenceAfterCompleteDeletion: @MainActor @Sendable () async -> Void
+    let prepareStorageTransfer: (@MainActor @Sendable (StorageTransferChoice) async throws -> Void)?
+    let unmountForStorageTransfer: (@MainActor @Sendable () -> Void)?
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
@@ -326,7 +344,10 @@ struct RootView: View {
     private var wrappedNotifications = false
     @AppStorage(AccountScopedLocalState.defaultsKey(base: "activity.last-applied-reset-epoch")) private var lastAppliedResetEpoch = ""
     @State private var router = AppRouter()
+    // Preserve the owner of this persistence host while a replacement mounts.
+    @State private var screenTimeContextKey = AccountScopedLocalState.defaultsKey(base: "screen-time-owner")
     @State private var isBootstrapped = false
+    @State private var viewTasks = ViewTaskScope()
     @State private var isFinishingOnboarding = false
     @State private var bootstrapError: String?
     @State private var bootstrapAttempt = 0
@@ -339,12 +360,16 @@ struct RootView: View {
     @State private var isFirstFramePresented = false
     @State private var didScheduleDeferredLaunchMaintenance = false
     @State private var deferredResetCleanupPending = false
-    @State private var deferredResetCleanupPreservesFocus = false
+    @State private var resetCleanupJournal = ActivityResetCleanupJournal.live()
+    @State private var acceptedResetCleanupTask: Task<Void, Error>?
+    @State private var acceptedResetCleanupReceipt: ActivityResetCleanupJournal.Receipt?
     @State private var hasLeftActiveStateAfterFirstFrame = false
     @State private var pendingLaunchMaintenanceReasons = Set<
         BoundedLaunchPreparation.DeferredMaintenanceReason
     >()
     @State private var completeDeletion = CompleteDataDeletionController()
+    @State private var storageTransfer = StorageTransferController()
+    @State private var storageTransferRegistrationID: UUID?
     @State private var isDataDeletionQuiesced = false
     @State private var maintenance = SyncMaintenanceCoordinator()
     @State private var maintenanceDrainTask: Task<Void, Never>?
@@ -384,12 +409,16 @@ struct RootView: View {
         persistenceStartupError: String?,
         persistenceMode: PersistenceLaunchMode = .inMemoryPreview,
         persistenceSafetyNotice: String? = nil,
-        rebuildPersistenceAfterCompleteDeletion: @escaping @MainActor @Sendable () async -> Void = {}
+        rebuildPersistenceAfterCompleteDeletion: @escaping @MainActor @Sendable () async -> Void = {},
+        prepareStorageTransfer: (@MainActor @Sendable (StorageTransferChoice) async throws -> Void)? = nil,
+        unmountForStorageTransfer: (@MainActor @Sendable () -> Void)? = nil
     ) {
         self.persistenceStartupError = persistenceStartupError
         self.persistenceMode = persistenceMode
         self.persistenceSafetyNotice = persistenceSafetyNotice
         self.rebuildPersistenceAfterCompleteDeletion = rebuildPersistenceAfterCompleteDeletion
+        self.prepareStorageTransfer = prepareStorageTransfer
+        self.unmountForStorageTransfer = unmountForStorageTransfer
         _activePersistenceSafetyNotice = State(initialValue: persistenceSafetyNotice)
         _aggregateProjectionPresentation = State(
             initialValue: .initial(for: persistenceMode)
@@ -601,7 +630,7 @@ struct RootView: View {
                     .task { await markFirstFramePresented() }
             } else {
                 OnboardingView(persistenceMode: persistenceMode) { selectedSubjectNames, wantsNotifications, rareRewardMode in
-                    Task {
+                    viewTasks.start {
                         await finishOnboarding(
                             selectedSubjectNames: selectedSubjectNames,
                             wantsNotifications: wantsNotifications,
@@ -652,8 +681,28 @@ struct RootView: View {
                     .zIndex(100)
             }
         }
+        .modifier(ScreenTimeIntegrationModifier(
+            isReady: isFirstFramePresented && !isDataDeletionQuiesced && !storageTransfer.isStarting,
+            timerPresented: router.focusPresentationIsActive,
+            contextKey: screenTimeContextKey,
+            dataEpochID: PrefsConsumerPolicy.currentEpochID(from: resetSnapshots)
+        ))
         .environment(router)
         .environment(completeDeletion)
+        .environment(storageTransfer)
+        .disabled(storageTransfer.isStarting)
+        .overlay {
+            if storageTransfer.isStarting {
+                ZStack {
+                    Color.black.opacity(0.22).ignoresSafeArea()
+                    ProgressView("保存先の切り替えを準備しています")
+                        .padding(24)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                        .accessibilityIdentifier("storage-switch.preparing")
+                }
+                .accessibilityAddTraits(.isModal)
+            }
+        }
         .environment(
             \.aggregateProjectionPresentation,
             aggregateProjectionPresentation
@@ -680,7 +729,7 @@ struct RootView: View {
             presenting: router.cloudFocusRecoveryOffer
         ) { offer in
             Button("この端末で続ける") {
-                Task { await adoptCloudFocus(offer) }
+                viewTasks.start { await adoptCloudFocus(offer) }
             }
             Button("あとで", role: .cancel) {
                 dismissedCloudFocusOfferID = offer.id
@@ -696,7 +745,7 @@ struct RootView: View {
             guard isFirstFramePresented, !isDataDeletionQuiesced else { return }
             maintenance.enqueue(.focusFairness)
             startMaintenanceDrain()
-            Task { await reconcileIncomingActivityData() }
+            viewTasks.start { await reconcileIncomingActivityData() }
         }
         .onChange(of: sessionSourceFingerprint) { _, _ in
             guard isFirstFramePresented, !isDataDeletionQuiesced else { return }
@@ -706,13 +755,13 @@ struct RootView: View {
             // and the recurring verification sweep, so the fallback never
             // sorts the full lifetime table merely to detect a change.
             enqueueSessionDependentVerification()
-            Task { await reconcileIncomingActivityData() }
+            viewTasks.start { await reconcileIncomingActivityData() }
         }
         .onChange(of: activityAuxiliaryFingerprint) { _, _ in
             guard isFirstFramePresented, !isDataDeletionQuiesced else { return }
             // These models may also be written by maintenance. Keep their
             // query observation presentation-only to avoid self-save loops.
-            Task { await reconcileIncomingActivityData() }
+            viewTasks.start { await reconcileIncomingActivityData() }
         }
         .onChange(of: aggregateProjectionFingerprint) { _, _ in
             // Projection saves are UI refresh hints, never source
@@ -733,8 +782,9 @@ struct RootView: View {
             // writes must not rerun the session/achievement launch probe: even
             // a bounded top-N query can require SQLite to sort a multi-decade
             // source table before an unrelated Settings toggle can go idle.
-            Task { @MainActor in
+            viewTasks.start {
                 await Task.yield()
+                guard !Task.isCancelled else { return }
                 reconcileCloudUserState()
             }
         }
@@ -832,17 +882,32 @@ struct RootView: View {
             // account/deletion checks. The sweep itself still waits for this
             // foreground epoch's 60-second interaction grace.
             requestAggregateProjectionVerification()
-            Task {
+            viewTasks.start {
                 await verifyMountedDeletionFence()
-                guard !isDataDeletionQuiesced, scenePhase == .active else { return }
-                await PurchaseManager.shared.refreshEntitlements()
+                guard !Task.isCancelled, !isDataDeletionQuiesced,
+                      scenePhase == .active else { return }
+                let entitlementTask = Task { await PurchaseManager.shared.refreshEntitlements() }
+                _ = try? await CancellationResponsiveTaskWaiter.value { await entitlementTask.value }
+                guard !Task.isCancelled else { return }
                 await NotificationManager.shared.refreshAuthorizationStatus()
+                guard !Task.isCancelled else { return }
                 await NotificationManager.shared.clearDeliveredState()
+                guard !Task.isCancelled else { return }
                 await offerCloudFocusIfNeeded()
+                guard !Task.isCancelled else { return }
                 await refreshPassiveNotifications()
             }
         }
+        .onAppear {
+            viewTasks.activate()
+            installStorageTransferOperation()
+        }
         .onDisappear {
+            if let registrationID = storageTransferRegistrationID {
+                storageTransfer.uninstall(registrationID: registrationID)
+                storageTransferRegistrationID = nil
+            }
+            viewTasks.cancelAll()
             maintenanceIdleGraceTask?.cancel()
             maintenanceIdleGraceTask = nil
             maintenanceIdleGraceToken = nil
@@ -860,6 +925,7 @@ struct RootView: View {
 
     @MainActor
     private func bootstrap() async {
+        guard !Task.isCancelled else { return }
         guard persistenceStartupError == nil else {
             await FocusActivityManager.shared.reconcileWithDurableSession(nil)
             return
@@ -904,13 +970,13 @@ struct RootView: View {
                 marker: preparation.currentMarker,
                 localFocusEpochState: preparation.localFocusEpochState
             )
-            deferredResetCleanupPreservesFocus = localEnvelope != nil
-                && preparation.localFocusEpochState != .stale
             await restoreBoundedLocalFocusIfNeeded(
                 localEnvelope,
                 preparation: preparation
             )
+            guard !Task.isCancelled else { return }
             await recoverBreakTimerIfNeeded()
+            guard !Task.isCancelled else { return }
 
             // `SeedData.bootstrap` deliberately does not run here. The first
             // bottle/onboarding frame depends only on the bounded preparation
@@ -920,8 +986,10 @@ struct RootView: View {
                 isBootstrapped = true
             }
         } catch {
+            guard !Task.isCancelled else { return }
             modelContext.rollback()
             await FocusActivityManager.shared.reconcileWithDurableSession(nil)
+            guard !Task.isCancelled else { return }
             bootstrapError = error.localizedDescription
         }
     }
@@ -1009,7 +1077,7 @@ struct RootView: View {
     private func scheduleDeferredLaunchMaintenance() {
         guard !didScheduleDeferredLaunchMaintenance else { return }
         didScheduleDeferredLaunchMaintenance = true
-        Task { @MainActor in
+        viewTasks.start {
             // Keep the transition interactive before legacy repair temporarily
             // occupies the main model context. A later ModelActor migration can
             // remove this grace interval without changing launch semantics.
@@ -1021,12 +1089,11 @@ struct RootView: View {
 
     @MainActor
     private func runDeferredLaunchMaintenance() async {
-        guard !isDataDeletionQuiesced else { return }
+        guard !Task.isCancelled, !isDataDeletionQuiesced else { return }
         if deferredResetCleanupPending {
             deferredResetCleanupPending = false
-            await performExternalActivityResetCleanup(
-                preservingLocalFocus: deferredResetCleanupPreservesFocus
-            )
+            await observeAcceptedExternalActivityResetCleanup()
+            guard !Task.isCancelled else { return }
         }
 
         SoundSynth.shared.prepare()
@@ -1034,7 +1101,9 @@ struct RootView: View {
         Task { await PurchaseManager.shared.prepare() }
 
         await NotificationManager.shared.refreshAuthorizationStatus()
+        guard !Task.isCancelled else { return }
         await NotificationManager.shared.clearDeliveredState()
+        guard !Task.isCancelled else { return }
         await refreshPassiveNotifications()
 
         // Do not consume `pendingLaunchMaintenanceReasons` with the legacy
@@ -1372,6 +1441,33 @@ struct RootView: View {
     }
 
     @MainActor
+    private func installStorageTransferOperation() {
+        guard let prepareStorageTransfer, let unmountForStorageTransfer else { return }
+        storageTransferRegistrationID = storageTransfer.install { choice in
+            guard !isDataDeletionQuiesced,
+                  !router.focusPresentationIsActive,
+                  router.recoveredFocus == nil,
+                  router.deferredFocusRecovery == nil,
+                  router.recoveredBreak == nil,
+                  try FocusCloudSyncStore.canonicalActive(context: modelContext) == nil else {
+                throw StorageTransferError.activeTimer
+            }
+            if modelContext.hasChanges { try modelContext.save() }
+            try await prepareStorageTransfer(choice)
+            isDataDeletionQuiesced = true
+            // The durable request is now present. Do not allow normal writers
+            // to resume if subsequent retirement or copying must be retried.
+            viewTasks.cancelAll()
+            let cleanup = acceptedResetCleanupTask
+            cleanup?.cancel()
+            if let cleanup { _ = await cleanup.result }
+            acceptedResetCleanupTask = nil
+            await quiesceForCompleteDataDeletion()
+            unmountForStorageTransfer()
+        }
+    }
+
+    @MainActor
     private func installCompleteDeletionOperation() {
         guard CompleteDataDeletionReleasePolicy.isEnabled else { return }
         completeDeletion.install {
@@ -1517,7 +1613,6 @@ struct RootView: View {
         didScheduleDeferredLaunchMaintenance = false
         launchHasSyncedUsageEvidence = false
         deferredResetCleanupPending = false
-        deferredResetCleanupPreservesFocus = false
         pendingLaunchMaintenanceReasons.removeAll()
         hasLeftActiveStateAfterFirstFrame = false
         bootstrapAttempt += 1
@@ -1525,7 +1620,7 @@ struct RootView: View {
 
     @MainActor
     private func reconcileIncomingActivityData() async {
-        guard !isDataDeletionQuiesced else { return }
+        guard !Task.isCancelled, !isDataDeletionQuiesced else { return }
         guard !isReconcilingActivityData else {
             // Do not lose a second CloudKit delivery that lands while the
             // first deterministic merge is saving its result.
@@ -1536,9 +1631,10 @@ struct RootView: View {
         defer { isReconcilingActivityData = false }
 
         repeat {
-            guard !isDataDeletionQuiesced else { return }
+            guard !Task.isCancelled, !isDataDeletionQuiesced else { return }
             shouldReconcileActivityDataAgain = false
             await applyLatestActivityResetIfNeeded()
+            guard !Task.isCancelled else { return }
             do {
                 // A CloudKit delivery or foreground transition must never
                 // materialize the complete activity history on MainActor.
@@ -1592,10 +1688,7 @@ struct RootView: View {
             marker: marker,
             localFocusEpochState: localEpochState
         ) {
-            await performExternalActivityResetCleanup(
-                preservingLocalFocus: localEnvelope != nil
-                    && localEpochState != .stale
-            )
+            await observeAcceptedExternalActivityResetCleanup()
         }
     }
 
@@ -1607,7 +1700,7 @@ struct RootView: View {
         marker: ActivityResetSnapshot?,
         localFocusEpochState: ActivityEpochState?
     ) -> Bool {
-        guard let marker else { return false }
+        guard !Task.isCancelled, let marker else { return false }
         let localEnvelope = FocusPersistence.load()
         if localFocusEpochState == .stale, localEnvelope != nil {
             retireInvalidLocalFocus(localEnvelope)
@@ -1618,7 +1711,28 @@ struct RootView: View {
         }
 
         let epochKey = marker.epochID.uuidString.lowercased()
-        guard lastAppliedResetEpoch != epochKey else { return false }
+        let journal = resetCleanupJournal
+        // On restart a new focus may already belong to this reset epoch.
+        // Preserve that exact session while retrying only the external cleanup;
+        // do not replay the synchronous local reset against newer state.
+        let preservedSessionID = localFocusEpochState == .current
+            ? (localEnvelope?.pendingCompletion?.sessionID
+                ?? localEnvelope?.engine.currentSessionID)
+            : nil
+        if lastAppliedResetEpoch == epochKey {
+            guard journal.hasPendingCleanup else { return false }
+            if let acceptedResetCleanupReceipt,
+               journal.pendingReceipt == acceptedResetCleanupReceipt {
+                return false
+            }
+            acceptExternalActivityResetCleanup(
+                epochID: marker.epochID,
+                preserving: preservedSessionID,
+                preservingBreak: FocusPersistence.loadBreak()?.id,
+                journal: journal
+            )
+            return true
+        }
 
         // This is the first local application of this reset generation. A
         // completion already created inside that same generation is valid and
@@ -1649,6 +1763,7 @@ struct RootView: View {
         DeferredFocusCompletionStore.clear()
         PendingStratumCelebrationStore.removeAll()
         PendingRewardReceiptStore.removeAll()
+        ScreenTimeGemDropStore.removeAll()
         FocusRestCadenceStore.removeAll()
         UserDefaults.standard.removeObject(
             forKey: AccountScopedLocalState.defaultsKey(
@@ -1669,23 +1784,57 @@ struct RootView: View {
         router.recoveredBreak = nil
         router.cloudFocusRecoveryOffer = nil
         dismissedCloudFocusOfferID = nil
+        // Persist retry evidence before acknowledging the epoch. Acceptance
+        // is synchronous and independent from the first-frame grace task.
+        acceptExternalActivityResetCleanup(
+            epochID: marker.epochID,
+            preserving: preservedSessionID,
+            journal: journal
+        )
         lastAppliedResetEpoch = epochKey
         return true
     }
 
     @MainActor
-    private func performExternalActivityResetCleanup(
-        preservingLocalFocus: Bool
-    ) async {
-        if !preservingLocalFocus {
-            await NotificationManager.shared.cancelAllTimerNotifications()
-            await FocusActivityManager.shared.endAll()
-        }
-        await NotificationManager.shared.clearDeliveredState()
-
-        do {
+    private func acceptExternalActivityResetCleanup(
+        epochID: UUID,
+        preserving sessionID: UUID?,
+        preservingBreak breakID: UUID? = nil,
+        journal: ActivityResetCleanupJournal
+    ) {
+        let ticket = journal.begin(epochID: epochID)
+        acceptedResetCleanupReceipt = ticket.receipt
+        let notificationCleanup = NotificationManager.shared
+            .prepareTimerNotificationCleanup(preserving: sessionID, preservingBreak: breakID)
+        let activityCleanup = FocusActivityManager.shared
+            .prepareCurrentActivityRetirement(preserving: sessionID)
+        let deliveredStateCleanup = NotificationManager.shared.prepareDeliveredStateCleanup()
+        acceptedResetCleanupTask = AcceptedActivityResetCleanup.start(
+            after: acceptedResetCleanupTask,
+            retaining: modelContext.container,
+            completing: ticket
+        ) {
+            await notificationCleanup()
+            await activityCleanup.end()
+            await deliveredStateCleanup()
             try await WidgetSnapshotStore.shared.clear()
+        }
+    }
+
+    @MainActor
+    private func observeAcceptedExternalActivityResetCleanup() async {
+        guard let cleanup = acceptedResetCleanupTask else { return }
+        let receipt = acceptedResetCleanupReceipt
+        // The cleanup was already accepted alongside the marker. Its own
+        // retained store lifetime protects remount even if this observer is
+        // cancelled or never starts.
+        do {
+            try await cleanup.value
         } catch {
+            if acceptedResetCleanupReceipt == receipt {
+                acceptedResetCleanupReceipt = nil
+            }
+            guard !Task.isCancelled else { return }
             router.showToast(
                 "記録はリセット済みですが、ウィジェットの更新に失敗しました",
                 symbol: "exclamationmark.arrow.triangle.2.circlepath"
@@ -1721,7 +1870,7 @@ struct RootView: View {
         wantsNotifications: Bool,
         rareRewardMode: RareRewardMode
     ) async {
-        guard !isFinishingOnboarding else { return }
+        guard !Task.isCancelled, !isFinishingOnboarding else { return }
         isFinishingOnboarding = true
         defer { isFinishingOnboarding = false }
 
@@ -1882,6 +2031,7 @@ struct RootView: View {
         let granted = wantsNotifications
             ? await NotificationManager.shared.requestAuthorization()
             : false
+        guard !Task.isCancelled else { return }
         do {
             let changedAt = Date.now
             try PrefsConsumerPolicy.mutate(
@@ -1926,12 +2076,8 @@ struct RootView: View {
         } catch {
             modelContext.rollback()
             router.showToast(
-                persistenceMode == .localOnly
-                    ? "初期設定をこのiPhoneへ保存できませんでした。もう一度お試しください"
-                    : "初期設定をiCloudへ保存できませんでした。もう一度お試しください",
-                symbol: persistenceMode == .localOnly
-                    ? "exclamationmark.triangle"
-                    : "exclamationmark.icloud"
+                "初期設定をこのiPhoneへ保存できませんでした。もう一度お試しください",
+                symbol: "exclamationmark.triangle"
             )
             return
         }
@@ -1947,8 +2093,10 @@ struct RootView: View {
                     hour: Constants.Notification.defaultReminderHour,
                     minute: Constants.Notification.defaultReminderMinute
                 )
+                guard !Task.isCancelled else { return }
                 lastPassiveNotificationErrorFingerprint = nil
             } catch {
+                guard !Task.isCancelled else { return }
                 reportPassiveNotificationFailure(error)
             }
         } else {
@@ -1956,6 +2104,7 @@ struct RootView: View {
             lastPassiveNotificationErrorFingerprint = nil
         }
 
+        guard !Task.isCancelled else { return }
         withAnimation(.easeInOut(duration: 0.35)) {
             didCompleteOnboarding = true
         }
@@ -2252,6 +2401,7 @@ struct RootView: View {
     private func presentLocalRecovery(
         _ originalEnvelope: FocusRecoveryEnvelope
     ) async {
+        guard !Task.isCancelled else { return }
         let envelope = prepareLocalRecoveryEnvelope(originalEnvelope)
         guard let subjectSnapshot = envelope.subject else {
             // Payloads from versions that did not persist a subject cannot be
@@ -2263,6 +2413,7 @@ struct RootView: View {
                 TimerCompletionAlertController.shared.stop(sessionID: sessionID)
                 await FocusActivityManager.shared.cancel(sessionID: sessionID)
             }
+            guard !Task.isCancelled else { return }
             FocusPersistence.clear()
             return
         }
@@ -2275,6 +2426,7 @@ struct RootView: View {
                 TimerCompletionAlertController.shared.stop(sessionID: sessionID)
                 await FocusActivityManager.shared.cancel(sessionID: sessionID)
             }
+            guard !Task.isCancelled else { return }
             FocusPersistence.clear()
             return
         }
@@ -2336,7 +2488,7 @@ struct RootView: View {
 
     @MainActor
     private func offerCloudFocusIfNeeded() async {
-        guard didCompleteOnboarding,
+        guard !Task.isCancelled, didCompleteOnboarding,
               router.recoveredFocus == nil,
               router.recoveredBreak == nil,
               FocusPersistence.load() == nil else { return }
@@ -2421,6 +2573,7 @@ struct RootView: View {
 
     @MainActor
     private func adoptCloudFocus(_ offer: CloudFocusRecoveryOffer) async {
+        guard !Task.isCancelled else { return }
         let sessionID = offer.id
         do {
             try FocusCloudSyncStore.claimOwnership(
@@ -2475,6 +2628,7 @@ struct RootView: View {
 
     @MainActor
     private func recoverBreakTimerIfNeeded() async {
+        guard !Task.isCancelled else { return }
         guard let recovery = FocusPersistence.loadBreak() else { return }
         if router.recoveredFocus != nil {
             FocusPersistence.clearBreak()
@@ -2489,6 +2643,8 @@ struct RootView: View {
 
     @MainActor
     private func refreshPassiveNotifications() async {
+        guard !Task.isCancelled else { return }
+        var schedulingStarted = false
         do {
             let values = try PrefsSyncPolicy.fetchBounded(from: modelContext)
             let prefs = try PrefsSyncPolicy.resolvedState(
@@ -2497,6 +2653,7 @@ struct RootView: View {
                     from: resetSnapshots
                 )
             )
+            schedulingStarted = true
             try await NotificationManager.shared.synchronizePassiveNotifications(
                 dailyReminderEnabled: prefs.reminderEnabled,
                 wrappedEnabled: wrappedNotifications,
@@ -2504,9 +2661,15 @@ struct RootView: View {
                 minute: prefs.reminderMinute,
                 playsSound: prefs.soundOn
             )
+            guard !Task.isCancelled else { return }
             lastPassiveNotificationErrorFingerprint = nil
         } catch {
-            await NotificationManager.shared.cancelPassiveNotifications()
+            guard !Task.isCancelled else { return }
+            // The manager rolls back its own failed schedule. A delayed error
+            // from that attempt must not cancel a newer preference refresh.
+            if !schedulingStarted {
+                await NotificationManager.shared.cancelPassiveNotifications()
+            }
             reportPassiveNotificationFailure(error)
         }
     }
@@ -2679,6 +2842,7 @@ private struct StartupErrorView: View {
 
 struct MainNavigationView: View {
     @Bindable var router: AppRouter
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let persistenceMode: PersistenceLaunchMode
     @State private var navigationPath: [AppTab] = []
 
@@ -2718,10 +2882,12 @@ struct MainNavigationView: View {
         .fullScreenCover(item: $router.recoveredFocus, onDismiss: {
             router.completeFocusPresentation()
         }) { request in
-            FocusView(recovery: request)
+            CloudConnectionSessionContent { FocusView(recovery: request) }
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .fullScreenCover(item: $router.recoveredBreak) { recovery in
-            BreakTimerView(recovery: recovery)
+            CloudConnectionSessionContent { BreakTimerView(recovery: recovery) }
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
     }
 

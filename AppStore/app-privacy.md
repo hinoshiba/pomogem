@@ -1,5 +1,7 @@
 # App Privacy answer draft
 
+1.0.2候補の実装に合わせた更新です。App Store Connectへの保存・公開結果は別のrelease recordへ記録します。
+
 ## 推奨回答
 
 現行Release candidateについては、アプリ本体から運営者へ自動送信する仕組みがないため、
@@ -13,23 +15,39 @@ Apple teamの実際のaccess、mail運用を照合して最終回答します。
 
 - 独自account、analytics、ads、tracking、developer serverがない
 - 初回に「iCloudで同期」と「このiPhoneのみ」を同格で提示し、確認後に一方を確定する。どちらも
-  推奨扱いにせず、Version 1.0では後から変更できない
+  推奨扱いにしない。設定からの切り替えも、残る側と失われる側を示した明示的な確認だけで行う
 - 「このiPhoneのみ」は全ての基本機能をApple Account／networkなしで利用でき、専用random namespaceの
   端末storeだけへ保存する。iCloudへ自動切替／uploadしない
 - iCloudを選択した場合だけ、テーマ名、成果memo、記録、設定、進行中timerを含む7種類の同期元modelを、
   端末と利用者自身のSwiftData用private CloudKit databaseに保存する
 - CloudKit user record IDはaccount境界の照合にだけ使い、container情報とともに端末内でSHA-256
   fingerprintへ変換する。local store名とdefaults keyには別のrandom namespaceを使い、raw identifierを
-  埋め込まない。選択時と各launch／resumeで`accountStatus`と`userRecordID`を確認し、private databaseの
-  全record zoneをread-only fetchしてonline accessを確かめる。通信不可、account不明、別accountの場合は
-  保存領域を開かないが、保存済みdataは削除しない
+  埋め込まない。初回取得・同期再開ではaccountと保存先をonline確認し、通常起動のprivate control取得を
+  通信確認にも使って前後のidentityを照合する。別accountや未対応の履歴不一致では書き込みを止め、
+  保存済みdataを自動削除しない
+- 初回は観測した世代以上のリセット履歴が端末へ届くまで期限付きで待機する。以前の確認済み端末dataと
+  利用記録が条件を満たせば、同期なしでtimer・記録・設定を使える。変更は端末に保存し、同期待ちと表示する。
+  accountのハッシュ、端末保存領域、確認済み世代、改訂ID、オフライン利用・失効状態を端末内に保持する。
+  account変更で利用許可を失効させる。オンライン利用後の復帰などではapp終了・再起動が必要になる。
+  接続確認は全記録の送受信完了の証明ではない
+- iCloud有効化はcloud内容で端末だけのdataを置き換え、結合しない。解除は検証済みコピーを端末へ残し、
+  cloud側のdataも保持する。端末dataによるcloud全置き換えと復旧再開は通常Releaseで禁止する。
+  進捗・元data・途中コピーを端末に保持し、取消しや後片付けの失敗ではコピーが残る場合がある。
+  同じprivate CloudKit内の切り替え・復旧情報を確認し、許可された取消し・終了済み処理の後片付けを行う。
+  新しい全置き換え用コピーは通常アプリからuploadしない。運営者向け収集や別containerを追加しない
+- Proの秒単位の既定時間は既存Prefsにoptional秒数と変更への参照を加え、選んだ保存先へ保持・同期する。
+  既存の分単位の意味は維持する。iCloudの通常resetは一時停止し、local-onlyの通常resetは維持する
 - `AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`の4種類は端末内だけの表示用projectionで、
   同期元記録から再構築しCloudKitへuploadしない
-- motionはその場で処理し、保存・送信しない
+- 瓶用のCore Motionはその場で処理し、保存・送信しない
+- 集中・休憩タイマーはUIKitのdevice orientation通知で上下左右の表示を切り替える。追加の権限要求や
+  Core Motion managerの追加はない。端末から届く向きとタイマー中の一時的な手動選択は実行中のメモリだけに
+  保持する。設定で選ぶ既定の向き（自動／上／右／下／左）だけをこのiPhoneのUserDefaultsに保存し、
+  同期・送信・JSON書き出しはしない。通常の記録リセットでは保持し、アプリ削除時には消去される
 - shareは利用者の明示操作でsystem share sheetへ渡すだけ
 - 全11種類の出荷対象SwiftData保存データのversioned JSON exportも、利用者の明示操作だけで生成し、
-  選択した保存・共有先へ渡す。Version 1.0にJSON再importはなく、local-only dataのiCloud移行や
-  機種変更時の継続には使えない
+  選択した保存・共有先へ渡す。JSON再importはなく、このファイルによる復元・移行には対応しない。
+  設定の保存先切り替えもJSONを読み込む処理ではない
 - StoreKit transactionは端末上でApple署名をverifyし、developer serverへ送らない
 - Live Activityは明示的に開始した集中のランダムなsession UUID、秒数、終了日時／残り時間、状態だけを
   ActivityKitへ渡して端末内更新する。theme名、memo、質量、Apple Account／CloudKit dataを含めず、
@@ -55,8 +73,8 @@ Email AddressをApp Functionality（customer support）目的、linked to user�
 
 - production archiveの全network endpoint、runtime SDK、privacy manifest、entitlementを再走査する
 - CloudKitがprivate databaseだけで、運営者のserver、analytics、crash uploadへ転送されないことを確認する
-- 初回保存先の二択が同格で、iCloudへ送る具体的dataとonline account確認、local-onlyの不変性・削除・
-  JSON非移行性が確認前に表示されることをRelease実機で確認する
+- 初回保存先の二択が同格で、iCloudへ送る具体的data、online確認とoffline利用の条件、明示的な
+  切り替えのコピー先・削除対象・cloud保持、app削除・JSONの制約が確認前に表示されることをRelease実機で確認する
 - Apple Developer team／CloudKit運用者が利用者dataを日常support、debug、分析、backup目的で取得・閲覧・
   exportしない運用をownerが確認する
 - support mailがAppleの現行optional disclosure条件を全て満たすか、実際の受付、保持、12か月以内の
@@ -82,6 +100,27 @@ App Managerが最終決定・Publishします。
   `CA92.1`
 - Widget required-reason APIs: none。Version 1.0のWidgetとLive Activity extensionは利用者data、CloudKit、
   App Group、UserDefaultsを読まず、account-neutralな起動導線または時間／状態だけを表示
+- タイマーのUIKit device orientation利用によるdata type／required-reason API categoryの追加はない。
+  端末内だけで処理する向きは[Appleの収集の定義](https://developer.apple.com/app-store/app-privacy-details/)に
+  該当せず、使用APIは[required-reason APIの一覧](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype)に該当しない
+- 既定の向きの端末内保存には、すでに宣言しているstandard User Defaults `CA92.1`を使用する
+- 中断されたリセット後処理の再試行用UUIDも、同じ`CA92.1`で保存先ごとの端末内UserDefaultsに保持する。
+  正常完了後に消去し、同期・送信・JSON書き出しには含めない
 
 新しいnetwork endpoint、SDK、permission、data retention、Widget accessを追加した時点で、このdraftを
 無効として再回答します。
+
+## Screen Time追加時の再監査
+
+次期候補はFamily Controlsの個人認証とDevice Activity Monitorを追加する。利用者が
+選択・有効化したアプリの利用が10分に達したイベントだけを処理し、アプリ名・Bundle IDの
+取得やDeviceActivityReportからのデータ搬出は行わない。設定・不透明トークン・到達台帳・
+黒い石は本体と監視拡張のApp Group内に保持し、バックアップ・CloudKit・共有・ログへ出さない。
+学習の確定済み10分/100gだけを通常記録へ取り込み、本人がiCloudを選んだ場合はそのprivate
+CloudKitへ同期する。運営者のサーバー、解析SDK、追跡処理の追加はない。
+
+WidgetのApp Group非使用は維持する。監視拡張のPrivacy Manifestもtracking=false、
+collected data types=[]とする。端末内処理だけではAppleのデータ収集に該当しないが、
+配布前に実際のarchive・Family Controls配布権限・公開ポリシーとApp Store Connectの
+最新質問を再確認する。Screen Timeの設定、未取込情報、黒い石は現在のJSON書き出しと
+保存先移行に含まれないことをアプリと公開ポリシーで明示する。

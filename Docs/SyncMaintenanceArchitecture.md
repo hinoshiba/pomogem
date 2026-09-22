@@ -44,6 +44,12 @@ iOS 18+ History token経路の追加最適化です。iOS 17の正しさはrolli
 
 ### 3.1 永続化境界
 
+この節の変更不可・再インストールに関する記述は、保存先切り替えを含まない既存版の制約です。
+開発中の次候補は明示した処理とdurable journal、commit済みreceiptを根拠に保存先を変更します。
+有効化はcloudか端末のどちらを残すか選び、解除はcloudを端末へコピーしてcloud側を残します。
+通常起動の暗黙の切り替えやmergeは許可しません。切り替え中はappを削除せず案内に従い再起動します。
+[保存先切り替えの仕様と未完了gate](StorageModeTransfer.md)を参照してください。
+
 version 1.0は最初の`ModelContainer`を作る前に、同格の「iCloudで同期」と「このiPhoneのみ」を提示し、
 それぞれの確認後に一方を確定します。どちらも推奨扱いにせず、選択はVersion 1.0では変更できません。
 shipping `ModelContainer`は選択に応じて次の分離を使います。
@@ -124,6 +130,11 @@ SwiftData、CloudKit、App Group、snapshotを一切読みません。Live Activ
 
 ### 3.2 Apple Account境界
 
+次候補のnamespace変更では、検証済みの明示したjournalまたはcommit済みreceiptだけを限定的な
+authorityとして使います。通常launchで既存registryを書き換えず、account、保存元、保存先、
+namespaceの他accountとの重複を確認します。commit済みの新cloud領域から旧cacheへ戻るfallbackは
+許可しません。これは下記の通常mountのaccount確認を省略する仕組みではありません。
+
 shippingのcloud modeは、利用者へtheme名、成果memo、記録、設定、進行中timerをApple Accountのprivate
 iCloudへ保存することとonline確認要件を表示し、利用者がiCloud選択を確認した後、SwiftUIが`RootView`
 またはCloudKit-backed `ModelContainer`を作る前に次の境界を確立します。
@@ -138,6 +149,13 @@ iCloudへ保存することとonline確認要件を表示し、利用者がiClou
 6. 以後の各launch／resumeは、fresh request後のfingerprintと保存済みprofileが完全一致する場合だけ、
    cloud cacheとlocal projectionのSQLite URL、focus復旧／deferred完走、maintenance checkpoint、reset
    適用状態を同じnamespaceへ分離してcontainerをmountする
+
+container作成後、`RootView`とそのwriterを公開する前には`CloudActivityHistoryPreflight`を通します。
+private custom zoneの全ページからリセット履歴の必要fieldだけをread-only取得し、サーバーで観測した
+winner以上の順序を持つ履歴が端末へ届くまでfresh `ModelContext`で待ちます。順序はsequence／writer／
+epoch／idの全tupleで、`resetAt`は含めません。mountの世代・保存先とアカウントをawait前後で再確認し、
+不完全な応答、cancel、90秒の履歴確認期限ではRootを公開しません。全同期元データのhydrationや
+projection再構築をこのgateの完了条件にはしません。token cacheはなく、全zone走査の時間は記録数に依存します。
 
 通信不可、account identity不明、保存済みfingerprintと異なるaccountでは旧storeへfallbackせず、記録領域を
 開かないfail-closed画面に留まります。Bへ自動switchせず、元のAへ戻ってonline確認できた場合だけ同じA
@@ -252,7 +270,9 @@ achievement stones = 0g
   stale判定根拠にも使わず、対応epochのrowを推測で削除しない
 - winnerの主順序はLamport-style `sequence`。同一sequenceは`writerDeviceID`、`epochID`、marker `id`の
   安定順で決め、`resetAt`は表示・監査metadataにしか使わない
-- 新しいresetは観測済みwinnerの`sequence + 1`。上限到達時はcounterを再利用せず操作を拒否する
+- local-onlyの新しいresetは観測済みwinnerの`sequence + 1`。上限到達時はcounterを再利用せず操作を拒否する
+- iCloudの利用者によるresetは、未反映の高いsequenceを見落として新世代を作る問題への対策として
+  一時停止する。UIと`beginUserInitiatedReset`の両方で変更前に拒否し、既存markerは維持する
 - markerが1件もない場合、`nil` epochだけがcurrent
 - winning markerのepochがcurrent
 - markerが存在する非winning epochと、marker存在後の`nil` epochはstale
@@ -838,6 +858,9 @@ stamp fieldを含め、raw evidenceを失わないことを固定します。`ti
 
 ### 13.6 resetとオンボーディング
 
+- cloud履歴preflightはnil／古いlocal winnerでwriterを公開せず、同じか新しい全tupleを観測してから許可する
+- preflight完了後の手動記録・timer・claimが後続保守で残り、待機中・期限切れ時は活動記録を新規作成しない
+- iCloudの利用者resetは変更前に拒否し、local-onlyの利用者resetは既存順序を維持する
 - unknown epochはmarker前にdelete、merge、current化されない
 - `resetAt`が過去／未来へ大きくずれてもLamport sequenceのwinnerが変わらない
 - 同一sequenceのoffline markerが安定tie-breakで収束し、範囲外sequenceをwinner／stale根拠にしない

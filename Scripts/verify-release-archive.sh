@@ -19,11 +19,12 @@ readonly POMOGEM_AUDIT_WIDGET_BUNDLE_ID='com.hinoshiba.pomogem.widgets'
 readonly POMOGEM_AUDIT_TEAM_ID='94HVVWXLK3'
 readonly POMOGEM_AUDIT_APP_GROUP='group.com.hinoshiba.pomogem'
 readonly POMOGEM_AUDIT_ICLOUD_CONTAINER='iCloud.com.hinoshiba.pomogem'
-readonly POMOGEM_AUDIT_MARKETING_VERSION='1.0'
-readonly POMOGEM_AUDIT_BUILD_NUMBER='5'
+readonly POMOGEM_AUDIT_MARKETING_VERSION='1.0.2'
+readonly POMOGEM_AUDIT_BUILD_NUMBER='9'
 readonly POMOGEM_AUDIT_MINIMUM_IOS='17.0'
 readonly POMOGEM_AUDIT_FONT_SHA256='6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f'
 readonly POMOGEM_AUDIT_FONT_LICENSE_SHA256='e8b4d8c39b0d7cc4b202dbd013b999bc6233a9bbe6cce1c37cfddc26ad544228'
+readonly POMOGEM_AUDIT_SCRIPT_DIRECTORY="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 export POMOGEM_AUDIT_APP_BUNDLE_ID POMOGEM_AUDIT_WIDGET_BUNDLE_ID
 export POMOGEM_AUDIT_TEAM_ID POMOGEM_AUDIT_APP_GROUP
 export POMOGEM_AUDIT_ICLOUD_CONTAINER POMOGEM_AUDIT_MARKETING_VERSION
@@ -222,20 +223,23 @@ if embedded_apps != ["PomoGem.app"]:
 if embedded_extensions != ["PomoGemWidgets.appex"]:
     fail("app must embed exactly the reviewed PomoGem Widget extension")
 
-debug_payload_names = []
-try:
-    for item in app.rglob("*"):
-        name = item.name.lower()
-        if (
-            name.endswith(".debug.dylib")
-            or name == "__preview.dylib"
-            or "preview-thunk" in name
-        ):
-            debug_payload_names.append(item.name)
-except OSError:
-    fail("archive payload topology is unreadable")
-if debug_payload_names:
-    fail("archive contains a Debug or preview dynamic-library payload")
+def validate_release_payload_topology(bundle: Path) -> None:
+    try:
+        for item in bundle.rglob("*"):
+            name = item.name.lower()
+            if name.endswith(".xctest"):
+                fail("archive contains an XCTest payload")
+            if (
+                name.endswith(".debug.dylib")
+                or name == "__preview.dylib"
+                or "preview-thunk" in name
+            ):
+                fail("archive contains a Debug or preview dynamic-library payload")
+    except OSError:
+        fail("archive payload topology is unreadable")
+
+
+validate_release_payload_topology(app)
 
 archive_plist = load(Path(archive_info_raw), "archive Info.plist")
 if archive_plist.get("ArchiveVersion") != 2:
@@ -469,7 +473,7 @@ extract_signing_state "$widget_bundle" "$widget_profile" 'widget'
 # deliberately identify only the failed field, never the observed secret or
 # account-specific value.
 PYTHONDONTWRITEBYTECODE=1 python3 - \
-  "$mode" "$archive_info" \
+  "$POMOGEM_AUDIT_SCRIPT_DIRECTORY" "$mode" "$archive_info" \
   "$audit_tmp/app-entitlements.plist" "$audit_tmp/widget-entitlements.plist" \
   "$audit_tmp/app-profile.plist" "$audit_tmp/widget-profile.plist" \
   "$audit_tmp/app-signature.txt" "$audit_tmp/widget-signature.txt" \
@@ -485,6 +489,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 (
+    script_directory_raw,
     mode,
     archive_info_raw,
     app_entitlements_raw,
@@ -496,6 +501,9 @@ from typing import Any, Optional
     app_certificate_raw,
     widget_certificate_raw,
 ) = sys.argv[1:]
+
+sys.path.insert(0, script_directory_raw)
+from release_profile_policy import validate_profile_cloud_environment
 
 TEAM_ID = os.environ["POMOGEM_AUDIT_TEAM_ID"]
 APP_ID = os.environ["POMOGEM_AUDIT_APP_BUNDLE_ID"]
@@ -802,22 +810,10 @@ def validate_signed_bundle(
         if signed_entitlements.get("com.apple.developer.icloud-container-environment") != expected_cloud_environment:
             fail(f"{label} signed CloudKit environment does not match the profile class")
         profile_cloud_value = profile_entitlements.get("com.apple.developer.icloud-container-environment")
-        if isinstance(profile_cloud_value, str):
-            profile_cloud_environments = {profile_cloud_value}
-        elif (
-            isinstance(profile_cloud_value, list)
-            and profile_cloud_value
-            and all(isinstance(item, str) for item in profile_cloud_value)
-        ):
-            profile_cloud_environments = set(profile_cloud_value)
-        else:
-            fail(f"{label} profile CloudKit environment authorization is malformed")
-        if (
-            expected_cloud_environment not in profile_cloud_environments
-            or not profile_cloud_environments.issubset({"Development", "Production"})
-            or (kind != "development" and profile_cloud_environments != {"Production"})
-        ):
-            fail(f"{label} profile CloudKit environment does not match its distribution class")
+        try:
+            validate_profile_cloud_environment(profile_cloud_value, expected_cloud_environment)
+        except ValueError as error:
+            fail(f"{label} {error}")
         if signed_entitlements.get("aps-environment") != expected_aps_environment:
             fail(f"{label} signed APNs environment does not match the profile class")
         if profile_entitlements.get("aps-environment") != expected_aps_environment:
@@ -898,10 +894,14 @@ scan_release_binary() {
     fail "$label release-string scan produced no auditable output"
   fi
 
+  # The dedicated factory name also occurs inside an unstripped Swift symbol.
+  # Missing strings alone are not proof of the runtime's default-deny policy.
   for marker in \
     'POMOGEM_LOCAL_PREVIEW' \
     'POMOGEM_UI_TEST_' \
+    'POMOGEM_REAL_' \
     'POMOGEM_RUN_40_YEAR_PERSISTENCE' \
+    'liveForIsolatedTesting' \
     'FortyYearPersistentUITestFixture' \
     'FortyYearDebugScenario' \
     'FortyYearPersistenceHarness' \

@@ -57,11 +57,16 @@ final class JarSnapshotter {
         var visibility: [(node: SKNode, wasHidden: Bool)] = []
         scene.enumerateChildNodes(withName: "//*") { node, _ in
             let shouldHidePebble = (node as? PebbleNode).map {
-                !options.includesSelfReported && !$0.descriptor.isMeasured
+                // Device-local distraction history has no study mass and is
+                // never published as part of a study-only share or widget.
+                $0.descriptor.isScreenTimeObstacle
+                    || (!options.includesSelfReported && !$0.descriptor.isMeasured)
             } ?? false
             let isTransient = node.name?.hasPrefix("drop.") == true
                 || node.name?.hasPrefix("ambient.") == true
-            guard shouldHidePebble || (!options.includesTransientEffects && isTransient) else {
+                || node.name == "obstacle.fusion"
+            guard shouldHidePebble || node.name == "obstacle.fusion"
+                || (!options.includesTransientEffects && isTransient) else {
                 return
             }
             visibility.append((node, node.isHidden))

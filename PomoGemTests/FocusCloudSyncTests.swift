@@ -410,6 +410,9 @@ final class FocusCloudSyncTests: XCTestCase {
                     claimIfUnowned: true,
                     now: start
                 )
+                try insertTimerHistory(
+                    count: 140, context: context, start: start, writer: "device-a"
+                )
                 let event = try XCTUnwrap(engine.advance(at: end))
                 guard case let .focusCompleted(completion) = event else {
                     return XCTFail("Expected completion")
@@ -530,6 +533,12 @@ final class FocusCloudSyncTests: XCTestCase {
                 now: start
             )
             try context.save()
+            // The only matching ancestor belongs to A's old revision. Newer
+            // foreign history must not evict the lineage needed after handoff.
+            try insertTimerHistory(
+                count: 140, context: context,
+                start: start.addingTimeInterval(1), writer: "history-only-device"
+            )
 
             let event = try XCTUnwrap(engine.advance(at: end))
             guard case let .focusCompleted(completion) = event else {
@@ -992,6 +1001,108 @@ final class FocusCloudSyncTests: XCTestCase {
             context: context,
             deviceID: "device-a"
         ))
+    }
+
+    @MainActor
+    func testReleaseOutsideFullOwnershipPageCannotAuthorizeANewClaim() throws {
+        let container = try focusContainer(named: "FocusCloudSyncTruncatedRelease")
+        let context = container.mainContext
+        let instant = Date(timeIntervalSince1970: 1_800_550_000)
+        let candidateID = UUID()
+        for sequence in 2...FocusCloudSyncStore.QueryContract.matchingSessionClaimLimit {
+            context.insert(FocusTimerDeviceClaim(
+                sessionID: sessionA, deviceID: "released-\(sequence)",
+                sequence: sequence, claimedAt: instant,
+                releasedAt: instant.addingTimeInterval(30)
+            ))
+        }
+        context.insert(FocusTimerDeviceClaim(
+            id: candidateID, sessionID: sessionA, deviceID: "released-candidate",
+            sequence: 1, claimedAt: instant.addingTimeInterval(10)
+        ))
+        // Physical copies need not have matching metadata. Any release of the
+        // logical claim tombstones it; the older timestamp puts this evidence
+        // deterministically beyond the initial 128-row prefix.
+        context.insert(FocusTimerDeviceClaim(
+            id: candidateID, sessionID: sessionA, deviceID: "released-candidate",
+            sequence: 1, claimedAt: instant,
+            releasedAt: instant.addingTimeInterval(30)
+        ))
+        context.insert(FocusTimerDeviceClaim(
+            sessionID: sessionA, deviceID: "actual-owner",
+            sequence: 0, claimedAt: instant
+        ))
+        let timer = try timerRecord(
+            sessionID: sessionA, status: .running, start: instant,
+            updatedAt: instant, revision: 1, ownershipSequence: 0,
+            writer: "actual-owner"
+        )
+        context.insert(timer)
+        try context.save()
+        let claimsBefore = try context.fetchCount(FetchDescriptor<FocusTimerDeviceClaim>())
+        let recordsBefore = try context.fetchCount(FetchDescriptor<SyncedFocusTimer>())
+        let bounded = try FocusCloudSyncStore.claims(sessionID: sessionA, context: context)
+        XCTAssertEqual(bounded.count, FocusCloudSyncStore.QueryContract.matchingSessionClaimLimit)
+        XCTAssertEqual(FocusSyncPolicy.notificationOwner(
+            for: sessionA, claims: bounded.map(\.policySnapshot)
+        ), "released-candidate")
+        let complete = try context.fetch(FetchDescriptor<FocusTimerDeviceClaim>())
+        XCTAssertEqual(FocusSyncPolicy.notificationOwner(
+            for: sessionA, claims: complete.map(\.policySnapshot)
+        ), "actual-owner")
+
+        let assertBoundedFailure: (Error) -> Void = {
+            XCTAssertEqual($0 as? FocusCloudSyncError, .timerHistoryRequiresMaintenance)
+        }
+        XCTAssertThrowsError(try FocusCloudSyncStore.notificationOwner(
+            sessionID: sessionA, context: context
+        )) { assertBoundedFailure($0) }
+        XCTAssertThrowsError(try FocusCloudSyncStore.claimOwnership(
+            sessionID: sessionA, context: context, deviceID: "new-device"
+        )) { assertBoundedFailure($0) }
+        XCTAssertThrowsError(try FocusCloudSyncStore.upsert(
+            envelope: timer.decodedPayload().recoveryEnvelope(adoptedAt: instant),
+            status: .running, context: context, deviceID: "new-device",
+            claimIfUnowned: true, now: instant
+        )) { assertBoundedFailure($0) }
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<FocusTimerDeviceClaim>()), claimsBefore)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<SyncedFocusTimer>()), recordsBefore)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    @MainActor
+    func testCompleteReleasedOwnershipHistoryAllowsANewClaim() throws {
+        let container = try focusContainer(named: "FocusCloudSyncCompleteReleasedClaims")
+        let context = container.mainContext
+        let instant = Date(timeIntervalSince1970: 1_800_550_000)
+        let id = UUID()
+        for releasedAt in [nil, Optional(instant.addingTimeInterval(30))] {
+            context.insert(FocusTimerDeviceClaim(
+                id: id, sessionID: sessionA, deviceID: "released-device",
+                sequence: 8, claimedAt: instant, releasedAt: releasedAt
+            ))
+        }
+        let timer = try timerRecord(
+            sessionID: sessionA, status: .running, start: instant,
+            updatedAt: instant, revision: 1, ownershipSequence: 8,
+            writer: "released-device"
+        )
+        context.insert(timer)
+        try context.save()
+
+        XCTAssertNil(try FocusCloudSyncStore.notificationOwner(sessionID: sessionA, context: context))
+        _ = try FocusCloudSyncStore.upsert(
+            envelope: timer.decodedPayload().recoveryEnvelope(adoptedAt: instant),
+            status: .running, context: context, deviceID: "new-device",
+            claimIfUnowned: true, now: instant.addingTimeInterval(60)
+        )
+        try context.save()
+        XCTAssertEqual(try FocusCloudSyncStore.notificationOwner(
+            sessionID: sessionA, context: context
+        ), "new-device")
+        let claims = try FocusCloudSyncStore.claims(sessionID: sessionA, context: context)
+        XCTAssertEqual(claims.count, 3)
+        XCTAssertEqual(claims.first?.sequence, 9)
     }
 
     @MainActor
@@ -1912,6 +2023,349 @@ final class FocusCloudSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testMoreThan64PauseCyclesStillSyncAdoptAndClose() throws {
+        for terminalStatus in [SyncedFocusStatus.completed, .cancelled] {
+            let container = try focusContainer(named: "FocusHistoryTransitions-\(terminalStatus)")
+            let context = container.mainContext
+            let start = Date.now.addingTimeInterval(-600)
+            var engine = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
+            try engine.startFocus(isPro: false, now: start, sessionID: sessionA)
+            var writer = "device-a"
+            func publish(_ status: SyncedFocusStatus, at date: Date) throws {
+                _ = try FocusCloudSyncStore.upsert(
+                    envelope: FocusRecoveryEnvelope(
+                        engine: engine, subject: subject, clockAnchor: nil,
+                        pendingCompletion: nil, savedAt: date
+                    ),
+                    status: status, context: context, deviceID: writer,
+                    claimIfUnowned: true, now: date
+                )
+                try context.save()
+            }
+            try publish(.running, at: start)
+            for index in 0 ..< 65 {
+                let pausedAt = start.addingTimeInterval(1 + Double(index) * 2)
+                try engine.pause(at: pausedAt)
+                try publish(.paused, at: pausedAt)
+                let resumedAt = pausedAt.addingTimeInterval(0.5)
+                try engine.resume(at: resumedAt)
+                try publish(.running, at: resumedAt)
+            }
+            XCTAssertEqual(try context.fetchCount(FetchDescriptor<SyncedFocusTimer>()), 131)
+            let latest = try XCTUnwrap(FocusCloudSyncStore.canonicalActive(context: context))
+            XCTAssertEqual(latest.status, .running)
+            XCTAssertEqual(latest.revision, 131)
+
+            _ = try FocusCloudSyncStore.claimOwnership(
+                sessionID: sessionA, context: context, deviceID: "device-b",
+                expectedRecordID: latest.id, expectedRevision: latest.revision,
+                expectedOwnershipSequence: latest.ownershipSequence
+            )
+            try context.save()
+            writer = "device-b"
+            try publish(.running, at: start.addingTimeInterval(200))
+            XCTAssertEqual(try FocusCloudSyncStore.notificationOwner(
+                sessionID: sessionA, context: context
+            ), writer)
+
+            let end = try XCTUnwrap(engine.endDate)
+            if terminalStatus == .completed {
+                guard case let .focusCompleted(completion)? = engine.advance(at: end) else {
+                    return XCTFail("Expected earned completion after repeated pauses")
+                }
+                _ = try FocusCloudSyncStore.upsert(
+                    envelope: FocusRecoveryEnvelope(
+                        engine: engine, subject: subject, clockAnchor: nil,
+                        pendingCompletion: completion, savedAt: end
+                    ),
+                    status: .completionPending, context: context, deviceID: writer,
+                    claimIfUnowned: false, now: end
+                )
+                context.insert(FocusCompletionSessionFactory.normalSession(
+                    completion: completion, subject: nil, subjectSnapshot: subject,
+                    dataEpochID: nil
+                ))
+            }
+            try FocusCloudSyncStore.markTerminal(
+                sessionID: sessionA, status: terminalStatus, context: context,
+                deviceID: writer, at: end
+            )
+            try context.save()
+            XCTAssertTrue(try FocusCloudSyncStore.isSessionClosed(
+                sessionID: sessionA, context: context
+            ))
+            XCTAssertNil(try FocusCloudSyncStore.canonicalActive(context: context))
+            let rows = try context.fetch(FetchDescriptor<SyncedFocusTimer>())
+            XCTAssertEqual(rows.count, terminalStatus == .completed ? 134 : 133)
+            XCTAssertEqual(rows.filter { $0.status == terminalStatus }.count, 1)
+        }
+    }
+
+    @MainActor
+    func testPagedHistoryValidatesDuplicatePayloadsAcrossPageBoundary() throws {
+        for hasConflict in [false, true] {
+            let container = try focusContainer(named: "FocusHistoryBoundary-\(hasConflict)")
+            let context = container.mainContext
+            let start = Date.now.addingTimeInterval(-600)
+            for index in 0 ..< 127 {
+                let row = try timerRecord(
+                    sessionID: sessionA, status: .running, start: start,
+                    updatedAt: start, revision: index + 1, ownershipSequence: 0,
+                    writer: "device-a"
+                )
+                row.id = historyRecordID(index)
+                context.insert(row)
+            }
+            let first = try timerRecord(
+                sessionID: sessionA, status: .running, start: start,
+                updatedAt: start, revision: 1, ownershipSequence: 0, writer: "old-device"
+            )
+            let second = try timerRecord(
+                sessionID: sessionA, status: .running, start: start,
+                updatedAt: start, revision: 1, ownershipSequence: 0, writer: "old-device"
+            )
+            first.id = historyRecordID(127)
+            second.id = first.id
+            second.payloadData = first.payloadData
+            var object = try XCTUnwrap(JSONSerialization.jsonObject(
+                with: second.payloadData
+            ) as? [String: Any])
+            if hasConflict {
+                var subjectObject = try XCTUnwrap(object["subject"] as? [String: Any])
+                subjectObject["name"] = "Different valid subject payload"
+                object["subject"] = subjectObject
+            }
+            second.payloadData = try JSONSerialization.data(
+                withJSONObject: object, options: [.sortedKeys, .prettyPrinted]
+            )
+            _ = try second.decodedPayload()
+            context.insert(first)
+            context.insert(second)
+            let winner = try timerRecord(
+                sessionID: sessionA, status: .running, start: start,
+                updatedAt: start, revision: 1, ownershipSequence: 7, writer: "new-device"
+            )
+            winner.id = historyRecordID(128)
+            context.insert(winner)
+            try context.save()
+            let originalBytes = second.payloadData
+
+            if hasConflict {
+                XCTAssertThrowsError(try FocusCloudSyncStore.claimOwnership(
+                    sessionID: sessionA, context: context, deviceID: "reader"
+                )) {
+                    XCTAssertEqual($0 as? FocusCloudSyncError, .invalidPayload)
+                }
+            } else {
+                XCTAssertEqual(try FocusCloudSyncStore.canonicalActive(context: context)?.id,
+                               winner.id)
+                _ = try FocusCloudSyncStore.claimOwnership(
+                    sessionID: sessionA, context: context, deviceID: "reader"
+                )
+            }
+            XCTAssertEqual(try context.fetchCount(FetchDescriptor<SyncedFocusTimer>()), 130)
+            XCTAssertEqual(second.payloadData, originalBytes)
+        }
+    }
+
+    @MainActor
+    func testPagedHistoryGroupsCanonicallyEquivalentWriterIDs() throws {
+        let decomposed = "x-e\u{301}"
+        let precomposed = "x-\u{e9}"
+        let distinct = "x-e\u{34f}\u{301}"
+        XCTAssertEqual(decomposed, precomposed)
+        XCTAssertNotEqual(decomposed, distinct)
+        for persistFirst in [false, true] {
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("FocusHistoryUnicode-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let container = try focusContainer(
+                named: "FocusHistoryUnicode",
+                url: directory.appendingPathComponent("history.store")
+            )
+            let context = container.mainContext
+            context.autosaveEnabled = false
+            let start = Date.now.addingTimeInterval(-600)
+            let template = try timerRecord(
+                sessionID: sessionA, status: .running, start: start,
+                updatedAt: start, revision: 1, ownershipSequence: 0,
+                writer: decomposed
+            )
+            for writer in [decomposed, distinct, precomposed] {
+                let row = try timerRecord(
+                    sessionID: sessionA, status: .running, start: start,
+                    updatedAt: start, revision: 1, ownershipSequence: 0, writer: writer
+                )
+                row.id = template.id
+                row.payloadData = template.payloadData
+                if writer.utf8.elementsEqual(precomposed.utf8) {
+                    var object = try XCTUnwrap(JSONSerialization.jsonObject(
+                        with: row.payloadData
+                    ) as? [String: Any])
+                    object["savedAt"] = start.addingTimeInterval(1).timeIntervalSinceReferenceDate
+                    row.payloadData = try JSONSerialization.data(withJSONObject: object)
+                }
+                _ = try row.decodedPayload()
+                context.insert(row)
+            }
+            if persistFirst { try context.save() }
+            // Finder-style collation can place the distinct writer between
+            // two Swift-equal snapshots, hiding their divergent payloads from
+            // adjacent-row validation. Check SQLite and pending-row ordering.
+            XCTAssertThrowsError(try FocusCloudSyncStore.claimOwnership(
+                sessionID: sessionA, context: context, deviceID: "reader"
+            )) {
+                XCTAssertEqual($0 as? FocusCloudSyncError, .invalidPayload)
+            }
+            XCTAssertEqual(try context.fetchCount(FetchDescriptor<SyncedFocusTimer>()), 3)
+        }
+    }
+
+    @MainActor
+    func testPagedHistoryValidatesUnsavedPhysicalCopiesBeyondOnePage() throws {
+        for hasConflict in [false, true] {
+            let container = try focusContainer(named: "FocusHistoryPendingCopies-\(hasConflict)")
+            let context = container.mainContext
+            context.autosaveEnabled = false
+            let start = Date.now.addingTimeInterval(-600)
+            let source = try timerRecord(
+                sessionID: sessionA, status: .running, start: start,
+                updatedAt: start, revision: 1, ownershipSequence: 0, writer: "device-a"
+            )
+            source.id = historyRecordID(0)
+            for index in 0 ..< 130 {
+                let copy = try timerRecord(
+                    sessionID: sessionA, status: .running, start: start,
+                    updatedAt: start, revision: 1, ownershipSequence: 0, writer: "device-a"
+                )
+                copy.id = source.id
+                copy.payloadData = source.payloadData
+                if hasConflict, index == 129 {
+                    var object = try XCTUnwrap(JSONSerialization.jsonObject(
+                        with: copy.payloadData
+                    ) as? [String: Any])
+                    object["savedAt"] = start.addingTimeInterval(1).timeIntervalSinceReferenceDate
+                    copy.payloadData = try JSONSerialization.data(withJSONObject: object)
+                }
+                context.insert(copy)
+            }
+            if hasConflict {
+                XCTAssertThrowsError(try FocusCloudSyncStore.claimOwnership(
+                    sessionID: sessionA, context: context, deviceID: "reader"
+                )) {
+                    XCTAssertEqual($0 as? FocusCloudSyncError, .invalidPayload)
+                }
+            } else {
+                XCTAssertEqual(try FocusCloudSyncStore.canonicalActive(context: context)?.id,
+                               source.id)
+            }
+            XCTAssertEqual(try context.fetchCount(FetchDescriptor<SyncedFocusTimer>()), 130)
+        }
+    }
+
+    @MainActor
+    func testPagedHistoryBoundsDistinctSnapshotCollisionsWithinOneEventID() throws {
+        let container = try focusContainer(named: "FocusHistoryEventCollisions")
+        let context = container.mainContext
+        let start = Date.now.addingTimeInterval(-600)
+        for index in 0 ..< 129 {
+            let row = try timerRecord(
+                sessionID: sessionA, status: .running, start: start,
+                updatedAt: start, revision: index + 1, ownershipSequence: 0,
+                writer: "device-a"
+            )
+            // Normal state transitions have different UUIDs. This fixture is
+            // a bounded failure for conflicting copies of one physical event.
+            row.id = historyRecordID(0)
+            context.insert(row)
+        }
+        try context.save()
+        XCTAssertThrowsError(try FocusCloudSyncStore.claimOwnership(
+            sessionID: sessionA, context: context, deviceID: "reader"
+        )) {
+            XCTAssertEqual($0 as? FocusCloudSyncError, .timerHistoryRequiresMaintenance)
+        }
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<SyncedFocusTimer>()), 129)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<FocusTimerDeviceClaim>()), 0)
+    }
+
+    @MainActor
+    func testPagedHistoryRejectsCorruptNonwinningRearRevision() throws {
+        let container = try focusContainer(named: "FocusHistoryRearCorruption")
+        let context = container.mainContext
+        let start = Date.now.addingTimeInterval(-600)
+        for index in 0 ..< 260 {
+            let row = try timerRecord(
+                sessionID: sessionA, status: .running, start: start,
+                updatedAt: start, revision: 1,
+                ownershipSequence: index == 0 ? 7 : 0, writer: "device-a"
+            )
+            row.id = historyRecordID(index)
+            if index == 259 { row.payloadData = Data([0xFF]) }
+            context.insert(row)
+        }
+        try context.save()
+        XCTAssertThrowsError(try FocusCloudSyncStore.claimOwnership(
+            sessionID: sessionA, context: context, deviceID: "reader"
+        )) {
+            XCTAssertEqual($0 as? FocusCloudSyncError, .invalidPayload)
+        }
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<SyncedFocusTimer>()), 260)
+    }
+
+    @MainActor
+    func testThousandRevisionSQLiteHistoryRemainsUsableAndRetainsMaximumRevision() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FocusHistoryBenchmark-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let container = try focusContainer(
+            named: "FocusHistoryBenchmark", url: directory.appendingPathComponent("history.store")
+        )
+        let context = container.mainContext
+        let start = Date.now.addingTimeInterval(-600)
+        for index in 0 ..< 1_000 {
+            let row = try timerRecord(
+                sessionID: sessionA, status: .running, start: start,
+                updatedAt: start.addingTimeInterval(Double(index)), revision: index + 1,
+                ownershipSequence: index == 0 ? 7 : 0, writer: "device-a"
+            )
+            row.id = historyRecordID(index)
+            context.insert(row)
+        }
+        context.insert(FocusTimerDeviceClaim(
+            sessionID: sessionA, deviceID: "device-a", sequence: 7, claimedAt: start
+        ))
+        try context.save()
+        // A fresh context ensures this also measures SQLite reads and decoding,
+        // rather than relying solely on the models inserted above.
+        let reader = ModelContext(container)
+        let beganAt = ProcessInfo.processInfo.systemUptime
+        let winner = try XCTUnwrap(FocusCloudSyncStore.canonicalActive(context: reader))
+        XCTAssertEqual(winner.id, historyRecordID(0))
+        XCTAssertEqual(winner.revision, 1)
+        _ = try FocusCloudSyncStore.claimOwnership(
+            sessionID: sessionA, context: reader, deviceID: "device-b"
+        )
+        try FocusCloudSyncStore.markTerminal(
+            sessionID: sessionA, status: .cancelled, context: reader,
+            deviceID: "device-b", at: start.addingTimeInterval(1_001)
+        )
+        try reader.save()
+        let elapsed = ProcessInfo.processInfo.systemUptime - beganAt
+        XCTAssertLessThan(elapsed, 10, "Three complete 1,000-row scans took \(elapsed) seconds")
+        let cancelled = SyncedFocusStatus.cancelled.rawValue
+        let terminal = try XCTUnwrap(reader.fetch(FetchDescriptor<SyncedFocusTimer>(
+            predicate: #Predicate { $0.statusRaw == cancelled }
+        )).first)
+        XCTAssertEqual(terminal.revision, 1_001,
+                       "The next revision must exceed even a discarded nonwinning revision")
+        XCTAssertEqual(terminal.ownershipSequence, 8)
+        XCTAssertEqual(try reader.fetchCount(FetchDescriptor<SyncedFocusTimer>()), 1_001)
+    }
+
+    @MainActor
     func testOwnershipQueriesStayBoundedAndExactWithLifetimeNoise() throws {
         let schema = Schema([
             StudySession.self,
@@ -2001,6 +2455,24 @@ final class FocusCloudSyncTests: XCTestCase {
             ),
             "zzzz-policy-winner"
         )
+    }
+
+    private func historyRecordID(_ index: Int) -> UUID {
+        UUID(uuidString: String(format: "30000000-0000-0000-0000-%012d", index))!
+    }
+
+    @MainActor
+    private func insertTimerHistory(
+        count: Int, context: ModelContext, start: Date, writer: String
+    ) throws {
+        for index in 0 ..< count {
+            context.insert(try timerRecord(
+                sessionID: sessionA, status: .running, start: start,
+                updatedAt: start.addingTimeInterval(Double(index)),
+                revision: index + 1, ownershipSequence: 0, writer: writer
+            ))
+        }
+        try context.save()
     }
 
     private var subject: FocusSubjectSnapshot {

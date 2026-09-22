@@ -1,8 +1,58 @@
 # App Store submission checklist
 
-新IDのPomoGem 1.0 (5)のチェックリストです。実装済みの項目と、Apple上の登録・実機検証は
-分けて確認します。以前のアプリに対するupload／価格／schema／登録済みの証拠は新アプリへ転用しません。
+PomoGemの現行候補と、初回1.0 (5)以降の履歴を区別したチェックリストです。実装済みの項目と、
+Apple上の登録・実機検証は分けて確認します。以前のアプリに対するupload／価格／schema／登録済みの証拠は新アプリへ転用しません。
 過去の結果は`Docs/LEGACY_RELEASE_PROVENANCE.md`に分離しています。
+
+## 2026-09-13 スクリーンタイム候補の配布前確認
+
+次は新機能の出荷条件です。sourceのmerge、Simulatorでの成功、以前のApp Store提出結果を
+Apple承認や実機確認の代わりにしません。[仕様・手順](../Docs/ScreenTimeGems.md)を参照します。
+
+- [ ] アプリ本体とDevice Activity Monitor拡張それぞれのFamily Controls **distribution**承認を確認。
+  App Groupを含むApp ID・provisioning profileと、最終Archive／IPAの署名が一致することを検証
+- [ ] 署名済みiPhoneでindividual authorizationの許可・拒否・取消・再許可と、監視エラーからの再試行を確認
+- [ ] 勉強側の無料5つ・6つ目拒否、Pro購入／復元で無制限、Pro取消時の超過監視停止を確認。
+  黒いgem側は無料6つ以上も利用でき、カテゴリ／Web選択と両側への同一アプリ登録を拒否
+- [ ] 各側で複数アプリにまたがる合計10分・20分の実到達を確認し、復帰時に差分だけが瓶へ落ちる。
+  タイマー中は学習側を休止し、黒いgem側は記録を継続。端数・日付・時刻変更・再起動も確認
+- [ ] 通知重複・順序逆転・保存失敗・途中終了・再試行で二重加算せず、保存先／アカウント／resetの
+  境界で古い台帳や遅延通知を新しい領域へ取り込まないことを実機で確認
+- [ ] 黒いgemは黒同士だけで結合し、学習時間・勉強質量・レア抽選・共有画像／内訳へ混ざらないことを確認
+- [ ] VoiceOver・最大文字サイズ・視差効果を減らす設定で、アプリ選択・テーマ・保存・停止と瓶の識別を確認
+- [ ] Pro掲載文・新しい審査画像・Privacy・Review Notesを最終候補へ合わせ、必要な公開先へ転記後に再確認。
+  端末内だけの選択／黒いgemと、通常の保存先へ入る勉強記録を区別して説明
+
+## 2026-09-12 の1.0.1 (7) 審査提出
+
+build 6は実機監査でreset履歴の問題を再現したため審査取消操作を行い、version itemはReady for Reviewへ
+戻りました。以下はbuild 7だけの記録です。利用者の並列提出指示に従い、build 7を2026-09-12
+16:26 JSTに提出し、「審査待ち」を確認しました。SettingsのiCloud切り替えは開発・検証中で、
+このbuildには含みません。次の機能版のbuild番号は未確定です。
+後続の2026-09-06欄と過去のチェック済み項目は、
+build 7の合格・upload・提出の証拠には使いません。現行状態は
+[release-record-1.0.1-7.md](release-record-1.0.1-7.md)、実機監査の範囲と残件は
+[RealDeviceICloudAudit.md](../Docs/RealDeviceICloudAudit.md)に記録します。
+
+- [x] build 6の「デベロッパにより却下済み」を確認してからbuild 7を選択
+- [x] Archive元`e4aee83b5e70aa9ae078ff37ad90626bb8becc97`のbuild 7で生成project・Release Archiveを検証し、
+  別途exportしたIPAと実際のupload-staging IPAの双方でstrict distribution検証に合格。app／Widgetの実行fileとdSYMのUUIDも一致
+- [x] ローカルのDebug全815件（811成功・明示opt-in 4skip・失敗0）、current-file readiness、Release静的解析を確認
+- [ ] Archive元のGitHub CIを実行完了。run `34668002596`は支払い／Actions上限によりrunner起動前に失敗し、未実行
+- [x] Apple Development署名のRelease実機でiCloud保存領域の再起動、履歴反映前の記録保護、
+  cloud reset一時停止、local-only reset継続、実通信断からの非破壊復旧を確認。App Store配布版の実機試験とは区別
+- [x] Apple Validate（2026-09-12 11:43 JST）とOrganizerのbuild 7 uploadを確認（記録時刻11:56 JST、完了表示確認11:57 JST）
+- [x] upload後に`v1.0.1-build7`を作成・pushし、上記Archive元のcommitを指すことを確認
+- [x] 改訂したja-JP／en-US更新内容とReview NotesをConnectへ保存・再読込して正本との一致を確認
+- [ ] 公開Privacy文面を一致させる。Pages run `34669415266` attempt 2も支払い／上限によりrunner起動前に失敗
+- [ ] 既存screenshotを署名済みReleaseと比較し、差がある画像だけを更新。旧captureのversion・hashを新規撮影扱いにしない
+- [x] 処理済みbuild 7を選択し、1.0.1 (7)の1項目を審査へ提出。提出ID `7f746a75-2605-47c5-83d5-48ee76b40b2c`、2026-09-12 16:26 JSTに審査待ち
+- [ ] Appleの承認と公開を確認。既存の承認後自動公開設定は維持
+
+`AppStore/configuration.yml`の既知blockerは、実行または判断の証拠なしに解除しません。
+今回の1台の試験を、2台同期・account切替・StoreKit・accessibility全項目の合格とは扱いません。
+上記提出の完了は、開発中の保存先切り替え機能の合格・追加schema公開・提出を意味しません。
+後続の記録更新／merge commitはArchive元とは別に扱い、source tagは上記の固定commitを指します。
 
 ## 2026-09-06 の再登録・提出作業
 
@@ -100,7 +150,10 @@ HTTPS証明書の是正もユーザーが担当し、その完了を待たず提
   同一groupの競合解決、JSON raw export、2台間同期を最終development schemaと署名済み実機で確認する
 - [ ] partition中は、commit前に見えたscheduled-end前cancelを尊重する一方、先にmaterializeした
   `StudySession`は遅延cancelで削除／demoteしないCAP trade-offをownerが承認し、署名済み2台で両順序を確認
-- [x] account切替・複数worker競合が未解決のdirect CloudKit一括削除は1.0のUI／launch pathから無効化し、通常reset、app削除、AppleのiCloudストレージ管理だけを案内
+- [ ] direct CloudKit一括削除の無効化を維持し、現在の候補ではiCloud通常resetも変更前に拒否して理由を表示する。
+  local-only通常resetは維持し、物理削除との違いを審査メモ・Privacy・画面で一致させる
+- [ ] 既存CloudKit補助directoryを消さずに起動できることと、不正な保存履歴の拒否を確認する。
+  cloud履歴preflightはRoot公開前に必要な世代の反映を待ち、期限切れ・取消・不完全応答では新規記録を作らない
 - [ ] 署名済み実機2台でmaintenance、foreground復帰、15分以上のactive継続中に相手端末から追加・更新した
   古い日時のsession、remote import通知、再集計中表示、timer引き継ぎと同期を検証し、Release buildに
   rare reward UI／operations entitlement／direct CloudKit一括削除UI／削除用launch preflight gateがないことを確認
@@ -112,7 +165,7 @@ HTTPS証明書の是正もユーザーが担当し、その完了を待たず提
 - [x] 新Non-Consumable `com.hinoshiba.pomogem.pro.lifetime`を作成し、米国USD 0.99を基準価格、日本をJPY 100のcustom price、その他の配信地域をAppleの現地相当額に設定
 - [ ] 日本向け有料IAPについて販売主体と特商法上の表示要否を確認し、必要な事業者情報・価格・支払／提供時期・返品等を購入前に表示。氏名／住所／電話／Webで省略する販売価格は、請求時に購入判断前の十分な余裕をもって遅滞なく提供できる実運用を確認（現行の既知blocker）
 - [ ] `Docs/COMMERCIAL_DISCLOSURE_OPERATIONS.md`に従い、非公開の法定情報正本、販売価格を含む開示請求メール、担当者不在時の代替手順を実地確認
-- [ ] 新IAPのja-JP（`ポモジェムPro`）／en-US（`PomoGem Pro`）を「任意時間・月刻印」の
+- [ ] 新IAPのja-JP（`ポモジェムPro`）／en-US（`PomoGem Pro`）を「任意時間・月刻印・勉強アプリ数無制限」の
   2機能で登録し、新product IDのreview notes・価格・配信地域・Family Sharingを保存後に再確認する。
   同じ新アプリのversion 1.0と初回IAPを同一のreview submissionへ追加する
 - [x] IAP review screenshotを「任意時間・月刻印」の2機能とStoreKitの実価格だけを示す現行paywallへ差し替え、reload確認
@@ -148,7 +201,8 @@ HTTPS証明書の是正もユーザーが担当し、その完了を待たず提
 - [ ] `./Scripts/check-oss-readiness.sh --release`、site validation、build、test、analyzeが成功
 - [ ] 全11出荷対象モデルのversioned JSON exportを40年相当の保存データで実行し、件数・内容・Files保存・一時ファイル削除を確認
 - [ ] local-only実機でofflineの基本機能、削除前のJSON書き出しと再import不可を確認し、iCloud実機2台で
-  online account確認、同期、timer引き継ぎ、reset、通信断時fail-closedと非破壊性を確認
+  online account確認、リセット履歴反映後の記録作成、同期、timer引き継ぎ、通常resetの利用不可、
+  通信断時fail-closedと非破壊性を確認。local-only通常resetの継続も確認する
 - 過去の別アプリ1.0 (1)／1.0 (3)のアップロード・実機installは、今回の新アプリの証拠にはしない。
   日時と旧IDを含む履歴は`Docs/LEGACY_RELEASE_PROVENANCE.md`を参照。
 - [x] `timerDisplayMode`を含む最終候補を一意なbuild番号でArchive／Distributeし、distribution署名／

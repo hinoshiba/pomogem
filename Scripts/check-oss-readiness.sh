@@ -28,6 +28,9 @@ Docs/OSS_PUBLISHING.md
 Docs/LICENSE_AUDIT.md
 Scripts/check-git-public-metadata.py
 Scripts/public_mailbox_policy.py
+Scripts/test-public-metadata.py
+Scripts/release_profile_policy.py
+Scripts/test-release-profile-policy.py
 Scripts/check-published-site-policy.sh
 AppStore/README.md
 AppStore/configuration.yml
@@ -123,6 +126,9 @@ ruby -e 'require "psych"; ARGV.each { |path| Psych.parse_file(path) }' \
   .github/workflows/*.yml \
   .github/ISSUE_TEMPLATE/*.yml
 
+python3 Scripts/test-release-profile-policy.py
+python3 Scripts/test-public-metadata.py
+
 plutil -lint PomoGem/Info.plist >/dev/null
 plutil -lint PomoGem/Resources/PrivacyInfo.xcprivacy >/dev/null
 plutil -lint PomoGemWidgets/PrivacyInfo.xcprivacy >/dev/null
@@ -204,9 +210,18 @@ require(
 )
 require(app_entitlements.get("com.apple.developer.icloud-services") == ["CloudKit"], "app iCloud services entitlement must contain only CloudKit")
 require(
-    "com.apple.security.application-groups" not in app_entitlements,
-    "main app must not retain the removed App Group entitlement",
+    app_entitlements.get("com.apple.security.application-groups") == ["group.com.hinoshiba.pomogem"],
+    "main app must use only the Screen Time App Group",
 )
+require(app_entitlements.get("com.apple.developer.family-controls") is True, "Screen Time requires Family Controls")
+monitor_entitlements = load("PomoGemScreenTimeMonitor/PomoGemScreenTimeMonitor.entitlements")
+require(monitor_entitlements == {
+    "com.apple.security.application-groups": ["group.com.hinoshiba.pomogem"],
+    "com.apple.developer.family-controls": True,
+}, "monitor entitlement scope must remain device-only")
+monitor_manifest = load("PomoGemScreenTimeMonitor/PrivacyInfo.xcprivacy")
+require(monitor_manifest.get("NSPrivacyTracking") is False, "monitor must not track users")
+require(monitor_manifest.get("NSPrivacyCollectedDataTypes") == [], "monitor must not collect data")
 
 widget_entitlements = load("PomoGemWidgets/PomoGemWidgets.entitlements")
 for forbidden in (
@@ -446,6 +461,36 @@ for raw_path in sorted(expected_paths):
     if manifest_entries[raw_path] != actual:
         raise SystemExit(f"error: screenshot checksum manifest differs from file: {raw_path}")
     if ledger_entries[raw_path] != actual:
+        raise SystemExit(f"error: ASSET_LICENSES.md hash differs from file: {raw_path}")
+
+documentation_directory = Path("Docs/images/timer-orientation")
+documentation_paths = {
+    (documentation_directory / name).as_posix()
+    for name in (
+        "default-orientation-settings.png",
+        "timer-up.png", "timer-right.png", "timer-down.png", "timer-left.png",
+        "break-up.png", "break-right.png", "break-down.png", "break-left.png",
+    )
+}
+if {path.as_posix() for path in documentation_directory.rglob("*.png")} != documentation_paths:
+    raise SystemExit("error: timer-orientation screenshots differ from the nine reviewed documentation images")
+
+documentation_entries = {}
+for line_number, line in enumerate(ledger_path.read_text().splitlines(), start=1):
+    fields = re.findall(r"`([^`]+)`", line)
+    if not fields or not fields[0].startswith(f"{documentation_directory.as_posix()}/"):
+        continue
+    if len(fields) != 2 or re.fullmatch(r"[0-9a-f]{64}", fields[1]) is None:
+        raise SystemExit(f"error: invalid documentation screenshot row at {ledger_path}:{line_number}")
+    raw_path, digest = fields
+    if raw_path in documentation_entries:
+        raise SystemExit(f"error: duplicate documentation screenshot row: {raw_path}")
+    documentation_entries[raw_path] = digest
+
+if set(documentation_entries) != documentation_paths:
+    raise SystemExit("error: ASSET_LICENSES.md differs from the nine timer-orientation documentation images")
+for raw_path, digest in documentation_entries.items():
+    if hashlib.sha256(Path(raw_path).read_bytes()).hexdigest() != digest:
         raise SystemExit(f"error: ASSET_LICENSES.md hash differs from file: {raw_path}")
 PY
 

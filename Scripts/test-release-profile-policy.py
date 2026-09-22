@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+"""Regressions for authorization and test exclusion in the archive verifier."""
+
+from __future__ import annotations
+
+import ast
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from typing import Optional
+
+sys.dont_write_bytecode = True
+from release_profile_policy import validate_profile_cloud_environment
+
+
+class ProfileCloudEnvironmentTests(unittest.TestCase):
+    def test_production_may_be_one_of_several_authorized_environments(self) -> None:
+        for value in ("Production", ["Production"], ["Production", "Development"],
+                      ["Development", "Production"]):
+            with self.subTest(value=value):
+                validate_profile_cloud_environment(value, "Production")
+
+    def test_missing_production_unknown_values_and_malformed_allowlists_fail(self) -> None:
+        for value in (None, True, 1, [], {}, ["Production", None], ["Production", 1],
+                      ["Production", ["Development"]], "Development", ["Development"],
+                      "", "production", "Production ", ["Production", "Unknown"],
+                      {"Production"}, ("Production",)):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                validate_profile_cloud_environment(value, "Production")
+
+    def test_development_must_also_be_explicitly_authorized(self) -> None:
+        validate_profile_cloud_environment("Development", "Development")
+        validate_profile_cloud_environment(["Production", "Development"], "Development")
+        with self.assertRaises(ValueError):
+            validate_profile_cloud_environment("Production", "Development")
+
+
+def verifier_bundle_check():
+    # Execute the production function, not a test copy of its signed-value
+    # guard. Other profile/certificate checks use fixtures because this suite
+    # must not depend on a developer's profiles, identities, or private keys.
+    script = Path(__file__).with_name("verify-release-archive.sh").read_text()
+    for source in re.findall(r"<<'PY'\n(.*?)\nPY(?:\n|$)", script, re.DOTALL):
+        module = ast.parse(source)
+        function = next((node for node in module.body if isinstance(node, ast.FunctionDef)
+                         and node.name == "validate_signed_bundle"), None)
+        if function is None:
+            continue
+
+        def fail(message: str) -> None:
+            raise ValueError(message)
+
+        namespace = {
+            "Optional": Optional,
+            "TEAM_ID": "fixture-team",
+            "validate_profile_cloud_environment": validate_profile_cloud_environment,
+            "validate_profile_basics": lambda profile, *_: profile["Entitlements"],
+            "require_host_signature_capabilities": lambda *_: None,
+            "require_host_profile_capabilities": lambda *_: None,
+            "profile_type": lambda profile, *_: profile["FixtureType"],
+            "fail": fail,
+        }
+        compiled = compile(ast.Module(body=[function], type_ignores=[]), str(Path(__file__)), "exec")
+        exec(compiled, namespace)
+        return namespace["validate_signed_bundle"]
+    raise AssertionError("The production validate_signed_bundle function was not found")
+
+
+class SignedCloudEnvironmentTests(unittest.TestCase):
+    def check_bundle(self, *, kind: str, signed_cloud: str, profile_cloud: object):
+        is_development = kind == "development"
+        entitlements = {
+            "application-identifier": "fixture-team.example.app",
+            "com.apple.developer.team-identifier": "fixture-team",
+            "get-task-allow": is_development,
+            "com.apple.developer.icloud-container-environment": signed_cloud,
+            "aps-environment": "development" if is_development else "production",
+        }
+        profile_entitlements = dict(entitlements)
+        profile_entitlements["com.apple.developer.icloud-container-environment"] = profile_cloud
+        return verifier_bundle_check()(
+            label="fixture app", bundle_id="example.app", signed_entitlements=entitlements,
+            profile={"FixtureType": kind, "Entitlements": profile_entitlements},
+            identity="apple-development" if is_development else "apple-distribution",
+            certificate_path="unused", is_neutral_widget=False,
+        )
+
+    def test_distribution_accepts_production_with_both_environments_authorized(self) -> None:
+        self.assertEqual(self.check_bundle(kind="app-store-connect", signed_cloud="Production",
+                         profile_cloud=["Production", "Development"]),
+                         ("app-store-connect", False, "Production"))
+
+    def test_distribution_still_rejects_signed_development_even_when_authorized(self) -> None:
+        with self.assertRaisesRegex(ValueError, "signed CloudKit environment"):
+            self.check_bundle(kind="app-store-connect", signed_cloud="Development",
+                              profile_cloud=["Production", "Development"])
+
+    def test_distribution_rejects_an_unusable_profile_allowlist(self) -> None:
+        for value in (None, ["Development"], ["Production", "Unknown"]):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "profile CloudKit environment"):
+                self.check_bundle(kind="app-store-connect", signed_cloud="Production",
+                                  profile_cloud=value)
+
+    def test_development_archive_still_requires_signed_development(self) -> None:
+        self.assertEqual(self.check_bundle(kind="development", signed_cloud="Development",
+                         profile_cloud=["Production", "Development"]),
+                         ("development", True, "Development"))
+        with self.assertRaisesRegex(ValueError, "signed CloudKit environment"):
+            self.check_bundle(kind="development", signed_cloud="Production",
+                              profile_cloud=["Production", "Development"])
+
+    def test_non_app_store_distribution_remains_rejected(self) -> None:
+        for kind in ("ad-hoc", "enterprise"):
+            with self.subTest(kind=kind), self.assertRaisesRegex(ValueError, "non-App-Store"):
+                self.check_bundle(kind=kind, signed_cloud="Production",
+                                  profile_cloud=["Production", "Development"])
+
+
+def verifier_payload_check():
+    script = Path(__file__).with_name("verify-release-archive.sh").read_text()
+    for source in re.findall(r"<<'PY'\n(.*?)\nPY(?:\n|$)", script, re.DOTALL):
+        function = next((node for node in ast.parse(source).body
+                         if isinstance(node, ast.FunctionDef)
+                         and node.name == "validate_release_payload_topology"), None)
+        if function is None:
+            continue
+
+        def fail(message: str) -> None:
+            raise ValueError(message)
+
+        namespace = {"Path": Path, "fail": fail}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), str(Path(__file__)), "exec"), namespace)
+        return namespace["validate_release_payload_topology"]
+    raise AssertionError("The production payload topology check was not found")
+
+
+class ReleaseTestExclusionTests(unittest.TestCase):
+    def test_nested_xctest_payload_is_rejected_including_widget_contents(self) -> None:
+        check = verifier_payload_check()
+        for relative in ("PlugIns/PomoGemTests.xctest",
+                         "PlugIns/PomoGemWidgets.appex/PlugIns/Injected.XCTEST"):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / relative).mkdir(parents=True)
+                with self.assertRaisesRegex(ValueError, "XCTest payload"):
+                    check(root)
+
+    def test_reviewed_payload_remains_allowed_and_preview_exclusion_is_preserved(self) -> None:
+        check = verifier_payload_check()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "PlugIns/PomoGemWidgets.appex").mkdir(parents=True)
+            (root / "PomoGem").write_bytes(b"ordinary executable fixture")
+            check(root)
+            for name in ("PomoGem.debug.dylib", "__preview.dylib", "source.preview-thunk.dylib"):
+                with self.subTest(name=name):
+                    artifact = root / name
+                    artifact.write_bytes(b"fixture")
+                    with self.assertRaisesRegex(ValueError, "Debug or preview"):
+                        check(root)
+                    artifact.unlink()
+
+    def test_real_device_gates_are_rejected_by_the_actual_binary_scan(self) -> None:
+        script = Path(__file__).with_name("verify-release-archive.sh").read_text()
+        function = re.search(r"^scan_release_binary\(\) \{\n.*?^\}", script, re.MULTILINE | re.DOTALL)
+        self.assertIsNotNone(function)
+        shell = "set -euo pipefail\nfail() { exit 71; }\n" + function.group(0) + \
+            '\naudit_tmp=$1\nscan_release_binary "$2" fixture\n'
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Path(directory) / "fixture-binary"
+            for marker in ("POMOGEM_REAL_STORAGE_TRANSFER", "POMOGEM_REAL_TRANSFER_LIFECYCLE",
+                           "POMOGEM_REAL_CLOUD_AUDIT", "POMOGEM_UI_TEST_STORAGE_TRANSFER",
+                           "liveForIsolatedTesting",
+                           "$s7PomoGem22StorageTransferRuntimeC22liveForIsolatedTestingACyKFZ"):
+                with self.subTest(marker=marker):
+                    fixture.write_bytes(b"ordinary string\n" + marker.encode() + b"\n")
+                    result = subprocess.run(["/bin/bash", "-c", shell, "payload-test", directory, str(fixture)],
+                                            capture_output=True, check=False)
+                    self.assertEqual(result.returncode, 71)
+            fixture.write_bytes(b"ordinary release executable strings\nStorageTransferRuntime\n"
+                                b"StorageTransferReleasePolicy\nallowsCloudReplacement\nisolatedTesting\n")
+            result = subprocess.run(["/bin/bash", "-c", shell, "payload-test", directory, str(fixture)],
+                                    capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0)
+
+    def test_ci_scan_rejects_dedicated_factory_in_host_and_nested_widget(self) -> None:
+        # Execute the checked-in CI step against inert files. This also catches
+        # regressions where the archive scanner is updated but CI is not.
+        workflow = Path(__file__).resolve().parents[1] / ".github/workflows/ci.yml"
+        match = re.search(
+            r"^      - name: Reject UI-test hooks in Release app\n"
+            r"        shell: bash\n        run: \|\n(?P<body>(?:          .*\n|\n)+)",
+            workflow.read_text(), re.MULTILINE,
+        )
+        self.assertIsNotNone(match)
+        shell = "\n".join(line[10:] for line in match.group("body").splitlines())
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory) / "DerivedData-CI-Release/Build/Products/Release-iphonesimulator/PomoGem.app"
+            widget = bundle / "PlugIns/PomoGemWidgets.appex/PomoGemWidgets"
+            widget.parent.mkdir(parents=True)
+            host = bundle / "PomoGem"
+            ordinary = b"StorageTransferRuntime\nStorageTransferReleasePolicy\nallowsCloudReplacement\nisolatedTesting\n"
+            environment = dict(os.environ, RUNNER_TEMP=directory)
+            for binary in (host, widget):
+                for marker in ("liveForIsolatedTesting",
+                               "$s7PomoGem22StorageTransferRuntimeC22liveForIsolatedTestingACyKFZ"):
+                    with self.subTest(binary=binary.name, marker=marker):
+                        host.write_bytes(ordinary)
+                        widget.write_bytes(ordinary)
+                        binary.write_bytes(ordinary + b"\x00" + marker.encode() + b"\x00")
+                        result = subprocess.run(["/bin/bash", "-c", shell], env=environment,
+                                                capture_output=True, check=False)
+                        self.assertEqual(result.returncode, 1)
+                        self.assertIn(b"forbidden UI-test or Debug hook tokens", result.stderr)
+            host.write_bytes(ordinary)
+            widget.write_bytes(ordinary)
+            result = subprocess.run(["/bin/bash", "-c", shell], env=environment,
+                                    capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

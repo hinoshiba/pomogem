@@ -1,0 +1,6 @@
+- Set Pro focus durations with numeric minute and second input or scroll wheels, from 1 minute 00 seconds to 360 minutes 00 seconds.
+- Enable or disable iCloud from Settings. Enabling uses iCloud data to replace this iPhone's local data. Disabling copies data to this iPhone and keeps it in iCloud. Replacing all iCloud data with this iPhone's data remains unavailable.
+- Use timers and records offline in iCloud mode when previously verified device data meets the access conditions. Changes are saved on this iPhone while sync waits.
+- Improved connection checks, retries, and timer presentation when returning to the app. Depending on the state, you may need to quit and reopen the app as instructed.
+- The three-manual-records-per-day limit now applies to this device independently of usage synced from other devices.
+- Gems now bounce, fall, and respond to tilt and shake consistently whether Reduce Motion is on or off.

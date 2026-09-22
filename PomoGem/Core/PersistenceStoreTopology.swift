@@ -207,16 +207,17 @@ enum PersistenceDeploymentStateError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .selectionAlreadyMade:
-            "保存方式はこのバージョンでは変更できません。"
+            "保存先は既に選択されています。変更するときは、設定の「iCloudと保存先」から確認してください。"
         case .invalidPersistedSelection:
             "保存方式の設定を安全に確認できません。"
         }
     }
 }
 
-/// Installation-level storage contract. A local-only choice is intentionally
-/// sticky: version 1 never changes it to CloudKit or uploads its rows. Moving
-/// to CloudKit requires deleting/reinstalling the app after an optional export.
+/// The original installation choice is retained for migration provenance.
+/// Only a verified storage-transfer transaction can supersede it, using one
+/// atomic selection/mount receipt outside UserDefaults. A malformed new receipt
+/// fails closed instead of silently reopening the older store.
 @MainActor
 enum PersistenceDeploymentState {
     private static let selectionKey = "persistence.deployment-selection.v1"
@@ -226,6 +227,11 @@ enum PersistenceDeploymentState {
     static func load(
         defaults: UserDefaults = .standard
     ) -> PersistenceDeploymentSelectionState {
+        switch transferredSelection(defaults: defaults) {
+        case let .committed(value): return .selected(value.selection)
+        case .invalid: return .invalid
+        case .absent: break
+        }
         guard let data = defaults.data(forKey: selectionKey) else {
             return .unselected
         }
@@ -263,6 +269,11 @@ enum PersistenceDeploymentState {
     static func loadMountState(
         defaults: UserDefaults = .standard
     ) -> PersistenceDeploymentMountState {
+        switch transferredSelection(defaults: defaults) {
+        case let .committed(value): return .mounted(value.selection)
+        case .invalid: return .invalid
+        case .absent: break
+        }
         guard let data = defaults.data(forKey: mountedSelectionKey) else {
             return .unrecorded
         }
@@ -285,6 +296,7 @@ enum PersistenceDeploymentState {
         guard load(defaults: defaults) == .selected(selection) else {
             throw PersistenceDeploymentStateError.invalidPersistedSelection
         }
+        if case .committed = transferredSelection(defaults: defaults) { return }
         switch loadMountState(defaults: defaults) {
         case .unrecorded:
             let encoder = JSONEncoder()
@@ -298,6 +310,27 @@ enum PersistenceDeploymentState {
         case .mounted, .invalid:
             throw PersistenceDeploymentStateError.invalidPersistedSelection
         }
+    }
+
+    static func hasVerifiedTransferReceipt(defaults: UserDefaults = .standard) -> Bool {
+        if case .committed = transferredSelection(defaults: defaults) { return true }
+        return false
+    }
+
+    private enum TransferredSelection {
+        case absent, committed(StorageTransferCommittedSelection), invalid
+    }
+
+    private static func transferredSelection(defaults: UserDefaults) -> TransferredSelection {
+        // Injected defaults suites are isolated unit-test/preview contracts;
+        // they must never consult the real installation's on-disk receipt.
+        guard defaults === UserDefaults.standard else { return .absent }
+        do {
+            if let receipt = try StorageTransferJournalStore.live().committedSelection() {
+                return .committed(receipt)
+            }
+            return .absent
+        } catch { return .invalid }
     }
 
 }
@@ -319,7 +352,8 @@ extension PersistenceDeploymentState {
         mountState: PersistenceDeploymentMountState,
         artifactHistory: PersistenceArtifactHistory,
         hasCloudRegistryHistory: Bool,
-        hasCloudBindingHistory: Bool
+        hasCloudBindingHistory: Bool,
+        hasVerifiedTransferReceipt: Bool = false
     ) -> PersistenceDeploymentValidation {
         switch selectionState {
         case .invalid:
@@ -359,8 +393,8 @@ extension PersistenceDeploymentState {
                     )),
                   !artifactHistory.hasInvalidArtifact,
                   artifactHistory.cloud.isEmpty,
-                  !hasCloudRegistryHistory,
-                  !hasCloudBindingHistory
+                  (!hasCloudRegistryHistory || hasVerifiedTransferReceipt),
+                  (!hasCloudBindingHistory || hasVerifiedTransferReceipt)
             else { return .recoveryRequired }
             guard !artifactHistory.localOnly.isEmpty else {
                 return mountState == .unrecorded
@@ -488,6 +522,48 @@ struct PersistenceContainerRetirementPollBudget: Equatable, Sendable {
     }
 }
 
+/// Exact SQLite/Core Data companions derived from a store's filename stem.
+/// Framework versions use both extension-qualified and extension-free names;
+/// keep scanning and complete deletion on the same finite set of spellings.
+enum PersistenceStoreArtifactLayout {
+    struct Variant: Sendable {
+        let prefix: String
+        let suffix: String
+        let isDirectory: Bool
+        let isPrimaryStore: Bool
+    }
+
+    static let variants: [Variant] = [
+        .init(prefix: "", suffix: ".store", isDirectory: false, isPrimaryStore: true),
+        .init(prefix: "", suffix: ".store-wal", isDirectory: false, isPrimaryStore: false),
+        .init(prefix: "", suffix: ".store-shm", isDirectory: false, isPrimaryStore: false),
+        .init(prefix: "", suffix: ".store-journal", isDirectory: false, isPrimaryStore: false),
+        .init(prefix: "", suffix: ".store_SUPPORT", isDirectory: true, isPrimaryStore: false),
+        .init(prefix: "", suffix: ".store.ckAssetFiles", isDirectory: true, isPrimaryStore: false),
+        .init(prefix: "", suffix: ".store_ckAssets", isDirectory: true, isPrimaryStore: false),
+        .init(prefix: "", suffix: "_ckAssets", isDirectory: true, isPrimaryStore: false),
+        .init(prefix: ".", suffix: "_SUPPORT", isDirectory: true, isPrimaryStore: false)
+    ]
+
+    static func artifacts(for storeURL: URL) -> [URL] {
+        let store = storeURL.standardizedFileURL
+        let parent = store.deletingLastPathComponent()
+        let filename = store.lastPathComponent
+        let stem = store.deletingPathExtension().lastPathComponent
+        return variants.map { variant in
+            // Scanning recognizes our shipping .store names; derivation must
+            // still preserve the caller's exact primary URL and extension.
+            let name = variant.suffix.hasPrefix(".store")
+                ? filename + String(variant.suffix.dropFirst(".store".count))
+                : variant.prefix + stem + variant.suffix
+            return parent.appendingPathComponent(
+                name,
+                isDirectory: variant.isDirectory
+            )
+        }
+    }
+}
+
 /// Owns the physical SwiftData store boundary.
 ///
 /// User-authored activity is synchronized through the existing `PomoGem`
@@ -549,10 +625,10 @@ enum PersistenceStoreTopology {
         }
     }
 
-    /// Exact application-owned persistence artifacts. Callers may derive the
-    /// standard SQLite `-wal`/`-shm` siblings for each store URL. This list is
-    /// intentionally limited to app data and the pre-split migration sidecar;
-    /// it never includes a complete-deletion receipt or retry journal.
+    /// Exact store and migration URLs. The persistent-store cleaner derives
+    /// each store's finite SQLite/Core Data companion list from the shared
+    /// artifact layout. This list never includes a complete-deletion receipt
+    /// or retry journal.
     static func deletionArtifactURLs(
         for mode: PersistenceLaunchMode,
         accountNamespace: AccountDataNamespace? = nil
@@ -741,6 +817,60 @@ enum PersistenceStoreTopology {
         ]
     }
 
+    /// Reuses the existing account's exact store URLs and configuration names,
+    /// with CloudKit disabled. This does not select local-only mode or create
+    /// another dataset. The launch host must prove a complete prior mount,
+    /// offline admission, and retirement of every previous store handle.
+    static func offlineCloudConfigurations(
+        accountNamespace: AccountDataNamespace
+    ) -> [ModelConfiguration] {
+        let urls = accountStoreURLs(accountNamespace: accountNamespace)
+        return [
+            ModelConfiguration(cloudStoreName, schema: cloudSchema,
+                url: urls[0], cloudKitDatabase: .none),
+            ModelConfiguration(localProjectionStoreName, schema: localProjectionSchema,
+                url: urls[1], cloudKitDatabase: .none)
+        ]
+    }
+
+    static func makeOfflineCloudContainer(
+        accountNamespace: AccountDataNamespace
+    ) throws -> ModelContainer {
+        try ModelContainer(for: shippingSchema,
+            configurations: offlineCloudConfigurations(accountNamespace: accountNamespace))
+    }
+
+    /// Apple's read-only ModelConfiguration prevents persistence writes. Keep
+    /// the full shipping graph and its original store routing, with CloudKit
+    /// explicitly disabled, solely to inspect an already-existing cache.
+    /// https://developer.apple.com/videos/play/wwdc2023/10196/
+    static func readOnlyCloudConfigurations(
+        accountNamespace: AccountDataNamespace,
+        directory: URL? = nil
+    ) -> [ModelConfiguration] {
+        let urls = accountStoreURLs(accountNamespace: accountNamespace, directory: directory)
+        return [
+            ModelConfiguration(cloudStoreName, schema: cloudSchema,
+                url: urls[0], allowsSave: false, cloudKitDatabase: .none),
+            ModelConfiguration(localProjectionStoreName, schema: localProjectionSchema,
+                url: urls[1], allowsSave: false, cloudKitDatabase: .none)
+        ]
+    }
+
+    /// The host proves exact completed selection/pair/account and absence of
+    /// app writers before calling; no migration, UI or source saves run here.
+    /// Track this reader until all its contexts retire before opening a mirror.
+    /// Read-only access does not drain earlier native CloudKit operations.
+    static func makeReadOnlyCloudContainer(
+        accountNamespace: AccountDataNamespace,
+        directory: URL? = nil
+    ) throws -> ModelContainer {
+        let container = try ModelContainer(for: shippingSchema,
+            configurations: readOnlyCloudConfigurations(accountNamespace: accountNamespace, directory: directory))
+        container.mainContext.autosaveEnabled = false
+        return container
+    }
+
     static func localOnlyConfigurations(
         namespace: AccountDataNamespace,
         directory: URL? = nil
@@ -868,9 +998,14 @@ enum PersistenceStoreTopology {
     }
 
     private static var defaultStoreDirectory: URL {
+        // Study stores predate the Screen Time App Group and belong to the
+        // app's private container. Automatic group discovery would redirect
+        // an existing installation to an empty shared directory while its
+        // deployment receipts still describe the original private stores.
         ModelConfiguration(
             cloudStoreName,
             schema: cloudSchema,
+            groupContainer: .none,
             cloudKitDatabase: .none
         ).url.deletingLastPathComponent()
     }
@@ -908,12 +1043,13 @@ enum PersistenceStoreTopology {
                 || name.hasPrefix("\(storeName)-")
                 || name.hasPrefix("\(storeName)_")
                 || name.hasPrefix("\(storeName).")
+                || name == "\(base)_ckAssets"
+                || name == ".\(base)_SUPPORT"
         }
         return isLegacyOrUnnamespaced
-            || name.hasPrefix("\(cloudStoreName)-")
-            || name.hasPrefix("\(localProjectionStoreName)-")
-            || name.hasPrefix("\(localOnlySourceStoreName)-")
-            || name.hasPrefix("\(localOnlyProjectionStoreName)-")
+            || legacyBases.contains { base in
+                name.hasPrefix("\(base)-") || name.hasPrefix(".\(base)-")
+            }
             || name.hasPrefix(".pomogem-local-projection-")
     }
 
@@ -926,26 +1062,17 @@ enum PersistenceStoreTopology {
             (localProjectionStoreName, .cloud, .projection),
             (cloudStoreName, .cloud, .source)
         ]
-        let suffixes: [(String, Bool, Bool)] = [
-            (".store", false, true),
-            (".store-wal", false, false),
-            (".store-shm", false, false),
-            (".store-journal", false, false),
-            (".store_SUPPORT", true, false),
-            (".store.ckAssetFiles", true, false)
-        ]
         for (base, kind, role) in bases {
-            let prefix = "\(base)-"
-            guard name.hasPrefix(prefix) else { continue }
-            for (suffix, expectsDirectory, isPrimaryStore) in suffixes
-            where name.hasSuffix(suffix) {
+            for variant in PersistenceStoreArtifactLayout.variants {
+                let prefix = "\(variant.prefix)\(base)-"
+                guard name.hasPrefix(prefix), name.hasSuffix(variant.suffix) else { continue }
                 let start = name.index(
                     name.startIndex,
                     offsetBy: prefix.count
                 )
                 let end = name.index(
                     name.endIndex,
-                    offsetBy: -suffix.count
+                    offsetBy: -variant.suffix.count
                 )
                 guard start < end,
                       let namespace = AccountDataNamespace(
@@ -957,11 +1084,10 @@ enum PersistenceStoreTopology {
                     kind: kind,
                     role: role,
                     namespace: namespace,
-                    expectsDirectory: expectsDirectory,
-                    isPrimaryStore: isPrimaryStore
+                    expectsDirectory: variant.isDirectory,
+                    isPrimaryStore: variant.isPrimaryStore
                 )
             }
-            return nil
         }
         return nil
     }
@@ -1049,12 +1175,14 @@ enum PersistenceStoreTopology {
                 simulatorCloudStoreName,
                 schema: cloudSchema,
                 isStoredInMemoryOnly: false,
+                groupContainer: .none,
                 cloudKitDatabase: .none
             ),
             ModelConfiguration(
                 simulatorLocalProjectionStoreName,
                 schema: localProjectionSchema,
                 isStoredInMemoryOnly: false,
+                groupContainer: .none,
                 cloudKitDatabase: .none
             )
         ]
@@ -1078,6 +1206,7 @@ enum PersistenceStoreTopology {
             simulatorCloudStoreName,
             schema: shippingSchema,
             isStoredInMemoryOnly: false,
+            groupContainer: .none,
             cloudKitDatabase: .none
         )
     }

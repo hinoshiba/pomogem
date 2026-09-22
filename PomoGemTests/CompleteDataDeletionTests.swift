@@ -564,8 +564,7 @@ final class CompleteDataDeletionTests: XCTestCase {
         let store = root.appendingPathComponent("PomoGem.store")
         let artifacts = CompleteDataDeletionPersistentStoreCleaner.artifacts(for: store)
         for artifact in artifacts {
-            if artifact.lastPathComponent.hasSuffix("_SUPPORT")
-                || artifact.lastPathComponent.hasSuffix("_ckAssets") {
+            if artifact.hasDirectoryPath {
                 try fileManager.createDirectory(
                     at: artifact,
                     withIntermediateDirectories: false

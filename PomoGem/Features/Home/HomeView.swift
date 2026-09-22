@@ -49,6 +49,7 @@ struct HomeView: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
     @Environment(\.aggregateProjectionPresentation)
     private var aggregateProjectionPresentation
     @ScaledMetric(relativeTo: .subheadline) private var homeMenuFontSize: CGFloat = 15
@@ -76,6 +77,7 @@ struct HomeView: View {
     @AppStorage(AccountScopedLocalState.defaultsKey(base: HomeAtmosphere.storageKey))
     private var homeAtmosphereRawValue = HomeAtmosphere.aurora.rawValue
     @State private var scene = JarScene()
+    @ObservedObject private var screenTime = ScreenTimeController.shared
     @State private var sceneInitialized = false
     @State private var homeIsVisible = false
     @State private var rewardDropRevealIsPending = false
@@ -106,7 +108,6 @@ struct HomeView: View {
     @State private var localMembershipProjectionIsComplete = true
     @State private var conflictedAggregateRootIDs = Set<UUID>()
     @State private var selectedDuration: PomodoroDuration = .twentyFiveMinutes
-    @State private var customMinutes = 40
     @State private var focusConfiguration: FocusConfiguration?
     @State private var showHomeMenu = false
     @State private var showAccumulationOverview = false
@@ -598,17 +599,20 @@ struct HomeView: View {
             continueRewardDropIfPossible()
             recoverPendingRewardReceipt()
         }) { configuration in
-            FocusView(
-                subject: configuration.subject,
-                duration: configuration.duration,
-                dataEpochID: currentActivityEpochID
-            )
+            CloudConnectionSessionContent {
+                FocusView(
+                    subject: configuration.subject,
+                    duration: configuration.duration,
+                    dataEpochID: currentActivityEpochID
+                )
+            }
             .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .fullScreenCover(item: $breakConfiguration, onDismiss: {
             recoverPendingRewardReceipt()
         }) { configuration in
-            BreakTimerView(recovery: configuration)
+            CloudConnectionSessionContent { BreakTimerView(recovery: configuration) }
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .sheet(isPresented: $showHomeMenu) {
             homeMenuSheet
@@ -642,7 +646,11 @@ struct HomeView: View {
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showCustomDuration) {
-            CustomDurationView(minutes: $customMinutes, onConfirm: confirmCustomDuration)
+            CustomDurationView(
+                initialSeconds: selectedDuration.seconds,
+                onConfirm: confirmCustomDuration
+            )
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
                 .presentationDetents(customDurationSheetDetents)
                 .presentationDragIndicator(.visible)
         }
@@ -690,10 +698,7 @@ struct HomeView: View {
     }
 
     private var customDurationSheetDetents: Set<PresentationDetent> {
-        if dynamicTypeSize.isAccessibilitySize || verticalSizeClass == .compact {
-            return [.large]
-        }
-        return [.height(390), .large]
+        [.large]
     }
 
     private var lifecycleContent: some View {
@@ -703,6 +708,8 @@ struct HomeView: View {
             rewardDropRevealIsPending = false
             restorePreferredDuration()
             configureScene()
+            screenTime.reload()
+            scene.setScreenTimeObstacles(totalUnits: screenTime.negativeGemCount)
             refreshAcceptedAggregateRoots()
             refreshAchievementProjection()
             refreshAchievementCount()
@@ -753,6 +760,10 @@ struct HomeView: View {
 
     private var observedContent: some View {
         lifecycleContent
+        .onChange(of: screenTime.negativeGemCount) { _, count in
+            guard homeIsVisible else { return }
+            scene.updateScreenTimeObstacles(totalUnits: count)
+        }
         .onChange(of: sessionChangeTokens) { _, _ in
             syncScene()
             scheduleTiltHintIfNeeded()
@@ -806,11 +817,9 @@ struct HomeView: View {
             applySensoryPreferences()
             restorePreferredDuration()
         }
-        .onChange(of: reduceMotion) { _, enabled in
+        .onChange(of: reduceMotion) { _, _ in
             cancelTiltHintPresentation()
-            if !enabled || voiceOverEnabled {
-                scheduleTiltHintIfNeeded()
-            }
+            scheduleTiltHintIfNeeded()
         }
         .onChange(of: voiceOverEnabled) { _, enabled in
             cancelTiltHintPresentation()
@@ -1054,7 +1063,7 @@ struct HomeView: View {
             VStack(spacing: 4) {
                 jarMetricPill(jarMetricSummary)
                 if aggregateProjectionPresentation.isCloudVerificationPending {
-                    Text("iCloudを再確認中")
+                    Text(isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを再確認中")
                         .font(.system(size: 9, weight: .bold, design: .rounded))
                         .foregroundStyle(Color.white.opacity(0.68))
                 }
@@ -1120,9 +1129,14 @@ struct HomeView: View {
 
     private var homeMenuAccessibilitySummary: String {
         if aggregateProjectionPresentation.isCloudVerificationPending {
-            return "iCloudの累計を再集計中。この端末で確認済みの集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
+            let status = isCloudOfflineSession ? "このiPhoneの累計を確認中" : "iCloudの累計を再集計中"
+            return "\(status)。この端末で確認済みの集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
         }
         return "累計\(formattedMass(totalGrams))、集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
+    }
+
+    private var projectionVerificationTitle: String {
+        isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを再集計中"
     }
 
     private var effortProgressSnapshot: EffortProgressSnapshot {
@@ -1268,7 +1282,7 @@ struct HomeView: View {
                 ProgressView()
                     .tint(PomoGemTheme.amber)
                     .accessibilityHidden(true)
-                Text("iCloudを再集計中")
+                Text(projectionVerificationTitle)
                     .font(.headline.weight(.bold))
                 Text("この端末で確認できた記録だけを表示しています。")
                     .font(.caption)
@@ -1276,7 +1290,7 @@ struct HomeView: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(
-                "iCloudを再集計中。この端末で確認できた記録だけを表示しています"
+                "\(projectionVerificationTitle)。この端末で確認できた記録だけを表示しています"
             )
         } else if dynamicTypeSize.isAccessibilitySize {
             // The bottle is a fixed visual canvas. At accessibility text sizes,
@@ -1427,7 +1441,7 @@ struct HomeView: View {
         Button {
             selectDuration(duration)
         } label: {
-            let title = "\(duration.minutes ?? customMinutes)分"
+            let title = duration.displayLabel
             if selectedDuration == duration {
                 Label(title, systemImage: "checkmark")
             } else {
@@ -1513,7 +1527,7 @@ struct HomeView: View {
 #if DEBUG
         if selectedDuration == .demo { return "12秒" }
 #endif
-        return "\(selectedDuration.minutes ?? customMinutes)分"
+        return selectedDuration.displayLabel
     }
 
     private var homeMenu: some View {
@@ -2057,7 +2071,7 @@ struct HomeView: View {
             .isCloudVerificationPending
         return Label {
             VStack(alignment: .leading, spacing: 4) {
-                Text(isStillVerifying ? "iCloudを再集計中" : "集計を更新しました")
+                Text(isStillVerifying ? projectionVerificationTitle : "集計を更新しました")
                     .font(.headline.weight(.black))
                 Text(
                     isStillVerifying
@@ -2068,7 +2082,7 @@ struct HomeView: View {
                     .foregroundStyle(PomoGemTheme.muted)
             }
         } icon: {
-            Image(systemName: "icloud.and.arrow.down")
+            Image(systemName: isCloudOfflineSession ? "checklist" : "icloud.and.arrow.down")
                 .foregroundStyle(PomoGemTheme.amber)
         }
         .padding(.horizontal, 11)
@@ -2078,7 +2092,7 @@ struct HomeView: View {
         .accessibilityIdentifier("reward.projection-verification-pending")
         .accessibilityLabel(
             isStillVerifying
-                ? "iCloudを再集計中。今回の\(offer.grams)グラムは保存済みです。生涯合計は確認後に表示します"
+                ? "\(projectionVerificationTitle)。今回の\(offer.grams)グラムは保存済みです。生涯合計は確認後に表示します"
                 : "集計を更新しました。今回の\(offer.grams)グラムは保存済みです。更新前の生涯合計は再利用しません"
         )
     }
@@ -2542,9 +2556,13 @@ struct HomeView: View {
         let canRevealDrop = !rewardDropRevealIsPending
             && breakOffer == nil
             && !rewardDropSurfaceIsObscured
+        for id in ScreenTimeGemDropStore.load()
+        where scene.hasLandedPebble(withID: id) || representedSessionIDs.contains(id) {
+            ScreenTimeGemDropStore.remove(id)
+        }
         let awaitingDropIDs = Set(pendingReceipts.filter {
             $0.dropPhase == .awaitingLanding
-        }.map(\.id))
+        }.map(\.id)).union(ScreenTimeGemDropStore.load())
         let heldIDs = Set(pendingReceipts.filter {
             $0.isAwaitingAcknowledgement || ($0.requiresDrop && !canRevealDrop)
         }.map(\.id)).union(looseSessions.filter(hasLocalCompletionMarker).map(\.id))
@@ -2615,13 +2633,23 @@ struct HomeView: View {
 
     private func refreshRewardSessionBackfill() -> Bool {
         let receipts = PendingRewardReceiptStore.load().filter(\.requiresDrop)
-        guard !receipts.isEmpty else { return true }
+        let screenTimeIDs = ScreenTimeGemDropStore.load()
+        guard !receipts.isEmpty || !screenTimeIDs.isEmpty else { return true }
         do {
-            let resolved = try HomeProjectionPolicy.pendingRewardSessionCandidates(
+            var resolved = try HomeProjectionPolicy.pendingRewardSessionCandidates(
                 for: receipts,
                 context: modelContext,
                 resetMarkers: resetSnapshots
             )
+            for id in screenTimeIDs {
+                if let session = try BoundedHistoryPolicy.resolvedSession(
+                    id: id, epochID: currentActivityEpochID, context: modelContext
+                ), session.source == .screenTime, StudySessionIntegrityPolicy.isSupported(session) {
+                    resolved.append(session)
+                } else {
+                    ScreenTimeGemDropStore.remove(id)
+                }
+            }
             let resolvedIDs = Set(resolved.map(\.id))
             // Keep a just-landed older reward visible for this Home generation.
             // Removing its receipt must not immediately remove its jar body.
@@ -2629,7 +2657,7 @@ struct HomeView: View {
                 !resolvedIDs.contains($0.id)
             }
             rewardSessionBackfill = Array(
-                (resolved + retained).prefix(PendingRewardReceiptStore.maximumPendingCount)
+                (resolved + retained).prefix(PendingRewardReceiptStore.maximumPendingCount + ScreenTimeGemDropStore.maximumCount)
             )
             rewardSessionBackfillGeneration = HomeSceneSessionSnapshotGeneration(
                 aggregateProjectionPresentation
@@ -2789,15 +2817,12 @@ struct HomeView: View {
     }
 
     private func restorePreferredDuration() {
-        guard let preferred = resolvedPreferences?.preferredFocusMinutes else {
+        guard let preferred = resolvedPreferences?.preferredFocusSeconds else {
             return
         }
-        let restored = PomodoroDuration(minutes: preferred)
+        let restored = PomodoroDuration(totalSeconds: preferred)
+        guard restored.isValid else { return }
         if restored.requiresPro {
-            customMinutes = min(
-                max(preferred, Constants.Timer.customMinimumMinutes),
-                Constants.Timer.customMaximumMinutes
-            )
             selectedDuration = purchase.isPro ? restored : .twentyFiveMinutes
         } else {
             selectedDuration = restored
@@ -2810,13 +2835,20 @@ struct HomeView: View {
         showCustomDuration = true
     }
 
-    private func confirmCustomDuration() {
-        selectedDuration = PomodoroDuration(minutes: customMinutes)
-        persistPreferredFocusMinutes(
-            customMinutes,
+    private func confirmCustomDuration(_ totalSeconds: Int) -> Bool {
+        guard purchase.isPro else {
+            router.showToast("Proの購入状態を確認してください", symbol: "lock")
+            return false
+        }
+        let duration = PomodoroDuration(totalSeconds: totalSeconds)
+        guard duration.isValid else { return false }
+        guard persistPreferredFocusSeconds(
+            totalSeconds,
             failureMessage: "集中時間を保存できませんでした"
-        )
+        ) else { return false }
+        selectedDuration = duration
         showCustomDuration = false
+        return true
     }
 
     private func shareCompletedStratum(_ request: PendingStratumCelebration) {
@@ -2851,9 +2883,11 @@ struct HomeView: View {
 
     private func selectDuration(_ duration: PomodoroDuration) {
         selectedDuration = duration
-        guard let minutes = duration.minutes else { return }
-        persistPreferredFocusMinutes(
-            minutes,
+#if DEBUG
+        if duration == .demo { return }
+#endif
+        _ = persistPreferredFocusSeconds(
+            duration.seconds,
             failureMessage: "集中時間を保存できませんでした"
         )
     }
@@ -2864,36 +2898,39 @@ struct HomeView: View {
             return
         }
         selectedDuration = duration
-        persistPreferredFocusMinutes(
-            duration.minutes ?? Constants.Timer.twentyFiveMinutes,
-            failureMessage: "前回使った時間として保存できませんでした"
-        )
+        if duration.isValid,
+           duration.seconds >= Constants.Timer.customMinimumMinutes * Constants.Timer.secondsPerMinute {
+            _ = persistPreferredFocusSeconds(
+                duration.seconds,
+                failureMessage: "前回使った時間として保存できませんでした"
+            )
+        }
         focusConfiguration = FocusConfiguration(subject: subject, duration: duration)
     }
 
-    private func persistPreferredFocusMinutes(
-        _ minutes: Int,
+    private func persistPreferredFocusSeconds(
+        _ totalSeconds: Int,
         failureMessage: String
-    ) {
+    ) -> Bool {
         guard let resolvedPreferences else {
             router.showToast(failureMessage, symbol: "exclamationmark.triangle")
-            return
+            return false
         }
-        guard resolvedPreferences.preferredFocusMinutes != minutes else {
-            return
+        guard resolvedPreferences.preferredFocusSeconds != totalSeconds else {
+            return true
         }
         do {
-            try PrefsConsumerPolicy.mutate(
-                .preferredFocusMinutes,
+            try PrefsConsumerPolicy.setPreferredFocusSeconds(
+                totalSeconds,
                 context: modelContext,
                 markers: resetSnapshots
-            ) {
-                $0.preferredFocusMinutes = minutes
-            }
+            )
             try modelContext.save()
+            return true
         } catch {
             modelContext.rollback()
             router.showToast(failureMessage, symbol: "exclamationmark.triangle")
+            return false
         }
     }
 
@@ -3304,6 +3341,11 @@ struct HomeView: View {
             && rareRewardMode.usesEnhancedPresentation
         router.showToast(message, symbol: usesRareSymbol ? "sparkles" : "scalemass")
 
+        if descriptor.source == .screenTime {
+            ScreenTimeGemDropStore.remove(descriptor.id)
+            syncScene()
+            return
+        }
         if PendingRewardReceiptStore.load().contains(where: {
             $0.id == descriptor.id && $0.dropPhase == .awaitingLanding
         }) {
@@ -3633,8 +3675,7 @@ struct HomeView: View {
         let hasSeenCurrentHint = isVoiceOverHint ? didSeeVoiceOverTapHint : didSeeTapHint
         guard !hasSeenCurrentHint,
               !isJarEmpty,
-              tiltHintTask == nil,
-              isVoiceOverHint || !reduceMotion
+              tiltHintTask == nil
         else { return }
         tiltHintTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(700))
@@ -3658,18 +3699,11 @@ struct HomeView: View {
 
     private var jarInteractionHintText: String {
         if voiceOverEnabled {
-            return reduceMotion
-                ? "瓶をダブルタップすると近くの粒が一方向に短く動いて戻ります"
-                : "瓶をダブルタップすると粒が跳ねます。VoiceOverのカスタムアクションで左右にも動かせます"
+            return "瓶をダブルタップすると粒が跳ねます。VoiceOverのカスタムアクションで左右にも動かせます"
         }
 #if targetEnvironment(macCatalyst)
-        return reduceMotion
-            ? "瓶をタップすると近くの粒が一方向に短く動いて戻ります"
-            : "瓶をタップすると粒が跳ね、左右にドラッグすると転がります"
+        return "瓶をタップすると粒が跳ね、左右にドラッグすると転がります"
 #else
-        if reduceMotion {
-            return "瓶をタップすると近くの粒が一方向に動き、軽く振ると複数の粒が動きます"
-        }
         return "瓶をタップすると粒が跳ね、iPhoneを傾けると転がります"
 #endif
     }
@@ -3934,7 +3968,7 @@ struct HomeView: View {
                 || !canPublishBreakOfferProjection(offer)
         )
             ? (aggregateProjectionPresentation.isCloudVerificationPending
-                ? "iCloudを再集計中。今回の記録は保存済みです。生涯合計は確認後に表示します"
+                ? "\(projectionVerificationTitle)。今回の記録は保存済みです。生涯合計は確認後に表示します"
                 : "集計を更新しました。今回の記録は保存済みです。更新前の生涯合計は再利用しません")
             : PostDropProgressAccessibilityPresentation.description(
                 effortProgress: offer.effortProgress,
@@ -4615,51 +4649,6 @@ private struct ManualButton: View {
     }
 }
 
-private struct CustomDurationView: View {
-    @Binding var minutes: Int
-    let onConfirm: () -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    VStack(spacing: 8) {
-                        SectionEyebrow(text: "POMOGEM PRO")
-                        Text("集中時間を選ぶ").font(PomoGemTheme.brand(26))
-                    }
-                    Text("\(minutes):00")
-                        .font(.system(size: 54, weight: .heavy, design: .rounded))
-                        .monospacedDigit()
-                    Slider(
-                        value: Binding(get: { Double(minutes) }, set: { minutes = Int($0.rounded()) }),
-                        in: Double(Constants.Timer.customMinimumMinutes)...Double(Constants.Timer.customMaximumMinutes),
-                        step: 1
-                    )
-                    .tint(PomoGemTheme.amber)
-                    .accessibilityLabel("集中時間")
-                    .accessibilityValue("\(minutes)分")
-                    Button("この時間にする", action: onConfirm)
-                        .buttonStyle(PomoGemPrimaryButtonStyle())
-                }
-                .frame(maxWidth: .infinity)
-                .padding(24)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .background(NightBackground())
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    PomoGemSheetCloseButton(
-                        accessibilityIdentifier: "custom-timer.close"
-                    ) {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
-
 private struct StratumCelebrationView: View {
     let request: PendingStratumCelebration
     let showsMonthLabel: Bool
@@ -4939,9 +4928,9 @@ private struct FortyYearPersistentFixtureProbe: View {
 /// A stateful, explicit-UI-test-only readout of the live SpriteKit
 /// presentation. XCUITest cannot reliably sample a transient position from a
 /// `TimelineView`: accessibility snapshots can be delivered after the pebble
-/// has already settled. This probe therefore retains the two-dimensional
-/// displacement observed by the app's render loop. A no-op tap cannot advance
-/// the sequence or its displacement.
+/// has already settled. This probe therefore retains the upward travel
+/// observed by the app's render loop. A no-op tap cannot advance the sequence
+/// or its rise.
 ///
 /// It is compiled out of Release and is mounted only when both local-preview
 /// and UI-test launch flags are present, so ordinary VoiceOver users never see
@@ -4955,13 +4944,8 @@ private struct JarUITestPresentationProbe: View {
     @State private var records = ""
     @State private var trackedRecords: String?
     @State private var bounceSequence = 0
-    @State private var lastNormalSceneSequence = 0
+    @State private var lastSceneSequence = 0
     @State private var bounceRise: CGFloat = 0
-    @State private var bounceStartPosition: CGPoint?
-    @State private var bounceLeaderID: UUID?
-    @State private var isTrackingBounce = false
-    @State private var isTrackingReducedMotionRattle = false
-    @State private var previousPositionByPebbleID: [UUID: CGPoint] = [:]
     @State private var targetX: CGFloat = 0.5
     @State private var targetY: CGFloat = 0.88
     @State private var dropSequence = 0
@@ -5028,82 +5012,23 @@ private struct JarUITestPresentationProbe: View {
 
         if trackedRecords != currentRecords {
             trackedRecords = currentRecords
-            lastNormalSceneSequence = Int(
+            lastSceneSequence = Int(
                 truncatingIfNeeded: scene.tapPresentationSequence
             )
             bounceRise = 0
-            bounceStartPosition = nil
-            bounceLeaderID = nil
-            isTrackingBounce = false
-            isTrackingReducedMotionRattle = false
-            previousPositionByPebbleID = [:]
         }
 
-        defer {
-            previousPositionByPebbleID = Dictionary(
-                uniqueKeysWithValues: pebbles.map {
-                    ($0.descriptor.id, $0.position)
-                }
-            )
-        }
-
-        // Normal-motion travel is captured on SpriteKit's own physics frames.
+        // Upward travel is captured on SpriteKit's own physics frames for both
+        // Reduce Motion settings.
         // Polling only from this SwiftUI task can miss the start of a fast arc
-        // under UI automation and substantially under-report its displacement.
-        if !scene.reduceMotion {
-            let sceneSequence = Int(truncatingIfNeeded: scene.tapPresentationSequence)
-            if sceneSequence > lastNormalSceneSequence {
-                bounceSequence += sceneSequence - lastNormalSceneSequence
-                bounceRise = 0
-            }
-            lastNormalSceneSequence = sceneSequence
-            // Keep the legacy `bounceRise` wire key for existing UI tooling;
-            // the physical path now validates total two-dimensional travel.
-            bounceRise = max(
-                bounceRise,
-                scene.tapPresentationMaximumDisplacement
-            )
-            isTrackingBounce = false
-            isTrackingReducedMotionRattle = false
-            bounceStartPosition = nil
-            bounceLeaderID = nil
-            return
+        // under UI automation and substantially under-report its rise.
+        let sceneSequence = Int(truncatingIfNeeded: scene.tapPresentationSequence)
+        if sceneSequence > lastSceneSequence {
+            bounceSequence += sceneSequence - lastSceneSequence
+            bounceRise = 0
         }
-
-        if !isTrackingBounce {
-            if let rattledPebble = pebbles.first(where: {
-                $0.action(forKey: "jar.reducedMotion.tapRattle") != nil
-            }) {
-                bounceSequence += 1
-                bounceStartPosition = previousPositionByPebbleID[
-                    rattledPebble.descriptor.id
-                ] ?? rattledPebble.position
-                bounceLeaderID = rattledPebble.descriptor.id
-                bounceRise = 0
-                isTrackingBounce = true
-                isTrackingReducedMotionRattle = true
-            }
-        }
-
-        guard isTrackingBounce,
-              let bounceStartPosition,
-              let bounceLeaderID,
-              let leader = pebbles.first(where: { $0.descriptor.id == bounceLeaderID })
-        else { return }
-
-        let displacement = hypot(
-            leader.position.x - bounceStartPosition.x,
-            leader.position.y - bounceStartPosition.y
-        )
-        bounceRise = max(bounceRise, displacement)
-        let presentationEnded = isTrackingReducedMotionRattle
-            && leader.action(forKey: "jar.reducedMotion.tapRattle") == nil
-        if presentationEnded {
-            isTrackingBounce = false
-            isTrackingReducedMotionRattle = false
-            self.bounceStartPosition = nil
-            self.bounceLeaderID = nil
-        }
+        lastSceneSequence = sceneSequence
+        bounceRise = max(bounceRise, scene.tapPresentationMaximumRise)
     }
 
     private func collectPebbles(from node: SKNode, into pebbles: inout [PebbleNode]) {

@@ -1,6 +1,6 @@
 # ポモジェム公式版 — ローカルArchive／App Storeリリース手順
 
-更新日: 2026-09-06
+更新日: 2026-09-13
 
 この手順は、許可済みMacのXcode OrganizerからiPhone版をArchive、Validate、Uploadするための
 正本です。Mac／Mac Catalyst版は作成しません。
@@ -15,10 +15,42 @@ App Store Connectで無効化し、ブランチ・タグの変更によるビル
 
 ## 今回の候補と識別子
 
-PomoGem 1.0 (5)は、新しいBundle ID・App Store record・IAP・CloudKit containerを使う初回候補です。
-2026-09-06に新App Store recordを作成し、`AppStore/configuration.yml`へApple ID `6809139517`を
-記録しました。SKUは`pomogem-ios`、登録名は「ポモジェム：ポモドーロタイマー」です。
-main／Widget App ID、新CloudKit containerの登録とhostへの割当も確認しました。
+最新の審査提出済み候補はPomoGem 1.0.2 (9)です。build 8までのiCloud修正とProタイマーの分・秒指定に、
+視差効果設定に関係なく粒を同じように跳ねさせる修正を加えました。PR #13のmerge commit
+`9c256136f7b9d4190da5800723acec0273bd6b27`をcleanな状態でArchiveし、2026-09-13 11:14 JSTに成功しました。
+Apple Validateは11:16 JSTに成功し、別途exportしたIPAと実際のupload-staging IPAの厳格な配布検証、
+元ArchiveとdSYMのUUID照合も成功しました。Organizerで11:22 JSTの「PomoGem 1.0.2 (9) uploaded」を
+確認した後、同じArchive元を指す不変tag `v1.0.2-build9`を作成・pushしました。
+Prefs追加2属性は同日11:33 JSTにCloudKit ConsoleのDevelopment/Production両環境で型・indexの
+一致を確認しました。Production Historyの同日09:52 JSTの2 field変更・5 index作成により、
+確認前に配備されていたことを照合しています。この作業ではschemaを変更・再配備していません。
+11:34 JSTにbuild 9の処理完了と提出準備状態を確認し、審査待ちだったbuild 8の提出を取り消して
+build 9へ差し替えました。日本語・英語の更新内容、Review Notes、選択ビルドの保存・再読込照合後、
+11:39 JSTに審査へ提出しました。提出受付画面でiOS 1.0.2 (9)の「審査待ち」と提出日時を確認しています。
+承認後の自動公開と全利用者への即時配信は維持しています。承認や公開完了を示すものではありません。
+現在の状態は`AppStore/release-record-1.0.2-9.md`を参照してください。
+
+一つ前のupload済み版はPomoGem 1.0.2 (8)です。Organizerで同日10:01 JSTのupload履歴を確認したため、
+今回のbuild numberを9へ増やしました。build 8の同日10:11 JSTの審査提出はbuild 9への差し替えのため
+取り消し、「デベロッパにより却下済み」を確認しました。build 8の確認と準備履歴は
+`AppStore/release-record-1.0.2-8.md`に保持します。2026-09-13にApp Store Connectで
+1.0.1 (7)の「配信準備完了」を確認しました。1.0 (5)と同じApp Store record、Bundle ID、IAP、
+CloudKit containerを使用します。Apple IDは`6809139517`、SKUは`pomogem-ios`、
+登録名は「ポモジェム：ポモドーロタイマー」です。初回登録・提出結果は
+`AppStore/release-record-1.0-5.md`、build 6のupload・取消履歴は
+`AppStore/release-record-1.0.1-6.md`、build 7の準備・検証・提出履歴は
+`AppStore/release-record-1.0.1-7.md`を参照します。
+build 6は実機監査で記録保護の問題を再現したため審査を取り消し、App Store Connectで
+「デベロッパにより却下済み」を確認しました。build 7は固定commit
+`e4aee83b5e70aa9ae078ff37ad90626bb8becc97`からArchiveし、配布payloadの検証とApple Validateに合格、
+Organizerのupload時刻は2026-09-12 11:56 JST、完了表示の確認は11:57 JSTです。upload後に
+`v1.0.1-build7`を作成・pushし、上記Archive元を指すことを確認しました。後続の記録更新・merge・機能追加の
+commitとArchive元を区別し、このtagを移動しません。
+利用者の並列提出指示に従い、処理済みbuild 7を選択し、ja-JP／en-USの更新内容とReview Notesを
+保存・再読込で照合して2026-09-12 16:26 JSTに審査へ提出しました。
+提出IDは`7f746a75-2605-47c5-83d5-48ee76b40b2c`で、提出時に1.0.1 (7)の「審査待ち」を確認しました。
+SettingsのiCloud切り替えと後続のオフライン修正は、このbuild 7には含みません。
+公開Privacyの更新はGitHub Actionsの支払い／上限エラーで未配信のままです。
 登録済みでも公開前は`app_store_listing_status: not_public`を保持し、Webは「近日公開」のまま
 Smart App Bannerを表示しません。実際に公開・ダウンロード可能になってからstatusを`public`へ変更し、
 同じ数値IDのSmart App Bannerを追加して検証します。
@@ -26,7 +58,8 @@ Smart App Bannerを表示しません。実際に公開・ダウンロード可�
 履歴は`Docs/LEGACY_RELEASE_PROVENANCE.md`へ隔離し、未完了項目の正本は
 `AppStore/configuration.yml`の`release_blockers`に保持します。
 
-新Bundle IDは別アプリなので、旧版の保存データや購入権利を自動移行・共有しません。
+名称変更前の別Bundle ID製品から、保存データや購入権利を自動移行・共有しません。
+1.0から1.0.1、1.0.2への更新は同じBundle IDを使用します。
 既存のapp record、IAP、CloudKit container、production dataを削除・resetする工程はありません。
 
 ## 1. 安全境界
@@ -79,7 +112,7 @@ App Store版はproduction CloudKit environmentだけを利用します。SwiftDa
 
 - SwiftData containerには`Subject`、`StudySession`、`AchievementStone`、`Prefs`、
   `ActivityResetMarker`、`SyncedFocusTimer`、`FocusTimerDeviceClaim`の7 model、field、index、
-  relationshipだけがproductionに存在する
+  relationshipがproductionに存在する。保存先切り替え用の追加schemaは下記の記録で区別する
 - `AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`は端末内projection storeにあり、CloudKitへ
   uploadされず、同期元recordから再構築できる
 - 新規iPhone、既存dataのあるiPhone、offline→再接続の同期
@@ -97,6 +130,8 @@ App Store版はproduction CloudKit environmentだけを利用します。SwiftDa
   検証できること
 - iCloud選択後、通信不可／account不明／A→Bではstoreを開かずdataを削除しないこと。Aへ戻ってonline
   確認できた場合だけ同じA namespaceを再び開くこと
+- cloud mountではRoot公開前にサーバーのリセット履歴を読み、同じか新しい履歴の端末反映まで待つこと。
+  期限切れ・不完全な応答では新規記録を作れず、既存dataも削除しないこと。全記録の同期完了とは区別する
 - schema migrationと古いversionからの起動
 
 `RareRewardReleasePolicy.isEnabled`はversion 1.0で`false`に固定します。Release実機でrandom rewardの
@@ -110,8 +145,27 @@ offlineで通常のSwiftData storeを開けるのはlocal-only選択時だけで
 online account確認に失敗すればfail closedにします。version 1.0のproduction gateに削除用zone／record
 schemaや削除transaction試験を含めません。
 
+現在の配布候補では、iCloud選択時の「表示中の記録をリセット」も記録保護のため一時停止します。
+無効化された操作と理由の表示、呼び出し時にmarker・設定・timer・通知を変更しないことを確認します。
+local-onlyの通常resetは維持します。履歴確認のread-only preflightは削除用preflightとは別の機能です。
+通常のrelease工程にProduction environmentのresetや既存dataのpurgeを追加してはいけません。
+
 Version 1.0の最終Prefs schemaは`timerDisplayMode`を含む13 group、26個のrevision／mutation stamp fieldです。
 production schemaは削除・rename前提で運用せず、後方互換なadditive changeを基本にします。
+
+2026-09-12 16:40 JSTに、保存先切り替えの復旧用`PomoGemStorageTransferControl`と
+`PomoGemStorageTransferChunk`をProductionへ配備しました。Consoleの成功表示、Productionの両型・
+全field、Schema Historyを照合済みです。差分は2型、そのindexと2型への権限追加で、既存7種類の
+同期元schemaの変更・削除はありません。環境resetや利用者recordの削除は行っていません。
+この追加schemaは審査待ちのbuild 7では使いません。開発中の切り替え機能のProduction実通信・
+復旧試験の合格とは区別し、検証範囲は[StorageModeTransfer.md](StorageModeTransfer.md)で管理します。
+
+2026-09-13 11:33 JSTに、分・秒指定の追加field `CD_preferredFocusSeconds`（Int(64)、Queryable／Sortable）と
+`CD_preferredFocusSecondsMutationID`（String、Queryable／Searchable／Sortable）をDevelopmentとProductionの
+`CD_Prefs`（両方70 field）で確認しました。Production Historyには同日09:52 JSTの2 field変更・5 index作成が
+記録されており、すでに配備済みでした。今回の作業でschemaを変更・再配備していません。
+この照合を実機2台の秒単位送受信の合格とは扱いません。
+
 詳細はAppleの[Deploying an iCloud Container’s Schema](https://developer.apple.com/documentation/cloudkit/deploying-an-icloud-container-s-schema)
 と`Docs/SyncMaintenanceArchitecture.md`を参照します。
 
@@ -164,6 +218,8 @@ unit test、主要UI test、static analyzerを実行します。40年soakはrele
 - clean installで同格の保存先二択、両方の確認、local-onlyのoffline基本機能、選択の不変性、app削除前の
   JSON書き出しが再import／移行には使えないという表示
 - iCloud選択時のonline確認、各launch／resume、A→B block→A復帰、通信断時fail-closedと保存data非削除
+- 既存CloudKit補助directoryを残した再起動、リセット履歴反映前の新規記録拒否と反映後の記録保持、
+  iCloud通常resetの一時停止とlocal-only通常resetの継続
 - Home／Lock Screen Widgetが利用者dataを表示せずアプリを開くこと
 - Live Activityの開始、pause、resume、期限到達、cancel、完了後dismiss、手動dismiss後に再生成しないこと、
   SettingsでOFFにすると即終了すること。全状態でtheme名、memo、質量、account情報を表示しないこと

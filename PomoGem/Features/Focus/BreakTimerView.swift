@@ -8,8 +8,11 @@ struct BreakTimerView: View {
     let minutes: Int
     private let originatingFocusSessionID: UUID?
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
     @Query private var preferences: [Prefs]
     @Query private var activityResetMarkers: [ActivityResetMarker]
@@ -93,91 +96,44 @@ struct BreakTimerView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             RadialGradient(colors: [PomoGemTheme.amber.opacity(0.08), .clear], center: .center, startRadius: 0, endRadius: 340).ignoresSafeArea()
-            GeometryReader { proxy in
+            TimerOrientationContainer(sessionID: sessionID) { context in
                 ScrollView {
                     VStack(spacing: 20) {
-                        HStack {
-                            Spacer()
-                            Button { closeBreak() } label: {
-                                Image(systemName: "xmark")
-                            }
-                            .buttonStyle(PomoGemIconButtonStyle())
-                            .accessibilityLabel(
-                                remaining == 0
-                                    ? "終了アラートを停止して瓶へ戻る"
-                                    : "休憩をスキップ"
-                            )
-                        }
+                        timerHeader
 
-                        Spacer(minLength: 8)
-
-                        Image(systemName: "cup.and.saucer.fill")
-                            .font(.system(size: 38))
-                            .foregroundStyle(PomoGemTheme.amber)
-                            .accessibilityHidden(true)
-                        Text("休憩")
-                            .font(PomoGemTheme.brand(28))
-                            .accessibilityAddTraits(.isHeader)
-                        Text(String(format: "%02d:%02d", remaining / 60, remaining % 60))
-                            .font(.system(size: timerFontSize, weight: .heavy, design: .rounded))
-                            .monospacedDigit()
-                            .minimumScaleFactor(0.65)
-                            .lineLimit(1)
-                            .contentTransition(
-                                reduceMotion ? .identity : .numericText(countsDown: true)
-                            )
-                            .accessibilityLabel("残り\(remaining / 60)分\(remaining % 60)秒")
-                            .accessibilityAddTraits(.updatesFrequently)
-                        Text("瓶の粒は、そのまま待っています。")
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                            .multilineTextAlignment(.center)
-
-                        if remaining > 0 {
-                            completionNotificationStatus
-                        }
-
-                        Spacer(minLength: 8)
-
-                        if remaining == 0 {
-                            if completionAlert.isActive(sessionID: sessionID) {
-                                VStack(spacing: 7) {
-                                    Label(
-                                        "休憩終了のアラート中",
-                                        systemImage: "bell.and.waves.left.and.right.fill"
-                                    )
-                                    .font(.headline.weight(.bold))
-                                    .foregroundStyle(PomoGemTheme.amber)
-                                    Text("アプリが前面にある間、有効な音と触覚を停止するまで繰り返します")
-                                        .font(.caption)
-                                        .foregroundStyle(PomoGemTheme.muted)
-                                        .multilineTextAlignment(.center)
+                        if context.isLandscape && !dynamicTypeSize.isAccessibilitySize {
+                            HStack(spacing: 32) {
+                                VStack(spacing: 16) {
+                                    timerFace(spacing: 12)
+                                    waitingMessage
                                 }
+                                .frame(maxWidth: .infinity)
+
+                                VStack(spacing: 20) {
+                                    if remaining > 0 {
+                                        completionNotificationStatus
+                                    }
+                                    completionActions
+                                }
+                                .frame(maxWidth: .infinity)
                             }
-                            Button {
-                                closeBreak()
-                            } label: {
-                                Label(
-                                    completionAlert.isActive(sessionID: sessionID)
-                                        ? "停止して瓶へ戻る"
-                                        : "瓶へ戻る",
-                                    systemImage: completionAlert.isActive(sessionID: sessionID)
-                                        ? "stop.fill"
-                                        : "arrow.backward"
-                                )
-                            }
-                                .buttonStyle(PomoGemPrimaryButtonStyle())
-                                .frame(minHeight: 44)
-                                .accessibilityIdentifier("break.completion-alert.stop")
+                            .frame(minHeight: max(0, context.size.height - 88))
                         } else {
-                            Button("休憩をスキップ") { closeBreak() }
-                                .buttonStyle(PomoGemSecondaryButtonStyle())
-                                .frame(minHeight: 44)
+                            Spacer(minLength: 8)
+                            timerFace(spacing: 20)
+                            waitingMessage
+
+                            if remaining > 0 {
+                                completionNotificationStatus
+                            }
+
+                            Spacer(minLength: 8)
+                            completionActions
                         }
                     }
                     .padding(.horizontal, 24)
                     .padding(.vertical, 12)
-                    .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+                    .frame(maxWidth: .infinity, minHeight: context.size.height)
                 }
                 .scrollBounceBehavior(.basedOnSize)
             }
@@ -255,6 +211,90 @@ struct BreakTimerView: View {
             notificationGeneration += 1
             notificationSchedulingTask?.cancel()
             notificationSchedulingTask = nil
+        }
+    }
+
+    private var timerHeader: some View {
+        HStack {
+            TimerRotationControls()
+            Spacer()
+            Button { closeBreak() } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(PomoGemIconButtonStyle())
+            .accessibilityLabel(
+                remaining == 0
+                    ? "終了アラートを停止して瓶へ戻る"
+                    : "休憩をスキップ"
+            )
+        }
+    }
+
+    private func timerFace(spacing: CGFloat) -> some View {
+        VStack(spacing: spacing) {
+            Image(systemName: "cup.and.saucer.fill")
+                .font(.system(size: 38))
+                .foregroundStyle(PomoGemTheme.amber)
+                .accessibilityHidden(true)
+            Text("休憩")
+                .font(PomoGemTheme.brand(28))
+                .accessibilityAddTraits(.isHeader)
+            Text(String(format: "%02d:%02d", remaining / 60, remaining % 60))
+                .font(.system(size: timerFontSize, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+                .minimumScaleFactor(0.65)
+                .lineLimit(1)
+                .contentTransition(
+                    reduceMotion ? .identity : .numericText(countsDown: true)
+                )
+                .accessibilityLabel("残り\(remaining / 60)分\(remaining % 60)秒")
+                .accessibilityAddTraits(.updatesFrequently)
+        }
+    }
+
+    private var waitingMessage: some View {
+        Text("瓶の粒は、そのまま待っています。")
+            .font(.caption)
+            .foregroundStyle(PomoGemTheme.muted)
+            .multilineTextAlignment(.center)
+    }
+
+    @ViewBuilder
+    private var completionActions: some View {
+        if remaining == 0 {
+            if completionAlert.isActive(sessionID: sessionID) {
+                VStack(spacing: 7) {
+                    Label(
+                        "休憩終了のアラート中",
+                        systemImage: "bell.and.waves.left.and.right.fill"
+                    )
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(PomoGemTheme.amber)
+                    Text("アプリが前面にある間、有効な音と触覚を停止するまで繰り返します")
+                        .font(.caption)
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            Button {
+                closeBreak()
+            } label: {
+                Label(
+                    completionAlert.isActive(sessionID: sessionID)
+                        ? "停止して瓶へ戻る"
+                        : "瓶へ戻る",
+                    systemImage: completionAlert.isActive(sessionID: sessionID)
+                        ? "stop.fill"
+                        : "arrow.backward"
+                )
+            }
+            .buttonStyle(PomoGemPrimaryButtonStyle())
+            .frame(minHeight: 44)
+            .accessibilityIdentifier("break.completion-alert.stop")
+        } else {
+            Button("休憩をスキップ") { closeBreak() }
+                .buttonStyle(PomoGemSecondaryButtonStyle())
+                .frame(minHeight: 44)
         }
     }
 

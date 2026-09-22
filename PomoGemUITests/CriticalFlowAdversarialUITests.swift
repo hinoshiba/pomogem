@@ -147,6 +147,52 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
             waitForValue(of: keepAwake, toEqual: original),
             "A second tap must restore the original setting"
         )
+
+        let twentyFiveMinutes = app.buttons["settings.focus-preset.25"]
+        XCTAssertTrue(scrollUntilHittable(twentyFiveMinutes, swiping: .up))
+        let fortyFiveMinutes = app.buttons["settings.focus-preset.45"]
+        XCTAssertTrue(scrollUntilHittable(fortyFiveMinutes, swiping: .up))
+        fortyFiveMinutes.tap()
+        XCTAssertTrue(waitForValue(of: fortyFiveMinutes, toEqual: "選択中"))
+        XCTAssertEqual(twentyFiveMinutes.value as? String, "未選択")
+        XCTAssertTrue(twentyFiveMinutes.isHittable)
+        twentyFiveMinutes.tap()
+        XCTAssertTrue(waitForValue(of: twentyFiveMinutes, toEqual: "選択中"))
+        XCTAssertEqual(fortyFiveMinutes.value as? String, "未選択")
+
+        let customTimer = app.buttons["settings.custom-timer"]
+        // Keep the first preset row visible while bringing the complete
+        // custom option into the screenshot below it.
+        for _ in 0..<8 {
+            if customTimer.exists, customTimer.isHittable,
+               customTimer.frame.maxY <= app.frame.maxY - 24 { break }
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72))
+                .press(forDuration: 0.05, thenDragTo:
+                    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.62)))
+        }
+        XCTAssertTrue(customTimer.exists && customTimer.isHittable)
+        XCTAssertEqual(customTimer.value as? String, "未選択")
+        let navigationBottom = app.navigationBars["設定"].frame.maxY
+        for minutes in [25, 45, 60, 90] {
+            let preset = app.buttons["settings.focus-preset.\(minutes)"]
+            XCTAssertTrue(preset.isHittable)
+            XCTAssertGreaterThanOrEqual(preset.frame.minY, navigationBottom)
+            XCTAssertEqual(preset.label, "\(minutes)分")
+            XCTAssertEqual(preset.value as? String, minutes == 25 ? "選択中" : "未選択")
+        }
+        XCTAssertGreaterThanOrEqual(customTimer.frame.minY,
+                                    app.buttons["settings.focus-preset.90"].frame.maxY)
+        XCTAssertLessThanOrEqual(customTimer.frame.maxY, app.frame.maxY)
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "Settings free duration tiles and Pro custom option"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        tapNavigationBack(from: "設定")
+        let homeDuration = app.buttons["home.duration-picker"]
+        XCTAssertTrue(homeDuration.waitForExistence(timeout: 5))
+        XCTAssertTrue(homeDuration.label.contains("25分"))
+        XCTAssertFalse(homeDuration.label.contains("秒"))
     }
 
     func testTimerCompletionChoicesExposeCancellableThreeSecondPreview() {

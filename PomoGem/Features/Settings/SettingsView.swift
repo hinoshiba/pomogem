@@ -3,14 +3,58 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+enum NotificationPreference: Hashable {
+    case dailyReminder
+    case wrapped
+    case focusReturnReminder
+}
+
+/// Authorization may outlive a later toggle. Keep independent user intents
+/// for each setting so a delayed permission result cannot restore an old
+/// value or cancel an update to a different reminder.
+@MainActor
+final class NotificationPreferenceIntentGate {
+    private var intents: [NotificationPreference: UUID] = [:]
+
+    func begin(_ preference: NotificationPreference) -> UUID {
+        let intent = UUID()
+        intents[preference] = intent
+        return intent
+    }
+
+    func isCurrent(_ preference: NotificationPreference, intent: UUID) -> Bool {
+        !Task.isCancelled && intents[preference] == intent
+    }
+
+    /// Nil means a newer update or task cancellation superseded this request.
+    func authorizeUpdate(
+        _ preference: NotificationPreference,
+        intent: UUID,
+        enabled: Bool,
+        refreshAuthorization: () async -> Bool,
+        requestAuthorization: () async -> Bool
+    ) async -> Bool? {
+        guard isCurrent(preference, intent: intent) else { return nil }
+        guard enabled else { return true }
+        let alreadyAuthorized = await refreshAuthorization()
+        guard isCurrent(preference, intent: intent) else { return nil }
+        guard !alreadyAuthorized else { return true }
+        let granted = await requestAuthorization()
+        guard isCurrent(preference, intent: intent) else { return nil }
+        return granted
+    }
+}
+
 struct SettingsView: View {
     let persistenceMode: PersistenceLaunchMode
 
     @Environment(\.modelContext) private var modelContext
     @Environment(AppRouter.self) private var router
     @Environment(CompleteDataDeletionController.self) private var completeDeletion
+    @Environment(StorageTransferController.self) private var storageTransfer
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
     @Query private var storedSubjects: [Subject]
     @Query private var preferences: [Prefs]
     @Query private var activityResetMarkers: [ActivityResetMarker]
@@ -21,7 +65,8 @@ struct SettingsView: View {
     private var liveActivityEnabled = true
     @AppStorage(FocusReturnReminderPolicy.enabledDefaultsKey)
     private var focusReturnReminderEnabled = false
-    @State private var isUpdatingFocusReturnReminder = false
+    @AppStorage(TimerOrientationPreference.defaultsKey)
+    private var defaultTimerOrientationRawValue = TimerDefaultOrientation.automatic.rawValue
     @State private var purchase = PurchaseManager.shared
     @State private var isSubjectEditorPresented = false
     @State private var editingSubjectID: UUID?
@@ -29,7 +74,12 @@ struct SettingsView: View {
     @State private var subjectPendingDeletionRecordCount: Int?
     @State private var showResetData = false
     @State private var showFontLicense = false
+    @State private var showCustomDuration = false
     @State private var notificationError: String?
+    @State private var notificationPreferenceIntents =
+        NotificationPreferenceIntentGate()
+    @State private var viewTasks = ViewTaskScope()
+    @State private var resetCleanupJournal = ActivityResetCleanupJournal.live()
     @State private var settingsError: String?
     @State private var dataExportTask: Task<Void, Never>?
     @State private var activeDataExportID: UUID?
@@ -86,11 +136,20 @@ struct SettingsView: View {
         List {
             subjectsSection
             focusSection
+            screenTimeSection
             if RareRewardReleasePolicy.isEnabled {
                 rarePebbleSection
             }
             sensorySection
             CloudSyncSettingsSection(persistenceMode: persistenceMode)
+            StorageTransferSettingsSection(
+                persistenceMode: persistenceMode,
+                controller: storageTransfer,
+                otherWorkIsActive: isCloudOfflineSession || isExportingData || completeDeletion.hasStarted
+                    || router.focusPresentationIsActive || router.recoveredFocus != nil
+                    || router.deferredFocusRecovery != nil || router.recoveredBreak != nil
+                    || router.cloudFocusRecoveryOffer != nil
+            )
             notificationSection
             shareSection
             proSection
@@ -125,6 +184,16 @@ struct SettingsView: View {
                     onSave: addSubject
                 )
             }
+        }
+        .sheet(isPresented: $showCustomDuration) {
+            CustomDurationView(
+                initialSeconds: resolvedPreferences?.preferredFocusSeconds
+                    ?? Constants.Timer.twentyFiveMinutes * Constants.Timer.secondsPerMinute,
+                onConfirm: confirmPreferredFocusSeconds
+            )
+            .environment(\.dynamicTypeSize, dynamicTypeSize)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showFontLicense) {
             FontLicenseView()
@@ -231,9 +300,10 @@ struct SettingsView: View {
             }
         }
 #endif
+        .onAppear { viewTasks.activate() }
         .task {
-            await purchase.refreshEntitlements()
-            await reconcileNotificationAuthorization()
+            await refreshViewServices()
+            guard !Task.isCancelled else { return }
             await removeStaleDataExports()
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -241,15 +311,15 @@ struct SettingsView: View {
                 completionPreview.cancel()
                 return
             }
-            Task {
-                await purchase.refreshEntitlements()
-                await reconcileNotificationAuthorization()
+            viewTasks.start {
+                await refreshViewServices()
             }
         }
         .onChange(of: completionPreviewConfiguration) { _, _ in
             completionPreview.cancel()
         }
         .onDisappear {
+            viewTasks.cancelAll()
             completionPreview.cancel()
             guard !showDataExportShareSheet else { return }
             cancelDataExport(announce: false)
@@ -414,7 +484,6 @@ struct SettingsView: View {
                     symbol: "bell.badge"
                 )
             }
-            .disabled(isUpdatingFocusReturnReminder)
             .accessibilityIdentifier("settings.focus-return-reminder")
 
             Text("既定はオフ。集中タイマー中だけ通知し、戻ると取り消します。一時停止中・休憩中・終了間際は通知しません。画面をロックした場合も通知されます。")
@@ -447,55 +516,36 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("settings.keep-screen-awake")
             }
-            if purchase.isPro {
-                if resolvedPreferences != nil {
-                    Group {
-                        if dynamicTypeSize.isAccessibilitySize {
-                            VStack(alignment: .leading, spacing: 8) {
-                                SettingLabel(title: "任意のタイマー時間", subtitle: Constants.UIStrings.customDurationRange, symbol: "timer")
-                                proAvailabilityLabel
-                                    .padding(.leading, 40)
-                            }
-                        } else {
-                            HStack(spacing: 10) {
-                                SettingLabel(title: "任意のタイマー時間", subtitle: Constants.UIStrings.customDurationRange, symbol: "timer")
-                                Spacer(minLength: 8)
-                                proAvailabilityLabel
-                            }
-                        }
-                    }
-                    .frame(minHeight: 44)
+            NavigationLink {
+                TimerDefaultOrientationSettingsView(selection: Binding(
+                    get: { TimerDefaultOrientation(rawValue: defaultTimerOrientationRawValue) ?? .automatic },
+                    set: { defaultTimerOrientationRawValue = $0.rawValue }
+                ))
+            } label: {
+                SettingLabel(
+                    title: "タイマーの既定の向き",
+                    subtitle: (TimerDefaultOrientation(rawValue: defaultTimerOrientationRawValue) ?? .automatic).title,
+                    symbol: "rotate.right"
+                )
+            }
+            .accessibilityIdentifier("settings.timer-default-orientation")
+            .accessibilityHint("新しい集中・休憩タイマーを開く向きを選べます")
 
-                    Picker("既定の集中時間", selection: preferredFocusMinutesBinding) {
-                        ForEach(
-                            Constants.Timer.customMinimumMinutes ... Constants.Timer.customMaximumMinutes,
-                            id: \.self
-                        ) { minutes in
-                            Text("\(minutes)分").tag(minutes)
+            if let resolvedPreferences {
+                PreferredFocusDurationPicker(
+                    preferredSeconds: resolvedPreferences.preferredFocusSeconds,
+                    isPro: purchase.isPro,
+                    onSelectPreset: { duration in
+                        _ = savePreferredFocusSeconds(duration.seconds)
+                    },
+                    onCustomDuration: {
+                        if purchase.isPro {
+                            showCustomDuration = true
+                        } else {
+                            router.presentPaywall(from: .customTimer)
                         }
                     }
-                    .pickerStyle(.navigationLink)
-                    .frame(minHeight: 44)
-                }
-            } else {
-                Button {
-                    router.presentPaywall(from: .customTimer)
-                } label: {
-                    HStack(spacing: 10) {
-                        SettingLabel(title: "任意のタイマー時間", subtitle: Constants.UIStrings.customDurationRange, symbol: "timer")
-                        Spacer(minLength: 8)
-                        Text("Pro")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(PomoGemTheme.amber)
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                    }
-                    .frame(minHeight: 44)
-                }
-                .buttonStyle(PomoGemBareButtonStyle())
-                .accessibilityIdentifier("settings.custom-timer")
-                .accessibilityHint("ポモジェムProのプランを表示します")
+                )
             }
         }
     }
@@ -708,6 +758,21 @@ struct SettingsView: View {
         }
     }
 
+    private var screenTimeSection: some View {
+        Section("アプリの利用時間") {
+            NavigationLink {
+                ScreenTimeSettingsView()
+            } label: {
+                SettingLabel(
+                    title: "スクリーンタイム",
+                    subtitle: "10分ごとに勉強のgem・黒いgemを積む",
+                    symbol: "hourglass"
+                )
+            }
+            .accessibilityIdentifier("settings.screen-time")
+        }
+    }
+
     private var proSection: some View {
         Section {
             Button {
@@ -719,7 +784,7 @@ struct SettingsView: View {
                         .frame(width: 28)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(Constants.UIStrings.paywallTitle).font(.headline)
-                        Text(purchase.isPro ? "利用中" : "任意時間・まとまり粒の月刻印")
+                        Text(purchase.isPro ? "利用中" : "任意時間・月刻印・勉強アプリ数の無制限")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                     }
@@ -834,6 +899,15 @@ struct SettingsView: View {
             }
 
             Button("表示中の記録をリセット", role: .destructive) { showResetData = true }
+                .disabled(!ActivityResetAdmissionPolicy.permitsUserReset(in: persistenceMode))
+                .accessibilityIdentifier("settings.activity-reset")
+
+            if !ActivityResetAdmissionPolicy.permitsUserReset(in: persistenceMode) {
+                Text(ActivityResetAdmissionPolicy.cloudResetUnavailableMessage)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .accessibilityIdentifier("settings.activity-reset-unavailable")
+            }
 
             if CompleteDataDeletionReleasePolicy.isEnabled,
                persistenceMode != .localOnly {
@@ -895,9 +969,9 @@ struct SettingsView: View {
     }
 
     private var dataStorageDisclosure: String {
-        let contents = "書き出しファイルには、テーマ名・成果メモ・設定・タイマー整合用のランダムな端末識別子と、以前リセットした旧世代を含む、この端末で利用可能な全11種類の出荷対象保存データが入ります。SNS用の共有画像とは異なります。保存先を確認してください。通常のリセット後はテーマとアプリ設定が残ります。"
+        let contents = "書き出しファイルには、テーマ名・成果メモ・設定・タイマー整合用のランダムな端末識別子と、以前リセットした旧世代を含む、この端末で利用可能な全11種類の出荷対象保存データが入ります。SNS用の共有画像とは異なります。保存先を確認してください。"
         if persistenceMode == .localOnly {
-            return contents + " 端末内の物理データはアプリの削除で消去できます。JSONは保管用で、アプリへ再読込したりiCloudの記録へ移行したりする機能はありません。"
+            return contents + " 通常のリセット後はテーマとアプリ設定が残ります。端末内の物理データはアプリの削除で消去できます。JSONは保管用で、アプリへ再読込したりiCloudの記録へ移行したりする機能はありません。"
         }
         return contents + " 端末内の物理データはアプリの削除、iCloud側はAppleのiCloudストレージ管理から削除できます。"
     }
@@ -987,9 +1061,11 @@ struct SettingsView: View {
     }
 
     private func removeStaleDataExports() async {
-        _ = await Task.detached(priority: .utility) {
-            try? PomoGemDataExporter.removeStaleTemporaryExports()
-        }.value
+        _ = try? await CancellationResponsiveTaskWaiter.value {
+            await Task.detached(priority: .utility) {
+                try? PomoGemDataExporter.removeStaleTemporaryExports()
+            }.value
+        }
     }
 
     private func settingBinding(
@@ -1097,24 +1173,6 @@ struct SettingsView: View {
         }
     }
 
-    private var preferredFocusMinutesBinding: Binding<Int> {
-        Binding(
-            get: {
-                min(
-                    max(
-                        resolvedPreferences?.preferredFocusMinutes
-                            ?? Constants.Timer.twentyFiveMinutes,
-                        Constants.Timer.customMinimumMinutes
-                    ),
-                    Constants.Timer.customMaximumMinutes
-                )
-            },
-            set: { minutes in
-                updatePreferredFocusMinutes(minutes)
-            }
-        )
-    }
-
     private var timerDisplayModeBinding: Binding<TimerDisplayMode> {
         Binding(
             get: {
@@ -1124,13 +1182,6 @@ struct SettingsView: View {
                 updateTimerDisplayMode(mode)
             }
         )
-    }
-
-    private var proAvailabilityLabel: some View {
-        Text("利用可能")
-            .font(.caption.weight(.bold))
-            .foregroundStyle(PomoGemTheme.amber)
-            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var reminderTimeBinding: Binding<Date> {
@@ -1359,27 +1410,36 @@ struct SettingsView: View {
         }
     }
 
-    private func updatePreferredFocusMinutes(_ minutes: Int) {
-        guard let resolvedPreferences else { return }
-        let normalized = min(
-            max(minutes, Constants.Timer.customMinimumMinutes),
-            Constants.Timer.customMaximumMinutes
-        )
-        guard resolvedPreferences.preferredFocusMinutes != normalized else {
-            return
+    private func confirmPreferredFocusSeconds(_ totalSeconds: Int) -> Bool {
+        guard purchase.isPro else {
+            router.showToast("Proの購入状態を確認してください", symbol: "lock")
+            return false
+        }
+        guard savePreferredFocusSeconds(totalSeconds) else { return false }
+        showCustomDuration = false
+        return true
+    }
+
+    private func savePreferredFocusSeconds(_ totalSeconds: Int) -> Bool {
+        let duration = PomodoroDuration(totalSeconds: totalSeconds)
+        guard let resolvedPreferences,
+              duration.isValid,
+              !duration.requiresPro || purchase.isPro else { return false }
+        if resolvedPreferences.preferredFocusSeconds == totalSeconds {
+            return true
         }
         do {
-            try PrefsConsumerPolicy.mutate(
-                .preferredFocusMinutes,
+            try PrefsConsumerPolicy.setPreferredFocusSeconds(
+                totalSeconds,
                 context: modelContext,
                 markers: resetSnapshots
-            ) {
-                $0.preferredFocusMinutes = normalized
-            }
+            )
             try modelContext.save()
+            return true
         } catch {
             modelContext.rollback()
-            settingsError = "既定の集中時間を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+            router.showToast("既定の集中時間を保存できませんでした", symbol: "exclamationmark.triangle")
+            return false
         }
     }
 
@@ -1411,7 +1471,7 @@ struct SettingsView: View {
     }
 
     private func updateFocusReturnReminder(enabled: Bool) {
-        guard !isUpdatingFocusReturnReminder else { return }
+        let intent = notificationPreferenceIntents.begin(.focusReturnReminder)
         let manager = NotificationManager.shared
         if !enabled {
             focusReturnReminderEnabled = false
@@ -1419,14 +1479,20 @@ struct SettingsView: View {
             return
         }
 
-        isUpdatingFocusReturnReminder = true
-        Task { @MainActor in
-            defer { isUpdatingFocusReturnReminder = false }
-            await manager.refreshAuthorizationStatus()
-            var granted = manager.isAuthorized
-            if !granted {
-                granted = await manager.requestAuthorization()
-            }
+        viewTasks.start {
+            guard let granted = await notificationPreferenceIntents.authorizeUpdate(
+                .focusReturnReminder,
+                intent: intent,
+                enabled: true,
+                refreshAuthorization: {
+                    await manager.refreshAuthorizationStatus()
+                    return manager.isAuthorized
+                },
+                requestAuthorization: {
+                    await manager.requestAuthorization()
+                }
+            ), notificationPreferenceIntents.isCurrent(.focusReturnReminder, intent: intent)
+            else { return }
             focusReturnReminderEnabled = granted
             if !granted {
                 manager.cancelFocusReturnReminder()
@@ -1442,22 +1508,29 @@ struct SettingsView: View {
         enabled: Bool
     ) {
         guard resolvedPreferences != nil else { return }
-        Task { @MainActor in
+        let intent = notificationPreferenceIntents.begin(preference.intentKey)
+        viewTasks.start {
             let manager = NotificationManager.shared
-            if enabled {
-                await manager.refreshAuthorizationStatus()
-                var granted = manager.isAuthorized
-                if !granted {
-                    granted = await manager.requestAuthorization()
+            guard let permitted = await notificationPreferenceIntents.authorizeUpdate(
+                preference.intentKey,
+                intent: intent,
+                enabled: enabled,
+                refreshAuthorization: {
+                    await manager.refreshAuthorizationStatus()
+                    return manager.isAuthorized
+                },
+                requestAuthorization: {
+                    await manager.requestAuthorization()
                 }
-                guard granted else {
-                    disableNotificationPreference(preference)
-                    notificationError = notificationPermissionMessage(
-                        underlyingError: manager.lastErrorDescription
-                    )
-                    await synchronizeNotificationsNow()
-                    return
-                }
+            ), notificationPreferenceIntents.isCurrent(preference.intentKey, intent: intent)
+            else { return }
+            guard permitted else {
+                disableNotificationPreference(preference)
+                notificationError = notificationPermissionMessage(
+                    underlyingError: manager.lastErrorDescription
+                )
+                await synchronizeNotificationsNow()
+                return
             }
 
             switch preference {
@@ -1485,16 +1558,21 @@ struct SettingsView: View {
     }
 
     private func synchronizeNotifications() {
-        Task { @MainActor in
+        viewTasks.start {
             await synchronizeNotificationsNow()
         }
     }
 
     private func resetStudyData() {
+        guard ActivityResetAdmissionPolicy.permitsUserReset(in: persistenceMode) else {
+            settingsError = ActivityResetAdmissionPolicy.cloudResetUnavailableMessage
+            return
+        }
         let marker: ActivityResetMarker
         do {
-            marker = try ActivityResetStore.beginReset(
+            marker = try ActivityResetStore.beginUserInitiatedReset(
                 context: modelContext,
+                persistenceMode: persistenceMode,
                 deviceID: FocusDeviceIdentity.current()
             )
         } catch {
@@ -1552,12 +1630,28 @@ struct SettingsView: View {
             symbol: "trash"
         )
 
-        Task { @MainActor in
-            await NotificationManager.shared.cancelAllTimerNotifications()
-            await FocusActivityManager.shared.endAll()
+        // The reset marker is already committed. Complete its external cleanup
+        // even if Settings disappears, and keep the old container leased until
+        // that cleanup settles so it cannot reach a remounted account's timer.
+        // Only the optional error presentation belongs to this view's task.
+        let ticket = resetCleanupJournal.begin(epochID: marker.epochID)
+        let notificationCleanup = NotificationManager.shared.prepareTimerNotificationCleanup()
+        let activityCleanup = FocusActivityManager.shared.prepareCurrentActivityRetirement()
+        let deliveredStateCleanup = NotificationManager.shared.prepareDeliveredStateCleanup()
+        let cleanupTask = AcceptedActivityResetCleanup.start(
+            retaining: modelContext.container,
+            completing: ticket
+        ) {
+            await notificationCleanup()
+            await activityCleanup.end()
+            await deliveredStateCleanup()
+            try await WidgetSnapshotStore.shared.clear()
+        }
+        viewTasks.start {
             do {
-                try await WidgetSnapshotStore.shared.clear()
+                try await CancellationResponsiveTaskWaiter.value { try await cleanupTask.value }
             } catch {
+                guard !Task.isCancelled else { return }
                 settingsError = persistenceMode == .localOnly
                     ? "このiPhone内の記録はリセット済みですが、端末上の補助表示を消去できませんでした。\n\(error.localizedDescription)"
                     : "この端末の記録はリセット済みですが、ウィジェットの表示を消去できませんでした。iCloudへの反映には時間がかかる場合があります。\n\(error.localizedDescription)"
@@ -1625,10 +1719,24 @@ struct SettingsView: View {
         }
     }
 
+    private func refreshViewServices() async {
+        // Only the process-wide service is retained by the system wait. The
+        // Settings task can release its ModelContext when the view disappears.
+        let purchase = purchase
+        do {
+            try await CancellationResponsiveTaskWaiter.value {
+                await purchase.refreshEntitlements()
+            }
+        } catch { return }
+        guard !Task.isCancelled else { return }
+        await reconcileNotificationAuthorization()
+    }
+
     private func reconcileNotificationAuthorization() async {
-        let prefs = resolvedPreferences
         let manager = NotificationManager.shared
         await manager.refreshAuthorizationStatus()
+        guard !Task.isCancelled else { return }
+        let prefs = resolvedPreferences
 
         if !manager.isAuthorized {
             let hadEnabledPreference = (prefs?.reminderEnabled ?? false)
@@ -1662,9 +1770,10 @@ struct SettingsView: View {
     }
 
     private func synchronizeNotificationsNow() async {
-        let prefs = resolvedPreferences
         let manager = NotificationManager.shared
         await manager.refreshAuthorizationStatus()
+        guard !Task.isCancelled else { return }
+        let prefs = resolvedPreferences
         do {
             try await manager.synchronizePassiveNotifications(
                 dailyReminderEnabled: (prefs?.reminderEnabled ?? false)
@@ -1677,6 +1786,7 @@ struct SettingsView: View {
                 playsSound: prefs?.soundOn ?? false
             )
         } catch {
+            guard !Task.isCancelled else { return }
             notificationError = "通知の予定を更新できませんでした。\n\(error.localizedDescription)"
         }
     }
@@ -1690,6 +1800,13 @@ struct SettingsView: View {
     private enum PassiveNotificationPreference {
         case dailyReminder
         case wrapped
+
+        var intentKey: NotificationPreference {
+            switch self {
+            case .dailyReminder: .dailyReminder
+            case .wrapped: .wrapped
+            }
+        }
     }
 }
 

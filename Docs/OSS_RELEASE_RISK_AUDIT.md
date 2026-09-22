@@ -126,6 +126,19 @@ version 1.0のUI、起動、shipping schema、entitlementから除外します�
 - App Storeだけで配布する公式binaryと、第三者がMIT sourceから作るforkを同一品質・privacyとして
   表示しない。公式署名、公式URL、brand policyで区別する。
 
+## 保存先切り替えの追加レビュー（2026-09-12、開発中）
+
+上の保存先不変・再インストール制約は既存版の記録です。次候補では設定から三つの切り替えを
+明示的に選ぶ機能を開発しています。cloud置換は復旧用コピーの受領確認後に管理対象zoneだけを
+削除し、解除では検証した端末コピーとcloud側の両方を残します。古い端末の再流入、不完全graphでの
+停止、途中終了・account変更後の再開は別のrelease review対象です。一般の一括削除UIや
+Production環境のresetを有効にする変更ではありません。
+
+[StorageModeTransfer.md](StorageModeTransfer.md)に実行済みのnamespace/controller/UI試験と
+実機manifest読取試験の範囲を記録します。これらを全Runtimeの切り替え、Production追加schema配備、
+複数端末、最終配布物の合格とは扱いません。build 7の同期修正の提出とは分離し、Actionsの支払い／
+利用上限とPages公開などのblockerは実証なしに解除しません。
+
 ## Go / no-go record
 
 Release ownerは次を全て記録してからGOへ変更します。

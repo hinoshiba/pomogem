@@ -592,7 +592,7 @@ enum FocusSyncPolicy {
         }
     }
 
-    /// Minimal witnesses for pure resolution proofs and legacy tests only.
+    /// Minimal in-memory witnesses for read resolution and pure proofs.
     /// They are never authority to delete or rewrite CloudKit source rows: a
     /// future partial delivery can still contain information not represented by
     /// the currently observed set.
@@ -848,12 +848,16 @@ enum FocusDeviceIdentity {
 @MainActor
 enum FocusCloudSyncStore {
     enum QueryContract {
-        /// One focus normally produces only a handful of revisions. These
-        /// defensive ceilings prevent corrupt/hostile CloudKit history from
-        /// allocating an account's lifetime of tombstones on MainActor.
+        /// Interactive sentinels and ownership reads stay hard bounded. A
+        /// single timer can legitimately accumulate many pause/resume events,
+        /// so exact timer history uses fixed-size pages and retained witnesses.
         static let recentTimerRecordLimit = 256
         static let recentOwnershipClaimLimit = 256
         static let matchingSessionRecordLimit = 128
+        static let timerHistoryPageSize = 128
+        /// One append event normally has one snapshot. Keep collision checks
+        /// bounded even if imported physical copies disagree about that event.
+        static let maximumSnapshotVariantsPerRecordID = 128
         static let matchingSessionClaimLimit = 128
         static let logicalTimerScanLimit = 256
     }
@@ -912,7 +916,12 @@ enum FocusCloudSyncStore {
             throw FocusCloudSyncError.timerAlreadyTerminal
         }
 
-        let records = try timerRecords(sessionID: sessionID, context: context)
+        let records = try timerResolutionRecords(
+            sessionID: sessionID,
+            context: context,
+            completionWitnessPayload: status == .completionPending ? payload : nil,
+            completionWitnessWriter: deviceID
+        )
         var ownerClaim = try activeOwnershipClaim(
             sessionID: sessionID,
             context: context
@@ -986,18 +995,23 @@ enum FocusCloudSyncStore {
                 candidates.append(record)
             }
         }
-        return candidates.max { lhs, rhs in
-            if lhs.ownershipSequence != rhs.ownershipSequence {
-                return lhs.ownershipSequence < rhs.ownershipSequence
-            }
-            if lhs.revision != rhs.revision {
-                return lhs.revision < rhs.revision
-            }
-            if lhs.updatedAt != rhs.updatedAt {
-                return lhs.updatedAt < rhs.updatedAt
-            }
-            return lhs.id.uuidString < rhs.id.uuidString
+        return candidates.max(by: completionLineageIsOrderedBefore)
+    }
+
+    private static func completionLineageIsOrderedBefore(
+        _ lhs: SyncedFocusTimer,
+        _ rhs: SyncedFocusTimer
+    ) -> Bool {
+        if lhs.ownershipSequence != rhs.ownershipSequence {
+            return lhs.ownershipSequence < rhs.ownershipSequence
         }
+        if lhs.revision != rhs.revision {
+            return lhs.revision < rhs.revision
+        }
+        if lhs.updatedAt != rhs.updatedAt {
+            return lhs.updatedAt < rhs.updatedAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
     }
 
     @discardableResult
@@ -1015,7 +1029,7 @@ enum FocusCloudSyncStore {
         guard try !isSessionClosed(sessionID: sessionID, context: context) else {
             throw FocusCloudSyncError.timerAlreadyTerminal
         }
-        let records = try timerRecords(sessionID: sessionID, context: context)
+        let records = try timerResolutionRecords(sessionID: sessionID, context: context)
         guard let winner = FocusSyncPolicy.resolveSameSession(
             records.map(\.policySnapshot)
         ), winner.status.isRecoverable else {
@@ -1065,7 +1079,7 @@ enum FocusCloudSyncStore {
             || status == .cancelled {
             return
         }
-        let records = try timerRecords(sessionID: sessionID, context: context)
+        let records = try timerResolutionRecords(sessionID: sessionID, context: context)
         guard let winner = FocusSyncPolicy.resolveSameSession(records.map(\.policySnapshot)),
               let source = try storedTimerRecord(matching: winner, in: records)
         else {
@@ -1374,59 +1388,121 @@ enum FocusCloudSyncStore {
         return record
     }
 
-    private static func timerRecords(
+    /// Reads every physical revision without treating the page size as a
+    /// lifetime transition limit. The returned rows are in-memory witnesses:
+    /// they are never authority to compact or delete synchronized evidence.
+    /// Work is linear in this one session's history; retained rows are bounded
+    /// to one page plus resolution, revision, and optional lineage witnesses.
+    /// A separate bounded payload map validates collisions within one event ID.
+    private static func timerResolutionRecords(
         sessionID: UUID,
-        context: ModelContext
+        context: ModelContext,
+        completionWitnessPayload: FocusCloudPayload? = nil,
+        completionWitnessWriter: String? = nil
     ) throws -> [SyncedFocusTimer] {
         let targetID = sessionID
         let currentEpochID = try ActivityResetStore.latestEpochID(context: context)
-        var descriptor: FetchDescriptor<SyncedFocusTimer>
+        let predicate: Predicate<SyncedFocusTimer>
         if let currentEpochID {
-            descriptor = FetchDescriptor(
-                predicate: #Predicate {
-                    $0.sessionID == targetID && $0.dataEpochID == currentEpochID
-                },
-                sortBy: [
-                    SortDescriptor(\SyncedFocusTimer.updatedAt, order: .reverse),
-                    SortDescriptor(\SyncedFocusTimer.revision, order: .reverse),
-                    SortDescriptor(\SyncedFocusTimer.id, order: .reverse)
-                ]
-            )
+            predicate = #Predicate {
+                $0.sessionID == targetID && $0.dataEpochID == currentEpochID
+            }
         } else {
-            descriptor = FetchDescriptor(
-                predicate: #Predicate {
-                    $0.sessionID == targetID && $0.dataEpochID == nil
-                },
-                sortBy: [
-                    SortDescriptor(\SyncedFocusTimer.updatedAt, order: .reverse),
-                    SortDescriptor(\SyncedFocusTimer.revision, order: .reverse),
-                    SortDescriptor(\SyncedFocusTimer.id, order: .reverse)
-                ]
-            )
+            predicate = #Predicate {
+                $0.sessionID == targetID && $0.dataEpochID == nil
+            }
         }
-        guard try context.fetchCount(descriptor) <= QueryContract.matchingSessionRecordLimit else {
+        // UUID ordering keeps every physical copy of one append event together.
+        // String collation can differ between pending rows and SQLite, so do
+        // not rely on Swift-equal writer IDs being adjacent within that group.
+        var descriptor = FetchDescriptor<SyncedFocusTimer>(
+            predicate: predicate,
+            sortBy: [
+                SortDescriptor(\SyncedFocusTimer.id),
+                SortDescriptor(\SyncedFocusTimer.statusRaw),
+                SortDescriptor(\SyncedFocusTimer.startedAt),
+                SortDescriptor(\SyncedFocusTimer.scheduledEndAt),
+                SortDescriptor(\SyncedFocusTimer.updatedAt),
+                SortDescriptor(\SyncedFocusTimer.terminalAt),
+                SortDescriptor(\SyncedFocusTimer.revision),
+                SortDescriptor(\SyncedFocusTimer.ownershipSequence),
+                SortDescriptor(\SyncedFocusTimer.writerDeviceID)
+            ]
+        )
+        let countBefore = try context.fetchCount(descriptor)
+        var offset = 0
+        var witnesses: [SyncedFocusTimer] = []
+        var maximumRevisionRecord: SyncedFocusTimer?
+        var completionLineage: SyncedFocusTimer?
+        var currentRecordID: UUID?
+        var payloadBySnapshot: [FocusSyncRecordSnapshot: FocusCloudPayload] = [:]
+
+        while offset < countBefore {
+            try Task.checkCancellation()
+            descriptor.fetchOffset = offset
+            descriptor.fetchLimit = min(
+                QueryContract.timerHistoryPageSize, countBefore - offset
+            )
+            let page = try context.fetch(descriptor)
+            guard page.count == descriptor.fetchLimit else {
+                throw FocusCloudSyncError.timerHistoryRequiresMaintenance
+            }
+            for record in page {
+                let snapshot = record.policySnapshot
+                let payload = try record.decodedPayload()
+                if currentRecordID != record.id {
+                    currentRecordID = record.id
+                    payloadBySnapshot.removeAll(keepingCapacity: true)
+                }
+                if let knownPayload = payloadBySnapshot[snapshot] {
+                    guard knownPayload == payload else {
+                        throw FocusCloudSyncError.invalidPayload
+                    }
+                } else {
+                    guard payloadBySnapshot.count
+                            < QueryContract.maximumSnapshotVariantsPerRecordID else {
+                        throw FocusCloudSyncError.timerHistoryRequiresMaintenance
+                    }
+                    payloadBySnapshot[snapshot] = payload
+                }
+
+                let candidates = witnesses + [record]
+                let selected = Set(FocusSyncPolicy.compactionWitnesses(
+                    from: candidates.map(\.policySnapshot)
+                ))
+                // Keep one physical row per selected snapshot. Equal copies
+                // have already passed the semantic payload validation above.
+                var retained = Set<FocusSyncRecordSnapshot>()
+                witnesses = candidates.filter {
+                    let key = $0.policySnapshot
+                    return selected.contains(key) && retained.insert(key).inserted
+                }
+                if record.revision > (maximumRevisionRecord?.revision ?? 0) {
+                    maximumRevisionRecord = record
+                }
+                if let completionWitnessPayload,
+                   record.writerDeviceID == completionWitnessWriter,
+                   record.status.isRecoverable,
+                   completionWitnessPayload.isCompletionSuccessor(of: payload),
+                   completionLineage.map({
+                       completionLineageIsOrderedBefore($0, record)
+                   }) ?? true {
+                    completionLineage = record
+                }
+            }
+            offset += page.count
+        }
+        // A cardinality change makes an offset scan incomplete. Do not append
+        // a new mutation from that read; the next attempt starts over. As with
+        // other bounded store reads, this is not a linearizable fence against
+        // same-count concurrent replacement by the CloudKit importer.
+        guard try context.fetchCount(FetchDescriptor(predicate: predicate))
+                == countBefore else {
             throw FocusCloudSyncError.timerHistoryRequiresMaintenance
         }
-        descriptor.fetchLimit = QueryContract.matchingSessionRecordLimit
-        let records = try context.fetch(descriptor)
-
-        // CloudKit can briefly materialize physical duplicates with the same
-        // application-level identity. Identical policy snapshots must also
-        // carry semantically identical payloads. Check every snapshot, not
-        // only the eventual policy winner, while accepting harmless JSON key
-        // order differences. This ensures an unrelated later save
-        // cannot change fetch order and make recovery pick arbitrary content.
-        var payloadBySnapshot: [FocusSyncRecordSnapshot: FocusCloudPayload] = [:]
-        for record in records {
-            let snapshot = record.policySnapshot
-            let payload = try record.decodedPayload()
-            if let knownPayload = payloadBySnapshot[snapshot],
-               knownPayload != payload {
-                throw FocusCloudSyncError.invalidPayload
-            }
-            payloadBySnapshot[snapshot] = payload
-        }
-        return records
+        var retained = Set<FocusSyncRecordSnapshot>()
+        return (witnesses + [maximumRevisionRecord, completionLineage].compactMap { $0 })
+            .filter { retained.insert($0.policySnapshot).inserted }
     }
 
     /// Walks logical active timers rather than taking a raw-row prefix. A
@@ -1469,7 +1545,7 @@ enum FocusCloudSyncStore {
             }
 
             do {
-                let records = try timerRecords(
+                let records = try timerResolutionRecords(
                     sessionID: candidate.sessionID,
                     context: context
                 )
@@ -1716,6 +1792,12 @@ enum FocusCloudSyncStore {
             sessionID: sessionID,
             context: context
         )
+        // Exact release checks may remove every apparent owner from this
+        // prefix. Its original completeness must survive those removals:
+        // shrinking candidates does not prove there is no older active claim
+        // beyond the bounded query.
+        let initialPageMayBeTruncated = candidates.count
+            == QueryContract.matchingSessionClaimLimit
         let currentEpochID = try ActivityResetStore.latestEpochID(context: context)
 
         for _ in 0..<QueryContract.matchingSessionClaimLimit {
@@ -1727,7 +1809,7 @@ enum FocusCloudSyncStore {
                 // groups, a later active claim may exist beyond it. Physical
                 // source claims are retained, so exact verification must fail
                 // closed at the bounded history ceiling.
-                if candidates.count == QueryContract.matchingSessionClaimLimit {
+                if initialPageMayBeTruncated {
                     throw FocusCloudSyncError.timerHistoryRequiresMaintenance
                 }
                 return nil
@@ -1748,7 +1830,12 @@ enum FocusCloudSyncStore {
             guard let verified = FocusSyncPolicy.notificationOwnerClaim(
                 for: sessionID,
                 claims: combinedSnapshots
-            ) else { return nil }
+            ) else {
+                if initialPageMayBeTruncated {
+                    throw FocusCloudSyncError.timerHistoryRequiresMaintenance
+                }
+                return nil
+            }
             if verified.id != provisional.id {
                 candidates.removeAll { $0.id == provisional.id }
                 continue

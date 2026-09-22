@@ -5,14 +5,15 @@ REVIEW PATH
 1. Clean install後、最初の画面で同格の「iCloudに保存して同期」または「このiPhoneだけに保存」を選びます。Apple Accountやnetworkなしで確認する場合は「このiPhoneだけに保存」→確認alertの「このiPhoneだけで始める」を選んでください。
 2. 任意の「ためしに一粒、落としてみる」は記録に入りません。「次へ」で省略できます。その後、勉強・仕事共通の候補から最初のテーマを1つ選ぶとHomeへ進みます。利用目的のmode切替はありません。
 3. Homeの選択欄でテーマと時間を選び、大きな開始buttonをtapするとtimerを開始します。無料版は25分／45分／60分／90分を利用できます。
-4. 短時間で完走を確認する場合は、PomoGem Pro購入後にHomeの時間表示 →「自由な時間を設定」で1分を設定してください。hidden demo/debug menuはRelease buildにありません。
+4. PomoGem Pro購入後、Homeの時間表示 →「自由な時間を設定」で分・秒を数字入力、またはホイールで選べます。範囲は1分00秒〜360分00秒です。短時間の完走確認には1分00秒を設定してください。入力中はtimerを開始せず、取消では既定時間を変えません。hidden demo/debug menuはRelease buildにありません。
 
 IN-APP PURCHASE
 
 - Product ID: com.hinoshiba.pomogem.pro.lifetime
 - Type: Non-Consumable、1回限りの買い切り
 - Entry: Homeの時間表示 →「自由な時間を設定」、またはSettings →「ポモジェムPro」
-- Unlocks: 無料preset以外の1〜360分、まとまり粒の月刻印
+- Unlocks: 無料preset以外の1分00秒〜360分00秒を秒単位で指定、まとまり粒の月刻印
+- 秒単位timerの引き継ぎには両端末の更新が必要と画面に表示します。1分30秒は90秒の記録・10gとなり、質量は完了した分ごとに10gです。
 - Share cards: 無料／Proとも、ポモジェムのロゴとhttps://pomogem.hinoshiba.com/を常に表示
 - Restore: purchase screen下部の「購入を復元」
 - Paywall: StoreKitのProduct.displayPriceを表示し、購入buttonより前に「価格・提供条件・販売者情報を確認」linkを表示
@@ -20,13 +21,22 @@ IN-APP PURCHASE
 
 APPLE SERVICES AND PRIVACY
 
-- iCloudを選び確認した場合だけ、theme名、achievement memo、記録、設定、進行中timerをApple Accountのprivate CloudKitへ保存します。独自loginはありません。起動・再開時に同じApple Accountをonline確認し、通信不可・account不明・別accountでは保存領域を開かず、dataを削除せずfail closedにします。
-- 「このiPhoneだけに保存」は全基本機能をApple Account／networkなしで利用でき、iCloudへ自動切替・uploadしません。Version 1.0では保存先を後から変更できません。
+- iCloudを選び確認した場合だけ、theme名、achievement memo、記録、設定、進行中timerをApple Accountのprivate CloudKitへ保存します。独自loginはありません。初回取得と同期再開にはonlineでaccount・保存先・リセット履歴を確認します。account変更や未対応の履歴不一致では書き込みを止め、既存dataを削除しません。
+- 確認済みの端末dataが利用条件を満たせば、iCloudモードでもofflineでtimer・記録・設定を使えます。「このiPhoneに保存・同期は待機中」と表示し、接続確認を全記録のupload完了とは扱いません。online利用後にbackgroundから戻る際など、同じprocessで安全にofflineへ移れない場合は、appの終了・再起動を案内します。
+- 「このiPhoneだけに保存」は全基本機能をApple Account／networkなしで利用でき、iCloudへ自動切替・uploadしません。Settingsからの切り替え手順は次項のとおりです。
+- 記録保護のため、iCloud選択時のSettings →「表示中の記録をリセット」は一時的に利用できず、理由を表示します。「このiPhoneだけに保存」では引き続き利用できます。通常resetは物理消去ではなく、アプリからのCloudKit一括削除機能も提供していません。
 - Home／Lock Screen Widgetはappを開く導線だけで、記録やthemeを表示しません。
 - Live Activityは、timer開始後のLock ScreenとDynamic Islandにアプリ名、選択時間、残り時間、実行状態と帰還案内を表示します。theme名、memo、質量、Apple Account、CloudKit dataは渡さず、ActivityKit pushも使いません。タップでアプリのタイマーへ戻り、Settings → 集中 →「画面を閉じてもタイマーを表示」で停止できます。
 - 「集中に戻るお知らせ」はSettings → 集中で任意にオンにできます（既定オフ・通知許可が必要）。集中中にアプリを離れると30秒後に一度だけ通知し、復帰・一時停止・中断時に取り消します。画面ロックも対象です。休憩中・終了間際は予約せず、通知にtheme名などは含めません。
 - MotionはHome表示中の瓶の重力とshake検知にだけ使い、値を保存・送信しません。Photos add-onlyは利用者が静止画保存を選んだ場合だけrequestします。
 - 広告、tracking、analytics SDK、developer serverはありません。
+
+STORAGE CHANGES
+
+- timerを終了してSettings →「iCloudを有効にする」→「iCloudのデータを使う」。端末だけのテーマ・記録・設定を削除してcloud内容へ置き換えます。mergeはせず、削除確認checkは初期状態OFFです。
+- iCloud利用中はSettings →「iCloudを解除する」→「このiPhoneへ引き継ぐ」。コピーを検証してから解除し、cloud側のdataは残します。解除後の端末変更は同期しません。
+- 「このiPhoneのデータで置き換える」は理由を表示して利用不可です。既に受付済み・別端末の全置き換えの復旧再開も禁止しています。
+- 通信と、案内に従ったapp終了・再起動が必要です。app自体は削除しないでください。中断時は復旧／取消を案内し、取り込み途中の取消では元dataと途中コピーを保持する場合があります。app削除は端末記録と未送信の変更を失わせます。JSON exportに再import機能はありません。
 
 Jar sound, haptics, and motion test
 
