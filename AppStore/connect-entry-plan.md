@@ -123,7 +123,7 @@ statusは公開前と各更新時に再監査します。新しいstorefrontの�
 | Other available storefronts | AppleがUSD 0.99を基準に為替・税・各地域の価格慣行から生成する現地相当額 |
 | Availability | App本体と同じ148 of 175 Countries or Regions（現行EU 27を除外。新しいstorefrontは自動追加） |
 | Family Sharing | Off |
-| Review screenshot | `pending_live_price_capture`。候補のPro機能を表示するStoreKit実価格画面で `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png` を撮影・検証してConnectへ登録 |
+| Review screenshot | `captured_live_price`。2026-09-22に1.1.0 (10)の実StoreKit価格$0.99を撮影・検証し、Connectへ登録・再読込確認済み。storefront国は未確認。正本は `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png` |
 | Review notes | `AppStore/iap-review-notes-connect.txt` |
 
 Unlockは無料preset以外の任意の1分00秒〜360分00秒、まとまり粒の月刻印、スクリーンタイムの勉強アプリ数無制限（無料5つ）です。黒いgem用アプリ数は無料でも無制限です。分・秒の数字入力とホイールに対応します。share cardは無料／Proともロゴと公式サイトを常設します。subscription、trial、
