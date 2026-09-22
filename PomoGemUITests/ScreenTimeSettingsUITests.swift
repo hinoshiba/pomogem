@@ -2,6 +2,15 @@ import XCTest
 
 /// Simulator navigation and accessibility coverage only. These tests never
 /// grant permission, simulate a successful callback, or operate the app picker.
+///
+/// One of them opts into a DEBUG-only Simulator fixture
+/// (`ScreenTimeSettingsUITestFixture`) so the unbound -> bound draft re-seed
+/// can be exercised at all: it stubs the authorization STATUS on a private
+/// controller over a temporary-directory ledger and replaces
+/// `ScreenTimeMonitoring` with a recorder. That is a test of the settings
+/// screen's own logic, never evidence about real Family Controls
+/// authorization, DeviceActivity registration, or callback delivery — those
+/// stay on the signed-device checklist.
 @MainActor
 final class ScreenTimeSettingsUITests: XCTestCase {
     private var app: XCUIApplication!
@@ -80,6 +89,143 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         assertResetConfirmationCanBeCancelled()
     }
 
+    /// The Simulator build carries no entitlements, so the App Group container
+    /// is nil and the Screen Time ledger can never bind. That must be explained
+    /// on screen, and 保存 stays pressable so the user is told why — the button
+    /// is an explanation, not a save that will succeed, and the footer has to
+    /// say so: `ScreenTimeController.save` refuses EVERY save while unbound,
+    /// including one that only switches recording off.
+    ///
+    /// The premise is a BUILD property, not a property of the Simulator: on
+    /// this Xcode's runtime the container only stays nil when the build passed
+    /// `CODE_SIGNING_ALLOWED=NO`. CI does (`.github/workflows/ci.yml`); a plain
+    /// `xcodebuild test -scheme PomoGem -destination 'platform=iOS
+    /// Simulator,…'` does not, and this test used to go red there with a
+    /// message that pointed at the settings UI instead of at the flag. It now
+    /// says so and skips.
+    func testUnavailableContextIsExplainedAndSaveStatesWhyItCannotComplete() throws {
+        launchAndOpenSettings()
+        let reason = app.staticTexts["screen-time.monitoring-error"]
+        if !reveal(reason) {
+            try skipIfTheLedgerBound()
+            XCTFail("An unbound context must state a reason, not only grey 保存 out")
+            return
+        }
+        XCTAssertTrue(reason.label.contains("スクリーンタイム"))
+        XCTAssertTrue(reveal(text(containing: "いまは変更を保存できません")),
+                      "The footer must not promise a save the controller always refuses")
+        attach("Screen Time — unavailable context is explained")
+
+        let save = app.buttons["screen-time.save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 6))
+        XCTAssertTrue(save.isEnabled, "保存 stays pressable so the reason can be shown")
+        save.tap()
+        let alert = app.alerts["設定を完了できませんでした"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 6))
+        attach("Screen Time — save reports the unbound context")
+        alert.buttons["閉じる"].tap()
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 4))
+    }
+
+    /// The load-bearing half of F4: the settings screen is opened while the
+    /// controller is still unbound, and the ledger admits the owner only
+    /// afterwards. The shipping Simulator path can never reach it — without
+    /// entitlements the App Group container is nil, so `isBoundToContext`
+    /// stays false forever — hence the DEBUG-only fixture, which points ONE
+    /// settings screen at a temporary-directory ledger with the authorization
+    /// status stubbed and a recording double instead of DeviceActivity. The
+    /// monitor extension is not involved and `ScreenTimeController.shared` is
+    /// not touched.
+    func testALateContextBindingSeedsTheStoredSelectionInsteadOfAnEmptyDraft() {
+        app.launchEnvironment["POMOGEM_UI_TEST_SCREEN_TIME"] = "late-binding"
+        app.launch()
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 20))
+
+        let ledger = app.staticTexts["screen-time.fixture-ledger"]
+        XCTAssertTrue(ledger.waitForExistence(timeout: 10))
+        // The ledger the fixture wrote before the screen mounted.
+        for expected in ["learning=2", "distraction=1", "enabled=1", "theme=seed",
+                         "matchesSeed=true", "sync=0", "boundToContext=false"] {
+            XCTAssertTrue(ledger.label.contains(expected), "ledger row was \(ledger.label)")
+        }
+
+        // Unbound: the controller publishes an EMPTY configuration, so the
+        // draft must show placeholders rather than the stored selection. The
+        // rows are visited top to bottom, which is the direction `reveal`
+        // scrolls by default.
+        XCTAssertTrue(reveal(text(containing: "いまは変更を保存できません")),
+                      "An unbound context must say that a save cannot complete")
+        let learning = app.buttons["screen-time.learning-apps"]
+        XCTAssertTrue(reveal(learning))
+        XCTAssertEqual(learning.value as? String, "0アプリ選択中")
+        let distraction = app.buttons["screen-time.distraction-apps"]
+        XCTAssertTrue(reveal(distraction))
+        XCTAssertEqual(distraction.value as? String, "0アプリ選択中")
+        let total = app.staticTexts["screen-time.negative-total"]
+        XCTAssertTrue(reveal(total))
+        XCTAssertTrue(total.label.contains("0個ぶん"), "negative total was \(total.label)")
+        attach("Screen Time — unbound draft shows placeholders")
+
+        // A 保存 attempted from that placeholder draft must not reach the
+        // ledger: it is refused, and the stored opaque selection survives.
+        let save = app.buttons["screen-time.save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 6))
+        save.tap()
+        let refusal = app.alerts["設定を完了できませんでした"]
+        XCTAssertTrue(refusal.waitForExistence(timeout: 6))
+        XCTAssertTrue(refusal.staticTexts.matching(NSPredicate(
+            format: "label CONTAINS %@", "データの準備が完了して"
+        )).firstMatch.exists, "\(refusal.debugDescription)")
+        attach("Screen Time — an unbound save is refused")
+        refusal.buttons["閉じる"].tap()
+        XCTAssertTrue(ledger.label.contains("matchesSeed=true"),
+                      "A refused save must leave the stored selection untouched: \(ledger.label)")
+
+        // The ledger admits the owner while the screen is already visible.
+        let bind = app.buttons["screen-time.fixture-bind"]
+        XCTAssertTrue(bind.waitForExistence(timeout: 6))
+        bind.tap()
+        expectLedger(ledger, contains: "boundToContext=true", timeout: 20)
+
+        // The refusal left the list at the bottom, so the footer is above.
+        XCTAssertTrue(reveal(text(containing: "変更は右上の「保存」で反映します"), upwards: false),
+                      "A bound context must stop warning that a save cannot complete")
+        XCTAssertTrue(reveal(learning))
+        XCTAssertEqual(learning.value as? String, "2アプリ選択中",
+                       "The unbound -> bound transition must re-seed the draft")
+        // The theme picker sits directly under the learning row.
+        let theme = app.descendants(matching: .any)["screen-time.theme"].firstMatch
+        XCTAssertTrue(reveal(theme))
+        XCTAssertTrue("\(theme.value ?? "")\(theme.label)".contains("スクリーンタイム検証テーマ"),
+                      "The re-seeded draft must carry the stored theme: \(theme.debugDescription)")
+        XCTAssertTrue(reveal(distraction))
+        XCTAssertEqual(distraction.value as? String, "1アプリ選択中")
+        XCTAssertTrue(reveal(total))
+        XCTAssertTrue(total.label.contains("3個ぶん"), "negative total was \(total.label)")
+        XCTAssertTrue(total.label.contains("30分"), "negative total was \(total.label)")
+        attach("Screen Time — bound draft shows the stored selection")
+
+        // Only now may 保存 complete, and it must write the stored
+        // configuration back unchanged.
+        XCTAssertTrue(save.isEnabled, "保存 must become available once the context is bound")
+        save.tap()
+        expectLedger(ledger, contains: "sync=1", timeout: 20)
+        for expected in ["learning=2", "distraction=1", "enabled=1", "theme=seed", "matchesSeed=true"] {
+            XCTAssertTrue(ledger.label.contains(expected),
+                          "A save from the re-seeded draft must not change the ledger: \(ledger.label)")
+        }
+        attach("Screen Time — save preserves the stored configuration")
+    }
+
+    private func expectLedger(_ ledger: XCUIElement, contains fragment: String, timeout: TimeInterval) {
+        let matched = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", fragment), object: ledger)
+        guard XCTWaiter.wait(for: [matched], timeout: timeout) == .completed else {
+            XCTFail("ledger row never reported \(fragment); last value: \(ledger.label)")
+            return
+        }
+    }
+
     private func launchAndOpenSettings() {
         app.launch()
         let menu = app.buttons["メニュー"]
@@ -125,6 +271,27 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         alert.buttons["キャンセル"].tap()
         XCTAssertFalse(alert.exists)
         XCTAssertTrue(app.navigationBars["スクリーンタイム"].exists)
+    }
+
+    /// The footer the settings screen shows once the ledger IS bound. It is
+    /// the only positive, on-screen evidence this suite can read that the App
+    /// Group container resolved, so the skip below never hides a real
+    /// regression in the unbound explanation — it fires only when the opposite
+    /// state is actually on screen.
+    private static let boundFooter = "変更は右上の「保存」で反映します"
+
+    private func skipIfTheLedgerBound() throws {
+        // A failed `reveal` leaves the list scrolled to the bottom and this
+        // footer sits above the reset section, so look upwards first.
+        let footer = text(containing: Self.boundFooter)
+        guard reveal(footer, upwards: false) || reveal(footer) else { return }
+        attach("Screen Time — the ledger bound, so the unavailable case is unreachable")
+        throw XCTSkip(
+            "This build's App Group container resolves, so the Screen Time ledger binds and the "
+            + "unavailable-context case cannot be reached at all. The premise holds only for a "
+            + "build with no entitlements: pass CODE_SIGNING_ALLOWED=NO, as CI does "
+            + "(.github/workflows/ci.yml)."
+        )
     }
 
     private func text(containing fragment: String) -> XCUIElement {
