@@ -67,16 +67,23 @@ enum StorageTransferPersistence {
             context.autosaveEnabled = false
             // The same check is repeated after cloud hydration. A timer that
             // arrived while leaving Settings must not silently migrate owners.
-            let discardsObsoleteCloudCache: Bool
-            if case .cloud = journal.source, journal.choice == .enableCloudKeepingCloud {
-                discardsObsoleteCloudCache = true
-            } else { discardsObsoleteCloudCache = false }
-            if !discardsObsoleteCloudCache,
+            if !discardsObsoleteCloudCache(journal: journal),
                try FocusCloudSyncStore.canonicalActive(context: context) != nil {
                 throw StorageTransferError.activeTimer
             }
             return try PomoGemStorageSnapshot.capture(from: context)
         }
+    }
+
+    /// A cloud-sourced `enableCloudKeepingCloud` is the one transfer that
+    /// throws the old cache away, so a canonical timer inside it is not a
+    /// reason to abort. Every other choice - including both directions of a
+    /// device -> iCloud overwrite - KEEPS that cache as the payload it is about
+    /// to publish, so an active or paused canonical timer still aborts before
+    /// any remote call is made.
+    static func discardsObsoleteCloudCache(journal: StorageTransferJournal) -> Bool {
+        if case .cloud = journal.source, journal.choice == .enableCloudKeepingCloud { return true }
+        return false
     }
 
     private static func requireDirectory(_ url: URL) throws {

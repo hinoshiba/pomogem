@@ -226,4 +226,152 @@ final class StorageTransferRuntimeAdmissionTests: XCTestCase {
         XCTAssertNil(try f.store.load())
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: f.root.path).isEmpty)
     }
+
+    // MARK: - Device -> iCloud overwrite (overwriteCloudDataset)
+
+    #if DEBUG
+    /// Publishes ONLY the overwrite bit, so every other prohibition stays shut.
+    private func overwriteFixture(hasGeneration: Bool = true) throws -> Fixture {
+        let base = try fixture(hasGeneration: hasGeneration)
+        return Fixture(root: base.root, binding: base.binding, control: base.control, store: base.store,
+            intent: base.intent,
+            runtime: StorageTransferRuntime(store: base.store, root: base.root,
+                releasePolicy: .isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)),
+            admission: base.admission)
+    }
+
+    func testStableOverwriteCreatesADifferentNamespaceFromTheExactVerifiedGeneration() async throws {
+        let f = try overwriteFixture()
+        let generation = try XCTUnwrap(f.control.datasetGenerationID)
+        var accountChecks = 0
+        var reads = 0
+        try await f.runtime.overwriteCloudDataset(binding: f.binding, expectedGenerationID: generation,
+            verifyAccount: { accountChecks += 1; return f.binding },
+            readControl: { reads += 1; return f.control }, validateAccess: {})
+        XCTAssertEqual(accountChecks, 1)
+        XCTAssertEqual(reads, 2, "The control must be read before and after the checkpoint, as a refresh does")
+        let journal = try XCTUnwrap(f.store.load())
+        XCTAssertEqual(journal.phase, .requested)
+        XCTAssertEqual(journal.choice, .overwriteCloudFromDevice)
+        XCTAssertTrue(journal.choice.replacesCloud, "A recovery copy must be staged before anything is deleted")
+        XCTAssertEqual(journal.source, .cloud(binding: f.binding))
+        XCTAssertNotEqual(journal.destination.storageNamespace, f.binding.namespace)
+        XCTAssertEqual(journal.destination, .cloud(binding: journal.cloudBinding))
+        XCTAssertEqual(journal.cloudBinding.accountFingerprint, f.binding.accountFingerprint)
+        let checkpoint = try StorageTransferStateFile<StorageTransferRuntimeCheckpoint>(url:
+            f.root.appendingPathComponent(journal.transactionID.uuidString.lowercased())
+                .appendingPathComponent("runtime-v1.json"))
+        XCTAssertEqual(try checkpoint.load()?.baselineControl, f.control)
+        XCTAssertFalse(try XCTUnwrap(checkpoint.load()).recoveredFromServer)
+        XCTAssertNil(try f.intent.pendingIntent())
+    }
+
+    func testOverwriteRefusesAStaleDisplayedGenerationWithoutWritingAnything() async throws {
+        let f = try overwriteFixture()
+        let before = try FileManager.default.contentsOfDirectory(atPath: f.root.path).sorted()
+        var reads = 0
+        do {
+            try await f.runtime.overwriteCloudDataset(binding: f.binding, expectedGenerationID: UUID(),
+                verifyAccount: { f.binding }, readControl: { reads += 1; return f.control }, validateAccess: {})
+            XCTFail("Only the displayed committed generation may authorize an overwrite")
+        } catch { XCTAssertEqual(error as? StorageTransferError, .staleTransaction) }
+        XCTAssertEqual(reads, 1)
+        XCTAssertNil(try f.store.load())
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: f.root.path).sorted(), before)
+    }
+
+    func testOverwriteRefusesWhileAnotherReplacementStillBlocksWriters() async throws {
+        let f = try overwriteFixture()
+        let manifest = try StorageTransferRecoveryManifest(transactionID: UUID(), accountFingerprint: account,
+            payload: Data("synthetic blocking payload".utf8), previousDatasetGenerationID: UUID())
+        let staging = try StorageTransferRecoveryControl(manifest: manifest)
+        XCTAssertTrue(staging.blocksWriters)
+        let generation = try XCTUnwrap(staging.datasetGenerationID)
+        do {
+            try await f.runtime.overwriteCloudDataset(binding: f.binding, expectedGenerationID: generation,
+                verifyAccount: { f.binding }, readControl: { staging }, validateAccess: {})
+            XCTFail("A fenced account must not accept a new overwrite")
+        } catch { XCTAssertEqual(error as? StorageTransferError, .staleTransaction) }
+        XCTAssertNil(try f.store.load())
+    }
+
+    func testOverwriteRefusesWithAPendingJournalBeforeResolvingTheAccount() async throws {
+        let f = try overwriteFixture()
+        let generation = try XCTUnwrap(f.control.datasetGenerationID)
+        let next = try XCTUnwrap(ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+                                                           accountFingerprint: account))
+        let pending = try StorageTransferJournal(choice: .enableCloudKeepingCloud,
+            source: .cloud(binding: f.binding), destination: .cloud(binding: next), cloudBinding: next)
+        try f.store.begin(pending)
+        var reads = 0
+        do {
+            try await f.runtime.overwriteCloudDataset(binding: f.binding, expectedGenerationID: generation,
+                verifyAccount: { XCTFail("A pending journal must refuse first"); return f.binding },
+                readControl: { reads += 1; return f.control }, validateAccess: {})
+            XCTFail("Two transfers must never overlap")
+        } catch { XCTAssertEqual(error as? StorageTransferRuntimeError, .relaunchRequired) }
+        XCTAssertEqual(reads, 0)
+        XCTAssertEqual(try f.store.load(), pending)
+    }
+
+    func testExistingIntentBlocksOverwriteBeforeAccountOrCloudRead() async throws {
+        let f = try overwriteFixture()
+        try accept(f)
+        let generation = try XCTUnwrap(f.control.datasetGenerationID)
+        var accountChecks = 0
+        var reads = 0
+        await expectIntentBlock {
+            try await f.runtime.overwriteCloudDataset(binding: f.binding, expectedGenerationID: generation,
+                verifyAccount: { accountChecks += 1; return f.binding },
+                readControl: { reads += 1; return f.control }, validateAccess: {})
+        }
+        XCTAssertEqual(accountChecks, 0)
+        XCTAssertEqual(reads, 0)
+        XCTAssertNil(try f.store.load())
+    }
+
+    func testOverwriteRefusesAnIndependentlyVerifiedDifferentBinding() async throws {
+        let f = try overwriteFixture()
+        let generation = try XCTUnwrap(f.control.datasetGenerationID)
+        let other = try XCTUnwrap(ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+                                                            accountFingerprint: account))
+        var reads = 0
+        do {
+            try await f.runtime.overwriteCloudDataset(binding: f.binding, expectedGenerationID: generation,
+                verifyAccount: { other }, readControl: { reads += 1; return f.control }, validateAccess: {})
+            XCTFail("The independently verified binding must match exactly")
+        } catch { XCTAssertEqual(error as? StorageTransferRecoveryError, .identityMismatch) }
+        XCTAssertEqual(reads, 0)
+        XCTAssertNil(try f.store.load())
+    }
+
+    func testOverwriteAcknowledgmentRequiresTheControlToBeUnchangedAfterTheCheckpoint() async throws {
+        let f = try overwriteFixture()
+        let generation = try XCTUnwrap(f.control.datasetGenerationID)
+        let changed = try StorageTransferRecoveryControl(manifest: StorageTransferRecoveryManifest(
+            transactionID: UUID(), accountFingerprint: account,
+            payload: Data("synthetic later payload".utf8),
+            previousDatasetGenerationID: generation)).cancelling()
+        var reads = 0
+        do {
+            try await f.runtime.overwriteCloudDataset(binding: f.binding, expectedGenerationID: generation,
+                verifyAccount: { f.binding }, readControl: {
+                    reads += 1
+                    return reads == 1 ? f.control : changed
+                }, validateAccess: {})
+            XCTFail("A control that moved under the request must not be acknowledged")
+        } catch { XCTAssertEqual(error as? StorageTransferError, .staleTransaction) }
+        XCTAssertEqual(reads, 2)
+        XCTAssertNil(try f.store.load())
+    }
+    #endif
+
+    func testOnlyADisableWithCopyRequiresCloudEqualityOfTheFrozenSource() {
+        // S11. An overwrite deliberately destroys a divergent - usually newer -
+        // remote dataset, so requiring equality would make it impossible.
+        XCTAssertTrue(StorageTransferChoice.disableCloudKeepingCopy.requiresCloudEqualityOfFrozenSource)
+        XCTAssertFalse(StorageTransferChoice.overwriteCloudFromDevice.requiresCloudEqualityOfFrozenSource)
+        XCTAssertFalse(StorageTransferChoice.enableCloudReplacingCloud.requiresCloudEqualityOfFrozenSource)
+        XCTAssertFalse(StorageTransferChoice.enableCloudKeepingCloud.requiresCloudEqualityOfFrozenSource)
+    }
 }

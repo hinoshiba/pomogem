@@ -31,6 +31,53 @@ struct CloudOfflineRecoveryPresentation: Equatable, Sendable {
     }
 }
 
+/// The launch presentations the split dataset-lineage taxonomy maps onto. Every
+/// case now has a screen of its own: `launchRoute(for:)` below is what the
+/// launch host switches on, so a state added here without an arm there fails
+/// to compile rather than silently falling into the generic blocked screen.
+enum CloudDatasetLineageBlock: Equatable, Sendable {
+    case remoteDatasetOffer, lineageUnavailable, environmentMismatch, localLedgerMissing
+
+    /// True when the presentation for this state includes 「iCloudから再取得」,
+    /// i.e. when a terminal, generation-carrying control exists for the host to
+    /// refresh from. These are the states whose refusal MUST reach
+    /// `.datasetRefresh`; losing that is the permanent dead end the split was
+    /// meant to end, and `StorageTransferAdmissionTaxonomyTests` pins it.
+    var offersRemoteDataset: Bool {
+        switch self {
+        case .remoteDatasetOffer, .localLedgerMissing: true
+        case .lineageUnavailable, .environmentMismatch: false
+        }
+    }
+
+    /// The screen this block is presented on. One function, so the host switch
+    /// and the classification cannot disagree.
+    var launchRoute: CloudLaunchRoute {
+        switch self {
+        case .remoteDatasetOffer, .localLedgerMissing: .datasetRefresh
+        case .lineageUnavailable: .lineageUnavailable
+        case .environmentMismatch: .environmentMismatch
+        }
+    }
+}
+
+/// The launch screen a `StorageTransferRuntimeError` is presented on. The host
+/// no longer switches on the error itself: `PomoGemApp.swift` switches on THIS
+/// value, so the classification lives in one testable place and a new stop
+/// reason cannot quietly inherit the generic blocked screen.
+enum CloudLaunchRoute: Equatable, Sendable {
+    case relaunch, remoteRecovery, datasetRefresh
+    /// 「iCloudの管理情報が見つかりません」. The server has no transfer ledger at
+    /// all, so there is nothing to refresh FROM. The screen offers the two
+    /// honest choices instead: start a lineage from this device, or stay
+    /// offline. Both are consented; neither happens by arriving here.
+    case lineageUnavailable
+    /// Explanation only. This device's receipt was earned in another CloudKit
+    /// environment, so no dataset operation in this build is meaningful.
+    case environmentMismatch
+    case blocked
+}
+
 /// What the launch host may do when CloudKit reports that account state moved.
 ///
 /// Quiescing closes the boundary: scheduling is suspended, the cross-process
@@ -57,9 +104,59 @@ enum CloudOfflineHostPolicy {
     static func recoveryKind(after error: Error) -> CloudOfflineRecoveryKind? {
         switch error {
         case StorageTransferRuntimeError.remoteRecoveryRequired,
-             StorageTransferRuntimeError.datasetRefreshRequired: .storageTransfer
+             StorageTransferRuntimeError.datasetRefreshRequired,
+             // The four states split out of `datasetRefreshRequired`. All of
+             // them still mean "a storage transfer decision is outstanding",
+             // so the offline fallback offer is unchanged.
+             StorageTransferRuntimeError.datasetReplacedRemotely,
+             StorageTransferRuntimeError.cloudLineageUnavailable,
+             StorageTransferRuntimeError.localLedgerMissing,
+             StorageTransferRuntimeError.cloudEnvironmentMismatch: .storageTransfer
         case CloudActivityHistoryPreflightError.offlineHistoryChanged: .resetHistory
         default: nil
+        }
+    }
+
+    /// Which launch presentation a dataset-lineage refusal deserves once the
+    /// launch host is wired to the split taxonomy. Kept here, as a pure
+    /// function, so the host change is a lookup rather than a second copy of
+    /// the classification. `leftoverLocalStores` is deliberately absent: it is
+    /// a Settings-time precondition, not a launch-time lineage decision.
+    static func datasetLineageBlock(for error: Error) -> CloudDatasetLineageBlock? {
+        switch error {
+        // A real, terminal, generation-carrying control exists, so the host can
+        // offer 「iCloudから再取得」 and the device -> iCloud overwrite.
+        case StorageTransferRuntimeError.datasetReplacedRemotely: .remoteDatasetOffer
+        // No lineage exists to refresh from. Offering a refresh here is the
+        // dead end the user actually hit: the only honest choices are starting
+        // a lineage from this device, or staying offline.
+        case StorageTransferRuntimeError.cloudLineageUnavailable: .lineageUnavailable
+        case StorageTransferRuntimeError.cloudEnvironmentMismatch: .environmentMismatch
+        case StorageTransferRuntimeError.localLedgerMissing: .localLedgerMissing
+        default: nil
+        }
+    }
+
+    /// Which screen the launch host builds for a runtime error.
+    ///
+    /// `PomoGemApp.swift` calls exactly this function and switches on the
+    /// result, so this IS the host's routing table rather than a copy of it.
+    /// `.datasetRefresh` reaches `presentDatasetRefresh`, the sole writer of
+    /// `storageTransferRefreshGenerationID` and therefore the only producer of
+    /// `launchState = .datasetRefresh` — the 「iCloudから再取得」 screen and the
+    /// only gate that lets `refreshCloudDataset` run at all. `.blocked` is the
+    /// generic 「保存領域を確認できません」 screen, whose only actions are
+    /// retry, offline use and support.
+    static func launchRoute(for error: StorageTransferRuntimeError) -> CloudLaunchRoute {
+        if let block = datasetLineageBlock(for: error) { return block.launchRoute }
+        switch error {
+        case .relaunchRequired: return .relaunch
+        case .remoteRecoveryRequired: return .remoteRecovery
+        case .datasetRefreshRequired: return .datasetRefresh
+        // `leftoverLocalStores`, `cloudCopyStillPending` and
+        // `recoveryNeedsReview` are not lineage decisions: they carry no
+        // in-app remedy and keep the generic screen and its offline route.
+        default: return .blocked
         }
     }
 

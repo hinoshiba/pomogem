@@ -99,6 +99,76 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
         }
     }
 
+    /// The launch host switches on `launchRoute(for:)` itself, so this table
+    /// is the host's routing rather than a description of it. Every case of
+    /// `StorageTransferRuntimeError` is listed: a new stop reason must be
+    /// given a screen deliberately, not inherit the generic blocked one by
+    /// falling through a `default`.
+    func testLaunchRouteCoversEveryRuntimeErrorCase() {
+        let expected: [(StorageTransferRuntimeError, CloudLaunchRoute)] = [
+            (.relaunchRequired, .relaunch),
+            (.remoteRecoveryRequired, .remoteRecovery),
+            // Still thrown by the binding guard and the offline receipt path.
+            (.datasetRefreshRequired, .datasetRefresh),
+            // The two refusals that carry 「iCloudから再取得」: a terminal,
+            // generation-carrying control exists for the host to refresh from.
+            (.datasetReplacedRemotely, .datasetRefresh),
+            (.localLedgerMissing, .datasetRefresh),
+            // No lineage to refresh FROM. Its own screen, with the two
+            // consented choices, instead of a door that cannot open.
+            (.cloudLineageUnavailable, .lineageUnavailable),
+            // Another CloudKit environment's receipt: explanation only.
+            (.cloudEnvironmentMismatch, .environmentMismatch),
+            // Not lineage decisions; the generic screen keeps its offline route.
+            (.leftoverLocalStores, .blocked),
+            (.cloudCopyStillPending, .blocked),
+            (.recoveryNeedsReview, .blocked)
+        ]
+        for (error, route) in expected {
+            XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: error), route,
+                           "\(error) must reach \(route)")
+        }
+        // A total table: every case above, and nothing missing. Adding a case
+        // to the error without adding it here fails this count.
+        XCTAssertEqual(Set(expected.map(\.0.self).map { "\($0)" }).count, 10)
+    }
+
+    /// `localLedgerMissing` shares the refresh screen with a real remote
+    /// replacement, but not its claim: a missing LOCAL ledger is this device's
+    /// gap, and says nothing about whether the server's dataset was replaced.
+    /// The two titles are therefore different strings.
+    func testTheRefreshScreenOnlyClaimsAReplacementWhenOneWasObserved() {
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .datasetReplacedRemotely), .datasetRefresh)
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .localLedgerMissing), .datasetRefresh)
+        XCTAssertFalse(StorageTransferRuntimeError.localLedgerMissing.localizedDescription
+            .contains("置き換え"),
+            "The local ledger gap must not be reported as a replacement")
+        XCTAssertTrue(StorageTransferRuntimeError.datasetReplacedRemotely.localizedDescription
+            .contains("置き換え"))
+        XCTAssertNotEqual(StorageTransferLineageCopy.localLedgerMissingTitle,
+                          "iCloudのデータが置き換わりました")
+    }
+
+    /// review-2-5. No stop reason names a control any more: the sentence that
+    /// does belongs to the SCREEN, which knows whether the build publishes it.
+    /// The screen the no-lineage state reaches is still its own.
+    func testNoStopReasonNamesAControlAndTheScreenBuildsItFromThePolicy() {
+        for error in [StorageTransferRuntimeError.cloudLineageUnavailable,
+                      .cloudEnvironmentMismatch, .localLedgerMissing] {
+            XCTAssertFalse(error.localizedDescription.contains("使い始める"),
+                           "\(error) must not promise a control the build may ship disabled")
+        }
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .cloudLineageUnavailable), .lineageUnavailable)
+        XCTAssertTrue(StorageTransferLineageCopy.screenMessage(offersLineageStart: true)
+            .contains("このiPhoneのデータでiCloudを使い始めるか、オフラインのまま使うかを選べます。"))
+        XCTAssertFalse(StorageTransferLineageCopy.screenMessage(offersLineageStart: false)
+            .contains("選べます"),
+            "While the door ships disabled the screen may not state that choice")
+        XCTAssertTrue(StorageTransferLineageCopy.screenMessage(offersLineageStart: false)
+            .contains("もう一度試す"),
+            "It must instead name a control the screen actually carries")
+    }
+
     func testRecoveryReviewIsSingleUseAndCannotRetireAChangedSessionOrAccount() {
         let binding = binding()
         let sessionID = UUID()

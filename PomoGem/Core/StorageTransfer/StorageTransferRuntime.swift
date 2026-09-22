@@ -5,6 +5,12 @@ import SwiftData
 
 enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
     case relaunchRequired, remoteRecoveryRequired, datasetRefreshRequired
+    /// The four states the old `datasetRefreshRequired` used to collapse into
+    /// one sentence. None of them may claim how many devices exist: the
+    /// control record carries no writer identity, so the app cannot tell its
+    /// own committed generation from anybody else's.
+    case datasetReplacedRemotely, cloudLineageUnavailable, localLedgerMissing
+    case cloudEnvironmentMismatch, leftoverLocalStores
     case cloudCopyStillPending, recoveryNeedsReview
 
     var errorDescription: String? {
@@ -14,7 +20,24 @@ enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
         case .remoteRecoveryRequired:
             "iCloudで未完了のデータ切り替えが見つかりました。復旧が完了するまで通常の同期を停止しています。"
         case .datasetRefreshRequired:
-            "別の端末でiCloudデータが置き換えられました。この端末の古いデータを送信しないよう同期を停止しています。"
+            // Still raised by the launch host for an offline receipt whose
+            // lineage cannot be matched, and by the binding guard below.
+            "iCloudのデータとこの端末の記録の対応を確認できませんでした。古いデータを送信しないよう同期を停止しています。どちらの記録も削除していません。"
+        case .datasetReplacedRemotely:
+            "iCloudのデータが別の記録に置き換えられています。この端末の記録を送らないよう同期を止めています。"
+        case .cloudLineageUnavailable:
+            // review-2-5. The stop reason states only what was observed. The
+            // sentence that names a control belongs to the SCREEN, which knows
+            // whether `allowsDatasetOverwriteFromDevice` actually publishes
+            // that control — see `StorageTransferLineageCopy.screenMessage`.
+            // A refusal may never promise an action the build ships disabled.
+            StorageTransferLineageCopy.stopReason
+        case .localLedgerMissing:
+            "この端末に、いまのiCloudデータを受け取った記録がありません。古いデータを混ぜないよう同期を停止しています。"
+        case .cloudEnvironmentMismatch:
+            "この端末の記録は、いまのアプリとは別のiCloud環境（開発用／配布用）で作られたものです。iCloudのデータは置き換えられていません。どちらの記録も削除せず、同期だけを停止しています。"
+        case .leftoverLocalStores:
+            "以前のiCloud用データがこの端末に残っているため、iCloudの利用を開始できません。記録が混ざらないよう停止しました。残っているデータを整理してから、もう一度お試しください。"
         case .cloudCopyStillPending:
             "iCloudの全データと端末のコピーがまだ一致しません。通信を確認して再試行してください。"
         case .recoveryNeedsReview:
@@ -51,13 +74,24 @@ final class StorageTransferRuntime {
     private static let processID = UUID()
     private let store: StorageTransferJournalStore
     private let root: URL
+    /// The directory this feature owns. Exposed so a small state file that
+    /// belongs beside `admission-*.json` can be built without widening the
+    /// runtime's surface any further.
+    var featureRoot: URL { root }
     private let releasePolicy: StorageTransferReleasePolicy
     private let storeDirectory: URL?
     private let readSourceSelection: @MainActor () -> PersistenceDeploymentSelectionState
+    /// The container/environment THIS build talks to. Dataset generations are
+    /// only comparable inside one scope, so every admission receipt records it.
+    private let cloudScope: StorageTransferCloudScope
+    /// Nil and `.unknown` are the SAME state, and nil is its only stored form:
+    /// a receipt never claims an environment the host could not prove.
+    private var recordedScope: StorageTransferCloudScope? { cloudScope.isKnown ? cloudScope : nil }
 
     init(store: StorageTransferJournalStore, root: URL,
          releasePolicy: StorageTransferReleasePolicy = .standard,
          storeDirectory: URL? = nil,
+         cloudScope: StorageTransferCloudScope = .unknown,
          readSourceSelection: @escaping @MainActor () -> PersistenceDeploymentSelectionState = {
              PersistenceDeploymentState.load()
          }) {
@@ -65,6 +99,7 @@ final class StorageTransferRuntime {
         self.root = root
         self.releasePolicy = releasePolicy
         self.storeDirectory = storeDirectory
+        self.cloudScope = cloudScope
         self.readSourceSelection = readSourceSelection
     }
 
@@ -82,7 +117,7 @@ final class StorageTransferRuntime {
         let support = try FileManager.default.url(for: .applicationSupportDirectory,
             in: .userDomainMask, appropriateFor: nil, create: true)
         return Self(store: try .live(), root: support.appendingPathComponent("StorageTransfer", isDirectory: true),
-                    releasePolicy: releasePolicy)
+                    releasePolicy: releasePolicy, cloudScope: .current())
     }
 
     func pendingLocalJournal() throws -> StorageTransferJournal? { try store.load() }
@@ -90,7 +125,7 @@ final class StorageTransferRuntime {
     /// A local receipt of a prior preflight; callers still need a fresh remote
     /// check before authorizing a CloudKit mirror.
     func localDatasetAdmission(binding: ActiveAccountLocalBinding) throws -> StorageTransferDatasetAdmission? {
-        let value = try admissionFile(binding).load()
+        let value = try loadAdmission(binding).value
         guard value == nil || value?.binding == binding else { throw StorageTransferError.staleTransaction }
         return value
     }
@@ -148,17 +183,36 @@ final class StorageTransferRuntime {
         try validateControlAccount(status, binding: binding)
         guard status?.blocksWriters != true else { throw StorageTransferRuntimeError.remoteRecoveryRequired }
         let file = try admissionFile(binding)
-        let expected = StorageTransferDatasetAdmission(binding: binding, datasetGenerationID: status?.datasetGenerationID)
-        if let found = try file.load() {
-            guard found == expected else { throw StorageTransferRuntimeError.datasetRefreshRequired }
-        } else {
-            // An old cache can join the legacy dataset only. After a remotely
-            // committed replacement, only an actually absent cache may enroll.
-            if expected.datasetGenerationID != nil {
-                try requireNoArtifacts(selection: .cloud(binding: binding))
-            }
+        let (found, isLegacy) = try loadAdmission(binding)
+        switch StorageTransferAdmissionPolicy.decide(found: found, binding: binding,
+            scope: cloudScope, serverGenerationID: status?.datasetGenerationID,
+            otherScopeReceipts: try foreignScopedAdmissions(binding)) {
+        case .admitted:
+            break
+        case let .refuse(error):
+            // Thrown under its own name. The launch host routes it through
+            // `CloudOfflineHostPolicy.launchRoute(for:)`, so every refusal that
+            // carries an in-app remedy reaches the screen that offers it.
+            throw error
+        case let .rescope(value):
             try validate()
-            try file.save(expected, replacing: nil)
+            try file.save(value, replacing: isLegacy ? nil : found)
+            if isLegacy { try retireLegacyAdmission(binding) }
+        case .enrol:
+            // Unconditional. An existing local cloud store joining a ledger
+            // this build has never recorded is a device -> iCloud publication,
+            // not an enrolment: preflight's success is what authorizes the host
+            // to build the mirror over that very store. When the remote ledger
+            // is EMPTY the publication is total, which is exactly the consented,
+            // policy-gated `startCloudLineageFromDevice`, so it must not happen
+            // by falling through a precondition that only ran for a non-nil
+            // server generation.
+            try requireNoArtifacts(selection: .cloud(binding: binding),
+                error: status?.datasetGenerationID == nil ? .cloudLineageUnavailable : .localLedgerMissing)
+            try validate()
+            try file.save(StorageTransferDatasetAdmission(binding: binding,
+                datasetGenerationID: status?.datasetGenerationID, cloudScope: recordedScope),
+                replacing: nil)
         }
         let after = try await readControl()
         try validate()
@@ -197,9 +251,84 @@ final class StorageTransferRuntime {
         let status = try await readControl()
         try validate()
         try validateControlAccount(status, binding: binding)
-        guard let status, !status.blocksWriters, status.datasetGenerationID == expectedGenerationID,
-              let destinationBinding = ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
-                  accountFingerprint: binding.accountFingerprint) else { throw StorageTransferError.staleTransaction }
+        guard let status, !status.blocksWriters,
+              status.datasetGenerationID == expectedGenerationID else {
+            throw StorageTransferError.staleTransaction
+        }
+        try await openCloudRefreshTransaction(binding: binding, baseline: status,
+            readControl: readControl, validate: validate)
+    }
+
+    /// W6. The iCloud → device direction for an account whose server has NO
+    /// transfer ledger at all — which is most healthy single-generation
+    /// accounts: they were never transferred, so nothing ever wrote a control
+    /// record, `remoteRecoveryStatus` returns nil and `refreshCloudDataset`'s
+    /// non-optional `expectedGenerationID` can never be formed.
+    ///
+    /// This is `refreshCloudDataset` with the CAS replaced by the ASSERTION
+    /// that there is nothing to CAS against, exactly as
+    /// `startCloudLineageFromDevice` is to `overwriteCloudDataset`. It is the
+    /// SAME journal (`.enableCloudKeepingCloud`), so it takes the same route:
+    /// a fresh destination namespace with no store artifacts, mirrored down
+    /// from CloudKit through the ordinary enrol path, the old namespace's
+    /// stores retired by the journal with the recovery copy the existing
+    /// refresh keeps. It NEVER writes to the server, never stages a payload
+    /// and never merges: `mayCreateRemotePayload: false` and the
+    /// authority fence below refuse the moment any control record appears.
+    ///
+    /// It carries no release bit for the same reason the generation-fenced
+    /// direction carries none (PLAN Step 12): it deletes nothing on the server.
+    func refreshCloudDatasetWithoutLineage(binding: ActiveAccountLocalBinding,
+                                           validateAccess: @escaping @MainActor () throws -> Void) async throws {
+        try await refreshCloudDatasetWithoutLineage(binding: binding,
+            verifyAccount: {
+                try await AppleAccountBoundaryResolver().resolve(expectedBinding: binding).binding
+            }, readControl: {
+                try await self.remoteRecoveryStatus(binding: binding, validateAccess: validateAccess)
+            }, validateAccess: validateAccess)
+    }
+
+    func refreshCloudDatasetWithoutLineage(binding: ActiveAccountLocalBinding,
+                                           verifyAccount: @escaping @MainActor () async throws -> ActiveAccountLocalBinding,
+                                           readControl: @escaping @MainActor () async throws -> StorageTransferRecoveryControl?,
+                                           validateAccess: @escaping @MainActor () throws -> Void) async throws {
+        let validate: @MainActor () throws -> Void = {
+            try Task.checkCancellation()
+            try validateAccess()
+            try self.requireNoPendingRemoteCancellation()
+            guard try self.store.load() == nil, !StorageTransferProcessState.cloudMirrorWasOpened else {
+                throw StorageTransferRuntimeError.relaunchRequired
+            }
+        }
+        try validate()
+        let verifiedBinding = try await verifyAccount()
+        try validate()
+        guard verifiedBinding == binding else { throw StorageTransferRecoveryError.identityMismatch }
+        let status = try await readControl()
+        try validate()
+        try validateControlAccount(status, binding: binding)
+        // The ONLY difference from `refreshCloudDataset`: the absence of a
+        // lineage is required instead of an exact match with a displayed one.
+        // The moment ANY committed generation exists the request is refused so
+        // it has to go through the ordinary generation-fenced CAS instead.
+        guard status?.blocksWriters != true, status?.datasetGenerationID == nil else {
+            throw StorageTransferError.staleTransaction
+        }
+        try await openCloudRefreshTransaction(binding: binding, baseline: status,
+            readControl: readControl, validate: validate)
+    }
+
+    /// The shared tail of both iCloud → device entry points. A nil `baseline`
+    /// is the durable record that this installation observed an EMPTY ledger;
+    /// `StorageTransferCloudAuthorityFence` then requires the control record to
+    /// STAY absent for the whole transaction, so a lineage published by another
+    /// device mid-flight stops this one instead of being mirrored over.
+    private func openCloudRefreshTransaction(binding: ActiveAccountLocalBinding,
+                                             baseline: StorageTransferRecoveryControl?,
+                                             readControl: @escaping @MainActor () async throws -> StorageTransferRecoveryControl?,
+                                             validate: @escaping @MainActor () throws -> Void) async throws {
+        guard let destinationBinding = ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+            accountFingerprint: binding.accountFingerprint) else { throw StorageTransferError.staleTransaction }
         let journal = try StorageTransferJournal(choice: .enableCloudKeepingCloud,
             source: .cloud(binding: binding), destination: .cloud(binding: destinationBinding),
             cloudBinding: destinationBinding)
@@ -209,12 +338,150 @@ final class StorageTransferRuntime {
         var checkpoint = StorageTransferRuntimeCheckpoint(transactionID: journal.transactionID,
             requestingProcessID: Self.processID)
         checkpoint.didObserveBaselineControl = true
-        checkpoint.baselineControl = status
+        checkpoint.baselineControl = baseline
         try file.save(checkpoint, replacing: nil)
         let after = try await readControl()
         try validate()
         try validateControlAccount(after, binding: binding)
-        guard after == status else { throw StorageTransferError.staleTransaction }
+        guard after == baseline else { throw StorageTransferError.staleTransaction }
+        try validate()
+        try store.begin(journal)
+    }
+
+    /// Explicitly confirmed replacement of the current iCloud dataset with this
+    /// device's data - the opposite direction of `refreshCloudDataset`, and the
+    /// only way a device that is already bound to the account but fenced out of
+    /// the current generation can publish its own records. Only the same
+    /// account's displayed committed generation can authorize this request.
+    func overwriteCloudDataset(binding: ActiveAccountLocalBinding, expectedGenerationID: UUID,
+                               validateAccess: @escaping @MainActor () throws -> Void) async throws {
+        try await overwriteCloudDataset(binding: binding, expectedGenerationID: expectedGenerationID,
+            verifyAccount: {
+                try await AppleAccountBoundaryResolver().resolve(expectedBinding: binding).binding
+            }, readControl: {
+                try await self.remoteRecoveryStatus(binding: binding, validateAccess: validateAccess)
+            }, validateAccess: validateAccess)
+    }
+
+    /// A clone of `refreshCloudDataset` with the same seams and the same two
+    /// read control discipline. Exactly three differences, each marked below.
+    func overwriteCloudDataset(binding: ActiveAccountLocalBinding, expectedGenerationID: UUID,
+                               verifyAccount: @escaping @MainActor () async throws -> ActiveAccountLocalBinding,
+                               readControl: @escaping @MainActor () async throws -> StorageTransferRecoveryControl?,
+                               validateAccess: @escaping @MainActor () throws -> Void) async throws {
+        // DIFFERENCE 1: the release gate is the FIRST statement, before any
+        // file is created, any account is resolved and any remote call is made.
+        try releasePolicy.validate(.overwriteCloudFromDevice)
+        let validate: @MainActor () throws -> Void = {
+            try Task.checkCancellation()
+            try validateAccess()
+            try self.requireNoPendingRemoteCancellation()
+            guard try self.store.load() == nil, !StorageTransferProcessState.cloudMirrorWasOpened else {
+                throw StorageTransferRuntimeError.relaunchRequired
+            }
+        }
+        try validate()
+        let verifiedBinding = try await verifyAccount()
+        try validate()
+        guard verifiedBinding == binding else { throw StorageTransferRecoveryError.identityMismatch }
+        let status = try await readControl()
+        try validate()
+        try validateControlAccount(status, binding: binding)
+        guard let status, !status.blocksWriters, status.datasetGenerationID == expectedGenerationID else {
+            throw StorageTransferError.staleTransaction
+        }
+        // DIFFERENCE 2 and 3 live in the shared tail below: the divergent
+        // device cache is the source and becomes the new generation, and
+        // unlike a refresh the transaction stages a recovery copy of the
+        // device payload on the server before anything is deleted.
+        try await openDeviceOverwriteTransaction(binding: binding, baseline: status,
+            readControl: readControl, validate: validate)
+    }
+
+    /// P0-2. Start a NEW iCloud lineage from this device when the server has
+    /// none at all.
+    ///
+    /// `refreshCloudDataset` and `overwriteCloudDataset` both fence against a
+    /// displayed committed generation, so neither can be reached when the
+    /// control record is absent - which is precisely the state the reported
+    /// device is stuck in. There is nothing to fence against and nothing a CAS
+    /// could protect: `stage()` already encodes exactly this rule by requiring
+    /// `previousDatasetGenerationID == nil` when the control record is absent
+    /// (StorageTransferRemoteRecovery.swift, the `envelope == nil` arm).
+    ///
+    /// This is the SAME operation as the overwrite, with a nil expected
+    /// generation, behind the SAME policy bit
+    /// (`allowsDatasetOverwriteFromDevice`, still false in `standard`).
+    func startCloudLineageFromDevice(binding: ActiveAccountLocalBinding,
+                                     validateAccess: @escaping @MainActor () throws -> Void) async throws {
+        try await startCloudLineageFromDevice(binding: binding,
+            verifyAccount: {
+                try await AppleAccountBoundaryResolver().resolve(expectedBinding: binding).binding
+            }, readControl: {
+                try await self.remoteRecoveryStatus(binding: binding, validateAccess: validateAccess)
+            }, validateAccess: validateAccess)
+    }
+
+    func startCloudLineageFromDevice(binding: ActiveAccountLocalBinding,
+                                     verifyAccount: @escaping @MainActor () async throws -> ActiveAccountLocalBinding,
+                                     readControl: @escaping @MainActor () async throws -> StorageTransferRecoveryControl?,
+                                     validateAccess: @escaping @MainActor () throws -> Void) async throws {
+        // The release gate is the FIRST statement, exactly as in the overwrite:
+        // a closed bit must not cost a network round trip or create a file.
+        try releasePolicy.validate(.overwriteCloudFromDevice)
+        let validate: @MainActor () throws -> Void = {
+            try Task.checkCancellation()
+            try validateAccess()
+            try self.requireNoPendingRemoteCancellation()
+            guard try self.store.load() == nil, !StorageTransferProcessState.cloudMirrorWasOpened else {
+                throw StorageTransferRuntimeError.relaunchRequired
+            }
+        }
+        try validate()
+        let verifiedBinding = try await verifyAccount()
+        try validate()
+        guard verifiedBinding == binding else { throw StorageTransferRecoveryError.identityMismatch }
+        let status = try await readControl()
+        try validate()
+        try validateControlAccount(status, binding: binding)
+        // The ONLY difference from `overwriteCloudDataset`: this entry point
+        // requires the absence of a lineage instead of an exact match with a
+        // displayed one. A pending transfer still blocks, and the moment ANY
+        // committed generation exists the request is refused so it has to go
+        // through the ordinary generation-fenced CAS instead.
+        guard status?.blocksWriters != true, status?.datasetGenerationID == nil else {
+            throw StorageTransferError.staleTransaction
+        }
+        try await openDeviceOverwriteTransaction(binding: binding, baseline: status,
+            readControl: readControl, validate: validate)
+    }
+
+    /// The shared tail of both device -> iCloud entry points. `baseline` is
+    /// optional on purpose: a nil baseline is the durable record that this
+    /// installation observed an EMPTY ledger, which is what lets the staged
+    /// manifest carry `previousDatasetGenerationID == nil` and satisfy
+    /// `stage()`'s create-if-absent rule.
+    private func openDeviceOverwriteTransaction(binding: ActiveAccountLocalBinding,
+                                                baseline: StorageTransferRecoveryControl?,
+                                                readControl: @escaping @MainActor () async throws -> StorageTransferRecoveryControl?,
+                                                validate: @escaping @MainActor () throws -> Void) async throws {
+        guard let destinationBinding = ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+            accountFingerprint: binding.accountFingerprint) else { throw StorageTransferError.staleTransaction }
+        let journal = try StorageTransferJournal(choice: .overwriteCloudFromDevice,
+            source: .cloud(binding: binding), destination: .cloud(binding: destinationBinding),
+            cloudBinding: destinationBinding)
+        try requireNoArtifacts(selection: journal.destination)
+        try cleanup().requireCapacityForNewTransfer(transactionID: journal.transactionID, mayCreateRemotePayload: true)
+        let file = try checkpointFile(files(journal))
+        var checkpoint = StorageTransferRuntimeCheckpoint(transactionID: journal.transactionID,
+            requestingProcessID: Self.processID)
+        checkpoint.didObserveBaselineControl = true
+        checkpoint.baselineControl = baseline
+        try file.save(checkpoint, replacing: nil)
+        let after = try await readControl()
+        try validate()
+        try validateControlAccount(after, binding: binding)
+        guard after == baseline else { throw StorageTransferError.staleTransaction }
         try validate()
         try store.begin(journal)
     }
@@ -255,7 +522,11 @@ final class StorageTransferRuntime {
         guard try FocusCloudSyncStore.canonicalActive(context: sourceContext) == nil else { throw StorageTransferError.activeTimer }
         let control = try await remoteRecoveryStatus(binding: binding, validateAccess: validateAccess)
         guard control?.blocksWriters != true else { throw StorageTransferRuntimeError.remoteRecoveryRequired }
-        try requireNoArtifacts(selection: destination)
+        // P1-5. Turning iCloud on from Settings resolves an EXISTING namespace,
+        // so a device that used iCloud before and went local-only can still own
+        // that namespace's cloud store files. Nothing has happened on the
+        // server; the copy must ask for a clean-up, not report a replacement.
+        try requireNoArtifacts(selection: destination, error: .leftoverLocalStores)
         let journal = try StorageTransferJournal(choice: choice, source: source,
             destination: destination, cloudBinding: binding)
         try cleanup().requireCapacityForNewTransfer(transactionID: journal.transactionID,
@@ -570,7 +841,9 @@ final class StorageTransferRuntime {
     func recoverRemoteTransfer(binding: ActiveAccountLocalBinding, expectedTransactionID: UUID,
                                validateAccess: @escaping @MainActor () throws -> Void) async throws {
         try validateAccess()
-        try releasePolicy.validate(.enableCloudReplacingCloud)
+        // Refuse a closed resume bit before any remote read, then refuse again
+        // on the observed phase below: the phase, not the kind, is the gate.
+        try releasePolicy.requireRemoteResumeIsPublished()
         try requireNoPendingRemoteCancellation()
         guard !StorageTransferProcessState.cloudMirrorWasOpened else { throw StorageTransferRuntimeError.relaunchRequired }
         if let journal = try store.load() {
@@ -583,6 +856,11 @@ final class StorageTransferRuntime {
               control.manifest.transactionID == expectedTransactionID, control.blocksWriters else {
             throw StorageTransferError.staleTransaction
         }
+        // Only .staging / .backupVerified may be adopted. The backupVerified ->
+        // replacing CAS elects exactly one executor of the zone deletion, so a
+        // later arrival observing .replacing is refused rather than becoming a
+        // second executor (Docs/MultiDeviceCloudSafety.md defect 2).
+        try releasePolicy.validateRemoteResume(control.phase)
         let recovered = try await recovery.recover(manifest: control.manifest)
         try validateAccess()
         let snapshot = try JSONDecoder().decode(PomoGemStorageSnapshot.self, from: recovered.bytes)
@@ -592,7 +870,7 @@ final class StorageTransferRuntime {
         // legacy rows. Never invent a path to another installation's cache.
         let source = PersistenceDeploymentSelection.localOnly(namespace: AccountDataNamespace())
         let journal = try StorageTransferJournal(transactionID: expectedTransactionID,
-            choice: .enableCloudReplacingCloud, source: source,
+            choice: .overwriteCloudFromDevice, source: source,
             destination: .cloud(binding: binding), cloudBinding: binding)
         try requireNoArtifacts(selection: source)
         try requireNoArtifacts(selection: journal.destination)
@@ -635,7 +913,11 @@ final class StorageTransferRuntime {
         if let receipt = try payload.acknowledgedReceipt() { return receipt.sha256 }
         try validate()
         let snapshot = try StorageTransferPersistence.snapshotFrozenSource(journal: journal, files: files)
-        if journal.choice == .disableCloudKeepingCopy {
+        // S11. Deliberately skipped for both replacement kinds and for a
+        // refresh: an overwrite exists precisely because this device's data has
+        // diverged from the current iCloud dataset. Requiring equality here
+        // would make the operation impossible, not safer.
+        if journal.choice.requiresCloudEqualityOfFrozenSource {
             try await requireCloudEquals(snapshot, binding: journal.cloudBinding, validate: validate)
         }
         try validate()
@@ -858,10 +1140,52 @@ final class StorageTransferRuntime {
             let admission = try admissionFile(binding)
             let previous = try admission.load()
             try admission.save(StorageTransferDatasetAdmission(binding: binding,
-                datasetGenerationID: status?.datasetGenerationID), replacing: previous)
+                datasetGenerationID: status?.datasetGenerationID, cloudScope: recordedScope),
+                replacing: previous)
+            recordReplacementWatch(journal: journal, files: files, binding: binding,
+                                   generationID: status?.datasetGenerationID)
         }
         try validate()
         try files.promoteStaged(destination: journal.destination, manifest: manifest)
+    }
+
+    /// PLAN Step 9. Leave a receipt so the next settled mount can look ONCE for
+    /// rows a device the purge could not fence pushed in afterwards. A
+    /// detector, never a fence, and never destructive. Failing to write it must
+    /// not fail an otherwise complete commit, so every error is swallowed here
+    /// on purpose: losing a diagnostic is strictly better than losing a
+    /// promotion that already deleted and re-exported the dataset.
+    private func recordReplacementWatch(journal: StorageTransferJournal,
+                                        files: StorageTransferStoreFiles,
+                                        binding: ActiveAccountLocalBinding,
+                                        generationID: UUID?) {
+        guard journal.choice.replacesCloud, let generationID else { return }
+        do {
+            // Already computed by captureSource; no new traversal of the store.
+            guard let receipt = try StorageTransferPayloadStore(files: files).acknowledgedReceipt() else { return }
+            try StorageTransferReplacementWatchStore(root: root, namespace: binding.namespace)
+                .record(datasetGenerationID: generationID,
+                        committedCounts: receipt.recordCounts, committedAt: Date())
+        } catch { }
+    }
+
+    /// PLAN Step 9, the one read-only comparison. The host calls this at the
+    /// first settled cloud mount after a commit; a `.lateArrival` outcome is
+    /// non-blocking banner state only. The receipt is removed whatever the
+    /// result, so this can never run twice for one commit.
+    func evaluateReplacementWatch(binding: ActiveAccountLocalBinding,
+                                  currentGenerationID: UUID?,
+                                  locallyAuthoredSinceCommit: [String: Int] = [:],
+                                  timeout: TimeInterval = StorageTransferCloudPreviewPolicy.timeout,
+                                  validateAccess: @escaping @MainActor () throws -> Void) async -> StorageTransferReplacementWatchOutcome {
+        guard let store = try? StorageTransferReplacementWatchStore(root: root, namespace: binding.namespace) else {
+            return .noReceipt
+        }
+        return await store.evaluate(currentGenerationID: currentGenerationID,
+                                    locallyAuthoredSinceCommit: locallyAuthoredSinceCommit) {
+            try await CloudStorageTransferCloudKit(timeout: timeout)
+                .readSnapshot(expectedBinding: binding, validateTransfer: validateAccess).snapshot.recordCounts
+        }
     }
 
     private func requireStableCloudCopy(context: ModelContext, binding: ActiveAccountLocalBinding,
@@ -971,16 +1295,82 @@ final class StorageTransferRuntime {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         return try StorageTransferRecoverySchema.digest(encoder.encode(value))
     }
-    private func admissionFile(_ binding: ActiveAccountLocalBinding) throws -> StorageTransferStateFile<StorageTransferDatasetAdmission> {
-        try StorageTransferStateFile(url: root.appendingPathComponent("admission-\(binding.namespace.rawValue).json"))
-    }
-    private func requireNoArtifacts(selection: PersistenceDeploymentSelection) throws {
-        let urls = try PersistenceStoreTopology.persistentStoreURLs(for: selection.storageLaunchMode,
-            accountNamespace: selection.storageNamespace)
-        for url in urls.flatMap({ PersistenceStoreArtifactLayout.artifacts(for: $0) }) {
-            var info = stat()
-            guard lstat(url.path, &info) != 0, errno == ENOENT else { throw StorageTransferRuntimeError.datasetRefreshRequired }
+    /// The receipt's file name, scoped by the CloudKit environment this build
+    /// talks to. Exposed so tests address the exact same file the runtime does
+    /// instead of hard-coding a name that can drift.
+    ///
+    /// An unknown scope keeps the legacy, unscoped name: that name IS the
+    /// legacy receipt, and giving it a third spelling would orphan it.
+    static func admissionFileName(namespace: AccountDataNamespace,
+                                  scope: StorageTransferCloudScope) -> String {
+        guard let component = scope.fileNameComponent else {
+            return "admission-\(namespace.rawValue).json"
         }
+        return "admission-\(component)-\(namespace.rawValue).json"
+    }
+    private func admissionFile(_ binding: ActiveAccountLocalBinding) throws -> StorageTransferStateFile<StorageTransferDatasetAdmission> {
+        try StorageTransferStateFile(url: root.appendingPathComponent(
+            Self.admissionFileName(namespace: binding.namespace, scope: cloudScope)))
+    }
+    private func legacyAdmissionFile(_ binding: ActiveAccountLocalBinding) throws -> StorageTransferStateFile<StorageTransferDatasetAdmission> {
+        try StorageTransferStateFile(url: root.appendingPathComponent(
+            Self.admissionFileName(namespace: binding.namespace, scope: .unknown)))
+    }
+    /// Read the scoped receipt, falling back ONCE to the unscoped receipt a
+    /// build without environment scoping left behind. The fallback record is
+    /// deliberately returned with `cloudScope == nil`, i.e. UNKNOWN: it cannot
+    /// say which environment earned it, and an unknown scope never accuses a
+    /// known one.
+    private func loadAdmission(_ binding: ActiveAccountLocalBinding) throws
+        -> (value: StorageTransferDatasetAdmission?, isLegacy: Bool) {
+        if let scoped = try admissionFile(binding).load() { return (scoped, false) }
+        guard cloudScope.isKnown, let legacy = try legacyAdmissionFile(binding).load() else {
+            return (nil, false)
+        }
+        return (legacy, true)
+    }
+    /// Every receipt filed for this namespace under an environment OTHER than
+    /// the one this build talks to.
+    ///
+    /// `loadAdmission` deliberately opens one file name, so the other
+    /// environment's receipt is invisible to it - and `retireLegacyAdmission`
+    /// removes the one unscoped file both environments used to share. Without
+    /// this scan, the first build to rescope a receipt makes the other build
+    /// see nothing at all and enrol, which is how a Debug/Release flip could
+    /// publish the whole device dataset into a database that never held it.
+    /// The recorded scope inside the file, not its name, is the evidence.
+    private func foreignScopedAdmissions(_ binding: ActiveAccountLocalBinding) throws
+        -> [StorageTransferDatasetAdmission] {
+        let mine = try admissionFile(binding).url
+        return try StorageTransferCloudEnvironment.allCases.compactMap { environment in
+            let scope = StorageTransferCloudScope(environment: environment,
+                containerIdentifier: cloudScope.containerIdentifier)
+            guard scope.fileNameComponent != nil else { return nil }
+            let url = root.appendingPathComponent(
+                Self.admissionFileName(namespace: binding.namespace, scope: scope))
+            guard url != mine else { return nil }
+            return try StorageTransferStateFile<StorageTransferDatasetAdmission>(url: url).load()
+        }
+    }
+    /// One-time migration. Only ever called after the scoped receipt has been
+    /// written AND read back by `StorageTransferStateFile.save`, so the record
+    /// survives; retiring the unscoped copy is what stops a build in the OTHER
+    /// environment from picking it up and calling it a replacement.
+    private func retireLegacyAdmission(_ binding: ActiveAccountLocalBinding) throws {
+        let legacy = try legacyAdmissionFile(binding)
+        guard legacy.url != (try admissionFile(binding).url) else { return }
+        var info = stat()
+        guard lstat(legacy.url.path, &info) == 0 else { return }
+        guard (info.st_mode & S_IFMT) == S_IFREG else { throw StorageTransferError.unsafePath }
+        try FileManager.default.removeItem(at: legacy.url)
+    }
+    /// `error` names what the leftover files actually mean at this call site.
+    /// The default is the destination precondition of a transfer that has just
+    /// minted a brand-new namespace, so any artifact there is stale local
+    /// state - never evidence that the iCloud dataset changed.
+    private func requireNoArtifacts(selection: PersistenceDeploymentSelection,
+                                    error: StorageTransferRuntimeError = .leftoverLocalStores) throws {
+        try StorageTransferStoreArtifactPrecondition.requireNone(selection: selection, error: error)
     }
 }
 

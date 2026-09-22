@@ -8,6 +8,73 @@ enum StorageTransferSettingsUITestFixture {
 
     enum Scenario: String {
         case offlineNavigation, offlineNavigationRecovered, offlineBreakNavigation, local, cloud, offline, offlineRecovery, offlineHistory, cloudNetworkWaiting, cloudLaunchTimedOut, activeTimer, exporting, deleting, unavailable
+        /// Cloud mode with the Settings dataset doors PUBLISHED, so their
+        /// consent flow can be exercised. `cloud` is the shipping screen, where
+        /// the same doors render disabled with their reason.
+        case cloudDatasetDoors
+        /// The same published doors, but the read-only pre-flight fails. The
+        /// device -> iCloud door must then stay shut with its own message:
+        /// 「we could not look」 and 「there is nothing there」 must not be
+        /// confusable before a deletion.
+        case cloudDatasetDoorsUnreadable
+        /// W6. The same published doors for an account that has records in
+        /// iCloud but NO transfer control record — the ordinary state of an
+        /// account that was never transferred. The comparison names the
+        /// absence and the device → iCloud confirmation says the operation
+        /// starts a lineage rather than replacing one.
+        case cloudDatasetDoorsNoLineage
+        /// review-1-2 / review-2-4. The account whose iCloud side holds no
+        /// PomoGem record at all — app data deleted from iOS Settings, a cause
+        /// ROOT-CAUSE §6.2 names. Direction (B) would discard the device's only
+        /// copy and mirror down nothing, so its confirmation must say so.
+        case cloudDatasetDoorsEmptyCloud
+        /// The launch-host screens a fenced device actually lands on. Each one
+        /// renders the shipping `PersistenceLaunchStatusView` with a recorder in
+        /// place of the runtime, so no journal, container or CloudKit call
+        /// exists in the process.
+        case datasetRefreshChoice, datasetRefreshOtherDevices, datasetRefreshPreviewFailed
+        case datasetRefreshBlocked, overwriteInProgress
+        /// `.remoteRecovery`, whose 「復旧を続ける」 door is gated by the resume
+        /// bit — not by the legacy `allowsCloudReplacement`.
+        case remoteResumeClosed, remoteResumeOpen
+        /// P0-2. The screen the reported iPhone actually needs: the server has
+        /// no transfer ledger, so the two honest choices are starting a lineage
+        /// from this device or staying offline. `lineageUnavailable` is the
+        /// shipping build (the first door disabled with its reason);
+        /// `lineageUnavailableEnabled` raises only
+        /// `allowsDatasetOverwriteFromDevice` so the consent flow is reachable.
+        case lineageUnavailable, lineageUnavailableEnabled
+        /// review-1-3 / review-2-1 and review-1-1 / review-2-2: the shipping
+        /// build with an ineligible offline route (the screen must still carry
+        /// a working control), and the published door whose read-only server
+        /// enumeration failed (the door must stay shut).
+        case lineageUnavailableClosed, lineageUnavailableUnreadable
+        /// The two explanation-only screens. Neither carries any destructive
+        /// control, in any policy.
+        case environmentMismatch, localLedgerMissingExplain
+        /// PLAN Step 9 / §6.5. The non-blocking banner a committed device ->
+        /// iCloud replacement raises when the one post-commit comparison finds
+        /// user records the committed payload did not hold.
+        case lateArrival
+
+        var overwriteLaunch: StorageTransferOverwriteLaunchUITestScenario? {
+            switch self {
+            case .datasetRefreshChoice: .choice
+            case .datasetRefreshOtherDevices: .otherDevices
+            case .datasetRefreshPreviewFailed: .previewFailed
+            case .datasetRefreshBlocked: .blocked
+            case .overwriteInProgress: .inProgress
+            case .remoteResumeClosed: .remoteResumeClosed
+            case .remoteResumeOpen: .remoteResumeOpen
+            case .lineageUnavailable: .lineageUnavailable
+            case .lineageUnavailableEnabled: .lineageUnavailableEnabled
+            case .lineageUnavailableClosed: .lineageUnavailableClosed
+            case .lineageUnavailableUnreadable: .lineageUnavailableUnreadable
+            case .environmentMismatch: .environmentMismatch
+            case .localLedgerMissingExplain: .localLedgerMissingExplain
+            default: nil
+            }
+        }
 
         var isOffline: Bool { self == .offline || self == .offlineRecovery || self == .offlineHistory }
         var recoveryKind: CloudOfflineRecoveryKind? {
@@ -19,7 +86,22 @@ enum StorageTransferSettingsUITestFixture {
         }
 
         var mode: PersistenceLaunchMode {
-            self == .cloud || isOffline || self == .cloudNetworkWaiting ? .cloudKit : .localOnly
+            self == .cloud || self == .cloudDatasetDoors
+                || self == .cloudDatasetDoorsUnreadable || self == .cloudDatasetDoorsNoLineage
+                || self == .cloudDatasetDoorsEmptyCloud
+                || self == .lateArrival || isOffline
+                || self == .cloudNetworkWaiting ? .cloudKit : .localOnly
+        }
+
+        /// Exactly one bit, and only for the one scenario that exercises a
+        /// published door. The legacy `localOnly -> cloud` replacement and the
+        /// remote resume stay closed, so a fixture can never widen the shipping
+        /// prohibition it is meant to exercise around.
+        var releasePolicy: StorageTransferReleasePolicy {
+            self == .cloudDatasetDoors || self == .cloudDatasetDoorsUnreadable
+                || self == .cloudDatasetDoorsNoLineage || self == .cloudDatasetDoorsEmptyCloud
+                ? .isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)
+                : .standard
         }
         var otherWorkIsActive: Bool {
             isOffline || self == .cloudNetworkWaiting || self == .activeTimer || self == .exporting || self == .deleting
@@ -40,6 +122,11 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
     @State private var controller = StorageTransferController()
     @State private var calls = 0
     @State private var lastChoice = "none"
+    @State private var datasetCalls = 0
+    @State private var lastDatasetDirection = "none"
+    @State private var previewCalls = 0
+    @State private var lateArrivalSettingsCalls = 0
+    @State private var showsLateArrival = true
     @State private var offlineRetryCalls = 0
     @State private var recoveryReviewCalls = 0
     @State private var isCheckingOfflineConnection = false
@@ -63,6 +150,8 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                 startsRecoveredBreak: scenario == .offlineBreakNavigation)
         } else if scenario == .cloudLaunchTimedOut {
             CloudLaunchTimeoutUITestFixtureView()
+        } else if let overwrite = scenario.overwriteLaunch {
+            StorageTransferOverwriteLaunchUITestFixtureView(scenario: overwrite)
         } else {
             settingsContent(scenario)
         }
@@ -75,6 +164,14 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                     Section {
                         Text(verbatim: "calls=\(calls);choice=\(lastChoice);starting=\(controller.isStarting)")
                             .accessibilityIdentifier("storage-switch.fixture-state")
+                        Text(verbatim: "dataset=\(lastDatasetDirection);datasetCalls=\(datasetCalls)")
+                            .accessibilityIdentifier("storage-switch.dataset-fixture-state")
+                        Text(verbatim: "previewCalls=\(previewCalls)")
+                            .accessibilityIdentifier("storage-switch.preview-fixture-state")
+                        if scenario == .lateArrival {
+                            Text(verbatim: "settingsCalls=\(lateArrivalSettingsCalls);shown=\(showsLateArrival)")
+                                .accessibilityIdentifier("storage-overwrite.late-arrival-fixture-state")
+                        }
                         if scenario.isOffline {
                             Text(verbatim: "retryCalls=\(offlineRetryCalls);checking=\(isCheckingOfflineConnection)")
                                 .accessibilityIdentifier("cloud-offline.fixture-state")
@@ -88,7 +185,8 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                     StorageTransferSettingsSection(
                         persistenceMode: scenario.mode,
                         controller: controller,
-                        otherWorkIsActive: scenario.otherWorkIsActive
+                        otherWorkIsActive: scenario.otherWorkIsActive,
+                        releasePolicy: scenario.releasePolicy
                     )
                 }
                 .navigationTitle("設定")
@@ -96,16 +194,115 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
         }
         .environment(\.isCloudOfflineSession, scenario.isOffline)
         .environment(\.cloudConnectionPresentation, presentation(scenario))
+        .environment(\.storageTransferLateArrival, lateArrival(scenario))
         .task {
             guard scenario != .unavailable else { return }
-            controller.install { choice in
+            controller.install({ choice in
                 calls += 1
                 lastChoice = choice.rawValue
                 // The accepted fake request stays busy while the test inspects
                 // the UI. No operation performs a save or a source change.
                 try await Task.sleep(for: .seconds(45))
-            }
+            }, dataset: { direction in
+                // Records the direction only. Nothing writes a dataset request
+                // file, reads CloudKit, or asks for a relaunch in this process.
+                datasetCalls += 1
+                lastDatasetDirection = direction.rawValue
+                try await Task.sleep(for: .seconds(45))
+            }, datasetPreview: {
+                // Stands in for the read-only server snapshot. It records that
+                // it was asked, so a test can prove the evidence is gathered
+                // BEFORE the acknowledgement rather than after it.
+                previewCalls += 1
+                guard scenario != .cloudDatasetDoorsUnreadable else {
+                    throw CloudStorageTransferCloudError.timedOut
+                }
+                // The host captures the device side only while the direction
+                // that needs it is published, so the fixture models the same
+                // gate: a shipping scenario must not invent a device row the
+                // real screen would never have.
+                let readsDeviceSide = scenario.releasePolicy.allowsDatasetOverwriteFromDevice
+                switch scenario {
+                case .cloudDatasetDoorsNoLineage:
+                    return Self.previewSummaryWithoutLineage(readsDeviceSide: readsDeviceSide)
+                case .cloudDatasetDoorsEmptyCloud:
+                    return Self.previewSummaryEmptyCloud(readsDeviceSide: readsDeviceSide)
+                default:
+                    return Self.previewSummary(readsDeviceSide: readsDeviceSide)
+                }
+            })
         }
+    }
+
+    /// Two sides whose counts and dates differ, and one witnessed other
+    /// device, so the sheet's comparison and evidence are both non-trivial.
+    private static func previewSummary(readsDeviceSide: Bool) -> StorageTransferDatasetPreviewSummary {
+        StorageTransferDatasetPreviewSummary(
+            cloud: preview(subjects: 9, sessions: 312, stones: 28,
+                           year: 2026, month: 9, day: 18, otherDeviceIDs: 2),
+            device: deviceSide(readsDeviceSide))
+    }
+
+    /// W6. Records on the server, no transfer control record.
+    private static func previewSummaryWithoutLineage(
+        readsDeviceSide: Bool
+    ) -> StorageTransferDatasetPreviewSummary {
+        StorageTransferDatasetPreviewSummary(
+            cloud: preview(subjects: 9, sessions: 312, stones: 28,
+                           year: 2026, month: 9, day: 18, otherDeviceIDs: 0),
+            device: deviceSide(readsDeviceSide),
+            hasCloudLineage: false)
+    }
+
+    private static func deviceSide(_ reads: Bool) -> StorageTransferCloudPreview? {
+        reads ? preview(subjects: 12, sessions: 480, stones: 36,
+                        year: 2026, month: 9, day: 20, otherDeviceIDs: 0) : nil
+    }
+
+    /// review-1-2 / review-2-4. Nothing on the server, months of records on
+    /// the device: the shape in which 「iCloudのデータは残ります」 is true and
+    /// still leaves the user with an empty app and no copy anywhere.
+    private static func previewSummaryEmptyCloud(
+        readsDeviceSide: Bool
+    ) -> StorageTransferDatasetPreviewSummary {
+        StorageTransferDatasetPreviewSummary(
+            cloud: preview(subjects: 0, sessions: 0, stones: 0,
+                           year: 2026, month: 9, day: 18, otherDeviceIDs: 0),
+            device: deviceSide(readsDeviceSide),
+            hasCloudLineage: false)
+    }
+
+    private static func preview(subjects: Int, sessions: Int, stones: Int,
+                                year: Int, month: Int, day: Int,
+                                otherDeviceIDs: Int) -> StorageTransferCloudPreview {
+        var counts = Dictionary(uniqueKeysWithValues:
+            PomoGemStorageSnapshot.cloudModelNames.map { ($0, 0) })
+        counts["Subject"] = subjects
+        counts["StudySession"] = sessions
+        counts["AchievementStone"] = stones
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = 12
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        return StorageTransferCloudPreview(
+            recordCounts: counts,
+            latestRecordAt: calendar.date(from: components),
+            otherDeviceIDs: otherDeviceIDs, ignoredWriterIDs: 0)
+    }
+
+    /// Neither action touches data: 「このまま使う」 only hides the banner, and
+    /// 「設定を開く」 only navigates. The recorder proves exactly that.
+    private func lateArrival(
+        _ scenario: StorageTransferSettingsUITestFixture.Scenario
+    ) -> StorageTransferLateArrivalPresentation? {
+        guard scenario == .lateArrival, showsLateArrival else { return nil }
+        return StorageTransferLateArrivalPresentation(
+            sessionID: fixtureSessionID, models: ["StudySession", "Subject"],
+            dismiss: { showsLateArrival = false },
+            openSettings: { lateArrivalSettingsCalls += 1 })
     }
 
     private func presentation(_ scenario: StorageTransferSettingsUITestFixture.Scenario) -> CloudConnectionPresentation? {
