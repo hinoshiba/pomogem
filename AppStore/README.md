@@ -26,9 +26,11 @@ SKU `pomogem-ios`、bundle ID `com.hinoshiba.pomogem`、日本語名「ポモジ
 作成・確認し、実値を`configuration.yml`へ記録しました。2026-09-13に日本・米国の公開listingで
 1.0.1の配信を確認しました。[App Store](https://apps.apple.com/app/id6809139517)へのリンクと
 Smart App BannerをWebに表示し、`app_store_listing_status: public`とします。
-公開準備中の1.0.2とは区別します。
+これは当時の確認記録です。2026-09-22にApp Store Connectで1.0.2 (9)のReady for Distributionを
+確認しました。現在の掲載文は次の1.1.0 (10)候補用で、1.1.0のdraftは作成済みですがbinaryは未uploadです。
+Family Controlsの配布権限と最終署名済み候補での実到達は未確認で、旧版の提出結果を流用しません。
 
-5枚の掲載画像はPomoGem 1.0 (5)のproduction UIから再撮影済みです。実行結果とファイルのhashは
+現在保管している5枚の掲載画像はPomoGem 1.0 (5)のproduction UIからの撮影履歴です。1.1.0の設定・Pro機能との比較と必要な差し替えは未完了です。実行結果とファイルのhashは
 `screenshots/README.md`に記録します。新IAPの実StoreKit価格を取得できるまでは
 `review_screenshot_status: pending_live_price_capture`とし、旧商品の価格画像は同梱しません。
 Developer Portalでは新しいmain／Widget App IDとCloudKit containerの登録・hostへの割当を確認しました。

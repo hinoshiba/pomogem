@@ -4,6 +4,24 @@ PomoGemの現行候補と、初回1.0 (5)以降の履歴を区別したチェッ
 Apple上の登録・実機検証は分けて確認します。以前のアプリに対するupload／価格／schema／登録済みの証拠は新アプリへ転用しません。
 過去の結果は`Docs/LEGACY_RELEASE_PROVENANCE.md`に分離しています。
 
+## 2026-09-22 1.1.0 (10)候補
+
+App Store Connectでは1.0.2 (9)がReady for Distributionです。1.1.0のdraftは作成済みで、
+次のbuildは10です。以下は候補の準備であり、過去の合格や出荷済みを意味しません。
+
+- [x] 掲載文・Pro特典・Privacy・審査原稿を10分gem、無料5学習アプリ／Pro無制限、黒いgem無制限に合わせる
+- [x] iCloud中の再取得の事前読取・空データ警告・未選択の削除同意と、端末→iCloud上書き禁止を区別する
+- [ ] 本体とMonitorそれぞれのFamily Controls distribution権限、App Group、最終Archive／IPAを確認。
+  現在のローカルdistribution profileにはFamily Controlsがなく、配布承認済みとは扱わない
+- [ ] 修正後の最終候補で勉強・黒いgemの実10分到達、許可取消／再許可、Pro、再起動・日付・account境界を確認。
+  2026-09-20〜21の到達失敗とその後の未検証修正は、成功として読み替えない
+- [ ] 新しいPro特典を含む実StoreKit価格のIAP審査画像へ更新し、掲載画像5枚も最終候補との違いを確認
+- [ ] 統合コードのCI、Release build、署名・entitlement検証と配布用archiveを記録
+- [ ] Connectのja-JP／en-US掲載文・Review Notes・IAP説明と公開Privacyを保存し、再読込で一致を確認
+- [ ] build 10のupload・処理・versionへの割当・審査提出を確認。自動公開設定の過去の値だけで提出済みとしない
+
+実機試験は現在の作業対象外です。未実施項目を合格にせず、配布前の残件として保持します。
+
 ## 2026-09-13 スクリーンタイム候補の配布前確認
 
 次は新機能の出荷条件です。sourceのmerge、Simulatorでの成功、以前のApp Store提出結果を

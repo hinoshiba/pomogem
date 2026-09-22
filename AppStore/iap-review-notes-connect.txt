@@ -1,12 +1,15 @@
-PomoGem Pro is a one-time, non-consumable In-App Purchase. It unlocks every focus duration from 1 to 360 minutes beyond the free 25-, 45-, 60-, and 90-minute presets, plus month labels on grouped pebbles. Share cards retain the PomoGem logo and https://pomogem.hinoshiba.com/ for Free and Pro users. There is no subscription, free trial, automatic renewal, external payment, account login, or custom purchase server.
+PomoGem Pro is a one-time, non-consumable In-App Purchase. It unlocks custom focus durations from 1 minute 00 seconds to 360 minutes 00 seconds beyond the free 25-, 45-, 60-, and 90-minute presets, month labels on grouped gems, and unlimited learning apps for optional Screen Time recording (five apps on the free plan). Black distraction-gem app selection is unlimited without purchase.
+
+Share cards retain the PomoGem logo and https://pomogem.hinoshiba.com/ for Free and Pro users. There is no subscription, free trial, automatic renewal, external payment, account login, or custom purchase server. This update uses the existing product com.hinoshiba.pomogem.pro.lifetime; previous purchasers receive the added benefit through their entitlement.
 
 Review steps:
 
-1. On first launch, choose “iCloudに保存して同期” and confirm with “確認して続ける”. Choosing “このiPhoneだけに保存” also reaches the same app and purchase screen.
-2. On the optional trial-pebble page, tap “次へ” to skip it, then select one initial theme from the combined study/work list.
-3. On Home, open the top-right menu, then Settings.
-4. Tap the entire “ポモジェムPro” row. The same paywall opens when choosing a custom duration while Free.
-5. The paywall displays the storefront price returned by StoreKit. “価格・提供条件・販売者情報を確認” opens the pre-purchase terms and seller disclosure before the purchase button.
-6. “購入を復元” is at the bottom of the same screen.
+1. On first launch, choose “このiPhoneだけに保存” and confirm “このiPhoneだけで始める” to use basic features without an Apple Account or network. The optional iCloud choice also reaches the same purchase screen.
+2. Skip the optional trial pebble with “次へ”, then choose a study/work theme.
+3. Open Home's top-right menu, then Settings and the “ポモジェムPro” row. The same paywall opens when choosing a custom duration while Free.
+4. The paywall shows the storefront price returned by StoreKit. “価格・提供条件・販売者情報を確認” opens the terms and seller disclosure before the purchase button.
+5. “購入を復元” is at the bottom of the same screen.
+6. On a supported iPhone, Settings → “スクリーンタイム” requests individual Family Controls access. After authorizing it, “勉強のgem” allows five learning apps for Free, and more than five after purchase or restore. Select a theme, enable recording, and save. Categories and websites are not accepted. The separate “黒いgem” selection is unlimited for everyone.
+7. Learning-app use is combined in confirmed 10-minute steps (100 grams), with OS delivery delays possible. Black gems stay outside study totals and sharing. Screen Time authorization is optional and is separate from the purchase; denying it does not prevent use of the timers or other Pro features.
 
-Use the paywall showing the live Product.displayPrice as the IAP review screenshot. This first non-consumable is submitted with app version 1.0. No review account is required.
+No review account is required. The review image should show this candidate's paywall with the live Product.displayPrice and the unlimited learning-app benefit.

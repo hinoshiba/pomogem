@@ -1,6 +1,14 @@
 # App Store screenshots
 
-## Current capture — 2026-09-06
+## Candidate 1.1.0 (10) — 2026-09-22
+
+The existing five product images remain historical 1.0 (5) captures. Compare them with
+this candidate and replace changed Settings or Pro screens before submission. The old
+IAP price image is preserved at `history/iap-review-20260906.png`; it does not show the
+new unlimited learning-app benefit. Capture a new live StoreKit paywall in
+`iap-review/01-pomogem-pro-live-price.png` before marking the current image ready.
+
+## Historical capture — 2026-09-06
 
 The checked-in set shows PomoGem version 1.0 build 5, including the visible theme and
 duration controls on Home, the remaining-time ring, and the completion card
@@ -161,11 +169,11 @@ remains a separate submission gate.
 `shasum -a 256 -c AppStore/screenshots/checksums.sha256` verifies the five listing
 images and the separate IAP review image.
 
-## IAP review image — captured
+## Historical IAP review image — 2026-09-06
 
-Status: `captured_live_price`.
+Historical status: `captured_live_price`. Candidate status: `pending_live_price_capture`.
 
-`iap-review/01-pomogem-pro-live-price.png` was captured on 2026-09-06 from
+`history/iap-review-20260906.png` was captured on 2026-09-06 from
 PomoGem version 1.0 build 5 on an iPhone 12 Pro Max simulator running iOS 26.5.
 The Japanese production paywall displays `com.hinoshiba.pomogem.pro.lifetime`
 returned by the actual `Product.products` request, without a local StoreKit

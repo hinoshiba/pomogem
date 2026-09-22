@@ -2,8 +2,11 @@
 
 Product: `com.hinoshiba.pomogem.pro.lifetime`
 
-Review image: `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png`
-（1.0 build 4、実際のStoreKit商品価格を表示、購入未実行。出所は`screenshots/README.md`）
+Candidate: 1.1.0 (10). The existing non-consumable gains unlimited learning-app selection.
+
+Review image to refresh: `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png`
+Historical image: `AppStore/screenshots/history/iap-review-20260906.png`
+（1.0 build 5、実際のStoreKit商品価格を表示、購入未実行。候補の新しいPro機能の証拠にはしません。）
 Type: Non-Consumable
 
 ## English (for App Review)
@@ -31,8 +34,8 @@ Review steps:
    Category and website selections are not accepted. “黒いgem” app selection is unlimited without purchase.
 
 Use the paywall showing the live `Product.displayPrice` as the IAP review screenshot.
-The first non-consumable is submitted together with app version 1.0.
-The Screen Time addition is for the next candidate. It requires Family Controls distribution
+The existing non-consumable was originally submitted with version 1.0; this candidate adds a benefit to the same product.
+The Screen Time addition is part of the 1.1.0 candidate. It requires Family Controls distribution
 approval for the host and monitor extension, plus signed-device verification before submission.
 The historical review image above must be refreshed to include the added Pro feature.
 
@@ -57,9 +60,9 @@ The historical review image above must be refreshed to include the added Pro fea
 7. 許可済みiPhoneで設定 →「スクリーンタイム」→「勉強のgem」を開き、無料では5アプリまで、
    購入・復元後は6アプリ以上を選択・保存できることを確認します。「黒いgem」は購入不要で無制限です。
 
-スクリーンタイム追加は次期候補です。提出前に本体・Monitor拡張のFamily Controls配布権限承認と
+スクリーンタイム追加は1.1.0候補です。提出前に本体・Monitor拡張のFamily Controls配布権限承認と
 署名済み実機検証を行い、冒頭の過去の審査画像も新しいPro機能を含む画像へ更新します。
 
-独自loginやreview用accountは不要です。初回Non-Consumableなのでversion 1.0と同じsubmissionへ追加します。
+独自loginやreview用accountは不要です。初回提出はversion 1.0の履歴です。今回は既存商品を維持し、購入済み利用者にも追加機能を提供します。
 Sandboxで購入、承認待ち、cancel、復元、revocationを確認し、審査用screenshotは上記paywallで
 `Product.displayPrice`が表示された状態を使用します。

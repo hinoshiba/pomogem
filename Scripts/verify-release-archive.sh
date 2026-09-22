@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Verify the signed contents of the version 1.0 PomoGem iOS archive without
+# Verify the signed contents of the PomoGem iOS archive without
 # printing certificate subjects, profile names, UUIDs, device identifiers, or
 # entitlement payloads.
 #
@@ -16,16 +16,15 @@ umask 077
 
 readonly POMOGEM_AUDIT_APP_BUNDLE_ID='com.hinoshiba.pomogem'
 readonly POMOGEM_AUDIT_WIDGET_BUNDLE_ID='com.hinoshiba.pomogem.widgets'
+readonly POMOGEM_AUDIT_MONITOR_BUNDLE_ID='com.hinoshiba.pomogem.screentimemonitor'
 readonly POMOGEM_AUDIT_TEAM_ID='94HVVWXLK3'
 readonly POMOGEM_AUDIT_APP_GROUP='group.com.hinoshiba.pomogem'
 readonly POMOGEM_AUDIT_ICLOUD_CONTAINER='iCloud.com.hinoshiba.pomogem'
-readonly POMOGEM_AUDIT_MARKETING_VERSION='1.0.2'
-readonly POMOGEM_AUDIT_BUILD_NUMBER='9'
 readonly POMOGEM_AUDIT_MINIMUM_IOS='17.0'
 readonly POMOGEM_AUDIT_FONT_SHA256='6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f'
 readonly POMOGEM_AUDIT_FONT_LICENSE_SHA256='e8b4d8c39b0d7cc4b202dbd013b999bc6233a9bbe6cce1c37cfddc26ad544228'
 readonly POMOGEM_AUDIT_SCRIPT_DIRECTORY="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-export POMOGEM_AUDIT_APP_BUNDLE_ID POMOGEM_AUDIT_WIDGET_BUNDLE_ID
+export POMOGEM_AUDIT_APP_BUNDLE_ID POMOGEM_AUDIT_WIDGET_BUNDLE_ID POMOGEM_AUDIT_MONITOR_BUNDLE_ID
 export POMOGEM_AUDIT_TEAM_ID POMOGEM_AUDIT_APP_GROUP
 export POMOGEM_AUDIT_ICLOUD_CONTAINER POMOGEM_AUDIT_MARKETING_VERSION
 export POMOGEM_AUDIT_BUILD_NUMBER POMOGEM_AUDIT_MINIMUM_IOS
@@ -39,10 +38,11 @@ Usage:
 Default mode validates a raw Organizer archive. It accepts coherent Apple
 Development/development-profile signing or Apple Distribution/App Store
 Connect-profile signing and reports only the non-sensitive signing classes.
-Both modes require the host's reviewed CloudKit and APNs setup. Version 1.0
-removes App Groups from both bundles; its Widget must carry no iCloud/APNs
-capability or account-snapshot code. Its Live Activity may display only the
-account-neutral timer contract reviewed by this script.
+Both modes require the host's reviewed CloudKit and APNs setup, plus Family
+Controls and the exact shared App Group in the app and Screen Time monitor.
+The Widget must carry no iCloud/APNs, Family Controls, App Group, or account-
+snapshot capability. Its Live Activity keeps the account-neutral timer contract.
+Expected version/build values come from this checkout's project.yml.
 
 --distribution additionally requires Apple Distribution signing, App Store
 Connect profiles, get-task-allow=false, no registered-device or enterprise
@@ -101,29 +101,55 @@ if [ ! -d "$archive_path" ] || [ -L "$archive_path" ]; then
   fail 'archive path is not a non-symlink directory'
 fi
 
+# Read source configuration without evaluating YAML tags, shell expressions,
+# build-setting expansion, or caller-provided environment overrides.
+if ! release_version=$(PYTHONDONTWRITEBYTECODE=1 python3 - "$POMOGEM_AUDIT_SCRIPT_DIRECTORY" <<'PYVERSION'
+from pathlib import Path
+import sys
+sys.path.insert(0, sys.argv[1])
+from release_profile_policy import read_release_version
+try:
+    version, build = read_release_version((Path(sys.argv[1]).parent / "project.yml").read_text())
+except (OSError, ValueError):
+    raise SystemExit("error: could not determine the reviewed source version/build")
+print(version, build)
+PYVERSION
+); then
+  fail 'source release version/build is missing or ambiguous'
+fi
+IFS=' ' read -r POMOGEM_AUDIT_MARKETING_VERSION POMOGEM_AUDIT_BUILD_NUMBER <<< "$release_version"
+readonly POMOGEM_AUDIT_MARKETING_VERSION POMOGEM_AUDIT_BUILD_NUMBER
+export POMOGEM_AUDIT_MARKETING_VERSION POMOGEM_AUDIT_BUILD_NUMBER
+
 readonly archive_info="$archive_path/Info.plist"
 readonly app_bundle="$archive_path/Products/Applications/PomoGem.app"
 readonly widget_bundle="$app_bundle/PlugIns/PomoGemWidgets.appex"
+readonly monitor_bundle="$app_bundle/PlugIns/PomoGemScreenTimeMonitor.appex"
 readonly app_info="$app_bundle/Info.plist"
 readonly widget_info="$widget_bundle/Info.plist"
+readonly monitor_info="$monitor_bundle/Info.plist"
 readonly app_binary="$app_bundle/PomoGem"
 readonly widget_binary="$widget_bundle/PomoGemWidgets"
+readonly monitor_binary="$monitor_bundle/PomoGemScreenTimeMonitor"
 readonly app_privacy="$app_bundle/PrivacyInfo.xcprivacy"
 readonly widget_privacy="$widget_bundle/PrivacyInfo.xcprivacy"
+readonly monitor_privacy="$monitor_bundle/PrivacyInfo.xcprivacy"
 readonly app_font="$app_bundle/ZenMaruGothic-Black.ttf"
 readonly app_font_license="$app_bundle/LICENSE-fonts.txt"
 readonly app_profile="$app_bundle/embedded.mobileprovision"
 readonly widget_profile="$widget_bundle/embedded.mobileprovision"
+readonly monitor_profile="$monitor_bundle/embedded.mobileprovision"
 
-for directory in "$app_bundle" "$widget_bundle"; do
+for directory in "$app_bundle" "$widget_bundle" "$monitor_bundle"; do
   if [ ! -d "$directory" ] || [ -L "$directory" ]; then
-    fail 'archive is missing the expected non-symlink app or Widget bundle'
+    fail 'archive is missing the expected non-symlink app, Widget, or Screen Time monitor bundle'
   fi
 done
 
 for file in "$archive_info" "$app_info" "$widget_info" \
   "$app_binary" "$widget_binary" "$app_privacy" "$widget_privacy" \
-  "$app_font" "$app_font_license" "$app_profile" "$widget_profile"; do
+  "$app_font" "$app_font_license" "$app_profile" "$widget_profile" \
+  "$monitor_info" "$monitor_binary" "$monitor_privacy" "$monitor_profile"; do
   if [ ! -f "$file" ] || [ -L "$file" ]; then
     fail 'archive is missing an expected non-symlink release artifact'
   fi
@@ -158,7 +184,7 @@ trap cleanup EXIT HUP INT TERM
 # embedded privacy manifests before invoking tools that inspect signatures.
 PYTHONDONTWRITEBYTECODE=1 python3 - \
   "$archive_path" "$archive_info" "$app_info" "$widget_info" \
-  "$app_privacy" "$widget_privacy" <<'PY'
+  "$app_privacy" "$widget_privacy" "$monitor_info" "$monitor_privacy" <<'PY'
 from __future__ import annotations
 
 import plistlib
@@ -174,10 +200,13 @@ from pathlib import Path
     widget_info_raw,
     app_privacy_raw,
     widget_privacy_raw,
+    monitor_info_raw,
+    monitor_privacy_raw,
 ) = sys.argv[1:]
 
 APP_ID = os.environ["POMOGEM_AUDIT_APP_BUNDLE_ID"]
 WIDGET_ID = os.environ["POMOGEM_AUDIT_WIDGET_BUNDLE_ID"]
+MONITOR_ID = os.environ["POMOGEM_AUDIT_MONITOR_BUNDLE_ID"]
 TEAM_ID = os.environ["POMOGEM_AUDIT_TEAM_ID"]
 VERSION = os.environ["POMOGEM_AUDIT_MARKETING_VERSION"]
 BUILD = os.environ["POMOGEM_AUDIT_BUILD_NUMBER"]
@@ -220,8 +249,8 @@ except OSError:
 
 if embedded_apps != ["PomoGem.app"]:
     fail("archive must contain exactly the reviewed PomoGem app")
-if embedded_extensions != ["PomoGemWidgets.appex"]:
-    fail("app must embed exactly the reviewed PomoGem Widget extension")
+if embedded_extensions != ["PomoGemScreenTimeMonitor.appex", "PomoGemWidgets.appex"]:
+    fail("app must embed exactly the reviewed Widget and Screen Time monitor extensions")
 
 def validate_release_payload_topology(bundle: Path) -> None:
     try:
@@ -268,6 +297,7 @@ if not isinstance(properties.get("SigningIdentity"), str) or not properties["Sig
 
 app_plist = load(Path(app_info_raw), "app Info.plist")
 widget_plist = load(Path(widget_info_raw), "Widget Info.plist")
+monitor_plist = load(Path(monitor_info_raw), "Screen Time monitor Info.plist")
 
 
 def validate_bundle_info(
@@ -277,10 +307,11 @@ def validate_bundle_info(
     bundle_id: str,
     executable: str,
     package_type: str,
+    display_name: str = "ポモジェム",
 ) -> None:
     expected = {
         "CFBundleIdentifier": bundle_id,
-        "CFBundleDisplayName": "ポモジェム",
+        "CFBundleDisplayName": display_name,
         "CFBundleExecutable": executable,
         "CFBundlePackageType": package_type,
         "CFBundleShortVersionString": VERSION,
@@ -321,6 +352,20 @@ validate_bundle_info(
     package_type="XPC!",
 )
 
+validate_bundle_info(
+    monitor_plist,
+    label="Screen Time monitor",
+    bundle_id=MONITOR_ID,
+    executable="PomoGemScreenTimeMonitor",
+    package_type="XPC!",
+    display_name="ポモジェム スクリーンタイム",
+)
+if monitor_plist.get("NSExtension") != {
+    "NSExtensionPointIdentifier": "com.apple.deviceactivity.monitor-extension",
+    "NSExtensionPrincipalClass": "PomoGemScreenTimeMonitor.ScreenTimeMonitorExtension",
+}:
+    fail("embedded Screen Time monitor entry point differs from the reviewed extension")
+
 if app_plist.get("LSRequiresIPhoneOS") is not True:
     fail("app must require iPhoneOS")
 if app_plist.get("CFBundleURLTypes") != [{
@@ -340,13 +385,14 @@ if (
 ):
     fail("app must not request frequent Live Activity updates")
 if "NSSupportsLiveActivities" in widget_plist and widget_plist.get("NSSupportsLiveActivities") is not False:
-    fail("Widget must not enable Live Activities for version 1.0")
+    fail("Widget must not independently enable Live Activities")
 extension = widget_plist.get("NSExtension")
 if not isinstance(extension, dict) or extension.get("NSExtensionPointIdentifier") != "com.apple.widgetkit-extension":
     fail("embedded extension is not a WidgetKit extension")
 
 
-def validate_privacy_manifest(path: Path, label: str, expected_reasons: dict[str, set[str]]) -> None:
+def validate_privacy_manifest(path: Path, label: str, expected_reasons: dict[str, set[str]],
+                              *, includes_tracking_domains: bool = True) -> None:
     manifest = load(path, f"{label} PrivacyInfo.xcprivacy")
     expected_top_level = {
         "NSPrivacyTracking",
@@ -354,11 +400,13 @@ def validate_privacy_manifest(path: Path, label: str, expected_reasons: dict[str
         "NSPrivacyCollectedDataTypes",
         "NSPrivacyAccessedAPITypes",
     }
+    if not includes_tracking_domains:
+        expected_top_level.remove("NSPrivacyTrackingDomains")
     if set(manifest) != expected_top_level:
         fail(f"{label} privacy manifest keys differ from the reviewed allowlist")
     if manifest.get("NSPrivacyTracking") is not False:
         fail(f"{label} privacy manifest must disable tracking")
-    if manifest.get("NSPrivacyTrackingDomains") != []:
+    if includes_tracking_domains and manifest.get("NSPrivacyTrackingDomains") != []:
         fail(f"{label} privacy manifest must not declare tracking domains")
     if manifest.get("NSPrivacyCollectedDataTypes") != []:
         fail(f"{label} privacy manifest must not declare collected data")
@@ -404,7 +452,10 @@ validate_privacy_manifest(
     {},
 )
 
-print("  bundle metadata, architecture record, Widget embedding, and privacy manifests: ok")
+validate_privacy_manifest(Path(monitor_privacy_raw), "Screen Time monitor", {},
+                          includes_tracking_domains=False)
+
+print("  bundle metadata, architecture record, both extensions, and privacy manifests: ok")
 PY
 
 validate_arm64_binary() {
@@ -424,11 +475,16 @@ validate_arm64_binary() {
 
 validate_arm64_binary "$app_binary" 'app'
 validate_arm64_binary "$widget_binary" 'Widget'
+validate_arm64_binary "$monitor_binary" 'Screen Time monitor'
 printf '  executable architectures: arm64 only\n'
 
 if ! /usr/bin/codesign --verify --strict --all-architectures \
   "$widget_bundle" >/dev/null 2>&1; then
   fail 'Widget code signature verification failed'
+fi
+if ! /usr/bin/codesign --verify --strict --all-architectures \
+  "$monitor_bundle" >/dev/null 2>&1; then
+  fail 'Screen Time monitor code signature verification failed'
 fi
 if ! /usr/bin/codesign --verify --deep --strict --all-architectures \
   "$app_bundle" >/dev/null 2>&1; then
@@ -468,6 +524,7 @@ extract_signing_state() {
 
 extract_signing_state "$app_bundle" "$app_profile" 'app'
 extract_signing_state "$widget_bundle" "$widget_profile" 'widget'
+extract_signing_state "$monitor_bundle" "$monitor_profile" 'monitor'
 
 # Compare signature entitlements with their embedded profiles. Error messages
 # deliberately identify only the failed field, never the observed secret or
@@ -477,7 +534,9 @@ PYTHONDONTWRITEBYTECODE=1 python3 - \
   "$audit_tmp/app-entitlements.plist" "$audit_tmp/widget-entitlements.plist" \
   "$audit_tmp/app-profile.plist" "$audit_tmp/widget-profile.plist" \
   "$audit_tmp/app-signature.txt" "$audit_tmp/widget-signature.txt" \
-  "$audit_tmp/app-certificate-0" "$audit_tmp/widget-certificate-0" <<'PY'
+  "$audit_tmp/app-certificate-0" "$audit_tmp/widget-certificate-0" \
+  "$audit_tmp/monitor-entitlements.plist" "$audit_tmp/monitor-profile.plist" \
+  "$audit_tmp/monitor-signature.txt" "$audit_tmp/monitor-certificate-0" <<'PY'
 from __future__ import annotations
 
 import datetime as dt
@@ -500,14 +559,21 @@ from typing import Any, Optional
     widget_signature_raw,
     app_certificate_raw,
     widget_certificate_raw,
+    monitor_entitlements_raw,
+    monitor_profile_raw,
+    monitor_signature_raw,
+    monitor_certificate_raw,
 ) = sys.argv[1:]
 
 sys.path.insert(0, script_directory_raw)
-from release_profile_policy import validate_profile_cloud_environment
+from release_profile_policy import (validate_profile_cloud_environment,
+                                    validate_bundle_capability_allowlist,
+                                    validate_archive_signing_classes)
 
 TEAM_ID = os.environ["POMOGEM_AUDIT_TEAM_ID"]
 APP_ID = os.environ["POMOGEM_AUDIT_APP_BUNDLE_ID"]
 WIDGET_ID = os.environ["POMOGEM_AUDIT_WIDGET_BUNDLE_ID"]
+MONITOR_ID = os.environ["POMOGEM_AUDIT_MONITOR_BUNDLE_ID"]
 APP_GROUP = os.environ["POMOGEM_AUDIT_APP_GROUP"]
 ICLOUD_CONTAINER = os.environ["POMOGEM_AUDIT_ICLOUD_CONTAINER"]
 OPERATIONS_CONTAINER = f"{ICLOUD_CONTAINER}.operations"
@@ -591,7 +657,7 @@ def recursively_contains_forbidden(value: Any) -> bool:
     if isinstance(value, str):
         lowered = value.lower()
         return (
-            value in {APP_GROUP, OPERATIONS_CONTAINER}
+            value == OPERATIONS_CONTAINER
             or ".operations" in lowered
             or "rare-reward" in lowered
             or "rarereward" in lowered
@@ -664,7 +730,7 @@ def validate_profile_basics(
     if entitlements.get("com.apple.developer.team-identifier") != TEAM_ID:
         fail(f"{label} profile entitlement team does not match the reviewed team")
     if recursively_contains_forbidden(entitlements):
-        fail(f"{label} profile contains a removed App Group or disabled operations/rare-reward identifier")
+        fail(f"{label} profile contains a disabled operations/rare-reward identifier")
     return entitlements
 
 
@@ -680,14 +746,12 @@ def require_host_signature_capabilities(entitlements: dict, label: str) -> None:
     development_containers = "com.apple.developer.icloud-container-development-container-identifiers"
     if development_containers in entitlements and entitlements.get(development_containers) != [ICLOUD_CONTAINER]:
         fail(f"{label} development iCloud containers differ from the reviewed allowlist")
-    if "com.apple.security.application-groups" in entitlements:
-        fail(f"{label} unexpectedly enables the removed App Group")
     if "com.apple.developer.ubiquity-container-identifiers" in entitlements:
         fail(f"{label} unexpectedly enables iCloud document containers")
     if "com.apple.developer.ubiquity-kvstore-identifier" in entitlements:
         fail(f"{label} unexpectedly enables iCloud key-value storage")
     if recursively_contains_forbidden(entitlements):
-        fail(f"{label} contains a removed App Group or disabled operations/rare-reward identifier")
+        fail(f"{label} contains a disabled operations/rare-reward identifier")
 
     if entitlements.get("aps-environment") not in ("development", "production"):
         fail(f"{label} APNs environment is missing or invalid")
@@ -718,10 +782,8 @@ def require_host_profile_capabilities(entitlements: dict, label: str) -> None:
     if kvstore_identifier is not None and kvstore_identifier != f"{TEAM_ID}.*":
         fail(f"{label} iCloud key-value authorization differs from Apple's expected team wildcard")
 
-    if "com.apple.security.application-groups" in entitlements:
-        fail(f"{label} unexpectedly enables the removed App Group")
     if recursively_contains_forbidden(entitlements):
-        fail(f"{label} contains a removed App Group or disabled operations/rare-reward identifier")
+        fail(f"{label} contains a disabled operations/rare-reward identifier")
     if entitlements.get("aps-environment") not in ("development", "production"):
         fail(f"{label} APNs environment is missing or invalid")
 
@@ -741,7 +803,7 @@ def require_neutral_widget_capabilities(entitlements: dict, label: str) -> None:
     if forbidden.intersection(entitlements):
         fail(f"{label} contains an account-data, iCloud, App Group, or APNs entitlement")
     if recursively_contains_forbidden(entitlements):
-        fail(f"{label} contains a removed App Group or disabled operations/rare-reward identifier")
+        fail(f"{label} contains a disabled operations/rare-reward identifier")
 
 
 def validate_signed_bundle(
@@ -753,6 +815,7 @@ def validate_signed_bundle(
     identity: str,
     certificate_path: str,
     is_neutral_widget: bool,
+    is_screen_time_monitor: bool = False,
 ) -> tuple[str, bool, Optional[str]]:
     profile_entitlements = validate_profile_basics(
         profile,
@@ -761,7 +824,16 @@ def validate_signed_bundle(
         certificate_path,
         is_neutral_widget,
     )
-    if is_neutral_widget:
+    role = "monitor" if is_screen_time_monitor else "widget" if is_neutral_widget else "app"
+    for entitlements, is_profile in ((signed_entitlements, False), (profile_entitlements, True)):
+        try:
+            validate_bundle_capability_allowlist(entitlements, role=role, team_id=TEAM_ID,
+                bundle_id=bundle_id, app_group=APP_GROUP, is_profile=is_profile)
+        except ValueError as error:
+            fail(f"{label} {error}")
+    if is_screen_time_monitor:
+        pass  # The exact non-cloud capability allowlist was checked above.
+    elif is_neutral_widget:
         require_neutral_widget_capabilities(signed_entitlements, f"{label} signature")
         require_neutral_widget_capabilities(profile_entitlements, f"{label} profile")
     else:
@@ -803,7 +875,7 @@ def validate_signed_bundle(
 
     if identity != expected_identity:
         fail(f"{label} signing identity and provisioning profile classes differ")
-    if is_neutral_widget:
+    if is_neutral_widget or is_screen_time_monitor:
         cloud_environment = None
     else:
         cloud_environment = expected_cloud_environment
@@ -829,6 +901,9 @@ app_profile = load(app_profile_raw, "app provisioning profile")
 widget_profile = load(widget_profile_raw, "Widget provisioning profile")
 app_identity = read_signature_identity(app_signature_raw)
 widget_identity = read_signature_identity(widget_signature_raw)
+monitor_entitlements = load(monitor_entitlements_raw, "Screen Time monitor signed entitlements")
+monitor_profile = load(monitor_profile_raw, "Screen Time monitor provisioning profile")
+monitor_identity = read_signature_identity(monitor_signature_raw)
 
 properties = archive_plist.get("ApplicationProperties", {})
 if not isinstance(properties, dict):
@@ -836,8 +911,8 @@ if not isinstance(properties, dict):
 archive_identity = classify_archive_identity(properties.get("SigningIdentity"))
 if archive_identity != app_identity:
     fail("archive signing identity record does not match the app signature class")
-if widget_identity != app_identity:
-    fail("app and Widget signing identity classes differ")
+if widget_identity != app_identity or monitor_identity != app_identity:
+    fail("app and extension signing identity classes differ")
 
 app_kind, app_task_allow, app_cloud = validate_signed_bundle(
     label="app",
@@ -858,19 +933,29 @@ widget_kind, widget_task_allow, widget_cloud = validate_signed_bundle(
     is_neutral_widget=True,
 )
 
-if (app_kind, app_task_allow) != (widget_kind, widget_task_allow):
-    fail("app and Widget signing/profile environments differ")
-if widget_cloud is not None:
-    fail("neutral Widget unexpectedly selected a CloudKit environment")
+monitor_kind, monitor_task_allow, monitor_cloud = validate_signed_bundle(
+    label="Screen Time monitor", bundle_id=MONITOR_ID,
+    signed_entitlements=monitor_entitlements, profile=monitor_profile,
+    identity=monitor_identity, certificate_path=monitor_certificate_raw,
+    is_neutral_widget=False, is_screen_time_monitor=True,
+)
+try:
+    validate_archive_signing_classes({
+        "app": (app_kind, app_task_allow, app_cloud),
+        "widget": (widget_kind, widget_task_allow, widget_cloud),
+        "monitor": (monitor_kind, monitor_task_allow, monitor_cloud),
+    }, distribution=mode == "distribution")
+except ValueError as error:
+    fail(str(error))
 
 if mode == "distribution":
     if app_identity != "apple-distribution" or app_kind != "app-store-connect":
         fail("--distribution requires Apple Distribution and App Store Connect profiles")
     if app_task_allow is not False:
         fail("--distribution requires get-task-allow=false")
-    if "ProvisionedDevices" in app_profile or "ProvisionedDevices" in widget_profile:
+    if any("ProvisionedDevices" in profile for profile in (app_profile, widget_profile, monitor_profile)):
         fail("--distribution forbids registered-device provisioning")
-    if app_profile.get("ProvisionsAllDevices", False) or widget_profile.get("ProvisionsAllDevices", False):
+    if any(profile.get("ProvisionsAllDevices", False) for profile in (app_profile, widget_profile, monitor_profile)):
         fail("--distribution forbids enterprise provisioning")
     if app_cloud != "Production":
         fail("--distribution requires the production CloudKit environment")
@@ -908,7 +993,10 @@ scan_release_binary() {
     'UITestFaultInjection' \
     'JarUITestPresentationProbe' \
     'FortyYearPersistentFixtureProbe' \
-    'AggregatePersistenceRecoveryProbe'; do
+    'AggregatePersistenceRecoveryProbe' \
+    'ScreenTimeSettingsUITestFixture' \
+    'StorageTransferSettingsUITestFixture' \
+    'RealDeviceScreenTimeUITests'; do
     if LC_ALL=C /usr/bin/grep -Fq "$marker" "$output"; then
       fail "$label executable contains a reviewed Debug-only gate or marker"
     fi
@@ -917,16 +1005,13 @@ scan_release_binary() {
 
 scan_release_binary "$app_binary" 'app'
 scan_release_binary "$widget_binary" 'widget'
+scan_release_binary "$monitor_binary" 'monitor'
 
 if ! LC_ALL=C /usr/bin/grep -Fq \
   'PomoGemFocusLiveActivity' "$audit_tmp/widget-strings.txt"; then
   fail 'Widget is missing the reviewed Live Activity configuration marker'
 fi
 
-if LC_ALL=C /usr/bin/grep -Fq \
-  "$POMOGEM_AUDIT_APP_GROUP" "$audit_tmp/app-strings.txt"; then
-  fail 'app executable contains the removed version 1.0 App Group identifier'
-fi
 if ! LC_ALL=C /usr/bin/grep -Fq \
   'live-activity.enabled' "$audit_tmp/app-strings.txt"; then
   fail 'app is missing the reviewed local Live Activity preference marker'
@@ -940,6 +1025,21 @@ if ! LC_ALL=C /usr/bin/grep -Fq \
   '/ActivityKit.framework/ActivityKit' "$app_linked_libraries"; then
   fail 'app is missing ActivityKit for the reviewed Live Activity lifecycle'
 fi
+
+monitor_linked_libraries="$audit_tmp/monitor-linked-libraries.txt"
+if ! /usr/bin/otool -L "$monitor_binary" > "$monitor_linked_libraries" 2>/dev/null; then
+  fail 'Screen Time monitor linked-library audit failed'
+fi
+for required_framework in '/DeviceActivity.framework/DeviceActivity' '/FamilyControls.framework/FamilyControls'; do
+  if ! LC_ALL=C /usr/bin/grep -Fq "$required_framework" "$monitor_linked_libraries"; then
+    fail 'Screen Time monitor is missing a reviewed Screen Time framework'
+  fi
+done
+for forbidden_framework in '/CloudKit.framework/CloudKit' '/SwiftData.framework/SwiftData'; do
+  if LC_ALL=C /usr/bin/grep -Fq "$forbidden_framework" "$monitor_linked_libraries"; then
+    fail 'Screen Time monitor links an account-data framework'
+  fi
+done
 
 widget_linked_libraries="$audit_tmp/widget-linked-libraries.txt"
 if ! /usr/bin/otool -L "$widget_binary" > "$widget_linked_libraries" 2>/dev/null; then

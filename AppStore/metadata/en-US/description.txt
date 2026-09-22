@@ -1,37 +1,36 @@
-Turn your next 25 minutes into a colorful gem.
+Turn focused time into colorful gems.
 
-PomoGem is a focus timer that turns completed time into a bottle of visible progress. Study for an exam, work on a project, or spend time with a book. Every completed session adds to a collection you can look back on. Taking a day off never removes your progress.
+PomoGem turns study and work time into a bottle of visible progress. Taking a day off never removes the gems you earned. The app interface and customer support are currently provided in Japanese.
 
-The app interface and customer support are currently provided in Japanese.
+CHOOSE A THEME AND START
 
-CHOOSE A THEME, SET YOUR TIME, AND START
+Choose a theme and a free 25-, 45-, 60-, or 90-minute timer. Finish a session and a gem drops into your bottle with sound and haptic feedback. Each completed minute becomes 10 grams: 25 minutes adds 250 grams.
 
-Choose your theme and duration on Home, then tap to start. The 25-, 45-, 60-, and 90-minute timers are free. Finish a session and a pebble drops into your bottle with sound and haptic feedback. Each minute becomes 10 grams: a 25-minute session adds 250 grams.
+• Custom themes for study and work
+• A tactile bottle that responds to taps, tilt, and gentle shaking
+• Ten gems combine into a larger crystal
+• Weekly and lifetime views, milestone stones, and optional manual records kept separate from measured time
+• Images and short GIFs for sharing, always with PomoGem branding and its official website
+• Home and Lock Screen widgets that open the app without displaying your records
 
-FEATURES
+OPTIONAL SCREEN TIME GEMS
 
-• Free 25-, 45-, 60-, and 90-minute focus timers
-• Custom themes for study and work, together in one list
-• Optional manual records kept separate from measured timer sessions
-• A tactile bottle: tap or lightly shake it to move the pebbles, with bounded sound and haptics that reflect their number and size
-• Ten pebbles combine into a growing crystal while your original records remain available
-• Milestone stones for a perfect score, an exam pass, or a work milestone
-• History, overview, long-term projections, and share cards that always include PomoGem branding and its official website
-• An explicit first-launch choice between private iCloud sync and storage on this iPhone only
-• Privacy-safe Home and Lock Screen widgets that open the app without displaying your records
+Choose learning apps and a theme. Each confirmed 10 minutes of combined use adds a 100-gram gem. Select up to five learning apps for free, or unlimited apps with Pro. This uses OS threshold notifications, so delivery can be delayed. Partial periods under 10 minutes are not added, and learning-app monitoring pauses while a focus timer runs.
+
+You can also choose apps you want to use less. Each combined 10 minutes adds a black obstacle gem. This selection is unlimited for everyone. Black gems combine only with black gems; they do not count toward study time, study mass, rewards, or sharing, and never subtract earned study gems. The same app cannot belong to both selections. You choose whether to authorize and enable recording.
 
 POMOGEM PRO
 
-PomoGem Pro is a one-time, non-consumable In-App Purchase. It unlocks custom durations from 1 minute 00 seconds to 360 minutes 00 seconds, beyond the free presets, plus month labels on grouped pebbles. Enter minutes and seconds numerically or choose them with scroll wheels. Update both devices to the latest version before handing off a timer set with seconds. There is no subscription, free trial, or automatic renewal.
+A one-time, non-consumable In-App Purchase unlocks custom timers from 1 minute 00 seconds to 360 minutes 00 seconds, month labels on grouped gems, and unlimited learning apps for Screen Time recording. Enter minutes and seconds or use scroll wheels. Update both devices before handing off timers set with seconds. No subscription, trial, or automatic renewal. The purchase screen shows your App Store price.
 
-PRIVACY
+YOUR STORAGE CHOICE
 
-PomoGem has no advertising, tracking, analytics service, or developer account system. At first launch, you choose between two equal storage options. “This iPhone only” keeps all app data on the device and supports all basic features without an Apple Account or network connection. It never automatically switches to or uploads to iCloud.
+At first launch, choose private iCloud sync or this iPhone only. Device-only storage supports basic features without an Apple Account or network and never uploads automatically. If you confirm iCloud, theme names, achievement notes, records, settings, and the active timer use your Apple Account's private CloudKit storage. Initial loading and resuming sync require online checks.
 
-If you confirm iCloud sync, theme names, achievement notes, records, settings, and the active timer sync through your Apple Account's private iCloud storage between compatible iPhones. Initial loading and resuming sync require online account and storage checks.
+An eligible, previously verified local copy can be used offline in iCloud mode; changes wait on this iPhone for sync. Verified account changes or conflicting history can block access to protect data. Reopening the app may be required. A connection check does not prove all records have uploaded.
 
-When previously verified device data meets the access conditions, you can use timers and records offline in iCloud mode. Changes stay on this iPhone while sync waits. Account changes or conflicting history can block access to protect your data. Returning to the app after online use may require quitting and reopening it. A successful connection check does not confirm that every record has uploaded.
+Settings lets you enable iCloud using its data to replace device-only records, or disable it by copying verified data to this iPhone while retaining iCloud data. In iCloud mode, you may also preview the cloud contents and explicitly confirm replacing this device's data, including unsent changes. Histories are not merged. Replacing all iCloud data with device data remains unavailable.
 
-Change storage in Settings. Enabling iCloud can use the existing iCloud data, deleting and replacing this iPhone's local-only themes, records, and settings. The two histories are not merged. Disabling iCloud copies verified data to this iPhone and keeps the iCloud data. Replacing all iCloud data with this iPhone's data is unavailable to protect records.
+Transfers require a connection and restarts as instructed. Do not uninstall during a transfer. Uninstalling loses device-only records and unsent changes. Exported JSON cannot be reimported for restoration or migration.
 
-Storage changes require a connection and app restarts as instructed. Do not delete the app during a transfer. Deleting it erases local-only records and changes not yet uploaded to iCloud. Exported JSON cannot be imported into PomoGem to restore or migrate records. Sharing and export happen only when you choose them.
+Screen Time app selections, pending thresholds, and black gems stay on this iPhone and are excluded from JSON export and storage transfers. Imported learning records follow your chosen storage, including private iCloud sync. Diagnostics stay on-device without app tokens or gem counts. No advertising, tracking, analytics SDK, or developer server.
