@@ -7,6 +7,8 @@ import XCTest
 /// container, writes a journal or makes a remote call.
 @MainActor
 final class StorageTransferDatasetRequestTests: XCTestCase {
+    private let scope = StorageTransferCloudScope(environment: .development,
+        containerIdentifier: "iCloud.com.example.scope-test")
     private let account = String(repeating: "b", count: 64)
 
     private struct Fixture {
@@ -31,8 +33,8 @@ final class StorageTransferDatasetRequestTests: XCTestCase {
 
     private func request(_ f: Fixture,
                          direction: StorageTransferDatasetRequestDirection = .overwriteCloudFromDevice,
-                         generation: UUID = UUID()) -> StorageTransferDatasetRequest {
-        StorageTransferDatasetRequest(direction: direction, binding: f.binding,
+                         generation: UUID? = UUID()) -> StorageTransferDatasetRequest {
+        StorageTransferDatasetRequest(direction: direction, binding: f.binding, cloudScope: scope,
                                       datasetGenerationID: generation,
                                       requestedAt: Date(timeIntervalSince1970: 1_700_000_000),
                                       requestingProcessID: UUID())
@@ -47,6 +49,7 @@ final class StorageTransferDatasetRequestTests: XCTestCase {
         let loaded = try XCTUnwrap(f.runtime.pendingDatasetRequest())
         XCTAssertEqual(loaded.direction, .overwriteCloudFromDevice)
         XCTAssertEqual(loaded.binding, f.binding)
+        XCTAssertEqual(loaded.cloudScope, scope)
         XCTAssertEqual(loaded.datasetGenerationID, generation)
         XCTAssertEqual(loaded.formatVersion, StorageTransferDatasetRequest.currentFormatVersion)
     }
@@ -92,7 +95,7 @@ final class StorageTransferDatasetRequestTests: XCTestCase {
     func testUnknownFormatVersionIsRefusedAndNeverExecuted() throws {
         let f = try fixture()
         let alien = StorageTransferDatasetRequest(formatVersion: 99,
-            direction: .overwriteCloudFromDevice, binding: f.binding,
+            direction: .overwriteCloudFromDevice, binding: f.binding, cloudScope: scope,
             datasetGenerationID: UUID(), requestedAt: Date(), requestingProcessID: UUID())
         XCTAssertThrowsError(try alien.validate())
         XCTAssertThrowsError(try f.runtime.recordDatasetRequest(alien))
@@ -118,10 +121,76 @@ final class StorageTransferDatasetRequestTests: XCTestCase {
         let other = try XCTUnwrap(ActiveAccountLocalBinding(
             namespace: AccountDataNamespace(), accountFingerprint: String(repeating: "c", count: 64)))
         let recorded = StorageTransferDatasetRequest(direction: .overwriteCloudFromDevice,
-            binding: other, datasetGenerationID: UUID(), requestedAt: Date(),
+            binding: other, cloudScope: scope, datasetGenerationID: UUID(), requestedAt: Date(),
             requestingProcessID: UUID())
-        XCTAssertFalse(recorded.authorizes(binding: f.binding))
-        XCTAssertTrue(recorded.authorizes(binding: other))
+        XCTAssertFalse(recorded.authorizes(binding: f.binding, cloudScope: scope))
+        XCTAssertTrue(recorded.authorizes(binding: other, cloudScope: scope))
+    }
+
+    /// The same account/namespace and an absent ledger can exist in both
+    /// databases. A build change during the requested relaunch must not turn
+    /// consent to Development into a request to discard stores for Production.
+    func testDurableRequestsCannotCrossCloudScopesAtRelaunch() throws {
+        let f = try fixture()
+        let evidenceURL = f.root.appendingPathComponent("admission-development-\(f.binding.namespace.rawValue).json")
+        let evidence = Data("existing admission evidence".utf8)
+        try evidence.write(to: evidenceURL)
+        let otherScopes = [
+            StorageTransferCloudScope(environment: .production,
+                containerIdentifier: scope.containerIdentifier),
+            StorageTransferCloudScope(environment: .development,
+                containerIdentifier: "iCloud.com.example.another-container"),
+            .unknown
+        ]
+        for generation in [nil, UUID()] as [UUID?] {
+            for direction in [StorageTransferDatasetRequestDirection.overwriteCloudFromDevice,
+                              .refreshFromCloud] {
+                let recorded = request(f, direction: direction, generation: generation)
+                try f.runtime.recordDatasetRequest(recorded)
+                let consumed = try XCTUnwrap(f.runtime.consumeDatasetRequest())
+                XCTAssertEqual(consumed.cloudScope, scope)
+                XCTAssertNotNil(consumed.dispatch(for: f.binding, cloudScope: scope))
+                for otherScope in otherScopes {
+                    XCTAssertNil(consumed.dispatch(for: f.binding, cloudScope: otherScope))
+                }
+                XCTAssertNil(try f.store.load(), "Refusal must not create a transfer")
+                XCTAssertEqual(try Data(contentsOf: evidenceURL), evidence)
+            }
+        }
+    }
+
+    /// A pre-upgrade request cannot establish which database the user saw.
+    /// Drop only the one-shot request; never infer scope from the new build or
+    /// rewrite the existing admission as if the user had confirmed again.
+    func testLegacyUnscopedRequestIsNeverDispatched() throws {
+        let f = try fixture()
+        let evidenceURL = f.root.appendingPathComponent("admission-\(f.binding.namespace.rawValue).json")
+        let evidence = Data("legacy admission evidence".utf8)
+        try evidence.write(to: evidenceURL)
+        let encoded = try JSONEncoder().encode(request(f, direction: .refreshFromCloud,
+                                                     generation: nil))
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        legacy["formatVersion"] = 1
+        legacy.removeValue(forKey: "cloudScope")
+        let requestURL = f.root.appendingPathComponent(StorageTransferDatasetRequestStore.fileName)
+        try JSONSerialization.data(withJSONObject: legacy).write(to: requestURL)
+
+        XCTAssertNil(try f.runtime.consumeDatasetRequest())
+        XCTAssertNil(try f.runtime.pendingDatasetRequest())
+        XCTAssertNil(try f.store.load())
+        XCTAssertEqual(try Data(contentsOf: evidenceURL), evidence)
+    }
+
+    func testUnknownScopeCannotAuthorizeOrRecordARequest() throws {
+        let f = try fixture()
+        let unscoped = StorageTransferDatasetRequest(direction: .refreshFromCloud,
+            binding: f.binding, cloudScope: .unknown, datasetGenerationID: nil,
+            requestedAt: .now, requestingProcessID: UUID())
+        XCTAssertThrowsError(try f.runtime.recordDatasetRequest(unscoped))
+        XCTAssertNil(unscoped.dispatch(for: f.binding, cloudScope: .unknown))
+        XCTAssertNil(unscoped.dispatch(for: f.binding, cloudScope: scope))
+        XCTAssertNil(try f.runtime.pendingDatasetRequest())
+        XCTAssertNil(try f.store.load())
     }
 
     // MARK: The Settings gate

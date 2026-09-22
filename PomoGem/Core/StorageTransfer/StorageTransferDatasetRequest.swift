@@ -75,13 +75,17 @@ enum StorageTransferDatasetRequestError: Error, LocalizedError, Equatable {
 /// still be the committed generation or the request fails the CAS and is
 /// refused. Its only job is to survive exactly one deliberate relaunch.
 struct StorageTransferDatasetRequest: Codable, Equatable, Sendable {
-    static let currentFormatVersion = 1
+    static let currentFormatVersion = 2
 
     var formatVersion = Self.currentFormatVersion
     let direction: StorageTransferDatasetRequestDirection
     /// The cloud binding Settings was mounted against. A request is ignored
     /// unless the next launch selects exactly this binding.
     let binding: ActiveAccountLocalBinding
+    /// A relaunch can also install a different build of the same bundle. The
+    /// account and namespace survive that install, but Development and
+    /// Production contain unrelated datasets. Consent names this database too.
+    let cloudScope: StorageTransferCloudScope
     /// The committed generation the user was shown, or nil when the account
     /// had no transfer ledger at all and the screen said so. A dataset that
     /// moved on between the confirmation and the relaunch fails the CAS rather
@@ -97,28 +101,33 @@ struct StorageTransferDatasetRequest: Codable, Equatable, Sendable {
     init(formatVersion: Int = Self.currentFormatVersion,
          direction: StorageTransferDatasetRequestDirection,
          binding: ActiveAccountLocalBinding,
+         cloudScope: StorageTransferCloudScope,
          datasetGenerationID: UUID?,
          requestedAt: Date,
          requestingProcessID: UUID) {
         self.formatVersion = formatVersion
         self.direction = direction
         self.binding = binding
+        self.cloudScope = cloudScope
         self.datasetGenerationID = datasetGenerationID
         self.requestedAt = requestedAt
         self.requestingProcessID = requestingProcessID
     }
 
     func validate() throws {
-        guard formatVersion == Self.currentFormatVersion,
+        guard formatVersion == Self.currentFormatVersion, cloudScope.isKnown,
               AppleAccountFingerprint.isValid(binding.accountFingerprint) else {
             throw StorageTransferError.invalidJournal
         }
     }
 
-    /// The launch host must be mounting this exact account and namespace. A
-    /// request written for another binding is dropped, never translated.
-    func authorizes(binding candidate: ActiveAccountLocalBinding) -> Bool {
-        binding == candidate
+    /// The launch host must be mounting this exact account, namespace and
+    /// CloudKit database. A request for another scope is dropped, never
+    /// translated; legacy requests cannot establish that scope either.
+    func authorizes(binding candidate: ActiveAccountLocalBinding,
+                    cloudScope candidateScope: StorageTransferCloudScope) -> Bool {
+        formatVersion == Self.currentFormatVersion && binding == candidate
+            && cloudScope.isKnown && cloudScope == candidateScope
     }
 }
 
@@ -142,8 +151,9 @@ extension StorageTransferDatasetRequest {
     /// The generation is carried, not trusted: each entry point re-reads the
     /// control record and refuses — a `.some` that no longer matches fails the
     /// CAS, and a `.none` that has since become a lineage is refused outright.
-    func dispatch(for binding: ActiveAccountLocalBinding) -> StorageTransferDatasetDispatch? {
-        guard authorizes(binding: binding) else { return nil }
+    func dispatch(for binding: ActiveAccountLocalBinding,
+                  cloudScope: StorageTransferCloudScope) -> StorageTransferDatasetDispatch? {
+        guard authorizes(binding: binding, cloudScope: cloudScope) else { return nil }
         switch (direction, datasetGenerationID) {
         case let (.overwriteCloudFromDevice, .some(generation)):
             return .overwriteCloudDataset(expectedGenerationID: generation)

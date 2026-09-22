@@ -15,6 +15,8 @@ import XCTest
 /// committed generation exists.
 @MainActor
 final class StorageTransferNilLineageDatasetTests: XCTestCase {
+    private let scope = StorageTransferCloudScope(environment: .development,
+        containerIdentifier: "iCloud.com.example.scope-test")
     private let account = String(repeating: "7", count: 64)
 
     private struct Fixture {
@@ -64,7 +66,7 @@ final class StorageTransferNilLineageDatasetTests: XCTestCase {
 
     private func request(_ f: Fixture, direction: StorageTransferDatasetRequestDirection,
                          generation: UUID?) -> StorageTransferDatasetRequest {
-        StorageTransferDatasetRequest(direction: direction, binding: f.binding,
+        StorageTransferDatasetRequest(direction: direction, binding: f.binding, cloudScope: scope,
                                       datasetGenerationID: generation,
                                       requestedAt: Date(timeIntervalSince1970: 1_700_000_000),
                                       requestingProcessID: UUID())
@@ -86,7 +88,7 @@ final class StorageTransferNilLineageDatasetTests: XCTestCase {
             let consumed = try XCTUnwrap(f.runtime.consumeDatasetRequest())
             XCTAssertEqual(consumed, recorded, "\(direction) must round trip with its nil intact")
             XCTAssertNil(consumed.datasetGenerationID)
-            XCTAssertEqual(consumed.dispatch(for: f.binding), expected)
+            XCTAssertEqual(consumed.dispatch(for: f.binding, cloudScope: scope), expected)
             XCTAssertNil(try f.runtime.consumeDatasetRequest(), "single shot")
         }
     }
@@ -97,9 +99,9 @@ final class StorageTransferNilLineageDatasetTests: XCTestCase {
         let f = try fixture()
         let generation = UUID()
         XCTAssertEqual(request(f, direction: .overwriteCloudFromDevice, generation: generation)
-            .dispatch(for: f.binding), .overwriteCloudDataset(expectedGenerationID: generation))
+            .dispatch(for: f.binding, cloudScope: scope), .overwriteCloudDataset(expectedGenerationID: generation))
         XCTAssertEqual(request(f, direction: .refreshFromCloud, generation: generation)
-            .dispatch(for: f.binding), .refreshCloudDataset(expectedGenerationID: generation))
+            .dispatch(for: f.binding, cloudScope: scope), .refreshCloudDataset(expectedGenerationID: generation))
     }
 
     /// A request written for another binding is dropped, never translated —
@@ -112,7 +114,7 @@ final class StorageTransferNilLineageDatasetTests: XCTestCase {
             for direction in [StorageTransferDatasetRequestDirection.overwriteCloudFromDevice,
                               .refreshFromCloud] {
                 XCTAssertNil(request(f, direction: direction, generation: generation)
-                    .dispatch(for: other))
+                    .dispatch(for: other, cloudScope: scope))
             }
         }
     }

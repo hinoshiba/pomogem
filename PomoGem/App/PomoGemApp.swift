@@ -980,7 +980,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                    // observed an EMPTY ledger, which most healthy accounts
                    // have (W6). Each direction then dispatches to the entry
                    // point that REQUIRES that absence and re-proves it.
-                   let dispatch = request.dispatch(for: requestBinding) {
+                   let dispatch = request.dispatch(for: requestBinding, cloudScope: .current()) {
                     storageTransferRecoveryBinding = requestBinding
                     switch dispatch {
                     case let .overwriteCloudDataset(generation):
@@ -2237,7 +2237,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             try validate()
         }
         try runtime.recordDatasetRequest(StorageTransferDatasetRequest(
-            direction: direction, binding: binding, datasetGenerationID: generation,
+            direction: direction, binding: binding, cloudScope: .current(), datasetGenerationID: generation,
             requestedAt: .now, requestingProcessID: UUID()))
         requireStorageTransferRelaunch(message: datasetRequestRelaunchMessage(direction))
     }
