@@ -40,14 +40,17 @@ dependency run alone is not a substitute for the final integration run.
   bounds remain 128, with no schema change or implicit save. The failing baseline
   is retained separately; the final integrated CI still must pass.
 
-An unsigned generic iOS Release archive was built from clean commit
-`4fb75de0efcd79794b4de9a123af799a3db2c3a8` with Xcode 26.6 / XcodeGen 2.45.4.
+The final unsigned generic iOS Release archive was built from clean commit
+`0c84f25d03b46da5bc88f8e13c6575e102a4c450` with Xcode 26.6 / XcodeGen 2.45.4,
+including the duplicate-history fix, and completed at 18:04:52 JST.
 The host, neutral Widget and Screen Time monitor are each 1.1.0 (10), arm64 device
 products. Bundle topology, privacy manifests, production framework restrictions,
 absence of Debug/UI-test hooks, font hashes and all three executable/dSYM UUID
 pairs passed checks. The distribution verifier correctly rejected the missing
 profiles/signatures. **This unsigned artifact cannot be uploaded as a release.**
-Any later product-code fix requires a new candidate archive.
+The earlier `4fb75de` archive is superseded and retained as historical evidence.
+Later documentation-only changes do not alter the archived product source; any
+later product-code fix requires a new candidate archive.
 
 Private logs, xcresults, image attachment manifests and archive evidence are kept
 outside the public repository under `release-validation/pomogem-20260922`.
@@ -62,6 +65,11 @@ No signing credentials, keys, certificates or profiles are attached here.
 - Replaced the five inherited Japanese listing images with the current captures in
   order 01–05; after reloading, Connect retained all five in that order. English
   uses the Japanese set. The separate IAP review image is not a listing image.
+- Saved both new IAP descriptions as Prepare for Submission revisions alongside
+  the existing approved descriptions. Saved the current IAP review notes and price
+  image; reload matched the notes and retained the new image with all three Pro
+  benefits. The English description is within Connect's 55-character limit.
+- App Information still shows the existing global 4+ age rating.
 - Existing commercial terms, territories, review contact and release settings are
   retained. No purchase, refund, agreement acceptance or review submission occurred.
 
@@ -80,8 +88,9 @@ No signing credentials, keys, certificates or profiles are attached here.
    development-signed Release audit recorded four delivered callbacks/four recorded
    callbacks after the fix; that partial evidence does not cover untested day,
    account, permission, purchase or distribution-signing boundaries.
-4. Confirm new screenshots/IAP text in Connect and published Japanese/English privacy
-   policy after the Pages deployment. Simulator images need signed-device parity.
+4. Confirm the published Japanese/English privacy policy after the Pages deployment.
+   Connect texts and images are saved, but simulator images still need signed-device
+   parity and the pending IAP localization revisions have not been submitted.
 5. Review all remaining owner decisions and release gates in
    [configuration.yml](configuration.yml) and [submission-checklist.md](submission-checklist.md),
    then explicitly authorize submission. Preparing a draft does not authorize release.

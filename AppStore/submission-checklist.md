@@ -16,9 +16,11 @@ App Store Connectでは1.0.2 (9)がReady for Distributionです。1.1.0のdraft�
 - [ ] 修正後の最終候補で勉強・黒いgemの実10分到達、許可取消／再許可、Pro、再起動・日付・account境界を確認。
   2026-09-21の修正後の開発署名Releaseでは到達4件／4件が記録され、両レーンの付与を確認済み。
   20分の一括到達、日付／時刻変更、端末再起動などの未確認条件と最終配布候補の試験は引き続き残す
-- [ ] 新しいPro特典を含む実StoreKit価格のIAP審査画像へ更新し、掲載画像5枚も最終候補との違いを確認
-- [ ] 統合コードのCI、Release build、署名・entitlement検証と配布用archiveを記録
-- [ ] Connectのja-JP／en-US掲載文・Review Notes・IAP説明と公開Privacyを保存し、再読込で一致を確認
+- [x] 新しいPro特典を含む実StoreKit価格のIAP審査画像と掲載画像5枚を1.1.0 (10)から再撮影し、目視確認・hash記録
+- [x] 統合コードから署名なしRelease archiveを生成し、3 bundleの構成・privacy・Debugコード不在・dSYM一致を確認（sourceと限界はrelease record参照）
+- [ ] 統合CIと最終配布署名・entitlement検証を完了。署名なしarchiveは配布用の合格ではない
+- [x] Connectのja-JP／en-US掲載文・Review Notes・掲載画像・IAP説明のdraftと審査メモ・画像を保存し、再読込で一致を確認
+- [ ] 改訂した日本語／英語の公開PrivacyをPagesへ反映し、実配信との一致を確認
 - [ ] build 10のupload・処理・versionへの割当・審査提出を確認。自動公開設定の過去の値だけで提出済みとしない
 
 実機試験は現在の作業対象外です。未実施項目を合格にせず、配布前の残件として保持します。
