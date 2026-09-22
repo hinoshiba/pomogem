@@ -49,8 +49,11 @@ struct StorageTransferAccountNamespaceAuthority: Equatable {
             return .block(.accountMismatch)
         }
 
+        // `replacesCloud` covers both replacement kinds. The only overwrite
+        // shape with a local-only source is the reinstall resume, which needs
+        // exactly the authority the legacy replacement already had here.
         if let pending,
-           pending.choice == .enableCloudKeepingCloud || pending.choice == .enableCloudReplacingCloud,
+           pending.choice == .enableCloudKeepingCloud || pending.choice.replacesCloud,
            case .localOnly = pending.source,
            case let .cloud(destination) = pending.destination,
            let committed, committed.selection == pending.source {
@@ -74,8 +77,13 @@ struct StorageTransferAccountNamespaceAuthority: Equatable {
             return resolveAuthorized(source, expected: expectedBinding, registry: registry)
         }
 
+        // A cloud -> cloud overwrite mints a new destination namespace from the
+        // old cache exactly as a refresh does, so its `committedBinding ==
+        // destination` handoff and ordinary-registry fallback apply unchanged.
+        // The legacy `enableCloudReplacingCloud` has no cloud-source shape and
+        // is deliberately not admitted here.
         if let pending,
-           pending.choice == .enableCloudKeepingCloud,
+           pending.choice == .enableCloudKeepingCloud || pending.choice == .overwriteCloudFromDevice,
            case let .cloud(source) = pending.source,
            case let .cloud(destination) = pending.destination {
             guard source.accountFingerprint == verifiedFingerprint,

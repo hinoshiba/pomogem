@@ -73,6 +73,28 @@ enum CloudOfflineAccessPolicy {
         return nil
     }
 
+    /// Which recorded revocation a completed identity check may retract.
+    ///
+    /// Only `accountChanged` is retractable, and only because it is the one
+    /// reason this app could ever write WITHOUT comparing a verified identity
+    /// against the stored binding: a `.CKAccountChanged` notification, or one
+    /// verification whose two identity reads disagreed with each other. Such a
+    /// record was never evidence that a different Apple Account existed, so a
+    /// later verified identity equal to the stored binding does not overrule
+    /// evidence — it supplies the evidence that was missing.
+    ///
+    /// The others stay. `accountMismatch` IS the comparison's verdict.
+    /// `noAccount` and `restricted` are positive statements about the account
+    /// state that only a successful cloud mount may clear, through
+    /// `recordVerifiedOnline`. The switch is exhaustive on purpose: a new
+    /// reason has to decide which side it is on.
+    static func isRetractableByConfirmedIdentity(_ reason: CloudOfflineRevocationReason) -> Bool {
+        switch reason {
+        case .accountChanged: true
+        case .accountMismatch, .noAccount, .restricted: false
+        }
+    }
+
     /// This is only the lineage comparison after a fresh, complete Runtime
     /// server preflight. Account, lease, pending-transfer and reset-history
     /// checks remain mandatory before constructing any mirroring container.

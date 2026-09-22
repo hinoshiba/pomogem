@@ -112,6 +112,114 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
         }
     }
 
+    /// Regression for the 2026-09-20 device launch that stopped on
+    /// 「保存領域を確認できません」 with the identityUnavailable text and offered no
+    /// offline action. The app was launched by XCUITest, so SwiftUI already
+    /// reported `.active` while UIKit was still `.inactive`, and the launch
+    /// preparation entered the transfer-cleanup check in that frame. That
+    /// half-activated frame must stay a lifecycle interruption: it cannot be
+    /// reported as a failed Apple Account verification, because the blocked
+    /// screen is reached before an offline candidate has been evaluated and
+    /// therefore carries no recovery action at all.
+    ///
+    /// Driven through `DeferredLaunchCancellationRaceHostModel`, which owns the flags the host
+    /// owns: reverting the assignment in the host's `catch is CancellationError`
+    /// arm, or removing the activation receiver, now fails this test instead of
+    /// leaving the suite green.
+    func testHalfActivatedLaunchFrameDefersInsteadOfBlockingOnTheAccount() {
+        let host = DeferredLaunchCancellationRaceHostModel()
+        host.phase = .active              // SwiftUI already reports .active
+        host.applicationState = .inactive // UIKit has not posted didBecomeActive
+
+        host.startLaunchAttempt()
+        XCTAssertEqual(host.mountedSessions, 0,
+            "A pending UIKit activation must not be reported as an unavailable identity")
+        XCTAssertEqual(host.screen, .preparing)
+        XCTAssertTrue(host.isWaitingForActivation, "The catch must record the wait it depends on")
+        XCTAssertFalse(host.isPreparing, "The attempt's defer must release its own flag")
+
+        // No further scene-phase change can arrive: the phase is already
+        // active. Only the UIKit notification can restart this launch.
+        host.deliverActivationNotification()
+        XCTAssertEqual(host.mountedSessions, 1)
+        XCTAssertEqual(host.screen, .home)
+        XCTAssertFalse(host.isWaitingForActivation)
+
+        // A duplicate activation notification must not start a second launch.
+        host.deliverActivationNotification()
+        XCTAssertEqual(host.mountedSessions, 1)
+    }
+
+    /// The catch used to derive "I am waiting" purely from the lifecycle state
+    /// at the moment it ran. `requireCloudMountAuthorization` throws from deep
+    /// inside awaited CloudKit work, so the error is observed after actor hops
+    /// and the app can already be fully active by then: the flag is computed
+    /// as false, `.onChange(of: scenePhase)` has no transition left to report,
+    /// and the didBecomeActive receiver has already run against a false flag.
+    /// `launchState` then stays `.preparing`, which renders a bare
+    /// `ProgressView` with no retry control at all.
+    func testACancellationObservedAfterActivationRestartsInsteadOfStranding() {
+        let host = DeferredLaunchCancellationRaceHostModel()
+        host.phase = .active
+        host.applicationState = .inactive
+        // The checkpoint inside the cloud mount saw the half-activated frame…
+        host.checkpointApplicationState = .inactive
+        // …but activation lands while the CancellationError is still
+        // propagating, and its receiver finds the waiting flag still false.
+        host.activationDuringCancellation = { [unowned host] in
+            host.deliverActivationNotification()
+        }
+
+        host.startLaunchAttempt()
+
+        XCTAssertEqual(host.mountedSessions, 1,
+            "An activation observed before the cancellation is caught must not strand the launch")
+        XCTAssertEqual(host.screen, .home)
+        XCTAssertFalse(host.isWaitingForActivation)
+        XCTAssertFalse(host.isPreparing)
+    }
+
+    /// The same ordering while the app is still only half activated keeps the
+    /// old behaviour: record the wait, let the real activation restart it.
+    func testACancellationObservedWhileStillInactiveStillWaitsForActivation() {
+        for applicationState in [UIApplication.State.inactive, .background] {
+            let host = DeferredLaunchCancellationRaceHostModel()
+            host.phase = .active
+            host.applicationState = applicationState
+
+            host.startLaunchAttempt()
+            XCTAssertTrue(host.isWaitingForActivation)
+            XCTAssertEqual(host.mountedSessions, 0)
+
+            host.deliverActivationNotification()
+            XCTAssertEqual(host.mountedSessions, 1)
+        }
+    }
+
+    /// The deferred resume is gated on `isPreparing`, so a superseded attempt
+    /// must never be the one that records the wait: its generation guard fails
+    /// first and its successor owns both flags. Pins that a stale attempt
+    /// cannot strand an unloaded launch behind a preparation flag it no
+    /// longer owns.
+    func testSupersededAttemptNeitherRecordsNorConsumesTheDeferredResume() {
+        // A superseded attempt is interrupted for the same lifecycle reason,
+        // so it cannot be distinguished by its error and must not act on it.
+        XCTAssertThrowsError(try PersistenceLaunchScenePolicy.requireActiveAttempt(
+            generationMatches: false, phase: .active, applicationState: .inactive)) { error in
+            XCTAssertTrue(error is CancellationError)
+        }
+        // While its successor prepares, the activation notification is ignored;
+        // the successor's own defer and catch decide what happens next.
+        XCTAssertFalse(PersistenceLaunchScenePolicy.shouldResumeDeferredPreparation(
+            phase: .active, isWaitingForActivation: true, hasSession: false, isPreparing: true),
+            "A running preparation owns the launch; a stale attempt must not restart it")
+        // And the successor is always started by the generation change itself.
+        XCTAssertEqual(PersistenceLaunchScenePolicy.action(
+            phase: .active, hasSession: false, isPreparing: true,
+            isQuiescingAccountChange: false, usesCloudAccountBoundary: true),
+            .preparePersistence)
+    }
+
     func testPublishedOfflineRootSurvivesOrdinaryBackgroundAndRevalidatesEveryForeground() {
         for phase in [ScenePhase.inactive, .background, .inactive, .active, .inactive, .background, .active] {
             XCTAssertEqual(PersistenceLaunchScenePolicy.action(
@@ -836,5 +944,567 @@ final class PurchaseConfigurationTests: XCTestCase {
             (root["nonRenewingSubscriptions"] as? [[String: Any]])?.count,
             0
         )
+    }
+}
+
+
+/// A stand-in for `PomoGemPersistenceLaunchHost`'s launch wiring: it owns the
+/// same flags (`isPreparing`, `isWaitingForActivation`, the published session)
+/// and reproduces the four parts that decide whether a deferred launch can
+/// ever resume — the view task, the `catch is CancellationError` arm, the
+/// UIKit `didBecomeActiveNotification` receiver and the scene-phase handler.
+/// Every decision goes through the same `PersistenceLaunchScenePolicy` entry
+/// points the host calls, so a change to the host's policy usage shows up
+/// here; the wiring itself is still a model, and the device phases remain the
+/// only end-to-end evidence.
+final class DeferredLaunchCancellationRaceHostModel {
+    enum Screen: Equatable { case preparing, home }
+
+    var phase: ScenePhase = .active
+    var applicationState: UIApplication.State = .active
+    /// The lifecycle values the throwing checkpoint observed, which can differ
+    /// from the values the catch sees after the error crosses an await.
+    /// Consumed by the attempt that reads them, like the frame itself.
+    var checkpointPhase: ScenePhase?
+    var checkpointApplicationState: UIApplication.State?
+    /// Runs inside the catch, before it decides: models an activation
+    /// delivered while the CancellationError is still propagating.
+    var activationDuringCancellation: (() -> Void)?
+
+    private(set) var screen: Screen = .preparing
+    private(set) var isPreparing = false
+    private(set) var isWaitingForActivation = false
+    private(set) var mountedSessions = 0
+    private(set) var attempt = 0
+
+    /// `.task(id: launchAttempt)` → `preparePersistenceIfNeeded()`.
+    func startLaunchAttempt() {
+        let attempt = self.attempt
+        guard mountedSessions == 0 else { return }
+        isWaitingForActivation = false
+        isPreparing = true
+        defer { if self.attempt == attempt { isPreparing = false } }
+        let frame = consumeCheckpointFrame()
+        do {
+            try PersistenceLaunchScenePolicy.requireActiveAttempt(
+                generationMatches: self.attempt == attempt,
+                phase: frame.0,
+                applicationState: frame.1
+            )
+            mountedSessions += 1
+            screen = .home
+        } catch {
+            let activation = activationDuringCancellation
+            activationDuringCancellation = nil
+            activation?()
+            var resolution = PersistenceLaunchScenePolicy.DeferredLaunchResolution.waitForActivation
+            if self.attempt == attempt {
+                resolution = PersistenceLaunchScenePolicy.deferredLaunchResolution(
+                    phase: phase, applicationState: applicationState)
+                isWaitingForActivation = resolution == .waitForActivation
+            }
+            if resolution == .restartImmediately { handleScenePhaseChange(.active) }
+        }
+    }
+
+    /// `.onReceive(UIApplication.didBecomeActiveNotification)`.
+    func deliverActivationNotification() {
+        applicationState = .active
+        guard PersistenceLaunchScenePolicy.shouldResumeDeferredPreparation(
+            phase: phase,
+            isWaitingForActivation: isWaitingForActivation,
+            hasSession: mountedSessions > 0,
+            isPreparing: isPreparing
+        ) else { return }
+        isWaitingForActivation = false
+        handleScenePhaseChange(.active)
+    }
+
+    /// `.onChange(of: scenePhase)` → `handleScenePhaseChange`.
+    func handleScenePhaseChange(_ next: ScenePhase) {
+        phase = next
+        guard PersistenceLaunchScenePolicy.action(
+            phase: next,
+            hasSession: mountedSessions > 0,
+            isPreparing: isPreparing,
+            isQuiescingAccountChange: false,
+            usesCloudAccountBoundary: true
+        ) == .preparePersistence else { return }
+        screen = .preparing
+        attempt += 1
+        startLaunchAttempt()
+    }
+
+    private func consumeCheckpointFrame() -> (ScenePhase, UIApplication.State) {
+        defer {
+            checkpointPhase = nil
+            checkpointApplicationState = nil
+        }
+        return (checkpointPhase ?? phase, checkpointApplicationState ?? applicationState)
+    }
+}
+
+/// The real-device frame of 2026-09-20: iOS holds its own 「iCloudにサインイン」
+/// alert over PomoGem, so the app stays foreground-inactive. The launch defers
+/// at its first checkpoint, the account deadline is never reached, and before
+/// this watchdog the preparation spinner had no timeout, no error and no button.
+@MainActor
+final class LaunchActivationWatchdogTests: XCTestCase {
+    func testSystemAlertFrameIsBoundedByTheDocumentedLaunchBudget() {
+        // Both lifecycle orders of a launch behind a system modal.
+        let onScreenWithoutActivation: [(ScenePhase, UIApplication.State)] = [
+            (.active, .inactive), (.inactive, .inactive), (.inactive, .active)
+        ]
+        for (phase, applicationState) in onScreenWithoutActivation {
+            XCTAssertThrowsError(try PersistenceLaunchScenePolicy.requireActiveAttempt(
+                generationMatches: true, phase: phase, applicationState: applicationState))
+            XCTAssertEqual(
+                LaunchActivationWatchdogPolicy.waitOutcome(phase: phase,
+                    applicationState: applicationState,
+                    timeout: CloudLaunchDeadline.existingStoreTimeout),
+                .bounded(timeout: CloudLaunchDeadline.existingStoreTimeout))
+            XCTAssertEqual(
+                LaunchActivationWatchdogPolicy.waitOutcome(phase: phase,
+                    applicationState: applicationState,
+                    timeout: CloudLaunchDeadline.initialStoreTimeout),
+                .bounded(timeout: CloudLaunchDeadline.initialStoreTimeout))
+        }
+        // The budget comes from the documented contract, not from a new number.
+        let cloud = ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+            accountFingerprint: String(repeating: "a", count: 64))!
+        XCTAssertEqual(CloudOfflineHostPolicy.launchTimeout(selection: .selected(.cloud(binding: cloud)),
+            mountState: .mounted(.cloud(binding: cloud)), hasExactCompleteStorePair: true),
+            CloudLaunchDeadline.existingStoreTimeout)
+        XCTAssertEqual(CloudOfflineHostPolicy.launchTimeout(selection: .unselected,
+            mountState: .unrecorded, hasExactCompleteStorePair: false),
+            CloudLaunchDeadline.initialStoreTimeout)
+    }
+
+    func testSuspendedOrActivatedLaunchIsNeverBlamedForWaiting() {
+        for applicationState in [UIApplication.State.inactive, .background, .active] {
+            XCTAssertEqual(LaunchActivationWatchdogPolicy.waitOutcome(phase: .background,
+                applicationState: applicationState, timeout: 12), .unbounded,
+                "A suspended process must not present a failure nobody saw")
+        }
+        for phase in [ScenePhase.active, .inactive, .background] {
+            XCTAssertEqual(LaunchActivationWatchdogPolicy.waitOutcome(phase: phase,
+                applicationState: .background, timeout: 12), .unbounded)
+        }
+        XCTAssertEqual(LaunchActivationWatchdogPolicy.waitOutcome(phase: .active,
+            applicationState: .active, timeout: 12), .unbounded,
+            "An activated launch owns itself")
+        for timeout in [0, -1, TimeInterval.infinity, TimeInterval.nan] {
+            XCTAssertEqual(LaunchActivationWatchdogPolicy.waitOutcome(phase: .active,
+                applicationState: .inactive, timeout: timeout), .unbounded)
+        }
+    }
+
+    func testDeferredLaunchReachesTheRetryScreenWithinTheBudgetAndIgnoresALateActivation() async {
+        let host = DeferredLaunchHostModel(phase: .active, applicationState: .inactive)
+        host.offlineCopyIsEligible = true
+        host.startLaunchAttempt(timeout: 0.05)
+        XCTAssertTrue(host.isWaitingForActivation)
+        XCTAssertEqual(host.screen, .preparing("保存方式を確認しています"),
+            "The deferred launch keeps the spinner until the budget ends")
+        XCTAssertFalse(host.offersRetry)
+
+        await host.awaitRetryScreen()
+
+        XCTAssertEqual(host.screen, .blocked(host.expectedBlockedMessage))
+        XCTAssertTrue(host.offersRetry, "The protected screen must offer もう一度試す")
+        XCTAssertTrue(host.offersOfflineContinuation,
+            "An eligible device keeps its オフライン利用 affordance")
+        XCTAssertEqual(host.retryScreenPresentations, 1)
+        XCTAssertFalse(host.isWaitingForActivation)
+
+        // The system alert is finally answered. The settled screen is no
+        // longer waiting for activation, so the UIKit activation notification
+        // is inert. (A scene activation is a different signal and does restart
+        // the launch; see testDismissingTheSystemAlertRestartsTheLaunchItself.)
+        host.applicationState = .active
+        host.deliverActivationNotification()
+        XCTAssertEqual(host.screen, .blocked(host.expectedBlockedMessage))
+        XCTAssertEqual(host.launchAttempts, 1)
+        host.tapRetry()
+        XCTAssertEqual(host.launchAttempts, 2)
+        XCTAssertEqual(host.screen, .home)
+        XCTAssertEqual(host.retryScreenPresentations, 1)
+    }
+
+    func testActivationBeforeTheBudgetEndsCancelsItWithoutAnyRetryScreen() async {
+        let host = DeferredLaunchHostModel(phase: .active, applicationState: .inactive)
+        host.startLaunchAttempt(timeout: 0.05)
+        XCTAssertTrue(host.watchdog.isArmed)
+        host.applicationState = .active
+        host.deliverActivationNotification()
+        XCTAssertFalse(host.watchdog.isArmed, "Activation disarms the wait budget")
+        XCTAssertEqual(host.screen, .home)
+        try? await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(host.retryScreenPresentations, 0)
+        XCTAssertEqual(host.launchAttempts, 2)
+    }
+
+    func testBackgroundedWaitIsDisarmedAndRepeatedInactivityNeverResetsTheBudget() {
+        let host = DeferredLaunchHostModel(phase: .active, applicationState: .inactive)
+        host.startLaunchAttempt(timeout: 30)
+        let armed = host.watchdog.armedDeadline
+        XCTAssertNotNil(armed)
+        XCTAssertEqual(host.watchdog.armedTimeout, 30)
+        for _ in 0..<3 {
+            host.handleScenePhaseChange(.inactive)
+            XCTAssertTrue(host.watchdog.armedDeadline === armed,
+                "One absolute budget per wait; an inactive transition must not restart it")
+        }
+        host.handleScenePhaseChange(.background)
+        XCTAssertFalse(host.watchdog.isArmed, "The OS owns a suspended process")
+        XCTAssertEqual(host.retryScreenPresentations, 0)
+        // Returning to the foreground behind the same alert re-arms the wait.
+        host.phase = .inactive
+        host.handleScenePhaseChange(.inactive)
+        XCTAssertTrue(host.watchdog.isArmed)
+        XCTAssertFalse(host.watchdog.armedDeadline === armed)
+        host.watchdog.cancel()
+    }
+
+    /// The arming, disarming and expiry order is product code, not test
+    /// scaffolding: drive `LaunchActivationWatchdog` itself.
+    /// The watchdog is armed from the generic cancellation catch, which is
+    /// also where a launch lands after it has recorded a storage mode or
+    /// opened a CloudKit mirror. The screen must not promise those away.
+    func testTheRetryScreenOnlyPromisesWhatTheInterruptedLaunchCanProve() {
+        let unchanged = LaunchActivationWatchdogPolicy.blockedMessage(progress: .nothingCommitted)
+        XCTAssertTrue(unchanged.contains("記録や保存先の設定は変更していません"),
+            "A wait that ran before any storage work may still reassure the user")
+
+        for (didCommitStorageSelection, cloudMirrorWasOpened) in
+            [(true, false), (false, true), (true, true)] {
+            XCTAssertEqual(LaunchActivationWatchdogPolicy.launchProgress(
+                didCommitStorageSelection: didCommitStorageSelection,
+                cloudMirrorWasOpened: cloudMirrorWasOpened), .storageWorkCommitted)
+        }
+        XCTAssertEqual(LaunchActivationWatchdogPolicy.launchProgress(
+            didCommitStorageSelection: false, cloudMirrorWasOpened: false), .nothingCommitted)
+
+        let committed = LaunchActivationWatchdogPolicy.blockedMessage(progress: .storageWorkCommitted)
+        XCTAssertFalse(committed.contains("変更していません"),
+            "A launch that already recorded a storage mode or opened a mirror changed something")
+        XCTAssertTrue(committed.contains("記録は削除していません"))
+        XCTAssertTrue(committed.contains("開き直す"),
+            "An opened mirror already forces a relaunch before offline use")
+        // Both messages still name the cause and the remedy.
+        for message in [unchanged, committed] {
+            XCTAssertTrue(message.contains("起動を続けられませんでした"))
+            XCTAssertTrue(message.contains("Apple Accountのサインイン"))
+            XCTAssertTrue(message.contains("もう一度試す"))
+        }
+    }
+
+    /// Both messages reach the screen through the same expiry path.
+    func testCommittedStorageWorkChangesTheRetryScreenText() async {
+        let host = DeferredLaunchHostModel(phase: .active, applicationState: .inactive)
+        host.launchProgress = .storageWorkCommitted
+        host.startLaunchAttempt(timeout: 0.05)
+        await host.awaitRetryScreen()
+        XCTAssertEqual(host.screen, .blocked(
+            LaunchActivationWatchdogPolicy.blockedMessage(progress: .storageWorkCommitted)))
+        XCTAssertNotEqual(host.screen, .blocked(
+            LaunchActivationWatchdogPolicy.blockedMessage(progress: .nothingCommitted)))
+    }
+
+    /// The real device frame is `(scenePhase .inactive, applicationState
+    /// .inactive)`: iOS owns the foreground with its Apple Account alert.
+    /// Closing that alert activates the scene, and a sessionless launch screen
+    /// always restarts on activation — the user does not have to press
+    /// 「もう一度試す」, and the retry screen is not preserved for them.
+    func testDismissingTheSystemAlertRestartsTheLaunchItself() async {
+        let host = DeferredLaunchHostModel(phase: .inactive, applicationState: .inactive)
+        host.startLaunchAttempt(timeout: 0.05)
+        XCTAssertTrue(host.watchdog.isArmed)
+        await host.awaitRetryScreen()
+        XCTAssertEqual(host.screen, .blocked(host.expectedBlockedMessage))
+        XCTAssertEqual(host.launchAttempts, 1)
+
+        // The alert is dismissed: .inactive -> .active, with no tap at all.
+        host.applicationState = .active
+        host.handleScenePhaseChange(.active)
+        XCTAssertEqual(host.screen, .home,
+            "Activation restarts an unpublished launch; the blocked screen is replaced")
+        XCTAssertEqual(host.launchAttempts, 2)
+        XCTAssertEqual(host.retryScreenPresentations, 1)
+        XCTAssertFalse(host.watchdog.isArmed)
+    }
+
+    /// The watchdog makes the retry screen reachable before the recorded
+    /// selection is even read, so its 「もう一度試す」 must not stand in for the
+    /// storage choice the user has never been shown.
+    func testARetryAfterATimeoutNeverStandsInForTheStorageChoice() async {
+        let host = DeferredLaunchHostModel(phase: .active, applicationState: .inactive)
+        host.storageModeIsUnselected = true
+        host.startLaunchAttempt(timeout: 0.05)
+        await host.awaitRetryScreen()
+        XCTAssertTrue(host.offersRetry)
+        XCTAssertFalse(host.didConfirmCloudSelection)
+
+        host.tapRetry()
+        XCTAssertFalse(host.requestedCloudSelection,
+            "A lifecycle timeout must not commit an unselected device to iCloud")
+
+        // The same retry does resume a cloud launch the user did confirm.
+        host.chooseCloudStorage()
+        XCTAssertTrue(host.requestedCloudSelection)
+        host.tapRetry()
+        XCTAssertTrue(host.requestedCloudSelection)
+    }
+
+    func testRetryOnlyRestoresACloudSelectionTheUserMade() {
+        XCTAssertFalse(LaunchRetryConsentPolicy.restoresPendingCloudSelection(
+            storageModeIsUnselected: true, didConfirmCloudSelection: false),
+            "No storage mode and no confirmation: the retry must ask first")
+        XCTAssertTrue(LaunchRetryConsentPolicy.restoresPendingCloudSelection(
+            storageModeIsUnselected: true, didConfirmCloudSelection: true),
+            "A confirmed iCloud choice is resumed, not asked again")
+        for didConfirm in [true, false] {
+            XCTAssertFalse(LaunchRetryConsentPolicy.restoresPendingCloudSelection(
+                storageModeIsUnselected: false, didConfirmCloudSelection: didConfirm),
+                "A recorded storage mode needs no pending selection")
+        }
+    }
+
+    func testWatchdogArmsOnlyForAWaitNobodyElseOwnsAndKeepsOneBudget() {
+        var expiries: [Int] = []
+        let watchdog = LaunchActivationWatchdog()
+        let deferred = LaunchActivationWatchdog.Frame(generation: 7, hasSession: false,
+            isWaitingForActivation: true, isPreparing: false, isQuiescingAccountChange: false,
+            requiresStorageTransferRelaunch: false, phase: .inactive, applicationState: .inactive)
+
+        XCTAssertTrue(watchdog.armForDeferredAttempt(frame: deferred, timeout: 30,
+            expire: { expiries.append($0) }))
+        XCTAssertEqual(watchdog.armedGeneration, 7)
+        XCTAssertEqual(watchdog.armedTimeout, 30)
+        let budget = watchdog.armedDeadline
+
+        // A second inactive transition re-uses the same absolute budget.
+        XCTAssertFalse(watchdog.armIfStillDeferred(frame: deferred, timeout: 30,
+            expire: { expiries.append($0) }))
+        XCTAssertTrue(watchdog.armedDeadline === budget)
+
+        // Anything that already owns the screen refuses a fresh budget.
+        watchdog.cancel()
+        XCTAssertFalse(watchdog.isArmed)
+        let owned: [(String, WritableKeyPath<LaunchActivationWatchdog.Frame, Bool>, Bool)] = [
+            ("A published session", \.hasSession, true),
+            ("A settled screen is no longer waiting", \.isWaitingForActivation, false),
+            ("A running preparation owns the launch", \.isPreparing, true),
+            ("Account quiescence owns the screen", \.isQuiescingAccountChange, true),
+            ("A storage-transfer relaunch owns the screen", \.requiresStorageTransferRelaunch, true)
+        ]
+        for (reason, keyPath, value) in owned {
+            var frame = deferred
+            frame[keyPath: keyPath] = value
+            XCTAssertFalse(watchdog.armIfStillDeferred(frame: frame, timeout: 30,
+                expire: { expiries.append($0) }), reason)
+            XCTAssertFalse(watchdog.isArmed, reason)
+        }
+
+        // A suspended process is never bounded, whichever entry point asks.
+        var backgrounded = deferred
+        backgrounded.phase = .background
+        XCTAssertFalse(watchdog.armForDeferredAttempt(frame: backgrounded, timeout: 30,
+            expire: { expiries.append($0) }))
+        XCTAssertFalse(watchdog.armIfStillDeferred(frame: backgrounded, timeout: 30,
+            expire: { expiries.append($0) }))
+        XCTAssertTrue(expiries.isEmpty)
+    }
+
+    func testWatchdogScenePhaseWiringDisarmsOnBackgroundAndRearmsOnInactive() {
+        let watchdog = LaunchActivationWatchdog()
+        var frame = LaunchActivationWatchdog.Frame(generation: 3, hasSession: false,
+            isWaitingForActivation: true, isPreparing: false, isQuiescingAccountChange: false,
+            requiresStorageTransferRelaunch: false, phase: .inactive, applicationState: .inactive)
+        watchdog.handleScenePhaseChange(.inactive, frame: frame, timeout: 30, expire: { _ in })
+        let budget = watchdog.armedDeadline
+        XCTAssertNotNil(budget)
+
+        watchdog.handleScenePhaseChange(.inactive, frame: frame, timeout: 30, expire: { _ in })
+        XCTAssertTrue(watchdog.armedDeadline === budget, "One absolute budget per wait")
+
+        frame.phase = .background
+        watchdog.handleScenePhaseChange(.background, frame: frame, timeout: 30, expire: { _ in })
+        XCTAssertFalse(watchdog.isArmed)
+
+        // .active is the host's own business: the watchdog never arms there.
+        frame.phase = .active
+        frame.applicationState = .active
+        watchdog.handleScenePhaseChange(.active, frame: frame, timeout: 30, expire: { _ in })
+        XCTAssertFalse(watchdog.isArmed)
+    }
+
+    func testWatchdogExpirySpendsTheBudgetAndRefusesASupersededGeneration() {
+        let watchdog = LaunchActivationWatchdog()
+        let frame = LaunchActivationWatchdog.Frame(generation: 4, hasSession: false,
+            isWaitingForActivation: true, isPreparing: false, isQuiescingAccountChange: false,
+            requiresStorageTransferRelaunch: false, phase: .active, applicationState: .inactive)
+        watchdog.armForDeferredAttempt(frame: frame, timeout: 30, expire: { _ in })
+        XCTAssertFalse(watchdog.settleExpiry(generation: 3, frame: frame),
+            "A budget from a superseded attempt cannot take the screen")
+        XCTAssertFalse(watchdog.isArmed, "The budget is spent either way")
+
+        watchdog.armForDeferredAttempt(frame: frame, timeout: 30, expire: { _ in })
+        XCTAssertTrue(watchdog.settleExpiry(generation: 4, frame: frame))
+        XCTAssertFalse(watchdog.isArmed)
+    }
+
+    func testAnOwnedLaunchOrSettledScreenNeverGetsTheRetryScreen() {
+        let cases: [(String, Bool, Bool, Bool, Bool, Bool, Bool)] = [
+            ("A superseded generation", false, false, true, false, false, false),
+            ("A published session", true, true, true, false, false, false),
+            ("A settled screen is no longer waiting", true, false, false, false, false, false),
+            ("A running preparation owns the launch", true, false, true, true, false, false),
+            ("Account quiescence owns the screen", true, false, true, false, true, false),
+            ("A storage-transfer relaunch owns the screen", true, false, true, false, false, true)
+        ]
+        for (reason, generation, hasSession, waiting, preparing, quiescing, relaunch) in cases {
+            XCTAssertFalse(LaunchActivationWatchdogPolicy.presentsRetryScreen(
+                generationMatches: generation, hasSession: hasSession,
+                isWaitingForActivation: waiting, isPreparing: preparing,
+                isQuiescingAccountChange: quiescing,
+                requiresStorageTransferRelaunch: relaunch,
+                phase: .active, applicationState: .inactive), reason)
+        }
+        XCTAssertTrue(LaunchActivationWatchdogPolicy.presentsRetryScreen(
+            generationMatches: true, hasSession: false, isWaitingForActivation: true,
+            isPreparing: false, isQuiescingAccountChange: false,
+            requiresStorageTransferRelaunch: false,
+            phase: .active, applicationState: .inactive))
+        for (phase, applicationState) in [(ScenePhase.active, UIApplication.State.active),
+                                          (.background, .inactive), (.inactive, .background)] {
+            XCTAssertFalse(LaunchActivationWatchdogPolicy.presentsRetryScreen(
+                generationMatches: true, hasSession: false, isWaitingForActivation: true,
+                isPreparing: false, isQuiescingAccountChange: false,
+                requiresStorageTransferRelaunch: false,
+                phase: phase, applicationState: applicationState))
+        }
+    }
+}
+
+/// Mirrors the launch host's *launch-state* effects for the deferred-activation
+/// window — the SwiftUI view task, the CancellationError catch, the UIKit
+/// activation notification, the scene-phase transitions and the retry button.
+/// The arm / disarm / expiry decisions are NOT re-implemented here: they are
+/// driven through the product's own `LaunchActivationWatchdog`.
+@MainActor
+private final class DeferredLaunchHostModel {
+    enum Screen: Equatable { case preparing(String), blocked(String), home }
+
+    var phase: ScenePhase
+    var applicationState: UIApplication.State
+    var screen: Screen = .preparing("保存方式を確認しています")
+    var offlineCopyIsEligible = false
+    let watchdog = LaunchActivationWatchdog()
+    private(set) var isWaitingForActivation = false
+    private(set) var isPreparing = false
+    private(set) var hasSession = false
+    private(set) var canContinueOffline = false
+    private(set) var attempt = 0
+    private(set) var launchAttempts = 0
+    private(set) var retryScreenPresentations = 0
+    private var timeout: TimeInterval = 30
+
+    var launchProgress = LaunchActivationWatchdogPolicy.LaunchProgress.nothingCommitted
+    /// No storage mode recorded yet, as on a first launch.
+    var storageModeIsUnselected = false
+    private(set) var requestedCloudSelection = false
+    private(set) var didConfirmCloudSelection = false
+    var expectedBlockedMessage: String {
+        LaunchActivationWatchdogPolicy.blockedMessage(progress: launchProgress)
+    }
+    var offersRetry: Bool { if case .blocked = screen { return true } else { return false } }
+    var offersOfflineContinuation: Bool {
+        offersRetry && canContinueOffline && !isPreparing && !hasSession
+    }
+
+    private var frame: LaunchActivationWatchdog.Frame {
+        LaunchActivationWatchdog.Frame(generation: attempt, hasSession: hasSession,
+            isWaitingForActivation: isWaitingForActivation, isPreparing: isPreparing,
+            isQuiescingAccountChange: false, requiresStorageTransferRelaunch: false,
+            phase: phase, applicationState: applicationState)
+    }
+
+    init(phase: ScenePhase, applicationState: UIApplication.State) {
+        self.phase = phase
+        self.applicationState = applicationState
+    }
+
+    func startLaunchAttempt(timeout: TimeInterval) {
+        self.timeout = timeout
+        launchAttempts += 1
+        watchdog.cancel()
+        isWaitingForActivation = false
+        isPreparing = true
+        defer { isPreparing = false }
+        do {
+            try PersistenceLaunchScenePolicy.requireActiveAttempt(
+                generationMatches: true, phase: phase, applicationState: applicationState)
+            hasSession = true
+            screen = .home
+        } catch {
+            isWaitingForActivation = phase != .active || applicationState != .active
+            guard isWaitingForActivation else { return }
+            isPreparing = false
+            watchdog.armForDeferredAttempt(frame: frame, timeout: timeout,
+                expire: { [weak self] in self?.endWait(attempt: $0) })
+        }
+    }
+
+    func awaitRetryScreen(timeout: TimeInterval = 5) async {
+        let end = Date().addingTimeInterval(timeout)
+        while retryScreenPresentations == 0, Date() < end {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    func deliverActivationNotification() {
+        guard PersistenceLaunchScenePolicy.shouldResumeDeferredPreparation(
+            phase: phase, isWaitingForActivation: isWaitingForActivation,
+            hasSession: hasSession, isPreparing: isPreparing) else { return }
+        isWaitingForActivation = false
+        watchdog.cancel()
+        handleScenePhaseChange(.active)
+    }
+
+    func handleScenePhaseChange(_ next: ScenePhase) {
+        phase = next
+        watchdog.handleScenePhaseChange(next, frame: frame, timeout: timeout,
+            expire: { [weak self] in self?.endWait(attempt: $0) })
+        guard next == .active, !hasSession, !isPreparing else { return }
+        attempt += 1
+        screen = .preparing("保存方式を確認しています")
+        startLaunchAttempt(timeout: timeout)
+    }
+
+    /// The storage-choice screen's iCloud button, behind its confirmation.
+    func chooseCloudStorage() {
+        requestedCloudSelection = true
+        didConfirmCloudSelection = true
+    }
+
+    func tapRetry() {
+        if LaunchRetryConsentPolicy.restoresPendingCloudSelection(
+            storageModeIsUnselected: storageModeIsUnselected,
+            didConfirmCloudSelection: didConfirmCloudSelection) {
+            requestedCloudSelection = true
+        }
+        watchdog.cancel()
+        attempt += 1
+        screen = .preparing("保存領域を再確認しています")
+        startLaunchAttempt(timeout: timeout)
+    }
+
+    private func endWait(attempt: Int) {
+        guard watchdog.settleExpiry(generation: attempt, frame: frame) else { return }
+        isWaitingForActivation = false
+        canContinueOffline = offlineCopyIsEligible
+        screen = .blocked(expectedBlockedMessage)
+        retryScreenPresentations += 1
     }
 }

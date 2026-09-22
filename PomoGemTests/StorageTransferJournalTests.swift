@@ -181,4 +181,92 @@ final class StorageTransferJournalTests: XCTestCase {
         XCTAssertThrowsError(try StorageTransferJournal(choice: .enableCloudReplacingCloud,
             source: initial.source, destination: initial.destination, cloudBinding: initial.cloudBinding))
     }
+
+    // MARK: - Device -> iCloud overwrite (.overwriteCloudFromDevice)
+
+    private func cloudBinding(_ fingerprint: String? = nil) throws -> ActiveAccountLocalBinding {
+        try XCTUnwrap(ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+                                                accountFingerprint: fingerprint ?? digest))
+    }
+
+    func testOverwriteFromACloudSourceIsValidOnlyWithinOneAccountAndIntoANewNamespace() throws {
+        let previous = try cloudBinding()
+        let destination = try cloudBinding()
+        let journal = try StorageTransferJournal(choice: .overwriteCloudFromDevice,
+            source: .cloud(binding: previous), destination: .cloud(binding: destination),
+            cloudBinding: destination)
+        XCTAssertTrue(journal.choice.replacesCloud)
+        try journal.validate()
+        let reopened = try JSONDecoder().decode(StorageTransferJournal.self,
+                                                from: JSONEncoder().encode(journal))
+        XCTAssertEqual(reopened, journal)
+        try reopened.validate()
+
+        // A divergent cache of a different Apple Account can never authorize it.
+        let foreign = try cloudBinding(otherDigest)
+        XCTAssertThrowsError(try StorageTransferJournal(choice: .overwriteCloudFromDevice,
+            source: .cloud(binding: foreign), destination: .cloud(binding: destination),
+            cloudBinding: destination))
+        // cloudBinding is the destination generation, never the retired source.
+        XCTAssertThrowsError(try StorageTransferJournal(choice: .overwriteCloudFromDevice,
+            source: .cloud(binding: previous), destination: .cloud(binding: destination),
+            cloudBinding: previous))
+        // The destination is always a brand-new namespace; nothing is edited in place.
+        XCTAssertThrowsError(try StorageTransferJournal(choice: .overwriteCloudFromDevice,
+            source: .cloud(binding: destination), destination: .cloud(binding: destination),
+            cloudBinding: destination))
+        // An overwrite never moves data out of iCloud.
+        XCTAssertThrowsError(try StorageTransferJournal(choice: .overwriteCloudFromDevice,
+            source: .cloud(binding: previous),
+            destination: .localOnly(namespace: AccountDataNamespace()), cloudBinding: previous))
+    }
+
+    func testOverwriteFromAServerRecoveredLocalSourceIsTheOnlyOtherAcceptedShape() throws {
+        let binding = try cloudBinding()
+        let journal = try StorageTransferJournal(choice: .overwriteCloudFromDevice,
+            source: .localOnly(namespace: AccountDataNamespace()),
+            destination: .cloud(binding: binding), cloudBinding: binding)
+        try journal.validate()
+        XCTAssertThrowsError(try StorageTransferJournal(choice: .overwriteCloudFromDevice,
+            source: .localOnly(namespace: AccountDataNamespace()),
+            destination: .cloud(binding: binding), cloudBinding: try cloudBinding(otherDigest)))
+    }
+
+    func testLegacyReplacementDidNotWidenToACloudSource() throws {
+        let previous = try cloudBinding()
+        let destination = try cloudBinding()
+        XCTAssertThrowsError(try StorageTransferJournal(choice: .enableCloudReplacingCloud,
+            source: .cloud(binding: previous), destination: .cloud(binding: destination),
+            cloudBinding: destination)) {
+            XCTAssertEqual($0 as? StorageTransferError, .invalidJournal)
+        }
+    }
+
+    func testOverwriteNeedsItsOwnRecoveryCopyAndStopsPermittingCancellationAfterIt() throws {
+        let previous = try cloudBinding()
+        let destination = try cloudBinding()
+        let initial = try StorageTransferJournal(choice: .overwriteCloudFromDevice,
+            source: .cloud(binding: previous), destination: .cloud(binding: destination),
+            cloudBinding: destination)
+        let saved = try initial.advancing(to: .sourceSaved, sourceDigest: digest)
+        XCTAssertThrowsError(try saved.advancing(to: .recoveryCopySaved))
+        XCTAssertThrowsError(try saved.advancing(to: .recoveryCopySaved,
+                                                 remoteRecoveryTransactionID: UUID()))
+        let backedUp = try saved.advancing(to: .recoveryCopySaved,
+                                           remoteRecoveryTransactionID: initial.transactionID)
+        XCTAssertTrue(backedUp.permitsCancellation)
+        let preparing = try backedUp.advancing(to: .preparingDestination)
+        XCTAssertFalse(preparing.permitsCancellation)
+        XCTAssertFalse(preparing.retainsImportOnCancellation)
+    }
+
+    func testStoredChoiceRawValuesRemainTheJournalFormatContract() throws {
+        XCTAssertEqual(StorageTransferChoice.disableCloudKeepingCopy.rawValue, "disableCloudKeepingCopy")
+        XCTAssertEqual(StorageTransferChoice.enableCloudKeepingCloud.rawValue, "enableCloudKeepingCloud")
+        XCTAssertEqual(StorageTransferChoice.enableCloudReplacingCloud.rawValue, "enableCloudReplacingCloud")
+        XCTAssertEqual(StorageTransferChoice.overwriteCloudFromDevice.rawValue, "overwriteCloudFromDevice")
+        XCTAssertEqual(StorageTransferChoice.allCases.count, 4)
+        XCTAssertEqual(StorageTransferChoice.allCases.filter(\.replacesCloud),
+                       [.enableCloudReplacingCloud, .overwriteCloudFromDevice])
+    }
 }

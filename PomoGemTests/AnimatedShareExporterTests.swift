@@ -283,6 +283,30 @@ struct AnimatedShareExporterTests {
         ))
     }
 
+    @Test func compactMeasuredOnlyShareIncludesScreenTimeWithoutDroppingOlderRoots() {
+        let measured = CompactShareProjectionPolicy.SummaryComposition(
+            pebbleCount: 100_000,
+            measuredPebbleCount: 100_000,
+            manualPebbleCount: 0
+        )
+        for sources: [SessionSource] in [[.screenTime], [.timer, .screenTime]] {
+            #expect(CompactShareProjectionPolicy.canUseLifetimeRoots(
+                includesSelfReportedFocus: false,
+                modernSummaryComposition: [measured],
+                hasLegacySummaries: false,
+                looseSources: sources
+            ))
+        }
+        for selfReported in [SessionSource.manual, .timerDemoted] {
+            #expect(!CompactShareProjectionPolicy.canUseLifetimeRoots(
+                includesSelfReportedFocus: false,
+                modernSummaryComposition: [measured],
+                hasLegacySummaries: false,
+                looseSources: [.screenTime, selfReported]
+            ))
+        }
+    }
+
     @Test func compactMeasuredOnlyShareRejectsUnknownOrSelfReportedComposition() {
         let mixed = CompactShareProjectionPolicy.SummaryComposition(
             pebbleCount: 100,

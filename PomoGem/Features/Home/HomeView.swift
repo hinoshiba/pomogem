@@ -3610,11 +3610,11 @@ struct HomeView: View {
         }
         let uniqueSessions = StudySessionSyncPolicy.canonicalSessions(from: sessions)
         let looseMeasured = uniqueSessions.filter {
-            $0.source == .timer
+            $0.source.isMeasured
                 && !representedSessionIDs.contains($0.id)
         }
         let measuredSessionGrams = uniqueSessions
-            .filter { $0.source == .timer }
+            .filter { $0.source.isMeasured }
             .map(\.grams)
         let aggregateMeasuredGrams = HomeProjectionPolicy.saturatingNonnegativeSum([
             HomeProjectionPolicy.saturatingNonnegativeSum(

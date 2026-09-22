@@ -2579,7 +2579,9 @@ private struct SubjectEditorView: View {
     }
 }
 
-private struct PomoGemDataExportShareSheet: UIViewControllerRepresentable {
+/// Shared with the launch host: the `.datasetRefresh` rescue door hands the
+/// user the same export through the same presentation.
+struct PomoGemDataExportShareSheet: UIViewControllerRepresentable {
     let fileURL: URL
     let completion: (Error?) -> Void
 

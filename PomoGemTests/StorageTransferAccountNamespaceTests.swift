@@ -287,7 +287,77 @@ final class StorageTransferAccountNamespaceTests: XCTestCase {
         try JSONSerialization.data(withJSONObject: json).write(to: file)
         await expectBlocked { try await self.resolver(f, client: accountB).resolve(expectedBinding: nextBinding) }
     }
+
+    // MARK: - Device -> iCloud overwrite
+
+    private func overwrite(_ f: Fixture) throws -> StorageTransferJournal {
+        try StorageTransferJournal(choice: .overwriteCloudFromDevice,
+            source: .cloud(binding: f.old), destination: .cloud(binding: f.new), cloudBinding: f.new)
+    }
+
+    func testRecordedCloudSourceOverwriteAuthorizesOnlyItsRecordedDestination() async throws {
+        let f = try await fixture()
+        try f.store.begin(overwrite(f))
+        let result = try await resolver(f).resolve(expectedBinding: f.new)
+        XCTAssertEqual(result.binding, f.new)
+        let source = try await resolver(f).resolve(expectedBinding: f.old)
+        XCTAssertEqual(source.binding, f.old, "Before commit the frozen source must still authenticate")
+        let unrelated = try XCTUnwrap(ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+                                                               accountFingerprint: f.old.accountFingerprint))
+        await expectBlocked { try await self.resolver(f).resolve(expectedBinding: unrelated) }
+        XCTAssertEqual(f.defaults.data(forKey: registryKey), f.registryBytes)
+    }
+
+    func testCommittedOverwriteReceiptMakesTheOldCloudSourceIneligible() async throws {
+        let f = try await fixture()
+        let journal = try overwrite(f)
+        try f.store.begin(journal)
+        let verified = try advance(journal, in: f.store, through: .destinationVerified)
+        try f.store.commitSelection(for: verified)
+        let committed = try await resolver(f).resolve().binding
+        XCTAssertEqual(committed, f.new)
+        await expectBlocked { try await self.resolver(f).resolve(expectedBinding: f.old) }
+        try f.store.finish(advance(verified, in: f.store, through: .sourceRetired))
+        let reopened = StorageTransferJournalStore(directory: f.directory)
+        let after = AppleAccountBoundaryResolver(defaults: f.defaults, client: client(),
+                                                 transferJournalStore: reopened)
+        let reresolved = try await after.resolve().binding
+        XCTAssertEqual(reresolved, f.new)
+        await expectBlocked { try await after.resolve(expectedBinding: f.old) }
+        XCTAssertEqual(f.defaults.data(forKey: registryKey), f.registryBytes)
+    }
+
+    func testOverwriteUnderAnotherLiveAccountIsBlocked() async throws {
+        let f = try await fixture()
+        try f.store.begin(overwrite(f))
+        await expectBlocked(.accountMismatch) {
+            try await self.resolver(f, client: self.client(account: "different-synthetic-account"))
+                .resolve(expectedBinding: f.new)
+        }
+        XCTAssertEqual(f.defaults.data(forKey: registryKey), f.registryBytes)
+    }
+
+    /// The reinstall shape recoverRemoteTransfer synthesizes must keep exactly
+    /// the authority the legacy replacement had from a committed local source.
+    func testServerRecoveredOverwriteKeepsTheLegacyLocalSourceAuthority() async throws {
+        let f = try await fixture()
+        let local = PersistenceDeploymentSelection.localOnly(namespace: AccountDataNamespace())
+        let disable = try StorageTransferJournal(choice: .disableCloudKeepingCopy,
+            source: .cloud(binding: f.old), destination: local, cloudBinding: f.old)
+        try f.store.begin(disable)
+        try f.store.finish(advance(disable, in: f.store, through: .sourceRetired))
+        let recovered = try StorageTransferJournal(choice: .overwriteCloudFromDevice,
+            source: local, destination: .cloud(binding: f.new), cloudBinding: f.new)
+        try f.store.begin(recovered)
+        let authorized = try await resolver(f).resolve(expectedBinding: f.new).binding
+        XCTAssertEqual(authorized, f.new)
+        let arbitrary = try XCTUnwrap(ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+                                                               accountFingerprint: f.new.accountFingerprint))
+        await expectBlocked { try await self.resolver(f).resolve(expectedBinding: arbitrary) }
+        XCTAssertEqual(f.defaults.data(forKey: registryKey), f.registryBytes)
+    }
 }
+
 
 private actor NamespaceVerificationGate {
     nonisolated let started: XCTestExpectation

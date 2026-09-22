@@ -96,6 +96,10 @@ struct StorageTransferRuntimeCheckpoint: Codable, Equatable {
         // Restoring a server payload must not grant authority over a previous
         // installation's source path. Runtime separately proves that this new
         // local-only namespace has no files before it may skip source retirement.
+        // Deliberately NOT relaxed for `.overwriteCloudFromDevice`: its second
+        // journal shape `(.localOnly, .cloud)` exists precisely so a reinstall
+        // keeps satisfying this rule. A cloud-source overwrite owns a real store
+        // and must retire it, so it can never claim a server origin.
         if recoveredFromServer {
             guard journal.choice.replacesCloud,
                   case .localOnly = journal.source else { throw StorageTransferError.invalidJournal }
@@ -148,7 +152,10 @@ struct StorageTransferRuntimeCheckpoint: Codable, Equatable {
                 guard importedPayloadDigest == journal.sourceDigest else { throw StorageTransferError.invalidJournal }
             case .enableCloudKeepingCloud:
                 guard verifiedCloudProcessID != nil else { throw StorageTransferError.invalidJournal }
-            case .enableCloudReplacingCloud:
+            // Both replacement kinds destroy the remote dataset, so both need
+            // the acknowledged local import AND an independent process's proof
+            // that the new namespace was mirrored back out of CloudKit.
+            case .enableCloudReplacingCloud, .overwriteCloudFromDevice:
                 guard importedPayloadDigest == journal.sourceDigest,
                       verifiedCloudProcessID != nil else { throw StorageTransferError.invalidJournal }
             }
@@ -156,7 +163,23 @@ struct StorageTransferRuntimeCheckpoint: Codable, Equatable {
     }
 }
 
+/// This installation's receipt that it was admitted into a specific iCloud
+/// dataset lineage.
+///
+/// `cloudScope` is optional so a receipt written by a build that predates it
+/// still decodes: nil means UNKNOWN, i.e. the receipt cannot say which
+/// container environment earned it. It is upgraded in place the first time the
+/// recorded generation is confirmed against a server in a known scope, and it
+/// is never used to accuse a known scope of being different.
 struct StorageTransferDatasetAdmission: Codable, Equatable {
     let binding: ActiveAccountLocalBinding
     let datasetGenerationID: UUID?
+    var cloudScope: StorageTransferCloudScope?
+
+    init(binding: ActiveAccountLocalBinding, datasetGenerationID: UUID?,
+         cloudScope: StorageTransferCloudScope? = nil) {
+        self.binding = binding
+        self.datasetGenerationID = datasetGenerationID
+        self.cloudScope = cloudScope
+    }
 }

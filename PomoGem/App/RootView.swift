@@ -332,6 +332,17 @@ struct RootView: View {
     let persistenceSafetyNotice: String?
     let rebuildPersistenceAfterCompleteDeletion: @MainActor @Sendable () async -> Void
     let prepareStorageTransfer: (@MainActor @Sendable (StorageTransferChoice) async throws -> Void)?
+    /// PLAN Steps 11-12. A directional dataset replacement cannot start in this
+    /// process: the session has already opened the CloudKit mirror. The host
+    /// records a durable request and asks for the deliberate relaunch that runs
+    /// it through the same runtime entry point the recovery screen uses.
+    let requestStorageTransferDataset:
+        (@MainActor @Sendable (StorageTransferDatasetRequestDirection) async throws -> Void)?
+    /// The read-only pre-flight Settings shows BEFORE the device -> iCloud
+    /// acknowledgement. It starts nothing and records nothing; it exists so
+    /// consent is consent to enumerated facts (PLAN §3 S14/S15).
+    let previewStorageTransferDataset:
+        (@MainActor @Sendable () async throws -> StorageTransferDatasetPreviewSummary)?
     let unmountForStorageTransfer: (@MainActor @Sendable () -> Void)?
 
     @Environment(\.modelContext) private var modelContext
@@ -411,6 +422,10 @@ struct RootView: View {
         persistenceSafetyNotice: String? = nil,
         rebuildPersistenceAfterCompleteDeletion: @escaping @MainActor @Sendable () async -> Void = {},
         prepareStorageTransfer: (@MainActor @Sendable (StorageTransferChoice) async throws -> Void)? = nil,
+        requestStorageTransferDataset:
+            (@MainActor @Sendable (StorageTransferDatasetRequestDirection) async throws -> Void)? = nil,
+        previewStorageTransferDataset:
+            (@MainActor @Sendable () async throws -> StorageTransferDatasetPreviewSummary)? = nil,
         unmountForStorageTransfer: (@MainActor @Sendable () -> Void)? = nil
     ) {
         self.persistenceStartupError = persistenceStartupError
@@ -418,6 +433,8 @@ struct RootView: View {
         self.persistenceSafetyNotice = persistenceSafetyNotice
         self.rebuildPersistenceAfterCompleteDeletion = rebuildPersistenceAfterCompleteDeletion
         self.prepareStorageTransfer = prepareStorageTransfer
+        self.requestStorageTransferDataset = requestStorageTransferDataset
+        self.previewStorageTransferDataset = previewStorageTransferDataset
         self.unmountForStorageTransfer = unmountForStorageTransfer
         _activePersistenceSafetyNotice = State(initialValue: persistenceSafetyNotice)
         _aggregateProjectionPresentation = State(
@@ -821,6 +838,14 @@ struct RootView: View {
             .receive(on: RunLoop.main)
         ) { signal in
             handleStoreChangeSignal(signal)
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .pomogemOpenStorageSettings)
+                .receive(on: RunLoop.main)
+        ) { _ in
+            // The late-arrival banner sits above this view and cannot reach the
+            // router. Navigation only: nothing here reads, writes or transfers.
+            router.selectedTab = .settings
         }
         .onChange(of: router.selectedTab) { _, selectedTab in
             guard isFirstFramePresented else { return }
@@ -1443,7 +1468,7 @@ struct RootView: View {
     @MainActor
     private func installStorageTransferOperation() {
         guard let prepareStorageTransfer, let unmountForStorageTransfer else { return }
-        storageTransferRegistrationID = storageTransfer.install { choice in
+        storageTransferRegistrationID = storageTransfer.install({ choice in
             guard !isDataDeletionQuiesced,
                   !router.focusPresentationIsActive,
                   router.recoveredFocus == nil,
@@ -1464,7 +1489,39 @@ struct RootView: View {
             acceptedResetCleanupTask = nil
             await quiesceForCompleteDataDeletion()
             unmountForStorageTransfer()
-        }
+        }, dataset: requestStorageTransferDataset.map { request in
+            // `@Sendable` is written out rather than left to the conversion:
+            // `StorageTransferController.DatasetOperation` is
+            // `@MainActor @Sendable`, and converting a closure that does not
+            // declare it is a data-race warning. The captures are this
+            // `@MainActor` view's own state, which the isolation already
+            // protects.
+            { @MainActor @Sendable direction in
+                // The same external-work gate the choice operation applies. A
+                // dataset direction writes no journal here, but it does end the
+                // session, so an active or recovered timer must still block it.
+                guard !isDataDeletionQuiesced,
+                      !router.focusPresentationIsActive,
+                      router.recoveredFocus == nil,
+                      router.deferredFocusRecovery == nil,
+                      router.recoveredBreak == nil,
+                      try FocusCloudSyncStore.canonicalActive(context: modelContext) == nil else {
+                    throw StorageTransferError.activeTimer
+                }
+                if modelContext.hasChanges { try modelContext.save() }
+                // Records the durable request and requires the relaunch. The
+                // host, not this view, owns unmounting from here on.
+                try await request(direction)
+            }
+        }, datasetPreview: previewStorageTransferDataset.map { preview in
+            { @MainActor @Sendable in
+                // Read-only. Deliberately NOT behind the external-work gate:
+                // looking at what would be destroyed starts nothing, and a
+                // running timer is a reason to refuse the operation, not a
+                // reason to hide the evidence about it.
+                try await preview()
+            }
+        })
     }
 
     @MainActor

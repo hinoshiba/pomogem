@@ -7,7 +7,7 @@ import SwiftUI
 struct ScreenTimeSettingsView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.scenePhase) private var scenePhase
-    @ObservedObject private var controller = ScreenTimeController.shared
+    @ObservedObject private var controller: ScreenTimeController
     @State private var purchase = PurchaseManager.shared
     @Query private var storedSubjects: [Subject]
     @State private var draft: ScreenTimeConfiguration
@@ -15,10 +15,18 @@ struct ScreenTimeSettingsView: View {
     @State private var isRequestingAuthorization = false
     @State private var saveError: String?
     @State private var isResetConfirmationPresented = false
-    @State private var hasLoaded = false
+    @State private var hasUserEdits = false
 
-    init() {
-        _draft = State(initialValue: ScreenTimeController.shared.configuration)
+    /// Production always uses the shared controller; the parameter exists so
+    /// the Simulator UI-test fixture can drive a temporary ledger that really
+    /// binds. Without entitlements the shared controller's App Group container
+    /// is nil and `isBoundToContext` can never become true, which would leave
+    /// the unbound -> bound draft re-seed with no automated coverage at all.
+    @MainActor
+    init(controller: ScreenTimeController? = nil) {
+        let controller = controller ?? .shared
+        _controller = ObservedObject(wrappedValue: controller)
+        _draft = State(initialValue: controller.configuration)
         var descriptor = FetchDescriptor<Subject>(sortBy: [
             SortDescriptor(\Subject.sortOrder),
             SortDescriptor(\Subject.createdAt),
@@ -88,7 +96,10 @@ struct ScreenTimeSettingsView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存", action: save)
-                    .disabled(isRequestingAuthorization || validationMessage != nil)
+                    .disabled(ScreenTimeDraftPolicy.blocksSave(
+                        bound: controller.isBoundToContext, draftEnabled: draft.enabled
+                    ) || isRequestingAuthorization
+                              || controller.isSaving || controller.isResetting || validationMessage != nil)
                     .accessibilityIdentifier("screen-time.save")
             }
         }
@@ -101,6 +112,7 @@ struct ScreenTimeSettingsView: View {
                     ? draft.distractionSelection : draft.learningSelection,
                 isPro: purchase.isPro
             ) { selection in
+                hasUserEdits = true
                 if lane == .learning {
                     draft.learningSelection = selection
                 } else {
@@ -124,9 +136,12 @@ struct ScreenTimeSettingsView: View {
         }
         .task {
             controller.reload()
-            guard !hasLoaded else { return }
-            hasLoaded = true
-            draft = controller.configuration
+            seedDraftIfNeeded()
+        }
+        .onChange(of: controller.isBoundToContext) { _, _ in
+            // The controller publishes an empty configuration until the ledger
+            // admits this owner, which can happen after this screen appears.
+            seedDraftIfNeeded()
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { controller.reload() }
@@ -136,6 +151,7 @@ struct ScreenTimeSettingsView: View {
             // background refreshes must not overwrite the user's draft edits.
             if !controller.authorizationGranted {
                 draft = configuration
+                hasUserEdits = false
             }
         }
     }
@@ -201,12 +217,12 @@ struct ScreenTimeSettingsView: View {
 
     private var recordingSection: some View {
         Section {
-            Toggle("アプリの利用時間を記録", isOn: $draft.enabled)
-                .disabled(!controller.authorizationGranted && !draft.enabled)
+            Toggle("アプリの利用時間を記録", isOn: editedBinding(\.enabled))
+                .disabled(controller.isSaving || controller.isResetting || (!controller.authorizationGranted && !draft.enabled))
                 .accessibilityHint("アプリとテーマを選び、保存すると反映されます")
                 .accessibilityIdentifier("screen-time.enabled")
 
-            if let message = controller.monitoringError {
+            if let message = controller.monitoringError ?? controller.bindingError {
                 Label(message, systemImage: "exclamationmark.triangle")
                     .font(.subheadline)
                     .foregroundStyle(.red)
@@ -216,7 +232,15 @@ struct ScreenTimeSettingsView: View {
                     .accessibilityAddTraits(.isStaticText)
                     .accessibilityIdentifier("screen-time.monitoring-error")
             }
-            if controller.isMonitoring {
+            if controller.isUpdatingMonitoring {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("スクリーンタイムの設定を反映中…")
+                        .font(.subheadline)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("screen-time.updating")
+            } else if controller.isMonitoring {
                 Label(monitoringStatusText, systemImage: "checkmark.circle")
                     .font(.subheadline)
                     .foregroundStyle(PomoGemTheme.muted)
@@ -235,6 +259,8 @@ struct ScreenTimeSettingsView: View {
             if let validationMessage {
                 Text(validationMessage)
                     .foregroundStyle(.red)
+            } else if !controller.isBoundToContext {
+                Text(ScreenTimeDraftPolicy.unboundFooterMessage)
             } else {
                 Text("変更は右上の「保存」で反映します。記録を再開できないときも、保存から再試行できます。")
             }
@@ -245,7 +271,7 @@ struct ScreenTimeSettingsView: View {
         Section {
             selectionButton(.learning, count: learningCount)
 
-            Picker("記録先のテーマ", selection: $draft.themeID) {
+            Picker("記録先のテーマ", selection: editedBinding(\.themeID)) {
                 Text("選んでください").tag(nil as UUID?)
                 if let themeID = draft.themeID, !selectedThemeExists {
                     Text("削除されたテーマ").tag(Optional(themeID))
@@ -254,6 +280,7 @@ struct ScreenTimeSettingsView: View {
                     Text(subject.safeDisplayName).tag(Optional(subject.id))
                 }
             }
+            .disabled(controller.isSaving || controller.isResetting)
             .accessibilityIdentifier("screen-time.theme")
 
             if !purchase.isPro {
@@ -330,6 +357,7 @@ struct ScreenTimeSettingsView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
             .frame(minHeight: 44)
+            .disabled(controller.isSaving || controller.isResetting || isRequestingAuthorization)
             .accessibilityIdentifier("screen-time.reset")
         } footer: {
             Text("アプリの選択・未取り込みの利用記録・黒いgemを削除し、自動記録を停止します。保存済みの勉強時間と通常gemは残ります。")
@@ -382,12 +410,37 @@ struct ScreenTimeSettingsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PomoGemBareButtonStyle())
-        .disabled(!controller.authorizationGranted || isRequestingAuthorization)
+        .disabled(!controller.authorizationGranted || isRequestingAuthorization || controller.isSaving || controller.isResetting)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(lane.title)のアプリを選ぶ")
         .accessibilityValue("\(count)アプリ選択中")
         .accessibilityHint(lane == .learning && !purchase.isPro ? "無料では5つまで選べます" : "アプリ数は無制限です")
         .accessibilityIdentifier("screen-time.\(lane.rawValue)-apps")
+    }
+
+    /// Only user interaction goes through this setter, so a later re-seed
+    /// cannot be mistaken for an edit the user can see on screen.
+    private func editedBinding<Value: Equatable>(
+        _ keyPath: WritableKeyPath<ScreenTimeConfiguration, Value>
+    ) -> Binding<Value> {
+        Binding(
+            get: { draft[keyPath: keyPath] },
+            set: { newValue in
+                guard draft[keyPath: keyPath] != newValue else { return }
+                hasUserEdits = true
+                draft[keyPath: keyPath] = newValue
+            }
+        )
+    }
+
+    private func seedDraftIfNeeded() {
+        guard ScreenTimeDraftPolicy.shouldReseed(
+            bound: controller.isBoundToContext,
+            hasUserEdits: hasUserEdits,
+            draftIsEmpty: draft == ScreenTimeConfiguration()
+        ) else { return }
+        draft = controller.configuration
+        hasUserEdits = false
     }
 
     private func requestAuthorization() async {
@@ -396,30 +449,68 @@ struct ScreenTimeSettingsView: View {
         defer { isRequestingAuthorization = false }
         await controller.requestAuthorization()
         draft = controller.configuration
+        hasUserEdits = false
     }
 
     private func save() {
-        guard validationMessage == nil else { return }
-        do {
-            try controller.save(configuration: draft, isPro: purchase.isPro)
-            draft = controller.configuration
-            if controller.monitoringError == nil {
-                router.showToast("スクリーンタイムの設定を保存しました", symbol: "checkmark")
+        guard validationMessage == nil, !controller.isSaving, !controller.isResetting else { return }
+        let configuration = draft
+        let isPro = purchase.isPro
+        Task {
+            do {
+                try await controller.save(configuration: configuration, isPro: isPro)
+                draft = controller.configuration
+                hasUserEdits = false
+                if controller.monitoringError == nil {
+                    router.showToast("スクリーンタイムの設定を保存しました", symbol: "checkmark")
+                }
+            } catch {
+                saveError = error.localizedDescription
             }
-        } catch {
-            saveError = error.localizedDescription
         }
     }
 
     private func reset() {
-        do {
-            try controller.resetActivityData()
-            draft = controller.configuration
-            router.showToast("スクリーンタイムの内容をリセットしました", symbol: "checkmark")
-        } catch {
-            saveError = error.localizedDescription
+        Task {
+            do {
+                try await controller.resetActivityData()
+                draft = controller.configuration
+                hasUserEdits = false
+                router.showToast("スクリーンタイムの内容をリセットしました", symbol: "checkmark")
+            } catch {
+                saveError = error.localizedDescription
+            }
         }
     }
+}
+
+/// Seeding the draft from an unbound controller shows an empty configuration;
+/// saving that would erase application tokens the user can only restore through
+/// a new picker session. An empty draft has nothing to lose, so a late binding
+/// may still fill it in.
+enum ScreenTimeDraftPolicy {
+    static func shouldReseed(bound: Bool, hasUserEdits: Bool, draftIsEmpty: Bool) -> Bool {
+        guard bound else { return false }
+        return !hasUserEdits || draftIsEmpty
+    }
+
+    /// 保存 stays enabled while the context is unbound and the draft is OFF so
+    /// the user gets the concrete reason from the 「設定を完了できませんでした」
+    /// alert instead of a mute greyed-out control. It does NOT mean the save
+    /// succeeds: `ScreenTimeController.save` starts with `boundLease()`, which
+    /// throws `unboundContext` for every save while unbound. A save that would
+    /// ENABLE recording is blocked outright, because its draft may still be
+    /// the controller's empty published configuration and saving that would
+    /// destroy opaque selections only a new picker session could restore.
+    static func blocksSave(bound: Bool, draftEnabled: Bool) -> Bool {
+        !bound && draftEnabled
+    }
+
+    /// What the footer says while the context is unbound. It must describe the
+    /// button's real effect — an explanation — and never promise a save the
+    /// controller refuses.
+    static let unboundFooterMessage =
+        "記録の準備が完了していないため、いまは変更を保存できません。「保存」を押すと、理由をお知らせします。"
 }
 
 private enum ScreenTimeSelectionLane: String, Identifiable {

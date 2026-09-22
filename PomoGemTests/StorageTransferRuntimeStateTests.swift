@@ -198,4 +198,71 @@ final class StorageTransferRuntimeStateTests: XCTestCase {
         XCTAssertThrowsError(try file.save(initial, replacing: initial))
         XCTAssertEqual(try file.load(), successor)
     }
+
+    // MARK: - Device -> iCloud overwrite (.overwriteCloudFromDevice)
+
+    /// The user's actual case: a device already bound to the account replaces
+    /// the current generation with its own cache.
+    private func overwriteFromCloud(through phase: StorageTransferJournal.Phase = .requested) throws -> StorageTransferJournal {
+        let account = String(repeating: "a", count: 64)
+        let previous = try XCTUnwrap(ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+                                                               accountFingerprint: account))
+        let destination = try XCTUnwrap(ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+                                                                  accountFingerprint: account))
+        var value = try StorageTransferJournal(choice: .overwriteCloudFromDevice,
+            source: .cloud(binding: previous), destination: .cloud(binding: destination),
+            cloudBinding: destination)
+        while value.phase < phase {
+            let next = try XCTUnwrap(StorageTransferJournal.Phase(rawValue: value.phase.rawValue + 1))
+            value = try value.advancing(to: next,
+                sourceDigest: next == .sourceSaved ? sourceDigest : nil,
+                destinationDigest: next == .destinationSaved ? sourceDigest : nil,
+                remoteRecoveryTransactionID: next == .recoveryCopySaved ? value.transactionID : nil)
+        }
+        return value
+    }
+
+    func testOverwriteCheckpointCarriesExactlyTheLegacyReplacementEvidence() throws {
+        for phase in StorageTransferJournal.Phase.allCases {
+            let journal = try overwriteFromCloud(through: phase)
+            let value = try checkpoint(journal)
+            try value.validate(journal: journal)
+            let decoded = try JSONDecoder().decode(StorageTransferRuntimeCheckpoint.self,
+                                                   from: JSONEncoder().encode(value))
+            XCTAssertEqual(decoded, value)
+            try decoded.validate(journal: journal)
+        }
+        // The acknowledged remote recovery copy cannot be lost afterwards.
+        let acknowledged = try overwriteFromCloud(through: .recoveryCopySaved)
+        var value = try checkpoint(acknowledged); value.recoveryManifest = nil
+        XCTAssertThrowsError(try value.validate(journal: acknowledged))
+        // destinationSaved needs BOTH the local import receipt and another
+        // process's cloud-mirroring proof, exactly as the legacy case does.
+        let saved = try overwriteFromCloud(through: .destinationSaved)
+        value = try checkpoint(saved)
+        value.verifiedCloudProcessID = nil; value.verifiedCloudPayloadDigest = nil
+        XCTAssertThrowsError(try value.validate(journal: saved))
+        value = try checkpoint(saved); value.importedPayloadDigest = nil
+        XCTAssertThrowsError(try value.validate(journal: saved))
+        value = try checkpoint(saved); value.cloudExportIntentRecorded = false
+        XCTAssertThrowsError(try value.validate(journal: saved))
+    }
+
+    func testServerOriginOverwriteStillRequiresTheSynthesizedLocalOnlySource() throws {
+        let reinstall = try journal(.overwriteCloudFromDevice, through: .preparingDestination)
+        var value = try checkpoint(reinstall)
+        value.recoveredFromServer = true
+        value.baselineControl = try StorageTransferRecoveryControl(manifest: XCTUnwrap(value.recoveryManifest))
+        try value.validate(journal: reinstall)
+        value.partialRecoveryAttemptID = UUID()
+        try value.validate(journal: reinstall)
+
+        // A cloud-source overwrite owns a real store and must retire it, so it
+        // can never claim the server origin that skips source retirement.
+        let fromCloud = try overwriteFromCloud(through: .preparingDestination)
+        var impossible = try checkpoint(fromCloud)
+        impossible.recoveredFromServer = true
+        impossible.baselineControl = try StorageTransferRecoveryControl(manifest: XCTUnwrap(impossible.recoveryManifest))
+        XCTAssertThrowsError(try impossible.validate(journal: fromCloud))
+    }
 }

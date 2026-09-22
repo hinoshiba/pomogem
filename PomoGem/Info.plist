@@ -43,6 +43,8 @@
 	<string>シェアカードを写真に保存します。</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>POMOGEM_ICLOUD_CONTAINER_ENVIRONMENT</key>
+	<string>$(ICLOUD_CONTAINER_ENVIRONMENT)</string>
 	<key>POMOGEM_PRIVACY_POLICY_URL</key>
 	<string>https://pomogem.hinoshiba.com/#privacy</string>
 	<key>UIAppFonts</key>

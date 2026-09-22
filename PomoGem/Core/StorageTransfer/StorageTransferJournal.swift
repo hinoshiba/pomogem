@@ -7,8 +7,24 @@ enum StorageTransferChoice: String, Codable, CaseIterable, Sendable {
     case disableCloudKeepingCopy
     case enableCloudKeepingCloud
     case enableCloudReplacingCloud
+    /// Replaces the current iCloud dataset with this device's data while the
+    /// device is already bound to the account - the fenced datasetRefreshRequired
+    /// situation, which the legacy `enableCloudReplacingCloud` cannot express.
+    /// Both raw values are stored journal format and never change; the legacy
+    /// case keeps its own shapes, its own release bit and its own error string.
+    case overwriteCloudFromDevice
 
-    var replacesCloud: Bool { self == .enableCloudReplacingCloud }
+    var replacesCloud: Bool {
+        self == .enableCloudReplacingCloud || self == .overwriteCloudFromDevice
+    }
+
+    /// Whether the frozen source must be proven equal to the current iCloud
+    /// dataset before it is captured. Only a disable-with-copy must: an
+    /// overwrite deliberately destroys a divergent - usually newer - remote
+    /// dataset, so requiring equality would make the operation impossible.
+    /// Skipping this precondition IS the definition of an overwrite, and it is
+    /// an explicit decision here rather than an accident at the call site.
+    var requiresCloudEqualityOfFrozenSource: Bool { self == .disableCloudKeepingCopy }
 }
 
 enum StorageTransferError: Error, LocalizedError, Equatable {
@@ -129,6 +145,18 @@ struct StorageTransferJournal: Codable, Equatable, Sendable {
                   previous.accountFingerprint == destinationBinding.accountFingerprint else {
                 throw StorageTransferError.invalidJournal
             }
+        // The device is already bound to the account but fenced out of the
+        // current generation. Its old cache is the source; a fresh namespace
+        // becomes the new generation. Both endpoints are one Apple Account.
+        case let (.overwriteCloudFromDevice, .cloud(previous), .cloud(destinationBinding)):
+            guard destinationBinding == cloudBinding,
+                  previous.accountFingerprint == destinationBinding.accountFingerprint else {
+                throw StorageTransferError.invalidJournal
+            }
+        // Reinstall only: recoverRemoteTransfer synthesizes an empty local
+        // source because a fresh installation owns no previous store.
+        case let (.overwriteCloudFromDevice, .localOnly, .cloud(binding)):
+            guard binding == cloudBinding else { throw StorageTransferError.invalidJournal }
         default:
             throw StorageTransferError.invalidJournal
         }
@@ -138,6 +166,9 @@ struct StorageTransferJournal: Codable, Equatable, Sendable {
               destinationDigest.map(AppleAccountFingerprint.isValid) ?? true else {
             throw StorageTransferError.invalidJournal
         }
+        // `replacesCloud` now covers the overwrite too, so the recovery-copy
+        // requirement, `permitsCancellation` and `retainsImportOnCancellation`
+        // above already bind the new case with no further change.
         if choice.replacesCloud, phase >= .recoveryCopySaved {
             guard remoteRecoveryTransactionID == transactionID else {
                 throw StorageTransferError.recoveryCopyRequired
