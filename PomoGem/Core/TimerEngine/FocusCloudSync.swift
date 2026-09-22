@@ -1391,8 +1391,9 @@ enum FocusCloudSyncStore {
     /// Reads every physical revision without treating the page size as a
     /// lifetime transition limit. The returned rows are in-memory witnesses:
     /// they are never authority to compact or delete synchronized evidence.
-    /// Work is linear in this one session's history; retained rows are bounded
-    /// to one page plus resolution, revision, and optional lineage witnesses.
+    /// Traverses this session's persisted rows in batches, retaining only
+    /// resolution, revision, and optional lineage witnesses. The
+    /// context's already-retained unsaved edits are merged into that stream.
     /// A separate bounded payload map validates collisions within one event ID.
     private static func timerResolutionRecords(
         sessionID: UUID,
@@ -1430,73 +1431,99 @@ enum FocusCloudSyncStore {
             ]
         )
         let countBefore = try context.fetchCount(descriptor)
-        var offset = 0
+        // Offset requests that include pending changes can repeat physical
+        // copies between pages. Keep one persisted fetch result and merge the
+        // context's existing edits explicitly; batched fetches do not support
+        // includePendingChanges. No save or source-row mutation is needed.
+        var pendingByID: [PersistentIdentifier: SyncedFocusTimer] = [:]
+        for model in context.insertedModelsArray + context.changedModelsArray
+            + context.deletedModelsArray {
+            if let timer = model as? SyncedFocusTimer {
+                pendingByID[timer.persistentModelID] = timer
+            }
+        }
+        let pendingRows = try pendingByID.values.filter {
+            guard !$0.isDeleted else { return false }
+            return try predicate.evaluate($0)
+        }.sorted(using: descriptor.sortBy)
+        descriptor.includePendingChanges = false
+        let persistedRows = try context.fetch(
+            descriptor, batchSize: QueryContract.timerHistoryPageSize
+        )
+        var processedCount = 0
         var witnesses: [SyncedFocusTimer] = []
         var maximumRevisionRecord: SyncedFocusTimer?
         var completionLineage: SyncedFocusTimer?
         var currentRecordID: UUID?
         var payloadBySnapshot: [FocusSyncRecordSnapshot: FocusCloudPayload] = [:]
 
-        while offset < countBefore {
+        func consume(_ record: SyncedFocusTimer) throws {
             try Task.checkCancellation()
-            descriptor.fetchOffset = offset
-            descriptor.fetchLimit = min(
-                QueryContract.timerHistoryPageSize, countBefore - offset
-            )
-            let page = try context.fetch(descriptor)
-            guard page.count == descriptor.fetchLimit else {
-                throw FocusCloudSyncError.timerHistoryRequiresMaintenance
+            processedCount += 1
+            let snapshot = record.policySnapshot
+            let payload = try record.decodedPayload()
+            if currentRecordID != record.id {
+                currentRecordID = record.id
+                payloadBySnapshot.removeAll(keepingCapacity: true)
             }
-            for record in page {
-                let snapshot = record.policySnapshot
-                let payload = try record.decodedPayload()
-                if currentRecordID != record.id {
-                    currentRecordID = record.id
-                    payloadBySnapshot.removeAll(keepingCapacity: true)
+            if let knownPayload = payloadBySnapshot[snapshot] {
+                guard knownPayload == payload else {
+                    throw FocusCloudSyncError.invalidPayload
                 }
-                if let knownPayload = payloadBySnapshot[snapshot] {
-                    guard knownPayload == payload else {
-                        throw FocusCloudSyncError.invalidPayload
-                    }
-                } else {
-                    guard payloadBySnapshot.count
-                            < QueryContract.maximumSnapshotVariantsPerRecordID else {
-                        throw FocusCloudSyncError.timerHistoryRequiresMaintenance
-                    }
-                    payloadBySnapshot[snapshot] = payload
+            } else {
+                guard payloadBySnapshot.count
+                        < QueryContract.maximumSnapshotVariantsPerRecordID else {
+                    throw FocusCloudSyncError.timerHistoryRequiresMaintenance
                 }
+                payloadBySnapshot[snapshot] = payload
+            }
 
-                let candidates = witnesses + [record]
-                let selected = Set(FocusSyncPolicy.compactionWitnesses(
-                    from: candidates.map(\.policySnapshot)
-                ))
-                // Keep one physical row per selected snapshot. Equal copies
-                // have already passed the semantic payload validation above.
-                var retained = Set<FocusSyncRecordSnapshot>()
-                witnesses = candidates.filter {
-                    let key = $0.policySnapshot
-                    return selected.contains(key) && retained.insert(key).inserted
-                }
-                if record.revision > (maximumRevisionRecord?.revision ?? 0) {
-                    maximumRevisionRecord = record
-                }
-                if let completionWitnessPayload,
-                   record.writerDeviceID == completionWitnessWriter,
-                   record.status.isRecoverable,
-                   completionWitnessPayload.isCompletionSuccessor(of: payload),
-                   completionLineage.map({
-                       completionLineageIsOrderedBefore($0, record)
-                   }) ?? true {
-                    completionLineage = record
-                }
+            let candidates = witnesses + [record]
+            let selected = Set(FocusSyncPolicy.compactionWitnesses(
+                from: candidates.map(\.policySnapshot)
+            ))
+            // Keep one physical row per selected snapshot. Equal copies
+            // have already passed the semantic payload validation above.
+            var retained = Set<FocusSyncRecordSnapshot>()
+            witnesses = candidates.filter {
+                let key = $0.policySnapshot
+                return selected.contains(key) && retained.insert(key).inserted
             }
-            offset += page.count
+            if record.revision > (maximumRevisionRecord?.revision ?? 0) {
+                maximumRevisionRecord = record
+            }
+            if let completionWitnessPayload,
+               record.writerDeviceID == completionWitnessWriter,
+               record.status.isRecoverable,
+               completionWitnessPayload.isCompletionSuccessor(of: payload),
+               completionLineage.map({
+                   completionLineageIsOrderedBefore($0, record)
+               }) ?? true {
+                completionLineage = record
+            }
         }
-        // A cardinality change makes an offset scan incomplete. Do not append
-        // a new mutation from that read; the next attempt starts over. As with
-        // other bounded store reads, this is not a linearizable fence against
-        // same-count concurrent replacement by the CloudKit importer.
-        guard try context.fetchCount(FetchDescriptor(predicate: predicate))
+
+        var pendingIndex = 0
+        for record in persistedRows {
+            try Task.checkCancellation()
+            // A pending edit or deletion replaces this local physical row's
+            // persisted representation, even if it no longer matches the query.
+            guard pendingByID[record.persistentModelID] == nil else { continue }
+            while pendingIndex < pendingRows.count,
+                  pendingRows[pendingIndex].id <= record.id {
+                try consume(pendingRows[pendingIndex])
+                pendingIndex += 1
+            }
+            try consume(record)
+        }
+        while pendingIndex < pendingRows.count {
+            try consume(pendingRows[pendingIndex])
+            pendingIndex += 1
+        }
+        // Reject a changed/incomplete read before appending a mutation. This
+        // does not fence same-count concurrent replacement by the importer.
+        guard processedCount == countBefore,
+              try context.fetchCount(FetchDescriptor(predicate: predicate))
                 == countBefore else {
             throw FocusCloudSyncError.timerHistoryRequiresMaintenance
         }
