@@ -494,6 +494,12 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var isPreparing = false
     @State private var isWaitingForLaunchActivation = false
     @State private var requestedCloudSelection = false
+    // Sticky for the process: a later attempt cannot undo a storage mode an
+    // earlier one already recorded, so the watchdog screen must not promise it.
+    @State private var didCommitStorageSelection = false
+    // The user's own iCloud choice in this process. A retry may resume that
+    // choice; no interruption of any kind may manufacture it.
+    @State private var didConfirmCloudSelection = false
     @State private var canChooseLocalOnly = false
     @State private var mustDestroyPersistentStores = false
     @State private var pendingDestructionNamespace: AccountDataNamespace?
@@ -507,12 +513,20 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var retainsTransferCopyOnCancellation = false
     @State private var remoteRecoveryAction: RemoteRecoveryAction?
     @State private var cloudLaunchDeadline: CloudLaunchDeadline?
+    @State private var launchActivationWatchdog = LaunchActivationWatchdog()
     @State private var offlineFallbackRequested = false
     @State private var requestedOnlineCloudLaunch = false
     @State private var offlineRecovery = CloudOfflineRecoveryPresentation()
     @State private var canContinueOffline = false
     @State private var isCheckingOfflineConnection = false
     @State private var offlineRevocationWriteFailed = false
+    /// This process was told the account state moved and has not completed a
+    /// boundary resolution since. Deliberately in-process only: it is not
+    /// evidence about the account, so it must not outlive the process the way
+    /// a receipt revocation does. A relaunch starts over from the receipt, and
+    /// the cold-launch case — the account changed while the app was not
+    /// running, so no notification was ever delivered — is not covered by it.
+    @State private var hasUnresolvedAccountStateMovement = false
     @State private var offlineConnectionTask: Task<Void, Never>?
     @State private var offlineConnectionAttempt: UUID?
     @State private var offlineMessage = "タイマーや記録を利用できます。接続回復後に同期を再開します。"
@@ -548,7 +562,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             NotificationCenter.default.publisher(for: .CKAccountChanged)
                 .receive(on: RunLoop.main)
         ) { _ in
-            accountIdentityDidChange()
+            quiesceForPossibleAccountChange()
         }
         .onChange(of: scenePhase) { _, phase in
             handleScenePhaseChange(phase)
@@ -568,6 +582,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 isPreparing: isPreparing
             ) else { return }
             isWaitingForLaunchActivation = false
+            cancelLaunchActivationDeadline()
             handleScenePhaseChange(.active)
         }
     }
@@ -759,6 +774,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         guard launchAttemptGate.allowsPreparation(for: attempt) else { return }
         guard !requiresStorageTransferRelaunch else { return }
         isWaitingForLaunchActivation = false
+        cancelLaunchActivationDeadline()
         isPreparing = true
         canContinueOffline = false
         var ownedDeadline: CloudLaunchDeadline?
@@ -964,7 +980,8 @@ private struct PomoGemPersistenceLaunchHost: View {
             requestedOnlineCloudLaunch = false
             if let expectedCloudBinding,
                CloudOfflineHostPolicy.prefersOfflineLaunch(explicitOnlineRetry: explicitOnlineRetry,
-                   requestedOfflineFallback: offlineFallbackRequested, networkIsOffline: networkPath.isOffline) {
+                   requestedOfflineFallback: offlineFallbackRequested, networkIsOffline: networkPath.isOffline,
+                   hasUnresolvedAccountStateMovement: hasUnresolvedAccountStateMovement) {
                 let wasFallback = offlineFallbackRequested
                 offlineFallbackRequested = false
                 if try await openOfflineSession(binding: expectedCloudBinding, attempt: attempt) { return }
@@ -990,6 +1007,10 @@ private struct PomoGemPersistenceLaunchHost: View {
             }
             try Task.checkCancellation()
             guard launchAttempt == attempt else { return }
+            // A complete resolution is the only thing that answers the
+            // question a quiescence asked. Until one arrives, no route may
+            // reopen the local copy on the receipt alone.
+            hasUnresolvedAccountStateMovement = false
             try requireActiveLaunchAttempt(
                 attempt,
                 checkpoint: "before-profile-commit"
@@ -998,12 +1019,25 @@ private struct PomoGemPersistenceLaunchHost: View {
             try PersistenceDeploymentState.select(.cloud(
                 binding: resolvedBoundary.binding
             ))
+            didCommitStorageSelection = true
             try requireCloudMountAuthorization(
                 expectedBinding: resolvedBoundary.binding,
                 verifiedBinding: resolvedBoundary.binding,
                 attempt: attempt,
                 checkpoint: "after-initial-identity"
             )
+            // The live identity has now been verified and resolved to exactly
+            // the stored binding. That is the comparison a revocation written
+            // without one was always missing, so retract it here — before the
+            // transfer/lineage preflights, which can block this launch long
+            // before any mount could clear it.
+            if expectedCloudBinding != nil {
+                recordLaunchRecovery(CloudOfflineLaunchRecovery(
+                    expectedBinding: expectedCloudBinding,
+                    resolvedBinding: resolvedBoundary.binding
+                ).run(state: try? CloudOfflineAccessState(),
+                      isEligible: { offlineCopyIsEligible(binding: $0) }))
+            }
             requestedCloudSelection = false
             canChooseLocalOnly = false
             if let suspendedAccountBinding,
@@ -1132,6 +1166,9 @@ private struct PomoGemPersistenceLaunchHost: View {
                     applicationState: UIApplication.shared.applicationState
                 )
                 isWaitingForLaunchActivation = resolution == .waitForActivation
+                // iOS can hold its own modal without delivering activation.
+                // Keep that wait bounded while a fully active catch restarts now.
+                if isWaitingForLaunchActivation { armLaunchActivationDeadline(attempt: attempt) }
             }
             // Record lifecycle values only; never account identifiers, model
             // contents or store paths. Cancellation must be distinguishable
@@ -1199,7 +1236,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 AccountScopedLocalState.clearPendingPreviousBinding()
             }
             AccountScopedLocalState.deactivate()
-            launchState = .blocked(error.localizedDescription)
+            launchState = .blocked(launchFailureMessage(for: error))
         } catch {
             guard launchAttempt == attempt, !Task.isCancelled else { return }
             if case let .selected(.cloud(binding)) = PersistenceDeploymentState.load() {
@@ -1217,9 +1254,25 @@ private struct PomoGemPersistenceLaunchHost: View {
                 AccountScopedLocalState.clearPendingPreviousBinding()
             }
             launchState = error is PersistenceContainerRetirementError
-                ? .blocked(error.localizedDescription)
-                : .failed(error.localizedDescription)
+                ? .blocked(launchFailureMessage(for: error))
+                : .failed(launchFailureMessage(for: error))
         }
+    }
+
+    /// The message a blocked or failed launch shows. When the only thing
+    /// keeping the local copy off the screen is an account-state movement this
+    /// process could not resolve, say that instead of reporting the transport
+    /// failure alone: 「もう一度試す」 is then the entire recovery, and the
+    /// previous wording would have promised an offline door that is shut.
+    private func launchFailureMessage(for error: Error) -> String {
+        guard case let .selected(.cloud(binding)) = PersistenceDeploymentState.load() else {
+            return error.localizedDescription
+        }
+        return CloudOfflineHostPolicy.unresolvedAccountMovementMessage(
+            after: error,
+            hasUnresolvedAccountStateMovement: hasUnresolvedAccountStateMovement,
+            offlineCopyWouldOtherwiseBeEligible: receiptPermitsOfflineUse(binding: binding)
+        ) ?? error.localizedDescription
     }
 
     private func makeLocalSession(
@@ -1535,7 +1588,8 @@ private struct PomoGemPersistenceLaunchHost: View {
                         cloudMirrorWasOpened: StorageTransferProcessState.cloudMirrorWasOpened,
                         hasExistingStore: hasExistingStore,
                         containersRetired: retirement == .retired,
-                        sceneIsActive: scenePhase == .active)
+                        sceneIsActive: scenePhase == .active,
+                        hasUnresolvedAccountStateMovement: hasUnresolvedAccountStateMovement)
                     switch recovery {
                     case .openOfflineCopy:
                         offlineFallbackRequested = true
@@ -1569,6 +1623,11 @@ private struct PomoGemPersistenceLaunchHost: View {
     private func openOfflineSession(binding: ActiveAccountLocalBinding, attempt: Int) async throws -> Bool {
         try requireActiveLaunchAttempt(attempt, checkpoint: "before-offline-copy")
         guard !offlineRevocationWriteFailed else { return false }
+        // Nothing below compares an identity: the receipt, the store pair and
+        // the transfer gates are all local records of a PREVIOUS check. While
+        // an account-state movement is unresolved they cannot say who is
+        // signed in, so this route stays closed until a resolution reopens it.
+        guard !hasUnresolvedAccountStateMovement else { return false }
         let state = try CloudOfflineAccessState()
         let existing = try state.load()
         let conditions = try offlineConditions(binding: binding)
@@ -1648,10 +1707,20 @@ private struct PomoGemPersistenceLaunchHost: View {
             }
             do {
                 try await deadline.run(validate: validate) {
-                    _ = try await AppleAccountBoundaryResolver().resolve(expectedBinding: binding)
+                    let boundary = try await AppleAccountBoundaryResolver().resolve(expectedBinding: binding)
                     try validate()
-                    let runtime = try StorageTransferRuntime.live()
-                    try await runtime.preflightCloudMount(binding: binding, validateAccess: validate)
+                    hasUnresolvedAccountStateMovement = false
+                    // The retraction is ordered before the preflight by the
+                    // recovery step itself, not by the order of these lines.
+                    let runtime = try await CloudOfflineLaunchRecovery(
+                        expectedBinding: binding, resolvedBinding: boundary.binding
+                    ).run(state: try? CloudOfflineAccessState(),
+                          isEligible: { offlineCopyIsEligible(binding: $0) },
+                          record: { recordLaunchRecovery($0) }) { () -> StorageTransferRuntime in
+                        let runtime = try StorageTransferRuntime.live()
+                        try await runtime.preflightCloudMount(binding: binding, validateAccess: validate)
+                        return runtime
+                    }
                     guard let receipt = try CloudOfflineAccessState().load(), receipt.binding == binding else {
                         throw CloudOfflineAccessStateError.invalidReceipt
                     }
@@ -1751,7 +1820,8 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     private func requestOfflineFallback(after error: Error, attempt: Int) -> Bool {
-        guard CloudOfflineHostPolicy.allowsOfflineFallback(after: error), launchAttempt == attempt,
+        guard !hasUnresolvedAccountStateMovement,
+              CloudOfflineHostPolicy.allowsOfflineFallback(after: error), launchAttempt == attempt,
               case let .selected(.cloud(binding)) = PersistenceDeploymentState.load(),
               let state = try? CloudOfflineAccessState(),
               let conditions = try? offlineConditions(binding: binding) else { return false }
@@ -1771,7 +1841,15 @@ private struct PomoGemPersistenceLaunchHost: View {
         return true
     }
 
+    /// The offline door as the user sees it. An account-state movement this
+    /// process has not resolved withdraws the door even from a receipt that
+    /// is otherwise perfectly eligible: the receipt says which account the
+    /// local copy belongs to, never which account is signed in now.
     private func offlineCopyIsEligible(binding: ActiveAccountLocalBinding) -> Bool {
+        !hasUnresolvedAccountStateMovement && receiptPermitsOfflineUse(binding: binding)
+    }
+
+    private func receiptPermitsOfflineUse(binding: ActiveAccountLocalBinding) -> Bool {
         guard !offlineRevocationWriteFailed else { return false }
         do {
             let conditions = try offlineConditions(binding: binding)
@@ -1791,12 +1869,35 @@ private struct PomoGemPersistenceLaunchHost: View {
         launchAttempt += 1
     }
 
+    /// Apply what `CloudOfflineLaunchRecovery` decided: the offline door is
+    /// reopened in this same launch attempt, so a launch that is blocked later
+    /// by a lineage or transfer preflight still offers the local copy. A
+    /// failed write is not fatal — the receipt simply stays as it was.
+    private func recordLaunchRecovery(_ outcome: CloudOfflineLaunchRecovery.Outcome) {
+        canContinueOffline = outcome.offlineCopyIsEligible
+        if let retracted = outcome.retractedReason {
+            Self.persistenceLogger.notice(
+                "Offline receipt revocation retracted reason=\(retracted.rawValue, privacy: .public)"
+            )
+        }
+        if outcome.failed {
+            Self.persistenceLogger.notice(
+                "Offline receipt revocation retraction failed"
+            )
+        }
+    }
+
     private func revokeOfflineForAccountError(_ error: Error, binding: ActiveAccountLocalBinding) {
         guard let reason = CloudOfflineHostPolicy.revocationReason(for: error) else { return }
         canContinueOffline = false
         do { try CloudOfflineAccessState().revoke(binding: binding, reason: reason) }
-        catch { offlineRevocationWriteFailed = true }
-        if session != nil { accountIdentityDidChange() }
+        catch {
+            offlineRevocationWriteFailed = true
+            Self.persistenceLogger.notice(
+                "Offline receipt revocation write failed reason=\(reason.rawValue, privacy: .public)"
+            )
+        }
+        if session != nil { quiesceForPossibleAccountChange() }
     }
 
     private func cancelOfflineConnectionCheck() {
@@ -1829,6 +1930,88 @@ private struct PomoGemPersistenceLaunchHost: View {
                 .identityUnavailable
             )
         }
+    }
+
+    /// The documented launch budget for the recorded storage selection: 12 s
+    /// once this device established a cloud store, 30 s otherwise. Reading it
+    /// touches only local selection files, never the account or the network.
+    private func selectedCloudLaunchTimeout() -> TimeInterval {
+        let selection = PersistenceDeploymentState.load()
+        let hasExactCompleteStorePair: Bool
+        if case let .selected(.cloud(binding)) = selection {
+            hasExactCompleteStorePair = PersistenceStoreTopology.persistenceArtifactHistory()
+                .hasExactCompleteStorePair(for: .cloud(binding: binding))
+        } else {
+            hasExactCompleteStorePair = false
+        }
+        return CloudOfflineHostPolicy.launchTimeout(selection: selection,
+            mountState: PersistenceDeploymentState.loadMountState(),
+            hasExactCompleteStorePair: hasExactCompleteStorePair)
+    }
+
+    /// The state every watchdog decision reads, sampled now. The generation is
+    /// the attempt currently on screen, so a superseded expiry is discarded.
+    private var launchActivationFrame: LaunchActivationWatchdog.Frame {
+        LaunchActivationWatchdog.Frame(
+            generation: launchAttempt,
+            hasSession: session != nil,
+            isWaitingForActivation: isWaitingForLaunchActivation,
+            isPreparing: isPreparing,
+            isQuiescingAccountChange: isQuiescingAccountChange,
+            requiresStorageTransferRelaunch: requiresStorageTransferRelaunch,
+            phase: scenePhase,
+            applicationState: UIApplication.shared.applicationState
+        )
+    }
+
+    private var endsLaunchActivationWait: LaunchActivationWatchdog.Expiry {
+        { attempt in endLaunchActivationWait(attempt: attempt) }
+    }
+
+    /// Covers the window between the first lifecycle checkpoint and the
+    /// account deadline, where a deferred attempt has already returned and
+    /// nothing else is armed. Storage-transfer recovery keeps running outside
+    /// any launch budget: it is progressing work with its own relaunch
+    /// contract, and interrupting it would change transfer semantics.
+    private func armLaunchActivationDeadline(attempt: Int) {
+        guard launchActivationWatchdog.armForDeferredAttempt(
+            frame: launchActivationFrame,
+            timeout: selectedCloudLaunchTimeout(),
+            expire: endsLaunchActivationWait
+        ) else { return }
+        Self.persistenceLogger.info(
+            "Launch activation wait armed attempt=\(attempt) timeout=\(launchActivationWatchdog.armedTimeout ?? 0)"
+        )
+    }
+
+    private func cancelLaunchActivationDeadline() {
+        launchActivationWatchdog.cancel()
+    }
+
+    /// Expiry is a lifecycle observation, not an account or storage result:
+    /// it selects no storage mode, opens nothing and revokes nothing itself.
+    /// The launch it interrupts may already have done so, which is what the
+    /// message reports. The offline affordance still has to pass the ordinary
+    /// eligibility gate, and taking it revalidates every condition again.
+    private func endLaunchActivationWait(attempt: Int) {
+        guard launchActivationWatchdog.settleExpiry(
+            generation: attempt,
+            frame: launchActivationFrame
+        ) else { return }
+        isWaitingForLaunchActivation = false
+        if case let .selected(.cloud(binding)) = PersistenceDeploymentState.load() {
+            canContinueOffline = offlineCopyIsEligible(binding: binding)
+        }
+        let progress = LaunchActivationWatchdogPolicy.launchProgress(
+            didCommitStorageSelection: didCommitStorageSelection,
+            cloudMirrorWasOpened: StorageTransferProcessState.cloudMirrorWasOpened
+        )
+        Self.persistenceLogger.info(
+            "Launch activation wait expired attempt=\(attempt) offlineOffered=\(canContinueOffline) progress=\(String(describing: progress))"
+        )
+        launchState = .blocked(
+            LaunchActivationWatchdogPolicy.blockedMessage(progress: progress)
+        )
     }
 
     private func requireActiveLaunchAttempt(
@@ -2089,6 +2272,7 @@ private struct PomoGemPersistenceLaunchHost: View {
 
     private func retryLaunch() {
         guard !requiresStorageTransferRelaunch else { return }
+        cancelLaunchActivationDeadline()
         if isQuiescingAccountChange {
             guard !containerLifetimes.hasLiveContainers else {
                 launchState = .blocked(
@@ -2101,7 +2285,16 @@ private struct PomoGemPersistenceLaunchHost: View {
             isPreparing = false
         }
         guard !isPreparing else { return }
+        let storageModeIsUnselected: Bool
         if case .unselected = PersistenceDeploymentState.load() {
+            storageModeIsUnselected = true
+        } else {
+            storageModeIsUnselected = false
+        }
+        if LaunchRetryConsentPolicy.restoresPendingCloudSelection(
+            storageModeIsUnselected: storageModeIsUnselected,
+            didConfirmCloudSelection: didConfirmCloudSelection
+        ) {
             requestedCloudSelection = true
         }
         launchState = .preparing("保存領域を再確認しています")
@@ -2115,6 +2308,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             return
         }
         requestedCloudSelection = true
+        didConfirmCloudSelection = true
         launchState = .preparing("Apple Accountを安全に確認しています")
         launchAttempt += 1
     }
@@ -2126,6 +2320,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             try PersistenceDeploymentState.select(
                 .localOnly(namespace: namespace)
             )
+            didCommitStorageSelection = true
             AccountScopedLocalState.activateLocalOnly(namespace: namespace)
             requestedCloudSelection = false
             canChooseLocalOnly = false
@@ -2169,15 +2364,45 @@ private struct PomoGemPersistenceLaunchHost: View {
         }
     }
 
-    private func accountIdentityDidChange() {
+    /// Close the live account boundary because the account MIGHT have changed,
+    /// and start a fresh launch that will resolve the identity again.
+    ///
+    /// `.CKAccountChanged` is posted for every movement of account state —
+    /// signing in or out, iCloud being switched on or off for this app, a
+    /// token refresh, an availability transition. It carries no identity, so
+    /// it compares nothing against the stored binding and is not evidence that
+    /// another Apple Account is signed in. Quiescing here stays fail-closed:
+    /// scheduling is suspended, the cross-process binding is cleared, the
+    /// containers are retired and nothing reopens until a complete boundary
+    /// resolution succeeds. The durable receipt is deliberately left alone;
+    /// when the account really did change, that resolution returns
+    /// `.blocked(.accountMismatch)` and `revokeOfflineForAccountError` records
+    /// it with the reason that a comparison actually produced.
+    ///
+    /// What replaces the revocation on the offline route is
+    /// `hasUnresolvedAccountStateMovement`: until a resolution completes, the
+    /// local copy cannot be reopened on the receipt alone, so the launch fails
+    /// closed without writing anything that outlives the process.
+    private func quiesceForPossibleAccountChange() {
+        // Which of the two paths fired, and when, could previously only be
+        // guessed from the receipt file's timestamp.
+        Self.persistenceLogger.notice(
+            "Account boundary quiesced for a possible account change; the offline receipt is unchanged"
+        )
+        switch CloudOfflineHostPolicy.reactionToAccountStateNotification(
+            selection: PersistenceDeploymentState.load()
+        ) {
+        case .quiesceOnly:
+            break
+        case let .revokeThenQuiesce(binding, reason):
+            do { try CloudOfflineAccessState().revoke(binding: binding, reason: reason) }
+            catch { offlineRevocationWriteFailed = true }
+        }
+        hasUnresolvedAccountStateMovement = true
         canContinueOffline = false
         cancelOfflineConnectionCheck()
         cloudLaunchDeadline?.cancel()
         cloudLaunchDeadline = nil
-        if case let .selected(.cloud(binding)) = PersistenceDeploymentState.load() {
-            do { try CloudOfflineAccessState().revoke(binding: binding, reason: .accountChanged) }
-            catch { offlineRevocationWriteFailed = true }
-        }
         guard !requiresStorageTransferRelaunch else { return }
         guard usesCloudAccountBoundary else { return }
         // Reject every late request from the old view hierarchy before the
@@ -2240,6 +2465,16 @@ private struct PomoGemPersistenceLaunchHost: View {
             cloudLaunchDeadline?.cancel()
             cloudLaunchDeadline = nil
         }
+        // The OS owns a suspended process and must not be blamed for a wait
+        // the user never saw; returning to the foreground behind the same
+        // system modal never reaches .active, so the inactive transition is
+        // the only chance to re-arm. An armed budget is never restarted.
+        launchActivationWatchdog.handleScenePhaseChange(
+            phase,
+            frame: launchActivationFrame,
+            timeout: selectedCloudLaunchTimeout(),
+            expire: endsLaunchActivationWait
+        )
         guard !requiresStorageTransferRelaunch else {
             NotificationManager.shared.cancelFocusReturnReminder()
             return
