@@ -220,6 +220,7 @@
 		E59840D5770474D6631626E7 /* PomoGemStorageSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 032193B5B041D1E354E34CA7 /* PomoGemStorageSnapshot.swift */; };
 		E7134BF91616BDC73367CA9D /* CloudOfflineAccessStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01A9B85D336BC4EE52B68528 /* CloudOfflineAccessStateTests.swift */; };
 		E7894B8428282A5912517447 /* CloudAccountVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A8F60025FE01C9FFD03A00B /* CloudAccountVerificationTests.swift */; };
+		E9A82D7F751B0FE377D95E0F /* LaunchActivationWatchdogPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4213EFBA64EE041E199C469F /* LaunchActivationWatchdogPolicy.swift */; };
 		EAEE7DC58351957E5F87FDB6 /* SyncMaintenanceWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75FEB1C5A7ADA079417D3332 /* SyncMaintenanceWorker.swift */; };
 		EBC0CD9CB312A4C332A52889 /* StorageTransferCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6529191CFF72FFD406038E5B /* StorageTransferCleanup.swift */; };
 		EC756FBB0F108A7E2FA29232 /* LocalPreviewLaunchPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6C6D396C5FB8FF2FEC27957 /* LocalPreviewLaunchPolicyTests.swift */; };
@@ -354,6 +355,7 @@
 		3C7FCEA6CCE642823CB5D6E0 /* AccumulationTimelineRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationTimelineRepository.swift; sourceTree = "<group>"; };
 		3FA4EE8D1FB7A66F05F42BD7 /* CloudOfflineHistoryPreflightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudOfflineHistoryPreflightTests.swift; sourceTree = "<group>"; };
 		405164FE628C5989DD6BDCAE /* AccessibilityAdversarialUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityAdversarialUITests.swift; sourceTree = "<group>"; };
+		4213EFBA64EE041E199C469F /* LaunchActivationWatchdogPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchActivationWatchdogPolicy.swift; sourceTree = "<group>"; };
 		4383D72800A4EF0F5C7823FE /* EngagementOverviewUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngagementOverviewUITests.swift; sourceTree = "<group>"; };
 		448C5665A29F67E58E8ED641 /* CloudActivityHistoryPreflight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudActivityHistoryPreflight.swift; sourceTree = "<group>"; };
 		45B56B164A5E838876543CF2 /* StorageTransferRemoteRecoveryCloudKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferRemoteRecoveryCloudKitTests.swift; sourceTree = "<group>"; };
@@ -750,6 +752,7 @@
 				7EFB20CEF01CE01A6FC6CBB9 /* Constants.swift */,
 				1A889309BC037B43F7C5906A /* FairnessPolicy.swift */,
 				F5F337E4E147E9E6B47EEAA3 /* GachaEngine.swift */,
+				4213EFBA64EE041E199C469F /* LaunchActivationWatchdogPolicy.swift */,
 				F8018C65F844DB234D0AAC3E /* NotificationManager.swift */,
 				D80F315027168B5F3C0DAD54 /* PersistenceStoreTopology.swift */,
 				691189CE99E8C37EC486382D /* PurchaseManager.swift */,
@@ -1270,6 +1273,7 @@
 				D327FF3F60F21C8E4756BA30 /* JarScene.swift in Sources */,
 				FBFEB564B7AB9E0735D7855D /* JarSnapshotter.swift in Sources */,
 				1142A86A589A4BA6F25EC137 /* JarSpriteView.swift in Sources */,
+				E9A82D7F751B0FE377D95E0F /* LaunchActivationWatchdogPolicy.swift in Sources */,
 				660CC6C015B35FE94AFDB1F1 /* LogView.swift in Sources */,
 				1EFC03E8D775BD2DDC551F2B /* Models.swift in Sources */,
 				DB581C5F804C40DDBCA4B0C5 /* NotificationManager.swift in Sources */,
