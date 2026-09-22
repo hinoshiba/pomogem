@@ -670,6 +670,30 @@ final class ScreenTimeCallbackDiagnosticsTests: XCTestCase {
         }
     }
 
+    func testMirrorErasureIsIdempotentAndResetsTheHeartbeatCache() throws {
+        try withMirror(heartbeat: 60) { mirror, directory in
+            let url = try XCTUnwrap(mirror.fileURL)
+            let state = mirroredState()
+            mirror.write(state, now: now)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+            let sibling = directory.appendingPathComponent("unrelated.txt")
+            try Data("keep".utf8).write(to: sibling)
+
+            try mirror.eraseAllData()
+            try mirror.eraseAllData()
+
+            XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+            XCTAssertEqual(try Data(contentsOf: sibling), Data("keep".utf8))
+            // The same digest inside the heartbeat window must still write.
+            let nextPass = now.addingTimeInterval(1)
+            mirror.write(state, now: nextPass)
+            let report = try JSONDecoder().decode(
+                ScreenTimeDiagnosticsReport.self, from: Data(contentsOf: url)
+            )
+            XCTAssertEqual(Self.instantFormatter.date(from: try XCTUnwrap(report.writtenAt)), nextPass)
+        }
+    }
+
     // MARK: - fixture
 
     static let instantFormatter: ISO8601DateFormatter = {

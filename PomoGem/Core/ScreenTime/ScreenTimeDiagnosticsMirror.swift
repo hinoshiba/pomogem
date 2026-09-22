@@ -38,10 +38,11 @@ import Foundation
 /// `ScreenTimeDiagnosticsReport` rather than by encoding ledger types, so a
 /// field added to the ledger cannot arrive here by itself.
 ///
-/// Nothing here throws. A diagnostics file that cannot be written must not
+/// Writing diagnostics never throws. A file that cannot be written must not
 /// disturb a pass that has real work to do, and it never creates a ledger:
 /// `ScreenTimeController` only calls it for a ledger that already exists, the
-/// same rule as `ScreenTimeStore.countCallback`.
+/// same rule as `ScreenTimeStore.countCallback`. Complete deletion does surface
+/// a failed removal, so it cannot report success while this usage history remains.
 final class ScreenTimeDiagnosticsMirror {
     static let directoryName = "ScreenTimeDiagnostics"
     static let fileName = "counters.json"
@@ -101,6 +102,21 @@ final class ScreenTimeDiagnosticsMirror {
     }
 
     var fileURL: URL? { directory?.appendingPathComponent(Self.fileName) }
+
+    /// Complete deletion includes the copy in the app container, not only the
+    /// App Group ledger. Clear the heartbeat cache so a later admitted owner
+    /// can immediately write even when its empty ledger has the same digest.
+    func eraseAllData() throws {
+        if let fileURL {
+            do {
+                try FileManager.default.removeItem(at: fileURL)
+            } catch let error as CocoaError where error.code == .fileNoSuchFile {
+                // Idempotent when deletion resumes or no mirror was written.
+            }
+        }
+        lastDigest = nil
+        lastWriteAt = nil
+    }
 
     /// Copies what this pass read. Silent on every failure by design.
     func write(_ state: ScreenTimeState, now: Date = Date()) {

@@ -474,6 +474,9 @@ final class ScreenTimeController: ObservableObject {
         try await worker.perform {
             try worker.store.eraseAllData { worker.monitoring.stop() }
         }
+        // The lease is retired and queued writers have drained. A reload
+        // cannot recreate this app-container copy until a new owner binds.
+        try diagnosticsMirror.eraseAllData()
     }
 
     /// A barrier for lifecycle cleanup and deterministic regression tests.

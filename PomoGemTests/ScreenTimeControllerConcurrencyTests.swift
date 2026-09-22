@@ -660,6 +660,32 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         try JSONDecoder().decode(ScreenTimeDiagnosticsReport.self, from: Data(contentsOf: url))
     }
 
+    func testCompleteDeletionRemovesTheAppContainerDiagnosticsUntilANewOwnerBinds() async throws {
+        let store = try makeStore()
+        try store.update { $0.countThresholdCallback(.recorded, now: start) }
+        let mirror = ScreenTimeDiagnosticsMirror(directory: makeDirectory())
+        let controller = ScreenTimeController(
+            store: store, currentContextKey: { "owner" }, monitoring: Driver(store: store),
+            authorization: { .approved }, diagnosticsMirror: mirror
+        )
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        let url = try XCTUnwrap(mirror.fileURL)
+        XCTAssertEqual(try Self.mirroredReport(at: url).counters?.thresholdsRecorded, 1)
+
+        try await controller.eraseAllData()
+        controller.reload()
+        try await controller.waitForPendingOperations()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path),
+                       "Complete deletion must erase callback times and counts in both containers")
+        XCTAssertNil(try store.snapshot().callbackCounters)
+        XCTAssertFalse(controller.isBoundToContext)
+
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        XCTAssertNil(try Self.mirroredReport(at: url).counters,
+                     "Rebinding must not restore the deleted usage history")
+    }
+
     func testAuthorizationWithoutAdmittedOwnerReportsActionableError() async throws {
         let store = try makeStore()
         let driver = Driver(store: store)
