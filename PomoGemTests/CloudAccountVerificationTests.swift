@@ -31,25 +31,77 @@ final class CloudAccountVerificationTests: XCTestCase {
         XCTAssertEqual(calls, ["status", "identity", "probe", "identity"])
     }
 
+    /// Two disagreeing reads inside one proof are not an authorization and
+    /// not an accusation. The whole proof is repeated once; only a complete,
+    /// self-consistent proof may authorize a namespace.
     @MainActor
-    func testResolverRejectsAccountChangeDuringProofWithoutPersistingSelection() async throws {
+    func testResolverRejectsAProofThatDisagreedWithItselfTwiceWithoutPersistingSelection() async throws {
         let suite = "CloudAccountVerificationTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let script = CloudVerificationScript(changesIdentity: true)
-        let resolver = AppleAccountBoundaryResolver(defaults: defaults, client: script.client)
+        let script = CloudVerificationScript(
+            identityNames: ["first-account", "second-account", "third-account", "fourth-account"])
+        let resolver = AppleAccountBoundaryResolver(defaults: defaults, client: script.client, retryDelay: 0)
         do {
             _ = try await resolver.resolve()
-            XCTFail("An identity change cannot authorize any namespace")
+            XCTFail("An unusable identity proof cannot authorize any namespace")
         } catch let error as AppleAccountBoundaryResolutionError {
             guard case let .verification(failure) = error else {
                 return XCTFail("Expected verification failure")
             }
-            XCTAssertEqual(failure.kind, .accountChanged)
+            XCTAssertEqual(failure.kind, .identityUnstable)
             XCTAssertEqual(failure.stage, .identityAfterProbe)
         }
+        let calls = await script.calls
+        XCTAssertEqual(calls, ["status", "identity", "probe", "identity",
+                               "status", "identity", "probe", "identity"])
         XCTAssertFalse(AppleAccountBoundaryResolver.hasPersistedRegistryHistory(defaults: defaults))
         XCTAssertEqual(PersistenceDeploymentState.load(defaults: defaults), .unselected)
+    }
+
+    /// The 2026-09-21 device receipt was revoked for `accountChanged` while
+    /// every other artifact said the account never moved. A proof that read
+    /// two different identities must be repeated, and the repeat — compared
+    /// against the stored binding — is what decides.
+    @MainActor
+    func testUnstableIdentityThatSettlesOnTheStoredAccountKeepsTheSameBoundary() async throws {
+        let suite = "CloudAccountVerificationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let stored = try await AppleAccountBoundaryResolver(
+            defaults: defaults, client: CloudVerificationScript().client, retryDelay: 0).resolve()
+        let script = CloudVerificationScript(
+            identityNames: ["test-account", "noise-account", "test-account", "test-account"])
+        let resolved = try await AppleAccountBoundaryResolver(
+            defaults: defaults, client: script.client, retryDelay: 0)
+            .resolve(expectedBinding: stored.binding)
+        XCTAssertEqual(resolved, stored, "A repeated, self-consistent proof of the same account")
+        let calls = await script.calls
+        XCTAssertEqual(calls, ["status", "identity", "probe", "identity",
+                               "status", "identity", "probe", "identity"])
+    }
+
+    /// The fail-closed half: when the repeat settles on a DIFFERENT account
+    /// than the stored binding, the resolver still blocks, and that verdict —
+    /// not the unstable read — is what may revoke offline access.
+    @MainActor
+    func testUnstableIdentityThatSettlesOnAnotherAccountStillBlocksAsAMismatch() async throws {
+        let suite = "CloudAccountVerificationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let stored = try await AppleAccountBoundaryResolver(
+            defaults: defaults, client: CloudVerificationScript().client, retryDelay: 0).resolve()
+        let script = CloudVerificationScript(
+            identityNames: ["test-account", "noise-account", "other-account", "other-account"])
+        do {
+            _ = try await AppleAccountBoundaryResolver(
+                defaults: defaults, client: script.client, retryDelay: 0)
+                .resolve(expectedBinding: stored.binding)
+            XCTFail("A confirmed different account must not reuse the stored binding")
+        } catch let error as AppleAccountBoundaryResolutionError {
+            XCTAssertEqual(error, .blocked(.accountMismatch))
+            XCTAssertEqual(CloudOfflineHostPolicy.revocationReason(for: error), .accountMismatch)
+        }
     }
 
     @MainActor
@@ -499,6 +551,10 @@ private actor CloudVerificationScript {
     let status: CKAccountStatus
     let recordName: String
     let changesIdentity: Bool
+    /// Exact reply for each `userRecordID` call, in order; the last entry
+    /// repeats. Lets one script script a proof that disagrees with itself and
+    /// the proof that follows it.
+    let identityNames: [String]
     let firstStatusGate: CloudVerificationGate?
     let secondStatusGate: CloudVerificationGate?
     var probeErrors: [CKError]
@@ -509,6 +565,7 @@ private actor CloudVerificationScript {
         status: CKAccountStatus = .available,
         recordName: String = "test-account",
         changesIdentity: Bool = false,
+        identityNames: [String] = [],
         probeErrors: [CKError] = [],
         firstStatusGate: CloudVerificationGate? = nil,
         secondStatusGate: CloudVerificationGate? = nil
@@ -516,6 +573,7 @@ private actor CloudVerificationScript {
         self.status = status
         self.recordName = recordName
         self.changesIdentity = changesIdentity
+        self.identityNames = identityNames
         self.probeErrors = probeErrors
         self.firstStatusGate = firstStatusGate
         self.secondStatusGate = secondStatusGate
@@ -550,6 +608,10 @@ private actor CloudVerificationScript {
     private func userRecordID() -> CKRecord.ID {
         calls.append("identity")
         identityCalls += 1
+        if !identityNames.isEmpty {
+            return CKRecord.ID(
+                recordName: identityNames[min(identityCalls - 1, identityNames.count - 1)])
+        }
         return CKRecord.ID(recordName: changesIdentity && identityCalls > 1 ? "changed-account" : recordName)
     }
 

@@ -74,7 +74,12 @@ struct CloudAccountVerificationFailure: Error, LocalizedError, Equatable, Sendab
     enum Kind: Equatable, Sendable {
         case noAccount, restricted, temporarilyUnavailable, networkUnavailable
         case serviceUnavailable, configuration, permission, quota
-        case accountChanged, timedOut, unknown
+        /// One verification read the account identity twice and the two reads
+        /// disagreed with each other. This compares nothing to the stored
+        /// binding, so it is a transient failure of the proof, never evidence
+        /// that a different Apple Account is signed in.
+        case identityUnstable
+        case timedOut, unknown
     }
 
     let kind: Kind
@@ -101,8 +106,8 @@ struct CloudAccountVerificationFailure: Error, LocalizedError, Equatable, Sendab
             message = "iCloudへのアクセスが許可されませんでした。設定でポモジェムのiCloud利用を確認し、解消しない場合はサポートへお問い合わせください。"
         case .quota:
             message = "iCloudの空き容量を確認し、容量を確保してから再試行してください。"
-        case .accountChanged:
-            message = "確認中にApple Accountが変更されました。保存に使用したApple Accountで再試行してください。"
+        case .identityUnstable:
+            message = "Apple Accountの識別を一度で確認できませんでした。そのまま再試行してください。"
         case .timedOut:
             message = "iCloudの確認に時間がかかっています。通信状態を確認して再試行してください。"
         case .unknown:
@@ -314,8 +319,8 @@ enum CloudAccountIdentityVerifier {
                                 return
                             } catch let failure as CloudAccountVerificationFailure {
                                 guard attempt == 0,
-                                      let delay = failure.automaticRetryDelay(
-                                        defaultDelay: retryDelay
+                                      let delay = nextAttemptDelay(
+                                        after: failure, defaultDelay: retryDelay
                                       ) else { throw failure }
                                 try await Task.sleep(for: .seconds(delay))
                             }
@@ -337,6 +342,22 @@ enum CloudAccountIdentityVerifier {
         } onCancel: {
             completion.finish(.failure(CancellationError()))
         }
+    }
+
+    /// A second complete proof is worth running when the first one failed for
+    /// a reason that says nothing about which account is signed in. Server
+    /// backoff still owns its own deadline; an identity that disagreed with
+    /// itself is repeated once at the caller's ordinary retry delay, because
+    /// there is no server asking us to wait.
+    static func nextAttemptDelay(
+        after failure: CloudAccountVerificationFailure,
+        defaultDelay: TimeInterval
+    ) -> TimeInterval? {
+        guard failure.kind == .identityUnstable else {
+            return failure.automaticRetryDelay(defaultDelay: defaultDelay)
+        }
+        guard defaultDelay.isFinite, defaultDelay >= 0 else { return nil }
+        return min(defaultDelay, 3)
     }
 
     private static func step<Value>(
@@ -388,8 +409,11 @@ enum CloudAccountIdentityVerifier {
         try await step(.privateDatabase, client: client, operation: client.probePrivateDatabase)
         let after = try await step(.identityAfterProbe, client: client, operation: client.userRecordID)
         guard before == after else {
+            // Two disagreeing reads inside one proof say only that the proof
+            // is not usable. Which account is signed in is decided by the
+            // NEXT complete proof, compared against the stored binding.
             throw CloudAccountVerificationFailure(
-                kind: .accountChanged, stage: .identityAfterProbe
+                kind: .identityUnstable, stage: .identityAfterProbe
             )
         }
         return after
