@@ -39,12 +39,13 @@ App Store素材の制作、公開、販売を制限するものではありま�
 権利を付与しません。
 
 PomoGemへの改名時点では、文字を含まない既存iconとAurora背景を継続使用します。
-listing 5枚はPomoGem 1.0 (5)から新規captureし、XCTestのRGB PNG添付を無加工でコピーしています。
+現在のlisting 5枚は2026-09-22にPomoGem 1.1.0 (10)からcaptureし、XCTestのRGB PNG添付を無加工でコピーしています。
 署名済みRelease実機とのparityは別のrelease gateで確認します。
-IAP審査画像は、2026-09-06にPomoGem 1.0 (5)の新商品を実際のProduct.productsで取得し、
-StoreKit設定ファイルなしでUS storefrontの実価格$0.99を表示して撮影しました。日本語UIの
-1284×2778 RGB PNGを無加工でコピーし、目視とhashを確認しています。購入自体は実行していません。
-旧商品の画像や仮価格の画像は使わず、購入・復元・署名済み実機・提出の検証は別に行います。
+現在のIAP審査画像は同日に1.1.0 (10)のProを実際のProduct.productsで取得し、
+StoreKit設定ファイルなしで実表示価格$0.99を撮影しました。storefront国は未確認です。日本語UIの
+1284×2778 RGB PNGを無加工でコピーし、目視とhashを確認しています。購入・復元は実行していません。
+2026-09-06の1.0 (5)の画像はhistory内に来歴として保持し、今回のuploadには使いません。
+購入・復元・署名済み実機・提出の検証は別に行います。
 
 | 素材 | 場所 | 出所 | 配布条件 | SHA-256 |
 |---|---|---|---|---|
@@ -58,12 +59,13 @@ StoreKit設定ファイルなしでUS storefrontの実価格$0.99を表示して
 | 旧App Icon高解像度source（Focus Vessel v4） | `Brand/AppIcon-FocusVessel-v4-source.png` | 本プロジェクト向けにAI支援で生成し、人が選定・調整 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `b60d2fe464f4460702be923976c5865dfca487b189072ac249638eac1e1ec1ca` |
 | 旧App Icon比較素材 | `Brand/AppIcon-Aurora-v3-legacy.png` | 本プロジェクト向けにAI支援で生成 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `30d8c4b856a46dc87a00c5c09861df6a008ffce8092a0a3f72bea4b074e3a4f8` |
 | Aurora背景 | `PomoGem/Resources/Assets.xcassets/focus.aurora.imageset/focus-aurora.png` | 本プロジェクト向けにAI支援で生成し、人が選定・調整 | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `b6a9e5e324e13978eeb0806ce051ca51304571d4fb22544916c55cc8350a8e66` |
-| App Store画面 01 | `AppStore/screenshots/ja-JP/01-home-with-first-pebble.png` | PomoGem 1.0 (5)のproduction UIをDebug-only deterministic fixtureで2026-09-06に新規capture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `c4d5200526bcd629561c7be909ae7563d753071446de111772b59f6bdef06e50` |
-| App Store画面 02 | `AppStore/screenshots/ja-JP/02-25-minute-focus.png` | PomoGem 1.0 (5)のproduction UIをDebug-only deterministic fixtureで2026-09-06に新規capture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `a226fbe8844c33d044b281f4ef3ee557a17cea398db4d104607de6d985d96b60` |
-| App Store画面 03 | `AppStore/screenshots/ja-JP/03-completion-reward.png` | PomoGem 1.0 (5)のproduction UIをDebug-only deterministic fixtureで2026-09-06に新規capture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `8cbdd99b4a7218c4ff05df7313abf48e9ca80d690e3578e70835c2ed5cef67c1` |
-| App Store画面 04 | `AppStore/screenshots/ja-JP/04-accumulation-overview.png` | PomoGem 1.0 (5)のproduction UIをDebug-only deterministic fixtureで2026-09-06に新規capture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `77a59f13e47a27e92c21505fc91255a6a99c3a9ae772f231e59badba9ea02eed` |
-| App Store画面 05 | `AppStore/screenshots/ja-JP/05-iCloud-and-privacy.png` | PomoGem 1.0 (5)のproduction UIをDebug-only deterministic fixtureで2026-09-06に新規capture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `0aaaf14b32c8b5834cbf9bd2eadbe1fff37f59409cdf818bb0471f87356cf97d` |
-| IAP審査画面 | `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png` | PomoGem 1.0 (5)のproduction UIで新商品の実StoreKit価格を2026-09-06にcapture。Product.products、StoreKit設定なし、JA UI／US storefront $0.99。購入未実行、1284×2778 RGB PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `d1cba699d99ef7f34cebe0e1261f7fd6616003138a4c01aa9e0ded2555aa52c0` |
+| App Store画面 01 | `AppStore/screenshots/ja-JP/01-home-with-first-pebble.png` | PomoGem 1.1.0 (10)のproduction UIをDebug-only deterministic fixtureで2026-09-22にcapture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `ef8e52c16a1058933fad1710a60b96481ea0eae066346bbd85e526d4a6b249b8` |
+| App Store画面 02 | `AppStore/screenshots/ja-JP/02-25-minute-focus.png` | PomoGem 1.1.0 (10)のproduction UIをDebug-only deterministic fixtureで2026-09-22にcapture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `3bc9a4fd4fceb98da8a2f242ff5fab35f86938a64f29a2d4e51898684808b776` |
+| App Store画面 03 | `AppStore/screenshots/ja-JP/03-completion-reward.png` | PomoGem 1.1.0 (10)のproduction UIをDebug-only deterministic fixtureで2026-09-22にcapture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `caa415fe10e731882bded13a5bcf43d438a0328b701a70d7d9f98d1e737fe8d5` |
+| App Store画面 04 | `AppStore/screenshots/ja-JP/04-accumulation-overview.png` | PomoGem 1.1.0 (10)のproduction UIをDebug-only deterministic fixtureで2026-09-22にcapture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `77a59f13e47a27e92c21505fc91255a6a99c3a9ae772f231e59badba9ea02eed` |
+| App Store画面 05 | `AppStore/screenshots/ja-JP/05-iCloud-and-privacy.png` | PomoGem 1.1.0 (10)のproduction UIをDebug-only deterministic fixtureで2026-09-22にcapture。XCTest添付PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `9320158b228c5f81d293a629db8e8263847bc5e7edffa051ca10a12a429f1474` |
+| IAP審査画面 | `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png` | PomoGem 1.1.0 (10)のproduction UIで実StoreKit価格を2026-09-22にcapture。StoreKit設定なし、JA UI、表示価格$0.99（storefront国は未確認）。購入・復元未実行。1284×2778 RGB PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `a2f3a7a8a8e22ec6a4a9e174bb468b8565fb0faa029ca4a4b75d1ff96c53efb2` |
+| 過去のIAP審査画面 | `AppStore/screenshots/history/iap-review-20260906.png` | PomoGem 1.0 (5)のproduction UIで新商品の実StoreKit価格を2026-09-06にcapture。Product.products、StoreKit設定なし、JA UI／US storefront $0.99。購入未実行、1284×2778 RGB PNGを無加工でコピー。詳細は AppStore/screenshots/README.md | Copyright 2026 hinoshiba. All rights reserved. MIT対象外 | `d1cba699d99ef7f34cebe0e1261f7fd6616003138a4c01aa9e0ded2555aa52c0` |
 | Zen Maru Gothic Black | `PomoGem/Resources/Fonts/ZenMaruGothic-Black.ttf`、`http_dists/public/ZenMaruGothic-Black.ttf` | Copyright 2021 The Zen Maru Gothic Project Authors | SIL Open Font License 1.1。`LICENSE-fonts.txt`参照 | `6bd74fe76cd39ee0ec18775c3661d845343fb3f6f8fa09a3076638417baf741f` |
 | タイマー既定方向の設定画面 | `Docs/images/timer-orientation/default-orientation-settings.png` | 2026-09-09、iPhone 17 Pro / iOS 26.5 Simulatorの実UIをXCTestでcapture。テスト専用の空の保存領域を使用、加工・合成なし。詳細は Docs/TimerOrientation.md | Copyright 2026 hinoshiba. MIT License（本プロジェクトが保有する権利） | `c40006bc617c4f1d44accc932a02ec92089146655d963cc7a172e825dd41ba78` |
 | 集中タイマー・上 | `Docs/images/timer-orientation/timer-up.png` | 2026-09-09、iPhone 17 Pro / iOS 26.5 Simulatorの実UIをXCTestでcapture。テスト専用の空の保存領域と初期テーマ「英語」を使用、加工・合成なし。詳細は Docs/TimerOrientation.md | Copyright 2026 hinoshiba. MIT License（本プロジェクトが保有する権利） | `964d36dd4a65cf12e94c9066bdf41c4dd7a7051f0713d663919ecacd9bffea99` |

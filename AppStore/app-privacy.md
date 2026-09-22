@@ -1,6 +1,6 @@
 # App Privacy answer draft
 
-1.0.2候補の実装に合わせた更新です。App Store Connectへの保存・公開結果は別のrelease recordへ記録します。
+1.1.0 (10)候補の実装に合わせた更新です。App Store Connectへの保存・公開結果は別のrelease recordへ記録します。
 
 ## 推奨回答
 
@@ -28,13 +28,16 @@ Apple teamの実際のaccess、mail運用を照合して最終回答します。
 - 初回は観測した世代以上のリセット履歴が端末へ届くまで期限付きで待機する。以前の確認済み端末dataと
   利用記録が条件を満たせば、同期なしでtimer・記録・設定を使える。変更は端末に保存し、同期待ちと表示する。
   accountのハッシュ、端末保存領域、確認済み世代、改訂ID、オフライン利用・失効状態を端末内に保持する。
-  account変更で利用許可を失効させる。オンライン利用後の復帰などではapp終了・再起動が必要になる。
+  account変更の通知だけでは失効させず、確認できたaccount不一致などを根拠に利用許可を失効させる。オンライン利用後の復帰などではapp終了・再起動が必要になる。
   接続確認は全記録の送受信完了の証明ではない
 - iCloud有効化はcloud内容で端末だけのdataを置き換え、結合しない。解除は検証済みコピーを端末へ残し、
   cloud側のdataも保持する。端末dataによるcloud全置き換えと復旧再開は通常Releaseで禁止する。
   進捗・元data・途中コピーを端末に保持し、取消しや後片付けの失敗ではコピーが残る場合がある。
   同じprivate CloudKit内の切り替え・復旧情報を確認し、許可された取消し・終了済み処理の後片付けを行う。
-  新しい全置き換え用コピーは通常アプリからuploadしない。運営者向け収集や別containerを追加しない
+  新しい全置き換え用コピーは通常アプリからuploadしない。運営者向け収集や別containerを追加しない。
+  iCloud中の「iCloudから再取得」は、cloud内容の事前読取と未選択の削除同意を経て端末の未送信変更を
+  捨てる操作で、cloud側を削除しない。再起動待ちの同意はaccount・namespace・CloudKitコンテナ／環境に
+  結び付け、環境が変わったリクエストや旧形式を実行しない
 - Proの秒単位の既定時間は既存Prefsにoptional秒数と変更への参照を加え、選んだ保存先へ保持・同期する。
   既存の分単位の意味は維持する。iCloudの通常resetは一時停止し、local-onlyの通常resetは維持する
 - `AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`の4種類は端末内だけの表示用projectionで、
@@ -112,15 +115,20 @@ App Managerが最終決定・Publishします。
 
 ## Screen Time追加時の再監査
 
-次期候補はFamily Controlsの個人認証とDevice Activity Monitorを追加する。利用者が
-選択・有効化したアプリの利用が10分に達したイベントだけを処理し、アプリ名・Bundle IDの
+1.1.0候補はFamily Controlsの個人認証とDevice Activity Monitorを追加する。利用者が
+選択・有効化したアプリの合計利用が10分刻みに達したイベントを処理し、アプリ名・Bundle IDの
 取得やDeviceActivityReportからのデータ搬出は行わない。設定・不透明トークン・到達台帳・
 黒い石は本体と監視拡張のApp Group内に保持し、バックアップ・CloudKit・共有・ログへ出さない。
+監視の登録・停止やコールバックの件数・結果・所要時間、最後の通知時刻などの診断情報は端末内に
+保持します。App Groupの件数を本体のApplication Support内へ写した診断ファイルもバックアップ対象外です。
+os.Loggerには件数・結果・時間だけを出力し、アプリ名、token、run ID、到達段数、黒いgem数を出しません。
+これらのログや診断ファイルを運営者へ自動送信する仕組みはありません。
 学習の確定済み10分/100gだけを通常記録へ取り込み、本人がiCloudを選んだ場合はそのprivate
 CloudKitへ同期する。運営者のサーバー、解析SDK、追跡処理の追加はない。
 
 WidgetのApp Group非使用は維持する。監視拡張のPrivacy Manifestもtracking=false、
 collected data types=[]とする。端末内処理だけではAppleのデータ収集に該当しないが、
-配布前に実際のarchive・Family Controls配布権限・公開ポリシーとApp Store Connectの
+配布権限は未確認で、現在のローカルdistribution profileはFamily Controlsを含みません。配布前に
+実際のarchive・本体とMonitor拡張それぞれのFamily Controls配布権限・公開ポリシーとApp Store Connectの
 最新質問を再確認する。Screen Timeの設定、未取込情報、黒い石は現在のJSON書き出しと
 保存先移行に含まれないことをアプリと公開ポリシーで明示する。

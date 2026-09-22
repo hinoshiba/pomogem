@@ -1,6 +1,6 @@
 # ポモジェム公式版 — ローカルArchive／App Storeリリース手順
 
-更新日: 2026-09-13
+更新日: 2026-09-22
 
 この手順は、許可済みMacのXcode OrganizerからiPhone版をArchive、Validate、Uploadするための
 正本です。Mac／Mac Catalyst版は作成しません。
@@ -13,9 +13,40 @@ App Store Connectで無効化し、ブランチ・タグの変更によるビル
 設定は変わりません。既存の実行履歴と成果物は保持し、確認結果を非公開の
 リリース記録へ残します。
 
-## 今回の候補と識別子
+## 現行候補: 1.1.0 (10)
 
-最新の審査提出済み候補はPomoGem 1.0.2 (9)です。build 8までのiCloud修正とProタイマーの分・秒指定に、
+公開中の1.0.2 (9)とは別に、Screen Timeと起動・オフライン・iCloud再取得の修正を統合した
+1.1.0 (10)を準備します。App Store Connectの1.1.0 draft作成はbinaryのupload・審査提出を意味しません。
+状態・Archive元・検証結果の正本は[1.1.0 (10) release record](../AppStore/release-record-1.1.0-10.md)、
+未完了項目は[submission-checklist](../AppStore/submission-checklist.md)と
+[configuration.yml](../AppStore/configuration.yml)です。
+
+署名・配布検証の対象は次の3 bundleです。Widgetだけを確認した過去の配布証拠は流用しません。
+
+| Bundle | 配布用の確認 |
+|---|---|
+| `com.hinoshiba.pomogem` | CloudKit Production／APNs Production、Family Controls、共有App Group |
+| `com.hinoshiba.pomogem.widgets` | account-neutralなWidget／Live Activity。Family Controls、App Group、CloudKit、APNsなし |
+| `com.hinoshiba.pomogem.screentimemonitor` | Device Activity Monitor拡張、Family Controls、本体と同じ共有App Group。CloudKit／APNsなし |
+
+共有先は`group.com.hinoshiba.pomogem`です。本体・MonitorそれぞれについてApple側のFamily Controls
+**distribution**権限とprofileを確認し、最終Archive、export IPA、実際のupload payloadの全3 bundleを
+`Scripts/verify-release-archive.sh`で検証します。開発用profileの成功を配布承認として扱いません。
+現在確認できているローカルdistribution profileにはFamily Controlsがなく、配布準備は未完了です。
+秘密鍵や新しい署名identityの生成・exportは、この機能の通常手順に含めません。
+
+Screen Timeは任意の個人認証・10分刻みです。勉強アプリは無料5つ／Pro無制限、黒いgem側は無料でも
+無制限で学習集計・共有へ混ぜません。iCloud中の再取得は事前読取と端末data削除の明示確認を要し、
+端末dataによるiCloud全体の置き換えと復旧再開は引き続き無効です。
+2026-09-21の開発署名Releaseでは修正後の到達4件／4件と両レーンの付与を確認した履歴がありますが、
+配布署名候補の合格や未試験の境界条件へ拡張しません。現在の作業では実機試験を追加していません。
+
+下記1.0〜1.0.2の提出日時・2 bundleでの検証・初回登録は履歴です。共通の手順を再実行する際も、
+version／build／target／公開機能は現在の`project.yml`と上記3 bundleに従い、旧候補の固定値を使いません。
+
+## 過去の候補と識別子（2026-09-13時点）
+
+2026-09-13時点の最新提出候補はPomoGem 1.0.2 (9)でした。build 8までのiCloud修正とProタイマーの分・秒指定に、
 視差効果設定に関係なく粒を同じように跳ねさせる修正を加えました。PR #13のmerge commit
 `9c256136f7b9d4190da5800723acec0273bd6b27`をcleanな状態でArchiveし、2026-09-13 11:14 JSTに成功しました。
 Apple Validateは11:16 JSTに成功し、別途exportしたIPAと実際のupload-staging IPAの厳格な配布検証、
@@ -28,7 +59,7 @@ Prefs追加2属性は同日11:33 JSTにCloudKit ConsoleのDevelopment/Production
 build 9へ差し替えました。日本語・英語の更新内容、Review Notes、選択ビルドの保存・再読込照合後、
 11:39 JSTに審査へ提出しました。提出受付画面でiOS 1.0.2 (9)の「審査待ち」と提出日時を確認しています。
 承認後の自動公開と全利用者への即時配信は維持しています。承認や公開完了を示すものではありません。
-現在の状態は`AppStore/release-record-1.0.2-9.md`を参照してください。
+当時の提出状態は`AppStore/release-record-1.0.2-9.md`を参照してください。2026-09-22にはConnectでReady for Distributionを確認しています。
 
 一つ前のupload済み版はPomoGem 1.0.2 (8)です。Organizerで同日10:01 JSTのupload履歴を確認したため、
 今回のbuild numberを9へ増やしました。build 8の同日10:11 JSTの審査提出はbuild 9への差し替えのため
@@ -243,8 +274,8 @@ unit test、主要UI test、static analyzerを実行します。40年soakはrele
 2. Signing & Capabilitiesで公式teamとAutomatically manage signingを選ぶ
 3. destinationを`Any iOS Device (arm64)`または接続実機にする
 4. Product → Archive
-5. Organizerでarchiveのversion、build、bundle ID、entitlements、含まれるaccount-neutral Widget／
-   Live Activityを確認。hostは`NSSupportsLiveActivities = true`、frequent updatesは未宣言、Widget Infoは
+5. Organizerでarchiveのversion、build、bundle ID、entitlementsと上記3 bundleを確認。account-neutral Widget／
+   Live Activityに加え、Device Activity Monitor拡張を確認。hostは`NSSupportsLiveActivities = true`、frequent updatesは未宣言、Widget Infoは
    host用の同keyを持たず、Widget binaryがActivityKitを含むことを確認
 6. Validate Appを実行し、warningも審査対象として解消・記録
 7. Distribute App → TestFlight & App Store → Upload

@@ -7,12 +7,18 @@ store_localizations:
   - en-US
 app_store_id: 6809139517
 app_store_listing_status: public
-marketing_version: "1.0.2"
-build_number: "9"
+marketing_version: "1.1.0"
+build_number: "10"
+candidate_status: preparation_not_uploaded
+published_version: "1.0.2"
+published_version_status: ready_for_distribution_verified_2026_09_22
 copyright: "2026 hinoshiba"
 website_host: pomogem.hinoshiba.com
 app_bundle_id: com.hinoshiba.pomogem
 widget_bundle_id: com.hinoshiba.pomogem.widgets
+screen_time_monitor_bundle_id: com.hinoshiba.pomogem.screentimemonitor
+app_groups:
+  shared_screen_time: group.com.hinoshiba.pomogem
 minimum_ios: "17.0"
 supports_ipad_ui: false
 supports_mac_catalyst: false
@@ -70,7 +76,37 @@ target_capabilities:
     - icloud_cloudkit
     - push_notifications
     - in_app_purchase
+    - family_controls
+    - app_groups
   widget: []
+  screen_time_monitor:
+    - family_controls
+    - app_groups
+screen_time:
+  enabled_by_default: false
+  authorization: family_controls_individual
+  distribution_authorization: unverified_local_distribution_profiles_lack_family_controls
+  learning:
+    aggregation: combined_selected_apps_in_confirmed_10_minute_steps
+    seconds_per_gem: 600
+    grams_per_gem: 100
+    free_app_limit: 5
+    pro_app_limit: unlimited
+    pause_during_focus_timer: true
+    imported_records: ordinary_selected_storage_and_optional_private_cloud_sync
+  distraction:
+    free_and_pro_app_limit: unlimited
+    grams_per_obstacle: 100
+    combines_with: black_obstacles_only
+    contributes_to_study_totals_or_sharing: false
+  categories_and_websites: not_selectable
+  same_app_in_both_selections: prohibited
+  automatic_launch_of_other_apps: false
+  delivery: os_threshold_callbacks_may_be_delayed
+  raw_app_tokens_receipts_and_black_gems: device_only_app_group_excluded_from_backup
+  diagnostics: device_only_counts_outcomes_timing_no_tokens_app_names_or_gem_counts
+  diagnostics_upload: none
+  raw_state_json_export_or_storage_transfer: excluded
 i_cloud_sync:
   database_scope: private
   first_launch_choices:
@@ -83,6 +119,10 @@ i_cloud_sync:
     enable_icloud: verify_cloud_copy_then_replace_local_only_data_without_merging
     enable_deletion_acknowledgment: initially_unselected_and_required
     disable_icloud: verify_copy_to_this_iphone_and_retain_cloud_data
+    refresh_existing_cloud_mode: preview_cloud_then_confirm_replacement_of_device_data_without_merging
+    empty_cloud_refresh: explicit_empty_cloud_warning_before_required_unchecked_acknowledgment
+    deferred_dataset_request: exact_account_namespace_container_environment_and_generation_required
+    legacy_unscoped_dataset_request: discard_request_without_changing_admission_or_records
     replace_all_cloud_data_with_local_data: prohibited_in_standard_debug_and_release
     resume_destructive_cloud_replacement: prohibited_in_standard_debug_and_release
     cancellation: permitted_predestructive_phases_only
@@ -213,6 +253,8 @@ i_cloud_sync:
     offline_current_account_or_latest_server_data_verified: false
     offline_background_return: retain_admitted_session_and_revalidate_local_conditions
     positive_account_revocation: persist_until_fresh_online_verification
+    bare_account_change_notification: reverify_without_revoking_by_itself
+    deferred_launch_activation: bounded_wait_with_explicit_retry
     different_account_behavior: fail_closed_without_deleting_data
     missing_network_behavior: allow_eligible_offline_copy_otherwise_keep_protected_gate_without_deleting_data
     reconnect_rule: fresh_account_dataset_and_reset_history_checks_before_mirroring
@@ -279,10 +321,10 @@ in_app_purchases:
     localizations:
       ja-JP:
         display_name: ポモジェムPro
-        description: 自由な1〜360分と月刻印を追加。買い切りで、自動更新はありません。
+        description: 自由な集中時間・月刻印・勉強アプリ数無制限。買い切りです。
       en-US:
         display_name: PomoGem Pro
-        description: Custom timers and month labels.
+        description: Custom timers, month labels, unlimited learning apps.
     price_management: automatic_equivalent_except_japan_override
 version_1_feature_gates:
   rare_rewards: disabled
@@ -294,7 +336,7 @@ version_1_data_deletion:
   json_export_import: unsupported
   json_export_migration: unsupported
 oss_publication:
-  repository_visibility: private
+  repository_visibility: public
   repository_license_model: mixed_license
   source_code_and_ordinary_docs: MIT
   bundled_font: OFL-1.1
@@ -303,13 +345,15 @@ oss_publication:
     - logos_and_app_icons
     - generated_backgrounds
     - store_and_web_marketing_images
-  owner_decision_required: publish_as_mixed_license_or_relicense_and_replace_excluded_assets
+  publication_model: mixed_license_source_and_ordinary_docs_with_reserved_brand_assets
 release_blockers:
+  - verify Family Controls distribution authorization and matching final profiles for both host and Screen Time monitor extension
+  - verify actual signed-device 10-minute learning and black-gem delivery after the callback fix; prior failed or simulator-only checks are not a pass
+  - compare the 2026-09-22 simulator screenshots with the signed Release candidate on a physical supported iPhone
   - candidate signed-device testing must verify equal first-launch choices and both confirmations, explicit enable/disable confirmations and initially unselected deletion acknowledgment, verified destination copies and retained cloud data on disable, offline eligibility/revocation/reconnect and pending-upload disclosures, and complete local-only basic use without an Apple Account or network; record untested cases as pending
   - owner must accept the focus partition trade-off that materialized completions survive delayed cancellation
   - owner must accept the fail-closed interactive recovery ceiling when more than 256 corrupt active logical timer sessions precede a valid session, or ship a versioned reversible quarantine design
   - Japan paid-IAP operator disclosure and pre-purchase legal presentation require owner or qualified legal determination
-  - owner must choose mixed-license publication or relicense and replace the excluded brand assets
   - complete StoreKit Sandbox, signed-device, TestFlight, App Store metadata, and distribution-signing verification
 
 release_verification_2026_09_06:

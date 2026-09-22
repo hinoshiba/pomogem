@@ -26,12 +26,16 @@ SKU `pomogem-ios`、bundle ID `com.hinoshiba.pomogem`、日本語名「ポモジ
 作成・確認し、実値を`configuration.yml`へ記録しました。2026-09-13に日本・米国の公開listingで
 1.0.1の配信を確認しました。[App Store](https://apps.apple.com/app/id6809139517)へのリンクと
 Smart App BannerをWebに表示し、`app_store_listing_status: public`とします。
-公開準備中の1.0.2とは区別します。
+これは当時の確認記録です。2026-09-22にApp Store Connectで1.0.2 (9)のReady for Distributionを
+確認しました。現在の掲載文は次の1.1.0 (10)候補用で、1.1.0のdraftは作成済みですがbinaryは未uploadです。
+Family Controlsの配布権限と最終署名済み候補での実到達は未確認で、旧版の提出結果を流用しません。
 
-5枚の掲載画像はPomoGem 1.0 (5)のproduction UIから再撮影済みです。実行結果とファイルのhashは
-`screenshots/README.md`に記録します。新IAPの実StoreKit価格を取得できるまでは
-`review_screenshot_status: pending_live_price_capture`とし、旧商品の価格画像は同梱しません。
-Developer Portalでは新しいmain／Widget App IDとCloudKit containerの登録・hostへの割当を確認しました。
+現在の掲載画像5枚とIAP審査画像は2026-09-22に1.1.0 (10)から撮り直しました。実行結果とhashは
+`screenshots/README.md`に記録しています。実StoreKit表示価格は$0.99（storefront国は未確認）で、
+`review_screenshot_status: captured_live_price`です。購入・復元の成功や署名済み実機との表示一致は未確認です。
+旧IAP画像はupload対象外の`history/`に保存しています。現在の準備状態は
+`release-record-1.1.0-10.md`を参照してください。
+過去のDeveloper Portal確認ではmain／Widget App IDとCloudKit containerの登録・hostへの割当を確認しました。
 この登録はProduction schemaのdeployや配布署名の完了を意味しません。新IDの署名・実機表示・Sandbox・
 CloudKit Production・Connectの残りの提出内容の保存と再読み込みは別途必須です。
 過去のアーカイブ等の来歴は`Docs/LEGACY_RELEASE_PROVENANCE.md`に分離しています。
@@ -41,8 +45,8 @@ App Store Connectのcopyright欄は`configuration.yml`の`2026 hinoshiba`を正�
 
 ## Screenshot
 
-初回提出用screenshotはproduction UIを架空dataのDebug-only deterministic fixtureでcaptureし、
-App Store Connectがversion 1.0で要求する6.5-inch枠（1242×2688または1284×2778）へ書き出します。
+掲載用screenshotはproduction UIを架空dataのDebug-only deterministic fixtureでcaptureし、
+今回のConnect draftで使用している6.5-inch枠へ1284×2778で書き出しています。
 これはsigned Release binaryの同一表示を証明しないため、提出前に署名済みRelease実機と全画面を比較し、
 差があれば再captureします。status bar、通知、顧客名、個人情報も確認します。画面内にPro機能がある
 場合は追加購入であることをmetadataでも明確にします。

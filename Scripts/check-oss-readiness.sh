@@ -398,6 +398,8 @@ expected_paths = {
     "AppStore/screenshots/ja-JP/03-completion-reward.png",
     "AppStore/screenshots/ja-JP/04-accumulation-overview.png",
     "AppStore/screenshots/ja-JP/05-iCloud-and-privacy.png",
+    # Kept only as historical provenance, outside the upload directories.
+    "AppStore/screenshots/history/iap-review-20260906.png",
 }
 iap_image = "AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png"
 configuration = Path("AppStore/configuration.yml").read_text()
@@ -436,7 +438,7 @@ for line_number, line in enumerate(manifest_path.read_text().splitlines(), start
     manifest_entries[raw_path] = digest
 
 if set(manifest_entries) != expected_paths:
-    raise SystemExit("error: screenshot checksum manifest differs from the five listing images and declared IAP capture status")
+    raise SystemExit("error: screenshot checksum manifest differs from the listing images, historical capture, and declared IAP capture status")
 
 ledger_entries = {}
 for line_number, line in enumerate(ledger_path.read_text().splitlines(), start=1):
@@ -451,7 +453,7 @@ for line_number, line in enumerate(ledger_path.read_text().splitlines(), start=1
     ledger_entries[raw_path] = digest
 
 if set(ledger_entries) != expected_paths:
-    raise SystemExit("error: ASSET_LICENSES.md differs from the five listing images and declared IAP capture status")
+    raise SystemExit("error: ASSET_LICENSES.md differs from the listing images, historical capture, and declared IAP capture status")
 
 for raw_path in sorted(expected_paths):
     path = PurePosixPath(raw_path)

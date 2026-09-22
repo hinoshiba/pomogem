@@ -1,201 +1,181 @@
 # App Store screenshots
 
-## Current capture — 2026-09-06
+## Candidate 1.1.0 (10) — 2026-09-22
 
-The checked-in set shows PomoGem version 1.0 build 5, including the visible theme and
-duration controls on Home, the remaining-time ring, and the completion card
-before the gem drops. All five images were visually reviewed and their hashes
-recorded in `checksums.sha256`. The new product's separate IAP review image
-shows its actual StoreKit price and is documented below.
+The five images in `ja-JP/` and the separate image in `iap-review/` were captured
+from PomoGem 1.1.0 (10) on an iOS 26.5 iPhone 12 Pro Max Simulator. All six are
+unretouched XCTest attachments, copied byte for byte as portrait 1284 × 2778
+RGB PNGs without alpha. Their hashes are recorded in `checksums.sha256` and
+`ASSET_LICENSES.md`.
 
-Compare the set with the signed Release build on a supported physical iPhone
-before submission; that visual-parity check remains outstanding. Images saved
-under `Artifacts/` during development are review references, not the reviewed
-App Store set.
+Product source was `f3d7f456fdb9b8da05d77d2c4cdb9af4026039f2`; the capture-only
+test changes were recorded in `1c40e4e9a2118101bc798a40df3bb2fd8ac11733` and
+integrated into the release branch. The build used `MARKETING_VERSION=1.1.0`
+and `CURRENT_PROJECT_VERSION=10`; the host, widget and Screen Time monitor
+bundle versions were all checked. No product source change was needed for capture.
+
+The retained private release evidence includes `capture-2.xcresult`,
+`capture-2.log`, `capture-manifest.json`, and `CAPTURE-README.md`. The manifest
+records each attachment's original filename, timestamp, dimensions and SHA-256.
+Both selected tests passed: two tests, zero failures, zero skips. No images
+from the earlier capture attempt are selected; its Settings accessibility-row
+locator was corrected and the complete capture was rerun.
 
 ## Japanese iPhone set
 
-`ja-JP/` contains five release-intended product-UI screenshots captured with a
-Debug-only deterministic fixture, in the intended App Store order:
+The App Store listing order is:
 
-1. `01-home-with-first-pebble.png` — Home bottle after one deterministic 250g completion
-2. `02-25-minute-focus.png` — the real free 25-minute focus timer in progress
-3. `03-completion-reward.png` — the saved completion, time-based progress, and
-   explanation that closing the card drops the gem into the bottle
-4. `04-accumulation-overview.png` — weekly and lifetime accumulation overview
-5. `05-iCloud-and-privacy.png` — the shipped private-iCloud and no-tracking
-   explanation, support and privacy links, current Pro features, and version
-   `1.0 (5)`. The display-reset and Apple iCloud storage-management rows are
-   outside this capture's viewport.
+| File | Actual capture content | XCTest attachment prefix |
+|---|---|---|
+| `ja-JP/01-home-with-first-pebble.png` | Home after one deterministic 250g completion, with the normal 25-minute preset visible and the landing toast gone | `ASC_01_home-with-first-pebble` |
+| `ja-JP/02-25-minute-focus.png` | Real 25-minute countdown and the ordinary notification-permission invitation | `ASC_02_25-minute-focus` |
+| `ja-JP/03-completion-reward.png` | Normal completion card, with the visible preset restored to 25 minutes before capture | `ASC_03_completion-reward` |
+| `ja-JP/04-accumulation-overview.png` | Weekly and lifetime accumulation from the same 250g fixture | `ASC_04_accumulation-overview` |
+| `ja-JP/05-iCloud-and-privacy.png` | Naturally scrolled Settings showing its privacy explanation and version 1.1.0 (10) | `ASC_05_iCloud-and-privacy` |
 
-All files are portrait `1284 × 2778` RGB PNGs without an alpha channel. This
-is an accepted 6.5-inch screenshot size in Apple's current
-[screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/).
-Apple currently permits one to ten screenshots per set. A 6.5-inch set is
-required when a 6.9-inch set is not provided.
+The existing Debug-only local-preview/UI-test fixture creates one 250g record
+through its 12-second test duration. It restores the visible duration to the
+normal 25 minutes before the completion and Home captures. The images do not
+establish completion of a real 25-minute session or physical-device Screen Time
+callbacks. No Screen Time permission or Pro entitlement was synthesized.
 
-The screenshots intentionally contain:
+All images show Japanese product UI with built-in content, without account
+information, debug labels, promotional overlays, device frames or compositing.
+The landing toast disappears normally; Simulator cloud diagnostics are outside
+the naturally scrolled Settings viewport. The product-page set contains no price
+or purchased state. No optional Screen Time image is included because real-device
+authorization was outside this capture task.
 
-- only Japanese production UI;
-- a built-in seed theme, with no user-entered name or note;
-- no account, Apple ID, notification, or other personal information;
-- no visible `DEBUG`, `DEMO`, UI-test probe, injected error, or placeholder;
-- no claimed Pro entitlement and no simulated purchase state;
-- no promotional text or device-frame compositing.
+Physical-device visual comparison with the signed Release candidate remains a
+separate submission requirement. These Simulator captures do not establish
+Family Controls distribution approval, device behavior, or upload completion.
 
-The product-page set omits the paywall and focuses on the free experience. It
-contains neither a hard-coded price nor a synthetic purchased state. The
-separate IAP review image must use the localized `Product.displayPrice`
-supplied by StoreKit, with no price drawn into the image.
+## Current IAP review image
 
-The test fixture uses a Debug-only 12-second timer to create one 250g record,
-but restores the visible duration to 25 minutes before capturing the reward
-card and Home. The reward it creates is the same
-250g normal pebble as a real 25-minute completion. Version 1.0's release policy
-disables random rewards, so this set cannot randomly change.
+Status: `captured_live_price`.
 
-The Simulator storage screen can contain diagnostic text. Screenshot 05 uses
-normal scrolling to show the support/privacy section and version together;
-diagnostics are outside the viewport, with no content edited out of the image.
+`iap-review/01-pomogem-pro-live-price.png` comes from
+`RuntimeFlowAuditUITests/testCaptureActualStoreKitPrice` in the same passing
+capture run. The actual `Product.products` path returned
+`com.hinoshiba.pomogem.pro.lifetime`, without a StoreKit configuration file.
+`Product.displayPrice` was `$0.99`; the purchase control read `$0.99でProを購入`.
+The storefront country was not independently read, so this image establishes
+neither a US storefront nor a Japanese-yen price.
 
-These images verify product-page composition and truthful UI content; they are
-not evidence that the signed Release archive renders identically. Before
-submission, compare every screen against the signed Release build on a physical
-supported device and replace any image whose UI differs.
+The image shows all three current Pro benefits, including unlimited learning
+apps, the one-time price, seller-disclosure link, and purchase button. Restore
+Purchases starts below the captured viewport. No purchase, restore, or offer
+redemption was invoked. This is price/display evidence, not a purchase or
+restore test.
+
+The original source attachment was `8686D580-F195-471C-B06B-46FBEE628EC6.png`,
+with attachment prefix `IAP_01-pomogem-pro-live-price`. The selected capture
+passed before the explicit live-StoreKit opt-in guard was added to the test;
+the capture path after that guard is unchanged. A focused follow-up on the same
+Simulator verified one intentional skip without the flag and one passing test
+with the flag. Those follow-up runs did not replace any selected image.
 
 ## Reproduce
 
-Create and boot an iPhone 12 Pro Max simulator on an installed iOS runtime,
-then set a clean, stable status bar. Assign the UUID printed by `simctl create`
-to `SCREENSHOT_DEVICE_ID`.
+Use a disposable iPhone 12 Pro Max Simulator on an installed iOS runtime and
+keep build products and results outside the checkout. The following names match
+the capture tests in `PomoGemUITests/RuntimeFlowAuditUITests.swift`.
 
 ```sh
-xcrun simctl create \
+SCREENSHOT_DEVICE_ID=$(xcrun simctl create \
   'PomoGem App Store 6.5-inch' \
   com.apple.CoreSimulator.SimDeviceType.iPhone-12-Pro-Max \
-  com.apple.CoreSimulator.SimRuntime.iOS-26-5
-
-SCREENSHOT_DEVICE_ID='<created simulator UUID>'
+  com.apple.CoreSimulator.SimRuntime.iOS-26-5)
 xcrun simctl boot "$SCREENSHOT_DEVICE_ID"
 xcrun simctl bootstatus "$SCREENSHOT_DEVICE_ID" -b
 xcrun simctl status_bar "$SCREENSHOT_DEVICE_ID" override \
-  --time '9:41' \
-  --batteryState charged \
-  --batteryLevel 100 \
-  --wifiBars 3 \
-  --cellularBars 4 \
-  --operatorName ''
-```
+  --time '9:41' --batteryState charged --batteryLevel 100 \
+  --wifiBars 3 --cellularBars 4 --operatorName ''
 
-Run only the deterministic capture journey. Keep build products and the result
-bundle outside the checkout.
-
-```sh
-SCREENSHOT_RESULTS="$(mktemp -d /tmp/PomoGemScreenshots.XXXXXX)"
-
+SCREENSHOT_RESULTS=$(mktemp -d /tmp/PomoGemScreenshots.XXXXXX)
 xcodebuild \
-  -project PomoGem.xcodeproj \
-  -scheme PomoGem \
+  -project PomoGem.xcodeproj -scheme PomoGem -configuration Debug \
   -destination "platform=iOS Simulator,id=$SCREENSHOT_DEVICE_ID" \
   -derivedDataPath "$SCREENSHOT_RESULTS/DerivedData" \
+  MARKETING_VERSION=1.1.0 CURRENT_PROJECT_VERSION=10 \
+  build-for-testing
+```
+
+The test setup itself sets `POMOGEM_LOCAL_PREVIEW=1` and
+`POMOGEM_UI_TEST_MODE=1`, with Japanese language/locale. The listing journey
+needs no extra opt-in. The live-price test skips unless its test-runner process
+receives `POMOGEM_CAPTURE_LIVE_STOREKIT=1`. Set that flag only for a deliberate
+capture; do not configure a StoreKit test file or manufacture a product price.
+For the generated xctestrun format used by this project:
+
+```sh
+python3 - "$SCREENSHOT_RESULTS/DerivedData/Build/Products" <<'PY'
+from pathlib import Path
+import plistlib
+import sys
+
+products = Path(sys.argv[1])
+run_files = list(products.glob('*.xctestrun'))
+assert len(run_files) == 1, 'Choose the intended generated xctestrun file'
+run = run_files[0]
+data = plistlib.loads(run.read_bytes())
+data['PomoGemUITests'].setdefault('EnvironmentVariables', {})[
+    'POMOGEM_CAPTURE_LIVE_STOREKIT'
+] = '1'
+run.write_bytes(plistlib.dumps(data))
+PY
+
+xcodebuild \
+  -xctestrun "$SCREENSHOT_RESULTS"/DerivedData/Build/Products/*.xctestrun \
+  -destination "platform=iOS Simulator,id=$SCREENSHOT_DEVICE_ID" \
   -resultBundlePath "$SCREENSHOT_RESULTS/PomoGemScreenshots.xcresult" \
+  -parallel-testing-enabled NO \
   -only-testing:PomoGemUITests/RuntimeFlowAuditUITests/testAppStoreScreenshotSetJapaneseReleaseCandidate \
-  test
+  -only-testing:PomoGemUITests/RuntimeFlowAuditUITests/testCaptureActualStoreKitPrice \
+  test-without-building
 
 xcrun xcresulttool export attachments \
   --path "$SCREENSHOT_RESULTS/PomoGemScreenshots.xcresult" \
   --output-path "$SCREENSHOT_RESULTS/attachments"
 ```
 
-Use `manifest.json` to map the five attachments prefixed `ASC_` to the ordered
-filenames above. If an exported XCTest screenshot contains an opaque alpha
-plane, strip only that channel while preserving RGB pixels; keep an already
-RGB/no-alpha attachment unchanged:
+Map the five `ASC_` attachments and one `IAP_` attachment using the exported
+`manifest.json`. Visually inspect the actual images and copy the selected
+attachments unchanged. A skipped live-price test does not produce price evidence.
+Record new provenance and checksums when adopting a replacement capture.
 
 ```sh
-ffmpeg -hide_banner -loglevel error \
-  -i '<exported attachment>' \
-  -vf format=rgb24 \
-  -frames:v 1 \
-  'AppStore/screenshots/ja-JP/<ordered filename>.png'
-```
-
-Before upload, verify every file and visually inspect all five:
-
-```sh
-for screenshot in AppStore/screenshots/ja-JP/*.png; do
+for screenshot in AppStore/screenshots/ja-JP/*.png AppStore/screenshots/iap-review/*.png; do
   sips -g pixelWidth -g pixelHeight -g hasAlpha -g space -g format "$screenshot"
 done
+shasum -a 256 -c AppStore/screenshots/checksums.sha256
 ```
 
-Expected values are `pixelWidth: 1284`, `pixelHeight: 2778`, `hasAlpha: no`,
-`space: RGB`, and `format: png`.
+The current six candidate files should report 1284 × 2778, RGB, PNG, and no
+alpha. The checksum manifest also covers the separate historical image below.
 
-The checked-in set was regenerated on 2026-09-06 from PomoGem version 1.0
-build 5 with Xcode 26.6 (17F113), using a Debug-only deterministic fixture on
-an iOS 26.5 iPhone 12 Pro Max simulator. The original application executable
-remained unchanged throughout both capture runs. The second run used a private,
-ad-hoc-signed UI-test runner copy; no application source or repository test was
-modified for the images. The selected sources are:
+## Historical IAP review image — 2026-09-06
 
-| Image | Capture source | Verification |
-|---|---|---|
-| 01 | Adjusted capture journey, `ASC_01_home-with-first-pebble` | Private test-copy-only four-second wait for the normal landing toast to disappear; clean Home visually reviewed |
-| 02 | Original capture journey, `ASC_02_25-minute-focus` | Original capture journey, 1 test passed |
-| 03 | Original capture journey, `ASC_03_completion-reward` | Original capture journey, 1 test passed |
-| 04 | Original capture journey, `ASC_04_accumulation-overview` | Original capture journey, 1 test passed |
-| 05 | Settings natural-scroll capture, `ASC_05_privacy-position-1` | Separate Settings-navigation capture in the private test runner; version and production privacy explanation visually reviewed |
+`history/iap-review-20260906.png` is retained only as a historical PomoGem 1.0
+build 5 capture from an iOS 26.5 iPhone 12 Pro Max Simulator. It is not the
+current candidate's review image and does not show the new unlimited
+learning-app benefit. The five current listing files replace the earlier
+September 6 listing set.
 
-The original capture journey passed (1 of 1 tests). The adjusted journey and
-the separate Settings capture also passed (2 of 2 tests). The initial 01
-(landing toast) and initial 05 (Simulator diagnostics) were rejected on visual
-review. The adjustments only wait for an ordinary transient toast to disappear
-and scroll Settings normally. Reproduce these capture steps before adopting
-01 and 05; the unmodified test's attachments alone are not composition approval.
+The historical capture used the actual `Product.products` request without a
+local StoreKit configuration and displayed `$0.99`. It showed the earlier Pro
+benefits, one-time purchase, seller disclosure and Restore Purchases.
+`IAPCaptureUITests/testCaptureActualStoreKitPrice` passed without purchasing,
+restoring or redeeming an offer.
 
-All selected XCTest attachments were already RGB PNGs without an alpha channel
-and were copied byte for byte, without pixel edits, cropping, or compositing.
-Screenshot 03 shows the first saved 250g completion before the drop, with Close,
-GIF, and 5-minute break actions. Signed-Release physical-device visual parity
-remains a separate submission gate.
-`shasum -a 256 -c AppStore/screenshots/checksums.sha256` verifies the five listing
-images and the separate IAP review image.
-
-## IAP review image — captured
-
-Status: `captured_live_price`.
-
-`iap-review/01-pomogem-pro-live-price.png` was captured on 2026-09-06 from
-PomoGem version 1.0 build 5 on an iPhone 12 Pro Max simulator running iOS 26.5.
-The Japanese production paywall displays `com.hinoshiba.pomogem.pro.lifetime`
-returned by the actual `Product.products` request, without a local StoreKit
-configuration. The US storefront supplied the displayed `$0.99` price through
-`Product.displayPrice`; this is not a Japan-storefront price capture.
-
-The image shows the 1–360 minute range, month labels on grouped pebbles,
-one-time purchase, the pre-purchase seller-disclosure link, and Restore
-Purchases. The capture test
-`IAPCaptureUITests/testCaptureActualStoreKitPrice` passed (1 of 1 tests).
-It opened the paywall and checked that its purchase control was available;
-it did not perform a purchase, restore, or offer redemption.
-
-The source attachment was `136CBBEE-68B6-4251-AF3B-0E604F56ECBD.png`, named
-`01-pomogem-pro-live-price` in the XCTest result. It was already an opaque
-1284 × 2778 RGB PNG and was copied byte for byte, with no cropping, price
-replacement, compositing, or other pixel edits. Its hash is recorded in
-`checksums.sha256` and `ASSET_LICENSES.md`.
-
-The earlier product's price screenshot remains in a private historical
-archive and is not included in this set. This new capture establishes the
-paywall's visible product and price; it does not establish purchase/restore
-success, signed-Release physical-device parity, or App Store Connect upload
-and submission completion.
+Its source attachment was `136CBBEE-68B6-4251-AF3B-0E604F56ECBD.png`, named
+`01-pomogem-pro-live-price`. It was copied unchanged as an opaque 1284 × 2778
+RGB PNG; its hash remains in `checksums.sha256` and `ASSET_LICENSES.md`.
 
 ## English product page
 
-The app UI and support are currently Japanese, and the `en-US` description
-states that explicitly. Because these images contain no added Japanese
-marketing copy, the exact same truthful UI set can be reused for `en-US`.
-Either upload the same ordered set to that localization or let App Store
-Connect inherit the Japanese set; do not create an English-looking custom set
-until the binary itself has English UI.
+The app UI and support are currently Japanese, which the `en-US` description
+states. The same five Japanese product-UI images can be reused for `en-US`;
+there is no added marketing text to translate. Upload the same ordered set or
+let App Store Connect inherit the Japanese set. An English-looking custom set
+would require corresponding English UI in the binary.

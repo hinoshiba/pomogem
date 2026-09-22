@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import plistlib
 import sys
 from pathlib import Path
 from urllib.parse import urlsplit
+
+sys.dont_write_bytecode = True
+from release_profile_policy import read_release_version
 
 ROOT = Path(__file__).resolve().parents[1]
 META = ROOT / "AppStore/metadata/ja-JP"
@@ -212,12 +216,11 @@ required_lines = (
     "secondary_category: Education",
     "- ja-JP",
     "- en-US",
-    'marketing_version: "1.0.2"',
-    'build_number: "9"',
     'copyright: "2026 hinoshiba"',
     "website_host: pomogem.hinoshiba.com",
     "app_bundle_id: com.hinoshiba.pomogem",
     "widget_bundle_id: com.hinoshiba.pomogem.widgets",
+    "screen_time_monitor_bundle_id: com.hinoshiba.pomogem.screentimemonitor",
     'minimum_ios: "17.0"',
     "supports_ipad_ui: false",
     "supports_mac_catalyst: false",
@@ -320,6 +323,13 @@ for product_position, start in enumerate(iap_starts):
         fail("configuration.yml in_app_purchases contains an empty product_id")
     iap_product_ids.append(product_id)
     scope = f"in_app_purchases[{product_id}]"
+    localizations = yaml_block(product, 4, "localizations", scope)
+    for locale in ("ja-JP", "en-US"):
+        localized = yaml_block(localizations, 6, locale, f"{scope}.localizations")
+        for field, limit in (("display_name", 30), ("description", 55)):
+            value = yaml_scalar(localized, 8, field, f"{scope}.{locale}")
+            if len(value) > limit:
+                fail(f"configuration.yml {scope}.{locale}.{field} exceeds {limit} characters")
     review_screenshot_status = yaml_scalar(product, 4, "review_screenshot_status", scope)
     if review_screenshot_status not in {"pending_live_price_capture", "captured_live_price"}:
         fail(f"configuration.yml {scope}.review_screenshot_status is invalid")
@@ -348,16 +358,61 @@ if len(iap_product_ids) != len(set(iap_product_ids)):
     fail("configuration.yml in_app_purchases contains duplicate product_id values")
 
 if "iCloud.com.hinoshiba.pomogem.operations" in configuration:
-    fail("version 1.0 must not declare the disabled rare-reward operations container")
-if "group.com.hinoshiba.pomogem" in configuration or "- app_groups" in configuration_lines:
-    fail("version 1.0 must not declare the removed App Group")
+    fail("shipping configuration must not declare the disabled rare-reward operations container")
 if "rare_rewards: disabled" not in configuration_lines:
-    fail("version 1.0 rare-reward release gate must remain disabled")
+    fail("shipping rare-reward release gate must remain disabled")
 
 project = (ROOT / "project.yml").read_text(encoding="utf-8")
-for line in ('MARKETING_VERSION: "1.0.2"', 'CURRENT_PROJECT_VERSION: "9"'):
-    if line not in project:
-        fail(f"project.yml version does not match App Store configuration: {line}")
+try:
+    version, build = read_release_version(project)
+except ValueError as error:
+    fail(str(error))
+for key, expected in (("marketing_version", version), ("build_number", build)):
+    if yaml_scalar(configuration_entries, 0, key, "app") != f'"{expected}"':
+        fail(f"configuration.yml {key} does not match project.yml")
+
+# The ledger is shared by the host and monitor only. The Widget's account-
+# neutral contract remains unchanged; neither it nor the monitor gets CloudKit.
+capabilities = yaml_block(configuration_entries, 0, "target_capabilities", "target_capabilities")
+expected_targets = {"app:", "widget: []", "screen_time_monitor:"}
+if [content for indent, content in capabilities if indent == 2].count("widget: []") != 1 or {
+    content for indent, content in capabilities if indent == 2
+} != expected_targets:
+    fail("configuration.yml must declare exactly the app, neutral Widget, and Screen Time monitor capabilities")
+for role, expected in (
+    ("app", {"icloud_cloudkit", "push_notifications", "in_app_purchase", "family_controls", "app_groups"}),
+    ("screen_time_monitor", {"family_controls", "app_groups"}),
+):
+    observed = yaml_list(capabilities, 2, role, "target_capabilities")
+    if len(observed) != len(expected) or set(observed) != expected:
+        fail(f"configuration.yml {role} capabilities differ from the reviewed shipping allowlist")
+app_groups = yaml_block(configuration_entries, 0, "app_groups", "app_groups")
+if app_groups != [(2, "shared_screen_time: group.com.hinoshiba.pomogem")]:
+    fail("configuration.yml must declare only the exact shared Screen Time App Group")
+expected_source_entitlements = {
+    "PomoGem/PomoGem.entitlements": {
+        "aps-environment": "$(APS_ENVIRONMENT)",
+        "com.apple.developer.icloud-container-environment": "$(ICLOUD_CONTAINER_ENVIRONMENT)",
+        "com.apple.developer.icloud-container-identifiers": ["iCloud.com.hinoshiba.pomogem"],
+        "com.apple.developer.icloud-services": ["CloudKit"],
+        "com.apple.developer.family-controls": True,
+        "com.apple.security.application-groups": ["group.com.hinoshiba.pomogem"],
+    },
+    "PomoGemWidgets/PomoGemWidgets.entitlements": {},
+    "PomoGemScreenTimeMonitor/PomoGemScreenTimeMonitor.entitlements": {
+        "com.apple.developer.family-controls": True,
+        "com.apple.security.application-groups": ["group.com.hinoshiba.pomogem"],
+    },
+}
+for relative, expected in expected_source_entitlements.items():
+    try:
+        with (ROOT / relative).open("rb") as handle:
+            observed = plistlib.load(handle)
+    except (OSError, ValueError, plistlib.InvalidFileException):
+        fail("shipping source entitlements are missing or malformed")
+    if observed != expected or ("com.apple.developer.family-controls" in expected
+                               and observed.get("com.apple.developer.family-controls") is not True):
+        fail(f"{relative} differs from the reviewed shipping capability allowlist")
 
 review_notes = (ROOT / "AppStore/review-notes-connect.txt").read_text(encoding="utf-8")
 if len(review_notes) > 4000:

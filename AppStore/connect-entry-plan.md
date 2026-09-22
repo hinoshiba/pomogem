@@ -1,6 +1,6 @@
 # App Store Connect entry plan
 
-Initial preparation: 2026-09-06 for PomoGem 1.0 (5). Storage, offline access and Pro duration instructions below are updated for the 1.0.2 candidate; this is not a new upload or submission record.
+Initial preparation: 2026-09-06 for PomoGem 1.0 (5). The instructions below target 1.1.0 (10). App Store Connect shows 1.0.2 (9) Ready for Distribution as of 2026-09-22. A 1.1.0 draft has been created; its binary is not uploaded. This is not a submission record.
 New record created and verified on 2026-09-06: Apple ID `6809139517`.
 SKU `pomogem-ios`, primary language Japanese, bundle ID `com.hinoshiba.pomogem`.
 The registered Japanese name is ポモジェム：ポモドーロタイマー. Historical submissions and their results are recorded separately in the release records.
@@ -45,7 +45,7 @@ SecondaryはEducationとします。
 Version 1.0はランダム報酬を出荷せず、完走時は通常粒を決定論的に保存します。上記descriptorへ
 影響する機能を追加した時点で4+回答を無効化し、全質問を再判定します。
 
-## Version 1.0 localizations
+## Candidate 1.1.0 localizations
 
 | Field | Source |
 |---|---|
@@ -114,26 +114,38 @@ statusは公開前と各更新時に再監査します。新しいstorefrontの�
 | Type | Non-Consumable |
 | Reference Name | PomoGem Pro Lifetime |
 | ja-JP name | ポモジェムPro |
-| ja-JP description | 任意の集中時間とまとまり粒の月刻印を買い切りで追加。 |
+| ja-JP description | 自由な集中時間・月刻印・勉強アプリ数無制限。買い切りです。 |
 | en-US name | PomoGem Pro |
-| en-US description | Custom timers and month labels. |
+| en-US description | Custom timers, month labels, unlimited learning apps. |
 | Base country or region | United States |
 | United States target price | USD 0.99（「約1ドル」の利用可能な標準price point） |
 | Japan custom price | JPY 100 |
 | Other available storefronts | AppleがUSD 0.99を基準に為替・税・各地域の価格慣行から生成する現地相当額 |
 | Availability | App本体と同じ148 of 175 Countries or Regions（現行EU 27を除外。新しいstorefrontは自動追加） |
 | Family Sharing | Off |
-| Review screenshot | `pending_live_price_capture`。新商品のStoreKit実価格を取得後に `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png` を撮影・検証してConnectへ登録 |
+| Review screenshot | `captured_live_price`。2026-09-22に1.1.0 (10)の実StoreKit価格$0.99を撮影・検証し、Connectへ登録・再読込確認済み。storefront国は未確認。正本は `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png` |
 | Review notes | `AppStore/iap-review-notes-connect.txt` |
 
-Unlockは無料の25分／45分／60分／90分以外の任意の1分00秒〜360分00秒と、まとまり粒の月刻印です。次候補では分・秒の数字入力とホイールで指定します。share cardは無料／Proともロゴと公式サイトを常設します。subscription、trial、
+Unlockは無料preset以外の任意の1分00秒〜360分00秒、まとまり粒の月刻印、スクリーンタイムの勉強アプリ数無制限（無料5つ）です。黒いgem用アプリ数は無料でも無制限です。分・秒の数字入力とホイールに対応します。share cardは無料／Proともロゴと公式サイトを常設します。subscription、trial、
 external purchase、独自serverはありません。purchase、pending、cancel、restore、revocationと、
-entitlement反映後にtransactionをfinishすることをSandboxで検証します。初回IAPはversion 1.0と同じ
-submissionへ追加します。
+entitlement反映後にtransactionをfinishすることをSandboxで検証します。初回IAPのversion 1.0提出は履歴です。1.1.0でも既存商品を維持し、購入済み利用者にも追加機能を提供します。
 
 日本だけをcustom priceとして固定し、EU 27を除くその他の配信地域ではAppleの自動調整を維持します。
 「全地域を手動管理」は採用しません。App内では常にStoreKitの`displayPrice`を表示し、固定為替や
 税込み表示をコードへ埋め込みません。
+
+## Screen Time and storage review
+
+Settings → スクリーンタイムで個人認証後にアプリ・テーマ・記録を設定します。選択アプリの合計10分ごとに
+600秒／100gを取り込みます。OS通知の遅延を明記し、常時・即時計測や他アプリの強制起動を約束しません。
+黒いgemは黒同士だけで結合し、学習集計・報酬・共有から除外します。tokenと未取込情報・黒いgemは端末内、
+取り込み済み学習記録は通常の選択保存先という区別を、掲載文・Privacy・Review Notesで統一します。
+本体／MonitorのFamily Controls distribution承認・最終profile・実到達は未確認です。
+
+iCloud利用中の設定画面には「iCloudから再取得」を追加します。事前のcloud読取、空なら専用警告、
+初期OFFの端末data削除同意を経て、未送信変更を捨てて再取得します。cloud側は残り、結合しません。
+受付はaccount・namespace・コンテナ／環境へ結び付け、旧形式・別環境のリクエストは実行しません。
+端末dataでiCloud全体を置き換える操作と、その復旧再開は引き続き無効です。
 
 ## App Privacy
 
@@ -145,6 +157,7 @@ database、4種類の瓶用projectionは端末内だけに保存します。運�
 なしで全基本機能を使え、iCloudへ自動uploadしません。share／exportは利用者の明示操作です。1.0は
 rare reward用operations containerもdirect CloudKit一括削除も提供せず、app削除とAppleのiCloud
 ストレージ管理を案内します。現在のJSON exportは全11種類の出荷対象SwiftData modelを対象にします。
+スクリーンタイムのtoken・未取込情報・黒いgem・診断情報は端末内に限り、JSONには含めません。通常記録へ取り込み済みの学習分は選択した保存先の記録として同期・書き出し対象です。診断は件数・結果・時間に限り、運営者へ送信しません。
 JSONを再importする機能はなく、このファイルによる復元・移行には対応しません。明示的な保存先切り替えも、このJSONを読み込む処理ではありません。
 ただしsupport mailがAppleのoptional disclosure条件を満たさない運用なら、Email Addressを
 App Functionality（customer support）、linked to user、not trackingとして申告します。Publish直前に
