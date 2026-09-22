@@ -2265,6 +2265,146 @@ final class FocusCloudSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testPagedHistoryValidatesEveryPhysicalCopyInATiedGroup() throws {
+        for savedCopyCount in [0, 65, 130] {
+            let container = try focusContainer(named: "FocusHistoryEveryCopy-\(savedCopyCount)")
+            let context = container.mainContext
+            context.autosaveEnabled = false
+            let start = Date.now.addingTimeInterval(-600)
+            let source = try timerRecord(
+                sessionID: sessionA, status: .running, start: start,
+                updatedAt: start, revision: 1, ownershipSequence: 0, writer: "device-a"
+            )
+            var object = try XCTUnwrap(JSONSerialization.jsonObject(
+                with: source.payloadData
+            ) as? [String: Any])
+            object["savedAt"] = start.addingTimeInterval(1).timeIntervalSinceReferenceDate
+            let conflictingPayload = try JSONSerialization.data(withJSONObject: object)
+            var copies: [SyncedFocusTimer] = []
+            for index in 0 ..< 130 {
+                let copy = try timerRecord(
+                    sessionID: sessionA, status: .running, start: start,
+                    updatedAt: start, revision: 1, ownershipSequence: 0, writer: "device-a"
+                )
+                copy.id = source.id
+                copy.payloadData = source.payloadData
+                context.insert(copy)
+                copies.append(copy)
+                if index + 1 == savedCopyCount { try context.save() }
+            }
+
+            // Each physical copy must participate even when every synchronized
+            // ordering field ties. Moving the sole conflict through the entire
+            // group detects an omitted row without depending on insertion order.
+            for (index, copy) in copies.enumerated() {
+                copy.payloadData = conflictingPayload
+                defer { copy.payloadData = source.payloadData }
+                XCTAssertThrowsError(try FocusCloudSyncStore.claimOwnership(
+                    sessionID: sessionA, context: context, deviceID: "reader"
+                ), "Skipped copy \(index), saved prefix \(savedCopyCount)") {
+                    XCTAssertEqual($0 as? FocusCloudSyncError, .invalidPayload)
+                }
+            }
+            XCTAssertEqual(try context.fetchCount(FetchDescriptor<SyncedFocusTimer>()), 130)
+            XCTAssertEqual(try context.fetchCount(FetchDescriptor<FocusTimerDeviceClaim>()), 0)
+            XCTAssertTrue(copies.allSatisfy { $0.payloadData == source.payloadData })
+        }
+    }
+
+    @MainActor
+    func testPagedHistoryMergesPendingPredicateChangesAndDeletes() throws {
+        for change in ["delete", "sessionOut", "sessionIn", "epochOut", "epochIn"] {
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("FocusHistoryOverlay-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let container = try focusContainer(
+                named: "FocusHistoryOverlay-\(change)",
+                url: directory.appendingPathComponent("history.store")
+            )
+            let context = container.mainContext
+            context.autosaveEnabled = false
+            let start = Date.now.addingTimeInterval(-600)
+            let source = try timerRecord(
+                sessionID: sessionA, status: .running, start: start,
+                updatedAt: start, revision: 1, ownershipSequence: 0, writer: "device-a"
+            )
+            let otherSession = try timerRecord(
+                sessionID: sessionB, status: .running, start: start,
+                updatedAt: start, revision: 1, ownershipSequence: 0, writer: "device-a"
+            )
+            let outsideEpoch = UUID()
+            var object = try XCTUnwrap(JSONSerialization.jsonObject(
+                with: source.payloadData
+            ) as? [String: Any])
+            object["dataEpochID"] = outsideEpoch.uuidString
+            let otherEpochPayload = try JSONSerialization.data(withJSONObject: object)
+            object.removeValue(forKey: "dataEpochID")
+            object["savedAt"] = start.addingTimeInterval(1).timeIntervalSinceReferenceDate
+            let conflictPayload = try JSONSerialization.data(withJSONObject: object)
+            for _ in 0 ..< 130 {
+                let copy = try timerRecord(
+                    sessionID: sessionA, status: .running, start: start,
+                    updatedAt: start, revision: 1, ownershipSequence: 0, writer: "device-a"
+                )
+                copy.id = source.id
+                copy.payloadData = source.payloadData
+                context.insert(copy)
+            }
+            let edited = try timerRecord(
+                sessionID: sessionA, status: .running, start: start,
+                updatedAt: start, revision: 1, ownershipSequence: 0, writer: "device-a"
+            )
+            edited.id = source.id
+            edited.payloadData = conflictPayload
+            if change == "sessionIn" {
+                edited.sessionID = sessionB
+                edited.payloadData = otherSession.payloadData
+            } else if change == "epochIn" {
+                edited.dataEpochID = outsideEpoch
+                edited.payloadData = otherEpochPayload
+            }
+            context.insert(edited)
+            try context.save()
+
+            switch change {
+            case "delete": context.delete(edited)
+            case "sessionOut":
+                edited.sessionID = sessionB
+                edited.id = otherSession.id
+                edited.payloadData = otherSession.payloadData
+            case "sessionIn":
+                edited.sessionID = sessionA
+                edited.payloadData = conflictPayload
+            case "epochOut":
+                edited.dataEpochID = outsideEpoch
+                edited.payloadData = otherEpochPayload
+            case "epochIn":
+                edited.dataEpochID = nil
+                edited.payloadData = conflictPayload
+            default: XCTFail("Unexpected fixture mutation")
+            }
+            if change != "delete" { _ = try edited.decodedPayload() }
+            let conflictIsCurrent = change.hasSuffix("In")
+            if conflictIsCurrent {
+                XCTAssertThrowsError(try FocusCloudSyncStore.claimOwnership(
+                    sessionID: sessionA, context: context, deviceID: "reader"
+                ), change) {
+                    XCTAssertEqual($0 as? FocusCloudSyncError, .invalidPayload)
+                }
+            } else {
+                XCTAssertNoThrow(try FocusCloudSyncStore.claimOwnership(
+                    sessionID: sessionA, context: context, deviceID: "reader"
+                ), change)
+            }
+            XCTAssertEqual(try context.fetchCount(FetchDescriptor<FocusTimerDeviceClaim>()),
+                           conflictIsCurrent ? 0 : 1, change)
+            XCTAssertEqual(try context.fetchCount(FetchDescriptor<SyncedFocusTimer>()),
+                           change == "delete" ? 130 : 131, change)
+        }
+    }
+
+    @MainActor
     func testPagedHistoryBoundsDistinctSnapshotCollisionsWithinOneEventID() throws {
         let container = try focusContainer(named: "FocusHistoryEventCollisions")
         let context = container.mainContext
