@@ -4,9 +4,15 @@ Product: `com.hinoshiba.pomogem.pro.lifetime`
 
 Candidate: 1.1.0 (10). The existing non-consumable gains unlimited learning-app selection.
 
-Review image to refresh: `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png`
+Current review image (`captured_live_price`, 2026-09-22): `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png`
 Historical image: `AppStore/screenshots/history/iap-review-20260906.png`
 （1.0 build 5、実際のStoreKit商品価格を表示、購入未実行。候補の新しいPro機能の証拠にはしません。）
+
+The current 1.1.0 (10) Simulator image shows the actual StoreKit `Product.displayPrice`
+`$0.99`, including the unlimited learning-app benefit. The storefront country was not
+independently read; this is not evidence of a US storefront or a Japanese-yen price.
+No purchase or restore was performed. See `screenshots/README.md` for capture provenance.
+
 Type: Non-Consumable
 
 ## English (for App Review)
@@ -37,7 +43,7 @@ Use the paywall showing the live `Product.displayPrice` as the IAP review screen
 The existing non-consumable was originally submitted with version 1.0; this candidate adds a benefit to the same product.
 The Screen Time addition is part of the 1.1.0 candidate. It requires Family Controls distribution
 approval for the host and monitor extension, plus signed-device verification before submission.
-The historical review image above must be refreshed to include the added Pro feature.
+The current review image above includes the added Pro feature and live StoreKit price; the historical image remains separate.
 
 ## 日本語
 
@@ -61,7 +67,7 @@ The historical review image above must be refreshed to include the added Pro fea
    購入・復元後は6アプリ以上を選択・保存できることを確認します。「黒いgem」は購入不要で無制限です。
 
 スクリーンタイム追加は1.1.0候補です。提出前に本体・Monitor拡張のFamily Controls配布権限承認と
-署名済み実機検証を行い、冒頭の過去の審査画像も新しいPro機能を含む画像へ更新します。
+署名済み実機検証を行います。現在の審査画像は新しいPro機能とStoreKitの実際の価格 `$0.99` を含み、過去の画像とは分けて保持しています。取得元のストア国は独立に確認しておらず、購入・復元は実行していません。
 
 独自loginやreview用accountは不要です。初回提出はversion 1.0の履歴です。今回は既存商品を維持し、購入済み利用者にも追加機能を提供します。
 Sandboxで購入、承認待ち、cancel、復元、revocationを確認し、審査用screenshotは上記paywallで

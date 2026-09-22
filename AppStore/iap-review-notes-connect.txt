@@ -12,4 +12,4 @@ Review steps:
 6. On a supported iPhone, Settings → “スクリーンタイム” requests individual Family Controls access. After authorizing it, “勉強のgem” allows five learning apps for Free, and more than five after purchase or restore. Select a theme, enable recording, and save. Categories and websites are not accepted. The separate “黒いgem” selection is unlimited for everyone.
 7. Learning-app use is combined in confirmed 10-minute steps (100 grams), with OS delivery delays possible. Black gems stay outside study totals and sharing. Screen Time authorization is optional and is separate from the purchase; denying it does not prevent use of the timers or other Pro features.
 
-No review account is required. The review image should show this candidate's paywall with the live Product.displayPrice and the unlimited learning-app benefit.
+No review account is required. The review image shows this candidate's paywall, the unlimited learning-app benefit, and the actual StoreKit Product.displayPrice of $0.99. The storefront country was not independently read. This capture did not perform a purchase or restore.

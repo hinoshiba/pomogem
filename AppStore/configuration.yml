@@ -311,7 +311,7 @@ in_app_purchases:
   - product_id: com.hinoshiba.pomogem.pro.lifetime
     type: non_consumable
     reference_name: PomoGem Pro Lifetime
-    review_screenshot_status: pending_live_price_capture
+    review_screenshot_status: captured_live_price
     family_sharing: false
     availability: non_eu_148_of_175_countries_and_regions
     automatically_available_in_new_countries_or_regions: true
@@ -349,8 +349,7 @@ oss_publication:
 release_blockers:
   - verify Family Controls distribution authorization and matching final profiles for both host and Screen Time monitor extension
   - verify actual signed-device 10-minute learning and black-gem delivery after the callback fix; prior failed or simulator-only checks are not a pass
-  - capture and verify the new PomoGem IAP review screenshot with the live StoreKit price for com.hinoshiba.pomogem.pro.lifetime
-  - compare current store screenshots with the final candidate and replace stale settings or Pro feature images
+  - compare the 2026-09-22 simulator screenshots with the signed Release candidate on a physical supported iPhone
   - candidate signed-device testing must verify equal first-launch choices and both confirmations, explicit enable/disable confirmations and initially unselected deletion acknowledgment, verified destination copies and retained cloud data on disable, offline eligibility/revocation/reconnect and pending-upload disclosures, and complete local-only basic use without an Apple Account or network; record untested cases as pending
   - owner must accept the focus partition trade-off that materialized completions survive delayed cancellation
   - owner must accept the fail-closed interactive recovery ceiling when more than 256 corrupt active logical timer sessions precede a valid session, or ship a versioned reversible quarantine design

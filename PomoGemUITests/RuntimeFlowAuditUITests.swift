@@ -897,8 +897,11 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     }
 
     /// Captures the production Product.displayPrice without purchasing or
-    /// restoring. Run without a StoreKit configuration file.
+    /// restoring. Explicitly opt in and run without a StoreKit configuration file.
     func testCaptureActualStoreKitPrice() throws {
+        guard ProcessInfo.processInfo.environment["POMOGEM_CAPTURE_LIVE_STOREKIT"] == "1" else {
+            throw XCTSkip("Set POMOGEM_CAPTURE_LIVE_STOREKIT=1 to capture the live StoreKit product price.")
+        }
         openMenuAction(containing: "設定")
         let pro = button(containing: "ポモジェムPro")
         XCTAssertTrue(scrollUntilHittable(pro))
