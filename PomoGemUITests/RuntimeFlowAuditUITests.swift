@@ -469,6 +469,84 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         cancelPresentedFocusIfNeeded()
     }
 
+    /// The repeating alarm is only for a timer that ends on screen. Coming
+    /// back shortly after the end (no notification permission in UI tests,
+    /// so at most one chime) must continue to the receipt without Stop.
+    func testReturningShortlyAfterTheEndOpensTheReceiptWithoutAlarm() throws {
+        try verifyReturnAfterFocusEnd(awayFor: 17)
+    }
+
+    /// Past the one-chime window the return is old news: no cue at all.
+    func testReturningLongAfterTheEndOpensTheReceiptWithoutAlarm() throws {
+        try verifyReturnAfterFocusEnd(awayFor: 80)
+    }
+
+    /// Leaving while the alarm repeats is the acknowledgement. Coming back
+    /// must not show (or ring) the alarm again; the saved result continues.
+    func testLeavingWhileTheAlarmRepeatsCountsAsStop() throws {
+        selectDemoDurationForVisualAudit()
+        startDemoFocusForVisualAudit()
+        let stop = app.buttons["focus.completion-alert.stop"]
+        XCTAssertTrue(stop.waitForExistence(timeout: 25), "The demo must end on screen with its alarm")
+
+        XCUIDevice.shared.press(.home)
+        sleep(3)
+        app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 8))
+        XCTAssertTrue(
+            waitForAbsence(stop, timeout: 3),
+            "Returning after leaving mid-alarm must not present Stop again"
+        )
+        finishReceiptAfterReturn(named: "Returned mid-alarm — receipt without Stop")
+    }
+
+    /// The break-end alarm follows the same rule: leaving while it repeats
+    /// counts as Stop, and 「瓶へ戻る」 stays for the person to choose.
+    func testLeavingWhileTheBreakEndAlarmRepeatsCountsAsStop() throws {
+        executionTimeAllowance = 600
+        enterFiveMinuteBreakFromDemoReward()
+        let breakEnd = app.buttons["break.completion-alert.stop"]
+        XCTAssertTrue(breakEnd.waitForExistence(timeout: 330))
+        XCTAssertEqual(breakEnd.label, "停止して瓶へ戻る")
+
+        XCUIDevice.shared.press(.home)
+        sleep(3)
+        app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 8))
+        XCTAssertTrue(
+            waitForLabel(breakEnd, equalTo: "瓶へ戻る", timeout: 3),
+            "Returning after leaving mid-alarm must not keep the break-end alarm going"
+        )
+        XCTAssertFalse(app.staticTexts["休憩終了のアラート中"].exists)
+        retainScreenshot(named: "Returned mid break-end alarm — no alarm")
+        finishBreakEnd(breakEnd)
+    }
+
+    /// A break that ends while the app is away never starts the repeating
+    /// alarm on return.
+    func testReturningAfterTheBreakEndDoesNotStartTheAlarm() throws {
+        executionTimeAllowance = 600
+        enterFiveMinuteBreakFromDemoReward()
+        XCUIDevice.shared.press(.home)
+        sleep(310)
+        app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 8))
+        let breakEnd = app.buttons["break.completion-alert.stop"]
+        XCTAssertTrue(breakEnd.waitForExistence(timeout: 12))
+        let alarm = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "停止して瓶へ戻る"),
+            object: breakEnd
+        )
+        alarm.isInverted = true
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [alarm], timeout: 3), .completed,
+            "Returning after the break ended must not start the repeating alarm"
+        )
+        XCTAssertEqual(breakEnd.label, "瓶へ戻る")
+        retainScreenshot(named: "Returned after the break end — no alarm")
+        finishBreakEnd(breakEnd)
+    }
+
     func testPausedFocusIsHonestAndTheRingDoesNotMove() throws {
         app.buttons["home.duration-picker"].tap()
         app.buttons["25分"].tap()
@@ -514,6 +592,85 @@ final class RuntimeFlowAuditUITests: XCTestCase {
                        "Resuming must not move the ring")
         XCTAssertFalse(notice.exists)
         cancelPresentedFocusIfNeeded()
+    }
+
+    private func verifyReturnAfterFocusEnd(awayFor seconds: UInt32) throws {
+        selectDemoDurationForVisualAudit()
+        startDemoFocusForVisualAudit()
+        XCUIDevice.shared.press(.home)
+        sleep(seconds)
+        app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 8))
+
+        let stop = app.buttons["focus.completion-alert.stop"]
+        let alarm = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true"), object: stop
+        )
+        alarm.isInverted = true
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [alarm], timeout: 3), .completed,
+            "A focus that ended while the app was away must not start the repeating alarm"
+        )
+        finishReceiptAfterReturn(named: "Returned \(seconds) s later — receipt without an alarm")
+    }
+
+    private func finishReceiptAfterReturn(named name: String) {
+        let dismiss = app.buttons["休憩の提案を閉じる"]
+        XCTAssertTrue(
+            dismiss.waitForExistence(timeout: 20),
+            "The completion must continue straight to Home's receipt"
+        )
+        retainScreenshot(named: name)
+        XCTAssertTrue(waitForHittable(dismiss, timeout: 5))
+        dismiss.tap()
+        XCTAssertTrue(waitForAbsence(dismiss, timeout: 5))
+        waitForLauncherEnabled()
+    }
+
+    private func enterFiveMinuteBreakFromDemoReward() {
+        app.terminate()
+        // Keep the suggestion at five minutes regardless of the shared
+        // simulator's previous rest cadence.
+        app.launchArguments += ["-focus.rest-cadence.v2", "break-return-ui-test-reset"]
+        app.launch()
+        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 10))
+        selectDemoDurationForVisualAudit()
+        startDemoFocusForVisualAudit()
+        XCTAssertTrue(stopCompletionAlertIfPresented(in: app))
+        let startBreak = app.buttons["5分休憩する"]
+        XCTAssertTrue(waitForHittable(startBreak, timeout: 20))
+        startBreak.tap()
+        XCTAssertTrue(app.staticTexts["休憩"].waitForExistence(timeout: 12))
+    }
+
+    private func finishBreakEnd(_ breakEnd: XCUIElement) {
+        XCTAssertTrue(waitForHittable(breakEnd, timeout: 3))
+        breakEnd.tap()
+        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 8))
+        waitForLauncherEnabled()
+    }
+
+    /// A receipt is retired only after its gem lands; the next start (and
+    /// the next test) needs the launcher enabled again.
+    private func waitForLauncherEnabled() {
+        let launcherEnabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND enabled == true"),
+            object: app.buttons["home.focus-launcher"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [launcherEnabled], timeout: 12), .completed)
+    }
+
+    private func waitForLabel(
+        _ element: XCUIElement,
+        equalTo label: String,
+        timeout: TimeInterval
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if element.exists, element.label == label { return true }
+            usleep(50_000)
+        } while Date() < deadline
+        return element.exists && element.label == label
     }
 
     private func verifyCompletionDropAfterRewardDismissal(reduceMotion: Bool) throws {
