@@ -36,7 +36,7 @@ struct WrappedView: View {
     }
 
     private var totalMinutes: Int {
-        NonnegativeIntPolicy.sum(monthSessions.map(\.seconds)) / 60
+        DurationPresentation.creditedFocusMinutes(of: monthSessions)
     }
     private var monthIncludesSelfReportedFocus: Bool {
         monthSessions.contains { $0.effectiveSource.isSelfReported }

@@ -10,9 +10,14 @@ import Foundation
 /// follower cannot turn into time (walk-edge-08, history-08). Screens now ask
 /// this type, so the same effort reads the same everywhere.
 ///
-/// Mass converts exactly: focus earns `Constants.Mass.gramsPerMinute` grams a
-/// minute, and nothing on the study side of a jar or a card weighs anything
-/// else (black Screen Time stones are never counted there).
+/// The time shown is the credited focus time: the whole minutes of each
+/// completion, which are exactly what earns `Constants.Mass.gramsPerMinute`
+/// grams a minute. A Pro focus of 40分30秒 credits 40分 and 400 g; its last
+/// 30 seconds earn no mass, so they are not counted as time either. Screens
+/// therefore derive time from mass (`focusMinutes(grams:)`,
+/// `creditedFocusMinutes(of:)`), never by adding raw seconds: summed seconds
+/// said 1時間21分 in 記録 and Wrapped for two such focuses while the card
+/// made from them, which only knows grams, said 1時間20分.
 enum DurationPresentation {
     /// Whole minutes as 「N分」, 「H時間」 or 「H時間M分」. Negative input is
     /// clamped to 「0分」; hours are digit-grouped (「1,234時間」).
@@ -45,6 +50,15 @@ enum DurationPresentation {
     /// never claims more time than was stacked.
     static func focusMinutes(grams: Int) -> Int {
         max(0, grams) / Constants.Mass.gramsPerMinute
+    }
+
+    /// The credited focus minutes of these records: their summed mass in
+    /// minutes, so a list of records reads the same time as a card or a
+    /// summary built from the same mass.
+    static func creditedFocusMinutes<Records: Sequence>(
+        of sessions: Records
+    ) -> Int where Records.Element == StudySession {
+        focusMinutes(grams: NonnegativeIntPolicy.sum(sessions.map(\.grams)))
     }
 
     /// The focus time a mass stands for, e.g. 2,500 g → 「4時間10分」.

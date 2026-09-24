@@ -46,6 +46,52 @@ final class DurationPresentationTests: XCTestCase {
         XCTAssertEqual(DurationPresentation.focusLabel(grams: -250), "0分")
     }
 
+    func testRecordsCreditWholeMinutesSoTimeMatchesTheirMass() {
+        // Two Pro focuses of 40分30秒 credit 40分 and 400 g each. Summing raw
+        // seconds said 1時間21分 in 記録 and Wrapped, while a card made from
+        // the same records, which only knows their grams, said 1時間20分.
+        let end = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let precise = (0..<2).map { index in
+            record(endingAt: end.addingTimeInterval(Double(index) * 3_600), seconds: 2_430, source: .timer)
+        }
+        XCTAssertEqual(precise.map(\.grams), [400, 400])
+        XCTAssertEqual(DurationPresentation.minutesLabel(
+            NonnegativeIntPolicy.sum(precise.map(\.seconds)) / 60
+        ), "1時間21分", "The old seconds-based total")
+        XCTAssertEqual(DurationPresentation.creditedFocusMinutes(of: precise), 80)
+        let preciseGrams = NonnegativeIntPolicy.sum(precise.map(\.grams))
+        XCTAssertEqual(DurationPresentation.focusLabel(grams: preciseGrams), "1時間20分")
+        XCTAssertEqual(
+            DurationPresentation.minutesLabel(DurationPresentation.creditedFocusMinutes(of: precise)),
+            DurationPresentation.focusLabel(grams: preciseGrams),
+            "記録, Wrapped and the card read the same time"
+        )
+
+        // Whole-minute records, self-reported time and a Screen Time chunk
+        // already credit exactly their minutes.
+        let mixed = precise + [
+            record(endingAt: end.addingTimeInterval(-7_200), seconds: 1_500, source: .timer),
+            record(endingAt: end.addingTimeInterval(-10_800), seconds: 1_800, source: .manual),
+            record(
+                endingAt: end.addingTimeInterval(-14_400),
+                seconds: SessionSource.screenTimeSeconds,
+                source: .screenTime
+            )
+        ]
+        XCTAssertEqual(DurationPresentation.creditedFocusMinutes(of: mixed), 80 + 25 + 30 + 10)
+        XCTAssertEqual(DurationPresentation.creditedFocusMinutes(of: [StudySession]()), 0)
+    }
+
+    private func record(endingAt end: Date, seconds: Int, source: SessionSource) -> StudySession {
+        StudySession(
+            startAt: end.addingTimeInterval(-Double(seconds)),
+            endAt: end,
+            seconds: seconds,
+            source: source,
+            deviceDayKey: FairnessPolicy.deviceDayKey(for: end)
+        )
+    }
+
     func testEffortProgressDurationKeepsItsOutputThroughTheSharedHelper() {
         XCTAssertEqual(EffortProgressPresentation.formattedDuration(grams: 250), "25分")
         XCTAssertEqual(EffortProgressPresentation.formattedDuration(grams: 6_000), "10時間")

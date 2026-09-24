@@ -1022,9 +1022,7 @@ struct LogView: View {
 
     private var summaryGrid: some View {
         let measured = filteredSessions.filter { $0.effectiveSource.isMeasured }
-        let totalMinutes = NonnegativeIntPolicy.sum(
-            filteredSessions.map(\.seconds)
-        ) / 60
+        let totalMinutes = DurationPresentation.creditedFocusMinutes(of: filteredSessions)
         return Group {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: 10) {
@@ -1555,7 +1553,7 @@ struct LogView: View {
             guard !page.sessions.isEmpty else { continue }
             summaries.append(LogMonthSummary(
                 month: WrappedMonth(containing: start, calendar: calendar),
-                minutes: NonnegativeIntPolicy.sum(page.sessions.map(\.seconds)) / 60,
+                minutes: DurationPresentation.creditedFocusMinutes(of: page.sessions),
                 pebbleCount: page.sessions.count,
                 isPartial: page.isPartial
             ))
