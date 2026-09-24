@@ -1537,8 +1537,8 @@ final class SeedDataTests: XCTestCase {
         var remaining = try context.fetch(FetchDescriptor<StudySession>())
             .sorted { $0.startAt < $1.startAt }
         XCTAssertEqual(remaining.map(\.id), [firstID, laterID])
-        XCTAssertEqual(remaining[0].source, .timer)
-        XCTAssertEqual(remaining[1].source, .timer)
+        XCTAssertEqual(remaining[0].effectiveSource, .timer)
+        XCTAssertEqual(remaining[1].effectiveSource, .timer)
         XCTAssertEqual(remaining[1].pebbleKind, .prism)
         XCTAssertEqual(remaining.map(\.rareRewardParticipated), [true, true])
         XCTAssertEqual(remaining.flatMap(\.effectiveRareRewardOutcomes), [
@@ -1564,7 +1564,7 @@ final class SeedDataTests: XCTestCase {
         remaining = try context.fetch(FetchDescriptor<StudySession>())
             .sorted { $0.startAt < $1.startAt }
         XCTAssertEqual(remaining.map(\.id), [firstID, laterID])
-        XCTAssertEqual(remaining.map(\.source), [.timer, .timer])
+        XCTAssertEqual(remaining.map(\.effectiveSource), [.timer, .timer])
         XCTAssertEqual(remaining[1].pebbleKind, .prism)
         XCTAssertEqual(
             StrataMath.totalGrams(

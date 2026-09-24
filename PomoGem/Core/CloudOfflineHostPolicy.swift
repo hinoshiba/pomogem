@@ -67,10 +67,11 @@ enum CloudDatasetLineageBlock: Equatable, Sendable {
 /// reason cannot quietly inherit the generic blocked screen.
 enum CloudLaunchRoute: Equatable, Sendable {
     case relaunch, remoteRecovery, datasetRefresh
-    /// 「iCloudの管理情報が見つかりません」. The server has no transfer ledger at
-    /// all, so there is nothing to refresh FROM. The screen offers the two
-    /// honest choices instead: start a lineage from this device, or stay
-    /// offline. Both are consented; neither happens by arriving here.
+    /// 「iCloudとの同期を止めています」. The server has no transfer ledger at
+    /// all, so there is no committed generation to refresh FROM. The screen
+    /// offers staying offline, the ledger-less 「iCloudから再取得」 and — only in
+    /// a build that publishes it — starting a lineage from this device. All are
+    /// consented; none happens by arriving here.
     case lineageUnavailable
     /// Explanation only. This device's receipt was earned in another CloudKit
     /// environment, so no dataset operation in this build is meaningful.
@@ -93,7 +94,7 @@ enum CloudOfflineSessionError: Error, LocalizedError {
     case relaunchRequired
 
     var errorDescription: String? {
-        "端末の記録を保護したままオフラインで開くため、先ほどの同期処理を終了する必要があります。アプリスイッチャーでPomoGemを終了し、もう一度開いてください。アプリ自体は削除しないでください。"
+        "端末の記録を保護したままオフラインで開くため、先ほどの同期処理を終了する必要があります。Appスイッチャーでポモジェムを終了し、もう一度開いてください。アプリ自体は削除しないでください。"
     }
 }
 
@@ -150,7 +151,7 @@ enum CloudOfflineHostPolicy {
     static func launchRoute(for error: StorageTransferRuntimeError) -> CloudLaunchRoute {
         if let block = datasetLineageBlock(for: error) { return block.launchRoute }
         switch error {
-        case .relaunchRequired: return .relaunch
+        case .relaunchRequired, .cloudCopyStillArriving: return .relaunch
         case .remoteRecoveryRequired: return .remoteRecovery
         case .datasetRefreshRequired: return .datasetRefresh
         // `leftoverLocalStores`, `cloudCopyStillPending` and

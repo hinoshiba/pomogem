@@ -209,7 +209,7 @@ struct ShareStratumVisual: Identifiable, Equatable {
     }
 
     static func radius(for session: StudySession) -> Double {
-        guard session.source == .manual else {
+        guard session.effectiveSource == .manual else {
             return Double(Constants.Jar.measuredRadius)
         }
         let thirtyMinuteGrams = Constants.Mass.manualThirtyMinutes
@@ -423,7 +423,7 @@ struct ShareAggregateVisual: Identifiable, Equatable {
                 pebbleCount: 1
             )]
         })
-        measuredPebbleCount = included.filter { $0.source.isMeasured }.count
+        measuredPebbleCount = included.filter { $0.effectiveSource.isMeasured }.count
         manualPebbleCount = included.count - measuredPebbleCount
         let rewards = RareRewardCounts.total(included.map(\.rareRewardCounts))
         goldPebbleCount = rewards.goldCount

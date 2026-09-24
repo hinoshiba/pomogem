@@ -505,6 +505,45 @@ final class StorageTransferRuntimeCancellationTests: XCTestCase {
         XCTAssertEqual(backend.chunkSaves, 0)
     }
 
+    // MARK: transfer-04 — the relaunch screen's 「次に開くと…完了します」
+
+    /// The relaunch screen promises that the next launch completes the
+    /// transfer only when that is true: an earlier process verified the staged
+    /// mirror, or the journal is already past saving the destination.
+    func testTheNextLaunchCompletesOnlyAfterVerificationOrPastTheDestinationSave() throws {
+        let empty = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RuntimeNoJournal-\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: empty) }
+        XCTAssertFalse(StorageTransferRuntime(store: StorageTransferJournalStore(directory: empty), root: empty)
+            .pendingTransferCompletesOnNextLaunch(), "No journal: nothing to complete")
+
+        for phase in [StorageTransferJournal.Phase.requested, .sourceSaved, .recoveryCopySaved] {
+            let f = try fixture(phase: phase)
+            XCTAssertNil(try f.checkpoint.load()?.verifiedCloudProcessID, "\(phase)")
+            XCTAssertFalse(f.runtime.pendingTransferCompletesOnNextLaunch(),
+                "\(phase): nothing was verified yet, so more than one launch may remain")
+        }
+
+        let verified = try fixture(phase: .preparingDestination)
+        XCTAssertNotNil(try verified.checkpoint.load()?.verifiedCloudProcessID)
+        XCTAssertTrue(verified.runtime.pendingTransferCompletesOnNextLaunch(),
+            "An earlier process verified the mirror")
+        // The same phase without the checkpoint that says so promises nothing.
+        try FileManager.default.removeItem(at: verified.files.transactionDirectory
+            .appendingPathComponent("runtime-v1.json"))
+        XCTAssertFalse(verified.runtime.pendingTransferCompletesOnNextLaunch())
+
+        for phase in [StorageTransferJournal.Phase.destinationSaved, .destinationVerified,
+                      .selectionCommitted, .sourceRetired] {
+            let f = try fixture(phase: phase)
+            try FileManager.default.removeItem(at: f.files.transactionDirectory
+                .appendingPathComponent("runtime-v1.json"))
+            XCTAssertTrue(f.runtime.pendingTransferCompletesOnNextLaunch(),
+                "\(phase): past saving the destination, the phase alone decides")
+        }
+    }
+
     func testDestructivePhasesAndWrongTransactionAreRefusedBeforeRemoteCalls() async throws {
         for phase in [StorageTransferJournal.Phase.preparingDestination, .destinationSaved, .sourceRetired] {
             let f = try fixture(phase: phase)

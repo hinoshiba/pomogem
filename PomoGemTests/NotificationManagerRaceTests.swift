@@ -22,6 +22,40 @@ final class NotificationManagerRaceTests: XCTestCase {
         XCTAssertTrue(recorder.pending.isEmpty)
     }
 
+    func testOnlyTimerEndAlertsAreTimeSensitive() async throws {
+        let recorder = PendingNotificationRecorder()
+        let manager = recorder.makeManager()
+        let focusID = UUID()
+        let breakID = UUID()
+        _ = try await manager.scheduleFocusCompletion(
+            sessionID: focusID, endDate: .now.addingTimeInterval(120)
+        )
+        _ = try await manager.scheduleBreakCompletion(
+            id: breakID, endDate: .now.addingTimeInterval(300)
+        )
+        let focus = try XCTUnwrap(recorder.pending.values.first {
+            $0.identifier.hasPrefix("pomogem.focus.complete.")
+        })
+        let rest = try XCTUnwrap(recorder.pending.values.first {
+            $0.identifier.hasPrefix("pomogem.break.complete.")
+        })
+        XCTAssertEqual(focus.content.interruptionLevel, .timeSensitive)
+        XCTAssertEqual(rest.content.interruptionLevel, .timeSensitive)
+        // Account-neutral, and never a promise that a gem is already saved.
+        XCTAssertEqual(focus.content.body, "集中時間が終わりました。おつかれさまでした。")
+        XCTAssertEqual(rest.content.body, "休憩はここまで。次の一粒へ、ゆっくり戻りましょう。")
+
+        try await schedulePassive(manager, hour: 9)
+        let passive = recorder.pending.values.filter {
+            $0.identifier.hasPrefix("pomogem.passive.")
+        }
+        XCTAssertFalse(passive.isEmpty)
+        XCTAssertTrue(
+            passive.allSatisfy { $0.content.interruptionLevel == .active },
+            "Daily reminders and Wrapped must stay ordinary notifications"
+        )
+    }
+
     func testAcceptedResetCleanupPreservesTimerCreatedBeforeItsDeferredExecution() async throws {
         let recorder = PendingNotificationRecorder()
         let manager = recorder.makeManager()

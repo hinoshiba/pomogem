@@ -66,6 +66,8 @@ targets:
       path: PomoGem/PomoGem.entitlements
       properties:
         com.apple.developer.family-controls: true
+        # Only the focus/break end alerts use .timeSensitive (NotificationManager).
+        com.apple.developer.usernotifications.time-sensitive: true
         com.apple.security.application-groups:
           - group.com.hinoshiba.pomogem
         aps-environment: $(APS_ENVIRONMENT)

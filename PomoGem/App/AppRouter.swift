@@ -222,6 +222,9 @@ struct RecoveredFocusRequest: Identifiable {
     let dataEpochID: UUID?
     let origin: FocusRecoveryOrigin
     let allowsLocalNotifications: Bool
+    /// The cause this device recorded when the timer became self-reported,
+    /// carried from the local recovery envelope (nil for an older envelope).
+    let demotionReason: FocusDemotionNoticeReason?
 
     init(
         subject: Subject?,
@@ -232,7 +235,8 @@ struct RecoveredFocusRequest: Identifiable {
         scheduledCompletionNotificationDeliveryDate: Date? = nil,
         dataEpochID: UUID? = nil,
         origin: FocusRecoveryOrigin = .local,
-        allowsLocalNotifications: Bool = true
+        allowsLocalNotifications: Bool = true,
+        demotionReason: FocusDemotionNoticeReason? = nil
     ) {
         id = pendingCompletion?.sessionID ?? engine.currentSessionID ?? UUID()
         self.subject = subject
@@ -245,6 +249,7 @@ struct RecoveredFocusRequest: Identifiable {
         self.dataEpochID = dataEpochID
         self.origin = origin
         self.allowsLocalNotifications = allowsLocalNotifications
+        self.demotionReason = demotionReason
     }
 }
 
@@ -259,6 +264,9 @@ struct CloudFocusRecoveryOffer: Identifiable {
     let sourceRecordID: UUID
     let sourceRevision: Int
     let sourceOwnershipSequence: Int
+    /// Which iPhone last wrote the offered record. Only another device's
+    /// record makes continuing it a handoff rather than a resume.
+    let sourceWriterDeviceID: String
 
     init(request: RecoveredFocusRequest, source: FocusSyncRecordSnapshot) {
         id = request.id
@@ -266,5 +274,6 @@ struct CloudFocusRecoveryOffer: Identifiable {
         sourceRecordID = source.recordID
         sourceRevision = source.revision
         sourceOwnershipSequence = source.ownershipSequence
+        sourceWriterDeviceID = source.writerDeviceID
     }
 }

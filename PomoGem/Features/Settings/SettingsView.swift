@@ -55,7 +55,13 @@ struct SettingsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
+    /// Live theme rows only; tombstones never count toward the row bound.
+    /// They are complete mutation evidence for a presented theme: a supported
+    /// tombstone for its ID would have hidden it.
     @Query private var storedSubjects: [Subject]
+    /// Observed so a deletion delivered as a new physical row refreshes the
+    /// list; see `SubjectSyncPolicy.presentationSubjects(live:tombstones:context:)`.
+    @Query private var storedSubjectTombstones: [Subject]
     @Query private var preferences: [Prefs]
     @Query private var activityResetMarkers: [ActivityResetMarker]
 
@@ -111,7 +117,9 @@ struct SettingsView: View {
         activityResetMarkers.map(\.policySnapshot)
     }
     private var subjects: [Subject] {
-        SubjectSyncPolicy.presentationSubjects(from: storedSubjects)
+        SubjectSyncPolicy.presentationSubjects(
+            live: storedSubjects, tombstones: storedSubjectTombstones, context: modelContext
+        )
     }
     private func isCurrentActivity(_ epochID: UUID?) -> Bool {
         ActivityResetPolicy.isCurrent(epochID, markers: resetSnapshots)
@@ -119,13 +127,12 @@ struct SettingsView: View {
 
     init(persistenceMode: PersistenceLaunchMode = .inMemoryPreview) {
         self.persistenceMode = persistenceMode
-        var subjectDescriptor = FetchDescriptor<Subject>(sortBy: [
+        _storedSubjects = Query(SubjectSyncPolicy.liveRowsDescriptor(sortBy: [
             SortDescriptor(\Subject.sortOrder),
             SortDescriptor(\Subject.createdAt),
             SortDescriptor(\Subject.id)
-        ])
-        subjectDescriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
-        _storedSubjects = Query(subjectDescriptor)
+        ]))
+        _storedSubjectTombstones = Query(SubjectSyncPolicy.tombstoneRowsDescriptor())
 
         _preferences = Query(PrefsConsumerPolicy.descriptor())
 
@@ -148,7 +155,8 @@ struct SettingsView: View {
                 otherWorkIsActive: isCloudOfflineSession || isExportingData || completeDeletion.hasStarted
                     || router.focusPresentationIsActive || router.recoveredFocus != nil
                     || router.deferredFocusRecovery != nil || router.recoveredBreak != nil
-                    || router.cloudFocusRecoveryOffer != nil
+                    || router.cloudFocusRecoveryOffer != nil,
+                disclosesScreenTimeReset: screenTimeIsInUse
             )
             notificationSection
             shareSection
@@ -631,7 +639,7 @@ struct SettingsView: View {
         } header: {
             Text("音と触覚")
         } footer: {
-            Text("アプリが前面にある間は、終了音と触覚を停止操作まで繰り返します。音はサイレントモードに従います。通知を許可している場合、ロック中は1回の通知となり、音と触覚はiPhoneの通知設定に従います。")
+            Text("アプリを開いている間にタイマーが終わったときは、終了音と触覚を停止操作まで繰り返します。通知で知らせたあとや、あとからアプリに戻ったときは繰り返さず、そのまま記録を表示します。音はサイレントモードに従います。通知を許可している場合、ロック中は1回の通知となり、音と触覚はiPhoneの通知設定に従います。")
         }
     }
 
@@ -740,7 +748,7 @@ struct SettingsView: View {
         } header: {
             Text("通知")
         } footer: {
-            Text("既定はオフ。赤いバッジや連続記録の警告は使いません。")
+            Text("既定はオフ。赤いバッジや連続記録の警告は使いません。タイマー終了の通知だけは「即時通知」として送るため、iPhoneの集中モード（おやすみモードなど）で即時通知を許可していれば、その間も届きます。")
         }
     }
 
@@ -839,6 +847,15 @@ struct SettingsView: View {
         }
     }
 
+    /// transfer-07. Whether a storage switch would reset anything the user
+    /// set up in Screen Time: the feature is on or monitoring, or black gems
+    /// are still held on this iPhone.
+    private var screenTimeIsInUse: Bool {
+        let screenTime = ScreenTimeController.shared
+        return screenTime.configuration.enabled || screenTime.isMonitoring
+            || screenTime.negativeGemCount > 0
+    }
+
     private var appVersionLabel: String {
         let version = Bundle.main.object(
             forInfoDictionaryKey: "CFBundleShortVersionString"
@@ -907,6 +924,20 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .accessibilityIdentifier("settings.activity-reset-unavailable")
+            }
+
+            // settings-03 / transfer-09. The disabled reset used to be a dead
+            // end: its only next step hid in the footer. The routes that do
+            // work — switch this iPhone to local-only and reset, or delete the
+            // iCloud data in iOS Settings — get their own row.
+            if ActivityResetAdmissionPolicy.offersCloudDeletionGuidance(in: persistenceMode) {
+                NavigationLink {
+                    CloudDataDeletionGuidanceView(isExporting: isExportingData, export: startDataExport)
+                } label: {
+                    Text(CloudDataDeletionGuidanceCopy.rowTitle)
+                        .frame(minHeight: 44, alignment: .leading)
+                }
+                .accessibilityIdentifier("settings.activity-reset-alternatives")
             }
 
             if CompleteDataDeletionReleasePolicy.isEnabled,

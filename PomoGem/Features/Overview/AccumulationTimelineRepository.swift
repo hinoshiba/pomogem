@@ -312,7 +312,7 @@ actor AccumulationTimelineRepository {
                 subjectName: session.displaySubjectName,
                 colorHex: session.displaySubjectColorHex,
                 grams: max(0, session.grams),
-                isMeasured: session.source.isMeasured,
+                isMeasured: session.effectiveSource.isMeasured,
                 // Timeline records are raw activity. A caller that also
                 // presents local aggregates resolves membership separately.
                 isRepresentedByLocalAggregate: false

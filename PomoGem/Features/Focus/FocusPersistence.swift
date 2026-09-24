@@ -38,6 +38,73 @@ struct FocusSubjectSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+/// Why a running focus became self-reported. The engine keeps only the
+/// demoted source, so this device records the cause it observed in its local
+/// recovery envelope, where it survives a relaunch or an iCloud remount.
+/// Telling someone who continued their own timer on another iPhone, or
+/// restarted the phone, that its clock jumped would be false and sounds like
+/// blame.
+enum FocusDemotionNoticeReason: String, Equatable, Sendable {
+    case clockChanged
+    case adoptedFromOtherDevice
+    /// Continued from a saved timer record that no other iPhone wrote, such as
+    /// the local-only 「保存済みの進行中タイマー」 offer. Nothing proves the
+    /// interval was measured continuously, but no other device was involved.
+    case resumedFromSavedState
+    case continuityLost
+    /// A timer demoted before the cause was recorded (an older envelope).
+    /// Its notice asserts no cause rather than guessing one.
+    case unexplained
+
+    /// A demotion caught while this device measures the timer, whether on the
+    /// running screen or when a relaunch checks the saved clock anchor.
+    static func detected(_ integrity: ClockIntegrity) -> Self? {
+        switch integrity {
+        case .valid: nil
+        case .changed: .clockChanged
+        case .uptimeReset, .unverifiable: .continuityLost
+        }
+    }
+
+    /// Continuing a saved timer record always demotes it. Only a record that
+    /// another iPhone wrote, in an iCloud-backed store, is a handoff; the
+    /// local-only offer and this iPhone's own record resume saved state.
+    static func adopted(
+        isCloudBacked: Bool,
+        sourceWriterDeviceID: String,
+        currentDeviceID: String
+    ) -> Self {
+        isCloudBacked && sourceWriterDeviceID != currentDeviceID
+            ? .adoptedFromOtherDevice
+            : .resumedFromSavedState
+    }
+
+    var message: String {
+        switch self {
+        case .clockChanged:
+            "端末時刻の大きな変化を検出。この回だけ自己申告あつかいです"
+        case .adoptedFromOtherDevice:
+            "別の端末から引き継いだため、この回は自己申告あつかいです"
+        case .resumedFromSavedState:
+            "保存済みの状態から再開したため、この回は自己申告あつかいです"
+        case .continuityLost:
+            "再起動などで計測が途切れたため、この回は自己申告あつかいです"
+        case .unexplained:
+            "この回は自己申告あつかいです"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .clockChanged: "clock.badge.exclamationmark"
+        case .adoptedFromOtherDevice: "iphone.and.arrow.forward"
+        case .resumedFromSavedState: "clock.arrow.circlepath"
+        case .continuityLost: "arrow.clockwise.circle"
+        case .unexplained: "info.circle"
+        }
+    }
+}
+
 struct FocusRecoveryEnvelope: Codable, Equatable, Sendable {
     var engine: PomodoroEngine
     let subject: FocusSubjectSnapshot?
@@ -53,6 +120,17 @@ struct FocusRecoveryEnvelope: Codable, Equatable, Sendable {
     /// timer is offline must cancel it, never silently promote it into the new
     /// activity generation.
     var dataEpochID: UUID?
+    /// Device-local, like the delivery witness above, and never part of
+    /// FocusCloudPayload: what this device observed when the timer became
+    /// self-reported. Kept as a raw string (absent in older envelopes) so an
+    /// unrecognised value degrades to the neutral notice instead of failing
+    /// to decode, and so discarding, the whole recovery.
+    private var demotionReasonRawValue: String?
+
+    var demotionReason: FocusDemotionNoticeReason? {
+        get { demotionReasonRawValue.flatMap(FocusDemotionNoticeReason.init(rawValue:)) }
+        set { demotionReasonRawValue = newValue?.rawValue }
+    }
 
     init(
         engine: PomodoroEngine,
@@ -61,7 +139,8 @@ struct FocusRecoveryEnvelope: Codable, Equatable, Sendable {
         pendingCompletion: PomodoroCompletion?,
         savedAt: Date,
         scheduledCompletionNotificationDeliveryDate: Date? = nil,
-        dataEpochID: UUID? = nil
+        dataEpochID: UUID? = nil,
+        demotionReason: FocusDemotionNoticeReason? = nil
     ) {
         self.engine = engine
         self.subject = subject
@@ -71,6 +150,7 @@ struct FocusRecoveryEnvelope: Codable, Equatable, Sendable {
         self.scheduledCompletionNotificationDeliveryDate =
             scheduledCompletionNotificationDeliveryDate
         self.dataEpochID = dataEpochID
+        demotionReasonRawValue = demotionReason?.rawValue
     }
 }
 
@@ -503,8 +583,12 @@ enum PendingRewardReceiptStore {
 /// Counting completions made six 10-minute sessions advance that cadence six
 /// times faster than one 60-minute session. We instead accumulate measured
 /// mass (10g/minute) and cross the same 100-minute boundary regardless of how
-/// that time was split. Recent session IDs make crash/replay handling
-/// idempotent; accepting the suggested break is always optional.
+/// that time was split. A single uninterrupted block of 60 minutes or more
+/// also earns the long break and restarts the cycle: split sessions already
+/// had rests between them, one long block had none, and splitting can only
+/// delay (never bring forward) that suggestion. Recent session IDs make
+/// crash/replay handling idempotent; accepting the suggested break is always
+/// optional.
 struct FocusRestCadenceSnapshot: Codable, Equatable, Sendable {
     struct Record: Codable, Equatable, Sendable {
         let sessionID: UUID
@@ -518,6 +602,7 @@ struct FocusRestCadenceSnapshot: Codable, Equatable, Sendable {
 enum FocusRestCadenceStore {
     static let defaultsKey = "focus.rest-cadence.v2"
     static let longBreakIntervalGrams = 100 * Constants.Mass.gramsPerMinute
+    static let singleSessionLongBreakGrams = 60 * Constants.Mass.gramsPerMinute
     private static let maximumRecentRecordCount = 32
 
     static func load(defaults: UserDefaults = .standard) -> FocusRestCadenceSnapshot {
@@ -554,17 +639,23 @@ enum FocusRestCadenceStore {
         }
 
         let contributionGrams = max(0, rawContributionGrams)
-        // Keep only quotient/remainder facts so even a corrupt Int.max input
-        // cannot overflow or change the mathematical remainder.
-        let contributionCrossesBoundary = contributionGrams >= longBreakIntervalGrams
-        let contributionRemainder = contributionGrams % longBreakIntervalGrams
-        let remainderTotal = state.creditedGrams + contributionRemainder
-        let crossedLongBreakBoundary = contributionCrossesBoundary
-            || remainderTotal >= longBreakIntervalGrams
-        state.creditedGrams = remainderTotal % longBreakIntervalGrams
-        let breakMinutes = crossedLongBreakBoundary
-            ? Constants.Timer.longBreakMinutes
-            : Constants.Timer.shortBreakMinutes
+        let breakMinutes: Int
+        if contributionGrams >= singleSessionLongBreakGrams {
+            // One long block had no rest inside it. Suggest the long break
+            // now and start the next cycle from zero, so the following short
+            // session does not immediately earn a second long break.
+            state.creditedGrams = 0
+            breakMinutes = Constants.Timer.longBreakMinutes
+        } else {
+            // Keep only quotient/remainder facts so even a corrupt Int.max
+            // input cannot overflow or change the mathematical remainder.
+            let contributionRemainder = contributionGrams % longBreakIntervalGrams
+            let remainderTotal = state.creditedGrams + contributionRemainder
+            state.creditedGrams = remainderTotal % longBreakIntervalGrams
+            breakMinutes = remainderTotal >= longBreakIntervalGrams
+                ? Constants.Timer.longBreakMinutes
+                : Constants.Timer.shortBreakMinutes
+        }
         state.recentRecords.append(FocusRestCadenceSnapshot.Record(
             sessionID: sessionID,
             breakMinutes: breakMinutes
@@ -719,31 +810,42 @@ enum FocusPersistence {
             envelope,
             at: now,
             uptime: uptime,
-            requiresLocalContinuityProof: true
+            adoptionReason: nil
         )
     }
 
     /// Uptime is device-local. An active timer adopted from iCloud can retain
     /// its duration and stable session ID, but cannot inherit proof that the
     /// remote interval was continuously measured on this device.
+    /// `demotionReason` records why for the notice; it also replaces the
+    /// source device's reason on a record that arrives already demoted.
     static func preparedForCrossDeviceAdoption(
         _ envelope: FocusRecoveryEnvelope,
         at now: Date,
-        uptime: TimeInterval
+        uptime: TimeInterval,
+        demotionReason: FocusDemotionNoticeReason
     ) -> FocusRecoveryEnvelope {
-        preparedActiveFocus(
+        var prepared = preparedActiveFocus(
             envelope,
             at: now,
             uptime: uptime,
-            requiresLocalContinuityProof: false
+            adoptionReason: demotionReason
         )
+        if prepared.pendingCompletion == nil,
+           prepared.engine.containsRecoverableFocus,
+           prepared.engine.currentSource == .timerDemoted {
+            prepared.demotionReason = demotionReason
+        }
+        return prepared
     }
 
+    /// `adoptionReason` is nil for a local relaunch, which must prove its own
+    /// continuity from the saved anchor; an adoption always demotes.
     private static func preparedActiveFocus(
         _ envelope: FocusRecoveryEnvelope,
         at now: Date,
         uptime: TimeInterval,
-        requiresLocalContinuityProof: Bool
+        adoptionReason: FocusDemotionNoticeReason?
     ) -> FocusRecoveryEnvelope {
         // A pending completion froze its classification at the actual end
         // boundary. Replaying its persistence must not reclassify it using a
@@ -753,17 +855,23 @@ enum FocusPersistence {
               envelope.engine.currentSource == .timer
         else { return envelope }
 
-        let shouldDemote: Bool
-        if requiresLocalContinuityProof, let anchor = envelope.clockAnchor {
-            shouldDemote = FairnessPolicy.clockIntegrity(
-                from: anchor,
-                completionDate: now,
-                completionUptime: uptime
-            ).shouldDemote
+        let demotionReason: FocusDemotionNoticeReason?
+        if let adoptionReason {
+            demotionReason = adoptionReason
+        } else if let anchor = envelope.clockAnchor {
+            // The same classification the running screen uses, so a clock
+            // change found at relaunch is not reported as a reboot.
+            demotionReason = FocusDemotionNoticeReason.detected(
+                FairnessPolicy.clockIntegrity(
+                    from: anchor,
+                    completionDate: now,
+                    completionUptime: uptime
+                )
+            )
         } else {
-            shouldDemote = true
+            demotionReason = .continuityLost
         }
-        guard shouldDemote else { return envelope }
+        guard let demotionReason else { return envelope }
 
         var engine = envelope.engine
         do {
@@ -785,7 +893,8 @@ enum FocusPersistence {
             savedAt: now,
             scheduledCompletionNotificationDeliveryDate:
                 envelope.scheduledCompletionNotificationDeliveryDate,
-            dataEpochID: envelope.dataEpochID
+            dataEpochID: envelope.dataEpochID,
+            demotionReason: demotionReason
         )
     }
 

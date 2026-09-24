@@ -380,7 +380,8 @@ if [content for indent, content in capabilities if indent == 2].count("widget: [
 } != expected_targets:
     fail("configuration.yml must declare exactly the app, neutral Widget, and Screen Time monitor capabilities")
 for role, expected in (
-    ("app", {"icloud_cloudkit", "push_notifications", "in_app_purchase", "family_controls", "app_groups"}),
+    ("app", {"icloud_cloudkit", "push_notifications", "in_app_purchase", "family_controls", "app_groups",
+             "time_sensitive_notifications"}),
     ("screen_time_monitor", {"family_controls", "app_groups"}),
 ):
     observed = yaml_list(capabilities, 2, role, "target_capabilities")
@@ -396,6 +397,7 @@ expected_source_entitlements = {
         "com.apple.developer.icloud-container-identifiers": ["iCloud.com.hinoshiba.pomogem"],
         "com.apple.developer.icloud-services": ["CloudKit"],
         "com.apple.developer.family-controls": True,
+        "com.apple.developer.usernotifications.time-sensitive": True,
         "com.apple.security.application-groups": ["group.com.hinoshiba.pomogem"],
     },
     "PomoGemWidgets/PomoGemWidgets.entitlements": {},
@@ -410,8 +412,11 @@ for relative, expected in expected_source_entitlements.items():
             observed = plistlib.load(handle)
     except (OSError, ValueError, plistlib.InvalidFileException):
         fail("shipping source entitlements are missing or malformed")
-    if observed != expected or ("com.apple.developer.family-controls" in expected
-                               and observed.get("com.apple.developer.family-controls") is not True):
+    if observed != expected or any(
+        key in expected and observed.get(key) is not True
+        for key in ("com.apple.developer.family-controls",
+                    "com.apple.developer.usernotifications.time-sensitive")
+    ):
         fail(f"{relative} differs from the reviewed shipping capability allowlist")
 
 review_notes = (ROOT / "AppStore/review-notes-connect.txt").read_text(encoding="utf-8")

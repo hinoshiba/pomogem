@@ -2665,6 +2665,163 @@ final class FocusCloudSyncTests: XCTestCase {
         )
     }
 
+    // MARK: - Recovery scan window
+
+    /// Mirrors the product flow: start (a running row) and give up (a
+    /// separate cancelled tombstone). The running row is never deleted.
+    @MainActor
+    private func cancelFocus(
+        _ sessionID: UUID,
+        startedAt start: Date,
+        context: ModelContext
+    ) throws {
+        try startFocus(sessionID, at: start, context: context)
+        try FocusCloudSyncStore.markTerminal(
+            sessionID: sessionID, status: .cancelled, context: context,
+            deviceID: "iphone", at: start.addingTimeInterval(120)
+        )
+        try context.save()
+    }
+
+    @MainActor
+    private func startFocus(
+        _ sessionID: UUID,
+        at start: Date,
+        context: ModelContext
+    ) throws {
+        var engine = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
+        try engine.startFocus(isPro: false, now: start, sessionID: sessionID)
+        _ = try FocusCloudSyncStore.upsert(
+            envelope: FocusRecoveryEnvelope(
+                engine: engine, subject: subject, clockAnchor: nil,
+                pendingCompletion: nil, savedAt: start
+            ),
+            status: .running, context: context, deviceID: "iphone",
+            claimIfUnowned: true, now: start
+        )
+        try context.save()
+    }
+
+    @MainActor
+    func testCancelledFocusesBeyondTheRecoverableWindowNoLongerExhaustTheScan() throws {
+        let container = try focusContainer(named: "CancelledHistoryBeyondWindow")
+        let context = container.mainContext
+        let liveStart = Date(timeIntervalSince1970: 1_800_000_000)
+        let nineDaysEarlier = liveStart.addingTimeInterval(-9 * 24 * 60 * 60)
+        for index in 0 ..< 300 {
+            try cancelFocus(
+                UUID(),
+                startedAt: nineDaysEarlier.addingTimeInterval(-Double(index) * 3_600),
+                context: context
+            )
+        }
+        let liveID = UUID()
+        try startFocus(liveID, at: liveStart, context: context)
+
+        // Before the window existed, the 257th logical session exhausted the
+        // scan and this threw `timerHistoryRequiresMaintenance`.
+        XCTAssertEqual(
+            try FocusCloudSyncStore.canonicalActive(
+                context: context, now: liveStart.addingTimeInterval(60)
+            )?.sessionID,
+            liveID
+        )
+        XCTAssertEqual(
+            try FocusCloudSyncStore.reconcileActiveTimers(
+                context: context, deviceID: "iphone", now: liveStart.addingTimeInterval(60)
+            )?.sessionID,
+            liveID
+        )
+        // Non-destructive: every running row and tombstone is still stored.
+        let rows = try context.fetch(FetchDescriptor<SyncedFocusTimer>())
+        XCTAssertEqual(rows.filter { $0.status == .running }.count, 301)
+        XCTAssertEqual(rows.filter { $0.status == .cancelled }.count, 300)
+    }
+
+    @MainActor
+    func testRecentCancellationsStillResolveTheLiveTimer() throws {
+        let container = try focusContainer(named: "RecentCancellations")
+        let context = container.mainContext
+        let liveStart = Date(timeIntervalSince1970: 1_800_000_000)
+        for index in 1 ... 20 {
+            try cancelFocus(
+                UUID(), startedAt: liveStart.addingTimeInterval(-Double(index) * 3_600),
+                context: context
+            )
+        }
+        let liveID = UUID()
+        try startFocus(liveID, at: liveStart, context: context)
+        XCTAssertEqual(
+            try FocusCloudSyncStore.canonicalActive(context: context, now: liveStart)?.sessionID,
+            liveID
+        )
+    }
+
+    @MainActor
+    func testOpenFocusStartedBeforeTheWindowIsNotOfferedOverANewerOne() throws {
+        let container = try focusContainer(named: "StaleOpenFocus")
+        let context = container.mainContext
+        let liveStart = Date(timeIntervalSince1970: 1_800_000_000)
+        // Never cancelled or completed: it can no longer become a supported
+        // StudySession, so it must not hold the account's single recovery slot.
+        let staleID = UUID()
+        try startFocus(staleID, at: liveStart.addingTimeInterval(-9 * 24 * 60 * 60), context: context)
+        let liveID = UUID()
+        try startFocus(liveID, at: liveStart, context: context)
+        XCTAssertEqual(
+            try FocusCloudSyncStore.canonicalActive(context: context, now: liveStart)?.sessionID,
+            liveID
+        )
+        // The stale focus is still a stored, exact witness for its own ID.
+        XCTAssertFalse(try FocusCloudSyncStore.isSessionClosed(sessionID: staleID, context: context))
+    }
+
+    @MainActor
+    func testWindowFollowsTheNewestActiveStartSoALoneOldFocusIsStillFound() throws {
+        let container = try focusContainer(named: "LoneOldFocus")
+        let context = container.mainContext
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let onlyID = UUID()
+        try startFocus(onlyID, at: start, context: context)
+        XCTAssertEqual(
+            try FocusCloudSyncStore.canonicalActive(
+                context: context, now: start.addingTimeInterval(30 * 24 * 60 * 60)
+            )?.sessionID,
+            onlyID,
+            "Unchanged behavior: the window never hides the newest active focus"
+        )
+    }
+
+    @MainActor
+    func testFutureDatedActiveRowDoesNotHideTheCurrentTimer() throws {
+        let container = try focusContainer(named: "FutureDatedFocus")
+        let context = container.mainContext
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        for index in 0 ..< 300 {
+            try cancelFocus(
+                UUID(),
+                startedAt: now.addingTimeInterval(-10 * 24 * 60 * 60 - Double(index) * 3_600),
+                context: context
+            )
+        }
+        // A skewed clock on another device wrote this start a year ahead.
+        try startFocus(UUID(), at: now.addingTimeInterval(365 * 24 * 60 * 60), context: context)
+        let liveID = UUID()
+        try startFocus(liveID, at: now, context: context)
+        XCTAssertEqual(
+            try FocusCloudSyncStore.canonicalActive(context: context, now: now)?.sessionID,
+            liveID
+        )
+    }
+
+    @MainActor
+    func testWindowCoversEveryStartThatCanStillComplete() {
+        XCTAssertGreaterThan(
+            FocusCloudSyncStore.QueryContract.recoverableStartWindow,
+            StudySessionIntegrityPolicy.maximumCompletionWallSpan
+        )
+    }
+
     @MainActor
     private func focusContainer(
         named name: String,

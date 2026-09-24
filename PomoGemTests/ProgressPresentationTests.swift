@@ -1720,65 +1720,123 @@ final class ProgressPresentationTests: XCTestCase {
         XCTAssertEqual(FocusRestCadenceStore.load(defaults: defaults).creditedGrams, 0)
     }
 
-    func testRestCadenceTreatsEqualFocusedTimeEquallyAndReplaysIdempotently() throws {
+    func testRestCadenceTreatsEqualSplitFocusedTimeEquallyAndReplaysIdempotently() throws {
         let makeDefaults: () throws -> (UserDefaults, String) = {
             let name = "PomoGemTests.rest-cadence.\(UUID().uuidString)"
             return (try XCTUnwrap(UserDefaults(suiteName: name)), name)
         }
         let (tenMinuteDefaults, tenMinuteName) = try makeDefaults()
         let (twentyFiveDefaults, twentyFiveName) = try makeDefaults()
-        let (sixtyMinuteDefaults, sixtyMinuteName) = try makeDefaults()
         defer {
             tenMinuteDefaults.removePersistentDomain(forName: tenMinuteName)
             twentyFiveDefaults.removePersistentDomain(forName: twentyFiveName)
-            sixtyMinuteDefaults.removePersistentDomain(forName: sixtyMinuteName)
         }
 
         for _ in 0 ..< 6 {
-            _ = FocusRestCadenceStore.record(
-                sessionID: UUID(),
-                contributionGrams: 100,
-                defaults: tenMinuteDefaults
+            XCTAssertEqual(
+                FocusRestCadenceStore.record(
+                    sessionID: UUID(),
+                    contributionGrams: 100,
+                    defaults: tenMinuteDefaults
+                ),
+                Constants.Timer.shortBreakMinutes
             )
         }
+        let replayID = UUID()
         for grams in [250, 250, 100] {
             _ = FocusRestCadenceStore.record(
-                sessionID: UUID(),
+                sessionID: grams == 100 ? replayID : UUID(),
                 contributionGrams: grams,
                 defaults: twentyFiveDefaults
             )
         }
-        let sixtyID = UUID()
-        let sixtyBreak = FocusRestCadenceStore.record(
-            sessionID: sixtyID,
-            contributionGrams: 600,
-            defaults: sixtyMinuteDefaults
-        )
-        XCTAssertEqual(sixtyBreak, Constants.Timer.shortBreakMinutes)
         XCTAssertEqual(
             FocusRestCadenceStore.record(
-                sessionID: sixtyID,
-                contributionGrams: 600,
-                defaults: sixtyMinuteDefaults
+                sessionID: replayID,
+                contributionGrams: 100,
+                defaults: twentyFiveDefaults
             ),
-            sixtyBreak
+            Constants.Timer.shortBreakMinutes,
+            "Replaying a recorded completion returns its frozen suggestion"
         )
 
         XCTAssertEqual(FocusRestCadenceStore.load(defaults: tenMinuteDefaults).creditedGrams, 600)
         XCTAssertEqual(FocusRestCadenceStore.load(defaults: twentyFiveDefaults).creditedGrams, 600)
-        XCTAssertEqual(FocusRestCadenceStore.load(defaults: sixtyMinuteDefaults).creditedGrams, 600)
     }
 
-    func testRestCadenceKeepsExactRemainderAtIntegerLimit() throws {
+    func testRestCadenceSuggestsLongBreakAfterSingleUninterruptedLongBlock() throws {
+        let makeDefaults: () throws -> (UserDefaults, String) = {
+            let name = "PomoGemTests.rest-cadence.\(UUID().uuidString)"
+            return (try XCTUnwrap(UserDefaults(suiteName: name)), name)
+        }
+        let short = Constants.Timer.shortBreakMinutes
+        let long = Constants.Timer.longBreakMinutes
+
+        // A 90-minute block had no rest inside it: 15 minutes, replayed
+        // idempotently, and the next cycle starts from zero.
+        let (ninetyDefaults, ninetyName) = try makeDefaults()
+        defer { ninetyDefaults.removePersistentDomain(forName: ninetyName) }
+        let ninetyID = UUID()
+        XCTAssertEqual(
+            FocusRestCadenceStore.record(sessionID: ninetyID, contributionGrams: 900, defaults: ninetyDefaults),
+            long
+        )
+        XCTAssertEqual(
+            FocusRestCadenceStore.record(sessionID: ninetyID, contributionGrams: 900, defaults: ninetyDefaults),
+            long
+        )
+        XCTAssertEqual(FocusRestCadenceStore.load(defaults: ninetyDefaults).creditedGrams, 0)
+        XCTAssertEqual(
+            FocusRestCadenceStore.record(sessionID: UUID(), contributionGrams: 250, defaults: ninetyDefaults),
+            short,
+            "The session after a long rest starts a fresh cycle"
+        )
+
+        // Exactly 60 minutes is the threshold; the carried remainder is reset.
+        let (sixtyDefaults, sixtyName) = try makeDefaults()
+        defer { sixtyDefaults.removePersistentDomain(forName: sixtyName) }
+        _ = FocusRestCadenceStore.record(sessionID: UUID(), contributionGrams: 250, defaults: sixtyDefaults)
+        XCTAssertEqual(
+            FocusRestCadenceStore.record(sessionID: UUID(), contributionGrams: 600, defaults: sixtyDefaults),
+            long
+        )
+        XCTAssertEqual(FocusRestCadenceStore.load(defaults: sixtyDefaults).creditedGrams, 0)
+
+        // Below 60 minutes the ordinary mass boundary still decides.
+        let (fortyFiveDefaults, fortyFiveName) = try makeDefaults()
+        defer { fortyFiveDefaults.removePersistentDomain(forName: fortyFiveName) }
+        XCTAssertEqual(
+            FocusRestCadenceStore.record(sessionID: UUID(), contributionGrams: 450, defaults: fortyFiveDefaults),
+            short
+        )
+        XCTAssertEqual(
+            FocusRestCadenceStore.record(sessionID: UUID(), contributionGrams: 590, defaults: fortyFiveDefaults),
+            long,
+            "450g + 590g crosses the 1,000g boundary"
+        )
+        XCTAssertEqual(FocusRestCadenceStore.load(defaults: fortyFiveDefaults).creditedGrams, 40)
+
+        // The classic 25 × 4 cadence is unchanged.
+        let (classicDefaults, classicName) = try makeDefaults()
+        defer { classicDefaults.removePersistentDomain(forName: classicName) }
+        let classic = (0 ..< 4).map { _ in
+            FocusRestCadenceStore.record(sessionID: UUID(), contributionGrams: 250, defaults: classicDefaults)
+        }
+        XCTAssertEqual(classic, [short, short, short, long])
+        XCTAssertEqual(FocusRestCadenceStore.load(defaults: classicDefaults).creditedGrams, 0)
+    }
+
+    func testRestCadenceHandlesIntegerLimitWithoutOverflow() throws {
         let suiteName = "PomoGemTests.rest-cadence.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         _ = FocusRestCadenceStore.record(
             sessionID: UUID(),
-            contributionGrams: 600,
+            contributionGrams: 590,
             defaults: defaults
         )
+        XCTAssertEqual(FocusRestCadenceStore.load(defaults: defaults).creditedGrams, 590)
         XCTAssertEqual(
             FocusRestCadenceStore.record(
                 sessionID: UUID(),
@@ -1787,10 +1845,15 @@ final class ProgressPresentationTests: XCTestCase {
             ),
             Constants.Timer.longBreakMinutes
         )
+        XCTAssertEqual(FocusRestCadenceStore.load(defaults: defaults).creditedGrams, 0)
         XCTAssertEqual(
-            FocusRestCadenceStore.load(defaults: defaults).creditedGrams,
-            (600 + Int.max % FocusRestCadenceStore.longBreakIntervalGrams)
-                % FocusRestCadenceStore.longBreakIntervalGrams
+            FocusRestCadenceStore.record(
+                sessionID: UUID(),
+                contributionGrams: Int.min,
+                defaults: defaults
+            ),
+            Constants.Timer.shortBreakMinutes,
+            "A corrupt negative contribution is clamped to zero"
         )
     }
 

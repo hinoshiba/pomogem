@@ -893,7 +893,11 @@ struct LogView: View {
     @Environment(\.aggregateProjectionPresentation)
     private var aggregateProjectionPresentation
     @Query private var activityResetMarkers: [ActivityResetMarker]
+    /// Live theme rows only; tombstones never count toward the row bound.
     @Query(sort: \Subject.sortOrder) private var storedSubjects: [Subject]
+    /// Observed so a deletion delivered as a new physical row refreshes the
+    /// list; see `SubjectSyncPolicy.presentationSubjects(live:tombstones:context:)`.
+    @Query private var storedSubjectTombstones: [Subject]
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var period: Period = .week
     @State private var selectedWrappedMonth: WrappedMonth?
@@ -912,12 +916,11 @@ struct LogView: View {
     @State private var pendingAchievementUndo: AchievementStoneRevisionSnapshot?
 
     init() {
-        var subjectDescriptor = FetchDescriptor<Subject>(sortBy: [
+        _storedSubjects = Query(SubjectSyncPolicy.liveRowsDescriptor(sortBy: [
             SortDescriptor(\Subject.sortOrder),
             SortDescriptor(\Subject.syncRecordID)
-        ])
-        subjectDescriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
-        _storedSubjects = Query(subjectDescriptor)
+        ]))
+        _storedSubjectTombstones = Query(SubjectSyncPolicy.tombstoneRowsDescriptor())
         _activityResetMarkers = Query(BoundedHistoryPolicy.latestResetMarkerDescriptor())
     }
 
@@ -925,7 +928,9 @@ struct LogView: View {
         activityResetMarkers.map(\.policySnapshot)
     }
     private var subjects: [Subject] {
-        SubjectSyncPolicy.presentationSubjects(from: storedSubjects)
+        SubjectSyncPolicy.presentationSubjects(
+            live: storedSubjects, tombstones: storedSubjectTombstones, context: modelContext
+        )
     }
     private var filteredSessions: [StudySession] {
         StudySessionSyncPolicy.canonicalSessions(from: periodSessions)
@@ -1016,7 +1021,7 @@ struct LogView: View {
     }
 
     private var summaryGrid: some View {
-        let measured = filteredSessions.filter { $0.source.isMeasured }
+        let measured = filteredSessions.filter { $0.effectiveSource.isMeasured }
         let totalMinutes = NonnegativeIntPolicy.sum(
             filteredSessions.map(\.seconds)
         ) / 60
@@ -1841,8 +1846,8 @@ private struct AggregateArchiveItem: Identifiable {
         grams = layer.grams
         measuredPebbleCount = members.isEmpty
             ? layer.pebbleCount
-            : members.filter { $0.source.isMeasured }.count
-        manualPebbleCount = members.filter { !$0.source.isMeasured }.count
+            : members.filter { $0.effectiveSource.isMeasured }.count
+        manualPebbleCount = members.filter { !$0.effectiveSource.isMeasured }.count
         let rewards = RareRewardCounts.total(members.map(\.rareRewardCounts))
         goldPebbleCount = rewards.goldCount
         prismPebbleCount = rewards.prismCount
@@ -2436,7 +2441,7 @@ private struct HistoryRow: View {
             ZStack {
                 Circle()
                     .fill(pebbleColor)
-                if session.source.isSelfReported {
+                if session.effectiveSource.isSelfReported {
                     Circle().stroke(.white.opacity(0.72), style: StrokeStyle(lineWidth: 1.4, dash: [3, 3]))
                 } else {
                     Circle().fill(RadialGradient(colors: [.white.opacity(0.48), .clear], center: .topLeading, startRadius: 0, endRadius: 15))
@@ -2459,7 +2464,7 @@ private struct HistoryRow: View {
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
                 Text("+\(session.grams)g").font(.system(.subheadline, design: .rounded, weight: .bold))
-                Text(session.source.displayName)
+                Text(session.effectiveSource.displayName)
                     .font(.caption2)
                     .foregroundStyle(PomoGemTheme.muted)
             }
@@ -2471,7 +2476,7 @@ private struct HistoryRow: View {
     }
 
     private var historyAccessibilityLabel: String {
-        let source = session.source.displayName
+        let source = session.effectiveSource.displayName
         let date = session.endAt.formatted(date: .long, time: .shortened)
         let batch = RareRewardPresentationPolicy
             .counts(session.rareRewardCounts)
