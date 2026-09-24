@@ -4398,7 +4398,7 @@ private struct PersistenceLaunchStatusView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .multilineTextAlignment(.leading)
-                Spacer(minLength: 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 if !isAccessibilitySize {
                     Image(systemName: "chevron.right")
                         .font(.footnote.weight(.bold))
