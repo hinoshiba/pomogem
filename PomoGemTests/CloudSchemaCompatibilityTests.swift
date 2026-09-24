@@ -160,10 +160,11 @@ final class CloudSchemaCompatibilityTests: XCTestCase {
                 seconds: shape(for: source), source: source, deviceDayKey: "day"
             ))
         }
-        // The shape a pre-release 1.1.0 build left behind.
-        let legacyID = UUID()
+        // The shape a pre-release 1.1.0 build left behind, recorded while such
+        // builds ran (2026-09-20 12:00 JST).
+        let preReleaseEnd = Date(timeIntervalSince1970: 1_789_873_200)
         let legacy = StudySession(
-            id: legacyID, startAt: now.addingTimeInterval(-1_200), endAt: now,
+            startAt: preReleaseEnd.addingTimeInterval(-1_200), endAt: preReleaseEnd,
             seconds: 600, source: .manual, deviceDayKey: "day"
         )
         legacy.overwriteStoredSourceForTesting(.screenTime)

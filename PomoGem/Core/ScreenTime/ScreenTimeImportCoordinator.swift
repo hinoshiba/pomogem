@@ -94,6 +94,38 @@ enum ScreenTimeImportCoordinator {
 
     static let legacySourceEncodingPageSize = 256
 
+    /// When a pre-release build could have stored the raw value `screenTime`:
+    /// the Screen Time writer first ran on 2026-09-13 (JST), and every build
+    /// from the encoding fix on writes `.manual`. A device must not keep
+    /// running a pre-release build past the end (Docs/RELEASING.md). Bounding
+    /// the scan by `endAt` keeps its cost fixed for the life of the store, so
+    /// it can run on every activation and still catch a pre-release row that
+    /// CloudKit delivers late, for example after a reinstall.
+    static let legacySourceEncodingInterval = DateInterval(
+        start: Date(timeIntervalSince1970: 1_789_138_800), // 2026-09-12 00:00 JST
+        end: Date(timeIntervalSince1970: 1_796_050_800) // 2026-12-01 00:00 JST
+    )
+
+    private static func legacySourceEncodingDescriptor() -> FetchDescriptor<StudySession> {
+        let seconds = SessionSource.screenTimeSeconds
+        let grams = SessionSource.screenTimeGrams
+        let start = legacySourceEncodingInterval.start
+        let end = legacySourceEncodingInterval.end
+        return FetchDescriptor<StudySession>(
+            predicate: #Predicate {
+                $0.seconds == seconds && $0.grams == grams
+                    && $0.endAt >= start && $0.endAt < end
+            },
+            sortBy: [SortDescriptor(\StudySession.syncRecordID)]
+        )
+    }
+
+    /// Rows that could still hold the pre-release value. A single SQL count:
+    /// the caller skips the scan while this is unchanged since a clean pass.
+    static func legacySourceEncodingCandidateCount(container: ModelContainer) throws -> Int {
+        try ModelContext(container).fetchCount(legacySourceEncodingDescriptor())
+    }
+
     /// Pre-release 1.1.0 builds stored Screen Time rows with the raw value
     /// `screenTime`, which a 1.0.2 device on the same iCloud data cannot
     /// decode. This rewrites those rows to the stored `.manual` signature.
@@ -104,11 +136,11 @@ enum ScreenTimeImportCoordinator {
     /// an import: a dedicated UI-authored context in the admitted, selected
     /// store, never during storage switching or data deletion, and never from
     /// background maintenance, whose source resolvers do not rewrite rows.
-    /// `Int` predicates narrow the scan to 600 s / 100 g rows; an enum cannot
-    /// be filtered in the store. The sort key never changes, so offset pages
-    /// stay stable while `source` is rewritten. Each page saves on its own and
-    /// yields, so a large history never blocks the main actor for long.
-    /// Returns the number of rows rewritten.
+    /// `Int` and `Date` predicates narrow the scan to 600 s / 100 g rows in
+    /// `legacySourceEncodingInterval`; an enum cannot be filtered in the store.
+    /// The sort key never changes, so offset pages stay stable while `source`
+    /// is rewritten. Each page saves on its own and yields, so the main actor
+    /// is never blocked for long. Returns the number of rows rewritten.
     static func normalizeLegacySourceEncoding(
         container: ModelContainer,
         pageSize: Int = legacySourceEncodingPageSize
@@ -118,12 +150,7 @@ enum ScreenTimeImportCoordinator {
         if #available(iOS 18.0, *) {
             context.author = SyncMaintenanceNotificationPolicy.uiAuthor
         }
-        let seconds = SessionSource.screenTimeSeconds
-        let grams = SessionSource.screenTimeGrams
-        var descriptor = FetchDescriptor<StudySession>(
-            predicate: #Predicate { $0.seconds == seconds && $0.grams == grams },
-            sortBy: [SortDescriptor(\StudySession.syncRecordID)]
-        )
+        var descriptor = legacySourceEncodingDescriptor()
         descriptor.fetchLimit = max(1, pageSize)
         var offset = 0
         var normalized = 0
@@ -146,24 +173,6 @@ enum ScreenTimeImportCoordinator {
             offset += page.count
             await Task.yield()
         }
-    }
-}
-
-/// Records that this store's pre-release `screenTime` rows were rewritten, so
-/// the full scan runs once per storage namespace rather than on every launch.
-/// A row that a still-unupdated pre-release build syncs in later is harmless
-/// to this build and is rewritten by that device once it updates.
-enum ScreenTimeLegacySourceEncodingMarker {
-    static func key(defaults: UserDefaults) -> String {
-        AccountScopedLocalState.defaultsKey(
-            base: "screen-time.legacy-source-encoding-normalized.v1", defaults: defaults
-        )
-    }
-    static func isComplete(defaults: UserDefaults = .standard) -> Bool {
-        defaults.bool(forKey: key(defaults: defaults))
-    }
-    static func markComplete(defaults: UserDefaults = .standard) {
-        defaults.set(true, forKey: key(defaults: defaults))
     }
 }
 

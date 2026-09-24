@@ -17,6 +17,9 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
     @State private var lastPresentedError: String?
     @State private var lastBoundKey: String?
     @State private var lastMonitoringKey: String?
+    /// The candidate count at the last clean encoding pass for a context. An
+    /// unchanged count means no row can have arrived that needs rewriting.
+    @State private var cleanLegacyEncodingCount: (contextKey: String, count: Int)?
 
     /// Production always uses the shared controller; the parameter exists so a
     /// mount/unmount regression test can drive a temporary ledger instead of
@@ -107,18 +110,25 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
     }
 
     /// Runs regardless of whether Screen Time is set up on this device: a
-    /// store can hold pre-release rows from an earlier configuration, and the
-    /// rewrite must not wait for the user to re-enable the feature.
+    /// store can hold pre-release rows from an earlier configuration, or
+    /// receive them late through CloudKit, and the rewrite must not wait for
+    /// the user to re-enable the feature. Each activation costs one count
+    /// query unless rows in the bounded window changed.
     @MainActor
     private func normalizeLegacySourceEncodingIfNeeded() async {
-        guard isReady, scenePhase == .active, isCurrentOwner,
-              !ScreenTimeLegacySourceEncodingMarker.isComplete() else { return }
+        guard isReady, scenePhase == .active, isCurrentOwner else { return }
+        let container = modelContext.container
         do {
+            let count = try ScreenTimeImportCoordinator.legacySourceEncodingCandidateCount(
+                container: container
+            )
+            if let clean = cleanLegacyEncodingCount,
+               clean.contextKey == contextKey, clean.count == count { return }
             _ = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncoding(
-                container: modelContext.container
+                container: container
             )
             guard !Task.isCancelled, isCurrentOwner else { return }
-            ScreenTimeLegacySourceEncodingMarker.markComplete()
+            cleanLegacyEncodingCount = (contextKey, count)
         } catch {
             // Retried on the next activation. The rows stay readable here;
             // nothing is shown because the user has nothing to act on.

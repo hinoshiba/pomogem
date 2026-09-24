@@ -96,28 +96,33 @@ final class ScreenTimeImportTests: XCTestCase {
         XCTAssertThrowsError(try ScreenTimeImportCoordinator.insert([value], container: manualStore, contextKey: "local", dataEpochID: nil))
     }
 
+    /// Inside `legacySourceEncodingInterval`, when pre-release builds ran.
+    private let preReleaseEnd = Date(timeIntervalSince1970: 1_789_873_200) // 2026-09-20 12:00 JST
+
     func testNormalizationRewritesOnlyPreReleaseRowsAcrossPages() async throws {
         let store = try container()
         let context = ModelContext(store)
-        let start = Date.now.addingTimeInterval(-1_200)
+        let end = preReleaseEnd
+        let start = end.addingTimeInterval(-1_200)
         var legacyIDs = Set<UUID>()
         for _ in 0..<5 {
-            let row = StudySession(startAt: start, endAt: .now, seconds: 600, source: .manual, grams: 100, deviceDayKey: "day")
+            let row = StudySession(startAt: start, endAt: end, seconds: 600, source: .manual, grams: 100, deviceDayKey: "day")
             row.overwriteStoredSourceForTesting(.screenTime)
             legacyIDs.insert(row.id)
             context.insert(row)
         }
         let timers = (0..<3).map { _ in
-            StudySession(startAt: start, endAt: .now, seconds: 600, source: .timer, deviceDayKey: "day")
+            StudySession(startAt: start, endAt: end, seconds: 600, source: .timer, deviceDayKey: "day")
         }
         timers.forEach(context.insert)
         let manual = StudySession(
-            startAt: start.addingTimeInterval(-3_600), endAt: .now,
+            startAt: end.addingTimeInterval(-3_600), endAt: end,
             seconds: ManualDuration.sixtyMinutes.seconds, source: .manual,
             grams: ManualDuration.sixtyMinutes.grams, deviceDayKey: "day"
         )
         context.insert(manual)
         try context.save()
+        XCTAssertEqual(try ScreenTimeImportCoordinator.legacySourceEncodingCandidateCount(container: store), 8)
 
         let rewritten = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncoding(container: store, pageSize: 2)
         XCTAssertEqual(rewritten, 5)
@@ -133,15 +138,34 @@ final class ScreenTimeImportTests: XCTestCase {
                 XCTAssertEqual(row.effectiveSource, .timer)
             }
         }
+        // Rewriting the encoding never changes the rows the count selects.
+        XCTAssertEqual(try ScreenTimeImportCoordinator.legacySourceEncodingCandidateCount(container: store), 8)
     }
 
-    func testNormalizationMarkerIsScopedAndOnlySetExplicitly() throws {
-        let suite = "ScreenTimeImportTests.marker.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        XCTAssertFalse(ScreenTimeLegacySourceEncodingMarker.isComplete(defaults: defaults))
-        ScreenTimeLegacySourceEncodingMarker.markComplete(defaults: defaults)
-        XCTAssertTrue(ScreenTimeLegacySourceEncodingMarker.isComplete(defaults: defaults))
+    func testNormalizationScanIsBoundedToThePreReleaseWindow() async throws {
+        let store = try container()
+        let context = ModelContext(store)
+        // Written by the fixed build long after the window: never scanned,
+        // however many accumulate. (A pre-release value cannot be this late.)
+        let later = ScreenTimeImportCoordinator.legacySourceEncodingInterval.end.addingTimeInterval(86_400)
+        let outside = StudySession(startAt: later.addingTimeInterval(-1_200), endAt: later, seconds: 600, source: .manual, grams: 100, deviceDayKey: "day")
+        outside.overwriteStoredSourceForTesting(.screenTime)
+        context.insert(outside)
+        try context.save()
+        XCTAssertEqual(try ScreenTimeImportCoordinator.legacySourceEncodingCandidateCount(container: store), 0)
+        let rewritten = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncoding(container: store)
+        XCTAssertEqual(rewritten, 0)
+    }
+
+    func testPreReleaseWindowCoversEveryBuildThatWroteTheOldValue() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo"))
+        let interval = ScreenTimeImportCoordinator.legacySourceEncodingInterval
+        XCTAssertEqual(interval.start, calendar.date(from: DateComponents(year: 2026, month: 9, day: 12)))
+        XCTAssertEqual(interval.end, calendar.date(from: DateComponents(year: 2026, month: 12, day: 1)))
+        // The Screen Time writer first ran on 2026-09-13 (JST).
+        XCTAssertTrue(interval.contains(try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 9, day: 13)))))
+        XCTAssertTrue(interval.contains(preReleaseEnd))
     }
 
     /// Every reader classifies the stored `.manual` signature as Screen Time,

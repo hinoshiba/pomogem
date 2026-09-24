@@ -195,6 +195,8 @@ valueを読んだ時点で停止するため、同じApple Accountの旧版端�
   `PebbleKind`、`AchievementKind`、`SyncedFocusStatus`、payload versionも1.0.2の値に固定している
 - 新しい分類は既存の値と判別できる形で保存し、読み出しで解決する。Screen Timeの記録は`manual`と
   600秒・100gで保存し、`StudySession.effectiveSource`が判別する（[ScreenTimeGems.md](ScreenTimeGems.md)）
+- `screenTime`を保存していた修正前の開発版（Release構成はProductionのCloudKitを使う）を入れた端末は、
+  2026-11-30までに修正後のbuildへ更新する。更新後の端末が、その期間の記録を1.0.2でも読める値へ直す
 
 2026-09-12 16:40 JSTに、保存先切り替えの復旧用`PomoGemStorageTransferControl`と
 `PomoGemStorageTransferChunk`をProductionへ配備しました。Consoleの成功表示、Productionの両型・
