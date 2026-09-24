@@ -194,9 +194,10 @@ struct BreakTimerView: View {
             if newPhase == .active,
                didEnterBackgroundSinceLastActive,
                completionAlert.isActive(sessionID: sessionID) {
-                // The phone locked or the person switched apps while the
-                // break-end alarm was repeating. Coming back is the
-                // acknowledgement; 「瓶へ戻る」 stays for them to choose.
+                // Leaving while the break-end alarm repeated counts as Stop.
+                // The app-level scene handler records and ends it on the way
+                // out (acknowledgeOnLeavingApp); this only covers a loop that
+                // is somehow still alive. 「瓶へ戻る」 stays for them to choose.
                 TimerCompletionAlertAcknowledgementStore.mark(
                     sessionID: sessionID
                 )
@@ -538,14 +539,19 @@ struct BreakTimerView: View {
                 sound: soundOn ? sensoryPreferences.timerCompletionSound : nil,
                 haptic: hapticsOn ? sensoryPreferences.timerCompletionHaptic : nil
             )
-            switch cue {
-            case .repeating:
-                completionAlert.start(configuration)
-            case .single:
-                TimerCompletionAlertAcknowledgementStore.mark(sessionID: sessionID)
-                completionAlert.playOnce(configuration)
-            case .none:
-                TimerCompletionAlertAcknowledgementStore.mark(sessionID: sessionID)
+            if completionAlert.resumeSuspendedAlert(sessionID: sessionID) {
+                // An iCloud remount cut this alarm off while the app stayed on
+                // screen; restore it with its Stop for whoever stepped away.
+            } else {
+                switch cue {
+                case .repeating:
+                    completionAlert.start(configuration)
+                case .single:
+                    TimerCompletionAlertAcknowledgementStore.mark(sessionID: sessionID)
+                    completionAlert.playOnce(configuration)
+                case .none:
+                    TimerCompletionAlertAcknowledgementStore.mark(sessionID: sessionID)
+                }
             }
         }
         guard completionAlert.isActive(sessionID: sessionID),

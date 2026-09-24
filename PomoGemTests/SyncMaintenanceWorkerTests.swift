@@ -1848,6 +1848,127 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         XCTAssertEqual(spy.configurations, [configuration, live])
     }
 
+    func testLeavingTheAppWhileTheAlarmRepeatsCountsAsStop() async throws {
+        let suiteName = "PomoGemTests.alarm-leave.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let gate = TimerCompletionAlertSleepGate()
+        let spy = TimerCompletionAlertPlaybackSpy()
+        let controller = TimerCompletionAlertController(
+            sleeper: { try await gate.sleep() },
+            playback: { spy.configurations.append($0) },
+            stopPlayback: { spy.stopCount += 1 },
+            applicationIsActive: { spy.applicationIsActive }
+        )
+        let configuration = TimerCompletionAlertConfiguration(
+            sessionID: UUID(),
+            sound: .bright,
+            haptic: .strong
+        )
+
+        // Nothing ringing: leaving records nothing.
+        controller.acknowledgeOnLeavingApp(defaults: defaults)
+        XCTAssertFalse(TimerCompletionAlertAcknowledgementStore.contains(
+            sessionID: configuration.sessionID, defaults: defaults
+        ))
+
+        controller.start(configuration)
+        await waitForCompletionAlertSleep(gate, count: 1)
+        spy.applicationIsActive = false
+        controller.acknowledgeOnLeavingApp(defaults: defaults)
+        XCTAssertFalse(controller.isActive(sessionID: configuration.sessionID))
+        XCTAssertTrue(TimerCompletionAlertAcknowledgementStore.contains(
+            sessionID: configuration.sessionID, defaults: defaults
+        ))
+        XCTAssertEqual(spy.stopCount, 1)
+
+        // The expired sleep of the ended loop cannot ring on the way back in.
+        spy.applicationIsActive = true
+        await gate.resumeNext()
+        await Task.yield()
+        XCTAssertEqual(spy.configurations, [configuration])
+        XCTAssertFalse(
+            controller.resumeSuspendedAlert(sessionID: configuration.sessionID),
+            "An alarm the person left is never restored"
+        )
+    }
+
+    func testContainerRetirementOnScreenSuspendsTheAlarmForItsOwnSession() async throws {
+        let suiteName = "PomoGemTests.alarm-suspend.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let gate = TimerCompletionAlertSleepGate()
+        let spy = TimerCompletionAlertPlaybackSpy()
+        let controller = TimerCompletionAlertController(
+            sleeper: { try await gate.sleep() },
+            playback: { spy.configurations.append($0) },
+            stopPlayback: { spy.stopCount += 1 },
+            applicationIsActive: { spy.applicationIsActive }
+        )
+        let configuration = TimerCompletionAlertConfiguration(
+            sessionID: UUID(),
+            sound: .soft,
+            haptic: nil
+        )
+
+        controller.start(configuration)
+        await waitForCompletionAlertSleep(gate, count: 1)
+        controller.suspendForContainerRetirement()
+        XCTAssertFalse(controller.isActive(sessionID: configuration.sessionID))
+        XCTAssertEqual(spy.stopCount, 1)
+        await gate.resumeNext()
+        await Task.yield()
+        XCTAssertEqual(spy.configurations, [configuration],
+                       "No view shows Stop while the container is away")
+        // A second sweep keeps the memory (retireExternalTimerState).
+        controller.suspendForContainerRetirement()
+
+        XCTAssertFalse(controller.resumeSuspendedAlert(sessionID: UUID()),
+                       "Another session never inherits the alarm")
+        XCTAssertTrue(controller.resumeSuspendedAlert(sessionID: configuration.sessionID))
+        XCTAssertTrue(controller.isActive(sessionID: configuration.sessionID))
+        XCTAssertEqual(spy.configurations, [configuration, configuration])
+        XCTAssertFalse(TimerCompletionAlertAcknowledgementStore.contains(
+            sessionID: configuration.sessionID, defaults: defaults
+        ))
+        await waitForCompletionAlertSleep(gate, count: 1)
+        controller.stop(sessionID: configuration.sessionID)
+        await gate.resumeNext()
+        XCTAssertFalse(controller.resumeSuspendedAlert(sessionID: configuration.sessionID),
+                       "Restoring consumes the memory")
+
+        // Closing the timer, or leaving the app, forgets a suspended alarm;
+        // leaving also records it as Stop. A newer alarm replaces it.
+        let memory = TimerCompletionAlertController(
+            sleeper: { try await Task.sleep(for: .seconds(60)) },
+            playback: { _ in },
+            stopPlayback: {},
+            applicationIsActive: { true }
+        )
+        memory.start(configuration)
+        memory.suspendForContainerRetirement()
+        memory.stop(sessionID: configuration.sessionID)
+        XCTAssertFalse(memory.resumeSuspendedAlert(sessionID: configuration.sessionID))
+
+        memory.start(configuration)
+        memory.suspendForContainerRetirement()
+        memory.acknowledgeOnLeavingApp(defaults: defaults)
+        XCTAssertFalse(memory.resumeSuspendedAlert(sessionID: configuration.sessionID))
+        XCTAssertTrue(TimerCompletionAlertAcknowledgementStore.contains(
+            sessionID: configuration.sessionID, defaults: defaults
+        ))
+
+        let newer = TimerCompletionAlertConfiguration(
+            sessionID: UUID(), sound: .standard, haptic: nil
+        )
+        memory.start(configuration)
+        memory.suspendForContainerRetirement()
+        memory.start(newer)
+        XCTAssertFalse(memory.resumeSuspendedAlert(sessionID: configuration.sessionID))
+        XCTAssertTrue(memory.isActive(sessionID: newer.sessionID))
+        memory.stop()
+    }
+
     func testTimerCompletionAlertIsSilentOnlyWhenBothChannelsAreOff() {
         let spy = TimerCompletionAlertPlaybackSpy()
         let controller = TimerCompletionAlertController(

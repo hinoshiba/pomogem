@@ -793,6 +793,7 @@ struct FocusView: View {
                 return
             }
             notificationAuthorizationIsCurrent = false
+            acknowledgeAlarmLeftWhileAway()
             Task { @MainActor in
                 await notifications.refreshAuthorizationStatus()
                 guard !Task.isCancelled,
@@ -2348,12 +2349,14 @@ struct FocusView: View {
         }
     }
 
-    /// A pending completion restored into a new view was consumed earlier,
-    /// while the app was in the foreground. Reaching it again means the app
-    /// was relaunched or its iCloud container remounted, which in practice
-    /// happens only after the person left and came back. They are looking at
-    /// the screen, so never re-arm the loop; the return is the acknowledgement.
-    /// A loop still alive in this process keeps its Stop control instead.
+    /// A pending completion restored into a new view was consumed earlier.
+    /// Leaving the app while its alarm repeated was already recorded as Stop
+    /// (`acknowledgeOnLeavingApp`). An alarm that an iCloud remount cut off
+    /// while the app stayed on screen, such as an Apple Account check, is
+    /// restored with its Stop control: the person may have stepped away from
+    /// the desk. Anything else is a relaunch, and the person opening the app
+    /// is looking at it, so the loop is never re-armed and the return is the
+    /// acknowledgement. A loop still alive in this process keeps its Stop.
     private func resumeCompletionAlertIfNeeded(
         _ result: PomodoroCompletion
     ) {
@@ -2364,7 +2367,28 @@ struct FocusView: View {
         guard !completionAlertWasAcknowledged,
               !completionAlert.isActive(sessionID: result.sessionID)
         else { return }
+        if completionAlert.resumeSuspendedAlert(sessionID: result.sessionID) {
+            return
+        }
         markCompletionAlertAcknowledged(result)
+    }
+
+    /// Returning after leaving while the alarm repeated. The app-level scene
+    /// handler already recorded that as Stop and ended the loop on the way
+    /// out; run synchronously on the active edge, before the authorization
+    /// refresh, so the saved result continues without waiting for it.
+    private func acknowledgeAlarmLeftWhileAway() {
+        guard didEnterBackgroundSinceLastActive,
+              let pendingCompletion,
+              !completionAlertWasAcknowledged
+        else { return }
+        let sessionID = pendingCompletion.sessionID
+        guard completionAlert.isActive(sessionID: sessionID)
+                || TimerCompletionAlertAcknowledgementStore.contains(
+                    sessionID: sessionID
+                )
+        else { return }
+        acknowledgeCompletionAlert(pendingCompletion)
     }
 
     private func markCompletionAlertAcknowledged(_ result: PomodoroCompletion) {
@@ -2929,15 +2953,6 @@ struct FocusView: View {
         }
 
         guard newPhase == .active else { return }
-
-        if didEnterBackgroundSinceLastActive,
-           let pendingCompletion,
-           completionAlert.isActive(sessionID: pendingCompletion.sessionID) {
-            // The phone locked or the person switched apps while the alarm was
-            // repeating. Coming back is the acknowledgement: stop it and let
-            // the saved result continue instead of ringing at them again.
-            acknowledgeCompletionAlert(pendingCompletion)
-        }
 
         let returnDate = Date.now
         let returnUptime = ContinuousUptime.now()
