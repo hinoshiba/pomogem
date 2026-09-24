@@ -12,7 +12,12 @@ struct OnboardingView: View {
     @State private var selectedSubjects = Set<String>()
     @State private var wantsNotifications = false
     @State private var selectedRareRewardMode: RareRewardMode?
+    @Environment(\.modelContext) private var modelContext
+    /// Live theme rows only; tombstones never count toward the row bound.
     @Query(sort: \Subject.sortOrder) private var storedSubjects: [Subject]
+    /// Observed so a deletion delivered as a new physical row refreshes the
+    /// list; see `SubjectSyncPolicy.presentationSubjects(live:tombstones:context:)`.
+    @Query private var storedSubjectTombstones: [Subject]
 
     init(
         persistenceMode: PersistenceLaunchMode = .inMemoryPreview,
@@ -20,12 +25,11 @@ struct OnboardingView: View {
     ) {
         self.persistenceMode = persistenceMode
         self.onComplete = onComplete
-        var descriptor = FetchDescriptor<Subject>(sortBy: [
+        _storedSubjects = Query(SubjectSyncPolicy.liveRowsDescriptor(sortBy: [
             SortDescriptor(\Subject.sortOrder),
             SortDescriptor(\Subject.syncRecordID)
-        ])
-        descriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
-        _storedSubjects = Query(descriptor)
+        ]))
+        _storedSubjectTombstones = Query(SubjectSyncPolicy.tombstoneRowsDescriptor())
     }
 
     private var pageCount: Int {
@@ -33,7 +37,9 @@ struct OnboardingView: View {
     }
 
     private var existingSubjects: [Subject] {
-        SubjectSyncPolicy.presentationSubjects(from: storedSubjects)
+        SubjectSyncPolicy.presentationSubjects(
+            live: storedSubjects, tombstones: storedSubjectTombstones, context: modelContext
+        )
     }
 
     var body: some View {
@@ -804,7 +810,7 @@ private struct SubjectSetupPage: View {
                 .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 16))
                 .accessibilityIdentifier("onboarding.daily-reminder")
 
-                Text("通知は任意です。時刻やオン・オフは設定で変更できます。タイマーの終了通知は、このリマインダーをオフにしていても使えます。")
+                Text("通知は任意です。時刻やオン・オフは設定で変更できます。タイマーの終了通知は、このリマインダーとは別に、最初に集中を始めるときに一度だけ許可をおたずねします。")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)

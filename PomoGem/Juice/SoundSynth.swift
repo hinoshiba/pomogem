@@ -228,9 +228,12 @@ struct TimerCompletionAlertConfiguration: Equatable, Sendable {
 /// Repeats a short, bounded completion cue while the app is in the foreground.
 ///
 /// iOS suspends ordinary apps in the background, where the scheduled local
-/// notification remains the only supported completion cue. Keeping the
-/// logical alert alive while inactive lets it resume after the app becomes
-/// active without requesting background audio or bypassing the silent switch.
+/// notification remains the only supported completion cue. The logical alert
+/// stays alive while the scene is only inactive (Control Center, a banner),
+/// so it continues when that closes, without requesting background audio or
+/// bypassing the silent switch. Leaving the app ends it: the person had to
+/// pick up the phone to leave, so that counts as Stop (see
+/// `acknowledgeOnLeavingApp`).
 /// Generation fencing protects a newer timer from a late, non-cooperative
 /// cancellation or stop action owned by an older session.
 @MainActor
@@ -246,6 +249,11 @@ final class TimerCompletionAlertController {
     static let shared = TimerCompletionAlertController()
 
     private(set) var activeConfiguration: TimerCompletionAlertConfiguration?
+    /// An alarm cut off by an iCloud container retirement while the app stayed
+    /// on screen (an Apple Account check). Process-local on purpose: only the
+    /// next view for the same session in this process may restore it. After a
+    /// relaunch nothing is remembered, so a recovered completion never rings.
+    private var suspendedConfiguration: TimerCompletionAlertConfiguration?
 
     private let sleeper: Sleeper
     private let playback: Playback
@@ -296,6 +304,7 @@ final class TimerCompletionAlertController {
         }
         guard activeConfiguration != configuration else { return }
 
+        suspendedConfiguration = nil
         generation &+= 1
         let alertGeneration = generation
         task?.cancel()
@@ -330,7 +339,22 @@ final class TimerCompletionAlertController {
         }
     }
 
+    /// Plays the chosen completion cue exactly once without arming the
+    /// repeating alert, for a person who has just brought the app back. It
+    /// never interrupts or replaces an alert that is already repeating.
+    func playOnce(_ configuration: TimerCompletionAlertConfiguration) {
+        guard !configuration.isSilent,
+              activeConfiguration == nil,
+              applicationIsActive() else { return }
+        playback(configuration)
+    }
+
+    /// Ends the alarm. With a `sessionID` it also forgets a suspended alarm
+    /// for that session, since the caller is closing that timer for good.
     func stop(sessionID: UUID? = nil) {
+        if let sessionID, suspendedConfiguration?.sessionID == sessionID {
+            suspendedConfiguration = nil
+        }
         guard let activeConfiguration else { return }
         if let sessionID, activeConfiguration.sessionID != sessionID { return }
 
@@ -339,6 +363,45 @@ final class TimerCompletionAlertController {
         task = nil
         self.activeConfiguration = nil
         stopPlayback()
+    }
+
+    /// The app is entering the background while the alarm repeats. Leaving
+    /// takes picking up the phone, so record it durably as Stop and end the
+    /// loop now: no cycle can then fire on the way back in, before any view
+    /// has seen the return, and neither a still-mounted screen nor one
+    /// recovered after an iCloud remount rings again. The acknowledgement is
+    /// written before the caller retires the container, while the account
+    /// scope of the defaults key still names the timer's account.
+    func acknowledgeOnLeavingApp(defaults: UserDefaults = .standard) {
+        let ringing = activeConfiguration ?? suspendedConfiguration
+        suspendedConfiguration = nil
+        guard let ringing else { return }
+        TimerCompletionAlertAcknowledgementStore.mark(
+            sessionID: ringing.sessionID,
+            defaults: defaults
+        )
+        stop()
+    }
+
+    /// An iCloud container is retiring. Its views disappear, so the loop must
+    /// not keep ringing without a Stop control. If the app is still on screen
+    /// (an account check, not a trip away), remember the alarm so the timer's
+    /// next view in this process can restore it for someone who stepped away.
+    func suspendForContainerRetirement() {
+        guard let activeConfiguration else { return }
+        let configuration = activeConfiguration
+        stop()
+        suspendedConfiguration = configuration
+    }
+
+    /// Restores an alarm that `suspendForContainerRetirement` cut off for this
+    /// session, returning whether it did. Consumed on use.
+    func resumeSuspendedAlert(sessionID: UUID) -> Bool {
+        guard let configuration = suspendedConfiguration,
+              configuration.sessionID == sessionID else { return false }
+        suspendedConfiguration = nil
+        start(configuration)
+        return isActive(sessionID: sessionID)
     }
 }
 

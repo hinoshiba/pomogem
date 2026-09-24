@@ -60,24 +60,95 @@ final class StorageTransferConsentEvidenceTests: XCTestCase {
     func testTheNoLineageCloudRowCountsTheRecordsAndImpliesNoLedger() {
         let row = StorageTransferOverwriteCopy.cloudSideWithoutLineage(preview: Self.preview(
             subjects: 9, sessions: 312, stones: 28, otherDeviceIDs: 1))
-        XCTAssertEqual(row, "iCloud側の管理情報なし（記録件数: 349）")
+        XCTAssertEqual(row, "iCloud: テーマ9・記録312・成果28")
         XCTAssertFalse(row.contains("最終"))
+        // transfer-10. No internal term on a screen where a deletion is chosen.
+        XCTAssertFalse(row.contains("管理情報"))
     }
 
-    // MARK: review-2-7 — the disabled door's reason
+    /// transfer-03. Bookkeeping rows are not the user's records. A server that
+    /// holds only a Prefs writer row, a device claim, a reset marker and the
+    /// five seeded preset themes still holds nothing the user made, and the
+    /// row may not read as if it did.
+    func testBookkeepingRowsNeitherInflateTheRowNorHideAnEmptyServer() {
+        var counts = Dictionary(uniqueKeysWithValues:
+            PomoGemStorageSnapshot.cloudModelNames.map { ($0, 0) })
+        counts["Subject"] = 5
+        counts["Prefs"] = 1
+        counts["FocusTimerDeviceClaim"] = 1
+        counts["ActivityResetMarker"] = 1
+        counts["SyncedFocusTimer"] = 1
+        let bookkeeping = StorageTransferCloudPreview(recordCounts: counts,
+            latestRecordAt: Date(timeIntervalSinceReferenceDate: 0), otherDeviceIDs: 1, ignoredWriterIDs: 0)
+        XCTAssertEqual(bookkeeping.totalRecordCount, 9)
+        XCTAssertEqual(bookkeeping.userContentRecordCount, 0)
+        XCTAssertTrue(StorageTransferRefreshCopy.cloudSideIsEmpty(bookkeeping),
+                      "The documented 0件 warning must fire for this account")
+        XCTAssertEqual(StorageTransferOverwriteCopy.cloudSideWithoutLineage(preview: bookkeeping),
+                       "iCloud: テーマ5・記録0・成果0")
 
-    /// The reason line under 「このiPhoneのデータでiCloudを使い始める」 used to be
-    /// the overwrite string, which describes a 「置き換え」 and promises a
-    /// 復旧用コピー this path never stages before it is permitted to run.
-    func testTheDisabledLineageDoorIsExplainedInItsOwnTerms() {
-        let reason = StorageTransferLineageCopy.startUnavailable
-        XCTAssertTrue(reason.contains("使い始める操作は、いまは利用できません"))
-        XCTAssertFalse(reason.contains("置き換える操作"),
-            "The screen insists this is not a replacement; its reason line must agree")
-        XCTAssertFalse(reason.contains("復旧用コピー"),
-            "No recovery copy exists on this path at the point the door is refused")
-        XCTAssertNotEqual(reason,
-            StorageTransferReleaseError.datasetOverwriteUnavailable.localizedDescription)
+        let withRecords = Self.preview(subjects: 0, sessions: 1, stones: 0, otherDeviceIDs: 0)
+        XCTAssertFalse(StorageTransferRefreshCopy.cloudSideIsEmpty(withRecords))
+        let withStones = Self.preview(subjects: 0, sessions: 0, stones: 1, otherDeviceIDs: 0)
+        XCTAssertFalse(StorageTransferRefreshCopy.cloudSideIsEmpty(withStones))
+        XCTAssertFalse(StorageTransferRefreshCopy.cloudSideIsEmpty(nil),
+                       "A read that did not happen is never an empty server")
+    }
+
+    // MARK: device-01 — the shipping lineage screen
+
+    /// A shipping build never renders the start-from-device door on this
+    /// screen, so no sentence on it may promise that door: not the message,
+    /// not the offline explanation (which used to say 「あとでこの画面から、
+    /// このiPhoneのデータでiCloudを使い始めることもできます」).
+    func testTheShippingLineageScreenPromisesNoDisabledDoor() {
+        let bit = StorageTransferReleasePolicy.standard.allowsDatasetOverwriteFromDevice
+        XCTAssertFalse(bit, "The premise: the start door is closed in a shipping build")
+        for text in [StorageTransferLineageCopy.screenMessage(offersLineageStart: bit),
+                     StorageTransferLineageCopy.offlineExplanation(offersLineageStart: bit),
+                     StorageTransferLineageCopy.offlineUnavailable] {
+            XCTAssertFalse(text.contains("使い始める"), text)
+        }
+        let offline = StorageTransferLineageCopy.offlineExplanation(offersLineageStart: bit)
+        XCTAssertTrue(offline.contains("同期は止まったまま"),
+            "Choosing offline must be described as what it is: sync stays stopped")
+        XCTAssertTrue(offline.contains("「復旧手順」"),
+            "and it names the way back an offline session actually carries")
+        XCTAssertTrue(StorageTransferLineageCopy.offlineExplanation(offersLineageStart: true)
+            .contains("使い始める"), "Only a build that publishes the door may name it")
+        XCTAssertTrue(offline.contains("あとで「iCloudから再取得」を選ぶと、オフラインで記録した変更も削除されます。"),
+            "Staying offline must say what the way back does to what is recorded meanwhile")
+        XCTAssertTrue(StorageTransferLineageCopy.offlineSessionMessage.contains("止まったまま"))
+        XCTAssertFalse(StorageTransferLineageCopy.offlineSessionMessage.contains("接続回復後"))
+    }
+
+    /// transfer-01 / transfer-10. The stop reason is read by App Store users,
+    /// for whom a 「開発用／配布用」 build does not exist, and it is also the
+    /// offline banner's text after a retry. Plain words, no internal terms.
+    func testTheStopReasonIsPlainAndBlamesNoBuildTheUserCannotHave() {
+        for text in [StorageTransferLineageCopy.stopReason, StorageTransferLineageCopy.title,
+                     StorageTransferLineageCopy.refreshExplanation] {
+            XCTAssertFalse(text.contains("開発用"), text)
+            XCTAssertFalse(text.contains("配布用"), text)
+            XCTAssertFalse(text.contains("管理情報"), text)
+        }
+        XCTAssertTrue(StorageTransferLineageCopy.stopReason.contains("削除していません"))
+        XCTAssertEqual(StorageTransferRuntimeError.cloudLineageUnavailable.localizedDescription,
+                       StorageTransferLineageCopy.stopReason)
+        // The stop reason names no cause. Deleting the app's iCloud data does
+        // not lead here for an App Store user (a nil-generation receipt is
+        // admitted), so offering it as the example sent the people who CAN
+        // reach this screen — an older-generation receipt, or a 1.0.x store
+        // the adoption rule does not take — looking for something they never
+        // did. What was observed, and what was not done; nothing else.
+        XCTAssertEqual(StorageTransferLineageCopy.stopReason,
+                       "iCloudのデータとこのiPhoneの記録の対応を確認できないため、記録が混ざらないよう同期を止めています。このiPhoneの記録もiCloudのデータも削除していません。")
+        XCTAssertFalse(StorageTransferLineageCopy.stopReason.contains("場合"))
+        XCTAssertFalse(StorageTransferLineageCopy.stopReason.contains("PomoGem"))
+        // One operation, one name on the screen: the section, its button and
+        // the sheet's confirm are all 「iCloudから再取得」.
+        XCTAssertEqual(StorageTransferLineageCopy.refreshDoorTitle, StorageTransferRefreshCopy.confirmTitle)
+        XCTAssertTrue(StorageTransferLineageCopy.refreshExplanation.contains("iCloudのデータは削除しません"))
     }
 
     // MARK: review-1-4 — the localLedgerMissing explanation
@@ -109,9 +180,16 @@ final class StorageTransferConsentEvidenceTests: XCTestCase {
     func testTheRefreshDirectionDisclosesAnEmptyServerSide() {
         let empty = Self.preview(subjects: 0, sessions: 0, stones: 0, otherDeviceIDs: 0)
         XCTAssertEqual(empty.totalRecordCount, 0)
-        let warning = StorageTransferRefreshCopy.cloudSideEmpty
+        XCTAssertTrue(StorageTransferRefreshCopy.cloudSideIsEmpty(empty))
+        let warning = StorageTransferRefreshCopy.cloudSideEmpty(device: nil)
         XCTAssertTrue(warning.contains("1件も見つかりませんでした"))
         XCTAssertTrue(warning.contains("元に戻すことはできません"))
+        // transfer-03. When this iPhone was counted, the warning says what it
+        // is about to lose, in the same three nouns as the comparison rows.
+        let counted = StorageTransferRefreshCopy.cloudSideEmpty(device: Self.preview(
+            subjects: 12, sessions: 480, stones: 36, otherDeviceIDs: 0))
+        XCTAssertTrue(counted.contains("このiPhoneのテーマ12・記録480・成果36"), counted)
+        XCTAssertTrue(counted.contains("元に戻すことはできません"))
         // The reassurance sentence on its own must never be the whole story.
         XCTAssertTrue(StorageTransferRefreshCopy.dataLossWarning.contains("iCloudのデータは残ります"))
         XCTAssertFalse(StorageTransferRefreshCopy.dataLossWarning.contains("件"))

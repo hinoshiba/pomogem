@@ -214,6 +214,10 @@ require(
     "main app must use only the Screen Time App Group",
 )
 require(app_entitlements.get("com.apple.developer.family-controls") is True, "Screen Time requires Family Controls")
+require(
+    app_entitlements.get("com.apple.developer.usernotifications.time-sensitive") is True,
+    "timer-end alerts require the Time Sensitive notification entitlement",
+)
 monitor_entitlements = load("PomoGemScreenTimeMonitor/PomoGemScreenTimeMonitor.entitlements")
 require(monitor_entitlements == {
     "com.apple.security.application-groups": ["group.com.hinoshiba.pomogem"],
@@ -230,6 +234,7 @@ for forbidden in (
     "com.apple.developer.icloud-container-environment",
     "com.apple.developer.icloud-services",
     "com.apple.security.application-groups",
+    "com.apple.developer.usernotifications.time-sensitive",
 ):
     require(forbidden not in widget_entitlements, f"neutral widget source entitlements contain {forbidden}")
 PY

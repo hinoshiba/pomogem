@@ -12,11 +12,16 @@ enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
     case datasetReplacedRemotely, cloudLineageUnavailable, localLedgerMissing
     case cloudEnvironmentMismatch, leftoverLocalStores
     case cloudCopyStillPending, recoveryNeedsReview
+    /// transfer-04. The mirror wait timed out in a process that has already
+    /// opened the staged CloudKit mirror. An in-process retry can only end in
+    /// `relaunchRequired` (`resumePendingTransfer` refuses such a process), so
+    /// this is a relaunch, not a network error with a 「もう一度試す」.
+    case cloudCopyStillArriving
 
     var errorDescription: String? {
         switch self {
         case .relaunchRequired:
-            "データを安全に切り替えるため、アプリを一度終了し、もう一度開いてください。アプリ自体は削除しないでください。"
+            "データを安全に切り替えるため、Appスイッチャーでポモジェムを一度終了し、もう一度開いてください。アプリ自体は削除しないでください。"
         case .remoteRecoveryRequired:
             "iCloudで未完了のデータ切り替えが見つかりました。復旧が完了するまで通常の同期を停止しています。"
         case .datasetRefreshRequired:
@@ -39,7 +44,9 @@ enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
         case .leftoverLocalStores:
             "以前のiCloud用データがこの端末に残っているため、iCloudの利用を開始できません。記録が混ざらないよう停止しました。残っているデータを整理してから、もう一度お試しください。"
         case .cloudCopyStillPending:
-            "iCloudの全データと端末のコピーがまだ一致しません。通信を確認して再試行してください。"
+            "iCloudのデータとこの端末のコピーがまだ一致しません。記録は保護されています。通信を確認して、もう一度お試しください。ほかの端末でポモジェムを使っている場合は、その端末を閉じてからお試しください。"
+        case .cloudCopyStillArriving:
+            "iCloudからの受信に時間がかかっています。記録は保護されています。通信の安定した場所で、Appスイッチャーでポモジェムを終了してもう一度開くと、続きから確認します。アプリ自体は削除しないでください。"
         case .recoveryNeedsReview:
             "中断時のデータを安全に自動復旧できません。復旧用コピーを保護し、削除を停止しています。"
         }
@@ -154,15 +161,21 @@ final class StorageTransferRuntime {
         try await remote(validateAccess).inspect(accountFingerprint: binding.accountFingerprint)?.control
     }
 
+    /// `legacyCloudMountEvidence` is read only when the pre-receipt adoption
+    /// rule could apply at all (an absent control record in a Production
+    /// build with no receipt), so an ordinary launch pays nothing for it. It
+    /// defaults to `.none`: the rule never applies unless the caller gathered
+    /// the device's own evidence on purpose.
     func preflightCloudMount(binding: ActiveAccountLocalBinding,
                              controlClient: StorageTransferCloudMountControlClient? = nil,
                              accountDefaults: UserDefaults = .standard,
+                             legacyCloudMountEvidence: @escaping @MainActor () -> StorageTransferLegacyCloudMountEvidence = { .none },
                              validateAccess: @escaping @MainActor () throws -> Void) async throws {
         let reader = StorageTransferCloudMountControlReader(client: controlClient,
             defaults: accountDefaults, transferJournalStore: store)
         try await preflightCloudMount(binding: binding, readControl: {
             try await reader.read(expectedBinding: binding, validateAccess: validateAccess)
-        }, validateAccess: validateAccess)
+        }, legacyCloudMountEvidence: legacyCloudMountEvidence, validateAccess: validateAccess)
     }
 
     /// The transport seam preserves the actual local admission files and final
@@ -170,6 +183,7 @@ final class StorageTransferRuntime {
     /// authorize a container just because the remote control stayed unchanged.
     func preflightCloudMount(binding: ActiveAccountLocalBinding,
                              readControl: @escaping @MainActor () async throws -> StorageTransferRecoveryControl?,
+                             legacyCloudMountEvidence: @escaping @MainActor () -> StorageTransferLegacyCloudMountEvidence = { .none },
                              validateAccess: @escaping @MainActor () throws -> Void) async throws {
         let validate: @MainActor () throws -> Void = {
             try Task.checkCancellation()
@@ -199,16 +213,33 @@ final class StorageTransferRuntime {
             try file.save(value, replacing: isLegacy ? nil : found)
             if isLegacy { try retireLegacyAdmission(binding) }
         case .enrol:
-            // Unconditional. An existing local cloud store joining a ledger
-            // this build has never recorded is a device -> iCloud publication,
-            // not an enrolment: preflight's success is what authorizes the host
-            // to build the mirror over that very store. When the remote ledger
-            // is EMPTY the publication is total, which is exactly the consented,
+            // An existing local cloud store joining a ledger this build has
+            // never recorded is a device -> iCloud publication, not an
+            // enrolment: preflight's success is what authorizes the host to
+            // build the mirror over that very store. When the remote ledger is
+            // EMPTY the publication is total, which is exactly the consented,
             // policy-gated `startCloudLineageFromDevice`, so it must not happen
             // by falling through a precondition that only ran for a non-nil
             // server generation.
-            try requireNoArtifacts(selection: .cloud(binding: binding),
-                error: status?.datasetGenerationID == nil ? .cloudLineageUnavailable : .localLedgerMissing)
+            //
+            // The single exception is a store 1.0 / 1.0.1 created before
+            // receipts existed, which has only ever mirrored this binding's
+            // Production zone: re-joining it publishes nothing new, and it is
+            // what 1.0.2 did. `StorageTransferLegacyCloudAdoptionPolicy` holds
+            // every condition; the evidence is read only once the cheap ones
+            // (absent control, Production scope) already hold.
+            var adoptsPreReceiptStore = false
+            if status == nil, cloudScope.environment == .production {
+                adoptsPreReceiptStore = StorageTransferLegacyCloudAdoptionPolicy.adoptsPreReceiptStore(
+                    scope: cloudScope,
+                    hasAdmissionReceiptUnderAnyName: try hasAdmissionReceiptUnderAnyName(binding),
+                    serverControl: status,
+                    evidence: legacyCloudMountEvidence())
+            }
+            if !adoptsPreReceiptStore {
+                try requireNoArtifacts(selection: .cloud(binding: binding),
+                    error: status?.datasetGenerationID == nil ? .cloudLineageUnavailable : .localLedgerMissing)
+            }
             try validate()
             try file.save(StorageTransferDatasetAdmission(binding: binding,
                 datasetGenerationID: status?.datasetGenerationID, cloudScope: recordedScope),
@@ -547,9 +578,23 @@ final class StorageTransferRuntime {
         try store.begin(journal)
     }
 
+    /// transfer-04. Whether the pending transfer needs exactly one more launch:
+    /// the staged mirror was already verified by an earlier process, or the
+    /// journal is past saving the destination. The relaunch screen uses it to
+    /// say 「次に開くと切り替えが完了します」 only when that is true.
+    func pendingTransferCompletesOnNextLaunch() -> Bool {
+        guard let journal = try? store.load() else { return false }
+        if journal.phase >= .destinationSaved { return true }
+        guard let files = try? files(journal),
+              let saved = try? checkpoint(files, journal: journal) else { return false }
+        return saved.verifiedCloudProcessID != nil
+    }
+
     @discardableResult
     func resumePendingTransfer(validateAccess: @escaping @MainActor () throws -> Void,
-                               trackContainer: @escaping @MainActor (ModelContainer, Bool) -> Void) async throws -> StorageTransferResumeOutcome {
+                               trackContainer: @escaping @MainActor (ModelContainer, Bool) -> Void,
+                               progress: @escaping @MainActor (StorageTransferJournal.Phase) -> Void = { _ in })
+        async throws -> StorageTransferResumeOutcome {
         try requireNoPendingRemoteCancellation()
         guard let initial = try store.load() else { return .noPending }
         try initial.validate()
@@ -614,7 +659,7 @@ final class StorageTransferRuntime {
                 try self.cleanup().enqueue(journal: journal, recoveryManifest: manifest)
             })
         try await StorageTransferCoordinator(store: store, effects: effects).resume(
-            transactionID: initial.transactionID, validateTransfer: validate)
+            transactionID: initial.transactionID, validateTransfer: validate, progress: progress)
         try resumeLocalCleanup(validateAccess: validateAccess)
         return .completed
     }
@@ -1070,7 +1115,12 @@ final class StorageTransferRuntime {
                 try checkpointFile(files).save(checkpoint, replacing: previous)
                 throw StorageTransferRuntimeError.relaunchRequired
             }
-            guard ProcessInfo.processInfo.systemUptime < deadline else { throw StorageTransferRuntimeError.cloudCopyStillPending }
+            // transfer-04. This process opened the staged mirror above, so a
+            // retry here could only be refused; the honest remedy is the
+            // relaunch that continues the wait from the durable checkpoint.
+            guard ProcessInfo.processInfo.systemUptime < deadline else {
+                throw StorageTransferRuntimeError.cloudCopyStillArriving
+            }
             try await Task.sleep(for: .seconds(2))
         }
     }
@@ -1351,6 +1401,23 @@ final class StorageTransferRuntime {
             guard url != mine else { return nil }
             return try StorageTransferStateFile<StorageTransferDatasetAdmission>(url: url).load()
         }
+    }
+    /// Whether ANY receipt exists for this namespace: this environment's, the
+    /// unscoped legacy one, or another environment's. Every file is decoded,
+    /// so a damaged receipt throws and the preflight fails closed rather than
+    /// reading as "no receipt". Only the pre-receipt adoption rule asks.
+    private func hasAdmissionReceiptUnderAnyName(_ binding: ActiveAccountLocalBinding) throws -> Bool {
+        let names = Set(StorageTransferCloudEnvironment.allCases.map { environment in
+            Self.admissionFileName(namespace: binding.namespace,
+                scope: StorageTransferCloudScope(environment: environment,
+                    containerIdentifier: cloudScope.containerIdentifier))
+        })
+        for name in names.sorted() {
+            let file = try StorageTransferStateFile<StorageTransferDatasetAdmission>(
+                url: root.appendingPathComponent(name))
+            if try file.load() != nil { return true }
+        }
+        return false
     }
     /// One-time migration. Only ever called after the scoped receipt has been
     /// written AND read back by `StorageTransferStateFile.save`, so the record

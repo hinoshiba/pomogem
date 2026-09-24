@@ -70,6 +70,10 @@ canonical rowへ書き戻したり、他copyへfan-outしたり、物理削除�
 例外は、supported reset markerで明示的に証明したstale epochと、同じUUIDの有効な`StudySession`がすでに
 materializeしているとexact queryで確認した後のclosed focus active tailだけです。4種類のlocal projectionは
 CloudKit sourceから再構築できる端末内dataなので、検証済みのmerge／compact／再作成を続けます。
+利用者の操作以外で同期元rowの値を書き換えるのは、開発中の1.1.0が`StudySession.source`へ保存した
+`screenTime`を、1.0.2も読める`manual`へ直す処理だけです。論理値（`effectiveSource`）は変わらず、
+background maintenanceではなくScreen Timeの取り込みと同じ前面の書き込み境界で行います
+（[ScreenTimeGems.md](ScreenTimeGems.md)）。
 
 #### 3.1.1 Version 1.0の最終CloudKit source schema
 
@@ -505,7 +509,13 @@ maintenanceを継続します。interactiveなexact session queryは128行を上
 truncated winnerとして利用せずmaintenance要求としてfail closedします。maintenanceが全pageを読んでも
 source row数自体は減らないため、UIのbounded ceilingを超える履歴が自動的に解消すると主張しません。
 
-account-wide interactive recoveryが検査するactive logical sessionは最大256件です。invalid groupは表示・
+account-wide interactive recoveryは、最新のactive rowの開始時刻（現在時刻より後なら現在時刻）から
+`StudySessionIntegrityPolicy.maximumCompletionWallSpan`（7日）と端末間の時計差1日を引いた時刻以降に
+開始したsessionだけを検査します。それより前に始まった集中は有効な`StudySession`になれず、回復・引き継ぎ・
+完了のどれにも使えないためです。取り消した集中はrunning rowを残し続けるので、この下限がないと検査の
+費用が生涯の取消回数に比例し、257回目の取消で引き継ぎと保存先の切り替えが止まっていました。rowは
+削除せず、端末自身の回復は従来どおりlocal envelopeとexactな`completionGate`で判断します。
+この範囲で検査するactive logical sessionは最大256件です。invalid groupは表示・
 変更せず次の独立sessionへ進みますが、valid timerの前にinvalid active logical sessionが257件以上並ぶと
 有界scanを使い切り、maintenance後もfail closedが継続し得ます。checkpoint quarantineは他作業を飢餓
 させませんがrow自体をqueryから外さないため、この上限を解消しません。完全解消には、raw payloadを
@@ -583,6 +593,11 @@ localな書込み完了後の値をexactとして扱えます。
   全物理rowを保持する
 - version 1.0はsubject restore UIを持たないため、一度観測したsupportedな`deletedAt`は、より高いrevisionの
   offline renameより常に優先する
+- tombstoneは削除しないため、全物理rowの件数は削除したテーマの数だけ増え続ける。表示・編集・この
+  phaseの上限（256行）は削除されていない行だけに適用し、tombstoneはそれらと同じlogical IDのものだけを
+  読む。以前は全行を数えたため、長期利用で257行に達すると全画面のテーマが消え、このphaseは`.retry`を
+  繰り返して検証が終わらなかった。削除されていない行が上限を超える悪意ある複製は表示が空になるだけで、
+  read-onlyのこのphaseは修復対象がないため完了する
 - sessionとachievementはrelationshipをfan-out書換えせず、snapshot subject IDから論理表示を解決する
 - missing presetは挿入しない
 - `hasCompletedInitialSubjectSeed`をworkerから変更しない

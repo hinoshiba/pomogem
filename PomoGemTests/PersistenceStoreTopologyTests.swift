@@ -1301,7 +1301,7 @@ final class PersistenceStoreTopologyTests: XCTestCase {
         )
         XCTAssertEqual(session.seconds, canonicalSeconds)
         XCTAssertEqual(session.grams, Constants.Mass.measuredPebbleGrams)
-        XCTAssertEqual(session.source, .timer)
+        XCTAssertEqual(session.effectiveSource, .timer)
         XCTAssertTrue(
             StudySessionIntegrityPolicy.isSupported(
                 session,

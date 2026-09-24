@@ -310,4 +310,45 @@ final class FairnessTests: XCTestCase {
             minute: minute
         )))
     }
+
+    func testDemotionNoticeNamesTheActualReason() {
+        XCTAssertEqual(
+            FocusDemotionNoticeReason.adopted(
+                isCloudBacked: true,
+                sourceWriterDeviceID: "other-iphone",
+                currentDeviceID: "this-iphone"
+            ),
+            .adoptedFromOtherDevice,
+            "Continuing a timer from another iPhone is not a clock change"
+        )
+        XCTAssertEqual(
+            FocusDemotionNoticeReason.adopted(
+                isCloudBacked: false,
+                sourceWriterDeviceID: "other-iphone",
+                currentDeviceID: "this-iphone"
+            ),
+            .resumedFromSavedState,
+            "The local-only offer says it resumes saved state, never a handoff"
+        )
+        XCTAssertEqual(
+            FocusDemotionNoticeReason.adopted(
+                isCloudBacked: true,
+                sourceWriterDeviceID: "this-iphone",
+                currentDeviceID: "this-iphone"
+            ),
+            .resumedFromSavedState,
+            "This iPhone's own record is not taken over from another device"
+        )
+        XCTAssertNil(FocusDemotionNoticeReason.detected(.valid(drift: 0.5)))
+        XCTAssertEqual(FocusDemotionNoticeReason.detected(.changed(drift: 600)), .clockChanged)
+        XCTAssertEqual(FocusDemotionNoticeReason.detected(.uptimeReset), .continuityLost)
+        XCTAssertEqual(FocusDemotionNoticeReason.detected(.unverifiable), .continuityLost)
+
+        XCTAssertTrue(FocusDemotionNoticeReason.clockChanged.message.contains("端末時刻"))
+        XCTAssertTrue(FocusDemotionNoticeReason.adoptedFromOtherDevice.message.contains("別の端末から引き継いだ"))
+        XCTAssertFalse(FocusDemotionNoticeReason.adoptedFromOtherDevice.message.contains("時刻"))
+        XCTAssertFalse(FocusDemotionNoticeReason.continuityLost.message.contains("時刻"))
+        XCTAssertFalse(FocusDemotionNoticeReason.resumedFromSavedState.message.contains("別の端末"))
+        XCTAssertEqual(FocusDemotionNoticeReason.unexplained.message, "この回は自己申告あつかいです")
+    }
 }

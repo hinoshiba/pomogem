@@ -1080,7 +1080,7 @@ enum HomeProjectionPolicy {
         )
         let completedCount = saturatingNonnegativeSum([
             saturatingNonnegativeSum(roots.map(\.measuredPebbleCount)),
-            uniqueLoose.filter { $0.source.isMeasured }.count
+            uniqueLoose.filter { $0.effectiveSource.isMeasured }.count
         ])
 
         guard let interval = calendar.dateInterval(of: .weekOfYear, for: date) else {
@@ -1101,7 +1101,7 @@ enum HomeProjectionPolicy {
             interval: interval,
             maximumPhysicalRows: maximumWeeklyPhysicalRows
         )
-            .filter { $0.source.isMeasured }
+            .filter { $0.effectiveSource.isMeasured }
         return CompletionMetrics(
             completedFocusCount: completedCount,
             weeklyMeasuredSessionIDs: Set(unique.map(\.id)),
@@ -1397,7 +1397,7 @@ enum HomeAggregatePersistence {
         _ session: StudySession,
         source: AggregateSource
     ) -> Bool {
-        let isMeasured = session.source.isMeasured
+        let isMeasured = session.effectiveSource.isMeasured
         return StudySessionIntegrityPolicy.isSupported(session)
             && session.id == source.id
             && source.level == 0

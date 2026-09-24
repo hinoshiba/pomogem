@@ -821,7 +821,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         )
         XCTAssertEqual(resolved.grams, 220)
         XCTAssertEqual(resolved.pebbleKind, .prism)
-        XCTAssertEqual(resolved.source, .timer)
+        XCTAssertEqual(resolved.effectiveSource, .timer)
         XCTAssertTrue(
             StudySessionSyncPolicy.canonicalSession(from: Array(copies.reversed()))
                 === resolved
@@ -879,7 +879,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         b.syncRecordID = orderedUUID(602)
         let c = makeSession(id: logicalID, grams: 220, kind: .prism, epochID: nil)
         c.syncRecordID = orderedUUID(603)
-        c.source = .timerDemoted
+        c.persistedSource = .timerDemoted
 
         XCTAssertTrue(StudySessionSyncPolicy.canonicalSession(from: [a, b]) === b)
         XCTAssertTrue(StudySessionSyncPolicy.canonicalSession(from: [b, a]) === b)
@@ -897,7 +897,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         // a destructive A/B fold would have erased that evidence.
         XCTAssertEqual(a.grams, 100)
         XCTAssertEqual(b.grams, 220)
-        XCTAssertEqual(c.source, .timerDemoted)
+        XCTAssertEqual(c.persistedSource, .timerDemoted)
     }
 
     func testEqualStudySessionCopiesUseStablePhysicalTotalOrder() throws {
@@ -967,6 +967,145 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
             SubjectSyncPolicy.canonical(from: [laterOfflineRename, legacyTombstone])
                 === legacyTombstone
         )
+    }
+
+    // MARK: - Theme tombstones never count toward the row bound
+
+    /// Deleting a theme only writes a tombstone. `count` deleted themes plus
+    /// the given live ones, all in one store.
+    private func insertThemeHistory(
+        deleted count: Int,
+        live names: [String],
+        context: ModelContext
+    ) throws -> [Subject] {
+        for index in 0 ..< count {
+            context.insert(Subject(
+                name: "削除済み\(index)", colorHex: "#123456", sortOrder: index,
+                isArchived: true, deletedAt: Date(timeIntervalSince1970: 1_800_000_000 + Double(index)),
+                syncRecordID: orderedUUID(700_000 + index)
+            ))
+        }
+        let live = names.enumerated().map { index, name in
+            Subject(
+                name: name, colorHex: "#654321", sortOrder: index,
+                syncRecordID: orderedUUID(710_000 + index)
+            )
+        }
+        live.forEach(context.insert)
+        try context.save()
+        return live
+    }
+
+    private func presentedThemes(context: ModelContext) throws -> [Subject] {
+        SubjectSyncPolicy.presentationSubjects(
+            live: try context.fetch(SubjectSyncPolicy.liveRowsDescriptor()),
+            tombstones: try context.fetch(SubjectSyncPolicy.tombstoneRowsDescriptor()),
+            context: context
+        )
+    }
+
+    func testThemesStayVisibleAfterHundredsOfDeletedThemes() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let live = try insertThemeHistory(
+            deleted: SubjectSyncPolicy.observedTombstoneLimit + 1,
+            live: ["英語", "数学", "簿記"], context: context
+        )
+        // The whole-catalogue read used to fail closed to an empty list here.
+        XCTAssertTrue(SubjectSyncPolicy.presentationSubjects(
+            from: try context.fetch(FetchDescriptor<Subject>())
+        ).isEmpty)
+        XCTAssertEqual(try presentedThemes(context: context).map(\.id), live.map(\.id))
+        XCTAssertEqual(
+            Set(try SubjectSyncPolicy.liveCatalogue(context: context).map(\.id)),
+            Set(live.map(\.id))
+        )
+    }
+
+    func testTombstoneSharingALiveIDStillHidesItWhetherOrNotThePageIsComplete() throws {
+        // 0 and 300 fit the observed tombstone page; one more than the page
+        // forces the exact per-ID read.
+        for deletedCount in [0, 300, SubjectSyncPolicy.observedTombstoneLimit + 1] {
+            let container = try makeContainer()
+            let context = container.mainContext
+            let live = try insertThemeHistory(
+                deleted: deletedCount, live: ["英語", "数学"], context: context
+            )
+            // Another device deleted 数学 while this one still has a live copy
+            // with a later offline rename. Deletion is sticky.
+            let deletedCopy = Subject(
+                id: live[1].id, name: "数学", colorHex: "#654321", sortOrder: 1,
+                isArchived: true, deletedAt: Date(timeIntervalSince1970: 1_800_100_000),
+                syncRecordID: orderedUUID(720_000), contentRevision: 1
+            )
+            live[1].contentRevision = 9
+            context.insert(deletedCopy)
+            try context.save()
+            XCTAssertEqual(
+                try presentedThemes(context: context).map(\.id), [live[0].id],
+                "\(deletedCount) unrelated tombstones"
+            )
+            let catalogue = try SubjectSyncPolicy.liveCatalogue(context: context)
+            XCTAssertTrue(catalogue.contains { $0 === deletedCopy })
+            XCTAssertEqual(
+                SubjectSyncPolicy.canonicalSubjects(from: catalogue)
+                    .filter { $0.deletedAt == nil }.map(\.id),
+                [live[0].id]
+            )
+        }
+    }
+
+    func testAddingThemesStillWorksAfterHundredsOfDeletions() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let names = (0 ..< Constants.App.maximumSubjects - 1).map { "テーマ\($0)" }
+        _ = try insertThemeHistory(deleted: 300, live: names, context: context)
+        XCTAssertEqual(try presentedThemes(context: context).count, Constants.App.maximumSubjects - 1)
+        context.insert(Subject(name: "新しいテーマ", colorHex: "#abcdef", sortOrder: 99))
+        try context.save()
+        let presented = try presentedThemes(context: context)
+        XCTAssertEqual(presented.count, Constants.App.maximumSubjects)
+        XCTAssertTrue(presented.contains { $0.name == "新しいテーマ" })
+    }
+
+    func testSubjectsMaintenanceCompletesWithHundredsOfDeletedThemes() async throws {
+        let container = try makeContainer()
+        _ = try insertThemeHistory(
+            deleted: 300, live: ["英語", "数学"], context: container.mainContext
+        )
+        let result = try await SyncMaintenanceSliceWorker(modelContainer: container)
+            .run(SyncMaintenanceSliceRequest(
+                kind: .subjects, generation: 1, cursor: nil, limits: .production
+            ))
+        assertBudget(result.audit)
+        XCTAssertNotEqual(result.disposition, .retry, "Used to retry forever and block verification")
+        XCTAssertNil(result.failureCategory)
+        var cursor = result.nextCursor
+        var disposition = result.disposition
+        var slices = 1
+        while disposition == .moreWork, slices < 16 {
+            let next = try await SyncMaintenanceSliceWorker(modelContainer: container)
+                .run(SyncMaintenanceSliceRequest(
+                    kind: .subjects, generation: 1, cursor: cursor, limits: .production
+                ))
+            assertBudget(next.audit)
+            disposition = next.disposition
+            cursor = next.nextCursor
+            slices += 1
+        }
+        XCTAssertEqual(disposition, .completed)
+        XCTAssertEqual(try container.mainContext.fetchCount(FetchDescriptor<Subject>()), 302)
+    }
+
+    func testSubjectMutationErrorsExplainThemselvesInJapanese() {
+        for error in [
+            SubjectSyncPolicy.MutationError.tooManyPhysicalRows,
+            .revisionLimitReached
+        ] {
+            let message = error.localizedDescription
+            XCTAssertTrue(message.contains("テーマ"), message)
+            XCTAssertFalse(message.contains("MutationError"), message)
+        }
     }
 
     func testSubjectMutationChangesOnlySelectedPhysicalRow() throws {
@@ -1415,32 +1554,65 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         XCTAssertEqual(result.audit.saveCount, 0)
     }
 
-    func testForegroundCompletionFeedbackAvoidsRecoveredAndNotificationDuplicates() {
-        XCTAssertTrue(TimerCompletionForegroundFeedbackPolicy.shouldPlay(
-            recoveredAfterExpiration: false,
-            returnedFromBackground: false,
-            notificationMayHaveDelivered: false
-        ))
-        XCTAssertTrue(TimerCompletionForegroundFeedbackPolicy.shouldPlay(
-            recoveredAfterExpiration: false,
-            returnedFromBackground: true,
-            notificationMayHaveDelivered: false
-        ))
-        XCTAssertFalse(TimerCompletionForegroundFeedbackPolicy.shouldPlay(
-            recoveredAfterExpiration: false,
-            returnedFromBackground: true,
-            notificationMayHaveDelivered: true
-        ))
-        XCTAssertTrue(TimerCompletionForegroundFeedbackPolicy.shouldPlay(
-            recoveredAfterExpiration: true,
-            returnedFromBackground: false,
-            notificationMayHaveDelivered: false
-        ))
-        XCTAssertFalse(TimerCompletionForegroundFeedbackPolicy.shouldPlay(
-            recoveredAfterExpiration: true,
-            returnedFromBackground: false,
-            notificationMayHaveDelivered: true
-        ))
+    func testCompletionCueRepeatsOnlyForATimerThatEndedOnScreen() {
+        typealias Policy = TimerCompletionForegroundFeedbackPolicy
+        let endedAt = Date(timeIntervalSinceReferenceDate: 50_000)
+        func cue(
+            recovered: Bool = false,
+            returned: Bool = false,
+            delivered: Bool = false,
+            after seconds: TimeInterval
+        ) -> Policy.Cue {
+            Policy.cue(
+                recoveredAfterExpiration: recovered,
+                returnedFromBackground: returned,
+                notificationMayHaveDelivered: delivered,
+                endedAt: endedAt,
+                now: endedAt.addingTimeInterval(seconds)
+            )
+        }
+
+        // Live foreground completion: the alarm-clock loop, even when an
+        // inactive-only interruption (Control Center) delayed consumption.
+        XCTAssertEqual(cue(after: 0), .repeating)
+        XCTAssertEqual(cue(after: 5), .repeating)
+
+        // A return shortly after the end with no other announcement is
+        // marked once; the person is already looking at the screen.
+        XCTAssertEqual(cue(returned: true, after: 30), .single)
+        XCTAssertEqual(cue(recovered: true, after: 30), .single)
+        XCTAssertEqual(cue(returned: true, after: Policy.lateReturnGrace), .single)
+
+        // Old news stays silent, including a relaunch long after the end.
+        XCTAssertEqual(cue(returned: true, after: 600), .none)
+        XCTAssertEqual(cue(recovered: true, after: 600), .none)
+        XCTAssertEqual(
+            cue(returned: true, after: Policy.lateReturnGrace + 1),
+            .none
+        )
+
+        // A delivered notification already announced the end, however
+        // recently: opening the app from it never rings again.
+        XCTAssertEqual(cue(returned: true, delivered: true, after: 2), .none)
+        XCTAssertEqual(cue(recovered: true, delivered: true, after: 2), .none)
+        XCTAssertEqual(cue(returned: true, delivered: true, after: 600), .none)
+
+        // Notifications denied: a live end still loops, a return still
+        // follows the grace rule.
+        XCTAssertEqual(cue(delivered: false, after: 1), .repeating)
+        XCTAssertEqual(cue(returned: true, delivered: false, after: 10), .single)
+
+        // A non-finite interval can never produce a cue.
+        XCTAssertEqual(
+            Policy.cue(
+                recoveredAfterExpiration: true,
+                returnedFromBackground: false,
+                notificationMayHaveDelivered: false,
+                endedAt: .distantPast,
+                now: endedAt
+            ),
+            .none
+        )
     }
 
     func testForegroundCompletionFeedbackTrustsWitnessOnlyWithAlignedClocks() {
@@ -1764,6 +1936,176 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         await gate.resumeNext()
         await Task.yield()
         XCTAssertEqual(spy.configurations, [configuration])
+    }
+
+    func testTimerCompletionAlertPlayOnceNeverArmsTheRepeatingLoop() async {
+        let gate = TimerCompletionAlertSleepGate()
+        let spy = TimerCompletionAlertPlaybackSpy()
+        let controller = TimerCompletionAlertController(
+            sleeper: { try await gate.sleep() },
+            playback: { spy.configurations.append($0) },
+            stopPlayback: { spy.stopCount += 1 },
+            applicationIsActive: { spy.applicationIsActive }
+        )
+        let configuration = TimerCompletionAlertConfiguration(
+            sessionID: UUID(),
+            sound: .standard,
+            haptic: .standard
+        )
+
+        controller.playOnce(configuration)
+        XCTAssertEqual(spy.configurations, [configuration])
+        XCTAssertFalse(controller.isActive(sessionID: configuration.sessionID))
+        await Task.yield()
+        let pendingSleeps = await gate.pendingCount
+        XCTAssertEqual(pendingSleeps, 0, "A single cue must not start the repeat loop")
+
+        // Silent preferences and a backgrounded app stay quiet.
+        controller.playOnce(TimerCompletionAlertConfiguration(
+            sessionID: UUID(), sound: nil, haptic: nil
+        ))
+        spy.applicationIsActive = false
+        controller.playOnce(configuration)
+        XCTAssertEqual(spy.configurations, [configuration])
+
+        // A live alarm for a foreground completion is never interrupted.
+        spy.applicationIsActive = true
+        let live = TimerCompletionAlertConfiguration(
+            sessionID: UUID(),
+            sound: .bright,
+            haptic: nil
+        )
+        controller.start(live)
+        await waitForCompletionAlertSleep(gate, count: 1)
+        controller.playOnce(configuration)
+        XCTAssertEqual(spy.configurations, [configuration, live])
+        XCTAssertTrue(controller.isActive(sessionID: live.sessionID))
+        XCTAssertEqual(spy.stopCount, 0)
+        controller.stop(sessionID: live.sessionID)
+        await gate.resumeNext()
+        await Task.yield()
+        XCTAssertEqual(spy.configurations, [configuration, live])
+    }
+
+    func testLeavingTheAppWhileTheAlarmRepeatsCountsAsStop() async throws {
+        let suiteName = "PomoGemTests.alarm-leave.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let gate = TimerCompletionAlertSleepGate()
+        let spy = TimerCompletionAlertPlaybackSpy()
+        let controller = TimerCompletionAlertController(
+            sleeper: { try await gate.sleep() },
+            playback: { spy.configurations.append($0) },
+            stopPlayback: { spy.stopCount += 1 },
+            applicationIsActive: { spy.applicationIsActive }
+        )
+        let configuration = TimerCompletionAlertConfiguration(
+            sessionID: UUID(),
+            sound: .bright,
+            haptic: .strong
+        )
+
+        // Nothing ringing: leaving records nothing.
+        controller.acknowledgeOnLeavingApp(defaults: defaults)
+        XCTAssertFalse(TimerCompletionAlertAcknowledgementStore.contains(
+            sessionID: configuration.sessionID, defaults: defaults
+        ))
+
+        controller.start(configuration)
+        await waitForCompletionAlertSleep(gate, count: 1)
+        spy.applicationIsActive = false
+        controller.acknowledgeOnLeavingApp(defaults: defaults)
+        XCTAssertFalse(controller.isActive(sessionID: configuration.sessionID))
+        XCTAssertTrue(TimerCompletionAlertAcknowledgementStore.contains(
+            sessionID: configuration.sessionID, defaults: defaults
+        ))
+        XCTAssertEqual(spy.stopCount, 1)
+
+        // The expired sleep of the ended loop cannot ring on the way back in.
+        spy.applicationIsActive = true
+        await gate.resumeNext()
+        await Task.yield()
+        XCTAssertEqual(spy.configurations, [configuration])
+        XCTAssertFalse(
+            controller.resumeSuspendedAlert(sessionID: configuration.sessionID),
+            "An alarm the person left is never restored"
+        )
+    }
+
+    func testContainerRetirementOnScreenSuspendsTheAlarmForItsOwnSession() async throws {
+        let suiteName = "PomoGemTests.alarm-suspend.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let gate = TimerCompletionAlertSleepGate()
+        let spy = TimerCompletionAlertPlaybackSpy()
+        let controller = TimerCompletionAlertController(
+            sleeper: { try await gate.sleep() },
+            playback: { spy.configurations.append($0) },
+            stopPlayback: { spy.stopCount += 1 },
+            applicationIsActive: { spy.applicationIsActive }
+        )
+        let configuration = TimerCompletionAlertConfiguration(
+            sessionID: UUID(),
+            sound: .soft,
+            haptic: nil
+        )
+
+        controller.start(configuration)
+        await waitForCompletionAlertSleep(gate, count: 1)
+        controller.suspendForContainerRetirement()
+        XCTAssertFalse(controller.isActive(sessionID: configuration.sessionID))
+        XCTAssertEqual(spy.stopCount, 1)
+        await gate.resumeNext()
+        await Task.yield()
+        XCTAssertEqual(spy.configurations, [configuration],
+                       "No view shows Stop while the container is away")
+        // A second sweep keeps the memory (retireExternalTimerState).
+        controller.suspendForContainerRetirement()
+
+        XCTAssertFalse(controller.resumeSuspendedAlert(sessionID: UUID()),
+                       "Another session never inherits the alarm")
+        XCTAssertTrue(controller.resumeSuspendedAlert(sessionID: configuration.sessionID))
+        XCTAssertTrue(controller.isActive(sessionID: configuration.sessionID))
+        XCTAssertEqual(spy.configurations, [configuration, configuration])
+        XCTAssertFalse(TimerCompletionAlertAcknowledgementStore.contains(
+            sessionID: configuration.sessionID, defaults: defaults
+        ))
+        await waitForCompletionAlertSleep(gate, count: 1)
+        controller.stop(sessionID: configuration.sessionID)
+        await gate.resumeNext()
+        XCTAssertFalse(controller.resumeSuspendedAlert(sessionID: configuration.sessionID),
+                       "Restoring consumes the memory")
+
+        // Closing the timer, or leaving the app, forgets a suspended alarm;
+        // leaving also records it as Stop. A newer alarm replaces it.
+        let memory = TimerCompletionAlertController(
+            sleeper: { try await Task.sleep(for: .seconds(60)) },
+            playback: { _ in },
+            stopPlayback: {},
+            applicationIsActive: { true }
+        )
+        memory.start(configuration)
+        memory.suspendForContainerRetirement()
+        memory.stop(sessionID: configuration.sessionID)
+        XCTAssertFalse(memory.resumeSuspendedAlert(sessionID: configuration.sessionID))
+
+        memory.start(configuration)
+        memory.suspendForContainerRetirement()
+        memory.acknowledgeOnLeavingApp(defaults: defaults)
+        XCTAssertFalse(memory.resumeSuspendedAlert(sessionID: configuration.sessionID))
+        XCTAssertTrue(TimerCompletionAlertAcknowledgementStore.contains(
+            sessionID: configuration.sessionID, defaults: defaults
+        ))
+
+        let newer = TimerCompletionAlertConfiguration(
+            sessionID: UUID(), sound: .standard, haptic: nil
+        )
+        memory.start(configuration)
+        memory.suspendForContainerRetirement()
+        memory.start(newer)
+        XCTAssertFalse(memory.resumeSuspendedAlert(sessionID: configuration.sessionID))
+        XCTAssertTrue(memory.isActive(sessionID: newer.sessionID))
+        memory.stop()
     }
 
     func testTimerCompletionAlertIsSilentOnlyWhenBothChannelsAreOff() {
@@ -2099,7 +2441,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         XCTAssertEqual(result.disposition, .completed)
         let sessions = try context.fetch(FetchDescriptor<StudySession>())
         XCTAssertEqual(Set(sessions.map(\.id)), [firstID, secondID])
-        XCTAssertTrue(sessions.allSatisfy { $0.source == .timer })
+        XCTAssertTrue(sessions.allSatisfy { $0.effectiveSource == .timer })
     }
 
     func testCleanSessionPageIsReadOnly() async throws {
@@ -4076,12 +4418,12 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         )
         XCTAssertEqual(
             frontier.summaries.reduce(0) { $0 + $1.measuredPebbleCount },
-            expectedMeasured - retainedLooseSessions.filter(\.source.isMeasured).count
+            expectedMeasured - retainedLooseSessions.filter(\.effectiveSource.isMeasured).count
         )
         XCTAssertEqual(
             frontier.summaries.reduce(0) { $0 + $1.manualPebbleCount },
             expectedManual - retainedLooseSessions.filter {
-                !$0.source.isMeasured
+                !$0.effectiveSource.isMeasured
             }.count
         )
         XCTAssertEqual(
@@ -4452,7 +4794,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
             value.startAt.timeIntervalSinceReferenceDate.description,
             value.endAt.timeIntervalSinceReferenceDate.description,
             String(value.seconds),
-            value.source.rawValue,
+            value.persistedSource.rawValue,
             value.pebbleKind.rawValue,
             String(value.grams),
             value.deviceDayKey,
