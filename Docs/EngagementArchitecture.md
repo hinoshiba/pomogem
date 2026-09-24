@@ -621,7 +621,7 @@ CとDの差は視覚的レアだけに限定し、Dでも本人はいつでも`q
 5. 現在の年月ブラウザは選択期間を全件batch集計するため正確だが、毎回の再走査を避ける月・年summaryを保存し、CloudKit後着行で差分更新する
 6. 中断tombstoneのオフラインoutboxと設定revision。現状は保存失敗時にタイマーを安全に継続し、outboxはオフラインでも終了意図を即時受理するためのUX改善とする
 5. 同期の最終成功・待機・エラーをAccount可否と分けて表示
-6. 手動追加Undo／2端末上限。成果の個別訂正・削除・同一端末Undoは実装済みのため、実CloudKit 2端末で同時編集、削除、旧複製の後着、Undo競合を検証する
+6. 手動追加Undo／2端末上限。保存直後の同一端末Undoも、同期済み`StudySession`行の物理削除では作らない。削除すると、その行を保持して表示中の画面（別端末、未更新の1.0.2を含む）でSwiftDataのmodelが無効になり、参照した時点で停止し得る。保存した端末でも、Homeが保持する行を先に外さないと同じ停止が起きることを2026-09-24にsimulatorで確認した。revision付きtombstone（schema追加）か、確認後の保存を数秒遅らせて取り消せる方式を選んでから実装する。成果の個別訂正・削除・同一端末Undoは実装済みのため、実CloudKit 2端末で同時編集、削除、旧複製の後着、Undo競合を検証する
 7. 実CloudKit 2端末、実機VoiceOver、StoreKitを含む全主要E2E。AX5の25監査、system Dynamic Type、GIF生成・system cancel・コピー・一時ファイル削除はsimulator実UIで検証済み
 8. 既存/TestFlight storeを対象にする場合は、停止中の旧`SeedData.bootstrap`を戻さず、競合親と欠落同期を扱える有界legacy migrationを追加
 9. 本人が「いつ／どこで／何の後に、何を何分するか」を一件ずつ選択・編集・無効化できるif-then cue。空白後は失効表示をせず、「記録はそのまま」から再開する
