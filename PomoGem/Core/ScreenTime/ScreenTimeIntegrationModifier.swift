@@ -17,9 +17,6 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
     @State private var lastPresentedError: String?
     @State private var lastBoundKey: String?
     @State private var lastMonitoringKey: String?
-    /// The candidate count at the last clean encoding pass for a context. An
-    /// unchanged count means no row can have arrived that needs rewriting.
-    @State private var cleanLegacyEncodingCount: (contextKey: String, count: Int)?
 
     /// Production always uses the shared controller; the parameter exists so a
     /// mount/unmount regression test can drive a temporary ledger instead of
@@ -113,22 +110,17 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
     /// store can hold pre-release rows from an earlier configuration, or
     /// receive them late through CloudKit, and the rewrite must not wait for
     /// the user to re-enable the feature. Each activation costs one count
-    /// query unless rows in the bounded window changed.
+    /// query; the bounded window is scanned only when the count changed or
+    /// the last clean pass is a day old (`ScreenTimeLegacyEncodingCleanPass`).
     @MainActor
     private func normalizeLegacySourceEncodingIfNeeded() async {
         guard isReady, scenePhase == .active, isCurrentOwner else { return }
-        let container = modelContext.container
         do {
-            let count = try ScreenTimeImportCoordinator.legacySourceEncodingCandidateCount(
-                container: container
+            _ = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncodingIfChanged(
+                container: modelContext.container,
+                ownerKey: contextKey,
+                isStillOwner: { isCurrentOwner }
             )
-            if let clean = cleanLegacyEncodingCount,
-               clean.contextKey == contextKey, clean.count == count { return }
-            _ = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncoding(
-                container: container
-            )
-            guard !Task.isCancelled, isCurrentOwner else { return }
-            cleanLegacyEncodingCount = (contextKey, count)
         } catch {
             // Retried on the next activation. The rows stay readable here;
             // nothing is shown because the user has nothing to act on.

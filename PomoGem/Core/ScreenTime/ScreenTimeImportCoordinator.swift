@@ -92,7 +92,9 @@ enum ScreenTimeImportCoordinator {
         return inserted
     }
 
-    static let legacySourceEncodingPageSize = 256
+    /// Nonisolated because it is a default argument, which is evaluated
+    /// outside the enum's main-actor isolation.
+    nonisolated static let legacySourceEncodingPageSize = 256
 
     /// When a pre-release build could have stored the raw value `screenTime`:
     /// the Screen Time writer first ran on 2026-09-13 (JST), and every build
@@ -121,7 +123,8 @@ enum ScreenTimeImportCoordinator {
     }
 
     /// Rows that could still hold the pre-release value. A single SQL count:
-    /// the caller skips the scan while this is unchanged since a clean pass.
+    /// `normalizeLegacySourceEncodingIfChanged` skips the scan while this is
+    /// unchanged since a recent clean pass.
     static func legacySourceEncodingCandidateCount(container: ModelContainer) throws -> Int {
         try ModelContext(container).fetchCount(legacySourceEncodingDescriptor())
     }
@@ -173,6 +176,85 @@ enum ScreenTimeImportCoordinator {
             offset += page.count
             await Task.yield()
         }
+    }
+
+    /// The foreground entry point: one count, and the scan only when the last
+    /// clean pass for this store does not vouch for that count. The pass is
+    /// kept in device-local defaults because an in-memory memo on the view
+    /// would never skip in iCloud mode: PomoGemApp drops the cloud session on
+    /// every backgrounding, which rebuilds RootView and its state.
+    ///
+    /// The count is taken before the scan, so a row that arrives during it
+    /// changes the next count and is picked up then. `isStillOwner` is read
+    /// after the scan: a pass that ends after the store or account changed
+    /// must not vouch for anything. Returns the number of rows rewritten, or
+    /// nil when the scan was skipped.
+    static func normalizeLegacySourceEncodingIfChanged(
+        container: ModelContainer,
+        ownerKey: String,
+        defaults: UserDefaults = .standard,
+        now: Date = .now,
+        isStillOwner: () -> Bool
+    ) async throws -> Int? {
+        let current = ScreenTimeLegacyEncodingCleanPass(
+            ownerKey: ownerKey,
+            storeIdentity: ScreenTimeLegacyEncodingCleanPass.storeIdentity(of: container),
+            candidateCount: try legacySourceEncodingCandidateCount(container: container),
+            checkedAt: now
+        )
+        if ScreenTimeLegacyEncodingCleanPass.load(defaults: defaults)?.vouches(for: current) == true {
+            return nil
+        }
+        let rewritten = try await normalizeLegacySourceEncoding(container: container)
+        guard !Task.isCancelled, isStillOwner() else { return rewritten }
+        current.save(defaults: defaults)
+        return rewritten
+    }
+}
+
+/// The last clean encoding pass, one per account namespace in device-local
+/// defaults (complete data deletion removes it with the rest). An unchanged
+/// count is trusted only for `maximumAge`: a deleted row and a late CloudKit
+/// arrival between two checks can leave the count equal, and the rescan that
+/// then catches the arrival costs no more than the bounded window.
+struct ScreenTimeLegacyEncodingCleanPass: Codable, Equatable {
+    static let baseKey = "screen-time.legacy-encoding-clean-pass.v1"
+    static let maximumAge: TimeInterval = 24 * 60 * 60
+
+    var ownerKey: String
+    var storeIdentity: String
+    var candidateCount: Int
+    var checkedAt: Date
+
+    /// Store file names carry the account or local-only namespace. The
+    /// directory is left out: an app's data container path can change across
+    /// updates, and a mismatch would only cost one extra scan anyway.
+    static func storeIdentity(of container: ModelContainer) -> String {
+        container.configurations.map(\.url.lastPathComponent).sorted().joined(separator: "|")
+    }
+
+    /// Same owner, same store, same count, and checked recently. A clock set
+    /// backwards never reads as recent.
+    func vouches(for current: Self) -> Bool {
+        let age = current.checkedAt.timeIntervalSince(checkedAt)
+        return ownerKey == current.ownerKey
+            && storeIdentity == current.storeIdentity
+            && candidateCount == current.candidateCount
+            && age >= 0 && age < Self.maximumAge
+    }
+
+    static func key(defaults: UserDefaults) -> String {
+        AccountScopedLocalState.defaultsKey(base: baseKey, defaults: defaults)
+    }
+
+    static func load(defaults: UserDefaults = .standard) -> Self? {
+        guard let data = defaults.data(forKey: key(defaults: defaults)) else { return nil }
+        return try? JSONDecoder().decode(Self.self, from: data)
+    }
+
+    func save(defaults: UserDefaults = .standard) {
+        guard let data = try? JSONEncoder().encode(self) else { return }
+        defaults.set(data, forKey: Self.key(defaults: defaults))
     }
 }
 

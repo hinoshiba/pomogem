@@ -157,6 +157,124 @@ final class ScreenTimeImportTests: XCTestCase {
         XCTAssertEqual(rewritten, 0)
     }
 
+    private func isolatedDefaults() throws -> UserDefaults {
+        let suite = "ScreenTimeImportTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        return defaults
+    }
+
+    @discardableResult
+    private func insertPreReleaseRow(into store: ModelContainer) throws -> UUID {
+        let context = ModelContext(store)
+        let row = StudySession(
+            startAt: preReleaseEnd.addingTimeInterval(-1_200), endAt: preReleaseEnd,
+            seconds: 600, source: .manual, grams: 100, deviceDayKey: "day"
+        )
+        row.overwriteStoredSourceForTesting(.screenTime)
+        context.insert(row)
+        try context.save()
+        return row.id
+    }
+
+    /// Rewrites a normalized row back to the pre-release value without
+    /// changing the candidate count, so a skipped scan is observable.
+    private func revertEncoding(of id: UUID, in store: ModelContainer) throws {
+        let context = ModelContext(store)
+        let row = try XCTUnwrap(context.fetch(FetchDescriptor<StudySession>(predicate: #Predicate { $0.id == id })).first)
+        row.overwriteStoredSourceForTesting(.screenTime)
+        try context.save()
+    }
+
+    private func hasLegacyRows(_ store: ModelContainer) throws -> Bool {
+        try ModelContext(store).fetch(FetchDescriptor<StudySession>()).contains(where: \.hasLegacySourceEncoding)
+    }
+
+    /// The view that runs this is rebuilt on every iCloud-mode foreground, so
+    /// the clean pass must come from defaults, not from the caller.
+    func testCleanPassSkipsTheScanUntilTheCountChanges() async throws {
+        let store = try container()
+        let defaults = try isolatedDefaults()
+        let now = preReleaseEnd.addingTimeInterval(3_600)
+        let first = try insertPreReleaseRow(into: store)
+
+        let initial = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncodingIfChanged(
+            container: store, ownerKey: "owner", defaults: defaults, now: now, isStillOwner: { true }
+        )
+        XCTAssertEqual(initial, 1)
+        XCTAssertEqual(ScreenTimeLegacyEncodingCleanPass.load(defaults: defaults)?.candidateCount, 1)
+
+        // Same count: the scan is skipped, so this reverted row is left alone.
+        try revertEncoding(of: first, in: store)
+        let skipped = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncodingIfChanged(
+            container: store, ownerKey: "owner", defaults: defaults,
+            now: now.addingTimeInterval(60), isStillOwner: { true }
+        )
+        XCTAssertNil(skipped)
+        XCTAssertTrue(try hasLegacyRows(store))
+
+        // A late CloudKit arrival changes the count, and the rescan fixes both.
+        try insertPreReleaseRow(into: store)
+        let rescanned = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncodingIfChanged(
+            container: store, ownerKey: "owner", defaults: defaults,
+            now: now.addingTimeInterval(120), isStillOwner: { true }
+        )
+        XCTAssertEqual(rescanned, 2)
+        XCTAssertFalse(try hasLegacyRows(store))
+        XCTAssertEqual(ScreenTimeLegacyEncodingCleanPass.load(defaults: defaults)?.candidateCount, 2)
+    }
+
+    func testUnchangedCountIsRescannedForAnotherOwnerAfterADayOrABackwardClock() async throws {
+        let store = try container()
+        let defaults = try isolatedDefaults()
+        let now = preReleaseEnd.addingTimeInterval(3_600)
+        let id = try insertPreReleaseRow(into: store)
+        let initial = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncodingIfChanged(
+            container: store, ownerKey: "owner", defaults: defaults, now: now, isStillOwner: { true }
+        )
+        XCTAssertEqual(initial, 1)
+
+        for (owner, checkedAt) in [
+            ("another-owner", now.addingTimeInterval(60)),
+            ("another-owner", now.addingTimeInterval(60 + ScreenTimeLegacyEncodingCleanPass.maximumAge)),
+            ("another-owner", now)
+        ] {
+            try revertEncoding(of: id, in: store)
+            let rewritten = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncodingIfChanged(
+                container: store, ownerKey: owner, defaults: defaults, now: checkedAt, isStillOwner: { true }
+            )
+            XCTAssertEqual(rewritten, 1, "\(owner) at \(checkedAt)")
+            XCTAssertFalse(try hasLegacyRows(store))
+        }
+    }
+
+    func testPassThatEndsAfterTheOwnerChangedRecordsNothing() async throws {
+        let store = try container()
+        let defaults = try isolatedDefaults()
+        try insertPreReleaseRow(into: store)
+        let rewritten = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncodingIfChanged(
+            container: store, ownerKey: "owner", defaults: defaults, isStillOwner: { false }
+        )
+        XCTAssertEqual(rewritten, 1)
+        XCTAssertNil(ScreenTimeLegacyEncodingCleanPass.load(defaults: defaults))
+        let next = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncodingIfChanged(
+            container: store, ownerKey: "owner", defaults: defaults, isStillOwner: { true }
+        )
+        XCTAssertEqual(next, 0, "Without a recorded pass the next activation scans again")
+    }
+
+    func testCleanPassVouchesOnlyForTheSameStore() {
+        let pass = ScreenTimeLegacyEncodingCleanPass(
+            ownerKey: "owner", storeIdentity: "PomoGemLocal-a.store|PomoGemProjection-a.store",
+            candidateCount: 3, checkedAt: preReleaseEnd
+        )
+        var current = pass
+        current.checkedAt = preReleaseEnd.addingTimeInterval(60)
+        XCTAssertTrue(pass.vouches(for: current))
+        current.storeIdentity = "PomoGemLocal-b.store|PomoGemProjection-b.store"
+        XCTAssertFalse(pass.vouches(for: current))
+    }
+
     func testPreReleaseWindowCoversEveryBuildThatWroteTheOldValue() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo"))
