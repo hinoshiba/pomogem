@@ -32,7 +32,14 @@ enum ShareScope: Equatable {
     var periodLabel: String {
         switch self {
         case .all:
-            return Date.now.formatted(.dateTime.year().month().day())
+            // The lifetime card covers everything so far, not one day. A bare
+            // date here made a saved or reposted card read as that day's
+            // result (history-08).
+            return String(
+                localized: "これまで",
+                table: "Share",
+                comment: "Share card period label for the whole history"
+            )
         case let .month(monthStart):
             return StrataMath.monthLabel(for: monthStart)
         case let .aggregate(_, monthLabel):

@@ -111,6 +111,14 @@ struct AnimatedShareExporterTests {
         #expect(!caption.contains("成果メモ"))
     }
 
+    @Test func lifetimeCardIsLabelledSoFarNotWithTodaysDate() {
+        #expect(ShareScope.all.periodLabel == "これまで")
+        let september = Calendar(identifier: .gregorian).date(
+            from: DateComponents(year: 2026, month: 9, day: 1)
+        )!
+        #expect(ShareScope.month(september).periodLabel.contains("9月"))
+    }
+
     @Test func editableHashtagsAreValidatedDeduplicatedAndOptional() {
         #expect(ShareHashtagPolicy.normalized(" 学習記録 ") == "#学習記録")
         #expect(ShareHashtagPolicy.normalized("#Study_2026") == "#Study_2026")
