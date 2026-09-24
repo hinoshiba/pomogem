@@ -1088,6 +1088,11 @@ struct HomeView: View {
             systemImage: jarInteractionHintSymbol
         )
             .font(.caption.weight(.bold))
+            // Like the readout above it, the hint lives inside the jar's
+            // fixed canvas. At accessibility sizes it grew past the jar and
+            // back over the gem; VoiceOver reads the same guidance from the
+            // jar itself.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .foregroundStyle(PomoGemTheme.text)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 13)

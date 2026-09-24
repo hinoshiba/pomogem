@@ -223,9 +223,17 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
     }
 
     func testFirstJarHintWaitsForTheToastAndStaysOffTheGem() {
+        checkFirstJarHint(accessibility5: false, screenshot: "jar-hint-after-toast")
+    }
+
+    func testFirstJarHintStaysOffTheGemAtAccessibilitySize() {
+        checkFirstJarHint(accessibility5: true, screenshot: "jar-hint-ax5")
+    }
+
+    private func checkFirstJarHint(accessibility5: Bool, screenshot: String) {
         // Show the one-time hint again for this launch only.
         app.launchArguments += ["-jar.tap-hint-seen", "NO"]
-        launch()
+        launch(accessibility5: accessibility5)
         let probe = app.descendants(matching: .any)["jar.presentation.probe"]
         XCTAssertTrue(probe.waitForExistence(timeout: 5))
         let toast = app.descendants(matching: .any).matching(identifier: "app.toast").firstMatch
@@ -243,7 +251,7 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertNotNil(hint, "The first gem shows the jar hint once; probe=\(fields)")
         XCTAssertFalse(toast.exists, "One message at a time: the hint waits for the toast")
         pause(0.6) // let the hint finish fading in
-        saveScreenshot("jar-hint-after-toast")
+        saveScreenshot(screenshot)
 
         guard let hint,
               let gemX = fields["targetWindowX"].flatMap(Double.init),
@@ -374,6 +382,7 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         openMenuRow("時間を手動で積む")
         let thirtyMinutes = app.buttons["30分、300グラム加算"]
         XCTAssertTrue(thirtyMinutes.waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUntilHittable(thirtyMinutes))
         thirtyMinutes.tap()
         let confirm = app.buttons["manual.confirm"]
         XCTAssertTrue(waitForHittable(confirm))
