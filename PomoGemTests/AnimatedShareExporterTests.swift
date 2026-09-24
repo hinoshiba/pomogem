@@ -119,6 +119,15 @@ struct AnimatedShareExporterTests {
         #expect(ShareScope.month(september).periodLabel.contains("9月"))
     }
 
+    @Test func gifScaleLadderStartsSharpAndOnlyStepsDown() {
+        let ladder = AnimatedShareExporter.renderScaleLadder
+        #expect(ladder.first == 2)
+        #expect(ladder.last == 1)
+        #expect(zip(ladder, ladder.dropFirst()).allSatisfy { $0 > $1 })
+        let feed = ShareCardLayoutPolicy.canvasSize(for: .feed)
+        #expect(feed.width * ladder[0] >= 720)
+    }
+
     @Test func editableHashtagsAreValidatedDeduplicatedAndOptional() {
         #expect(ShareHashtagPolicy.normalized(" 学習記録 ") == "#学習記録")
         #expect(ShareHashtagPolicy.normalized("#Study_2026") == "#Study_2026")
@@ -589,18 +598,22 @@ final class ShareVisualQAArtifactTests: XCTestCase {
             frameCount: AnimatedShareExporter.frameCount
         )
         let gifStartedAt = ContinuousClock.now
+        let preferredScale = try XCTUnwrap(AnimatedShareExporter.renderScaleLadder.first)
         let poses = try (0..<AnimatedShareExporter.renderedPoseCount).map { index in
             let phase = Double(index) / Double(AnimatedShareExporter.renderedPoseCount)
             let image = try XCTUnwrap(render(
                 format: .story,
                 phase: phase,
-                scale: 1.25,
+                scale: preferredScale,
                 usesAnimatedArtwork: true
             ).cgImage)
             print("SHARE_QA pose=\(index) elapsed=\(startedAt.duration(to: .now))")
             return image
         }
         XCTAssertEqual(Set(poses.map(imageDigest)).count, AnimatedShareExporter.renderedPoseCount)
+        // history-07: the preferred GIF is 720 px wide, not 450.
+        XCTAssertEqual(poses.first?.width, 720)
+        XCTAssertEqual(poses.first?.height, 1_280)
         var frames: [CGImage] = []
         for poseIndex in 0..<AnimatedShareExporter.renderedPoseCount {
             let pose = poses[poseIndex]

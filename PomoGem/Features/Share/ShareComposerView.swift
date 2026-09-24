@@ -2,6 +2,7 @@ import Photos
 import SwiftData
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct ShareComposerView: View {
     let scope: ShareScope
@@ -355,7 +356,9 @@ struct ShareComposerView: View {
                         shareLaunchLabel
                     }
                     .buttonStyle(PomoGemPrimaryButtonStyle())
-                    .disabled(isRendering || !selection.hasShareableContent)
+                    // One render at a time: a photo save renders the same
+                    // cards on the main actor.
+                    .disabled(isRendering || isSaving || !selection.hasShareableContent)
                     .accessibilityIdentifier("share.primary-action")
                     .accessibilityHint(
                         mediaKind == .animatedGIF
@@ -638,7 +641,9 @@ struct ShareComposerView: View {
             renderAndSave()
         } label: {
             if isSaving {
-                ProgressView().tint(PomoGemTheme.text)
+                ProgressView()
+                    .tint(PomoGemTheme.text)
+                    .accessibilityLabel(Text("写真に保存しています", tableName: "Share"))
             } else {
                 Label("写真に2サイズ保存", systemImage: "photo.badge.arrow.down")
             }
@@ -1221,9 +1226,6 @@ struct ShareComposerView: View {
 
     @MainActor
     private func renderCards(snapshot: ShareExportSnapshot) -> [UIImage] {
-        isRendering = true
-        defer { isRendering = false }
-
         let feed = render(
             snapshot: snapshot,
             format: .feed,
@@ -1464,6 +1466,7 @@ struct ShareComposerView: View {
     @MainActor
     private func renderAnimatedGIF(
         snapshot: ShareExportSnapshot,
+        format: Format? = nil,
         logicalSize: CGSize
     ) async throws -> (url: URL, cover: UIImage) {
         var ownedURL: URL?
@@ -1472,40 +1475,31 @@ struct ShareComposerView: View {
             if !returned, let ownedURL { try? FileManager.default.removeItem(at: ownedURL) }
         }
 
-        let preferred = try await writeAnimatedGIF(
-            snapshot: snapshot,
-            logicalSize: logicalSize,
-            scale: 1.25
-        )
-        ownedURL = preferred.url
-        try Task.checkCancellation()
-        guard AnimatedShareExporter.fileSize(at: preferred.url) > AnimatedShareExporter.maximumShareBytes else {
-            returned = true
-            return preferred
-        }
-
-        try? FileManager.default.removeItem(at: preferred.url)
-        ownedURL = nil
-        try Task.checkCancellation()
-        let compact = try await writeAnimatedGIF(
-            snapshot: snapshot,
-            logicalSize: logicalSize,
-            scale: 1
-        )
-        ownedURL = compact.url
-        try Task.checkCancellation()
-        guard AnimatedShareExporter.fileSize(at: compact.url) <= AnimatedShareExporter.maximumShareBytes else {
-            try? FileManager.default.removeItem(at: compact.url)
+        // Sharpest first; step down only when a file exceeds the share cap.
+        for scale in AnimatedShareExporter.renderScaleLadder {
+            try Task.checkCancellation()
+            let candidate = try await writeAnimatedGIF(
+                snapshot: snapshot,
+                format: format,
+                logicalSize: logicalSize,
+                scale: scale
+            )
+            ownedURL = candidate.url
+            try Task.checkCancellation()
+            if AnimatedShareExporter.fileSize(at: candidate.url) <= AnimatedShareExporter.maximumShareBytes {
+                returned = true
+                return candidate
+            }
+            try? FileManager.default.removeItem(at: candidate.url)
             ownedURL = nil
-            throw AnimatedShareExportError.fileTooLarge
         }
-        returned = true
-        return compact
+        throw AnimatedShareExportError.fileTooLarge
     }
 
     @MainActor
     private func writeAnimatedGIF(
         snapshot: ShareExportSnapshot,
+        format: Format? = nil,
         logicalSize: CGSize,
         scale: CGFloat
     ) async throws -> (url: URL, cover: UIImage) {
@@ -1526,6 +1520,7 @@ struct ShareComposerView: View {
             let rendered: (image: UIImage, cgImage: CGImage)? = autoreleasepool {
                 guard let image = render(
                     snapshot: snapshot,
+                    format: format,
                     logicalSize: logicalSize,
                     scale: scale,
                     animationPhase: phase
@@ -1615,15 +1610,13 @@ struct ShareComposerView: View {
         }
         guard photoSaveTask == nil else { return }
         let snapshot = captureExportSnapshot()
-        let images = renderCards(snapshot: snapshot)
-        guard images.count == 2 else {
-            updateStatus("カードを生成できませんでした。")
-            return
-        }
+        // Show progress before any rendering: the cards used to render on the
+        // main actor first, so the button froze and only then showed its
+        // spinner (history-07).
         isSaving = true
         activePhotoSaveID = snapshot.id
         photoSaveTask = Task { @MainActor in
-            await saveToPhotoLibrary(images, snapshot: snapshot)
+            await renderAndSaveToPhotoLibrary(snapshot: snapshot)
         }
     }
 
@@ -1635,18 +1628,54 @@ struct ShareComposerView: View {
         isSaving = false
     }
 
+    /// What the photo save writes: two stills, or, when 動くGIF is chosen,
+    /// the two GIF files themselves so Photos keeps them animated.
+    private enum PhotoSaveMedia {
+        case stills([UIImage])
+        case animatedGIFs([URL])
+    }
+
     @MainActor
-    private func saveToPhotoLibrary(
-        _ images: [UIImage],
-        snapshot: ShareExportSnapshot
-    ) async {
+    private func renderAndSaveToPhotoLibrary(snapshot: ShareExportSnapshot) async {
+        var temporaryGIFs: [URL] = []
         defer {
+            temporaryGIFs.forEach { try? FileManager.default.removeItem(at: $0) }
             if activePhotoSaveID == snapshot.id {
                 activePhotoSaveID = nil
                 photoSaveTask = nil
                 isSaving = false
             }
         }
+        // Let the spinner commit before main-actor rendering starts.
+        try? await Task.sleep(for: .milliseconds(50))
+        guard activePhotoSaveID == snapshot.id, !Task.isCancelled else { return }
+
+        let media: PhotoSaveMedia
+        do {
+            switch snapshot.mediaKind {
+            case .stillImage:
+                let images = renderCards(snapshot: snapshot)
+                guard images.count == 2 else { throw AnimatedShareExportError.noFrames }
+                media = .stills(images)
+            case .animatedGIF:
+                for format in Format.allCases {
+                    let export = try await renderAnimatedGIF(
+                        snapshot: snapshot,
+                        format: format,
+                        logicalSize: ShareCardLayoutPolicy.canvasSize(for: format)
+                    )
+                    temporaryGIFs.append(export.url)
+                }
+                media = .animatedGIFs(temporaryGIFs)
+            }
+        } catch {
+            guard activePhotoSaveID == snapshot.id, !Task.isCancelled,
+                  !(error is CancellationError) else { return }
+            updateStatus("カードを生成できませんでした。")
+            return
+        }
+        guard activePhotoSaveID == snapshot.id, !Task.isCancelled else { return }
+
         let authorization = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
         guard activePhotoSaveID == snapshot.id, !Task.isCancelled else { return }
         guard authorization == .authorized || authorization == .limited else {
@@ -1666,12 +1695,35 @@ struct ShareComposerView: View {
 
         do {
             try await PHPhotoLibrary.shared().performChanges {
-                images.forEach { PHAssetChangeRequest.creationRequestForAsset(from: $0) }
+                switch media {
+                case let .stills(images):
+                    images.forEach { PHAssetChangeRequest.creationRequestForAsset(from: $0) }
+                case let .animatedGIFs(urls):
+                    // A GIF added as the photo resource stays animated in
+                    // Photos; `creationRequestForAsset(from: UIImage)` would
+                    // flatten it to one frame.
+                    for url in urls {
+                        let options = PHAssetResourceCreationOptions()
+                        options.shouldMoveFile = false
+                        options.uniformTypeIdentifier = UTType.gif.identifier
+                        PHAssetCreationRequest.forAsset()
+                            .addResource(with: .photo, fileURL: url, options: options)
+                    }
+                }
             }
             guard activePhotoSaveID == snapshot.id, !Task.isCancelled else {
                 return
             }
-            updateStatus("フィード用とストーリー用を写真に保存しました。")
+            switch media {
+            case .stills:
+                updateStatus("フィード用とストーリー用を写真に保存しました。")
+            case .animatedGIFs:
+                updateStatus(String(
+                    localized: "動くGIFをフィード用とストーリー用で写真に保存しました。",
+                    table: "Share",
+                    comment: "Share composer: both animated GIF sizes were saved to Photos"
+                ))
+            }
             Analytics.shared.track(.shareCreated)
         } catch is CancellationError {
             return

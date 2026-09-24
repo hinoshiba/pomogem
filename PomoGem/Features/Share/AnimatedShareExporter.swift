@@ -37,6 +37,14 @@ enum AnimatedShareExporter {
     static let renderedPoseCount = 4
     static let frameDelay = 0.18
     static let maximumShareBytes = 15 * 1_024 * 1_024
+    /// Render scales tried in order for the GIF's poses on the 360-point
+    /// share canvas; the first file within `maximumShareBytes` is used.
+    /// 2x gives 720×900 (feed) and 720×1280 (story) pixels, so the 7–9 pt
+    /// URL, disclosure and tag lines stay legible after a platform
+    /// recompresses the upload. The GIF used to start at 1.25x (450 px wide)
+    /// although four poses sit far below the size cap (history-07); the
+    /// smaller steps remain only as a fallback for unusually heavy cards.
+    static let renderScaleLadder: [CGFloat] = [2, 1.25, 1]
     static let temporaryFilePrefix = "pomogem-share-"
     static let staleFileAge: TimeInterval = 24 * 60 * 60
 
