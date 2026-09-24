@@ -97,6 +97,16 @@ final class FirstRunUITests: XCTestCase {
         launchStorageChoice(accessibility5: true)
         let title = app.staticTexts["記録の保存先を選んでください"]
         XCTAssertTrue(title.waitForExistence(timeout: 4))
+        // The first option starts on the first screen: the value line is
+        // capped as branding, and the reassurance follows the options here.
+        let firstOption = app.buttons["iCloudに保存して同期"]
+        XCTAssertTrue(firstOption.waitForExistence(timeout: 4))
+        XCTAssertLessThan(firstOption.frame.minY, app.windows.firstMatch.frame.maxY - 44,
+                          "At AX5 the first option must start within the first screen")
+        let message = app.staticTexts["storage-launch-message"]
+        XCTAssertTrue(message.exists)
+        XCTAssertGreaterThan(message.frame.minY, firstOption.frame.maxY,
+                             "At accessibility sizes the one-line message follows the options")
         attachScreenshot("storage-choice-ax5-top")
         for label in ["iCloudに保存して同期", "このiPhoneだけに保存"] {
             let option = app.buttons[label]

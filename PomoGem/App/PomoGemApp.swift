@@ -3590,13 +3590,9 @@ private struct PersistenceLaunchStatusView: View {
                         .font(PomoGemTheme.brand(24))
                         .multilineTextAlignment(.center)
                         .accessibilityAddTraits(isChoosingStorage ? .isHeader : [])
-                    Text(message)
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .multilineTextAlignment(.center)
-                        // review-2-5. The screen's message names a control on
-                        // some states, so a test must be able to read it and
-                        // check it against what this build actually publishes.
-                        .accessibilityIdentifier("storage-launch-message")
+                    if !showsStorageChoiceMessageBelowOptions {
+                        launchMessage
+                    }
 
                     if isPreparing {
                         ProgressView()
@@ -3650,6 +3646,9 @@ private struct PersistenceLaunchStatusView: View {
                             identifier: "storage-choice.local"
                         ) {
                             storageConfirmation = .localOnly
+                        }
+                        if showsStorageChoiceMessageBelowOptions {
+                            launchMessage
                         }
 
                         Link(destination: AppLinks.privacyPolicy) {
@@ -4361,6 +4360,24 @@ private struct PersistenceLaunchStatusView: View {
             return "元の保存先とiCloudの記録を残して、取り込みを取り消せます。途中までのコピーも保護のため端末に保持します。取り消した後はアプリを終了して開き直し、改めて切り替えを開始してください。"
         }
         return "置き換えが始まる前なので、この端末の切り替えを取り消して元の保存先へ戻れます。取り消した後はアプリを終了して開き直してください。"
+    }
+
+    private var launchMessage: some View {
+        Text(message)
+            .foregroundStyle(PomoGemTheme.muted)
+            .multilineTextAlignment(.center)
+            // review-2-5. The screen's message names a control on
+            // some states, so a test must be able to read it and
+            // check it against what this build actually publishes.
+            .accessibilityIdentifier("storage-launch-message")
+    }
+
+    /// launch-03. At accessibility sizes the one-sentence reassurance under
+    /// the storage question took five lines of an SE's first screen and
+    /// pushed both options below it, so there it follows the options. It
+    /// keeps the user's text size; only its place changes.
+    private var showsStorageChoiceMessageBelowOptions: Bool {
+        isChoosingStorage && dynamicTypeSize.isAccessibilitySize
     }
 
     /// launch-03 / product-01. The first frame of every new install used to be
