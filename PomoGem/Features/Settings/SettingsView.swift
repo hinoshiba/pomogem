@@ -155,7 +155,8 @@ struct SettingsView: View {
                 otherWorkIsActive: isCloudOfflineSession || isExportingData || completeDeletion.hasStarted
                     || router.focusPresentationIsActive || router.recoveredFocus != nil
                     || router.deferredFocusRecovery != nil || router.recoveredBreak != nil
-                    || router.cloudFocusRecoveryOffer != nil
+                    || router.cloudFocusRecoveryOffer != nil,
+                disclosesScreenTimeReset: screenTimeIsInUse
             )
             notificationSection
             shareSection
@@ -846,6 +847,15 @@ struct SettingsView: View {
         }
     }
 
+    /// transfer-07. Whether a storage switch would reset anything the user
+    /// set up in Screen Time: the feature is on or monitoring, or black gems
+    /// are still held on this iPhone.
+    private var screenTimeIsInUse: Bool {
+        let screenTime = ScreenTimeController.shared
+        return screenTime.configuration.enabled || screenTime.isMonitoring
+            || screenTime.negativeGemCount > 0
+    }
+
     private var appVersionLabel: String {
         let version = Bundle.main.object(
             forInfoDictionaryKey: "CFBundleShortVersionString"
@@ -914,6 +924,20 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .accessibilityIdentifier("settings.activity-reset-unavailable")
+            }
+
+            // settings-03 / transfer-09. The disabled reset used to be a dead
+            // end: its only next step hid in the footer. The routes that do
+            // work — switch this iPhone to local-only and reset, or delete the
+            // iCloud data in iOS Settings — get their own row.
+            if ActivityResetAdmissionPolicy.offersCloudDeletionGuidance(in: persistenceMode) {
+                NavigationLink {
+                    CloudDataDeletionGuidanceView(isExporting: isExportingData, export: startDataExport)
+                } label: {
+                    Text(CloudDataDeletionGuidanceCopy.rowTitle)
+                        .frame(minHeight: 44, alignment: .leading)
+                }
+                .accessibilityIdentifier("settings.activity-reset-alternatives")
             }
 
             if CompleteDataDeletionReleasePolicy.isEnabled,

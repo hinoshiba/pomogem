@@ -33,7 +33,7 @@ STORAGE AND PRIVACY
 - iCloudを選び確認した場合だけ、テーマ、成果memo、記録、設定、進行中timerを本人のprivate CloudKitへ保存します。「このiPhoneだけに保存」は自動uploadしません。
 - 確認済みの端末dataが利用条件を満たす場合はiCloudモードでもoffline利用でき、変更は同期待ちになります。account変更の通知だけで失効させず、確認できたaccount不一致などで保護のため停止します。接続確認は全dataのupload完了を意味しません。
 - timerを終了してSettings→「iCloudを有効にする」→「iCloudのデータを使う」で、端末だけの記録を削除しcloud内容に置き換えます。結合せず、削除確認checkは初期OFFです。
-- iCloud中はSettings→「iCloudを解除する」で開く「iCloudと保存先の変更」に、コピーを検証して同期解除する「このiPhoneへ引き継ぐ」と、「iCloudから再取得」があります。前者はcloud側も保持します。
+- iCloud中はSettings→「iCloudと保存先の変更」に、コピーを検証して同期解除する「このiPhoneへ引き継ぐ」と、「iCloudから再取得」があります。前者はcloud側も保持します。
 - 「iCloudから再取得」はcloud内容を先に読み、0件なら専用警告を出します。最後の確認で端末data削除への未選択checkをオンにすると、未送信変更を捨てて再取得します。cloud側は削除せず、両方の履歴を結合しません。
 - 端末dataでiCloud全体を置き換える操作と、その復旧再開は無効です。再取得の受付は同じaccount・保存領域・CloudKit環境に限定し、別環境へ持ち越しません。起動時に管理情報が無い状態を他端末の置き換えと決めつけません。
 - 切り替えには通信とapp終了・再起動が必要です。app自体を削除しないでください。削除すると端末記録・未送信変更は失われます。JSONは再importできません。
