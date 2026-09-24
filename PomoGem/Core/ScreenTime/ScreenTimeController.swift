@@ -32,6 +32,12 @@ final class ScreenTimeController: ObservableObject {
     /// every three seconds: the user needs time to read what to fix. Cleared
     /// by the next request and once access is granted.
     @Published private(set) var authorizationFailure: ScreenTimeAuthorizationFailure?
+    /// The learning destination theme was deleted (here or on another device)
+    /// and the study-app selection was cleared with it, as documented. Kept
+    /// per owner on this iPhone until the user saves the Screen Time settings
+    /// again, so the settings screen and its row can say why learning stopped
+    /// instead of looking like a feature that was never set up.
+    @Published private(set) var learningThemeWasRemoved = false
     let store: ScreenTimeStore
     private let worker: ScreenTimeMonitoringWorker
     /// A read-only copy of the callback diagnostics into the app's own
@@ -44,6 +50,7 @@ final class ScreenTimeController: ObservableObject {
     private let currentContextKey: () -> String
     private let authorization: () -> AuthorizationStatus
     private let requestIndividualAuthorization: () async throws -> Void
+    private let noticeDefaults: UserDefaults
     /// FamilyControls reports a REVOKED authorization as `.notDetermined` — the
     /// same value a process reads before the framework has answered and the one
     /// a user who never opted in has. Treat `.notDetermined` as settled only
@@ -82,9 +89,11 @@ final class ScreenTimeController: ObservableObject {
         },
         authorizationSettlingWindow: TimeInterval = 10,
         authorizationSettlingObservations: Int = 4,
-        diagnosticsMirror: ScreenTimeDiagnosticsMirror = ScreenTimeDiagnosticsMirror()
+        diagnosticsMirror: ScreenTimeDiagnosticsMirror = ScreenTimeDiagnosticsMirror(),
+        noticeDefaults: UserDefaults = .standard
     ) {
         self.store = store
+        self.noticeDefaults = noticeDefaults
         self.currentContextKey = currentContextKey
         self.authorization = authorization
         self.requestIndividualAuthorization = requestIndividualAuthorization
@@ -421,6 +430,8 @@ final class ScreenTimeController: ObservableObject {
                 return
             }
             configuration = state.configuration
+            let themeRemoved = noticeDefaults.bool(forKey: Self.themeRemovalNoticeKey(lease.binding.contextKey))
+            if learningThemeWasRemoved != themeRemoved { learningThemeWasRemoved = themeRemoved }
             negativeGemCount = state.negativeGemCount
             learningPausedByTimer = state.isLearningPaused(at: .now)
             monitoringError = state.monitoringError
@@ -601,12 +612,85 @@ final class ScreenTimeController: ObservableObject {
         if isBoundToContext != bound { isBoundToContext = bound }
     }
 
+    /// Called after the learning selection was cleared because its theme is
+    /// gone. Device-local and per owner, like the rest of the Screen Time setup.
+    func noteLearningThemeRemoved() {
+        guard let lease = try? boundLease() else { return }
+        noticeDefaults.set(true, forKey: Self.themeRemovalNoticeKey(lease.binding.contextKey))
+        learningThemeWasRemoved = true
+    }
+
+    /// The user has chosen again (a save) or started over (a reset).
+    func clearLearningThemeRemovalNotice() {
+        guard let lease else { return }
+        noticeDefaults.removeObject(forKey: Self.themeRemovalNoticeKey(lease.binding.contextKey))
+        if learningThemeWasRemoved { learningThemeWasRemoved = false }
+    }
+
+    /// The owner key is already namespaced per account and storage mode.
+    private static func themeRemovalNoticeKey(_ contextKey: String) -> String {
+        "screen-time.learning-theme-removed.\(contextKey)"
+    }
+
     private func clearPublishedState() {
+        if learningThemeWasRemoved { learningThemeWasRemoved = false }
         configuration = ScreenTimeConfiguration()
         negativeGemCount = 0
         learningPausedByTimer = false
         monitoringError = nil
         isMonitoring = false
+    }
+}
+
+/// What the Settings row says about Screen Time, so a stop is visible
+/// without opening the page. 要確認 is tied to a real failure (an error the
+/// ledger or the permission reports, or a removed destination theme) and
+/// never to the documented timer hold or a registration still under way.
+enum ScreenTimeRowStatus: Equatable {
+    /// Off, not yet known, or nothing to report: describe the feature.
+    case feature
+    case recording
+    case needsAttention
+    case themeRemoved
+
+    init(isBound: Bool, enabled: Bool, isMonitoring: Bool, monitoringError: String?, themeRemoved: Bool) {
+        guard isBound else { self = .feature; return }
+        if themeRemoved { self = .themeRemoved; return }
+        guard enabled else { self = .feature; return }
+        if monitoringError != nil { self = .needsAttention; return }
+        self = isMonitoring ? .recording : .feature
+    }
+
+    var subtitle: String {
+        switch self {
+        case .feature:
+            String(localized: "勉強アプリの粒と黒い石を10分ごとに積む", table: "ScreenTime",
+                   comment: "Settings row subtitle: Screen Time, when there is nothing to report")
+        case .recording:
+            String(localized: "自動記録中", table: "ScreenTime", comment: "Settings row subtitle: recording")
+        case .needsAttention:
+            String(localized: "要確認：自動記録が止まっています", table: "ScreenTime",
+                   comment: "Settings row subtitle: recording stopped because of an error")
+        case .themeRemoved:
+            String(localized: "要確認：記録先のテーマが削除されました", table: "ScreenTime",
+                   comment: "Settings row subtitle: the study-app destination theme was deleted")
+        }
+    }
+
+    var isWarning: Bool { self == .needsAttention || self == .themeRemoved }
+}
+
+/// The extra paragraph of the theme-delete confirmation when that theme is
+/// where Screen Time records study-app time on this iPhone.
+enum ScreenTimeThemeDeletionNotice {
+    static func applies(to themeID: UUID, configuration: ScreenTimeConfiguration, isBound: Bool) -> Bool {
+        isBound && configuration.themeID == themeID
+            && !configuration.learningSelection.applicationTokens.isEmpty
+    }
+
+    static var text: String {
+        String(localized: "このテーマは、スクリーンタイムで選んだ勉強アプリの記録先です。削除すると勉強アプリの選択も解除され、記録を続けるにはアプリと記録先を選び直す必要があります。",
+               table: "ScreenTime", comment: "Theme delete confirmation: the theme is the Screen Time destination")
     }
 }
 

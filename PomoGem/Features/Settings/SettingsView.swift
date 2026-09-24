@@ -771,12 +771,7 @@ struct SettingsView: View {
             NavigationLink {
                 ScreenTimeSettingsView()
             } label: {
-                SettingLabel(
-                    title: "スクリーンタイム",
-                    subtitle: String(localized: "勉強アプリの粒と黒い石を10分ごとに積む", table: "Settings",
-                                     comment: "Settings row subtitle: Screen Time"),
-                    symbol: "hourglass"
-                )
+                ScreenTimeSettingsRowLabel()
             }
             .accessibilityIdentifier("settings.screen-time")
         }
@@ -1361,10 +1356,20 @@ struct SettingsView: View {
         for subject: Subject,
         recordCount: Int
     ) -> String {
+        let message: String
         if recordCount == 0 {
-            return "「\(subject.safeDisplayName)」を削除します。関連する過去の記録はありません。この操作は取り消せません。"
+            message = "「\(subject.safeDisplayName)」を削除します。関連する過去の記録はありません。この操作は取り消せません。"
+        } else {
+            message = "「\(subject.safeDisplayName)」だけを削除します。過去の記録\(recordCount)件と質量は消えず、現在の名前と色も残ります。この操作は取り消せません。"
         }
-        return "「\(subject.safeDisplayName)」だけを削除します。過去の記録\(recordCount)件と質量は消えず、現在の名前と色も残ります。この操作は取り消せません。"
+        // Deleting the Screen Time destination also clears the study-app
+        // selection (Docs/ScreenTimeGems.md). Say so while the user can still
+        // cancel and pick another destination first.
+        guard ScreenTimeThemeDeletionNotice.applies(
+            to: subject.id, configuration: ScreenTimeController.shared.configuration,
+            isBound: ScreenTimeController.shared.isBoundToContext
+        ) else { return message }
+        return message + "\n\n" + ScreenTimeThemeDeletionNotice.text
     }
 
     private func prepareSubjectDeletion(_ subject: Subject) {
@@ -2346,6 +2351,44 @@ private struct SubjectReorderAccessibilityModifier: ViewModifier {
                 .accessibilityAction(named: "上へ移動", moveUp)
                 .accessibilityAction(named: "下へ移動", moveDown)
         }
+    }
+}
+
+/// The Screen Time row, with the feature's status in place of a fixed
+/// caption: a stop used to be visible only inside the page. Its own view so
+/// that only this row follows the controller, not the whole Settings list.
+private struct ScreenTimeSettingsRowLabel: View {
+    @ObservedObject private var controller = ScreenTimeController.shared
+
+    private var status: ScreenTimeRowStatus {
+        ScreenTimeRowStatus(
+            isBound: controller.isBoundToContext,
+            enabled: controller.configuration.enabled,
+            isMonitoring: controller.isMonitoring,
+            monitoringError: controller.monitoringError,
+            themeRemoved: controller.learningThemeWasRemoved
+        )
+    }
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("スクリーンタイム", tableName: "Settings", comment: "Settings row title: Screen Time")
+                    .foregroundStyle(PomoGemTheme.text)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    if status.isWarning {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .accessibilityHidden(true)
+                    }
+                    Text(status.subtitle)
+                }
+                .font(.caption)
+                .foregroundStyle(status.isWarning ? PomoGemTheme.amber : PomoGemTheme.muted)
+            }
+        } icon: {
+            Image(systemName: "hourglass").foregroundStyle(PomoGemTheme.amber).frame(width: 26)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

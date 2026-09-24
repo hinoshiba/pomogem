@@ -11,6 +11,9 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
     let dataEpochID: UUID?
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    /// Optional so a host without the app's router (a unit-test mount) still
+    /// works; RootView always provides it.
+    @Environment(AppRouter.self) private var router: AppRouter?
     @ObservedObject private var controller: ScreenTimeController
     @State private var purchase = PurchaseManager.shared
     @State private var importError: String?
@@ -244,6 +247,15 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
         // Existing receipts retain the original theme ID; future use is no
         // longer silently attributed to a theme the user has removed.
         try await controller.save(configuration: configuration, isPro: purchase.isPro)
+        // Clearing the selection is documented; doing it without a word read
+        // as a broken feature. Say it now, and keep saying it on the Screen
+        // Time page and its Settings row until the user chooses again.
+        controller.noteLearningThemeRemoved()
+        router?.showToast(
+            String(localized: "記録先のテーマが削除されたため、勉強アプリの記録を止めました", table: "ScreenTime",
+                   comment: "Toast: the Screen Time destination theme was deleted, so study-app recording stopped"),
+            symbol: "exclamationmark.triangle"
+        )
     }
 }
 

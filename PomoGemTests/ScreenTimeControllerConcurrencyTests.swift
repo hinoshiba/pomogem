@@ -1318,4 +1318,74 @@ final class ScreenTimeSettingsDraftTests: XCTestCase {
                            ScreenTimeError.unboundContext.localizedDescription)
         }
     }
+
+    // MARK: - screentime-03: a stop is visible outside the page
+
+    func testTheSettingsRowSaysWhenRecordingStoppedButNeverForTheTimerHold() {
+        typealias Status = ScreenTimeRowStatus
+        XCTAssertEqual(Status(isBound: false, enabled: true, isMonitoring: true, monitoringError: "x", themeRemoved: true),
+                       .feature, "An unbound owner has nothing it can report")
+        XCTAssertEqual(Status(isBound: true, enabled: false, isMonitoring: false, monitoringError: nil, themeRemoved: false),
+                       .feature)
+        XCTAssertEqual(Status(isBound: true, enabled: true, isMonitoring: true, monitoringError: nil, themeRemoved: false),
+                       .recording)
+        XCTAssertEqual(Status(isBound: true, enabled: true, isMonitoring: false, monitoringError: "監視エラー", themeRemoved: false),
+                       .needsAttention)
+        // Registering, or the timer holding the learning lane: no error, no alarm.
+        XCTAssertEqual(Status(isBound: true, enabled: true, isMonitoring: false, monitoringError: nil, themeRemoved: false),
+                       .feature)
+        // The destination went away; even with the black-stone lane still on.
+        XCTAssertEqual(Status(isBound: true, enabled: true, isMonitoring: true, monitoringError: nil, themeRemoved: true),
+                       .themeRemoved)
+        XCTAssertEqual(Status(isBound: true, enabled: false, isMonitoring: false, monitoringError: nil, themeRemoved: true),
+                       .themeRemoved)
+        XCTAssertTrue(Status.needsAttention.isWarning)
+        XCTAssertTrue(Status.themeRemoved.isWarning)
+        XCTAssertFalse(Status.recording.isWarning)
+        XCTAssertEqual(Status.recording.subtitle, "自動記録中")
+        XCTAssertTrue(Status.needsAttention.subtitle.hasPrefix("要確認"))
+    }
+
+    func testTheThemeDeleteWarningAppliesOnlyToTheScreenTimeDestination() {
+        let theme = UUID()
+        var configuration = ScreenTimeConfiguration()
+        configuration.themeID = theme
+        XCTAssertFalse(ScreenTimeThemeDeletionNotice.applies(to: theme, configuration: configuration, isBound: true),
+                       "No study apps chosen: nothing is lost")
+        configuration.learningSelection = selection(count: 2, seed: 0x71)
+        XCTAssertTrue(ScreenTimeThemeDeletionNotice.applies(to: theme, configuration: configuration, isBound: true))
+        XCTAssertFalse(ScreenTimeThemeDeletionNotice.applies(to: UUID(), configuration: configuration, isBound: true))
+        XCTAssertFalse(ScreenTimeThemeDeletionNotice.applies(to: theme, configuration: configuration, isBound: false))
+        XCTAssertTrue(ScreenTimeThemeDeletionNotice.text.contains("選び直す"))
+    }
+
+    func testTheRemovedThemeNoticeLastsUntilTheUserSavesAndStaysWithItsOwner() async throws {
+        let suite = "ScreenTimeNoticeTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = try makeStore()
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" }, monitoring: Driver(store: store),
+                                              authorization: { .approved }, noticeDefaults: defaults)
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        XCTAssertFalse(controller.learningThemeWasRemoved)
+        controller.noteLearningThemeRemoved()
+        XCTAssertTrue(controller.learningThemeWasRemoved)
+
+        // A later launch reads it back for the same owner only.
+        let relaunched = ScreenTimeController(store: store, currentContextKey: { "owner" }, monitoring: Driver(store: store),
+                                              authorization: { .approved }, noticeDefaults: defaults)
+        try await relaunched.bindContext(contextKey: "owner", dataEpochID: nil)
+        XCTAssertTrue(relaunched.learningThemeWasRemoved)
+        let otherStore = try makeStore(owner: "someone-else")
+        let other = ScreenTimeController(store: otherStore, currentContextKey: { "someone-else" },
+                                         monitoring: Driver(store: otherStore), authorization: { .approved },
+                                         noticeDefaults: defaults)
+        try await other.bindContext(contextKey: "someone-else", dataEpochID: nil)
+        XCTAssertFalse(other.learningThemeWasRemoved)
+
+        relaunched.clearLearningThemeRemovalNotice()
+        XCTAssertFalse(relaunched.learningThemeWasRemoved)
+        controller.reload()
+        XCTAssertFalse(controller.learningThemeWasRemoved)
+    }
 }
