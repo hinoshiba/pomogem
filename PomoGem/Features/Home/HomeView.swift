@@ -79,6 +79,12 @@ struct HomeView: View {
     @AppStorage(AccountScopedLocalState.defaultsKey(base: RecentCustomFocusDurations.storageKey))
     private var recentCustomFocusSecondsRawValue = ""
     @State private var scene = JarScene()
+    /// Bumped whenever PendingRewardReceiptStore writes. The receipts live in
+    /// UserDefaults, which SwiftUI does not observe, so clearing the last one
+    /// must re-evaluate Home explicitly: otherwise the start button stays
+    /// disabled and a queued fusion celebration waits until some unrelated
+    /// state change (formerly the three-second Screen Time pass) re-renders.
+    @State private var pendingRewardReceiptRevision = 0
     @State private var sceneInitialized = false
     @State private var homeIsVisible = false
     @State private var rewardDropRevealIsPending = false
@@ -160,6 +166,11 @@ struct HomeView: View {
         _activityResetMarkers = Query(ActivityResetPolicy.currentMarkerDescriptor())
         _preferences = Query(PrefsConsumerPolicy.descriptor())
     }
+
+    /// Delivered on the main run loop: the store may be written off-main.
+    private static let pendingRewardReceiptChanges = NotificationCenter.default
+        .publisher(for: PendingRewardReceiptStore.didChangeNotification)
+        .receive(on: RunLoop.main)
 
     private var subjects: [Subject] {
         SubjectSyncPolicy.presentationSubjects(from: storedSubjects)
@@ -476,7 +487,8 @@ struct HomeView: View {
         !celebrationPresentationBlockers.contains(true)
     }
     private var hasPendingRewardReceipt: Bool {
-        !PendingRewardReceiptStore.load().isEmpty
+        _ = pendingRewardReceiptRevision
+        return !PendingRewardReceiptStore.load().isEmpty
     }
     private var rewardDropSurfaceIsObscured: Bool {
         showHomeMenu || showAccumulationOverview || selectedAggregateDetail != nil
@@ -776,6 +788,9 @@ struct HomeView: View {
         .onReceive(ScreenTimeController.shared.negativeGemCountChanges) { count in
             guard homeIsVisible else { return }
             scene.updateScreenTimeObstacles(totalUnits: count)
+        }
+        .onReceive(Self.pendingRewardReceiptChanges) { _ in
+            pendingRewardReceiptRevision &+= 1
         }
         .onChange(of: sessionChangeTokens) { _, _ in
             syncScene()
