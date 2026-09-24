@@ -573,6 +573,12 @@ struct RootView: View {
             || launchHasSyncedUsageEvidence
     }
 
+    private var showsPersistenceSafetyNotice: Bool {
+        activePersistenceSafetyNotice != nil
+            && isBootstrapped
+            && !completeDeletion.hasStarted
+    }
+
     private var shouldShowMain: Bool {
         if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess,
            ProcessInfo.processInfo.environment[
@@ -665,32 +671,33 @@ struct RootView: View {
                 .task { await markFirstFramePresented() }
             }
 
-            if let toast = router.toast {
-                VStack {
-                    Spacer()
-                    ToastOverlay(message: toast)
-                        .padding(.bottom, 86)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+            // Transient messages share the top edge with the persistence
+            // notice. At the bottom, a toast sat on Home's start button (the
+            // primary action right after every drop) and took its taps.
+            if router.toast != nil || showsPersistenceSafetyNotice {
+                VStack(spacing: 8) {
+                    if let activePersistenceSafetyNotice, showsPersistenceSafetyNotice {
+                        Label(activePersistenceSafetyNotice, systemImage: "icloud.slash")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(PomoGemTheme.text)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .accessibilityIdentifier("root.persistence-safety-notice")
+                            .padding(.horizontal, 16)
+                            .allowsHitTesting(false)
+                    }
+                    if let toast = router.toast {
+                        ToastOverlay(message: toast)
+                            // Clear the navigation bar (Home's メニュー) unless
+                            // the notice above already pushes it down.
+                            .padding(.top, showsPersistenceSafetyNotice ? 0 : 44)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .allowsHitTesting(false)
+                    }
+                    Spacer(minLength: 0)
                 }
-                .zIndex(20)
-            }
-
-            if let activePersistenceSafetyNotice,
-               isBootstrapped,
-               !completeDeletion.hasStarted {
-                VStack {
-                    Label(activePersistenceSafetyNotice, systemImage: "icloud.slash")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(PomoGemTheme.text)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .accessibilityIdentifier("root.persistence-safety-notice")
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
                 .padding(.top, 8)
-                .allowsHitTesting(false)
                 .zIndex(30)
             }
 

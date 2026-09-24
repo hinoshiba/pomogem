@@ -997,23 +997,24 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             XCTAssertFalse(app.staticTexts["集中設定"].exists)
             XCTAssertFalse(app.buttons["45分"].exists)
 
-            var referenceSize: CGSize?
+            // Picking a space lowers a fully raised menu to half height, where
+            // iOS insets the sheet and every card narrows together. So each
+            // card is compared with a neighbour measured at the same moment,
+            // once the sheet has settled, rather than with an earlier size.
             for rawValue in ["midnight", "aurora", "dawn", "study"] {
                 let card = app.buttons["home.atmosphere.\(rawValue)"]
+                let neighbour = app.buttons["home.atmosphere.\(rawValue == "midnight" ? "aurora" : "midnight")"]
                 XCTAssertTrue(scrollUntilHittable(card, attempts: 12))
+                waitForSettledFrame(card)
                 XCTAssertGreaterThanOrEqual(card.frame.height, 44)
-                if let referenceSize {
-                    XCTAssertEqual(card.frame.width, referenceSize.width, accuracy: 1,
-                                   "All four space cards need the same width at this text size")
-                    XCTAssertEqual(card.frame.height, referenceSize.height, accuracy: 1,
-                                   "The image and subtitle must not change an individual card's height")
-                } else {
-                    referenceSize = card.frame.size
-                }
-                let originalSize = card.frame.size
+                XCTAssertEqual(card.frame.width, neighbour.frame.width, accuracy: 1,
+                               "All four space cards need the same width at this text size")
+                XCTAssertEqual(card.frame.height, neighbour.frame.height, accuracy: 1,
+                               "The image and subtitle must not change an individual card's height")
                 card.tap()
-                XCTAssertEqual(card.frame.width, originalSize.width, accuracy: 1)
-                XCTAssertEqual(card.frame.height, originalSize.height, accuracy: 1,
+                waitForSettledFrame(card)
+                XCTAssertEqual(card.frame.width, neighbour.frame.width, accuracy: 1)
+                XCTAssertEqual(card.frame.height, neighbour.frame.height, accuracy: 1,
                                "Selecting a space must not resize its card")
             }
             retainScreenshot(named: usesLargeText ? "Home spaces — equal cards at AX5" : "Home spaces — equal cards at default text")
@@ -2036,6 +2037,18 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     }
 
     @discardableResult
+    /// Waits until a sheet animation has finished moving `element`.
+    private func waitForSettledFrame(_ element: XCUIElement, timeout: TimeInterval = 3) {
+        var previous = element.frame
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            usleep(200_000)
+            let current = element.frame
+            if abs(current.minY - previous.minY) < 0.5, abs(current.width - previous.width) < 0.5 { return }
+            previous = current
+        }
+    }
+
     private func scrollUntilHittable(
         _ element: XCUIElement,
         attempts: Int = 10,

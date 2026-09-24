@@ -86,6 +86,10 @@ struct PaywallView: View {
             VStack(spacing: 8) {
                 Text(Constants.UIStrings.paywallTitle)
                     .font(PomoGemTheme.brand(34))
+                    // Shrink the product name instead of breaking it
+                    // mid-word (「ポモジェ／ムPro」) at the largest sizes.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
                 Text(contextCopy)
                     .font(.subheadline)
                     .foregroundStyle(PomoGemTheme.muted)

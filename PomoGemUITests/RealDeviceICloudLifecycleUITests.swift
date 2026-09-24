@@ -176,7 +176,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
     private func addAuditManualRecord() throws {
         let app = app!
         try openMenuAction("時間を手動で積む")
-        try require(app.staticTexts[themeName].waitForExistence(timeout: 5),
+        try require(waitForLabel(app.buttons["manual.subject-picker"], containing: themeName, timeout: 5),
                     "The manual record must belong to the unique audit theme.")
         try tap(app.buttons["30分、300グラム加算"])
         let confirm = app.buttons["manual.confirm"]

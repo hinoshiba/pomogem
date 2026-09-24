@@ -1526,6 +1526,8 @@ struct SettingsView: View {
             return false
         }
         guard savePreferredFocusSeconds(totalSeconds) else { return false }
+        // Home lists recent custom times so a preset never loses this one.
+        RecentCustomFocusDurations.record(totalSeconds)
         showCustomDuration = false
         return true
     }
