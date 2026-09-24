@@ -682,8 +682,10 @@ struct ScreenTimeSettingsView: View {
                         for: configuration, isMonitoring: controller.isMonitoring
                     )
                     router.showToast(toast.text, symbol: toast.symbol)
+                    if leavesAfterSave, isVisible { dismiss() }
                 }
-                if leavesAfterSave, isVisible { dismiss() }
+                // With a monitoring error the red message on this page is the
+                // only explanation, so 「保存して戻る」 stays here to show it.
                 leavesAfterSave = false
             } catch {
                 leavesAfterSave = false
