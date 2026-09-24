@@ -310,4 +310,22 @@ final class FairnessTests: XCTestCase {
             minute: minute
         )))
     }
+
+    func testDemotionNoticeNamesTheActualReason() {
+        XCTAssertEqual(
+            FocusDemotionNoticeReason.recovered(origin: .iCloud),
+            .adoptedFromOtherDevice,
+            "Continuing a timer from another iPhone is not a clock change"
+        )
+        XCTAssertEqual(FocusDemotionNoticeReason.recovered(origin: .local), .continuityLost)
+        XCTAssertNil(FocusDemotionNoticeReason.detected(.valid(drift: 0.5)))
+        XCTAssertEqual(FocusDemotionNoticeReason.detected(.changed(drift: 600)), .clockChanged)
+        XCTAssertEqual(FocusDemotionNoticeReason.detected(.uptimeReset), .continuityLost)
+        XCTAssertEqual(FocusDemotionNoticeReason.detected(.unverifiable), .continuityLost)
+
+        XCTAssertTrue(FocusDemotionNoticeReason.clockChanged.message.contains("端末時刻"))
+        XCTAssertTrue(FocusDemotionNoticeReason.adoptedFromOtherDevice.message.contains("別の端末から引き継いだ"))
+        XCTAssertFalse(FocusDemotionNoticeReason.adoptedFromOtherDevice.message.contains("時刻"))
+        XCTAssertFalse(FocusDemotionNoticeReason.continuityLost.message.contains("時刻"))
+    }
 }

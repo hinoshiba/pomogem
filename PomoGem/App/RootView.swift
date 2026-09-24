@@ -754,9 +754,17 @@ struct RootView: View {
             }
         } message: { offer in
             let remaining = offer.request.engine.snapshot(at: .now).remainingSeconds
+            // Adoption can never prove this device measured the remote
+            // interval, so FocusPersistence.preparedForCrossDeviceAdoption
+            // always demotes a running timer. Say so before the choice.
+            let becomesSelfReported = offer.request.pendingCompletion == nil
+                && offer.request.engine.containsRecoverableFocus
+            let selfReportedNote = becomesSelfReported
+                ? "続けた回は自己申告あつかいになります。"
+                : ""
             Text(persistenceMode == .localOnly
-                 ? "\(offer.request.subjectSnapshot.name)・残り約\(max(0, (remaining + 59) / 60))分。保存済みの状態から再開すると、このiPhoneが終了通知を担当します。"
-                 : "\(offer.request.subjectSnapshot.name)・残り約\(max(0, (remaining + 59) / 60))分。この端末へ引き継ぐと、この端末が終了通知を担当します。元の端末がオフラインまたはロック中の場合は、古い通知が一度届くことがあります。")
+                 ? "\(offer.request.subjectSnapshot.name)・残り約\(max(0, (remaining + 59) / 60))分。保存済みの状態から再開すると、このiPhoneが終了通知を担当します。\(selfReportedNote)"
+                 : "\(offer.request.subjectSnapshot.name)・残り約\(max(0, (remaining + 59) / 60))分。この端末へ引き継ぐと、この端末が終了通知を担当します。\(selfReportedNote)元の端末がオフラインまたはロック中の場合は、古い通知が一度届くことがあります。")
         }
         .onChange(of: focusSyncFingerprint) { _, _ in
             guard isFirstFramePresented, !isDataDeletionQuiesced else { return }

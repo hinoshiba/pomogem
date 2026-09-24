@@ -99,6 +99,51 @@ enum TimerCompletionForegroundFeedbackPolicy {
     }
 }
 
+/// Why a running focus became self-reported. The engine keeps only the
+/// demoted source, so FocusView records the reason it observed; telling
+/// someone who continued their own timer on another iPhone, or restarted
+/// the phone, that its clock jumped would be false and sounds like blame.
+enum FocusDemotionNoticeReason: Equatable, Sendable {
+    case clockChanged
+    case adoptedFromOtherDevice
+    case continuityLost
+
+    /// A recovered timer that is already demoted. Adoption from iCloud always
+    /// demotes; a local relaunch demotes when continuity (for example across a
+    /// reboot) cannot be proven.
+    static func recovered(origin: FocusRecoveryOrigin) -> Self {
+        origin == .iCloud ? .adoptedFromOtherDevice : .continuityLost
+    }
+
+    /// A demotion caught while this screen is running.
+    static func detected(_ integrity: ClockIntegrity) -> Self? {
+        switch integrity {
+        case .valid: nil
+        case .changed: .clockChanged
+        case .uptimeReset, .unverifiable: .continuityLost
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .clockChanged:
+            "端末時刻の大きな変化を検出。この回だけ自己申告あつかいです"
+        case .adoptedFromOtherDevice:
+            "別の端末から引き継いだため、この回は自己申告あつかいです"
+        case .continuityLost:
+            "再起動などで計測が途切れたため、この回は自己申告あつかいです"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .clockChanged: "clock.badge.exclamationmark"
+        case .adoptedFromOtherDevice: "iphone.and.arrow.forward"
+        case .continuityLost: "arrow.clockwise.circle"
+        }
+    }
+}
+
 /// Constructs the only StudySession shape written while the optional rare
 /// reward feature is disabled for release. Keeping this factory independent of
 /// SwiftUI makes the shipping invariant directly unit-testable.
@@ -215,7 +260,7 @@ struct FocusView: View {
     @State private var isCommittingCompletion = false
     @State private var breakFinished = false
     @State private var showGiveUpConfirmation = false
-    @State private var fairnessNotice = false
+    @State private var fairnessNoticeReason: FocusDemotionNoticeReason?
     @State private var setupErrorMessage: String?
     @State private var operationErrorMessage: String?
     @State private var rareRewardChoice: RareRewardMode?
@@ -306,7 +351,11 @@ struct FocusView: View {
         _scheduledCompletionNotificationDeliveryDate = State(
             initialValue: request.scheduledCompletionNotificationDeliveryDate
         )
-        _fairnessNotice = State(initialValue: request.engine.currentSource == .timerDemoted)
+        _fairnessNoticeReason = State(
+            initialValue: request.engine.currentSource == .timerDemoted
+                ? .recovered(origin: request.origin)
+                : nil
+        )
         let sessionID = request.pendingCompletion?.sessionID
             ?? request.engine.currentSessionID
         preparedSessionID = sessionID
@@ -942,16 +991,20 @@ struct FocusView: View {
         )
     }
 
-    @ViewBuilder
     private var timerNotice: some View {
-        if fairnessNotice {
-            Label("端末時刻の大きな変化を検出。この回だけ自己申告あつかいです", systemImage: "clock.badge.exclamationmark")
-                .font(.caption)
-                .foregroundStyle(PomoGemTheme.muted)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .transition(.opacity)
-        } else {
+        VStack(spacing: 8) {
+            if let fairnessNoticeReason {
+                Label(fairnessNoticeReason.message, systemImage: fairnessNoticeReason.systemImage)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+                    .accessibilityIdentifier("focus.self-reported-notice")
+            }
+            // The end-notification controls stay available on a
+            // self-reported timer: an adopted timer is exactly where this
+            // device may still need permission or a retry.
             completionNotificationStatus
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1521,7 +1574,9 @@ struct FocusView: View {
                 result,
                 clockAnchor: clockAnchor
             )
-            fairnessNotice = finalized.source == .timerDemoted
+            fairnessNoticeReason = finalized.source == .timerDemoted
+                ? fairnessNoticeReason ?? .continuityLost
+                : nil
             handleFocusCompletion(finalized, cue: cue)
         case .breakCompleted:
             FocusPersistence.clear()
@@ -1554,7 +1609,8 @@ struct FocusView: View {
             guard engine.currentSource == .timer else { return }
             do {
                 try engine.demoteCurrentFocus()
-                fairnessNotice = true
+                fairnessNoticeReason = FocusDemotionNoticeReason.detected(integrity)
+                    ?? .continuityLost
                 // Keep a valid local anchor for diagnostics and for coherent
                 // recovery bytes. The source is already irreversibly demoted,
                 // so re-anchoring cannot restore measured-only rewards.
