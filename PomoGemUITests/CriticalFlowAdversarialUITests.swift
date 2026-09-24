@@ -354,6 +354,10 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
             app.staticTexts["この期間の粒は、まだありません。"].exists,
             "A week with a record must never show the empty-period copy"
         )
+        // The device audits find the tiles by identifier, whatever the period.
+        let mass = app.descendants(matching: .any)["log.summary.mass"].firstMatch
+        XCTAssertTrue(mass.exists)
+        XCTAssertTrue(mass.label.contains("300g") && mass.label.contains("今週の質量"), mass.label)
         let weekAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         weekAttachment.name = "記録 — calendar week with its self-reported share"
         weekAttachment.lifetime = .keepAlways

@@ -1205,9 +1205,9 @@ struct LogView: View {
 
     @ViewBuilder
     private func summaryTiles(_ summary: LogPeriodSummary) -> some View {
-        SummaryTile(label: periodPageIsPartial ? "表示分の時間" : "積んだ時間", value: formatMinutes(summary.totalSeconds / 60), symbol: "hourglass")
+        SummaryTile(label: periodPageIsPartial ? "表示分の時間" : "積んだ時間", value: formatMinutes(summary.totalSeconds / 60), symbol: "hourglass", identifier: "log.summary.time")
         // Timers that ran to their end; Screen Time chunks are not completions.
-        SummaryTile(label: periodPageIsPartial ? "表示分の完走" : "完走ポモ", value: "\(summary.timerCompletionCount)", symbol: "checkmark.circle")
+        SummaryTile(label: periodPageIsPartial ? "表示分の完走" : "完走ポモ", value: "\(summary.timerCompletionCount)", symbol: "checkmark.circle", identifier: "log.summary.completions")
         SummaryTile(
             label: periodPageIsPartial
                 ? "表示分の質量"
@@ -1215,7 +1215,8 @@ struct LogView: View {
                     ? String(localized: "今週の質量", table: "Log", comment: "Log tile: mass added this calendar week")
                     : String(localized: "今月の質量", table: "Log", comment: "Log tile: mass added this calendar month")),
             value: formatMass(summary.grams),
-            symbol: "scalemass"
+            symbol: "scalemass",
+            identifier: "log.summary.mass"
         )
     }
 
@@ -2338,6 +2339,8 @@ private struct SummaryTile: View {
     let label: String
     let value: String
     let symbol: String
+    /// Stable across the 今週／今月 wording, for the device audit.
+    let identifier: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -2349,6 +2352,7 @@ private struct SummaryTile: View {
         .padding(13)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 14))
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(identifier)
     }
 }
 
