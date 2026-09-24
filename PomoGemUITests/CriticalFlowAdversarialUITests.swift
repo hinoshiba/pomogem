@@ -306,6 +306,102 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         XCTAssertFalse(app.buttons["achievement.undo-delete"].exists)
     }
 
+    /// Deleting a theme keeps its history. Correcting only the memo of a
+    /// milestone recorded under it must not move the milestone to whichever
+    /// theme happens to sort first.
+    func testEditingAMilestoneKeepsItsDeletedTheme() {
+        let themeName = "英検QA"
+        openMenuAction(containing: "設定")
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        let addTheme = app.buttons["テーマを追加"]
+        XCTAssertTrue(scrollUntilHittable(addTheme, swiping: .up))
+        addTheme.tap()
+        XCTAssertTrue(app.navigationBars["テーマを追加"].waitForExistence(timeout: 5))
+        let nameField = app.textFields.firstMatch
+        XCTAssertTrue(nameField.waitForExistence(timeout: 4))
+        nameField.tap()
+        nameField.typeText(themeName)
+        app.navigationBars["テーマを追加"].buttons["保存"].tap()
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        waitForUISettle()
+        tapNavigationBack(from: "設定")
+
+        let themeMenu = app.buttons["home.subject-picker"]
+        XCTAssertTrue(themeMenu.waitForExistence(timeout: 4))
+        themeMenu.tap()
+        let themeChoice = app.buttons[themeName]
+        XCTAssertTrue(themeChoice.waitForExistence(timeout: 4))
+        themeChoice.tap()
+
+        openMenuAction(containing: "成果を積む")
+        XCTAssertTrue(app.navigationBars["成果を選ぶ"].waitForExistence(timeout: 4))
+        let examPass = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "試験合格")
+        ).firstMatch
+        XCTAssertTrue(examPass.waitForExistence(timeout: 4))
+        examPass.tap()
+        XCTAssertTrue(app.navigationBars["記念石にする"].waitForExistence(timeout: 4))
+        app.textFields.firstMatch.tap()
+        app.textFields.firstMatch.typeText("二次試験")
+        app.buttons["この成果を積む"].tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
+
+        openMenuAction(containing: "設定")
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        let themeRow = app.buttons[themeName]
+        XCTAssertTrue(scrollUntilHittable(themeRow, swiping: .up))
+        themeRow.swipeLeft()
+        let delete = app.buttons["削除"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 4))
+        delete.tap()
+        let confirm = app.buttons["「\(themeName)」を削除"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        XCTAssertFalse(app.buttons[themeName].waitForExistence(timeout: 2))
+        tapNavigationBack(from: "設定")
+
+        openMenuAction(containing: "記録を見る")
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 5))
+        let row = app.buttons["achievement.history.row"].firstMatch
+        XCTAssertTrue(scrollUntilHittable(row, swiping: .up))
+        XCTAssertTrue(row.label.contains(themeName), row.label)
+        waitForUISettle()
+        row.tap()
+
+        XCTAssertTrue(app.navigationBars["成果を編集"].waitForExistence(timeout: 4))
+        let subject = app.buttons["achievement.editor.subject"]
+        XCTAssertTrue(subject.waitForExistence(timeout: 4))
+        XCTAssertTrue(
+            subject.label.contains(themeName),
+            "The editor must start on the milestone's own theme; label=\(subject.label)"
+        )
+        XCTAssertTrue(
+            app.staticTexts["achievement.editor.kept-subject"].exists,
+            "The editor must say why the deleted theme is still shown"
+        )
+        let editor = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        editor.name = "Milestone editor keeps a deleted theme"
+        editor.lifetime = .keepAlways
+        add(editor)
+
+        let note = app.textFields["achievement.editor.note"]
+        XCTAssertTrue(note.exists)
+        note.tap()
+        note.typeText("合格")
+        let save = app.buttons["achievement.editor.save"]
+        XCTAssertTrue(scrollUntilHittable(save, swiping: .up))
+        save.tap()
+
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 4))
+        let revised = app.buttons["achievement.history.row"].firstMatch
+        XCTAssertTrue(scrollUntilHittable(revised, swiping: .up))
+        XCTAssertTrue(revised.label.contains("二次試験合格"), revised.label)
+        XCTAssertTrue(
+            revised.label.contains(themeName),
+            "Editing only the memo must keep the deleted theme; label=\(revised.label)"
+        )
+    }
+
     private func openMenuAction(containing title: String) {
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
         app.buttons["メニュー"].tap()

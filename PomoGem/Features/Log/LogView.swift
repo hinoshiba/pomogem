@@ -1686,16 +1686,29 @@ struct LogView: View {
                 loadBoundedHistory()
                 return "この記念石は別の端末ですでに削除されています。"
             }
-            guard let subject = subjects.first(where: { $0.id == draft.subjectID }) else {
-                return "選んだテーマが見つかりません。テーマを選び直してください。"
+            let result: AchievementStoneRevisionPolicy.MutationResult
+            if let subjectID = draft.subjectID {
+                guard let subject = subjects.first(where: { $0.id == subjectID }) else {
+                    return "選んだテーマが見つかりません。テーマを選び直してください。"
+                }
+                result = AchievementStoneRevisionPolicy.edit(
+                    values,
+                    subject: subject,
+                    kind: draft.kind,
+                    note: draft.note,
+                    achievedAt: draft.achievedAt
+                )
+            } else {
+                // The stone's own theme is not offered (deleted in Settings).
+                // Keep it exactly as it is rather than relabelling the stone.
+                result = AchievementStoneRevisionPolicy.editKeepingSubject(
+                    values,
+                    kind: draft.kind,
+                    note: draft.note,
+                    achievedAt: draft.achievedAt
+                )
             }
-            guard AchievementStoneRevisionPolicy.edit(
-                values,
-                subject: subject,
-                kind: draft.kind,
-                note: draft.note,
-                achievedAt: draft.achievedAt
-            ) == .applied else {
+            guard result == .applied else {
                 return "この記念石の編集履歴が上限に達したため、編集できませんでした。"
             }
             try modelContext.save()
@@ -2176,6 +2189,8 @@ private struct AchievementEditSelection: Identifiable {
     let id: UUID
     let dataEpochID: UUID?
     let subjectID: UUID?
+    /// The stone still points at a theme that was deleted in Settings.
+    let subjectIsDeleted: Bool
     let subjectName: String
     let subjectColorHex: String
     let kind: AchievementKind
@@ -2186,6 +2201,7 @@ private struct AchievementEditSelection: Identifiable {
         id = stone.id
         dataEpochID = stone.dataEpochID
         subjectID = stone.subject?.id
+        subjectIsDeleted = stone.subject?.deletedAt != nil
         subjectName = stone.displaySubjectName
         subjectColorHex = stone.displaySubjectColorHex
         kind = stone.kind
@@ -2195,7 +2211,8 @@ private struct AchievementEditSelection: Identifiable {
 }
 
 private struct AchievementEditDraft {
-    let subjectID: UUID
+    /// `nil` keeps the stone's current theme link and name/color snapshots.
+    let subjectID: UUID?
     let kind: AchievementKind
     let note: String
     let achievedAt: Date
@@ -2206,6 +2223,12 @@ private struct AchievementEditorSheet: View {
     let subjects: [Subject]
     let onSave: (AchievementEditDraft) -> String?
     let onDelete: () -> String?
+
+    /// Stands for "keep this stone's theme as it is" when that theme is not
+    /// among the offered ones (deleted in Settings, or not linked on this
+    /// iPhone). It never equals a live theme's ID, so "a theme is selected"
+    /// still decides whether 変更を保存 is available.
+    private let keptSubjectChoiceID: UUID?
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedSubjectID: UUID?
@@ -2226,13 +2249,27 @@ private struct AchievementEditorSheet: View {
         self.subjects = subjects
         self.onSave = onSave
         self.onDelete = onDelete
-        let initialSubjectID = selection.subjectID.flatMap { id in
+        // Never fall back to an unrelated theme: a stone whose theme is not
+        // offered starts on "keep as it is", so saving a memo or date fix
+        // cannot silently relabel it. Any live theme stays one tap away.
+        let offeredSubjectID = selection.subjectID.flatMap { id in
             subjects.contains(where: { $0.id == id }) ? id : nil
-        } ?? subjects.first(where: {
-            $0.safeDisplayName == selection.subjectName
-                && $0.colorHex.caseInsensitiveCompare(selection.subjectColorHex) == .orderedSame
-        })?.id ?? subjects.first?.id
-        _selectedSubjectID = State(initialValue: initialSubjectID)
+        }
+        // A stone that lost its link (never a deleted theme) may relink to
+        // the live theme with the same name and color: nothing visible moves.
+        let matchingSubjectID = selection.subjectID == nil
+            ? subjects.first(where: {
+                $0.safeDisplayName == selection.subjectName
+                    && $0.colorHex.caseInsensitiveCompare(selection.subjectColorHex) == .orderedSame
+            })?.id
+            : nil
+        let keptChoiceID = offeredSubjectID == nil && matchingSubjectID == nil
+            ? (selection.subjectID ?? selection.id)
+            : nil
+        keptSubjectChoiceID = keptChoiceID
+        _selectedSubjectID = State(
+            initialValue: offeredSubjectID ?? matchingSubjectID ?? keptChoiceID
+        )
         _kind = State(initialValue: selection.kind)
         _note = State(initialValue: selection.note)
         _achievedAt = State(initialValue: min(selection.achievedAt, .now))
@@ -2240,6 +2277,26 @@ private struct AchievementEditorSheet: View {
 
     private var selectedSubject: Subject? {
         subjects.first { $0.id == selectedSubjectID }
+    }
+
+    private var keepsOriginalSubject: Bool {
+        keptSubjectChoiceID != nil && selectedSubjectID == keptSubjectChoiceID
+    }
+
+    private var selectedSubjectTitle: String? {
+        keepsOriginalSubject ? selection.subjectName : selectedSubject?.safeDisplayName
+    }
+
+    private var keptSubjectMenuTitle: String {
+        selection.subjectIsDeleted
+            ? "\(selection.subjectName)（削除したテーマ）"
+            : "\(selection.subjectName)（今のまま）"
+    }
+
+    private var keptSubjectNotice: String {
+        selection.subjectIsDeleted
+            ? "「\(selection.subjectName)」は設定で削除したテーマです。ほかのテーマを選ばなければ、このまま残ります。"
+            : "「\(selection.subjectName)」は今のテーマ一覧にありません。ほかのテーマを選ばなければ、このまま残ります。"
     }
 
     var body: some View {
@@ -2377,6 +2434,17 @@ private struct AchievementEditorSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             editorLabel("テーマ")
             Menu {
+                if let keptSubjectChoiceID {
+                    Button {
+                        selectedSubjectID = keptSubjectChoiceID
+                    } label: {
+                        if keepsOriginalSubject {
+                            Label(keptSubjectMenuTitle, systemImage: "checkmark")
+                        } else {
+                            Text(keptSubjectMenuTitle)
+                        }
+                    }
+                }
                 ForEach(subjects) { subject in
                     Button {
                         selectedSubjectID = subject.id
@@ -2390,19 +2458,31 @@ private struct AchievementEditorSheet: View {
                 }
             } label: {
                 editorMenuLabel(
-                    title: selectedSubject?.safeDisplayName ?? "テーマを選択",
-                    colorHex: selectedSubject?.colorHex ?? Constants.Color.textMute,
+                    title: selectedSubjectTitle ?? "テーマを選択",
+                    colorHex: keepsOriginalSubject
+                        ? selection.subjectColorHex
+                        : (selectedSubject?.colorHex ?? Constants.Color.textMute),
                     symbol: "folder.fill"
                 )
             }
-            .disabled(subjects.isEmpty)
-            .accessibilityLabel("テーマ、\(selectedSubject?.safeDisplayName ?? "未選択")")
+            .disabled(subjects.isEmpty && keptSubjectChoiceID == nil)
+            .accessibilityLabel("テーマ、\(selectedSubjectTitle ?? "未選択")")
             .accessibilityHint(
                 subjects.isEmpty
-                    ? "テーマがないため変更できません"
+                    ? (keptSubjectChoiceID == nil
+                        ? "テーマがないため変更できません"
+                        : "ほかに選べるテーマはありません")
                     : "成果を結びつけるテーマを変更できます"
             )
             .accessibilityIdentifier("achievement.editor.subject")
+
+            if keepsOriginalSubject {
+                Text(keptSubjectNotice)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("achievement.editor.kept-subject")
+            }
         }
     }
 
@@ -2467,7 +2547,7 @@ private struct AchievementEditorSheet: View {
         guard !isCommitting, let selectedSubjectID else { return }
         isCommitting = true
         errorMessage = onSave(AchievementEditDraft(
-            subjectID: selectedSubjectID,
+            subjectID: selectedSubjectID == keptSubjectChoiceID ? nil : selectedSubjectID,
             kind: kind,
             note: note,
             achievedAt: achievedAt

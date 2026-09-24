@@ -1615,6 +1615,38 @@ enum AchievementStoneRevisionPolicy {
         )
     }
 
+    /// Edits a milestone without touching its theme: the link and the name
+    /// and color snapshots stay exactly as they are. The 記録 editor uses it
+    /// when the stone's theme is no longer offered (deleted in Settings), so
+    /// correcting a memo or date never relabels it with an unrelated theme.
+    @discardableResult
+    static func editKeepingSubject(
+        _ values: [AchievementStone],
+        kind: AchievementKind,
+        note: String,
+        achievedAt: Date,
+        now: Date = .now
+    ) -> MutationResult {
+        let canonical = AchievementStonePolicy.canonicalStone(from: values)
+        guard let current = canonical
+            ?? AchievementStonePolicy.repairCandidate(from: values)
+        else { return .applied }
+        return apply(
+            values,
+            subject: current.subject,
+            subjectNameSnapshot: current.subjectNameSnapshot,
+            subjectColorHexSnapshot: current.subjectColorHexSnapshot,
+            kind: kind,
+            note: note,
+            achievedAt: achievedAt,
+            deletedAt: canonical?.deletedAt,
+            deletionRevision: canonical?.deletionRevision ?? 0,
+            deletionMutationID: canonical?.deletionMutationID,
+            restoredDeletionMutationID: canonical?.restoredDeletionMutationID,
+            now: now
+        )
+    }
+
     @discardableResult
     static func delete(
         _ values: [AchievementStone],
