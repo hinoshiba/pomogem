@@ -851,19 +851,20 @@ struct AccumulationOverviewView: View {
             Circle()
                 .stroke(Color(hex: currentWeekColorHex).opacity(0.34), lineWidth: 1)
             VStack(spacing: 4) {
-                Image(systemName: "scalemass.fill")
+                // The same time as the 時間 stat beside it; 標準単位 here gave
+                // the one week a second unit (history-08). At accessibility
+                // sizes the time would break mid-number inside the 112 pt
+                // crystal, and the stat under it already says it.
+                Image(systemName: "hourglass")
                     .font(.title2.weight(.black))
-                Text(
-                    dynamicTypeSize.isAccessibilitySize
-                        ? EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams)
-                            .replacingOccurrences(of: "標準", with: "\n標準")
-                        : EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams)
-                )
-                    .font(.caption2.weight(.black))
-                    .monospacedDigit()
-                    .multilineTextAlignment(.center)
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Text(DurationPresentation.focusLabel(grams: currentWeekGrams))
+                        .font(.caption2.weight(.black))
+                        .monospacedDigit()
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.8)
+                }
             }
             .foregroundStyle(Color(hex: currentWeekColorHex))
             .padding(8)
