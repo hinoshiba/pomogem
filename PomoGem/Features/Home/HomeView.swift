@@ -377,6 +377,28 @@ struct HomeView: View {
     /// the colour of their accumulated effort, while the launch button can
     /// still describe the next chosen theme independently.
     private var lifetimeCoreColorHex: String {
+        lifetimeCoreColorWeights.sorted { lhs, rhs in
+            if lhs.value == rhs.value { return lhs.key < rhs.key }
+            return lhs.value > rhs.value
+        }.first?.key ?? selectedSubject?.colorHex ?? Constants.Color.amberLamp
+    }
+
+    /// Approximate theme shares of the lifetime core (root grams × colour
+    /// mix + loose grams). Aggregate mixes are count-weighted, so this is
+    /// called "おおよそ" and never a mass breakdown.
+    private var lifetimeCoreColorShares: [GemColorShare] {
+        let weights = lifetimeCoreColorWeights
+        let total = weights.values.reduce(0, +)
+        guard total > 0 else { return [] }
+        return weights
+            .sorted { lhs, rhs in
+                if lhs.value == rhs.value { return lhs.key < rhs.key }
+                return lhs.value > rhs.value
+            }
+            .map { GemColorShare(hex: $0.key, fraction: $0.value / total) }
+    }
+
+    private var lifetimeCoreColorWeights: [String: Double] {
         var weights: [String: Double] = [:]
 
         for aggregate in activeAggregateRoots {
@@ -397,11 +419,7 @@ struct HomeView: View {
         for session in looseSessions {
             weights[session.displaySubjectColorHex, default: 0] += Double(max(0, session.grams))
         }
-
-        return weights.sorted { lhs, rhs in
-            if lhs.value == rhs.value { return lhs.key < rhs.key }
-            return lhs.value > rhs.value
-        }.first?.key ?? selectedSubject?.colorHex ?? Constants.Color.amberLamp
+        return weights
     }
     private var visibleAchievementStones: [AchievementStone] {
         AchievementStonePolicy.visibleStones(from: achievementStones)
@@ -879,6 +897,8 @@ struct HomeView: View {
                 prismPebbleCount: visiblePrismPebbleCount,
                 accentHex: selectedSubject?.colorHex ?? Constants.Color.amberLamp,
                 lifetimeCoreColorHex: lifetimeCoreColorHex,
+                lifetimeCoreColorShares: lifetimeCoreColorShares,
+                coreTopClearance: Self.previewsHUDAboveJar ? nil : jarMetricHUDBottom,
                 projectionIsLowerBound: localProjectionNeedsMaintenance,
                 projectionIsUnverified:
                     aggregateProjectionPresentation.isCloudVerificationPending,
@@ -890,6 +910,7 @@ struct HomeView: View {
                 onAggregateAccessibilityAction: presentAggregateDetail
             )
                 .padding(.horizontal, 4)
+                .padding(.top, Self.previewsHUDAboveJar ? Self.hudAboveJarHeight : 0)
 
             jarMetricHUD
 
@@ -1039,6 +1060,30 @@ struct HomeView: View {
             && router.cloudFocusRecoveryOffer == nil
     }
 
+    /// D5 (owner decision pending, Docs/GemExperienceDesign.md §8.1): a
+    /// Simulator-only preview that moves the metric HUD above the jar mouth
+    /// so the jar holds only the core and the gems. Requires the in-memory
+    /// UI-test launch plus `POMOGEM_UI_TEST_HUD=outside`; never in release.
+    private static let previewsHUDAboveJar: Bool = {
+#if DEBUG && targetEnvironment(simulator)
+        return LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess
+            && LocalPreviewLaunchPolicy.persistenceModeForCurrentProcess == .inMemoryPreview
+            && ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_HUD"] == "outside"
+#else
+        return false
+#endif
+    }()
+    private static let hudAboveJarHeight: CGFloat = 104
+
+    /// Approximate bottom edge of the metric HUD inside the jar stage (its
+    /// 88 pt top inset plus the label, value and pill rows), used to keep the
+    /// time core's orbit clear of the numbers.
+    private var jarMetricHUDBottom: CGFloat {
+        let valueRow: CGFloat = dynamicTypeSize.isAccessibilitySize ? 36 : 47
+        let rail: CGFloat = showsPreFusionRail ? 34 : 0
+        return 88 + 15 + 3 + valueRow + 3 + 24 + rail
+    }
+
     private var jarMetricHUD: some View {
         VStack(spacing: 3) {
             Text("積み上げた集中")
@@ -1072,8 +1117,10 @@ struct HomeView: View {
                 }
             }
         }
+        .shadow(color: .black.opacity(0.52), radius: 3, y: 1)
         // A soft ink scrim keeps the value legible over the brighter core,
-        // orbit markers and glowing gems behind the glass.
+        // orbit markers and glowing gems behind the glass. The text shadow
+        // is applied first, so the blurred scrim is not shadowed again.
         .background {
             Ellipse()
                 .fill(
@@ -1089,9 +1136,8 @@ struct HomeView: View {
         }
         // Keep every glyph behind the mouth instead of straddling its bright
         // rim; the occlusion cue is what makes the glass depth believable.
-        .padding(.top, 88)
+        .padding(.top, Self.previewsHUDAboveJar ? 0 : 88)
         .frame(maxHeight: .infinity, alignment: .top)
-        .shadow(color: .black.opacity(0.52), radius: 3, y: 1)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

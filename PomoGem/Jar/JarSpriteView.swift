@@ -123,6 +123,10 @@ struct JarSpriteView: View {
     let prismPebbleCount: Int
     let accentHex: String
     let lifetimeCoreColorHex: String
+    let lifetimeCoreColorShares: [GemColorShare]
+    /// Height of an overlaid HUD at the top of the stage (Home), so the core
+    /// and its orbit stay clear of it.
+    let coreTopClearance: CGFloat?
     let projectionIsLowerBound: Bool
     let projectionIsUnverified: Bool
     let fusionProgressDescription: String?
@@ -157,6 +161,8 @@ struct JarSpriteView: View {
         prismPebbleCount: Int = 0,
         accentHex: String = Constants.Color.amberLamp,
         lifetimeCoreColorHex: String? = nil,
+        lifetimeCoreColorShares: [GemColorShare] = [],
+        coreTopClearance: CGFloat? = nil,
         projectionIsLowerBound: Bool = false,
         projectionIsUnverified: Bool = false,
         fusionProgressDescription: String? = nil,
@@ -181,6 +187,8 @@ struct JarSpriteView: View {
         )
         self.accentHex = accentHex
         self.lifetimeCoreColorHex = lifetimeCoreColorHex ?? accentHex
+        self.lifetimeCoreColorShares = lifetimeCoreColorShares
+        self.coreTopClearance = coreTopClearance
         self.projectionIsLowerBound = projectionIsLowerBound
         self.projectionIsUnverified = projectionIsUnverified
         self.fusionProgressDescription = fusionProgressDescription
@@ -228,14 +236,24 @@ struct JarSpriteView: View {
                 if let coreState = lifetimeCoreState {
                     JarLifetimeCoreBackdrop(
                         state: coreState,
-                        colorHex: lifetimeCoreColorHex
+                        colorHex: lifetimeCoreColorHex,
+                        colorShares: lifetimeCoreColorShares,
+                        topClearance: coreTopClearance
                     )
+                } else if totalGrams > 0, totalGrams < GemCutLadder.firstCrystalTierGrams {
+                    // Where the core will be born: a colourless vessel whose
+                    // facets light up one per 250 g.
+                    JarLifetimeCoreVessel(totalGrams: totalGrams, topClearance: coreTopClearance)
                 }
 
                 SpriteView(
                     scene: scene,
-                    preferredFramesPerSecond: Constants.Jar.targetFramesPerSecond,
-                    options: [.allowsTransparency],
+                    // Low Power Mode and a hot device drop to 30 fps (the
+                    // flares and event sparks also pause there).
+                    preferredFramesPerSecond: JarScene.allowsAmbientSparkle
+                        ? Constants.Jar.targetFramesPerSecond
+                        : min(30, Constants.Jar.targetFramesPerSecond),
+                    options: [.allowsTransparency, .shouldCullNonVisibleNodes],
                     debugOptions: Self.spriteDebugOptions
                 )
 #if targetEnvironment(macCatalyst)
@@ -265,7 +283,11 @@ struct JarSpriteView: View {
 #endif
                 .onAppear {
                     scene.size = proxy.size
+                    scene.milestoneTraceCount = milestoneTraceCount
                     updateMotionBehavior(reduceMotion: reduceMotion)
+                }
+                .onChange(of: milestoneTraceCount) { _, count in
+                    scene.milestoneTraceCount = count
                 }
                 .onChange(of: proxy.size) { _, newSize in
                     scene.size = newSize
@@ -317,6 +339,14 @@ struct JarSpriteView: View {
             scene.cancelInteractionPresentation()
             motionObserver.stop()
         }
+    }
+
+    /// Long-term milestone traces, engraved on the jar's copper collar.
+    private var milestoneTraceCount: Int {
+        JarAccumulationPresencePresentation.state(
+            totalGrams: totalGrams,
+            effortSnapshot: JarAccumulationPresencePresentation.effortSnapshot(totalGrams: totalGrams)
+        ).visibleMajorMilestoneTraceCount
     }
 
     /// Debug-only rendering counters for gem performance reviews in the
@@ -648,7 +678,7 @@ private struct JarAmbientStage: View {
                 Ellipse()
                     .fill(
                         RadialGradient(
-                            colors: [Color.black.opacity(0.52), .clear],
+                            colors: [Color.black.opacity(0.30), .clear],
                             center: .center,
                             startRadius: 2,
                             endRadius: jarWidth * 0.46
@@ -663,7 +693,7 @@ private struct JarAmbientStage: View {
                         .fill(
                             RadialGradient(
                                 colors: [
-                                    PomoGemTheme.auroraWarm.opacity(reduceTransparency ? 0.14 : 0.34),
+                                    PomoGemTheme.auroraWarm.opacity(reduceTransparency ? 0.17 : 0.34),
                                     .clear
                                 ],
                                 center: .center,
@@ -675,7 +705,7 @@ private struct JarAmbientStage: View {
                         .fill(
                             RadialGradient(
                                 colors: [
-                                    PomoGemTheme.auroraBlue.opacity(reduceTransparency ? 0.12 : 0.30),
+                                    PomoGemTheme.auroraBlue.opacity(reduceTransparency ? 0.15 : 0.30),
                                     .clear
                                 ],
                                 center: .center,
@@ -720,39 +750,42 @@ private struct JarAmbientStage: View {
     }
 }
 
-/// Four static star glints on the floor. Drawn once; no animation.
+/// Four static star glints on the floor, drawn once (no animation). Each is
+/// asymmetric — the horizontal arm 1.6× the vertical — so they read as light
+/// caught on glass rather than clip-art crosses.
 private struct JarFloorSparkles: View {
     var body: some View {
         Canvas { context, size in
             let points: [(x: CGFloat, y: CGFloat, length: CGFloat, alpha: Double)] = [
-                (0.12, 0.45, 7, 0.75),
-                (0.30, 0.78, 4.5, 0.55),
-                (0.73, 0.55, 6, 0.70),
-                (0.91, 0.30, 4, 0.50)
+                (0.10, 0.42, 5.5, 0.55),
+                (0.31, 0.80, 3.8, 0.38),
+                (0.70, 0.58, 5.0, 0.50),
+                (0.92, 0.30, 3.6, 0.35)
             ]
             for point in points {
                 let center = CGPoint(x: size.width * point.x, y: size.height * point.y)
                 for vertical in [false, true] {
+                    let arm = vertical ? point.length : point.length * 1.6
                     let rect = vertical
-                        ? CGRect(x: center.x - 0.7, y: center.y - point.length, width: 1.4, height: point.length * 2)
-                        : CGRect(x: center.x - point.length, y: center.y - 0.7, width: point.length * 2, height: 1.4)
+                        ? CGRect(x: center.x - 0.6, y: center.y - arm, width: 1.2, height: arm * 2)
+                        : CGRect(x: center.x - arm, y: center.y - 0.6, width: arm * 2, height: 1.2)
                     context.fill(
                         Path(ellipseIn: rect),
                         with: .radialGradient(
                             Gradient(colors: [.white.opacity(point.alpha), .white.opacity(0)]),
                             center: center,
                             startRadius: 0,
-                            endRadius: point.length
+                            endRadius: arm
                         )
                     )
                 }
                 context.fill(
-                    Path(ellipseIn: CGRect(x: center.x - 2, y: center.y - 2, width: 4, height: 4)),
+                    Path(ellipseIn: CGRect(x: center.x - 1.8, y: center.y - 1.8, width: 3.6, height: 3.6)),
                     with: .radialGradient(
                         Gradient(colors: [.white.opacity(point.alpha), .white.opacity(0)]),
                         center: center,
                         startRadius: 0,
-                        endRadius: 2
+                        endRadius: 1.8
                     )
                 )
             }

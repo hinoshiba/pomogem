@@ -604,4 +604,28 @@ final class GemBrillianceTests: XCTestCase {
         XCTAssertEqual(first.size.width, GemArtwork.coreBakeDiameter, accuracy: 0.5)
         XCTAssertTrue(GemArtwork.vesselImage(litFacets: 3) === GemArtwork.vesselImage(litFacets: 3))
     }
+
+    /// The core never stops growing visibly: size to 0.26 of the jar, then
+    /// a second orbit (250 kg), a crown (2.5 t) and a third orbit (25 t).
+    func testTimeCoreGrowthNeverStalls() {
+        let jarWidth: CGFloat = 358
+        var previous: (CGFloat, Int, Bool)?
+        for level in 1 ... 5 {
+            let current = (
+                JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: level),
+                JarLifetimeCoreBackdrop.orbitCount(level: level),
+                GemArtwork.coreHasCrown(level: level)
+            )
+            XCTAssertLessThanOrEqual(current.0, 96)
+            if let previous {
+                XCTAssertGreaterThanOrEqual(current.0, previous.0)
+                XCTAssertGreaterThanOrEqual(current.1, previous.1)
+                let grew = current.0 > previous.0 + 0.5
+                    || current.1 > previous.1
+                    || (current.2 && !previous.2)
+                XCTAssertTrue(grew, "level \(level) must add something visible")
+            }
+            previous = current
+        }
+    }
 }
