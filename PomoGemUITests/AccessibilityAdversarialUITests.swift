@@ -384,6 +384,59 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         XCTAssertTrue(waitForEnabled(app.buttons["home.focus-launcher"], timeout: 12))
     }
 
+    /// At AX5 on a 4.7-inch iPhone the timer's pause/resume and 「今日はここまで」
+    /// used to start below the fold with nothing showing the screen scrolls.
+    /// They are pinned on screen in every state.
+    func testAX5FocusControlsStayOnScreenWhileRunningAndPaused() throws {
+        let durationPicker = app.buttons["home.duration-picker"]
+        XCTAssertTrue(scrollUntilFullyVisibleInContent(durationPicker, attempts: 12))
+        durationPicker.tap()
+        let twentyFive = app.buttons["25分"].firstMatch
+        XCTAssertTrue(twentyFive.waitForExistence(timeout: 4))
+        XCTAssertTrue(scrollUntilHittable(twentyFive))
+        twentyFive.tap()
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(scrollUntilFullyVisibleInContent(launcher, attempts: 12))
+        launcher.tap()
+        let rareChoice = app.descendants(matching: .any)["focus.rare-reward-choice"]
+        if rareChoice.waitForExistence(timeout: 1) {
+            app.buttons["rare-reward.choice.off"].tap()
+            app.buttons["focus.rare-reward-choice.confirm"].tap()
+        }
+
+        let viewport = app.windows.firstMatch.frame
+        func assertOnScreen(_ element: XCUIElement, _ message: String) {
+            XCTAssertTrue(element.waitForExistence(timeout: 6), message)
+            XCTAssertTrue(element.isHittable, message)
+            XCTAssertGreaterThanOrEqual(element.frame.minY, viewport.minY, message)
+            XCTAssertLessThanOrEqual(element.frame.maxY, viewport.maxY, message)
+            XCTAssertGreaterThanOrEqual(element.frame.height, 43.5, message)
+        }
+        let pause = app.buttons["一時停止"]
+        let giveUp = app.buttons["今日はここまで"]
+        assertOnScreen(pause, "Pause must be operable at AX5 without scrolling")
+        assertOnScreen(giveUp, "Give-up must be operable at AX5 without scrolling")
+        let running = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        running.name = "AX5 running focus — pinned controls"
+        running.lifetime = .keepAlways
+        add(running)
+
+        pause.tap()
+        let resume = app.buttons["再開する"]
+        assertOnScreen(resume, "Resume must be operable at AX5 without scrolling")
+        assertOnScreen(giveUp, "Give-up must stay operable while paused")
+        let paused = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        paused.name = "AX5 paused focus — pinned controls"
+        paused.lifetime = .keepAlways
+        add(paused)
+
+        giveUp.tap()
+        let confirmation = app.alerts["今日はここまで"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
+        confirmation.buttons["今日はここまで"].tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+    }
+
     private func waitForEnabled(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
         let enabled = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == true AND enabled == true"),

@@ -899,45 +899,65 @@ struct FocusView: View {
         return AnyHashable(preparedSessionID ?? orientationSessionID)
     }
 
+    /// At accessibility text sizes the ring, notice and controls cannot all
+    /// fit a 4.7-inch screen. Pause/resume and 「今日はここまで」 are then
+    /// pinned below the scrolling content, like the completion alarm's Stop,
+    /// so they are always on screen; the ring scrolls above them.
     private func timerBody(_ context: TimerLayoutContext) -> some View {
-        let usesColumns = context.isLandscape && !dynamicTypeSize.isAccessibilitySize
-        let ringSize = FocusTimerLayoutPolicy.ringSize(in: context.size)
-        return ScrollView {
-            VStack(spacing: 0) {
-                timerHeader
+        let pinsActions = dynamicTypeSize.isAccessibilitySize
+        let usesColumns = context.isLandscape && !pinsActions
+        return VStack(spacing: 0) {
+            GeometryReader { proxy in
+                let ringSize = FocusTimerLayoutPolicy.ringSize(
+                    in: pinsActions ? proxy.size : context.size
+                )
+                ScrollView {
+                    VStack(spacing: 0) {
+                        timerHeader
 
-                if usesColumns {
-                    HStack(spacing: 32) {
-                        timerDisplay(size: ringSize)
-                            .frame(maxWidth: .infinity)
-                        VStack(spacing: 20) {
+                        if usesColumns {
+                            HStack(spacing: 32) {
+                                timerDisplay(size: ringSize)
+                                    .frame(maxWidth: .infinity)
+                                VStack(spacing: 20) {
+                                    timerNotice
+                                    timerActions(horizontal: false)
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .padding(.horizontal, 28)
+                            .padding(.vertical, 12)
+                            .frame(maxHeight: .infinity)
+                        } else {
+                            Spacer(minLength: 18)
+                            timerDisplay(size: ringSize)
                             timerNotice
-                            timerActions
+                                .padding(.horizontal, 24)
+                                .padding(.top, 24)
+                            Spacer(minLength: 18)
+                            if !pinsActions {
+                                timerActions(horizontal: false)
+                                    .padding(.horizontal, 24)
+                                    .padding(.bottom, 24)
+                            }
                         }
-                        .frame(maxWidth: .infinity)
                     }
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 12)
-                    .frame(maxHeight: .infinity)
-                } else {
-                    Spacer(minLength: 18)
-                    timerDisplay(size: ringSize)
-                    timerNotice
-                        .padding(.horizontal, 24)
-                        .padding(.top, 24)
-                    Spacer(minLength: 18)
-                    timerActions
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 24)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: proxy.size.height)
                 }
+                .scrollBounceBehavior(.basedOnSize)
+                // The ring and notice may continue under the pinned bar.
+                .scrollIndicatorsFlash(onAppear: pinsActions)
             }
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: context.size.height)
+
+            if pinsActions {
+                // Side by side in landscape keeps the bar short enough to
+                // leave the ring room on a ~375 pt tall scene.
+                timerActions(horizontal: context.isLandscape)
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+                    .modifier(TimerPinnedActionBar())
+            }
         }
-        // At accessibility sizes the pause and give-up controls can start
-        // below the fold; show that the timer screen scrolls.
-        .scrollIndicators(dynamicTypeSize.isAccessibilitySize ? .visible : .hidden)
-        .scrollBounceBehavior(.basedOnSize)
     }
 
     private var timerHeader: some View {
@@ -1000,8 +1020,11 @@ struct FocusView: View {
         }
     }
 
-    private var timerActions: some View {
-        VStack(spacing: 12) {
+    private func timerActions(horizontal: Bool) -> some View {
+        let layout = horizontal
+            ? AnyLayout(HStackLayout(spacing: 16))
+            : AnyLayout(VStackLayout(spacing: 12))
+        return layout {
             Button(action: togglePause) {
                 Label(
                     snapshot.phase == .paused ? Constants.UIStrings.resume : Constants.UIStrings.pause,
@@ -1014,11 +1037,18 @@ struct FocusView: View {
                 Button("休憩をスキップ", action: skipBreak)
                     .buttonStyle(PomoGemSecondaryButtonStyle())
             } else {
-                Button(Constants.UIStrings.giveUp) { showGiveUpConfirmation = true }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(PomoGemTheme.muted)
-                    .frame(minHeight: 44)
-                    .buttonStyle(PomoGemBareButtonStyle())
+                Button {
+                    showGiveUpConfirmation = true
+                } label: {
+                    // The 44 pt minimum belongs to the label, so the touch
+                    // target and the accessibility frame both get it.
+                    Text(Constants.UIStrings.giveUp)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PomoGemTheme.muted)
+                .buttonStyle(PomoGemBareButtonStyle())
             }
         }
     }
@@ -2579,12 +2609,7 @@ struct FocusView: View {
         .accessibilityHint("音と触覚を止めます。記録の保存中でも操作でき、2本指のダブルタップでも止められます")
         .accessibilityIdentifier("focus.completion-alert.stop")
         .accessibilityFocused($completionAlertStopFocused)
-        .frame(maxWidth: 520)
-        .padding(.horizontal, 24)
-        .padding(.top, 12)
-        .padding(.bottom, 16)
-        .frame(maxWidth: .infinity)
-        .background(Color.black)
+        .modifier(TimerPinnedActionBar())
     }
 
     private func completionSummary(
@@ -2630,6 +2655,9 @@ struct FocusView: View {
                     .accessibilityAddTraits(.isHeader)
                 Text("\(subjectSnapshot.name)  +\(result.grams)g")
                     .font(.system(.headline, design: .rounded, weight: .bold))
+                    // Same ceiling as the title, so the facts never outgrow
+                    // the heading at the largest sizes.
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                     .foregroundStyle(PomoGemTheme.muted)
                     .multilineTextAlignment(.center)
             }
@@ -2645,11 +2673,15 @@ struct FocusView: View {
         VStack(spacing: 22) {
             if isAlerting {
                 VStack(spacing: 8) {
+                    // The heading's icon already shows the bell at
+                    // accessibility sizes; the words alone stay on one line.
                     Label(
                         "終了アラート中",
                         systemImage: "bell.and.waves.left.and.right.fill"
                     )
+                    .labelStyle(AccessibilitySizeTitleOnlyLabelStyle())
                     .font(.headline.weight(.bold))
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                     .foregroundStyle(PomoGemTheme.amber)
                     Text("止めるまで、音と触覚を繰り返します")
                         .font(.caption)
@@ -3092,6 +3124,52 @@ private struct RareRewardPreFocusChoiceView: View {
         .scrollBounceBehavior(.basedOnSize)
         .background(Color.black.ignoresSafeArea())
         .accessibilityIdentifier("focus.rare-reward-choice")
+    }
+}
+
+/// Drops a label's icon at accessibility text sizes, where a large symbol
+/// beside a short status would wrap the words one character per line.
+struct AccessibilitySizeTitleOnlyLabelStyle: LabelStyle {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    func makeBody(configuration: Configuration) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            configuration.title
+        } else {
+            Label(configuration)
+        }
+    }
+}
+
+/// The bottom bar that keeps a timer screen's essential controls on screen
+/// at every text size. A short fade and a hairline mark its top edge, so text
+/// scrolling beneath it reads as continuing rather than clipped.
+struct TimerPinnedActionBar: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: 520)
+            .padding(.horizontal, 24)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
+            .frame(maxWidth: .infinity)
+            .background(Color.black)
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(PomoGemTheme.muted.opacity(0.3))
+                    .frame(height: 1)
+                    .accessibilityHidden(true)
+            }
+            .background(alignment: .top) {
+                LinearGradient(
+                    colors: [Color.black.opacity(0), Color.black],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 20)
+                .offset(y: -20)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
     }
 }
 

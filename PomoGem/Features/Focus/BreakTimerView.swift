@@ -293,7 +293,9 @@ struct BreakTimerView: View {
                         "休憩終了のアラート中",
                         systemImage: "bell.and.waves.left.and.right.fill"
                     )
+                    .labelStyle(AccessibilitySizeTitleOnlyLabelStyle())
                     .font(.headline.weight(.bold))
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                     .foregroundStyle(PomoGemTheme.amber)
                     Text("止めるまで、音と触覚を繰り返します")
                         .font(.caption)
@@ -327,12 +329,7 @@ struct BreakTimerView: View {
         .accessibilityHint("2本指のダブルタップでも操作できます")
         .accessibilityIdentifier("break.completion-alert.stop")
         .accessibilityFocused($breakEndButtonFocused)
-        .frame(maxWidth: 520)
-        .padding(.horizontal, 24)
-        .padding(.top, 12)
-        .padding(.bottom, 16)
-        .frame(maxWidth: .infinity)
-        .background(Color.black)
+        .modifier(TimerPinnedActionBar())
     }
 
     @ViewBuilder
