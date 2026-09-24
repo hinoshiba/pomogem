@@ -486,7 +486,7 @@ struct AccumulationOverviewPageScope: Equatable, Sendable {
 
     var achievementSectionSubtitle: String {
         if totalAchievementCountIsLowerBound {
-            return "記念石(totalAchievementCount.formatted())個以上・最新(displayedAchievementCount.formatted())個を表示"
+            return "記念石\(totalAchievementCount.formatted())個以上・最新\(displayedAchievementCount.formatted())個を表示"
         }
         if achievementPageIsPartial {
             return "全\(totalAchievementCount.formatted())個のうち最新\(displayedAchievementCount.formatted())個を表示"
@@ -496,7 +496,7 @@ struct AccumulationOverviewPageScope: Equatable, Sendable {
 
     var achievementAccessibilitySummary: String {
         if totalAchievementCountIsLowerBound {
-            return "記念石(totalAchievementCount.formatted())個以上、最新(displayedAchievementCount.formatted())個を表示"
+            return "記念石\(totalAchievementCount.formatted())個以上、最新\(displayedAchievementCount.formatted())個を表示"
         }
         if achievementPageIsPartial {
             return "記念石\(totalAchievementCount.formatted())個、最新\(displayedAchievementCount.formatted())個を表示"

@@ -527,6 +527,25 @@ final class ProgressPresentationTests: XCTestCase {
         XCTAssertEqual(complete.shelfScopeLabel, "月ごと・全9件")
         XCTAssertEqual(complete.achievementSectionSubtitle, "質量とは別の記念・全2個")
         XCTAssertEqual(complete.achievementAccessibilitySummary, "記念石2個")
+
+        // A full candidate page only proves a lower bound. Both strings must
+        // carry the numbers, never the interpolation source text.
+        let lowerBound = AccumulationOverviewPageScope(
+            totalSessionCount: 1,
+            displayedSessionCount: 1,
+            totalAchievementCount: 1_200,
+            displayedAchievementCount: 120,
+            totalAchievementCountIsLowerBound: true
+        )
+        XCTAssertTrue(lowerBound.achievementPageIsPartial)
+        XCTAssertEqual(
+            lowerBound.achievementSectionSubtitle,
+            "記念石1,200個以上・最新120個を表示"
+        )
+        XCTAssertEqual(
+            lowerBound.achievementAccessibilitySummary,
+            "記念石1,200個以上、最新120個を表示"
+        )
     }
 
     func testOverviewPageScopeDoesNotClaimEmptyLifetimeForUnloadedHistory() {
