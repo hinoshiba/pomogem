@@ -738,26 +738,72 @@ struct SettingsView: View {
                     get: { resolvedPreferences.reminderEnabled },
                     set: { enabled in updateReminder(enabled: enabled) }
                 )) {
-                    SettingLabel(title: "毎日のリマインダ", subtitle: Constants.UIStrings.eveningNotification, symbol: "bell")
-                }
-
-                if resolvedPreferences.reminderEnabled {
-                    DatePicker(
-                        "通知する時刻",
-                        selection: reminderTimeBinding,
-                        displayedComponents: .hourAndMinute
+                    SettingLabel(
+                        title: String(
+                            localized: "毎日のリマインダー",
+                            table: "Settings",
+                            comment: "Settings switch title: the opt-in daily reminder"
+                        ),
+                        subtitle: Constants.UIStrings.eveningNotification,
+                        symbol: "bell"
                     )
                 }
+                .accessibilityIdentifier("settings.daily-reminder")
 
                 Toggle(isOn: Binding(
                     get: { wrappedNotifications },
                     set: { enabled in updateWrappedNotification(enabled: enabled) }
                 )) {
-                    SettingLabel(title: "今月の積み重ね", subtitle: "毎月1日に一度だけ", symbol: "circle.grid.3x3.fill")
+                    // Wrapped looks back at the month that just ended.
+                    SettingLabel(
+                        title: String(
+                            localized: "先月の瓶のお知らせ",
+                            table: "Settings",
+                            comment: "Settings switch title: the opt-in monthly look-back notification"
+                        ),
+                        subtitle: String(
+                            localized: "毎月1日に一度だけ",
+                            table: "Settings",
+                            comment: "Settings switch subtitle: the monthly notification is sent on the 1st"
+                        ),
+                        symbol: "circle.grid.3x3.fill"
+                    )
                 }
+                .accessibilityIdentifier("settings.wrapped-notification")
 
                 if resolvedPreferences.reminderEnabled || wrappedNotifications {
                     notificationPermissionStatus(identifier: "settings.notification-permission")
+
+                    // One shared time for both notifications, so it stays
+                    // visible and editable while either one is on.
+                    DatePicker(
+                        String(localized: "通知する時刻", table: "Settings", comment: "Settings time picker label for reminders"),
+                        selection: reminderTimeBinding,
+                        displayedComponents: .hourAndMinute
+                    )
+                    .accessibilityIdentifier("settings.reminder-time")
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        if resolvedPreferences.reminderEnabled {
+                            Text(
+                                "その日に集中を始めたり記録を積んだりしていれば、毎日のリマインダーは鳴りません。7日間アプリを開かなかったときは、次に開くまでお休みします。",
+                                tableName: "Settings",
+                                comment: "Settings caption: when the daily reminder is skipped"
+                            )
+                        }
+                        if wrappedNotifications {
+                            Text(
+                                "先月の瓶のお知らせは、毎月1日のこの時刻に届きます。記録がない月には届きません。",
+                                tableName: "Settings",
+                                comment: "Settings caption: when the monthly look-back notification is sent"
+                            )
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("settings.reminder-rules")
                 }
             }
         } header: {
@@ -1593,7 +1639,11 @@ struct SettingsView: View {
                     try modelContext.save()
                 } catch {
                     modelContext.rollback()
-                    settingsError = "毎日のリマインダ設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+                    settingsError = String(
+                        localized: "毎日のリマインダー設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                        table: "Settings",
+                        comment: "Settings error; the argument is the system error description"
+                    )
                     return
                 }
             case .wrapped:
@@ -1773,6 +1823,11 @@ struct SettingsView: View {
         await manager.refreshAuthorizationStatus()
         guard !Task.isCancelled else { return }
         let prefs = resolvedPreferences
+        let activity = PassiveReminderActivityReader.read(
+            context: modelContext,
+            markers: resetSnapshots,
+            focusIsPresented: router.focusPresentationIsActive
+        )
         do {
             try await manager.synchronizePassiveNotifications(
                 dailyReminderEnabled: (prefs?.reminderEnabled ?? false)
@@ -1782,7 +1837,8 @@ struct SettingsView: View {
                     ?? Constants.Notification.defaultReminderHour,
                 minute: prefs?.reminderMinute
                     ?? Constants.Notification.defaultReminderMinute,
-                playsSound: prefs?.soundOn ?? false
+                playsSound: prefs?.soundOn ?? false,
+                activity: activity
             )
         } catch {
             guard !Task.isCancelled else { return }

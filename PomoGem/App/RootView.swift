@@ -363,6 +363,7 @@ struct RootView: View {
     @State private var bootstrapError: String?
     @State private var bootstrapAttempt = 0
     @State private var lastPassiveNotificationErrorFingerprint: String?
+    @State private var lastPassiveReminderActivity: PassiveReminderActivity?
     @State private var dismissedCloudFocusOfferID: UUID?
     @State private var didReportCloudFocusIntegrityIssue = false
     @State private var isReconcilingActivityData = false
@@ -781,6 +782,15 @@ struct RootView: View {
             // sorts the full lifetime table merely to detect a change.
             enqueueSessionDependentVerification()
             viewTasks.start { await reconcileIncomingActivityData() }
+            // A completion or a hand-added gem answers today's reminder.
+            refreshPassiveNotificationsIfActivityChanged()
+        }
+        .onChange(of: router.focusPresentationIsActive) { _, isActive in
+            // Opening the focus screen answers today's reminder, so it cannot
+            // ring over a running focus on the lock screen. Closing it re-reads
+            // whether a record was saved.
+            if isActive { PassiveReminderActivityReader.recordFocusStarted() }
+            refreshPassiveNotificationsIfActivityChanged()
         }
         .onChange(of: activityAuxiliaryFingerprint) { _, _ in
             guard isFirstFramePresented, !isDataDeletionQuiesced else { return }
@@ -2163,11 +2173,14 @@ struct RootView: View {
         wrappedNotifications = false
         if granted {
             do {
+                let activity = currentPassiveReminderActivity()
+                lastPassiveReminderActivity = activity
                 try await NotificationManager.shared.synchronizePassiveNotifications(
                     dailyReminderEnabled: true,
                     wrappedEnabled: false,
                     hour: Constants.Notification.defaultReminderHour,
-                    minute: Constants.Notification.defaultReminderMinute
+                    minute: Constants.Notification.defaultReminderMinute,
+                    activity: activity
                 )
                 guard !Task.isCancelled else { return }
                 lastPassiveNotificationErrorFingerprint = nil
@@ -2728,6 +2741,25 @@ struct RootView: View {
         router.recoveredBreak = recovery
     }
 
+    /// Opening or closing a focus, or a new record, can answer today's
+    /// reminder or give last month its jar. Re-book only when that changes;
+    /// launch and foreground returns always refresh.
+    @MainActor
+    private func refreshPassiveNotificationsIfActivityChanged() {
+        guard isFirstFramePresented, !isDataDeletionQuiesced else { return }
+        guard currentPassiveReminderActivity() != lastPassiveReminderActivity else { return }
+        viewTasks.start { await refreshPassiveNotifications() }
+    }
+
+    @MainActor
+    private func currentPassiveReminderActivity() -> PassiveReminderActivity {
+        PassiveReminderActivityReader.read(
+            context: modelContext,
+            markers: resetSnapshots,
+            focusIsPresented: router.focusPresentationIsActive
+        )
+    }
+
     @MainActor
     private func refreshPassiveNotifications() async {
         guard !Task.isCancelled else { return }
@@ -2740,6 +2772,8 @@ struct RootView: View {
                     from: resetSnapshots
                 )
             )
+            let activity = currentPassiveReminderActivity()
+            lastPassiveReminderActivity = activity
             schedulingStarted = true
             // The synced switch is passed as the person's intent. The manager
             // books nothing while this iPhone lacks notification permission,
@@ -2749,7 +2783,8 @@ struct RootView: View {
                 wrappedEnabled: wrappedNotifications,
                 hour: prefs.reminderHour,
                 minute: prefs.reminderMinute,
-                playsSound: prefs.soundOn
+                playsSound: prefs.soundOn,
+                activity: activity
             )
             guard !Task.isCancelled else { return }
             lastPassiveNotificationErrorFingerprint = nil

@@ -1,3 +1,4 @@
+import SwiftData
 import UserNotifications
 import XCTest
 @testable import PomoGem
@@ -126,11 +127,11 @@ final class NotificationManagerRaceTests: XCTestCase {
         old.cancel()
         await fulfillment(of: [waiterFinished], timeout: 2)
         recorder.scheduleCompleted = expectation(description: "accepted passive schedule finishes")
-        recorder.targetAddCount = 2 * IntegrationConstants.passiveNotificationHorizonDays
+        recorder.targetAddCount = 2 * IntegrationConstants.passiveDailyReminderHorizonDays
         recorder.finishAdd()
         await fulfillment(of: [recorder.scheduleCompleted!], timeout: 3)
         await waiter.value
-        XCTAssertEqual(recorder.pending.count, IntegrationConstants.passiveNotificationHorizonDays)
+        XCTAssertEqual(recorder.pending.count, IntegrationConstants.passiveDailyReminderHorizonDays)
         XCTAssertTrue(recorder.pending.values.allSatisfy {
             ($0.trigger as? UNCalendarNotificationTrigger)?.dateComponents.hour == 9
         })
@@ -146,7 +147,7 @@ final class NotificationManagerRaceTests: XCTestCase {
         try await schedulePassive(manager, hour: 21)
         recorder.finishQuery()
         await cleanup.value
-        XCTAssertEqual(recorder.pending.count, IntegrationConstants.passiveNotificationHorizonDays)
+        XCTAssertEqual(recorder.pending.count, IntegrationConstants.passiveDailyReminderHorizonDays)
         XCTAssertTrue(recorder.pending.values.allSatisfy {
             ($0.trigger as? UNCalendarNotificationTrigger)?.dateComponents.hour == 21
         })
@@ -162,7 +163,7 @@ final class NotificationManagerRaceTests: XCTestCase {
         } catch PendingNotificationRecorder.AddError.injected { }
         XCTAssertTrue(recorder.pending.isEmpty)
         try await schedulePassive(manager, hour: 21)
-        XCTAssertEqual(recorder.pending.count, IntegrationConstants.passiveNotificationHorizonDays)
+        XCTAssertEqual(recorder.pending.count, IntegrationConstants.passiveDailyReminderHorizonDays)
     }
 
     func testPassiveCancellationRemovesAnAddThatFinishesLate() async throws {
@@ -192,7 +193,7 @@ final class NotificationManagerRaceTests: XCTestCase {
         recorder.finishAdd()
         try await old.value
         try await newer.value
-        XCTAssertEqual(recorder.pending.count, IntegrationConstants.passiveNotificationHorizonDays)
+        XCTAssertEqual(recorder.pending.count, IntegrationConstants.passiveDailyReminderHorizonDays)
         for request in recorder.pending.values {
             XCTAssertEqual((request.trigger as? UNCalendarNotificationTrigger)?.dateComponents.hour, 21)
         }
@@ -212,7 +213,7 @@ final class NotificationManagerRaceTests: XCTestCase {
         XCTAssertTrue(recorder.pending.isEmpty)
         manager.resumeTimerSchedulingAfterAccountBoundary()
         try await schedulePassive(manager, hour: 21)
-        XCTAssertEqual(recorder.pending.count, IntegrationConstants.passiveNotificationHorizonDays)
+        XCTAssertEqual(recorder.pending.count, IntegrationConstants.passiveDailyReminderHorizonDays)
     }
 
     func testDelayedTimerCleanupDoesNotDeleteARescheduledCompletion() async throws {
@@ -352,6 +353,166 @@ final class NotificationManagerRaceTests: XCTestCase {
         }
     }
 
+    func testDailyReminderStopsSevenDaysAfterTheLastOpen() async throws {
+        for (now, hour) in [("2026-09-25T09:00", 20), ("2026-09-25T21:00", 20)] {
+            let recorder = PendingNotificationRecorder()
+            try await recorder.makeManager().synchronizePassiveNotifications(
+                dailyReminderEnabled: true, wrappedEnabled: false,
+                hour: hour, minute: 0, playsSound: false,
+                now: date(now), calendar: Self.tokyo
+            )
+            XCTAssertEqual(recorder.pending.count, 7, now)
+            let latest = try XCTUnwrap(recorder.fireDates(calendar: Self.tokyo).max())
+            XCTAssertLessThan(latest, date(now).addingTimeInterval(7 * 86_400), now)
+        }
+    }
+
+    func testAnsweredTodaySkipsOnlyTodaysDailyReminder() async throws {
+        let recorder = PendingNotificationRecorder()
+        let now = date("2026-09-25T09:00")
+        try await recorder.makeManager().synchronizePassiveNotifications(
+            dailyReminderEnabled: true, wrappedEnabled: false,
+            hour: 20, minute: 0, playsSound: false,
+            activity: PassiveReminderActivity(answeredStudyDayKeys: ["2026-09-25"]),
+            now: now, calendar: Self.tokyo
+        )
+        let identifiers = Set(recorder.pending.keys)
+        XCTAssertFalse(identifiers.contains("pomogem.passive.2026.9.25"))
+        XCTAssertTrue(identifiers.contains("pomogem.passive.2026.9.26"))
+        XCTAssertEqual(identifiers.count, 6)
+        XCTAssertTrue(recorder.pending.values.allSatisfy {
+            $0.content.body == "瓶が待ってる。今日のひと粒、積んでいく？"
+        })
+    }
+
+    func testEarlyMorningReminderBelongsToThePreviousStudyDay() async throws {
+        // 02:00 is before the 04:00 study-day boundary, so the 02:00 slot
+        // after a Friday-night focus still belongs to Friday.
+        let recorder = PendingNotificationRecorder()
+        try await recorder.makeManager().synchronizePassiveNotifications(
+            dailyReminderEnabled: true, wrappedEnabled: false,
+            hour: 2, minute: 0, playsSound: false,
+            activity: PassiveReminderActivity(answeredStudyDayKeys: ["2026-09-25"]),
+            now: date("2026-09-25T23:30"), calendar: Self.tokyo
+        )
+        let identifiers = Set(recorder.pending.keys)
+        XCTAssertFalse(identifiers.contains("pomogem.passive.2026.9.26"))
+        XCTAssertTrue(identifiers.contains("pomogem.passive.2026.9.27"))
+    }
+
+    func testWrappedKeepsItsSlotOnAnAnsweredDayAndBeyondTheDailyWindow() async throws {
+        let recorder = PendingNotificationRecorder()
+        try await recorder.makeManager().synchronizePassiveNotifications(
+            dailyReminderEnabled: true, wrappedEnabled: true,
+            hour: 20, minute: 0, playsSound: false,
+            activity: PassiveReminderActivity(
+                answeredStudyDayKeys: ["2026-10-01"],
+                monthsWithRecords: [PassiveReminderActivity.monthKey(for: date("2026-09-10T12:00"), calendar: Self.tokyo)]
+            ),
+            now: date("2026-10-01T08:00"), calendar: Self.tokyo
+        )
+        XCTAssertEqual(
+            recorder.pending["pomogem.passive.2026.10.1"]?.content.body,
+            "先月の瓶ができた。積み上がりを眺めよう。"
+        )
+        XCTAssertEqual(recorder.pending.count, 7, "Oct 1 Wrapped plus six daily reminders")
+
+        // Twenty days after the last open only Wrapped is still booked.
+        let later = PendingNotificationRecorder()
+        try await later.makeManager().synchronizePassiveNotifications(
+            dailyReminderEnabled: true, wrappedEnabled: true,
+            hour: 20, minute: 0, playsSound: false,
+            activity: PassiveReminderActivity(
+                monthsWithRecords: [PassiveReminderActivity.monthKey(for: date("2026-09-10T12:00"), calendar: Self.tokyo)]
+            ),
+            now: date("2026-09-11T08:00"), calendar: Self.tokyo
+        )
+        XCTAssertNotNil(later.pending["pomogem.passive.2026.10.1"])
+        XCTAssertEqual(later.pending.count, 8, "Seven daily reminders and the Oct 1 Wrapped")
+    }
+
+    func testWrappedOnlyAtItsOwnTimeAndOnlyForAMonthWithAJar() async throws {
+        let september = PassiveReminderActivity.monthKey(for: date("2026-09-10T12:00"), calendar: Self.tokyo)
+        let recorder = PendingNotificationRecorder()
+        // Now in September: Oct 1 looks back at September (has records) and
+        // Nov 1 at October, which has nothing yet.
+        try await recorder.makeManager().synchronizePassiveNotifications(
+            dailyReminderEnabled: false, wrappedEnabled: true,
+            hour: 6, minute: 30, playsSound: false,
+            activity: PassiveReminderActivity(monthsWithRecords: [september]),
+            now: date("2026-09-28T12:00"), calendar: Self.tokyo
+        )
+        XCTAssertEqual(Array(recorder.pending.keys), ["pomogem.passive.2026.10.1"])
+        let trigger = try XCTUnwrap(recorder.pending.values.first?.trigger as? UNCalendarNotificationTrigger)
+        XCTAssertEqual(trigger.dateComponents.hour, 6)
+        XCTAssertEqual(trigger.dateComponents.minute, 30)
+
+        let empty = PendingNotificationRecorder()
+        try await empty.makeManager().synchronizePassiveNotifications(
+            dailyReminderEnabled: false, wrappedEnabled: true,
+            hour: 6, minute: 30, playsSound: false,
+            activity: PassiveReminderActivity(monthsWithRecords: []),
+            now: date("2026-09-28T12:00"), calendar: Self.tokyo
+        )
+        XCTAssertTrue(empty.pending.isEmpty, "No jar last month, so no 「先月の瓶ができた」")
+
+        // With the daily reminder on, an empty month's 1st is an ordinary day.
+        let daily = PendingNotificationRecorder()
+        try await daily.makeManager().synchronizePassiveNotifications(
+            dailyReminderEnabled: true, wrappedEnabled: true,
+            hour: 20, minute: 0, playsSound: false,
+            activity: PassiveReminderActivity(monthsWithRecords: []),
+            now: date("2026-09-28T12:00"), calendar: Self.tokyo
+        )
+        XCTAssertEqual(
+            daily.pending["pomogem.passive.2026.10.1"]?.content.body,
+            "瓶が待ってる。今日のひと粒、積んでいく？"
+        )
+    }
+
+    func testUnreadableRecordsKeepWrappedAsBefore() async throws {
+        let recorder = PendingNotificationRecorder()
+        try await recorder.makeManager().synchronizePassiveNotifications(
+            dailyReminderEnabled: false, wrappedEnabled: true,
+            hour: 20, minute: 0, playsSound: false,
+            activity: .unknown,
+            now: date("2026-09-28T12:00"), calendar: Self.tokyo
+        )
+        XCTAssertEqual(
+            Set(recorder.pending.keys),
+            ["pomogem.passive.2026.10.1", "pomogem.passive.2026.11.1"]
+        )
+    }
+
+    func testFocusAnsweringTodayWinsOverAnInFlightSchedule() async throws {
+        let recorder = PendingNotificationRecorder()
+        let manager = recorder.makeManager()
+        let now = date("2026-09-25T09:00")
+        recorder.addStarted = expectation(description: "unanswered schedule add started")
+        let old = Task {
+            try await manager.synchronizePassiveNotifications(
+                dailyReminderEnabled: true, wrappedEnabled: false,
+                hour: 20, minute: 0, playsSound: false,
+                now: now, calendar: Self.tokyo
+            )
+        }
+        await fulfillment(of: [recorder.addStarted!], timeout: 3)
+        // A focus opens while the older schedule is still adding today's slot.
+        let answered = Task {
+            try await manager.synchronizePassiveNotifications(
+                dailyReminderEnabled: true, wrappedEnabled: false,
+                hour: 20, minute: 0, playsSound: false,
+                activity: PassiveReminderActivity(answeredStudyDayKeys: ["2026-09-25"]),
+                now: now, calendar: Self.tokyo
+            )
+        }
+        recorder.finishAdd()
+        try await old.value
+        try await answered.value
+        XCTAssertNil(recorder.pending["pomogem.passive.2026.9.25"])
+        XCTAssertEqual(recorder.pending.count, 6)
+    }
+
     func testThisDevicesPermissionGatesBookingWithoutTouchingTheIntent() async throws {
         for status in [UNAuthorizationStatus.notDetermined, .denied] {
             let recorder = PendingNotificationRecorder()
@@ -476,6 +637,14 @@ private final class PendingNotificationRecorder {
         )
     }
 
+    /// Resolves each floating trigger in `calendar`'s zone.
+    func fireDates(calendar: Calendar) -> [Date] {
+        pending.values.compactMap { request in
+            guard let trigger = request.trigger as? UNCalendarNotificationTrigger else { return nil }
+            return calendar.date(from: trigger.dateComponents)
+        }
+    }
+
     func finishAdd() {
         let continuation = addContinuation
         addContinuation = nil
@@ -507,5 +676,136 @@ private final class SuspendedNotificationCallback<Value> {
         releasedValue = value
         continuation?.resume(returning: value)
         continuation = nil
+    }
+}
+
+/// What counts as "today already answered" and "last month has a jar".
+@MainActor
+final class PassiveReminderActivityReaderTests: XCTestCase {
+    private var defaults: UserDefaults!
+    private var suiteName: String!
+
+    override func setUp() {
+        super.setUp()
+        suiteName = "PassiveReminderActivityReaderTests-\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+    }
+
+    override func tearDown() {
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults = nil
+        super.tearDown()
+    }
+
+    private func makeContext() throws -> ModelContext {
+        let schema = Schema([Subject.self, StudySession.self, ActivityResetMarker.self])
+        let container = try ModelContainer(for: schema, configurations: [
+            ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        ])
+        return ModelContext(container)
+    }
+
+    private let now = Date.now
+
+    private func read(
+        _ context: ModelContext,
+        markers: [ActivityResetSnapshot] = [],
+        focusIsPresented: Bool = false
+    ) -> PassiveReminderActivity {
+        PassiveReminderActivityReader.read(
+            context: context,
+            markers: markers,
+            focusIsPresented: focusIsPresented,
+            now: now,
+            calendar: .autoupdatingCurrent,
+            defaults: defaults
+        )
+    }
+
+    private func insert(
+        _ source: SessionSource,
+        seconds: Int,
+        endingAt end: Date,
+        epoch: UUID? = nil,
+        in context: ModelContext
+    ) throws {
+        context.insert(StudySession(
+            startAt: end.addingTimeInterval(-TimeInterval(seconds)),
+            endAt: end,
+            seconds: seconds,
+            source: source,
+            grams: source == .manual
+                ? ManualDuration.thirtyMinutes.grams
+                : nil,
+            deviceDayKey: FairnessPolicy.deviceDayKey(for: end),
+            dataEpochID: epoch
+        ))
+        try context.save()
+    }
+
+    private var todayKey: String { FairnessPolicy.deviceDayKey(for: now) }
+    private var thisMonth: String {
+        PassiveReminderActivity.monthKey(for: now, calendar: .autoupdatingCurrent)
+    }
+
+    func testNothingDoneLeavesTheReminderAndNoJar() throws {
+        let activity = read(try makeContext())
+        XCTAssertTrue(activity.answeredStudyDayKeys.isEmpty)
+        XCTAssertEqual(activity.monthsWithRecords, [])
+    }
+
+    func testTimerAndHandAddedRecordsAnswerToday() throws {
+        for (source, seconds) in [
+            (SessionSource.timer, 25 * 60),
+            (.timerDemoted, 25 * 60),
+            (.manual, ManualDuration.thirtyMinutes.seconds)
+        ] {
+            let context = try makeContext()
+            try insert(source, seconds: seconds, endingAt: now.addingTimeInterval(-60), in: context)
+            let activity = read(context)
+            XCTAssertEqual(activity.answeredStudyDayKeys, [todayKey], "\(source)")
+            XCTAssertEqual(activity.monthsWithRecords?.contains(thisMonth), true)
+        }
+    }
+
+    func testScreenTimeChunksFillTheJarButDoNotAnswerToday() throws {
+        let context = try makeContext()
+        try insert(.screenTime, seconds: SessionSource.screenTimeSeconds, endingAt: now.addingTimeInterval(-60), in: context)
+        let activity = read(context)
+        XCTAssertTrue(activity.answeredStudyDayKeys.isEmpty)
+        XCTAssertEqual(activity.monthsWithRecords?.contains(thisMonth), true)
+    }
+
+    func testYesterdaysFocusDoesNotAnswerToday() throws {
+        let context = try makeContext()
+        try insert(.timer, seconds: 25 * 60, endingAt: now.addingTimeInterval(-30 * 60 * 60), in: context)
+        XCTAssertTrue(read(context).answeredStudyDayKeys.isEmpty)
+    }
+
+    func testOpenFocusOrOneStartedTodayAnswersToday() throws {
+        let context = try makeContext()
+        XCTAssertEqual(read(context, focusIsPresented: true).answeredStudyDayKeys, [todayKey])
+
+        // Stopped with 「今日はここまで」: nothing saved, but the day is answered.
+        PassiveReminderActivityReader.recordFocusStarted(at: now, defaults: defaults)
+        XCTAssertEqual(read(context).answeredStudyDayKeys, [todayKey])
+
+        defaults.set("2000-01-01", forKey: PassiveReminderActivityReader.focusStartedStudyDayDefaultsKey)
+        XCTAssertTrue(read(context).answeredStudyDayKeys.isEmpty)
+
+        // A running or paused focus recovered from this device's local state.
+        defaults.set(Data([1]), forKey: FocusPersistence.key)
+        XCTAssertEqual(read(context).answeredStudyDayKeys, [todayKey])
+    }
+
+    func testRecordsOutsideTheCurrentResetGenerationAreIgnored() throws {
+        let context = try makeContext()
+        let marker = ActivityResetMarker(epochID: UUID(), sequence: 1, resetAt: now.addingTimeInterval(-120), writerDeviceID: "test")
+        context.insert(marker)
+        try context.save()
+        try insert(.timer, seconds: 25 * 60, endingAt: now.addingTimeInterval(-60), epoch: nil, in: context)
+        let activity = read(context, markers: [marker.policySnapshot])
+        XCTAssertTrue(activity.answeredStudyDayKeys.isEmpty)
+        XCTAssertEqual(activity.monthsWithRecords, [])
     }
 }
