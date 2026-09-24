@@ -38,6 +38,11 @@ enum GemShowcaseUITestFixture {
         /// landing and the fusion finale are written to the app's tmp
         /// directory (`fx-landing-*.png`, `fx-fusion-*.png`).
         case fusionfx
+        /// Heavy users for the gem bed: 1,004 completions (about 251 kg:
+        /// one ×1000 root and four loose gems) and 10,006 completions
+        /// (about 2.5 t: one ×1万 root and six loose gems).
+        case heavy
+        case veteran
     }
 
     static var modeForCurrentProcess: Mode? {
@@ -64,6 +69,8 @@ enum GemShowcaseUITestFixture {
         case .first: 1
         case .home: 15
         case .tiers: 117
+        case .heavy: 1_004
+        case .veteran: 10_006
         case .gallery, .stress, .worstcase, .fusionfx, nil: nil
         }
     }
@@ -150,48 +157,44 @@ enum GemShowcaseUITestFixture {
             UUID(uuidString: String(format: "6E4D5348-4147-4752-%04X-%012X", level, index))!
         }
 
-        let levelOneCount = bakedCount / fanIn
-        // Level-2 roots absorb complete groups of ten level-1 aggregates.
-        let levelTwoCount = levelOneCount / fanIn
-        for group in 0 ..< levelOneCount {
-            let range = group * fanIn ..< (group + 1) * fanIn
-            let (colorMix, subjectMix) = mixes(range)
-            let parent = group < levelTwoCount * fanIn ? aggregateID(level: 2, index: group / fanIn) : nil
-            context.insert(AggregatePebble(
-                id: aggregateID(level: 1, index: group),
-                createdAt: planned[range.upperBound - 1].end,
-                level: 1,
-                pebbleCount: fanIn,
-                grams: fanIn * 250,
-                measuredPebbleCount: fanIn,
-                colorMixJSON: colorMix,
-                subjectMixJSON: subjectMix,
-                periodStart: planned[range.lowerBound].start,
-                periodEnd: planned[range.upperBound - 1].end,
-                sessionIDs: range.map { planned[$0].id },
-                parentAggregateID: parent
-            ))
+        // Every complete group of ten at each level rolls up into the next
+        // level (×10 → ×100 → ×1000 → ×1万), exactly as the live fusion
+        // persists it; the highest complete level holds the roots.
+        var countsByLevel: [Int] = []
+        var levelCount = bakedCount / fanIn
+        while levelCount > 0 {
+            countsByLevel.append(levelCount)
+            levelCount /= fanIn
         }
-        for group in 0 ..< levelTwoCount {
-            let size = fanIn * fanIn
-            let range = group * size ..< (group + 1) * size
-            let (colorMix, subjectMix) = mixes(range)
-            context.insert(AggregatePebble(
-                id: aggregateID(level: 2, index: group),
-                createdAt: planned[range.upperBound - 1].end,
-                level: 2,
-                pebbleCount: size,
-                childAggregateCount: fanIn,
-                grams: size * 250,
-                measuredPebbleCount: size,
-                colorMixJSON: colorMix,
-                subjectMixJSON: subjectMix,
-                periodStart: planned[range.lowerBound].start,
-                periodEnd: planned[range.upperBound - 1].end,
-                childAggregateIDs: (group * fanIn ..< (group + 1) * fanIn).map {
-                    aggregateID(level: 1, index: $0)
-                }
-            ))
+        for (levelIndex, count) in countsByLevel.enumerated() {
+            let level = levelIndex + 1
+            let size = Int(pow(Double(fanIn), Double(level)))
+            let parentCount = levelIndex + 1 < countsByLevel.count ? countsByLevel[levelIndex + 1] : 0
+            for group in 0 ..< count {
+                let range = group * size ..< (group + 1) * size
+                let (colorMix, subjectMix) = mixes(range)
+                let parent = group < parentCount * fanIn
+                    ? aggregateID(level: level + 1, index: group / fanIn)
+                    : nil
+                context.insert(AggregatePebble(
+                    id: aggregateID(level: level, index: group),
+                    createdAt: planned[range.upperBound - 1].end,
+                    level: level,
+                    pebbleCount: size,
+                    childAggregateCount: level == 1 ? 0 : fanIn,
+                    grams: size * 250,
+                    measuredPebbleCount: size,
+                    colorMixJSON: colorMix,
+                    subjectMixJSON: subjectMix,
+                    periodStart: planned[range.lowerBound].start,
+                    periodEnd: planned[range.upperBound - 1].end,
+                    sessionIDs: level == 1 ? range.map { planned[$0].id } : [],
+                    childAggregateIDs: level == 1 ? [] : (group * fanIn ..< (group + 1) * fanIn).map {
+                        aggregateID(level: level - 1, index: $0)
+                    },
+                    parentAggregateID: parent
+                ))
+            }
         }
         if modeForCurrentProcess == .tiers, let subject = subjects.first {
             context.insert(AchievementStone(
