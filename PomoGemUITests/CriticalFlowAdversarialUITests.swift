@@ -363,6 +363,23 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         weekAttachment.lifetime = .keepAlways
         add(weekAttachment)
 
+        // Back from the background, 記録 reads again but keeps what it shows:
+        // never the empty-period copy over a week that has a record.
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(
+            app.wait(for: .runningBackground, timeout: 5)
+                || app.wait(for: .runningBackgroundSuspended, timeout: 5)
+        )
+        app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 5))
+        XCTAssertFalse(
+            app.staticTexts["この期間の粒は、まだありません。"].exists,
+            "Returning to 記録 must not show the empty-period copy"
+        )
+        XCTAssertTrue(selfReported.waitForExistence(timeout: 4))
+        XCTAssertTrue(selfReported.label.contains("このうち自己申告 300g"), selfReported.label)
+        XCTAssertTrue(period.buttons["今週"].isSelected, "Returning must keep the chosen period")
+
         // Tap today's column in the chart.
         let chart = app.descendants(matching: .any)["log.mass-chart"]
         XCTAssertTrue(scrollUntilHittable(chart, swiping: .up))
