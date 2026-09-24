@@ -691,14 +691,23 @@ struct FocusView: View {
                     onReturnToJar: { dismiss() }
                 )
                 .transition(.opacity)
-            } else if let pendingCompletion {
-                completionCommitView(pendingCompletion)
-                    .transition(.opacity)
-            } else if breakFinished {
-                BreakFinishedView { dismiss() }
-                    .transition(.opacity)
             } else {
-                timerContent
+                // One container spans the running timer, its completion and
+                // the legacy break end, so the scene keeps the timer's
+                // orientation until the cover closes (Docs/TimerOrientation.md).
+                // Swapping branches around the container released the rotation
+                // the moment the completion alarm began.
+                TimerOrientationContainer(sessionID: timerOrientationSessionID) { context in
+                    if let pendingCompletion {
+                        completionCommitView(pendingCompletion, context: context)
+                            .transition(.opacity)
+                    } else if breakFinished {
+                        BreakFinishedView { dismiss() }
+                            .transition(.opacity)
+                    } else {
+                        timerBody(context)
+                    }
+                }
             }
         }
         .foregroundStyle(PomoGemTheme.text)
@@ -839,45 +848,43 @@ struct FocusView: View {
         return AnyHashable(preparedSessionID ?? orientationSessionID)
     }
 
-    private var timerContent: some View {
-        TimerOrientationContainer(sessionID: timerOrientationSessionID) { context in
-            let usesColumns = context.isLandscape && !dynamicTypeSize.isAccessibilitySize
-            let ringSize = FocusTimerLayoutPolicy.ringSize(in: context.size)
-            ScrollView {
-                VStack(spacing: 0) {
-                    timerHeader
+    private func timerBody(_ context: TimerLayoutContext) -> some View {
+        let usesColumns = context.isLandscape && !dynamicTypeSize.isAccessibilitySize
+        let ringSize = FocusTimerLayoutPolicy.ringSize(in: context.size)
+        return ScrollView {
+            VStack(spacing: 0) {
+                timerHeader
 
-                    if usesColumns {
-                        HStack(spacing: 32) {
-                            timerDisplay(size: ringSize)
-                                .frame(maxWidth: .infinity)
-                            VStack(spacing: 20) {
-                                timerNotice
-                                timerActions
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .padding(.horizontal, 28)
-                        .padding(.vertical, 12)
-                        .frame(maxHeight: .infinity)
-                    } else {
-                        Spacer(minLength: 18)
+                if usesColumns {
+                    HStack(spacing: 32) {
                         timerDisplay(size: ringSize)
-                        timerNotice
-                            .padding(.horizontal, 24)
-                            .padding(.top, 24)
-                        Spacer(minLength: 18)
-                        timerActions
-                            .padding(.horizontal, 24)
-                            .padding(.bottom, 24)
+                            .frame(maxWidth: .infinity)
+                        VStack(spacing: 20) {
+                            timerNotice
+                            timerActions
+                        }
+                        .frame(maxWidth: .infinity)
                     }
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 12)
+                    .frame(maxHeight: .infinity)
+                } else {
+                    Spacer(minLength: 18)
+                    timerDisplay(size: ringSize)
+                    timerNotice
+                        .padding(.horizontal, 24)
+                        .padding(.top, 24)
+                    Spacer(minLength: 18)
+                    timerActions
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 24)
                 }
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: context.size.height)
             }
-            .scrollIndicators(.hidden)
-            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: context.size.height)
         }
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.basedOnSize)
     }
 
     private var timerHeader: some View {
@@ -2359,8 +2366,45 @@ struct FocusView: View {
         return deliveryDate
     }
 
-    private func completionCommitView(_ result: PomodoroCompletion) -> some View {
+    /// The completion screen shares the timer's orientation container. In
+    /// landscape the facts sit beside the status and actions so the whole
+    /// screen fits a ~400 pt tall scene; height always comes from the scene's
+    /// safe rectangle rather than the physical screen.
+    private func completionCommitView(
+        _ result: PomodoroCompletion,
+        context: TimerLayoutContext
+    ) -> some View {
         let isAlerting = completionAlert.isActive(sessionID: result.sessionID)
+        let usesColumns = context.isLandscape && !dynamicTypeSize.isAccessibilitySize
+        return ScrollView {
+            Group {
+                if usesColumns {
+                    HStack(spacing: 32) {
+                        completionSummary(result, isAlerting: isAlerting)
+                            .frame(maxWidth: .infinity)
+                        completionStatus(result, isAlerting: isAlerting)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 16)
+                } else {
+                    VStack(spacing: 22) {
+                        completionSummary(result, isAlerting: isAlerting)
+                        completionStatus(result, isAlerting: isAlerting)
+                    }
+                    .padding(.vertical, 40)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: context.size.height)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    private func completionSummary(
+        _ result: PomodoroCompletion,
+        isAlerting: Bool
+    ) -> some View {
         let completionIcon = if completionSaveError != nil {
             "exclamationmark.arrow.triangle.2.circlepath"
         } else if isAlerting {
@@ -2370,104 +2414,104 @@ struct FocusView: View {
         } else {
             "arrow.down.to.line.compact"
         }
+        return VStack(spacing: 22) {
+            ZStack {
+                Circle()
+                    .fill(accent.opacity(0.16))
+                    .frame(width: 116, height: 116)
+                Image(systemName: completionIcon)
+                    .font(.system(size: 42, weight: .semibold))
+                    .foregroundStyle(completionSaveError == nil ? accent : PomoGemTheme.amber)
+            }
+            VStack(spacing: 8) {
+                Text(completionSaveError == nil ? "粒を瓶へ運んでいます" : "記録をまだ安全に保存できていません")
+                    .font(PomoGemTheme.brand(25))
+                    .multilineTextAlignment(.center)
+                Text("\(subjectSnapshot.name)  +\(result.grams)g")
+                    .font(.system(.headline, design: .rounded, weight: .bold))
+                    .foregroundStyle(PomoGemTheme.muted)
+            }
+        }
+    }
 
-        return ScrollView {
-            VStack(spacing: 22) {
-                Spacer(minLength: 42)
-                ZStack {
-                    Circle()
-                        .fill(accent.opacity(0.16))
-                        .frame(width: 116, height: 116)
-                    Image(systemName: completionIcon)
-                        .font(.system(size: 42, weight: .semibold))
-                        .foregroundStyle(completionSaveError == nil ? accent : PomoGemTheme.amber)
-                }
+    @ViewBuilder
+    private func completionStatus(
+        _ result: PomodoroCompletion,
+        isAlerting: Bool
+    ) -> some View {
+        VStack(spacing: 22) {
+            if isAlerting {
                 VStack(spacing: 8) {
-                    Text(completionSaveError == nil ? "粒を瓶へ運んでいます" : "記録をまだ安全に保存できていません")
-                        .font(PomoGemTheme.brand(25))
-                        .multilineTextAlignment(.center)
-                    Text("\(subjectSnapshot.name)  +\(result.grams)g")
-                        .font(.system(.headline, design: .rounded, weight: .bold))
-                        .foregroundStyle(PomoGemTheme.muted)
-                }
-
-                if isAlerting {
-                    VStack(spacing: 8) {
-                        Label(
-                            "終了アラート中",
-                            systemImage: "bell.and.waves.left.and.right.fill"
-                        )
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(PomoGemTheme.amber)
-                        Text("アプリが前面にある間、有効な音と触覚を停止するまで繰り返します")
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(.horizontal, 24)
-
-                    Button {
-                        acknowledgeCompletionAlert(result)
-                    } label: {
-                        Label("終了アラートを止める", systemImage: "stop.fill")
-                    }
-                    .buttonStyle(PomoGemPrimaryButtonStyle())
-                    .padding(.horizontal, 24)
-                    .accessibilityHint("音と触覚を止めます。記録の保存中でも操作できます")
-                    .accessibilityIdentifier("focus.completion-alert.stop")
-                }
-
-                if let completionSaveError {
-                    Text(completionSaveError)
+                    Label(
+                        "終了アラート中",
+                        systemImage: "bell.and.waves.left.and.right.fill"
+                    )
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(PomoGemTheme.amber)
+                    Text("アプリが前面にある間、有効な音と触覚を停止するまで繰り返します")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 28)
-                        .accessibilityIdentifier("focus.completion-save.error")
-                    Button {
-                        Task { await commitCompletion(result) }
-                    } label: {
-                        Label(
-                            completionWasRejectedForOwnership
-                                ? "保存状態を確認する"
-                                : "もう一度保存する",
-                            systemImage: "arrow.clockwise"
-                        )
-                    }
-                    .buttonStyle(PomoGemPrimaryButtonStyle(tintHex: subjectSnapshot.colorHex))
-                    .padding(.horizontal, 24)
-                    .disabled(isCommittingCompletion)
-                    .accessibilityFocused($completionSaveRetryFocused)
-                    .accessibilityIdentifier("focus.completion-save.retry")
-
-                    Button {
-                        returnHomeKeepingCompletion(result)
-                    } label: {
-                        Label("完走を保護してホームへ戻る", systemImage: "house.fill")
-                            .frame(maxWidth: .infinity, minHeight: 48)
-                    }
-                    .buttonStyle(PomoGemBareButtonStyle())
-                    .foregroundStyle(PomoGemTheme.text)
-                    .padding(.horizontal, 24)
-                    .accessibilityHint("完走は端末に残り、ホームから保存を再試行できます")
-                    .accessibilityIdentifier("focus.completion-save.protect")
-                } else if !completionPersistenceSucceeded {
-                    ProgressView()
-                        .tint(accent)
-                        .controlSize(.large)
-                        .accessibilityLabel("記録を保存中")
-                } else if !isAlerting {
-                    ProgressView()
-                        .tint(accent)
-                        .controlSize(.large)
-                        .accessibilityLabel("瓶へ戻ります")
                 }
-                Spacer(minLength: 40)
+                .padding(.horizontal, 24)
+
+                Button {
+                    acknowledgeCompletionAlert(result)
+                } label: {
+                    Label("終了アラートを止める", systemImage: "stop.fill")
+                }
+                .buttonStyle(PomoGemPrimaryButtonStyle())
+                .padding(.horizontal, 24)
+                .accessibilityHint("音と触覚を止めます。記録の保存中でも操作できます")
+                .accessibilityIdentifier("focus.completion-alert.stop")
             }
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: UIScreen.main.bounds.height)
+
+            if let completionSaveError {
+                Text(completionSaveError)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
+                    .accessibilityIdentifier("focus.completion-save.error")
+                Button {
+                    Task { await commitCompletion(result) }
+                } label: {
+                    Label(
+                        completionWasRejectedForOwnership
+                            ? "保存状態を確認する"
+                            : "もう一度保存する",
+                        systemImage: "arrow.clockwise"
+                    )
+                }
+                .buttonStyle(PomoGemPrimaryButtonStyle(tintHex: subjectSnapshot.colorHex))
+                .padding(.horizontal, 24)
+                .disabled(isCommittingCompletion)
+                .accessibilityFocused($completionSaveRetryFocused)
+                .accessibilityIdentifier("focus.completion-save.retry")
+
+                Button {
+                    returnHomeKeepingCompletion(result)
+                } label: {
+                    Label("完走を保護してホームへ戻る", systemImage: "house.fill")
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                }
+                .buttonStyle(PomoGemBareButtonStyle())
+                .foregroundStyle(PomoGemTheme.text)
+                .padding(.horizontal, 24)
+                .accessibilityHint("完走は端末に残り、ホームから保存を再試行できます")
+                .accessibilityIdentifier("focus.completion-save.protect")
+            } else if !completionPersistenceSucceeded {
+                ProgressView()
+                    .tint(accent)
+                    .controlSize(.large)
+                    .accessibilityLabel("記録を保存中")
+            } else if !isAlerting {
+                ProgressView()
+                    .tint(accent)
+                    .controlSize(.large)
+                    .accessibilityLabel("瓶へ戻ります")
+            }
         }
-        .scrollBounceBehavior(.basedOnSize)
     }
 
     private func returnHomeKeepingCompletion(_ result: PomodoroCompletion) {

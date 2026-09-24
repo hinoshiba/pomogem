@@ -303,6 +303,48 @@ final class TimerOrientationUITests: XCTestCase {
         skipBreakAndVerifyHome()
     }
 
+    func testCompletionKeepsTheTimerOrientationUntilTheCoverCloses() throws {
+        launch(rotationLocked: true)
+        for direction in ["右", "下"] {
+            _ = startFocus(duration: "12秒、DEMO")
+            // Freeze the 12-second fixture while the scene rotates.
+            app.buttons["一時停止"].tap()
+            XCTAssertTrue(waitForHittable(app.buttons["再開する"]))
+            rotate(to: "右")
+            if direction == "下" { rotate(to: "下") }
+            app.buttons["再開する"].tap()
+
+            let stop = app.buttons["focus.completion-alert.stop"]
+            XCTAssertTrue(stop.waitForExistence(timeout: 25))
+            // Give a regressed release time to snap the scene back.
+            usleep(1_500_000)
+            let window = app.windows.firstMatch.frame
+            if direction == "右" {
+                assertWindowOrientation(isLandscape: true)
+                XCTAssertEqual(sceneInterfaceOrientation, .landscapeRight,
+                               "The completion screen must keep the timer's scene")
+            } else {
+                assertWindowOrientation(isLandscape: false)
+                // On Face ID iPhones 下 is a portrait scene plus a 180° content
+                // turn: the pinned Stop must stay at the phone's physical top.
+                if sceneInterfaceOrientation == .portrait {
+                    XCTAssertLessThan(stop.frame.midY, window.midY,
+                                      "The upside-down timer must stay upside down at completion")
+                }
+            }
+            XCTAssertTrue(waitForHittable(stop))
+            XCTAssertTrue(window.contains(stop.frame), "Stop must fit the timer's scene")
+            retainScreenshot(named: "timer-completion-\(direction == "右" ? "right" : "down")")
+            stop.tap()
+            let reward = app.buttons["reward.dismiss"]
+            XCTAssertTrue(reward.waitForExistence(timeout: 20))
+            assertWindowOrientation(isLandscape: false)
+            XCTAssertTrue(reveal(reward, towardStart: false))
+            reward.tap()
+            XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 8))
+        }
+    }
+
     private func startFiveMinuteBreak(
         expectedDirection: String = "上",
         focusManualDirection: String? = nil
