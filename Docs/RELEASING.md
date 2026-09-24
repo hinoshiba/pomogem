@@ -25,7 +25,7 @@ App Store Connectで無効化し、ブランチ・タグの変更によるビル
 
 | Bundle | 配布用の確認 |
 |---|---|
-| `com.hinoshiba.pomogem` | CloudKit Production／APNs Production、Family Controls、共有App Group |
+| `com.hinoshiba.pomogem` | CloudKit Production／APNs Production、Family Controls、共有App Group、Time Sensitive Notifications（集中・休憩の終了通知だけ） |
 | `com.hinoshiba.pomogem.widgets` | account-neutralなWidget／Live Activity。Family Controls、App Group、CloudKit、APNsなし |
 | `com.hinoshiba.pomogem.screentimemonitor` | Device Activity Monitor拡張、Family Controls、本体と同じ共有App Group。CloudKit／APNsなし |
 

@@ -78,6 +78,7 @@ target_capabilities:
     - in_app_purchase
     - family_controls
     - app_groups
+    - time_sensitive_notifications
   widget: []
   screen_time_monitor:
     - family_controls

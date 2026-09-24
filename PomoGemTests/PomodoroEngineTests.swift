@@ -85,6 +85,10 @@ final class PomodoroEngineTests: XCTestCase {
         XCTAssertGreaterThan(trigger.timeInterval, 25)
         XCTAssertLessThanOrEqual(trigger.timeInterval, 30)
         XCTAssertEqual(request.content.body, "集中時間が続いています。タイマーに戻って続けましょう。")
+        XCTAssertEqual(
+            request.content.interruptionLevel, .active,
+            "An opt-in nudge must never break through Focus as Time Sensitive"
+        )
         XCTAssertNil(request.content.sound)
         XCTAssertNil(request.content.badge)
         XCTAssertTrue(request.content.userInfo.isEmpty)

@@ -50,6 +50,9 @@ def validate_bundle_capability_allowlist(
 ) -> None:
     """Keep Family Controls and the shared ledger exclusive to app + monitor.
 
+    Time Sensitive notifications are exclusive to, and required by, the app:
+    only its timer-end alerts use that interruption level, and without the
+    entitlement iOS silently downgrades them under Focus/Do Not Disturb.
     CloudKit/APNs values are additionally checked by the archive verifier;
     profile authorizations may be broader than signed CloudKit claims.
     """
@@ -65,6 +68,7 @@ def validate_bundle_capability_allowlist(
         "com.apple.developer.icloud-container-development-container-identifiers",
         "com.apple.developer.icloud-services", "com.apple.developer.icloud-container-environment",
     }
+    time_sensitive = "com.apple.developer.usernotifications.time-sensitive"
     allowed = set(common)
     if role in {"app", "monitor"}:
         allowed |= screen_time
@@ -73,7 +77,9 @@ def validate_bundle_capability_allowlist(
         if entitlements.get("com.apple.security.application-groups") != [app_group]:
             raise ValueError("App Group differs from the reviewed shared ledger")
     if role == "app":
-        allowed |= cloud
+        allowed |= cloud | {time_sensitive}
+        if entitlements.get(time_sensitive) is not True:
+            raise ValueError("Time Sensitive notification authorization is missing or malformed")
         if is_profile:
             allowed |= {"com.apple.developer.ubiquity-container-identifiers",
                         "com.apple.developer.ubiquity-kvstore-identifier"}

@@ -322,7 +322,8 @@ final class NotificationManager {
             // Live Activity content is gated independently by account identity.
             body: "集中時間が終わりました。おつかれさまでした。",
             playsSound: playsSound,
-            timerCompletionSound: completionSound
+            timerCompletionSound: completionSound,
+            interruptionLevel: .timeSensitive
         )
         focusNotificationGeneration &+= 1
         let generation = focusNotificationGeneration
@@ -533,7 +534,8 @@ final class NotificationManager {
         let content = notificationContent(
             body: "休憩はここまで。次の一粒へ、ゆっくり戻りましょう。",
             playsSound: playsSound,
-            timerCompletionSound: completionSound
+            timerCompletionSound: completionSound,
+            interruptionLevel: .timeSensitive
         )
         breakNotificationGeneration &+= 1
         let generation = breakNotificationGeneration
@@ -813,14 +815,21 @@ final class NotificationManager {
         }
     }
 
+    /// Only the end of a timer the person started is Time Sensitive: iOS
+    /// Focus, Do Not Disturb and Scheduled Summary would otherwise hold the one
+    /// alert a locked-phone timer must deliver. Reminders, Wrapped and the
+    /// return reminder are nudges and stay `.active`. People can still turn
+    /// Time Sensitive off per app or per Focus in iOS Settings.
     private func notificationContent(
         body: String,
         playsSound: Bool,
-        timerCompletionSound: TimerCompletionSound? = nil
+        timerCompletionSound: TimerCompletionSound? = nil,
+        interruptionLevel: UNNotificationInterruptionLevel = .active
     ) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
         content.title = "ポモジェム"
         content.body = body
+        content.interruptionLevel = interruptionLevel
         if playsSound {
             content.sound = timerCompletionSound.map {
                 TimerCompletionSoundLibrary.notificationSound(for: $0)

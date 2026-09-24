@@ -83,6 +83,7 @@ class SignedCloudEnvironmentTests(unittest.TestCase):
             "com.apple.developer.team-identifier": "fixture-team",
             "get-task-allow": is_development,
             "com.apple.developer.family-controls": True,
+            "com.apple.developer.usernotifications.time-sensitive": True,
             "com.apple.security.application-groups": ["group.example.app"],
             "com.apple.developer.icloud-container-environment": signed_cloud,
             "aps-environment": "development" if is_development else "production",
@@ -243,19 +244,45 @@ class ScreenTimeCapabilityTests(unittest.TestCase):
         validate_bundle_capability_allowlist(entitlements, role=role, team_id="fixture-team",
             bundle_id="example.app", app_group="group.example.app", is_profile=profile)
 
+    time_sensitive = "com.apple.developer.usernotifications.time-sensitive"
+
     def screen_capabilities(self):
         return {"com.apple.developer.family-controls": True,
                 "com.apple.security.application-groups": ["group.example.app"]}
 
+    def role_capabilities(self, role: str):
+        capabilities = self.screen_capabilities()
+        if role == "app":
+            capabilities[self.time_sensitive] = True
+        return capabilities
+
     def test_family_controls_requires_explicit_boolean_authorization_in_both_products(self):
         for role in ("app", "monitor"):
             for profile in (False, True):
-                self.check(self.screen_capabilities(), role, profile=profile)
+                self.check(self.role_capabilities(role), role, profile=profile)
                 for value in (None, False, 1, "true", []):
-                    entitlements = self.screen_capabilities()
+                    entitlements = self.role_capabilities(role)
                     entitlements["com.apple.developer.family-controls"] = value
                     with self.subTest(role=role, profile=profile, value=value), self.assertRaises(ValueError):
                         self.check(entitlements, role, profile=profile)
+
+    def test_time_sensitive_is_required_by_the_app_and_rejected_elsewhere(self):
+        for profile in (False, True):
+            self.check(self.role_capabilities("app"), "app", profile=profile)
+            for value in (None, False, 1, "true", []):
+                entitlements = self.role_capabilities("app")
+                if value is None:
+                    del entitlements[self.time_sensitive]
+                else:
+                    entitlements[self.time_sensitive] = value
+                with self.subTest(profile=profile, value=value), \
+                        self.assertRaisesRegex(ValueError, "Time Sensitive"):
+                    self.check(entitlements, "app", profile=profile)
+            with self.subTest(role="monitor", profile=profile), self.assertRaises(ValueError):
+                self.check(self.screen_capabilities() | {self.time_sensitive: True},
+                           "monitor", profile=profile)
+            with self.subTest(role="widget", profile=profile), self.assertRaises(ValueError):
+                self.check({self.time_sensitive: True}, "widget", profile=profile)
 
     def test_monitor_group_must_be_exact_without_wildcards_or_extra_groups(self):
         for profile in (False, True):
@@ -462,6 +489,7 @@ target_capabilities:
     - in_app_purchase
     - family_controls
     - app_groups
+    - time_sensitive_notifications
   widget: []
   screen_time_monitor:
     - family_controls
@@ -493,6 +521,7 @@ target_capabilities:
 
     def test_mismatched_version_or_unreviewed_target_capabilities_are_rejected(self):
         mutations = [lambda text: text.replace('build_number: "10"', 'build_number: "9"'),
+                     lambda text: text.replace("    - time_sensitive_notifications\n", ""),
                      lambda text: text.replace("  widget: []", "  widget:\n    - app_groups"),
                      lambda text: text.replace("  screen_time_monitor:", "  unknown_extension:"),
                      lambda text: text + "    - icloud_cloudkit\n",
@@ -513,6 +542,13 @@ target_capabilities:
                             "com.apple.developer.family-controls", value) for value in (False, 1)]
         mutations.append(mutate("PomoGemWidgets/PomoGemWidgets.entitlements",
                                 "com.apple.security.application-groups", ["group.com.hinoshiba.pomogem"]))
+        mutations.append(mutate("PomoGemWidgets/PomoGemWidgets.entitlements",
+                                "com.apple.developer.usernotifications.time-sensitive", True))
+        mutations.append(mutate("PomoGemScreenTimeMonitor/PomoGemScreenTimeMonitor.entitlements",
+                                "com.apple.developer.usernotifications.time-sensitive", True))
+        mutations += [mutate("PomoGem/PomoGem.entitlements",
+                             "com.apple.developer.usernotifications.time-sensitive", value)
+                      for value in (False, 1)]
         for mutation in mutations:
             with self.subTest(mutation=mutation), self.assertRaises(ValueError):
                 self.check_metadata(source_mutation=mutation)
