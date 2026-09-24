@@ -4576,6 +4576,11 @@ private struct JarUITestPresentationProbe: View {
     @State private var bounceRise: CGFloat = 0
     @State private var targetX: CGFloat = 0.5
     @State private var targetY: CGFloat = 0.88
+    /// The same target in window points. The jar's accessibility frame is
+    /// wider than the SpriteKit view (its glow overflows), so a tap placed by
+    /// normalized offset in that frame drifts right of the gem.
+    @State private var targetWindowX: CGFloat = -1
+    @State private var targetWindowY: CGFloat = -1
     @State private var dropSequence = 0
     @State private var dropFall: CGFloat = 0
     @State private var dropLanded = false
@@ -4603,7 +4608,7 @@ private struct JarUITestPresentationProbe: View {
 
     private var presentationValue: String {
         String(
-            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d",
+            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d;targetWindowX=%.1f;targetWindowY=%.1f",
             count,
             Double(maximumY),
             records,
@@ -4613,7 +4618,9 @@ private struct JarUITestPresentationProbe: View {
             Double(targetY),
             dropSequence,
             Double(dropFall),
-            dropLanded ? 1 : 0
+            dropLanded ? 1 : 0,
+            Double(targetWindowX),
+            Double(targetWindowY)
         )
     }
 
@@ -4636,6 +4643,11 @@ private struct JarUITestPresentationProbe: View {
         }), scene.size.width > 0, scene.size.height > 0 {
             targetX = min(max(target.position.x / scene.size.width, 0), 1)
             targetY = min(max(1 - target.position.y / scene.size.height, 0), 1)
+            if let view = scene.view, let window = view.window {
+                let point = view.convert(scene.convertPoint(toView: target.position), to: window)
+                targetWindowX = point.x
+                targetWindowY = point.y
+            }
         }
 
         if trackedRecords != currentRecords {
