@@ -1325,7 +1325,8 @@ struct ShareComposerView: View {
                 }
 
             case let .month(monthStart):
-                let calendar = Calendar.autoupdatingCurrent
+                // Gregorian, like the card's 「1985年1月」 label and Wrapped.
+                let calendar = PomoGemCalendar.gregorian
                 guard let interval = calendar.dateInterval(of: .month, for: monthStart) else {
                     throw BoundedShareLoadError.invalidMonth
                 }

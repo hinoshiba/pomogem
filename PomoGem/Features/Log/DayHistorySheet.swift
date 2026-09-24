@@ -8,6 +8,7 @@ enum HistoryDrillDownAccessibilityID {
     static let dayClose = "history.day.close"
     static let dayRow = "history.day.session"
     static let pastHistory = "log.past-history"
+    static let pastHistoryFromMonths = "log.past-history.from-months"
     static let pastHistoryClose = "log.past-history.close"
 
     static func day(_ dayStart: Date, calendar: Calendar) -> String {
@@ -301,10 +302,7 @@ struct HistoryThemeBreakdown: View {
 
     private func themeName(_ theme: AccumulationTimelineThemeSummary) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Circle()
-                .fill(Color(hex: theme.colorHex))
-                .frame(width: 10, height: 10)
-                .accessibilityHidden(true)
+            HistoryThemeDot(colorHex: theme.colorHex)
             Text(theme.name)
                 .font(.subheadline.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
@@ -317,6 +315,22 @@ struct HistoryThemeBreakdown: View {
             (Double(theme.seconds) / Double(totalSeconds) * 100).rounded(),
             maximum: 100
         )
+    }
+}
+
+/// A theme's color beside its name. A symbol rather than a `Circle`: it has
+/// a text baseline, so on the name's first line it sits at the middle of the
+/// letters instead of on the baseline like a period, and it grows with
+/// Dynamic Type instead of staying a 10-point speck at AX5.
+struct HistoryThemeDot: View {
+    let colorHex: String
+
+    var body: some View {
+        Image(systemName: "circle.fill")
+            .font(.subheadline)
+            .imageScale(.small)
+            .foregroundStyle(Color(hex: colorHex))
+            .accessibilityHidden(true)
     }
 }
 
@@ -396,6 +410,12 @@ struct HistorySessionRow: View {
                     .font(.caption2)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                if let batch = multiDrawSummary {
+                    Text(batch)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text(
                     "+\(item.grams)g・\(item.source.displayName)",
                     tableName: "Log",
@@ -432,8 +452,7 @@ struct HistorySessionRow: View {
                 Text(timeText)
                     .font(.caption2)
                     .foregroundStyle(PomoGemTheme.muted)
-                if let batch = RareRewardPresentationPolicy
-                    .counts(item.rareRewardCounts).multiDrawSummary {
+                if let batch = multiDrawSummary {
                     Text(batch)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(PomoGemTheme.muted)
@@ -448,6 +467,11 @@ struct HistorySessionRow: View {
                     .foregroundStyle(PomoGemTheme.muted)
             }
         }
+    }
+
+    /// The rare 金／虹 batch line; shown at every text size.
+    private var multiDrawSummary: String? {
+        RareRewardPresentationPolicy.counts(item.rareRewardCounts).multiDrawSummary
     }
 
     private var timeText: String {

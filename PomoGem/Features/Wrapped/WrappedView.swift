@@ -1,11 +1,15 @@
 import SwiftData
 import SwiftUI
 
+/// A Gregorian month, as its title 「1985年1月」 says. 記録's month list,
+/// 年月, Wrapped and the month card all bucket and read months this way, so
+/// on an Islamic, Hebrew or Chinese calendar the jar and card cover the month
+/// the row was labelled with.
 struct WrappedMonth: Identifiable, Hashable {
     let start: Date
     var id: Date { start }
 
-    init(containing date: Date, calendar: Calendar = .autoupdatingCurrent) {
+    init(containing date: Date, calendar: Calendar = PomoGemCalendar.gregorian) {
         start = calendar.dateInterval(of: .month, for: date)?.start ?? date
     }
 
@@ -156,7 +160,7 @@ struct WrappedView: View {
                 .padding(.horizontal, 18)
 
                 if !isLoading, loadError == nil, !themeTimes.isEmpty {
-                    WrappedThemeTimes(themes: themeTimes)
+                    WrappedThemeTimes(themes: themeTimes, isScoped: statsAreScoped)
                         .padding(.horizontal, 18)
                 }
 
@@ -176,7 +180,7 @@ struct WrappedView: View {
                     }
                     .buttonStyle(PomoGemPrimaryButtonStyle())
                     .accessibilityIdentifier("wrapped.share")
-                    Button("瓶へ戻る") { dismiss() }
+                    Button(dismissButtonTitle) { dismiss() }
                         .buttonStyle(PomoGemSecondaryButtonStyle())
                 }
                 .padding(.horizontal, 22)
@@ -222,7 +226,7 @@ struct WrappedView: View {
         guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
         isLoading = true
         loadError = nil
-        let calendar = Calendar.autoupdatingCurrent
+        let calendar = PomoGemCalendar.gregorian
         guard let interval = calendar.dateInterval(of: .month, for: month.start) else {
             monthSessions = []
             pageIsPartial = false
@@ -258,10 +262,26 @@ struct WrappedView: View {
         return remainder == 0 ? "\(hours)時間" : "\(hours)時間\(remainder)分"
     }
 
+    /// The numbers cover only the records shown (a capped page, or iCloud
+    /// still re-counting), so every figure on the page says 確認済み.
+    private var statsAreScoped: Bool {
+        pageIsPartial || aggregateProjectionPresentation.isCloudVerificationPending
+    }
+
+    /// Opened from a month in 年月, dismissing returns to that month's
+    /// sheet, not to a jar. 記録 keeps its existing wording.
+    private var dismissButtonTitle: String {
+        switch shareRoute {
+        case .router:
+            "瓶へ戻る"
+        case .inline:
+            String(localized: "月の記録へ戻る", table: "Log", comment: "Wrapped opened from a month in 年月: returns to that month's sheet")
+        }
+    }
+
     @ViewBuilder
     private var wrappedStats: some View {
-        let scoped = pageIsPartial
-            || aggregateProjectionPresentation.isCloudVerificationPending
+        let scoped = statsAreScoped
         WrappedStat(title: scoped ? "確認済み時間" : "時間", value: formatMinutes(totalMinutes))
         WrappedStat(title: scoped ? "確認済み粒" : "元の粒", value: "\(monthSessions.count)")
         WrappedStat(title: scoped ? "確認済みトップ" : "いちばん積んだ", value: topSubject)
@@ -372,6 +392,9 @@ private struct MonthlyAggregatePebble: View {
 
 private struct WrappedThemeTimes: View {
     let themes: [AccumulationTimelineThemeSummary]
+    /// Built from the same capped records as the stats, so it is titled
+    /// the same way they are.
+    let isScoped: Bool
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -379,7 +402,13 @@ private struct WrappedThemeTimes: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("テーマ別の時間", tableName: "Log", comment: "Wrapped: heading of the month's time per theme")
+            Group {
+                if isScoped {
+                    Text("確認済みのテーマ別の時間", tableName: "Log", comment: "Wrapped: heading of the time per theme when only part of the month is shown or iCloud is re-counting")
+                } else {
+                    Text("テーマ別の時間", tableName: "Log", comment: "Wrapped: heading of the month's time per theme")
+                }
+            }
                 .font(.caption.weight(.bold))
                 .foregroundStyle(PomoGemTheme.muted)
             ForEach(shown) { theme in
@@ -419,10 +448,7 @@ private struct WrappedThemeTimes: View {
 
     private func themeName(_ theme: AccumulationTimelineThemeSummary) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 9) {
-            Circle()
-                .fill(Color(hex: theme.colorHex))
-                .frame(width: 9, height: 9)
-                .accessibilityHidden(true)
+            HistoryThemeDot(colorHex: theme.colorHex)
             Text(theme.name)
                 .font(.subheadline.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)

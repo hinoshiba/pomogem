@@ -615,18 +615,27 @@ private struct AccumulationTimelineMonthSheet: View {
     }
 
     /// Any month, however old, can open as its own monthly jar and card.
+    /// Named for what it does rather than 「この月の瓶」, which the 代表瓶
+    /// section below already draws; the caption says it makes a card.
     private var wrappedButton: some View {
-        Button {
-            wrappedMonth = WrappedMonth(containing: month.monthStart, calendar: calendar)
-        } label: {
-            Label(
-                String(localized: "この月の瓶を見る", table: "Overview", comment: "Opens the month as its monthly jar (Wrapped)"),
-                systemImage: "sparkles.rectangle.stack.fill"
-            )
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                wrappedMonth = WrappedMonth(containing: month.monthStart, calendar: calendar)
+            } label: {
+                Label(
+                    String(localized: "この月を振り返る", table: "Overview", comment: "Opens the month's monthly wrap-up (Wrapped), which can become a share card"),
+                    systemImage: "sparkles.rectangle.stack.fill"
+                )
+            }
+            .buttonStyle(PomoGemPrimaryButtonStyle())
+            .accessibilityHint(Text("この月の記録を、ひとつの瓶とカードで振り返ります", tableName: "Overview"))
+            .accessibilityIdentifier(AccumulationTimelineAccessibilityID.monthWrapped)
+            Text("ひと月の瓶とテーマ別の時間を見て、カードにして残せます。", tableName: "Overview", comment: "Caption under 「この月を振り返る」")
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityHidden(true)
         }
-        .buttonStyle(PomoGemPrimaryButtonStyle())
-        .accessibilityHint(Text("この月の記録を、ひとつの瓶とカードで振り返ります", tableName: "Overview"))
-        .accessibilityIdentifier(AccumulationTimelineAccessibilityID.monthWrapped)
     }
 
     private func dayList(_ days: [AccumulationTimelineDaySummary]) -> some View {

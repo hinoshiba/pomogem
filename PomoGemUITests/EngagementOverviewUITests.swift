@@ -380,12 +380,16 @@ final class EngagementOverviewUITests: XCTestCase {
             app.swipeDown()
         }
         XCTAssertTrue(wrapped.exists && wrapped.isHittable)
+        XCTAssertTrue(wrapped.label.contains("この月を振り返る"), wrapped.label)
         wrapped.tap()
         XCTAssertTrue(app.staticTexts["1985年1月の瓶"].waitForExistence(timeout: 8))
         let themeTimes = app.descendants(matching: .any)["wrapped.theme-times"]
         XCTAssertTrue(scrollUntilVisible(themeTimes, in: app))
         let share = app.buttons["wrapped.share"]
         XCTAssertTrue(scrollUntilVisible(share, in: app))
+        // Over a month sheet, dismissing returns to the month, not to a jar.
+        XCTAssertTrue(app.buttons["月の記録へ戻る"].exists)
+        XCTAssertFalse(app.buttons["瓶へ戻る"].exists)
         let wrappedAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         wrappedAttachment.name = "1985年1月 — monthly jar from 年月\(suffix)"
         wrappedAttachment.lifetime = .keepAlways

@@ -989,7 +989,7 @@ enum LogHistoryLoadPolicy {
         scenePhase: ScenePhase,
         isCloudVerificationPending: Bool,
         now: Date = .now,
-        calendar: Calendar = .autoupdatingCurrent
+        calendar: Calendar = PomoGemCalendar.gregorian
     ) -> String {
         let month = calendar.dateInterval(of: .month, for: now)?.start
             .timeIntervalSinceReferenceDate ?? 0
@@ -1549,6 +1549,33 @@ struct LogView: View {
                         }
                         .buttonStyle(PomoGemRowButtonStyle())
                     }
+
+                    // The twelve months end here; older months are one step
+                    // away instead of only at the bottom of 最近の記録.
+                    Divider().overlay(PomoGemTheme.glassEdge.opacity(0.08))
+                    Button {
+                        showsPastHistory = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "calendar")
+                                .foregroundStyle(PomoGemTheme.amber)
+                                .frame(width: 28)
+                                .accessibilityHidden(true)
+                            Text("もっと前の月を見る", tableName: "Log", comment: "Log: row under the twelve monthly jars that opens 年月 for older months")
+                                .font(.subheadline.weight(.bold))
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(PomoGemTheme.muted)
+                                .accessibilityHidden(true)
+                        }
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PomoGemRowButtonStyle())
+                    .accessibilityHint(Text("年と月を選んで、日ごとの記録までたどれます", tableName: "Log"))
+                    .accessibilityIdentifier(HistoryDrillDownAccessibilityID.pastHistoryFromMonths)
                 }
             }
         }
@@ -1834,7 +1861,9 @@ struct LogView: View {
     private func loadMonthSummaries(for key: String) async {
         guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
         let epochID = ActivityResetPolicy.currentEpochID(from: resetSnapshots)
-        let calendar = Calendar.autoupdatingCurrent
+        // Gregorian like the month titles, 年月, Wrapped and the card, so a
+        // row opens the same month it is labelled with on any calendar.
+        let calendar = PomoGemCalendar.gregorian
         let now = Date.now
         do {
             let summaries = try await AccumulationTimelineLoader.read(

@@ -385,6 +385,18 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         app.buttons["history.day.close"].tap()
         XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 4))
 
+        // The twelve monthly jars end with the way to older months.
+        let olderMonths = app.buttons["log.past-history.from-months"]
+        XCTAssertTrue(scrollUntilHittable(olderMonths, swiping: .up))
+        let monthsAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        monthsAttachment.name = "記録 — 月ごとの瓶 leads to older months"
+        monthsAttachment.lifetime = .keepAlways
+        add(monthsAttachment)
+        olderMonths.tap()
+        XCTAssertTrue(app.navigationBars["過去の記録"].waitForExistence(timeout: 5))
+        app.buttons["log.past-history.close"].tap()
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 4))
+
         let past = app.buttons["log.past-history"]
         XCTAssertTrue(scrollUntilHittable(past, swiping: .up))
         past.tap()
