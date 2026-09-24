@@ -2519,8 +2519,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             throw StorageTransferRuntimeError.cloudCopyStillPending
         }
         let attempt = launchAttempt
-        guard case let .selected(source) = PersistenceDeploymentState.load(),
-              case let .cloud(binding) = source else {
+        guard case let .selected(source) = PersistenceDeploymentState.load() else {
             throw StorageTransferError.staleTransaction
         }
         let validate: @MainActor () throws -> Void = {
@@ -2534,6 +2533,10 @@ private struct PomoGemPersistenceLaunchHost: View {
         try validate()
         let deviceID = FocusDeviceIdentity.current()
         let runtime = try StorageTransferRuntime.live()
+        guard case let .cloud(binding) = source else {
+            return try await previewLocalEnableCloud(sourceSession: sourceSession, runtime: runtime,
+                                                     deviceID: deviceID, validate: validate)
+        }
         let cloud = try await runtime.previewCloudDataset(
             binding: binding, localDeviceID: deviceID, validateAccess: validate)
         try validate()
@@ -2557,6 +2560,44 @@ private struct PomoGemPersistenceLaunchHost: View {
         try validate()
         return StorageTransferDatasetPreviewSummary(cloud: cloud, device: device,
                                                     hasCloudLineage: lineage)
+    }
+
+    /// transfer-02. The pre-flight behind 「iCloudのデータを使う」, the one door a
+    /// local-only user has into iCloud, which deletes this device's jar. It
+    /// resolves which Apple Account iCloud would mean (read-only: the
+    /// resolution is never persisted here), reads that account's iCloud side
+    /// and counts this iPhone. It opens no mirror, writes no journal or
+    /// request and authorizes nothing: `begin` re-resolves and re-reads
+    /// everything it relies on.
+    ///
+    /// The account is re-checked around the read by fingerprint, not by
+    /// namespace: a local-only install has no cloud namespace to compare, and
+    /// what the user is shown must simply be this account's iCloud.
+    private func previewLocalEnableCloud(
+        sourceSession: PomoGemPersistenceSession,
+        runtime: StorageTransferRuntime,
+        deviceID: String,
+        validate: @escaping @MainActor () throws -> Void
+    ) async throws -> StorageTransferDatasetPreviewSummary {
+        let binding = try await AppleAccountBoundaryResolver().resolve().binding
+        try validate()
+        let live = CloudStorageTransferCloudClient.live
+        let client = CloudStorageTransferCloudClient(verifyAccount: { expected in
+            let current = try await AppleAccountBoundaryResolver().resolve().binding
+            guard current.accountFingerprint == expected.accountFingerprint else {
+                throw StorageTransferRecoveryError.identityMismatch
+            }
+        }, readDatabase: live.readDatabase)
+        let cloud = try await runtime.previewCloudDataset(localDeviceID: deviceID, readSnapshot: {
+            try await CloudStorageTransferCloudKit(client: client,
+                timeout: StorageTransferCloudPreviewPolicy.timeout)
+                .readSnapshot(expectedBinding: binding, validateTransfer: validate).snapshot
+        }, validateAccess: validate)
+        try validate()
+        let device = try? Self.mountedDevicePreview(container: sourceSession.container,
+                                                    localDeviceID: deviceID)
+        try validate()
+        return StorageTransferDatasetPreviewSummary(cloud: cloud, device: device)
     }
 
     /// The device side of a Settings comparison, read from the session that is

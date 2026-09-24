@@ -37,6 +37,13 @@ enum StorageTransferSettingsUITestFixture {
         /// settings-03. The page the disabled iCloud reset points to, behind the
         /// same row Settings shows. Its export is a recorder here.
         case cloudResetGuidance
+        /// transfer-02. Local-only mode, where 「iCloudのデータを使う」 deletes
+        /// the device's jar: an iCloud side holding none of the user's records,
+        /// and an iCloud side that could not be read.
+        case localEmptyCloud, localPreviewUnreadable
+        /// transfer-07. Screen Time gems are in use, so every published
+        /// switch discloses what it resets.
+        case localScreenTime, cloudScreenTime
         /// The launch-host screens a fenced device actually lands on. Each one
         /// renders the shipping `PersistenceLaunchStatusView` with a recorder in
         /// place of the runtime, so no journal, container or CloudKit call
@@ -102,6 +109,7 @@ enum StorageTransferSettingsUITestFixture {
             self == .cloud || self == .cloudDatasetDoors
                 || self == .cloudDatasetDoorsUnreadable || self == .cloudDatasetDoorsNoLineage
                 || self == .cloudDatasetDoorsEmptyCloud || self == .cloudRefreshBookkeepingOnly
+                || self == .cloudScreenTime
                 || self == .lateArrival || isOffline
                 || self == .cloudNetworkWaiting ? .cloudKit : .localOnly
         }
@@ -116,6 +124,7 @@ enum StorageTransferSettingsUITestFixture {
                 ? .isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)
                 : .standard
         }
+        var disclosesScreenTimeReset: Bool { self == .localScreenTime || self == .cloudScreenTime }
         var otherWorkIsActive: Bool {
             isOffline || self == .cloudNetworkWaiting || self == .activeTimer || self == .exporting || self == .deleting
         }
@@ -224,7 +233,8 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                         persistenceMode: scenario.mode,
                         controller: controller,
                         otherWorkIsActive: scenario.otherWorkIsActive,
-                        releasePolicy: scenario.releasePolicy
+                        releasePolicy: scenario.releasePolicy,
+                        disclosesScreenTimeReset: scenario.disclosesScreenTimeReset
                     )
                 }
                 .navigationTitle("設定")
@@ -252,7 +262,7 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                 // it was asked, so a test can prove the evidence is gathered
                 // BEFORE the acknowledgement rather than after it.
                 previewCalls += 1
-                guard scenario != .cloudDatasetDoorsUnreadable else {
+                guard scenario != .cloudDatasetDoorsUnreadable, scenario != .localPreviewUnreadable else {
                     throw CloudStorageTransferCloudError.timedOut
                 }
                 // transfer-03. The host reads this iPhone for every build now,
@@ -262,7 +272,7 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                     return Self.previewSummaryWithoutLineage(readsDeviceSide: true)
                 case .cloudDatasetDoorsEmptyCloud:
                     return Self.previewSummaryEmptyCloud(readsDeviceSide: true)
-                case .cloudRefreshBookkeepingOnly:
+                case .cloudRefreshBookkeepingOnly, .localEmptyCloud:
                     return Self.previewSummaryBookkeepingOnly()
                 default:
                     return Self.previewSummary(readsDeviceSide: true)

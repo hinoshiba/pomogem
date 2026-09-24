@@ -118,6 +118,10 @@ struct StorageTransferSettingsSection: View {
     /// Injected so the Debug UI-test fixture can exercise a published door with
     /// exactly one bit raised. Every shipping caller uses the default.
     var releasePolicy: StorageTransferReleasePolicy = .standard
+    /// transfer-07. True while Screen Time gems are on, monitoring, or holding
+    /// black gems — the state every switch resets. Users who never used the
+    /// feature see no extra paragraph.
+    var disclosesScreenTimeReset = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showsChoices = false
 
@@ -148,6 +152,7 @@ struct StorageTransferSettingsSection: View {
                         persistenceMode: persistenceMode,
                         releasePolicy: releasePolicy,
                         offersDatasetDoors: controller.isDatasetAvailable,
+                        disclosesScreenTimeReset: disclosesScreenTimeReset,
                         previewDataset: { try await controller.previewDataset() },
                         confirmed: { choice in
                             showsChoices = false
@@ -180,12 +185,20 @@ private struct StorageTransferChoiceView: View {
     let persistenceMode: PersistenceLaunchMode
     let releasePolicy: StorageTransferReleasePolicy
     let offersDatasetDoors: Bool
+    let disclosesScreenTimeReset: Bool
     let previewDataset: @MainActor @Sendable () async throws -> StorageTransferDatasetPreviewSummary
     let confirmed: (StorageTransferChoice) -> Void
     let confirmedDataset: (StorageTransferDatasetRequestDirection) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.modelContext) private var modelContext
     @State private var choice: StorageTransferChoice?
+    /// transfer-02. The same read-only pre-flight, for the local-only door
+    /// that deletes this device's jar. Its own state, so a reading taken for a
+    /// dataset direction is never the evidence behind this confirmation.
+    @State private var choicePreview: StorageTransferDatasetPreviewSummary?
+    @State private var isReadingChoicePreview = false
+    @State private var choicePreviewError: String?
     /// Its own presentation state, so a tentative dataset direction can never
     /// be confused with a tentative storage-mode choice, and so the two kinds
     /// of confirmation never share an acknowledgement.
@@ -218,25 +231,7 @@ private struct StorageTransferChoiceView: View {
                     }
                     datasetDoors
                 } else {
-                    Section {
-                        Text("残すデータを選んでください。2つの保存先のデータは結合しません。")
-                    }
-                    Section("iCloudのデータを残す") {
-                        Text("現在このiPhoneにあるテーマ・記録・設定を削除し、iCloudのデータに置き換えます。端末だけの記録は失われます。")
-                        Button("iCloudのデータを使う", role: .destructive) { choice = .enableCloudKeepingCloud }
-                            .accessibilityIdentifier("storage-switch.keep-cloud")
-                    }
-                    Section("このiPhoneのデータを残す") {
-                        Text("現在iCloudにあるPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータに置き換えます。同じApple Accountの他の端末にも影響します。")
-                        Text(StorageTransferOverwriteCopy.doorUnavailable)
-                            .accessibilityIdentifier("storage-switch.replace-cloud-unavailable")
-                        Button("このiPhoneのデータで置き換える", role: .destructive) { choice = .enableCloudReplacingCloud }
-                            .disabled(!StorageTransferReleasePolicy.standard.allowsCloudReplacement)
-                            .accessibilityIdentifier("storage-switch.replace-cloud")
-                    }
-                    Section {
-                        Text("テーマ名・成果メモ・記録・設定・タイマーの整合用データが、あなたのApple AccountのプライベートiCloud領域に保存されます。")
-                    }
+                    enableDoors
                 }
                 Section {
                     Text("通信状態やデータ量によって時間がかかります。安全のため、画面の案内に従ってアプリを終了し、開き直す手順があります。アプリ自体は削除しないでください。中断した場合は、次回起動時に復旧画面を表示します。")
@@ -248,20 +243,75 @@ private struct StorageTransferChoiceView: View {
                 ? StorageTransferSettingsSection.cloudEntryTitle : "iCloudを有効にする")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { dismiss() } } }
-            .sheet(item: $choice) { selected in
-                StorageTransferConfirmationView(choice: selected) { confirmed(selected) }
-                    .dynamicTypeSize(dynamicTypeSize)
-            }
-            .sheet(item: $datasetDirection) { direction in
-                StorageTransferDatasetConfirmationView(
-                    direction: direction,
-                    preview: datasetPreview
-                ) {
-                    confirmedDataset(direction)
-                }
-                .dynamicTypeSize(dynamicTypeSize)
-            }
+            .sheet(item: $choice) { selected in choiceConfirmation(selected) }
+            .sheet(item: $datasetDirection) { direction in datasetConfirmation(direction) }
         }
+    }
+
+    /// The local-only screen's doors.
+    @ViewBuilder
+    private var enableDoors: some View {
+        Section {
+            Text("残すデータを選んでください。2つの保存先のデータは結合しません。")
+        }
+        Section("iCloudのデータを残す") {
+            Text("現在このiPhoneにあるテーマ・記録・設定を削除し、iCloudのデータに置き換えます。端末だけの記録は失われます。")
+            if isReadingChoicePreview {
+                ProgressView(StorageTransferOverwriteCopy.comparisonReading)
+                    .accessibilityIdentifier("storage-switch.keep-cloud-reading")
+            }
+            if let choicePreviewError {
+                Text(choicePreviewError)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("storage-switch.keep-cloud-preview-error")
+            }
+            Button(StorageTransferEnableCopy.keepCloudTitle, role: .destructive) {
+                // transfer-02. Never opens 「最後の確認」 on an assumption:
+                // both sides are counted first, and a failed read keeps the
+                // confirmation closed.
+                loadPreviewThenConfirmChoice(.enableCloudKeepingCloud)
+            }
+            .disabled(isReadingChoicePreview)
+            .accessibilityIdentifier("storage-switch.keep-cloud")
+        }
+        Section("このiPhoneのデータを残す") {
+            Text("現在iCloudにあるPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータに置き換えます。同じApple Accountの他の端末にも影響します。")
+            Text(StorageTransferOverwriteCopy.doorUnavailable)
+                .accessibilityIdentifier("storage-switch.replace-cloud-unavailable")
+            Button("このiPhoneのデータで置き換える", role: .destructive) { choice = .enableCloudReplacingCloud }
+                .disabled(!StorageTransferReleasePolicy.standard.allowsCloudReplacement)
+                .accessibilityIdentifier("storage-switch.replace-cloud")
+        }
+        Section {
+            Text("テーマ名・成果メモ・記録・設定・タイマーの整合用データが、あなたのApple AccountのプライベートiCloud領域に保存されます。")
+        }
+    }
+
+    private func choiceConfirmation(_ selected: StorageTransferChoice) -> some View {
+        let deletesThisDevice = selected == .enableCloudKeepingCloud
+        var export: StorageTransferExportControl.Export?
+        if deletesThisDevice { export = exportAction() }
+        return StorageTransferConfirmationView(
+            choice: selected,
+            preview: deletesThisDevice ? choicePreview : nil,
+            disclosesScreenTimeReset: disclosesScreenTimeReset,
+            export: export
+        ) { confirmed(selected) }
+            .dynamicTypeSize(dynamicTypeSize)
+    }
+
+    private func datasetConfirmation(_ direction: StorageTransferDatasetRequestDirection) -> some View {
+        var export: StorageTransferExportControl.Export?
+        if direction == .refreshFromCloud { export = exportAction() }
+        return StorageTransferDatasetConfirmationView(
+            direction: direction,
+            preview: datasetPreview,
+            disclosesScreenTimeReset: disclosesScreenTimeReset,
+            export: export
+        ) {
+            confirmedDataset(direction)
+        }
+        .dynamicTypeSize(dynamicTypeSize)
     }
 
     /// PLAN Steps 11-12. The two directional dataset doors, the one a
@@ -355,6 +405,31 @@ private struct StorageTransferChoiceView: View {
         }
     }
 
+    /// transfer-02. The local-only twin of `loadPreviewThenConfirm`.
+    private func loadPreviewThenConfirmChoice(_ selected: StorageTransferChoice) {
+        guard !isReadingChoicePreview else { return }
+        choicePreview = nil
+        choicePreviewError = nil
+        isReadingChoicePreview = true
+        Task { @MainActor in
+            defer { isReadingChoicePreview = false }
+            do {
+                choicePreview = try await previewDataset()
+                choice = selected
+            } catch {
+                choicePreview = nil
+                choicePreviewError = StorageTransferEnableCopy.previewUnavailable
+            }
+        }
+    }
+
+    /// The ordinary Settings export of the mounted session, offered inside
+    /// the confirmations that delete this device's side.
+    private func exportAction() -> StorageTransferExportControl.Export {
+        let context = modelContext
+        return { try await StorageTransferExportControl.exportMountedSession(context) }
+    }
+
     private func isReading(_ direction: StorageTransferDatasetRequestDirection) -> Bool {
         isReadingDatasetPreview && readingDirection == direction
     }
@@ -381,6 +456,12 @@ struct StorageTransferDatasetConfirmationView: View {
     /// counts and the other-device evidence are what informed consent is
     /// consent TO (PLAN §3 S14/S15).
     var preview: StorageTransferDatasetPreviewSummary?
+    /// transfer-07. Only the direction whose own copy does not already say so.
+    var disclosesScreenTimeReset = false
+    /// 「先にこの端末の記録を書き出す」, for the direction that deletes this
+    /// device's side. nil where the surface carries its own export (the launch
+    /// host) or where the deleted side is iCloud's.
+    var export: StorageTransferExportControl.Export?
     let confirmed: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var understandsDeletion = false
@@ -426,6 +507,12 @@ struct StorageTransferDatasetConfirmationView: View {
                             // side the direction deletes.
                             paragraph(StorageTransferRefreshCopy.cloudSideEmpty(device: preview?.device),
                                       suffix: "empty-cloud")
+                        }
+                        if let export {
+                            StorageTransferExportControl(identifier: identifier("export"), export: export)
+                        }
+                        if disclosesScreenTimeReset {
+                            paragraph(StorageTransferScreenTimeCopy.switchResets, suffix: "screen-time")
                         }
                         paragraph(StorageTransferRefreshCopy.relaunch, suffix: "relaunch")
                     }
@@ -499,6 +586,11 @@ struct StorageTransferDatasetConfirmationView: View {
 
 private struct StorageTransferConfirmationView: View {
     let choice: StorageTransferChoice
+    /// transfer-02. Present for 「iCloudのデータを使う」, which is never offered
+    /// without it: the counts are what the acknowledgement is consent TO.
+    var preview: StorageTransferDatasetPreviewSummary?
+    var disclosesScreenTimeReset = false
+    var export: StorageTransferExportControl.Export?
     let confirmed: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var understandsDeletion = false
@@ -508,6 +600,27 @@ private struct StorageTransferConfirmationView: View {
             List {
                 Section {
                     Text(message)
+                    if let preview {
+                        // The device side is the one deleted, so it comes first.
+                        // The iCloud side carries counts only: its newest
+                        // mirrored timestamp may be a Prefs stamp.
+                        Text(StorageTransferOverwriteCopy.side("このiPhone", preview: preview.device)
+                             + "\n" + StorageTransferOverwriteCopy.countsOnly("iCloud", preview: preview.cloud))
+                            .accessibilityIdentifier("storage-switch.keep-cloud-comparison")
+                        if StorageTransferRefreshCopy.cloudSideIsEmpty(preview.cloud) {
+                            Text(StorageTransferEnableCopy.cloudSideEmpty(device: preview.device))
+                                .accessibilityIdentifier("storage-switch.keep-cloud-empty-cloud")
+                        }
+                    }
+                    if let export {
+                        StorageTransferExportControl(identifier: "storage-switch.export", export: export)
+                    }
+                    if disclosesScreenTimeReset {
+                        // transfer-07. Every choice here moves to another
+                        // storage namespace, including the non-destructive one.
+                        Text(StorageTransferScreenTimeCopy.switchResets)
+                            .accessibilityIdentifier("storage-switch.screen-time")
+                    }
                     // Every choice that replaces the iCloud dataset stages a
                     // recovery copy first, not only the legacy one.
                     if choice.replacesCloud {

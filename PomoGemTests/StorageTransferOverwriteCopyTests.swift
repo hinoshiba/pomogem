@@ -149,6 +149,40 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
         }
     }
 
+    /// transfer-02. The local-only → iCloud door deletes this device's jar.
+    /// When iCloud holds none of the user's records the warning names what is
+    /// lost, in the comparison's nouns, and that sync then starts empty.
+    func testTheEnableWarningNamesTheLossAndTheEmptyStart() {
+        var counts = Dictionary(uniqueKeysWithValues:
+            PomoGemStorageSnapshot.cloudModelNames.map { ($0, 0) })
+        counts["Subject"] = 12
+        counts["StudySession"] = 480
+        counts["AchievementStone"] = 36
+        let device = StorageTransferCloudPreview(recordCounts: counts, latestRecordAt: nil,
+                                                 otherDeviceIDs: 0, ignoredWriterIDs: 0)
+        let warning = StorageTransferEnableCopy.cloudSideEmpty(device: device)
+        XCTAssertTrue(warning.contains("このiPhoneのテーマ12・記録480・成果36"), warning)
+        XCTAssertTrue(warning.contains("空の状態からiCloudの同期を始めます"))
+        XCTAssertTrue(warning.contains("元に戻すことはできません"))
+        XCTAssertTrue(StorageTransferEnableCopy.cloudSideEmpty(device: nil).contains("元に戻すことはできません"))
+        XCTAssertTrue(StorageTransferEnableCopy.previewUnavailable
+            .contains("「\(StorageTransferEnableCopy.keepCloudTitle)」"),
+            "A failed read names the control the user presses again")
+        XCTAssertTrue(StorageTransferEnableCopy.previewUnavailable.contains("どちらの記録も削除していません"))
+        XCTAssertEqual(StorageTransferOverwriteCopy.countsOnly("iCloud", preview: device),
+                       "iCloud: テーマ12・記録480・成果36")
+    }
+
+    /// transfer-07. What a switch resets, and what it keeps, in the Screen
+    /// Time settings' own nouns.
+    func testTheScreenTimeDisclosureSaysWhatIsResetAndWhatIsKept() {
+        let text = StorageTransferScreenTimeCopy.switchResets
+        for noun in ["選んだアプリ", "まだ取り込んでいない利用記録", "黒いgem", "「スクリーンタイム」",
+                     "保存済みの勉強時間と通常gemは引き継ぎます"] {
+            XCTAssertTrue(text.contains(noun), noun)
+        }
+    }
+
     /// transfer-10. A closed door has staged nothing, so its reason may not
     /// promise a recovery copy the way the resume-time refusal can.
     func testAClosedDoorsReasonPromisesNoRecoveryCopy() {

@@ -148,7 +148,8 @@ struct SettingsView: View {
                 otherWorkIsActive: isCloudOfflineSession || isExportingData || completeDeletion.hasStarted
                     || router.focusPresentationIsActive || router.recoveredFocus != nil
                     || router.deferredFocusRecovery != nil || router.recoveredBreak != nil
-                    || router.cloudFocusRecoveryOffer != nil
+                    || router.cloudFocusRecoveryOffer != nil,
+                disclosesScreenTimeReset: screenTimeIsInUse
             )
             notificationSection
             shareSection
@@ -837,6 +838,15 @@ struct SettingsView: View {
                 )
             }
         }
+    }
+
+    /// transfer-07. Whether a storage switch would reset anything the user
+    /// set up in Screen Time: the feature is on or monitoring, or black gems
+    /// are still held on this iPhone.
+    private var screenTimeIsInUse: Bool {
+        let screenTime = ScreenTimeController.shared
+        return screenTime.configuration.enabled || screenTime.isMonitoring
+            || screenTime.negativeGemCount > 0
     }
 
     private var appVersionLabel: String {

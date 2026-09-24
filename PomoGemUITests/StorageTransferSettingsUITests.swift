@@ -64,6 +64,102 @@ final class StorageTransferSettingsUITests: XCTestCase {
         assertAccepted("enableCloudKeepingCloud")
     }
 
+    /// transfer-02. 「iCloudのデータを使う」 deletes this device's whole jar,
+    /// so both sides are counted before 「最後の確認」 opens, with an export
+    /// beside them. Screen Time is not in use here, so nothing about it shows.
+    func testKeepingCloudCountsBothSidesBeforeItsConfirmation() {
+        launch("local")
+        openChoices()
+        openConfirmation("storage-switch.keep-cloud")
+        let comparison = app.staticTexts["storage-switch.keep-cloud-comparison"]
+        XCTAssertTrue(reveal(comparison))
+        XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"), "saw: \(comparison.label)")
+        XCTAssertTrue(comparison.label.contains("iCloud: テーマ9・記録312・成果28"), "saw: \(comparison.label)")
+        XCTAssertFalse(app.staticTexts["storage-switch.keep-cloud-empty-cloud"].exists)
+        XCTAssertTrue(reveal(app.buttons["storage-switch.export"]))
+        XCTAssertFalse(app.staticTexts["storage-switch.screen-time"].exists)
+        attach("Enable iCloud — both sides counted before the acknowledgement")
+        assertUncheckedConfirmation()
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.navigationBars["iCloudを有効にする"].waitForExistence(timeout: 4))
+        app.navigationBars["iCloudを有効にする"].buttons["キャンセル"].tap()
+        assertPreviewReads(1)
+        assertNoOperation()
+    }
+
+    /// The common case for someone who never used sync: iCloud holds only
+    /// what every onboarded device mirrors. The user is told, with counts,
+    /// that this iPhone's jar is deleted and sync starts from nothing.
+    func testKeepingCloudWarnsWhenICloudHoldsNoneOfTheUsersRecords() {
+        launch("localEmptyCloud")
+        openChoices()
+        openConfirmation("storage-switch.keep-cloud")
+        let empty = app.staticTexts["storage-switch.keep-cloud-empty-cloud"]
+        XCTAssertTrue(reveal(empty))
+        XCTAssertTrue(empty.label.contains("1件も見つかりませんでした"), "saw: \(empty.label)")
+        XCTAssertTrue(empty.label.contains("このiPhoneのテーマ12・記録480・成果36"), "saw: \(empty.label)")
+        XCTAssertTrue(empty.label.contains("空の状態からiCloudの同期を始めます"), "saw: \(empty.label)")
+        attach("Enable iCloud — iCloud holds none of the user's records")
+        assertUncheckedConfirmation()
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.navigationBars["iCloudを有効にする"].waitForExistence(timeout: 4))
+        app.navigationBars["iCloudを有効にする"].buttons["キャンセル"].tap()
+        assertNoOperation()
+    }
+
+    /// "Could not look" is never shown as "nothing there": a failed read
+    /// keeps 最後の確認 closed and names the button to press again.
+    func testKeepingCloudStaysClosedWhenICloudCannotBeRead() {
+        launch("localPreviewUnreadable")
+        openChoices()
+        let door = app.buttons["storage-switch.keep-cloud"]
+        XCTAssertTrue(reveal(door))
+        door.tap()
+        let failure = app.staticTexts["storage-switch.keep-cloud-preview-error"]
+        XCTAssertTrue(reveal(failure))
+        XCTAssertTrue(failure.label.contains("「iCloudのデータを使う」"), "saw: \(failure.label)")
+        XCTAssertTrue(failure.label.contains("どちらの記録も削除していません"))
+        XCTAssertFalse(app.navigationBars["最後の確認"].exists)
+        attach("Enable iCloud — unreadable iCloud keeps the confirmation closed")
+        app.navigationBars["iCloudを有効にする"].buttons["キャンセル"].tap()
+        assertPreviewReads(1)
+        assertNoOperation()
+    }
+
+    /// transfer-07. Every published switch moves to a new storage namespace
+    /// and resets Screen Time gems; each confirmation says so while the
+    /// feature is in use, including the non-destructive 「このiPhoneへ引き継ぐ」.
+    func testEveryPublishedSwitchDisclosesTheScreenTimeReset() {
+        launch("localScreenTime")
+        openChoices()
+        openConfirmation("storage-switch.keep-cloud")
+        let enable = app.staticTexts["storage-switch.screen-time"]
+        XCTAssertTrue(reveal(enable))
+        XCTAssertTrue(enable.label.contains("選び直してください"), "saw: \(enable.label)")
+        XCTAssertTrue(enable.label.contains("保存済みの勉強時間と通常gemは引き継ぎます"))
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.navigationBars["iCloudを有効にする"].waitForExistence(timeout: 4))
+        app.navigationBars["iCloudを有効にする"].buttons["キャンセル"].tap()
+
+        launch("cloudScreenTime")
+        openChoices()
+        openConfirmation("storage-switch.disable-keep-copy")
+        XCTAssertTrue(reveal(app.staticTexts["storage-switch.screen-time"]))
+        attach("Keep a copy — Screen Time reset disclosed")
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        let closed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"),
+                                               object: app.navigationBars["最後の確認"])
+        XCTAssertEqual(XCTWaiter.wait(for: [closed], timeout: 5), .completed)
+        openConfirmation("storage-switch.refresh-from-cloud")
+        XCTAssertTrue(reveal(app.staticTexts["storage-switch.refresh-from-cloud-screen-time"]))
+        XCTAssertTrue(reveal(app.buttons["storage-switch.refresh-from-cloud-export"]))
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.navigationBars["iCloudと保存先の変更"].waitForExistence(timeout: 4))
+        app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
+        assertNoOperation()
+        assertNoDatasetRequest()
+    }
+
     func testReplacingCloudIsDisabledWithReasonAndCannotOpenConfirmation() {
         launch("local")
         openChoices()

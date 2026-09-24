@@ -174,6 +174,41 @@ enum StorageTransferRefreshCopy {
     }
 }
 
+/// transfer-02. The fixed Japanese copy for the one published local-only →
+/// iCloud door, 「iCloudのデータを使う」. It deletes the device's whole jar, so
+/// its confirmation now carries the same read-only evidence as the refresh
+/// door: what each side holds, and a warning when iCloud holds none of the
+/// user's records.
+enum StorageTransferEnableCopy {
+    static let keepCloudTitle = "iCloudのデータを使う"
+    static let previewUnavailable =
+        "iCloudの内容を確認できませんでした。通信とApple Accountを確認して、もう一度「\(keepCloudTitle)」を押してください。どちらの記録も削除していません。"
+
+    /// Deliberately not the refresh door's sentence: here the user is turning
+    /// iCloud ON, and an empty iCloud means the synced jar starts from zero.
+    static func cloudSideEmpty(device: StorageTransferCloudPreview?) -> String {
+        let loss: String
+        if let device {
+            let counts = device.recordCounts
+            loss = "このiPhoneのテーマ\(counts["Subject"] ?? 0)・記録\(counts["StudySession"] ?? 0)・成果\(counts["AchievementStone"] ?? 0)を含む、テーマ・記録・設定はすべて削除され、"
+        } else {
+            loss = "このiPhoneのテーマ・記録・設定はすべて削除され、"
+        }
+        return "iCloudには、このアプリの記録と成果が1件も見つかりませんでした。このまま実行すると、" + loss
+            + "空の状態からiCloudの同期を始めます。元に戻すことはできません。"
+    }
+}
+
+/// transfer-07. Every published storage switch moves to a different storage
+/// namespace, and the Screen Time ledger is bound to that namespace
+/// (Docs/ScreenTimeGems.md: the selection, unimported reached events and
+/// black gems are not carried over). Not carrying them is intended; not
+/// saying so is what made users conclude the feature broke.
+enum StorageTransferScreenTimeCopy {
+    static let switchResets =
+        "切り替えると、スクリーンタイムの自動記録はオフになり、選んだアプリ、まだ取り込んでいない利用記録、黒いgemは引き継ぎません。切り替えたあとで、設定の「スクリーンタイム」から選び直してください。保存済みの勉強時間と通常gemは引き継ぎます。"
+}
+
 /// The fixed Japanese copy for the device → iCloud overwrite. It lives beside
 /// the runtime rather than inside a view so the launch host, Settings and the
 /// review notes quote one text, and so a reviewer can diff the shipped strings
@@ -316,8 +351,15 @@ enum StorageTransferOverwriteCopy {
     /// stamp as a record, and whether a ledger exists is stated, where it
     /// changes what an action does, by its own paragraph.
     static func cloudSideWithoutLineage(preview: StorageTransferCloudPreview?) -> String {
-        guard let preview else { return side("iCloud", preview: nil) }
-        return "iCloud: \(counts(preview))"
+        countsOnly("iCloud", preview: preview)
+    }
+
+    /// The same three counts, without the 「最終」 date. Used for an iCloud
+    /// side whose newest mirrored timestamp may be a Prefs stamp rather than
+    /// anything the user recorded.
+    static func countsOnly(_ label: String, preview: StorageTransferCloudPreview?) -> String {
+        guard let preview else { return side(label, preview: nil) }
+        return "\(label): \(counts(preview))"
     }
 
     /// 「テーマ12・記録480・成果36（最終 2026年9月20日）」. Only the three models a
