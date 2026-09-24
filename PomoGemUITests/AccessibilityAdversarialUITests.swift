@@ -371,9 +371,16 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         stop.tap()
         let dismiss = app.buttons["reward.dismiss"]
         XCTAssertTrue(dismiss.waitForExistence(timeout: 20))
+        // Home's reward inset has its own AX5 audit and may need scrolling on
+        // a short screen. Acknowledge the receipt and wait for the gem to
+        // land: the durable receipt is retired only after landing, and an
+        // unacknowledged or mid-drop receipt would block the next test.
+        let bridge = app.descendants(matching: .any)["reward.bridge"]
+        for _ in 0 ..< 6 where !dismiss.isHittable {
+            bridge.swipeUp()
+        }
+        XCTAssertTrue(dismiss.isHittable, "The receipt's 閉じる must be reachable")
         dismiss.tap()
-        // The durable receipt is retired only after the gem lands. Leave the
-        // shared simulator without a pending receipt for the next test.
         XCTAssertTrue(waitForEnabled(app.buttons["home.focus-launcher"], timeout: 12))
     }
 
@@ -383,38 +390,6 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             object: element
         )
         return XCTWaiter.wait(for: [enabled], timeout: timeout) == .completed
-    }
-
-    /// Waits through a real five-minute break in the foreground so the
-    /// break-end alarm and its pinned action are checked at AX5.
-    func testAX5BreakEndActionIsOnScreenWithoutScrolling() throws {
-        executionTimeAllowance = 540
-        let staleDismiss = app.buttons["reward.dismiss"]
-        if staleDismiss.waitForExistence(timeout: 2), staleDismiss.isHittable {
-            staleDismiss.tap()
-            XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
-        }
-        startAX5DemoFocus()
-        stopCompletionAlertIfPresented(in: app)
-        let startBreak = app.buttons["5分休憩する"]
-        XCTAssertTrue(startBreak.waitForExistence(timeout: 20))
-        XCTAssertTrue(scrollUntilHittable(startBreak))
-        startBreak.tap()
-        XCTAssertTrue(app.staticTexts["休憩"].waitForExistence(timeout: 12))
-
-        let breakEnd = app.buttons["break.completion-alert.stop"]
-        XCTAssertTrue(breakEnd.waitForExistence(timeout: 330))
-        XCTAssertEqual(breakEnd.label, "停止して瓶へ戻る")
-        let viewport = app.windows.firstMatch.frame
-        XCTAssertTrue(breakEnd.isHittable, "The break-end action must be operable without scrolling")
-        XCTAssertLessThanOrEqual(breakEnd.frame.maxY, viewport.maxY)
-        XCTAssertGreaterThanOrEqual(breakEnd.frame.minY, viewport.minY)
-        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        attachment.name = "AX5 break-end alarm — pinned action"
-        attachment.lifetime = .keepAlways
-        add(attachment)
-        breakEnd.tap()
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
     }
 
     private func startAX5DemoFocus() {

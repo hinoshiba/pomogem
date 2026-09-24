@@ -352,6 +352,31 @@ final class TimerOrientationUITests: XCTestCase {
         }
     }
 
+    /// The break-end alarm's only action must be on screen at AX5 without
+    /// scrolling. Enter the real break at the ordinary size (Home's reward
+    /// inset is audited separately), recover it at AX5 and wait it out.
+    func testAX5BreakEndActionIsOnScreenWithoutScrolling() throws {
+        executionTimeAllowance = 600
+        launch()
+        _ = startFiveMinuteBreak()
+        app.terminate()
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        app.launch()
+        XCTAssertTrue(app.staticTexts["休憩"].waitForExistence(timeout: 12))
+
+        let breakEnd = app.buttons["break.completion-alert.stop"]
+        XCTAssertTrue(breakEnd.waitForExistence(timeout: 330))
+        XCTAssertEqual(breakEnd.label, "停止して瓶へ戻る")
+        let viewport = app.windows.firstMatch.frame
+        XCTAssertTrue(breakEnd.isHittable, "The break-end action must be operable without scrolling")
+        XCTAssertGreaterThanOrEqual(breakEnd.frame.minY, viewport.minY)
+        XCTAssertLessThanOrEqual(breakEnd.frame.maxY, viewport.maxY)
+        XCTAssertGreaterThanOrEqual(breakEnd.frame.height, 43.5)
+        retainScreenshot(named: "break-end-ax5")
+        breakEnd.tap()
+        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 8))
+    }
+
     private func startFiveMinuteBreak(
         expectedDirection: String = "上",
         focusManualDirection: String? = nil
