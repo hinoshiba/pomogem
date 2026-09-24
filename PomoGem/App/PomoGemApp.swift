@@ -856,6 +856,8 @@ private struct PomoGemPersistenceLaunchHost: View {
             StorageTransferSettingsUITestFixtureLaunchView()
         } else if ScreenTimeSettingsUITestFixture.isActiveForCurrentProcess {
             ScreenTimeSettingsUITestFixtureLaunchView()
+        } else if GemShowcaseUITestFixture.showsGalleryForCurrentProcess {
+            GemShowcaseFixtureLaunchView()
         } else if FortyYearPersistentUITestFixture.showsOverviewForCurrentProcess {
             if LocalPreviewLaunchPolicy.forcesAccessibility5(
                 environment: ProcessInfo.processInfo.environment,

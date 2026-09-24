@@ -235,7 +235,8 @@ struct JarSpriteView: View {
                 SpriteView(
                     scene: scene,
                     preferredFramesPerSecond: Constants.Jar.targetFramesPerSecond,
-                    options: [.allowsTransparency]
+                    options: [.allowsTransparency],
+                    debugOptions: Self.spriteDebugOptions
                 )
 #if targetEnvironment(macCatalyst)
                 // One zero-distance gesture owns both click and drag on Mac.
@@ -316,6 +317,18 @@ struct JarSpriteView: View {
             scene.cancelInteractionPresentation()
             motionObserver.stop()
         }
+    }
+
+    /// Debug-only rendering counters for gem performance reviews in the
+    /// Simulator (`POMOGEM_UI_TEST_SPRITE_STATS=1` with the UI-test launch).
+    private static var spriteDebugOptions: SpriteView.DebugOptions {
+#if DEBUG
+        if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess,
+           ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_SPRITE_STATS"] == "1" {
+            return [.showsFPS, .showsNodeCount, .showsDrawCount]
+        }
+#endif
+        return []
     }
 
     private var accessibilityValue: String {

@@ -1064,6 +1064,9 @@ struct RootView: View {
             ))
         }
         if modelContext.hasChanges { try modelContext.save() }
+#if DEBUG && targetEnvironment(simulator)
+        try GemShowcaseUITestFixture.seedIfNeeded(context: modelContext)
+#endif
     }
 
     /// Called by the actual Home/Onboarding subtree rather than the outer root
