@@ -627,13 +627,17 @@ struct HomeView: View {
             ClusterDetailSheet(cluster: cluster)
                 .presentationDragIndicator(.visible)
         }
+        // Both entry forms end in a commit button, so they open at full
+        // height; a half sheet hid the confirmation below its fold.
         .sheet(isPresented: $showManualEntry) {
             ManualEntrySheet(
-                subject: selectedSubject,
+                initialSubject: selectedSubject,
+                subjects: activeSubjects,
                 counterState: manualCounterState,
                 onAdd: addManualEntry
             )
-                .presentationDetents(auxiliarySheetDetents)
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showAchievementEntry) {
@@ -642,7 +646,8 @@ struct HomeView: View {
                 subjects: activeSubjects,
                 onAdd: addAchievementStone
             )
-                .presentationDetents(auxiliarySheetDetents)
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showCustomDuration) {
@@ -3107,16 +3112,25 @@ struct HomeView: View {
         }
     }
 
-    private func addManualEntry(_ duration: ManualDuration) -> Bool {
+    /// Saves to the theme chosen in the sheet. Home's own selection is left
+    /// alone: back-filling time for another theme must not change what the
+    /// next timer starts with. Returns nil once saved, otherwise the reason,
+    /// which the still-open sheet shows beside its button (a toast would sit
+    /// behind the full-height sheet).
+    private func addManualEntry(_ subject: Subject, _ duration: ManualDuration) -> String? {
         guard let resolvedPreferences else {
-            router.showToast("設定情報を読み込めませんでした", symbol: "exclamationmark.triangle")
-            return false
+            return "設定情報を読み込めませんでした。もう一度お試しください。"
         }
-        guard let subject = selectedSubject else {
+        guard !activeSubjects.isEmpty else {
             showManualEntry = false
             router.selectedTab = .settings
             router.showToast("先にテーマを追加してください", symbol: "books.vertical.fill")
-            return false
+            return "先にテーマを追加してください。"
+        }
+        // The sheet's list is a snapshot; the theme may have been archived
+        // or removed (for example from another device) while it was open.
+        guard activeSubjects.contains(where: { $0.id == subject.id }) else {
+            return "選んだテーマが見つかりません。テーマを選び直してください。"
         }
         let now = Date.now
         let decision = FairnessPolicy.consumeManualEntry(
@@ -3127,8 +3141,7 @@ struct HomeView: View {
             at: now
         )
         guard decision.isAllowed else {
-            router.showToast(Constants.UIStrings.manualCapToast, symbol: "info.circle")
-            return false
+            return "\(Constants.UIStrings.manualCapToast)です。"
         }
 
         // Apply the quota and session in the same SwiftData transaction. Merely
@@ -3141,8 +3154,7 @@ struct HomeView: View {
             )
         } catch {
             modelContext.rollback()
-            router.showToast("設定情報を安全に保存できませんでした", symbol: "exclamationmark.triangle")
-            return false
+            return "設定情報を安全に保存できませんでした。もう一度お試しください。"
         }
         writer.manualDayKey = decision.state.dayKey
         writer.manualUsedToday = decision.state.usedToday
@@ -3164,18 +3176,18 @@ struct HomeView: View {
                 Constants.UIStrings.manualToast(subject: subject.safeDisplayName, grams: duration.grams),
                 symbol: "plus.circle.fill"
             )
-            return true
+            return nil
         } catch {
             modelContext.rollback()
-            router.showToast(error.localizedDescription, symbol: "exclamationmark.triangle")
-            return false
+            return "保存できませんでした。もう一度お試しください。"
         }
     }
 
+    /// Returns nil once saved, otherwise the reason for the open sheet.
     private func addAchievementStone(
         subject: Subject,
         draft: AchievementDraft
-    ) -> Bool {
+    ) -> String? {
         let stone = AchievementStone(
             subject: subject,
             kind: draft.kind,
@@ -3186,11 +3198,10 @@ struct HomeView: View {
         modelContext.insert(stone)
         do {
             try modelContext.save()
-            return true
+            return nil
         } catch {
             modelContext.rollback()
-            router.showToast("記念石を保存できませんでした", symbol: "exclamationmark.triangle")
-            return false
+            return "記念石を保存できませんでした。もう一度お試しください。"
         }
     }
 
@@ -4204,466 +4215,6 @@ private struct BreakOffer: Identifiable {
         return kilograms.rounded() == kilograms
             ? "\(Int(kilograms))kg"
             : String(format: "%.2fkg", kilograms)
-    }
-}
-
-private struct AchievementDraft {
-    let kind: AchievementKind
-    let note: String
-    let achievedAt: Date
-}
-
-private struct AchievementEntrySheet: View {
-    let subjects: [Subject]
-    let onAdd: (Subject, AchievementDraft) -> Bool
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var selectedKind: AchievementKind?
-    @State private var selectedSubjectID: UUID?
-    @State private var note = ""
-    @State private var achievedAt = Date.now
-    @State private var isSubmitting = false
-
-    init(
-        initialSubject: Subject?,
-        subjects: [Subject],
-        onAdd: @escaping (Subject, AchievementDraft) -> Bool
-    ) {
-        self.subjects = subjects
-        self.onAdd = onAdd
-        let initialID = initialSubject.flatMap { initial in
-            subjects.contains(where: { $0.id == initial.id }) ? initial.id : nil
-        } ?? subjects.first?.id
-        _selectedSubjectID = State(initialValue: initialID)
-    }
-
-    private var selectedSubject: Subject? {
-        subjects.first { $0.id == selectedSubjectID }
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    if let selectedKind {
-                        detailsStep(kind: selectedKind)
-                    } else {
-                        kindStep
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(20)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .background(NightBackground())
-            .navigationTitle(selectedKind == nil ? "成果を選ぶ" : "記念石にする")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if selectedKind != nil {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("戻る") { selectedKind = nil }
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    PomoGemSheetCloseButton(
-                        accessibilityIdentifier: "achievement.create.close"
-                    ) {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-
-    private var kindStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                SectionEyebrow(text: "MILESTONE")
-                Text("どんな成果だった？")
-                    .font(PomoGemTheme.brand(26))
-                Text(achievementIntroduction)
-                    .font(.subheadline)
-                    .foregroundStyle(PomoGemTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            ForEach(AchievementKind.allCases) { kind in
-                Button {
-                    selectedKind = kind
-                } label: {
-                    HStack(spacing: 14) {
-                        Image(systemName: kind.systemImage)
-                            .font(.title2)
-                            .foregroundStyle(PomoGemTheme.amber)
-                            .frame(width: 36)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(kind.title)
-                                .font(.system(.headline, design: .rounded, weight: .bold))
-                            Text(kind.detail)
-                                .font(.caption)
-                                .foregroundStyle(PomoGemTheme.muted)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                    }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-                    .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 16))
-                }
-                .buttonStyle(PomoGemBareButtonStyle())
-            }
-        }
-    }
-
-    private var achievementIntroduction: String {
-        "満点・試験合格・納品・公開などの節目を、集中時間とは別のひとまわり大きな記念石として残せます。"
-    }
-
-    private func detailsStep(kind: AchievementKind) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
-                Image(systemName: kind.systemImage)
-                    .font(.title)
-                    .foregroundStyle(PomoGemTheme.amber)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(kind.title)
-                        .font(PomoGemTheme.brand(24))
-                    Text(selectedSubject?.safeDisplayName ?? "テーマを選んでください")
-                        .font(.subheadline)
-                        .foregroundStyle(PomoGemTheme.muted)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("テーマ")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.muted)
-                Menu {
-                    ForEach(subjects) { subject in
-                        Button {
-                            selectedSubjectID = subject.id
-                        } label: {
-                            if selectedSubjectID == subject.id {
-                                Label(subject.safeDisplayName, systemImage: "checkmark")
-                            } else {
-                                Text(subject.safeDisplayName)
-                            }
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 10) {
-                        Circle()
-                            .fill(Color(hex: selectedSubject?.colorHex ?? Constants.Color.textMute))
-                            .frame(width: 12, height: 12)
-                            .accessibilityHidden(true)
-                        Text(selectedSubject?.safeDisplayName ?? "選択してください")
-                            .font(.system(.body, design: .rounded, weight: .bold))
-                        Spacer()
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                            .accessibilityHidden(true)
-                    }
-                    .foregroundStyle(PomoGemTheme.text)
-                    .padding(.horizontal, 14)
-                    .frame(maxWidth: .infinity, minHeight: 50)
-                    .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 12))
-                }
-                .accessibilityLabel("テーマ、\(selectedSubject?.safeDisplayName ?? "未選択")")
-                .accessibilityHint("成果を結びつけるテーマを変更できます")
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("成果名（任意）")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.muted)
-                TextField(kind.notePlaceholder, text: $note)
-                    .textFieldStyle(.plain)
-                    .padding(14)
-                    .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 12))
-                    .onChange(of: note) { _, value in
-                        note = AchievementStone.sanitizedNote(value)
-                    }
-            }
-
-            DatePicker(
-                "達成した日",
-                selection: $achievedAt,
-                in: ...Date.now,
-                displayedComponents: .date
-            )
-            .datePickerStyle(.compact)
-
-            Label(
-                "記念石は0gで、集中時間・質量・通常の粒数には加わりません。瓶では新しい12個が動き、前の石も記録棚にずっと残ります。",
-                systemImage: "checkmark.shield"
-            )
-            .font(.caption)
-            .foregroundStyle(PomoGemTheme.muted)
-            .fixedSize(horizontal: false, vertical: true)
-
-            Button {
-                guard !isSubmitting else { return }
-                guard let selectedSubject else { return }
-                isSubmitting = true
-                let saved = onAdd(
-                    selectedSubject,
-                    AchievementDraft(kind: kind, note: note, achievedAt: achievedAt)
-                )
-                if saved {
-                    dismiss()
-                } else {
-                    isSubmitting = false
-                }
-            } label: {
-                if isSubmitting {
-                    ProgressView().tint(PomoGemTheme.background)
-                } else {
-                    Label("この成果を積む", systemImage: "medal.fill")
-                }
-            }
-            .buttonStyle(PomoGemPrimaryButtonStyle())
-            .disabled(selectedSubject == nil || isSubmitting)
-        }
-    }
-}
-
-private struct ManualEntrySheet: View {
-    let subject: Subject?
-    let counterState: ManualCounterState
-    let onAdd: (ManualDuration) -> Bool
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var selectedDuration: ManualDuration?
-    @State private var isSubmitting = false
-
-    var body: some View {
-        TimelineView(.everyMinute) { context in
-            content(at: context.date)
-        }
-    }
-
-    private func content(at date: Date) -> some View {
-        let availability = FairnessPolicy.manualEntryAvailability(
-            state: counterState,
-            at: date
-        )
-
-        return NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    header
-                    remainingCount(availability)
-                    durationButtons(isEnabled: availability.isAllowed && subject != nil)
-                    if let selectedDuration, availability.isAllowed {
-                        confirmationCard(
-                            duration: selectedDuration,
-                            availability: availability
-                        )
-                    }
-                    fairnessCopy
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(20)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .background(NightBackground())
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    PomoGemSheetCloseButton { dismiss() }
-                }
-            }
-        }
-        .onChange(of: availability.isAllowed) { _, isAllowed in
-            if !isAllowed {
-                selectedDuration = nil
-                isSubmitting = false
-            }
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionEyebrow(text: "SELF-REPORTED")
-            Text("手動で積む")
-                .font(PomoGemTheme.brand(26))
-            Text(subject?.safeDisplayName ?? "テーマを選んでください")
-                .foregroundStyle(PomoGemTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func remainingCount(_ availability: ManualEntryAvailability) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: availability.isAllowed ? "checkmark.circle.fill" : "clock.badge.xmark")
-                .font(.title3)
-                .foregroundStyle(availability.isAllowed ? PomoGemTheme.amber : PomoGemTheme.muted)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("この端末で本日あと\(availability.remainingEntries)回")
-                    .font(.headline)
-                    .accessibilityIdentifier("manual.remaining-count")
-                Text(
-                    availability.isAllowed
-                        ? "選んだだけでは保存されません。次の画面で内容を確認できます。"
-                        : "この端末での本日の上限です。朝4:00に3回へ切り替わります。"
-                )
-                .font(.caption)
-                .foregroundStyle(PomoGemTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 13))
-    }
-
-    private var fairnessCopy: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(Constants.UIStrings.fairnessNote, systemImage: "circle.dashed")
-                .font(.caption)
-                .foregroundStyle(PomoGemTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("この端末で1日3回まで・朝4:00に回数が切り替わります")
-                .font(.caption2)
-                .foregroundStyle(PomoGemTheme.muted)
-        }
-    }
-
-    private func confirmationCard(
-        duration: ManualDuration,
-        availability: ManualEntryAvailability
-    ) -> some View {
-        PomoGemCard {
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 4) {
-                    SectionEyebrow(text: "CONFIRM")
-                    Text("この内容で積みますか？")
-                        .font(PomoGemTheme.brand(21))
-                }
-
-                VStack(spacing: 10) {
-                    confirmationRow(title: "テーマ", value: subject?.safeDisplayName ?? "未選択")
-                    confirmationRow(title: "時間", value: durationTitle(duration))
-                    confirmationRow(title: "加算", value: "+\(duration.grams)g")
-                    confirmationRow(
-                        title: "保存後",
-                        value: "この端末で本日あと\(availability.remainingEntriesAfterSaving)回"
-                    )
-                }
-
-                Button {
-                    guard !isSubmitting else { return }
-                    isSubmitting = true
-                    if !onAdd(duration) {
-                        isSubmitting = false
-                    }
-                } label: {
-                    if isSubmitting {
-                        ProgressView().tint(PomoGemTheme.background)
-                    } else {
-                        Label("確認して積む", systemImage: "plus.circle.fill")
-                    }
-                }
-                .buttonStyle(PomoGemPrimaryButtonStyle())
-                .disabled(subject == nil || !availability.isAllowed || isSubmitting)
-                .accessibilityIdentifier("manual.confirm")
-            }
-        }
-    }
-
-    private func confirmationRow(title: String, value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(PomoGemTheme.muted)
-            Spacer(minLength: 12)
-            Text(value)
-                .font(.subheadline.weight(.bold))
-                .multilineTextAlignment(.trailing)
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private func durationTitle(_ duration: ManualDuration) -> String {
-        switch duration {
-        case .thirtyMinutes: "30分"
-        case .sixtyMinutes: "1時間"
-        case .oneHundredTwentyMinutes: "2時間"
-        }
-    }
-
-    @ViewBuilder
-    private func durationButtons(isEnabled: Bool) -> some View {
-        if dynamicTypeSize.isAccessibilitySize || verticalSizeClass == .compact {
-            VStack(spacing: 10) {
-                manualButtons(isEnabled: isEnabled)
-            }
-        } else {
-            HStack(spacing: 10) {
-                manualButtons(isEnabled: isEnabled)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func manualButtons(isEnabled: Bool) -> some View {
-        ManualButton(
-            title: "30分",
-            grams: 300,
-            selected: selectedDuration == .thirtyMinutes,
-            isEnabled: isEnabled
-        ) { selectedDuration = .thirtyMinutes }
-        ManualButton(
-            title: "1時間",
-            grams: 600,
-            selected: selectedDuration == .sixtyMinutes,
-            isEnabled: isEnabled
-        ) { selectedDuration = .sixtyMinutes }
-        ManualButton(
-            title: "2時間",
-            grams: 1_200,
-            selected: selectedDuration == .oneHundredTwentyMinutes,
-            isEnabled: isEnabled
-        ) { selectedDuration = .oneHundredTwentyMinutes }
-    }
-}
-
-private struct ManualButton: View {
-    let title: String
-    let grams: Int
-    let selected: Bool
-    let isEnabled: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 5) {
-                Text(title).font(.system(.headline, design: .rounded, weight: .bold))
-                Text("+\(grams)g")
-                    .font(.caption)
-                    .foregroundStyle(
-                        selected
-                            ? PomoGemTheme.background.opacity(0.72)
-                            : PomoGemTheme.muted
-                    )
-            }
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: 78)
-            .foregroundStyle(selected ? PomoGemTheme.background : PomoGemTheme.text)
-            .background(
-                selected ? PomoGemTheme.amber : PomoGemTheme.raised,
-                in: RoundedRectangle(cornerRadius: 13)
-            )
-        }
-        .buttonStyle(PomoGemBareButtonStyle())
-        .disabled(!isEnabled)
-        .accessibilityLabel("\(title)、\(grams)グラム加算")
-        .accessibilityHint(isEnabled ? "内容の確認へ進みます" : "本日の手動追加上限です")
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
