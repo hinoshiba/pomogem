@@ -33,7 +33,10 @@ targets:
         NSSupportsLiveActivities: true
         LSApplicationCategoryType: public.app-category.education
         UIApplicationSupportsIndirectInputEvents: true
-        UILaunchScreen: {}
+        # launch-03: the first frame of every launch matches NightBackground
+        # instead of flashing black before the storage choice or the jar.
+        UILaunchScreen:
+          UIColorName: ink.night
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
