@@ -50,6 +50,44 @@ Each identity comparison uses the baseline for its own case. Authorized purges s
 | Actual 100% network loss during cloud launch | Passed with separately witnessed network conditioning | The runner first reached online Home, terminated the target, and emitted its readiness marker. Xcode's 100% loss condition was activated before the delayed relaunch. The real app then showed its network/timeout reason and retry action at the protected storage gate, with no Home, onboarding, or replacement local choice. All seven source-model tables retained identical field values across the offline attempt. The condition was stopped immediately afterward and returned to None. |
 | Online cold recovery after network restoration | Passed through the real UI and independent store comparison | The app reopened Home and completed its live iCloud connection check with normal networking. All seven source-model tables had identical field values before the offline attempt and after online recovery, including timer and claim payloads. The Subject, manual StudySession, all three reset markers, and preferences baseline remained intact. Xcode's network condition remained None. |
 
+## Launch timing budget (device-02 / launch-02)
+
+Every cloud launch attempt now emits an `os_signpost` interval named `CloudLaunch`
+(subsystem `com.hinoshiba.pomogem`, category `CloudLaunch`) from the start of its
+deadline to session publication, with events `control-preflight`,
+`history-before-mirror`, `control-preflight-before-mirror`, `container`,
+`identity-after-container`, `history-after-mirror`, `final-control-preflight` and
+`published`. The same attempt logs one public line in category `PersistenceLaunch`:
+`Cloud session published attempt=… elapsed=…ms roundTrips=N accountProbe=… controlFetch=…
+historyZoneList=… historyZoneChanges=…`, and every published session (local or
+cloud) logs `Session published preparation=…ms sinceProcessStart=…ms`. The counts
+are operations this process added to a private database; they carry no record,
+zone, account or namespace data.
+
+Fixed private-database round trips before Home on an established store, not counting
+zone-change pages:
+
+| Build | Account probes | Control fetches | History zone lists | Total |
+| --- | ---: | ---: | ---: | ---: |
+| Before device-02 | 8 (launch, pre-mount, 2 × 2 around each history read, post-mount, pre-publication) | 6 | 2 | 16 |
+| After device-02 | 2 (launch, post-mount) | 6 | 2 | 10 |
+
+The identity checks around each history read no longer make their own zone-list
+request (the read between them is the network proof, as for the control read),
+the pre-mount resolve reuses the launch resolution of the same attempt, and the
+pre-publication resolve is carried by the final control read pair. The three
+safety points (before the container, after it, right before publication) and the
+double control read are unchanged. With the change-token cache (PR 15) each
+history read is one zone list plus one delta page per zone in the steady state,
+instead of every page of every zone.
+
+Budget to verify on a device with a healthy Production receipt (the shared iPhone
+12 mini's Development-era receipt lands on the lineage screen and is not the
+healthy path): p50 deadline-start → publication of 1.5 s or less on Wi-Fi, and
+the `roundTrips` line matching the table above plus one zone-changes operation
+per custom zone. This device measurement is pending; the Simulator cannot open
+CloudKit, so its numbers cover only the local path.
+
 ## Release containment
 
 After the reset regression reproduced, 1.0.1 (6) was removed from review and its Developer Rejected status was verified. The corrected 1.0.1 (7) was submitted and reached Waiting for Review on 2026-09-12. See the [build 7 release record](../AppStore/release-record-1.0.1-7.md) for that separate submission. The new storage-mode switching and offline access changes are not included in that build.

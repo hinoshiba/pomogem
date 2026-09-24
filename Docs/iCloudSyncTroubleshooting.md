@@ -156,9 +156,16 @@ WAL、CloudKit補助データを一組の既存保存領域として保持し、
 読み取り専用のfresh `ModelContext`で反映を確認し、通信失敗、不完全な応答、キャンセル、期限切れでは
 画面を公開しません。履歴preflight自体の上限は90秒で、その他の起動時アカウント検証とは別の期限です。
 
-全記録のdownload完了を待つ仕組みではありません。query indexへ依存せず全zone変更を読むため、
-記憶量はマーカー中心に制限しても、読み取り時間は記録数に応じて増えます。変更tokenの永続cacheは
-導入していません。この確認だけで、まだサーバーへ届いていない別端末の変更や、既に誤った世代へ
+全記録のdownload完了を待つ仕組みではありません。query indexへ依存せず全zone変更を読みます。
+2026-09-25（device-02）から、アカウント確認を通過した直前の読み取りが残した変更tokenとマーカーを
+`Application Support/CloudOffline/history-markers-v1.json`に保存し、次回はその後の差分だけを
+サーバーから読みます（毎回サーバーへの新しい要求は行います）。保存先のnamespace・アカウント・
+CloudKit環境・container・端末の保存先世代が一致しない、zoneの組が変わった、ファイルが読めない、
+サーバーが`changeTokenExpired`・`zoneNotFound`・`userDeletedZone`を返した、のいずれでも
+従来どおり全zoneを最初から読みます。それ以外の失敗は従来どおり画面を公開しません。このcacheは
+読み取りの前後の識別確認が通った後にだけ書き、アカウント状態の変化、失効、保存先の切り替え、
+完全削除で消します。iCloudへは送信せず、利用者の記録内容は含みません。
+この確認だけで、まだサーバーへ届いていない別端末の変更や、既に誤った世代へ
 保存された記録の復元まで保証することはできません。
 ([Apple: Reading CloudKit Records for Core Data](https://developer.apple.com/documentation/coredata/reading-cloudkit-records-for-core-data)、
 [Apple: CKFetchRecordZoneChangesOperation](https://developer.apple.com/documentation/cloudkit/ckfetchrecordzonechangesoperation))

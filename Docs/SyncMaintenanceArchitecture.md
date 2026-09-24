@@ -159,7 +159,10 @@ private custom zoneの全ページからリセット履歴の必要fieldだけ�
 winner以上の順序を持つ履歴が端末へ届くまでfresh `ModelContext`で待ちます。順序はsequence／writer／
 epoch／idの全tupleで、`resetAt`は含めません。mountの世代・保存先とアカウントをawait前後で再確認し、
 不完全な応答、cancel、90秒の履歴確認期限ではRootを公開しません。全同期元データのhydrationや
-projection再構築をこのgateの完了条件にはしません。token cacheはなく、全zone走査の時間は記録数に依存します。
+projection再構築をこのgateの完了条件にはしません。読み取りの前後のidentity確認は独自のzone一覧取得を
+行わず（間の読み取りが通信の確認）、account statusと識別を保存先と照合します。直前の確認済み読み取りが残したbinding単位の変更token cache
+（`CloudActivityHistoryMarkerCache`）から差分だけを読み、cacheの欠落・破損・key不一致・zone構成の変化・
+token失効・zone消失では全zoneを最初から読み直します。
 
 通信不可、account identity不明、保存済みfingerprintと異なるaccountでは旧storeへfallbackせず、記録領域を
 開かないfail-closed画面に留まります。Bへ自動switchせず、元のAへ戻ってonline確認できた場合だけ同じA

@@ -50,6 +50,7 @@ enum CloudKitOnlineAccountVerifier {
                 operation.fetchRecordZonesResultBlock = { result in
                     continuation.resume(with: result)
                 }
+                CloudKitRoundTripLedger.record(.accountProbe)
                 database.add(operation)
             }
         } onCancel: {
