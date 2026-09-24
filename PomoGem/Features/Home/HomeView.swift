@@ -1643,24 +1643,23 @@ struct HomeView: View {
                     .frame(width: 30, height: 30)
                     .background(.ultraThinMaterial, in: Circle())
 
+                // Short Japanese names must never break mid-word
+                // (「オーロ／ラ」); shrink slightly before wrapping.
                 VStack(alignment: .leading, spacing: 1) {
                     Text(atmosphere.title)
                         .font(.system(size: atmosphereTitleFontSize, weight: .bold, design: .rounded))
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                        .minimumScaleFactor(0.8)
                         .accessibilityHidden(true)
                     Text(atmosphere.subtitle)
                         .font(.system(size: atmosphereSubtitleFontSize))
                         .foregroundStyle(.white)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                        .minimumScaleFactor(0.85)
                         .accessibilityHidden(true)
                 }
 
                 Spacer(minLength: 2)
-
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(PomoGemTheme.amber)
-                        .accessibilityHidden(true)
-                }
             }
             .padding(10)
             .foregroundStyle(.white)
@@ -1677,6 +1676,16 @@ struct HomeView: View {
                             endPoint: .bottom
                         )
                     }
+            }
+            // The badge sits in the empty artwork corner, outside the text
+            // row, so selecting a card never narrows or re-wraps its title.
+            .overlay(alignment: .topTrailing) {
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(PomoGemTheme.amber)
+                        .padding(8)
+                        .accessibilityHidden(true)
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
             .overlay {
