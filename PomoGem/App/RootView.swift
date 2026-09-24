@@ -1069,6 +1069,21 @@ struct RootView: View {
             }
         }
 
+#if DEBUG
+        if ProcessInfo.processInfo.environment[
+            LocalPreviewLaunchPolicy.syncedReminderIntentUITestEnvironmentKey
+        ] == "1",
+           resolvedPreferences?.reminderEnabled != true {
+            try PrefsConsumerPolicy.mutate(
+                .reminderEnabled,
+                context: modelContext,
+                markers: resetSnapshots
+            ) {
+                $0.reminderEnabled = true
+            }
+        }
+#endif
+
         var descriptor = FetchDescriptor<Subject>(
             sortBy: [SortDescriptor(\Subject.sortOrder)]
         )

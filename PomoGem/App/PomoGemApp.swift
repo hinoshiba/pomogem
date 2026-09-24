@@ -175,6 +175,10 @@ enum LocalPreviewLaunchPolicy {
     static let rareRewardOnboardingUITestEnvironmentKey = "POMOGEM_UI_TEST_RARE_REWARD_ONBOARDING"
     /// Seeds this many deleted themes (tombstones) next to the fixture theme.
     static let deletedThemeHistoryUITestEnvironmentKey = "POMOGEM_UI_TEST_DELETED_THEMES"
+    /// Seeds the synced daily-reminder switch as ON, as another iPhone or an
+    /// earlier install would have left it, without touching this device's
+    /// notification permission.
+    static let syncedReminderIntentUITestEnvironmentKey = "POMOGEM_UI_TEST_SYNCED_REMINDER_ON"
 #else
     // Keep the policy API available to ordinary production code while making
     // the test protocol and its environment tokens absent from Release output.
@@ -186,6 +190,7 @@ enum LocalPreviewLaunchPolicy {
     static let unselectedRareRewardUITestEnvironmentKey = ""
     static let rareRewardOnboardingUITestEnvironmentKey = ""
     static let deletedThemeHistoryUITestEnvironmentKey = ""
+    static let syncedReminderIntentUITestEnvironmentKey = ""
 #endif
 
     static func isEnabled(

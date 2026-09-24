@@ -9,6 +9,7 @@ import XCTest
 final class RuntimeFlowAuditUITests: XCTestCase {
     private var app: XCUIApplication!
     private var needsFocusReturnReminderCleanup = false
+    private var needsWrappedNotificationCleanup = false
     private let focusReturnReminderBody = "集中時間が続いています。タイマーに戻って続けましょう。"
 
     override func setUpWithError() throws {
@@ -37,6 +38,9 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         // in-memory data itself is never erased or uninstalled.
         if needsFocusReturnReminderCleanup {
             _ = restoreFocusReturnReminderToOff()
+        }
+        if needsWrappedNotificationCleanup {
+            _ = restoreWrappedNotificationToOff()
         }
         cancelPresentedFocusIfNeeded()
         app.terminate()
@@ -106,6 +110,143 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(app.buttons["再開する"].waitForExistence(timeout: 6))
         XCTAssertEqual(try timerRemainingSeconds(timer), pausedSeconds)
         XCTAssertTrue(restoreFocusReturnReminderToOff())
+    }
+
+    /// A reinstalled or second iPhone reads the synced reminder as ON before
+    /// this device was ever asked. Opening Settings must keep that intent,
+    /// raise no unprompted error, and offer the one step that fixes it here.
+    func testSyncedReminderKeepsItsIntentAndSettingsOffersPermissionHere() throws {
+        relaunch(environment: ["POMOGEM_UI_TEST_SYNCED_REMINDER_ON": "1"])
+        openMenuAction(containing: "設定")
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+
+        let liveActivity = app.switches["settings.live-activity"]
+        XCTAssertTrue(scrollUntilHittable(liveActivity, attempts: 6))
+        XCTAssertTrue(liveActivity.label.contains("ロック画面などに残り時間・進捗を表示"),
+                      "The Live Activity row must not name a Dynamic Island the iPhone may not have")
+        XCTAssertFalse(liveActivity.label.contains("Dynamic Island"))
+        retainScreenshot(named: "Settings — focus section copy")
+
+        let daily = app.switches["settings.daily-reminder"]
+        XCTAssertTrue(scrollUntilHittable(daily, attempts: 20))
+        XCTAssertFalse(app.alerts["通知を設定できませんでした"].waitForExistence(timeout: 2),
+                       "Opening Settings must not raise an unprompted permission error")
+        XCTAssertEqual(daily.value as? String, "1",
+                       "This iPhone's permission must never switch the synced reminder off")
+        // List rows below the fold are created while scrolling to them.
+        let time = app.descendants(matching: .any)["settings.reminder-time"]
+        XCTAssertTrue(scrollUntilHittable(time, attempts: 4))
+        let rules = app.descendants(matching: .any)["settings.reminder-rules"]
+        XCTAssertTrue(scrollUntilHittable(rules, attempts: 3))
+
+        let status = app.descendants(matching: .any)["settings.notification-permission"]
+        let statusAction = app.buttons["settings.notification-permission.action"]
+        if status.waitForExistence(timeout: 3) {
+            retainScreenshot(named: "Settings — synced reminder on, not yet allowed on this iPhone")
+            if statusAction.label == "許可する" {
+                XCTAssertTrue(status.label.contains("まだ通知を許可していない"))
+                statusAction.tap()
+                allowReminderNotificationPermissionIfPresented(timeout: 5)
+                XCTAssertTrue(waitForAbsence(status, timeout: 6),
+                              "Allowing on this iPhone must clear the notice")
+            } else {
+                XCTAssertEqual(statusAction.label, "設定を開く")
+            }
+        }
+        XCTAssertTrue(scrollUntilHittable(daily, attempts: 4, swipingDown: true))
+        XCTAssertEqual(daily.value as? String, "1")
+        retainScreenshot(named: "Settings — reminder rules under the shared time")
+
+        // The shared time stays visible while only the monthly look-back is on.
+        tapSwitch(daily)
+        XCTAssertTrue(waitForSwitch(daily, value: "0", timeout: 4))
+        XCTAssertTrue(waitForAbsence(time, timeout: 3))
+        let wrapped = app.switches["settings.wrapped-notification"]
+        XCTAssertTrue(scrollUntilHittable(wrapped, attempts: 4))
+        XCTAssertTrue(wrapped.label.contains("先月の瓶のお知らせ"))
+        needsWrappedNotificationCleanup = true
+        tapSwitch(wrapped)
+        allowReminderNotificationPermissionIfPresented(timeout: 3)
+        let permissionError = app.alerts["通知を設定できませんでした"]
+        if permissionError.waitForExistence(timeout: 2) {
+            // Denied on this simulator: iOS will not ask again, so the alert
+            // must lead to Settings instead of offering only 閉じる.
+            XCTAssertTrue(permissionError.buttons["設定を開く"].exists)
+            retainScreenshot(named: "Settings — denied permission alert offers Settings")
+            permissionError.buttons["閉じる"].tap()
+            needsWrappedNotificationCleanup = false
+            return
+        }
+        XCTAssertTrue(waitForSwitch(wrapped, value: "1", timeout: 6))
+        XCTAssertTrue(scrollUntilHittable(time, attempts: 4),
+                      "The Wrapped time must be visible while the daily reminder is off")
+        XCTAssertTrue(scrollUntilHittable(rules, attempts: 3))
+        XCTAssertTrue(rules.label.contains("記録がない月には届きません"))
+        XCTAssertFalse(rules.label.contains("毎日のリマインダーは鳴りません"))
+        retainScreenshot(named: "Settings — Wrapped only keeps its time")
+        XCTAssertTrue(restoreWrappedNotificationToOff())
+    }
+
+    func testNotificationSettingsAtAccessibilitySize() throws {
+        relaunch(environment: [
+            "POMOGEM_UI_TEST_SYNCED_REMINDER_ON": "1",
+            "POMOGEM_UI_TEST_AX5": "1"
+        ])
+        openMenuAction(containing: "設定")
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        let returnReminder = app.switches["settings.focus-return-reminder"]
+        XCTAssertTrue(scrollUntilHittable(returnReminder, attempts: 12))
+        app.swipeUp()
+        retainScreenshot(named: "AX5 Settings — return reminder caption")
+        let daily = app.switches["settings.daily-reminder"]
+        XCTAssertTrue(scrollUntilHittable(daily, attempts: 40))
+        XCTAssertEqual(daily.value as? String, "1")
+        retainScreenshot(named: "AX5 Settings — daily reminder")
+        // List rows scrolled away leave the hierarchy, so note the shared time
+        // while passing it.
+        let time = app.descendants(matching: .any)["settings.reminder-time"]
+        var sawTime = false
+        for index in 1 ... 3 {
+            app.swipeUp()
+            sawTime = sawTime || time.exists
+            retainScreenshot(named: "AX5 Settings — reminder notice and rules \(index)")
+        }
+        XCTAssertTrue(sawTime)
+    }
+
+    private func relaunch(environment: [String: String]) {
+        app.terminate()
+        for (key, value) in environment {
+            app.launchEnvironment[key] = value
+        }
+        app.launch()
+        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 10))
+    }
+
+    @discardableResult
+    private func restoreWrappedNotificationToOff() -> Bool {
+        app.activate()
+        let permissionError = app.alerts["通知を設定できませんでした"]
+        if permissionError.exists {
+            permissionError.buttons["閉じる"].tap()
+        }
+        if !app.navigationBars["設定"].exists {
+            let menu = app.buttons["メニュー"]
+            guard waitForHittable(menu, timeout: 6) else { return false }
+            menu.tap()
+            let settings = button(containing: "設定")
+            guard scrollUntilHittable(settings) else { return false }
+            settings.tap()
+        }
+        guard app.navigationBars["設定"].waitForExistence(timeout: 5) else { return false }
+        let wrapped = app.switches["settings.wrapped-notification"]
+        guard scrollUntilHittable(wrapped, attempts: 20) else { return false }
+        if wrapped.value as? String == "1" {
+            tapSwitch(wrapped)
+        }
+        guard waitForSwitch(wrapped, value: "0", timeout: 5) else { return false }
+        needsWrappedNotificationCleanup = false
+        return true
     }
 
     private func enableFocusReturnReminderFromSettings() {
