@@ -262,6 +262,66 @@ final class GIFShareLifecycleUITests: XCTestCase {
         )
     }
 
+    /// walk-std-04 / walk-edge-08: a month holding only self-reported focus
+    /// and a 記念石, opened from its Wrapped screen, must explain the excluded
+    /// time in 分 and offer to include it next to the card, not read as an
+    /// unexplained 0g.
+    func testWrappedMonthWithSelfReportedFocusAndAStoneExplainsAndIncludesTheTime() {
+        addShareableSession()
+        addExamPassStone()
+
+        openMenuAction(containing: "記録を見る")
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 6))
+        let monthRow = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", currentMonthTitle())
+        ).firstMatch
+        XCTAssertTrue(scrollUntilHittable(monthRow), "The month must be listed under 月ごとの瓶")
+        XCTAssertTrue(monthRow.label.contains("30分・1粒"), monthRow.label)
+        XCTAssertFalse(monthRow.label.contains("30m"), monthRow.label)
+        attachScreenshot(named: "Log — month row in 分")
+        monthRow.tap()
+
+        let note = app.descendants(matching: .any)["wrapped.self-reported-note"]
+        XCTAssertTrue(note.waitForExistence(timeout: 8))
+        XCTAssertEqual(note.label, "時間と粒には、自己申告の記録も含みます。")
+        attachScreenshot(named: "Wrapped — totals say they include self-reported time")
+        let makeCard = app.buttons["この月の瓶をカードにする"]
+        XCTAssertTrue(scrollUntilHittable(makeCard))
+        makeCard.tap()
+
+        XCTAssertTrue(app.navigationBars["カードにする"].waitForExistence(timeout: 8))
+        let summary = app.descendants(matching: .any)["share.settings-summary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            summary.label,
+            "現在の共有設定、GIF・4:5・実測のみ（自己申告は除外）・記念石は自己申告・タグ2個"
+        )
+        let card = app.descendants(matching: .any)["share.card"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+        XCTAssertTrue(card.label.contains("瓶に積んだ集中、0グラム。"), card.label)
+        let notice = app.descendants(matching: .any)["share.excluded-self-reported"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 5))
+        XCTAssertEqual(notice.label, "自己申告の30分は、カードに含めていません。")
+        attachScreenshot(named: "Share — stone-only month explains the excluded 30分")
+
+        let include = app.buttons["share.include-self-reported-inline"]
+        XCTAssertTrue(scrollUntilHittable(include))
+        include.tap()
+        XCTAssertTrue(
+            waitForLabel(
+                summary,
+                equalTo: "現在の共有設定、GIF・4:5・自己申告あり・記念石は自己申告・タグ2個",
+                timeout: 8
+            )
+        )
+        XCTAssertTrue(
+            waitForLabel(card, containing: "瓶に積んだ集中、300グラム、30分。", timeout: 8),
+            card.label
+        )
+        XCTAssertTrue(waitForNonExistence(notice, timeout: 5))
+        attachScreenshot(named: "Share — included card states 300g and 30分")
+    }
+
     /// history-10: typing a tag must reuse the resolved card instead of
     /// re-reading every record; study tags are offered but stay opt-in.
     func testTypingATagReusesTheResolvedCardAndStudyTagsStayOptional() {
@@ -315,11 +375,79 @@ final class GIFShareLifecycleUITests: XCTestCase {
         attachScreenshot(named: "Share — suggested study tags and a custom tag")
     }
 
+    /// The excluded-time notice, the two-part scope summary and the Log's
+    /// time tile must stay whole and reachable at the largest text size.
+    func testExcludedTimeNoticeAndLogTimeStayReadableAtAccessibilitySizes() {
+        app.terminate()
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+        addShareableSession()
+        addExamPassStone()
+
+        openMenuAction(containing: "動く瓶をシェア")
+        XCTAssertTrue(app.navigationBars["カードにする"].waitForExistence(timeout: 8))
+        let notice = app.descendants(matching: .any)["share.excluded-self-reported"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 8))
+        XCTAssertTrue(scrollUntilHittable(notice))
+        attachScreenshot(named: "AX5 Share — excluded-time notice")
+        let include = app.buttons["share.include-self-reported-inline"]
+        XCTAssertTrue(scrollUntilHittable(include), "The inline include button must be reachable at AX5")
+        let summary = app.descendants(matching: .any)["share.settings-summary"]
+        XCTAssertTrue(scrollUntilHittable(summary))
+        XCTAssertTrue(summary.label.hasSuffix("・記念石は自己申告・タグ2個"), summary.label)
+        attachScreenshot(named: "AX5 Share — two-part scope summary")
+        include.tap()
+        XCTAssertTrue(waitForNonExistence(notice, timeout: 8))
+        app.navigationBars["カードにする"].buttons["閉じる"].tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+
+        openMenuAction(containing: "記録を見る")
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 6))
+        let timeTile = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "30分", "積んだ時間")
+        ).firstMatch
+        XCTAssertTrue(scrollUntilHittable(timeTile), "The Log time tile must read 30分")
+        attachScreenshot(named: "AX5 Log — time tile in 分")
+    }
+
+    private func addExamPassStone() {
+        openMenuAction(containing: "成果を積む")
+        XCTAssertTrue(app.navigationBars["成果を選ぶ"].waitForExistence(timeout: 5))
+        let examPass = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "試験合格")
+        ).firstMatch
+        XCTAssertTrue(examPass.waitForExistence(timeout: 5))
+        examPass.tap()
+        XCTAssertTrue(app.navigationBars["記念石にする"].waitForExistence(timeout: 5))
+        let save = app.buttons["この成果を積む"]
+        XCTAssertTrue(scrollUntilHittable(save))
+        save.tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
+    }
+
+    private func currentMonthTitle() -> String {
+        let parts = Calendar(identifier: .gregorian).dateComponents([.year, .month], from: .now)
+        return "\(parts.year ?? 0)年\(parts.month ?? 0)月"
+    }
+
     private func attachScreenshot(named name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func waitForLabel(
+        _ element: XCUIElement,
+        containing expected: String,
+        timeout: TimeInterval
+    ) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", expected),
+            object: element
+        )
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
     private func addShareableSession() {

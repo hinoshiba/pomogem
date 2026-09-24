@@ -230,14 +230,24 @@ struct ShareComposerView: View {
         let selection = selection
         let medium = mediaKind == .animatedGIF ? "GIF" : "静止画"
         let shape = format == .feed ? "4:5" : "9:16"
-        let scopeLabel: String
-        if selection.includesSelfReportedFocus || !selection.achievements.isEmpty {
-            scopeLabel = "自己申告あり"
+        // Describe the focus on the card first, then any 記念石 separately.
+        // A stone used to turn the whole label into 「自己申告あり」 even while
+        // self-reported focus was left out (walk-std-04).
+        let focusLabel: String
+        if selection.includesSelfReportedFocus {
+            focusLabel = "自己申告あり"
         } else if selection.hasExcludedSelfReportedContent {
-            scopeLabel = "実測のみ（自己申告は除外）"
+            focusLabel = "実測のみ（自己申告は除外）"
         } else {
-            scopeLabel = "実測のみ"
+            focusLabel = "実測のみ"
         }
+        let scopeLabel = selection.achievements.isEmpty
+            ? focusLabel
+            : String(
+                localized: "\(focusLabel)・記念石は自己申告",
+                table: "Share",
+                comment: "Share settings summary: focus scope, then the note that stones are self-reported"
+            )
         let hashtagLabel = activeHashtags.isEmpty
             ? "タグなし"
             : "タグ\(activeHashtags.count)個"
@@ -304,6 +314,10 @@ struct ShareComposerView: View {
                         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: format)
                     } else {
                         emptyShareState
+                    }
+
+                    if showsExcludedSelfReportedNotice {
+                        excludedSelfReportedNotice
                     }
 
                     shareSettingsSummary
@@ -544,10 +558,11 @@ struct ShareComposerView: View {
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(PomoGemTheme.amber)
                 .accessibilityHidden(true)
+            // No line cap: the scope can now name both the excluded focus and
+            // the stones, which needs more lines at accessibility sizes.
             Text(settingsSummary)
                 .font(.system(.caption, design: .rounded, weight: .bold))
                 .foregroundStyle(PomoGemTheme.text)
-                .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
@@ -900,6 +915,65 @@ struct ShareComposerView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 24)
         }
+    }
+
+    /// A card is on screen but self-reported focus is left out of it. Without
+    /// this, a month of manual records plus one 記念石 read as an unexplained
+    /// 0g, and the only way to include the focus sat in the collapsed 調整
+    /// (walk-std-04). Tapping includes it the same way the toggle does; the
+    /// saved preference only changes because the person asked here.
+    private var showsExcludedSelfReportedNotice: Bool {
+        !isLoadingData
+            && !aggregateProjectionPresentation.isCloudVerificationPending
+            && selection.hasShareableContent
+            && selection.hasExcludedSelfReportedContent
+    }
+
+    private var excludedSelfReportedMessage: String {
+        if let grams = selection.excludedSelfReportedGrams,
+           DurationPresentation.focusMinutes(grams: grams) > 0 {
+            return String(
+                localized: "自己申告の\(DurationPresentation.focusLabel(grams: grams))は、カードに含めていません。",
+                table: "Share",
+                comment: "Share composer: amount of self-reported focus left out of the card, e.g. 1時間30分"
+            )
+        }
+        return String(
+            localized: "自己申告の集中は、カードに含めていません。",
+            table: "Share",
+            comment: "Share composer: self-reported focus is left out of the card"
+        )
+    }
+
+    private var excludedSelfReportedNotice: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label {
+                Text(excludedSelfReportedMessage)
+                    .font(.subheadline)
+                    .foregroundStyle(PomoGemTheme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "info.circle.fill")
+                    .foregroundStyle(PomoGemTheme.amber)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("share.excluded-self-reported")
+
+            Button {
+                includeManual = true
+            } label: {
+                Text("自己申告を含める", tableName: "Share")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(PomoGemSecondaryButtonStyle())
+            .disabled(isRendering || isSaving)
+            .accessibilityIdentifier("share.include-self-reported-inline")
+            .accessibilityHint(Text("自己申告として明記したうえで、この記録をカードに含めます", tableName: "Share"))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(PomoGemTheme.card.opacity(0.88), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .contain)
     }
 
     private var shareBrandingNotice: some View {

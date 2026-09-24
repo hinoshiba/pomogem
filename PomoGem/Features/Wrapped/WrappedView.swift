@@ -38,6 +38,9 @@ struct WrappedView: View {
     private var totalMinutes: Int {
         NonnegativeIntPolicy.sum(monthSessions.map(\.seconds)) / 60
     }
+    private var monthIncludesSelfReportedFocus: Bool {
+        monthSessions.contains { $0.effectiveSource.isSelfReported }
+    }
     private var topSubject: String {
         let groups = Dictionary(grouping: monthSessions, by: \.displaySubjectName)
         return groups.max { lhs, rhs in
@@ -132,6 +135,19 @@ struct WrappedView: View {
                     }
                 }
                 .padding(.horizontal, 18)
+
+                // The card this screen offers defaults to measured focus only.
+                // Say that these totals include self-reported time, so the two
+                // screens explain each other (walk-std-04).
+                if !isLoading, loadError == nil, monthIncludesSelfReportedFocus {
+                    Text("時間と粒には、自己申告の記録も含みます。", tableName: "Log")
+                        .font(.caption)
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 28)
+                        .accessibilityIdentifier("wrapped.self-reported-note")
+                }
 
                 Spacer(minLength: 12)
                 VStack(spacing: 10) {
