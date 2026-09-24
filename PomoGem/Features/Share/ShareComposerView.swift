@@ -342,16 +342,20 @@ struct ShareComposerView: View {
                             .accessibilityLabel("GIF share lifecycle probe")
                             .accessibilityValue(Text(verbatim: debugGIFShareLifecycle.accessibilityValue))
                             .allowsHitTesting(false)
-                        // How often this process resolved the card selection
-                        // versus reused it; typing a tag must only reuse it.
-                        Text("Share selection probe")
-                            .font(.system(size: 1))
-                            .foregroundStyle(Color.clear)
-                            .frame(width: 1, height: 1)
-                            .accessibilityIdentifier("share.debug.selection")
-                            .accessibilityLabel("Share selection probe")
-                            .accessibilityValue(Text(verbatim: "builds=\(ShareSelectionCache.debugBuildCount);lookups=\(ShareSelectionCache.debugLookupCount)"))
-                            .allowsHitTesting(false)
+                            // How often this process resolved the card
+                            // selection versus reused it; typing a tag must
+                            // only reuse it. An overlay, so the probe adds no
+                            // height the UI tests' scrolling would notice.
+                            .overlay {
+                                Text("Share selection probe")
+                                    .font(.system(size: 1))
+                                    .foregroundStyle(Color.clear)
+                                    .frame(width: 1, height: 1)
+                                    .accessibilityIdentifier("share.debug.selection")
+                                    .accessibilityLabel("Share selection probe")
+                                    .accessibilityValue(Text(verbatim: "builds=\(ShareSelectionCache.debugBuildCount);lookups=\(ShareSelectionCache.debugLookupCount)"))
+                                    .allowsHitTesting(false)
+                            }
                     }
 #endif
 

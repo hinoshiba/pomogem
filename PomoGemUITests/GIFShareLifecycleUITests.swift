@@ -45,11 +45,18 @@ final class GIFShareLifecycleUITests: XCTestCase {
 
         cancelSystemShareSheet(systemSheet)
 
+        // The status element already shows the preparation message behind
+        // the sheet, so wait for the cancellation text rather than for the
+        // element to exist.
         let status = app.staticTexts["share.status"]
         XCTAssertTrue(status.waitForExistence(timeout: 12))
-        XCTAssertEqual(
-            status.label,
-            "共有はキャンセルされました。カードはこの画面に残っています。"
+        XCTAssertTrue(
+            waitForLabel(
+                status,
+                equalTo: "共有はキャンセルされました。カードはこの画面に残っています。",
+                timeout: 12
+            ),
+            status.label
         )
 
         let probe = app.staticTexts["share.debug.gif-lifecycle"]
@@ -255,10 +262,15 @@ final class GIFShareLifecycleUITests: XCTestCase {
             "Direct self-reported inclusion must continue to the real system share sheet"
         )
         cancelSystemShareSheet(systemSheet)
-        XCTAssertTrue(app.staticTexts["share.status"].waitForExistence(timeout: 8))
-        XCTAssertEqual(
-            app.staticTexts["share.status"].label,
-            "共有はキャンセルされました。カードはこの画面に残っています。"
+        let status = app.staticTexts["share.status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            waitForLabel(
+                status,
+                equalTo: "共有はキャンセルされました。カードはこの画面に残っています。",
+                timeout: 12
+            ),
+            status.label
         )
     }
 
@@ -558,19 +570,29 @@ final class GIFShareLifecycleUITests: XCTestCase {
         avoiding obstruction: XCUIElement,
         attempts: Int = 8
     ) -> Bool {
-        for _ in 0..<attempts {
-            if element.exists,
-               obstruction.exists,
-               element.isHittable,
-               !element.frame.intersects(obstruction.frame) {
-                return true
-            }
-            app.swipeUp()
+        // A fast fling can carry the element past the top, where XCTest still
+        // reports it hittable under the translucent navigation bar and a tap
+        // lands on the bar instead. Require it below the bar, and come back
+        // down slowly when it has gone past.
+        let navigationBar = app.navigationBars.firstMatch
+        func isClear() -> Bool {
+            element.exists
+                && obstruction.exists
+                && element.isHittable
+                && !element.frame.intersects(obstruction.frame)
+                && (!navigationBar.exists || element.frame.minY >= navigationBar.frame.maxY)
         }
-        return element.exists
-            && obstruction.exists
-            && element.isHittable
-            && !element.frame.intersects(obstruction.frame)
+        for _ in 0..<attempts {
+            if isClear() { return true }
+            if navigationBar.exists,
+               element.exists,
+               element.frame.minY < navigationBar.frame.maxY {
+                app.swipeDown(velocity: .slow)
+            } else {
+                app.swipeUp(velocity: .slow)
+            }
+        }
+        return isClear()
     }
 
     private func expandAdjustmentsIfNeeded() {
