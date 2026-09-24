@@ -35,6 +35,7 @@
 		1F0A26CEDD94391DC3E98C20 /* CompleteDataDeletionTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A050345814C902A4AF65C03 /* CompleteDataDeletionTypes.swift */; };
 		1F96B5E7B41F562BB1529DA4 /* EngagementOverviewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4383D72800A4EF0F5C7823FE /* EngagementOverviewUITests.swift */; };
 		210B91AF5B3C606C22519C12 /* ActivityResetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C6C6F690DAE80124E03BFF0 /* ActivityResetTests.swift */; };
+		2232B489F1EA669A7200CFB0 /* StorageTransferLegacyCloudAdoptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A55D40BDDEB56B47537EB376 /* StorageTransferLegacyCloudAdoptionTests.swift */; };
 		24FDE33C03F4B5B936F37337 /* BoundedLaunchPreparationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 189F9C27085367C86D86A859 /* BoundedLaunchPreparationTests.swift */; };
 		26A13C585B7493B72A6709E4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDFD2F7482C6D59F73C3C3DE /* RootView.swift */; };
 		26D7635108864844B2D07D8D /* ScreenTimeRolloverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5980293973D5E2D9CB9224E /* ScreenTimeRolloverTests.swift */; };
@@ -163,6 +164,7 @@
 		987A5B495CFF5E4AF0963713 /* UITestFaultInjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5542B8EEF5204878A5734E13 /* UITestFaultInjection.swift */; };
 		9B0D45C064B95151B3779A74 /* AggregatePersistenceFailureRecoveryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 626D6B716E894C9A3DEE9E3E /* AggregatePersistenceFailureRecoveryUITests.swift */; };
 		9C81622243F21976590DDAEE /* Analytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D472A1DA7AE5AE7B665ABD /* Analytics.swift */; };
+		9DA2579DDE78F8FEAC7837FC /* CloudDataDeletionGuidanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DD50E345F510C6D928E8D62 /* CloudDataDeletionGuidanceView.swift */; };
 		9EEDB2A23B19E4EC537E3B4A /* ScreenTimeIntegrationModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 692367EFFE3E11A3BCD6C0EA /* ScreenTimeIntegrationModifier.swift */; };
 		9F5BC57BB4923D391D26B6E8 /* StrataRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F444E317993ECB2656CB2A /* StrataRenderer.swift */; };
 		9F871818A486B4918C3C1ED9 /* StorageTransferOverwriteCopyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B4F5B2D8F5094682053D4D3 /* StorageTransferOverwriteCopyTests.swift */; };
@@ -183,6 +185,7 @@
 		A9C0D11803B6F1516CAB93B5 /* GachaHistoryReconciliationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E38675DCE672C29E9EBF0A56 /* GachaHistoryReconciliationTests.swift */; };
 		AAA5CC189B85916C797A20C7 /* CloudStorageTransferCloudKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 932126197219FB72E78BE385 /* CloudStorageTransferCloudKit.swift */; };
 		AB36821AD3DF9DF1078F2A18 /* AnimatedShareExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7CA0949614CED6AA5F16278 /* AnimatedShareExporterTests.swift */; };
+		AB5601582FCDC3F34EA6C86E /* StorageTransferExportControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BF448686726031FD2E85261 /* StorageTransferExportControl.swift */; };
 		AB92A5C29B406BE9B5100044 /* RareRewardLedgerLocalState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C496D64AA5AC2AD3BE657462 /* RareRewardLedgerLocalState.swift */; };
 		ACBAD0B80D98ADEFB7302823 /* ProgressPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4876B16EDE82FFACCC197D8 /* ProgressPresentationTests.swift */; };
 		ADB73894F8EFAB0939250580 /* RealDeviceCloudEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 074F0B06F095448D8DB5E302 /* RealDeviceCloudEvidenceTests.swift */; };
@@ -249,6 +252,7 @@
 		E42BBCABF5296E22F948E14B /* StorageTransferJournalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71587FDB738B4B796B69A5A5 /* StorageTransferJournalTests.swift */; };
 		E439AF0CE89CCF2D1B6227D3 /* StorageTransferRuntimeState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F4502C5BED8F8E1C6436946 /* StorageTransferRuntimeState.swift */; };
 		E59840D5770474D6631626E7 /* PomoGemStorageSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 032193B5B041D1E354E34CA7 /* PomoGemStorageSnapshot.swift */; };
+		E68C33E7640CD0ACE3C1A89D /* CloudDataDeletionGuidanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A59348CE223F32E2E77A9C /* CloudDataDeletionGuidanceTests.swift */; };
 		E7134BF91616BDC73367CA9D /* CloudOfflineAccessStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01A9B85D336BC4EE52B68528 /* CloudOfflineAccessStateTests.swift */; };
 		E7894B8428282A5912517447 /* CloudAccountVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A8F60025FE01C9FFD03A00B /* CloudAccountVerificationTests.swift */; };
 		E8CEDC6F17CF9CA6BC84D581 /* StorageTransferOverwriteLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E5666021E6F2E37B8F719E5 /* StorageTransferOverwriteLaunchUITests.swift */; };
@@ -372,6 +376,7 @@
 		21C0823291E12749CF291866 /* CloudLaunchDeadlineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudLaunchDeadlineTests.swift; sourceTree = "<group>"; };
 		22AE75A11BD5EDDE67856C80 /* AcceptedActivityResetCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcceptedActivityResetCleanupTests.swift; sourceTree = "<group>"; };
 		23281121BA4A32647A92F516 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		23A59348CE223F32E2E77A9C /* CloudDataDeletionGuidanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDataDeletionGuidanceTests.swift; sourceTree = "<group>"; };
 		242F6C46DFBD7EB7FF76A689 /* FocusActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusActivityManager.swift; sourceTree = "<group>"; };
 		255FD4B5A9B4B647ED209984 /* GemTextureAtlas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GemTextureAtlas.swift; sourceTree = "<group>"; };
 		25D1619268B0924CA1E7949F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -382,6 +387,7 @@
 		2BE03AD68663BB94BACCC1F3 /* ScreenTimeSettingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeSettingsUITests.swift; sourceTree = "<group>"; };
 		2C30CF10E3988DB96AE814A1 /* StorageTransferDatasetRequestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferDatasetRequestTests.swift; sourceTree = "<group>"; };
 		2D26D449B8AEC9D324182BF9 /* StorageTransferCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferCleanupTests.swift; sourceTree = "<group>"; };
+		2DD50E345F510C6D928E8D62 /* CloudDataDeletionGuidanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDataDeletionGuidanceView.swift; sourceTree = "<group>"; };
 		2DDAE8A3E08C0FB57CB0FBE1 /* FortyYearPersistenceHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FortyYearPersistenceHarness.swift; sourceTree = "<group>"; };
 		301B5DB2A2FAC88DC5015AF4 /* BreakTimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreakTimerView.swift; sourceTree = "<group>"; };
 		304682ED2010B4AFADAD2F75 /* StorageTransferRemoteRecoveryCloudKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferRemoteRecoveryCloudKit.swift; sourceTree = "<group>"; };
@@ -420,6 +426,7 @@
 		4ADD0283627FA63899DACAF3 /* StorageTransferBindingMismatchRefutationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferBindingMismatchRefutationTests.swift; sourceTree = "<group>"; };
 		4AE5C2F0BA5111841B70C41A /* CustomDurationEditingStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomDurationEditingStateTests.swift; sourceTree = "<group>"; };
 		4AFF2A86B3C795B7E8FDBA94 /* WrappedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WrappedView.swift; sourceTree = "<group>"; };
+		4BF448686726031FD2E85261 /* StorageTransferExportControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferExportControl.swift; sourceTree = "<group>"; };
 		4BF84C957F5965D5E7377EAD /* SyncMaintenance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncMaintenance.swift; sourceTree = "<group>"; };
 		4C5593DA547691E54AD22F76 /* InitialCloudHydrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InitialCloudHydrationTests.swift; sourceTree = "<group>"; };
 		4C82F7F0FD796F8D9446AB8F /* JarWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarWidgets.swift; sourceTree = "<group>"; };
@@ -504,6 +511,7 @@
 		A46EC111083ACA7C8AC45F2B /* IntegrationConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntegrationConstants.swift; sourceTree = "<group>"; };
 		A4876B16EDE82FFACCC197D8 /* ProgressPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressPresentationTests.swift; sourceTree = "<group>"; };
 		A503997D8D710D5C186A1C85 /* StorageTransferRuntimeStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferRuntimeStateTests.swift; sourceTree = "<group>"; };
+		A55D40BDDEB56B47537EB376 /* StorageTransferLegacyCloudAdoptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferLegacyCloudAdoptionTests.swift; sourceTree = "<group>"; };
 		A6DACC9E7792C2200EE2C699 /* StorageTransferJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferJournal.swift; sourceTree = "<group>"; };
 		A78F4AF55E67F22420886C69 /* ScreenTimeSettingsUITestFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeSettingsUITestFixture.swift; sourceTree = "<group>"; };
 		A81DCEA1C2A2133E7484C8F8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -789,10 +797,12 @@
 		6303CCF965DC4FCB4BD972A0 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				2DD50E345F510C6D928E8D62 /* CloudDataDeletionGuidanceView.swift */,
 				CF23306474C1C7B694067BD8 /* PomoGemDataExporter.swift */,
 				9365249A6EAC82E237E17D81 /* PreferredFocusDurationPicker.swift */,
 				12099E8B5B1E78CFEA252490 /* ScreenTimeSettingsView.swift */,
 				D58C3C1A3A761BDD16883051 /* SettingsView.swift */,
+				4BF448686726031FD2E85261 /* StorageTransferExportControl.swift */,
 				D9E630CC67F2B7AA44EC1740 /* StorageTransferSettingsSection.swift */,
 				BC20B60AC810C395798DDEB0 /* TimerDefaultOrientationSettingsView.swift */,
 			);
@@ -884,6 +894,7 @@
 				189F9C27085367C86D86A859 /* BoundedLaunchPreparationTests.swift */,
 				3A8F60025FE01C9FFD03A00B /* CloudAccountVerificationTests.swift */,
 				C9E64D7EC1B176F2D176D0D4 /* CloudActivityHistoryPreflightTests.swift */,
+				23A59348CE223F32E2E77A9C /* CloudDataDeletionGuidanceTests.swift */,
 				21C0823291E12749CF291866 /* CloudLaunchDeadlineTests.swift */,
 				01A9B85D336BC4EE52B68528 /* CloudOfflineAccessStateTests.swift */,
 				3FA4EE8D1FB7A66F05F42BD7 /* CloudOfflineHistoryPreflightTests.swift */,
@@ -955,6 +966,7 @@
 				F01F76954764EF2852C12F46 /* StorageTransferHostCloudPublicationTests.swift */,
 				71587FDB738B4B796B69A5A5 /* StorageTransferJournalTests.swift */,
 				E3EFE561D47563975C72F2D5 /* StorageTransferLeftoverStoreTests.swift */,
+				A55D40BDDEB56B47537EB376 /* StorageTransferLegacyCloudAdoptionTests.swift */,
 				9D6F82AD688662A4AD7260E6 /* StorageTransferManagedZoneDeletionAdaptersTests.swift */,
 				1718C6E2F252164D9503E8A4 /* StorageTransferManagedZoneDeletionTests.swift */,
 				F0C7F1C2440BE0CBAEAA0495 /* StorageTransferManifestWriterFieldTests.swift */,
@@ -1349,6 +1361,7 @@
 				C62051B8ED2541CD5A86B248 /* BoundedLaunchPreparation.swift in Sources */,
 				A92F3091A783C359B1B55918 /* BreakTimerView.swift in Sources */,
 				4C91A3DC21863ED4983DC2A5 /* CloudActivityHistoryPreflight.swift in Sources */,
+				9DA2579DDE78F8FEAC7837FC /* CloudDataDeletionGuidanceView.swift in Sources */,
 				E3850FBAACB7458D01C975F7 /* CloudLaunchDeadline.swift in Sources */,
 				AEE7961A8206B323F618A0E6 /* CloudOfflineAccessPolicy.swift in Sources */,
 				7D6D35E9AE98C9E52CF548F8 /* CloudOfflineAccessState.swift in Sources */,
@@ -1433,6 +1446,7 @@
 				B20E1247B1A28C056F69C038 /* StorageTransferCloudScope.swift in Sources */,
 				4BDB2EADE20D3D2DCA634C25 /* StorageTransferCoordinator.swift in Sources */,
 				6C17671D2EC3E55828EBBCE9 /* StorageTransferDatasetRequest.swift in Sources */,
+				AB5601582FCDC3F34EA6C86E /* StorageTransferExportControl.swift in Sources */,
 				B374802FAFF6915313EC83A7 /* StorageTransferHostCloudPublicationGate.swift in Sources */,
 				ADD4DB9F72353D5D81C1A655 /* StorageTransferJournal.swift in Sources */,
 				148D814EC01AF2D8600F3722 /* StorageTransferLateArrivalBanner.swift in Sources */,
@@ -1483,6 +1497,7 @@
 				24FDE33C03F4B5B936F37337 /* BoundedLaunchPreparationTests.swift in Sources */,
 				E7894B8428282A5912517447 /* CloudAccountVerificationTests.swift in Sources */,
 				6382EF8D628902B73C5C9B85 /* CloudActivityHistoryPreflightTests.swift in Sources */,
+				E68C33E7640CD0ACE3C1A89D /* CloudDataDeletionGuidanceTests.swift in Sources */,
 				BFEDE3F131BBB58B6252245A /* CloudLaunchDeadlineTests.swift in Sources */,
 				E7134BF91616BDC73367CA9D /* CloudOfflineAccessStateTests.swift in Sources */,
 				38DEC6856CFAABECC0594526 /* CloudOfflineHistoryPreflightTests.swift in Sources */,
@@ -1554,6 +1569,7 @@
 				F1DF0C48E96692B44BF0C732 /* StorageTransferHostCloudPublicationTests.swift in Sources */,
 				E42BBCABF5296E22F948E14B /* StorageTransferJournalTests.swift in Sources */,
 				2C58F1A5864BAE6A26DBA5E5 /* StorageTransferLeftoverStoreTests.swift in Sources */,
+				2232B489F1EA669A7200CFB0 /* StorageTransferLegacyCloudAdoptionTests.swift in Sources */,
 				FBCCE739CC80292026748953 /* StorageTransferManagedZoneDeletionAdaptersTests.swift in Sources */,
 				B228B4ECFBDEB30112F23B6E /* StorageTransferManagedZoneDeletionTests.swift in Sources */,
 				432E3A239EAD37662DB890D2 /* StorageTransferManifestWriterFieldTests.swift in Sources */,

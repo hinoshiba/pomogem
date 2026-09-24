@@ -102,6 +102,21 @@ struct PomoGemStorageSnapshot: Codable, Sendable, Equatable {
         }
     }
 
+    /// Every row of the seven MIRRORED models, scalar fields only, in one
+    /// pass: no relationships, no local-only models, no reference table, no
+    /// budget and no validation. It is an observation for counting, never a
+    /// transfer payload; `StorageTransferCloudPreview.make(context:)` uses it
+    /// to count a side that a deletion is about to be chosen over.
+    @MainActor static func visitMirroredRows(in context: ModelContext,
+                                             _ visit: (_ entity: String, _ fields: [String: Scalar]) throws -> Void) throws {
+        for entity in entities where cloudModelNames.contains(entity.name) {
+            try entity.enumerate(context) { value in
+                try Task.checkCancellation()
+                try visit(entity.name, entity.capture(value))
+            }
+        }
+    }
+
     @MainActor static func capture(from context: ModelContext, limits: Limits = .standard) throws -> Self {
         try captureRows(from: context, permitsObservedCloudReplica: false, limits: limits)
     }
@@ -591,7 +606,7 @@ private extension StorageSnapshotScalarConvertible { static var storageOptional:
             Field<StudySession>("startAt", \.startAt),
             Field<StudySession>("endAt", \.endAt),
             Field<StudySession>("seconds", \.seconds),
-            Field<StudySession>("source", \.source),
+            Field<StudySession>("source", \.persistedSource),
             Field<StudySession>("pebbleKind", \.pebbleKind),
             Field<StudySession>("grams", \.grams),
             Field<StudySession>("deviceDayKey", \.deviceDayKey),

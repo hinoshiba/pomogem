@@ -25,7 +25,7 @@ App Store Connectで無効化し、ブランチ・タグの変更によるビル
 
 | Bundle | 配布用の確認 |
 |---|---|
-| `com.hinoshiba.pomogem` | CloudKit Production／APNs Production、Family Controls、共有App Group |
+| `com.hinoshiba.pomogem` | CloudKit Production／APNs Production、Family Controls、共有App Group、Time Sensitive Notifications（集中・休憩の終了通知だけ） |
 | `com.hinoshiba.pomogem.widgets` | account-neutralなWidget／Live Activity。Family Controls、App Group、CloudKit、APNsなし |
 | `com.hinoshiba.pomogem.screentimemonitor` | Device Activity Monitor拡張、Family Controls、本体と同じ共有App Group。CloudKit／APNsなし |
 
@@ -183,6 +183,20 @@ local-onlyの通常resetは維持します。履歴確認のread-only preflight�
 
 Version 1.0の最終Prefs schemaは`timerDisplayMode`を含む13 group、26個のrevision／mutation stamp fieldです。
 production schemaは削除・rename前提で運用せず、後方互換なadditive changeを基本にします。
+
+既存の同期fieldへ、公開中の旧版が知らない値を書くことも後方互換ではありません。fieldの追加が不要なため
+CloudKit schemaの配備では検出できず、そのままiCloud経由で旧版端末へ届きます。SwiftDataは未知のenum raw
+valueを読んだ時点で停止するため、同じApple Accountの旧版端末が起動のたびに終了します。提出前に次を確認します。
+
+- 公開中のtag（現在は`v1.0.2-build9`）と候補commitの間で、同期modelが保存するenumの値と
+  `FocusCloudPayload.currentVersion`を比較し、旧版が読めない値を保存していないこと
+- `CloudSchemaCompatibilityTests`が成功すること。`StudySession.source`に保存できる値は
+  `SessionSource.legacyPersistableRawValues`（`timer`、`manual`、`timerDemoted`）に固定し、
+  `PebbleKind`、`AchievementKind`、`SyncedFocusStatus`、payload versionも1.0.2の値に固定している
+- 新しい分類は既存の値と判別できる形で保存し、読み出しで解決する。Screen Timeの記録は`manual`と
+  600秒・100gで保存し、`StudySession.effectiveSource`が判別する（[ScreenTimeGems.md](ScreenTimeGems.md)）
+- `screenTime`を保存していた修正前の開発版（Release構成はProductionのCloudKitを使う）を入れた端末は、
+  2026-11-30までに修正後のbuildへ更新する。更新後の端末が、その期間の記録を1.0.2でも読める値へ直す
 
 2026-09-12 16:40 JSTに、保存先切り替えの復旧用`PomoGemStorageTransferControl`と
 `PomoGemStorageTransferChunk`をProductionへ配備しました。Consoleの成功表示、Productionの両型・

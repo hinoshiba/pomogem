@@ -32,6 +32,7 @@ struct BreakTimerView: View {
     @State private var notificationAuthorizationIsCurrent = false
     @State private var notificationAuthorizationRefreshGeneration = 0
     @State private var scheduledCompletionNotificationDeliveryDate: Date? = nil
+    @AccessibilityFocusState private var breakEndButtonFocused: Bool
     private let ticker = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     init(minutes: Int) {
@@ -97,48 +98,64 @@ struct BreakTimerView: View {
             Color.black.ignoresSafeArea()
             RadialGradient(colors: [PomoGemTheme.amber.opacity(0.08), .clear], center: .center, startRadius: 0, endRadius: 340).ignoresSafeArea()
             TimerOrientationContainer(sessionID: sessionID) { context in
-                ScrollView {
-                    VStack(spacing: 20) {
-                        timerHeader
+                VStack(spacing: 0) {
+                    GeometryReader { proxy in
+                        ScrollView {
+                            VStack(spacing: 20) {
+                                timerHeader
 
-                        if context.isLandscape && !dynamicTypeSize.isAccessibilitySize {
-                            HStack(spacing: 32) {
-                                VStack(spacing: 16) {
-                                    timerFace(spacing: 12)
+                                if context.isLandscape && !dynamicTypeSize.isAccessibilitySize {
+                                    HStack(spacing: 32) {
+                                        VStack(spacing: 16) {
+                                            timerFace(spacing: 12)
+                                            waitingMessage
+                                        }
+                                        .frame(maxWidth: .infinity)
+
+                                        VStack(spacing: 20) {
+                                            if remaining > 0 {
+                                                completionNotificationStatus
+                                            }
+                                            completionActions
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                    }
+                                    .frame(minHeight: max(0, proxy.size.height - 88))
+                                } else {
+                                    Spacer(minLength: 8)
+                                    timerFace(spacing: 20)
                                     waitingMessage
-                                }
-                                .frame(maxWidth: .infinity)
 
-                                VStack(spacing: 20) {
                                     if remaining > 0 {
                                         completionNotificationStatus
                                     }
+
+                                    Spacer(minLength: 8)
                                     completionActions
                                 }
-                                .frame(maxWidth: .infinity)
                             }
-                            .frame(minHeight: max(0, context.size.height - 88))
-                        } else {
-                            Spacer(minLength: 8)
-                            timerFace(spacing: 20)
-                            waitingMessage
-
-                            if remaining > 0 {
-                                completionNotificationStatus
-                            }
-
-                            Spacer(minLength: 8)
-                            completionActions
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 12)
+                            .frame(maxWidth: .infinity, minHeight: proxy.size.height)
                         }
+                        .scrollBounceBehavior(.basedOnSize)
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-                    .frame(maxWidth: .infinity, minHeight: context.size.height)
+
+                    if remaining == 0 {
+                        // The break-end action (and its alarm's only Stop)
+                        // stays pinned on screen at every text size.
+                        breakEndButton
+                    }
                 }
-                .scrollBounceBehavior(.basedOnSize)
             }
         }
         .statusBarHidden()
+        // VoiceOver's two-finger double-tap stops the break-end alarm and
+        // returns to the jar, the screen's only action once the break is over.
+        .accessibilityAction(.magicTap) {
+            guard remaining == 0 else { return }
+            closeBreak()
+        }
         .task { await prepareBreak() }
         .onReceive(ticker) { date in
             now = date
@@ -151,16 +168,12 @@ struct BreakTimerView: View {
                 let returnedFromBackground = didEnterBackgroundSinceLastActive
                 didEnterBackgroundSinceLastActive = false
                 signalBreakCompletionIfNeeded(
-                    playsSensoryFeedback:
-                        TimerCompletionForegroundFeedbackPolicy.shouldPlay(
-                            recoveredAfterExpiration: false,
-                            returnedFromBackground: returnedFromBackground,
-                            notificationMayHaveDelivered:
-                                notificationMayHaveDelivered(
-                                    at: date,
-                                    uptime: completionUptime
-                                )
-                        )
+                    cue: completionCue(
+                        at: date,
+                        uptime: completionUptime,
+                        recoveredAfterExpiration: false,
+                        returnedFromBackground: returnedFromBackground
+                    )
                 )
             }
         }
@@ -178,6 +191,18 @@ struct BreakTimerView: View {
         }
         .onChange(of: scenePhase) { _, newPhase in
             updateIdleTimer(sceneIsActive: newPhase == .active)
+            if newPhase == .active,
+               didEnterBackgroundSinceLastActive,
+               completionAlert.isActive(sessionID: sessionID) {
+                // Leaving while the break-end alarm repeated counts as Stop.
+                // The app-level scene handler records and ends it on the way
+                // out (acknowledgeOnLeavingApp); this only covers a loop that
+                // is somehow still alive. 「瓶へ戻る」 stays for them to choose.
+                TimerCompletionAlertAcknowledgementStore.mark(
+                    sessionID: sessionID
+                )
+                completionAlert.stop(sessionID: sessionID)
+            }
             if newPhase == .background {
                 didEnterBackgroundSinceLastActive = true
             }
@@ -223,9 +248,11 @@ struct BreakTimerView: View {
             }
             .buttonStyle(PomoGemIconButtonStyle())
             .accessibilityLabel(
-                remaining == 0
-                    ? "終了アラートを停止して瓶へ戻る"
-                    : "休憩をスキップ"
+                remaining > 0
+                    ? "休憩をスキップ"
+                    : completionAlert.isActive(sessionID: sessionID)
+                        ? "終了アラートを停止して瓶へ戻る"
+                        : "瓶へ戻る"
             )
         }
     }
@@ -268,34 +295,43 @@ struct BreakTimerView: View {
                         "休憩終了のアラート中",
                         systemImage: "bell.and.waves.left.and.right.fill"
                     )
+                    .labelStyle(AccessibilitySizeTitleOnlyLabelStyle())
                     .font(.headline.weight(.bold))
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                     .foregroundStyle(PomoGemTheme.amber)
-                    Text("アプリが前面にある間、有効な音と触覚を停止するまで繰り返します")
+                    Text("止めるまで、音と触覚を繰り返します")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .multilineTextAlignment(.center)
                 }
             }
-            Button {
-                closeBreak()
-            } label: {
-                Label(
-                    completionAlert.isActive(sessionID: sessionID)
-                        ? "停止して瓶へ戻る"
-                        : "瓶へ戻る",
-                    systemImage: completionAlert.isActive(sessionID: sessionID)
-                        ? "stop.fill"
-                        : "arrow.backward"
-                )
-            }
-            .buttonStyle(PomoGemPrimaryButtonStyle())
-            .frame(minHeight: 44)
-            .accessibilityIdentifier("break.completion-alert.stop")
         } else {
             Button("休憩をスキップ") { closeBreak() }
                 .buttonStyle(PomoGemSecondaryButtonStyle())
                 .frame(minHeight: 44)
         }
+    }
+
+    private var breakEndButton: some View {
+        Button {
+            closeBreak()
+        } label: {
+            Label(
+                completionAlert.isActive(sessionID: sessionID)
+                    ? "停止して瓶へ戻る"
+                    : "瓶へ戻る",
+                systemImage: completionAlert.isActive(sessionID: sessionID)
+                    ? "stop.fill"
+                    : "arrow.backward"
+            )
+        }
+        .buttonStyle(PomoGemPrimaryButtonStyle())
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .frame(minHeight: 44)
+        .accessibilityHint("2本指のダブルタップでも操作できます")
+        .accessibilityIdentifier("break.completion-alert.stop")
+        .accessibilityFocused($breakEndButtonFocused)
+        .modifier(TimerPinnedActionBar())
     }
 
     @ViewBuilder
@@ -426,9 +462,11 @@ struct BreakTimerView: View {
             let completionDate = Date.now
             let completionUptime = ContinuousUptime.now()
             signalBreakCompletionIfNeeded(
-                playsSensoryFeedback: !notificationMayHaveDelivered(
+                cue: completionCue(
                     at: completionDate,
-                    uptime: completionUptime
+                    uptime: completionUptime,
+                    recoveredAfterExpiration: true,
+                    returnedFromBackground: false
                 )
             )
             return
@@ -452,16 +490,12 @@ struct BreakTimerView: View {
             // A background notification may already have announced this end;
             // an inactive-only interruption still deserves the foreground cue.
             signalBreakCompletionIfNeeded(
-                playsSensoryFeedback:
-                    TimerCompletionForegroundFeedbackPolicy.shouldPlay(
-                        recoveredAfterExpiration: false,
-                        returnedFromBackground: returnedFromBackground,
-                        notificationMayHaveDelivered:
-                            notificationMayHaveDelivered(
-                                at: now,
-                                uptime: completionUptime
-                            )
-                    )
+                cue: completionCue(
+                    at: now,
+                    uptime: completionUptime,
+                    recoveredAfterExpiration: false,
+                    returnedFromBackground: returnedFromBackground
+                )
             )
             return
         }
@@ -484,7 +518,9 @@ struct BreakTimerView: View {
     }
 
     @MainActor
-    private func signalBreakCompletionIfNeeded(playsSensoryFeedback: Bool) {
+    private func signalBreakCompletionIfNeeded(
+        cue: TimerCompletionForegroundFeedbackPolicy.Cue
+    ) {
         guard !didSignalCompletion else { return }
         didSignalCompletion = true
         UIApplication.shared.isIdleTimerDisabled = false
@@ -497,20 +533,61 @@ struct BreakTimerView: View {
         if !TimerCompletionAlertAcknowledgementStore.contains(
             sessionID: sessionID
         ) {
-            completionAlert.start(
-                TimerCompletionAlertConfiguration(
-                    sessionID: sessionID,
-                    sound: soundOn
-                        ? sensoryPreferences.timerCompletionSound
-                        : nil,
-                    haptic: hapticsOn
-                        ? sensoryPreferences.timerCompletionHaptic
-                        : nil
-                ),
-                playsImmediately: playsSensoryFeedback
+            let configuration = TimerCompletionAlertConfiguration(
+                sessionID: sessionID,
+                sound: soundOn ? sensoryPreferences.timerCompletionSound : nil,
+                haptic: hapticsOn ? sensoryPreferences.timerCompletionHaptic : nil
+            )
+            if completionAlert.resumeSuspendedAlert(sessionID: sessionID) {
+                // An iCloud remount cut this alarm off while the app stayed on
+                // screen; restore it with its Stop for whoever stepped away.
+            } else {
+                switch cue {
+                case .repeating:
+                    completionAlert.start(configuration)
+                case .single:
+                    TimerCompletionAlertAcknowledgementStore.mark(sessionID: sessionID)
+                    completionAlert.playOnce(configuration)
+                case .none:
+                    TimerCompletionAlertAcknowledgementStore.mark(sessionID: sessionID)
+                }
+            }
+        }
+        guard completionAlert.isActive(sessionID: sessionID),
+              UIAccessibility.isVoiceOverRunning else {
+            UIAccessibility.post(notification: .announcement, argument: "休憩が終わりました")
+            return
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard completionAlert.isActive(sessionID: sessionID) else { return }
+            breakEndButtonFocused = true
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: NSAttributedString(
+                    string: "休憩が終わりました。2本指でダブルタップすると、アラートを止めて瓶へ戻れます",
+                    attributes: [.accessibilitySpeechQueueAnnouncement: true]
+                )
             )
         }
-        UIAccessibility.post(notification: .announcement, argument: "休憩が終わりました")
+    }
+
+    private func completionCue(
+        at date: Date,
+        uptime: TimeInterval,
+        recoveredAfterExpiration: Bool,
+        returnedFromBackground: Bool
+    ) -> TimerCompletionForegroundFeedbackPolicy.Cue {
+        TimerCompletionForegroundFeedbackPolicy.cue(
+            recoveredAfterExpiration: recoveredAfterExpiration,
+            returnedFromBackground: returnedFromBackground,
+            notificationMayHaveDelivered: notificationMayHaveDelivered(
+                at: date,
+                uptime: uptime
+            ),
+            endedAt: endDate ?? date,
+            now: date
+        )
     }
 
     @MainActor

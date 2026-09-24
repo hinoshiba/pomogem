@@ -214,7 +214,8 @@ final class PomodoroSecondPrecisionTests: XCTestCase {
         let paused = try pausedRecord.decodedPayload()
         let adoptedAt = start.addingTimeInterval(318.25)
         let adopted = FocusPersistence.preparedForCrossDeviceAdoption(
-            paused.recoveryEnvelope(adoptedAt: adoptedAt), at: adoptedAt, uptime: 42
+            paused.recoveryEnvelope(adoptedAt: adoptedAt), at: adoptedAt, uptime: 42,
+            demotionReason: .adoptedFromOtherDevice
         )
         XCTAssertEqual(adopted.engine.currentSource, .timerDemoted)
         XCTAssertEqual(adopted.engine.currentSessionID, sessionID)

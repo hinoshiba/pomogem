@@ -245,11 +245,14 @@ private struct FocusStateText: View {
                 case .running:
                     if let endDate = state.endDate {
                         let startDate = min(Date.now, endDate)
+                        // Count in total minutes (「89:59」), like the app's
+                        // timer, the paused state below and the 「90分」 label.
+                        // Hours would make one timer read 1:29:59 here only.
                         Text(
                             timerInterval: startDate...endDate,
                             pauseTime: nil,
                             countsDown: true,
-                            showsHours: true
+                            showsHours: false
                         )
                         .accessibilityLabel(
                             Text("残り時間、")
@@ -257,7 +260,7 @@ private struct FocusStateText: View {
                                     timerInterval: startDate...endDate,
                                     pauseTime: nil,
                                     countsDown: true,
-                                    showsHours: true
+                                    showsHours: false
                                 )
                         )
                     } else {

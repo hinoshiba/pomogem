@@ -763,9 +763,17 @@ struct RootView: View {
             }
         } message: { offer in
             let remaining = offer.request.engine.snapshot(at: .now).remainingSeconds
+            // Adoption can never prove this device measured the remote
+            // interval, so FocusPersistence.preparedForCrossDeviceAdoption
+            // always demotes a running timer. Say so before the choice.
+            let becomesSelfReported = offer.request.pendingCompletion == nil
+                && offer.request.engine.containsRecoverableFocus
+            let selfReportedNote = becomesSelfReported
+                ? "続けた回は自己申告あつかいになります。"
+                : ""
             Text(persistenceMode == .localOnly
-                 ? "\(offer.request.subjectSnapshot.name)・残り約\(max(0, (remaining + 59) / 60))分。保存済みの状態から再開すると、このiPhoneが終了通知を担当します。"
-                 : "\(offer.request.subjectSnapshot.name)・残り約\(max(0, (remaining + 59) / 60))分。この端末へ引き継ぐと、この端末が終了通知を担当します。元の端末がオフラインまたはロック中の場合は、古い通知が一度届くことがあります。")
+                 ? "\(offer.request.subjectSnapshot.name)・残り約\(max(0, (remaining + 59) / 60))分。保存済みの状態から再開すると、このiPhoneが終了通知を担当します。\(selfReportedNote)"
+                 : "\(offer.request.subjectSnapshot.name)・残り約\(max(0, (remaining + 59) / 60))分。この端末へ引き継ぐと、この端末が終了通知を担当します。\(selfReportedNote)元の端末がオフラインまたはロック中の場合は、古い通知が一度届くことがあります。")
         }
         .onChange(of: focusSyncFingerprint) { _, _ in
             guard isFirstFramePresented, !isDataDeletionQuiesced else { return }
@@ -1071,6 +1079,23 @@ struct RootView: View {
                 colorHex: preset.colorHex,
                 sortOrder: 0
             ))
+#if DEBUG
+            // A long-term user's history: themes deleted over the years stay
+            // as tombstones and must not hide the live ones.
+            let deletedCount = Int(ProcessInfo.processInfo.environment[
+                LocalPreviewLaunchPolicy.deletedThemeHistoryUITestEnvironmentKey
+            ] ?? "") ?? 0
+            let deletedAt = Date(timeIntervalSince1970: 1_800_000_000)
+            for index in 0 ..< min(max(0, deletedCount), 2_000) {
+                modelContext.insert(Subject(
+                    name: "削除したテーマ\(index + 1)",
+                    colorHex: preset.colorHex,
+                    sortOrder: index + 1,
+                    isArchived: true,
+                    deletedAt: deletedAt.addingTimeInterval(TimeInterval(index))
+                ))
+            }
+#endif
         }
         if modelContext.hasChanges { try modelContext.save() }
 #if DEBUG && targetEnvironment(simulator)
@@ -1952,17 +1977,11 @@ struct RootView: View {
                 SubjectNamePolicy.validated($0)
             }
             let selectedNameKeys = Set(selectedNames.map(SubjectNamePolicy.comparisonKey))
-            var subjectDescriptor = FetchDescriptor<Subject>(sortBy: [
-                SortDescriptor(\Subject.syncRecordID)
-            ])
-            subjectDescriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
-            let storedSubjects = try modelContext.fetch(subjectDescriptor)
-            guard storedSubjects.count <= SubjectSyncPolicy.maximumPhysicalRows else {
-                throw SubjectSyncPolicy.MutationError.tooManyPhysicalRows
-            }
-            let subjects = SubjectSyncPolicy.presentationSubjects(
-                from: storedSubjects
-            )
+            // Live rows plus the tombstones sharing their IDs: deleted themes
+            // from earlier installs must not count toward the row bound.
+            let storedSubjects = try SubjectSyncPolicy.liveCatalogue(context: modelContext)
+            let subjects = SubjectSyncPolicy.canonicalSubjects(from: storedSubjects)
+                .filter { $0.deletedAt == nil }
             var removedSubjectIDs = Set<UUID>()
             for subject in subjects where presetIDs.contains(subject.id) {
                 let isSelected = selectedNameKeys.contains(
@@ -2513,7 +2532,8 @@ struct RootView: View {
             pendingCompletion: envelope.pendingCompletion,
             scheduledCompletionNotificationDeliveryDate:
                 envelope.scheduledCompletionNotificationDeliveryDate,
-            dataEpochID: envelope.dataEpochID
+            dataEpochID: envelope.dataEpochID,
+            demotionReason: envelope.demotionReason
         )
         if let pendingID = envelope.pendingCompletion?.sessionID,
            DeferredFocusCompletionStore.sessionID() == pendingID {
@@ -2676,10 +2696,19 @@ struct RootView: View {
             savedAt: adoptedAt,
             dataEpochID: source.dataEpochID
         )
+        // The reason is saved in this device's envelope so the notice stays
+        // the same after every relaunch or iCloud remount. It matches the
+        // offer's alert: only another iPhone's record in an iCloud store is
+        // a handoff; the local-only offer resumes saved state.
         let envelope = FocusPersistence.preparedForCrossDeviceAdoption(
             candidateEnvelope,
             at: adoptedAt,
-            uptime: adoptionUptime
+            uptime: adoptionUptime,
+            demotionReason: .adopted(
+                isCloudBacked: persistenceMode != .localOnly,
+                sourceWriterDeviceID: offer.sourceWriterDeviceID,
+                currentDeviceID: FocusDeviceIdentity.current()
+            )
         )
         FocusPersistence.save(envelope)
         router.cloudFocusRecoveryOffer = nil
@@ -2691,7 +2720,8 @@ struct RootView: View {
             pendingCompletion: envelope.pendingCompletion,
             dataEpochID: source.dataEpochID,
             origin: .iCloud,
-            allowsLocalNotifications: true
+            allowsLocalNotifications: true,
+            demotionReason: envelope.demotionReason
         )
     }
 

@@ -266,7 +266,7 @@ struct AccumulationOverviewLoader: View {
                         subjectName: $0.displaySubjectName,
                         colorHex: $0.displaySubjectColorHex,
                         grams: $0.grams,
-                        isMeasured: $0.source.isMeasured,
+                        isMeasured: $0.effectiveSource.isMeasured,
                         isRepresentedByLocalAggregate: localMembership
                             .representedSessionIDs.contains($0.id)
                     )

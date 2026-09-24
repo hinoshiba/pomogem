@@ -70,6 +70,13 @@ enum ActivityResetAdmissionPolicy {
             return true
         }
     }
+
+    /// settings-03. Wherever the reset is refused because the store mirrors
+    /// iCloud, Settings points to the routes that still work instead of
+    /// leaving a disabled red button as the last word.
+    static func offersCloudDeletionGuidance(in mode: PersistenceLaunchMode) -> Bool {
+        mode == .cloudKit && !permitsUserReset(in: mode)
+    }
 }
 
 enum ActivityResetPolicy {

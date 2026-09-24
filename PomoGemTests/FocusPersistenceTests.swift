@@ -694,13 +694,16 @@ final class FocusPersistenceTests: XCTestCase {
         let adopted = FocusPersistence.preparedForCrossDeviceAdoption(
             offered,
             at: adoptedAt,
-            uptime: 1_000
+            uptime: 1_000,
+            demotionReason: .adoptedFromOtherDevice
         )
         XCTAssertEqual(adopted.engine.currentSource, .timerDemoted)
+        XCTAssertEqual(adopted.demotionReason, .adoptedFromOtherDevice)
 
         FocusPersistence.save(adopted)
         let recovered = try XCTUnwrap(FocusPersistence.load())
         XCTAssertEqual(recovered.engine.currentSource, .timerDemoted)
+        XCTAssertEqual(recovered.demotionReason, .adoptedFromOtherDevice)
         var completing = recovered.engine
         let scheduledEnd = try XCTUnwrap(completing.endDate)
         let event = try XCTUnwrap(completing.advance(
@@ -711,6 +714,135 @@ final class FocusPersistenceTests: XCTestCase {
             return XCTFail("Expected adopted completion")
         }
         XCTAssertEqual(completion.source, .timerDemoted)
+    }
+
+    /// In iCloud mode every trip to the background remounts the container and
+    /// restores the timer through the local relaunch path. The notice must
+    /// keep the cause observed first, not guess 「再起動など」 on each return.
+    func testDemotionReasonSurvivesEveryLaterLocalRelaunch() throws {
+        let start = Date(timeIntervalSince1970: 1_800_023_500)
+        let subject = FocusSubjectSnapshot(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000119")!,
+            name: "英語",
+            colorHex: "#4C8CCF"
+        )
+
+        // Adopted from another iPhone, then relaunched twice.
+        var remoteEngine = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
+        try remoteEngine.startFocus(isPro: false, now: start)
+        let adoptedAt = start.addingTimeInterval(120)
+        let adopted = FocusPersistence.preparedForCrossDeviceAdoption(
+            FocusRecoveryEnvelope(
+                engine: remoteEngine,
+                subject: subject,
+                clockAnchor: ClockAnchor(wallDate: adoptedAt, systemUptime: 5_000),
+                pendingCompletion: nil,
+                savedAt: adoptedAt
+            ),
+            at: adoptedAt,
+            uptime: 5_000,
+            demotionReason: .adoptedFromOtherDevice
+        )
+        FocusPersistence.save(adopted)
+        var relaunched = try XCTUnwrap(FocusPersistence.load())
+        for offset in [30.0, 90.0] {
+            relaunched = FocusPersistence.preparedForLocalRelaunch(
+                relaunched,
+                at: adoptedAt.addingTimeInterval(offset),
+                uptime: 5_000 + offset
+            )
+            FocusPersistence.save(relaunched)
+            relaunched = try XCTUnwrap(FocusPersistence.load())
+            XCTAssertEqual(relaunched.engine.currentSource, .timerDemoted)
+            XCTAssertEqual(relaunched.demotionReason, .adoptedFromOtherDevice)
+        }
+
+        // A wall-clock jump found at relaunch is named as such, and stays so
+        // after the next relaunch even though uptime then looks continuous.
+        var localEngine = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
+        try localEngine.startFocus(isPro: false, now: start)
+        let jumped = FocusPersistence.preparedForLocalRelaunch(
+            FocusRecoveryEnvelope(
+                engine: localEngine,
+                subject: subject,
+                clockAnchor: ClockAnchor(wallDate: start, systemUptime: 9_000),
+                pendingCompletion: nil,
+                savedAt: start
+            ),
+            at: start.addingTimeInterval(3_600),
+            uptime: 9_060
+        )
+        XCTAssertEqual(jumped.engine.currentSource, .timerDemoted)
+        XCTAssertEqual(jumped.demotionReason, .clockChanged)
+        FocusPersistence.save(jumped)
+        let afterJump = FocusPersistence.preparedForLocalRelaunch(
+            try XCTUnwrap(FocusPersistence.load()),
+            at: start.addingTimeInterval(3_630),
+            uptime: 9_090
+        )
+        XCTAssertEqual(afterJump.demotionReason, .clockChanged)
+
+        // A reboot (uptime reset) is the one case that says so.
+        let rebooted = FocusPersistence.preparedForLocalRelaunch(
+            FocusRecoveryEnvelope(
+                engine: localEngine,
+                subject: subject,
+                clockAnchor: ClockAnchor(wallDate: start, systemUptime: 9_000),
+                pendingCompletion: nil,
+                savedAt: start
+            ),
+            at: start.addingTimeInterval(300),
+            uptime: 40
+        )
+        XCTAssertEqual(rebooted.demotionReason, .continuityLost)
+    }
+
+    func testDemotionReasonIsOptionalAndToleratesUnknownValues() throws {
+        let start = Date(timeIntervalSince1970: 1_800_023_700)
+        var engine = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
+        try engine.startFocus(isPro: false, now: start)
+        try engine.demoteCurrentFocus()
+        let envelope = FocusRecoveryEnvelope(
+            engine: engine,
+            subject: FocusSubjectSnapshot(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000120")!,
+                name: "宅建",
+                colorHex: "#3FA57C"
+            ),
+            clockAnchor: ClockAnchor(wallDate: start, systemUptime: 7_000),
+            pendingCompletion: nil,
+            savedAt: start,
+            demotionReason: .resumedFromSavedState
+        )
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(envelope)
+        ) as? [String: Any])
+
+        // An envelope from before the field existed still restores the timer.
+        object.removeValue(forKey: "demotionReasonRawValue")
+        let legacy = try JSONDecoder().decode(
+            FocusRecoveryEnvelope.self,
+            from: JSONSerialization.data(withJSONObject: object)
+        )
+        XCTAssertNil(legacy.demotionReason)
+        XCTAssertEqual(legacy.engine, envelope.engine)
+
+        // A value this version does not know degrades to no reason instead
+        // of discarding the whole recovery.
+        object["demotionReasonRawValue"] = "someFutureReason"
+        let future = try JSONDecoder().decode(
+            FocusRecoveryEnvelope.self,
+            from: JSONSerialization.data(withJSONObject: object)
+        )
+        XCTAssertNil(future.demotionReason)
+        XCTAssertEqual(future.engine, envelope.engine)
+
+        // The reason is device-local and never reaches the iCloud payload.
+        let payload = try FocusCloudPayload(envelope: envelope)
+        let payloadObject = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(payload)
+        ) as? [String: Any])
+        XCTAssertFalse(payloadObject.keys.contains { $0.localizedCaseInsensitiveContains("demotion") })
     }
 
     func testLegacyClockAnchorDecodesAsUnverifiableAndActiveRecoveryDemotes() throws {

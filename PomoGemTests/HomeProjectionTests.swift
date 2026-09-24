@@ -29,7 +29,7 @@ final class HomeProjectionTests: XCTestCase {
         )
         XCTAssertEqual(recovered.map(\.id), [old.id])
         XCTAssertEqual(recovered.first?.syncRecordID, canonical.syncRecordID)
-        XCTAssertEqual(recovered.first?.source, .timerDemoted)
+        XCTAssertEqual(recovered.first?.effectiveSource, .timerDemoted)
         let combined = StudySessionSyncPolicy.canonicalSessions(from: page.sessions + recovered + [old])
         XCTAssertEqual(combined.filter { $0.id == old.id }.count, 1)
         XCTAssertEqual(combined.first { $0.id == old.id }?.syncRecordID, canonical.syncRecordID)
@@ -257,7 +257,7 @@ final class HomeProjectionTests: XCTestCase {
         XCTAssertEqual(page.sessions.count, 5)
         XCTAssertEqual(Set(page.sessions.map(\.id)).count, 5)
         XCTAssertEqual(page.sessions.first?.id, duplicateID)
-        XCTAssertEqual(page.sessions.first?.source, .timerDemoted)
+        XCTAssertEqual(page.sessions.first?.effectiveSource, .timerDemoted)
         XCTAssertEqual(page.sessions.last?.endAt, base.addingTimeInterval(-4))
         XCTAssertTrue(page.isPartial)
         XCTAssertEqual(page.scannedPhysicalRowCount, 66)
@@ -307,7 +307,7 @@ final class HomeProjectionTests: XCTestCase {
 
         XCTAssertEqual(page.sessions.count, 40)
         XCTAssertEqual(
-            page.sessions.first(where: { $0.id == duplicatedID })?.source,
+            page.sessions.first(where: { $0.id == duplicatedID })?.effectiveSource,
             .timerDemoted
         )
         XCTAssertEqual(
@@ -457,7 +457,7 @@ final class HomeProjectionTests: XCTestCase {
             context: context
         ))
 
-        XCTAssertEqual(resolved.source, .timerDemoted)
+        XCTAssertEqual(resolved.effectiveSource, .timerDemoted)
         XCTAssertEqual(
             BoundedHistoryPolicy.sessionDescriptor(
                 id: logicalID,
@@ -968,7 +968,7 @@ final class HomeProjectionTests: XCTestCase {
             resetMarkers: []
         )
         XCTAssertEqual(scan.sessions.map(\.id), [boundaryID])
-        XCTAssertEqual(scan.sessions.first?.source, .timerDemoted)
+        XCTAssertEqual(scan.sessions.first?.effectiveSource, .timerDemoted)
         XCTAssertEqual(
             scan.scannedRowCount,
             HomeProjectionPolicy.maximumLooseSessionScanRows
@@ -1854,14 +1854,17 @@ final class HomeProjectionTests: XCTestCase {
 
         // Newer manual rows fill the first 512-row database page. A fetch
         // limit applied before the in-memory source filter would report 0g.
+        // They use a real manual choice: a stored `.manual` 600 s / 100 g row
+        // is the Screen Time signature and counts as measured.
+        let manual = ManualDuration.thirtyMinutes
         for index in 0 ..< 520 {
             let end = now.addingTimeInterval(TimeInterval(-index))
             context.insert(StudySession(
-                startAt: end.addingTimeInterval(-600),
+                startAt: end.addingTimeInterval(-TimeInterval(manual.seconds)),
                 endAt: end,
-                seconds: 600,
+                seconds: manual.seconds,
                 source: .manual,
-                grams: 100,
+                grams: manual.grams,
                 deviceDayKey: "fixture"
             ))
         }
@@ -2063,7 +2066,7 @@ final class HomeProjectionTests: XCTestCase {
 
         XCTAssertEqual(weekly.count, 721)
         XCTAssertTrue(weekly.allSatisfy { $0.dataEpochID == currentEpoch })
-        XCTAssertEqual(weekly.filter { $0.source == .manual }.count, 241)
+        XCTAssertEqual(weekly.filter { $0.effectiveSource == .manual }.count, 241)
     }
 
     private func makeLeafAggregateFixture() throws -> (

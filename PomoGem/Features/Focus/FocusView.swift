@@ -2,6 +2,7 @@ import Combine
 import SwiftData
 import SwiftUI
 import UIKit
+import UserNotifications
 
 enum FocusCompletionPersistenceResult: Equatable, Sendable {
     case inserted(PebbleKind)
@@ -29,11 +30,30 @@ private enum ExplicitFocusActivityState: Equatable {
     case paused(remainingSeconds: Int)
 }
 
-/// Decides whether an elapsed timer still needs an in-app completion cue.
+/// Decides which in-app cue an elapsed focus or break timer still needs.
 /// A persisted delivery date is trusted only while wall and monotonic clocks
 /// still agree; a relative OS notification may remain pending after a manual
 /// wall-clock jump.
 enum TimerCompletionForegroundFeedbackPolicy {
+    /// The in-app cue for one resolved completion.
+    enum Cue: Equatable, Sendable {
+        /// The timer ended while the app was on screen. Repeat the chosen
+        /// sound and haptic until the person stops it, like an alarm clock:
+        /// they may have stepped away from a phone kept awake on the desk.
+        case repeating
+        /// The person has just brought the app back, nothing else announced
+        /// the end, and it ended moments ago. Mark the moment once.
+        case single
+        /// A notification already announced the end, or the person returned
+        /// long after it. They are looking at the screen, so go straight to
+        /// the saved result without any cue.
+        case none
+    }
+
+    /// A return within this window still counts as "at the end" for the
+    /// single cue. Later returns are old news and stay silent.
+    static let lateReturnGrace: TimeInterval = 60
+
     static func notificationMayHaveDelivered(
         isAuthorized: Bool,
         expectedDeliveryDate: Date?,
@@ -43,13 +63,24 @@ enum TimerCompletionForegroundFeedbackPolicy {
             && (expectedDeliveryDate ?? .distantFuture) <= now
     }
 
-    static func shouldPlay(
+    /// A repeating alarm exists to reach someone who is not looking at the
+    /// screen. An app only becomes active again because the person brought
+    /// it forward, so a completion resolved on a return or a recovery never
+    /// loops: it is either marked once or shown silently.
+    static func cue(
         recoveredAfterExpiration: Bool,
         returnedFromBackground: Bool,
-        notificationMayHaveDelivered: Bool
-    ) -> Bool {
-        !((recoveredAfterExpiration || returnedFromBackground)
-            && notificationMayHaveDelivered)
+        notificationMayHaveDelivered: Bool,
+        endedAt: Date,
+        now: Date
+    ) -> Cue {
+        guard recoveredAfterExpiration || returnedFromBackground else {
+            return .repeating
+        }
+        guard !notificationMayHaveDelivered else { return .none }
+        let elapsed = now.timeIntervalSince(endedAt)
+        guard elapsed.isFinite, elapsed <= lateReturnGrace else { return .none }
+        return .single
     }
 
     static func notificationTimingIsTrustworthy(
@@ -66,6 +97,29 @@ enum TimerCompletionForegroundFeedbackPolicy {
                 completionUptime: uptime
               ) else { return false }
         return drift <= IntegrationConstants.notificationClockDriftTolerance
+    }
+}
+
+/// The end-of-timer alert is the core cue of a focus on a locked phone, so
+/// permission is asked in context: once, at the first focus the person
+/// starts themselves, and never for a recovered or adopted timer. The flag is
+/// device-local because notification permission belongs to this iPhone.
+/// Daily reminders keep their own separate opt-in.
+enum FocusCompletionNotificationOfferPolicy {
+    static let defaultsKey = "notifications.focus-completion-permission-offered.v1"
+
+    static func shouldOffer(
+        authorizationStatus: UNAuthorizationStatus,
+        isExplicitStart: Bool,
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        isExplicitStart
+            && authorizationStatus == .notDetermined
+            && !defaults.bool(forKey: defaultsKey)
+    }
+
+    static func markOffered(defaults: UserDefaults = .standard) {
+        defaults.set(true, forKey: defaultsKey)
     }
 }
 
@@ -185,7 +239,7 @@ struct FocusView: View {
     @State private var isCommittingCompletion = false
     @State private var breakFinished = false
     @State private var showGiveUpConfirmation = false
-    @State private var fairnessNotice = false
+    @State private var fairnessNoticeReason: FocusDemotionNoticeReason?
     @State private var setupErrorMessage: String?
     @State private var operationErrorMessage: String?
     @State private var rareRewardChoice: RareRewardMode?
@@ -203,15 +257,21 @@ struct FocusView: View {
     @State private var viewLifecycleGeneration: UInt64 = 0
     @State private var isViewActive = false
     @AccessibilityFocusState private var completionSaveRetryFocused: Bool
+    @AccessibilityFocusState private var completionAlertStopFocused: Bool
 
     private let ticker = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
 
+    /// `sessionID` must be owned by the presenting item, not created here.
+    /// SwiftUI re-runs this initializer whenever Home re-renders the cover, and
+    /// the session-scoped queries below adopt each new descriptor while the
+    /// `@State` engine keeps the first ID. A per-init UUID would silently point
+    /// ownership, handoff and cancellation queries at a session with no rows.
     init(
         subject: Subject,
         duration: PomodoroDuration,
+        sessionID: UUID,
         dataEpochID: UUID? = nil
     ) {
-        let sessionID = UUID()
         self.subject = subject
         self.subjectSnapshot = FocusSubjectSnapshot(subject: subject)
         self.recoveryOrigin = .local
@@ -270,7 +330,14 @@ struct FocusView: View {
         _scheduledCompletionNotificationDeliveryDate = State(
             initialValue: request.scheduledCompletionNotificationDeliveryDate
         )
-        _fairnessNotice = State(initialValue: request.engine.currentSource == .timerDemoted)
+        // The cause comes from this device's envelope, so a relaunch or an
+        // iCloud remount never rewrites it. An older envelope without one
+        // gets the neutral notice rather than a guessed cause.
+        _fairnessNoticeReason = State(
+            initialValue: request.engine.currentSource == .timerDemoted
+                ? request.demotionReason ?? .unexplained
+                : nil
+        )
         let sessionID = request.pendingCompletion?.sessionID
             ?? request.engine.currentSessionID
         preparedSessionID = sessionID
@@ -625,6 +692,9 @@ struct FocusView: View {
     }
 
     var body: some View {
+#if DEBUG
+        let _ = assertStableSessionIdentity()
+#endif
         ZStack {
             Color.black.ignoresSafeArea()
             RadialGradient(
@@ -653,19 +723,31 @@ struct FocusView: View {
                     onReturnToJar: { dismiss() }
                 )
                 .transition(.opacity)
-            } else if let pendingCompletion {
-                completionCommitView(pendingCompletion)
-                    .transition(.opacity)
-            } else if breakFinished {
-                BreakFinishedView { dismiss() }
-                    .transition(.opacity)
             } else {
-                timerContent
+                // One container spans the running timer, its completion and
+                // the legacy break end, so the scene keeps the timer's
+                // orientation until the cover closes (Docs/TimerOrientation.md).
+                // Swapping branches around the container released the rotation
+                // the moment the completion alarm began.
+                TimerOrientationContainer(sessionID: timerOrientationSessionID) { context in
+                    if let pendingCompletion {
+                        completionCommitView(pendingCompletion, context: context)
+                            .transition(.opacity)
+                    } else if breakFinished {
+                        BreakFinishedView { dismiss() }
+                            .transition(.opacity)
+                    } else {
+                        timerBody(context)
+                    }
+                }
             }
         }
         .foregroundStyle(PomoGemTheme.text)
         .interactiveDismissDisabled()
         .statusBarHidden()
+        // VoiceOver's two-finger double-tap performs the screen's main action:
+        // stop a repeating completion alarm, otherwise pause or resume.
+        .accessibilityAction(.magicTap) { performMagicTap() }
         .onAppear { router.beginFocusPresentation() }
         .task { await beginActivation() }
         .onReceive(ticker) { date in
@@ -683,18 +765,17 @@ struct FocusView: View {
                 // Notification Center add has a definite success/failure.
                 guard !notificationScheduleState.isScheduling else { return }
                 let completionUptime = ContinuousUptime.now()
-                let playsSensoryFeedback =
-                    foregroundFeedbackShouldPlayForElapsedCompletion(
-                        at: date,
-                        uptime: completionUptime,
-                        returnedFromBackground:
-                            didEnterBackgroundSinceLastActive
-                    )
+                let cue = completionCueForElapsedTimer(
+                    at: date,
+                    uptime: completionUptime,
+                    returnedFromBackground:
+                        didEnterBackgroundSinceLastActive
+                )
                 didEnterBackgroundSinceLastActive = false
                 advanceIfNeeded(
                     at: date,
                     uptime: completionUptime,
-                    playsSensoryFeedback: playsSensoryFeedback
+                    cue: cue
                 )
                 return
             }
@@ -712,6 +793,7 @@ struct FocusView: View {
                 return
             }
             notificationAuthorizationIsCurrent = false
+            acknowledgeAlarmLeftWhileAway()
             Task { @MainActor in
                 await notifications.refreshAuthorizationStatus()
                 guard !Task.isCancelled,
@@ -780,6 +862,47 @@ struct FocusView: View {
         }
     }
 
+#if DEBUG
+    /// Guards the query/engine identity contract documented on `init`. A
+    /// re-created view must keep targeting the session its engine is running.
+    private func assertStableSessionIdentity() {
+        guard let runningSessionID = engine.currentSessionID,
+              pendingCompletion == nil else { return }
+        assert(
+            runningSessionID == preparedSessionID,
+            "FocusView re-initialized with a different session ID than its running engine"
+        )
+    }
+#endif
+
+    private func performMagicTap() {
+        if let pendingCompletion {
+            guard completionAlert.isActive(sessionID: pendingCompletion.sessionID)
+            else { return }
+            acknowledgeCompletionAlert(pendingCompletion)
+            return
+        }
+        guard !needsRareRewardChoice,
+              completion == nil,
+              !breakFinished,
+              snapshot.phase.isRunning || snapshot.phase == .paused
+        else { return }
+        let wasPaused = snapshot.phase == .paused
+        togglePause()
+        // VoiceOver focus is rarely on the pause button, and the same gesture
+        // plays or pauses media elsewhere, so say what just happened.
+        let current = engine.snapshot(at: .now)
+        let announcement: String
+        if wasPaused, current.phase != .paused {
+            announcement = "再開しました。\(accessibleTime(current.remainingSeconds))"
+        } else if !wasPaused, current.phase == .paused {
+            announcement = "一時停止しました"
+        } else {
+            return
+        }
+        UIAccessibility.post(notification: .announcement, argument: announcement)
+    }
+
     private var timerOrientationSessionID: AnyHashable {
         // The legacy engine break has no UUID. Its original start remains
         // stable through pause/resume and persisted view reconstruction.
@@ -789,44 +912,64 @@ struct FocusView: View {
         return AnyHashable(preparedSessionID ?? orientationSessionID)
     }
 
-    private var timerContent: some View {
-        TimerOrientationContainer(sessionID: timerOrientationSessionID) { context in
-            let usesColumns = context.isLandscape && !dynamicTypeSize.isAccessibilitySize
-            let ringSize = FocusTimerLayoutPolicy.ringSize(in: context.size)
-            ScrollView {
-                VStack(spacing: 0) {
-                    timerHeader
+    /// At accessibility text sizes the ring, notice and controls cannot all
+    /// fit a 4.7-inch screen. Pause/resume and 「今日はここまで」 are then
+    /// pinned below the scrolling content, like the completion alarm's Stop,
+    /// so they are always on screen; the ring scrolls above them.
+    private func timerBody(_ context: TimerLayoutContext) -> some View {
+        let pinsActions = dynamicTypeSize.isAccessibilitySize
+        let usesColumns = context.isLandscape && !pinsActions
+        return VStack(spacing: 0) {
+            GeometryReader { proxy in
+                let ringSize = FocusTimerLayoutPolicy.ringSize(
+                    in: pinsActions ? proxy.size : context.size
+                )
+                ScrollView {
+                    VStack(spacing: 0) {
+                        timerHeader
 
-                    if usesColumns {
-                        HStack(spacing: 32) {
-                            timerDisplay(size: ringSize)
+                        if usesColumns {
+                            HStack(spacing: 32) {
+                                timerDisplay(size: ringSize)
+                                    .frame(maxWidth: .infinity)
+                                VStack(spacing: 20) {
+                                    timerNotice
+                                    timerActions(horizontal: false)
+                                }
                                 .frame(maxWidth: .infinity)
-                            VStack(spacing: 20) {
-                                timerNotice
-                                timerActions
                             }
-                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 28)
+                            .padding(.vertical, 12)
+                            .frame(maxHeight: .infinity)
+                        } else {
+                            Spacer(minLength: 18)
+                            timerDisplay(size: ringSize)
+                            timerNotice
+                                .padding(.horizontal, 24)
+                                .padding(.top, 24)
+                            Spacer(minLength: 18)
+                            if !pinsActions {
+                                timerActions(horizontal: false)
+                                    .padding(.horizontal, 24)
+                                    .padding(.bottom, 24)
+                            }
                         }
-                        .padding(.horizontal, 28)
-                        .padding(.vertical, 12)
-                        .frame(maxHeight: .infinity)
-                    } else {
-                        Spacer(minLength: 18)
-                        timerDisplay(size: ringSize)
-                        timerNotice
-                            .padding(.horizontal, 24)
-                            .padding(.top, 24)
-                        Spacer(minLength: 18)
-                        timerActions
-                            .padding(.horizontal, 24)
-                            .padding(.bottom, 24)
                     }
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: proxy.size.height)
                 }
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: context.size.height)
+                .scrollBounceBehavior(.basedOnSize)
+                // The ring and notice may continue under the pinned bar.
+                .scrollIndicatorsFlash(onAppear: pinsActions)
             }
-            .scrollIndicators(.hidden)
-            .scrollBounceBehavior(.basedOnSize)
+
+            if pinsActions {
+                // Side by side in landscape keeps the bar short enough to
+                // leave the ring room on a ~375 pt tall scene.
+                timerActions(horizontal: context.isLandscape)
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+                    .modifier(TimerPinnedActionBar())
+            }
         }
     }
 
@@ -866,24 +1009,35 @@ struct FocusView: View {
         )
     }
 
-    @ViewBuilder
     private var timerNotice: some View {
-        if fairnessNotice {
-            Label("端末時刻の大きな変化を検出。この回だけ自己申告あつかいです", systemImage: "clock.badge.exclamationmark")
-                .font(.caption)
-                .foregroundStyle(PomoGemTheme.muted)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .transition(.opacity)
-        } else {
+        VStack(spacing: 8) {
+            if let fairnessNoticeReason {
+                Label(fairnessNoticeReason.message, systemImage: fairnessNoticeReason.systemImage)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+                    .accessibilityIdentifier("focus.self-reported-notice")
+            }
+            // The end-notification controls stay available on a
+            // self-reported timer: an adopted timer is exactly where this
+            // device may still need permission or a retry.
             completionNotificationStatus
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+                // Every one-line form (button, caption, spinner) takes the
+                // same height, so the ring above never jumps when the state
+                // changes on permission, pause or resume.
+                .frame(minHeight: 44)
         }
     }
 
-    private var timerActions: some View {
-        VStack(spacing: 12) {
+    private func timerActions(horizontal: Bool) -> some View {
+        let layout = horizontal
+            ? AnyLayout(HStackLayout(spacing: 16))
+            : AnyLayout(VStackLayout(spacing: 12))
+        return layout {
             Button(action: togglePause) {
                 Label(
                     snapshot.phase == .paused ? Constants.UIStrings.resume : Constants.UIStrings.pause,
@@ -896,11 +1050,18 @@ struct FocusView: View {
                 Button("休憩をスキップ", action: skipBreak)
                     .buttonStyle(PomoGemSecondaryButtonStyle())
             } else {
-                Button(Constants.UIStrings.giveUp) { showGiveUpConfirmation = true }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(PomoGemTheme.muted)
-                    .frame(minHeight: 44)
-                    .buttonStyle(PomoGemBareButtonStyle())
+                Button {
+                    showGiveUpConfirmation = true
+                } label: {
+                    // The 44 pt minimum belongs to the label, so the touch
+                    // target and the accessibility frame both get it.
+                    Text(Constants.UIStrings.giveUp)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PomoGemTheme.muted)
+                .buttonStyle(PomoGemBareButtonStyle())
             }
         }
     }
@@ -937,6 +1098,53 @@ struct FocusView: View {
 
     @ViewBuilder
     private var completionNotificationStatus: some View {
+        if snapshot.phase == .paused {
+            pausedNotificationStatus
+        } else if snapshot.phase == .focusing {
+            focusingNotificationStatus
+        }
+    }
+
+    /// A paused timer does not run, so 「画面を閉じても進みます」 would be false
+    /// and 「終了通知を設定」 could do nothing; resuming schedules the end
+    /// notification when it is allowed. Someone who has not allowed it yet
+    /// keeps the in-app way to do so, on the same single 44 pt row so the
+    /// ring never moves between running and paused.
+    @ViewBuilder
+    private var pausedNotificationStatus: some View {
+        if notifications.authorizationStatus == .notDetermined {
+            Button {
+                Task { await enableCompletionNotification() }
+            } label: {
+                Label("一時停止中です。再開後の終了通知を許可", systemImage: "bell")
+                    .font(.caption.weight(.semibold))
+            }
+            .buttonStyle(PomoGemBareButtonStyle())
+            .frame(minHeight: 44)
+            .foregroundStyle(PomoGemTheme.amber)
+            .accessibilityIdentifier("focus.paused-notice")
+        } else if notifications.authorizationStatus == .denied {
+            Button {
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                UIApplication.shared.open(url)
+            } label: {
+                Label("一時停止中です。終了通知は端末の設定から", systemImage: "bell.slash")
+                    .font(.caption.weight(.semibold))
+            }
+            .buttonStyle(PomoGemBareButtonStyle())
+            .frame(minHeight: 44)
+            .foregroundStyle(PomoGemTheme.amber)
+            .accessibilityIdentifier("focus.paused-notice")
+        } else {
+            Label("一時停止中はタイマーは進みません", systemImage: "pause.circle")
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .accessibilityIdentifier("focus.paused-notice")
+        }
+    }
+
+    @ViewBuilder
+    private var focusingNotificationStatus: some View {
         switch notificationScheduleState {
         case .scheduled where notifications.isAuthorized:
             Label("画面を閉じてもタイマーは進み、終了時に通知します", systemImage: "bell.badge.fill")
@@ -1060,21 +1268,21 @@ struct FocusView: View {
             guard !completionIsAlreadyElapsed || scenePhase == .active else {
                 return
             }
-            let playsSensoryFeedback: Bool
+            let cue: TimerCompletionForegroundFeedbackPolicy.Cue
             if completionIsAlreadyElapsed {
-                playsSensoryFeedback = foregroundFeedbackShouldPlayForElapsedCompletion(
+                cue = completionCueForElapsedTimer(
                     at: now,
                     uptime: completionUptime,
                     returnedFromBackground: false
                 )
             } else {
                 isAwaitingRecoveryActivation = false
-                playsSensoryFeedback = true
+                cue = .repeating
             }
             advanceIfNeeded(
                 at: now,
                 uptime: completionUptime,
-                playsSensoryFeedback: playsSensoryFeedback
+                cue: cue
             )
             if pendingCompletion == nil {
                 await scheduleCurrentCompletionNotification()
@@ -1123,13 +1331,30 @@ struct FocusView: View {
             saveRecoveryState()
             updateIdleTimer(at: now)
 
-            await scheduleCurrentCompletionNotification()
-            guard !Task.isCancelled,
-                  lifecycleGeneration == viewLifecycleGeneration else { return }
+            let offersCompletionNotification = completionNotificationOfferIsAllowed
+                && FocusCompletionNotificationOfferPolicy.shouldOffer(
+                    authorizationStatus: notifications.authorizationStatus,
+                    isExplicitStart: recoveryOrigin == .local
+                )
+            if !offersCompletionNotification {
+                await scheduleCurrentCompletionNotification()
+                guard !Task.isCancelled,
+                      lifecycleGeneration == viewLifecycleGeneration else { return }
+            }
             await startLiveActivityForExplicitTimer(sessionID: sessionID)
             guard !Task.isCancelled,
                   lifecycleGeneration == viewLifecycleGeneration,
                   engine.currentSessionID == sessionID else { return }
+            if offersCompletionNotification {
+                // The timer is already running and never waits on this
+                // answer. The system dialog is the choice; a grant schedules
+                // this session's end notification under the usual guards.
+                FocusCompletionNotificationOfferPolicy.markOffered()
+                await enableCompletionNotification()
+                guard !Task.isCancelled,
+                      lifecycleGeneration == viewLifecycleGeneration,
+                      engine.currentSessionID == sessionID else { return }
+            }
             await refreshExternalTimerPresentation(
                 synchronizesCompletionNotification: false
             )
@@ -1169,6 +1394,21 @@ struct FocusView: View {
             isSavingRareRewardChoice = false
             rareRewardChoiceError = "レア粒の選択を保存できませんでした。タイマーはまだ始まっていません。\n\(error.localizedDescription)"
         }
+    }
+
+    /// UI tests start many focuses on shared simulators; only a test that
+    /// opts in meets the one-time system dialog. Release builds always ask.
+    private var completionNotificationOfferIsAllowed: Bool {
+#if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        if LocalPreviewLaunchPolicy.isUITestMode(
+            environment: environment,
+            isDebugBuild: true
+        ) {
+            return environment["POMOGEM_UI_TEST_COMPLETION_NOTIFICATION_OFFER"] == "1"
+        }
+#endif
+        return true
     }
 
     @MainActor
@@ -1410,7 +1650,7 @@ struct FocusView: View {
     private func advanceIfNeeded(
         at now: Date,
         uptime: TimeInterval,
-        playsSensoryFeedback: Bool = true
+        cue: TimerCompletionForegroundFeedbackPolicy.Cue = .repeating
     ) {
         // Freeze an elapsed completion before consulting mutable CloudKit
         // ownership. A handoff followed by a cancellation at/after the frozen
@@ -1426,11 +1666,10 @@ struct FocusView: View {
                 result,
                 clockAnchor: clockAnchor
             )
-            fairnessNotice = finalized.source == .timerDemoted
-            handleFocusCompletion(
-                finalized,
-                playsSensoryFeedback: playsSensoryFeedback
-            )
+            fairnessNoticeReason = finalized.source == .timerDemoted
+                ? fairnessNoticeReason ?? .continuityLost
+                : nil
+            handleFocusCompletion(finalized, cue: cue)
         case .breakCompleted:
             FocusPersistence.clear()
             UIApplication.shared.isIdleTimerDisabled = false
@@ -1462,7 +1701,8 @@ struct FocusView: View {
             guard engine.currentSource == .timer else { return }
             do {
                 try engine.demoteCurrentFocus()
-                fairnessNotice = true
+                fairnessNoticeReason = FocusDemotionNoticeReason.detected(integrity)
+                    ?? .continuityLost
                 // Keep a valid local anchor for diagnostics and for coherent
                 // recovery bytes. The source is already irreversibly demoted,
                 // so re-anchoring cannot restore measured-only rewards.
@@ -1479,15 +1719,15 @@ struct FocusView: View {
 
     private func handleFocusCompletion(
         _ result: PomodoroCompletion,
-        playsSensoryFeedback: Bool = true
+        cue: TimerCompletionForegroundFeedbackPolicy.Cue
     ) {
         guard pendingCompletion == nil else { return }
+        // A 「今日はここまで」 confirmation opened before the end no longer
+        // describes anything: the focus is complete and will be saved.
+        showGiveUpConfirmation = false
         pendingCompletion = result
         saveRecoveryState(pendingCompletion: result)
-        signalCompletionIfNeeded(
-            result,
-            playsSensoryFeedback: playsSensoryFeedback
-        )
+        signalCompletionIfNeeded(result, cue: cue)
         Task { await commitCompletion(result) }
     }
 
@@ -1583,10 +1823,7 @@ struct FocusView: View {
 
     @MainActor
     private func acknowledgeCompletionAlert(_ result: PomodoroCompletion) {
-        TimerCompletionAlertAcknowledgementStore.mark(
-            sessionID: result.sessionID
-        )
-        completionAlertWasAcknowledged = true
+        markCompletionAlertAcknowledged(result)
         completionAlert.stop(sessionID: result.sessionID)
         guard completionPersistenceSucceeded else { return }
         Task { await finishCommittedCompletion(result) }
@@ -2019,7 +2256,7 @@ struct FocusView: View {
               freshSessions.allSatisfy({
                   $0.id == payload.submission.sessionID
                       && $0.dataEpochID == dataEpochID
-                      && $0.source == payload.submission.source
+                      && $0.effectiveSource == payload.submission.source
                       && $0.seconds == payload.submission.completedSeconds
                       && $0.grams == payload.submission.completedGrams
               }) else {
@@ -2128,7 +2365,7 @@ struct FocusView: View {
 
     private func signalCompletionIfNeeded(
         _ result: PomodoroCompletion,
-        playsSensoryFeedback: Bool = true
+        cue: TimerCompletionForegroundFeedbackPolicy.Cue
     ) {
         guard !didSignalCompletion else { return }
         didSignalCompletion = true
@@ -2143,29 +2380,58 @@ struct FocusView: View {
             TimerCompletionAlertAcknowledgementStore.contains(
                 sessionID: result.sessionID
             )
+        let configuration = TimerCompletionAlertConfiguration(
+            sessionID: result.sessionID,
+            sound: soundOn ? sensoryPreferences.timerCompletionSound : nil,
+            haptic: hapticsOn ? sensoryPreferences.timerCompletionHaptic : nil
+        )
         if !completionAlertWasAcknowledged {
-            completionAlert.start(
-                TimerCompletionAlertConfiguration(
-                    sessionID: result.sessionID,
-                    sound: soundOn
-                        ? sensoryPreferences.timerCompletionSound
-                        : nil,
-                    haptic: hapticsOn
-                        ? sensoryPreferences.timerCompletionHaptic
-                        : nil
-                ),
-                playsImmediately: playsSensoryFeedback
-            )
+            switch cue {
+            case .repeating:
+                completionAlert.start(configuration)
+            case .single:
+                // The person is already looking at the screen. Mark the end
+                // once and let the saved result continue to Home by itself.
+                markCompletionAlertAcknowledged(result)
+                completionAlert.playOnce(configuration)
+            case .none:
+                markCompletionAlertAcknowledged(result)
+            }
         }
         UIApplication.shared.isIdleTimerDisabled = false
-        if UIAccessibility.isVoiceOverRunning {
+        guard UIAccessibility.isVoiceOverRunning else { return }
+        guard completionAlert.isActive(sessionID: result.sessionID) else {
             UIAccessibility.post(
                 notification: .announcement,
                 argument: "集中が完了しました。\(subjectSnapshot.name)、\(result.grams)グラムを保存しています"
             )
+            return
+        }
+        // Land VoiceOver on the only control that stops the repeating cue,
+        // then queue the facts and the gesture after the button is read, so
+        // neither announcement cuts the other off.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard completionAlert.isActive(sessionID: result.sessionID) else { return }
+            completionAlertStopFocused = true
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: NSAttributedString(
+                    string: "集中が完了しました。\(subjectSnapshot.name)、\(result.grams)グラム。2本指でダブルタップすると終了アラートを止められます",
+                    attributes: [.accessibilitySpeechQueueAnnouncement: true]
+                )
+            )
         }
     }
 
+    /// A pending completion restored into a new view was consumed earlier.
+    /// Leaving the app while its alarm repeated was already recorded as Stop
+    /// (`acknowledgeOnLeavingApp`). An alarm that an iCloud remount cut off
+    /// while the app stayed on screen, such as an Apple Account check, is
+    /// restored with its Stop control: the person may have stepped away from
+    /// the desk. Anything else is a relaunch, and the person opening the app
+    /// is looking at it, so the loop is never re-armed and the return is the
+    /// acknowledgement. A loop still alive in this process keeps its Stop.
     private func resumeCompletionAlertIfNeeded(
         _ result: PomodoroCompletion
     ) {
@@ -2176,25 +2442,35 @@ struct FocusView: View {
         guard !completionAlertWasAcknowledged,
               !completionAlert.isActive(sessionID: result.sessionID)
         else { return }
-        let soundOn = sensoryPreferences.soundOn
-        let hapticsOn = sensoryPreferences.hapticsOn
-        SoundSynth.shared.isEnabled = soundOn
-        Haptics.shared.isEnabled = hapticsOn
-        completionAlert.start(
-            TimerCompletionAlertConfiguration(
-                sessionID: result.sessionID,
-                sound: soundOn
-                    ? sensoryPreferences.timerCompletionSound
-                    : nil,
-                haptic: hapticsOn
-                    ? sensoryPreferences.timerCompletionHaptic
-                    : nil
-            ),
-            // A recovered local notification may have sounded immediately
-            // before launch. Resume the repeating in-app cue after one interval
-            // instead of stacking two completion tones.
-            playsImmediately: false
+        if completionAlert.resumeSuspendedAlert(sessionID: result.sessionID) {
+            return
+        }
+        markCompletionAlertAcknowledged(result)
+    }
+
+    /// Returning after leaving while the alarm repeated. The app-level scene
+    /// handler already recorded that as Stop and ended the loop on the way
+    /// out; run synchronously on the active edge, before the authorization
+    /// refresh, so the saved result continues without waiting for it.
+    private func acknowledgeAlarmLeftWhileAway() {
+        guard didEnterBackgroundSinceLastActive,
+              let pendingCompletion,
+              !completionAlertWasAcknowledged
+        else { return }
+        let sessionID = pendingCompletion.sessionID
+        guard completionAlert.isActive(sessionID: sessionID)
+                || TimerCompletionAlertAcknowledgementStore.contains(
+                    sessionID: sessionID
+                )
+        else { return }
+        acknowledgeCompletionAlert(pendingCompletion)
+    }
+
+    private func markCompletionAlertAcknowledged(_ result: PomodoroCompletion) {
+        TimerCompletionAlertAcknowledgementStore.mark(
+            sessionID: result.sessionID
         )
+        completionAlertWasAcknowledged = true
     }
 
     /// A failed commit replaces a passive progress state with recovery
@@ -2268,7 +2544,10 @@ struct FocusView: View {
                 resolvedPendingCompletion == nil
                 ? currentNotificationDeliveryWitness
                 : nil,
-            dataEpochID: dataEpochID
+            dataEpochID: dataEpochID,
+            demotionReason: engine.currentSource == .timerDemoted
+                ? fairnessNoticeReason
+                : nil
         )
     }
 
@@ -2316,8 +2595,72 @@ struct FocusView: View {
         return deliveryDate
     }
 
-    private func completionCommitView(_ result: PomodoroCompletion) -> some View {
+    /// The completion screen shares the timer's orientation container. In
+    /// landscape the facts sit beside the status so the whole screen fits a
+    /// ~400 pt tall scene; height always comes from the scene's safe rectangle
+    /// rather than the physical screen. While the alarm repeats, its only
+    /// Stop control is pinned below the scrolling content so it is on screen
+    /// at every text size, including accessibility sizes on 4.7-inch phones.
+    private func completionCommitView(
+        _ result: PomodoroCompletion,
+        context: TimerLayoutContext
+    ) -> some View {
         let isAlerting = completionAlert.isActive(sessionID: result.sessionID)
+        let usesColumns = context.isLandscape && !dynamicTypeSize.isAccessibilitySize
+        return VStack(spacing: 0) {
+            GeometryReader { proxy in
+                ScrollView {
+                    Group {
+                        if usesColumns {
+                            HStack(spacing: 32) {
+                                completionSummary(result, isAlerting: isAlerting)
+                                    .frame(maxWidth: .infinity)
+                                completionStatus(result, isAlerting: isAlerting)
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .padding(.horizontal, 28)
+                            .padding(.vertical, 16)
+                        } else {
+                            VStack(spacing: dynamicTypeSize.isAccessibilitySize ? 16 : 22) {
+                                completionSummary(result, isAlerting: isAlerting)
+                                completionStatus(result, isAlerting: isAlerting)
+                            }
+                            .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 12 : 40)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: proxy.size.height)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+            }
+
+            if isAlerting {
+                completionAlertStopButton(result)
+            }
+        }
+    }
+
+    private func completionAlertStopButton(
+        _ result: PomodoroCompletion
+    ) -> some View {
+        Button {
+            acknowledgeCompletionAlert(result)
+        } label: {
+            Label("終了アラートを止める", systemImage: "stop.fill")
+        }
+        .buttonStyle(PomoGemPrimaryButtonStyle())
+        // Keep the pinned bar well under half of a 667 pt screen at AX5.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .accessibilityHint("音と触覚を止めます。記録の保存中でも操作でき、2本指のダブルタップでも止められます")
+        .accessibilityIdentifier("focus.completion-alert.stop")
+        .accessibilityFocused($completionAlertStopFocused)
+        .modifier(TimerPinnedActionBar())
+    }
+
+    private func completionSummary(
+        _ result: PomodoroCompletion,
+        isAlerting: Bool
+    ) -> some View {
         let completionIcon = if completionSaveError != nil {
             "exclamationmark.arrow.triangle.2.circlepath"
         } else if isAlerting {
@@ -2327,104 +2670,118 @@ struct FocusView: View {
         } else {
             "arrow.down.to.line.compact"
         }
+        let title = if completionSaveError != nil {
+            "記録をまだ安全に保存できていません"
+        } else if completionPersistenceSucceeded {
+            "集中を完走しました"
+        } else {
+            "粒を瓶へ運んでいます"
+        }
+        // Accessibility text sizes need the space for words and controls, so
+        // the decorative icon shrinks instead of pushing them off screen.
+        let isCompact = dynamicTypeSize.isAccessibilitySize
+        return VStack(spacing: isCompact ? 12 : 22) {
+            ZStack {
+                Circle()
+                    .fill(accent.opacity(0.16))
+                    .frame(width: isCompact ? 64 : 116, height: isCompact ? 64 : 116)
+                Image(systemName: completionIcon)
+                    .font(.system(size: isCompact ? 26 : 42, weight: .semibold))
+                    .foregroundStyle(completionSaveError == nil ? accent : PomoGemTheme.amber)
+            }
+            .accessibilityHidden(true)
+            VStack(spacing: 8) {
+                Text(title)
+                    .font(PomoGemTheme.brand(25))
+                    // One line on a 4.7-inch screen at the largest sizes, so
+                    // a lone final kana never wraps under the heading.
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                    .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
+                Text("\(subjectSnapshot.name)  +\(result.grams)g")
+                    .font(.system(.headline, design: .rounded, weight: .bold))
+                    // Same ceiling as the title, so the facts never outgrow
+                    // the heading at the largest sizes.
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 24)
+        }
+    }
 
-        return ScrollView {
-            VStack(spacing: 22) {
-                Spacer(minLength: 42)
-                ZStack {
-                    Circle()
-                        .fill(accent.opacity(0.16))
-                        .frame(width: 116, height: 116)
-                    Image(systemName: completionIcon)
-                        .font(.system(size: 42, weight: .semibold))
-                        .foregroundStyle(completionSaveError == nil ? accent : PomoGemTheme.amber)
-                }
+    @ViewBuilder
+    private func completionStatus(
+        _ result: PomodoroCompletion,
+        isAlerting: Bool
+    ) -> some View {
+        VStack(spacing: 22) {
+            if isAlerting {
                 VStack(spacing: 8) {
-                    Text(completionSaveError == nil ? "粒を瓶へ運んでいます" : "記録をまだ安全に保存できていません")
-                        .font(PomoGemTheme.brand(25))
-                        .multilineTextAlignment(.center)
-                    Text("\(subjectSnapshot.name)  +\(result.grams)g")
-                        .font(.system(.headline, design: .rounded, weight: .bold))
-                        .foregroundStyle(PomoGemTheme.muted)
-                }
-
-                if isAlerting {
-                    VStack(spacing: 8) {
-                        Label(
-                            "終了アラート中",
-                            systemImage: "bell.and.waves.left.and.right.fill"
-                        )
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(PomoGemTheme.amber)
-                        Text("アプリが前面にある間、有効な音と触覚を停止するまで繰り返します")
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(.horizontal, 24)
-
-                    Button {
-                        acknowledgeCompletionAlert(result)
-                    } label: {
-                        Label("終了アラートを止める", systemImage: "stop.fill")
-                    }
-                    .buttonStyle(PomoGemPrimaryButtonStyle())
-                    .padding(.horizontal, 24)
-                    .accessibilityHint("音と触覚を止めます。記録の保存中でも操作できます")
-                    .accessibilityIdentifier("focus.completion-alert.stop")
-                }
-
-                if let completionSaveError {
-                    Text(completionSaveError)
+                    // The heading's icon already shows the bell at
+                    // accessibility sizes; the words alone stay on one line.
+                    Label(
+                        "終了アラート中",
+                        systemImage: "bell.and.waves.left.and.right.fill"
+                    )
+                    .labelStyle(AccessibilitySizeTitleOnlyLabelStyle())
+                    .font(.headline.weight(.bold))
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+                    .foregroundStyle(PomoGemTheme.amber)
+                    Text("止めるまで、音と触覚を繰り返します")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 28)
-                        .accessibilityIdentifier("focus.completion-save.error")
-                    Button {
-                        Task { await commitCompletion(result) }
-                    } label: {
-                        Label(
-                            completionWasRejectedForOwnership
-                                ? "保存状態を確認する"
-                                : "もう一度保存する",
-                            systemImage: "arrow.clockwise"
-                        )
-                    }
-                    .buttonStyle(PomoGemPrimaryButtonStyle(tintHex: subjectSnapshot.colorHex))
-                    .padding(.horizontal, 24)
-                    .disabled(isCommittingCompletion)
-                    .accessibilityFocused($completionSaveRetryFocused)
-                    .accessibilityIdentifier("focus.completion-save.retry")
-
-                    Button {
-                        returnHomeKeepingCompletion(result)
-                    } label: {
-                        Label("完走を保護してホームへ戻る", systemImage: "house.fill")
-                            .frame(maxWidth: .infinity, minHeight: 48)
-                    }
-                    .buttonStyle(PomoGemBareButtonStyle())
-                    .foregroundStyle(PomoGemTheme.text)
-                    .padding(.horizontal, 24)
-                    .accessibilityHint("完走は端末に残り、ホームから保存を再試行できます")
-                    .accessibilityIdentifier("focus.completion-save.protect")
-                } else if !completionPersistenceSucceeded {
-                    ProgressView()
-                        .tint(accent)
-                        .controlSize(.large)
-                        .accessibilityLabel("記録を保存中")
-                } else if !isAlerting {
-                    ProgressView()
-                        .tint(accent)
-                        .controlSize(.large)
-                        .accessibilityLabel("瓶へ戻ります")
                 }
-                Spacer(minLength: 40)
+                .padding(.horizontal, 24)
             }
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: UIScreen.main.bounds.height)
+
+            if let completionSaveError {
+                Text(completionSaveError)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
+                    .accessibilityIdentifier("focus.completion-save.error")
+                Button {
+                    Task { await commitCompletion(result) }
+                } label: {
+                    Label(
+                        completionWasRejectedForOwnership
+                            ? "保存状態を確認する"
+                            : "もう一度保存する",
+                        systemImage: "arrow.clockwise"
+                    )
+                }
+                .buttonStyle(PomoGemPrimaryButtonStyle(tintHex: subjectSnapshot.colorHex))
+                .padding(.horizontal, 24)
+                .disabled(isCommittingCompletion)
+                .accessibilityFocused($completionSaveRetryFocused)
+                .accessibilityIdentifier("focus.completion-save.retry")
+
+                Button {
+                    returnHomeKeepingCompletion(result)
+                } label: {
+                    Label("完走を保護してホームへ戻る", systemImage: "house.fill")
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                }
+                .buttonStyle(PomoGemBareButtonStyle())
+                .foregroundStyle(PomoGemTheme.text)
+                .padding(.horizontal, 24)
+                .accessibilityHint("完走は端末に残り、ホームから保存を再試行できます")
+                .accessibilityIdentifier("focus.completion-save.protect")
+            } else if !completionPersistenceSucceeded {
+                ProgressView()
+                    .tint(accent)
+                    .controlSize(.large)
+                    .accessibilityLabel("記録を保存中")
+            } else if !isAlerting {
+                ProgressView()
+                    .tint(accent)
+                    .controlSize(.large)
+                    .accessibilityLabel("瓶へ戻ります")
+            }
         }
-        .scrollBounceBehavior(.basedOnSize)
     }
 
     private func returnHomeKeepingCompletion(_ result: PomodoroCompletion) {
@@ -2443,7 +2800,8 @@ struct FocusView: View {
             pendingCompletion: result,
             dataEpochID: dataEpochID,
             origin: recoveryOrigin,
-            allowsLocalNotifications: allowsLocalNotifications
+            allowsLocalNotifications: allowsLocalNotifications,
+            demotionReason: fairnessNoticeReason
         )
         UIApplication.shared.isIdleTimerDisabled = false
         router.showToast(
@@ -2509,6 +2867,16 @@ struct FocusView: View {
     }
 
     private func giveUp() {
+        // The confirmation can be answered in the same run-loop turn that
+        // completes the focus. An earned completion is never tombstoned,
+        // nor its only recovery envelope cleared, by a stale give-up.
+        guard pendingCompletion == nil,
+              completion == nil,
+              engine.containsRecoverableFocus,
+              engine.snapshot(at: .now).remainingSeconds > 0 else {
+            showGiveUpConfirmation = false
+            return
+        }
         operationErrorMessage = nil
         let sessionID = engine.currentSessionID
         if let sessionID {
@@ -2535,6 +2903,7 @@ struct FocusView: View {
         UIApplication.shared.isIdleTimerDisabled = false
         if let sessionID {
             NotificationManager.shared.cancelFocusCompletion(sessionID: sessionID)
+            completionAlert.stop(sessionID: sessionID)
             scheduledCompletionNotificationDeliveryDate = nil
             Task { await FocusActivityManager.shared.cancel(sessionID: sessionID) }
         }
@@ -2566,13 +2935,12 @@ struct FocusView: View {
             advanceIfNeeded(
                 at: now,
                 uptime: completionUptime,
-                playsSensoryFeedback:
-                    foregroundFeedbackShouldPlayForElapsedCompletion(
-                        at: now,
-                        uptime: completionUptime,
-                        returnedFromBackground:
-                            didEnterBackgroundSinceLastActive
-                    )
+                cue: completionCueForElapsedTimer(
+                    at: now,
+                    uptime: completionUptime,
+                    returnedFromBackground:
+                        didEnterBackgroundSinceLastActive
+                )
             )
             if pendingCompletion != nil { return false }
         }
@@ -2673,16 +3041,16 @@ struct FocusView: View {
             UIApplication.shared.isIdleTimerDisabled = false
             return
         }
-        let playsSensoryFeedback: Bool
+        let cue: TimerCompletionForegroundFeedbackPolicy.Cue
         if completionIsElapsed {
-            playsSensoryFeedback = foregroundFeedbackShouldPlayForElapsedCompletion(
+            cue = completionCueForElapsedTimer(
                 at: returnDate,
                 uptime: returnUptime,
                 returnedFromBackground: didEnterBackgroundSinceLastActive
             )
         } else {
             isAwaitingRecoveryActivation = false
-            playsSensoryFeedback = true
+            cue = .repeating
         }
         didEnterBackgroundSinceLastActive = false
         displayNow = returnDate
@@ -2690,15 +3058,15 @@ struct FocusView: View {
         advanceIfNeeded(
             at: returnDate,
             uptime: returnUptime,
-            playsSensoryFeedback: playsSensoryFeedback
+            cue: cue
         )
     }
 
-    private func foregroundFeedbackShouldPlayForElapsedCompletion(
+    private func completionCueForElapsedTimer(
         at now: Date,
         uptime: TimeInterval,
         returnedFromBackground: Bool
-    ) -> Bool {
+    ) -> TimerCompletionForegroundFeedbackPolicy.Cue {
         let recoveredAfterExpiration = isAwaitingRecoveryActivation
         isAwaitingRecoveryActivation = false
         // Time-interval notifications run against elapsed time, while the
@@ -2713,7 +3081,7 @@ struct FocusView: View {
                     now: now,
                     uptime: uptime
                 )
-        return TimerCompletionForegroundFeedbackPolicy.shouldPlay(
+        return TimerCompletionForegroundFeedbackPolicy.cue(
             recoveredAfterExpiration: recoveredAfterExpiration,
             returnedFromBackground: returnedFromBackground,
             notificationMayHaveDelivered:
@@ -2725,7 +3093,9 @@ struct FocusView: View {
                             ? currentNotificationDeliveryWitness
                             : nil,
                         now: now
-                    )
+                    ),
+            endedAt: engine.endDate ?? now,
+            now: now
         )
     }
 
@@ -2799,6 +3169,52 @@ private struct RareRewardPreFocusChoiceView: View {
         .scrollBounceBehavior(.basedOnSize)
         .background(Color.black.ignoresSafeArea())
         .accessibilityIdentifier("focus.rare-reward-choice")
+    }
+}
+
+/// Drops a label's icon at accessibility text sizes, where a large symbol
+/// beside a short status would wrap the words one character per line.
+struct AccessibilitySizeTitleOnlyLabelStyle: LabelStyle {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    func makeBody(configuration: Configuration) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            configuration.title
+        } else {
+            Label(configuration)
+        }
+    }
+}
+
+/// The bottom bar that keeps a timer screen's essential controls on screen
+/// at every text size. A short fade and a hairline mark its top edge, so text
+/// scrolling beneath it reads as continuing rather than clipped.
+struct TimerPinnedActionBar: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: 520)
+            .padding(.horizontal, 24)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
+            .frame(maxWidth: .infinity)
+            .background(Color.black)
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(PomoGemTheme.muted.opacity(0.3))
+                    .frame(height: 1)
+                    .accessibilityHidden(true)
+            }
+            .background(alignment: .top) {
+                LinearGradient(
+                    colors: [Color.black.opacity(0), Color.black],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 20)
+                .offset(y: -20)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
     }
 }
 
@@ -2976,14 +3392,26 @@ struct FocusTimerDisplay: View {
         .padding(max(24, lineWidth * 2.5))
     }
 
+    /// The ring never widens, so at accessibility sizes the full line cannot
+    /// fit. Drop the spacing, then the mode word, before the number itself;
+    /// paused stays visible through the amber color and the 「一時停止」 header.
     private var statusLabel: some View {
-        Text("\(modeLabel)  ·  \(remainingPercent)% 残り")
+        ViewThatFits(in: .horizontal) {
+            statusText("\(modeLabel)  ·  \(remainingPercent)% 残り", tracking: 1.2)
+            statusText("\(modeLabel) · \(remainingPercent)%", tracking: 0)
+            statusText("\(remainingPercent)% 残り", tracking: 0)
+            statusText("\(remainingPercent)%", tracking: 0)
+                .minimumScaleFactor(0.72)
+        }
+    }
+
+    private func statusText(_ text: String, tracking: CGFloat) -> some View {
+        Text(text)
             .font(.caption2.weight(.bold))
-            .tracking(1.2)
+            .tracking(tracking)
             .foregroundStyle(
                 isPaused ? PomoGemTheme.amber : PomoGemTheme.muted
             )
-            .minimumScaleFactor(0.72)
             .lineLimit(1)
     }
 

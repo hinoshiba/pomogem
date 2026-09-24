@@ -204,7 +204,13 @@ enum FocusCloudSyncError: Error, LocalizedError, Equatable {
         case .timerAlreadyTerminal:
             "このタイマーはすでに完了または終了しています。"
         case .timerHistoryRequiresMaintenance:
-            "タイマーの同期履歴を整理してから、もう一度お試しください。"
+            // Shown by timer operations and handoff as well as by storage
+            // switching, which adds the action it could not finish.
+            // It can be transient (rows changed during a CloudKit import) or
+            // persistent (a damaged history), so it offers both next steps.
+            // 「履歴」 matches the launch toast; 「記録」 would read as the
+            // user's completed focus records.
+            "タイマーの履歴を確認できませんでした。少し時間をおいてから、もう一度お試しください。解決しない場合は、設定のサポートからお問い合わせください。"
         case .ownershipSequenceExhausted:
             "タイマーの引き継ぎ履歴が上限に達しました。サポートへお問い合わせください。"
         case .recoveryOfferChanged:
@@ -860,6 +866,16 @@ enum FocusCloudSyncStore {
         static let maximumSnapshotVariantsPerRecordID = 128
         static let matchingSessionClaimLimit = 128
         static let logicalTimerScanLimit = 256
+        /// How far before the newest active row the account-wide recovery scan
+        /// looks. A focus, including every pause, must finish within
+        /// `StudySessionIntegrityPolicy.maximumCompletionWallSpan` to become a
+        /// supported StudySession, so an older start can never be recovered,
+        /// handed off or completed. One extra day absorbs clock skew between
+        /// devices. Without this bound every cancelled focus kept its running
+        /// row in the scan forever: the cost grew with lifetime cancellations
+        /// and the 257th made handoff and storage switching fail.
+        static let recoverableStartWindow: TimeInterval =
+            StudySessionIntegrityPolicy.maximumCompletionWallSpan + 24 * 60 * 60
     }
 
     static func upsert(
@@ -1148,9 +1164,10 @@ enum FocusCloudSyncStore {
     }
 
     static func canonicalActive(
-        context: ModelContext
+        context: ModelContext,
+        now: Date = .now
     ) throws -> SyncedFocusTimer? {
-        try oldestOpenTimer(context: context)
+        try oldestOpenTimer(context: context, now: now)
     }
 
     /// Selects one visible timer without destructively cancelling other logical
@@ -1165,8 +1182,7 @@ enum FocusCloudSyncStore {
         now: Date = .now
     ) throws -> SyncedFocusTimer? {
         _ = deviceID
-        _ = now
-        return try oldestOpenTimer(context: context)
+        return try oldestOpenTimer(context: context, now: now)
     }
 
     static func allClaims(context: ModelContext) throws -> [FocusTimerDeviceClaim] {
@@ -1537,15 +1553,27 @@ enum FocusCloudSyncStore {
     /// revisions. Only an exact, materialized StudySession permits maintenance
     /// to remove that closed active tail; a fixed raw-row prefix would let the
     /// retained revisions hide the next independent timer forever.
+    ///
+    /// The walk starts at `recoveryHorizon`, not at the oldest row. Rows are
+    /// append-only and a cancelled focus keeps its running row, so without a
+    /// lower bound the walk grew with every focus ever cancelled. Nothing is
+    /// deleted: older rows stay as synchronized evidence, and the device's
+    /// own envelope plus the exact `completionGate` still decide its local
+    /// recovery.
     private static func oldestOpenTimer(
-        context: ModelContext
+        context: ModelContext,
+        now: Date
     ) throws -> SyncedFocusTimer? {
+        guard let horizon = try recoveryHorizon(context: context, now: now) else {
+            return nil
+        }
         var cursor: (startedAt: Date, sessionID: UUID)?
         var visitedSessionIDs = Set<UUID>()
 
         for _ in 0..<QueryContract.logicalTimerScanLimit {
             guard let candidate = try nextActiveTimerCandidate(
                 after: cursor,
+                notBefore: horizon,
                 context: context
             ) else {
                 return nil
@@ -1604,8 +1632,49 @@ enum FocusCloudSyncStore {
         throw FocusCloudSyncError.timerHistoryRequiresMaintenance
     }
 
+    /// The earliest start the recovery scan considers, or nil when no active
+    /// row exists at all. It is anchored on the newest active start as well as
+    /// `now`: a future-dated or clock-skewed row cannot move the window past a
+    /// genuinely running timer, and history recorded with fixed past dates is
+    /// judged relative to itself.
+    private static func recoveryHorizon(
+        context: ModelContext,
+        now: Date
+    ) throws -> Date? {
+        let running = SyncedFocusStatus.running.rawValue
+        let paused = SyncedFocusStatus.paused.rawValue
+        let completionPending = SyncedFocusStatus.completionPending.rawValue
+        var descriptor: FetchDescriptor<SyncedFocusTimer>
+        if let epochID = try ActivityResetStore.latestEpochID(context: context) {
+            descriptor = FetchDescriptor(
+                predicate: #Predicate {
+                    $0.dataEpochID == epochID
+                        && ($0.statusRaw == running
+                            || $0.statusRaw == paused
+                            || $0.statusRaw == completionPending)
+                },
+                sortBy: [SortDescriptor(\SyncedFocusTimer.startedAt, order: .reverse)]
+            )
+        } else {
+            descriptor = FetchDescriptor(
+                predicate: #Predicate {
+                    $0.dataEpochID == nil
+                        && ($0.statusRaw == running
+                            || $0.statusRaw == paused
+                            || $0.statusRaw == completionPending)
+                },
+                sortBy: [SortDescriptor(\SyncedFocusTimer.startedAt, order: .reverse)]
+            )
+        }
+        descriptor.fetchLimit = 1
+        guard let newest = try context.fetch(descriptor).first else { return nil }
+        return min(now, newest.startedAt)
+            .addingTimeInterval(-QueryContract.recoverableStartWindow)
+    }
+
     private static func nextActiveTimerCandidate(
         after cursor: (startedAt: Date, sessionID: UUID)?,
+        notBefore horizon: Date,
         context: ModelContext
     ) throws -> SyncedFocusTimer? {
         let running = SyncedFocusStatus.running.rawValue
@@ -1623,6 +1692,7 @@ enum FocusCloudSyncStore {
                         && ($0.statusRaw == running
                             || $0.statusRaw == paused
                             || $0.statusRaw == completionPending)
+                        && $0.startedAt >= horizon
                         && ($0.startedAt > start
                             || ($0.startedAt == start
                                 && $0.sessionID > sessionID))
@@ -1644,6 +1714,7 @@ enum FocusCloudSyncStore {
                         && ($0.statusRaw == running
                             || $0.statusRaw == paused
                             || $0.statusRaw == completionPending)
+                        && $0.startedAt >= horizon
                 },
                 sortBy: [
                     SortDescriptor(\SyncedFocusTimer.startedAt),
@@ -1662,6 +1733,7 @@ enum FocusCloudSyncStore {
                         && ($0.statusRaw == running
                             || $0.statusRaw == paused
                             || $0.statusRaw == completionPending)
+                        && $0.startedAt >= horizon
                         && ($0.startedAt > start
                             || ($0.startedAt == start
                                 && $0.sessionID > sessionID))
@@ -1683,6 +1755,7 @@ enum FocusCloudSyncStore {
                         && ($0.statusRaw == running
                             || $0.statusRaw == paused
                             || $0.statusRaw == completionPending)
+                        && $0.startedAt >= horizon
                 },
                 sortBy: [
                     SortDescriptor(\SyncedFocusTimer.startedAt),

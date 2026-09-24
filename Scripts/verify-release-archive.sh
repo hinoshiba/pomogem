@@ -40,8 +40,10 @@ Development/development-profile signing or Apple Distribution/App Store
 Connect-profile signing and reports only the non-sensitive signing classes.
 Both modes require the host's reviewed CloudKit and APNs setup, plus Family
 Controls and the exact shared App Group in the app and Screen Time monitor.
-The Widget must carry no iCloud/APNs, Family Controls, App Group, or account-
-snapshot capability. Its Live Activity keeps the account-neutral timer contract.
+Only the app carries, and must carry, Time Sensitive notifications for its
+timer-end alerts. The Widget must carry no iCloud/APNs, Family Controls, App
+Group, Time Sensitive, or account-snapshot capability. Its Live Activity keeps
+the account-neutral timer contract.
 Expected version/build values come from this checkout's project.yml.
 
 --distribution additionally requires Apple Distribution signing, App Store
@@ -792,6 +794,7 @@ def require_neutral_widget_capabilities(entitlements: dict, label: str) -> None:
     forbidden = {
         "aps-environment",
         "com.apple.developer.aps-environment",
+        "com.apple.developer.usernotifications.time-sensitive",
         "com.apple.security.application-groups",
         "com.apple.developer.icloud-container-identifiers",
         "com.apple.developer.icloud-container-development-container-identifiers",
@@ -801,7 +804,7 @@ def require_neutral_widget_capabilities(entitlements: dict, label: str) -> None:
         "com.apple.developer.ubiquity-kvstore-identifier",
     }
     if forbidden.intersection(entitlements):
-        fail(f"{label} contains an account-data, iCloud, App Group, or APNs entitlement")
+        fail(f"{label} contains an account-data, iCloud, App Group, APNs, or Time Sensitive entitlement")
     if recursively_contains_forbidden(entitlements):
         fail(f"{label} contains a disabled operations/rare-reward identifier")
 
