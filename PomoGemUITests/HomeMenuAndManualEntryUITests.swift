@@ -257,6 +257,41 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertLessThan(hint.maxY, CGFloat(gemY) - gemRadius, "hint=\(hint) gem=(\(gemX), \(gemY))")
     }
 
+    func testPickingABackgroundLowersTheMenuSoTheBackgroundShows() {
+        launch()
+        app.buttons["メニュー"].tap()
+        let title = app.navigationBars["メニュー"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        let halfHeightTop = title.frame.minY
+        let window = app.windows.firstMatch.frame
+
+        // The picker is last, so reaching it raises the menu over Home.
+        let candidates = ["dawn", "midnight", "study"].map { app.buttons["home.atmosphere.\($0)"] }
+        let midnight = app.buttons["home.atmosphere.midnight"]
+        XCTAssertTrue(bringFullyIntoView(midnight))
+        XCTAssertLessThan(title.frame.minY, halfHeightTop - 100, "Scrolling to the picker raises the menu")
+        guard let card = candidates.first(where: { $0.exists && !$0.isSelected && $0.isHittable }) else {
+            return XCTFail("No unselected background card on screen")
+        }
+        let cardIdentifier = card.identifier
+        card.tap()
+
+        XCTAssertTrue(waitUntil(timeout: 4) { title.frame.minY > window.height * 0.3 },
+                      "Picking a background lowers the menu to half height; title=\(title.frame)")
+        let picked = app.buttons[cardIdentifier]
+        XCTAssertTrue(waitUntil(timeout: 3) {
+            picked.isSelected && picked.isHittable && picked.frame.maxY <= window.maxY
+        }, "The chosen card stays in view; card=\(picked.frame)")
+        saveScreenshot("menu-background-picked")
+
+        // Put the default back for later tests and screenshots.
+        let aurora = app.buttons["home.atmosphere.aurora"]
+        XCTAssertTrue(bringFullyIntoView(aurora))
+        aurora.tap()
+        XCTAssertTrue(waitUntil(timeout: 3) { aurora.isSelected })
+        app.buttons["home.menu.close"].tap()
+    }
+
     // MARK: - Helpers
 
     private func probeFields(_ probe: XCUIElement) -> [String: String] {
@@ -279,6 +314,15 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         let idle = XCTestExpectation(description: "pause")
         idle.isInverted = true
         _ = XCTWaiter.wait(for: [idle], timeout: seconds)
+    }
+
+    private func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if condition() { return true }
+            pause(0.2)
+        } while Date() < deadline
+        return condition()
     }
 
     /// A running timer survives relaunch; end it so later tests start on Home.

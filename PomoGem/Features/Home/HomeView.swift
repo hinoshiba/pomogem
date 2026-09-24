@@ -117,6 +117,9 @@ struct HomeView: View {
     @State private var selectedDuration: PomodoroDuration = .twentyFiveMinutes
     @State private var focusConfiguration: FocusConfiguration?
     @State private var showHomeMenu = false
+    /// The menu's height, bound so that picking a background can lower a
+    /// fully raised menu back to half height, where the new background shows.
+    @State private var homeMenuDetent: PresentationDetent = .medium
     @State private var showAccumulationOverview = false
     @State private var overviewInitialClusterID: UUID?
     @State private var aggregateInspectionID: UUID?
@@ -638,7 +641,7 @@ struct HomeView: View {
         .sheet(isPresented: $showHomeMenu) {
             homeMenuSheet
                 .environment(\.dynamicTypeSize, dynamicTypeSize)
-                .presentationDetents(auxiliarySheetDetents)
+                .presentationDetents(auxiliarySheetDetents, selection: homeMenuDetentSelection)
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showAccumulationOverview) {
@@ -715,6 +718,17 @@ struct HomeView: View {
 #else
         content
 #endif
+    }
+
+    /// Always one of `auxiliarySheetDetents`: at accessibility sizes and in
+    /// landscape the menu only has the full height.
+    private var homeMenuDetentSelection: Binding<PresentationDetent> {
+        Binding(
+            get: {
+                auxiliarySheetDetents.contains(homeMenuDetent) ? homeMenuDetent : .large
+            },
+            set: { homeMenuDetent = $0 }
+        )
     }
 
     private var auxiliarySheetDetents: Set<PresentationDetent> {
@@ -1614,6 +1628,7 @@ struct HomeView: View {
 
     private var homeMenu: some View {
         Button {
+            homeMenuDetent = .medium
             showHomeMenu = true
         } label: {
             HStack(spacing: 6) {
@@ -1634,6 +1649,7 @@ struct HomeView: View {
 
     private var homeMenuSheet: some View {
         NavigationStack {
+            ScrollViewReader { menuScrollProxy in
             ScrollView {
                 // The menu is Home's only way to 記録 and 設定, so the
                 // destinations people open it for come first and fit in the
@@ -1643,12 +1659,13 @@ struct HomeView: View {
                     menuDestinationActions
                     menuAccumulationActions
                     menuAccumulationPlanAction
-                    menuAtmospherePicker
+                    menuAtmospherePicker(scrollProxy: menuScrollProxy)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
             }
             .scrollBounceBehavior(.basedOnSize)
+            }
             .background(NightBackground())
             .navigationTitle("メニュー")
             .navigationBarTitleDisplayMode(.inline)
@@ -1665,7 +1682,7 @@ struct HomeView: View {
         }
     }
 
-    private var menuAtmospherePicker: some View {
+    private func menuAtmospherePicker(scrollProxy: ScrollViewProxy) -> some View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 13) {
                 HStack(alignment: .firstTextBaseline) {
@@ -1695,14 +1712,22 @@ struct HomeView: View {
                     spacing: 10
                 ) {
                     ForEach(HomeAtmosphere.allCases) { atmosphere in
-                        atmosphereButton(atmosphere)
+                        atmosphereButton(atmosphere, scrollProxy: scrollProxy)
+                            .id(Self.atmosphereScrollID(atmosphere))
                     }
                 }
             }
         }
     }
 
-    private func atmosphereButton(_ atmosphere: HomeAtmosphere) -> some View {
+    private static func atmosphereScrollID(_ atmosphere: HomeAtmosphere) -> String {
+        "home.menu.atmosphere.\(atmosphere.rawValue)"
+    }
+
+    private func atmosphereButton(
+        _ atmosphere: HomeAtmosphere,
+        scrollProxy: ScrollViewProxy
+    ) -> some View {
         let isSelected = homeAtmosphere == atmosphere
 
         return Button {
@@ -1711,6 +1736,7 @@ struct HomeView: View {
             if sensoryPreferences.hapticsOn {
                 Haptics.shared.playSecondaryCollision()
             }
+            revealChosenAtmosphere(atmosphere, scrollProxy: scrollProxy)
         } label: {
             HStack(alignment: .bottom, spacing: 8) {
                 Image(systemName: atmosphere.systemImage)
@@ -1786,6 +1812,29 @@ struct HomeView: View {
         // target, so restore the interactive role that SwiftUI otherwise drops.
         .accessibilityAddTraits(.isButton)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// The background picker sits last in the menu, so reaching it usually
+    /// raises the sheet to full height, over Home. Lower it to half height
+    /// and keep the chosen card in view, so the new background shows behind
+    /// the sheet the moment it is picked.
+    private func revealChosenAtmosphere(
+        _ atmosphere: HomeAtmosphere,
+        scrollProxy: ScrollViewProxy
+    ) {
+        guard homeMenuDetent != .medium,
+              auxiliarySheetDetents.contains(.medium) else { return }
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.3)) {
+            homeMenuDetent = .medium
+        }
+        Task { @MainActor in
+            // Scroll once the sheet has its half-height frame; before that
+            // the card is still inside the taller visible area.
+            try? await Task.sleep(for: .milliseconds(reduceMotion ? 50 : 360))
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+                scrollProxy.scrollTo(Self.atmosphereScrollID(atmosphere), anchor: .center)
+            }
+        }
     }
 
     @ViewBuilder
