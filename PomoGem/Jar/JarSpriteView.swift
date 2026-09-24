@@ -240,27 +240,22 @@ struct JarSpriteView: View {
 
                 // The core column (orbit and labels) stays above the gem
                 // bed, which the scene draws in front of this layer.
-                let coreBottomLimit = JarScene.gemBedTopFromStageTop(
+                let bedTop = JarScene.gemBedTopFromStageTop(
                     stageSize: proxy.size,
                     bed: gemBedState
-                ) - 6
-                // The labels (drawn in front) sit above the resting bodies
-                // right under them: at least one floor row, higher when an
-                // achievement stone or a crystal rests there. Only when the
-                // pile rises so high that the orbit column and the labels no
-                // longer fit above it is the core buried; then the labels
-                // step behind the scene with it.
-                let floorLabelLimit = proxy.size.height
-                    - JarScene.interiorRect(sceneSize: proxy.size).minY
-                    - Constants.Jar.measuredRadius * 2 - 7
-                let pileUnderLabels = scene.settledPileTop(
-                    minX: (proxy.size.width - coreLabelSize.width) / 2,
-                    maxX: (proxy.size.width + coreLabelSize.width) / 2
                 )
-                let pileLabelLimit = pileUnderLabels > 0
-                    ? proxy.size.height - pileUnderLabels - 4
-                    : floorLabelLimit
-                let abovePileLimit = min(floorLabelLimit, pileLabelLimit)
+                let coreBottomLimit = bedTop - 6
+                let limits = JarLifetimeCoreLabelLimits.resolve(
+                    stageHeight: proxy.size.height,
+                    floorY: JarScene.interiorRect(sceneSize: proxy.size).minY,
+                    bedTop: bedTop,
+                    pileTop: scene.settledPileTop(
+                        minX: (proxy.size.width - coreLabelSize.width) / 2,
+                        maxX: (proxy.size.width + coreLabelSize.width) / 2
+                    )
+                )
+                let floorLabelLimit = limits.floor
+                let abovePileLimit = limits.abovePile
                 let coreLabelsBuried = lifetimeCoreState.map { state -> Bool in
                     let layout = JarLifetimeCoreLabels.layout(
                         stageSize: proxy.size,
@@ -270,7 +265,8 @@ struct JarSpriteView: View {
                         labelBottomLimit: abovePileLimit,
                         labelHeight: coreLabelSize.height
                     )
-                    return layout.labelTop + coreLabelSize.height > abovePileLimit + 0.5
+                    return layout.overflows
+                        || layout.labelTop + coreLabelSize.height > abovePileLimit + 0.5
                 } ?? false
                 let coreLabelBottomLimit = coreLabelsBuried ? floorLabelLimit : abovePileLimit
                 if let coreState = lifetimeCoreState {
@@ -420,13 +416,19 @@ struct JarSpriteView: View {
     }
 
     /// 「積み上がりの光」 as a gem bed: lifetime grams and the lifetime theme
-    /// mix only (the same fan as the time core).
+    /// mix only (the same fan as the time core). While the projection is
+    /// provisional (unverified or a lower bound) the bed never sinks below
+    /// the one already shown.
     private var gemBedState: JarGemBedState {
-        JarGemBedPresentation.state(
-            totalGrams: totalGrams,
-            colorShares: lifetimeCoreColorShares.isEmpty
-                ? [GemColorShare(hex: lifetimeCoreColorHex, fraction: 1)]
-                : lifetimeCoreColorShares
+        JarGemBedPresentation.displayed(
+            current: JarGemBedPresentation.state(
+                totalGrams: totalGrams,
+                colorShares: lifetimeCoreColorShares.isEmpty
+                    ? [GemColorShare(hex: lifetimeCoreColorHex, fraction: 1)]
+                    : lifetimeCoreColorShares
+            ),
+            shown: scene.gemBed,
+            isProvisional: projectionIsLowerBound || projectionIsUnverified
         )
     }
 

@@ -49,6 +49,7 @@ struct HomeView: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.displayScale) private var displayScale
     @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
     @Environment(\.aggregateProjectionPresentation)
     private var aggregateProjectionPresentation
@@ -2621,6 +2622,9 @@ struct HomeView: View {
         // first visible descent. The landing callback applies the latest page.
         guard !scene.hasCompletionDropInFlight else { return }
         guard refreshRewardSessionBackfill() else { return }
+        // Bodies bake at this view's scale; set it before the first restore
+        // so a 2× device never bakes (and keeps) 3× textures.
+        scene.artworkScale = displayScale
         syncBaseLayers()
 
         let localCompletions = looseSessions.filter(hasLocalCompletionMarker)

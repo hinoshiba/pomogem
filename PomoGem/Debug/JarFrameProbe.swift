@@ -113,7 +113,7 @@ final class JarFrameProbe {
             return sorted[min(sorted.count - 1, Int(Double(sorted.count - 1) * fraction))]
         }
         let line = String(
-            format: "t=%.0f frames=%d tilt=%d idle=%d medMs=%.2f p95Ms=%.2f atlas=g%d/%d names/%.1fMB kept/%.0fx%.0f page/%d loose\n",
+            format: "t=%.0f frames=%d tilt=%d idle=%d medMs=%.2f p95Ms=%.2f atlas=g%d/%d names/%.1fMB kept/%.0fx%.0f page/%d loose/%.1fMB resident/%d live\n",
             now - launch,
             updates,
             (scene?.idleTiltFrameCount ?? 0) - lastTiltSteps,
@@ -125,7 +125,9 @@ final class JarFrameProbe {
             Double(atlas.keptImageBytes) / 1_048_576,
             atlas.pageSize.width,
             atlas.pageSize.height,
-            atlas.standaloneTextures
+            atlas.standaloneTextures,
+            Double(atlas.residentBytes) / 1_048_576,
+            atlas.liveNames
         )
         lastTiltSteps = scene?.idleTiltFrameCount ?? 0
         updates = 0

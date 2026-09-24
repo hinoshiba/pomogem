@@ -155,6 +155,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         static let tapCaustic = "jar.tapCaustic"
         static let tapSpecular = "jar.tapSpecular"
         static let reducedMotionHighlight = "jar.reducedMotionHighlight"
+        static let pileGlowShape = "jar.pileGlow.shape"
     }
 
     /// A tap launches one primary gem and lets SpriteKit transfer that motion
@@ -263,14 +264,17 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             refreshGemBed()
         }
     }
-    /// Display scale for baked gem textures: the presenting SKView's
-    /// `contentScaleFactor` (or SwiftUI's `displayScale`). Until a view
-    /// reports it, textures bake at the 3× ceiling so nothing looks soft.
+    /// Display scale for baked gem textures: SwiftUI's `displayScale`, set
+    /// by the owner (Home) before its first restore and by the jar view on
+    /// appear; the SKView's window screen is a fallback. Until one reports
+    /// it, textures bake at the 3× ceiling so nothing looks soft.
     var artworkScale: CGFloat = PebbleNode.defaultArtworkScale {
         didSet {
+            // Assigning inside didSet does not re-enter it, so the clamped
+            // value is stored and compared here in one pass.
             let resolved = GemArtwork.renderScale(artworkScale)
-            if resolved != artworkScale { artworkScale = resolved; return }
-            if oldValue != artworkScale { refreshGemBed() }
+            if resolved != artworkScale { artworkScale = resolved }
+            if resolved != GemArtwork.renderScale(oldValue) { refreshGemBed() }
         }
     }
     private var lastPileLightRefresh: TimeInterval = -.greatestFiniteMagnitude
@@ -304,10 +308,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// Highest settled body over the horizontal span `minX...maxX` (scene
     /// coordinates), or 0 when that span is clear.
     func settledPileTop(minX: CGFloat, maxX: CGFloat) -> CGFloat {
-        guard !settledPileProfile.isEmpty, size.width > 0 else { return 0 }
+        guard !settledPileProfile.isEmpty, size.width > 0,
+              minX.isFinite, maxX.isFinite
+        else { return 0 }
         let binWidth = size.width / CGFloat(settledPileProfile.count)
-        let first = max(0, Int(minX / binWidth))
-        let last = min(settledPileProfile.count - 1, Int(maxX / binWidth))
+        let first = max(0, Int(min(max(minX, 0), size.width) / binWidth))
+        let last = min(settledPileProfile.count - 1, Int(min(max(maxX, 0), size.width) / binWidth))
         guard first <= last else { return 0 }
         return settledPileProfile[first ... last].max() ?? 0
     }
@@ -609,7 +615,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             )
             fragment.position = source.position
             fragment.zRotation = source.zRotation
-            fragment.zPosition = JarZPosition.pebble
+            // The view ignores sibling order: the fading fragments take the
+            // top stacking slot, so they stay above the resting bodies as
+            // the effect container (added last) used to.
+            fragment.zPosition = JarZPosition.pebble(stackingIndex: JarZPosition.stackingSlots - 1)
             effect.addChild(fragment)
             fragment.run(.group([
                 .move(to: point, duration: 0.28),
@@ -695,7 +704,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     override func didMove(to view: SKView) {
-        artworkScale = view.contentScaleFactor
+        // One source of truth for the bake scale: the SwiftUI owner sets
+        // `displayScale` before its first restore; the window's screen is
+        // only a fallback once the view is really on one.
+        if let screenScale = view.window?.screen.scale {
+            artworkScale = screenScale
+        }
         view.preferredFramesPerSecond = Constants.Jar.targetFramesPerSecond
         view.ignoresSiblingOrder = true
         view.allowsTransparency = true
@@ -1739,7 +1753,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         ) > 0.01 else { return }
         appliedGravityVector = next
         physicsWorld.gravity = next
-        applyOpticalTilt(horizontal: next.dx, uptime: ProcessInfo.processInfo.systemUptime)
+        applyOpticalTilt(horizontal: next.dx, uptime: tiltClock())
         // Core Motion delivers up to 30 updates per second. Treating every
         // sample as a new interaction used to reset both the three-second
         // settling observation and the tapped gem's low damping, so a held
@@ -1757,6 +1771,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     func resetGravity() {
         setGravityVector(Constants.Jar.gravityVector, smoothing: false)
+        // Below the 0.01 sample step the call above keeps the old vector;
+        // a reset is exact whatever the last sample was.
+        appliedGravityVector = Constants.Jar.gravityVector
+        physicsWorld.gravity = Constants.Jar.gravityVector
         // A resting jar returns its light exactly to the level position.
         updateOpticalTilt(horizontal: appliedGravityVector.dx)
     }
@@ -1771,6 +1789,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// nothing. An awake jar follows every sample, as before.
     static let idleTiltRenderThreshold: CGFloat = 0.015
     static let idleTiltFramesPerSecond: Double = 30
+    /// Clock of the idle tilt gate (tests inject one).
+    var tiltClock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     private var lastIdleTiltUptime: TimeInterval = -.greatestFiniteMagnitude
     /// Light changes made while idle — each one is a frame SpriteKit draws
     /// for a paused jar (tests and the Debug frame probe).
@@ -1821,6 +1841,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         if isIdlePaused {
             isIdlePaused = false
             onIdlePauseChanged?(false)
+            // Samples the idle gate held back are caught up at once.
+            updateOpticalTilt(horizontal: appliedGravityVector.dx)
         }
         resetIdleObservation()
     }
@@ -2031,7 +2053,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         pileGlowNode.blendMode = .add
         pileGlowNode.colorBlendFactor = 1
         pileGlowNode.alpha = 0
-        pileGlowNode.zPosition = JarZPosition.strata + 0.6
+        // Behind the gem bed: the pile's light rises around the bodies and
+        // through the bed's gaps, but never tints one side of the bed.
+        pileGlowNode.zPosition = JarZPosition.strata + 0.52
 
         cameraNode.position = cameraRestPosition
         addChild(cameraNode)
@@ -3500,7 +3524,15 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// Recomputes the light the pile casts into the lower jar and marks the
     /// crystal holding the most grams. O(n), a few times a second while
     /// awake and once when the jar settles.
-    private func refreshPileLight() {
+    ///
+    /// Only the resting pile lights the jar: a gem that has not landed yet
+    /// (a completion falling from the mouth) or one moving faster than
+    /// `pileProfileRestingSpeed` never stretches the light, so a drop no
+    /// longer floods the core and the HUD with a haze. The light is also
+    /// bounded to a band seated on the floor (at most 0.45 of the jar width
+    /// across and 0.45 of the interior high, its centre no higher than the
+    /// gem bed's top + 40 pt) and eases to a new shape over 0.4 s.
+    private func refreshPileLight(animated: Bool = true) {
         var minX = CGFloat.greatestFiniteMagnitude
         var maxX = -CGFloat.greatestFiniteMagnitude
         var minY = CGFloat.greatestFiniteMagnitude
@@ -3511,9 +3543,20 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         var weight: CGFloat = 0
         var heaviest: PebbleNode?
         var aggregates: [PebbleNode] = []
+        var hasUnsettledGem = false
         for pebble in livePebbles where !pebble.isRemovedForBake
             && !pebble.descriptor.isScreenTimeObstacle
             && !pebble.descriptor.isTutorial {
+            if pebble.descriptor.isAggregate {
+                aggregates.append(pebble)
+                if heaviest == nil || pebble.descriptor.grams > heaviest?.descriptor.grams ?? 0 {
+                    heaviest = pebble
+                }
+            }
+            guard Self.castsPileLight(pebble) else {
+                hasUnsettledGem = true
+                continue
+            }
             let r = pebble.radius
             minX = min(minX, pebble.position.x - r)
             maxX = max(maxX, pebble.position.x + r)
@@ -3525,35 +3568,91 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             green += tone.green * w
             blue += tone.blue * w
             weight += w
-            if pebble.descriptor.isAggregate {
-                aggregates.append(pebble)
-                if heaviest == nil || pebble.descriptor.grams > heaviest?.descriptor.grams ?? 0 {
-                    heaviest = pebble
-                }
-            }
         }
         aggregates.forEach { $0.setPileEmphasis($0 === heaviest) }
         guard weight > 0 else {
-            pileGlowNode.alpha = 0
-            pileGlowBaseAlpha = 0
+            // Nothing rests yet (an empty jar, or only a falling gem): keep
+            // the last resting light rather than flashing it off mid-drop.
+            if !hasUnsettledGem {
+                pileGlowNode.removeAction(forKey: ActionKey.pileGlowShape)
+                pileGlowNode.alpha = 0
+                pileGlowBaseAlpha = 0
+            }
             return
         }
         let mean = GemColor(red: red / weight, green: green / weight, blue: blue / weight)
         // Warm-biased (60 % #FF9E6B) so a blue/violet pile still reads as
         // lit rather than foggy.
-        pileGlowNode.color = mean.mixed(with: GemColor(hex: "#FF9E6B"), amount: 0.6).withAlpha(1)
-        let width = max(120, (maxX - minX) * 1.3)
-        let height = min(max(84, (maxY - minY) * 1.8), width * 0.75)
-        pileGlowNode.size = CGSize(width: width, height: height)
-        // Seated on the floor so the base lens catches the pile's light.
-        pileGlowNode.position = CGPoint(
-            x: (minX + maxX) / 2,
-            y: max((minY + maxY) / 2, currentFloorY + height * 0.22)
+        let color = mean.mixed(with: GemColor(hex: "#FF9E6B"), amount: 0.6).withAlpha(1)
+        let target = Self.pileLightFrame(
+            bodies: CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY),
+            jar: outerJarRect,
+            interior: interiorRect,
+            bedTop: currentFloorY + (gemBed.map { $0.height(interiorHeight: interiorRect.height) } ?? 0)
         )
-        pileGlowBaseAlpha = 0.55 * (reduceTransparency ? 0.45 : 1)
+        // The lit interior (JarStageArtwork) already glows toward the
+        // floor, so the pile adds a softer light than before.
+        pileGlowBaseAlpha = 0.45 * (reduceTransparency ? 0.45 : 1)
         if pileGlowNode.action(forKey: "jar.pileGlow.pulse") == nil {
             pileGlowNode.alpha = pileGlowBaseAlpha
         }
+        pileGlowNode.removeAction(forKey: ActionKey.pileGlowShape)
+        let isFirstLight = pileGlowNode.size.width < 1
+        guard animated, !isFirstLight, !isPaused, !reduceMotion else {
+            pileGlowNode.color = color
+            pileGlowNode.size = target.size
+            pileGlowNode.position = CGPoint(x: target.midX, y: target.midY)
+            return
+        }
+        let duration: TimeInterval = 0.4
+        let startColor = GemColor(pileGlowNode.color)
+        let endColor = GemColor(color)
+        let tint = SKAction.customAction(withDuration: duration) { node, elapsed in
+            let t = CGFloat(elapsed / duration)
+            (node as? SKSpriteNode)?.color = startColor.mixed(with: endColor, amount: t).withAlpha(1)
+        }
+        let resize = SKAction.resize(toWidth: target.width, height: target.height, duration: duration)
+        let move = SKAction.move(to: CGPoint(x: target.midX, y: target.midY), duration: duration)
+        [resize, move].forEach { $0.timingMode = .easeInEaseOut }
+        pileGlowNode.run(.group([resize, move, tint]), withKey: ActionKey.pileGlowShape)
+    }
+
+    /// Whether a body counts toward the pile light: it has landed and rests
+    /// (the same speed test as the settled pile profile).
+    private static func castsPileLight(_ pebble: PebbleNode) -> Bool {
+        guard pebble.hasLanded else { return false }
+        if let velocity = pebble.physicsBody?.velocity,
+           hypot(velocity.dx, velocity.dy) > pileProfileRestingSpeed {
+            return false
+        }
+        return pebble.position.x.isFinite && pebble.position.y.isFinite
+    }
+
+    /// The pile light's rectangle for resting bodies spanning `bodies`:
+    /// 1.3 × their width (at least 96 pt, at most 0.9 × the jar width),
+    /// 1.8 × their height (at least 64 pt, at most 0.45 of the interior and
+    /// 0.75 of its own width), seated on the floor with its centre no higher
+    /// than the gem bed's top + 40 pt.
+    nonisolated static func pileLightFrame(
+        bodies: CGRect,
+        jar: CGRect,
+        interior: CGRect,
+        bedTop: CGFloat
+    ) -> CGRect {
+        let width = min(max(96, bodies.width * 1.3), jar.width * 0.9)
+        let height = min(
+            max(64, bodies.height * 1.8),
+            width * 0.75,
+            interior.height * 0.45
+        )
+        let floorY = interior.minY
+        let centerY = min(
+            max(bodies.midY, floorY + height * 0.22),
+            max(bedTop, floorY) + 40,
+            floorY + height * 0.5
+        )
+        let centerX = min(max(bodies.midX, jar.minX + width / 2), jar.maxX - width / 2)
+        return CGRect(x: centerX - width / 2, y: centerY - height / 2, width: width, height: height)
     }
 
     private func publishSettledPileTop() {
@@ -3566,9 +3665,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                hypot(velocity.dx, velocity.dy) > Self.pileProfileRestingSpeed {
                 continue
             }
-            let top = max(0, pebble.position.y + pebble.radius)
-            let first = max(0, Int((pebble.position.x - pebble.radius) / binWidth))
-            let last = min(count - 1, Int((pebble.position.x + pebble.radius) / binWidth))
+            // A body flung out of range (or a non-finite position) must
+            // never trap the Int conversion below.
+            guard pebble.position.x.isFinite, pebble.position.y.isFinite else { continue }
+            let top = min(max(0, pebble.position.y + pebble.radius), size.height)
+            let left = min(max(pebble.position.x - pebble.radius, 0), size.width)
+            let right = min(max(pebble.position.x + pebble.radius, 0), size.width)
+            let first = max(0, Int(left / binWidth))
+            let last = min(count - 1, Int(right / binWidth))
             guard first <= last else { continue }
             for bin in first ... last {
                 profile[bin] = max(profile[bin], (top / 4).rounded(.up) * 4)
@@ -3875,13 +3979,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             body.usesPreciseCollisionDetection = false
             body.isResting = true
         }
+        // The light enters the idle state exactly where gravity is, so the
+        // idle gate's small residual can only come from later samples.
+        updateOpticalTilt(horizontal: appliedGravityVector.dx)
         // Never freeze a half-lit flare: settle every star to its resting
         // (or tilt-lit) value before the frame stops.
         livePebbles.forEach {
             $0.settleGemTwinkle()
             $0.updatePresentationLighting(horizontal: opticalTiltFraction)
         }
-        refreshPileLight()
+        refreshPileLight(animated: false)
         publishSettledPileTop()
         if !isIdlePaused {
             isIdlePaused = true

@@ -30,9 +30,12 @@ final class GemTextureAtlas {
         static let lightShade = "gem.shared.lightShade"
     }
 
-    /// Kept source images (RGBA bytes). A full jar needs about 3–7 MB at 3×;
-    /// the budget leaves room for the share/plan jars without growing
-    /// without bound.
+    /// Kept CPU source images (RGBA bytes). A full jar needs about 3–7 MB at
+    /// 3×; the budget leaves room for the share/plan jars without growing
+    /// without bound. It bounds the CPU copies only: the installed page on
+    /// the GPU holds about as many bytes again, and stand-alone textures of
+    /// names not yet packed come on top (`Statistics.residentBytes`). Names
+    /// a live sprite still shows are never evicted.
     static let imageByteBudget = 24 * 1_024 * 1_024
 
     struct Statistics: Equatable {
@@ -43,6 +46,16 @@ final class GemTextureAtlas {
         var standaloneTextures: Int
         /// Pixel size of the installed page, derived from its largest entry.
         var pageSize: CGSize
+        /// RGBA bytes of the installed page (GPU) and of the stand-alone
+        /// textures that wait for the next page.
+        var pageBytes: Int
+        var standaloneBytes: Int
+        /// Names that a live sprite shows (never evicted).
+        var liveNames: Int
+
+        /// Kept CPU images + page + stand-alone textures: the atlas's whole
+        /// resident footprint, about 2–3 × `keptImageBytes`.
+        var residentBytes: Int { keptImageBytes + pageBytes + standaloneBytes }
     }
 
     private struct Entry {
@@ -67,6 +80,9 @@ final class GemTextureAtlas {
     private var isRebuildScheduled = false
     private var isBuilding = false
     private(set) var generation = 0
+    /// Images baked inline by a lookup miss (a node created before its body
+    /// was baked ahead). Tests read it to prove a restore bakes first.
+    private(set) var onDemandBakeCount = 0
     /// Coalescing delay after a new name before the atlas is rebuilt.
     var rebuildDelay: TimeInterval = 0.25
     /// Tests pack synchronously with `rebuildNow()`.
@@ -95,7 +111,13 @@ final class GemTextureAtlas {
         touch(name)
         if let texture = packed[name] { return texture }
         if let texture = standalone[name] { return texture }
-        let image = entries[name]?.image ?? makeImage()
+        let image: UIImage
+        if let kept = entries[name]?.image {
+            image = kept
+        } else {
+            onDemandBakeCount &+= 1
+            image = makeImage()
+        }
         if entries[name] == nil { store(name, image: image, pinned: false) }
         let texture = SKTexture(image: image)
         texture.filteringMode = .linear
@@ -144,14 +166,29 @@ final class GemTextureAtlas {
     }
 
     var statistics: Statistics {
-        Statistics(
+        let page = pageSize
+        let standaloneBytes = standalone.keys.reduce(0) { $0 + (entries[$1]?.bytes ?? 0) }
+        return Statistics(
             generation: generation,
             packedNames: packed.count,
             keptImages: entries.count,
             keptImageBytes: keptBytes,
             standaloneTextures: standalone.count,
-            pageSize: pageSize
+            pageSize: page,
+            pageBytes: Int(page.width) * Int(page.height) * 4,
+            standaloneBytes: standaloneBytes,
+            liveNames: liveNames().count
         )
+    }
+
+    /// Names shown by sprites that still exist.
+    private func liveNames() -> Set<String> {
+        var names = Set<String>()
+        let enumerator = registry.objectEnumerator()
+        while let name = enumerator?.nextObject() as? NSString {
+            names.insert(name as String)
+        }
+        return names
     }
 
     private var pageSize: CGSize {
@@ -180,6 +217,12 @@ final class GemTextureAtlas {
     /// before creating its nodes, so a full jar's misses cost one parallel
     /// pass instead of one serial bake per body.
     func bakeMissing(_ requests: [BakeRequest]) {
+        // A restore right after launch must not bake the same bodies again
+        // while the launch pre-bake is still on the utility pool (both would
+        // compete for every core exactly when the first frame is due): stop
+        // the pre-bake from starting new bakes, wait for the few in flight,
+        // and keep what it has finished.
+        finishPrewarmNow()
         var seen = Set<String>()
         let missing = requests.filter { entries[$0.name] == nil && seen.insert($0.name).inserted }
         guard !missing.isEmpty else { return }
@@ -187,19 +230,79 @@ final class GemTextureAtlas {
     }
 
     /// Bakes `requests` on a utility queue and keeps them when done (the
-    /// launch pre-bake). A body needed before it finishes simply bakes on
-    /// demand; the later insert skips names that exist by then.
+    /// launch pre-bake). A restore that needs bodies before it finishes
+    /// takes over (`bakeMissing`); the later insert skips names that exist
+    /// by then.
     func prewarm(_ requests: [BakeRequest]) {
         var seen = Set<String>()
         let missing = requests.filter { entries[$0.name] == nil && seen.insert($0.name).inserted }
         guard !missing.isEmpty else { return }
+        finishPrewarmNow()
+        let run = PrewarmRun()
+        activePrewarm = run
+        run.group.enter()
         DispatchQueue.global(qos: .utility).async {
-            let baked = Self.bake(missing)
+            Self.bake(missing, run: run)
+            run.group.leave()
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    GemTextureAtlas.shared.insert(baked)
+                    let atlas = GemTextureAtlas.shared
+                    if atlas.activePrewarm === run { atlas.activePrewarm = nil }
+                    atlas.insert(run.takeResults())
                 }
             }
+        }
+    }
+
+    /// Whether a launch pre-bake is still running (tests).
+    var isPrewarming: Bool { activePrewarm != nil }
+
+    private var activePrewarm: PrewarmRun?
+
+    /// Stops the running pre-bake from starting new bakes, waits for the
+    /// bakes already in flight (at most one per core, a few ms each) and
+    /// keeps every finished image.
+    private func finishPrewarmNow() {
+        guard let run = activePrewarm else { return }
+        activePrewarm = nil
+        run.cancel()
+        run.group.wait()
+        insert(run.takeResults())
+    }
+
+    /// One launch pre-bake: cancellation flag and finished images, shared
+    /// with the utility pool under a lock.
+    private final class PrewarmRun: @unchecked Sendable {
+        let group = DispatchGroup()
+        private let lock = NSLock()
+        private var cancelled = false
+        private var results: [(name: String, image: UIImage)] = []
+
+        var isCancelled: Bool {
+            lock.lock(); defer { lock.unlock() }
+            return cancelled
+        }
+
+        func cancel() {
+            lock.lock(); cancelled = true; lock.unlock()
+        }
+
+        func append(_ name: String, _ image: UIImage) {
+            lock.lock(); results.append((name, image)); lock.unlock()
+        }
+
+        func takeResults() -> [(name: String, image: UIImage)] {
+            lock.lock(); defer { lock.unlock() }
+            let taken = results
+            results = []
+            return taken
+        }
+    }
+
+    nonisolated private static func bake(_ requests: [BakeRequest], run: PrewarmRun) {
+        DispatchQueue.concurrentPerform(iterations: requests.count) { index in
+            guard !run.isCancelled else { return }
+            run.append(requests[index].name, requests[index].make())
         }
     }
 
@@ -240,6 +343,8 @@ final class GemTextureAtlas {
     private func startRebuild() {
         isRebuildScheduled = false
         guard !isBuilding else { return }
+        // Everything on screen counts as just used.
+        for name in liveNames() { touch(name) }
         let snapshot = entries.mapValues(\.image)
         guard Set(snapshot.keys) != Set(packed.keys) else { return }
         isBuilding = true
@@ -351,8 +456,13 @@ final class GemTextureAtlas {
 
     private func evictIfNeeded() {
         guard keptBytes > Self.imageByteBudget else { return }
+        // A body that stays on screen is "least recently used" by lookup
+        // time, yet it is the one image that must survive: dropping it
+        // would leave its sprite on an old page (unbatched, and keeping that
+        // whole page alive). Only names no live sprite shows may go.
+        let live = liveNames()
         let candidates = entries
-            .filter { !$0.value.isPinned }
+            .filter { !$0.value.isPinned && !live.contains($0.key) }
             .sorted { $0.value.lastUse < $1.value.lastUse }
         for (name, entry) in candidates {
             guard keptBytes > Self.imageByteBudget else { break }

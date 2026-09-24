@@ -177,6 +177,14 @@ final class JarRenderingPerformanceTests: XCTestCase {
     @MainActor
     func testKeptImagesStayWithinTheirBudget() {
         let atlas = GemTextureAtlas.shared
+        // No background repack of ~24 MB of test images between tests.
+        let rebuilds = atlas.rebuildsAutomatically
+        atlas.rebuildsAutomatically = false
+        defer { atlas.rebuildsAutomatically = rebuilds }
+        // A body on screen is never evicted, however long ago it was looked up.
+        let onScreen = PebbleNode(descriptor: looseDescriptor(index: 41, grams: 830, colorHex: "#5A7D9A"), reduceMotion: true)
+        let onScreenBody = onScreen.childNode(withName: "gem.body") as? SKSpriteNode
+        let onScreenName = onScreenBody.flatMap { atlas.textureName(of: $0) }
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         let side = 1_024
@@ -191,7 +199,19 @@ final class JarRenderingPerformanceTests: XCTestCase {
         XCTAssertTrue(atlas.hasImage(named: GemTextureAtlas.SharedName.halo), "Shared light is pinned")
         XCTAssertTrue(atlas.hasImage(named: "test.budget.\(count - 1)"), "The newest image stays")
         XCTAssertFalse(atlas.hasImage(named: "test.budget.0"), "The least recently used goes first")
+        if let onScreenName {
+            XCTAssertTrue(atlas.hasImage(named: onScreenName), "A live sprite's image is pinned")
+        } else {
+            XCTFail("The body registers its atlas name")
+        }
+        XCTAssertGreaterThanOrEqual(atlas.statistics.liveNames, 1)
+        XCTAssertGreaterThanOrEqual(
+            atlas.statistics.residentBytes,
+            atlas.statistics.keptImageBytes,
+            "Resident bytes count the page and stand-alone textures too"
+        )
         atlas.removeImages(named: (0 ..< count).map { "test.budget.\($0)" })
+        withExtendedLifetime(onScreen) {}
     }
 
     /// The rubble baked into one sprite draws what its eight shape nodes
@@ -248,8 +268,12 @@ final class JarRenderingPerformanceTests: XCTestCase {
 
         let scene = makeScene()
         scene.artworkScale = 3
+        let inlineBakes = atlas.onDemandBakeCount
         scene.restore(pebbles: descriptors)
         XCTAssertTrue(names.allSatisfy { atlas.hasImage(named: $0) })
+        // Every body was baked ahead (in parallel) before its node existed:
+        // no node had to bake inline.
+        XCTAssertEqual(atlas.onDemandBakeCount, inlineBakes, "Bodies bake before their nodes")
         for node in pebbles(in: scene) {
             let body = try XCTUnwrap(node.childNode(withName: "gem.body") as? SKSpriteNode)
             let name = try XCTUnwrap(atlas.textureName(of: body))
@@ -286,12 +310,58 @@ final class JarRenderingPerformanceTests: XCTestCase {
         }
     }
 
+    /// A restore right after launch takes over the launch pre-bake instead
+    /// of baking the same bodies a second time on every core.
+    @MainActor
+    func testRestoreTakesOverTheLaunchPreBake() {
+        let atlas = GemTextureAtlas.shared
+        let counter = BakeCounter()
+        let hexes = ["#4F6D3A", "#6D3A4F", "#3A4F6D", "#6D5A3A"]
+        let requests = hexes.enumerated().flatMap { index, hex in
+            (0 ..< 3).map { size -> GemTextureAtlas.BakeRequest in
+                let name = "test.prewarm.\(index).\(size)"
+                let spec = GemArtworkSpec(
+                    rung: GemCutLadder.standard.loose,
+                    colors: [GemColorShare(hex: hex, fraction: 1)],
+                    variant: size,
+                    isMuted: false,
+                    showsDashedRing: false
+                )
+                return GemTextureAtlas.BakeRequest(name: name) {
+                    counter.increment(name)
+                    return GemArtwork.renderBodyImage(for: spec, radius: 12 + CGFloat(size) * 3, scale: 2)
+                }
+            }
+        }
+        atlas.prewarm(requests)
+        atlas.bakeMissing(requests)
+        XCTAssertFalse(atlas.isPrewarming)
+        XCTAssertTrue(requests.allSatisfy { atlas.hasImage(named: $0.name) })
+        XCTAssertTrue(counter.counts.values.allSatisfy { $0 == 1 }, "Each image baked exactly once")
+        XCTAssertEqual(counter.counts.count, requests.count)
+        atlas.removeImages(named: requests.map(\.name))
+    }
+
+    private final class BakeCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage: [String: Int] = [:]
+        var counts: [String: Int] {
+            lock.lock(); defer { lock.unlock() }
+            return storage
+        }
+        func increment(_ name: String) {
+            lock.lock(); storage[name, default: 0] += 1; lock.unlock()
+        }
+    }
+
     // MARK: Idle tilt
 
     @MainActor
     func testIdleJarFollowsTiltOnlyInStepsAboveTheThreshold() throws {
         let scene = makeScene()
         scene.reduceMotion = false
+        var clock: TimeInterval = 1_000
+        scene.tiltClock = { clock }
         scene.restore(pebbles: [looseDescriptor(index: 7)])
         scene.evaluateInteractionMotionForTesting(currentTime: 100, uptime: 100)
         scene.evaluateInteractionMotionForTesting(currentTime: 110, uptime: 110)
@@ -312,20 +382,27 @@ final class JarRenderingPerformanceTests: XCTestCase {
         // At most one idle tilt frame per 1/30 s.
         scene.setGravityVector(CGVector(dx: 0.3 * scale, dy: Constants.Jar.gravity), smoothing: false)
         XCTAssertEqual(scene.idleTiltFrameCount, start + 1)
-        Thread.sleep(forTimeInterval: 0.04)
+        clock += 0.04
         scene.setGravityVector(CGVector(dx: 0.31 * scale, dy: Constants.Jar.gravity), smoothing: false)
         XCTAssertEqual(scene.idleTiltFrameCount, start + 2)
         XCTAssertEqual(scene.opticalTiltFraction, 0.31, accuracy: 0.0001)
 
-        // Levelling the phone returns the light exactly to rest.
-        Thread.sleep(forTimeInterval: 0.04)
-        scene.setGravityVector(CGVector(dx: 0.02 * scale, dy: Constants.Jar.gravity), smoothing: false)
+        // Levelling the phone brings the light back within the threshold
+        // while idle; a sample held back by the gate is caught up the
+        // moment the jar wakes, and a reset returns it exactly.
+        clock += 0.04
+        scene.setGravityVector(CGVector(dx: 0.012 * scale, dy: Constants.Jar.gravity), smoothing: false)
+        XCTAssertEqual(scene.opticalTiltFraction, 0.012, accuracy: 0.0001)
+        clock += 0.04
+        scene.setGravityVector(CGVector(dx: 0.001 * scale, dy: Constants.Jar.gravity), smoothing: false)
+        XCTAssertEqual(scene.opticalTiltFraction, 0.012, accuracy: 0.0001, "Under the threshold: no frame")
+        scene.resumeSimulation()
+        XCTAssertFalse(scene.isIdlePaused)
+        XCTAssertEqual(scene.opticalTiltFraction, 0.001, accuracy: 0.0001, "Caught up on wake")
         scene.resetGravity()
         XCTAssertEqual(scene.opticalTiltFraction, 0)
 
         // An awake jar follows every sample, as before.
-        scene.resumeSimulation()
-        XCTAssertFalse(scene.isIdlePaused)
         let awake = scene.idleTiltFrameCount
         scene.setGravityVector(CGVector(dx: 0.005 * scale, dy: Constants.Jar.gravity), smoothing: false)
         XCTAssertEqual(scene.opticalTiltFraction, 0.005, accuracy: 0.0001)

@@ -181,15 +181,21 @@ final class GemBrillianceTests: XCTestCase {
 
         let gemBody = try XCTUnwrap(pebble.childNode(withName: "gem.body") as? SKSpriteNode)
         let halo = try XCTUnwrap(pebble.childNode(withName: "gem.halo") as? SKSpriteNode)
-        // Shared light comes from the gem atlas (stand-alone until packed).
-        XCTAssertEqual(GemTextureAtlas.shared.textureName(of: halo), GemTextureAtlas.SharedName.halo)
+        // Shared light comes from the gem atlas (stand-alone until packed):
+        // the registered name and the very texture the atlas serves for it.
+        let atlas = GemTextureAtlas.shared
+        func served(_ name: String) -> SKTexture { atlas.texture(named: name) { GemArtwork.haloImage } }
+        XCTAssertEqual(atlas.textureName(of: halo), GemTextureAtlas.SharedName.halo)
+        XCTAssertTrue(halo.texture === served(GemTextureAtlas.SharedName.halo))
         XCTAssertEqual(halo.blendMode, .add)
         XCTAssertNotNil(pebble.childNode(withName: "//gem.glint"))
         let light = try XCTUnwrap(pebble.childNode(withName: "//pebble.dimensionalLight") as? SKSpriteNode)
-        XCTAssertEqual(GemTextureAtlas.shared.textureName(of: light), GemTextureAtlas.SharedName.lightAdd)
+        XCTAssertEqual(atlas.textureName(of: light), GemTextureAtlas.SharedName.lightAdd)
+        XCTAssertTrue(light.texture === served(GemTextureAtlas.SharedName.lightAdd))
         XCTAssertEqual(light.blendMode, .add)
         let shade = try XCTUnwrap(pebble.childNode(withName: "//gem.rig.shade") as? SKSpriteNode)
-        XCTAssertEqual(GemTextureAtlas.shared.textureName(of: shade), GemTextureAtlas.SharedName.lightShade)
+        XCTAssertEqual(atlas.textureName(of: shade), GemTextureAtlas.SharedName.lightShade)
+        XCTAssertTrue(shade.texture === served(GemTextureAtlas.SharedName.lightShade))
         XCTAssertLessThanOrEqual(
             gemBody.size.width,
             GemArtwork.bodySpriteSize(radius: descriptor.radius).width + 0.001
@@ -758,6 +764,23 @@ final class GemBrillianceTests: XCTestCase {
         XCTAssertEqual(early.slotHexes, GemArtwork.coreSlotHexes(shares: shares))
     }
 
+    /// While the projection is provisional (CloudKit verification pending,
+    /// or a local lower bound) the bed never sinks below the one on screen;
+    /// a verified projection is followed exactly.
+    func testGemBedHoldsWhileTheProjectionIsProvisional() {
+        let shares = [GemColorShare(hex: Constants.Color.english, fraction: 1)]
+        let full = JarGemBedPresentation.state(totalGrams: 250_000, colorShares: shares)
+        let looseOnly = JarGemBedPresentation.state(totalGrams: 3_750, colorShares: shares)
+        let grown = JarGemBedPresentation.state(totalGrams: 2_500_000, colorShares: shares)
+        XCTAssertLessThan(looseOnly.heightBucket, full.heightBucket)
+
+        XCTAssertEqual(JarGemBedPresentation.displayed(current: looseOnly, shown: full, isProvisional: true), full)
+        XCTAssertEqual(JarGemBedPresentation.displayed(current: grown, shown: full, isProvisional: true), grown)
+        XCTAssertEqual(JarGemBedPresentation.displayed(current: looseOnly, shown: nil, isProvisional: true), looseOnly)
+        // Verified: the real value, even lower (the person deleted records).
+        XCTAssertEqual(JarGemBedPresentation.displayed(current: looseOnly, shown: full, isProvisional: false), looseOnly)
+    }
+
     /// Ten bodies fusing into one, or Screen Time obstacles arriving, leave
     /// the bed exactly as it was: same texture, size, position and light.
     @MainActor
@@ -845,22 +868,34 @@ final class GemBrillianceTests: XCTestCase {
                             let columnBottom = bedTop ?? stageHeight - 16
                             let labelBottom = labelBottomLimit ?? columnBottom
                             let top = hudBottom + JarLifetimeCoreLayout.hudGap
-                            let fits = columnBottom - top >= stone * 2
-                                && labelBottom - top >= stone * 2 + JarLifetimeCoreLayout.labelGap + labelHeight
-                            guard fits else { continue }
+                            let minimumStone = stone * JarLifetimeCoreLayout.minimumStoneScale
+                            let fits = columnBottom - top >= minimumStone * 2
+                                && labelBottom - top >= minimumStone * 2 + JarLifetimeCoreLayout.labelGap + labelHeight
+                            guard fits else {
+                                // Too short for even the smallest stone: the
+                                // core is marked buried (its labels step
+                                // behind the scene), never silently spilled.
+                                XCTAssertTrue(layout.overflows, context)
+                                continue
+                            }
+                            XCTAssertFalse(layout.overflows, context)
+                            XCTAssertGreaterThanOrEqual(layout.stoneScale, JarLifetimeCoreLayout.minimumStoneScale - 0.001, context)
+                            XCTAssertLessThanOrEqual(layout.stoneScale, 1, context)
                             XCTAssertGreaterThanOrEqual(layout.columnTop, top - 0.5, context)
                             XCTAssertLessThanOrEqual(layout.columnBottom, columnBottom + 0.5, context)
                             XCTAssertGreaterThanOrEqual(layout.labelTop, layout.columnBottom, context)
                             XCTAssertLessThanOrEqual(layout.labelTop + labelHeight, labelBottom + 0.5, context)
+                            let shownStone = stone * layout.stoneScale
                             if layout.showsMarkers {
                                 XCTAssertGreaterThanOrEqual(
                                     layout.orbitRadius - JarLifetimeCoreLayout.markerSize / 2,
-                                    stone,
+                                    shownStone,
                                     "Markers stay off the stone: \(context)"
                                 )
                             }
                             if layout.showsOrbit {
-                                XCTAssertGreaterThan(layout.orbitRadius, stone, context)
+                                XCTAssertGreaterThan(layout.orbitRadius, shownStone, context)
+                                XCTAssertGreaterThanOrEqual(layout.stoneScale, JarLifetimeCoreLayout.orbitStoneScale - 0.001, context)
                             }
                         }
                     }
@@ -911,6 +946,49 @@ final class GemBrillianceTests: XCTestCase {
         XCTAssertTrue(sawMarkersHidden)
     }
 
+    /// The labels (drawn in front of the scene) end 6 pt above the gem bed
+    /// and above the settled gems under them, never over either.
+    func testCoreLabelsStayAboveTheBedAndTheSettledGems() {
+        let stage: CGFloat = 470
+        let floorY: CGFloat = 30
+        let floorRow = stage - floorY - Constants.Jar.measuredRadius * 2 - 7
+        // A thin bed below the first gem row: the floor row decides.
+        let thin = JarLifetimeCoreLabelLimits.resolve(stageHeight: stage, floorY: floorY, bedTop: stage - floorY - 10, pileTop: 0)
+        XCTAssertEqual(thin.floor, floorRow, accuracy: 0.001)
+        XCTAssertEqual(thin.abovePile, floorRow, accuracy: 0.001)
+        // A 60 pt veteran bed rises above the first row: the bed decides.
+        let bedTop = stage - floorY - 60
+        let veteran = JarLifetimeCoreLabelLimits.resolve(stageHeight: stage, floorY: floorY, bedTop: bedTop, pileTop: 0)
+        XCTAssertEqual(veteran.floor, bedTop - JarLifetimeCoreLabelLimits.clearance, accuracy: 0.001)
+        // Settled gems under the labels, higher still.
+        let piled = JarLifetimeCoreLabelLimits.resolve(stageHeight: stage, floorY: floorY, bedTop: bedTop, pileTop: 130)
+        XCTAssertEqual(piled.abovePile, stage - 130 - JarLifetimeCoreLabelLimits.clearance, accuracy: 0.001)
+        XCTAssertLessThanOrEqual(piled.abovePile, piled.floor)
+    }
+
+    /// On a short stage (an iPhone 12 mini's 375 × 812 pt screen) the stone
+    /// gives way a little before the progress markers disappear.
+    func testShortStageKeepsTheOrbitMarkersByShrinkingTheStone() {
+        let labelHeight = JarLifetimeCoreBackdrop.estimatedLabelHeight
+        let core = JarLifetimeCoreBackdrop.coreDiameter(jarWidth: 375 - Constants.Jar.horizontalMargin * 2, level: 1)
+        // About 94 pt of column above the labels at 3.75 kg, then about
+        // 74 pt with two rows of gems resting under the labels.
+        for budget: CGFloat in [94, 74] {
+            let layout = JarLifetimeCoreLayout.resolve(
+                stageHeight: 384,
+                core: core,
+                orbitCount: 1,
+                topClearance: 150,
+                bottomLimit: 150 + JarLifetimeCoreLayout.hudGap + budget + JarLifetimeCoreLayout.labelGap + labelHeight,
+                labelHeight: labelHeight
+            )
+            XCTAssertTrue(layout.showsOrbit, "budget \(budget)")
+            XCTAssertFalse(layout.overflows)
+            XCTAssertGreaterThanOrEqual(layout.stoneScale, JarLifetimeCoreLayout.orbitStoneScale - 0.001)
+            if budget >= 94 { XCTAssertTrue(layout.showsMarkers, "budget \(budget)") }
+        }
+    }
+
     /// The pile profile the core's labels read counts resting bodies only,
     /// per column, so a pile at one side never pushes labels in the middle
     /// and a falling gem is never mistaken for the pile.
@@ -955,6 +1033,50 @@ final class GemBrillianceTests: XCTestCase {
         XCTAssertEqual(GemArtwork.renderScale(.nan), 3)
         let node = PebbleNode(descriptor: looseDescriptor(), reduceMotion: true, artworkScale: 2)
         XCTAssertEqual(node.artworkScale, 2)
+    }
+
+    // MARK: Pile light
+
+    /// A completion falling from the mouth never stretches the pile light
+    /// over the core and the HUD: only resting bodies shape it, and it
+    /// stays a band seated on the floor.
+    @MainActor
+    func testFallingGemNeverStretchesThePileLight() throws {
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        scene.reduceMotion = true
+        scene.restore(pebbles: [
+            looseDescriptor(),
+            looseDescriptor(id: UUID(uuidString: "C0000000-0000-4000-8000-000000000002")!)
+        ])
+        scene.update(1)
+        let glow = try XCTUnwrap(scene.childNode(withName: "//jar.pileGlow") as? SKSpriteNode)
+        let before = (glow.size, glow.position)
+        XCTAssertGreaterThan(glow.alpha, 0)
+
+        scene.dropFromAbove(looseDescriptor(id: UUID(uuidString: "C0000000-0000-4000-8000-000000000003")!))
+        scene.update(2)
+        let falling = try XCTUnwrap(scene.childNode(withName: "//pebble.C0000000-0000-4000-8000-000000000003") as? PebbleNode)
+        XCTAssertFalse(falling.hasLanded)
+        falling.position = CGPoint(x: 195, y: Constants.Jar.height - 20)
+        falling.physicsBody?.velocity = CGVector(dx: 0, dy: -400)
+        scene.update(3)
+        XCTAssertEqual(glow.size, before.0, "A falling gem is not the pile")
+        XCTAssertEqual(glow.position, before.1)
+
+        // Whatever rests, the light stays a floor band.
+        let interior = JarScene.interiorRect(sceneSize: scene.size)
+        let outer = JarScene.outerJarRect(sceneSize: scene.size)
+        let tall = JarScene.pileLightFrame(
+            bodies: CGRect(x: interior.minX, y: interior.minY, width: interior.width, height: interior.height),
+            jar: outer,
+            interior: interior,
+            bedTop: interior.minY + 40
+        )
+        XCTAssertLessThanOrEqual(tall.height, interior.height * 0.45 + 0.001)
+        XCTAssertLessThanOrEqual(tall.width, outer.width * 0.9 + 0.001)
+        XCTAssertLessThanOrEqual(tall.midY, interior.minY + 40 + 40 + 0.001)
     }
 
     // MARK: Pixel helpers

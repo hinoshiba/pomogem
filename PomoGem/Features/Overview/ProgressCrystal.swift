@@ -980,6 +980,24 @@ enum JarGemBedPresentation {
             slotHexes: slots
         )
     }
+
+    /// The bed to show while the projection may still be incomplete. A
+    /// provisional projection (CloudKit verification pending, or a local
+    /// page that is only a lower bound) counts fewer grams than the store
+    /// holds, so it may only ever raise the bed: the bed that is already on
+    /// screen stays until a verified projection says otherwise. Once the
+    /// projection is verified the bed follows it exactly (it is lower only
+    /// when the person really deleted records, §9.1).
+    static func displayed(
+        current: JarGemBedState,
+        shown: JarGemBedState?,
+        isProvisional: Bool
+    ) -> JarGemBedState {
+        guard isProvisional, let shown, shown.heightBucket > current.heightBucket else {
+            return current
+        }
+        return shown
+    }
 }
 
 /// Pure, bounded geometry for the jar's non-physical accumulation memory.
@@ -1902,12 +1920,15 @@ enum JarLifetimeCorePresentation {
 /// Pure geometry (stage coordinates, y down). The Home HUD's measured bottom
 /// edge bounds the top. The orbit column (stone, rings, markers) is drawn
 /// behind the scene, so it stays above the gem bed's top edge; the label
-/// block below it is drawn in front of the scene, so it only has to stay
-/// above the first row of gems on the floor. Neither the orbit nor its
+/// block below it is drawn in front of the scene, so it has to stay above
+/// the gem bed and the resting gems under it. Neither the orbit nor its
 /// diamond markers can cross the HUD or the core's own labels. When the
 /// band is short (large text, a short stage, a tall bed) the extra orbits
-/// close up first, then the orbit tightens toward the stone, then its
-/// markers hide, and last the orbit itself.
+/// close up first, then the orbit tightens toward the stone, then the stone
+/// gives way a little (to 0.72) so the markers stay, then the markers hide
+/// (the stone may give way again so the ring stays), and last the orbit
+/// itself; a band too short for even the bare stone shrinks it to 0.65, and
+/// below that the core is buried.
 struct JarLifetimeCoreLayout: Equatable {
     let centerY: CGFloat
     let orbitRadius: CGFloat
@@ -1919,6 +1940,12 @@ struct JarLifetimeCoreLayout: Equatable {
     let columnBottom: CGFloat
     /// Top of the label block (name plate and progress card).
     let labelTop: CGFloat
+    /// Scale of the stone (and its halo) when even the bare stone does not
+    /// fit the band: 1 normally, never below `minimumStoneScale`.
+    var stoneScale: CGFloat = 1
+    /// True when the column cannot fit even at `minimumStoneScale`: the
+    /// core is buried, and its labels step behind the scene with it.
+    var overflows = false
 
     /// Double-diamond orbit slot (outer square side).
     static let markerSize: CGFloat = 12
@@ -1928,6 +1955,10 @@ struct JarLifetimeCoreLayout: Equatable {
     static let stoneRadiusFactor: CGFloat = 0.46
     /// Without an overlaid HUD the column starts below the neck and 巡 pill.
     static let topFractionWithoutHUD: CGFloat = 0.16
+    /// The stone shrinks to fit a band too short for it, down to this.
+    static let minimumStoneScale: CGFloat = 0.65
+    /// How far the stone may shrink to keep its orbit (and markers).
+    static let orbitStoneScale: CGFloat = 0.72
 
     /// - Parameters:
     ///   - bottomLimit: lowest y of the orbit column (the gem bed's top).
@@ -1963,22 +1994,44 @@ struct JarLifetimeCoreLayout: Equatable {
         var spacing = nominalSpacing
         var markers = true
         var orbit = true
+        var stoneScale: CGFloat = 1
         if 2 * halfHeight(radius: radius, spacing: spacing, markers: true) > columnBudget {
             // 1. Close up the extra orbits, 2. tighten the main orbit while
             // its markers stay clear of the stone.
             spacing = min(nominalSpacing, 5)
             radius = min(nominalRadius, columnBudget / 2 - markerHalf - rings * spacing)
             if radius < stone + markerHalf + 3 {
-                // 3. Hide the markers at the same radius (the ring and its
-                // lit arc remain), so the orbit never jumps outward.
-                markers = false
-                if radius < stone + 3 {
-                    // 4. No room for any orbit: the stone alone.
-                    orbit = false
+                // 2b. The stone gives way a little (down to
+                // `orbitStoneScale`) so the progress markers stay.
+                let fitting = (radius - markerHalf - 3) / max(stone, 1)
+                if fitting >= orbitStoneScale {
+                    stoneScale = fitting
+                } else {
+                    // 3. Hide the markers at the same radius (the ring and
+                    // its lit arc remain), so the orbit never jumps outward.
+                    markers = false
+                    let ringFitting = (radius - 3) / max(stone, 1)
+                    if ringFitting >= 1 {
+                        stoneScale = 1
+                    } else if ringFitting >= orbitStoneScale {
+                        stoneScale = ringFitting
+                    } else {
+                        // 4. No room for any orbit: the stone alone.
+                        orbit = false
+                        stoneScale = 1
+                    }
                 }
             }
         }
-        let half = orbit ? halfHeight(radius: radius, spacing: spacing, markers: markers) : stone
+        // 5. Not even the bare stone fits: it shrinks to the band (never
+        // below `minimumStoneScale`); below that the core is buried.
+        var overflows = false
+        if !orbit, 2 * stone > columnBudget {
+            let fitting = columnBudget / max(2 * stone, 1)
+            stoneScale = max(minimumStoneScale, fitting)
+            overflows = fitting < minimumStoneScale
+        }
+        let half = orbit ? halfHeight(radius: radius, spacing: spacing, markers: markers) : stone * stoneScale
         let slack = max(0, columnBudget - 2 * half)
         let columnTop = top + slack / 2
         let centerY = columnTop + half
@@ -1990,8 +2043,37 @@ struct JarLifetimeCoreLayout: Equatable {
             showsMarkers: orbit && markers,
             columnTop: columnTop,
             columnBottom: centerY + half,
-            labelTop: centerY + half + labelGap
+            labelTop: centerY + half + labelGap,
+            stoneScale: stoneScale,
+            overflows: overflows
         )
+    }
+}
+
+/// Lowest stage y (SwiftUI, y down) of the time core's label block, which
+/// is drawn in front of the scene. The block never covers the gem bed (its
+/// chips would show through the card and dim 11 pt text) nor the resting
+/// gems under it:
+/// - `floor`: one floor row of gems above the floor, and 6 pt above the
+///   bed's top edge, whichever is higher on screen;
+/// - `abovePile`: also 6 pt above the highest settled body under the
+///   labels (`JarScene.settledPileTop`, 0 when that span is clear).
+struct JarLifetimeCoreLabelLimits: Equatable {
+    let floor: CGFloat
+    let abovePile: CGFloat
+
+    static let clearance: CGFloat = 6
+
+    static func resolve(
+        stageHeight: CGFloat,
+        floorY: CGFloat,
+        bedTop: CGFloat,
+        pileTop: CGFloat
+    ) -> JarLifetimeCoreLabelLimits {
+        let floorRow = stageHeight - floorY - Constants.Jar.measuredRadius * 2 - 7
+        let floor = min(floorRow, bedTop - clearance)
+        let pile = pileTop > 0 ? stageHeight - pileTop - clearance : floor
+        return JarLifetimeCoreLabelLimits(floor: floor, abovePile: min(floor, pile))
     }
 }
 

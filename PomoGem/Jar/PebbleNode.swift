@@ -528,7 +528,7 @@ final class PebbleNode: SKShapeNode {
 
     /// Bake scale used before a view reports its own (the 3× ceiling of
     /// current iPhones, so a texture is never soft).
-    static let defaultArtworkScale: CGFloat = 3
+    nonisolated static let defaultArtworkScale: CGFloat = 3
 
     init(
         descriptor: PebbleDescriptor,
