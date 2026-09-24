@@ -13,6 +13,7 @@ struct AchievementDraft {
 /// the same pinned bar.
 struct AchievementEntrySheet: View {
     private static let noteFieldScrollID = "achievement.create.note-field"
+    private static let topScrollID = "achievement.create.top"
 
     let subjects: [Subject]
     /// Returns nil once saved, otherwise the reason, shown beside the button.
@@ -56,6 +57,7 @@ struct AchievementEntrySheet: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(20)
+                .id(Self.topScrollID)
             }
             .scrollBounceBehavior(.basedOnSize)
             .scrollDismissesKeyboard(.interactively)
@@ -69,6 +71,12 @@ struct AchievementEntrySheet: View {
             // half under the bar as visible. Bring the whole field above the
             // bar once the keyboard is up, and again when the bar grows to
             // explain an over-long name.
+            // Both steps share this scroll view. At large text a kind picked
+            // from low in the list otherwise opened the details already
+            // scrolled past the theme and the name, at 「達成した日」.
+            .onChange(of: selectedKind) { _, _ in
+                scrollProxy.scrollTo(Self.topScrollID, anchor: .top)
+            }
             .onChange(of: noteIsFocused) { _, focused in
                 guard focused else { return }
                 revealNoteField(scrollProxy, after: .milliseconds(350))

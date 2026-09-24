@@ -266,13 +266,30 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
     }
 
     func testOverLongAchievementNameExplainsTheDisabledSave() {
-        launch()
+        checkOverLongAchievementName(accessibility5: false, screenshot: "achievement-name-too-long")
+    }
+
+    func testOverLongAchievementNameExplainsTheDisabledSaveAtAccessibilitySize() {
+        checkOverLongAchievementName(accessibility5: true, screenshot: "achievement-name-too-long-ax5")
+    }
+
+    private func checkOverLongAchievementName(accessibility5: Bool, screenshot: String) {
+        launch(accessibility5: accessibility5)
         openMenuRow("成果を積む")
         let examPass = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "試験合格")).firstMatch
         XCTAssertTrue(examPass.waitForExistence(timeout: 4))
+        XCTAssertTrue(scrollUntilHittable(examPass))
         examPass.tap()
         let field = app.textFields["achievement.create.note"]
+        let save = app.buttons["この成果を積む"]
         XCTAssertTrue(field.waitForExistence(timeout: 4))
+        // At AX5 the pinned save bar covers the lower third of an SE, so
+        // drag above it, a short way at a time.
+        for _ in 0..<8 where !(field.isHittable && field.frame.maxY <= save.frame.minY) {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)))
+        }
+        XCTAssertTrue(field.isHittable)
         field.tap()
         field.typeText(String(repeating: "A", count: 42))
 
@@ -283,13 +300,20 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertTrue(message.waitForExistence(timeout: 3))
         XCTAssertTrue(message.label.contains("2文字超過"), "message=\(message.label)")
         XCTAssertTrue(waitForHittable(message), "The reason must be visible above the keyboard")
-        let save = app.buttons["この成果を積む"]
         XCTAssertFalse(save.isEnabled)
         XCTAssertLessThan(message.frame.maxY, save.frame.minY + 1, "The reason sits above the button")
-        // The whole field clears the pinned bar, not just its top half.
-        XCTAssertTrue(waitUntil(timeout: 3) { field.frame.maxY <= message.frame.minY },
-                      "field=\(field.frame) message=\(message.frame)")
-        saveScreenshot("achievement-name-too-long")
+        // The whole field sits between the navigation bar and the pinned
+        // bar, not half under it. At AX5 on a 4.7-inch phone the keyboard,
+        // the explanation and the button leave no room for the field at all;
+        // there the explanation above is what has to stay in view.
+        let navigationBar = app.navigationBars["記念石にする"]
+        let windowHeight = app.windows.firstMatch.frame.height
+        if !accessibility5 || windowHeight >= 700 {
+            XCTAssertTrue(waitUntil(timeout: 3) {
+                field.frame.maxY <= message.frame.minY && field.frame.minY >= navigationBar.frame.maxY
+            }, "field=\(field.frame) message=\(message.frame) bar=\(navigationBar.frame)")
+        }
+        saveScreenshot(screenshot)
 
         field.typeText(XCUIKeyboardKey.delete.rawValue + XCUIKeyboardKey.delete.rawValue)
         XCTAssertTrue(waitUntil(timeout: 3) { !message.exists })
