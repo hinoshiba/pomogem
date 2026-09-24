@@ -426,6 +426,24 @@ final class PebbleNode: SKShapeNode {
     private var aggregateCountNode: SKLabelNode?
     private var achievementMarkBackdropNode: SKShapeNode?
     private var achievementMarkNode: SKLabelNode?
+    /// Faceted gem skin (loose normal gems and aggregates). The circular
+    /// physics body, radius and mass are untouched by any of these nodes.
+    private(set) var gemRung: GemCutRung?
+    private var gemBodyNode: SKSpriteNode?
+    private var gemHaloNode: SKSpriteNode?
+    /// Screen-fixed light rig: contact shadow, key-light sheen and glints
+    /// counter-rotate together so the light source stays put in the scene.
+    private var gemLightRigNode: SKNode?
+    private var gemGlintNodes: [SKSpriteNode] = []
+    private var gemGlintRestAlphas: [CGFloat] = []
+    private var gemGlintRestPositions: [CGPoint] = []
+    private var gemGlintPhases: [CGFloat] = []
+    private var aggregateCountPlateNode: SKShapeNode?
+    private var gemHaloBaseAlpha: CGFloat = 0
+    /// Reduce Transparency trades additive bloom for crisper edges.
+    private var reducesTransparency = UIAccessibility.isReduceTransparencyEnabled
+
+    static let cutLadder = GemCutLadder.standard
 
     var subjectColor: UIColor { JarPalette.color(hex: descriptor.colorHex) }
     private var presentsRareRewardFeature: Bool {
@@ -486,6 +504,7 @@ final class PebbleNode: SKShapeNode {
         reducesVisualMotion = enabled
         configureAggregateAuraMotion()
         configureEarlyEffortAuraMotion()
+        if enabled { cancelGemTwinkle() }
         guard presentationKind == .prism, !descriptor.isAggregate else { return }
         fillShader = rareRewardMode.usesEnhancedPresentation
             ? (enabled ? Self.staticPrismShader : Self.prismShader)
@@ -614,7 +633,7 @@ final class PebbleNode: SKShapeNode {
             contactNode.zRotation = -zRotation
         }
 
-        if let dimensionalLightNode {
+        if let dimensionalLightNode, gemLightRigNode == nil {
             let worldOffset = CGPoint(x: horizontal * radius * 0.055, y: 0)
             dimensionalLightNode.position = CGPoint(
                 x: cosine * worldOffset.x + sine * worldOffset.y,
@@ -623,10 +642,32 @@ final class PebbleNode: SKShapeNode {
             dimensionalLightNode.zRotation = -zRotation
         }
 
+        if let gemLightRigNode {
+            // One transform keeps shadow, sheen and glints fixed to the
+            // scene's key light. Tilt slides the highlights a little, like
+            // turning a real stone under a lamp.
+            gemLightRigNode.zRotation = -zRotation
+            dimensionalLightNode?.position = CGPoint(x: horizontal * radius * 0.07, y: 0)
+            for index in gemGlintNodes.indices {
+                let glint = gemGlintNodes[index]
+                let phase = gemGlintPhases[index]
+                // Each glint owns a narrow tilt window, so tilting the phone
+                // makes the pile catch the light one stone at a time.
+                let distance = abs(horizontal * 1.6 - phase)
+                let window = max(0, 1 - distance / 0.34)
+                let tiltBoost = window * window * (3 - 2 * window)
+                let twinkleBoost = max(0, glint.xScale - 1) * 1.6
+                glint.alpha = min(1, gemGlintRestAlphas[index] + tiltBoost * 0.55 + twinkleBoost)
+                let rest = gemGlintRestPositions[index]
+                glint.position = CGPoint(x: rest.x + horizontal * radius * 0.12, y: rest.y)
+            }
+        }
+
         // Counts and achievement marks are semantic labels, not painted
         // speckles. Keeping them upright makes ×1万 / 合格 readable even after
         // a user tilts or taps the physical stone.
         aggregateCountNode?.zRotation = -zRotation
+        aggregateCountPlateNode?.zRotation = -zRotation
         achievementMarkBackdropNode?.zRotation = -zRotation
         achievementMarkNode?.zRotation = -zRotation
         childNode(withName: "obstacle.count")?.zRotation = -zRotation
@@ -658,13 +699,17 @@ final class PebbleNode: SKShapeNode {
             ScreenTimeObstacleAppearance.apply(to: self, descriptor: obstacle, radius: radius)
             return
         }
-        addContactShadow()
-
         if let aggregate = descriptor.aggregate {
             configureAggregateAppearance(aggregate)
-            addDimensionalOverlay()
             return
         }
+
+        if descriptor.achievementKind == nil, presentationKind == .normal {
+            configureFacetedLooseAppearance()
+            return
+        }
+
+        addContactShadow()
 
         if let achievementKind = descriptor.achievementKind {
             let material = JarPalette.achievementMaterial(for: achievementKind)
@@ -702,6 +747,219 @@ final class PebbleNode: SKShapeNode {
         addCachedDetailTexture()
         addDimensionalOverlay()
         addRareMarkIfNeeded()
+    }
+
+    // MARK: Faceted gem skin
+
+    private func configureFacetedLooseAppearance() {
+        let rung = Self.cutLadder.rung(for: descriptor)
+        let spec = gemArtworkSpec(rung: rung)
+        // The container keeps the silhouette as its path but draws nothing
+        // (measured: no extra draw); the baked body sprite carries facets,
+        // edges and the girdle outline. Collision stays the circular body.
+        path = GemArtwork.outlinePath(for: spec, radius: radius)
+        fillColor = .clear
+        strokeColor = .clear
+        lineWidth = 0
+        glowWidth = 0
+        let haloColor = descriptor.isTutorial
+            ? UIColor(red: 0.78, green: 0.88, blue: 1, alpha: 1)
+            : GemColor(hex: descriptor.colorHex).haloColor(muted: !descriptor.isMeasured)
+        installGemSkin(
+            rung: rung,
+            spec: spec,
+            haloColor: haloColor,
+            haloStrength: looseHaloStrength
+        )
+    }
+
+    /// Brilliance is proportional to recorded time: a 1-minute stone glows
+    /// less than a 25-minute one, and a 60-minute stone a little more.
+    private var looseHaloStrength: CGFloat {
+        guard !descriptor.isTutorial else { return 1 }
+        let nominal = CGFloat(max(1, Constants.Mass.measuredPebbleGrams))
+        let ratio = CGFloat(max(0, descriptor.grams)) / nominal
+        return min(1.12, max(0.6, 0.55 + 0.45 * ratio.squareRoot()))
+    }
+
+    private func gemArtworkSpec(rung: GemCutRung) -> GemArtworkSpec {
+        let colors: [GemColorShare]
+        let isMuted: Bool
+        let showsDashedRing: Bool
+        if let aggregate = descriptor.aggregate {
+            let mix = aggregate.colorMix
+                .filter { $0.fraction > 0 }
+                .sorted { $0.fraction > $1.fraction }
+                .prefix(4)
+            colors = mix.isEmpty
+                ? [GemColorShare(hex: aggregate.dominantColorHex, fraction: 1)]
+                : mix.map { GemColorShare(hex: $0.hex, fraction: $0.fraction) }
+            isMuted = aggregate.manualPebbleCount > aggregate.measuredPebbleCount
+            showsDashedRing = aggregate.manualPebbleCount > 0
+        } else {
+            colors = [GemColorShare(hex: descriptor.colorHex, fraction: 1)]
+            isMuted = !descriptor.isMeasured && !descriptor.isTutorial
+            showsDashedRing = !descriptor.isMeasured && !descriptor.isTutorial
+        }
+        return GemArtworkSpec(
+            cut: rung.cut,
+            symmetry: rung.symmetry,
+            colors: colors,
+            variant: Int(descriptor.id.presentationHash % UInt64(GemArtworkSpec.variantCount)),
+            facetContrast: rung.facetContrast,
+            sparkleCount: rung.sparkleCount,
+            isMuted: isMuted,
+            showsDashedRing: showsDashedRing
+        )
+    }
+
+    private func installGemSkin(
+        rung: GemCutRung,
+        spec: GemArtworkSpec,
+        haloColor: UIColor,
+        haloStrength: CGFloat
+    ) {
+        gemRung = rung
+        let body = SKSpriteNode(
+            texture: GemArtwork.bodyTexture(for: spec, radius: radius),
+            size: GemArtwork.bodySpriteSize(radius: radius)
+        )
+        body.name = "gem.body"
+        body.zPosition = JarZPosition.pebbleDetail - 0.8
+        addChild(body)
+        gemBodyNode = body
+
+        // One shared additive texture for every halo: all halos in the jar
+        // resolve to a single draw batch.
+        let haloDiameter = radius * 2 * rung.haloScale
+        let halo = SKSpriteNode(
+            texture: GemArtwork.haloTexture,
+            size: CGSize(width: haloDiameter, height: haloDiameter)
+        )
+        halo.name = "gem.halo"
+        halo.color = haloColor
+        halo.colorBlendFactor = 1
+        halo.blendMode = .add
+        gemHaloBaseAlpha = min(1, rung.haloAlpha * haloStrength)
+        halo.alpha = gemHaloBaseAlpha * (reducesTransparency ? 0.45 : 1)
+        halo.zPosition = -0.6
+        addChild(halo)
+        gemHaloNode = halo
+
+        let rig = SKNode()
+        rig.name = "gem.lightRig"
+        addChild(rig)
+        gemLightRigNode = rig
+
+        let shadow = SKSpriteNode(
+            texture: GemArtwork.shadowTexture,
+            size: CGSize(width: radius * 1.95, height: radius * 0.62)
+        )
+        shadow.name = "pebble.contactShadow"
+        shadow.position = CGPoint(x: 0, y: -radius * 0.72)
+        shadow.alpha = descriptor.isTutorial ? 0.22 : 0.70
+        shadow.zPosition = -1
+        rig.addChild(shadow)
+
+        let light = SKSpriteNode(
+            texture: GemArtwork.keyLightTexture,
+            size: CGSize(width: radius * 1.84, height: radius * 1.84)
+        )
+        light.name = "pebble.dimensionalLight"
+        light.alpha = descriptor.isTutorial ? 0.45 : (spec.isMuted ? 0.72 : 1)
+        light.zPosition = JarZPosition.pebbleDetail - 0.25
+        rig.addChild(light)
+        dimensionalLightNode = light
+
+        let hash = descriptor.id.presentationHash
+        let anchors: [(angle: CGFloat, distance: CGFloat, size: CGFloat, alpha: CGFloat)] = [
+            (2.30, 0.60, 1, 0.66),
+            (1.45, 0.80, 0.68, 0.42),
+            (3.05, 0.74, 0.58, 0.36)
+        ]
+        let glintTint = haloColor.mixedForGlint()
+        for index in 0 ..< min(rung.glintCount, anchors.count) {
+            let anchor = anchors[index]
+            let side = radius * rung.glintScale * anchor.size
+            let glint = SKSpriteNode(
+                texture: GemArtwork.glintTexture,
+                size: CGSize(width: side, height: side)
+            )
+            glint.name = "gem.glint"
+            glint.color = glintTint
+            glint.colorBlendFactor = 1
+            glint.blendMode = .add
+            let rest = CGPoint(
+                x: cos(anchor.angle) * radius * anchor.distance,
+                y: sin(anchor.angle) * radius * anchor.distance
+            )
+            glint.position = rest
+            glint.alpha = anchor.alpha
+            glint.zPosition = JarZPosition.pebbleDetail + 0.3
+            rig.addChild(glint)
+            gemGlintNodes.append(glint)
+            gemGlintRestAlphas.append(anchor.alpha)
+            gemGlintRestPositions.append(rest)
+            let bits = (hash >> UInt64(index * 11)) & 0x3FF
+            gemGlintPhases.append(CGFloat(bits) / 1_023 * 2 - 1)
+        }
+    }
+
+    func setReduceTransparency(_ enabled: Bool) {
+        guard reducesTransparency != enabled else { return }
+        reducesTransparency = enabled
+        gemHaloNode?.alpha = gemHaloBaseAlpha * (enabled ? 0.45 : 1)
+    }
+
+    private static let gemTwinkleKey = "gem.glint.twinkle"
+
+    /// Eligible for the scene's bounded twinkle scheduler.
+    var canGemTwinkle: Bool {
+        !gemGlintNodes.isEmpty && !isRemovedForBake && !reducesVisualMotion
+    }
+
+    var isGemTwinkling: Bool {
+        gemGlintNodes.contains { $0.action(forKey: Self.gemTwinkleKey) != nil }
+    }
+
+    var gemTwinkleWeight: Int { gemGlintNodes.count }
+
+    /// One short star flare (420 ms). Alpha follows the flare's scale in
+    /// `updatePresentationLighting`, so tilt and twinkle compose.
+    func playGemTwinkle(sequence: UInt64) {
+        guard canGemTwinkle else { return }
+        let glint = gemGlintNodes[Int(sequence % UInt64(gemGlintNodes.count))]
+        glint.removeAction(forKey: Self.gemTwinkleKey)
+        glint.setScale(1)
+        glint.zRotation = 0
+        let rise = SKAction.group([
+            .scale(to: 1.7, duration: 0.14),
+            .rotate(byAngle: 0.30, duration: 0.14)
+        ])
+        rise.timingMode = .easeOut
+        let fall = SKAction.group([
+            .scale(to: 1, duration: 0.22),
+            .rotate(byAngle: 0.12, duration: 0.22)
+        ])
+        fall.timingMode = .easeIn
+        glint.run(
+            .sequence([
+                rise,
+                .wait(forDuration: 0.06),
+                fall,
+                .run { [weak glint] in glint?.zRotation = 0 }
+            ]),
+            withKey: Self.gemTwinkleKey
+        )
+    }
+
+    private func cancelGemTwinkle() {
+        for (index, glint) in gemGlintNodes.enumerated() {
+            glint.removeAction(forKey: Self.gemTwinkleKey)
+            glint.setScale(1)
+            glint.zRotation = 0
+            glint.alpha = gemGlintRestAlphas[index]
+        }
     }
 
     private var baseLooseFill: UIColor {
@@ -889,12 +1147,14 @@ final class PebbleNode: SKShapeNode {
         let containsRare = presentsRareRewardFeature
             && rareRewardMode.usesEnhancedPresentation
             && (aggregate.goldPebbleCount > 0 || aggregate.prismPebbleCount > 0)
-        fillColor = dominant.mixed(
-            with: JarPalette.aggregateCore,
-            amount: AggregatePresentation.coreBlendAmount(level: aggregate.level)
-        )
-        strokeColor = dominant.mixed(with: .white, amount: 0.56)
-        lineWidth = Constants.Jar.outlineWidth + CGFloat(min(aggregate.level, 5)) * 0.48
+        let rung = Self.cutLadder.rung(aggregateLevel: aggregate.level)
+        let spec = gemArtworkSpec(rung: rung)
+        // The shape itself is only the rim: facets live in the baked body
+        // sprite. Its glow remains the deterministic, level-derived bloom.
+        path = GemArtwork.outlinePath(for: spec, radius: radius)
+        fillColor = .clear
+        strokeColor = dominant.mixed(with: .white, amount: 0.42).withAlphaComponent(0.62)
+        lineWidth = max(1.1, radius * 0.05)
         // Every aggregate is earned. Rarity may add sparkle, but a ×10万
         // crystal must never look dull simply because its children were normal.
         glowWidth = radius * AggregatePresentation.glowScale(
@@ -902,11 +1162,11 @@ final class PebbleNode: SKShapeNode {
             containsRare: containsRare
         )
 
-        let aura = SKShapeNode(path: Self.makeStonePath(radius: radius * 1.06, id: descriptor.id))
+        let aura = SKShapeNode(path: GemArtwork.outlinePath(for: spec, radius: radius * 1.06))
         aura.name = "aggregate.aura"
         aura.fillColor = .clear
-        aura.strokeColor = dominant.withAlphaComponent(0.34)
-        aura.lineWidth = max(1, radius * 0.07)
+        aura.strokeColor = dominant.withAlphaComponent(0.22)
+        aura.lineWidth = max(1, radius * 0.05)
         aura.glowWidth = radius * AggregatePresentation.glowScale(
             level: aggregate.level,
             containsRare: containsRare
@@ -917,43 +1177,64 @@ final class PebbleNode: SKShapeNode {
         updateAggregateRarePresentation(aggregate)
         configureAggregateAuraMotion()
 
-        let composition = SKSpriteNode(
-            texture: Self.makeAggregateTexture(
-                radius: radius,
-                aggregate: aggregate,
-                presentsRareRewards: presentsRareRewardFeature
-                    && rareRewardMode.usesEnhancedPresentation
-            ),
-            size: CGSize(width: radius * 2, height: radius * 2)
+        installGemSkin(
+            rung: rung,
+            spec: spec,
+            haloColor: GemColor(hex: aggregate.dominantColorHex).haloColor(muted: false),
+            haloStrength: aggregateHaloStrength(aggregate)
         )
-        composition.name = "aggregate.composition"
-        composition.zPosition = JarZPosition.pebbleDetail
-        addChild(composition)
 
-        let ringCount = AggregatePresentation.ringCount(level: aggregate.level)
-        for index in 0..<ringCount {
-            let inset = CGFloat(index + 1) * radius * 0.105
-            let ring = SKShapeNode(circleOfRadius: max(radius - inset, radius * 0.42))
-            ring.name = "aggregate.levelRing"
-            ring.fillColor = .clear
-            ring.strokeColor = UIColor.white.withAlphaComponent(0.14 + CGFloat(index) * 0.025)
-            ring.lineWidth = Constants.Jar.aggregateRingWidth
-            ring.zPosition = JarZPosition.pebbleDetail
-            addChild(ring)
+        if presentsRareRewardFeature,
+           rareRewardMode.usesEnhancedPresentation,
+           aggregate.goldPebbleCount > 0 || aggregate.prismPebbleCount > 0 {
+            let composition = SKSpriteNode(
+                texture: Self.makeAggregateRareTexture(radius: radius, aggregate: aggregate),
+                size: CGSize(width: radius * 2, height: radius * 2)
+            )
+            composition.name = "aggregate.composition"
+            composition.zPosition = JarZPosition.pebbleDetail
+            addChild(composition)
         }
 
         let count = SKLabelNode(fontNamed: "AvenirNext-Bold")
         count.name = "aggregate.count"
         count.text = AggregatePresentation.countLabel(aggregate.pebbleCount)
         let characterCount = CGFloat(count.text?.count ?? 2)
-        count.fontSize = radius * max(0.27, 0.43 - max(0, characterCount - 3) * 0.025)
-        count.fontColor = UIColor.white.withAlphaComponent(0.96)
+        count.fontSize = radius * max(0.27, 0.40 - max(0, characterCount - 3) * 0.025)
+        count.fontColor = UIColor.white.withAlphaComponent(0.98)
         count.verticalAlignmentMode = .center
         count.horizontalAlignmentMode = .center
         count.zPosition = JarZPosition.pebbleDetail + 1
         count.blendMode = .alpha
+
+        // Brighter facets need an ink plate so ×10 / ×1万 stay readable on
+        // every colour. It stays upright with the label.
+        let plateWidth = max(radius * 0.86, count.frame.width + radius * 0.34)
+        let plate = SKShapeNode(
+            rectOf: CGSize(width: plateWidth, height: radius * 0.52),
+            cornerRadius: radius * 0.26
+        )
+        plate.name = "aggregate.countPlate"
+        plate.fillColor = UIColor(red: 0.035, green: 0.05, blue: 0.11, alpha: 0.80)
+        plate.strokeColor = UIColor.white.withAlphaComponent(0.34)
+        plate.lineWidth = max(0.7, radius * 0.03)
+        plate.glowWidth = 0
+        plate.zPosition = JarZPosition.pebbleDetail + 0.9
+        plate.blendMode = .alpha
+        addChild(plate)
+        aggregateCountPlateNode = plate
         addChild(count)
         aggregateCountNode = count
+    }
+
+    /// Glow follows recorded grams, never the number of completions, so
+    /// splitting the same focus into many one-minute sessions cannot buy a
+    /// brighter crystal.
+    private func aggregateHaloStrength(_ aggregate: AggregateMetadata) -> CGFloat {
+        let nominal = CGFloat(max(1, aggregate.pebbleCount))
+            * CGFloat(max(1, Constants.Mass.measuredPebbleGrams))
+        let ratio = CGFloat(max(0, descriptor.grams)) / nominal
+        return 0.55 + 0.45 * min(max(ratio, 0.25), 1)
     }
 
     private func updateAggregateRarePresentation(_ aggregate: AggregateMetadata) {
@@ -992,73 +1273,18 @@ final class PebbleNode: SKShapeNode {
         aura.run(.repeatForever(.sequence([expand, contract])), withKey: actionKey)
     }
 
-    private static func makeAggregateTexture(
+    /// Rare-reward marks for an aggregate (internal builds only; rare
+    /// rewards are disabled in release). Facets now come from `GemArtwork`.
+    private static func makeAggregateRareTexture(
         radius: CGFloat,
-        aggregate: AggregateMetadata,
-        presentsRareRewards: Bool
+        aggregate: AggregateMetadata
     ) -> SKTexture {
         let size = CGSize(width: radius * 2, height: radius * 2)
         let format = UIGraphicsImageRendererFormat.preferred()
         format.opaque = false
         let image = UIGraphicsImageRenderer(size: size, format: format).image { renderer in
             let context = renderer.cgContext
-            let mixes = aggregate.colorMix.isEmpty
-                ? [StratumColorFraction(hex: Constants.Color.textMute, fraction: 1)]
-                : aggregate.colorMix
-            let dotCount = max(
-                Constants.Jar.aggregateInteriorDotCount,
-                AggregatePresentation.facetCount(level: aggregate.level) * 2
-            )
-            var cumulative: [(fraction: Double, color: UIColor)] = []
-            var cursor = 0.0
-            for item in mixes {
-                cursor += max(0, item.fraction)
-                cumulative.append((cursor, JarPalette.color(hex: item.hex)))
-            }
-
-            for index in 0..<dotCount {
-                let unit = (Double(index) + 0.5) / Double(dotCount)
-                let color = cumulative.first(where: { unit <= $0.fraction })?.color
-                    ?? cumulative.last?.color
-                    ?? JarPalette.aggregateCore
-                let angle = CGFloat(index) * 2.399963229728653
-                let radial = sqrt(CGFloat(index + 1) / CGFloat(dotCount + 1)) * radius * 0.70
-                let center = CGPoint(
-                    x: radius + cos(angle) * radial,
-                    y: radius + sin(angle) * radial
-                )
-                let dotRadius = max(1.4, radius * Constants.Jar.aggregateInteriorDotScale)
-                context.setFillColor(color.withAlphaComponent(0.88).cgColor)
-                let chip = CGMutablePath()
-                chip.move(to: CGPoint(x: center.x, y: center.y - dotRadius))
-                chip.addLine(to: CGPoint(x: center.x + dotRadius * 0.78, y: center.y))
-                chip.addLine(to: CGPoint(x: center.x, y: center.y + dotRadius))
-                chip.addLine(to: CGPoint(x: center.x - dotRadius * 0.78, y: center.y))
-                chip.closeSubpath()
-                context.addPath(chip)
-                context.fillPath()
-                context.setStrokeColor(UIColor.white.withAlphaComponent(0.16).cgColor)
-                context.setLineWidth(max(0.35, radius * 0.018))
-                context.addPath(chip)
-                context.strokePath()
-            }
-
-            if aggregate.manualPebbleCount > 0 {
-                let ringRadius = radius * 0.83
-                context.setStrokeColor(UIColor.white.withAlphaComponent(0.55).cgColor)
-                context.setLineWidth(max(1, radius * 0.06))
-                context.setLineDash(phase: 0, lengths: [radius * 0.12, radius * 0.13])
-                context.strokeEllipse(in: CGRect(
-                    x: radius - ringRadius,
-                    y: radius - ringRadius,
-                    width: ringRadius * 2,
-                    height: ringRadius * 2
-                ))
-                context.setLineDash(phase: 0, lengths: [])
-            }
-
-            if presentsRareRewards,
-               aggregate.goldPebbleCount > 0 {
+            if aggregate.goldPebbleCount > 0 {
                 context.setFillColor(JarPalette.gold.withAlphaComponent(0.95).cgColor)
                 drawAggregateFacet(
                     in: context,
@@ -1066,8 +1292,7 @@ final class PebbleNode: SKShapeNode {
                     size: radius * 0.13
                 )
             }
-            if presentsRareRewards,
-               aggregate.prismPebbleCount > 0 {
+            if aggregate.prismPebbleCount > 0 {
                 context.setFillColor(UIColor.white.withAlphaComponent(0.95).cgColor)
                 drawAggregateFacet(
                     in: context,
@@ -1449,6 +1674,11 @@ enum JarPalette {
 }
 
 private extension UIColor {
+    /// Near-white star with a hint of the gem colour.
+    func mixedForGlint() -> UIColor {
+        UIColor.white.mixed(with: self, amount: 0.22)
+    }
+
     func vivid(
         saturationFloor: CGFloat = 0.74,
         brightnessFloor: CGFloat = 0.88

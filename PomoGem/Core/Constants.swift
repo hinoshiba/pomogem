@@ -198,6 +198,11 @@ enum Constants {
         static let goldSparkCount = 8
         static let goldPreDropDuration: TimeInterval = 0.4
         static let rareTwinkleInterval: TimeInterval = 2
+        /// Faceted study gems: one deterministic star flare at most every
+        /// interval while the scene is awake. The idle pause still freezes
+        /// the jar after it settles, so a resting jar costs no extra frames.
+        static let gemTwinkleInterval: TimeInterval = 0.45
+        static let maximumConcurrentGemTwinkles = 6
         static let goldTwinkleProbability = 0.14
         static let prismTwinkleProbability = 0.20
         static let sparkFontScale: CGFloat = 0.72

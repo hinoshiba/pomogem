@@ -233,6 +233,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private let rimNode = SKShapeNode()
     private let innerRimNode = SKShapeNode()
     private let tapCausticNode = SKShapeNode()
+    /// Second contour that reads as the thickness of the glass wall.
+    private let innerWallNode = SKShapeNode()
+    /// Warm pool of light on the jar floor; shared halo texture, additive.
+    private let floorGlowNode = SKSpriteNode(texture: GemArtwork.haloTexture)
     private let wallNode = SKNode()
     private let floorNode = SKNode()
     private let cameraNode = SKCameraNode()
@@ -257,6 +261,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var lastSpawnUptime = -Double.greatestFiniteMagnitude
     private var idleSampleStartedAt: TimeInterval?
     private var lastTwinkleUptime = ProcessInfo.processInfo.systemUptime
+    private var lastGemTwinkleUptime: TimeInterval = 0
+    private var gemTwinkleSequence: UInt64 = 0
     private var lastTapBounceUptime = -Double.greatestFiniteMagnitude
     private(set) var lastAcceptedTapSelection: JarAcceptedTapSelection?
     private var lastShakeUptime = -Double.greatestFiniteMagnitude
@@ -292,6 +298,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var suspendedAggregateIDs = Set<UUID>()
     private var hasReportedHardLimit = false
     private var reduceMotionObserver: NSObjectProtocol?
+    private var reduceTransparencyObserver: NSObjectProtocol?
     private var transientMotionGate = JarTransientMotionGate()
     private var sensorySequence: UInt64 = 0
     private var opticalTiltFraction: CGFloat = 0
@@ -583,6 +590,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     deinit {
         if let reduceMotionObserver {
             NotificationCenter.default.removeObserver(reduceMotionObserver)
+        }
+        if let reduceTransparencyObserver {
+            NotificationCenter.default.removeObserver(reduceTransparencyObserver)
         }
     }
 
@@ -1655,6 +1665,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         processDropQueue()
         publishPhysicalContentChangeIfNeeded()
         updateRareTwinkles()
+        updateGemTwinkles(now: currentTime)
         updateIdlePause(
             currentTime: currentTime,
             uptime: ProcessInfo.processInfo.systemUptime
@@ -1779,6 +1790,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         rimNode.name = "jar.glass.rim"
         innerRimNode.name = "jar.glass.innerRim"
         tapCausticNode.name = "jar.tap.caustic"
+        innerWallNode.name = "jar.glass.innerWall"
+        floorGlowNode.name = "jar.floorGlow"
         worldNode.addChild(jarShadowNode)
         worldNode.addChild(backGlassNode)
         worldNode.addChild(mouthDepthNode)
@@ -1794,6 +1807,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         worldNode.addChild(rimNode)
         worldNode.addChild(innerRimNode)
         worldNode.addChild(tapCausticNode)
+        worldNode.addChild(innerWallNode)
+        worldNode.addChild(floorGlowNode)
 
         cameraNode.position = cameraRestPosition
         addChild(cameraNode)
@@ -1802,6 +1817,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     private func observeReduceMotion() {
+        reduceTransparencyObserver = NotificationCenter.default.addObserver(
+            forName: UIAccessibility.reduceTransparencyStatusDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                let enabled = UIAccessibility.isReduceTransparencyEnabled
+                self?.allPebbleNodes.forEach { $0.setReduceTransparency(enabled) }
+            }
+        }
         reduceMotionObserver = NotificationCenter.default.addObserver(
             forName: UIAccessibility.reduceMotionStatusDidChangeNotification,
             object: nil,
@@ -1861,8 +1886,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // Keep the silhouette legible without letting a uniform blue halo win
         // over the mouth depth, base refraction, and asymmetric lens shading.
         // This is especially important against Dawn's brighter background.
-        glassNode.strokeColor = JarPalette.glassEdge.withAlphaComponent(0.40)
-        glassNode.lineWidth = 1.45
+        glassNode.strokeColor = JarPalette.glassEdge.withAlphaComponent(0.52)
+        glassNode.lineWidth = 1.6
         glassNode.glowWidth = 0.22
         glassNode.zPosition = JarZPosition.glass
 
@@ -1945,10 +1970,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         specularNode.path = highlights
         specularNode.fillColor = .clear
         specularNode.strokeColor = JarPalette.specular
-        specularNode.lineWidth = 2.2
+        specularNode.lineWidth = 2.4
         specularNode.lineCap = .round
-        specularNode.glowWidth = 0.8
-        specularNode.alpha = 0.58
+        specularNode.glowWidth = 1.8
+        specularNode.alpha = 0.82
         specularNode.zPosition = JarZPosition.glass + 1
 
         let warmReflection = CGMutablePath()
@@ -1967,10 +1992,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         warmReflectionNode.path = warmReflection
         warmReflectionNode.fillColor = .clear
         warmReflectionNode.strokeColor = JarPalette.warmSpecular
-        warmReflectionNode.lineWidth = 1.45
+        warmReflectionNode.lineWidth = 2.0
         warmReflectionNode.lineCap = .round
-        warmReflectionNode.glowWidth = 1.0
-        warmReflectionNode.alpha = 0.60
+        warmReflectionNode.glowWidth = 2.0
+        warmReflectionNode.alpha = 0.86
         warmReflectionNode.zPosition = JarZPosition.glass + 1.05
 
         rimNode.path = CGPath(
@@ -2013,6 +2038,21 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         tapCausticNode.glowWidth = 3.2
         tapCausticNode.alpha = 0
         tapCausticNode.zPosition = JarZPosition.glass + 1.5
+
+        innerWallNode.path = makeJarPath(in: outer.insetBy(dx: 6, dy: 5))
+        innerWallNode.fillColor = .clear
+        innerWallNode.strokeColor = UIColor.white.withAlphaComponent(0.085)
+        innerWallNode.lineWidth = 1
+        innerWallNode.glowWidth = 0
+        innerWallNode.zPosition = JarZPosition.glass + 0.1
+
+        floorGlowNode.size = CGSize(width: outer.width * 0.98, height: 72)
+        floorGlowNode.position = CGPoint(x: outer.midX, y: interiorRect.minY + 4)
+        floorGlowNode.color = UIColor(red: 1, green: 0.62, blue: 0.42, alpha: 1)
+        floorGlowNode.colorBlendFactor = 1
+        floorGlowNode.blendMode = .add
+        floorGlowNode.alpha = 0.42
+        floorGlowNode.zPosition = JarZPosition.strata + 0.5
 
         wallNode.removeAllChildren()
         addStaticEdge(
@@ -2201,6 +2241,105 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                     endRadius: renderSize.width * 0.52,
                     options: [.drawsAfterEndLocation]
                 )
+            }
+
+            // Thick-glass rim light: warm key on the left wall, cool fill on
+            // the right, each fading inward over the wall's optical thickness.
+            let rimDepth = min(20, renderSize.width * 0.06)
+            let warmRim = [
+                JarPalette.warmSpecular.withAlphaComponent(0.58).cgColor,
+                JarPalette.warmSpecular.withAlphaComponent(0.14).cgColor,
+                UIColor.clear.cgColor
+            ] as CFArray
+            if let gradient = CGGradient(
+                colorsSpace: colorSpace,
+                colors: warmRim,
+                locations: [0, 0.38, 1]
+            ) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: 0, y: renderSize.height / 2),
+                    end: CGPoint(x: rimDepth, y: renderSize.height / 2),
+                    options: []
+                )
+            }
+            let coolRim = [
+                JarPalette.specular.withAlphaComponent(0.54).cgColor,
+                JarPalette.specular.withAlphaComponent(0.12).cgColor,
+                UIColor.clear.cgColor
+            ] as CFArray
+            if let gradient = CGGradient(
+                colorsSpace: colorSpace,
+                colors: coolRim,
+                locations: [0, 0.38, 1]
+            ) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: renderSize.width, y: renderSize.height / 2),
+                    end: CGPoint(x: renderSize.width - rimDepth, y: renderSize.height / 2),
+                    options: []
+                )
+            }
+
+            // Two soft vertical reflections on the curved front wall,
+            // drawn as stretched radial falloffs so both ends fade out.
+            for (center, width, alpha) in [
+                (renderSize.width * 0.17, renderSize.width * 0.05, CGFloat(0.075)),
+                (renderSize.width * 0.80, renderSize.width * 0.03, CGFloat(0.05))
+            ] {
+                let band = [
+                    UIColor.white.withAlphaComponent(alpha).cgColor,
+                    UIColor.white.withAlphaComponent(alpha * 0.55).cgColor,
+                    UIColor.clear.cgColor
+                ] as CFArray
+                guard let gradient = CGGradient(
+                    colorsSpace: colorSpace,
+                    colors: band,
+                    locations: [0, 0.6, 1]
+                ) else { continue }
+                context.saveGState()
+                context.translateBy(x: center, y: renderSize.height * 0.48)
+                context.scaleBy(x: 1, y: renderSize.height * 0.40 / max(width, 1))
+                context.drawRadialGradient(
+                    gradient,
+                    startCenter: .zero, startRadius: 0,
+                    endCenter: .zero, endRadius: width,
+                    options: []
+                )
+                context.restoreGState()
+            }
+
+            // A thick base: bright caustic line just above the bottom edge,
+            // below the resting gems, over a darker lens band.
+            let baseTop = renderSize.height - min(6, renderSize.height * 0.015)
+            context.setFillColor(UIColor(red: 0.05, green: 0.08, blue: 0.20, alpha: 0.16).cgColor)
+            context.fill(CGRect(
+                x: 0,
+                y: baseTop,
+                width: renderSize.width,
+                height: renderSize.height - baseTop
+            ))
+            let caustic = [
+                UIColor.clear.cgColor,
+                JarPalette.warmSpecular.withAlphaComponent(0.55).cgColor,
+                UIColor.white.withAlphaComponent(0.62).cgColor,
+                JarPalette.specular.withAlphaComponent(0.50).cgColor,
+                UIColor.clear.cgColor
+            ] as CFArray
+            if let gradient = CGGradient(
+                colorsSpace: colorSpace,
+                colors: caustic,
+                locations: [0.04, 0.28, 0.5, 0.72, 0.96]
+            ) {
+                context.saveGState()
+                context.clip(to: CGRect(x: 0, y: baseTop - 1.4, width: renderSize.width, height: 1.4))
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: 0, y: baseTop),
+                    end: CGPoint(x: renderSize.width, y: baseTop),
+                    options: []
+                )
+                context.restoreGState()
             }
 
             // Microscopic deterministic grain keeps large translucent areas
@@ -2941,6 +3080,43 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             ]),
             withKey: ActionKey.cameraShake
         )
+    }
+
+    /// Picks at most one gem per interval, weighted by its glint count, with
+    /// a deterministic sequence hash (no randomness, no reward semantics).
+    /// Higher tiers own more glints and therefore sparkle more often.
+    private func updateGemTwinkles(now: TimeInterval) {
+        guard !reduceMotion,
+              abs(now - lastGemTwinkleUptime) >= Constants.Jar.gemTwinkleInterval
+        else { return }
+        lastGemTwinkleUptime = now
+        var candidates: [PebbleNode] = []
+        var totalWeight = 0
+        var activeCount = 0
+        for case let pebble as PebbleNode in worldNode.children where pebble.canGemTwinkle {
+            if pebble.isGemTwinkling {
+                activeCount += 1
+                continue
+            }
+            candidates.append(pebble)
+            totalWeight += pebble.gemTwinkleWeight
+        }
+        guard activeCount < Constants.Jar.maximumConcurrentGemTwinkles,
+              totalWeight > 0
+        else { return }
+        gemTwinkleSequence &+= 1
+        var mixed = gemTwinkleSequence &* 0x9E37_79B9_7F4A_7C15
+        mixed ^= mixed >> 29
+        mixed &*= 0xBF58_476D_1CE4_E5B9
+        mixed ^= mixed >> 32
+        var pick = Int(mixed % UInt64(totalWeight))
+        for pebble in candidates {
+            pick -= pebble.gemTwinkleWeight
+            if pick < 0 {
+                pebble.playGemTwinkle(sequence: mixed >> 7)
+                return
+            }
+        }
     }
 
     private func updateRareTwinkles() {
