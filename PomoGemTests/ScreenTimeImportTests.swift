@@ -398,9 +398,17 @@ final class ScreenTimeArrivalSummaryTests: XCTestCase {
         let suite = "ScreenTimeArrivalTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let announcer = ScreenTimeArrivalAnnouncer(defaults: defaults, acknowledgedKey: { "stones" })
+        // No wall-clock race: the flush is awaited through an expectation,
+        // and the quiet interval is short but still a real suspension, so
+        // everything noted synchronously below lands in one summary.
+        let announcer = ScreenTimeArrivalAnnouncer(defaults: defaults, acknowledgedKey: { "stones" },
+                                                   quietInterval: .milliseconds(20))
         var spoken: [String] = []
-        let announce: (String, String) -> Void = { text, _ in spoken.append(text) }
+        let flushed = expectation(description: "One summary once the arrivals stop")
+        let announce: (String, String) -> Void = { text, _ in
+            spoken.append(text)
+            flushed.fulfill()
+        }
 
         announcer.noteBlackStoneCount(5, isBound: true, announce: announce)
         // Before binding the controller publishes 0; that must not be stored.
@@ -409,7 +417,7 @@ final class ScreenTimeArrivalSummaryTests: XCTestCase {
         announcer.noteLearningLanding(subjectName: "英語", announce: announce)
         announcer.noteLearningLanding(subjectName: "英語", announce: announce)
         XCTAssertTrue(spoken.isEmpty, "Nothing is said while pebbles are still landing")
-        try await Task.sleep(for: .milliseconds(1_200))
+        await fulfillment(of: [flushed], timeout: 10)
         XCTAssertEqual(spoken, ["スクリーンタイム：英語 +20分（2粒）、黒い石 +2"])
         XCTAssertEqual(defaults.integer(forKey: "stones"), 7)
     }

@@ -12,23 +12,29 @@ import Foundation
 /// §1.1).
 @MainActor
 final class ScreenTimeArrivalAnnouncer {
-    /// How long Home waits after the last arrival before speaking.
-    static let quietInterval: Duration = .milliseconds(600)
+    /// How long Home waits after the last arrival before speaking. Pebbles
+    /// land 180 ms apart, so this outlasts the gap between two of them.
+    /// Nonisolated because it is a default argument, which is evaluated
+    /// outside the class's main-actor isolation.
+    nonisolated static let defaultQuietInterval: Duration = .milliseconds(600)
     static let acknowledgedBlackStonesBase = "screen-time.acknowledged-black-stones"
 
     private var learning = ScreenTimeArrivalTally()
     private var flushTask: Task<Void, Never>?
     private let defaults: UserDefaults
     private let acknowledgedKey: () -> String
+    private let quietInterval: Duration
 
     init(
         defaults: UserDefaults = .standard,
         acknowledgedKey: @escaping () -> String = {
             AccountScopedLocalState.defaultsKey(base: ScreenTimeArrivalAnnouncer.acknowledgedBlackStonesBase)
-        }
+        },
+        quietInterval: Duration = ScreenTimeArrivalAnnouncer.defaultQuietInterval
     ) {
         self.defaults = defaults
         self.acknowledgedKey = acknowledgedKey
+        self.quietInterval = quietInterval
     }
 
     /// A Screen Time learning pebble reached the jar.
@@ -61,8 +67,9 @@ final class ScreenTimeArrivalAnnouncer {
 
     private func scheduleFlush(_ announce: @escaping (String, String) -> Void) {
         flushTask?.cancel()
+        let quietInterval = quietInterval
         flushTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: Self.quietInterval)
+            try? await Task.sleep(for: quietInterval)
             guard !Task.isCancelled, let self else { return }
             let tally = self.learning
             self.learning = ScreenTimeArrivalTally()
