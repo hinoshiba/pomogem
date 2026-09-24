@@ -565,6 +565,9 @@ struct FusionOrbitStage: View {
     let state: FusionOrbitStageState
     let colorHex: String
     var scale: FusionOrbitStageScale = .compact
+    /// Grams the destination crystal holds (its rung follows grams, D8);
+    /// defaults to its pebble count of 25-minute gems.
+    var destinationGrams: Int? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -612,28 +615,17 @@ struct FusionOrbitStage: View {
                     )
                     .frame(width: baseRadius * 2, height: baseRadius * 2)
 
+                // A quiet progress arc (α ≤ 0.3): no spokes and no bright
+                // wheel, so ten gems around one never read as a roulette
+                // (Docs/GemExperienceDesign.md §7.14).
                 Circle()
                     .trim(from: 0, to: CGFloat(state.progressFraction ?? 0))
                     .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color(hex: colorHex).opacity(0.30),
-                                .white.opacity(0.90),
-                                PomoGemTheme.auroraViolet.opacity(0.70)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        style: StrokeStyle(lineWidth: max(1.4, dimension * 0.012), lineCap: .round)
+                        Color.white.opacity(colorSchemeContrast == .increased ? 0.62 : 0.30),
+                        style: StrokeStyle(lineWidth: max(1, dimension * 0.008), lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
                     .frame(width: baseRadius * 2, height: baseRadius * 2)
-                    .shadow(color: Color(hex: colorHex).opacity(0.55), radius: 4)
-
-                sourceConnections(
-                    dimension: dimension,
-                    orbitRadius: orbitRadius
-                )
 
                 ForEach(0 ..< state.slotCount, id: \.self) { index in
                     let angle = Angle.degrees(
@@ -643,8 +635,9 @@ struct FusionOrbitStage: View {
                     let isLatest = state.emphasizesLatestSource
                         && index == state.latestLitSlotIndex
 
-                    FusionOrbitSourceShard(
+                    FusionOrbitSourceGem(
                         colorHex: colorHex,
+                        variant: index,
                         isLit: isLit,
                         isLatest: isLatest && !state.isFusionComplete,
                         highContrast: colorSchemeContrast == .increased
@@ -669,10 +662,21 @@ struct FusionOrbitStage: View {
                 completionFlare(dimension: dimension)
 
                 Group {
-                    if state.destinationMaterialized {
+                    if state.destinationMaterialized, scale == .chronicle {
+                        // The Overview's lifetime camera: the time core.
                         LifetimeCorePrism(
                             colorHex: colorHex,
                             level: state.destinationLevel
+                        )
+                    } else if state.destinationMaterialized {
+                        // A formed crystal: the Home jar's ×N art.
+                        GemArtworkStone(
+                            spec: GemArtworkStone.aggregateSpec(
+                                grams: destinationGrams
+                                    ?? state.destinationPebbleCount * Constants.Mass.measuredPebbleGrams,
+                                colors: [GemColorShare(hex: colorHex, fraction: 1)],
+                                variant: state.destinationLevel
+                            )
                         )
                     } else {
                         FusionDestinationVessel(
@@ -707,40 +711,6 @@ struct FusionOrbitStage: View {
         .onChange(of: reduceMotion) { _, _ in
             settleForCurrentMotionPreference()
         }
-    }
-
-    private func sourceConnections(
-        dimension: CGFloat,
-        orbitRadius: CGFloat
-    ) -> some View {
-        Canvas { context, size in
-            guard let lit = state.litSlotCount else { return }
-            let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            for index in 0 ..< min(state.slotCount, max(0, lit)) {
-                let angle = -Double.pi / 2
-                    + Double(index) / Double(max(1, state.slotCount)) * Double.pi * 2
-                let source = CGPoint(
-                    x: center.x + CGFloat(cos(angle)) * orbitRadius,
-                    y: center.y + CGFloat(sin(angle)) * orbitRadius
-                )
-                var ray = Path()
-                ray.move(to: source)
-                ray.addLine(to: center)
-                context.stroke(
-                    ray,
-                    with: .linearGradient(
-                        Gradient(colors: [
-                            Color(hex: colorHex).opacity(0.42),
-                            .white.opacity(state.isFusionComplete ? 0.26 : 0.08)
-                        ]),
-                        startPoint: source,
-                        endPoint: center
-                    ),
-                    lineWidth: state.isFusionComplete ? 0.9 : 0.55
-                )
-            }
-        }
-        .frame(width: dimension, height: dimension)
     }
 
     @ViewBuilder
@@ -866,51 +836,24 @@ private struct FusionDestinationVessel: View {
     }
 }
 
-private struct FusionOrbitSourceShard: View {
+/// One source gem of a ten-to-one carry: the Home jar's own loose-gem art.
+/// A waiting slot is the same stone, colourless and faint.
+private struct FusionOrbitSourceGem: View {
     let colorHex: String
+    let variant: Int
     let isLit: Bool
     let isLatest: Bool
     let highContrast: Bool
 
     var body: some View {
         ZStack {
-            DiamondSlot()
-                .fill(
-                    isLit
-                        ? AnyShapeStyle(
-                            AngularGradient(
-                                colors: [
-                                    Color(hex: colorHex),
-                                    .white,
-                                    PomoGemTheme.auroraBlue,
-                                    PomoGemTheme.auroraViolet,
-                                    Color(hex: colorHex)
-                                ],
-                                center: .center
-                            )
-                        )
-                        : AnyShapeStyle(PomoGemTheme.raised.opacity(highContrast ? 0.96 : 0.78))
-                )
-                .overlay {
-                    DiamondSlot()
-                        .stroke(
-                            isLit
-                                ? Color.white.opacity(0.90)
-                                : Color.white.opacity(highContrast ? 0.70 : 0.18),
-                            lineWidth: highContrast ? 1.4 : 0.85
-                        )
-                }
-                .shadow(
-                    color: isLit ? Color(hex: colorHex).opacity(0.80) : .clear,
-                    radius: isLit ? 5 : 0
-                )
-
-            if isLit {
-                Circle()
-                    .fill(.white.opacity(0.78))
-                    .frame(width: 2.5, height: 2.5)
-                    .offset(x: -2, y: -2)
-            }
+            GemArtworkStone(
+                spec: GemArtworkStone.looseSpec(hex: colorHex, variant: variant),
+                glowHex: isLit ? colorHex : nil,
+                glowOpacity: 0.36
+            )
+            .saturation(isLit ? 1 : 0)
+            .opacity(isLit ? 1 : (highContrast ? 0.70 : 0.45))
 
             if isLatest {
                 Circle()
@@ -918,7 +861,6 @@ private struct FusionOrbitSourceShard: View {
                     .padding(-4)
             }
         }
-        .saturation(isLit ? 1.34 : 0.76)
     }
 }
 
@@ -2603,206 +2545,140 @@ private struct DiamondSlot: Shape {
     }
 }
 
-/// A lightweight, code-native crystal shared by the completion card,
-/// aggregation celebration, and the three-scale overview. It grows facets
-/// from real completed sessions and remains static when Reduce Motion is on.
+/// The jar's baked gem art as a SwiftUI view (Docs/GemExperienceDesign.md
+/// §7.2–7.3): the same body image the Home jar shows, with the
+/// screen-fixed light rig (pavilion shade, key light) laid over it and an
+/// optional soft halo. One source of art for the fusion sheet, the
+/// Overview and the share cards, so a ×10 looks the same everywhere.
+struct GemArtworkStone: View {
+    let spec: GemArtworkSpec
+    var glowHex: String?
+    var glowOpacity: Double = 0.42
+
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        GeometryReader { proxy in
+            let side = min(proxy.size.width, proxy.size.height)
+            let radius = side / 2
+            let sprite = GemArtwork.bodySpriteSize(radius: radius)
+            ZStack {
+                if let glowHex {
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    Color(hex: glowHex).opacity(reduceTransparency ? glowOpacity * 0.45 : glowOpacity),
+                                    Color(hex: glowHex).opacity(reduceTransparency ? glowOpacity * 0.15 : glowOpacity * 0.32),
+                                    .clear
+                                ],
+                                center: .center,
+                                startRadius: radius * 0.55,
+                                endRadius: radius * 1.35
+                            )
+                        )
+                        .frame(width: side * 1.4, height: side * 1.4)
+                }
+                Image(uiImage: GemArtwork.bodyImage(for: spec, radius: radius, scale: displayScale))
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: sprite.width, height: sprite.height)
+                Image(uiImage: GemArtwork.lightRigShadeImage)
+                    .resizable()
+                    .frame(width: side, height: side)
+                Image(uiImage: GemArtwork.lightRigAddImage)
+                    .resizable()
+                    .frame(width: side, height: side)
+                    .blendMode(.plusLighter)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// The Home art of a crystal holding `grams` (rung by contained grams,
+    /// never by level: D8).
+    static func aggregateSpec(grams: Int, colors: [GemColorShare], variant: Int = 0) -> GemArtworkSpec {
+        GemArtworkSpec(
+            rung: GemCutLadder.standard.rung(aggregateGrams: grams),
+            colors: colors,
+            variant: variant % GemArtworkSpec.variantCount,
+            isMuted: false,
+            showsDashedRing: false
+        )
+    }
+
+    /// The Home art of one measured loose gem.
+    static func looseSpec(hex: String, variant: Int = 0) -> GemArtworkSpec {
+        GemArtworkSpec(
+            rung: GemCutLadder.standard.loose,
+            colors: [GemColorShare(hex: hex, fraction: 1)],
+            variant: variant % GemArtworkSpec.variantCount,
+            isMuted: false,
+            showsDashedRing: false
+        )
+    }
+}
+
+/// The Overview's crystal: the Home jar's own gem art at the rung of the
+/// grams it holds (an achievement shows the copper-set step cut), with the
+/// "×N" count on the same dark plate as in the jar. It breathes gently and
+/// stays still with Reduce Motion.
 struct ProgressCrystalGlyph: View {
     let completionCount: Int
     let colorHex: String
     var level = 1
     var showsCount = false
+    /// Grams the crystal holds; defaults to `completionCount` 25-minute
+    /// gems when unknown.
+    var grams: Int? = nil
+    var colorShares: [GemColorShare]? = nil
+    var isAchievement = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var breath = false
 
-    private let facetMaximum = 12
+    private var spec: GemArtworkSpec {
+        let colors = colorShares.flatMap { $0.isEmpty ? nil : $0 } ?? [GemColorShare(hex: colorHex, fraction: 1)]
+        if isAchievement {
+            return GemArtworkSpec(
+                rung: GemCutLadder.standard.achievement,
+                colors: colors,
+                variant: 0,
+                isMuted: false,
+                showsDashedRing: false
+            )
+        }
+        let contained = grams ?? max(1, completionCount) * Constants.Mass.measuredPebbleGrams
+        return GemArtworkStone.aggregateSpec(grams: contained, colors: colors, variant: level)
+    }
 
     var body: some View {
-        ZStack {
-            Canvas { context, size in
-                drawCrystal(context: &context, size: size)
-            }
-            .scaleEffect(breath ? 1.018 : 0.99)
-            .shadow(
-                color: Color(hex: colorHex).opacity(0.48),
-                radius: 9 + CGFloat(min(max(level, 1), 4)) * 2
-            )
+        GeometryReader { proxy in
+            let side = min(proxy.size.width, proxy.size.height)
+            ZStack {
+                GemArtworkStone(spec: spec, glowHex: colorHex, glowOpacity: 0.40)
+                    .frame(width: side * 0.80, height: side * 0.80)
+                    .scaleEffect(breath ? 1.018 : 0.99)
 
-            if showsCount {
-                Text(AggregatePresentation.countLabel(completionCount))
-                    .font(.system(size: 13, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.55), radius: 2, y: 1)
-                    .minimumScaleFactor(0.65)
-                    .padding(5)
+                if showsCount {
+                    Text(AggregatePresentation.countLabel(completionCount))
+                        .font(.system(size: max(8, side * 0.14), weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .minimumScaleFactor(0.65)
+                        .lineLimit(1)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(Color(red: 0.035, green: 0.05, blue: 0.11).opacity(0.86), in: Capsule())
+                        .offset(y: side * 0.25)
+                }
             }
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .onAppear { updateMotion() }
         .onChange(of: reduceMotion) { _, _ in updateMotion() }
         .accessibilityHidden(true)
-    }
-
-    private func drawCrystal(context: inout GraphicsContext, size: CGSize) {
-        let diameter = min(size.width, size.height)
-        guard diameter > 2 else { return }
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        let radius = diameter * 0.43
-        let base = Color(hex: colorHex)
-        let vertices = (0..<facetMaximum).map { index -> CGPoint in
-            let angle = -Double.pi / 2 + Double(index) / Double(facetMaximum) * Double.pi * 2
-            let modulation = index.isMultiple(of: 2) ? 1.0 : 0.87
-            return CGPoint(
-                x: center.x + CGFloat(cos(angle)) * radius * modulation,
-                y: center.y + CGFloat(sin(angle)) * radius * modulation
-            )
-        }
-
-        let auraRect = CGRect(
-            x: center.x - radius * 1.12,
-            y: center.y - radius * 1.12,
-            width: radius * 2.24,
-            height: radius * 2.24
-        )
-        context.fill(
-            Path(ellipseIn: auraRect),
-            with: .radialGradient(
-                Gradient(colors: [base.opacity(0.30), base.opacity(0)]),
-                center: center,
-                startRadius: 0,
-                endRadius: radius * 1.12
-            )
-        )
-
-        let growth = WeeklyProgressPolicy.growthState(
-            for: completionCount,
-            maximum: facetMaximum
-        )
-        let lit = growth.outerLitFacetCount
-        for index in vertices.indices {
-            var facet = Path()
-            facet.move(to: center)
-            facet.addLine(to: vertices[index])
-            facet.addLine(to: vertices[(index + 1) % vertices.count])
-            facet.closeSubpath()
-
-            let isLit = index < lit
-            let highlight = index.isMultiple(of: 3)
-            let color: Color = if isLit {
-                highlight ? base.mix(with: .white, by: 0.34) : base
-            } else {
-                base.mix(with: Color(hex: Constants.Color.inkRaised), by: 0.64)
-            }
-            context.fill(facet, with: .color(color.opacity(isLit ? 0.96 : 0.72)))
-            context.stroke(facet, with: .color(.white.opacity(isLit ? 0.22 : 0.09)), lineWidth: 0.7)
-        }
-
-        var outline = Path()
-        if let first = vertices.first {
-            outline.move(to: first)
-            vertices.dropFirst().forEach { outline.addLine(to: $0) }
-            outline.closeSubpath()
-        }
-        context.stroke(
-            outline,
-            with: .linearGradient(
-                Gradient(colors: [.white.opacity(0.82), base.opacity(0.82)]),
-                startPoint: CGPoint(x: center.x - radius, y: center.y - radius),
-                endPoint: CGPoint(x: center.x + radius, y: center.y + radius)
-            ),
-            lineWidth: max(1.2, diameter * 0.025)
-        )
-
-        drawGrowthLayers(
-            context: &context,
-            center: center,
-            radius: radius,
-            base: base,
-            state: growth
-        )
-
-        let flare = Path(ellipseIn: CGRect(
-            x: center.x - radius * 0.35,
-            y: center.y - radius * 0.52,
-            width: radius * 0.28,
-            height: radius * 0.16
-        ))
-        context.fill(flare, with: .color(.white.opacity(lit > 0 ? 0.62 : 0.18)))
-    }
-
-    private func drawGrowthLayers(
-        context: inout GraphicsContext,
-        center: CGPoint,
-        radius: CGFloat,
-        base: Color,
-        state: WeeklyProgressPolicy.GrowthState
-    ) {
-        guard state.completedLayerCount > 0 else { return }
-
-        for index in 0 ..< state.visibleRingCount {
-            let inset = radius * (0.18 + CGFloat(index) * 0.105)
-            let ringRadius = max(radius * 0.28, radius - inset)
-            let ring = Path(ellipseIn: CGRect(
-                x: center.x - ringRadius,
-                y: center.y - ringRadius,
-                width: ringRadius * 2,
-                height: ringRadius * 2
-            ))
-            let dash: [CGFloat] = index.isMultiple(of: 2) ? [] : [2.5, 3.5]
-            context.stroke(
-                ring,
-                with: .color(base.mix(with: .white, by: 0.32).opacity(0.36 + Double(index) * 0.07)),
-                style: StrokeStyle(lineWidth: 0.9 + CGFloat(index) * 0.18, dash: dash)
-            )
-        }
-
-        let innerRadius = radius * 0.34
-        let activeLit = state.activeLayerLitFacetCount
-        let innerVertices = (0 ..< facetMaximum).map { index -> CGPoint in
-            let angle = -Double.pi / 2
-                + Double(index) / Double(facetMaximum) * Double.pi * 2
-                + Double(state.completedLayerCount) * 0.11
-            return CGPoint(
-                x: center.x + CGFloat(cos(angle)) * innerRadius,
-                y: center.y + CGFloat(sin(angle)) * innerRadius
-            )
-        }
-        for index in innerVertices.indices {
-            var facet = Path()
-            facet.move(to: center)
-            facet.addLine(to: innerVertices[index])
-            facet.addLine(to: innerVertices[(index + 1) % innerVertices.count])
-            facet.closeSubpath()
-            let isLit = index < activeLit
-            context.fill(
-                facet,
-                with: .color(
-                    isLit
-                        ? base.mix(with: .white, by: 0.46).opacity(0.98)
-                        : Color(hex: Constants.Color.inkRaised).opacity(0.74)
-                )
-            )
-            context.stroke(
-                facet,
-                with: .color(.white.opacity(isLit ? 0.34 : 0.08)),
-                lineWidth: 0.55
-            )
-        }
-
-        let coreRadius = radius * min(0.17, 0.09 + CGFloat(state.completedLayerCount) * 0.012)
-        context.fill(
-            Path(ellipseIn: CGRect(
-                x: center.x - coreRadius,
-                y: center.y - coreRadius,
-                width: coreRadius * 2,
-                height: coreRadius * 2
-            )),
-            with: .radialGradient(
-                Gradient(colors: [.white.opacity(0.92), base.opacity(0.72)]),
-                center: center,
-                startRadius: 0,
-                endRadius: coreRadius
-            )
-        )
     }
 
     private func updateMotion() {
@@ -2816,31 +2692,5 @@ struct ProgressCrystalGlyph: View {
         withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
             breath = true
         }
-    }
-}
-
-private extension Color {
-    func mix(with other: Color, by amount: CGFloat) -> Color {
-        let fraction = min(max(amount, 0), 1)
-        return Color(uiColor: UIColor(self).progressMixed(
-            with: UIColor(other),
-            amount: fraction
-        ))
-    }
-}
-
-private extension UIColor {
-    func progressMixed(with other: UIColor, amount: CGFloat) -> UIColor {
-        let value = min(max(amount, 0), 1)
-        var lhs: (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
-        var rhs: (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
-        getRed(&lhs.0, green: &lhs.1, blue: &lhs.2, alpha: &lhs.3)
-        other.getRed(&rhs.0, green: &rhs.1, blue: &rhs.2, alpha: &rhs.3)
-        return UIColor(
-            red: lhs.0 + (rhs.0 - lhs.0) * value,
-            green: lhs.1 + (rhs.1 - lhs.1) * value,
-            blue: lhs.2 + (rhs.2 - lhs.2) * value,
-            alpha: lhs.3 + (rhs.3 - lhs.3) * value
-        )
     }
 }

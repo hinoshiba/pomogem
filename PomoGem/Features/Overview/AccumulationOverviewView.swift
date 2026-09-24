@@ -1466,10 +1466,12 @@ private struct FusionHierarchyLevelSummary: Identifiable, Equatable {
         level == 0 ? "\(unitCount.formatted())粒" : "\(unitCount.formatted())個"
     }
 
+    /// One accent per decimal form. No gold: a ×10 must not read as a
+    /// medal or a coin (Docs/GemExperienceDesign.md §7.14).
     var accentHex: String {
         let palette = [
             Constants.Color.auroraWarm,
-            Constants.Color.amberLamp,
+            "#D56B82",
             Constants.Color.auroraCool,
             Constants.Color.auroraViolet,
             "#E96DDB",
@@ -1648,9 +1650,10 @@ private struct FusionHierarchyGlyph: View {
             }
 
             ProgressCrystalGlyph(
-                completionCount: 12,
+                completionCount: max(1, summary.unitPebbleCount),
                 colorHex: summary.accentHex,
-                level: max(1, summary.level)
+                level: max(1, summary.level),
+                grams: summary.grams / max(1, summary.unitCount)
             )
             .padding(CGFloat(ringCount) * 3 + 5)
 
@@ -1791,7 +1794,8 @@ private struct MilestoneSummaryCard: View {
                 ProgressCrystalGlyph(
                     completionCount: 12,
                     colorHex: milestone.colorHex,
-                    level: 4
+                    level: 4,
+                    isAchievement: true
                 )
                 Text(milestone.mark)
                     .font(.system(size: 18, weight: .black, design: .rounded))
@@ -2279,7 +2283,9 @@ private struct AggregateGlyph: View {
                 completionCount: cluster.pebbleCount,
                 colorHex: dominantColorHex,
                 level: cluster.level,
-                showsCount: true
+                showsCount: true,
+                grams: cluster.grams,
+                colorShares: GemArtworkSpec.aggregateColors(cluster.colorMix, fallbackHex: dominantColorHex)
             )
             HStack(spacing: 2) {
                 ForEach(Array(palette.prefix(5).enumerated()), id: \.offset) { _, item in

@@ -626,6 +626,12 @@ struct ShareComposerView: View {
             }
             .background(NightBackground())
             .navigationTitle("カードにする")
+            // Scrolled content must not ghost through the title bar: an
+            // inline title on a near-opaque bar (a large title would sit
+            // under the bar's background).
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(PomoGemTheme.background.opacity(0.96), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if isRendering {

@@ -594,6 +594,19 @@ struct HomeView: View {
                         completionInsetContents
                     }
                 }
+                // Whatever scrolls behind the card's top edge (the theme and
+                // duration row) fades out instead of showing half its text.
+                .background(alignment: .top) {
+                    LinearGradient(
+                        colors: [PomoGemTheme.background.opacity(0), PomoGemTheme.background.opacity(0.92)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 30)
+                    .offset(y: -30)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
                 .transition(
                     reduceMotion
                         ? .opacity
@@ -3435,7 +3448,11 @@ struct HomeView: View {
         }
         let usesRareSymbol = presentationKind != .normal
             && rareRewardMode.usesEnhancedPresentation
-        router.showToast(message, symbol: usesRareSymbol ? "sparkles" : "scalemass")
+        router.showToast(
+            message,
+            symbol: usesRareSymbol ? "sparkles" : "scalemass",
+            bottomInset: ToastMessage.homeLaunchClearance
+        )
 
         if descriptor.source == .screenTime {
             ScreenTimeGemDropStore.remove(descriptor.id)
@@ -4802,7 +4819,8 @@ private struct StratumCelebrationView: View {
                         FusionOrbitStage(
                             state: orbitState,
                             colorHex: colorHex,
-                            scale: .hero
+                            scale: .hero,
+                            destinationGrams: request.grams
                         )
                         .frame(width: 218, height: 218)
 

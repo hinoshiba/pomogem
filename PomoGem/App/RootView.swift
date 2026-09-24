@@ -669,7 +669,7 @@ struct RootView: View {
                 VStack {
                     Spacer()
                     ToastOverlay(message: toast)
-                        .padding(.bottom, 86)
+                        .padding(.bottom, toast.bottomInset)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 .zIndex(20)

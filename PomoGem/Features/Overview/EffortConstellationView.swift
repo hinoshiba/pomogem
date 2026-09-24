@@ -337,7 +337,11 @@ struct EffortConstellationView: View {
             min(240, min(size.width * 0.58, size.height * 0.62))
         )
         let labelWidth = stageDiameter * 0.66
-        let labelOffset = stageDiameter * 0.11
+        let labelFontSizeForOffset = min(coreLabelTextSize, max(9, stageDiameter * 0.07))
+        // Below the whole orbit, never over the core (the stone is the same
+        // baked art as Home's and must stay whole).
+        let labelOffset = stageDiameter * 0.5
+            + (labelFontSizeForOffset * 1.25 + max(4, stageDiameter * 0.024) * 2) / 2 + 4
         let labelFontSize = min(
             coreLabelTextSize,
             max(9, stageDiameter * 0.07)
@@ -382,9 +386,7 @@ struct EffortConstellationView: View {
             .padding(.vertical, max(4, stageDiameter * 0.024))
             // The crystal color changes with lifetime subjects, so a shadow
             // cannot guarantee text contrast. Keep the core caption on a
-            // deterministic dark optical label instead. The label lives
-            // inside the lower half of the core, leaving a geometry-derived
-            // gap before the six-o'clock satellite at every stage size.
+            // deterministic dark optical label instead, below the orbit.
             .background(.black.opacity(0.86), in: Capsule())
             .overlay(Capsule().stroke(.white.opacity(0.22), lineWidth: 0.5))
             .offset(y: labelOffset)

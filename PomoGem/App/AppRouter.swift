@@ -111,13 +111,21 @@ final class AppRouter {
     }
 #endif
 
-    func showToast(_ text: String, symbol: String? = nil, duration: Duration = .seconds(3)) {
+    /// - Parameter bottomInset: distance above the bottom safe area; Home's
+    ///   landing toast passes `ToastMessage.homeLaunchClearance` so it sits
+    ///   above the theme row and the launch button instead of over them.
+    func showToast(
+        _ text: String,
+        symbol: String? = nil,
+        duration: Duration = .seconds(3),
+        bottomInset: CGFloat = ToastMessage.defaultBottomInset
+    ) {
         toastTask?.cancel()
         let appearsAnimation: Animation? = UIAccessibility.isReduceMotionEnabled
             ? nil
             : .spring(response: 0.36, dampingFraction: 0.84)
         withAnimation(appearsAnimation) {
-            toast = ToastMessage(text: text, symbol: symbol)
+            toast = ToastMessage(text: text, symbol: symbol, bottomInset: bottomInset)
         }
         toastTask = Task { [weak self] in
             try? await Task.sleep(for: duration)
@@ -180,6 +188,11 @@ struct ToastMessage: Identifiable, Equatable {
     let id = UUID()
     let text: String
     let symbol: String?
+    var bottomInset: CGFloat = ToastMessage.defaultBottomInset
+
+    static let defaultBottomInset: CGFloat = 86
+    /// Clears Home's theme/duration row and the launch button.
+    static let homeLaunchClearance: CGFloat = 190
 }
 
 struct ToastOverlay: View {
