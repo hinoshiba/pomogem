@@ -3288,14 +3288,26 @@ struct FocusTimerDisplay: View {
         .padding(max(24, lineWidth * 2.5))
     }
 
+    /// The ring never widens, so at accessibility sizes the full line cannot
+    /// fit. Drop the spacing, then the mode word, before the number itself;
+    /// paused stays visible through the amber color and the 「一時停止」 header.
     private var statusLabel: some View {
-        Text("\(modeLabel)  ·  \(remainingPercent)% 残り")
+        ViewThatFits(in: .horizontal) {
+            statusText("\(modeLabel)  ·  \(remainingPercent)% 残り", tracking: 1.2)
+            statusText("\(modeLabel) · \(remainingPercent)%", tracking: 0)
+            statusText("\(remainingPercent)% 残り", tracking: 0)
+            statusText("\(remainingPercent)%", tracking: 0)
+                .minimumScaleFactor(0.72)
+        }
+    }
+
+    private func statusText(_ text: String, tracking: CGFloat) -> some View {
+        Text(text)
             .font(.caption2.weight(.bold))
-            .tracking(1.2)
+            .tracking(tracking)
             .foregroundStyle(
                 isPaused ? PomoGemTheme.amber : PomoGemTheme.muted
             )
-            .minimumScaleFactor(0.72)
             .lineLimit(1)
     }
 
