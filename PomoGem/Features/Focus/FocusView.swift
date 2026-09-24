@@ -1529,6 +1529,9 @@ struct FocusView: View {
         cue: TimerCompletionForegroundFeedbackPolicy.Cue
     ) {
         guard pendingCompletion == nil else { return }
+        // A 「今日はここまで」 confirmation opened before the end no longer
+        // describes anything: the focus is complete and will be saved.
+        showGiveUpConfirmation = false
         pendingCompletion = result
         saveRecoveryState(pendingCompletion: result)
         signalCompletionIfNeeded(result, cue: cue)
@@ -2549,6 +2552,16 @@ struct FocusView: View {
     }
 
     private func giveUp() {
+        // The confirmation can be answered in the same run-loop turn that
+        // completes the focus. An earned completion is never tombstoned,
+        // nor its only recovery envelope cleared, by a stale give-up.
+        guard pendingCompletion == nil,
+              completion == nil,
+              engine.containsRecoverableFocus,
+              engine.snapshot(at: .now).remainingSeconds > 0 else {
+            showGiveUpConfirmation = false
+            return
+        }
         operationErrorMessage = nil
         let sessionID = engine.currentSessionID
         if let sessionID {
@@ -2575,6 +2588,7 @@ struct FocusView: View {
         UIApplication.shared.isIdleTimerDisabled = false
         if let sessionID {
             NotificationManager.shared.cancelFocusCompletion(sessionID: sessionID)
+            completionAlert.stop(sessionID: sessionID)
             scheduledCompletionNotificationDeliveryDate = nil
             Task { await FocusActivityManager.shared.cancel(sessionID: sessionID) }
         }

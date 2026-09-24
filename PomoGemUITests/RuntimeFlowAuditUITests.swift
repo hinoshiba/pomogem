@@ -356,6 +356,47 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertFalse(app.buttons["休憩の提案を閉じる"].exists)
     }
 
+    func testGiveUpConfirmationClosesWhenFocusCompletesAndAwardSurvives() throws {
+        selectDemoDurationForVisualAudit()
+        let probe = app.descendants(matching: .any)["jar.presentation.probe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 5))
+        let initial = try completionDropSample(from: probe)
+        startDemoFocusForVisualAudit()
+
+        // Open the destructive confirmation and hesitate past the end.
+        let giveUp = app.buttons["今日はここまで"]
+        XCTAssertTrue(waitForHittable(giveUp, timeout: 4))
+        giveUp.tap()
+        let confirmation = app.alerts["今日はここまで"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
+        XCTAssertTrue(
+            confirmation.staticTexts["この回の粒は積まれません。これまでの瓶はそのままです。"].exists
+        )
+
+        let stop = app.buttons["focus.completion-alert.stop"]
+        XCTAssertTrue(
+            stop.waitForExistence(timeout: 20),
+            "The demo must complete behind the open confirmation"
+        )
+        XCTAssertTrue(
+            waitForAbsence(confirmation, timeout: 3),
+            "Completion must close a give-up confirmation that no longer applies"
+        )
+        XCTAssertTrue(waitForHittable(stop, timeout: 3))
+        retainScreenshot(named: "Give-up confirmation closed by completion")
+        stop.tap()
+
+        let dismiss = app.buttons["休憩の提案を閉じる"]
+        XCTAssertTrue(
+            dismiss.waitForExistence(timeout: 20),
+            "The earned completion must reach Home's receipt, not be discarded"
+        )
+        XCTAssertFalse(app.alerts["今日はここまで"].exists)
+        dismiss.tap()
+        let landed = try waitForLandedCompletion(from: probe, after: initial, timeout: 10)
+        XCTAssertTrue(landed.records.hasSuffix(":250"), landed.records)
+    }
+
     private func verifyCompletionDropAfterRewardDismissal(reduceMotion: Bool) throws {
         app.terminate()
         app.launchEnvironment["POMOGEM_UI_TEST_REDUCE_MOTION"] = reduceMotion ? "1" : "0"
