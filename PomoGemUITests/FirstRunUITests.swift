@@ -219,6 +219,25 @@ final class FirstRunUITests: XCTestCase {
         XCTAssertTrue(app.buttons["home.subject-picker"].waitForExistence(timeout: 8))
     }
 
+    // MARK: - Trial drop (walk-std-12)
+
+    func testTrialDropSaysWhatTheGemStandsFor() {
+        launchOnboarding()
+        let next = app.buttons["onboarding.next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 8))
+        next.tap()
+        let trialDrop = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "ためしに一粒")).firstMatch
+        XCTAssertTrue(trialDrop.waitForExistence(timeout: 4))
+        XCTAssertFalse(app.staticTexts["onboarding.trial-meaning"].exists)
+        trialDrop.tap()
+        let meaning = app.staticTexts["onboarding.trial-meaning"]
+        XCTAssertTrue(meaning.waitForExistence(timeout: 4), "The landing must be explained")
+        XCTAssertEqual(meaning.label, "25分の集中を終えると、こんな一粒（250g）が瓶に残ります。")
+        attachScreenshot("onboarding-trial-landed")
+        XCTAssertTrue(waitUntilEnabled(next))
+    }
+
     // MARK: - Helpers
 
     private func launchOnboarding(accessibility5: Bool = false, extraEnvironment: [String: String] = [:]) {

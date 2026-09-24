@@ -502,6 +502,7 @@ private struct OnboardingPebble: View {
 
 private struct TrialDropPage: View {
     @Binding var dropped: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -559,10 +560,27 @@ private struct TrialDropPage: View {
                         .accessibilityValue(isDropping ? "落下中" : dropped ? "着地済み" : "落下前")
                     }
 
+                    if dropped {
+                        // walk-std-12. The proof moment names the promise:
+                        // what this drop stands for in a real focus.
+                        Text("25分の集中を終えると、こんな一粒（250g）が瓶に残ります。",
+                             tableName: "Onboarding",
+                             comment: "Onboarding trial drop: shown after the trial gem lands")
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(PomoGemTheme.amber)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("onboarding.trial-meaning")
+                            .transition(.opacity)
+                    }
+
                     Text("任意の体験です。0g・記録には入りません。「次へ」で省略できます。")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: dropped)
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 24)
@@ -609,7 +627,11 @@ private struct TrialDropPage: View {
         activeDropID = pebble.id
         isDropping = true
         scene.restore(pebbles: [])
-        scene.drop(pebble)
+        // walk-std-12. Enter through the neck and fall the jar's full
+        // height, the same path as Home's completion drop, instead of
+        // appearing near the floor and landing before anyone notices. The
+        // 2.5 s recovery below still covers the longer fall (under 1 s).
+        scene.dropFromAbove(pebble)
     }
 
     private func completeWithoutAnimation() {
@@ -653,8 +675,8 @@ private struct TrialDropPage: View {
     }
 
     private var jarAccessibilityLabel: String {
-        if dropped { return "透明な一粒が瓶に積もりました" }
-        if isDropping { return "透明な一粒が瓶の中を落下しています" }
+        if dropped { return "ためしの一粒が瓶に積もりました" }
+        if isDropping { return "ためしの一粒が瓶の中を落下しています" }
         return "空の瓶"
     }
 
