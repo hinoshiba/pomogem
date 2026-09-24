@@ -482,8 +482,28 @@ final class GIFShareLifecycleUITests: XCTestCase {
         let action = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", title)
         ).firstMatch
-        XCTAssertTrue(scrollUntilHittable(action), "Missing menu action: \(title)")
+        XCTAssertTrue(bringFullyIntoView(action), "Missing menu action: \(title)")
         action.tap()
+    }
+
+    /// The Home menu is a half-height sheet whose last rows start below its
+    /// edge. XCTest reports a row cut by that edge as hittable, but the tap
+    /// lands in the home-indicator strip and opens nothing. Short drags (a
+    /// fling can carry a row straight past) until the whole row is inside the
+    /// window and below the sheet's top.
+    private func bringFullyIntoView(_ element: XCUIElement, attempts: Int = 16) -> Bool {
+        let window = app.windows.firstMatch.frame
+        let topInset: CGFloat = 100
+        for _ in 0..<attempts {
+            if element.exists, element.isHittable,
+               element.frame.minY >= window.minY + topInset,
+               element.frame.maxY <= window.maxY { return true }
+            let isAbove = element.exists && element.frame.minY < window.minY + topInset
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: isAbove ? 0.45 : 0.8))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: isAbove ? 0.75 : 0.5))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        return element.exists && element.isHittable
     }
 
     private func enableSelfReportedSessionIfNeeded(for shareButton: XCUIElement) {
