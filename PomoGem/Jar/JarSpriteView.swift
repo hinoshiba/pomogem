@@ -764,50 +764,17 @@ private struct JarAmbientStage: View {
                 .frame(width: width * 1.14, height: height * 0.92)
                 .position(x: width / 2, y: height * 0.43)
 
-                // Showcase floor: a dark contact shadow, then a warm (left)
-                // and cool (right) light pool, as if the jar sat on glass.
-                Ellipse()
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.black.opacity(0.30), .clear],
-                            center: .center,
-                            startRadius: 2,
-                            endRadius: jarWidth * 0.46
-                        )
-                    )
-                    .frame(width: jarWidth * 0.94, height: 34)
-                    .blur(radius: reduceTransparency ? 3 : 8)
-                    .position(x: width / 2, y: jarBottom + 2)
-
-                HStack(spacing: 0) {
-                    Ellipse()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    PomoGemTheme.auroraWarm.opacity(reduceTransparency ? 0.17 : 0.34),
-                                    .clear
-                                ],
-                                center: .center,
-                                startRadius: 1,
-                                endRadius: jarWidth * 0.32
-                            )
-                        )
-                    Ellipse()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    PomoGemTheme.auroraBlue.opacity(reduceTransparency ? 0.15 : 0.30),
-                                    .clear
-                                ],
-                                center: .center,
-                                startRadius: 1,
-                                endRadius: jarWidth * 0.32
-                            )
-                        )
-                }
-                .frame(width: jarWidth * 1.12, height: 44)
-                .blur(radius: reduceTransparency ? 2 : 10)
-                .position(x: width / 2, y: jarBottom + 6)
+                // The jar's own light, baked once per stage size (no blur,
+                // no animation): floor pools, the rim bloom around the
+                // glass, and the lit interior behind the core and the gems.
+                // The floor light runs on past the stage's bottom edge.
+                Image(uiImage: JarStageArtwork.image(
+                    stageSize: proxy.size,
+                    reduceTransparency: reduceTransparency
+                ))
+                .resizable()
+                .frame(width: width, height: height + JarStageArtwork.bottomOverflow)
+                .frame(width: width, height: height, alignment: .top)
 
                 // Rim of light where the glass base meets the floor.
                 Capsule()
@@ -815,17 +782,16 @@ private struct JarAmbientStage: View {
                         LinearGradient(
                             colors: [
                                 .clear,
-                                PomoGemTheme.auroraWarm.opacity(0.55),
-                                Color.white.opacity(0.62),
-                                PomoGemTheme.auroraBlue.opacity(0.50),
+                                PomoGemTheme.auroraWarm.opacity(0.70),
+                                Color.white.opacity(0.80),
+                                PomoGemTheme.auroraBlue.opacity(0.66),
                                 .clear
                             ],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                     )
-                    .frame(width: jarWidth * 0.86, height: 1.4)
-                    .blur(radius: reduceTransparency ? 0 : 0.6)
+                    .frame(width: jarWidth * 0.90, height: 1.6)
                     .position(x: width / 2, y: jarBottom + 1)
 
                 if !reduceTransparency {
@@ -838,6 +804,209 @@ private struct JarAmbientStage: View {
         }
         .accessibilityHidden(true)
         .allowsHitTesting(false)
+    }
+}
+
+/// The static light of the jar stage (Docs/GemExperienceDesign.md §7.8),
+/// baked with Core Graphics once per stage size and cached. It lies behind
+/// the time core and the SpriteKit bottle:
+///
+/// - the floor: a soft contact shadow and two light pools, warm #FF8A5B on
+///   the left and cool #5BA8FF on the right (α0.42/0.38, 0.62 of the jar
+///   width each), as if the jar stood on glass;
+/// - the rim bloom: warm light leaving the left wall, cool light the right;
+/// - the interior: a violet body of light, brighter toward the floor where
+///   the gems glow, warm/cool side light, a soft glow behind the core, and
+///   ten still bokeh dots in the empty band (never over the core column).
+///
+/// `JarSnapshotter` draws the same image behind a share snapshot, so the
+/// exported jar carries the same light as Home.
+enum JarStageArtwork {
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 6
+        return cache
+    }()
+
+    /// Soft light only, so a modest scale is enough and keeps the bitmap
+    /// small (about 1.7 MB for a 402 × 470 pt stage).
+    static let renderScale: CGFloat = 1.5
+
+    /// The floor light continues this far below the stage (the image is
+    /// taller than the stage by this much), so it never ends in a hard edge.
+    static let bottomOverflow: CGFloat = 60
+
+    static func image(stageSize: CGSize, reduceTransparency: Bool) -> UIImage {
+        let stage = CGSize(width: max(1, stageSize.width.rounded()), height: max(1, stageSize.height.rounded()))
+        let size = CGSize(width: stage.width, height: stage.height + bottomOverflow)
+        let key = NSString(string: "stage4|\(Int(stage.width))x\(Int(stage.height))|\(reduceTransparency ? 1 : 0)")
+        if let cached = cache.object(forKey: key) { return cached }
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.scale = renderScale
+        format.opaque = false
+        format.preferredRange = .standard
+        let strength: CGFloat = reduceTransparency ? 0.5 : 1
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { renderer in
+            draw(in: renderer.cgContext, stageSize: stage, strength: strength)
+        }
+        cache.setObject(image, forKey: key)
+        return image
+    }
+
+    /// The jar rectangle in stage coordinates (y down).
+    static func jarRect(stageSize: CGSize) -> CGRect {
+        let outer = JarScene.outerJarRect(sceneSize: stageSize)
+        return CGRect(x: outer.minX, y: stageSize.height - outer.maxY, width: outer.width, height: outer.height)
+    }
+
+    /// The bottle outline in stage coordinates (y down).
+    static func jarOutline(stageSize: CGSize) -> CGPath {
+        let rect = jarRect(stageSize: stageSize)
+        var flip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: rect.minY * 2 + rect.height)
+        let path = JarScene.jarPath(in: rect, neckInset: JarScene.neckInset(jarWidth: rect.width))
+        return path.copy(using: &flip) ?? CGPath(rect: rect, transform: nil)
+    }
+
+    /// Draws the stage light into `context` (y down, stage points).
+    static func draw(in context: CGContext, stageSize: CGSize, strength: CGFloat) {
+        let jar = jarRect(stageSize: stageSize)
+        let outline = jarOutline(stageSize: stageSize)
+        let space = CGColorSpaceCreateDeviceRGB()
+        func color(_ hex: String, _ alpha: CGFloat) -> CGColor {
+            GemColor(hex: hex).withAlpha(alpha * strength).cgColor
+        }
+        func ellipse(center: CGPoint, radii: CGSize, colors: [CGColor], locations: [CGFloat]) {
+            guard let gradient = CGGradient(colorsSpace: space, colors: colors as CFArray, locations: locations) else { return }
+            context.saveGState()
+            context.translateBy(x: center.x, y: center.y)
+            context.scaleBy(x: 1, y: radii.height / max(radii.width, 1))
+            context.drawRadialGradient(
+                gradient,
+                startCenter: .zero, startRadius: 0,
+                endCenter: .zero, endRadius: radii.width,
+                options: []
+            )
+            context.restoreGState()
+        }
+
+        // Floor: contact shadow, then the warm and cool pools.
+        ellipse(
+            center: CGPoint(x: jar.midX, y: jar.maxY + 2),
+            radii: CGSize(width: jar.width * 0.47, height: 17),
+            colors: [UIColor.black.withAlphaComponent(0.30).cgColor, UIColor.black.withAlphaComponent(0).cgColor],
+            locations: [0, 1]
+        )
+        for (hex, alpha, dx) in [("#FF8A5B", CGFloat(0.62), CGFloat(-0.22)), ("#5BA8FF", CGFloat(0.56), CGFloat(0.22))] {
+            ellipse(
+                center: CGPoint(x: jar.midX + jar.width * dx, y: jar.maxY + 10),
+                radii: CGSize(width: jar.width * 0.30, height: 46),
+                colors: [color(hex, alpha), color(hex, alpha * 0.42), color(hex, 0)],
+                locations: [0, 0.45, 1]
+            )
+        }
+        // The jar's light mirrored on the glass floor.
+        ellipse(
+            center: CGPoint(x: jar.midX, y: jar.maxY + 4),
+            radii: CGSize(width: jar.width * 0.40, height: 20),
+            colors: [color("#FFD9C2", 0.30), color("#C9A8FF", 0.12), color("#8068F6", 0)],
+            locations: [0, 0.5, 1]
+        )
+
+        // Rim bloom: the silhouette's glow, a Gaussian (shadow blur, no
+        // banding) warm on the left and cool on the right (masked by a
+        // horizontal ramp).
+        let pointsToPixels = context.userSpaceToDeviceSpaceTransform.a
+        for (hex, alpha, fromLeft) in [(Constants.Color.auroraWarm, CGFloat(0.55), true), ("#6FB6FF", CGFloat(0.48), false)] {
+            context.saveGState()
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            context.saveGState()
+            // Shadow blur is in device pixels: 12 pt at any bake scale.
+            context.setShadow(offset: .zero, blur: 12 * max(1, abs(pointsToPixels)), color: color(hex, alpha))
+            context.setStrokeColor(color(hex, alpha * 0.55))
+            context.setLineWidth(3)
+            context.setLineJoin(.round)
+            context.addPath(outline)
+            context.strokePath()
+            context.restoreGState()
+            context.setBlendMode(.destinationIn)
+            let mask = [UIColor.white.cgColor, UIColor.white.withAlphaComponent(0.4).cgColor, UIColor.white.withAlphaComponent(0).cgColor] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: mask, locations: [0, 0.34, 0.6]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: fromLeft ? jar.minX - 30 : jar.maxX + 30, y: 0),
+                    end: CGPoint(x: fromLeft ? jar.maxX + 30 : jar.minX - 30, y: 0),
+                    options: [.drawsBeforeStartLocation]
+                )
+            }
+            context.endTransparencyLayer()
+            context.restoreGState()
+        }
+
+        // Interior light.
+        context.saveGState()
+        context.addPath(outline)
+        context.clip()
+        if let body = CGGradient(
+            colorsSpace: space,
+            colors: [
+                color("#3E3A80", 0.50),
+                color("#443A88", 0.46),
+                color("#563A8A", 0.50),
+                color("#8A5484", 0.60)
+            ] as CFArray,
+            locations: [0, 0.45, 0.75, 1]
+        ) {
+            context.drawLinearGradient(
+                body,
+                start: CGPoint(x: 0, y: jar.minY),
+                end: CGPoint(x: 0, y: jar.maxY),
+                options: []
+            )
+        }
+        // The pile's own glow pooled above the floor.
+        ellipse(
+            center: CGPoint(x: jar.midX, y: jar.maxY - 14),
+            radii: CGSize(width: jar.width * 0.56, height: 118),
+            colors: [color("#FFA27E", 0.52), color("#C46AA8", 0.26), color("#8068F6", 0)],
+            locations: [0, 0.5, 1]
+        )
+        // Side light through the thick walls: warm left, cool right.
+        for (hex, fromLeft) in [(Constants.Color.auroraWarm, true), ("#6FB6FF", false)] {
+            let side = [color(hex, 0.26), color(hex, 0.08), color(hex, 0)] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: side, locations: [0, 0.35, 1]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: fromLeft ? jar.minX : jar.maxX, y: 0),
+                    end: CGPoint(x: fromLeft ? jar.minX + jar.width * 0.28 : jar.maxX - jar.width * 0.28, y: 0),
+                    options: []
+                )
+            }
+        }
+        // A soft violet glow where the time core sits.
+        ellipse(
+            center: CGPoint(x: jar.midX, y: jar.minY + jar.height * 0.42),
+            radii: CGSize(width: jar.width * 0.40, height: jar.width * 0.40),
+            colors: [color("#8C78FF", 0.26), color("#8068F6", 0.09), color("#8068F6", 0)],
+            locations: [0, 0.5, 1]
+        )
+        // Still bokeh in the empty band beside the core column.
+        let bokeh: [(x: CGFloat, y: CGFloat, r: CGFloat, hex: String, a: CGFloat)] = [
+            (0.12, 0.30, 3.2, "#FFC27A", 0.42), (0.20, 0.52, 2.2, "#FF9E6B", 0.34),
+            (0.10, 0.66, 3.8, "#FFE3B0", 0.30), (0.24, 0.40, 1.6, "#8ACBFF", 0.40),
+            (0.17, 0.74, 2.6, "#FFC27A", 0.28), (0.86, 0.28, 2.6, "#8ACBFF", 0.38),
+            (0.80, 0.46, 3.6, "#FFE3B0", 0.30), (0.90, 0.60, 2.0, "#FF9E6B", 0.40),
+            (0.76, 0.70, 3.0, "#FFC27A", 0.26), (0.83, 0.36, 1.5, "#FFFFFF", 0.46)
+        ]
+        for dot in bokeh {
+            let center = CGPoint(x: jar.minX + jar.width * dot.x, y: jar.minY + jar.height * dot.y)
+            ellipse(
+                center: center,
+                radii: CGSize(width: dot.r * 2.2, height: dot.r * 2.2),
+                colors: [color(dot.hex, dot.a), color(dot.hex, dot.a * 0.55), color(dot.hex, 0)],
+                locations: [0, 0.42, 1]
+            )
+        }
+        context.restoreGState()
     }
 }
 

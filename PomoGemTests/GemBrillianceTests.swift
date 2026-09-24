@@ -680,19 +680,41 @@ final class GemBrillianceTests: XCTestCase {
         XCTAssertLessThanOrEqual(Set(GemArtwork.coreSlotHexes(shares: many)).count, 6, "Top five plus その他")
         XCTAssertEqual(GemArtwork.coreSlotHexes(shares: [GemColorShare(hex: "#3FA57C", fraction: 1)]), Array(repeating: "#3FA57C", count: 20))
 
-        // The baked stone really is painted by the fan: the right half
-        // (slots 0–9) carries the first share, the left half the second.
+        // The stone's colour is a field: the same proportions laid out in
+        // hue order from 7:30, starting after the widest hue gap, so it
+        // reads as a few large colour fields (not twenty alternating wedges).
+        let field = GemArtwork.CoreColorField(shares: GemArtwork.quantizedCoreShares([
+            GemColorShare(hex: "#E85D4A", fraction: 0.5),
+            GemColorShare(hex: "#4D7CDE", fraction: 0.3),
+            GemColorShare(hex: "#8A6FD1", fraction: 0.2)
+        ]))
+        XCTAssertEqual(field.arcs.map(\.hex), ["#4D7CDE", "#8A6FD1", "#E85D4A"], "Hue order after the widest gap")
+        XCTAssertEqual(field.arcs.first?.start ?? 0, GemArtwork.CoreColorField.startTurn, accuracy: 0.000_1)
+        for (arc, fraction) in zip(field.arcs, [0.3, 0.2, 0.5]) {
+            XCTAssertEqual(arc.end - arc.start, CGFloat(fraction), accuracy: 0.000_1, "Spans keep the shares")
+        }
+        // Distant hues meet in a pale seam (never grey, never a rainbow).
+        let seam = field.color(atTurn: field.arcs[2].start).hsb
+        XCTAssertLessThan(seam.saturation, 0.3)
+        XCTAssertGreaterThan(seam.brightness, 0.9)
+
+        // The baked stone really is painted by the field: coral and blue
+        // halves put blue up the left side and coral down the right.
         let halves = [
             GemColorShare(hex: "#E85D4A", fraction: 0.5),
             GemColorShare(hex: "#4D7CDE", fraction: 0.5)
         ]
-        let fan = GemArtwork.coreSlotHexes(shares: halves)
         let image = try XCTUnwrap(GemArtwork.coreImage(shares: halves, level: 1, scale: 1).cgImage)
-        let right = try pixel(in: image, clockwiseDegrees: 81, radiusFraction: 0.50)
-        let left = try pixel(in: image, clockwiseDegrees: 261, radiusFraction: 0.50)
-        let rightIsRed = fan[4] == "#E85D4A"
-        XCTAssertEqual(right.red > right.blue, rightIsRed, "3 o'clock follows slot 4 (\(fan[4]))")
-        XCTAssertEqual(left.red > left.blue, !rightIsRed, "9 o'clock follows slot 14 (\(fan[14]))")
+        let right = try pixel(in: image, clockwiseDegrees: 99, radiusFraction: 0.55)
+        let left = try pixel(in: image, clockwiseDegrees: 279, radiusFraction: 0.55)
+        XCTAssertGreaterThan(right.red, right.blue, "3 o'clock is coral")
+        XCTAssertGreaterThan(left.blue, left.red, "9 o'clock is blue")
+        // The two halo lobes carry the colour of their own side.
+        let lobes = GemArtwork.coreHaloLobeColors(shares: halves)
+        let leftLobe = GemColor(lobes.left)
+        let rightLobe = GemColor(lobes.right)
+        XCTAssertGreaterThan(leftLobe.blue, leftLobe.red)
+        XCTAssertGreaterThan(rightLobe.red, rightLobe.blue)
 
         // A single theme still sparkles: the two halves of a sector differ
         // in light, both keep the theme's hue family.
@@ -705,9 +727,23 @@ final class GemBrillianceTests: XCTestCase {
         for sample in [lead, trail] {
             XCTAssertGreaterThan(sample.red, sample.blue)
         }
-        // A white-hot heart.
+        // A wide white-hot heart: white at the centre and still pale a
+        // fifth of the way out.
         let heart = try pixel(in: coral, clockwiseDegrees: 0, radiusFraction: 0.02)
         XCTAssertGreaterThan(heart.luminance, 0.92)
+        let plateau = try pixel(in: coral, clockwiseDegrees: 30, radiusFraction: 0.20)
+        XCTAssertGreaterThan(plateau.luminance, 0.72)
+
+        // The colourless vessel is a clear crystal from the first day: pale
+        // ice facets (never a grey, dull stone), lit facets paler still.
+        let vessel = try XCTUnwrap(GemArtwork.vesselImage(litFacets: 5, scale: 1).cgImage)
+        let unlit = try pixel(in: vessel, clockwiseDegrees: 279, radiusFraction: 0.55)
+        let lit = try pixel(in: vessel, clockwiseDegrees: 81, radiusFraction: 0.55)
+        XCTAssertGreaterThan(unlit.luminance, 0.5)
+        XCTAssertGreaterThan(lit.luminance, unlit.luminance)
+        for sample in [unlit, lit] {
+            XCTAssertLessThan(max(sample.red, sample.green, sample.blue) - min(sample.red, sample.green, sample.blue), 0.2, "No theme colour")
+        }
     }
 
     // MARK: Gem bed (積み上がりの光)
@@ -781,6 +817,54 @@ final class GemBrillianceTests: XCTestCase {
         XCTAssertEqual(JarGemBedPresentation.displayed(current: looseOnly, shown: full, isProvisional: false), looseOnly)
     }
 
+    /// A new bed bakes off the main thread; the bed on screen stays until
+    /// the new texture, size and position change together.
+    @MainActor
+    func testGemBedBakesOffTheMainThreadAndKeepsThePreviousBed() throws {
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        scene.bakesGemBedInBackground = true
+        // A colour no other test bakes, so both bakes are real misses.
+        let shares = [GemColorShare(hex: "#7A5C3E", fraction: 0.7), GemColorShare(hex: "#3E7A5C", fraction: 0.3)]
+        let bed = try XCTUnwrap(scene.childNode(withName: "//jar.gemBed") as? SKSpriteNode)
+        func waitForBake() {
+            let done = expectation(for: NSPredicate { _, _ in !scene.isGemBedBaking }, evaluatedWith: nil)
+            wait(for: [done], timeout: 5)
+        }
+        scene.gemBed = JarGemBedPresentation.state(totalGrams: 3_750, colorShares: shares)
+        waitForBake()
+        XCTAssertFalse(bed.isHidden)
+        let first = (bed.texture, bed.size)
+        scene.gemBed = JarGemBedPresentation.state(totalGrams: 2_500_000, colorShares: shares)
+        XCTAssertTrue(scene.isGemBedBaking)
+        XCTAssertTrue(bed.texture === first.0, "The previous bed stays while the new one bakes")
+        XCTAssertEqual(bed.size, first.1)
+        waitForBake()
+        XCTAssertFalse(bed.texture === first.0)
+        XCTAssertGreaterThan(bed.size.height, first.1.height)
+    }
+
+    /// A clamped display scale (NaN, 4 …) still re-bakes the bed at the
+    /// resolved scale.
+    @MainActor
+    func testClampedArtworkScaleStillRebakesTheBed() throws {
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.bakesGemBedInBackground = false
+        scene.artworkScale = 2
+        scene.gemBed = JarGemBedPresentation.state(
+            totalGrams: 3_750,
+            colorShares: [GemColorShare(hex: Constants.Color.english, fraction: 1)]
+        )
+        let bed = try XCTUnwrap(scene.childNode(withName: "//jar.gemBed") as? SKSpriteNode)
+        let atTwo = try XCTUnwrap(bed.texture?.cgImage().width)
+        XCTAssertEqual(CGFloat(atTwo), bed.size.width * 2, accuracy: 2)
+        scene.artworkScale = .nan
+        XCTAssertEqual(scene.artworkScale, 3)
+        let atThree = try XCTUnwrap(bed.texture?.cgImage().width)
+        XCTAssertEqual(CGFloat(atThree), bed.size.width * 3, accuracy: 2)
+    }
+
     /// Ten bodies fusing into one, or Screen Time obstacles arriving, leave
     /// the bed exactly as it was: same texture, size, position and light.
     @MainActor
@@ -789,6 +873,7 @@ final class GemBrillianceTests: XCTestCase {
         scene.soundEnabled = false
         scene.hapticsEnabled = false
         scene.reduceMotion = false
+        scene.bakesGemBedInBackground = false
         let descriptors = (0 ..< Constants.Jar.aggregateFanIn).map { index in
             PebbleDescriptor(
                 id: UUID(uuidString: String(format: "E1000000-0000-4000-8000-%012X", index + 1))!,

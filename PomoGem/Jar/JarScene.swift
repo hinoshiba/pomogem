@@ -430,7 +430,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     private var neckInset: CGFloat {
-        min(50, outerJarRect.width * 0.14)
+        Self.neckInset(jarWidth: outerJarRect.width)
     }
 
     private var neckInteriorMinX: CGFloat {
@@ -2274,7 +2274,15 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         Self.jarPath(in: rect, neckInset: neckInset)
     }
 
-    private static func jarPath(in rect: CGRect, neckInset: CGFloat) -> CGPath {
+    /// Neck inset of a bottle `width` wide (the mouth is narrower by this
+    /// on both sides).
+    nonisolated static func neckInset(jarWidth width: CGFloat) -> CGFloat {
+        min(50, width * 0.14)
+    }
+
+    /// The bottle silhouette in `rect` (y up, like the scene). SwiftUI layers
+    /// and share art flip it to draw the same bottle.
+    nonisolated static func jarPath(in rect: CGRect, neckInset: CGFloat) -> CGPath {
         let path = CGMutablePath()
         let bottomRadius = min(Constants.Jar.cornerRadius * 1.30, rect.width * 0.12)
         let shoulderDepth = min(52, rect.height * 0.13)
@@ -2403,11 +2411,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             // toward the side walls.
             let absorption = JarPalette.color(hex: Constants.Color.glassAbsorption)
             let wall = [
-                absorption.withAlphaComponent(0.32).cgColor,
-                absorption.withAlphaComponent(0.13).cgColor,
-                absorption.withAlphaComponent(0.08).cgColor,
-                absorption.withAlphaComponent(0.13).cgColor,
-                absorption.withAlphaComponent(0.32).cgColor
+                absorption.withAlphaComponent(0.20).cgColor,
+                absorption.withAlphaComponent(0.10).cgColor,
+                absorption.withAlphaComponent(0.06).cgColor,
+                absorption.withAlphaComponent(0.10).cgColor,
+                absorption.withAlphaComponent(0.20).cgColor
             ] as CFArray
             if let gradient = CGGradient(colorsSpace: space, colors: wall, locations: [0, 0.28, 0.5, 0.72, 1]) {
                 context.drawLinearGradient(
@@ -2423,7 +2431,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 CGPoint(x: width * 0.08, y: shoulderY + 10), CGPoint(x: width * 0.92, y: shoulderY + 10)
             ] {
                 let shade = [
-                    UIColor(red: 0.01, green: 0.02, blue: 0.06, alpha: 0.30).cgColor,
+                    UIColor(red: 0.01, green: 0.02, blue: 0.06, alpha: 0.18).cgColor,
                     UIColor(red: 0.01, green: 0.02, blue: 0.06, alpha: 0).cgColor
                 ] as CFArray
                 if let gradient = CGGradient(colorsSpace: space, colors: shade, locations: [0, 1]) {
@@ -2491,9 +2499,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             }
             let caustic = [
                 UIColor.clear.cgColor,
-                warm.withAlphaComponent(0.50).cgColor,
-                UIColor.white.withAlphaComponent(0.60).cgColor,
-                cool.withAlphaComponent(0.50).cgColor,
+                warm.withAlphaComponent(0.75).cgColor,
+                UIColor.white.withAlphaComponent(0.85).cgColor,
+                cool.withAlphaComponent(0.75).cgColor,
                 UIColor.clear.cgColor
             ] as CFArray
             if let gradient = CGGradient(
@@ -2501,7 +2509,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 colors: caustic,
                 locations: [0.04, 0.26, 0.5, 0.74, 0.96]
             ) {
-                for (y, thickness, alpha) in [(height - 10, CGFloat(1.2), CGFloat(1)), (height - 2.5, CGFloat(1), CGFloat(0.55))] {
+                for (y, thickness, alpha) in [(height - 10, CGFloat(2), CGFloat(1)), (height - 2.5, CGFloat(1.2), CGFloat(0.7))] {
                     context.saveGState()
                     context.setAlpha(alpha)
                     context.clip(to: CGRect(x: 0, y: y - thickness / 2, width: width, height: thickness))
@@ -2531,9 +2539,36 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             }
             context.restoreGState()
 
-            // Warm left rim (coral → peach) and cool right rim (cyan → blue).
-            innerRim(context, colors: [warm, peach], alpha: 0.9, depth: 10, fromLeft: true)
-            innerRim(context, colors: [cool, blue], alpha: 0.8, depth: 10, fromLeft: false)
+            // Warm left rim (coral → peach) and cool right rim (cyan → blue):
+            // thick glass that glows from within.
+            innerRim(context, colors: [warm, peach], alpha: 1, depth: 15, fromLeft: true)
+            innerRim(context, colors: [cool, blue], alpha: 0.95, depth: 15, fromLeft: false)
+
+            // Wall specular lines: a 1.5 pt white line down each wall, from
+            // the shoulder to 70 % of the height, fading at both ends.
+            context.saveGState()
+            for (x, alpha) in [(CGFloat(5.5), CGFloat(0.70)), (width - 5.5, CGFloat(0.56))] {
+                let top = shoulderY + 8
+                let bottom = height * 0.70
+                context.saveGState()
+                context.clip(to: CGRect(x: x - 0.75, y: top, width: 1.5, height: bottom - top))
+                let line = [
+                    UIColor.white.withAlphaComponent(0).cgColor,
+                    UIColor.white.withAlphaComponent(alpha).cgColor,
+                    UIColor.white.withAlphaComponent(alpha * 0.8).cgColor,
+                    UIColor.white.withAlphaComponent(0).cgColor
+                ] as CFArray
+                if let gradient = CGGradient(colorsSpace: space, colors: line, locations: [0, 0.18, 0.7, 1]) {
+                    context.drawLinearGradient(
+                        gradient,
+                        start: CGPoint(x: x, y: top),
+                        end: CGPoint(x: x, y: bottom),
+                        options: []
+                    )
+                }
+                context.restoreGState()
+            }
+            context.restoreGState()
 
             // Lower-right flare streak in the cool rim.
             context.saveGState()
@@ -2646,8 +2681,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             context.saveGState()
             context.addPath(band)
             context.clip()
-            let vertical = [highlight.cgColor, base.cgColor, base.cgColor, shade.cgColor] as CFArray
-            if let gradient = CGGradient(colorsSpace: space, colors: vertical, locations: [0, 0.28, 0.62, 1]) {
+            // Polished rose gold: pale lip #FFE3CF, #D9967A body, and only
+            // the lowest fifth turning to #8A4E3A (no muddy brown band).
+            let vertical = [
+                JarPalette.color(hex: "#FFE3CF").cgColor,
+                JarPalette.color(hex: "#D9967A").cgColor,
+                base.cgColor,
+                JarPalette.color(hex: "#8A4E3A").cgColor,
+                shade.cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: vertical, locations: [0, 0.34, 0.62, 0.82, 1]) {
                 context.drawLinearGradient(
                     gradient,
                     start: CGPoint(x: 0, y: 0),
@@ -2655,12 +2698,27 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                     options: []
                 )
             }
+            // A white specular band at 30 % of the height (α0.9).
+            let bandY = height * 0.30
+            let bandColors = [
+                UIColor.white.withAlphaComponent(0).cgColor,
+                UIColor.white.withAlphaComponent(0.9).cgColor,
+                UIColor.white.withAlphaComponent(0).cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: bandColors, locations: [0, 0.5, 1]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: 0, y: bandY - 1.4),
+                    end: CGPoint(x: 0, y: bandY + 1.4),
+                    options: []
+                )
+            }
             // Horizontal shading: the band turns away at both ends.
             let ends = [
-                shade.withAlphaComponent(0.55).cgColor,
+                shade.withAlphaComponent(0.45).cgColor,
                 UIColor.clear.cgColor,
                 UIColor.clear.cgColor,
-                shade.withAlphaComponent(0.65).cgColor
+                shade.withAlphaComponent(0.55).cgColor
             ] as CFArray
             if let gradient = CGGradient(colorsSpace: space, colors: ends, locations: [0, 0.16, 0.84, 1]) {
                 context.drawLinearGradient(
@@ -2673,9 +2731,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             // Anisotropic highlight streaks; tilt slides them.
             let shift = CGFloat(tilt) * 0.07
             for (center, streakWidth, alpha) in [
-                (0.20 + shift, 0.07, CGFloat(0.75)),
-                (0.34 + shift, 0.025, CGFloat(0.45)),
-                (0.80 + shift, 0.05, CGFloat(0.55))
+                (0.20 + shift, 0.07, CGFloat(0.95)),
+                (0.34 + shift, 0.025, CGFloat(0.6)),
+                (0.80 + shift, 0.05, CGFloat(0.75))
             ] {
                 let streak = [
                     UIColor.clear.cgColor,
@@ -3681,13 +3739,23 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         if profile != settledPileProfile { settledPileProfile = profile }
     }
 
+    /// Bakes gem bed textures off the main thread (tests may bake inline).
+    var bakesGemBedInBackground = true
+    /// A background bed bake is running (tests wait for it).
+    private(set) var isGemBedBaking = false
+    private var gemBedBakeGeneration: UInt64 = 0
+
     /// Re-bakes (or reuses) the gem bed texture for the current lifetime
     /// state and jar size. Depends on `gemBed`, the interior rect and the
-    /// display scale only.
+    /// display scale only. A cached texture shows at once; a new one bakes
+    /// on a utility queue while the previous bed stays on screen, and the
+    /// texture, size and position change together when it is ready.
     private func refreshGemBed() {
+        gemBedBakeGeneration &+= 1
         guard size.width > .zero, size.height > .zero,
               let state = gemBed, state.isVisible
         else {
+            isGemBedBaking = false
             gemBedNode.isHidden = true
             gemBedNode.texture = nil
             return
@@ -3695,21 +3763,44 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let interior = interiorRect
         let height = state.height(interiorHeight: interior.height)
         guard height >= 2 else {
+            isGemBedBaking = false
             gemBedNode.isHidden = true
             gemBedNode.texture = nil
             return
         }
         let width = interior.width.rounded()
-        gemBedNode.texture = GemArtwork.bedTexture(
-            width: width,
-            height: height,
-            slotHexes: state.slotHexes,
-            scale: artworkScale
-        )
-        gemBedNode.size = CGSize(width: width, height: height)
-        gemBedNode.position = CGPoint(x: interior.midX, y: interior.minY)
-        gemBedNode.alpha = 1
-        gemBedNode.isHidden = false
+        let hexes = state.slotHexes
+        let scale = artworkScale
+        let install: (SKTexture) -> Void = { [weak self] texture in
+            guard let self else { return }
+            self.gemBedNode.texture = texture
+            self.gemBedNode.size = CGSize(width: width, height: height)
+            self.gemBedNode.position = CGPoint(x: interior.midX, y: interior.minY)
+            self.gemBedNode.alpha = 1
+            self.gemBedNode.isHidden = false
+        }
+        if let cached = GemArtwork.cachedBedTexture(width: width, height: height, slotHexes: hexes, scale: scale) {
+            isGemBedBaking = false
+            install(cached)
+            return
+        }
+        guard bakesGemBedInBackground else {
+            isGemBedBaking = false
+            install(GemArtwork.bedTexture(width: width, height: height, slotHexes: hexes, scale: scale))
+            return
+        }
+        isGemBedBaking = true
+        let generation = gemBedBakeGeneration
+        DispatchQueue.global(qos: .userInitiated).async {
+            let texture = GemArtwork.bedTexture(width: width, height: height, slotHexes: hexes, scale: scale)
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.gemBedBakeGeneration == generation else { return }
+                    self.isGemBedBaking = false
+                    install(texture)
+                }
+            }
+        }
     }
 
     /// Landing light: 6–8 soft sparks from the shared glint texture, at most
