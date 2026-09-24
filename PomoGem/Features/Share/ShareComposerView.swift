@@ -1820,15 +1820,44 @@ struct ShareComposerView: View {
     @MainActor
     private func renderAndSaveToPhotoLibrary(snapshot: ShareExportSnapshot) async {
         var temporaryGIFs: [URL] = []
+        let progressMessage = snapshot.mediaKind == .animatedGIF
+            ? String(
+                localized: "写真用のGIFを作っています…",
+                table: "Share",
+                comment: "Share composer: status while the two GIFs for Photos are rendered"
+            )
+            : String(
+                localized: "写真用の画像を作っています…",
+                table: "Share",
+                comment: "Share composer: status while the two still images for Photos are rendered"
+            )
         defer {
             temporaryGIFs.forEach { try? FileManager.default.removeItem(at: $0) }
+            // A save that stops without a result must not leave the
+            // progress line behind.
+            if statusMessage == progressMessage {
+                statusMessage = nil
+            }
             if activePhotoSaveID == snapshot.id {
                 activePhotoSaveID = nil
                 photoSaveTask = nil
                 isSaving = false
             }
         }
-        // Let the spinner commit before main-actor rendering starts.
+
+        // Ask for Photos access before rendering: two 720-pixel GIFs take
+        // several seconds, and a first-time person used to wait through them,
+        // then see the permission prompt, and lose the render on a denial.
+        let authorization = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard activePhotoSaveID == snapshot.id, !Task.isCancelled else { return }
+        guard authorization == .authorized || authorization == .limited else {
+            updateStatus("写真への追加が許可されていません。端末の設定から変更できます。")
+            return
+        }
+
+        updateStatus(progressMessage)
+        // Let the spinner and the progress line commit before main-actor
+        // rendering starts.
         try? await Task.sleep(for: .milliseconds(50))
         guard activePhotoSaveID == snapshot.id, !Task.isCancelled else { return }
 
@@ -1858,16 +1887,10 @@ struct ShareComposerView: View {
         }
         guard activePhotoSaveID == snapshot.id, !Task.isCancelled else { return }
 
-        let authorization = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-        guard activePhotoSaveID == snapshot.id, !Task.isCancelled else { return }
-        guard authorization == .authorized || authorization == .limited else {
-            updateStatus("写真への追加が許可されていません。端末の設定から変更できます。")
-            return
-        }
-        // The authorization prompt can outlive aggregate trust. Revalidate at
-        // the last MainActor instruction before starting the Photos mutation;
-        // a snapshot captured while already pending contains only explicitly
-        // labelled, device-confirmed individual records.
+        // The authorization prompt and the render can outlive aggregate trust.
+        // Revalidate at the last MainActor instruction before starting the
+        // Photos mutation; a snapshot captured while already pending contains
+        // only explicitly labelled, device-confirmed individual records.
         guard snapshot.projectionWasCloudUnverified
                 || aggregateProjectionPresentation
                     .acceptsVerifiedAggregateCache(
