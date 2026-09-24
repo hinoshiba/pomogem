@@ -871,6 +871,19 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertTrue(ScreenTimeAuthorizationFailure.offline.message.contains("インターネット"))
         XCTAssertTrue(ScreenTimeAuthorizationFailure.passcodeRequired.fixIsInSettingsApp)
         XCTAssertFalse(ScreenTimeAuthorizationFailure.offline.fixIsInSettingsApp)
+        // The button opens PomoGem's own page; every message that sends the
+        // user to the Settings app starts from its first screen, and the
+        // caption beside the button says how to get back there.
+        for failure in [ScreenTimeAuthorizationFailure.passcodeRequired, .accountNotSupported, .restricted] {
+            XCTAssertTrue(failure.fixIsInSettingsApp)
+            XCTAssertTrue(failure.message.contains("設定アプリの最初の画面"), failure.message)
+        }
+        XCTAssertTrue(ScreenTimeAuthorizationFailure.settingsAppRoute.contains("ポモジェム"))
+        XCTAssertTrue(ScreenTimeAuthorizationFailure.settingsAppRoute.contains("最初の画面"))
+        // A conflict is usually a parent's app: point to the person, never
+        // advise switching the controls off.
+        XCTAssertTrue(ScreenTimeAuthorizationFailure.conflictingApp.message.contains("保護者など"))
+        XCTAssertFalse(ScreenTimeAuthorizationFailure.conflictingApp.message.contains("やめる"))
     }
 
     func testAGrantedRequestClearsTheEarlierRefusal() async throws {

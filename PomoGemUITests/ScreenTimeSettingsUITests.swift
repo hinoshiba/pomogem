@@ -340,6 +340,56 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         XCTAssertTrue(menu.waitForExistence(timeout: 8), "Back returns to Home")
     }
 
+    /// critic-02: a refused request names its own fix, and the shortcut says
+    /// where it lands: the only public link opens PomoGem's own page in the
+    /// Settings app, below the first screen the message starts from. The
+    /// fixture stubs Family Controls to refuse for want of a passcode; the
+    /// Simulator cannot produce a refusal itself.
+    func testARefusedAccessRequestSaysWhereTheSettingsShortcutLands() {
+        checkRefusedAccessRequest(accessibility5: false)
+    }
+
+    func testARefusedAccessRequestStaysReadableAtAccessibilitySize() {
+        checkRefusedAccessRequest(accessibility5: true)
+    }
+
+    private func checkRefusedAccessRequest(accessibility5: Bool) {
+        if accessibility5 { app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1" }
+        app.launchEnvironment["POMOGEM_UI_TEST_SCREEN_TIME"] = "authorization-refused"
+        app.launch()
+        let ledger = app.staticTexts["screen-time.fixture-ledger"]
+        XCTAssertTrue(ledger.waitForExistence(timeout: 12))
+        expectLedger(ledger, contains: "boundToContext=true", timeout: 20)
+        let authorize = app.buttons["screen-time.authorize"]
+        XCTAssertTrue(revealAboveFixtureBar(authorize))
+        authorize.tap()
+        let failure = app.staticTexts["screen-time.authorization-failure"]
+        XCTAssertTrue(failure.waitForExistence(timeout: 8))
+        XCTAssertTrue(failure.label.contains("設定アプリの最初の画面にある「Face IDとパスコード」"), failure.label)
+        let open = app.buttons["screen-time.open-settings-app"]
+        XCTAssertTrue(revealAboveFixtureBar(open))
+        XCTAssertGreaterThanOrEqual(open.frame.height, 43.5)
+        let route = app.staticTexts["screen-time.open-settings-app-route"]
+        XCTAssertTrue(revealAboveFixtureBar(route))
+        XCTAssertTrue(route.label.contains("ポモジェムの設定ページ"), route.label)
+        XCTAssertTrue(route.label.contains("設定の最初の画面まで戻って"), route.label)
+        attach(accessibility5
+               ? "Screen Time AX5 — refused access and where the Settings shortcut lands"
+               : "Screen Time — refused access and where the Settings shortcut lands")
+    }
+
+    /// `reveal` treats anything above the window's bottom inset as on screen,
+    /// but the fixture's ledger bar covers the bottom of the page; lift an
+    /// element that is only hidden under it.
+    private func revealAboveFixtureBar(_ element: XCUIElement) -> Bool {
+        for _ in 0..<6 {
+            if reveal(element) { return true }
+            let start = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -120)))
+        }
+        return false
+    }
+
     /// `screen-time.enabled` is the whole row; a tap on its centre lands on
     /// the label and changes nothing, so aim at the switch itself.
     private func flip(_ toggle: XCUIElement) {

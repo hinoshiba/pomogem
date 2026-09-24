@@ -37,6 +37,10 @@ enum ScreenTimeSettingsUITestFixture {
         /// settings screen is pushed from a root screen so going back — and
         /// the unsaved-changes question it asks — can be exercised.
         case firstSetup = "first-setup"
+        /// A bound owner without access whose request Family Controls
+        /// refuses for want of a passcode, so the refusal, its fix and the
+        /// Settings shortcut can be seen. The Simulator cannot refuse itself.
+        case authorizationRefused = "authorization-refused"
     }
 
     static var scenario: Scenario? {
@@ -151,16 +155,20 @@ final class ScreenTimeSettingsUITestFixtureModel {
     private let driver: ScreenTimeSettingsUITestFixtureDriver
     private lazy var seeded = ScreenTimeSettingsUITestFixture.seededConfiguration(themeID: themeID)
 
-    init() {
+    init(scenario: ScreenTimeSettingsUITestFixture.Scenario) {
         directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ScreenTimeSettingsUITestFixture-\(UUID().uuidString)", isDirectory: true)
         store = ScreenTimeStore(directory: directory)
         driver = ScreenTimeSettingsUITestFixtureDriver(store: store)
+        let refused = scenario == .authorizationRefused
         controller = ScreenTimeController(
             store: store,
             currentContextKey: { ScreenTimeSettingsUITestFixture.ownerKey },
             monitoring: driver,
-            authorization: { .approved }
+            authorization: { refused ? .notDetermined : .approved },
+            requestIndividualAuthorization: {
+                if refused { throw FamilyControlsError.authenticationMethodUnavailable }
+            }
         )
     }
 
@@ -264,10 +272,10 @@ struct ScreenTimeSettingsUITestFixtureLaunchView: View {
         ) ? .accessibility5 : .large)
         .task {
             guard model == nil, let scenario = ScreenTimeSettingsUITestFixture.scenario else { return }
-            let prepared = ScreenTimeSettingsUITestFixtureModel()
+            let prepared = ScreenTimeSettingsUITestFixtureModel(scenario: scenario)
             prepared.prepare(into: modelContext, scenario: scenario)
             model = prepared
-            if scenario == .firstSetup { bind(prepared) }
+            if scenario != .lateBinding { bind(prepared) }
         }
         .onDisappear { model?.tearDown() }
     }
@@ -313,6 +321,8 @@ private struct ScreenTimeSettingsUITestFixtureBar: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
         .background(.regularMaterial)
+        // A test readout, not app UI: at AX5 it would cover half the page.
+        .dynamicTypeSize(.large)
     }
 }
 #endif

@@ -859,19 +859,19 @@ enum ScreenTimeAuthorizationFailure: Equatable {
     var message: String {
         switch self {
         case .passcodeRequired:
-            String(localized: "スクリーンタイムの許可には、iPhoneのパスコードが必要です。設定アプリの「Face IDとパスコード」（または「Touch IDとパスコード」）でパスコードを設定してから、もう一度お試しください。",
+            String(localized: "スクリーンタイムの許可には、iPhoneのパスコードが必要です。設定アプリの最初の画面にある「Face IDとパスコード」（または「Touch IDとパスコード」）でパスコードを設定してから、もう一度お試しください。",
                    table: "ScreenTime", comment: "Screen Time access failed: no device passcode")
         case .accountNotSupported:
-            String(localized: "このiPhoneのApple Accountでは許可できませんでした。設定アプリの一番上で、Apple Accountにサインインしているか確認してください。ファミリー共有で保護者が管理している子どものアカウントでは、この機能を使えないことがあります。",
+            String(localized: "このiPhoneのApple Accountでは許可できませんでした。設定アプリの最初の画面のいちばん上で、Apple Accountにサインインしているか確認してください。ファミリー共有で保護者が管理している子どものアカウントでは、この機能を使えないことがあります。",
                    table: "ScreenTime", comment: "Screen Time access failed: not signed in, or a child or managed account")
         case .offline:
             String(localized: "通信できなかったため、許可を確認できませんでした。インターネットにつながる状態で、もう一度お試しください。",
                    table: "ScreenTime", comment: "Screen Time access failed: network error")
         case .conflictingApp:
-            String(localized: "ほかのアプリがこのiPhoneで保護者による管理（ペアレンタルコントロール）をすでに行っているため、許可できませんでした。そのアプリでの管理をやめると、許可できるようになります。",
+            String(localized: "このiPhoneでは、ほかのアプリがすでに保護者による管理（ペアレンタルコントロール）を行っているため、許可できませんでした。そのアプリを管理している人（保護者など）に相談してください。",
                    table: "ScreenTime", comment: "Screen Time access failed: another parental-control app holds the authorization")
         case .restricted:
-            String(localized: "このiPhoneでは、スクリーンタイムの制限や学校・会社などの管理設定によって許可できません。設定アプリの「スクリーンタイム」の制限や、管理プロファイルを確認してください。",
+            String(localized: "このiPhoneでは、スクリーンタイムの制限や学校・会社などの管理設定によって許可できません。設定アプリの最初の画面にある「スクリーンタイム」の制限や、「一般」の「VPNとデバイス管理」を確認してください。",
                    table: "ScreenTime", comment: "Screen Time access failed: restricted by Screen Time limits or device management")
         case .other:
             String(localized: "スクリーンタイムへのアクセスを確認できませんでした。少し時間をおいて、もう一度お試しください。",
@@ -887,6 +887,14 @@ enum ScreenTimeAuthorizationFailure: Equatable {
         case .passcodeRequired, .accountNotSupported, .restricted: true
         case .offline, .conflictingApp, .other: false
         }
+    }
+
+    /// Said beside 「設定アプリを開く」. The only public link
+    /// (`UIApplication.openSettingsURLString`) opens PomoGem's own page, one
+    /// or two levels below the first screen every message starts from.
+    static var settingsAppRoute: String {
+        String(localized: "開くのはポモジェムの設定ページです。左上の「<」で設定の最初の画面まで戻ってください。",
+               table: "ScreenTime", comment: "Caption under the button that opens the Settings app: how to reach the page the message names")
     }
 }
 

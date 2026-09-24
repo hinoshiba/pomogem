@@ -321,16 +321,26 @@ struct ScreenTimeSettingsView: View {
                     .accessibilityAddTraits(.isStaticText)
                     .accessibilityIdentifier("screen-time.authorization-failure")
                 if failure.fixIsInSettingsApp {
-                    Button {
-                        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-                        openURL(url)
-                    } label: {
-                        Label(String(localized: "設定アプリを開く", table: "ScreenTime",
-                                     comment: "Button: open the iOS Settings app to fix Screen Time access"),
-                              systemImage: "gear")
-                            .frame(minHeight: 44)
+                    // One row: the only public link opens PomoGem's own page,
+                    // one or two levels below the page the message names, so
+                    // the way back up is said right under the button.
+                    VStack(alignment: .leading, spacing: 2) {
+                        Button {
+                            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                            openURL(url)
+                        } label: {
+                            Label(String(localized: "設定アプリを開く", table: "ScreenTime",
+                                         comment: "Button: open the iOS Settings app to fix Screen Time access"),
+                                  systemImage: "gear")
+                                .frame(minHeight: 44)
+                        }
+                        .accessibilityIdentifier("screen-time.open-settings-app")
+                        Text(ScreenTimeAuthorizationFailure.settingsAppRoute)
+                            .font(.caption)
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("screen-time.open-settings-app-route")
                     }
-                    .accessibilityIdentifier("screen-time.open-settings-app")
                 }
             }
 
