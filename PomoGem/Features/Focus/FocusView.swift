@@ -2,6 +2,7 @@ import Combine
 import SwiftData
 import SwiftUI
 import UIKit
+import UserNotifications
 
 enum FocusCompletionPersistenceResult: Equatable, Sendable {
     case inserted(PebbleKind)
@@ -96,6 +97,29 @@ enum TimerCompletionForegroundFeedbackPolicy {
                 completionUptime: uptime
               ) else { return false }
         return drift <= IntegrationConstants.notificationClockDriftTolerance
+    }
+}
+
+/// The end-of-timer alert is the core cue of a focus on a locked phone, so
+/// permission is asked in context: once, at the first focus the person
+/// starts themselves, and never for a recovered or adopted timer. The flag is
+/// device-local because notification permission belongs to this iPhone.
+/// Daily reminders keep their own separate opt-in.
+enum FocusCompletionNotificationOfferPolicy {
+    static let defaultsKey = "notifications.focus-completion-permission-offered.v1"
+
+    static func shouldOffer(
+        authorizationStatus: UNAuthorizationStatus,
+        isExplicitStart: Bool,
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        isExplicitStart
+            && authorizationStatus == .notDetermined
+            && !defaults.bool(forKey: defaultsKey)
+    }
+
+    static func markOffered(defaults: UserDefaults = .standard) {
+        defaults.set(true, forKey: defaultsKey)
     }
 }
 
@@ -1271,13 +1295,30 @@ struct FocusView: View {
             saveRecoveryState()
             updateIdleTimer(at: now)
 
-            await scheduleCurrentCompletionNotification()
-            guard !Task.isCancelled,
-                  lifecycleGeneration == viewLifecycleGeneration else { return }
+            let offersCompletionNotification = completionNotificationOfferIsAllowed
+                && FocusCompletionNotificationOfferPolicy.shouldOffer(
+                    authorizationStatus: notifications.authorizationStatus,
+                    isExplicitStart: recoveryOrigin == .local
+                )
+            if !offersCompletionNotification {
+                await scheduleCurrentCompletionNotification()
+                guard !Task.isCancelled,
+                      lifecycleGeneration == viewLifecycleGeneration else { return }
+            }
             await startLiveActivityForExplicitTimer(sessionID: sessionID)
             guard !Task.isCancelled,
                   lifecycleGeneration == viewLifecycleGeneration,
                   engine.currentSessionID == sessionID else { return }
+            if offersCompletionNotification {
+                // The timer is already running and never waits on this
+                // answer. The system dialog is the choice; a grant schedules
+                // this session's end notification under the usual guards.
+                FocusCompletionNotificationOfferPolicy.markOffered()
+                await enableCompletionNotification()
+                guard !Task.isCancelled,
+                      lifecycleGeneration == viewLifecycleGeneration,
+                      engine.currentSessionID == sessionID else { return }
+            }
             await refreshExternalTimerPresentation(
                 synchronizesCompletionNotification: false
             )
@@ -1317,6 +1358,21 @@ struct FocusView: View {
             isSavingRareRewardChoice = false
             rareRewardChoiceError = "レア粒の選択を保存できませんでした。タイマーはまだ始まっていません。\n\(error.localizedDescription)"
         }
+    }
+
+    /// UI tests start many focuses on shared simulators; only a test that
+    /// opts in meets the one-time system dialog. Release builds always ask.
+    private var completionNotificationOfferIsAllowed: Bool {
+#if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        if LocalPreviewLaunchPolicy.isUITestMode(
+            environment: environment,
+            isDebugBuild: true
+        ) {
+            return environment["POMOGEM_UI_TEST_COMPLETION_NOTIFICATION_OFFER"] == "1"
+        }
+#endif
+        return true
     }
 
     @MainActor

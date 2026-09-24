@@ -932,6 +932,35 @@ final class PomodoroEngineTests: XCTestCase {
         XCTAssertEqual(completion.grams, Constants.Mass.measuredPebbleGrams)
     }
 #endif
+
+    func testCompletionNotificationIsOfferedOnceAtTheFirstExplicitStart() throws {
+        let suiteName = "PomoGemTests.completion-offer.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        typealias Policy = FocusCompletionNotificationOfferPolicy
+
+        XCTAssertTrue(Policy.shouldOffer(
+            authorizationStatus: .notDetermined, isExplicitStart: true, defaults: defaults
+        ))
+        // Recovered, relaunched or adopted timers never trigger the dialog.
+        XCTAssertFalse(Policy.shouldOffer(
+            authorizationStatus: .notDetermined, isExplicitStart: false, defaults: defaults
+        ))
+        // A decided permission is respected either way.
+        for status in [UNAuthorizationStatus.authorized, .denied, .provisional, .ephemeral] {
+            XCTAssertFalse(Policy.shouldOffer(
+                authorizationStatus: status, isExplicitStart: true, defaults: defaults
+            ), "status \(status.rawValue)")
+        }
+
+        Policy.markOffered(defaults: defaults)
+        XCTAssertFalse(
+            Policy.shouldOffer(
+                authorizationStatus: .notDetermined, isExplicitStart: true, defaults: defaults
+            ),
+            "A later start never asks again, whatever the first answer was"
+        )
+    }
 }
 
 @MainActor

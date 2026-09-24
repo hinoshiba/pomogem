@@ -74,7 +74,8 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
 - Local projection: 瓶とまとまり粒に使う`AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`は
   CloudKitへuploadせず、選択した保存先の同期元記録から各端末で再構築。iCloudから後着した記録の
   再検証中は、古いaggregateを生涯の正確値や`+`／`以上`として表示せず「再集計中」と表示し、完了後に更新
-- Notifications: timer終了と、任意の「集中に戻るお知らせ」。集中・休憩timer終了の通知だけを
+- Notifications: timer終了と、任意の「集中に戻るお知らせ」。許可は、利用者が初めて明示的に集中を
+  開始したときに一度だけ尋ね、復元・iCloud引き継ぎでは尋ねない（毎日のリマインダーとは別）。集中・休憩timer終了の通知だけを
   Time Sensitive（即時通知）として送り、本人が開始したtimerの終了をFocus中にも届ける。毎日の
   リマインダー、今月の積み重ね、集中に戻るお知らせは通常の`.active`。後者はSettings → 集中でオンにして
   通知を許可すると、計測中にアプリを離れて30秒後に一度通知し、復帰・一時停止・中断時に取り消す。

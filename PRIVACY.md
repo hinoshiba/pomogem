@@ -69,7 +69,7 @@ dataを含めません。Live Activityは端末内で更新し、独自serverや
 - StoreKit: 商品情報、購入、復元、現在の権利をAppleへ確認
 - CloudKit: iCloudを選び確認した場合だけ、同じApple Accountの対応iPhone間で同期元データを一つの
   private databaseに保存・同期
-- Notifications: タイマー終了を端末上で通知。集中・休憩の終了通知だけを「即時通知」（Time Sensitive）
+- Notifications: タイマー終了を端末上で通知。許可は初めて集中を始めるときに一度だけ確認する。集中・休憩の終了通知だけを「即時通知」（Time Sensitive）
   として送り、リマインダーなどは通常の通知のまま。即時通知はiOSの設定でアプリごと・集中モードごとに停止可能
 - ActivityKit: 明示的に開始した集中の残り時間と状態だけを端末のロック画面へ表示。端末内で更新し、
   独自server、push、アカウント由来dataを使用しない。アプリ内設定をオフにすると既存表示も終了

@@ -397,6 +397,72 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(landed.records.hasSuffix(":250"), landed.records)
     }
 
+    /// Needs a simulator whose notification permission is still undecided
+    /// (erase it to rerun). Covers the one-time first-start permission ask
+    /// and the most common completion path: phone away, notification
+    /// delivered, app opened from it, straight to the reward with no alarm.
+    func testFirstFocusAsksOnceAndNotifiedCompletionOpensWithoutAlarm() throws {
+        app.terminate()
+        app.launchEnvironment["POMOGEM_UI_TEST_COMPLETION_NOTIFICATION_OFFER"] = "1"
+        app.launch()
+        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 10))
+        selectDemoDurationForVisualAudit()
+        startDemoFocusForVisualAudit()
+
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let allow = springboard.alerts.buttons.matching(NSPredicate(
+            format: "label IN %@", ["許可", "Allow", "通知を許可", "Allow Notifications"]
+        )).firstMatch
+        guard allow.waitForExistence(timeout: 6) else {
+            cancelPresentedFocusIfNeeded()
+            throw XCTSkip("Notification permission is already decided on this simulator")
+        }
+        retainScreenshot(named: "First focus — one-time end-notification permission")
+        allow.tap()
+        let scheduled = app.staticTexts["画面を閉じてもタイマーは進み、終了時に通知します"]
+        XCTAssertTrue(
+            scheduled.waitForExistence(timeout: 5),
+            "Granting at the first start must schedule this focus's end notification"
+        )
+
+        XCUIDevice.shared.press(.home)
+        let banner = springboard.descendants(matching: .any).matching(NSPredicate(
+            format: "label CONTAINS %@", "集中時間が終わりました"
+        )).firstMatch
+        XCTAssertTrue(banner.waitForExistence(timeout: 25), "The end notification must be delivered")
+        retainScreenshot(named: "Focus end — delivered notification")
+        banner.tap()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 8))
+
+        let stop = app.buttons["focus.completion-alert.stop"]
+        let alarm = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true"), object: stop
+        )
+        alarm.isInverted = true
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [alarm], timeout: 3), .completed,
+            "Opening the app from the end notification must not ring again"
+        )
+        let dismiss = app.buttons["休憩の提案を閉じる"]
+        XCTAssertTrue(
+            dismiss.waitForExistence(timeout: 10),
+            "The notified completion must continue straight to Home's receipt"
+        )
+        retainScreenshot(named: "Notified completion — receipt without an alarm")
+        dismiss.tap()
+        XCTAssertTrue(waitForAbsence(dismiss, timeout: 5))
+
+        // A later explicit start never asks again. Returning from the
+        // background restores the saved (25-minute) choice, so pick the demo.
+        selectDemoDurationForVisualAudit()
+        startDemoFocusForVisualAudit()
+        XCTAssertFalse(
+            allow.waitForExistence(timeout: 3),
+            "The end-notification permission is asked only at the first start"
+        )
+        cancelPresentedFocusIfNeeded()
+    }
+
     func testPausedFocusIsHonestAndTheRingDoesNotMove() throws {
         app.buttons["home.duration-picker"].tap()
         app.buttons["25分"].tap()
