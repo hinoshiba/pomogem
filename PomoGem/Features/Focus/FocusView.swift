@@ -123,51 +123,6 @@ enum FocusCompletionNotificationOfferPolicy {
     }
 }
 
-/// Why a running focus became self-reported. The engine keeps only the
-/// demoted source, so FocusView records the reason it observed; telling
-/// someone who continued their own timer on another iPhone, or restarted
-/// the phone, that its clock jumped would be false and sounds like blame.
-enum FocusDemotionNoticeReason: Equatable, Sendable {
-    case clockChanged
-    case adoptedFromOtherDevice
-    case continuityLost
-
-    /// A recovered timer that is already demoted. Adoption from iCloud always
-    /// demotes; a local relaunch demotes when continuity (for example across a
-    /// reboot) cannot be proven.
-    static func recovered(origin: FocusRecoveryOrigin) -> Self {
-        origin == .iCloud ? .adoptedFromOtherDevice : .continuityLost
-    }
-
-    /// A demotion caught while this screen is running.
-    static func detected(_ integrity: ClockIntegrity) -> Self? {
-        switch integrity {
-        case .valid: nil
-        case .changed: .clockChanged
-        case .uptimeReset, .unverifiable: .continuityLost
-        }
-    }
-
-    var message: String {
-        switch self {
-        case .clockChanged:
-            "端末時刻の大きな変化を検出。この回だけ自己申告あつかいです"
-        case .adoptedFromOtherDevice:
-            "別の端末から引き継いだため、この回は自己申告あつかいです"
-        case .continuityLost:
-            "再起動などで計測が途切れたため、この回は自己申告あつかいです"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .clockChanged: "clock.badge.exclamationmark"
-        case .adoptedFromOtherDevice: "iphone.and.arrow.forward"
-        case .continuityLost: "arrow.clockwise.circle"
-        }
-    }
-}
-
 /// Constructs the only StudySession shape written while the optional rare
 /// reward feature is disabled for release. Keeping this factory independent of
 /// SwiftUI makes the shipping invariant directly unit-testable.
@@ -375,9 +330,12 @@ struct FocusView: View {
         _scheduledCompletionNotificationDeliveryDate = State(
             initialValue: request.scheduledCompletionNotificationDeliveryDate
         )
+        // The cause comes from this device's envelope, so a relaunch or an
+        // iCloud remount never rewrites it. An older envelope without one
+        // gets the neutral notice rather than a guessed cause.
         _fairnessNoticeReason = State(
             initialValue: request.engine.currentSource == .timerDemoted
-                ? .recovered(origin: request.origin)
+                ? request.demotionReason ?? .unexplained
                 : nil
         )
         let sessionID = request.pendingCompletion?.sessionID
@@ -2487,7 +2445,10 @@ struct FocusView: View {
                 resolvedPendingCompletion == nil
                 ? currentNotificationDeliveryWitness
                 : nil,
-            dataEpochID: dataEpochID
+            dataEpochID: dataEpochID,
+            demotionReason: engine.currentSource == .timerDemoted
+                ? fairnessNoticeReason
+                : nil
         )
     }
 
@@ -2738,7 +2699,8 @@ struct FocusView: View {
             pendingCompletion: result,
             dataEpochID: dataEpochID,
             origin: recoveryOrigin,
-            allowsLocalNotifications: allowsLocalNotifications
+            allowsLocalNotifications: allowsLocalNotifications,
+            demotionReason: fairnessNoticeReason
         )
         UIApplication.shared.isIdleTimerDisabled = false
         router.showToast(

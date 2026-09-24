@@ -2509,7 +2509,8 @@ struct RootView: View {
             pendingCompletion: envelope.pendingCompletion,
             scheduledCompletionNotificationDeliveryDate:
                 envelope.scheduledCompletionNotificationDeliveryDate,
-            dataEpochID: envelope.dataEpochID
+            dataEpochID: envelope.dataEpochID,
+            demotionReason: envelope.demotionReason
         )
         if let pendingID = envelope.pendingCompletion?.sessionID,
            DeferredFocusCompletionStore.sessionID() == pendingID {
@@ -2672,10 +2673,19 @@ struct RootView: View {
             savedAt: adoptedAt,
             dataEpochID: source.dataEpochID
         )
+        // The reason is saved in this device's envelope so the notice stays
+        // the same after every relaunch or iCloud remount. It matches the
+        // offer's alert: only another iPhone's record in an iCloud store is
+        // a handoff; the local-only offer resumes saved state.
         let envelope = FocusPersistence.preparedForCrossDeviceAdoption(
             candidateEnvelope,
             at: adoptedAt,
-            uptime: adoptionUptime
+            uptime: adoptionUptime,
+            demotionReason: .adopted(
+                isCloudBacked: persistenceMode != .localOnly,
+                sourceWriterDeviceID: offer.sourceWriterDeviceID,
+                currentDeviceID: FocusDeviceIdentity.current()
+            )
         )
         FocusPersistence.save(envelope)
         router.cloudFocusRecoveryOffer = nil
@@ -2687,7 +2697,8 @@ struct RootView: View {
             pendingCompletion: envelope.pendingCompletion,
             dataEpochID: source.dataEpochID,
             origin: .iCloud,
-            allowsLocalNotifications: true
+            allowsLocalNotifications: true,
+            demotionReason: envelope.demotionReason
         )
     }
 
