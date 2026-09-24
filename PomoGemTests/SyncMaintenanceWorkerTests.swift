@@ -821,7 +821,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         )
         XCTAssertEqual(resolved.grams, 220)
         XCTAssertEqual(resolved.pebbleKind, .prism)
-        XCTAssertEqual(resolved.source, .timer)
+        XCTAssertEqual(resolved.effectiveSource, .timer)
         XCTAssertTrue(
             StudySessionSyncPolicy.canonicalSession(from: Array(copies.reversed()))
                 === resolved
@@ -879,7 +879,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         b.syncRecordID = orderedUUID(602)
         let c = makeSession(id: logicalID, grams: 220, kind: .prism, epochID: nil)
         c.syncRecordID = orderedUUID(603)
-        c.source = .timerDemoted
+        c.persistedSource = .timerDemoted
 
         XCTAssertTrue(StudySessionSyncPolicy.canonicalSession(from: [a, b]) === b)
         XCTAssertTrue(StudySessionSyncPolicy.canonicalSession(from: [b, a]) === b)
@@ -897,7 +897,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         // a destructive A/B fold would have erased that evidence.
         XCTAssertEqual(a.grams, 100)
         XCTAssertEqual(b.grams, 220)
-        XCTAssertEqual(c.source, .timerDemoted)
+        XCTAssertEqual(c.persistedSource, .timerDemoted)
     }
 
     func testEqualStudySessionCopiesUseStablePhysicalTotalOrder() throws {
@@ -967,6 +967,145 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
             SubjectSyncPolicy.canonical(from: [laterOfflineRename, legacyTombstone])
                 === legacyTombstone
         )
+    }
+
+    // MARK: - Theme tombstones never count toward the row bound
+
+    /// Deleting a theme only writes a tombstone. `count` deleted themes plus
+    /// the given live ones, all in one store.
+    private func insertThemeHistory(
+        deleted count: Int,
+        live names: [String],
+        context: ModelContext
+    ) throws -> [Subject] {
+        for index in 0 ..< count {
+            context.insert(Subject(
+                name: "削除済み\(index)", colorHex: "#123456", sortOrder: index,
+                isArchived: true, deletedAt: Date(timeIntervalSince1970: 1_800_000_000 + Double(index)),
+                syncRecordID: orderedUUID(700_000 + index)
+            ))
+        }
+        let live = names.enumerated().map { index, name in
+            Subject(
+                name: name, colorHex: "#654321", sortOrder: index,
+                syncRecordID: orderedUUID(710_000 + index)
+            )
+        }
+        live.forEach(context.insert)
+        try context.save()
+        return live
+    }
+
+    private func presentedThemes(context: ModelContext) throws -> [Subject] {
+        SubjectSyncPolicy.presentationSubjects(
+            live: try context.fetch(SubjectSyncPolicy.liveRowsDescriptor()),
+            tombstones: try context.fetch(SubjectSyncPolicy.tombstoneRowsDescriptor()),
+            context: context
+        )
+    }
+
+    func testThemesStayVisibleAfterHundredsOfDeletedThemes() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let live = try insertThemeHistory(
+            deleted: SubjectSyncPolicy.observedTombstoneLimit + 1,
+            live: ["英語", "数学", "簿記"], context: context
+        )
+        // The whole-catalogue read used to fail closed to an empty list here.
+        XCTAssertTrue(SubjectSyncPolicy.presentationSubjects(
+            from: try context.fetch(FetchDescriptor<Subject>())
+        ).isEmpty)
+        XCTAssertEqual(try presentedThemes(context: context).map(\.id), live.map(\.id))
+        XCTAssertEqual(
+            Set(try SubjectSyncPolicy.liveCatalogue(context: context).map(\.id)),
+            Set(live.map(\.id))
+        )
+    }
+
+    func testTombstoneSharingALiveIDStillHidesItWhetherOrNotThePageIsComplete() throws {
+        // 0 and 300 fit the observed tombstone page; one more than the page
+        // forces the exact per-ID read.
+        for deletedCount in [0, 300, SubjectSyncPolicy.observedTombstoneLimit + 1] {
+            let container = try makeContainer()
+            let context = container.mainContext
+            let live = try insertThemeHistory(
+                deleted: deletedCount, live: ["英語", "数学"], context: context
+            )
+            // Another device deleted 数学 while this one still has a live copy
+            // with a later offline rename. Deletion is sticky.
+            let deletedCopy = Subject(
+                id: live[1].id, name: "数学", colorHex: "#654321", sortOrder: 1,
+                isArchived: true, deletedAt: Date(timeIntervalSince1970: 1_800_100_000),
+                syncRecordID: orderedUUID(720_000), contentRevision: 1
+            )
+            live[1].contentRevision = 9
+            context.insert(deletedCopy)
+            try context.save()
+            XCTAssertEqual(
+                try presentedThemes(context: context).map(\.id), [live[0].id],
+                "\(deletedCount) unrelated tombstones"
+            )
+            let catalogue = try SubjectSyncPolicy.liveCatalogue(context: context)
+            XCTAssertTrue(catalogue.contains { $0 === deletedCopy })
+            XCTAssertEqual(
+                SubjectSyncPolicy.canonicalSubjects(from: catalogue)
+                    .filter { $0.deletedAt == nil }.map(\.id),
+                [live[0].id]
+            )
+        }
+    }
+
+    func testAddingThemesStillWorksAfterHundredsOfDeletions() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let names = (0 ..< Constants.App.maximumSubjects - 1).map { "テーマ\($0)" }
+        _ = try insertThemeHistory(deleted: 300, live: names, context: context)
+        XCTAssertEqual(try presentedThemes(context: context).count, Constants.App.maximumSubjects - 1)
+        context.insert(Subject(name: "新しいテーマ", colorHex: "#abcdef", sortOrder: 99))
+        try context.save()
+        let presented = try presentedThemes(context: context)
+        XCTAssertEqual(presented.count, Constants.App.maximumSubjects)
+        XCTAssertTrue(presented.contains { $0.name == "新しいテーマ" })
+    }
+
+    func testSubjectsMaintenanceCompletesWithHundredsOfDeletedThemes() async throws {
+        let container = try makeContainer()
+        _ = try insertThemeHistory(
+            deleted: 300, live: ["英語", "数学"], context: container.mainContext
+        )
+        let result = try await SyncMaintenanceSliceWorker(modelContainer: container)
+            .run(SyncMaintenanceSliceRequest(
+                kind: .subjects, generation: 1, cursor: nil, limits: .production
+            ))
+        assertBudget(result.audit)
+        XCTAssertNotEqual(result.disposition, .retry, "Used to retry forever and block verification")
+        XCTAssertNil(result.failureCategory)
+        var cursor = result.nextCursor
+        var disposition = result.disposition
+        var slices = 1
+        while disposition == .moreWork, slices < 16 {
+            let next = try await SyncMaintenanceSliceWorker(modelContainer: container)
+                .run(SyncMaintenanceSliceRequest(
+                    kind: .subjects, generation: 1, cursor: cursor, limits: .production
+                ))
+            assertBudget(next.audit)
+            disposition = next.disposition
+            cursor = next.nextCursor
+            slices += 1
+        }
+        XCTAssertEqual(disposition, .completed)
+        XCTAssertEqual(try container.mainContext.fetchCount(FetchDescriptor<Subject>()), 302)
+    }
+
+    func testSubjectMutationErrorsExplainThemselvesInJapanese() {
+        for error in [
+            SubjectSyncPolicy.MutationError.tooManyPhysicalRows,
+            .revisionLimitReached
+        ] {
+            let message = error.localizedDescription
+            XCTAssertTrue(message.contains("テーマ"), message)
+            XCTAssertFalse(message.contains("MutationError"), message)
+        }
     }
 
     func testSubjectMutationChangesOnlySelectedPhysicalRow() throws {
@@ -2302,7 +2441,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         XCTAssertEqual(result.disposition, .completed)
         let sessions = try context.fetch(FetchDescriptor<StudySession>())
         XCTAssertEqual(Set(sessions.map(\.id)), [firstID, secondID])
-        XCTAssertTrue(sessions.allSatisfy { $0.source == .timer })
+        XCTAssertTrue(sessions.allSatisfy { $0.effectiveSource == .timer })
     }
 
     func testCleanSessionPageIsReadOnly() async throws {
@@ -4279,12 +4418,12 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         )
         XCTAssertEqual(
             frontier.summaries.reduce(0) { $0 + $1.measuredPebbleCount },
-            expectedMeasured - retainedLooseSessions.filter(\.source.isMeasured).count
+            expectedMeasured - retainedLooseSessions.filter(\.effectiveSource.isMeasured).count
         )
         XCTAssertEqual(
             frontier.summaries.reduce(0) { $0 + $1.manualPebbleCount },
             expectedManual - retainedLooseSessions.filter {
-                !$0.source.isMeasured
+                !$0.effectiveSource.isMeasured
             }.count
         )
         XCTAssertEqual(
@@ -4655,7 +4794,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
             value.startAt.timeIntervalSinceReferenceDate.description,
             value.endAt.timeIntervalSinceReferenceDate.description,
             String(value.seconds),
-            value.source.rawValue,
+            value.persistedSource.rawValue,
             value.pebbleKind.rawValue,
             String(value.grams),
             value.deviceDayKey,

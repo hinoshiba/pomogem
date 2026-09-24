@@ -1070,6 +1070,23 @@ struct RootView: View {
                 colorHex: preset.colorHex,
                 sortOrder: 0
             ))
+#if DEBUG
+            // A long-term user's history: themes deleted over the years stay
+            // as tombstones and must not hide the live ones.
+            let deletedCount = Int(ProcessInfo.processInfo.environment[
+                LocalPreviewLaunchPolicy.deletedThemeHistoryUITestEnvironmentKey
+            ] ?? "") ?? 0
+            let deletedAt = Date(timeIntervalSince1970: 1_800_000_000)
+            for index in 0 ..< min(max(0, deletedCount), 2_000) {
+                modelContext.insert(Subject(
+                    name: "削除したテーマ\(index + 1)",
+                    colorHex: preset.colorHex,
+                    sortOrder: index + 1,
+                    isArchived: true,
+                    deletedAt: deletedAt.addingTimeInterval(TimeInterval(index))
+                ))
+            }
+#endif
         }
         if modelContext.hasChanges { try modelContext.save() }
     }
@@ -1948,17 +1965,11 @@ struct RootView: View {
                 SubjectNamePolicy.validated($0)
             }
             let selectedNameKeys = Set(selectedNames.map(SubjectNamePolicy.comparisonKey))
-            var subjectDescriptor = FetchDescriptor<Subject>(sortBy: [
-                SortDescriptor(\Subject.syncRecordID)
-            ])
-            subjectDescriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
-            let storedSubjects = try modelContext.fetch(subjectDescriptor)
-            guard storedSubjects.count <= SubjectSyncPolicy.maximumPhysicalRows else {
-                throw SubjectSyncPolicy.MutationError.tooManyPhysicalRows
-            }
-            let subjects = SubjectSyncPolicy.presentationSubjects(
-                from: storedSubjects
-            )
+            // Live rows plus the tombstones sharing their IDs: deleted themes
+            // from earlier installs must not count toward the row bound.
+            let storedSubjects = try SubjectSyncPolicy.liveCatalogue(context: modelContext)
+            let subjects = SubjectSyncPolicy.canonicalSubjects(from: storedSubjects)
+                .filter { $0.deletedAt == nil }
             var removedSubjectIDs = Set<UUID>()
             for subject in subjects where presetIDs.contains(subject.id) {
                 let isSelected = selectedNameKeys.contains(

@@ -64,13 +64,111 @@ final class StorageTransferSettingsUITests: XCTestCase {
         assertAccepted("enableCloudKeepingCloud")
     }
 
+    /// transfer-02. 「iCloudのデータを使う」 deletes this device's whole jar,
+    /// so both sides are counted before 「最後の確認」 opens, with an export
+    /// beside them. Screen Time is not in use here, so nothing about it shows.
+    func testKeepingCloudCountsBothSidesBeforeItsConfirmation() {
+        launch("local")
+        openChoices()
+        openConfirmation("storage-switch.keep-cloud")
+        let comparison = app.staticTexts["storage-switch.keep-cloud-comparison"]
+        XCTAssertTrue(reveal(comparison))
+        XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"), "saw: \(comparison.label)")
+        XCTAssertTrue(comparison.label.contains("iCloud: テーマ9・記録312・成果28"), "saw: \(comparison.label)")
+        XCTAssertFalse(app.staticTexts["storage-switch.keep-cloud-empty-cloud"].exists)
+        XCTAssertTrue(reveal(app.buttons["storage-switch.export"]))
+        XCTAssertFalse(app.staticTexts["storage-switch.screen-time"].exists)
+        attach("Enable iCloud — both sides counted before the acknowledgement")
+        assertUncheckedConfirmation()
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.navigationBars["iCloudを有効にする"].waitForExistence(timeout: 4))
+        app.navigationBars["iCloudを有効にする"].buttons["キャンセル"].tap()
+        assertPreviewReads(1)
+        assertNoOperation()
+    }
+
+    /// The common case for someone who never used sync: iCloud holds only
+    /// what every onboarded device mirrors. The user is told, with counts,
+    /// that this iPhone's jar is deleted and sync starts from nothing.
+    func testKeepingCloudWarnsWhenICloudHoldsNoneOfTheUsersRecords() {
+        launch("localEmptyCloud")
+        openChoices()
+        openConfirmation("storage-switch.keep-cloud")
+        let empty = app.staticTexts["storage-switch.keep-cloud-empty-cloud"]
+        XCTAssertTrue(reveal(empty))
+        XCTAssertTrue(empty.label.contains("1件も見つかりませんでした"), "saw: \(empty.label)")
+        XCTAssertTrue(empty.label.contains("このiPhoneのテーマ12・記録480・成果36"), "saw: \(empty.label)")
+        XCTAssertTrue(empty.label.contains("空の状態からiCloudの同期を始めます"), "saw: \(empty.label)")
+        attach("Enable iCloud — iCloud holds none of the user's records")
+        assertUncheckedConfirmation()
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.navigationBars["iCloudを有効にする"].waitForExistence(timeout: 4))
+        app.navigationBars["iCloudを有効にする"].buttons["キャンセル"].tap()
+        assertNoOperation()
+    }
+
+    /// "Could not look" is never shown as "nothing there": a failed read
+    /// keeps 最後の確認 closed and names the button to press again.
+    func testKeepingCloudStaysClosedWhenICloudCannotBeRead() {
+        launch("localPreviewUnreadable")
+        openChoices()
+        let door = app.buttons["storage-switch.keep-cloud"]
+        XCTAssertTrue(reveal(door))
+        door.tap()
+        let failure = app.staticTexts["storage-switch.keep-cloud-preview-error"]
+        XCTAssertTrue(reveal(failure))
+        XCTAssertTrue(failure.label.contains("「iCloudのデータを使う」"), "saw: \(failure.label)")
+        XCTAssertTrue(failure.label.contains("どちらの記録も削除していません"))
+        XCTAssertFalse(app.navigationBars["最後の確認"].exists)
+        attach("Enable iCloud — unreadable iCloud keeps the confirmation closed")
+        app.navigationBars["iCloudを有効にする"].buttons["キャンセル"].tap()
+        assertPreviewReads(1)
+        assertNoOperation()
+    }
+
+    /// transfer-07. Every published switch moves to a new storage namespace
+    /// and resets Screen Time gems; each confirmation says so while the
+    /// feature is in use, including the non-destructive 「このiPhoneへ引き継ぐ」.
+    func testEveryPublishedSwitchDisclosesTheScreenTimeReset() {
+        launch("localScreenTime")
+        openChoices()
+        openConfirmation("storage-switch.keep-cloud")
+        let enable = app.staticTexts["storage-switch.screen-time"]
+        XCTAssertTrue(reveal(enable))
+        XCTAssertTrue(enable.label.contains("選び直してください"), "saw: \(enable.label)")
+        XCTAssertTrue(enable.label.contains("保存済みの勉強時間と通常gemは引き継ぎます"))
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.navigationBars["iCloudを有効にする"].waitForExistence(timeout: 4))
+        app.navigationBars["iCloudを有効にする"].buttons["キャンセル"].tap()
+
+        launch("cloudScreenTime")
+        openChoices()
+        openConfirmation("storage-switch.disable-keep-copy")
+        XCTAssertTrue(reveal(app.staticTexts["storage-switch.screen-time"]))
+        attach("Keep a copy — Screen Time reset disclosed")
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        let closed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"),
+                                               object: app.navigationBars["最後の確認"])
+        XCTAssertEqual(XCTWaiter.wait(for: [closed], timeout: 5), .completed)
+        openConfirmation("storage-switch.refresh-from-cloud")
+        XCTAssertTrue(reveal(app.staticTexts["storage-switch.refresh-from-cloud-screen-time"]))
+        XCTAssertTrue(reveal(app.buttons["storage-switch.refresh-from-cloud-export"]))
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.navigationBars["iCloudと保存先の変更"].waitForExistence(timeout: 4))
+        app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
+        assertNoOperation()
+        assertNoDatasetRequest()
+    }
+
     func testReplacingCloudIsDisabledWithReasonAndCannotOpenConfirmation() {
         launch("local")
         openChoices()
         let reason = app.staticTexts["storage-switch.replace-cloud-unavailable"]
         XCTAssertTrue(reveal(reason))
         XCTAssertTrue(reason.label.contains("複数端末での同時操作"))
-        XCTAssertTrue(reason.label.contains("一時的に利用できません"))
+        XCTAssertTrue(reason.label.contains("いまは利用できません"))
+        // transfer-10. Nothing was ever staged at a closed door.
+        XCTAssertFalse(reason.label.contains("復旧用コピー"))
         let replacement = app.buttons["storage-switch.replace-cloud"]
         XCTAssertTrue(reveal(replacement))
         XCTAssertFalse(replacement.isEnabled)
@@ -127,7 +225,9 @@ final class StorageTransferSettingsUITests: XCTestCase {
         let reason = app.staticTexts["storage-switch.overwrite-cloud-unavailable"]
         XCTAssertTrue(reveal(reason))
         XCTAssertTrue(reason.label.contains("いまは利用できません"))
-        XCTAssertTrue(reason.label.contains("削除せず保持します"))
+        XCTAssertFalse(reason.label.contains("削除していません"),
+            "Nobody pressed a closed door; its reason reports no event")
+        XCTAssertFalse(reason.label.contains("復旧用コピー"))
         let door = app.buttons["storage-switch.overwrite-cloud"]
         XCTAssertTrue(reveal(door))
         XCTAssertFalse(door.isEnabled)
@@ -244,12 +344,41 @@ final class StorageTransferSettingsUITests: XCTestCase {
         openConfirmation("storage-switch.refresh-from-cloud")
         let comparison = app.staticTexts["storage-switch.refresh-from-cloud-comparison"]
         XCTAssertTrue(reveal(comparison))
-        XCTAssertTrue(comparison.label.contains("記録件数: 0"), "saw: \(comparison.label)")
+        XCTAssertTrue(comparison.label.contains("iCloud: テーマ0・記録0・成果0"), "saw: \(comparison.label)")
+        XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"),
+            "The side this direction deletes is counted too, saw: \(comparison.label)")
         let empty = app.staticTexts["storage-switch.refresh-from-cloud-empty-cloud"]
         XCTAssertTrue(reveal(empty))
         XCTAssertTrue(empty.label.contains("1件も見つかりませんでした"))
+        XCTAssertTrue(empty.label.contains("このiPhoneのテーマ12・記録480・成果36"), "saw: \(empty.label)")
         XCTAssertTrue(empty.label.contains("元に戻すことはできません"))
         attach("Settings refresh-from-cloud — the server side is empty")
+        assertUncheckedDatasetConfirmation("refresh-from-cloud")
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.navigationBars["iCloudと保存先の変更"].waitForExistence(timeout: 4))
+        app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
+        assertPreviewReads(1)
+        assertNoDatasetRequest()
+        assertNoOperation()
+    }
+
+    /// transfer-03, the shipping build. Five seeded themes, a Prefs row and a
+    /// device claim are not the user's records: the row names the three things
+    /// a person recognises, never a bookkeeping total, and the warning fires.
+    func testTheRefreshDirectionWarnsWhenICloudHoldsOnlyBookkeepingRows() {
+        launch("cloudRefreshBookkeepingOnly")
+        openChoices()
+        openConfirmation("storage-switch.refresh-from-cloud")
+        let comparison = app.staticTexts["storage-switch.refresh-from-cloud-comparison"]
+        XCTAssertTrue(reveal(comparison))
+        XCTAssertTrue(comparison.label.contains("iCloud: テーマ5・記録0・成果0"), "saw: \(comparison.label)")
+        XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"), "saw: \(comparison.label)")
+        XCTAssertFalse(comparison.label.contains("管理情報"))
+        XCTAssertFalse(comparison.label.contains("記録件数"))
+        let empty = app.staticTexts["storage-switch.refresh-from-cloud-empty-cloud"]
+        XCTAssertTrue(reveal(empty), "The documented 0件 warning must reach a real account")
+        XCTAssertTrue(empty.label.contains("このiPhoneのテーマ12・記録480・成果36"), "saw: \(empty.label)")
+        attach("Settings refresh-from-cloud — only bookkeeping rows in iCloud")
         assertUncheckedDatasetConfirmation("refresh-from-cloud")
         app.navigationBars["最後の確認"].buttons["戻る"].tap()
         XCTAssertTrue(app.navigationBars["iCloudと保存先の変更"].waitForExistence(timeout: 4))
@@ -334,9 +463,10 @@ final class StorageTransferSettingsUITests: XCTestCase {
         let comparison = app.staticTexts["storage-switch.refresh-from-cloud-comparison"]
         XCTAssertTrue(reveal(comparison))
         XCTAssertTrue(comparison.label.contains("iCloud: テーマ"), "saw: \(comparison.label)")
-        XCTAssertFalse(comparison.label.contains("このiPhone:"),
-            "The device side is not read while the direction that needs it is unpublished, "
-            + "so 「確認できませんでした」 would claim a look that never happened")
+        // transfer-03. This direction ships and deletes THIS iPhone's side, so
+        // the shipping build counts it before the acknowledgement.
+        XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"),
+            "saw: \(comparison.label)")
         assertUncheckedDatasetConfirmation("refresh-from-cloud")
         app.navigationBars["最後の確認"].buttons["戻る"].tap()
         XCTAssertTrue(app.navigationBars["iCloudと保存先の変更"].waitForExistence(timeout: 4))
@@ -374,9 +504,10 @@ final class StorageTransferSettingsUITests: XCTestCase {
         let comparison = app.staticTexts["storage-switch.overwrite-cloud-comparison"]
         XCTAssertTrue(reveal(comparison))
         XCTAssertTrue(comparison.label.contains("このiPhone: テーマ"))
-        XCTAssertTrue(comparison.label.contains("iCloud側の管理情報なし（記録件数: "))
-        XCTAssertFalse(comparison.label.contains("iCloud: テーマ"),
-            "A dataset with no ledger must not be rendered as one that has it")
+        XCTAssertTrue(comparison.label.contains("iCloud: テーマ9・記録312・成果28"), "saw: \(comparison.label)")
+        XCTAssertFalse(comparison.label.contains("iCloud: テーマ9・記録312・成果28（最終"),
+            "A dataset with no ledger must not print a 「最終」 row that implies one")
+        XCTAssertFalse(comparison.label.contains("管理情報"))
         let starts = app.staticTexts["storage-switch.overwrite-cloud-starts-lineage"]
         XCTAssertTrue(reveal(starts))
         XCTAssertTrue(starts.label.contains("新しく使い始める"))
@@ -437,6 +568,33 @@ final class StorageTransferSettingsUITests: XCTestCase {
         app.navigationBars["最後の確認"].buttons["戻る"].tap()
         app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
         assertNoDatasetRequest()
+        assertNoOperation()
+    }
+
+    /// settings-03 / transfer-09. The disabled iCloud reset leads somewhere:
+    /// a page naming the in-app route to start over and the iOS route to
+    /// delete iCloud data, with an export first. It starts nothing itself.
+    func testTheDisabledICloudResetPointsToTheRoutesThatWork() {
+        launch("cloudResetGuidance")
+        let row = app.buttons["settings.activity-reset-alternatives"]
+        XCTAssertTrue(reveal(row))
+        row.tap()
+        XCTAssertTrue(app.navigationBars["記録を消す・やり直す方法"].waitForExistence(timeout: 4))
+        let startOver = app.staticTexts["settings.reset-guidance.start-over"]
+        XCTAssertTrue(reveal(startOver))
+        XCTAssertTrue(startOver.label.contains("「iCloudと保存先の変更」"))
+        XCTAssertTrue(startOver.label.contains("「このiPhoneへ引き継ぐ」"))
+        let delete = app.staticTexts["settings.reset-guidance.delete"]
+        XCTAssertTrue(reveal(delete))
+        XCTAssertTrue(delete.label.contains("元に戻せません"))
+        attach("Settings — where the disabled iCloud reset points")
+        let export = app.buttons["settings.reset-guidance.export"]
+        XCTAssertTrue(reveal(export))
+        export.tap()
+        let state = app.staticTexts["settings.reset-guidance.fixture-state"]
+        app.navigationBars["記録を消す・やり直す方法"].buttons.firstMatch.tap()
+        XCTAssertTrue(reveal(state))
+        XCTAssertEqual(state.label, "guidanceExports=1")
         assertNoOperation()
     }
 
@@ -641,16 +799,23 @@ final class StorageTransferSettingsUITests: XCTestCase {
 
     func testOfflineRecoveryDetailsCanCloseWithoutRetiringOrAcceptingAnyTransfer() {
         launch("offlineRecovery")
-        assertCompactOfflineBanner(expectsRetry: false)
+        assertCompactOfflineBanner(expectsRetry: false, syncStopped: true)
         let entry = app.buttons["cloud-offline-recovery-details"]
         XCTAssertTrue(entry.isHittable)
         assertTouchTarget(entry)
         entry.tap()
         XCTAssertTrue(app.navigationBars["同期の状態"].waitForExistence(timeout: 4))
+        // device-01. A session opened from a stop screen does not resume on
+        // its own, so neither the banner nor its details say 「待機中」.
+        let title = app.staticTexts["cloud-offline-details-title"]
+        XCTAssertTrue(reveal(title))
+        XCTAssertEqual(title.label, "このiPhoneに保存・iCloud同期は停止中")
         let disclosure = app.staticTexts["cloud-offline-recovery-disclosure"]
         XCTAssertTrue(reveal(disclosure))
         XCTAssertTrue(disclosure.label.contains("データの置き換えや削除には、その後の確認が必要です"))
         closeOfflineDetails()
+        // Settings' own status row agrees with the banner.
+        XCTAssertTrue(reveal(text(containing: "通信が戻っても同期は自動では再開しません")))
         let reviewState = app.staticTexts["cloud-offline.recovery-fixture-state"]
         XCTAssertTrue(reveal(reviewState, upwards: false))
         XCTAssertEqual(reviewState.label, "reviewCalls=0")
@@ -670,7 +835,7 @@ final class StorageTransferSettingsUITests: XCTestCase {
 
     func testAX5OfflineRecoveryDisclosureAndExplicitReviewRemainReachable() throws {
         launch("offlineRecovery", accessibility5: true)
-        assertCompactOfflineBanner(expectsRetry: false)
+        assertCompactOfflineBanner(expectsRetry: false, syncStopped: true)
         let entry = app.buttons["cloud-offline-recovery-details"]
         XCTAssertTrue(entry.isHittable)
         assertTouchTarget(entry)
@@ -696,7 +861,7 @@ final class StorageTransferSettingsUITests: XCTestCase {
 
     func testResetHistoryConflictKeepsExportAndSupportChoicesWithoutInventingRefreshConsent() {
         launch("offlineHistory")
-        assertCompactOfflineBanner(expectsRetry: false)
+        assertCompactOfflineBanner(expectsRetry: false, syncStopped: true)
         app.buttons["cloud-offline-recovery-details"].tap()
         XCTAssertTrue(app.navigationBars["同期の状態"].waitForExistence(timeout: 4))
         let options = app.staticTexts["cloud-offline-history-options"]
@@ -883,11 +1048,13 @@ final class StorageTransferSettingsUITests: XCTestCase {
 
     private var state: XCUIElement { app.staticTexts["storage-switch.fixture-state"] }
 
-    private func assertCompactOfflineBanner(expectsRetry: Bool = true) {
+    private func assertCompactOfflineBanner(expectsRetry: Bool = true, syncStopped: Bool = false) {
         let details = app.buttons["cloud-offline-details"]
         XCTAssertTrue(details.waitForExistence(timeout: 4))
         XCTAssertTrue(details.isHittable)
-        XCTAssertEqual(details.label, "このiPhoneに保存・iCloud同期は待機中。詳細を表示")
+        XCTAssertEqual(details.label, syncStopped
+            ? "このiPhoneに保存・iCloud同期は停止中。詳細を表示"
+            : "このiPhoneに保存・iCloud同期は待機中。詳細を表示")
         assertTouchTarget(details)
         XCTAssertEqual(app.buttons.matching(identifier: "cloud-offline-details").count, 1)
         let window = app.windows.firstMatch.frame
@@ -948,7 +1115,7 @@ final class StorageTransferSettingsUITests: XCTestCase {
     private func assertOfflineStorageSwitchDisabled() {
         let entry = app.buttons["settings.storage-switch"]
         XCTAssertTrue(reveal(entry))
-        XCTAssertEqual(entry.label, "iCloudを解除する")
+        XCTAssertEqual(entry.label, "iCloudと保存先の変更")
         XCTAssertFalse(entry.isEnabled)
         entry.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertFalse(app.navigationBars["iCloudと保存先の変更"].exists)
@@ -1074,7 +1241,15 @@ final class StorageTransferSettingsUITests: XCTestCase {
     }
 
     @discardableResult
+    /// `upwards` is the first guess at where the element lies. When that scan
+    /// ends at a list edge without finding it — an AX5 row that grew moves
+    /// everything below it — the opposite direction is scanned before failing.
     private func reveal(_ element: XCUIElement, upwards: Bool = true) -> Bool {
+        if scan(element, upwards: upwards) { return true }
+        return scan(element, upwards: !upwards)
+    }
+
+    private func scan(_ element: XCUIElement, upwards: Bool) -> Bool {
         for _ in 0..<14 {
             if element.exists, element.isHittable {
                 if element.elementType != .button && element.elementType != .switch { return true }

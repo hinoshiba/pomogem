@@ -103,6 +103,10 @@ final class CloudStorageTransferCloudKitTests: XCTestCase {
         let source = record("StudySession")
         source["CD_source"] = try NSKeyedArchiver.archivedData(withRootObject: ["source": "manual"] as NSDictionary, requiringSecureCoding: true) as NSData
         XCTAssertEqual(try decoder.decode(source).fields["source"], .string("manual"))
+        // A pre-release 1.1.0 row is still readable, and decodes to the same
+        // encoding the local snapshot captures, so equality checks agree.
+        source["CD_source"] = try NSKeyedArchiver.archivedData(withRootObject: ["source": "screenTime"] as NSDictionary, requiringSecureCoding: true) as NSData
+        XCTAssertEqual(try decoder.decode(source).fields["source"], .string("manual"))
     }
 
     func testActualSyntheticCoreDataKnownKeysArchiveRetainsStrictEnumValidation() throws {

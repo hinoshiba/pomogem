@@ -313,7 +313,7 @@ final class BoundedLaunchPreparationTests: XCTestCase {
             invalid.startAt = endAt.addingTimeInterval(-5_400)
             invalid.seconds = 5_400
             invalid.grams = StudySession.grams(for: 5_400)
-            invalid.source = .manual
+            invalid.persistedSource = .manual
             XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(
                 invalid,
                 relativeTo: now
@@ -368,7 +368,7 @@ final class BoundedLaunchPreparationTests: XCTestCase {
             invalid.startAt = endAt.addingTimeInterval(-5_400)
             invalid.seconds = 5_400
             invalid.grams = StudySession.grams(for: 5_400)
-            invalid.source = .manual
+            invalid.persistedSource = .manual
             context.insert(invalid)
         }
         try context.save()

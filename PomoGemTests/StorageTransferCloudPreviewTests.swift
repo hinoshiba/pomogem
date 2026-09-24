@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import XCTest
 @testable import PomoGem
 
@@ -190,6 +191,65 @@ final class StorageTransferCloudPreviewTests: XCTestCase {
     }
 
     // MARK: - The runtime entry point
+
+    // MARK: - The device side, read straight from a context
+
+    /// The device side of a comparison is no longer a full snapshot (every
+    /// field and relationship of all eleven entities): it walks the mirrored
+    /// models' scalar fields once. It must still reduce to EXACTLY what the
+    /// snapshot path reduces to — counts, the newest non-future date, other
+    /// writers — or the two rows a deletion is chosen from drift apart.
+    /// Local-only rows stamped "now" must stay out of both.
+    func testTheDirectDeviceReadReducesExactlyAsTheSnapshotPathDoes() throws {
+        let schema = PersistenceStoreTopology.shippingSchema
+        let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(
+            "CloudPreviewDirectRead-\(UUID())", schema: schema,
+            isStoredInMemoryOnly: true, cloudKitDatabase: .none)])
+        let context = container.mainContext
+        context.autosaveEnabled = false
+        let base = Date(timeIntervalSince1970: 1_750_000_000)
+        let sessions = 2_000
+        let subject = Subject(name: "数学", colorHex: "blue", sortOrder: 0, createdAt: base)
+        context.insert(subject)
+        for index in 0..<sessions {
+            let start = base.addingTimeInterval(Double(index) * 3_600)
+            context.insert(StudySession(subject: subject, startAt: start, endAt: start.addingTimeInterval(1_500),
+                                        seconds: 1_500, source: .timer, deviceDayKey: "day-\(index)"))
+        }
+        context.insert(AchievementStone(subject: subject, kind: .examPass, note: "note",
+                                        achievedAt: base, createdAt: base))
+        context.insert(Prefs(keepScreenAwake: false, hasCompletedOnboarding: true, settingsWriterID: "writer-a"))
+        context.insert(ActivityResetMarker(sequence: 1, resetAt: base,
+                                           writerDeviceID: "22222222-2222-2222-2222-222222222222"))
+        context.insert(FocusTimerDeviceClaim(sessionID: UUID(), deviceID: localDeviceID, sequence: 1,
+                                             claimedAt: base, releasedAt: base))
+        let now = base.addingTimeInterval(Double(sessions + 24) * 3_600)
+        context.insert(AggregatePebble(level: 1, pebbleCount: 1, grams: 250, colorMixJSON: "[]",
+                                       periodStart: now, periodEnd: now))
+        context.insert(Bedrock(hours: 1, importedAt: now))
+        try context.save()
+
+        var started = Date()
+        let viaSnapshot = StorageTransferCloudPreview.make(
+            snapshot: try PomoGemStorageSnapshot.capture(from: ModelContext(container)),
+            localDeviceID: localDeviceID, now: now)
+        let snapshotSeconds = Date().timeIntervalSince(started)
+        started = Date()
+        let direct = try StorageTransferCloudPreview.make(context: ModelContext(container),
+                                                          localDeviceID: localDeviceID, now: now)
+        let directSeconds = Date().timeIntervalSince(started)
+
+        XCTAssertEqual(direct, viaSnapshot)
+        XCTAssertEqual(direct.recordCounts["StudySession"], sessions)
+        XCTAssertEqual(direct.recordCounts["Subject"], 1)
+        XCTAssertNil(direct.recordCounts["AggregatePebble"], "Local-only models are never counted")
+        XCTAssertEqual(direct.otherDeviceIDs, 1)
+        XCTAssertEqual(direct.latestRecordAt,
+                       base.addingTimeInterval(Double(sessions - 1) * 3_600 + 1_500),
+                       "The newest mirrored date, not a local-only row stamped at `now`")
+        // Evidence for the review, not a gate: timings vary by host.
+        print("device-preview rows=\(sessions) snapshot=\(snapshotSeconds)s direct=\(directSeconds)s")
+    }
 
     func testPreviewReadsOnceAndCreatesNoJournalCheckpointOrDirectoryEntry() async throws {
         let (root, store, runtime, _) = try fixture()

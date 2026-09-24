@@ -439,7 +439,7 @@ enum SeedData {
                 id: $0.id,
                 endAt: $0.endAt,
                 seconds: $0.seconds,
-                source: $0.source,
+                source: $0.effectiveSource,
                 pebbleKind: $0.pebbleKind,
                 rareRewardRuleVersion: $0.rareRewardRuleVersion,
                 rareRewardParticipated: $0.rareRewardParticipated,
@@ -739,8 +739,8 @@ enum SeedData {
                     : StrataMath.decimalAggregateLevel(forPebbleCount: stratum.pebbleCount),
                 pebbleCount: stratum.pebbleCount,
                 grams: stratum.grams,
-                measuredPebbleCount: members.filter { $0.source.isMeasured }.count,
-                manualPebbleCount: members.filter { !$0.source.isMeasured }.count,
+                measuredPebbleCount: members.filter { $0.effectiveSource.isMeasured }.count,
+                manualPebbleCount: members.filter { !$0.effectiveSource.isMeasured }.count,
                 goldPebbleCount: rareRewards.goldCount,
                 prismPebbleCount: rareRewards.prismCount,
                 colorMixJSON: stratum.colorMixJSON,
@@ -781,8 +781,8 @@ enum SeedData {
             )
             if knownComposition < aggregate.pebbleCount {
                 if members.count == aggregate.sessionIDs.count, !members.isEmpty {
-                    aggregate.measuredPebbleCount = members.filter { $0.source.isMeasured }.count
-                    aggregate.manualPebbleCount = members.filter { !$0.source.isMeasured }.count
+                    aggregate.measuredPebbleCount = members.filter { $0.effectiveSource.isMeasured }.count
+                    aggregate.manualPebbleCount = members.filter { !$0.effectiveSource.isMeasured }.count
                 } else if hasCompleteChildren {
                     aggregate.measuredPebbleCount = NonnegativeIntPolicy.sum(
                         children.map(\.measuredPebbleCount)

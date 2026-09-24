@@ -441,7 +441,7 @@ struct RareRewardPendingCommitDrainer {
                   StudySessionIntegrityPolicy.isSupported(session)
                       && RareRewardLedgerV2.normalizedEpochID(session.dataEpochID)
                       == submission.epochID
-                      && session.source == submission.source
+                      && session.effectiveSource == submission.source
                       && max(0, session.seconds) == submission.completedSeconds
                       && max(0, session.grams) == submission.completedGrams
                       && session.rareRewardRuleVersion

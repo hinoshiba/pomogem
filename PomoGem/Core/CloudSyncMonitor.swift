@@ -742,6 +742,9 @@ struct CloudSyncSettingsSection: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
+    /// device-01. Set for a session opened from a stop screen, whose sync
+    /// does not resume when the connection does.
+    @Environment(\.cloudConnectionPresentation) private var connectionPresentation
     @State private var monitor = CloudSyncMonitor()
 
     @ViewBuilder
@@ -782,10 +785,16 @@ struct CloudSyncSettingsSection: View {
     }
 
     private var offlineSection: some View {
-        Section {
-            Label("このiPhoneに保存・iCloud同期は待機中", systemImage: "icloud.slash")
+        let stopped = connectionPresentation?.recoveryKind != nil
+        return Section {
+            // The banner's own words, so the two never disagree about whether
+            // sync is waiting for a connection or stopped until a decision.
+            Label(stopped ? "このiPhoneに保存・iCloud同期は停止中" : "このiPhoneに保存・iCloud同期は待機中",
+                  systemImage: "icloud.slash")
                 .font(.headline)
-            Text("保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへはまだ送信されません。通信回復後、同じアカウントとデータを確認してから同期を再開します。")
+            Text(stopped
+                 ? "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへは送信されません。通信が戻っても同期は自動では再開しません。再開する方法は、画面上部の「復旧手順」から確認できます。"
+                 : "保存済みのテーマと記録を使い、タイマーや記録の追加を続けられます。この間の変更は端末に保存され、iCloudへはまだ送信されません。通信回復後、同じアカウントとデータを確認してから同期を再開します。")
                 .font(.caption)
                 .fixedSize(horizontal: false, vertical: true)
             Text("別端末でデータが置き換わっている場合は、端末の記録を保持して同期を停止します。保存先の切り替えは、接続と内容を確認できてから行ってください。")

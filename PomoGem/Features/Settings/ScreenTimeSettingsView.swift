@@ -9,7 +9,12 @@ struct ScreenTimeSettingsView: View {
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var controller: ScreenTimeController
     @State private var purchase = PurchaseManager.shared
+    @Environment(\.modelContext) private var modelContext
+    /// Live theme rows only; tombstones never count toward the row bound.
     @Query private var storedSubjects: [Subject]
+    /// Observed so a deletion delivered as a new physical row refreshes the
+    /// list; see `SubjectSyncPolicy.presentationSubjects(live:tombstones:context:)`.
+    @Query private var storedSubjectTombstones: [Subject]
     @State private var draft: ScreenTimeConfiguration
     @State private var selectionLane: ScreenTimeSelectionLane?
     @State private var isRequestingAuthorization = false
@@ -27,17 +32,18 @@ struct ScreenTimeSettingsView: View {
         let controller = controller ?? .shared
         _controller = ObservedObject(wrappedValue: controller)
         _draft = State(initialValue: controller.configuration)
-        var descriptor = FetchDescriptor<Subject>(sortBy: [
+        _storedSubjects = Query(SubjectSyncPolicy.liveRowsDescriptor(sortBy: [
             SortDescriptor(\Subject.sortOrder),
             SortDescriptor(\Subject.createdAt),
             SortDescriptor(\Subject.id)
-        ])
-        descriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
-        _storedSubjects = Query(descriptor)
+        ]))
+        _storedSubjectTombstones = Query(SubjectSyncPolicy.tombstoneRowsDescriptor())
     }
 
     private var subjects: [Subject] {
-        SubjectSyncPolicy.presentationSubjects(from: storedSubjects)
+        SubjectSyncPolicy.presentationSubjects(
+            live: storedSubjects, tombstones: storedSubjectTombstones, context: modelContext
+        )
     }
 
     private var learningCount: Int { draft.learningSelection.applicationTokens.count }
