@@ -159,62 +159,90 @@ enum PebbleRadiusPolicy {
     }
 }
 
-/// D4 — larger study gems (owner decision pending; Docs/GemExperienceDesign.md
-/// §7.5 and §11). Loose gems ×1.6, aggregates ×1.2, achievement stones ×1.15
-/// and Screen Time obstacles ×1.0, applied to the visible and the physics
-/// radius together so area stays proportional to mass. It stays off until the
-/// owner approves it together with capacity thresholds re-derived from the
-/// jar's real interior area; the Simulator-only preview exists so the choice
-/// can be made from screenshots.
-enum GemSizePolicy {
-    struct Scales: Equatable, Sendable {
-        let loose: CGFloat
-        let aggregate: CGFloat
-        let achievement: CGFloat
-    }
+/// D4 (decided): one jar-wide scale for every body in the jar
+/// (Docs/GemExperienceDesign.md §7.5). `PebbleRadiusPolicy` still sets each
+/// body's own radius (area ∝ mass between gems); the scene multiplies all of
+/// them by one factor `s = clamp(√(A_budget / A0), 1, maximumScale)`, where
+/// `A0` is Σπr² of the bodies at their own radii (study gems, milestone
+/// stones and Screen Time stones alike, plus the incoming drop) and
+/// `A_budget` a fixed share of the interior. A young jar therefore shows a
+/// few large jewels; as the pile grows the jar scales down to the shipping
+/// size (s = 1, never below) and every fusion, which lowers `A0`, lets the
+/// gems grow again. Presentation only: the stored rows, the grams, the
+/// capacity units and the fusion rules never see the scale.
+enum JarScalePolicy {
+    /// Share of the interior rectangle the scaled bodies may cover
+    /// (Σπ(s·r)² ≤ budget while s > 1). Well below the ~66 % at which the
+    /// shipping worst case still keeps 17 % free under the mouth.
+    static let interiorAreaBudgetFraction: CGFloat = 0.30
+    /// A 25-minute gem is about 55 pt across at this scale: 0.18 of the
+    /// iPhone 17 Pro Home interior (306 pt) and 0.20 of the 12 mini's
+    /// (279 pt); the reference image shows 0.15–0.20.
+    static let maximumScale: CGFloat = 2.4
+    static let minimumScale: CGFloat = 1
+    /// Scales move on a geometric ladder of 4 % rungs, so a landing that
+    /// changes the target by a hair never re-bakes the jar.
+    static let rungRatio: CGFloat = 1.04
+    /// Hysteresis: a jar shrinks as soon as its target falls below the
+    /// current rung, but grows only when the target clears it by two rungs.
+    static let growthRungs = 2
+    /// Screen Time stones grow at 0.72 × the study scale (a one-unit stone
+    /// is then never larger than a ten-minute study gem of the same jar) and
+    /// never beyond 1.6.
+    static let obstacleScaleRatio: CGFloat = 0.72
+    static let maximumObstacleScale: CGFloat = 1.6
+    /// Scale changes animate over this long (landing, fusion, resize).
+    static let transitionDuration: TimeInterval = 0.5
 
-    static let isApprovedForRelease = false
-    /// D4 option A (recommended in the proposal).
-    static let proposed = Scales(loose: 1.6, aggregate: 1.2, achievement: 1.15)
-    /// Fallbacks the proposal names for a failed worst case: aggregates
-    /// first, then loose gems.
-    static let aggregatesUnscaled = Scales(loose: 1.6, aggregate: 1.0, achievement: 1.0)
-    static let uniformLite = Scales(loose: 1.35, aggregate: 1.0, achievement: 1.0)
-
-    static var looseScale: CGFloat { activeScales?.loose ?? 1 }
-    static var aggregateScale: CGFloat { activeScales?.aggregate ?? 1 }
-    static var achievementScale: CGFloat { activeScales?.achievement ?? 1 }
-
-    static var isEnabled: Bool { activeScales != nil }
-
-    private static var activeScales: Scales? {
-        isApprovedForRelease ? proposed : simulatorPreviewScales
-    }
-
-    /// Debug + Simulator only: `POMOGEM_UI_TEST_GEM_SIZE=d4` (option A),
-    /// `d4-agg1` (aggregates unscaled) or `d4-lite` (×1.35 loose) together
-    /// with the in-memory UI-test launch previews the D4 sizes.
-    static let simulatorPreviewScales: Scales? = {
-#if DEBUG && targetEnvironment(simulator)
-        guard LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess,
-              LocalPreviewLaunchPolicy.persistenceModeForCurrentProcess == .inMemoryPreview
-        else { return nil }
-        switch ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_GEM_SIZE"] {
-        case "d4": return proposed
-        case "d4-agg1": return aggregatesUnscaled
-        case "d4-lite": return uniformLite
-        default: return nil
+    /// Σπr² of bodies at their own (unscaled) radii.
+    static func baseArea<Radii: Sequence>(radii: Radii) -> CGFloat where Radii.Element == CGFloat {
+        radii.reduce(CGFloat.zero) { total, radius in
+            guard radius.isFinite, radius > 0 else { return total }
+            return total + .pi * radius * radius
         }
-#else
-        return nil
-#endif
-    }()
+    }
 
-    static func scale(isAggregate: Bool, isAchievement: Bool) -> CGFloat {
-        guard let scales = activeScales else { return 1 }
-        if isAggregate { return scales.aggregate }
-        if isAchievement { return scales.achievement }
-        return scales.loose
+    /// The continuous target scale for bodies covering `baseArea` in an
+    /// interior of `interiorArea`, clamped to 1…`maximumScale`.
+    static func targetScale(baseArea: CGFloat, interiorArea: CGFloat) -> CGFloat {
+        guard interiorArea.isFinite, interiorArea > 0 else { return minimumScale }
+        guard baseArea.isFinite, baseArea > 0 else { return maximumScale }
+        let raw = (interiorArea * interiorAreaBudgetFraction / baseArea).squareRoot()
+        return min(max(raw, minimumScale), maximumScale)
+    }
+
+    /// Highest ladder rung at or below `scale` (1, 1.04, 1.04², … and
+    /// `maximumScale` itself as the top rung).
+    static func rung(atOrBelow scale: CGFloat) -> CGFloat {
+        guard scale.isFinite else { return minimumScale }
+        let clamped = min(max(scale, minimumScale), maximumScale)
+        if clamped >= maximumScale { return maximumScale }
+        let steps = (log(clamped / minimumScale) / log(rungRatio) + 1e-6).rounded(.down)
+        return min(maximumScale, minimumScale * pow(rungRatio, max(0, steps)))
+    }
+
+    /// The scale a jar at `current` moves to for `target`: down to the rung
+    /// below the target at once (the pile never outgrows its budget), up
+    /// only past the hysteresis band, otherwise unchanged.
+    static func resolvedScale(current rawCurrent: CGFloat, target: CGFloat) -> CGFloat {
+        let current = rawCurrent.isFinite ? min(max(rawCurrent, minimumScale), maximumScale) : minimumScale
+        let candidate = rung(atOrBelow: target)
+        if candidate < current - 1e-6 { return candidate }
+        let growthThreshold = min(maximumScale, current * pow(rungRatio, CGFloat(growthRungs)))
+        if candidate >= growthThreshold - 1e-6 { return candidate }
+        return current
+    }
+
+    /// The scale of Screen Time stones in a jar whose study gems use
+    /// `studyScale`: never above the study scale, never below 1.
+    static func obstacleScale(studyScale: CGFloat) -> CGFloat {
+        guard studyScale.isFinite else { return minimumScale }
+        return min(max(minimumScale, studyScale * obstacleScaleRatio), maximumObstacleScale, max(minimumScale, studyScale))
+    }
+
+    /// The share of the jar-wide scale a body of `descriptor` uses.
+    static func bodyScale(for descriptor: PebbleDescriptor, studyScale: CGFloat) -> CGFloat {
+        descriptor.isScreenTimeObstacle ? obstacleScale(studyScale: studyScale) : studyScale
     }
 }
 
@@ -271,9 +299,7 @@ struct PebbleDescriptor: Identifiable {
             grams: grams,
             achievementKind: achievementKind,
             aggregate: aggregate
-        ) * (screenTimeObstacle == nil
-            ? GemSizePolicy.scale(isAggregate: aggregate != nil, isAchievement: achievementKind != nil)
-            : 1)
+        )
         // Aggregate geometry is an invariant derived from its lossless mass and
         // membership. Do not let an older count-only caller bypass it by passing
         // the former hierarchy radius explicitly. Loose/tutorial fixtures may
@@ -471,9 +497,31 @@ struct PebbleDescriptor: Identifiable {
 /// reliable high-volume simulation; the irregularity is visual rather than collisional.
 final class PebbleNode: SKShapeNode {
     let descriptor: PebbleDescriptor
-    let radius: CGFloat
+    /// The body's own radius (`PebbleRadiusPolicy`, from the descriptor).
+    /// The physics circle and every child are built on it in the node's
+    /// local space; the jar-wide scale (`JarScalePolicy`) is the node's
+    /// scale, which SpriteKit applies to the physics body as well.
+    let localRadius: CGFloat
     /// Display scale of the gem body bake (from the owning scene's view).
     let artworkScale: CGFloat
+    /// This body's share of the jar-wide scale (D4, §7.5): 1 at the
+    /// shipping size. Animated by `transitionJarScale(to:duration:)`.
+    private(set) var jarScale: CGFloat = 1
+    /// The scale a running (or the last) transition ends at.
+    private(set) var jarScaleTarget: CGFloat = 1
+    /// The jar scale the body texture was baked for (so a scaled gem stays
+    /// as crisp as one built at that size).
+    private(set) var textureJarScale: CGFloat = 1
+    /// Scene-space radius of the collision circle and the visible gem.
+    var radius: CGFloat { localRadius * jarScale }
+    /// The radius the sound and haptic plan hears. The jar scale is
+    /// presentation only, so a larger-looking gem sounds exactly as before.
+    var sensoryRadius: CGFloat { localRadius }
+    /// The body's mass as if it were unscaled (read when the circle is
+    /// built, before the node is scaled). Shake impulses divide by it, so a
+    /// jar of large young gems shakes as lively as the shipping jar while
+    /// heavier crystals still lag behind lighter ones.
+    private(set) var presentationMass: CGFloat = 0
 
     private(set) var hasLanded = false
     private(set) var lastObservedPosition: CGPoint = .zero
@@ -486,7 +534,10 @@ final class PebbleNode: SKShapeNode {
     private var aggregateAuraNode: SKNode?
     private var earlyEffortAuraNode: SKSpriteNode?
     private var earlyEffortBloomNode: SKSpriteNode?
-    private var aggregateCountNode: SKLabelNode?
+    /// D26 (b): the ×N count as a small engraved copper tag (one sprite).
+    private var aggregateTagNode: SKSpriteNode?
+    /// The tag's text, exactly the former plate's (`AggregatePresentation`).
+    private(set) var aggregateTagText: String?
     private var achievementMarkBackdropNode: SKShapeNode?
     private var achievementMarkNode: SKLabelNode?
     /// Faceted gem skin (loose normal gems, aggregates and achievement
@@ -494,6 +545,9 @@ final class PebbleNode: SKShapeNode {
     /// any of these nodes.
     private(set) var gemRung: GemCutRung?
     private var gemBodyNode: SKSpriteNode?
+    private var gemBodySpec: GemArtworkSpec?
+    /// The baked rock of a Screen Time stone.
+    private var obstacleBodyNode: SKSpriteNode?
     private var gemHaloNode: SKSpriteNode?
     /// Screen-fixed light rig: contact shadow, key sheen, pavilion shade,
     /// rims and glints counter-rotate together so the light source stays put
@@ -502,12 +556,11 @@ final class PebbleNode: SKShapeNode {
     private var gemGlintNodes: [SKSpriteNode] = []
     private var gemGlintRestPositions: [CGPoint] = []
     private var gemGlintPhases: [CGFloat] = []
-    private var aggregateCountPlateNode: SKShapeNode?
     /// Upright count on a Screen Time obstacle. Held directly: the lighting
     /// pass runs for every body on every frame, and a name search there
     /// (`childNode(withName:)` with a dotted name) scans the runtime's type
     /// records each call — it was the jar's single largest frame cost.
-    private var obstacleCountNode: SKNode?
+    private var obstacleCountNode: SKSpriteNode?
     private var gemHaloBaseAlpha: CGFloat = 0
     /// +10 % for the aggregate that holds the most grams in the pile.
     private var gemHaloEmphasis: CGFloat = 1
@@ -534,16 +587,23 @@ final class PebbleNode: SKShapeNode {
         descriptor: PebbleDescriptor,
         reduceMotion: Bool = UIAccessibility.isReduceMotionEnabled,
         rareRewardMode: RareRewardMode = .standard,
-        artworkScale: CGFloat = PebbleNode.defaultArtworkScale
+        artworkScale: CGFloat = PebbleNode.defaultArtworkScale,
+        jarScale: CGFloat = 1
     ) {
         self.descriptor = descriptor
-        self.radius = descriptor.radius
+        self.localRadius = descriptor.radius
         self.reducesVisualMotion = reduceMotion
         self.rareRewardMode = rareRewardMode
         self.artworkScale = GemArtwork.renderScale(artworkScale)
+        let scale = Self.sanitizedJarScale(jarScale)
+        self.jarScale = scale
+        self.jarScaleTarget = scale
+        self.textureJarScale = scale
         super.init()
         configureAppearance()
         configurePhysics()
+        setScale(scale)
+        updateSemanticLabelScale()
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -555,7 +615,7 @@ final class PebbleNode: SKShapeNode {
             aggregate: nil,
             grams: .zero
         )
-        radius = Constants.Jar.measuredRadius
+        localRadius = Constants.Jar.measuredRadius
         reducesVisualMotion = UIAccessibility.isReduceMotionEnabled
         rareRewardMode = .standard
         artworkScale = Self.defaultArtworkScale
@@ -574,6 +634,80 @@ final class PebbleNode: SKShapeNode {
 
     func rememberObservedPosition() {
         lastObservedPosition = position
+    }
+
+    // MARK: Jar-wide scale (D4)
+
+    static let jarScaleActionKey = "pebble.jarScale"
+    /// Scene-side birth pops (fusion finale, black carry) run under this
+    /// key, relative to `jarScale`, so a scale transition can take over.
+    static let birthActionKey = "pebble.birth"
+
+    static func sanitizedJarScale(_ scale: CGFloat) -> CGFloat {
+        guard scale.isFinite, scale > 0 else { return 1 }
+        return min(max(scale, JarScalePolicy.minimumScale), JarScalePolicy.maximumScale)
+    }
+
+    /// Moves the body to `rawTarget` of the jar-wide scale over `duration`
+    /// (smoothstep; 0 = at once). Visual and physics radius move together
+    /// (SpriteKit scales the body with the node), so a growing pile pushes
+    /// its neighbours apart a little each frame instead of overlapping them
+    /// at once. The body texture is re-baked for the target size first.
+    func transitionJarScale(to rawTarget: CGFloat, duration: TimeInterval) {
+        let target = Self.sanitizedJarScale(rawTarget)
+        // Already there, or already on its way (a birth pop included).
+        guard abs(target - jarScaleTarget) > 0.0001 else { return }
+        removeAction(forKey: Self.jarScaleActionKey)
+        // A birth pop still in flight hands its current size over.
+        removeAction(forKey: Self.birthActionKey)
+        jarScaleTarget = target
+        refreshBodyTexture(forJarScale: target)
+        let startScale = jarScale
+        let startVisual = xScale
+        guard duration > 0, !isRemovedForBake,
+              abs(target - startScale) > 0.0001 || abs(target - startVisual) > 0.0001
+        else {
+            applyJarScale(target, visual: target)
+            return
+        }
+        let seconds = CGFloat(duration)
+        let step = SKAction.customAction(withDuration: duration) { node, elapsed in
+            guard let pebble = node as? PebbleNode else { return }
+            let t = min(1, max(0, elapsed / seconds))
+            let eased = t * t * (3 - 2 * t)
+            pebble.applyJarScale(
+                startScale + (target - startScale) * eased,
+                visual: startVisual + (target - startVisual) * eased
+            )
+        }
+        run(.sequence([
+            step,
+            .run { [weak self] in self?.applyJarScale(target, visual: target) }
+        ]), withKey: Self.jarScaleActionKey)
+    }
+
+    var isTransitioningJarScale: Bool { action(forKey: Self.jarScaleActionKey) != nil }
+
+    /// Ends a running transition at its target (the scene calls this before
+    /// it freezes, so a paused jar never keeps a half-scaled body).
+    func finishJarScaleTransition() {
+        guard isTransitioningJarScale else { return }
+        removeAction(forKey: Self.jarScaleActionKey)
+        applyJarScale(jarScaleTarget, visual: jarScaleTarget)
+    }
+
+    private func applyJarScale(_ scale: CGFloat, visual: CGFloat) {
+        jarScale = scale
+        setScale(visual)
+        updateSemanticLabelScale()
+    }
+
+    /// Count tags keep their own on-screen size: they are counter-scaled so
+    /// the jar scale never turns them into large numbers.
+    private func updateSemanticLabelScale() {
+        let inverse = 1 / max(jarScale, 0.01)
+        aggregateTagNode?.setScale(inverse)
+        obstacleCountNode?.setScale(inverse)
     }
 
     /// SpriteKit shaders keep animating independently of SKActions. Updating
@@ -640,7 +774,7 @@ final class PebbleNode: SKShapeNode {
                 .haloUIColor
             let bloom = Self.sharedLightSprite(
                 GemTextureAtlas.SharedName.halo,
-                size: CGSize(width: radius * 5.6, height: radius * 5.6)
+                size: CGSize(width: localRadius * 5.6, height: localRadius * 5.6)
             )
             bloom.name = "pebble.earlyEffortBloom"
             bloom.color = tint
@@ -653,7 +787,7 @@ final class PebbleNode: SKShapeNode {
 
             let aura = Self.sharedLightSprite(
                 GemTextureAtlas.SharedName.halo,
-                size: CGSize(width: radius * 3.4, height: radius * 3.4)
+                size: CGSize(width: localRadius * 3.4, height: localRadius * 3.4)
             )
             aura.name = "pebble.earlyEffortAura"
             aura.color = tint
@@ -699,8 +833,8 @@ final class PebbleNode: SKShapeNode {
         let sine = sin(zRotation)
 
         let worldOffset = CGPoint(
-            x: horizontal * radius * 0.12,
-            y: -radius * 0.63
+            x: horizontal * localRadius * 0.12,
+            y: -localRadius * 0.63
         )
         for contactNode in [contactShadowNode, contactCausticNode].compactMap({ $0 }) {
             contactNode.position = CGPoint(
@@ -711,7 +845,7 @@ final class PebbleNode: SKShapeNode {
         }
 
         if let dimensionalLightNode, gemLightRigNode == nil {
-            let worldOffset = CGPoint(x: horizontal * radius * 0.055, y: 0)
+            let worldOffset = CGPoint(x: horizontal * localRadius * 0.055, y: 0)
             dimensionalLightNode.position = CGPoint(
                 x: cosine * worldOffset.x + sine * worldOffset.y,
                 y: -sine * worldOffset.x + cosine * worldOffset.y
@@ -724,7 +858,7 @@ final class PebbleNode: SKShapeNode {
             // to the scene's key light. Tilt slides the highlights a little,
             // like turning a real stone under a lamp.
             gemLightRigNode.zRotation = -zRotation
-            dimensionalLightNode?.position = CGPoint(x: horizontal * radius * 0.07, y: 0)
+            dimensionalLightNode?.position = CGPoint(x: horizontal * localRadius * 0.07, y: 0)
             for index in gemGlintNodes.indices {
                 let glint = gemGlintNodes[index]
                 // Each glint owns a narrow window (0.12 wide) in the smoothed
@@ -736,7 +870,7 @@ final class PebbleNode: SKShapeNode {
                 let twinkleBoost = max(0, glint.xScale - 1) / (Self.gemTwinkleScale - 1)
                 glint.alpha = min(1, glintRestAlpha(index: index) + tiltBoost * 0.55 + twinkleBoost * 0.85)
                 let rest = gemGlintRestPositions[index]
-                glint.position = CGPoint(x: rest.x + horizontal * radius * 0.12, y: rest.y)
+                glint.position = CGPoint(x: rest.x + horizontal * localRadius * 0.12, y: rest.y)
             }
         }
 
@@ -745,22 +879,29 @@ final class PebbleNode: SKShapeNode {
         // a user tilts or taps the physical stone. The aggregate plate sits
         // below the table (screen-fixed offset) so the brightest facets stay
         // visible.
-        let plateOffset = CGPoint(x: 0, y: -radius * Self.aggregatePlateDrop)
-        let rotatedPlateOffset = CGPoint(
-            x: cosine * plateOffset.x + sine * plateOffset.y,
-            y: -sine * plateOffset.x + cosine * plateOffset.y
-        )
-        aggregateCountNode?.zRotation = -zRotation
-        aggregateCountNode?.position = rotatedPlateOffset
-        aggregateCountPlateNode?.zRotation = -zRotation
-        aggregateCountPlateNode?.position = rotatedPlateOffset
+        if let tag = aggregateTagNode {
+            let offset = CGPoint(x: 0, y: -localRadius * Self.aggregatePlateDrop)
+            tag.zRotation = -zRotation
+            tag.position = CGPoint(
+                x: cosine * offset.x + sine * offset.y,
+                y: -sine * offset.x + cosine * offset.y
+            )
+        }
         achievementMarkBackdropNode?.zRotation = -zRotation
         achievementMarkNode?.zRotation = -zRotation
-        obstacleCountNode?.zRotation = -zRotation
+        if let count = obstacleCountNode {
+            // Engraved on the rock's lower face, upright in screen space.
+            let offset = CGPoint(x: 0, y: -localRadius * ScreenTimeObstacleAppearance.countDrop)
+            count.zRotation = -zRotation
+            count.position = CGPoint(
+                x: cosine * offset.x + sine * offset.y,
+                y: -sine * offset.x + cosine * offset.y
+            )
+        }
     }
 
     private func configurePhysics() {
-        let body = SKPhysicsBody(circleOfRadius: radius)
+        let body = SKPhysicsBody(circleOfRadius: localRadius)
         body.restitution = Constants.Jar.restitution
         body.friction = Constants.Jar.friction
         body.linearDamping = Constants.Jar.linearDamping
@@ -773,11 +914,12 @@ final class PebbleNode: SKShapeNode {
             | JarPhysicsCategory.floor
         body.contactTestBitMask = body.collisionBitMask
         physicsBody = body
+        presentationMass = body.mass
     }
 
     private func configureAppearance() {
         name = "pebble.\(descriptor.id.uuidString)"
-        path = Self.makeStonePath(radius: radius, id: descriptor.id)
+        path = Self.makeStonePath(radius: localRadius, id: descriptor.id)
         lineWidth = Constants.Jar.outlineWidth
         lineJoin = .round
         zPosition = JarZPosition.pebble
@@ -785,15 +927,17 @@ final class PebbleNode: SKShapeNode {
             obstacleCountNode = ScreenTimeObstacleAppearance.apply(
                 to: self,
                 descriptor: obstacle,
-                radius: radius,
-                scale: artworkScale
+                radius: localRadius,
+                scale: artworkScale,
+                textureJarScale: textureJarScale
             )
+            obstacleBodyNode = childNode(withName: ScreenTimeObstacleAppearance.bodyName) as? SKSpriteNode
             // Obstacles never glow. A normal-blended dark halo (1.6R, black
             // α0.35) sits above the reward halos, so neighbouring light is
             // absorbed instead of washing over the rubble.
             let shadowHalo = Self.sharedLightSprite(
                 GemTextureAtlas.SharedName.halo,
-                size: CGSize(width: radius * 3.2, height: radius * 3.2)
+                size: CGSize(width: localRadius * 3.2, height: localRadius * 3.2)
             )
             shadowHalo.name = "obstacle.shadowHalo"
             shadowHalo.color = .black
@@ -832,8 +976,8 @@ final class PebbleNode: SKShapeNode {
                 : crystalFill.mixed(with: .white, amount: 0.52).withAlphaComponent(
                     descriptor.isMeasured ? 0.72 : 0.48
                 )
-            lineWidth = max(1.05, radius * 0.09)
-            glowWidth = descriptor.isTutorial ? 0 : radius * 0.10
+            lineWidth = max(1.05, localRadius * 0.09)
+            glowWidth = descriptor.isTutorial ? 0 : localRadius * 0.10
         case .gold, .prism:
             configureLooseGemMaterial(fill: fill)
         }
@@ -867,9 +1011,13 @@ final class PebbleNode: SKShapeNode {
     /// The baked texture a descriptor's body shows — the facet body or the
     /// rubble — or nil for the legacy rare materials. The scene bakes these
     /// for a whole restore in parallel before it creates the nodes.
-    static func bakeRequest(for descriptor: PebbleDescriptor, scale rawScale: CGFloat) -> GemTextureAtlas.BakeRequest? {
+    static func bakeRequest(
+        for descriptor: PebbleDescriptor,
+        scale rawScale: CGFloat,
+        jarScale: CGFloat = 1
+    ) -> GemTextureAtlas.BakeRequest? {
         let scale = GemArtwork.renderScale(rawScale)
-        let radius = descriptor.radius
+        let radius = descriptor.radius * sanitizedJarScale(jarScale)
         if let obstacle = descriptor.screenTimeObstacle {
             let variations = ScreenTimeObstacleAppearance.variations(descriptor: obstacle)
             return GemTextureAtlas.BakeRequest(
@@ -887,14 +1035,17 @@ final class PebbleNode: SKShapeNode {
     }
 
     /// Launch pre-bake (Docs/GemExperienceDesign.md §7.13): the loose gems
-    /// most jars start with — the five starter themes at 25 and 50 timer
-    /// minutes and a 30-minute self-report, in all four variants (60
-    /// bodies, about 2 MB at 3×). Everything else bakes on first use.
-    static func commonBakeRequests(scale rawScale: CGFloat) -> [GemTextureAtlas.BakeRequest] {
+    /// most jars start with — the five starter themes at 25 timer minutes
+    /// and a 30-minute self-report, in all four variants, at the jar scale
+    /// of a young jar (`JarScalePolicy.maximumScale`: 40 bodies, about 5 MB
+    /// at 3×). Everything else bakes on first use.
+    static func commonBakeRequests(
+        scale rawScale: CGFloat,
+        jarScale: CGFloat = JarScalePolicy.maximumScale
+    ) -> [GemTextureAtlas.BakeRequest] {
         let scale = GemArtwork.renderScale(rawScale)
         let samples: [(source: SessionSource, grams: Int)] = [
             (.timer, Constants.Mass.measuredPebbleGrams),
-            (.timer, 50 * Constants.Mass.gramsPerMinute),
             (.manual, ManualDuration.thirtyMinutes.grams)
         ]
         var requests: [GemTextureAtlas.BakeRequest] = []
@@ -908,7 +1059,7 @@ final class PebbleNode: SKShapeNode {
                     grams: sample.grams
                 )
                 let spec = looseSpec(for: descriptor)
-                let radius = descriptor.radius
+                let radius = descriptor.radius * sanitizedJarScale(jarScale)
                 for variant in 0 ..< GemArtworkSpec.variantCount {
                     let variantSpec = spec.withVariant(variant)
                     requests.append(GemTextureAtlas.BakeRequest(
@@ -990,7 +1141,7 @@ final class PebbleNode: SKShapeNode {
         // The container keeps the silhouette as its path but draws nothing
         // (measured: no extra draw); the baked body sprite carries facets,
         // edges and the girdle outline. Collision stays the circular body.
-        path = GemArtwork.outlinePath(for: spec, radius: radius)
+        path = GemArtwork.outlinePath(for: spec, radius: localRadius)
         fillColor = .clear
         strokeColor = .clear
         lineWidth = 0
@@ -1011,7 +1162,7 @@ final class PebbleNode: SKShapeNode {
     private func configureFacetedAchievementAppearance(_ achievementKind: AchievementKind) {
         let rung = Self.cutLadder.achievement
         let (spec, fill) = Self.achievementArtwork(for: descriptor, kind: achievementKind)
-        path = GemArtwork.outlinePath(for: spec, radius: radius)
+        path = GemArtwork.outlinePath(for: spec, radius: localRadius)
         fillColor = .clear
         strokeColor = .clear
         lineWidth = 0
@@ -1040,22 +1191,18 @@ final class PebbleNode: SKShapeNode {
         haloParent: SKNode? = nil
     ) {
         gemRung = rung
-        let body = SKSpriteNode(texture: nil, size: GemArtwork.bodySpriteSize(radius: radius))
-        let bodyScale = artworkScale
-        GemTextureAtlas.shared.show(
-            GemArtwork.bodyTextureName(for: spec, radius: radius, scale: bodyScale),
-            on: body
-        ) {
-            GemArtwork.renderBodyImage(for: spec, radius: radius, scale: bodyScale)
-        }
+        let body = SKSpriteNode(texture: nil, size: GemArtwork.bodySpriteSize(radius: localRadius))
+        gemBodySpec = spec
+        showGemBody(spec, on: body)
         body.name = "gem.body"
         body.zPosition = JarZPosition.pebbleDetail - 0.8
         addChild(body)
         gemBodyNode = body
 
+
         // One shared additive texture for every halo: all halos in the jar
         // resolve to a single draw batch.
-        let haloDiameter = radius * 2 * rung.haloScale
+        let haloDiameter = localRadius * 2 * rung.haloScale
         let halo = Self.sharedLightSprite(
             GemTextureAtlas.SharedName.halo,
             size: CGSize(width: haloDiameter, height: haloDiameter)
@@ -1077,17 +1224,17 @@ final class PebbleNode: SKShapeNode {
 
         let shadow = Self.sharedLightSprite(
             GemTextureAtlas.SharedName.shadow,
-            size: CGSize(width: radius * 1.5, height: radius * 0.5)
+            size: CGSize(width: localRadius * 1.5, height: localRadius * 0.5)
         )
         shadow.name = "pebble.contactShadow"
-        shadow.position = CGPoint(x: 0, y: -radius * 0.63)
+        shadow.position = CGPoint(x: 0, y: -localRadius * 0.63)
         shadow.alpha = descriptor.isTutorial ? 0.16 : 0.38
         shadow.zPosition = -1
         rig.addChild(shadow)
 
         let shade = Self.sharedLightSprite(
             GemTextureAtlas.SharedName.lightShade,
-            size: CGSize(width: radius * 2, height: radius * 2)
+            size: CGSize(width: localRadius * 2, height: localRadius * 2)
         )
         shade.name = "gem.rig.shade"
         shade.alpha = descriptor.isTutorial ? 0.5 : 1
@@ -1096,7 +1243,7 @@ final class PebbleNode: SKShapeNode {
 
         let light = Self.sharedLightSprite(
             GemTextureAtlas.SharedName.lightAdd,
-            size: CGSize(width: radius * 2, height: radius * 2)
+            size: CGSize(width: localRadius * 2, height: localRadius * 2)
         )
         light.name = "pebble.dimensionalLight"
         light.blendMode = .add
@@ -1116,7 +1263,7 @@ final class PebbleNode: SKShapeNode {
             let angle = 30 + (angleUnit * 140 + CGFloat(index) * 47)
                 .truncatingRemainder(dividingBy: 140)
             let distance = 0.45 + distanceUnit * 0.30
-            let side = radius * rung.glintScale * (index == 0 ? 1 : 0.72)
+            let side = localRadius * rung.glintScale * (index == 0 ? 1 : 0.72)
             let glint = Self.sharedLightSprite(
                 GemTextureAtlas.SharedName.glint,
                 size: CGSize(width: side, height: side)
@@ -1126,8 +1273,8 @@ final class PebbleNode: SKShapeNode {
             glint.colorBlendFactor = 1
             glint.blendMode = .add
             let rest = CGPoint(
-                x: cos(angle * .pi / 180) * radius * distance,
-                y: sin(angle * .pi / 180) * radius * distance
+                x: cos(angle * .pi / 180) * localRadius * distance,
+                y: sin(angle * .pi / 180) * localRadius * distance
             )
             glint.position = rest
             glint.zPosition = JarZPosition.pebbleDetail + 0.3
@@ -1137,6 +1284,69 @@ final class PebbleNode: SKShapeNode {
             let phaseBits = (hash >> UInt64(20 + index * 11)) & 0x3FF
             gemGlintPhases.append(CGFloat(phaseBits) / 1_023 * 2 - 1)
             glint.alpha = glintRestAlpha(index: index)
+        }
+    }
+
+    /// Shows the gem body baked for `localRadius × textureJarScale` on a
+    /// sprite sized back to local points, so a scaled gem is as crisp as one
+    /// built at that size and its facets land on the collision circle.
+    private func showGemBody(_ spec: GemArtworkSpec, on body: SKSpriteNode) {
+        let jarScale = max(textureJarScale, 0.01)
+        let bakedRadius = localRadius * jarScale
+        let bodyScale = artworkScale
+        let baked = GemArtwork.bodySpriteSize(radius: bakedRadius)
+        body.setUnscaledSize(CGSize(width: baked.width / jarScale, height: baked.height / jarScale))
+        GemTextureAtlas.shared.show(
+            GemArtwork.bodyTextureName(for: spec, radius: bakedRadius, scale: bodyScale),
+            on: body
+        ) {
+            GemArtwork.renderBodyImage(for: spec, radius: bakedRadius, scale: bodyScale)
+        }
+    }
+
+    /// Re-bakes the body (and the count engraving) for a new jar scale.
+    /// Textures come from the atlas, so the scene bakes the misses of a
+    /// whole transition in one parallel pass first.
+    private func refreshBodyTexture(forJarScale target: CGFloat) {
+        guard abs(target - textureJarScale) > 0.0001 else { return }
+        textureJarScale = target
+        if let spec = gemBodySpec, let body = gemBodyNode {
+            showGemBody(spec, on: body)
+        }
+        if let obstacle = descriptor.screenTimeObstacle {
+            if let rock = obstacleBodyNode {
+                ScreenTimeObstacleAppearance.showBody(
+                    descriptor: obstacle,
+                    radius: localRadius,
+                    scale: artworkScale,
+                    textureJarScale: target,
+                    on: rock
+                )
+            }
+            if let count = obstacleCountNode, let text = ScreenTimeObstacleAppearance.countText(descriptor: obstacle) {
+                ScreenTimeObstacleAppearance.showCount(
+                    text,
+                    radius: localRadius,
+                    scale: artworkScale,
+                    textureJarScale: target,
+                    on: count
+                )
+            }
+        }
+        showAggregateTag()
+    }
+
+    /// The count tag sized for the crystal's scene radius at the bake scale.
+    private func showAggregateTag() {
+        guard let tag = aggregateTagNode, let text = aggregateTagText else { return }
+        let fontSize = GemArtwork.countTagFontSize(sceneRadius: localRadius * textureJarScale)
+        tag.setUnscaledSize(GemArtwork.countEngravingSize(text: text, fontSize: fontSize, style: .copperTag))
+        let scale = artworkScale
+        GemTextureAtlas.shared.show(
+            GemArtwork.countEngravingTextureName(text: text, fontSize: fontSize, style: .copperTag, scale: scale),
+            on: tag
+        ) {
+            GemArtwork.countEngravingImage(text: text, fontSize: fontSize, style: .copperTag, scale: scale)
         }
     }
 
@@ -1291,15 +1501,15 @@ final class PebbleNode: SKShapeNode {
             strokeColor = enhanced
                 ? JarPalette.goldHighlight
                 : JarPalette.goldHighlight.withAlphaComponent(0.68)
-            lineWidth = max(1.1, radius * 0.10)
-            glowWidth = radius * (enhanced ? Constants.Jar.goldGlowScale : 0.10)
+            lineWidth = max(1.1, localRadius * 0.10)
+            glowWidth = localRadius * (enhanced ? Constants.Jar.goldGlowScale : 0.10)
         case .prism:
             fillColor = enhanced ? .white : fill.mixed(with: .white, amount: 0.18)
             strokeColor = .white.withAlphaComponent(
                 enhanced ? Constants.Jar.prismStrokeOpacity : 0.62
             )
-            lineWidth = max(1.05, radius * 0.09)
-            glowWidth = radius * (enhanced ? Constants.Jar.prismGlowScale : 0.10)
+            lineWidth = max(1.05, localRadius * 0.09)
+            glowWidth = localRadius * (enhanced ? Constants.Jar.prismGlowScale : 0.10)
             fillShader = enhanced
                 ? (reducesVisualMotion ? Self.staticPrismShader : Self.prismShader)
                 : nil
@@ -1356,30 +1566,30 @@ final class PebbleNode: SKShapeNode {
 
     private func addContactShadow() {
         let shadow = SKShapeNode(
-            ellipseOf: CGSize(width: radius * 1.58, height: radius * 0.54)
+            ellipseOf: CGSize(width: localRadius * 1.58, height: localRadius * 0.54)
         )
         shadow.name = "pebble.contactShadow"
         shadow.fillColor = UIColor(red: 0.015, green: 0.03, blue: 0.07, alpha: 0.38)
         shadow.strokeColor = UIColor.black.withAlphaComponent(0.12)
-        shadow.lineWidth = max(0.5, radius * 0.035)
-        shadow.glowWidth = radius * 0.14
+        shadow.lineWidth = max(0.5, localRadius * 0.035)
+        shadow.glowWidth = localRadius * 0.14
         shadow.alpha = descriptor.isTutorial ? 0.12 : 0.44
-        shadow.position = CGPoint(x: 0, y: -radius * 0.63)
+        shadow.position = CGPoint(x: 0, y: -localRadius * 0.63)
         shadow.zPosition = -1
         addChild(shadow)
         contactShadowNode = shadow
 
         let caustic = SKShapeNode(
-            ellipseOf: CGSize(width: radius * 1.22, height: radius * 0.28)
+            ellipseOf: CGSize(width: localRadius * 1.22, height: localRadius * 0.28)
         )
         caustic.name = "pebble.contactCaustic"
         caustic.fillColor = visualAccentColor.withAlphaComponent(
             descriptor.isTutorial ? 0.03 : 0.16
         )
         caustic.strokeColor = UIColor.white.withAlphaComponent(0.12)
-        caustic.lineWidth = max(0.45, radius * 0.025)
-        caustic.glowWidth = radius * 0.19
-        caustic.position = CGPoint(x: 0, y: -radius * 0.63)
+        caustic.lineWidth = max(0.45, localRadius * 0.025)
+        caustic.glowWidth = localRadius * 0.19
+        caustic.position = CGPoint(x: 0, y: -localRadius * 0.63)
         caustic.zPosition = -0.8
         addChild(caustic)
         contactCausticNode = caustic
@@ -1418,18 +1628,18 @@ final class PebbleNode: SKShapeNode {
             markText = "◇"
         }
 
-        let ring = SKShapeNode(circleOfRadius: radius * 0.69)
+        let ring = SKShapeNode(circleOfRadius: localRadius * 0.69)
         ring.name = "rare.innerRing"
         ring.fillColor = .clear
         ring.strokeColor = UIColor.white.withAlphaComponent(0.26)
-        ring.lineWidth = max(0.8, radius * 0.06)
+        ring.lineWidth = max(0.8, localRadius * 0.06)
         ring.zPosition = JarZPosition.pebbleDetail + 0.4
         addChild(ring)
 
         let mark = SKLabelNode(fontNamed: "AvenirNext-Bold")
         mark.name = "rare.mark"
         mark.text = markText
-        mark.fontSize = radius * (presentationKind == .gold ? 0.82 : 0.74)
+        mark.fontSize = localRadius * (presentationKind == .gold ? 0.82 : 0.74)
         mark.fontColor = UIColor.white.withAlphaComponent(0.94)
         mark.verticalAlignmentMode = .center
         mark.horizontalAlignmentMode = .center
@@ -1452,7 +1662,7 @@ final class PebbleNode: SKShapeNode {
         // The container draws nothing: no neon rim, no glowWidth. The earned
         // bloom is the shared Gaussian halo inside `aggregate.aura`, whose
         // gentle breath (scale only) keeps the existing action key.
-        path = GemArtwork.outlinePath(for: spec, radius: radius)
+        path = GemArtwork.outlinePath(for: spec, radius: localRadius)
         fillColor = .clear
         strokeColor = .clear
         lineWidth = 0
@@ -1478,46 +1688,27 @@ final class PebbleNode: SKShapeNode {
            rareRewardMode.usesEnhancedPresentation,
            aggregate.goldPebbleCount > 0 || aggregate.prismPebbleCount > 0 {
             let composition = SKSpriteNode(
-                texture: Self.makeAggregateRareTexture(radius: radius, aggregate: aggregate),
-                size: CGSize(width: radius * 2, height: radius * 2)
+                texture: Self.makeAggregateRareTexture(radius: localRadius, aggregate: aggregate),
+                size: CGSize(width: localRadius * 2, height: localRadius * 2)
             )
             composition.name = "aggregate.composition"
             composition.zPosition = JarZPosition.pebbleDetail
             addChild(composition)
         }
 
-        let count = SKLabelNode(fontNamed: "AvenirNext-Bold")
-        count.name = "aggregate.count"
-        count.text = AggregatePresentation.countLabel(aggregate.pebbleCount)
-        let characterCount = CGFloat(count.text?.count ?? 2)
-        count.fontSize = max(7, radius * max(0.27, 0.38 - max(0, characterCount - 3) * 0.025))
-        count.fontColor = UIColor.white.withAlphaComponent(0.98)
-        count.verticalAlignmentMode = .center
-        count.horizontalAlignmentMode = .center
-        count.zPosition = JarZPosition.pebbleDetail + 1
-        count.blendMode = .alpha
-        count.position = CGPoint(x: 0, y: -radius * Self.aggregatePlateDrop)
-
-        // An opaque ink plate keeps ×10 / ×1万 readable on every colour. It
-        // stays upright with the label, below the table.
-        let plateWidth = max(radius * 0.80, count.frame.width + radius * 0.30)
-        let plateHeight = max(count.fontSize * 1.35, radius * 0.40)
-        let plate = SKShapeNode(
-            rectOf: CGSize(width: plateWidth, height: plateHeight),
-            cornerRadius: plateHeight / 2
-        )
-        plate.name = "aggregate.countPlate"
-        plate.fillColor = UIColor(red: 0.035, green: 0.05, blue: 0.11, alpha: 0.88)
-        plate.strokeColor = UIColor.white.withAlphaComponent(0.26)
-        plate.lineWidth = max(0.6, radius * 0.025)
-        plate.glowWidth = 0
-        plate.zPosition = JarZPosition.pebbleDetail + 0.9
-        plate.blendMode = .alpha
-        plate.position = count.position
-        addChild(plate)
-        aggregateCountPlateNode = plate
-        addChild(count)
-        aggregateCountNode = count
+        // D26 (b): the count on a small engraved copper tag in the neck
+        // collar's material, upright below the table. The text is exactly
+        // the former plate's; the tag keeps its own on-screen size at every
+        // jar scale (counter-scaled), so the jar never shows a big number.
+        let tag = SKSpriteNode(texture: nil, size: .zero)
+        tag.name = "aggregate.tag"
+        tag.zPosition = JarZPosition.pebbleDetail + 0.9
+        tag.blendMode = .alpha
+        tag.position = CGPoint(x: 0, y: -localRadius * Self.aggregatePlateDrop)
+        addChild(tag)
+        aggregateTagNode = tag
+        aggregateTagText = AggregatePresentation.countLabel(aggregate.pebbleCount)
+        showAggregateTag()
     }
 
     /// Glow follows recorded grams, never the number of completions, so
@@ -1614,13 +1805,13 @@ final class PebbleNode: SKShapeNode {
         let fontScale: CGFloat
         switch achievementKind {
         case .perfectScore:
-            badgeSize = CGSize(width: radius * 1.64, height: radius * 0.98)
+            badgeSize = CGSize(width: localRadius * 1.64, height: localRadius * 0.98)
             fontScale = 0.68
         case .examPass:
-            badgeSize = CGSize(width: radius * 1.10, height: radius * 1.10)
+            badgeSize = CGSize(width: localRadius * 1.10, height: localRadius * 1.10)
             fontScale = 0.88
         case .workMilestone:
-            badgeSize = CGSize(width: radius * 1.14, height: radius * 1.08)
+            badgeSize = CGSize(width: localRadius * 1.14, height: localRadius * 1.08)
             fontScale = 0.76
         }
 
@@ -1639,8 +1830,8 @@ final class PebbleNode: SKShapeNode {
             alpha: 1
         )
         backdrop.strokeColor = material.edge.mixed(with: .white, amount: 0.22)
-        backdrop.lineWidth = max(1.1, radius * 0.085)
-        backdrop.glowWidth = radius * 0.12
+        backdrop.lineWidth = max(1.1, localRadius * 0.085)
+        backdrop.glowWidth = localRadius * 0.12
         backdrop.zPosition = JarZPosition.pebbleDetail + 0.55
         backdrop.blendMode = .alpha
         addChild(backdrop)
@@ -1649,7 +1840,7 @@ final class PebbleNode: SKShapeNode {
         let mark = SKLabelNode(fontNamed: "AvenirNext-Bold")
         mark.name = "achievement.mark"
         mark.text = achievementKind.shortMark
-        mark.fontSize = radius * fontScale
+        mark.fontSize = localRadius * fontScale
         mark.fontColor = .white
         mark.verticalAlignmentMode = .center
         mark.horizontalAlignmentMode = .center
@@ -1667,14 +1858,14 @@ final class PebbleNode: SKShapeNode {
         }
         let variant = byteSum % variantCount
         let key = NSString(
-            string: "\(radius)-\(descriptor.isMeasured)-\(variant)"
+            string: "\(localRadius)-\(descriptor.isMeasured)-\(variant)"
         )
         let texture: SKTexture
         if let cached = Self.detailTextureCache.object(forKey: key) {
             texture = cached
         } else {
             texture = Self.makeDetailTexture(
-                radius: radius,
+                radius: localRadius,
                 isMeasured: descriptor.isMeasured,
                 variant: variant
             )
@@ -1683,17 +1874,17 @@ final class PebbleNode: SKShapeNode {
 
         let detail = SKSpriteNode(
             texture: texture,
-            size: CGSize(width: radius * 2, height: radius * 2)
+            size: CGSize(width: localRadius * 2, height: localRadius * 2)
         )
         detail.zPosition = JarZPosition.pebbleDetail
         addChild(detail)
     }
 
     private func addDimensionalOverlay() {
-        let texture = Self.makeDimensionalTexture(radius: radius)
+        let texture = Self.makeDimensionalTexture(radius: localRadius)
         let light = SKSpriteNode(
             texture: texture,
-            size: CGSize(width: radius * 1.78, height: radius * 1.78)
+            size: CGSize(width: localRadius * 1.78, height: localRadius * 1.78)
         )
         light.name = "pebble.dimensionalLight"
         light.zPosition = JarZPosition.pebbleDetail - 0.25
@@ -1882,6 +2073,19 @@ final class PebbleNode: SKShapeNode {
             gl_FragColor = vec4(rainbow, 1.0) * v_color_mix;
         }
         """)
+}
+
+extension SKSpriteNode {
+    /// Sets the sprite's own size in its local space. `size` alone is the
+    /// scaled size, so on a counter-scaled tag it would fold the scale in.
+    func setUnscaledSize(_ unscaled: CGSize) {
+        let scale = (x: xScale, y: yScale)
+        xScale = 1
+        yScale = 1
+        size = unscaled
+        xScale = scale.x
+        yScale = scale.y
+    }
 }
 
 enum JarPhysicsCategory {

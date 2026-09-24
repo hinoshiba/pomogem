@@ -459,8 +459,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         livePebbles.filter { $0.descriptor.participatesInBake }
     }
 
+    /// Capacity counts the bodies at their own radii: the jar-wide scale
+    /// (D4) is presentation only and never moves a fusion threshold.
     private var bakeEligibleRadii: [Double] {
-        bakeEligiblePebbles.map { Double($0.radius) }
+        bakeEligiblePebbles.map { Double($0.localRadius) }
     }
 
     var physicalPebbleCount: Int { livePebbles.count }
@@ -553,12 +555,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             bakeBodies(for: additions)
             for (index, descriptor) in additions.enumerated() {
                 acceptedPebbleIDs.insert(descriptor.id)
-                let node = PebbleNode(
-                    descriptor: descriptor,
-                    reduceMotion: reduceMotion,
-                    rareRewardMode: rareRewardMode,
-                    artworkScale: artworkScale
-                )
+                let node = makePebbleNode(descriptor)
                 let diameter = node.radius * 2
                 let columns = max(1, Int(interiorRect.width / diameter))
                 node.position = CGPoint(
@@ -573,6 +570,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             }
         }
         guard !removedIDs.isEmpty || !additions.isEmpty || previousTotal != screenTimeObstacleUnitCount else { return }
+        // Stones placed at once or carried away change the jar's area now;
+        // dropped ones rescale the pile when they land.
+        reconcileJarScale()
         publishPhysicalContentChangeIfNeeded(force: true)
         resetIdleObservation()
         resumeSimulation()
@@ -607,12 +607,15 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         for source in removedBodies {
             guard let obstacle = source.descriptor.screenTimeObstacle else { continue }
             let fragment = SKShapeNode()
-            ScreenTimeObstacleAppearance.apply(
+            let count = ScreenTimeObstacleAppearance.apply(
                 to: fragment,
                 descriptor: obstacle,
-                radius: source.radius,
-                scale: artworkScale
+                radius: source.localRadius,
+                scale: artworkScale,
+                textureJarScale: source.textureJarScale
             )
+            count?.setScale(1 / max(source.jarScale, 0.01))
+            fragment.setScale(source.xScale)
             fragment.position = source.position
             fragment.zRotation = source.zRotation
             // The view ignores sibling order: the fading fragments take the
@@ -622,26 +625,22 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             effect.addChild(fragment)
             fragment.run(.group([
                 .move(to: point, duration: 0.28),
-                .scale(to: 0.25, duration: 0.28),
+                .scale(to: 0.25 * source.xScale, duration: 0.28),
                 .fadeOut(withDuration: 0.28)
             ]))
         }
         effect.run(.sequence([.wait(forDuration: 0.3), .removeFromParent()]))
-        let node = PebbleNode(
-            descriptor: destination,
-            reduceMotion: reduceMotion,
-            rareRewardMode: rareRewardMode,
-            artworkScale: artworkScale
-        )
+        let node = makePebbleNode(destination)
         let range = allowedHorizontalRange(at: point.y, radius: node.radius)
         node.position = CGPoint(
             x: min(max(point.x, range.lowerBound), range.upperBound),
             y: min(max(point.y + 12, currentFloorY + node.radius + 6), interiorRect.maxY - node.radius)
         )
-        node.setScale(0.4)
+        node.setScale(0.4 * node.jarScale)
         node.alpha = 0.25
         node.physicsBody?.velocity = CGVector(dx: 0, dy: 32)
-        node.run(.group([.scale(to: 1, duration: 0.28), .fadeIn(withDuration: 0.28)]))
+        node.run(.scale(to: node.jarScale, duration: 0.28), withKey: PebbleNode.birthActionKey)
+        node.run(.fadeIn(withDuration: 0.28))
         acceptedPebbleIDs.insert(destination.id)
         insertPebble(node)
         return destination.id
@@ -686,6 +685,120 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let interior = interiorRect
         let top = livePebbles.map { $0.position.y + $0.radius }.max() ?? interior.minY
         return max(0, (interior.maxY - top) / max(interior.height, 1))
+    }
+
+    // MARK: Jar-wide scale (D4)
+
+    /// The scale every study body is shown at (`JarScalePolicy`; Screen Time
+    /// stones use their own capped share of it). It changes only when a
+    /// drop lands, a fusion completes, the jar restores, or its content is
+    /// replaced (history sync, rotation, Screen Time); a smaller jar may
+    /// shrink it at once, a larger one never grows it by itself.
+    private(set) var jarScale: CGFloat = 1
+    /// The scale the pile moves to once the incoming drop has landed.
+    private var scheduledJarScale: CGFloat?
+    /// A landing asked for the scheduled scale; applied on the next update,
+    /// outside SpriteKit's contact callback.
+    private var appliesScheduledJarScale = false
+    /// Every scale change so far (Debug reviews and tests).
+    private(set) var jarScaleChangeCount = 0
+    /// The scene has drawn at least one frame. Before that (a restore or
+    /// the first layout of a new Home) scale changes apply at once, so a jar
+    /// never visibly resizes while it appears.
+    private var hasRenderedFrame = false
+
+    private var interiorArea: CGFloat {
+        interiorRect.width * interiorRect.height
+    }
+
+    /// Σπr² at the bodies' own radii: the live bodies and `extra` (the
+    /// incoming drop or a new crystal). Queued drops count only once they
+    /// spawn, so a waiting reward never resizes the pile before it lands.
+    private func jarBaseArea(adding extra: [PebbleDescriptor] = []) -> CGFloat {
+        JarScalePolicy.baseArea(
+            radii: livePebbles.map(\.localRadius) + extra.map(\.radius)
+        )
+    }
+
+    /// The scale the jar resolves to for its current content (plus `extra`),
+    /// with the policy's hysteresis against the scale it shows now.
+    private func resolvedJarScale(adding extra: [PebbleDescriptor] = []) -> CGFloat {
+        JarScalePolicy.resolvedScale(
+            current: jarScale,
+            target: JarScalePolicy.targetScale(
+                baseArea: jarBaseArea(adding: extra),
+                interiorArea: interiorArea
+            )
+        )
+    }
+
+    /// Every body of the scene is created here, at its share of the jar
+    /// scale (`studyScale`, the current scale by default).
+    private func makePebbleNode(_ descriptor: PebbleDescriptor, studyScale: CGFloat? = nil) -> PebbleNode {
+        PebbleNode(
+            descriptor: descriptor,
+            reduceMotion: reduceMotion,
+            rareRewardMode: rareRewardMode,
+            artworkScale: artworkScale,
+            jarScale: JarScalePolicy.bodyScale(for: descriptor, studyScale: studyScale ?? jarScale)
+        )
+    }
+
+    /// Moves every live body to `newScale`. Animated changes last
+    /// `JarScalePolicy.transitionDuration` and move the visual and the
+    /// physics radius together, a few percent a frame, so the solver
+    /// separates growing neighbours gently; the pile is woken for them and
+    /// a wall rescue runs when they end. The misses of the new size are
+    /// baked first in one parallel pass.
+    private func applyJarScale(_ rawScale: CGFloat, animated: Bool) {
+        scheduledJarScale = nil
+        appliesScheduledJarScale = false
+        let newScale = PebbleNode.sanitizedJarScale(rawScale)
+        let bodies = livePebbles
+        let needsChange = abs(newScale - jarScale) > 0.0001
+            || bodies.contains {
+                abs($0.jarScaleTarget - JarScalePolicy.bodyScale(for: $0.descriptor, studyScale: newScale)) > 0.0001
+            }
+        guard needsChange else { return }
+        jarScale = newScale
+        jarScaleChangeCount += 1
+        bakeBodies(for: bodies.map(\.descriptor))
+        let duration = animated && view != nil && hasRenderedFrame ? JarScalePolicy.transitionDuration : 0
+        for pebble in bodies {
+            pebble.transitionJarScale(
+                to: JarScalePolicy.bodyScale(for: pebble.descriptor, studyScale: newScale),
+                duration: duration
+            )
+            pebble.physicsBody?.isResting = false
+        }
+        removeAction(forKey: "jar.scale.rescue")
+        if duration > 0 {
+            run(.sequence([
+                .wait(forDuration: duration + 0.05),
+                .run { [weak self] in self?.rescuePebblesInsideWalls() }
+            ]), withKey: "jar.scale.rescue")
+        } else {
+            rescuePebblesInsideWalls()
+        }
+        resumeSimulation()
+#if DEBUG && targetEnvironment(simulator)
+        JarFrameProbe.shared?.note(String(
+            format: "jarScale=%.3f bodies=%d A0=%.0f interior=%.0f",
+            newScale,
+            bodies.count,
+            jarBaseArea(),
+            interiorArea
+        ))
+#endif
+    }
+
+    /// Re-resolves the scale for the current content (after a history
+    /// sync, a rotation to the shelf or a Screen Time change). Never during
+    /// a fusion: its sources have left the pile but its crystal has not
+    /// arrived yet, and the fusion resolves the scale itself.
+    private func reconcileJarScale(animated: Bool = true) {
+        guard !isBakeInProgress else { return }
+        applyJarScale(resolvedJarScale(), animated: animated)
     }
 
     init(
@@ -748,6 +861,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     override func didChangeSize(_ oldSize: CGSize) {
         super.didChangeSize(oldSize)
         rebuildGeometry()
+        // A smaller jar may shrink the pile at once (its budget is part of
+        // the interior); a larger one waits for the next landing or fusion.
+        if !isBakeInProgress, !livePebbles.isEmpty {
+            let resolved = resolvedJarScale()
+            if resolved < jarScale - 0.0001 {
+                applyJarScale(resolved, animated: true)
+            }
+        }
     }
 
     func configureBase(
@@ -862,19 +983,38 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let studyDescriptors = uniqueDescriptors.filter { !$0.isScreenTimeObstacle }
         let initiallyVisible = Array(studyDescriptors.prefix(Constants.Jar.maxPhysicsBodies))
             + uniqueDescriptors.filter(\.isScreenTimeObstacle)
+        // D4: the restored content (overflow drops included) sets the scale
+        // before any body exists, so nothing rescales after the layout.
+        scheduledJarScale = nil
+        appliesScheduledJarScale = false
+        let restoredScale = JarScalePolicy.resolvedScale(
+            current: jarScale,
+            target: JarScalePolicy.targetScale(
+                baseArea: JarScalePolicy.baseArea(radii: uniqueDescriptors.map(\.radius)),
+                interiorArea: interiorArea
+            )
+        )
+        if abs(restoredScale - jarScale) > 0.0001 {
+            jarScale = restoredScale
+            jarScaleChangeCount += 1
+        }
 #if DEBUG && targetEnvironment(simulator)
         let restoreStart = CACurrentMediaTime()
         let bakedBefore = GemTextureAtlas.shared.statistics.keptImages
 #endif
         bakeBodies(for: initiallyVisible)
+        // Rows are centred: with the large gems of a young jar (D4), a
+        // first gem rests under the core instead of in a corner.
+        var row: [PebbleNode] = []
+        func centerRow() {
+            let slack = max(0, interiorRect.maxX - cursorX) / 2
+            row.forEach { $0.position.x += slack }
+            row.removeAll()
+        }
         for descriptor in initiallyVisible {
-            let node = PebbleNode(
-                descriptor: descriptor,
-                reduceMotion: reduceMotion,
-                rareRewardMode: rareRewardMode,
-                artworkScale: artworkScale
-            )
+            let node = makePebbleNode(descriptor)
             if cursorX + node.radius * 2 > interiorRect.maxX {
+                centerRow()
                 cursorX = interiorRect.minX
                 cursorY += rowHeight * 2
                 rowHeight = .zero
@@ -887,8 +1027,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             node.zRotation = CGFloat.random(in: -.pi ... .pi)
             node.markLanded()
             insertPebble(node)
+            row.append(node)
             cursorX += node.radius * 2
         }
+        centerRow()
 #if DEBUG && targetEnvironment(simulator)
         JarFrameProbe.shared?.note(String(
             format: "restore bodies=%d baked=%d ms=%.1f",
@@ -993,12 +1135,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         bakeBodies(for: additions)
         for (index, descriptor) in additions.enumerated() {
             guard acceptedPebbleIDs.insert(descriptor.id).inserted else { continue }
-            let node = PebbleNode(
-                descriptor: descriptor,
-                reduceMotion: reduceMotion,
-                rareRewardMode: rareRewardMode,
-                artworkScale: artworkScale
-            )
+            let node = makePebbleNode(descriptor)
             let columns = max(1, Int(interiorRect.width / max(node.radius * 2, 1)))
             let column = index % columns
             let row = index / columns
@@ -1017,6 +1154,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             insertPebble(node)
         }
         installedHistoryIDs = wantedIDs
+        if !removedIDs.isEmpty || !replacements.isEmpty || !additions.isEmpty {
+            reconcileJarScale()
+        }
         publishPhysicalContentChangeIfNeeded(force: !replacements.isEmpty)
         resetIdleObservation()
     }
@@ -1030,12 +1170,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let oldRotation = oldNode.zRotation
         let wasLanded = oldNode.hasLanded
 
-        let node = PebbleNode(
-            descriptor: descriptor,
-            reduceMotion: reduceMotion,
-            rareRewardMode: rareRewardMode,
-            artworkScale: artworkScale
-        )
+        let node = makePebbleNode(descriptor)
         let minimumY = currentFloorY + node.radius
         let maximumY = interiorRect.maxY - node.radius
         let safeY = minimumY <= maximumY
@@ -1099,8 +1234,15 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         guard !JarFrameProbe.disablesPrebake else { return }
 #endif
         let scale = artworkScale
+        let studyScale = jarScale
         GemTextureAtlas.shared.bakeMissing(
-            descriptors.compactMap { PebbleNode.bakeRequest(for: $0, scale: scale) }
+            descriptors.compactMap {
+                PebbleNode.bakeRequest(
+                    for: $0,
+                    scale: scale,
+                    jarScale: JarScalePolicy.bodyScale(for: $0, studyScale: studyScale)
+                )
+            }
         )
     }
 
@@ -1142,6 +1284,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         for pebble in livePebbles where ids.contains(pebble.descriptor.id) {
             pebble.removeFromParent()
         }
+        reconcileJarScale()
         publishPhysicalContentChangeIfNeeded()
         resetIdleObservation()
         resumeSimulation()
@@ -1197,15 +1340,18 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         else { return }
         beginInteractionMotionWindow(uptime: uptime)
         for pebble in pebbles {
+            // SpriteKit's mass grows with the jar scale; the impulse grows
+            // with it, so a nudge moves every jar the same.
+            let massScale = pebble.xScale * pebble.xScale
             pebble.physicsBody?.applyImpulse(CGVector(
-                dx: safeDirection * Constants.Jar.shakeHorizontalImpulse,
-                dy: Constants.Jar.shakeVerticalImpulseMin * 0.25
+                dx: safeDirection * Constants.Jar.shakeHorizontalImpulse * massScale,
+                dy: Constants.Jar.shakeVerticalImpulseMin * 0.25 * massScale
             ))
         }
         playSensoryFeedback(
             trigger: .tap,
             samples: pebbles.map {
-                JarSensorySample(radius: Double($0.radius), coupling: 0.45)
+                JarSensorySample(radius: Double($0.sensoryRadius), coupling: 0.45)
             },
             strength: 0.55,
             userInitiated: true
@@ -1273,14 +1419,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                     dx: localDirection * horizontalImpulse,
                     dy: verticalImpulse * (0.86 + abs(variation) * 0.14)
                 ),
-                mass: CGFloat(body.mass)
+                // The unscaled mass: a jar of large young gems shakes like
+                // the shipping jar (D4 is presentation only).
+                mass: pebble.presentationMass
             )
         }
         playTapCaustic(at: centroid, expands: !reduceMotion)
         playSensoryFeedback(
             trigger: .shake,
             samples: pebbles.map {
-                JarSensorySample(radius: Double($0.radius), coupling: 1)
+                JarSensorySample(radius: Double($0.sensoryRadius), coupling: 1)
             },
             strength: Double(strength),
             userInitiated: true
@@ -1497,7 +1645,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             trigger: .tap,
             samples: impacts.map {
                 JarSensorySample(
-                    radius: Double($0.pebble.radius),
+                    radius: Double($0.pebble.sensoryRadius),
                     coupling: Double($0.strength)
                 )
             },
@@ -1906,6 +2054,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         if !isBakeInProgress, needsAggregation {
             _ = beginBakeIfNeeded(force: false)
         }
+        hasRenderedFrame = true
+        if appliesScheduledJarScale, let scheduled = scheduledJarScale {
+            applyJarScale(scheduled, animated: true)
+        }
         processDropQueue()
         publishPhysicalContentChangeIfNeeded()
         updateRareTwinkles()
@@ -2003,6 +2155,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             let impulseSpeed = contact.collisionImpulse / max(pebble.physicsBody?.mass ?? 1, 1)
             let impactSpeed = max(velocity, impulseSpeed)
             pebble.markLanded()
+            if scheduledJarScale != nil {
+                // Rescaling inside the contact callback would resize bodies
+                // mid-step; the next update applies it.
+                appliesScheduledJarScale = true
+            }
             finishCompletionEntryPhysics(for: pebble)
             aboveEntryPebbleIDs.remove(pebble.descriptor.id)
             updateCompletionDropTrackingIfNeeded()
@@ -2979,12 +3136,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         horizontalUnit: CGFloat,
         origin: DropOrigin
     ) {
-        let node = PebbleNode(
-            descriptor: descriptor,
-            reduceMotion: reduceMotion,
-            rareRewardMode: rareRewardMode,
-            artworkScale: artworkScale
-        )
+        // D4: the incoming gem counts toward the jar's area now and falls at
+        // the scale the pile takes when it lands (usually smaller; larger
+        // only after the jar itself had to shrink, e.g. under a card).
+        let arrivalScale = resolvedJarScale(adding: [descriptor])
+        if abs(arrivalScale - jarScale) > 0.0001 {
+            scheduledJarScale = arrivalScale
+        }
+        let node = makePebbleNode(descriptor, studyScale: arrivalScale)
         let xRange = interiorRect.width * Constants.Jar.dropHorizontalRangeFraction
         if origin == .sceneTop {
             let entryRange = allowedHorizontalRange(at: size.height, radius: node.radius)
@@ -3115,7 +3274,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                         .fadeOut(withDuration: Constants.Jar.aggregateFormationDuration),
                         .move(to: formationPoint, duration: Constants.Jar.aggregateFormationDuration),
                         .scale(
-                            to: Constants.Jar.bakePebbleFinalScale,
+                            to: Constants.Jar.bakePebbleFinalScale * pebble.xScale,
                             duration: Constants.Jar.aggregateFormationDuration
                         )
                     ])
@@ -3143,14 +3302,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
 
         let descriptor = request.outputDescriptor
-        if !livePebbles.contains(where: { $0.descriptor.id == descriptor.id }) {
+        let needsCrystal = !livePebbles.contains(where: { $0.descriptor.id == descriptor.id })
+        // D4: ten bodies became one, so A0 fell and the pile may grow back
+        // (fusion adds; it never empties the jar). The crystal is born at
+        // the new scale while its neighbours grow toward it.
+        let fusedScale = resolvedJarScale(adding: needsCrystal ? [descriptor] : [])
+        if needsCrystal {
             _ = acceptedPebbleIDs.insert(descriptor.id)
-            let aggregateNode = PebbleNode(
-                descriptor: descriptor,
-                reduceMotion: reduceMotion,
-                rareRewardMode: rareRewardMode,
-                artworkScale: artworkScale
-            )
+            let aggregateNode = makePebbleNode(descriptor, studyScale: fusedScale)
             aggregateNode.position = CGPoint(
                 x: min(
                     max(
@@ -3167,7 +3326,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                     interiorRect.maxY - aggregateNode.radius
                 )
             )
-            aggregateNode.setScale(0.38)
+            aggregateNode.setScale(0.38 * aggregateNode.jarScale)
             aggregateNode.alpha = 0.25
             aggregateNode.physicsBody?.velocity = CGVector(
                 dx: 0,
@@ -3176,6 +3335,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             insertPebble(aggregateNode)
             presentFusionFinale(for: aggregateNode)
         }
+        applyJarScale(fusedScale, animated: true)
         refreshPileLight()
         publishPhysicalContentChangeIfNeeded()
         let persistenceHandler = activeBake.persistenceHandler
@@ -3355,7 +3515,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let plan = JarSensoryPolicy.plan(
             trigger: .collision,
             samples: pebbles.map {
-                JarSensorySample(radius: Double($0.radius), coupling: 1)
+                JarSensorySample(radius: Double($0.sensoryRadius), coupling: 1)
             },
             gestureStrength: Double(min(max(impactSpeed / 8, 0.08), 1)),
             abundanceCount: physicalPebbleCount,
@@ -3878,8 +4038,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private func presentFusionFinale(for node: PebbleNode) {
         let tier = GemCutLadder.aggregateTier(grams: node.descriptor.grams)
         let point = node.position
+        let rest = node.jarScale
         if reduceMotion {
-            node.setScale(1)
+            node.setScale(rest)
             node.alpha = 1
             guard tier >= 1 else { return }
             let ring = makeFusionRing(at: point, radius: node.radius)
@@ -3889,18 +4050,18 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             return
         }
         guard tier >= 1, Self.allowsAmbientSparkle else {
-            node.setScale(1)
+            node.setScale(rest)
             node.alpha = 0
             node.run(.fadeIn(withDuration: 0.2))
             return
         }
         node.alpha = 1
-        node.setScale(0.6)
-        let grow = SKAction.scale(to: 1.08, duration: 0.20)
+        node.setScale(0.6 * rest)
+        let grow = SKAction.scale(to: 1.08 * rest, duration: 0.20)
         grow.timingMode = .easeOut
-        let settle = SKAction.scale(to: 1, duration: 0.18)
+        let settle = SKAction.scale(to: rest, duration: 0.18)
         settle.timingMode = .easeInEaseOut
-        node.run(.sequence([grow, settle]))
+        node.run(.sequence([grow, settle]), withKey: PebbleNode.birthActionKey)
 
         let flash = SKSpriteNode(
             texture: GemArtwork.haloTexture,
@@ -4084,6 +4245,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// Freezes only presentation physics. Study records, aggregate membership,
     /// mass, and cloud state live outside SpriteKit and are never touched.
     private func pauseSettledSimulation() {
+        // A frozen jar never keeps a half-scaled body.
+        livePebbles.forEach { $0.finishJarScaleTransition() }
         finishActiveTapMotion(forceReturn: false)
         transientMotionGate.invalidate()
         interactionMotionWindow = nil

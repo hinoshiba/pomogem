@@ -2744,3 +2744,129 @@ private extension CGPoint {
         CGPoint(x: x + (other.x - x) * amount, y: y + (other.y - y) * amount)
     }
 }
+
+// MARK: - Count engravings (D26)
+
+extension GemArtwork {
+    /// How a count is engraved: on a small copper tag in the collar's
+    /// material (crystals, D26 (b)) or straight into a black stone at low
+    /// contrast (D26 (a)).
+    enum CountEngraving: String, Sendable {
+        case copperTag
+        case stone
+    }
+
+    /// Tag type size in scene points for a crystal of `sceneRadius`: small
+    /// enough to read as a maker's tag, never as a multiplier.
+    static func countTagFontSize(sceneRadius: CGFloat) -> CGFloat {
+        guard sceneRadius.isFinite else { return 7.5 }
+        return min(9, max(7, sceneRadius * 0.20))
+    }
+
+    private static func countEngravingFont(fontSize: CGFloat, style: CountEngraving) -> UIFont {
+        let weight: UIFont.Weight = style == .copperTag ? .bold : .semibold
+        let base = UIFont.systemFont(ofSize: fontSize, weight: weight)
+        guard let rounded = base.fontDescriptor.withDesign(.rounded) else { return base }
+        return UIFont(descriptor: rounded, size: fontSize)
+    }
+
+    private static func countEngravingText(_ text: String, fontSize: CGFloat, style: CountEngraving) -> NSAttributedString {
+        NSAttributedString(string: text, attributes: [
+            .font: countEngravingFont(fontSize: fontSize, style: style),
+            .kern: fontSize * 0.02
+        ])
+    }
+
+    /// Scene-point size of an engraving (the tag plate or the stone text).
+    static func countEngravingSize(text: String, fontSize rawFontSize: CGFloat, style: CountEngraving) -> CGSize {
+        let fontSize = max(3, rawFontSize.isFinite ? rawFontSize : 7)
+        let measured = countEngravingText(text, fontSize: fontSize, style: style).size()
+        switch style {
+        case .copperTag:
+            let height = (fontSize * 1.50).rounded(.up)
+            return CGSize(width: (measured.width + fontSize * 0.95).rounded(.up), height: height)
+        case .stone:
+            return CGSize(width: (measured.width + 2).rounded(.up), height: (measured.height + 1.5).rounded(.up))
+        }
+    }
+
+    /// Atlas name of an engraving. `SKTextureAtlas` keys must stay ASCII
+    /// (a "×" in a key comes back as the missing-texture cross), so the text
+    /// is spelled as its Unicode scalar values.
+    static func countEngravingTextureName(text: String, fontSize: CGFloat, style: CountEngraving, scale: CGFloat) -> String {
+        let spelled = text.unicodeScalars.map { String($0.value, radix: 16) }.joined(separator: ".")
+        return "gem.engraving|\(style.rawValue)|\(spelled)|f\((fontSize * 4).rounded() / 4)|x\(renderScale(scale))"
+    }
+
+    /// The engraving as an image the size of `countEngravingSize`.
+    ///
+    /// - Copper tag: a small rounded plate shaded like the neck collar
+    ///   (#F2C4A8 → #B8735A → #8A4E3A), a bright bevel on its top edge and
+    ///   a dark one below, the count cut into it in dark copper with a pale
+    ///   lower lip. No black ink, no pill, no glow.
+    /// - Stone: the count alone, a shade lighter than the rock (white α0.30)
+    ///   with a dark upper lip, so it reads as cut into the stone and never
+    ///   as a label.
+    static func countEngravingImage(text: String, fontSize rawFontSize: CGFloat, style: CountEngraving, scale: CGFloat) -> UIImage {
+        let fontSize = max(3, rawFontSize.isFinite ? rawFontSize : 7)
+        let size = countEngravingSize(text: text, fontSize: fontSize, style: style)
+        let font = countEngravingFont(fontSize: fontSize, style: style)
+        return UIGraphicsImageRenderer(size: size, format: rendererFormat(scale: scale)).image { renderer in
+            let context = renderer.cgContext
+            let bounds = CGRect(origin: .zero, size: size)
+            let textSize = countEngravingText(text, fontSize: fontSize, style: style).size()
+            let origin = CGPoint(
+                x: (size.width - textSize.width) / 2,
+                y: (size.height - textSize.height) / 2 - fontSize * 0.02
+            )
+            func draw(color: UIColor, offset: CGFloat) {
+                NSAttributedString(string: text, attributes: [
+                    .font: font,
+                    .kern: fontSize * 0.02,
+                    .foregroundColor: color
+                ]).draw(at: CGPoint(x: origin.x, y: origin.y + offset))
+            }
+            switch style {
+            case .copperTag:
+                let plate = bounds.insetBy(dx: 0.5, dy: 0.5)
+                let corner = min(plate.height * 0.30, 3.2)
+                let path = UIBezierPath(roundedRect: plate, cornerRadius: corner)
+                context.saveGState()
+                path.addClip()
+                if let gradient = CGGradient(
+                    colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                    colors: [
+                        GemColor(hex: "#F2C4A8").cgColor,
+                        GemColor(hex: "#D9967A").cgColor,
+                        GemColor(hex: "#B8735A").cgColor,
+                        GemColor(hex: "#8A4E3A").cgColor
+                    ] as CFArray,
+                    locations: [0, 0.30, 0.62, 1]
+                ) {
+                    context.drawLinearGradient(
+                        gradient,
+                        start: CGPoint(x: 0, y: plate.minY),
+                        end: CGPoint(x: 0, y: plate.maxY),
+                        options: []
+                    )
+                }
+                // Bevel: light along the top edge, shade along the bottom.
+                context.setFillColor(UIColor(red: 1, green: 0.90, blue: 0.82, alpha: 0.70).cgColor)
+                context.fill(CGRect(x: plate.minX, y: plate.minY, width: plate.width, height: 0.6))
+                context.setFillColor(UIColor(red: 0.30, green: 0.14, blue: 0.08, alpha: 0.55).cgColor)
+                context.fill(CGRect(x: plate.minX, y: plate.maxY - 0.6, width: plate.width, height: 0.6))
+                context.restoreGState()
+                context.addPath(path.cgPath)
+                context.setStrokeColor(UIColor(red: 0.24, green: 0.11, blue: 0.06, alpha: 0.60).cgColor)
+                context.setLineWidth(0.6)
+                context.strokePath()
+                // Cut letters: the pale lower lip first, the dark cut on top.
+                draw(color: UIColor(red: 1, green: 0.88, blue: 0.78, alpha: 0.55), offset: 0.55)
+                draw(color: UIColor(red: 0.27, green: 0.13, blue: 0.07, alpha: 0.92), offset: 0)
+            case .stone:
+                draw(color: UIColor(white: 0, alpha: 0.65), offset: -0.5)
+                draw(color: UIColor(white: 1, alpha: 0.30), offset: 0)
+            }
+        }
+    }
+}

@@ -48,8 +48,7 @@ final class JarRenderingPerformanceTests: XCTestCase {
         "gem.glint",
         "achievement.markBackdrop",
         "achievement.mark",
-        "aggregate.countPlate",
-        "aggregate.count"
+        "aggregate.tag"
     ]
 
     @MainActor
@@ -214,42 +213,37 @@ final class JarRenderingPerformanceTests: XCTestCase {
         withExtendedLifetime(onScreen) {}
     }
 
-    /// The rubble baked into one sprite draws what its eight shape nodes
-    /// drew (only antialiasing along edges may differ slightly).
+    /// The obsidian rock is one baked sprite per shape, size bucket and
+    /// display scale: equal stones share it, and a stone shown at a larger
+    /// jar scale gets a bake of that size (crisp), sized back to local
+    /// points so it lands on the collision circle.
     @MainActor
-    func testBakedRubbleMatchesTheFormerShapeNodes() throws {
-        let view = SKView(frame: CGRect(x: 0, y: 0, width: 96, height: 96))
-        let scale = view.contentScaleFactor
-        for obstacle in [
-            ScreenTimeObstacleDescriptor(level: 0, slot: 3, representedUnits: 1, isHistoryPile: false),
-            ScreenTimeObstacleDescriptor(level: 2, slot: 7, representedUnits: 100, isHistoryPile: false),
-            ScreenTimeObstacleDescriptor(level: 4, slot: 1, representedUnits: 10_000, isHistoryPile: true)
-        ] {
-            let radius = obstacle.radius
-            let legacy = legacyRubble(obstacle, radius: radius)
-            let variations = ScreenTimeObstacleAppearance.variations(descriptor: obstacle)
-            let baked = SKTexture(image: ScreenTimeObstacleAppearance.image(
-                variations: variations,
-                radius: radius,
-                scale: scale
-            ))
-            baked.filteringMode = .linear
-            let before = try render(legacy, in: view)
-            let after = try render(
-                SKSpriteNode(texture: baked, size: ScreenTimeObstacleAppearance.spriteSize(radius: radius)),
-                in: view
+    func testBlackStoneBakeIsOneSharedSpritePerShapeAndSize() throws {
+        let stone = ScreenTimeObstacleDescriptor(level: 2, slot: 7, representedUnits: 100, isHistoryPile: false)
+        let descriptor = PebbleDescriptor(screenTimeObstacle: stone)
+        let atlas = GemTextureAtlas.shared
+        let first = PebbleNode(descriptor: descriptor, reduceMotion: true, artworkScale: 2)
+        let twin = PebbleNode(descriptor: descriptor, reduceMotion: true, artworkScale: 2)
+        let rock = try XCTUnwrap(first.childNode(withName: ScreenTimeObstacleAppearance.bodyName) as? SKSpriteNode)
+        let twinRock = try XCTUnwrap(twin.childNode(withName: ScreenTimeObstacleAppearance.bodyName) as? SKSpriteNode)
+        XCTAssertEqual(atlas.textureName(of: rock), atlas.textureName(of: twinRock))
+        XCTAssertFalse(first.children.contains { $0 is SKShapeNode || $0 is SKLabelNode })
+
+        let scale = JarScalePolicy.maximumObstacleScale
+        let scaled = PebbleNode(descriptor: descriptor, reduceMotion: true, artworkScale: 2, jarScale: scale)
+        let scaledRock = try XCTUnwrap(scaled.childNode(withName: ScreenTimeObstacleAppearance.bodyName) as? SKSpriteNode)
+        let name = try XCTUnwrap(atlas.textureName(of: scaledRock))
+        XCTAssertEqual(
+            name,
+            ScreenTimeObstacleAppearance.textureName(
+                variations: ScreenTimeObstacleAppearance.variations(descriptor: stone),
+                radius: stone.radius * scale,
+                scale: 2
             )
-            let difference = compare(before, after)
-            // Measured at 1×: mean 0.3–0.9, under 0.2 % of pixels beyond
-            // 48/255 (edge antialiasing and sub-pixel placement only). A
-            // flipped, recoloured or missing part is far above either bound.
-            XCTAssertLessThan(difference.mean, 1.5, "Mean channel difference for level \(obstacle.level)")
-            XCTAssertLessThan(
-                differingPixelShare(before, after, threshold: 48),
-                0.01,
-                "Only edge antialiasing may differ (level \(obstacle.level))"
-            )
-        }
+        )
+        let onScreen = scaledRock.size.width * scaled.xScale
+        let baked = ScreenTimeObstacleAppearance.spriteSize(radius: GemArtwork.sizeBucket(radius: stone.radius * scale))
+        XCTAssertEqual(onScreen, baked.width, accuracy: 0.01)
     }
 
     // MARK: Baking ahead
@@ -261,15 +255,25 @@ final class JarRenderingPerformanceTests: XCTestCase {
         let descriptors = (0 ..< 12).map {
             looseDescriptor(index: 100 + $0, grams: 710 + $0 * 40, colorHex: ["#6B8E23", "#2E8B8B", "#8B5A2B"][$0 % 3])
         }
-        let requests = descriptors.compactMap { PebbleNode.bakeRequest(for: $0, scale: 3) }
+        let scene = makeScene()
+        scene.artworkScale = 3
+        // The bodies bake at the jar scale the restore will resolve (D4).
+        let interior = JarScene.interiorRect(sceneSize: scene.size)
+        let jarScale = JarScalePolicy.resolvedScale(
+            current: 1,
+            target: JarScalePolicy.targetScale(
+                baseArea: JarScalePolicy.baseArea(radii: descriptors.map(\.radius)),
+                interiorArea: interior.width * interior.height
+            )
+        )
+        let requests = descriptors.compactMap { PebbleNode.bakeRequest(for: $0, scale: 3, jarScale: jarScale) }
         XCTAssertEqual(requests.count, descriptors.count)
         let names = Set(requests.map(\.name))
         XCTAssertTrue(names.allSatisfy { !atlas.hasImage(named: $0) })
 
-        let scene = makeScene()
-        scene.artworkScale = 3
         let inlineBakes = atlas.onDemandBakeCount
         scene.restore(pebbles: descriptors)
+        XCTAssertEqual(scene.jarScale, jarScale)
         XCTAssertTrue(names.allSatisfy { atlas.hasImage(named: $0) })
         // Every body was baked ahead (in parallel) before its node existed:
         // no node had to bake inline.
@@ -291,7 +295,7 @@ final class JarRenderingPerformanceTests: XCTestCase {
     @MainActor
     func testLaunchPreBakeCoversTheStarterGems() throws {
         let requests = PebbleNode.commonBakeRequests(scale: 3)
-        XCTAssertEqual(requests.count, SeedData.subjects.count * 3 * GemArtworkSpec.variantCount)
+        XCTAssertEqual(requests.count, SeedData.subjects.count * 2 * GemArtworkSpec.variantCount)
         XCTAssertEqual(Set(requests.map(\.name)).count, requests.count)
         let names = Set(requests.map(\.name))
         for subject in SeedData.subjects {
@@ -304,7 +308,12 @@ final class JarRenderingPerformanceTests: XCTestCase {
                     kind: .normal,
                     grams: Constants.Mass.measuredPebbleGrams
                 )
-                let request = try XCTUnwrap(PebbleNode.bakeRequest(for: descriptor, scale: 3))
+                // At the scale of a young jar, the jar every new person opens.
+                let request = try XCTUnwrap(PebbleNode.bakeRequest(
+                    for: descriptor,
+                    scale: 3,
+                    jarScale: JarScalePolicy.maximumScale
+                ))
                 XCTAssertTrue(names.contains(request.name), "A 25-minute \(subject.name) gem is pre-baked")
             }
         }
@@ -502,51 +511,6 @@ final class JarRenderingPerformanceTests: XCTestCase {
             grams: 10 * Constants.Mass.measuredPebbleGrams,
             createdAt: Date(timeIntervalSince1970: 900)
         )
-    }
-
-    /// The rubble exactly as it was built before the bake (outline, six
-    /// facets and the crack as shape nodes, no count).
-    @MainActor
-    private func legacyRubble(_ descriptor: ScreenTimeObstacleDescriptor, radius: CGFloat) -> SKNode {
-        let bytes = Array(descriptor.id.uuidString.utf8)
-        let points: [CGPoint] = (0 ..< 12).map { index in
-            let angle = CGFloat(index) / 12 * .pi * 2
-            let variation = CGFloat(bytes[index % bytes.count] % 11) / 100
-            let scale: CGFloat = index.isMultiple(of: 3) ? 0.78 + variation : 0.90 + variation
-            return CGPoint(x: cos(angle) * radius * scale, y: sin(angle) * radius * scale)
-        }
-        let outline = CGMutablePath()
-        outline.move(to: points[0])
-        points.dropFirst().forEach { outline.addLine(to: $0) }
-        outline.closeSubpath()
-        let node = SKShapeNode(path: outline)
-        node.fillColor = UIColor(red: 0.12, green: 0.12, blue: 0.14, alpha: 1)
-        node.strokeColor = UIColor(red: 0.39, green: 0.38, blue: 0.42, alpha: 1)
-        node.lineWidth = 1.2
-        node.glowWidth = 0
-        for index in stride(from: 0, to: points.count, by: 2) {
-            let facetPath = CGMutablePath()
-            facetPath.move(to: CGPoint(x: -radius * 0.08, y: radius * 0.06))
-            facetPath.addLine(to: points[index])
-            facetPath.addLine(to: points[(index + 1) % points.count])
-            facetPath.closeSubpath()
-            let facet = SKShapeNode(path: facetPath)
-            facet.fillColor = UIColor(white: index < 6 ? 0.36 : 0.05, alpha: 0.70)
-            facet.strokeColor = UIColor(white: 0.48, alpha: 0.25)
-            facet.lineWidth = 0.5
-            facet.zPosition = 0.1
-            node.addChild(facet)
-        }
-        let crackPath = CGMutablePath()
-        crackPath.move(to: CGPoint(x: -radius * 0.5, y: radius * 0.45))
-        crackPath.addLine(to: CGPoint(x: radius * 0.1, y: radius * 0.08))
-        crackPath.addLine(to: CGPoint(x: -radius * 0.02, y: -radius * 0.52))
-        let crack = SKShapeNode(path: crackPath)
-        crack.strokeColor = UIColor(white: 0.02, alpha: 0.92)
-        crack.lineWidth = max(1, radius * 0.08)
-        crack.zPosition = 0.2
-        node.addChild(crack)
-        return node
     }
 
     // MARK: Pixels

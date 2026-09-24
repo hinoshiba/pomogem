@@ -175,7 +175,7 @@ final class GemBrillianceTests: XCTestCase {
             accuracy: 0.0001,
             "The collision body stays the same circle"
         )
-        XCTAssertFalse(GemSizePolicy.isApprovedForRelease, "D4 sizes wait for the owner")
+        XCTAssertEqual(pebble.jarScale, 1, "A node built without a jar is at the shipping size")
         XCTAssertEqual(pebble.glowWidth, 0, "Loose gems glow through the shared halo sprite")
         XCTAssertEqual(pebble.gemRung?.cut, .tumbled)
 
@@ -319,28 +319,77 @@ final class GemBrillianceTests: XCTestCase {
     }
 
     @MainActor
-    func testAggregateKeepsLabelsUprightOnAPlateBelowTheTable() throws {
+    /// D26 (b): the count is a small engraved copper tag (the collar's
+    /// material), upright below the table, with exactly the former text. It
+    /// keeps its own on-screen size at every jar scale.
+    func testAggregateCountIsASmallEngravedCopperTagBelowTheTable() throws {
         let descriptor = aggregateDescriptor(level: 2)
         let pebble = PebbleNode(descriptor: descriptor, reduceMotion: true)
         XCTAssertEqual(pebble.gemRung?.cut, .brilliant)
-        let label = try XCTUnwrap(pebble.childNode(withName: "aggregate.count") as? SKLabelNode)
-        let plate = try XCTUnwrap(pebble.childNode(withName: "aggregate.countPlate") as? SKShapeNode)
-        XCTAssertEqual(label.text, "×100")
-        XCTAssertGreaterThan(plate.fillColor.cgColor.alpha, 0.7)
-        XCTAssertGreaterThan(plate.zPosition, try XCTUnwrap(pebble.childNode(withName: "gem.body")).zPosition)
-        XCTAssertLessThan(plate.zPosition, label.zPosition)
+        XCTAssertNil(pebble.childNode(withName: "aggregate.count"), "No live label")
+        XCTAssertNil(pebble.childNode(withName: "aggregate.countPlate"), "No ink pill")
+        let tag = try XCTUnwrap(pebble.childNode(withName: "aggregate.tag") as? SKSpriteNode)
+        XCTAssertEqual(pebble.aggregateTagText, "×100")
+        XCTAssertEqual(pebble.aggregateTagText, AggregatePresentation.countLabel(100))
+        XCTAssertEqual(tag.blendMode, .alpha)
+        XCTAssertGreaterThan(tag.zPosition, try XCTUnwrap(pebble.childNode(withName: "gem.body")).zPosition)
+        // `size` is the sprite's scaled size (its counter-scale included).
+        let onScreen = tag.size.height * pebble.xScale
+        XCTAssertLessThanOrEqual(onScreen, 15, "A small tag, not a plate")
+
+        // Copper, not black: the tag's mean colour is warm and mid-light.
+        let image = GemArtwork.countEngravingImage(text: "×100", fontSize: 9, style: .copperTag, scale: 2)
+        let mean = try meanColor(of: image)
+        XCTAssertGreaterThan(mean.red, mean.green)
+        XCTAssertGreaterThan(mean.green, mean.blue)
+        XCTAssertGreaterThan(0.2126 * mean.red + 0.7152 * mean.green + 0.0722 * mean.blue, 0.35)
 
         pebble.zRotation = .pi / 3
         pebble.updatePresentationLighting(horizontal: 0.4)
-        XCTAssertEqual(label.zRotation, -pebble.zRotation, accuracy: 0.001)
-        XCTAssertEqual(plate.zRotation, -pebble.zRotation, accuracy: 0.001)
-        // In screen space the plate stays below the centre after rotation.
+        XCTAssertEqual(tag.zRotation, -pebble.zRotation, accuracy: 0.001)
+        // In screen space the tag stays below the centre after rotation.
         let cosine = cos(pebble.zRotation)
         let sine = sin(pebble.zRotation)
-        let screenY = sine * label.position.x + cosine * label.position.y
-        let screenX = cosine * label.position.x - sine * label.position.y
+        let screenY = sine * tag.position.x + cosine * tag.position.y
+        let screenX = cosine * tag.position.x - sine * tag.position.y
         XCTAssertEqual(screenY, -descriptor.radius * PebbleNode.aggregatePlateDrop, accuracy: 0.01)
         XCTAssertEqual(screenX, 0, accuracy: 0.01)
+
+        // A large young jar never turns it into a big number.
+        let scaled = PebbleNode(descriptor: descriptor, reduceMotion: true, jarScale: JarScalePolicy.maximumScale)
+        let scaledTag = try XCTUnwrap(scaled.childNode(withName: "aggregate.tag") as? SKSpriteNode)
+        XCTAssertEqual(scaled.xScale, JarScalePolicy.maximumScale, accuracy: 0.0001)
+        XCTAssertLessThanOrEqual(scaledTag.size.height * scaled.xScale, 15)
+        XCTAssertLessThanOrEqual(scaledTag.size.height * scaled.xScale, onScreen * 1.4)
+        scaled.transitionJarScale(to: 1.2, duration: 0)
+        XCTAssertEqual(scaled.xScale, 1.2, accuracy: 0.0001)
+        XCTAssertLessThanOrEqual(scaledTag.size.height * scaled.xScale, 15)
+    }
+
+    private func meanColor(of image: UIImage) throws -> (red: CGFloat, green: CGFloat, blue: CGFloat) {
+        let cgImage = try XCTUnwrap(image.cgImage)
+        let width = cgImage.width
+        let height = cgImage.height
+        var data = [UInt8](repeating: 0, count: width * height * 4)
+        let context = try XCTUnwrap(CGContext(
+            data: &data,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        var sum = (red: CGFloat.zero, green: CGFloat.zero, blue: CGFloat.zero, alpha: CGFloat.zero)
+        for index in stride(from: 0, to: data.count, by: 4) {
+            sum.red += CGFloat(data[index])
+            sum.green += CGFloat(data[index + 1])
+            sum.blue += CGFloat(data[index + 2])
+            sum.alpha += CGFloat(data[index + 3])
+        }
+        let alpha = max(sum.alpha, 1)
+        return (sum.red / alpha, sum.green / alpha, sum.blue / alpha)
     }
 
     // MARK: Motion and accessibility
@@ -1163,6 +1212,221 @@ final class GemBrillianceTests: XCTestCase {
         XCTAssertLessThanOrEqual(tall.height, interior.height * 0.45 + 0.001)
         XCTAssertLessThanOrEqual(tall.width, outer.width * 0.9 + 0.001)
         XCTAssertLessThanOrEqual(tall.midY, interior.minY + 40 + 40 + 0.001)
+    }
+
+    // MARK: Jar-wide scale (D4)
+
+    @MainActor
+    private func scaleScene() -> JarScene {
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        scene.reduceMotion = true
+        scene.bakesGemBedInBackground = false
+        return scene
+    }
+
+    @MainActor
+    private func scenePebbles(_ scene: JarScene) -> [PebbleNode] {
+        scene.children.flatMap(\.children).compactMap { $0 as? PebbleNode }
+    }
+
+    private func looseSeries(_ count: Int, from start: Int = 0, minutes: Int = 25) -> [PebbleDescriptor] {
+        (start ..< start + count).map { index in
+            PebbleDescriptor(
+                id: UUID(uuidString: String(format: "D4000000-0000-4000-8000-%012X", index + 1))!,
+                subjectName: "英語",
+                colorHex: Constants.Color.english,
+                source: .timer,
+                kind: .normal,
+                grams: minutes * Constants.Mass.gramsPerMinute,
+                createdAt: Date(timeIntervalSince1970: TimeInterval(1_000 + index))
+            )
+        }
+    }
+
+    /// Six ×100 and five ×10 roots: with nine or ten loose gems the jar's
+    /// scale is set by its area budget (below the maximum).
+    private func budgetBoundRoots() -> [PebbleDescriptor] {
+        [2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1].enumerated().map { index, level in
+            aggregateDescriptor(level: level, idSuffix: 0xD400 + index)
+        }
+    }
+
+    @MainActor
+    func testRestoreShowsEveryBodyAtOneJarScaleAndKeepsFusionUnscaled() throws {
+        let scene = scaleScene()
+        scene.restore(pebbles: looseSeries(5))
+        XCTAssertEqual(scene.jarScale, JarScalePolicy.maximumScale, "A young jar shows large jewels")
+        for pebble in scenePebbles(scene) {
+            XCTAssertEqual(pebble.jarScale, scene.jarScale)
+            XCTAssertEqual(pebble.xScale, scene.jarScale, accuracy: 0.000_1)
+            XCTAssertEqual(pebble.localRadius, pebble.descriptor.radius, "The stored geometry is unscaled")
+            XCTAssertEqual(pebble.radius, pebble.descriptor.radius * scene.jarScale, accuracy: 0.000_1)
+            XCTAssertEqual(pebble.sensoryRadius, pebble.descriptor.radius, "Sound and haptics hear the unscaled gem")
+            // The body is baked for the size it shows (crisp, not upscaled).
+            let body = try XCTUnwrap(pebble.childNode(withName: "gem.body") as? SKSpriteNode)
+            let name = try XCTUnwrap(GemTextureAtlas.shared.textureName(of: body))
+            XCTAssertTrue(name.contains("|r\(GemArtwork.sizeBucket(radius: pebble.radius))|"), name)
+        }
+        // A heavy jar beyond the budget shows the shipping size.
+        let heavy = scaleScene()
+        heavy.restore(pebbles: GemShowcaseUITestFixture.worstCaseDescriptors())
+        XCTAssertEqual(heavy.jarScale, 1)
+        XCTAssertTrue(scenePebbles(heavy).allSatisfy { $0.xScale == 1 && $0.radius == $0.descriptor.radius })
+
+        // Fusion never sees the scale: the same ten sources, the same grams
+        // and the same unscaled radii as the shipping jar.
+        let fusing = scaleScene()
+        var requests: [JarAggregateRequest] = []
+        fusing.onAggregateRequested = { requests.append($0) }
+        let ten = looseSeries(10)
+        fusing.restore(pebbles: ten)
+        XCTAssertGreaterThan(fusing.jarScale, 1)
+        fusing.update(0)
+        let request = try XCTUnwrap(requests.first)
+        XCTAssertEqual(Set(request.pebbles.map(\.id)), Set(ten.map(\.id)))
+        XCTAssertEqual(request.pebbles.map(\.radius), ten.map(\.radius))
+        XCTAssertEqual(request.grams, 10 * Constants.Mass.measuredPebbleGrams)
+    }
+
+    /// Ten bodies becoming one lowers A0: the crystal is born at the new
+    /// scale and every other body grows toward it (fusion adds, it never
+    /// empties the jar).
+    @MainActor
+    func testFusionLetsTheWholePileGrowBack() throws {
+        let scene = scaleScene()
+        scene.onAggregateRequested = { _ in }
+        scene.restore(pebbles: budgetBoundRoots() + looseSeries(10))
+        let before = scene.jarScale
+        XCTAssertLessThan(before, JarScalePolicy.maximumScale, "The budget sets this jar's scale")
+        XCTAssertGreaterThan(before, 1)
+        let changes = scene.jarScaleChangeCount
+        scene.update(0)
+        XCTAssertEqual(scene.physicalAggregateCount, 12, "Ten loose gems fused into one more ×10")
+        XCTAssertGreaterThanOrEqual(
+            scene.jarScale,
+            before * JarScalePolicy.rungRatio * JarScalePolicy.rungRatio - 0.000_1,
+            "Visibly larger"
+        )
+        XCTAssertEqual(scene.jarScaleChangeCount, changes + 1)
+        for pebble in scenePebbles(scene) where !pebble.isRemovedForBake {
+            XCTAssertEqual(pebble.jarScale, scene.jarScale, accuracy: 0.000_1)
+        }
+    }
+
+    /// The incoming gem counts toward A0 at once and falls at the scale the
+    /// pile takes when it lands; the pile itself waits for the landing.
+    @MainActor
+    func testIncomingGemFallsAtTheScaleThePileTakesWhenItLands() throws {
+        let scene = scaleScene()
+        scene.restore(pebbles: budgetBoundRoots() + looseSeries(9))
+        let before = scene.jarScale
+        let incoming = looseSeries(1, from: 50, minutes: 120)[0]
+        scene.drop(incoming)
+        scene.update(0)
+        let node = try XCTUnwrap(scene.childNode(withName: "//pebble.\(incoming.id.uuidString)") as? PebbleNode)
+        XCTAssertLessThan(node.jarScale, before, "The new gem already has the landed size")
+        XCTAssertEqual(scene.jarScale, before, "The pile changes only when it lands")
+        XCTAssertTrue(scenePebbles(scene).filter { $0 !== node }.allSatisfy { $0.jarScale == before })
+    }
+
+    /// Restoring the same content twice resolves the same scale and changes
+    /// nothing the second time; an animated transition ends exactly at its
+    /// target, and the scene finishes one before it freezes.
+    @MainActor
+    func testTransitionsSettleAtTheirTargetWithoutOscillating() throws {
+        let scene = scaleScene()
+        let content = budgetBoundRoots() + looseSeries(9)
+        scene.restore(pebbles: content)
+        let first = scene.jarScale
+        let changes = scene.jarScaleChangeCount
+        scene.restore(pebbles: content)
+        XCTAssertEqual(scene.jarScale, first)
+        XCTAssertEqual(scene.jarScaleChangeCount, changes)
+
+        let pebble = PebbleNode(descriptor: looseDescriptor(), reduceMotion: true, jarScale: 1.5)
+        pebble.transitionJarScale(to: 2, duration: 0.5)
+        XCTAssertTrue(pebble.isTransitioningJarScale)
+        XCTAssertEqual(pebble.jarScaleTarget, 2)
+        pebble.finishJarScaleTransition()
+        XCTAssertFalse(pebble.isTransitioningJarScale)
+        XCTAssertEqual(pebble.jarScale, 2)
+        XCTAssertEqual(pebble.xScale, 2, accuracy: 0.000_1)
+        // A second request for the same target leaves it alone.
+        pebble.transitionJarScale(to: 2, duration: 0.5)
+        XCTAssertFalse(pebble.isTransitioningJarScale)
+        // Shake impulses see the unscaled mass.
+        let reference = PebbleNode(descriptor: looseDescriptor(), reduceMotion: true)
+        XCTAssertEqual(pebble.presentationMass, reference.presentationMass, accuracy: reference.presentationMass * 0.01)
+    }
+
+    // MARK: Black stones (D26 (a))
+
+    /// Irregular matte obsidian: no bright pixel, no rim, an uneven outline
+    /// of 9–11 corners inside the collision circle, and the count only as a
+    /// small, low-contrast engraving below the centre.
+    @MainActor
+    func testBlackStonesAreIrregularMatteObsidianWithASmallEngravedCount() throws {
+        for (units, level) in [(1, 0), (10, 1), (1_000, 3)] {
+            let stone = try XCTUnwrap(ScreenTimeObstacleProjection.decimalRoots(totalUnits: units).first)
+            XCTAssertEqual(stone.level, level)
+            let variations = ScreenTimeObstacleAppearance.variations(descriptor: stone)
+            let outline = ScreenTimeObstacleAppearance.outline(variations: variations, radius: stone.radius)
+            XCTAssertTrue((9 ... 11).contains(outline.count))
+            let reaches = outline.map { hypot($0.x, $0.y) / stone.radius }
+            XCTAssertTrue(reaches.allSatisfy { $0 <= 1 }, "Inside the collision circle")
+            XCTAssertGreaterThan((reaches.max() ?? 0) - (reaches.min() ?? 0), 0.04, "Uneven, never a coin or a chip")
+
+            let image = ScreenTimeObstacleAppearance.image(variations: variations, radius: stone.radius, scale: 2)
+            let luminance = try luminanceStatistics(of: image)
+            XCTAssertLessThan(luminance.maximum, 0.40, "Matte: no highlight")
+            XCTAssertLessThan(luminance.mean, 0.16, "Dark obsidian")
+
+            let pebble = PebbleNode(descriptor: PebbleDescriptor(screenTimeObstacle: stone), reduceMotion: true)
+            let count = pebble.childNode(withName: ScreenTimeObstacleAppearance.countName) as? SKSpriteNode
+            if level == 0 {
+                XCTAssertNil(count, "A single ten-minute stone carries no number")
+            } else {
+                let count = try XCTUnwrap(count)
+                XCTAssertLessThanOrEqual(count.size.height, 10, "Small")
+                XCTAssertLessThan(count.position.y, -stone.radius * 0.3, "Below the centre, not a centred number")
+                let text = try XCTUnwrap(ScreenTimeObstacleAppearance.countText(descriptor: stone))
+                let engraving = GemArtwork.countEngravingImage(text: text, fontSize: 7, style: .stone, scale: 2)
+                XCTAssertLessThan(try luminanceStatistics(of: engraving).maximum, 0.45, "Low contrast")
+            }
+            // VoiceOver keeps the full count.
+            XCTAssertTrue(pebble.descriptor.accessibilityDescription.contains(stone.representedUnits.formatted()))
+        }
+    }
+
+    /// Luminance (straight alpha) over the opaque pixels of an image.
+    private func luminanceStatistics(of image: UIImage) throws -> (mean: CGFloat, maximum: CGFloat) {
+        let cgImage = try XCTUnwrap(image.cgImage)
+        let width = cgImage.width
+        let height = cgImage.height
+        var data = [UInt8](repeating: 0, count: width * height * 4)
+        let context = try XCTUnwrap(CGContext(
+            data: &data,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        var total: CGFloat = 0
+        var count: CGFloat = 0
+        var maximum: CGFloat = 0
+        for index in stride(from: 0, to: data.count, by: 4) where data[index + 3] > 200 {
+            let alpha = CGFloat(data[index + 3])
+            let value = (0.2126 * CGFloat(data[index]) + 0.7152 * CGFloat(data[index + 1]) + 0.0722 * CGFloat(data[index + 2])) / alpha
+            total += value
+            count += 1
+            maximum = max(maximum, value)
+        }
+        return (count > 0 ? total / count : 0, maximum)
     }
 
     // MARK: Pixel helpers

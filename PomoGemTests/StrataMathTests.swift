@@ -2270,11 +2270,14 @@ final class StrataMathTests: XCTestCase {
                 ) as? PebbleNode)
                 let body = try XCTUnwrap(pebble.physicsBody)
                 XCTAssertFalse(pebble.hasLanded)
+                // Just under the mouth at the size it is shown (the jar-wide
+                // scale of D4 enlarges a gem in an empty jar).
                 XCTAssertEqual(
                     pebble.position.y,
-                    Constants.Jar.height - Constants.Jar.wallInset - descriptor.radius,
+                    Constants.Jar.height - Constants.Jar.wallInset - pebble.radius,
                     accuracy: 0.001
                 )
+                XCTAssertEqual(pebble.radius, descriptor.radius * pebble.jarScale, accuracy: 0.001)
                 XCTAssertEqual(
                     body.velocity.dy,
                     Constants.Jar.dropVerticalSpeed,

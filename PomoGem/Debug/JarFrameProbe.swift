@@ -17,6 +17,14 @@ import SpriteKit
 /// physics + render submission), then the gem atlas: generation, packed
 /// names, kept image MB, page pixels and stand-alone textures.
 ///
+/// `POMOGEM_UI_TEST_SETTLE_PROBE=<n>` (also enough on its own to start the
+/// probe) reviews the headroom under the mouth (D4, Docs/GemExperienceDesign.md
+/// §7.5): each time the jar idles it appends `settle i=… headroom=…
+/// scale=… bodies=… interior=…`, then shakes it (full strength,
+/// alternating sides) and waits for the next settle, `n` times after the
+/// first; the last line is `settle-min headroom=…`. A settle that takes
+/// longer than 20 s is logged as `timeout` and counted as is.
+///
 /// `POMOGEM_UI_TEST_TILT_SWEEP=<start>-<end>[:<amplitude>]` (seconds after
 /// the jar appears) feeds a Core Motion-like tilt at 30 Hz through the
 /// scene's normal gravity input, so idle tilt rendering can be observed
@@ -28,9 +36,17 @@ final class JarFrameProbe {
     static let shared: JarFrameProbe? = {
         let environment = ProcessInfo.processInfo.environment
         guard LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess,
-              environment["POMOGEM_UI_TEST_SPRITE_STATS"] == "1"
+              environment["POMOGEM_UI_TEST_SPRITE_STATS"] == "1" || settleProbeCount != nil
         else { return nil }
         return JarFrameProbe()
+    }()
+
+    /// `POMOGEM_UI_TEST_SETTLE_PROBE=<n>`: shaken settles after the first.
+    static let settleProbeCount: Int? = {
+        guard let value = ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_SETTLE_PROBE"],
+              let count = Int(value), count >= 0
+        else { return nil }
+        return count
     }()
 
     /// `POMOGEM_UI_TEST_IDLE_TILT_GATE=0`: an idle jar follows every tilt
@@ -53,6 +69,10 @@ final class JarFrameProbe {
     private var timer: Timer?
     private let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("jar-frames.log")
+    private var settleIndex = 0
+    private var settleMinimum = CGFloat.greatestFiniteMagnitude
+    private var settleWaitStarted: CFTimeInterval?
+    private var settleFinished = false
 
     private init() {
         try? FileManager.default.removeItem(at: url)
@@ -104,8 +124,39 @@ final class JarFrameProbe {
         }
     }
 
+    /// One step of the settle probe (called once a second).
+    private func advanceSettleProbe(now: CFTimeInterval) {
+        guard let total = Self.settleProbeCount, !settleFinished, let scene else { return }
+        let started = settleWaitStarted ?? now
+        if settleWaitStarted == nil { settleWaitStarted = now }
+        let timedOut = now - started > 20
+        guard scene.isIdlePaused || timedOut else { return }
+        let headroom = scene.pileHeadroomFraction
+        settleMinimum = min(settleMinimum, headroom)
+        let interior = JarScene.interiorRect(sceneSize: scene.size)
+        append(String(
+            format: "settle i=%d headroom=%.3f scale=%.3f bodies=%d interior=%.0fx%.0f%@\n",
+            settleIndex,
+            headroom,
+            scene.jarScale,
+            scene.physicalPebbleCount,
+            interior.width,
+            interior.height,
+            timedOut ? " timeout" : ""
+        ))
+        guard settleIndex < total else {
+            settleFinished = true
+            append(String(format: "settle-min headroom=%.3f settles=%d\n", settleMinimum, settleIndex + 1))
+            return
+        }
+        settleIndex += 1
+        settleWaitStarted = now + 1
+        _ = scene.shakePebbles(strength: 1, horizontal: settleIndex.isMultiple(of: 2) ? 1 : -1)
+    }
+
     private func flush() {
         let now = CACurrentMediaTime()
+        advanceSettleProbe(now: now)
         let atlas = GemTextureAtlas.shared.statistics
         let sorted = workMilliseconds.sorted()
         func percentile(_ fraction: Double) -> Double {

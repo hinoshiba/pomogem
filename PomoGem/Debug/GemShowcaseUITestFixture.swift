@@ -33,11 +33,14 @@ enum GemShowcaseUITestFixture {
         /// loose gems (long ones included), 18 roots, 12 achievement stones
         /// and 36 obstacles in the lowest (320 pt) jar.
         case worstcase
-        /// Reward-moment review: nine resting 25-minute gems, then a tenth
-        /// completion drops, lands and fuses into ×10 (A1). Frames of the
+        /// Reward-moment review: nine resting 25-minute gems beside six ×100
+        /// and five ×10 roots (a jar whose scale is set by its area budget,
+        /// D4), then a tenth completion drops, lands and fuses into ×10
+        /// (A1); the pile grows back when the ten become one. Frames of the
         /// landing and the fusion finale are written to the app's tmp
-        /// directory (`fx-landing-*.png`, `fx-fusion-*.png`) unless
-        /// `POMOGEM_UI_TEST_FX_FRAMES=0` asks for an unstalled recording.
+        /// directory (`fx-before-*.png`, `fx-landing-*.png`,
+        /// `fx-fusion-*.png`) unless `POMOGEM_UI_TEST_FX_FRAMES=0` asks for
+        /// an unstalled recording.
         case fusionfx
         /// Heavy users for the gem bed: 1,004 completions (about 251 kg:
         /// one ×1000 root and four loose gems) and 10,006 completions
@@ -256,10 +259,19 @@ enum GemShowcaseUITestFixture {
         return descriptors
     }
 
-    /// Nine resting 25-minute gems for the reward-moment review.
+    /// Nine resting 25-minute gems, six ×100 and five ×10 roots for the
+    /// reward-moment review.
     static func fusionEffectDescriptors() -> [PebbleDescriptor] {
         let base = Date(timeIntervalSince1970: 1_790_000_000)
-        return (0 ..< 9).map { index in
+        let roots = [2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1].enumerated().map { index, level in
+            rootDescriptor(
+                id: UUID(uuidString: String(format: "6E4D5348-4658-5254-%04X-%012X", level, index))!,
+                level: level,
+                paletteIndex: index,
+                createdAt: base.addingTimeInterval(Double(index) - 100)
+            )
+        }
+        return roots + (0 ..< 9).map { index in
             let item = palette[subjectCycle[index] % palette.count]
             return PebbleDescriptor(
                 id: UUID(uuidString: String(format: "6E4D5348-4658-4658-4658-%012X", index))!,
@@ -282,6 +294,39 @@ enum GemShowcaseUITestFixture {
         grams: Constants.Mass.measuredPebbleGrams,
         createdAt: Date(timeIntervalSince1970: 1_790_000_100)
     )
+
+    /// A root crystal of `level` (×10, ×100, …) in two palette colours.
+    private static func rootDescriptor(id: UUID, level: Int, paletteIndex index: Int, createdAt: Date) -> PebbleDescriptor {
+        let pebbleCount = Int(pow(10, Double(level)))
+        let item = palette[index % palette.count]
+        let mix = [
+            StratumColorFraction(hex: item.hex, fraction: 0.6),
+            StratumColorFraction(hex: palette[(index + 1) % palette.count].hex, fraction: 0.4)
+        ]
+        return PebbleDescriptor(
+            id: id,
+            subjectName: item.name,
+            colorHex: item.hex,
+            source: .timer,
+            kind: .normal,
+            aggregate: AggregateMetadata(
+                level: level,
+                pebbleCount: pebbleCount,
+                childAggregateCount: level == 1 ? 0 : 10,
+                colorMix: mix,
+                subjectMix: [AggregateSubjectFraction(name: item.name, colorHex: item.hex, pebbleCount: pebbleCount)],
+                periodStart: createdAt.addingTimeInterval(-Double(pebbleCount) * 1_500),
+                periodEnd: createdAt,
+                sessionIDs: [],
+                measuredPebbleCount: pebbleCount,
+                manualPebbleCount: 0,
+                goldPebbleCount: 0,
+                prismPebbleCount: 0
+            ),
+            grams: pebbleCount * Constants.Mass.measuredPebbleGrams,
+            createdAt: createdAt
+        )
+    }
 
     /// 9 loose (25–120 min), 18 roots from ×10 to ×1万, 12 achievements.
     static func worstCaseDescriptors() -> [PebbleDescriptor] {
@@ -565,6 +610,7 @@ struct GemShowcaseFixtureLaunchView: View {
                 Self.captureSequence(of: scene, prefix: "fusion", offsets: [0, 80, 160, 320, 560, 1100])
             }
             try? await Task.sleep(for: .seconds(4))
+            Self.captureSequence(of: scene, prefix: "before", offsets: [0])
             scene.performCompletionDrop(GemShowcaseUITestFixture.fusionEffectDrop)
         }
         .task {
