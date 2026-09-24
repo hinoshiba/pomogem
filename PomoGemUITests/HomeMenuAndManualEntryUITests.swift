@@ -65,6 +65,40 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         saveScreenshot("menu-ax5")
     }
 
+    /// Once the jar held a gem, its shake capture used to hold first
+    /// responder, and opening either picker menu slid a software keyboard
+    /// over the menu's lower rows on the simulator (12秒、DEMO among them).
+    func testPickerMenusKeepTheKeyboardDownOnceTheJarHasAGem() {
+        launch()
+        addThirtyMinutesManually()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
+        pause(3.5) // let the three-second drop toast go
+
+        app.buttons["home.duration-picker"].tap()
+        let demo = app.buttons["12秒、DEMO"]
+        XCTAssertTrue(demo.waitForExistence(timeout: 4))
+        // The keyboard used to be up within half a second of the menu.
+        pause(1)
+        XCTAssertEqual(app.keyboards.count, 0, "Opening the duration menu must not bring up a keyboard")
+        XCTAssertTrue(demo.isHittable, "The duration menu's last row must not be covered")
+        saveScreenshot("duration-menu-with-gem")
+        demo.tap()
+        XCTAssertTrue(app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "12秒集中する")
+        ).firstMatch.waitForExistence(timeout: 4))
+
+        app.buttons["home.subject-picker"].tap()
+        let manageThemes = app.buttons["テーマを管理"]
+        XCTAssertTrue(manageThemes.waitForExistence(timeout: 4))
+        pause(1)
+        XCTAssertEqual(app.keyboards.count, 0, "Opening the theme menu must not bring up a keyboard")
+        XCTAssertTrue(manageThemes.isHittable)
+        saveScreenshot("theme-menu-with-gem")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
+        XCTAssertTrue(waitUntil(timeout: 4) { !manageThemes.exists })
+        XCTAssertEqual(app.keyboards.count, 0)
+    }
+
     // MARK: - Manual entry
 
     func testManualEntryConfirmIsReachableAndThemeIsChosenInTheSheet() {
