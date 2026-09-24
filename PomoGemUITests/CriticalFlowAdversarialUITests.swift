@@ -312,8 +312,19 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         let action = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", title)
         ).firstMatch
-        XCTAssertTrue(scrollUntilHittable(action, swiping: .up), "Missing menu action: \(title)")
+        // A row cut by the half-height sheet's bottom edge reports hittable,
+        // but its visible sliver sits in the home-indicator area. Scroll
+        // until the whole row is on screen.
+        for _ in 0..<8 where !isFullyVisible(action) {
+            app.swipeUp()
+        }
+        XCTAssertTrue(isFullyVisible(action), "Missing menu action: \(title)")
         action.tap()
+    }
+
+    private func isFullyVisible(_ element: XCUIElement) -> Bool {
+        element.exists && element.isHittable
+            && element.frame.maxY <= app.windows.firstMatch.frame.maxY
     }
 
     private func alertDiagnostic() -> String {

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftData
 import UserNotifications
 
 /// Releases a cancelled view's waiter while the manager keeps ownership of an
@@ -84,6 +85,25 @@ enum FocusReturnReminderPolicy {
     static let enabledDefaultsKey = "notifications.focus-return-reminder.enabled"
     static let delay: TimeInterval = 30
     static let completionQuietWindow: TimeInterval = 60
+    /// How long the app keeps running after an accepted reminder to learn
+    /// whether the person only locked the phone. With a passcode, iOS posts
+    /// `protectedDataWillBecomeUnavailable` about 10 seconds after locking.
+    /// The window ends well before the 30-second trigger and inside the short
+    /// background-task budget; at its end the reminder simply stays booked.
+    static let lockDetectionWindow: TimeInterval = 20
+
+    /// Background time running out says nothing about a lock. Only an add
+    /// that never finished is withdrawn; an accepted reminder must still reach
+    /// the person who switched apps.
+    static func shouldWithdrawOnBackgroundExpiry(addWasAccepted: Bool) -> Bool {
+        !addWasAccepted
+    }
+
+    /// A missed notification (for example, the lock happened while the add was
+    /// still in flight) is caught by reading the protected-data state at the end.
+    static func shouldWithdrawAtLockWindowEnd(protectedDataIsAvailable: Bool) -> Bool {
+        !protectedDataIsAvailable
+    }
 
     static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
         defaults.bool(forKey: enabledDefaultsKey)
@@ -122,6 +142,262 @@ struct FocusReturnReminderNotificationClient {
     }
 }
 
+/// What the person has already done, as far as the passive reminders care.
+/// It is read on this device right before each schedule and never leaves
+/// it: nothing here is synced, and only the booked requests reflect it.
+struct PassiveReminderActivity: Equatable, Sendable {
+    /// 04:00-boundary study days (`FairnessPolicy.deviceDayKey`) on which a
+    /// focus was started or ran, or time was added by hand. Screen Time gems
+    /// arrive by themselves and do not count. The daily reminder asks
+    /// 「今日のひと粒、積んでいく？」, so it stays quiet on those days.
+    var answeredStudyDayKeys: Set<String> = []
+    /// Months holding at least one record (`monthKey`), or nil when records
+    /// could not be read. Wrapped says 「先月の瓶ができた」, so the 1st of a
+    /// month carries it only when the month before has a jar to look at.
+    var monthsWithRecords: Set<String>?
+
+    /// Nothing is known: the daily reminder and Wrapped keep their slots.
+    static let unknown = PassiveReminderActivity()
+
+    static func monthKey(for date: Date, calendar: Calendar) -> String {
+        let components = calendar.dateComponents([.era, .year, .month], from: date)
+        return "\(components.era ?? 0)-\(components.year ?? 0)-\(components.month ?? 0)"
+    }
+
+    func answersDailyReminder(at slot: Date, calendar: Calendar) -> Bool {
+        answeredStudyDayKeys.contains(
+            FairnessPolicy.deviceDayKey(for: slot, timeZone: calendar.timeZone)
+        )
+    }
+
+    /// The Wrapped slot on the 1st looks back at the month that just ended.
+    func hasRecordsInMonthEnding(before slot: Date, calendar: Calendar) -> Bool {
+        guard let monthsWithRecords else { return true }
+        guard let lastDay = calendar.date(byAdding: .day, value: -1, to: slot) else {
+            return true
+        }
+        return monthsWithRecords.contains(Self.monthKey(for: lastDay, calendar: calendar))
+    }
+}
+
+/// Decides what, if anything, one passive slot carries. Pure so the rules
+/// can be pinned without Notification Center.
+enum PassiveReminderSchedulePolicy {
+    enum Kind: Equatable {
+        case dailyReminder
+        case wrapped
+    }
+
+    static func kind(
+        for slot: Date,
+        now: Date,
+        dailyReminderEnabled: Bool,
+        wrappedEnabled: Bool,
+        activity: PassiveReminderActivity,
+        calendar: Calendar
+    ) -> Kind? {
+        // Wrapped keeps its monthly slot even on a day already focused and
+        // beyond the daily back-off: it is a once-a-month look back, not a nudge.
+        if wrappedEnabled,
+           calendar.component(.day, from: slot) == 1,
+           activity.hasRecordsInMonthEnding(before: slot, calendar: calendar) {
+            return .wrapped
+        }
+        guard dailyReminderEnabled,
+              let dailyDeadline = calendar.date(
+                  byAdding: .day,
+                  value: IntegrationConstants.passiveDailyReminderHorizonDays,
+                  to: now
+              ),
+              slot < dailyDeadline,
+              !activity.answersDailyReminder(at: slot, calendar: calendar)
+        else { return nil }
+        return .dailyReminder
+    }
+}
+
+/// Reads `PassiveReminderActivity` from this device's store and local state.
+/// Every failure falls back to "unknown", which books what 1.0.2 booked: a
+/// redundant reminder is better than a silently missing one.
+@MainActor
+enum PassiveReminderActivityReader {
+    /// The study day on which this device last opened a focus. Device-local
+    /// and account-scoped: a date key only, never synced or exported.
+    static var focusStartedStudyDayDefaultsKey: String {
+        AccountScopedLocalState.defaultsKey(base: "notifications.passive.focus-started-study-day")
+    }
+
+    /// Home calls this when the person starts a new focus. Opening one
+    /// answers today's reminder even when it is stopped with 「今日はここまで」:
+    /// asking again an hour later would be a nag.
+    static func recordFocusStarted(
+        at now: Date = .now,
+        timeZone: TimeZone = .current,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(
+            FairnessPolicy.deviceDayKey(for: now, timeZone: timeZone),
+            forKey: focusStartedStudyDayDefaultsKey
+        )
+    }
+
+    /// Reopening a focus is not starting one. A recovered focus answers today
+    /// only when it began today: one that ran late last night and is only
+    /// committed this morning belongs to last night, and a focus paused days
+    /// ago answers nothing new each time it is shown again.
+    static func recordRecoveredFocus(
+        engine: PomodoroEngine,
+        pendingCompletion: PomodoroCompletion?,
+        at now: Date = .now,
+        timeZone: TimeZone = .current,
+        defaults: UserDefaults = .standard
+    ) {
+        let todayKey = FairnessPolicy.deviceDayKey(for: now, timeZone: timeZone)
+        guard let startedAt = focusStartDate(engine: engine, pendingCompletion: pendingCompletion),
+              FairnessPolicy.deviceDayKey(for: startedAt, timeZone: timeZone) == todayKey
+        else { return }
+        defaults.set(todayKey, forKey: focusStartedStudyDayDefaultsKey)
+    }
+
+    static func read(
+        context: ModelContext,
+        markers: [ActivityResetSnapshot],
+        now: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent,
+        defaults: UserDefaults = .standard
+    ) -> PassiveReminderActivity {
+        let todayKey = FairnessPolicy.deviceDayKey(for: now, timeZone: calendar.timeZone)
+        let epochID = ActivityResetPolicy.currentEpochID(from: markers, now: now)
+        var activity = PassiveReminderActivity()
+
+        // A focus still in this device's recovery data (running, paused or
+        // awaiting its save) answers the days it belongs to, never simply
+        // today: a paused focus can linger for days.
+        activity.answeredStudyDayKeys = studyDayKeys(
+            ofPersistedFocus: defaults.data(forKey: FocusPersistence.key),
+            timeZone: calendar.timeZone
+        )
+        if defaults.string(forKey: focusStartedStudyDayDefaultsKey) == todayKey
+            || hasFocusRecord(
+                studyDayKey: todayKey,
+                context: context,
+                epochID: epochID,
+                now: now
+            ) {
+            activity.answeredStudyDayKeys.insert(todayKey)
+        }
+        activity.monthsWithRecords = monthsWithRecords(
+            context: context,
+            epochID: epochID,
+            now: now,
+            calendar: calendar
+        )
+        return activity
+    }
+
+    /// A timer or hand-added record already answers 「今日のひと粒」. Screen
+    /// Time chunks do not: they arrive by themselves and include black gems.
+    private static func hasFocusRecord(
+        studyDayKey: String,
+        context: ModelContext,
+        epochID: UUID?,
+        now: Date
+    ) -> Bool {
+        // A study day is at most 25 hours long, so its records ended within
+        // this window. The page is bounded; a miss only books a reminder.
+        let descriptor = BoundedHistoryPolicy.sessionDescriptor(
+            epochID: epochID,
+            start: now.addingTimeInterval(-26 * 60 * 60),
+            limit: 256
+        )
+        guard let rows = try? context.fetch(descriptor) else { return false }
+        return rows.contains { row in
+            row.deviceDayKey == studyDayKey
+                && row.effectiveSource != .screenTime
+                && StudySessionIntegrityPolicy.isSupported(row, relativeTo: now)
+        }
+    }
+
+    /// The study days a focus in this device's recovery data belongs to: the
+    /// day it began and the day its record will carry (records are keyed by
+    /// their end). A break, or bytes that cannot be read, answer nothing.
+    /// Decoding here has no side effects; restoring owns clearing bad bytes.
+    static func studyDayKeys(ofPersistedFocus data: Data?, timeZone: TimeZone) -> Set<String> {
+        guard let data else { return [] }
+        let decoder = JSONDecoder()
+        let engine: PomodoroEngine
+        let pendingCompletion: PomodoroCompletion?
+        if let envelope = try? decoder.decode(FocusRecoveryEnvelope.self, from: data) {
+            engine = envelope.engine
+            pendingCompletion = envelope.pendingCompletion
+        } else if let legacyEngine = try? decoder.decode(PomodoroEngine.self, from: data) {
+            engine = legacyEngine
+            pendingCompletion = nil
+        } else {
+            return []
+        }
+
+        let dates: [Date]
+        if let pendingCompletion {
+            dates = [pendingCompletion.startedAt, pendingCompletion.endedAt]
+        } else if engine.containsRecoverableFocus, let startedAt = engine.phaseStartedAt {
+            // A paused focus has no end yet; a running one ends at `endDate`.
+            dates = [startedAt] + (engine.endDate.map { [$0] } ?? [])
+        } else {
+            return []
+        }
+        return Set(dates.filter(PomodoroEngine.isSafePersistedDate).map {
+            FairnessPolicy.deviceDayKey(for: $0, timeZone: timeZone)
+        })
+    }
+
+    /// Pause and resume keep `phaseStartedAt` (it moves only when the clock
+    /// ran backwards while paused), so it is the focus's start.
+    private static func focusStartDate(
+        engine: PomodoroEngine,
+        pendingCompletion: PomodoroCompletion?
+    ) -> Date? {
+        let startedAt = pendingCompletion?.startedAt
+            ?? (engine.containsRecoverableFocus ? engine.phaseStartedAt : nil)
+        guard let startedAt, PomodoroEngine.isSafePersistedDate(startedAt) else { return nil }
+        return startedAt
+    }
+
+    /// Only this month and the previous one can end before a Wrapped slot in
+    /// the 35-day window while already holding records.
+    private static func monthsWithRecords(
+        context: ModelContext,
+        epochID: UUID?,
+        now: Date,
+        calendar: Calendar
+    ) -> Set<String>? {
+        guard let currentStart = calendar.dateInterval(of: .month, for: now)?.start else {
+            return nil
+        }
+        var months = Set<String>()
+        for offset in [-1, 0] {
+            guard let start = calendar.date(byAdding: .month, value: offset, to: currentStart),
+                  let end = calendar.date(byAdding: .month, value: 1, to: start)
+            else { return nil }
+            // The Log lists a month's jar when it holds any supported record.
+            // Existence needs no replica resolution; a small page is enough,
+            // and a page of only unreadable rows keeps Wrapped as before.
+            let limit = 16
+            guard let rows = try? context.fetch(BoundedHistoryPolicy.sessionDescriptor(
+                epochID: epochID,
+                start: start,
+                end: end,
+                limit: limit
+            )) else { return nil }
+            if rows.contains(where: { StudySessionIntegrityPolicy.isSupported($0, relativeTo: now) })
+                || rows.count == limit {
+                months.insert(PassiveReminderActivity.monthKey(for: start, calendar: calendar))
+            }
+        }
+        return months
+    }
+}
+
 /// Injectable boundary for pending requests shared by timer and passive
 /// scheduling. Tests can delay system callbacks without touching device state.
 @MainActor
@@ -142,15 +418,20 @@ struct NotificationRequestClient {
 /// Owns every local notification emitted by the app.
 ///
 /// Passive reminders are materialized as one-shot requests so the monthly
-/// Wrapped message can replace (rather than duplicate) that day's reminder.
-/// Calling `synchronizePassiveNotifications` on launch keeps the rolling
-/// schedule full without ever creating two passive notifications on one day.
+/// Wrapped message can replace (rather than duplicate) that day's reminder,
+/// and so a day the person already focused can simply have no request.
+/// Calling `synchronizePassiveNotifications` on launch and foreground keeps
+/// the rolling schedule current without ever creating two passive
+/// notifications on one day.
 @MainActor
 @Observable
 final class NotificationManager {
-    static let shared = NotificationManager()
+    static let shared = makeShared()
 
     private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
+    /// False until iOS has answered once in this process. `.notDetermined`
+    /// before that is only the initial value, not a fact about this device.
+    private(set) var hasLoadedAuthorizationStatus = false
     private(set) var lastErrorDescription: String?
 
     private let center: UNUserNotificationCenter
@@ -232,6 +513,43 @@ final class NotificationManager {
         }
     }
 
+    private static func makeShared() -> NotificationManager {
+#if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        if LocalPreviewLaunchPolicy.isUITestMode(environment: environment, isDebugBuild: true),
+           environment[LocalPreviewLaunchPolicy.unaskedNotificationPermissionUITestEnvironmentKey] == "1" {
+            return uiTestManagerWithUnaskedPermission()
+        }
+#endif
+        return NotificationManager()
+    }
+
+#if DEBUG
+    private final class UITestPermissionPrompt {
+        var hasAsked = false
+    }
+
+    /// Reports "not asked" until this process asks, then iOS's real answer,
+    /// so Settings shows what a new or reinstalled iPhone shows.
+    private static func uiTestManagerWithUnaskedPermission() -> NotificationManager {
+        let center = UNUserNotificationCenter.current()
+        let system = FocusReturnReminderNotificationClient.system(center: center)
+        let prompt = UITestPermissionPrompt()
+        var client = system
+        client.authorizationStatus = {
+            prompt.hasAsked ? await system.authorizationStatus() : .notDetermined
+        }
+        return NotificationManager(
+            center: center,
+            focusReturnReminderClient: client,
+            authorizationRequest: {
+                prompt.hasAsked = true
+                return try await center.requestAuthorization(options: [.alert, .sound])
+            }
+        )
+    }
+#endif
+
     var isAuthorized: Bool {
         switch authorizationStatus {
         case .authorized, .provisional, .ephemeral:
@@ -291,6 +609,7 @@ final class NotificationManager {
             guard !Task.isCancelled else { return authorizationStatus }
             guard let latestAuthorizationRefresh else {
                 authorizationStatus = status
+                hasLoadedAuthorizationStatus = true
                 return status
             }
             guard latestAuthorizationRefresh.generation
@@ -299,6 +618,7 @@ final class NotificationManager {
                 continue
             }
             authorizationStatus = status
+            hasLoadedAuthorizationStatus = true
             return status
         }
     }
@@ -638,16 +958,20 @@ final class NotificationManager {
         }
     }
 
-    /// Refreshes the next 35 days of engagement notifications.
+    /// Refreshes the engagement notifications: the daily reminder for the
+    /// next 7 days and Wrapped for the next 35.
     ///
     /// On the first of a month, Wrapped takes the daily reminder's slot. Both
     /// notification types remain opt-in and no request ever carries a badge.
+    /// `dailyReminderEnabled` and `wrappedEnabled` are the person's intent;
+    /// this device books requests only while iOS allows it to deliver them.
     func synchronizePassiveNotifications(
         dailyReminderEnabled: Bool,
         wrappedEnabled: Bool,
         hour: Int,
         minute: Int,
         playsSound: Bool = true,
+        activity: PassiveReminderActivity = .unknown,
         now: Date = .now,
         calendar: Calendar = .autoupdatingCurrent
     ) async throws {
@@ -669,6 +993,7 @@ final class NotificationManager {
                 dailyReminderEnabled: dailyReminderEnabled,
                 wrappedEnabled: wrappedEnabled,
                 hour: hour, minute: minute, playsSound: playsSound,
+                activity: activity,
                 now: now, calendar: calendar, generation: generation
             )
         }
@@ -698,6 +1023,7 @@ final class NotificationManager {
         hour: Int,
         minute: Int,
         playsSound: Bool,
+        activity: PassiveReminderActivity,
         now: Date,
         calendar: Calendar,
         generation: UInt64
@@ -708,6 +1034,17 @@ final class NotificationManager {
         guard passiveNotificationIntentIsCurrent(generation) else { return }
 
         guard dailyReminderEnabled || wrappedEnabled else {
+            lastErrorDescription = nil
+            return
+        }
+
+        // The reminder switch is synced, so on a new or reinstalled iPhone it
+        // can be on before this device was ever asked. iOS silently drops
+        // requests it may not deliver; book nothing, and leave the intent
+        // untouched so Settings can offer to allow it here.
+        await refreshAuthorizationStatus()
+        guard passiveNotificationIntentIsCurrent(generation) else { return }
+        guard isAuthorized else {
             lastErrorDescription = nil
             return
         }
@@ -741,13 +1078,20 @@ final class NotificationManager {
                     to: firstDate
                 ) else { continue }
 
-                let isFirstOfMonth = calendar.component(.day, from: date) == 1
                 let body: String
-                if isFirstOfMonth && wrappedEnabled {
+                switch PassiveReminderSchedulePolicy.kind(
+                    for: date,
+                    now: now,
+                    dailyReminderEnabled: dailyReminderEnabled,
+                    wrappedEnabled: wrappedEnabled,
+                    activity: activity,
+                    calendar: calendar
+                ) {
+                case .wrapped:
                     body = "先月の瓶ができた。積み上がりを眺めよう。"
-                } else if dailyReminderEnabled {
+                case .dailyReminder:
                     body = "瓶が待ってる。今日のひと粒、積んでいく？"
-                } else {
+                case nil:
                     continue
                 }
 
@@ -755,8 +1099,12 @@ final class NotificationManager {
                     body: body,
                     playsSound: playsSound
                 )
+                // Floating wall-clock components: no calendar and no time
+                // zone. A zone copied in here would travel with the archived
+                // trigger, so a 20:00 reminder booked in Tokyo would ring at
+                // 01:00 in Honolulu until the app is opened again.
                 var triggerComponents = calendar.dateComponents(
-                    [.calendar, .timeZone, .year, .month, .day, .hour, .minute],
+                    [.year, .month, .day, .hour, .minute],
                     from: date
                 )
                 triggerComponents.second = 0
