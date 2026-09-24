@@ -470,7 +470,13 @@ struct SettingsView: View {
             Toggle(isOn: $liveActivityEnabled) {
                 SettingLabel(
                     title: "画面を閉じてもタイマーを表示",
-                    subtitle: "ロック画面とDynamic Islandに残り時間・進捗を表示",
+                    // Neutral on purpose: most supported iPhones have no Dynamic
+                    // Island, and the Live Activity appears there too when one exists.
+                    subtitle: String(
+                        localized: "ロック画面などに残り時間・進捗を表示",
+                        table: "Settings",
+                        comment: "Settings row subtitle: where the Live Activity timer appears"
+                    ),
                     symbol: "lock.display"
                 )
             }
