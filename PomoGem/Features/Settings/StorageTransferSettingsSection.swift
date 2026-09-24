@@ -121,13 +121,24 @@ struct StorageTransferSettingsSection: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showsChoices = false
 
+    /// The iCloud-mode entry, named after the sheet it opens. Other screens
+    /// that send the user here quote this constant.
+    static let cloudEntryTitle = "iCloudと保存先の変更"
+
     var body: some View {
         if persistenceMode == .cloudKit || persistenceMode == .localOnly {
             Section {
                 LabeledContent("現在の保存先", value: persistenceMode == .cloudKit ? "iCloud" : "このiPhoneのみ")
-                Button(persistenceMode == .cloudKit ? "iCloudを解除する" : "iCloudを有効にする") {
+                // transfer-08. In iCloud mode the sheet this opens is no longer
+                // only 「解除」: it also holds 「iCloudから再取得」. The entry is
+                // named after the sheet, so nobody has to guess that re-fetching
+                // lives behind a button that says it unlinks iCloud.
+                Button(persistenceMode == .cloudKit ? Self.cloudEntryTitle : "iCloudを有効にする") {
                     showsChoices = true
                 }
+                .accessibilityHint(persistenceMode == .cloudKit
+                    ? "このiPhoneへの引き継ぎや、iCloudからの再取得を選べます"
+                    : "iCloudのデータをこのiPhoneで使う方法を選べます")
                 .disabled(!controller.isAvailable || otherWorkIsActive)
                 .accessibilityIdentifier("settings.storage-switch")
                 // List flattens Section into rows. Attach presentation to the
@@ -233,7 +244,8 @@ private struct StorageTransferChoiceView: View {
             }
             // The cloud-mode screen no longer only unlinks iCloud: it also
             // offers the generation-fenced device -> iCloud replacement.
-            .navigationTitle(persistenceMode == .cloudKit ? "iCloudと保存先の変更" : "iCloudを有効にする")
+            .navigationTitle(persistenceMode == .cloudKit
+                ? StorageTransferSettingsSection.cloudEntryTitle : "iCloudを有効にする")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { dismiss() } } }
             .sheet(item: $choice) { selected in
@@ -252,16 +264,47 @@ private struct StorageTransferChoiceView: View {
         }
     }
 
-    /// PLAN Steps 11-12. The two directional dataset doors, in the order the
-    /// plan lists them. `storage-switch.replace-cloud` — the legacy
+    /// PLAN Steps 11-12. The two directional dataset doors, the one a
+    /// shipping build can open first. `storage-switch.replace-cloud` — the legacy
     /// `localOnly -> cloud` replacement — is untouched and still keyed off its
     /// own, separate bit in the enable branch below.
     @ViewBuilder
     private var datasetDoors: some View {
         if offersDatasetDoors {
+            // transfer-08. The door this build can actually open comes first.
+            // Direction (B) carries NO release bit (PLAN Step 12). It deletes
+            // nothing on the server and is the same operation the recovery
+            // screen runs unconditionally; gating it on the opposite,
+            // destructive direction's bit would ship the one thing a user with
+            // a diverged device always needs as a permanently greyed-out row.
+            Section(StorageTransferRefreshCopy.settingsTitle) {
+                Text(StorageTransferRefreshCopy.dataLossWarning)
+                if isReading(.refreshFromCloud) {
+                    ProgressView(StorageTransferOverwriteCopy.comparisonReading)
+                        .accessibilityIdentifier("storage-switch.refresh-from-cloud-reading")
+                }
+                if let error = previewError(for: .refreshFromCloud) {
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .accessibilityIdentifier("storage-switch.refresh-from-cloud-preview-error")
+                }
+                Button(StorageTransferRefreshCopy.confirmTitle, role: .destructive) {
+                    // review-1-2 / review-2-4. The same read-only enumeration
+                    // direction (A) already performs. This direction deletes
+                    // the device side and stages no recovery copy anywhere, so
+                    // the user may not be asked to authorize it without being
+                    // shown what is on each side.
+                    loadPreviewThenConfirm(.refreshFromCloud)
+                }
+                .disabled(isReadingDatasetPreview)
+                .accessibilityIdentifier("storage-switch.refresh-from-cloud")
+            }
             Section("このiPhoneのデータでiCloudを置き換える") {
-                Text(StorageTransferOverwriteCopy.dataLossWarning)
-                if !releasePolicy.allowsDatasetOverwriteFromDevice {
+                // transfer-08. The long irreversible-deletion warning belongs to
+                // a door that can open. A closed door states only its reason.
+                if releasePolicy.allowsDatasetOverwriteFromDevice {
+                    Text(StorageTransferOverwriteCopy.dataLossWarning)
+                } else {
                     Text(StorageTransferOverwriteCopy.doorUnavailable)
                         .accessibilityIdentifier("storage-switch.overwrite-cloud-unavailable")
                 }
@@ -284,33 +327,6 @@ private struct StorageTransferChoiceView: View {
                 }
                 .disabled(!releasePolicy.allowsDatasetOverwriteFromDevice || isReadingDatasetPreview)
                 .accessibilityIdentifier("storage-switch.overwrite-cloud")
-            }
-            // Direction (B) carries NO release bit (PLAN Step 12). It deletes
-            // nothing on the server and is the same operation the recovery
-            // screen runs unconditionally; gating it on the opposite,
-            // destructive direction's bit would ship the one thing a user with
-            // a diverged device always needs as a permanently greyed-out row.
-            Section(StorageTransferRefreshCopy.settingsTitle) {
-                Text(StorageTransferRefreshCopy.dataLossWarning)
-                if isReading(.refreshFromCloud) {
-                    ProgressView(StorageTransferOverwriteCopy.comparisonReading)
-                        .accessibilityIdentifier("storage-switch.refresh-from-cloud-reading")
-                }
-                if let error = previewError(for: .refreshFromCloud) {
-                    Text(error)
-                        .foregroundStyle(.red)
-                        .accessibilityIdentifier("storage-switch.refresh-from-cloud-preview-error")
-                }
-                Button(StorageTransferRefreshCopy.confirmTitle, role: .destructive) {
-                    // review-1-2 / review-2-4. The same read-only enumeration
-                    // direction (A) already performs. This direction deletes
-                    // the device side and stages no recovery copy anywhere, so
-                    // the user may not be asked to authorize it without being
-                    // shown what is on the side it re-fetches from.
-                    loadPreviewThenConfirm(.refreshFromCloud)
-                }
-                .disabled(isReadingDatasetPreview)
-                .accessibilityIdentifier("storage-switch.refresh-from-cloud")
             }
         }
     }

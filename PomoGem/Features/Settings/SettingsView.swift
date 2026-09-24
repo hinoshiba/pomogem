@@ -909,6 +909,20 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.activity-reset-unavailable")
             }
 
+            // settings-03 / transfer-09. The disabled reset used to be a dead
+            // end: its only next step hid in the footer. The routes that do
+            // work — switch this iPhone to local-only and reset, or delete the
+            // iCloud data in iOS Settings — get their own row.
+            if ActivityResetAdmissionPolicy.offersCloudDeletionGuidance(in: persistenceMode) {
+                NavigationLink {
+                    CloudDataDeletionGuidanceView(isExporting: isExportingData, export: startDataExport)
+                } label: {
+                    Text(CloudDataDeletionGuidanceCopy.rowTitle)
+                        .frame(minHeight: 44, alignment: .leading)
+                }
+                .accessibilityIdentifier("settings.activity-reset-alternatives")
+            }
+
             if CompleteDataDeletionReleasePolicy.isEnabled,
                persistenceMode != .localOnly {
                 Button(role: .destructive) {

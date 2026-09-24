@@ -34,6 +34,9 @@ enum StorageTransferSettingsUITestFixture {
         /// records. The empty-iCloud warning must fire, and this iPhone's
         /// counts must be on the screen that deletes them.
         case cloudRefreshBookkeepingOnly
+        /// settings-03. The page the disabled iCloud reset points to, behind the
+        /// same row Settings shows. Its export is a recorder here.
+        case cloudResetGuidance
         /// The launch-host screens a fenced device actually lands on. Each one
         /// renders the shipping `PersistenceLaunchStatusView` with a recorder in
         /// place of the runtime, so no journal, container or CloudKit call
@@ -141,6 +144,7 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
     @State private var recoveryReviewCalls = 0
     @State private var isCheckingOfflineConnection = false
     @State private var fixtureSessionID = UUID()
+    @State private var guidanceExportCalls = 0
 
     var body: some View {
         if let scenario = StorageTransferSettingsUITestFixture.scenario {
@@ -160,6 +164,30 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                 startsRecoveredBreak: scenario == .offlineBreakNavigation)
         } else if scenario == .cloudLaunchTimedOut {
             CloudLaunchTimeoutUITestFixtureView()
+        } else if scenario == .cloudResetGuidance {
+            NavigationStack {
+                List {
+                    Section {
+                        Text(verbatim: "calls=0;choice=none;starting=false")
+                            .accessibilityIdentifier("storage-switch.fixture-state")
+                        Text(verbatim: "guidanceExports=\(guidanceExportCalls)")
+                            .accessibilityIdentifier("settings.reset-guidance.fixture-state")
+                    }
+                    Section("データ") {
+                        Button("表示中の記録をリセット", role: .destructive) {}
+                            .disabled(true)
+                        Text(ActivityResetAdmissionPolicy.cloudResetUnavailableMessage)
+                            .font(.caption)
+                        NavigationLink {
+                            CloudDataDeletionGuidanceView(isExporting: false) { guidanceExportCalls += 1 }
+                        } label: {
+                            Text(CloudDataDeletionGuidanceCopy.rowTitle)
+                        }
+                        .accessibilityIdentifier("settings.activity-reset-alternatives")
+                    }
+                }
+                .navigationTitle("設定")
+            }
         } else if let overwrite = scenario.overwriteLaunch {
             StorageTransferOverwriteLaunchUITestFixtureView(scenario: overwrite)
         } else {

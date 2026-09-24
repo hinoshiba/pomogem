@@ -474,6 +474,33 @@ final class StorageTransferSettingsUITests: XCTestCase {
         assertNoOperation()
     }
 
+    /// settings-03 / transfer-09. The disabled iCloud reset leads somewhere:
+    /// a page naming the in-app route to start over and the iOS route to
+    /// delete iCloud data, with an export first. It starts nothing itself.
+    func testTheDisabledICloudResetPointsToTheRoutesThatWork() {
+        launch("cloudResetGuidance")
+        let row = app.buttons["settings.activity-reset-alternatives"]
+        XCTAssertTrue(reveal(row))
+        row.tap()
+        XCTAssertTrue(app.navigationBars["記録を消す・やり直す方法"].waitForExistence(timeout: 4))
+        let startOver = app.staticTexts["settings.reset-guidance.start-over"]
+        XCTAssertTrue(reveal(startOver))
+        XCTAssertTrue(startOver.label.contains("「iCloudと保存先の変更」"))
+        XCTAssertTrue(startOver.label.contains("「このiPhoneへ引き継ぐ」"))
+        let delete = app.staticTexts["settings.reset-guidance.delete"]
+        XCTAssertTrue(reveal(delete))
+        XCTAssertTrue(delete.label.contains("元に戻せません"))
+        attach("Settings — where the disabled iCloud reset points")
+        let export = app.buttons["settings.reset-guidance.export"]
+        XCTAssertTrue(reveal(export))
+        export.tap()
+        let state = app.staticTexts["settings.reset-guidance.fixture-state"]
+        app.navigationBars["記録を消す・やり直す方法"].buttons.firstMatch.tap()
+        XCTAssertTrue(reveal(state))
+        XCTAssertEqual(state.label, "guidanceExports=1")
+        assertNoOperation()
+    }
+
     func testBusyOrUnavailableEntryCannotOpenChoices() {
         // Active/export/delete are distinct callers of the production section's
         // external-work gate. The runtime separately enforces active timers.
@@ -982,7 +1009,7 @@ final class StorageTransferSettingsUITests: XCTestCase {
     private func assertOfflineStorageSwitchDisabled() {
         let entry = app.buttons["settings.storage-switch"]
         XCTAssertTrue(reveal(entry))
-        XCTAssertEqual(entry.label, "iCloudを解除する")
+        XCTAssertEqual(entry.label, "iCloudと保存先の変更")
         XCTAssertFalse(entry.isEnabled)
         entry.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertFalse(app.navigationBars["iCloudと保存先の変更"].exists)
