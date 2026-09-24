@@ -999,7 +999,7 @@ struct SettingsView: View {
         // new generation too (ScreenTimeController.bindContext).
         guard ScreenTimeController.shared.hasLocalSetup else { return message }
         let screenTime = String(
-            localized: "スクリーンタイムの黒い石と、まだ取り込んでいない勉強アプリの記録も0に戻ります。アプリの選択と自動記録の設定は残ります。",
+            localized: "スクリーンタイムの黒い石、まだ取り込んでいない勉強アプリの記録、10分に満たない途中の利用時間も消えます。アプリの選択と自動記録の設定は残ります。",
             table: "Settings",
             comment: "Reset confirmation: extra paragraph shown only when Screen Time is set up on this iPhone"
         )
