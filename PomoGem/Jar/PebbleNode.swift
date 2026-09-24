@@ -889,7 +889,7 @@ final class PebbleNode: SKShapeNode {
     /// Launch pre-bake (Docs/GemExperienceDesign.md §7.13): the loose gems
     /// most jars start with — the five starter themes at 25 and 50 timer
     /// minutes and a 30-minute self-report, in all four variants (60
-    /// bodies, about 1.5 MB at 3×). Everything else bakes on first use.
+    /// bodies, about 2 MB at 3×). Everything else bakes on first use.
     static func commonBakeRequests(scale rawScale: CGFloat) -> [GemTextureAtlas.BakeRequest] {
         let scale = GemArtwork.renderScale(rawScale)
         let samples: [(source: SessionSource, grams: Int)] = [
