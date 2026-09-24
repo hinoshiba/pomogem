@@ -36,7 +36,8 @@ enum GemShowcaseUITestFixture {
         /// Reward-moment review: nine resting 25-minute gems, then a tenth
         /// completion drops, lands and fuses into ×10 (A1). Frames of the
         /// landing and the fusion finale are written to the app's tmp
-        /// directory (`fx-landing-*.png`, `fx-fusion-*.png`).
+        /// directory (`fx-landing-*.png`, `fx-fusion-*.png`) unless
+        /// `POMOGEM_UI_TEST_FX_FRAMES=0` asks for an unstalled recording.
         case fusionfx
         /// Heavy users for the gem bed: 1,004 completions (about 251 kg:
         /// one ×1000 root and four loose gems) and 10,006 completions
@@ -486,8 +487,17 @@ struct GemShowcaseFixtureLaunchView: View {
             .appendingPathComponent("fx-\(name).png"))
     }
 
+    /// `POMOGEM_UI_TEST_FX_FRAMES=0` skips the in-app frame writes. Each
+    /// write stalls the main thread (`texture(from:)` plus PNG encoding), so
+    /// a screen recording (`simctl io recordVideo`) of the reward moment is
+    /// only faithful to the live animation without them.
+    private static var writesEffectFrames: Bool {
+        ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_FX_FRAMES"] != "0"
+    }
+
     @MainActor
     private static func captureSequence(of scene: JarScene, prefix: String, offsets: [Int]) {
+        guard writesEffectFrames else { return }
         for offset in offsets {
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(offset)) {
                 writeFrame(of: scene, name: String(format: "%@-%04d", prefix, offset))
