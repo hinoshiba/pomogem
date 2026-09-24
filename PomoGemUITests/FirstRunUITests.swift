@@ -254,7 +254,12 @@ final class FirstRunUITests: XCTestCase {
         let counts = app.descendants(matching: .any)["cloud-restore.counts"]
         XCTAssertTrue(counts.waitForExistence(timeout: 4))
         XCTAssertTrue(counts.label.contains("テーマ1件"), counts.label)
-        XCTAssertTrue(counts.label.contains("集中の記録0件"), counts.label)
+        // The first focus record to arrive closes this screen, so a focus
+        // count would read 0 for almost the whole wait: it is not shown.
+        XCTAssertFalse(counts.label.contains("集中の記録"), counts.label)
+        let body = app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "記録が届きはじめると自動で瓶がひらき")).firstMatch
+        XCTAssertTrue(body.exists, "The copy must not promise the whole jar before it opens")
         attachScreenshot("cloud-restore-waiting")
         // The fixture delivers another device's finished onboarding a few
         // seconds in; the shipping auto-exit must open the jar by itself.

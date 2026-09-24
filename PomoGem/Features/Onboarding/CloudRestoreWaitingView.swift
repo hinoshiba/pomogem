@@ -95,7 +95,8 @@ struct FirstRunView: View {
 /// been, and an explicit way to start without waiting. The jar opens on its
 /// own through RootView's existing auto-exit as soon as onboarding evidence
 /// (a finished onboarding's settings, a focus record or an achievement) is
-/// imported.
+/// imported — the first of it, not the whole earlier jar, so the copy says
+/// that the rest keeps arriving after the jar opens.
 struct CloudRestoreWaitingView: View {
     let onStartFresh: () -> Void
 
@@ -107,7 +108,11 @@ struct CloudRestoreWaitingView: View {
     @Query private var themeTombstones: [Subject]
     @State private var startedAt = Date.now
     @State private var now = Date.now
-    @State private var focusRecordCount = 0
+    /// Raw rows of every kind the import delivers first. Only a sign of
+    /// progress for the quiet hint, never shown: the first current, supported
+    /// focus record closes this screen, so a displayed focus count would read
+    /// 0 for almost the whole wait.
+    @State private var arrivedSessionRows = 0
     @State private var lastChangeAt = Date.now
     @State private var lastObservedTotal = -1
     @State private var confirmsFreshStart = false
@@ -158,7 +163,7 @@ struct CloudRestoreWaitingView: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityAddTraits(.isHeader)
                             .accessibilityIdentifier("cloud-restore.title")
-                        Text("このApple Accountの以前の瓶を、iCloudから受け取っています。届いたら、自動で瓶がひらきます。",
+                        Text("このApple Accountの以前の瓶を、iCloudから受け取っています。記録が届きはじめると自動で瓶がひらき、残りの記録もそのあと順に届きます。",
                              tableName: "Onboarding",
                              comment: "Restore waiting screen: what is happening and what happens next")
                             .font(.body)
@@ -240,10 +245,10 @@ struct CloudRestoreWaitingView: View {
                  comment: "Restore waiting screen: heading above the received counts")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(PomoGemTheme.muted)
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) { countTiles }
-                VStack(spacing: 10) { countTiles }
-            }
+            countTile(
+                value: themeCount,
+                title: Text("テーマ", tableName: "Onboarding", comment: "Restore waiting screen: count label for themes")
+            )
             Text("経過 \(elapsedText)", tableName: "Onboarding",
                  comment: "Restore waiting screen: elapsed time, e.g. 経過 1:05")
                 .font(.system(.footnote, design: .rounded, weight: .semibold).monospacedDigit())
@@ -253,24 +258,11 @@ struct CloudRestoreWaitingView: View {
         .frame(maxWidth: .infinity)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("届いた記録：テーマ\(themeCount)件、集中の記録\(focusRecordCount)件。経過時間\(elapsedSeconds / 60)分\(elapsedSeconds % 60)秒",
+        .accessibilityLabel(Text("届いた記録：テーマ\(themeCount)件。経過時間\(elapsedSeconds / 60)分\(elapsedSeconds % 60)秒",
                                  tableName: "Onboarding",
-                                 comment: "VoiceOver summary of the restore progress: theme count, focus record count, elapsed minutes and seconds"))
+                                 comment: "VoiceOver summary of the restore progress: theme count, elapsed minutes and seconds"))
         .accessibilityAddTraits(.updatesFrequently)
         .accessibilityIdentifier("cloud-restore.counts")
-    }
-
-    @ViewBuilder
-    private var countTiles: some View {
-        countTile(
-            value: themeCount,
-            title: Text("テーマ", tableName: "Onboarding", comment: "Restore waiting screen: count label for themes")
-        )
-        countTile(
-            value: focusRecordCount,
-            title: Text("集中の記録", tableName: "Onboarding",
-                        comment: "Restore waiting screen: count label for focus records")
-        )
     }
 
     private func countTile(value: Int, title: Text) -> some View {
@@ -294,8 +286,8 @@ struct CloudRestoreWaitingView: View {
 
     private func refresh() {
         now = .now
-        focusRecordCount = (try? modelContext.fetchCount(FetchDescriptor<StudySession>())) ?? focusRecordCount
-        let total = themeCount + focusRecordCount
+        arrivedSessionRows = (try? modelContext.fetchCount(FetchDescriptor<StudySession>())) ?? arrivedSessionRows
+        let total = themeCount + arrivedSessionRows
         if total != lastObservedTotal {
             lastObservedTotal = total
             lastChangeAt = now
