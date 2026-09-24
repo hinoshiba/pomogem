@@ -680,10 +680,23 @@ private final class SuspendedNotificationCallback<Value> {
 }
 
 /// What counts as "today already answered" and "last month has a jar".
+///
+/// Every read uses a fixed instant in a fixed zone: a record placed "a minute
+/// ago" would cross the 04:00 study-day boundary or the 1st of a month when
+/// CI happens to run at those times.
 @MainActor
 final class PassiveReminderActivityReaderTests: XCTestCase {
     private var defaults: UserDefaults!
     private var suiteName: String!
+
+    private static let tokyo: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Tokyo")!
+        return calendar
+    }()
+
+    /// Mid-day in the middle of a month, well away from both boundaries.
+    private let now = PassiveReminderActivityReaderTests.date("2026-09-15T13:00")
 
     override func setUp() {
         super.setUp()
@@ -697,6 +710,21 @@ final class PassiveReminderActivityReaderTests: XCTestCase {
         super.tearDown()
     }
 
+    private static func date(_ value: String) -> Date {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = tokyo
+        formatter.timeZone = tokyo.timeZone
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        return formatter.date(from: value)!
+    }
+
+    private func date(_ value: String) -> Date { Self.date(value) }
+
+    private func dayKey(_ date: Date) -> String {
+        FairnessPolicy.deviceDayKey(for: date, timeZone: Self.tokyo.timeZone)
+    }
+
     private func makeContext() throws -> ModelContext {
         let schema = Schema([Subject.self, StudySession.self, ActivityResetMarker.self])
         let container = try ModelContainer(for: schema, configurations: [
@@ -705,19 +733,16 @@ final class PassiveReminderActivityReaderTests: XCTestCase {
         return ModelContext(container)
     }
 
-    private let now = Date.now
-
     private func read(
         _ context: ModelContext,
         markers: [ActivityResetSnapshot] = [],
-        focusIsPresented: Bool = false
+        at instant: Date? = nil
     ) -> PassiveReminderActivity {
         PassiveReminderActivityReader.read(
             context: context,
             markers: markers,
-            focusIsPresented: focusIsPresented,
-            now: now,
-            calendar: .autoupdatingCurrent,
+            now: instant ?? now,
+            calendar: Self.tokyo,
             defaults: defaults
         )
     }
@@ -737,15 +762,52 @@ final class PassiveReminderActivityReaderTests: XCTestCase {
             grams: source == .manual
                 ? ManualDuration.thirtyMinutes.grams
                 : nil,
-            deviceDayKey: FairnessPolicy.deviceDayKey(for: end),
+            deviceDayKey: dayKey(end),
             dataEpochID: epoch
         ))
         try context.save()
     }
 
-    private var todayKey: String { FairnessPolicy.deviceDayKey(for: now) }
+    private var todayKey: String { dayKey(now) }
     private var thisMonth: String {
-        PassiveReminderActivity.monthKey(for: now, calendar: .autoupdatingCurrent)
+        PassiveReminderActivity.monthKey(for: now, calendar: Self.tokyo)
+    }
+
+    private func persist(_ envelope: FocusRecoveryEnvelope) throws {
+        defaults.set(try JSONEncoder().encode(envelope), forKey: FocusPersistence.key)
+    }
+
+    private func envelope(
+        _ engine: PomodoroEngine,
+        pendingCompletion: PomodoroCompletion? = nil
+    ) -> FocusRecoveryEnvelope {
+        FocusRecoveryEnvelope(
+            engine: engine,
+            subject: nil,
+            clockAnchor: nil,
+            pendingCompletion: pendingCompletion,
+            savedAt: now
+        )
+    }
+
+    private func runningFocus(startedAt start: Date) throws -> PomodoroEngine {
+        var engine = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
+        try engine.startFocus(isPro: false, now: start)
+        return engine
+    }
+
+    /// A 25-minute focus that ended while the app was not running, waiting to
+    /// be saved on the next launch.
+    private func finishedFocus(startedAt start: Date) throws -> (PomodoroEngine, PomodoroCompletion) {
+        struct FocusDidNotComplete: Error {}
+        var engine = try runningFocus(startedAt: start)
+        guard case let .focusCompleted(completion)? = engine.advance(
+            at: start.addingTimeInterval(25 * 60)
+        ) else {
+            XCTFail("The engine did not complete the focus")
+            throw FocusDidNotComplete()
+        }
+        return (engine, completion)
     }
 
     func testNothingDoneLeavesTheReminderAndNoJar() throws {
@@ -776,26 +838,118 @@ final class PassiveReminderActivityReaderTests: XCTestCase {
         XCTAssertEqual(activity.monthsWithRecords?.contains(thisMonth), true)
     }
 
-    func testYesterdaysFocusDoesNotAnswerToday() throws {
+    /// Both records are inside the 26-hour fetch window, so only the study-day
+    /// key keeps them from answering today.
+    func testARecordFromThePreviousStudyDayDoesNotAnswerToday() throws {
+        for (end, readAt) in [
+            ("2026-09-25T03:30", "2026-09-25T10:00"),
+            ("2026-09-24T23:30", "2026-09-25T08:00"),
+            ("2026-09-25T03:50", "2026-09-25T04:10")
+        ] {
+            let context = try makeContext()
+            try insert(.timer, seconds: 25 * 60, endingAt: date(end), in: context)
+            XCTAssertLessThan(date(readAt).timeIntervalSince(date(end)), 26 * 60 * 60)
+            XCTAssertTrue(
+                read(context, at: date(readAt)).answeredStudyDayKeys.isEmpty,
+                "\(end) read at \(readAt)"
+            )
+        }
+
+        // The same window does answer today for a record after 04:00.
         let context = try makeContext()
-        try insert(.timer, seconds: 25 * 60, endingAt: now.addingTimeInterval(-30 * 60 * 60), in: context)
-        XCTAssertTrue(read(context).answeredStudyDayKeys.isEmpty)
+        try insert(.timer, seconds: 25 * 60, endingAt: date("2026-09-25T04:30"), in: context)
+        XCTAssertEqual(
+            read(context, at: date("2026-09-25T10:00")).answeredStudyDayKeys,
+            ["2026-09-25"]
+        )
     }
 
-    func testOpenFocusOrOneStartedTodayAnswersToday() throws {
+    func testAFocusStartedTodayAnswersOnlyToday() throws {
         let context = try makeContext()
-        XCTAssertEqual(read(context, focusIsPresented: true).answeredStudyDayKeys, [todayKey])
-
         // Stopped with 「今日はここまで」: nothing saved, but the day is answered.
-        PassiveReminderActivityReader.recordFocusStarted(at: now, defaults: defaults)
+        PassiveReminderActivityReader.recordFocusStarted(
+            at: now,
+            timeZone: Self.tokyo.timeZone,
+            defaults: defaults
+        )
+        XCTAssertEqual(read(context).answeredStudyDayKeys, [todayKey])
+        XCTAssertTrue(
+            read(context, at: now.addingTimeInterval(86_400)).answeredStudyDayKeys.isEmpty,
+            "Yesterday's start must not answer the next day"
+        )
+    }
+
+    /// A focus late on day D that finished overnight is committed through a
+    /// recovery the next morning; that must not silence D+1.
+    func testReopeningAFocusFromAnEarlierDayDoesNotAnswerToday() throws {
+        let context = try makeContext()
+        let morning = date("2026-09-25T08:00")
+        let (engine, completion) = try finishedFocus(startedAt: date("2026-09-24T23:30"))
+        PassiveReminderActivityReader.recordRecoveredFocus(
+            engine: engine,
+            pendingCompletion: completion,
+            at: morning,
+            timeZone: Self.tokyo.timeZone,
+            defaults: defaults
+        )
+        XCTAssertNil(defaults.string(forKey: PassiveReminderActivityReader.focusStartedStudyDayDefaultsKey))
+        try persist(envelope(engine, pendingCompletion: completion))
+        XCTAssertEqual(read(context, at: morning).answeredStudyDayKeys, ["2026-09-24"])
+
+        // A focus paused days ago and shown again answers nothing new.
+        var paused = try runningFocus(startedAt: date("2026-09-21T19:00"))
+        try paused.pause(at: date("2026-09-21T19:10"))
+        PassiveReminderActivityReader.recordRecoveredFocus(
+            engine: paused,
+            pendingCompletion: nil,
+            at: morning,
+            timeZone: Self.tokyo.timeZone,
+            defaults: defaults
+        )
+        try persist(envelope(paused))
+        XCTAssertEqual(read(context, at: morning).answeredStudyDayKeys, ["2026-09-21"])
+        XCTAssertFalse(read(context, at: morning).answeredStudyDayKeys.contains("2026-09-25"))
+    }
+
+    func testReopeningAFocusThatBeganTodayAnswersToday() throws {
+        let context = try makeContext()
+        // For example, a focus started on another iPhone and continued here.
+        var paused = try runningFocus(startedAt: now.addingTimeInterval(-15 * 60))
+        try paused.pause(at: now.addingTimeInterval(-5 * 60))
+        PassiveReminderActivityReader.recordRecoveredFocus(
+            engine: paused,
+            pendingCompletion: nil,
+            at: now,
+            timeZone: Self.tokyo.timeZone,
+            defaults: defaults
+        )
+        XCTAssertEqual(read(context).answeredStudyDayKeys, [todayKey])
+    }
+
+    func testAFocusInThisDevicesRecoveryDataAnswersTheDaysItRuns() throws {
+        let context = try makeContext()
+        try persist(envelope(try runningFocus(startedAt: now.addingTimeInterval(-10 * 60))))
         XCTAssertEqual(read(context).answeredStudyDayKeys, [todayKey])
 
-        defaults.set("2000-01-01", forKey: PassiveReminderActivityReader.focusStartedStudyDayDefaultsKey)
+        // Started before 04:00 and ending after it: the record will carry
+        // the day it ends, so both days are answered.
+        let early = date("2026-09-25T03:50")
+        try persist(envelope(try runningFocus(startedAt: early)))
+        XCTAssertEqual(
+            read(context, at: date("2026-09-25T04:05")).answeredStudyDayKeys,
+            ["2026-09-24", "2026-09-25"]
+        )
+    }
+
+    func testABreakOrUnreadableRecoveryDataAnswersNothing() throws {
+        let context = try makeContext()
+        var engine = try finishedFocus(startedAt: now.addingTimeInterval(-40 * 60)).0
+        try engine.startBreak(now: now.addingTimeInterval(-10 * 60))
+        try persist(envelope(engine))
         XCTAssertTrue(read(context).answeredStudyDayKeys.isEmpty)
 
-        // A running or paused focus recovered from this device's local state.
         defaults.set(Data([1]), forKey: FocusPersistence.key)
-        XCTAssertEqual(read(context).answeredStudyDayKeys, [todayKey])
+        XCTAssertTrue(read(context).answeredStudyDayKeys.isEmpty)
     }
 
     func testRecordsOutsideTheCurrentResetGenerationAreIgnored() throws {

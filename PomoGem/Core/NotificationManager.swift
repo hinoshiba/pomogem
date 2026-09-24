@@ -147,7 +147,8 @@ struct FocusReturnReminderNotificationClient {
 /// it: nothing here is synced, and only the booked requests reflect it.
 struct PassiveReminderActivity: Equatable, Sendable {
     /// 04:00-boundary study days (`FairnessPolicy.deviceDayKey`) on which a
-    /// focus was started or a gem was added. The daily reminder asks
+    /// focus was started or ran, or time was added by hand. Screen Time gems
+    /// arrive by themselves and do not count. The daily reminder asks
     /// 「今日のひと粒、積んでいく？」, so it stays quiet on those days.
     var answeredStudyDayKeys: Set<String> = []
     /// Months holding at least one record (`monthKey`), or nil when records
@@ -226,22 +227,41 @@ enum PassiveReminderActivityReader {
         AccountScopedLocalState.defaultsKey(base: "notifications.passive.focus-started-study-day")
     }
 
-    /// Opening a focus answers today's reminder even when it is stopped with
-    /// 「今日はここまで」: asking again an hour later would be a nag.
+    /// Home calls this when the person starts a new focus. Opening one
+    /// answers today's reminder even when it is stopped with 「今日はここまで」:
+    /// asking again an hour later would be a nag.
     static func recordFocusStarted(
         at now: Date = .now,
+        timeZone: TimeZone = .current,
         defaults: UserDefaults = .standard
     ) {
         defaults.set(
-            FairnessPolicy.deviceDayKey(for: now),
+            FairnessPolicy.deviceDayKey(for: now, timeZone: timeZone),
             forKey: focusStartedStudyDayDefaultsKey
         )
+    }
+
+    /// Reopening a focus is not starting one. A recovered focus answers today
+    /// only when it began today: one that ran late last night and is only
+    /// committed this morning belongs to last night, and a focus paused days
+    /// ago answers nothing new each time it is shown again.
+    static func recordRecoveredFocus(
+        engine: PomodoroEngine,
+        pendingCompletion: PomodoroCompletion?,
+        at now: Date = .now,
+        timeZone: TimeZone = .current,
+        defaults: UserDefaults = .standard
+    ) {
+        let todayKey = FairnessPolicy.deviceDayKey(for: now, timeZone: timeZone)
+        guard let startedAt = focusStartDate(engine: engine, pendingCompletion: pendingCompletion),
+              FairnessPolicy.deviceDayKey(for: startedAt, timeZone: timeZone) == todayKey
+        else { return }
+        defaults.set(todayKey, forKey: focusStartedStudyDayDefaultsKey)
     }
 
     static func read(
         context: ModelContext,
         markers: [ActivityResetSnapshot],
-        focusIsPresented: Bool,
         now: Date = .now,
         calendar: Calendar = .autoupdatingCurrent,
         defaults: UserDefaults = .standard
@@ -250,15 +270,20 @@ enum PassiveReminderActivityReader {
         let epochID = ActivityResetPolicy.currentEpochID(from: markers, now: now)
         var activity = PassiveReminderActivity()
 
-        let focusInFlight = focusIsPresented
-            || defaults.data(forKey: FocusPersistence.key) != nil
-            || defaults.string(forKey: focusStartedStudyDayDefaultsKey) == todayKey
-        if focusInFlight || hasFocusRecord(
-            studyDayKey: todayKey,
-            context: context,
-            epochID: epochID,
-            now: now
-        ) {
+        // A focus still in this device's recovery data (running, paused or
+        // awaiting its save) answers the days it belongs to, never simply
+        // today: a paused focus can linger for days.
+        activity.answeredStudyDayKeys = studyDayKeys(
+            ofPersistedFocus: defaults.data(forKey: FocusPersistence.key),
+            timeZone: calendar.timeZone
+        )
+        if defaults.string(forKey: focusStartedStudyDayDefaultsKey) == todayKey
+            || hasFocusRecord(
+                studyDayKey: todayKey,
+                context: context,
+                epochID: epochID,
+                now: now
+            ) {
             activity.answeredStudyDayKeys.insert(todayKey)
         }
         activity.monthsWithRecords = monthsWithRecords(
@@ -291,6 +316,51 @@ enum PassiveReminderActivityReader {
                 && row.effectiveSource != .screenTime
                 && StudySessionIntegrityPolicy.isSupported(row, relativeTo: now)
         }
+    }
+
+    /// The study days a focus in this device's recovery data belongs to: the
+    /// day it began and the day its record will carry (records are keyed by
+    /// their end). A break, or bytes that cannot be read, answer nothing.
+    /// Decoding here has no side effects; restoring owns clearing bad bytes.
+    static func studyDayKeys(ofPersistedFocus data: Data?, timeZone: TimeZone) -> Set<String> {
+        guard let data else { return [] }
+        let decoder = JSONDecoder()
+        let engine: PomodoroEngine
+        let pendingCompletion: PomodoroCompletion?
+        if let envelope = try? decoder.decode(FocusRecoveryEnvelope.self, from: data) {
+            engine = envelope.engine
+            pendingCompletion = envelope.pendingCompletion
+        } else if let legacyEngine = try? decoder.decode(PomodoroEngine.self, from: data) {
+            engine = legacyEngine
+            pendingCompletion = nil
+        } else {
+            return []
+        }
+
+        let dates: [Date]
+        if let pendingCompletion {
+            dates = [pendingCompletion.startedAt, pendingCompletion.endedAt]
+        } else if engine.containsRecoverableFocus, let startedAt = engine.phaseStartedAt {
+            // A paused focus has no end yet; a running one ends at `endDate`.
+            dates = [startedAt] + (engine.endDate.map { [$0] } ?? [])
+        } else {
+            return []
+        }
+        return Set(dates.filter(PomodoroEngine.isSafePersistedDate).map {
+            FairnessPolicy.deviceDayKey(for: $0, timeZone: timeZone)
+        })
+    }
+
+    /// Pause and resume keep `phaseStartedAt` (it moves only when the clock
+    /// ran backwards while paused), so it is the focus's start.
+    private static func focusStartDate(
+        engine: PomodoroEngine,
+        pendingCompletion: PomodoroCompletion?
+    ) -> Date? {
+        let startedAt = pendingCompletion?.startedAt
+            ?? (engine.containsRecoverableFocus ? engine.phaseStartedAt : nil)
+        guard let startedAt, PomodoroEngine.isSafePersistedDate(startedAt) else { return nil }
+        return startedAt
     }
 
     /// Only this month and the previous one can end before a Wrapped slot in

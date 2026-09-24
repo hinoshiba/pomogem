@@ -786,10 +786,18 @@ struct RootView: View {
             refreshPassiveNotificationsIfActivityChanged()
         }
         .onChange(of: router.focusPresentationIsActive) { _, isActive in
-            // Opening the focus screen answers today's reminder, so it cannot
-            // ring over a running focus on the lock screen. Closing it re-reads
+            // Home records a new focus before it opens one. A recovered focus
+            // answers today only if it began today: one that finished
+            // overnight and is committed this morning belongs to last night.
+            if isActive, let recovered = router.recoveredFocus {
+                PassiveReminderActivityReader.recordRecoveredFocus(
+                    engine: recovered.engine,
+                    pendingCompletion: recovered.pendingCompletion
+                )
+            }
+            // Opening re-reads the day the focus answers, so the reminder
+            // cannot ring over it on the lock screen; closing re-reads
             // whether a record was saved.
-            if isActive { PassiveReminderActivityReader.recordFocusStarted() }
             refreshPassiveNotificationsIfActivityChanged()
         }
         .onChange(of: activityAuxiliaryFingerprint) { _, _ in
@@ -2770,8 +2778,7 @@ struct RootView: View {
     private func currentPassiveReminderActivity() -> PassiveReminderActivity {
         PassiveReminderActivityReader.read(
             context: modelContext,
-            markers: resetSnapshots,
-            focusIsPresented: router.focusPresentationIsActive
+            markers: resetSnapshots
         )
     }
 

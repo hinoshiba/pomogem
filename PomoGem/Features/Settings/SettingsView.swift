@@ -1835,8 +1835,7 @@ struct SettingsView: View {
         let prefs = resolvedPreferences
         let activity = PassiveReminderActivityReader.read(
             context: modelContext,
-            markers: resetSnapshots,
-            focusIsPresented: router.focusPresentationIsActive
+            markers: resetSnapshots
         )
         do {
             try await manager.synchronizePassiveNotifications(
