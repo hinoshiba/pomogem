@@ -161,6 +161,7 @@
 		9755C95364E6796F28789E89 /* StorageTransferAdmissionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6AD60D562BCE8191E449F8C /* StorageTransferAdmissionPolicy.swift */; };
 		97C40694E5E1F098EBDF58EC /* StorageTransferPartialDestinationRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5717D8DB966629633F7FABBD /* StorageTransferPartialDestinationRecovery.swift */; };
 		987A5B495CFF5E4AF0963713 /* UITestFaultInjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5542B8EEF5204878A5734E13 /* UITestFaultInjection.swift */; };
+		9A5B20E7E4760A6A7B76CC50 /* ShareJarSnapshotPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3B8652F4DF2ED668317D29 /* ShareJarSnapshotPolicy.swift */; };
 		9B0D45C064B95151B3779A74 /* AggregatePersistenceFailureRecoveryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 626D6B716E894C9A3DEE9E3E /* AggregatePersistenceFailureRecoveryUITests.swift */; };
 		9C81622243F21976590DDAEE /* Analytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D472A1DA7AE5AE7B665ABD /* Analytics.swift */; };
 		9DA2579DDE78F8FEAC7837FC /* CloudDataDeletionGuidanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DD50E345F510C6D928E8D62 /* CloudDataDeletionGuidanceView.swift */; };
@@ -192,6 +193,7 @@
 		AE8D65F0021D89EBCE8A654C /* AnimatedShareExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0436DD2C5029182DC15ABE18 /* AnimatedShareExporter.swift */; };
 		AEE7961A8206B323F618A0E6 /* CloudOfflineAccessPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = C64A3CDF8278A0239A26D8A3 /* CloudOfflineAccessPolicy.swift */; };
 		AF49B433232B27FA242EF937 /* ViewTaskScopeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C62E2128B702CB576D0B1246 /* ViewTaskScopeTests.swift */; };
+		B08FB64B60DAB40D35254222 /* ShareJarSnapshotPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F035D196CDEEAFDA7F0CD84 /* ShareJarSnapshotPolicyTests.swift */; };
 		B1581E5B52C281BA5FE2F812 /* PomoGemApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50E849952EFAEFD4597EE5ED /* PomoGemApp.swift */; };
 		B20E1247B1A28C056F69C038 /* StorageTransferCloudScope.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF39651D2659356DF064D6B6 /* StorageTransferCloudScope.swift */; };
 		B228B4ECFBDEB30112F23B6E /* StorageTransferManagedZoneDeletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1718C6E2F252164D9503E8A4 /* StorageTransferManagedZoneDeletionTests.swift */; };
@@ -403,6 +405,7 @@
 		3A658F93291D3387937A39FF /* HomeAtmosphereTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeAtmosphereTests.swift; sourceTree = "<group>"; };
 		3A8F60025FE01C9FFD03A00B /* CloudAccountVerificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudAccountVerificationTests.swift; sourceTree = "<group>"; };
 		3C7FCEA6CCE642823CB5D6E0 /* AccumulationTimelineRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationTimelineRepository.swift; sourceTree = "<group>"; };
+		3F035D196CDEEAFDA7F0CD84 /* ShareJarSnapshotPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareJarSnapshotPolicyTests.swift; sourceTree = "<group>"; };
 		3FA4EE8D1FB7A66F05F42BD7 /* CloudOfflineHistoryPreflightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudOfflineHistoryPreflightTests.swift; sourceTree = "<group>"; };
 		405164FE628C5989DD6BDCAE /* AccessibilityAdversarialUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityAdversarialUITests.swift; sourceTree = "<group>"; };
 		405ABBE29080EBB7B18B775A /* ScreenTimeMonitoringInterleavingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeMonitoringInterleavingTests.swift; sourceTree = "<group>"; };
@@ -582,6 +585,7 @@
 		EADEE91C0891E75F8DF3198D /* ScreenTimeMonitoringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeMonitoringTests.swift; sourceTree = "<group>"; };
 		ECD32D06418B1E26D368ACEB /* JarScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarScene.swift; sourceTree = "<group>"; };
 		ED020371DFA1442C08CCD31D /* CloudOfflineAccessState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudOfflineAccessState.swift; sourceTree = "<group>"; };
+		ED3B8652F4DF2ED668317D29 /* ShareJarSnapshotPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareJarSnapshotPolicy.swift; sourceTree = "<group>"; };
 		EED7C76A33B9A41894714705 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		F01F76954764EF2852C12F46 /* StorageTransferHostCloudPublicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferHostCloudPublicationTests.swift; sourceTree = "<group>"; };
 		F0C7F1C2440BE0CBAEAA0495 /* StorageTransferManifestWriterFieldTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferManifestWriterFieldTests.swift; sourceTree = "<group>"; };
@@ -945,6 +949,7 @@
 				61A75244675655D9CCCEFA81 /* ScreenTimeObstacleTests.swift */,
 				B5980293973D5E2D9CB9224E /* ScreenTimeRolloverTests.swift */,
 				839664B06CFA54BA8F0F3E87 /* SeedDataTests.swift */,
+				3F035D196CDEEAFDA7F0CD84 /* ShareJarSnapshotPolicyTests.swift */,
 				B008E5BC71504457E21E1CDF /* ShareSelectionModelTests.swift */,
 				9A4A5EAD0BFF7E4E3075E3F2 /* StorageTransferAccountNamespaceTests.swift */,
 				681E42884F4D17CEF31D7511 /* StorageTransferAdmissionTaxonomyTests.swift */,
@@ -998,6 +1003,7 @@
 				0436DD2C5029182DC15ABE18 /* AnimatedShareExporter.swift */,
 				0922D0F864E131F54F7ECD29 /* ShareActivityItemSource.swift */,
 				802AFB78CDAD28FB3854309E /* ShareComposerView.swift */,
+				ED3B8652F4DF2ED668317D29 /* ShareJarSnapshotPolicy.swift */,
 				F7CE14A73EB70521D21A0343 /* ShareSelectionModel.swift */,
 			);
 			path = Share;
@@ -1428,6 +1434,7 @@
 				DC90ADA9D0794047850E597F /* SettingsView.swift in Sources */,
 				402D47F4D51A614035C8EA62 /* ShareActivityItemSource.swift in Sources */,
 				A930060FC3755AF7F8DB3DA7 /* ShareComposerView.swift in Sources */,
+				9A5B20E7E4760A6A7B76CC50 /* ShareJarSnapshotPolicy.swift in Sources */,
 				6DB27B8627152EADDF1D401B /* ShareSelectionModel.swift in Sources */,
 				060F0EB3F272CF1318515E6F /* SoundSynth.swift in Sources */,
 				84C6C795E78C8E64AEB16C1E /* StorageTransferAccountNamespaceAuthority.swift in Sources */,
@@ -1543,6 +1550,7 @@
 				2E9090DD08C3DD85C21D0B8F /* ScreenTimeObstacleTests.swift in Sources */,
 				26D7635108864844B2D07D8D /* ScreenTimeRolloverTests.swift in Sources */,
 				6942B6C03CA0272A8045D97C /* SeedDataTests.swift in Sources */,
+				B08FB64B60DAB40D35254222 /* ShareJarSnapshotPolicyTests.swift in Sources */,
 				2129247CC5F01F09AC707F71 /* ShareSelectionModelTests.swift in Sources */,
 				03FAAEE0629B472CE1D32A8B /* StorageTransferAccountNamespaceTests.swift in Sources */,
 				8A28A396D48A4B30CA1B6444 /* StorageTransferAdmissionTaxonomyTests.swift in Sources */,

@@ -1268,7 +1268,12 @@ struct ShareComposerView: View {
 
     @MainActor
     private func refreshJarSnapshot() {
-        jarSnapshot = capturedJarSnapshot(includesSelfReportedFocus: includeManual)
+        // The same inclusion the export uses: whether the card actually
+        // carries self-reported focus, not the toggle. They used to differ,
+        // so the preview could show stones the exported image then hid.
+        jarSnapshot = capturedJarSnapshot(
+            includesSelfReportedFocus: selection.includesSelfReportedFocus
+        )
     }
 
     @MainActor
@@ -1281,10 +1286,14 @@ struct ShareComposerView: View {
               let scene = router.jarScene else {
             return nil
         }
-        return try? JarSnapshotter.shared.image(
-            of: scene,
-            options: .share(includesSelfReported: includesSelfReportedFocus)
-        )
+        let options = JarSnapshotOptions.share(includesSelfReported: includesSelfReportedFocus)
+        // Hiding a pebble another gem rests on would leave that gem floating
+        // over a hole. The card then draws its own bottle from the shared
+        // records instead (jar-04, screentime-11).
+        guard !ShareJarSnapshotPolicy.hidingLeavesUnsupportedBody(in: scene, options: options) else {
+            return nil
+        }
+        return try? JarSnapshotter.shared.image(of: scene, options: options)
     }
 
     @MainActor
