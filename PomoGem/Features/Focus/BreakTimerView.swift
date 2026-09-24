@@ -248,9 +248,11 @@ struct BreakTimerView: View {
             }
             .buttonStyle(PomoGemIconButtonStyle())
             .accessibilityLabel(
-                remaining == 0
-                    ? "終了アラートを停止して瓶へ戻る"
-                    : "休憩をスキップ"
+                remaining > 0
+                    ? "休憩をスキップ"
+                    : completionAlert.isActive(sessionID: sessionID)
+                        ? "終了アラートを停止して瓶へ戻る"
+                        : "瓶へ戻る"
             )
         }
     }
