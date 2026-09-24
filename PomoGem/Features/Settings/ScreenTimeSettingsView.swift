@@ -445,16 +445,16 @@ struct ScreenTimeSettingsView: View {
         Section {
             selectionButton(.distraction, count: distractionCount)
             VStack(alignment: .leading, spacing: 4) {
-                Text("黒い石：10分 × \(max(0, controller.negativeGemCount))個ぶん", tableName: "ScreenTime",
-                     comment: "Black-stone total; the number counts ten-minute units")
+                Text(String(localized: "黒い石：10分 × \(max(0, controller.negativeGemCount))個ぶん", table: "ScreenTime",
+                            comment: "Black-stone total; the number counts ten-minute units"))
                 Text("累計 \(negativeDurationText)")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
             }
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text("黒い石、10分 × \(max(0, controller.negativeGemCount))個ぶん、累計 \(negativeDurationText)",
-                                     tableName: "ScreenTime", comment: "VoiceOver: black-stone total and minutes"))
+            .accessibilityLabel(String(localized: "黒い石、10分 × \(max(0, controller.negativeGemCount))個ぶん、累計 \(negativeDurationText)",
+                                       table: "ScreenTime", comment: "VoiceOver: black-stone total and minutes"))
             .accessibilityAddTraits(.isStaticText)
             .accessibilityIdentifier("screen-time.negative-total")
 
