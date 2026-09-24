@@ -215,6 +215,26 @@ final class ScreenTimeSettingsUITests: XCTestCase {
                           "A save from the re-seeded draft must not change the ledger: \(ledger.label)")
         }
         attach("Screen Time — save preserves the stored configuration")
+
+        // screentime-08: the black stones alone can be cleared, keeping the
+        // app choices and recording exactly as they were.
+        let clear = app.buttons["screen-time.clear-black-stones"]
+        XCTAssertTrue(reveal(clear))
+        clear.tap()
+        let confirm = app.alerts["黒い石を片付けますか？"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 6))
+        attach("Screen Time — clear black stones confirmation")
+        confirm.buttons["片付ける"].tap()
+        XCTAssertTrue(reveal(total))
+        let cleared = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "0個ぶん"), object: total)
+        XCTAssertEqual(XCTWaiter.wait(for: [cleared], timeout: 8), .completed, "total was \(total.label)")
+        XCTAssertFalse(clear.exists, "Nothing left to clear")
+        for expected in ["learning=2", "distraction=1", "enabled=1", "theme=seed", "matchesSeed=true"] {
+            XCTAssertTrue(ledger.label.contains(expected),
+                          "Clearing black stones must keep the setup: \(ledger.label)")
+        }
+        attach("Screen Time — black stones cleared, setup kept")
     }
 
     /// screentime-02 through the same DEBUG fixture, as a bound owner who has
