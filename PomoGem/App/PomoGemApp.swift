@@ -1026,7 +1026,8 @@ private struct PomoGemPersistenceLaunchHost: View {
                     try requireActiveLaunchAttempt(attempt, checkpoint: "during-remote-cancellation-resume")
                 })
                 try requireActiveLaunchAttempt(attempt, checkpoint: "after-remote-cancellation-resume")
-                requireStorageTransferRelaunch(message: "切り替えを取り消しました。元の記録を保護したまま、アプリを終了して開き直してください。")
+                requireStorageTransferRelaunch(message: "切り替えを取り消しました。元の記録を保護したまま、アプリを終了して開き直してください。",
+                                               afterCancellation: true)
                 return
             }
             // A direction confirmed in Settings before the relaunch this host
@@ -1066,6 +1067,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 switch action {
                 case .resume:
                     guard let binding = storageTransferRecoveryBinding else { throw StorageTransferError.staleTransaction }
+                var cancelled = false
                     guard let transactionID = storageTransferRecoveryTransactionID else { throw StorageTransferError.staleTransaction }
                     try await transferRuntime.recoverRemoteTransfer(binding: binding,
                         expectedTransactionID: transactionID, validateAccess: {
@@ -1082,6 +1084,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 case let .refresh(generation):
                     guard let binding = storageTransferRecoveryBinding else { throw StorageTransferError.staleTransaction }
                     try await transferRuntime.refreshCloudDataset(binding: binding,
+                    cancelled = true
                         expectedGenerationID: generation, validateAccess: {
                         try requireActiveLaunchAttempt(attempt, checkpoint: "during-dataset-refresh")
                     })
@@ -1124,7 +1127,8 @@ private struct PomoGemPersistenceLaunchHost: View {
                         : "切り替えを取り消しました。元の記録を残しています。アプリを終了して開き直してください。"
                 }
                 try requireActiveLaunchAttempt(attempt, checkpoint: "after-transfer-recovery")
-                requireStorageTransferRelaunch(message: completionMessage)
+                requireStorageTransferRelaunch(message: completionMessage, afterCancellation: cancelled)
+                    cancelled = true
                 return
             }
             // A journal can describe moved/promoted stores that intentionally
@@ -1173,7 +1177,8 @@ private struct PomoGemPersistenceLaunchHost: View {
                     }
                 )
                 if cancelledRetainedImport {
-                    requireStorageTransferRelaunch(message: "中断された取り込みの取消しを完了しました。元の保存先とiCloudの記録、途中までのコピーを保持しています。アプリを終了して開き直してください。")
+                    requireStorageTransferRelaunch(message: "中断された取り込みの取消しを完了しました。元の保存先とiCloudの記録、途中までのコピーを保持しています。アプリを終了して開き直してください。",
+                                                   afterCancellation: true)
                     return
                 }
                 launchAttempt += 1
@@ -2655,7 +2660,11 @@ private struct PomoGemPersistenceLaunchHost: View {
         requireStorageTransferRelaunch()
     }
 
-    private func requireStorageTransferRelaunch(message: String? = nil) {
+    /// - Parameter afterCancellation: the relaunch follows a cancellation. The
+    ///   screen then never says 「次に開くと、保存先の切り替えが完了します」:
+    ///   a retained cancellation can leave a journal that is past saving the
+    ///   destination, and the next launch does not complete THAT transfer.
+    private func requireStorageTransferRelaunch(message: String? = nil, afterCancellation: Bool = false) {
         requiresStorageTransferRelaunch = true
         canChooseLocalOnly = false
         requestedCloudSelection = false
@@ -2678,9 +2687,9 @@ private struct PomoGemPersistenceLaunchHost: View {
         beginContainerRetirement()
         isQuiescingAccountChange = false
         isPreparing = false
-        relaunchCompletesTransfer = (try? StorageTransferRuntime.live())?
-            .pendingTransferCompletesOnNextLaunch() ?? false
-        launchState = .relaunchRequired(message ?? "保存先の切り替えを受け付けました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。元の記録を保護したまま切り替えを続けます。")
+        relaunchCompletesTransfer = !afterCancellation
+            && ((try? StorageTransferRuntime.live())?.pendingTransferCompletesOnNextLaunch() ?? false)
+        launchState = .relaunchRequired(message ?? "保存先の切り替えを受け付けました。Appスイッチャーでポモジェムを終了し、もう一度開いてください。元の記録を保護したまま切り替えを続けます。")
         launchAttempt += 1
     }
 

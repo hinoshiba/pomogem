@@ -205,7 +205,103 @@ final class StorageTransferLegacyCloudAdoptionTests: XCTestCase {
         }
     }
 
+    // MARK: - The evidence reader, against 1.0.1's own on-disk shape
+
+    /// Whether real 1.0 / 1.0.1 users are rescued depends on the READER, not
+    /// only on the rule: the runtime tests above inject the evidence. This
+    /// writes exactly what v1.0.1-build7 leaves behind — its two
+    /// `UserDefaults` keys holding the sorted-keys JSON its
+    /// `PersistenceDeploymentState.select` / `recordSuccessfulMount` wrote,
+    /// the namespaced store pair, and no offline receipt at all — and reads it
+    /// back through the same function `live` uses.
+    func testTheEvidenceReaderRecognisesTheExactStateOnePointZeroOneLeaves() throws {
+        let shape = try onePointZeroOneShape()
+        let evidence = shape.read()
+        XCTAssertEqual(evidence, StorageTransferLegacyCloudMountEvidence(
+            recordedCloudMountOfThisBinding: true, hasExactCompleteStorePair: true,
+            offlineReceiptPostdatesAdmissionReceipts: false))
+        XCTAssertTrue(StorageTransferLegacyCloudAdoptionPolicy.adoptsPreReceiptStore(
+            scope: production, hasAdmissionReceiptUnderAnyName: false,
+            serverControl: nil, evidence: evidence))
+    }
+
+    func testTheEvidenceReaderFailsClosedOnEveryNeighbouringShape() throws {
+        // Selected but never mounted: 1.0.1 records the mount only after the
+        // first successful container construction.
+        var shape = try onePointZeroOneShape()
+        shape.defaults.removeObject(forKey: "persistence.deployment-mounted-selection.v1")
+        XCTAssertFalse(shape.read().recordedCloudMountOfThisBinding)
+
+        // A different binding's mount is not this binding's.
+        shape = try onePointZeroOneShape()
+        let other = try makeBinding()
+        XCTAssertFalse(StorageTransferLegacyCloudMountEvidence.read(binding: other,
+            defaults: shape.defaults, artifactHistory: shape.history,
+            offlineReceipt: { try shape.offline.load() }).recordedCloudMountOfThisBinding)
+
+        // Half a store pair.
+        shape = try onePointZeroOneShape()
+        try FileManager.default.removeItem(at: shape.stores[1])
+        XCTAssertFalse(shape.read().hasExactCompleteStorePair)
+
+        // A receipt-writing build already verified this installation online.
+        shape = try onePointZeroOneShape()
+        try shape.offline.recordVerifiedOnline(binding: shape.binding, datasetGenerationID: nil,
+                                               resetBaseline: nil, expectedReceipt: nil)
+        XCTAssertTrue(shape.read().offlineReceiptPostdatesAdmissionReceipts)
+
+        // An unreadable offline receipt counts as one that postdates receipts.
+        shape = try onePointZeroOneShape()
+        try Data("not a receipt".utf8).write(to: shape.offline.directory
+            .appendingPathComponent("access-v1.json"))
+        XCTAssertTrue(shape.read().offlineReceiptPostdatesAdmissionReceipts)
+    }
+
     // MARK: - Helpers
+
+    @MainActor
+    private struct OnePointZeroOneShape {
+        let binding: ActiveAccountLocalBinding
+        let defaults: UserDefaults
+        let stores: [URL]
+        let history: () -> PersistenceArtifactHistory
+        let offline: CloudOfflineAccessState
+
+        func read() -> StorageTransferLegacyCloudMountEvidence {
+            StorageTransferLegacyCloudMountEvidence.read(binding: binding, defaults: defaults,
+                artifactHistory: history, offlineReceipt: { try offline.load() })
+        }
+    }
+
+    private func onePointZeroOneShape() throws -> OnePointZeroOneShape {
+        let binding = try makeBinding()
+        let suite = "LegacyCloudAdoption-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        addTeardownBlock { UserDefaults().removePersistentDomain(forName: suite) }
+        let selection = #"{"cloudBinding":{"accountFingerprint":"\#(account)","namespace":{"rawValue":"\#(binding.namespace.rawValue)"}},"mode":"cloud"}"#
+        defaults.set(Data(selection.utf8), forKey: "persistence.deployment-selection.v1")
+        defaults.set(Data(selection.utf8), forKey: "persistence.deployment-mounted-selection.v1")
+
+        let parent = FileManager.default.temporaryDirectory
+            .appendingPathComponent("LegacyCloudEvidence-\(UUID())", isDirectory: true)
+        let storeDirectory = parent.appendingPathComponent("Application Support", isDirectory: true)
+        try FileManager.default.createDirectory(at: storeDirectory, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: parent) }
+        let stores = PersistenceStoreTopology.accountStoreURLs(accountNamespace: binding.namespace,
+                                                               directory: storeDirectory)
+        XCTAssertEqual(stores.map(\.lastPathComponent),
+                       ["PomoGem-\(binding.namespace.rawValue).store",
+                        "PomoGemLocalProjection-\(binding.namespace.rawValue).store"],
+                       "The names 1.0.1 gave its store pair")
+        try Data("1.0.1 cloud store".utf8).write(to: stores[0])
+        try Data("1.0.1 projection".utf8).write(to: stores[1])
+        let offline = try CloudOfflineAccessState(
+            directory: parent.appendingPathComponent("CloudOffline", isDirectory: true))
+        XCTAssertNil(try offline.load(), "1.0 and 1.0.1 wrote no offline receipt")
+        return OnePointZeroOneShape(binding: binding, defaults: defaults, stores: stores,
+            history: { PersistenceStoreTopology.persistenceArtifactHistory(directory: storeDirectory) },
+            offline: offline)
+    }
 
     private struct Fixture {
         let root: URL

@@ -183,15 +183,29 @@ extension StorageTransferLegacyCloudMountEvidence {
     /// control record, and the preflight still re-reads that control record.
     @MainActor
     static func live(binding: ActiveAccountLocalBinding) -> Self {
+        read(binding: binding, defaults: .standard,
+             artifactHistory: { PersistenceStoreTopology.persistenceArtifactHistory() },
+             offlineReceipt: { try CloudOfflineAccessState().load() })
+    }
+
+    /// `live` with its three sources injected, so the rescue of real 1.0 /
+    /// 1.0.1 installations can be checked against the exact on-disk shape
+    /// those builds left: their `UserDefaults` keys, their store files and no
+    /// offline receipt at all. An injected `UserDefaults` suite never consults
+    /// the installation's committed-transfer receipt
+    /// (`PersistenceDeploymentState.transferredSelection`).
+    @MainActor
+    static func read(binding: ActiveAccountLocalBinding,
+                     defaults: UserDefaults,
+                     artifactHistory: () -> PersistenceArtifactHistory,
+                     offlineReceipt: () throws -> CloudOfflineAccessReceipt?) -> Self {
         let selection = PersistenceDeploymentSelection.cloud(binding: binding)
-        let recordedMount = PersistenceDeploymentState.load() == .selected(selection)
-            && PersistenceDeploymentState.loadMountState() == .mounted(selection)
-        let hasPair = PersistenceStoreTopology.persistenceArtifactHistory()
-            .hasExactCompleteStorePair(for: selection)
+        let recordedMount = PersistenceDeploymentState.load(defaults: defaults) == .selected(selection)
+            && PersistenceDeploymentState.loadMountState(defaults: defaults) == .mounted(selection)
+        let hasPair = artifactHistory().hasExactCompleteStorePair(for: selection)
         let postdates: Bool
         do {
-            postdates = try CloudOfflineAccessState().load()
-                .map(offlineReceiptPostdatesAdmissionReceipts) ?? false
+            postdates = try offlineReceipt().map(offlineReceiptPostdatesAdmissionReceipts) ?? false
         } catch {
             postdates = true
         }
