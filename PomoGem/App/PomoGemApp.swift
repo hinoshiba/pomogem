@@ -3875,7 +3875,7 @@ private struct PersistenceLaunchStatusView: View {
                         // quality-01. A relaunch opens the phone's copy only
                         // when there is no connection at all, so the hint
                         // names that case instead of promising it always.
-                        Text("記録はこのiPhoneに残っています。「オンラインで再試行」で確認し直せます。通信が途切れていた場合は、つながると自動で確認します。通信のない場所で使うときは、Appスイッチャーでポモジェムを終了してから開き直すと、このiPhoneの記録で使えます（アプリは削除しないでください）。", tableName: "Launch")
+                        Text(CloudLaunchReconnectWall.cloudVerificationTimedOut.relaunchExplanation)
                             .foregroundStyle(PomoGemTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("cloud-launch-timeout-offline-explanation")
@@ -3884,7 +3884,7 @@ private struct PersistenceLaunchStatusView: View {
                             .buttonStyle(PomoGemPrimaryButtonStyle())
                             .disabled(!canRetryOnline)
                             .accessibilityIdentifier("cloud-offline-online-retry")
-                        Text("すぐに通信なしで使うときは、Appスイッチャーでポモジェムを終了してから開き直してください（アプリは削除しないでください）。", tableName: "Launch")
+                        Text(CloudLaunchReconnectWall.offlineRelaunchRequired.relaunchExplanation)
                             .foregroundStyle(PomoGemTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("cloud-offline-relaunch-explanation")

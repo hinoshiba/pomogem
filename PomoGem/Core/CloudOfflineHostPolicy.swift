@@ -109,6 +109,22 @@ enum CloudOfflineSessionError: Error, LocalizedError {
 /// back, and it needs nothing from the user but a connection.
 enum CloudLaunchReconnectWall: Equatable, Sendable {
     case offlineRelaunchRequired, cloudVerificationTimedOut
+
+    /// The line under the online retry on each wall. The walls' own messages
+    /// lead with the automatic check, so the way into iOS — the App Switcher
+    /// and the app's name there, 「ポモジェム」 — is said here, once.
+    var relaunchExplanation: String {
+        switch self {
+        case .offlineRelaunchRequired:
+            String(localized: "すぐに通信なしで使うときは、Appスイッチャーでポモジェムを終了してから開き直してください（アプリは削除しないでください）。",
+                   table: "Launch",
+                   comment: "Offline launch wall, under the online retry: how to use the phone's copy right away")
+        case .cloudVerificationTimedOut:
+            String(localized: "記録はこのiPhoneに残っています。「オンラインで再試行」で確認し直せます。通信が途切れていた場合は、つながると自動で確認します。通信のない場所で使うときは、Appスイッチャーでポモジェムを終了してから開き直すと、このiPhoneの記録で使えます（アプリは削除しないでください）。",
+                   table: "Launch",
+                   comment: "iCloud check timed-out wall, under the online retry: what is kept and how to go on")
+        }
+    }
 }
 
 /// Pure host decisions. None of these classifications authorizes offline
