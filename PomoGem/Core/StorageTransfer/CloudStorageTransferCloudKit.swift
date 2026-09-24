@@ -206,7 +206,15 @@ struct CloudStorageTransferRecordDecoder: Sendable {
         switch field.kind {
         case .string:
             if Self.isEnum(entity: entity, field: field.name) {
-                return .string(try Self.enumValue(value, property: field.name))
+                let raw = try Self.enumValue(value, property: field.name)
+                // A pre-release 1.1.0 row may still hold `screenTime`. The local
+                // snapshot captures `StudySession.persistedSource`, so decode to
+                // the same encoding and both sides of an equality check agree.
+                if entity == "StudySession", field.name == "source",
+                   let source = SessionSource(rawValue: raw) {
+                    return .string(source.persistedEncoding.rawValue)
+                }
+                return .string(raw)
             }
             guard let string = value as? String else { throw CloudStorageTransferCloudError.malformedRecord }
             guard string.utf8.count <= Self.maximumFieldBytes else { throw CloudStorageTransferCloudError.limitExceeded }
@@ -254,6 +262,8 @@ struct CloudStorageTransferRecordDecoder: Sendable {
     /// SwiftData's observed secure archive stores {<property name>: <raw enum>}.
     /// Only public Foundation classes are decoded. Unknown enum values fail
     /// closed instead of substituting a model initializer's default value.
+    /// `screenTime` stays accepted for rows a pre-release 1.1.0 build wrote;
+    /// the app itself never writes it (`SessionSource.legacyPersistableRawValues`).
     static func enumValue(_ value: CKRecordValue, property: String) throws -> String {
         let allowed: Set<String>
         switch property {

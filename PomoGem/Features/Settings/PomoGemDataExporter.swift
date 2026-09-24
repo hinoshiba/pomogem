@@ -650,7 +650,7 @@ private struct StudySessionExportRecord: Encodable {
         startAt = value.startAt
         endAt = value.endAt
         seconds = value.seconds
-        source = value.source.rawValue
+        source = value.effectiveSource.rawValue
         pebbleKind = value.pebbleKind.rawValue
         grams = value.grams
         deviceDayKey = value.deviceDayKey

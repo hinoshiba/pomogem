@@ -408,7 +408,7 @@ final class RealDeviceSwiftDataLifecycleTests: XCTestCase {
             sessionEpochMatchesExpected: sessions.first.map { $0.dataEpochID == expectedEpoch } ?? false,
             preferencesEpochMatchesExpected: prefs.first.map { $0.activityEpochID == expectedEpoch } ?? false,
             validManualSessions: sessions.filter {
-                $0.source == .manual && $0.seconds == 1_800 && $0.grams == 300
+                $0.effectiveSource == .manual && $0.seconds == 1_800 && $0.grams == 300
                     && $0.dataEpochID == expectedEpoch && StudySessionIntegrityPolicy.isSupported($0)
             }.count,
             subjectIdentityMatches: subjects.first?.id == subjectID && subjects.first?.deletedAt == nil,

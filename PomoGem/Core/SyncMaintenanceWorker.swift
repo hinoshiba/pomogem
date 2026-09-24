@@ -503,7 +503,7 @@ actor SyncMaintenanceSliceWorker {
                 id: $0.id,
                 endAt: $0.endAt,
                 seconds: $0.seconds,
-                source: $0.source,
+                source: $0.effectiveSource,
                 pebbleKind: $0.pebbleKind,
                 rareRewardRuleVersion: $0.rareRewardRuleVersion,
                 rareRewardParticipated: $0.rareRewardParticipated,
@@ -964,28 +964,50 @@ private extension SyncMaintenanceSliceWorker {
     /// Audits subject references without rewriting CloudKit source rows.
     /// Presentation resolves same-ID subjects in memory; relationship repair
     /// across contexts would otherwise race a concurrent user edit.
+    ///
+    /// Like presentation, it reads live rows plus the tombstones that share
+    /// their logical IDs. Tombstones are never removed, so a whole-catalogue
+    /// read grew with every theme ever deleted; past one fetch it returned
+    /// `.retry` forever, which kept iCloud verification from finishing.
     func reconnectSubjects(
         request: SyncMaintenanceSliceRequest,
         cursor: SyncMaintenanceCursor,
         currentEpochID: UUID?,
         runtime: inout Runtime
     ) throws -> SyncMaintenanceSliceResult {
-        let subjectDescriptor = FetchDescriptor<Subject>(sortBy: [
+        let liveDescriptor = SubjectSyncPolicy.liveRowsDescriptor(sortBy: [
             SortDescriptor(\Subject.id),
             SortDescriptor(\Subject.createdAt)
         ])
-        let subjects = try fetch(
-            subjectDescriptor,
+        let live = try fetch(
+            liveDescriptor,
             limit: runtime.limits.maximumRowsPerFetch,
             runtime: &runtime
         )
-        if subjects.count == runtime.limits.maximumRowsPerFetch,
-           try fetchCount(subjectDescriptor, runtime: &runtime) > subjects.count {
-            return .retry(
-                request: request,
-                cursor: cursor,
-                audit: runtime.audit,
-                category: "oversized-subject-catalogue"
+        if live.count == runtime.limits.maximumRowsPerFetch,
+           try fetchCount(liveDescriptor, runtime: &runtime) > live.count {
+            // A live replica set this large is hostile and presentation
+            // already fails closed on it. This slice is read-only, so there is
+            // nothing a retry could repair; completing lets verification end,
+            // and any later subject change enqueues the kind again.
+            return .completed(request: request, audit: runtime.audit)
+        }
+        let pageLimit = min(128, runtime.limits.maximumRowsPerFetch)
+        var subjects = live
+        for id in Set(live.map(\.id)).sorted(by: { $0.uuidString < $1.uuidString }) {
+            // Leave room for this slice's session or stone page. Only a hostile
+            // tombstone set can run out; the map below is an audit and is never
+            // written back, so a partial map cannot change stored data.
+            let remaining = runtime.limits.maximumRowsPerSlice
+                - runtime.audit.totalRowsAccessed - pageLimit
+            guard remaining > 0 else { break }
+            subjects += try fetch(
+                FetchDescriptor<Subject>(
+                    predicate: #Predicate { $0.id == id && $0.deletedAt != nil },
+                    sortBy: [SortDescriptor(\Subject.syncRecordID)]
+                ),
+                limit: min(runtime.limits.maximumRowsPerFetch, remaining),
+                runtime: &runtime
             )
         }
         let subjectGroups = Dictionary(grouping: subjects, by: \.id)
@@ -993,7 +1015,6 @@ private extension SyncMaintenanceSliceWorker {
             SubjectSyncPolicy.canonical(from: values)
         }
 
-        let pageLimit = min(128, runtime.limits.maximumRowsPerFetch)
         if cursor.phase == 0 {
             let descriptor = sessionPageDescriptor(
                 currentEpochID: currentEpochID,
@@ -2421,8 +2442,8 @@ private extension SyncMaintenanceSliceWorker {
             level: 1,
             pebbleCount: unique.count,
             grams: HomeProjectionPolicy.saturatingNonnegativeSum(unique.map(\.grams)),
-            measuredPebbleCount: unique.filter(\.source.isMeasured).count,
-            manualPebbleCount: unique.filter { !$0.source.isMeasured }.count,
+            measuredPebbleCount: unique.filter(\.effectiveSource.isMeasured).count,
+            manualPebbleCount: unique.filter { !$0.effectiveSource.isMeasured }.count,
             goldPebbleCount: rewards.goldCount,
             prismPebbleCount: rewards.prismCount,
             colorMixJSON: StrataMath.encodeColorMix(

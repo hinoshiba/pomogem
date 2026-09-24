@@ -750,6 +750,56 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         )
     }
 
+    /// Deleting a theme leaves a tombstone forever. Themes used to disappear
+    /// app-wide once live rows and tombstones together passed 256 rows, and a
+    /// newly added theme was hidden immediately. 300 deleted themes cover it.
+    func testThemesStayUsableAfterHundredsOfDeletedThemes() {
+        app.terminate()
+        app.launchEnvironment["POMOGEM_UI_TEST_DELETED_THEMES"] = "300"
+        app.launch()
+        XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 10))
+
+        let focus = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "集中する")
+        ).firstMatch
+        XCTAssertTrue(
+            focus.waitForExistence(timeout: 5),
+            "Home must still offer the live theme"
+        )
+        let home = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        home.name = "Home with 300 deleted themes"
+        home.lifetime = .keepAlways
+        add(home)
+
+        openMenuAction(containing: "設定")
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        XCTAssertTrue(
+            scrollUntilHittable(app.buttons["英語"]),
+            "The live theme must stay listed in Settings"
+        )
+        XCTAssertFalse(app.buttons["削除したテーマ1"].exists)
+
+        let addTheme = app.buttons["テーマを追加"]
+        XCTAssertTrue(scrollUntilHittable(addTheme))
+        addTheme.tap()
+        XCTAssertTrue(app.navigationBars["テーマを追加"].waitForExistence(timeout: 5))
+        let nameField = app.textFields.firstMatch
+        XCTAssertTrue(nameField.waitForExistence(timeout: 4))
+        nameField.tap()
+        nameField.typeText("新しいテーマ")
+        app.navigationBars["テーマを追加"].buttons["保存"].tap()
+        XCTAssertTrue(waitForAbsence(app.navigationBars["テーマを追加"]))
+        waitForUISettle()
+        XCTAssertTrue(
+            waitForHittable(button(containing: "新しいテーマ"), timeout: 6),
+            "A theme added after many deletions must appear"
+        )
+        let settings = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        settings.name = "Settings themes with 300 deleted themes"
+        settings.lifetime = .keepAlways
+        add(settings)
+    }
+
     /// Captures unretouched Japanese UI candidates for product-page review.
     ///
     /// The disposable Debug fixture is only a way to reach deterministic states:

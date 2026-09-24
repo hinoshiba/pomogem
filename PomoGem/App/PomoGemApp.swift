@@ -173,6 +173,8 @@ enum LocalPreviewLaunchPolicy {
     static let reduceMotionEnvironmentKey = "POMOGEM_UI_TEST_REDUCE_MOTION"
     static let unselectedRareRewardUITestEnvironmentKey = "POMOGEM_UI_TEST_RARE_REWARD_UNSELECTED"
     static let rareRewardOnboardingUITestEnvironmentKey = "POMOGEM_UI_TEST_RARE_REWARD_ONBOARDING"
+    /// Seeds this many deleted themes (tombstones) next to the fixture theme.
+    static let deletedThemeHistoryUITestEnvironmentKey = "POMOGEM_UI_TEST_DELETED_THEMES"
 #else
     // Keep the policy API available to ordinary production code while making
     // the test protocol and its environment tokens absent from Release output.
@@ -183,6 +185,7 @@ enum LocalPreviewLaunchPolicy {
     static let reduceMotionEnvironmentKey = ""
     static let unselectedRareRewardUITestEnvironmentKey = ""
     static let rareRewardOnboardingUITestEnvironmentKey = ""
+    static let deletedThemeHistoryUITestEnvironmentKey = ""
 #endif
 
     static func isEnabled(

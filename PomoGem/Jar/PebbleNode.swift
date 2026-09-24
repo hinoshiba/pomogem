@@ -228,7 +228,7 @@ struct PebbleDescriptor: Identifiable {
             id: session.id,
             subjectName: session.displaySubjectName,
             colorHex: session.displaySubjectColorHex,
-            source: session.source,
+            source: session.effectiveSource,
             kind: RareRewardPresentationPolicy.kind(session.pebbleKind),
             rareRewardCounts: session.rareRewardCounts,
             grams: session.grams,
