@@ -166,6 +166,57 @@ final class GemTextureAtlas {
         )
     }
 
+    // MARK: Baking ahead
+
+    /// One texture to bake: its atlas name and a thread-safe Core Graphics
+    /// bake of its image.
+    struct BakeRequest: @unchecked Sendable {
+        let name: String
+        let make: () -> UIImage
+    }
+
+    /// Bakes every missing image of `requests` across all cores, then keeps
+    /// them. Blocks the caller only for the misses; a restore calls it
+    /// before creating its nodes, so a full jar's misses cost one parallel
+    /// pass instead of one serial bake per body.
+    func bakeMissing(_ requests: [BakeRequest]) {
+        var seen = Set<String>()
+        let missing = requests.filter { entries[$0.name] == nil && seen.insert($0.name).inserted }
+        guard !missing.isEmpty else { return }
+        insert(Self.bake(missing))
+    }
+
+    /// Bakes `requests` on a utility queue and keeps them when done (the
+    /// launch pre-bake). A body needed before it finishes simply bakes on
+    /// demand; the later insert skips names that exist by then.
+    func prewarm(_ requests: [BakeRequest]) {
+        var seen = Set<String>()
+        let missing = requests.filter { entries[$0.name] == nil && seen.insert($0.name).inserted }
+        guard !missing.isEmpty else { return }
+        DispatchQueue.global(qos: .utility).async {
+            let baked = Self.bake(missing)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    GemTextureAtlas.shared.insert(baked)
+                }
+            }
+        }
+    }
+
+    nonisolated private static func bake(_ requests: [BakeRequest]) -> [(name: String, image: UIImage)] {
+        let lock = NSLock()
+        var images = [UIImage?](repeating: nil, count: requests.count)
+        DispatchQueue.concurrentPerform(iterations: requests.count) { index in
+            let image = requests[index].make()
+            lock.lock()
+            images[index] = image
+            lock.unlock()
+        }
+        return zip(requests, images).compactMap { request, image in
+            image.map { (request.name, $0) }
+        }
+    }
+
     // MARK: Packing
 
     /// Packs every kept image now and installs the page (tests, and the

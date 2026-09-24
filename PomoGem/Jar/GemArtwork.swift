@@ -232,6 +232,24 @@ struct GemArtworkSpec: Hashable, Sendable {
         )
     }
 
+    /// The same bake spec with another of the four variants.
+    func withVariant(_ variant: Int) -> GemArtworkSpec {
+        GemArtworkSpec(
+            cut: cut,
+            symmetry: symmetry,
+            colors: colors,
+            variant: variant,
+            facetContrast: facetContrast,
+            sparkleCount: sparkleCount,
+            isMuted: isMuted,
+            showsDashedRing: showsDashedRing,
+            hasWhiteCore: hasWhiteCore,
+            hasCrown: hasCrown,
+            hasProngs: hasProngs,
+            edgeBoost: edgeBoost
+        )
+    }
+
     /// Value-free individuality: one of four same-rung variants from the
     /// session UUID (never a rarity, never a ranking).
     static func variant(for id: UUID) -> Int {

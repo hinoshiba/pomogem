@@ -544,6 +544,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 enqueue(descriptor, delay: 0, origin: .interior)
             }
         } else {
+            bakeBodies(for: additions)
             for (index, descriptor) in additions.enumerated() {
                 acceptedPebbleIDs.insert(descriptor.id)
                 let node = PebbleNode(
@@ -820,6 +821,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let studyDescriptors = uniqueDescriptors.filter { !$0.isScreenTimeObstacle }
         let initiallyVisible = Array(studyDescriptors.prefix(Constants.Jar.maxPhysicsBodies))
             + uniqueDescriptors.filter(\.isScreenTimeObstacle)
+        bakeBodies(for: initiallyVisible)
         for descriptor in initiallyVisible {
             let node = PebbleNode(
                 descriptor: descriptor,
@@ -935,6 +937,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let existingIDs = Set(livePebbles.map { $0.descriptor.id })
             .union(dropQueue.map { $0.descriptor.id })
         let additions = historyDescriptors.filter { !existingIDs.contains($0.id) }
+        bakeBodies(for: additions)
         for (index, descriptor) in additions.enumerated() {
             guard acceptedPebbleIDs.insert(descriptor.id).inserted else { continue }
             let node = PebbleNode(
@@ -1033,6 +1036,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         node.zPosition = JarZPosition.pebble(stackingIndex: nextStackingIndex)
         nextStackingIndex += 1
         worldNode.addChild(node)
+    }
+
+    /// Bakes the bodies about to be created in one parallel pass (misses
+    /// only), so a restore never bakes a full jar one body at a time on the
+    /// main thread (§7.13).
+    private func bakeBodies(for descriptors: [PebbleDescriptor]) {
+        let scale = artworkScale
+        GemTextureAtlas.shared.bakeMissing(
+            descriptors.compactMap { PebbleNode.bakeRequest(for: $0, scale: scale) }
+        )
     }
 
     private func deterministicAngle(for id: UUID) -> CGFloat {

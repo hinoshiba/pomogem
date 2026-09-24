@@ -862,16 +862,131 @@ final class PebbleNode: SKShapeNode {
     /// The ×N plate sits below the table, as a fraction of the radius.
     static let aggregatePlateDrop: CGFloat = 0.40
 
-    private func configureFacetedLooseAppearance() {
-        let rung = Self.cutLadder.rung(for: descriptor)
-        let spec = GemArtworkSpec(
-            rung: rung,
+    // MARK: Body specs (shared by the node and the texture pre-bake)
+
+    /// The baked texture a descriptor's body shows — the facet body or the
+    /// rubble — or nil for the legacy rare materials. The scene bakes these
+    /// for a whole restore in parallel before it creates the nodes.
+    static func bakeRequest(for descriptor: PebbleDescriptor, scale rawScale: CGFloat) -> GemTextureAtlas.BakeRequest? {
+        let scale = GemArtwork.renderScale(rawScale)
+        let radius = descriptor.radius
+        if let obstacle = descriptor.screenTimeObstacle {
+            let variations = ScreenTimeObstacleAppearance.variations(descriptor: obstacle)
+            return GemTextureAtlas.BakeRequest(
+                name: ScreenTimeObstacleAppearance.textureName(variations: variations, radius: radius, scale: scale)
+            ) {
+                ScreenTimeObstacleAppearance.image(variations: variations, radius: radius, scale: scale)
+            }
+        }
+        guard let spec = bodySpec(for: descriptor) else { return nil }
+        return GemTextureAtlas.BakeRequest(
+            name: GemArtwork.bodyTextureName(for: spec, radius: radius, scale: scale)
+        ) {
+            GemArtwork.renderBodyImage(for: spec, radius: radius, scale: scale)
+        }
+    }
+
+    /// Launch pre-bake (Docs/GemExperienceDesign.md §7.13): the loose gems
+    /// most jars start with — the five starter themes at 25 and 50 timer
+    /// minutes and a 30-minute self-report, in all four variants (60
+    /// bodies, about 1.5 MB at 3×). Everything else bakes on first use.
+    static func commonBakeRequests(scale rawScale: CGFloat) -> [GemTextureAtlas.BakeRequest] {
+        let scale = GemArtwork.renderScale(rawScale)
+        let samples: [(source: SessionSource, grams: Int)] = [
+            (.timer, Constants.Mass.measuredPebbleGrams),
+            (.timer, 50 * Constants.Mass.gramsPerMinute),
+            (.manual, ManualDuration.thirtyMinutes.grams)
+        ]
+        var requests: [GemTextureAtlas.BakeRequest] = []
+        for subject in SeedData.subjects {
+            for sample in samples {
+                let descriptor = PebbleDescriptor(
+                    subjectName: subject.name,
+                    colorHex: subject.colorHex,
+                    source: sample.source,
+                    kind: .normal,
+                    grams: sample.grams
+                )
+                let spec = looseSpec(for: descriptor)
+                let radius = descriptor.radius
+                for variant in 0 ..< GemArtworkSpec.variantCount {
+                    let variantSpec = spec.withVariant(variant)
+                    requests.append(GemTextureAtlas.BakeRequest(
+                        name: GemArtwork.bodyTextureName(for: variantSpec, radius: radius, scale: scale)
+                    ) {
+                        GemArtwork.renderBodyImage(for: variantSpec, radius: radius, scale: scale)
+                    })
+                }
+            }
+        }
+        return requests
+    }
+
+    static func bodySpec(for descriptor: PebbleDescriptor) -> GemArtworkSpec? {
+        guard descriptor.screenTimeObstacle == nil else { return nil }
+        if let aggregate = descriptor.aggregate {
+            return aggregateSpec(for: descriptor, aggregate: aggregate)
+        }
+        if let achievementKind = descriptor.achievementKind {
+            return achievementArtwork(for: descriptor, kind: achievementKind).spec
+        }
+        guard presentationKind(for: descriptor) == .normal else { return nil }
+        return looseSpec(for: descriptor)
+    }
+
+    private static func presentationKind(for descriptor: PebbleDescriptor) -> PebbleKind {
+        RareRewardReleasePolicy.permitsInternalTestOverride(true) ? descriptor.kind : .normal
+    }
+
+    private static func looseSpec(for descriptor: PebbleDescriptor) -> GemArtworkSpec {
+        GemArtworkSpec(
+            rung: cutLadder.rung(for: descriptor),
             colors: [GemColorShare(hex: descriptor.colorHex, fraction: 1)],
             variant: GemArtworkSpec.variant(for: descriptor.id),
             isMuted: !descriptor.isMeasured && !descriptor.isTutorial,
             showsDashedRing: !descriptor.isMeasured && !descriptor.isTutorial,
-            edgeBoost: Self.edgeBoost
+            edgeBoost: edgeBoost
         )
+    }
+
+    private static func achievementArtwork(
+        for descriptor: PebbleDescriptor,
+        kind achievementKind: AchievementKind
+    ) -> (spec: GemArtworkSpec, fill: UIColor) {
+        let material = JarPalette.achievementMaterial(for: achievementKind)
+        let fill = material.base.mixed(
+            with: JarPalette.color(hex: descriptor.colorHex)
+                .vivid(saturationFloor: 0.78, brightnessFloor: 0.84),
+            amount: 0.18
+        )
+        let spec = GemArtworkSpec(
+            rung: cutLadder.achievement,
+            colors: [GemColorShare(hex: GemColor(fill).hexString, fraction: 1)],
+            variant: 0,
+            isMuted: false,
+            showsDashedRing: false,
+            edgeBoost: edgeBoost
+        )
+        return (spec, fill)
+    }
+
+    private static func aggregateSpec(
+        for descriptor: PebbleDescriptor,
+        aggregate: AggregateMetadata
+    ) -> GemArtworkSpec {
+        GemArtworkSpec(
+            rung: cutLadder.rung(aggregateGrams: descriptor.grams),
+            colors: GemArtworkSpec.aggregateColors(aggregate.colorMix, fallbackHex: aggregate.dominantColorHex),
+            variant: GemArtworkSpec.variant(for: descriptor.id),
+            isMuted: aggregate.manualPebbleCount > aggregate.measuredPebbleCount,
+            showsDashedRing: aggregate.manualPebbleCount > 0,
+            edgeBoost: edgeBoost
+        )
+    }
+
+    private func configureFacetedLooseAppearance() {
+        let rung = Self.cutLadder.rung(for: descriptor)
+        let spec = Self.looseSpec(for: descriptor)
         // The container keeps the silhouette as its path but draws nothing
         // (measured: no extra draw); the baked body sprite carries facets,
         // edges and the girdle outline. Collision stays the circular body.
@@ -895,19 +1010,7 @@ final class PebbleNode: SKShapeNode {
     /// setting. The semantic mark and its ink backdrop are unchanged.
     private func configureFacetedAchievementAppearance(_ achievementKind: AchievementKind) {
         let rung = Self.cutLadder.achievement
-        let material = JarPalette.achievementMaterial(for: achievementKind)
-        let fill = material.base.mixed(
-            with: subjectColor.vivid(saturationFloor: 0.78, brightnessFloor: 0.84),
-            amount: 0.18
-        )
-        let spec = GemArtworkSpec(
-            rung: rung,
-            colors: [GemColorShare(hex: GemColor(fill).hexString, fraction: 1)],
-            variant: 0,
-            isMuted: false,
-            showsDashedRing: false,
-            edgeBoost: Self.edgeBoost
-        )
+        let (spec, fill) = Self.achievementArtwork(for: descriptor, kind: achievementKind)
         path = GemArtwork.outlinePath(for: spec, radius: radius)
         fillColor = .clear
         strokeColor = .clear
@@ -1345,14 +1448,7 @@ final class PebbleNode: SKShapeNode {
         // Cut, light budget and halo follow the grams the crystal holds
         // (A0…A4), never its decimal level or pebble count.
         let rung = Self.cutLadder.rung(aggregateGrams: descriptor.grams)
-        let spec = GemArtworkSpec(
-            rung: rung,
-            colors: GemArtworkSpec.aggregateColors(aggregate.colorMix, fallbackHex: aggregate.dominantColorHex),
-            variant: GemArtworkSpec.variant(for: descriptor.id),
-            isMuted: aggregate.manualPebbleCount > aggregate.measuredPebbleCount,
-            showsDashedRing: aggregate.manualPebbleCount > 0,
-            edgeBoost: Self.edgeBoost
-        )
+        let spec = Self.aggregateSpec(for: descriptor, aggregate: aggregate)
         // The container draws nothing: no neon rim, no glowWidth. The earned
         // bloom is the shared Gaussian halo inside `aggregate.aura`, whose
         // gentle breath (scale only) keeps the existing action key.

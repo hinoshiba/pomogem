@@ -347,6 +347,7 @@ struct RootView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.displayScale) private var displayScale
     @AppStorage(AccountScopedLocalState.defaultsKey(base: "onboarding.completed"))
     private var didCompleteOnboarding = false
     @AppStorage(AccountScopedLocalState.defaultsKey(base: UsagePurpose.storageKey))
@@ -729,6 +730,11 @@ struct RootView: View {
         }
         .task {
             installCompleteDeletionOperation()
+        }
+        .task {
+            // The common gem textures bake off the main thread while the
+            // stores open, so the jar's first frame rarely has to bake.
+            GemTextureAtlas.shared.prewarm(PebbleNode.commonBakeRequests(scale: displayScale))
         }
         .alert(
             persistenceMode == .localOnly

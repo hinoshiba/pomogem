@@ -232,6 +232,60 @@ final class JarRenderingPerformanceTests: XCTestCase {
         }
     }
 
+    // MARK: Baking ahead
+
+    @MainActor
+    func testRestoreBakesEachMissingBodyOnceBeforeCreatingNodes() throws {
+        let atlas = GemTextureAtlas.shared
+        // Colours no other test uses, so every body is a miss here.
+        let descriptors = (0 ..< 12).map {
+            looseDescriptor(index: 100 + $0, grams: 710 + $0 * 40, colorHex: ["#6B8E23", "#2E8B8B", "#8B5A2B"][$0 % 3])
+        }
+        let requests = descriptors.compactMap { PebbleNode.bakeRequest(for: $0, scale: 3) }
+        XCTAssertEqual(requests.count, descriptors.count)
+        let names = Set(requests.map(\.name))
+        XCTAssertTrue(names.allSatisfy { !atlas.hasImage(named: $0) })
+
+        let scene = makeScene()
+        scene.artworkScale = 3
+        scene.restore(pebbles: descriptors)
+        XCTAssertTrue(names.allSatisfy { atlas.hasImage(named: $0) })
+        for node in pebbles(in: scene) {
+            let body = try XCTUnwrap(node.childNode(withName: "gem.body") as? SKSpriteNode)
+            let name = try XCTUnwrap(atlas.textureName(of: body))
+            XCTAssertTrue(names.contains(name))
+        }
+
+        // The parallel bake draws exactly what the node would have drawn.
+        let request = try XCTUnwrap(requests.first)
+        let serial = try XCTUnwrap(request.make().cgImage)
+        let parallel = try XCTUnwrap(atlas.texture(named: request.name) { UIImage() }.cgImage())
+        XCTAssertEqual(serial.width, parallel.width)
+        XCTAssertLessThanOrEqual(compare(pixels(of: serial), pixels(of: parallel)).maximum, 1)
+    }
+
+    @MainActor
+    func testLaunchPreBakeCoversTheStarterGems() throws {
+        let requests = PebbleNode.commonBakeRequests(scale: 3)
+        XCTAssertEqual(requests.count, SeedData.subjects.count * 3 * GemArtworkSpec.variantCount)
+        XCTAssertEqual(Set(requests.map(\.name)).count, requests.count)
+        let names = Set(requests.map(\.name))
+        for subject in SeedData.subjects {
+            for index in 0 ..< 8 {
+                let descriptor = PebbleDescriptor(
+                    id: UUID(uuidString: String(format: "C5000000-0000-4000-8000-%012X", index))!,
+                    subjectName: subject.name,
+                    colorHex: subject.colorHex,
+                    source: .timer,
+                    kind: .normal,
+                    grams: Constants.Mass.measuredPebbleGrams
+                )
+                let request = try XCTUnwrap(PebbleNode.bakeRequest(for: descriptor, scale: 3))
+                XCTAssertTrue(names.contains(request.name), "A 25-minute \(subject.name) gem is pre-baked")
+            }
+        }
+    }
+
     // MARK: Idle tilt
 
     @MainActor
