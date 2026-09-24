@@ -167,10 +167,15 @@ struct HomeView: View {
         _preferences = Query(PrefsConsumerPolicy.descriptor())
     }
 
-    /// Delivered on the main run loop: the store may be written off-main.
+    /// Delivered on the main queue: the store may be written off-main, and a
+    /// write made during a view update must not mutate state inside it. Not
+    /// `RunLoop.main`, whose Combine scheduler runs only in the default mode:
+    /// a change posted while the AX5 Home scroll view or a sheet is being
+    /// dragged would wait until the finger lifts, and with it the start
+    /// button and the queued celebration.
     private static let pendingRewardReceiptChanges = NotificationCenter.default
         .publisher(for: PendingRewardReceiptStore.didChangeNotification)
-        .receive(on: RunLoop.main)
+        .receive(on: DispatchQueue.main)
 
     private var subjects: [Subject] {
         SubjectSyncPolicy.presentationSubjects(from: storedSubjects)
