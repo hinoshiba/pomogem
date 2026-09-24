@@ -3350,6 +3350,43 @@ private struct ShareSessionGem: View {
     }
 
     var body: some View {
+        if session.presentationKind == .normal {
+            facetedBody
+        } else {
+            legacyBody
+        }
+    }
+
+    /// Normal gems reuse the jar's baked faceted artwork so a shared card
+    /// and the live jar show the same stone.
+    private var facetedBody: some View {
+        GeometryReader { proxy in
+            let side = min(proxy.size.width, proxy.size.height)
+            let isMeasured = session.source.isMeasured
+            let rung = isMeasured ? GemCutLadder.standard.loose : GemCutLadder.standard.selfReported
+            let spec = GemArtworkSpec(
+                cut: rung.cut,
+                symmetry: rung.symmetry,
+                colors: [GemColorShare(hex: session.colorHex, fraction: 1)],
+                variant: variant % GemArtworkSpec.variantCount,
+                facetContrast: rung.facetContrast,
+                sparkleCount: rung.sparkleCount,
+                isMuted: !isMeasured,
+                showsDashedRing: !isMeasured
+            )
+            Image(uiImage: GemArtwork.bodyImage(for: spec, radius: side / 2))
+                .resizable()
+                .interpolation(.high)
+                .frame(width: side, height: side)
+                .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+        }
+        .shadow(
+            color: ShareColorPolicy.color(session.colorHex, vivid: true).opacity(0.42 + glow * 0.22),
+            radius: 3 + glow * 2.5
+        )
+    }
+
+    private var legacyBody: some View {
         ShareGemShape(variant: variant)
             .fill(material)
             .overlay {
@@ -3394,24 +3431,25 @@ private struct ShareSessionGem: View {
                         .shadow(color: .black.opacity(0.9), radius: 1.5)
                 }
             }
-            .shadow(
-                color: session.presentationKind == .normal
-                    ? ShareColorPolicy.color(session.colorHex, vivid: true).opacity(0.24)
-                    : .white.opacity(0.28 + glow * 0.26),
-                radius: session.presentationKind == .normal
-                    ? 3 + glow * 1.5
-                    : 5 + glow * 4
-            )
+            // Only rare kinds reach this legacy body (normal gems use the
+            // baked artwork above), so the rare glow applies directly.
+            .shadow(color: rareShadowColor, radius: rareShadowRadius)
             .overlay(alignment: .topTrailing) {
-                if session.presentationKind != .normal {
-                    Image(systemName: "sparkle")
-                        .font(.system(size: 6 + glow * 3, weight: .black))
-                        .foregroundStyle(.white)
-                        .shadow(color: .white.opacity(0.72), radius: 3)
-                        .opacity(0.28 + glow * 0.72)
-                        .offset(x: 2, y: -2)
-                }
+                Image(systemName: "sparkle")
+                    .font(.system(size: 6 + glow * 3, weight: .black))
+                    .foregroundStyle(.white)
+                    .shadow(color: .white.opacity(0.72), radius: 3)
+                    .opacity(0.28 + glow * 0.72)
+                    .offset(x: 2, y: -2)
             }
+    }
+
+    private var rareShadowColor: Color {
+        .white.opacity(0.28 + glow * 0.26)
+    }
+
+    private var rareShadowRadius: CGFloat {
+        CGFloat(5 + glow * 4)
     }
 }
 
@@ -3537,27 +3575,10 @@ private struct ShareAggregatePebble: View {
             let size = min(proxy.size.width, proxy.size.height)
             let variant = stableShareVariant(aggregate.id)
             ZStack {
-                ShareGemShape(variant: variant)
-                    .fill(AngularGradient(colors: colors + [colors[0]], center: .center))
-                ShareGemShape(variant: variant)
-                    .fill(.black.opacity(0.15))
-                ShareGemFacetLines(variant: variant)
-                    .stroke(.white.opacity(0.34), lineWidth: max(0.8, size * 0.018))
-                    .clipShape(ShareGemShape(variant: variant))
-                ForEach(0..<min(aggregate.pebbleCount, 8), id: \.self) { index in
-                    let dotColor = colors[index % colors.count].opacity(0.92)
-                    let xOffset = CGFloat(index % 3 - 1) * size * 0.2
-                    let yOffset = CGFloat(index / 3 - 1) * size * 0.18
-                    Circle()
-                        .fill(dotColor)
-                        .frame(width: size * 0.16, height: size * 0.16)
-                        .offset(x: xOffset, y: yOffset)
-                }
-                ForEach(0..<min(aggregate.level, 3), id: \.self) { ring in
-                    ShareGemShape(variant: variant + ring * 11)
-                        .stroke(.white.opacity(0.24), lineWidth: 0.9)
-                        .padding(CGFloat(ring) * 3 + 2)
-                }
+                Image(uiImage: GemArtwork.bodyImage(for: artworkSpec(variant: variant), radius: size / 2))
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: size, height: size)
                 if rewardIdentity.goldCount > 0 {
                     Circle()
                         .trim(from: 0, to: rewardIdentity.prismCount > 0 ? 0.47 : 1)
@@ -3594,16 +3615,33 @@ private struct ShareAggregatePebble: View {
                     }
                 }
                 .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.88), radius: 2)
-                .padding(3)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1.5)
+                .background(Color(red: 0.035, green: 0.05, blue: 0.11).opacity(0.78), in: Capsule())
+                .shadow(color: .black.opacity(0.6), radius: 1.5)
             }
             .frame(width: size, height: size)
-            .shadow(color: colors[0].opacity(0.52), radius: size * 0.16)
-            .overlay {
-                ShareGemShape(variant: variant)
-                    .stroke(.white.opacity(0.54), lineWidth: max(1, size * 0.022))
-            }
+            .shadow(color: colors[0].opacity(0.58), radius: size * 0.16)
         }
+    }
+
+    private func artworkSpec(variant: Int) -> GemArtworkSpec {
+        let rung = GemCutLadder.standard.rung(aggregateLevel: aggregate.level)
+        let mix = aggregate.colorMix
+            .filter { $0.fraction > 0 }
+            .sorted { $0.fraction > $1.fraction }
+            .prefix(4)
+            .map { GemColorShare(hex: $0.hex, fraction: $0.fraction) }
+        return GemArtworkSpec(
+            cut: rung.cut,
+            symmetry: rung.symmetry,
+            colors: mix.isEmpty ? [GemColorShare(hex: Constants.Color.textMute, fraction: 1)] : Array(mix),
+            variant: variant % GemArtworkSpec.variantCount,
+            facetContrast: rung.facetContrast,
+            sparkleCount: rung.sparkleCount,
+            isMuted: aggregate.manualPebbleCount > aggregate.measuredPebbleCount,
+            showsDashedRing: aggregate.manualPebbleCount > 0
+        )
     }
 }
 

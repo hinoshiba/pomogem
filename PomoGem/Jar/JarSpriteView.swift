@@ -623,8 +623,13 @@ private struct JarAmbientStage: View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let height = proxy.size.height
+            // Mirrors JarScene.outerJarRect: the bottle is vertically centred
+            // and at most `Constants.Jar.height` tall.
+            let jarHeight = min(Constants.Jar.height, max(height, 1))
+            let jarBottom = (height + jarHeight) / 2
+            let jarWidth = max(width - Constants.Jar.horizontalMargin * 2, 1)
 
-            ZStack(alignment: .bottom) {
+            ZStack(alignment: .topLeading) {
                 RadialGradient(
                     colors: [
                         PomoGemTheme.auroraWarm.opacity(reduceTransparency ? 0.035 : 0.085),
@@ -636,27 +641,121 @@ private struct JarAmbientStage: View {
                     endRadius: max(width, height) * 0.56
                 )
                 .frame(width: width * 1.14, height: height * 0.92)
-                .offset(y: -height * 0.03)
+                .position(x: width / 2, y: height * 0.43)
 
+                // Showcase floor: a dark contact shadow, then a warm (left)
+                // and cool (right) light pool, as if the jar sat on glass.
                 Ellipse()
                     .fill(
                         RadialGradient(
-                            colors: [
-                                PomoGemTheme.auroraBlue.opacity(reduceTransparency ? 0.08 : 0.18),
-                                Color.black.opacity(0.46),
-                                .clear
-                            ],
+                            colors: [Color.black.opacity(0.52), .clear],
                             center: .center,
                             startRadius: 2,
-                            endRadius: width * 0.42
+                            endRadius: jarWidth * 0.46
                         )
                     )
-                    .frame(width: width * 0.86, height: max(30, height * 0.10))
-                    .blur(radius: reduceTransparency ? 4 : 10)
-                    .offset(y: -height * 0.035)
+                    .frame(width: jarWidth * 0.94, height: 34)
+                    .blur(radius: reduceTransparency ? 3 : 8)
+                    .position(x: width / 2, y: jarBottom + 2)
+
+                HStack(spacing: 0) {
+                    Ellipse()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    PomoGemTheme.auroraWarm.opacity(reduceTransparency ? 0.14 : 0.34),
+                                    .clear
+                                ],
+                                center: .center,
+                                startRadius: 1,
+                                endRadius: jarWidth * 0.32
+                            )
+                        )
+                    Ellipse()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    PomoGemTheme.auroraBlue.opacity(reduceTransparency ? 0.12 : 0.30),
+                                    .clear
+                                ],
+                                center: .center,
+                                startRadius: 1,
+                                endRadius: jarWidth * 0.32
+                            )
+                        )
+                }
+                .frame(width: jarWidth * 1.12, height: 44)
+                .blur(radius: reduceTransparency ? 2 : 10)
+                .position(x: width / 2, y: jarBottom + 6)
+
+                // Rim of light where the glass base meets the floor.
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                .clear,
+                                PomoGemTheme.auroraWarm.opacity(0.55),
+                                Color.white.opacity(0.62),
+                                PomoGemTheme.auroraBlue.opacity(0.50),
+                                .clear
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: jarWidth * 0.86, height: 1.4)
+                    .blur(radius: reduceTransparency ? 0 : 0.6)
+                    .position(x: width / 2, y: jarBottom + 1)
+
+                if !reduceTransparency {
+                    JarFloorSparkles()
+                        .frame(width: jarWidth * 1.1, height: 26)
+                        .position(x: width / 2, y: jarBottom + 9)
+                }
             }
+            .frame(width: width, height: height)
         }
         .accessibilityHidden(true)
         .allowsHitTesting(false)
+    }
+}
+
+/// Four static star glints on the floor. Drawn once; no animation.
+private struct JarFloorSparkles: View {
+    var body: some View {
+        Canvas { context, size in
+            let points: [(x: CGFloat, y: CGFloat, length: CGFloat, alpha: Double)] = [
+                (0.12, 0.45, 7, 0.75),
+                (0.30, 0.78, 4.5, 0.55),
+                (0.73, 0.55, 6, 0.70),
+                (0.91, 0.30, 4, 0.50)
+            ]
+            for point in points {
+                let center = CGPoint(x: size.width * point.x, y: size.height * point.y)
+                for vertical in [false, true] {
+                    let rect = vertical
+                        ? CGRect(x: center.x - 0.7, y: center.y - point.length, width: 1.4, height: point.length * 2)
+                        : CGRect(x: center.x - point.length, y: center.y - 0.7, width: point.length * 2, height: 1.4)
+                    context.fill(
+                        Path(ellipseIn: rect),
+                        with: .radialGradient(
+                            Gradient(colors: [.white.opacity(point.alpha), .white.opacity(0)]),
+                            center: center,
+                            startRadius: 0,
+                            endRadius: point.length
+                        )
+                    )
+                }
+                context.fill(
+                    Path(ellipseIn: CGRect(x: center.x - 2, y: center.y - 2, width: 4, height: 4)),
+                    with: .radialGradient(
+                        Gradient(colors: [.white.opacity(point.alpha), .white.opacity(0)]),
+                        center: center,
+                        startRadius: 0,
+                        endRadius: 2
+                    )
+                )
+            }
+        }
     }
 }

@@ -1072,6 +1072,21 @@ struct HomeView: View {
                 }
             }
         }
+        // A soft ink scrim keeps the value legible over the brighter core,
+        // orbit markers and glowing gems behind the glass.
+        .background {
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [Color.black.opacity(0.34), Color.black.opacity(0.14), .clear],
+                        center: .center,
+                        startRadius: 4,
+                        endRadius: 120
+                    )
+                )
+                .frame(width: 250, height: 150)
+                .blur(radius: 8)
+        }
         // Keep every glyph behind the mouth instead of straddling its bright
         // rim; the occlusion cue is what makes the glass depth believable.
         .padding(.top, 88)

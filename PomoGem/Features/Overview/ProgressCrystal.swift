@@ -1540,6 +1540,10 @@ private struct JarAccumulationLightParticleField: View {
         }
     }
 
+    private static let bokehGold = Color(red: 1, green: 0.76, blue: 0.48)
+    private static let bokehAmber = Color(red: 1, green: 0.62, blue: 0.42)
+    private static let bokehPeach = Color(red: 1, green: 0.89, blue: 0.69)
+
     private var memoryParticleCount: Int {
         min(54, max(12, Int((12 + state.presenceFraction * 42).rounded())))
     }
@@ -1569,8 +1573,10 @@ private struct JarAccumulationLightParticleField: View {
                         endPoint: .bottom
                     )
                 )
+            // Denser than the lifetime memory layer: the current cycle is
+            // the warm, lit volume the gems rest in.
             particleCanvas(
-                count: 64,
+                count: 104,
                 opacityScale: opacityScale,
                 whiteSparkInterval: 7
             )
@@ -1593,7 +1599,9 @@ private struct JarAccumulationLightParticleField: View {
                 // random seed or changing positions between renders.
                 let xUnit = (Double((index * 37 + 17) % 101) + 0.5) / 102
                 let yUnit = (Double((index * 53 + 29) % 103) + 0.5) / 104
-                let diameter = CGFloat(1.8 + Double((index * 7) % 5) * 0.58)
+                // Out-of-focus bokeh: a soft disc with a brighter rim-less
+                // centre. Mostly warm, one in ten cool, as in a lit showcase.
+                let diameter = CGFloat(2.6 + Double((index * 7) % 5) * 1.25)
                 let alpha = (0.42 + Double((index * 11) % 7) * 0.075) * opacityScale
                 let rect = CGRect(
                     x: size.width * CGFloat(xUnit) - diameter / 2,
@@ -1601,21 +1609,38 @@ private struct JarAccumulationLightParticleField: View {
                     width: diameter,
                     height: diameter
                 )
+                let tone: Color
+                switch index % 10 {
+                case 0: tone = PomoGemTheme.auroraBlue
+                case 1, 4, 7: tone = Color(hex: colorHex)
+                case 2, 5: tone = Self.bokehAmber
+                case 3, 8: tone = Self.bokehPeach
+                default: tone = Self.bokehGold
+                }
+                let center = CGPoint(x: rect.midX, y: rect.midY)
                 context.fill(
                     Path(ellipseIn: rect),
-                    with: .color(Color(hex: colorHex).opacity(alpha))
+                    with: .radialGradient(
+                        Gradient(stops: [
+                            .init(color: tone.opacity(min(1, alpha * 1.25)), location: 0),
+                            .init(color: tone.opacity(alpha * 0.75), location: 0.45),
+                            .init(color: tone.opacity(0), location: 1)
+                        ]),
+                        center: center,
+                        startRadius: 0,
+                        endRadius: diameter / 2
+                    )
                 )
 
                 if index.isMultiple(of: whiteSparkInterval) {
-                    let spark = rect.insetBy(dx: diameter * 0.28, dy: diameter * 0.28)
+                    let spark = rect.insetBy(dx: diameter * 0.34, dy: diameter * 0.34)
                     context.fill(
                         Path(ellipseIn: spark),
-                        with: .color(Color.white.opacity(min(0.88, alpha + 0.20)))
+                        with: .color(Color.white.opacity(min(0.92, alpha + 0.26)))
                     )
                 }
             }
         }
-        .blur(radius: reduceTransparency ? 0 : 0.45)
     }
 }
 
@@ -1813,7 +1838,11 @@ struct JarLifetimeCoreBackdrop: View {
     var body: some View {
         GeometryReader { proxy in
             let dimension = min(190, max(150, proxy.size.width * 0.48))
-            let prismFactor = CGFloat(state.prismDiameterFactor)
+            // The hero gem is drawn a little larger than its semantic
+            // diameter factor so its facets read at arm's length. The factor
+            // itself (and its tests) stay the source of truth for growth.
+            let semanticFactor = CGFloat(state.prismDiameterFactor)
+            let prismFactor = min(0.56, semanticFactor + min(0.14, semanticFactor * Self.opticalGrowth))
             // Place the label plate outside the prism with an optical 8–12 pt
             // gap on the iPhone 15+ stage. It must never read as a sticker
             // painted across the crystal.
@@ -1842,14 +1871,31 @@ struct JarLifetimeCoreBackdrop: View {
 
                 orbitSlots(dimension: dimension)
 
+                // Soft violet-rose bloom directly behind the stone.
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.white.opacity(reduceTransparency ? 0.10 : 0.22),
+                                Color(hex: colorHex).opacity(reduceTransparency ? 0.16 : 0.34),
+                                PomoGemTheme.auroraViolet.opacity(reduceTransparency ? 0.06 : 0.18),
+                                .clear
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: dimension * prismFactor * 0.78
+                        )
+                    )
+                    .frame(width: dimension * prismFactor * 1.6, height: dimension * prismFactor * 1.6)
+
                 LifetimeCorePrism(
                     colorHex: colorHex,
                     level: state.coreLevel
                 )
                 .frame(width: dimension * prismFactor, height: dimension * prismFactor)
                 .shadow(
-                    color: Color(hex: colorHex).opacity(reduceTransparency ? 0.24 : 0.74),
-                    radius: 18
+                    color: Color(hex: colorHex).opacity(reduceTransparency ? 0.24 : 0.62),
+                    radius: 14
                 )
 
                 VStack(spacing: 2) {
@@ -1919,15 +1965,21 @@ struct JarLifetimeCoreBackdrop: View {
         .onChange(of: reduceMotion) { _, _ in updateMotion() }
     }
 
+    /// Extra optical size (fraction of the semantic factor, capped at +0.14)
+    /// so the hero stone's facets read without crowding the HUD.
+    static let opticalGrowth: CGFloat = 0.45
+    /// Rose-gold orbit tone from the reference mood (not a reward colour).
+    private static let orbitCopper = Color(red: 0.85, green: 0.59, blue: 0.48)
+
     @ViewBuilder
     private func lifetimeRings(dimension: CGFloat) -> some View {
         ForEach(0 ..< state.visibleHaloRingCount, id: \.self) { index in
             let inset = CGFloat(index) * 8
             Circle()
                 .stroke(
-                    Color(hex: colorHex).opacity(
-                        (colorSchemeContrast == .increased ? 0.50 : 0.13)
-                            + CGFloat(index) * (colorSchemeContrast == .increased ? 0.025 : 0.018)
+                    Self.orbitCopper.opacity(
+                        (colorSchemeContrast == .increased ? 0.62 : 0.42)
+                            + CGFloat(index) * (colorSchemeContrast == .increased ? 0.025 : 0.03)
                     ),
                     style: StrokeStyle(
                         lineWidth: index == state.visibleHaloRingCount - 1 ? 1.2 : 0.7,
@@ -1948,32 +2000,44 @@ struct JarLifetimeCoreBackdrop: View {
             ForEach(0 ..< JarLifetimeCorePresentation.orbitSlotCount, id: \.self) { index in
                 let angle = Angle.degrees(-90 + Double(index) * 36)
                 let isLit = lit.map { index < $0 } ?? false
-                DiamondSlot()
-                    .fill(
-                        isLit
-                            ? Color(hex: colorHex)
-                            : PomoGemTheme.raised.opacity(
-                                colorSchemeContrast == .increased
-                                    ? 0.90
-                                    : (lit == nil ? 0.26 : 0.58)
-                            )
-                    )
-                    .overlay {
-                        DiamondSlot()
-                            .stroke(
-                                isLit
-                                    ? Color.white.opacity(0.82)
-                                    : Color.white.opacity(colorSchemeContrast == .increased ? 0.62 : 0.13),
-                                lineWidth: colorSchemeContrast == .increased
-                                    ? 1.2
-                                    : (isLit ? 0.9 : 0.55)
-                            )
-                    }
+                ZStack {
+                    // Outer outline diamond: the empty slot waiting for time.
+                    DiamondSlot()
+                        .stroke(
+                            isLit
+                                ? Color.white.opacity(0.78)
+                                : Self.orbitCopper.opacity(
+                                    colorSchemeContrast == .increased ? 0.90 : (lit == nil ? 0.30 : 0.50)
+                                ),
+                            lineWidth: colorSchemeContrast == .increased ? 1.2 : 0.9
+                        )
+                        .frame(width: 12, height: 12)
+                    DiamondSlot()
+                        .fill(
+                            isLit
+                                ? Color(hex: colorHex)
+                                : PomoGemTheme.raised.opacity(
+                                    colorSchemeContrast == .increased
+                                        ? 0.90
+                                        : (lit == nil ? 0.26 : 0.58)
+                                )
+                        )
+                        .overlay {
+                            DiamondSlot()
+                                .stroke(
+                                    isLit
+                                        ? Color.white.opacity(0.9)
+                                        : Self.orbitCopper.opacity(colorSchemeContrast == .increased ? 0.8 : 0.4),
+                                    lineWidth: colorSchemeContrast == .increased ? 1 : 0.6
+                                )
+                        }
+                        .frame(width: isLit ? 6.5 : 5, height: isLit ? 6.5 : 5)
+                }
                     .shadow(
-                        color: isLit ? Color(hex: colorHex).opacity(0.72) : .clear,
+                        color: isLit ? Color(hex: colorHex).opacity(0.8) : .clear,
                         radius: 5
                     )
-                    .frame(width: isLit ? 9 : 7, height: isLit ? 9 : 7)
+                    .frame(width: 12, height: 12)
                     .offset(
                         x: CGFloat(cos(angle.radians)) * radius,
                         y: CGFloat(sin(angle.radians)) * radius
@@ -1993,117 +2057,30 @@ struct JarLifetimeCoreBackdrop: View {
     }
 }
 
-/// A more dimensional material for the one compressed lifetime core. Subject
-/// colour remains the anchor, while cool and violet refractions stop a large
-/// aggregate from reading as a flat enlarged version of a loose particle.
-private struct LifetimeCorePrism: View {
+/// The one compressed lifetime core, drawn as a radiant brilliant. Facets
+/// are baked once by `GemArtwork` (Core Graphics) and cached per colour,
+/// level and size, so the core costs no per-frame drawing. The dispersion fan
+/// is anchored on the mass-weighted effort colour; its brilliance (symmetry
+/// and white core star) grows only with the deterministic core level.
+struct LifetimeCorePrism: View {
     let colorHex: String
     let level: Int
 
     var body: some View {
         GeometryReader { proxy in
-            let size = min(proxy.size.width, proxy.size.height)
-            ZStack {
-                LifetimeCoreShape(pointCount: max(8, min(14, 8 + level)))
-                    .fill(
-                        AngularGradient(
-                            colors: [
-                                Color(hex: colorHex),
-                                PomoGemTheme.auroraWarm,
-                                .white,
-                                PomoGemTheme.auroraBlue,
-                                PomoGemTheme.auroraViolet,
-                                Color(hex: colorHex)
-                            ],
-                            center: .center,
-                            angle: .degrees(-32)
-                        )
-                    )
-                    .overlay {
-                        LifetimeCoreShape(pointCount: max(8, min(14, 8 + level)))
-                            .fill(
-                                RadialGradient(
-                                    colors: [
-                                        .white.opacity(0.54),
-                                        .clear,
-                                        Color.black.opacity(0.24)
-                                    ],
-                                    center: UnitPoint(x: 0.30, y: 0.23),
-                                    startRadius: 0,
-                                    endRadius: size * 0.70
-                                )
-                            )
-                            .blendMode(.screen)
-                    }
-                    .overlay {
-                        LifetimeCoreShape(pointCount: max(8, min(14, 8 + level)))
-                            .stroke(
-                                LinearGradient(
-                                    colors: [.white.opacity(0.95), Color(hex: colorHex).opacity(0.86)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: max(1.8, size * 0.035)
-                            )
-                    }
-
-                Canvas { context, canvasSize in
-                    let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
-                    let radius = min(canvasSize.width, canvasSize.height) * 0.43
-                    let facets = max(8, min(14, 8 + level))
-                    for index in 0 ..< facets {
-                        let angle = -Double.pi / 2 + Double(index) / Double(facets) * Double.pi * 2
-                        let next = -Double.pi / 2 + Double(index + 1) / Double(facets) * Double.pi * 2
-                        var facet = Path()
-                        facet.move(to: center)
-                        facet.addLine(to: CGPoint(
-                            x: center.x + CGFloat(cos(angle)) * radius,
-                            y: center.y + CGFloat(sin(angle)) * radius
-                        ))
-                        facet.addLine(to: CGPoint(
-                            x: center.x + CGFloat(cos(next)) * radius,
-                            y: center.y + CGFloat(sin(next)) * radius
-                        ))
-                        facet.closeSubpath()
-                        context.fill(
-                            facet,
-                            with: .color(
-                                index.isMultiple(of: 3)
-                                    ? .white.opacity(0.12)
-                                    : Color.black.opacity(index.isMultiple(of: 2) ? 0.08 : 0.02)
-                            )
-                        )
-                        context.stroke(facet, with: .color(.white.opacity(0.16)), lineWidth: 0.55)
-                    }
-
-                    let coreRadius = radius * min(0.24, 0.12 + CGFloat(level) * 0.018)
-                    context.fill(
-                        Path(ellipseIn: CGRect(
-                            x: center.x - coreRadius,
-                            y: center.y - coreRadius,
-                            width: coreRadius * 2,
-                            height: coreRadius * 2
-                        )),
-                        with: .radialGradient(
-                            Gradient(colors: [.white.opacity(0.94), .white.opacity(0)]),
-                            center: center,
-                            startRadius: 0,
-                            endRadius: coreRadius
-                        )
-                    )
-                }
-
-                Capsule()
-                    .fill(.white.opacity(0.72))
-                    .frame(width: size * 0.24, height: size * 0.075)
-                    .blur(radius: size * 0.014)
-                    .rotationEffect(.degrees(-18))
-                    .offset(x: -size * 0.18, y: -size * 0.22)
-            }
+            let size = max(8, min(proxy.size.width, proxy.size.height))
+            Image(uiImage: GemArtwork.coreImage(
+                colorHex: colorHex,
+                level: level,
+                diameter: size
+            ))
+            .resizable()
+            .interpolation(.high)
+            .antialiased(true)
             .frame(width: size, height: size)
             .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
-            .saturation(1.22)
         }
+        .accessibilityHidden(true)
     }
 }
 
