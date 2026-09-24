@@ -3568,13 +3568,18 @@ private struct PersistenceLaunchStatusView: View {
             NightBackground()
             ScrollView {
                 VStack(spacing: 18) {
-                    Image(systemName: symbol)
-                        .font(.system(size: 44, weight: .light))
-                        .foregroundStyle(PomoGemTheme.amber)
-                        .accessibilityHidden(true)
+                    if isChoosingStorage {
+                        storageChoiceHeader
+                    } else {
+                        Image(systemName: symbol)
+                            .font(.system(size: 44, weight: .light))
+                            .foregroundStyle(PomoGemTheme.amber)
+                            .accessibilityHidden(true)
+                    }
                     Text(title)
                         .font(PomoGemTheme.brand(24))
                         .multilineTextAlignment(.center)
+                        .accessibilityAddTraits(isChoosingStorage ? .isHeader : [])
                     Text(message)
                         .foregroundStyle(PomoGemTheme.muted)
                         .multilineTextAlignment(.center)
@@ -3607,33 +3612,45 @@ private struct PersistenceLaunchStatusView: View {
                             }
                         }
                     } else if isChoosingStorage {
-                        storageChoiceDisclosure(
+                        // launch-03 / product-01. Two equal cards, one plain
+                        // line each (configuration.yml
+                        // `equal_neither_recommended`): same shape, same
+                        // style, no default. Each card is only the choice;
+                        // its full caveats are in its own confirmation alert
+                        // below, which stays the step that commits it. The
+                        // card title stays the button's exact accessibility
+                        // label because the real-device tests and the review
+                        // notes name these buttons by it.
+                        storageChoiceButton(
                             symbol: "icloud.fill",
-                            title: "iCloudに保存して同期",
-                            detail: "テーマ名、成果メモ、集中記録、設定、進行中タイマーを、Apple AccountのプライベートiCloudへ送信します。保存済みの端末データがあればオフラインでも利用できます。初回の取得や同期の再開・保存先の切り替えには通信が必要です。"
-                        )
-                        Button("iCloudに保存して同期") {
+                            title: String(localized: "iCloudに保存して同期", table: "Launch",
+                                          comment: "First-run storage choice: iCloud option (button label)"),
+                            detail: String(localized: "同じApple AccountのiPhone間で、記録を同期します。", table: "Launch",
+                                           comment: "First-run storage choice: the iCloud option's one line"),
+                            identifier: "storage-choice.cloud"
+                        ) {
                             storageConfirmation = .cloud
                         }
-                        .buttonStyle(PomoGemPrimaryButtonStyle())
-
-                        storageChoiceDisclosure(
+                        storageChoiceButton(
                             symbol: "iphone",
-                            title: "このiPhoneだけに保存",
-                            detail: "iCloudへ送信せず、このiPhoneに保存します。後で設定から保存先を切り替えられます。アプリを削除すると端末内の記録は失われます。"
-                        )
-                        Button("このiPhoneだけに保存") {
+                            title: String(localized: "このiPhoneだけに保存", table: "Launch",
+                                          comment: "First-run storage choice: local-only option (button label)"),
+                            detail: String(localized: "記録はこのiPhoneだけに保存し、iCloudへは送信しません。", table: "Launch",
+                                           comment: "First-run storage choice: the local-only option's one line"),
+                            identifier: "storage-choice.local"
+                        ) {
                             storageConfirmation = .localOnly
                         }
-                        .buttonStyle(PomoGemSecondaryButtonStyle())
 
                         Link(destination: AppLinks.privacyPolicy) {
                             Label(
                                 "プライバシーポリシー",
                                 systemImage: "hand.raised"
                             )
+                            .font(.footnote.weight(.semibold))
+                            .frame(minHeight: 44)
                         }
-                        .buttonStyle(PomoGemSecondaryButtonStyle())
+                        .foregroundStyle(PomoGemTheme.amber)
                     } else if case .datasetRefresh = state {
                         datasetRefreshDoors
                     } else if case .cloudLineageUnavailable = state {
@@ -4305,29 +4322,68 @@ private struct PersistenceLaunchStatusView: View {
         return "置き換えが始まる前なので、この端末の切り替えを取り消して元の保存先へ戻れます。取り消した後はアプリを終了して開き直してください。"
     }
 
-    private func storageChoiceDisclosure(
+    /// launch-03 / product-01. The first frame of every new install used to be
+    /// this generic status layout with a drive symbol, which read like a
+    /// system error. The brand and one sentence of what the app does come
+    /// first; the storage question follows.
+    private var storageChoiceHeader: some View {
+        VStack(spacing: 12) {
+            PomoGemLogo()
+            Text("集中した時間が、粒になって瓶にたまっていきます。", tableName: "Launch",
+                 comment: "First-run storage choice: the app's one-line promise under the logo")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PomoGemTheme.amber)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("storage-choice.value")
+        }
+    }
+
+    /// One storage option. Both options are drawn by this one function so
+    /// they cannot drift apart in weight: neither is filled, neither is first
+    /// by style, and each carries exactly one line.
+    private func storageChoiceButton(
         symbol: String,
         title: String,
-        detail: String
+        detail: String,
+        identifier: String,
+        action: @escaping () -> Void
     ) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: symbol)
-                .foregroundStyle(PomoGemTheme.amber)
-                .frame(width: 24)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.headline)
-                Text(detail)
-                    .font(.caption)
+        Button(action: action) {
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: symbol)
+                    .font(.title3)
+                    .foregroundStyle(PomoGemTheme.amber)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(.headline, design: .rounded, weight: .bold))
+                        .foregroundStyle(PomoGemTheme.text)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .multilineTextAlignment(.leading)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.bold))
                     .foregroundStyle(PomoGemTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
+            .padding(16)
+            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+            .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(PomoGemTheme.glassEdge.opacity(0.22), lineWidth: 1)
+            }
         }
-        .padding(14)
-        .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 14))
-        .accessibilityElement(children: .combine)
+        .buttonStyle(PomoGemRowButtonStyle(cornerRadius: 16))
+        // The exact label is the one the real-device tests and the review
+        // notes name; the line under it is what choosing it does.
+        .accessibilityLabel(title)
+        .accessibilityHint(detail)
+        .accessibilityIdentifier(identifier)
     }
 
     private var isPreparing: Bool {
@@ -4351,7 +4407,10 @@ private struct PersistenceLaunchStatusView: View {
     private var title: String {
         switch state {
         case .choosingStorage:
-            "iCloud同期を有効にしますか？"
+            // A neutral question: 「iCloudを有効にしますか？」 framed the
+            // local-only option as the "no" answer to a default.
+            String(localized: "記録の保存先を選んでください", table: "Launch",
+                   comment: "First-run storage choice: screen title")
         case .preparing:
             "準備中"
         case .blocked:
@@ -4385,7 +4444,8 @@ private struct PersistenceLaunchStatusView: View {
     private var message: String {
         switch state {
         case .choosingStorage:
-            "有効にすると、同じApple AccountのiPhone間で記録を同期します。利用しない場合は、このiPhoneだけに保存でき、記録はiCloudへ送信されません。"
+            String(localized: "どちらを選んでも、タイマーと瓶は同じように使えます。", table: "Launch",
+                   comment: "First-run storage choice: one-sentence message under the title")
         case let .preparing(message), let .blocked(message, _), let .failed(message),
              let .relaunchRequired(message), let .offlineRelaunchRequired(message),
              let .cloudVerificationTimedOut(message),
@@ -4447,6 +4507,40 @@ struct CloudLaunchTimeoutUITestFixtureView: View {
                         .accessibilityIdentifier("cloud-launch-timeout.fixture-state")
                 }
                 .font(.caption)
+            }
+    }
+}
+#endif
+
+#if DEBUG && targetEnvironment(simulator)
+/// launch-03 / launch-04. The shipping first-run storage choice with a call
+/// recorder in place of the host: no selection is recorded, no account is
+/// resolved and no container exists, so a test can open and cancel both
+/// confirmations and read what each one commits to.
+struct FirstRunStorageChoiceUITestFixtureView: View {
+    @State private var cloudCalls = 0
+    @State private var localCalls = 0
+
+    var body: some View {
+        PersistenceLaunchStatusView(
+            state: .choosingStorage,
+            onRetry: {}, onRetryOnline: {}, canRetryOnline: false,
+            onChooseCloud: { cloudCalls += 1 },
+            onChooseLocalOnly: { localCalls += 1 },
+            onRecoverTransfer: {}, onCancelTransfer: {}, onRefreshDataset: {},
+            onCancelLocalTransfer: nil, retainsTransferCopyOnCancellation: false,
+            onContinueOffline: nil)
+            .safeAreaInset(edge: .bottom) {
+                VStack {
+                    Text(verbatim: "calls=0;choice=none;starting=false")
+                        .accessibilityIdentifier("storage-switch.fixture-state")
+                    Text(verbatim: "cloud=\(cloudCalls);local=\(localCalls)")
+                        .accessibilityIdentifier("storage-choice.fixture-state")
+                }
+                .font(.caption)
+                // Test plumbing, not the screen under test: keep it from
+                // covering the AX5 layout being measured.
+                .dynamicTypeSize(.large)
             }
     }
 }

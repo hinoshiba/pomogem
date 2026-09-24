@@ -126,6 +126,7 @@
 		7850E3935D17341485C46C16 /* CompleteDataDeletionLaunchPreflight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 329AEDF3BEDD1C9D0C701244 /* CompleteDataDeletionLaunchPreflight.swift */; };
 		78B9055A72C9DC3FFE5842F0 /* CustomDurationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CEE148CEBF14D1D1A0C63F0 /* CustomDurationView.swift */; };
 		7CB82FE804B2887172375629 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EFB20CEF01CE01A6FC6CBB9 /* Constants.swift */; };
+		7D2B1A6965287AA687B73370 /* FirstRunUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8A7F4C18A24AEDA3A35FEBD /* FirstRunUITests.swift */; };
 		7D3CCEA39DBEB46065B5B57B /* ScreenTimeCallbackDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15F05E4736BA406DC0D092D5 /* ScreenTimeCallbackDiagnostics.swift */; };
 		7D6C7A960DAE6D98765C0855 /* PomoGemDataExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF23306474C1C7B694067BD8 /* PomoGemDataExporter.swift */; };
 		7D6D35E9AE98C9E52CF548F8 /* CloudOfflineAccessState.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED020371DFA1442C08CCD31D /* CloudOfflineAccessState.swift */; };
@@ -588,6 +589,7 @@
 		F7E3CBA2D38F36AD0E9F540B /* ScreenTimeObstacleProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeObstacleProjection.swift; sourceTree = "<group>"; };
 		F8018C65F844DB234D0AAC3E /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		F876E41FCE0D77EC75DBC1DF /* FocusCloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusCloudSync.swift; sourceTree = "<group>"; };
+		F8A7F4C18A24AEDA3A35FEBD /* FirstRunUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstRunUITests.swift; sourceTree = "<group>"; };
 		F8B8DB83E9BABEEE2F3EF597 /* StorageTransferNilLineageDatasetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferNilLineageDatasetTests.swift; sourceTree = "<group>"; };
 		FB130FAA896BC2C5EC57C722 /* StorageTransferControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferControllerTests.swift; sourceTree = "<group>"; };
 		FB33553E11FE75154EDC5E34 /* StrataMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataMath.swift; sourceTree = "<group>"; };
@@ -766,6 +768,7 @@
 				553C936224E8783AF264B56A /* CriticalFlowAdversarialUITests.swift */,
 				6D5BBBD0771D0437A32FFB64 /* DecimalFusionEndToEndUITests.swift */,
 				4383D72800A4EF0F5C7823FE /* EngagementOverviewUITests.swift */,
+				F8A7F4C18A24AEDA3A35FEBD /* FirstRunUITests.swift */,
 				88643D553679C84D93A636AE /* FocusCompletionFailureRecoveryUITests.swift */,
 				6417FB0D2F61DFB2082D39A3 /* FortyYearPersistentColdLaunchUITests.swift */,
 				B646D23FDCC8F9053F943B3F /* GIFShareLifecycleUITests.swift */,
@@ -1582,6 +1585,7 @@
 				5E521D17EFF0330DC4D121CD /* CriticalFlowAdversarialUITests.swift in Sources */,
 				D71C1C4A72E145D141128C66 /* DecimalFusionEndToEndUITests.swift in Sources */,
 				1F96B5E7B41F562BB1529DA4 /* EngagementOverviewUITests.swift in Sources */,
+				7D2B1A6965287AA687B73370 /* FirstRunUITests.swift in Sources */,
 				5DB48410BC347FAE6BD91C78 /* FocusCompletionFailureRecoveryUITests.swift in Sources */,
 				DF244E6D7791BE754CAF67DF /* FortyYearPersistentColdLaunchUITests.swift in Sources */,
 				2C4CC152BE16517C844AC96C /* GIFShareLifecycleUITests.swift in Sources */,
