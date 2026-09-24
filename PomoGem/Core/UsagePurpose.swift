@@ -183,11 +183,21 @@ enum OnboardingThemePolicy {
         return isArchived ? .keep : .archive
     }
 
+    /// Whether a theme that already exists takes one of the twelve slots
+    /// while the user picks a first theme. It must match what finishing
+    /// onboarding keeps (`builtInPresetChange`), or the picker offers a slot
+    /// that completion then does not have and the chosen theme is silently
+    /// skipped. A local store reclaims an unselected built-in preset without
+    /// history, so that one is free; iCloud mode keeps every theme that
+    /// arrived (launch-06), so every live theme counts there. `hasHistory`
+    /// is read only for a local built-in preset, the one case that needs it.
     static func countsAgainstThemeLimitBeforeSelection(
         isBuiltInPreset: Bool,
-        hasHistory: Bool
+        storesInCloud: Bool,
+        hasHistory: @autoclosure () -> Bool
     ) -> Bool {
-        !isBuiltInPreset || hasHistory
+        if storesInCloud || !isBuiltInPreset { return true }
+        return hasHistory()
     }
 
     /// launch-07. The one theme 「瓶をひらく」 will create. A valid name still

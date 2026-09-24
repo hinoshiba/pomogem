@@ -48,6 +48,10 @@ struct OnboardingView: View {
     }
 
     var body: some View {
+        // Read once per render. The theme field lives in this view, so every
+        // keystroke renders it again; each read walks the theme list.
+        let themeLimit = themeLimitSnapshot
+        let selection = effectiveSelectedSubjects(within: themeLimit)
         ZStack {
             NightBackground()
             VStack(spacing: 0) {
@@ -119,10 +123,10 @@ struct OnboardingView: View {
                         selectedSubjects: $selectedSubjects,
                         customSubjectName: $pendingSubjectName,
                         wantsNotifications: $wantsNotifications,
-                        effectiveSelection: effectiveSelectedSubjects,
+                        effectiveSelection: selection,
                         showsSelectionSummary: usesCompactChrome,
-                        existingSubjectNames: Set(existingSubjects.map(\.name)),
-                        availableNewSubjectSlots: availableNewSubjectSlots
+                        existingSubjectNames: themeLimit.existingNames,
+                        availableNewSubjectSlots: themeLimit.availableNewSubjectSlots
                     )
                     .tag(2)
 
@@ -151,7 +155,7 @@ struct OnboardingView: View {
                     }
 
                     if page == 2, !usesCompactChrome {
-                        OnboardingSelectionSummary(selection: effectiveSelectedSubjects)
+                        OnboardingSelectionSummary(selection: selection)
                     }
 
                     Button {
@@ -160,8 +164,8 @@ struct OnboardingView: View {
                         Text(page == pageCount - 1 ? "瓶をひらく" : "次へ")
                     }
                     .buttonStyle(PomoGemPrimaryButtonStyle())
-                    .disabled(isPrimaryActionDisabled)
-                    .accessibilityHint(primaryActionHint)
+                    .disabled(isPrimaryActionDisabled(selection: selection))
+                    .accessibilityHint(primaryActionHint(selection: selection))
                     .accessibilityIdentifier("onboarding.next")
                 }
                 .padding(.horizontal, 24)
@@ -194,14 +198,16 @@ struct OnboardingView: View {
         Binding(
             get: { page },
             set: { nextPage in
-                guard !(page == 2 && nextPage > page && effectiveSelectedSubjects.isEmpty) else { return }
+                guard !(page == 2 && nextPage > page
+                        && effectiveSelectedSubjects(within: themeLimitSnapshot).isEmpty) else { return }
                 page = nextPage
             }
         )
     }
 
     private func advance() {
-        guard !isPrimaryActionDisabled else { return }
+        let selection = effectiveSelectedSubjects(within: themeLimitSnapshot)
+        guard !isPrimaryActionDisabled(selection: selection) else { return }
         if page < pageCount - 1 {
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
                 page += 1
@@ -215,22 +221,22 @@ struct OnboardingView: View {
                 resolvedRareRewardMode = .off
             }
             onComplete(
-                effectiveSelectedSubjects,
+                selection,
                 wantsNotifications,
                 resolvedRareRewardMode
             )
         }
     }
 
-    private var isPrimaryActionDisabled: Bool {
-        (page == 2 && effectiveSelectedSubjects.isEmpty)
+    private func isPrimaryActionDisabled(selection: Set<String>) -> Bool {
+        (page == 2 && selection.isEmpty)
             || (RareRewardReleasePolicy.isEnabled
                 && page == pageCount - 1
                 && selectedRareRewardMode == nil)
     }
 
-    private var primaryActionHint: String {
-        if page == 2, effectiveSelectedSubjects.isEmpty {
+    private func primaryActionHint(selection: Set<String>) -> String {
+        if page == 2, selection.isEmpty {
             return "テーマを1つ選ぶと瓶をひらけます"
         }
         if RareRewardReleasePolicy.isEnabled,
@@ -253,32 +259,49 @@ struct OnboardingView: View {
     /// The theme 「瓶をひらく」 creates: a valid name still in the field wins
     /// over a suggestion tapped earlier, so typing and tapping the button
     /// never silently drops what was typed.
-    private var effectiveSelectedSubjects: Set<String> {
-        let existingKeys = Set(existingSubjects.map { SubjectNamePolicy.comparisonKey($0.name) })
-        let slots = availableNewSubjectSlots
-        return OnboardingThemePolicy.effectiveSelection(
+    private func effectiveSelectedSubjects(within themeLimit: ThemeLimitSnapshot) -> Set<String> {
+        OnboardingThemePolicy.effectiveSelection(
             selected: selectedSubjects,
             pending: pendingSubjectName
         ) { name in
             // One theme is chosen here, so replacing the selection never
             // needs more than one new slot.
-            existingKeys.contains(SubjectNamePolicy.comparisonKey(name)) || slots > 0
+            themeLimit.existingKeys.contains(SubjectNamePolicy.comparisonKey(name))
+                || themeLimit.availableNewSubjectSlots > 0
         }
     }
 
-    /// Built-in learning presets can exist before first-use setup is complete.
-    /// Unselected presets without history are reclaimed on completion and must
-    /// not consume one of the user's twelve theme slots here.
-    private var availableNewSubjectSlots: Int {
+    /// What the theme step needs to know about the themes already here.
+    private struct ThemeLimitSnapshot {
+        let existingNames: Set<String>
+        let existingKeys: Set<String>
+        let availableNewSubjectSlots: Int
+    }
+
+    /// Themes can exist before first-use setup is complete: presets an older
+    /// version seeded, or, in iCloud mode, themes from the user's other
+    /// devices. Only the ones finishing onboarding keeps take one of the
+    /// twelve slots here (`countsAgainstThemeLimitBeforeSelection`); a local
+    /// store reclaims an unselected preset without history, iCloud mode keeps
+    /// everything that arrived.
+    private var themeLimitSnapshot: ThemeLimitSnapshot {
+        let subjects = existingSubjects
+        let storesInCloud = persistenceMode == .cloudKit
         let builtInIDs = Set(SeedData.subjects.map(\.id))
-        let occupiedCount = existingSubjects.filter { subject in
+        let occupiedCount = subjects.filter { subject in
             OnboardingThemePolicy.countsAgainstThemeLimitBeforeSelection(
                 isBuiltInPreset: builtInIDs.contains(subject.id),
+                storesInCloud: storesInCloud,
                 hasHistory: !(subject.studySessions?.isEmpty ?? true)
                     || !(subject.achievementStones?.isEmpty ?? true)
             )
         }.count
-        return max(0, Constants.App.maximumSubjects - occupiedCount)
+        let names = Set(subjects.map(\.name))
+        return ThemeLimitSnapshot(
+            existingNames: names,
+            existingKeys: Set(names.map(SubjectNamePolicy.comparisonKey)),
+            availableNewSubjectSlots: max(0, Constants.App.maximumSubjects - occupiedCount)
+        )
     }
 }
 

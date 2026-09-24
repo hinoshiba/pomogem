@@ -81,6 +81,39 @@ final class CloudRestoreOnboardingTests: XCTestCase {
         XCTAssertEqual(historyReads, 0, "iCloud mode does not need to inspect history")
     }
 
+    /// The picker's slot count must match what completion keeps: an iCloud
+    /// user with twelve imported themes, some of them presets without
+    /// history yet, used to be offered a new theme that finishing onboarding
+    /// then skipped without a word.
+    func testICloudThemeLimitCountsEveryThemeCompletionKeeps() {
+        var historyReads = 0
+        for isBuiltInPreset in [false, true] {
+            XCTAssertTrue(OnboardingThemePolicy.countsAgainstThemeLimitBeforeSelection(
+                isBuiltInPreset: isBuiltInPreset,
+                storesInCloud: true,
+                hasHistory: { historyReads += 1; return false }()
+            ))
+            XCTAssertEqual(
+                OnboardingThemePolicy.builtInPresetChange(
+                    isSelected: false, isArchived: false, storesInCloud: true) { false },
+                .keep,
+                "Every theme the count includes is one completion keeps"
+            )
+        }
+        XCTAssertEqual(historyReads, 0, "iCloud mode never faults a theme's history to count it")
+
+        // A local store still frees an unselected preset without history,
+        // exactly the one completion reclaims.
+        XCTAssertFalse(OnboardingThemePolicy.countsAgainstThemeLimitBeforeSelection(
+            isBuiltInPreset: true, storesInCloud: false, hasHistory: false))
+        XCTAssertEqual(OnboardingThemePolicy.builtInPresetChange(
+            isSelected: false, isArchived: false, storesInCloud: false) { false }, .retire)
+        XCTAssertTrue(OnboardingThemePolicy.countsAgainstThemeLimitBeforeSelection(
+            isBuiltInPreset: false, storesInCloud: false,
+            hasHistory: { historyReads += 1; return false }()))
+        XCTAssertEqual(historyReads, 0, "A custom theme always counts; its history is not read")
+    }
+
     func testSelectedPresetIsShownInEveryMode() {
         for storesInCloud in [false, true] {
             XCTAssertEqual(OnboardingThemePolicy.builtInPresetChange(

@@ -49,14 +49,17 @@ final class UsagePurposeTests: XCTestCase {
         ))
         XCTAssertTrue(OnboardingThemePolicy.countsAgainstThemeLimitBeforeSelection(
             isBuiltInPreset: false,
+            storesInCloud: false,
             hasHistory: false
         ))
         XCTAssertFalse(OnboardingThemePolicy.countsAgainstThemeLimitBeforeSelection(
             isBuiltInPreset: true,
+            storesInCloud: false,
             hasHistory: false
         ))
         XCTAssertTrue(OnboardingThemePolicy.countsAgainstThemeLimitBeforeSelection(
             isBuiltInPreset: true,
+            storesInCloud: false,
             hasHistory: true
         ))
     }
