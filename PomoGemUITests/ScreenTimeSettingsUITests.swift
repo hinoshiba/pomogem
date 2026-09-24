@@ -58,7 +58,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         let total = app.staticTexts["screen-time.negative-total"]
         XCTAssertTrue(reveal(total, upwards: false))
         let originalTotal = total.label
-        XCTAssertTrue(originalTotal.contains("黒いgem"))
+        XCTAssertTrue(originalTotal.contains("黒い石"))
         XCTAssertTrue(originalTotal.contains("0"))
         XCTAssertTrue(reveal(text(containing: "JSON書き出しや保存先の切り替えでは引き継ぎません")))
         assertResetConfirmationCanBeCancelled()
@@ -353,7 +353,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         let alert = app.alerts["スクリーンタイムの内容をリセット"]
         XCTAssertTrue(alert.waitForExistence(timeout: 4))
         XCTAssertTrue(alert.staticTexts.matching(NSPredicate(
-            format: "label CONTAINS %@", "保存済みの勉強時間と通常gemは残ります"
+            format: "label CONTAINS %@", "保存済みの勉強時間と粒は残ります"
         )).firstMatch.exists)
         XCTAssertTrue(alert.buttons["リセット"].exists)
         attach("Screen Time — explicit local reset confirmation")

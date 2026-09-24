@@ -111,7 +111,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         var identifier: String {
             self == .learning ? "screen-time.learning-apps" : "screen-time.distraction-apps"
         }
-        var title: String { self == .learning ? "勉強のgem" : "黒いgem" }
+        var title: String { self == .learning ? "勉強アプリの粒" : "黒い石" }
     }
 
     private enum AuditFailure: Error { case stopped }
@@ -581,7 +581,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             let tickedConflict = tickApplication(app, named: conflicting)
             if tickedConflict {
                 let conflictMessage = app.staticTexts.matching(
-                    NSPredicate(format: "label CONTAINS %@", "同じアプリを勉強のgemと黒いgemの両方には登録できません")
+                    NSPredicate(format: "label CONTAINS %@", "同じアプリを勉強アプリと控えたいアプリの両方には登録できません")
                 ).firstMatch
                 try require(conflictMessage.waitForExistence(timeout: 5),
                             "Selecting \(conflicting) — already in the black-gem lane — must raise the cross-lane conflict message.",
@@ -801,7 +801,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         scrollSettingsToTop(app)
         let monitoring = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "自動記録中")).firstMatch
         try require(monitoring.waitForExistence(timeout: 30),
-                    "After a successful save the status must read 自動記録中 (or 黒いgemを自動記録中); the screen shows \(final).",
+                    "After a successful save the status must read 自動記録中 (or 控えたいアプリだけ自動記録中); the screen shows \(final).",
                     evidence: "save-not-monitoring")
         note("SAVE: final monitoring status = \(monitoring.label)")
         try require(!app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "自動記録は停止中です")).firstMatch.exists,
@@ -1017,7 +1017,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "After the timer is cancelled the learning lane must re-register and the status must return to 自動記録中; the screen shows \(after).",
                     evidence: "timer-pause-not-resumed")
         try require(!app.staticTexts.matching(
-                        NSPredicate(format: "label CONTAINS %@", "タイマーの計測中は、勉強アプリの自動記録を休止しています")
+                        NSPredicate(format: "label CONTAINS %@", "タイマーの計測中は勉強アプリの自動記録を休止し")
                     ).firstMatch.exists,
                     "The timer-pause notice must disappear once no timer is running.",
                     evidence: "timer-pause-notice-sticky")
@@ -1028,7 +1028,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
 
         if reachable.isEmpty {
             try skipWithEvidence("timer-pause-paused-state-unreachable",
-                                 "PASSED the post-timer half (自動記録中 restored, no monitoring error) but the paused half is UNVERIFIED: FocusView is an interactive-dismiss-disabled fullScreenCover with no route back to Home, so 「タイマーの計測中は、勉強アプリの自動記録を休止しています。」 and 「黒いgemを自動記録中」 cannot be observed from XCUITest while a timer runs. Drive that half through iPhone Mirroring or by hand.")
+                                 "PASSED the post-timer half (自動記録中 restored, no monitoring error) but the paused half is UNVERIFIED: FocusView is an interactive-dismiss-disabled fullScreenCover with no route back to Home, so 「タイマーの計測中は勉強アプリの自動記録を休止し、終了後に自動で再開します。」 and 「控えたいアプリだけ自動記録中」 cannot be observed from XCUITest while a timer runs. Drive that half through iPhone Mirroring or by hand.")
         }
         note("TIMER-PAUSE COMPLETE.")
     }
@@ -1525,8 +1525,8 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         // there reports every one of them as absent, which reads exactly like
         // "the app shows no status at all". Go back up first.
         scrollSettingsToTop(app)
-        for text in ["自動記録中", "黒いgemを自動記録中", "自動記録は停止中です。",
-                     "タイマーの計測中は、勉強アプリの自動記録を休止しています。",
+        for text in ["自動記録中", "控えたいアプリだけ自動記録中", "自動記録は停止中です。",
+                     "タイマーの計測中は勉強アプリの自動記録を休止し",
                      "スクリーンタイムの許可が解除されました"] {
             let element = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
             note("[\(label)] status text \"\(text)\" present=\(element.exists)")
@@ -1563,7 +1563,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             "記録するアプリを1つ以上選んでください。",
             "勉強時間を記録するテーマを選んでください。",
             "カテゴリやWebサイトは選べません",
-            "同じアプリを勉強のgemと黒いgemの両方には登録できません",
+            "同じアプリを勉強アプリと控えたいアプリの両方には登録できません",
             "無料では勉強アプリを5つまで選べます"
         ]
         let found = candidates.filter {

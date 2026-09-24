@@ -62,7 +62,11 @@ enum SessionSource: String, Codable, CaseIterable, Sendable {
 
     var isMeasured: Bool { self == .timer || self == .screenTime }
     var isSelfReported: Bool { !isMeasured }
-    var displayName: String { self == .screenTime ? "Screen Time" : (isMeasured ? "実測" : "自己申告") }
+    var displayName: String {
+        self == .screenTime
+            ? String(localized: "スクリーンタイム", table: "Models", comment: "Record source label: Screen Time")
+            : (isMeasured ? "実測" : "自己申告")
+    }
 }
 
 enum PebbleKind: String, Codable, CaseIterable, Sendable {

@@ -773,7 +773,8 @@ struct SettingsView: View {
             } label: {
                 SettingLabel(
                     title: "スクリーンタイム",
-                    subtitle: "10分ごとに勉強のgem・黒いgemを積む",
+                    subtitle: String(localized: "勉強アプリの粒と黒い石を10分ごとに積む", table: "Settings",
+                                     comment: "Settings row subtitle: Screen Time"),
                     symbol: "hourglass"
                 )
             }

@@ -646,7 +646,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         let screenTime = app.staticTexts["storage-switch.refresh-from-cloud-screen-time"]
         XCTAssertTrue(reveal(screenTime, upwards: false))
         XCTAssertTrue(screenTime.label.hasPrefix("スクリーンタイムの自動記録を使っている場合"), "saw: \(screenTime.label)")
-        XCTAssertTrue(screenTime.label.contains("黒いgemは引き継ぎません"))
+        XCTAssertTrue(screenTime.label.contains("黒い石は引き継ぎません"))
         let toggle = app.switches["storage-switch.refresh-from-cloud-confirm-data-loss"]
         XCTAssertTrue(reveal(toggle, upwards: false))
         XCTAssertLessThan(screenTime.frame.minY, toggle.frame.minY)

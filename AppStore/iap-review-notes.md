@@ -35,9 +35,9 @@ Review steps:
 5. The paywall displays the storefront price returned by StoreKit. The link labeled
    “価格・提供条件・販売者情報を確認” opens the pre-purchase terms and seller information.
 6. “購入を復元” (Restore Purchases) is at the bottom of the same screen.
-7. On an authorized iPhone, Settings → “スクリーンタイム” → “勉強のgem” accepts up to five
+7. On an authorized iPhone, Settings → “スクリーンタイム” → “勉強アプリの粒” accepts up to five
    learning apps for free. After purchase or restore, more than five can be selected and saved.
-   Category and website selections are not accepted. “黒いgem” app selection is unlimited without purchase.
+   Category and website selections are not accepted. “黒い石” app selection is unlimited without purchase.
 
 Use the paywall showing the live `Product.displayPrice` as the IAP review screenshot.
 The existing non-consumable was originally submitted with version 1.0; this candidate adds a benefit to the same product.
@@ -48,7 +48,7 @@ The current review image above includes the added Pro feature and live StoreKit 
 ## 日本語
 
 ポモジェムProは1回限りの買い切りです。無料の25分・45分・60分・90分以外の任意の1〜360分タイマー、まとまり粒の月刻印、スクリーンタイムの勉強アプリ数無制限（無料5つ）を解放します。
-黒いgem用のアプリ数は無料でも無制限です。
+黒い石用のアプリ数は無料でも無制限です。
 シェアカードのポモジェムロゴと公式サイトは、無料／Proとも常に表示します。subscription、trial、
 外部決済、独自purchase serverはありません。
 
@@ -63,8 +63,8 @@ The current review image above includes the added Pro feature and live StoreKit 
 5. PaywallはStoreKitから取得したlocal priceを表示し、「価格・提供条件・販売者情報を確認」から
    購入前の販売条件を開けます。
 6. 「購入を復元」は同じ画面の下部にあります。
-7. 許可済みiPhoneで設定 →「スクリーンタイム」→「勉強のgem」を開き、無料では5アプリまで、
-   購入・復元後は6アプリ以上を選択・保存できることを確認します。「黒いgem」は購入不要で無制限です。
+7. 許可済みiPhoneで設定 →「スクリーンタイム」→「勉強アプリの粒」を開き、無料では5アプリまで、
+   購入・復元後は6アプリ以上を選択・保存できることを確認します。「黒い石」は購入不要で無制限です。
 
 スクリーンタイム追加は1.1.0候補です。提出前に本体・Monitor拡張のFamily Controls配布権限承認と
 署名済み実機検証を行います。現在の審査画像は新しいPro機能とStoreKitの実際の価格 `$0.99` を含み、過去の画像とは分けて保持しています。取得元のストア国は独立に確認しておらず、購入・復元は実行していません。

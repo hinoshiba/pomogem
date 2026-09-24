@@ -293,7 +293,7 @@ final class ScreenTimeImportTests: XCTestCase {
         let session = StudySession(startAt: start, endAt: .now, seconds: 600, source: .screenTime, deviceDayKey: "day")
         XCTAssertEqual(session.persistedSource, .manual)
         XCTAssertTrue(FairnessPolicy.isIncludedInShareByDefault(source: session.effectiveSource))
-        XCTAssertEqual(session.effectiveSource.displayName, "Screen Time")
+        XCTAssertEqual(session.effectiveSource.displayName, "スクリーンタイム")
         XCTAssertEqual(ShareStratumVisual.radius(for: session), Double(Constants.Jar.measuredRadius))
         let descriptor = PebbleDescriptor(session: session)
         XCTAssertEqual(descriptor.source, .screenTime)

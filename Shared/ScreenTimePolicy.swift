@@ -23,7 +23,9 @@ enum ScreenTimeError: LocalizedError {
         case .unauthorized: return "スクリーンタイムへのアクセスを許可してください。"
         case .unboundContext: return "データの準備が完了してから、もう一度お試しください。"
         case .applicationsOnly: return "カテゴリやWebサイトではなく、個別のアプリを選んでください。"
-        case .overlappingApplications: return "同じアプリを学習用と黒い石用の両方には登録できません。"
+        case .overlappingApplications:
+            return String(localized: "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。",
+                          table: "ScreenTime", comment: "Error: an app is in both Screen Time lanes")
         case .freeApplicationLimit: return "無料で登録できる学習アプリは5つまでです。5つ以下にするか、Proをご利用ください。"
         case .missingTheme: return "学習時間を記録するテーマを選んでください。"
         case .corruptedState: return "スクリーンタイムの記録を読み込めませんでした。記録の上書きは行っていません。"

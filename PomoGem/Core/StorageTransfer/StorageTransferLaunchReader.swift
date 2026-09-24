@@ -208,8 +208,10 @@ enum StorageTransferEnableCopy {
 /// black gems are not carried over). Not carrying them is intended; not
 /// saying so is what made users conclude the feature broke.
 enum StorageTransferScreenTimeCopy {
-    static let switchResets =
-        "切り替えると、スクリーンタイムの自動記録はオフになり、選んだアプリ、まだ取り込んでいない利用記録、黒いgemは引き継ぎません。切り替えたあとで、設定の「スクリーンタイム」から選び直してください。保存済みの勉強時間と通常gemは引き継ぎます。"
+    static let switchResets = String(
+        localized: "切り替えると、スクリーンタイムの自動記録はオフになり、選んだアプリ、まだ取り込んでいない利用記録、黒い石は引き継ぎません。切り替えたあとで、設定の「スクリーンタイム」から選び直してください。保存済みの勉強時間と粒は引き継ぎます。",
+        table: "Storage", comment: "Storage switch: what happens to Screen Time"
+    )
 
     /// The same facts for the launch host's 「iCloudから再取得」 doors. No store
     /// is mounted there, so no Screen Time owner is bound and whether the
@@ -217,8 +219,10 @@ enum StorageTransferScreenTimeCopy {
     /// while it is. The conditional form is true either way, and these stop
     /// screens are rare enough that a sentence a non-user can skip costs less
     /// than a reset nobody was told about.
-    static let switchResetsIfInUse =
-        "スクリーンタイムの自動記録を使っている場合、切り替えると自動記録はオフになり、選んだアプリ、まだ取り込んでいない利用記録、黒いgemは引き継ぎません。切り替えたあとで、設定の「スクリーンタイム」から選び直してください。保存済みの勉強時間と通常gemは引き継ぎます。"
+    static let switchResetsIfInUse = String(
+        localized: "スクリーンタイムの自動記録を使っている場合、切り替えると自動記録はオフになり、選んだアプリ、まだ取り込んでいない利用記録、黒い石は引き継ぎません。切り替えたあとで、設定の「スクリーンタイム」から選び直してください。保存済みの勉強時間と粒は引き継ぎます。",
+        table: "Storage", comment: "Launch stop screen: what happens to Screen Time if it is in use"
+    )
 }
 
 /// The fixed Japanese copy for the device → iCloud overwrite. It lives beside

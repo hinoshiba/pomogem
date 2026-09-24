@@ -210,7 +210,8 @@ struct ScreenTimeSettingsView: View {
             Button("キャンセル", role: .cancel) {}
             Button("リセット", role: .destructive, action: reset)
         } message: {
-            Text("アプリの選択、まだ取り込んでいない利用記録、黒いgemをこのiPhoneから削除し、自動記録を停止します。取り消せません。保存済みの勉強時間と通常gemは残ります。")
+            Text("アプリの選択、まだ取り込んでいない利用記録、黒い石をこのiPhoneから削除し、自動記録を停止します。取り消せません。保存済みの勉強時間と粒は残ります。",
+                 tableName: "ScreenTime", comment: "Screen Time reset confirmation")
         }
         .task {
             controller.reload()
@@ -240,10 +241,12 @@ struct ScreenTimeSettingsView: View {
         Section {
             Label {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("アプリで過ごした時間を、gemに。")
+                    Text("アプリで過ごした時間も、瓶に。", tableName: "ScreenTime",
+                         comment: "Screen Time settings: headline")
                         .font(.headline)
                         .foregroundStyle(PomoGemTheme.text)
-                    Text("選んだアプリの利用時間を合計して、10分ごとにじゃらっと積みます。")
+                    Text("勉強アプリを使った時間は10分ごとに粒として、控えたいアプリの時間は黒い石として、瓶に積みます。",
+                         tableName: "ScreenTime", comment: "Screen Time settings: what the feature does")
                         .font(.subheadline)
                         .foregroundStyle(PomoGemTheme.muted)
                 }
@@ -403,10 +406,11 @@ struct ScreenTimeSettingsView: View {
                 .accessibilityIdentifier("screen-time.pro")
             }
         } header: {
-            Text("勉強のgem")
+            Text("勉強アプリの粒", tableName: "ScreenTime", comment: "Section header: study apps that add pebbles")
         } footer: {
             VStack(alignment: .leading, spacing: 5) {
-                Text("10分ごとに、選んだテーマへ10分ぶんのgemと勉強時間を追加します。")
+                Text("選んだアプリを合計10分使うごとに、記録先のテーマへ粒（10分・100g）と勉強時間を追加します。",
+                     tableName: "ScreenTime", comment: "Footer: how study-app time becomes pebbles")
                 Text(purchase.isPro ? "Pro：アプリ数は無制限です。" : "無料：5つまで。Pro：無制限。")
                 if learningCount > 0 && !selectedThemeExists {
                     Text("テーマが未選択、または削除されています。記録先を選び直してください。")
@@ -424,22 +428,26 @@ struct ScreenTimeSettingsView: View {
         Section {
             selectionButton(.distraction, count: distractionCount)
             VStack(alignment: .leading, spacing: 4) {
-                Text("黒いgem：10分 × \(max(0, controller.negativeGemCount).formatted())個ぶん")
+                Text("黒い石：10分 × \(max(0, controller.negativeGemCount))個ぶん", tableName: "ScreenTime",
+                     comment: "Black-stone total; the number counts ten-minute units")
                 Text("累計 \(negativeDurationText)")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
             }
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("黒いgem、10分 × \(max(0, controller.negativeGemCount).formatted())個ぶん、累計 \(negativeDurationText)")
+            .accessibilityLabel(Text("黒い石、10分 × \(max(0, controller.negativeGemCount))個ぶん、累計 \(negativeDurationText)",
+                                     tableName: "ScreenTime", comment: "VoiceOver: black-stone total and minutes"))
             .accessibilityAddTraits(.isStaticText)
             .accessibilityIdentifier("screen-time.negative-total")
         } header: {
-            Text("黒いgem")
+            Text("黒い石", tableName: "ScreenTime", comment: "Section header: apps to cut down that add black stones")
         } footer: {
             VStack(alignment: .leading, spacing: 5) {
-                Text("SNSなど、控えたいアプリを選べます。10分ごとに、瓶の中で邪魔な石になる黒い塊を追加します。")
-                Text("黒いgem同士だけが結合します。勉強時間には加算されません。")
+                Text("SNSなど、控えたいアプリを選べます。合計10分使うごとに、瓶の中で場所をとる黒い石が1つ増えます。",
+                     tableName: "ScreenTime", comment: "Footer: what the black-stone lane does")
+                Text("黒い石同士だけがまとまります。勉強時間には加算されず、積んだ粒も減りません。",
+                     tableName: "ScreenTime", comment: "Footer: black stones never reduce study")
                 Text("無料でもアプリ数は無制限です。")
             }
         }
@@ -447,11 +455,13 @@ struct ScreenTimeSettingsView: View {
 
     private var detailsSection: some View {
         Section {
-            Text("勉強アプリと黒いgemのアプリは別々に合計します。同じアプリを両方には登録できません。")
+            Text("勉強アプリと控えたいアプリは別々に合計します。同じアプリを両方には登録できません。",
+                 tableName: "ScreenTime", comment: "About recording: the two lanes are summed separately")
             Text("次にポモジェムを開くと、届いた記録を瓶に反映します。反映が遅れることがあります。")
             Text("一部のアプリは、OSが関連Webサイトの利用も含める場合があります。")
             Text("10分未満の端数は、日付の切り替わりや設定の変更・停止でリセットされます。タイマー中の二重加算を避けるため、勉強アプリの計測もいったん区切ります。")
-            Text("アプリの選択、未取り込みの利用記録、黒いgemは、このiPhoneだけに保存します。JSON書き出しや保存先の切り替えでは引き継ぎません。")
+            Text("アプリの選択、未取り込みの利用記録、黒い石は、このiPhoneだけに保存します。JSON書き出しや保存先の切り替えでは引き継ぎません。",
+                 tableName: "ScreenTime", comment: "About recording: device-local data")
         } header: {
             Text("記録について")
         }
@@ -469,7 +479,8 @@ struct ScreenTimeSettingsView: View {
             .disabled(controller.isSaving || controller.isResetting || isRequestingAuthorization)
             .accessibilityIdentifier("screen-time.reset")
         } footer: {
-            Text("アプリの選択・未取り込みの利用記録・黒いgemを削除し、自動記録を停止します。保存済みの勉強時間と通常gemは残ります。")
+            Text("アプリの選択・未取り込みの利用記録・黒い石を削除し、自動記録を停止します。保存済みの勉強時間と粒は残ります。",
+                 tableName: "ScreenTime", comment: "Footer under the full Screen Time reset")
         }
     }
 
@@ -478,7 +489,9 @@ struct ScreenTimeSettingsView: View {
             && controller.configuration.learningSelection.applicationTokens.count
                 > ScreenTimePolicy.freeLearningApplicationLimit
         return controller.learningPausedByTimer || learningOverLimit
-            ? "黒いgemを自動記録中" : "自動記録中"
+            ? String(localized: "控えたいアプリだけ自動記録中", table: "ScreenTime",
+                     comment: "Status: only the black-stone lane is recording")
+            : "自動記録中"
     }
 
     private var authorizationStatusText: String {
@@ -521,7 +534,7 @@ struct ScreenTimeSettingsView: View {
         .buttonStyle(PomoGemBareButtonStyle())
         .disabled(!controller.authorizationGranted || isRequestingAuthorization || controller.isSaving || controller.isResetting)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(lane.title)のアプリを選ぶ")
+        .accessibilityLabel(lane.chooseAppsLabel)
         .accessibilityValue("\(count)アプリ選択中")
         .accessibilityHint(lane == .learning && !purchase.isPro ? "無料では5つまで選べます" : "アプリ数は無制限です")
         .accessibilityIdentifier("screen-time.\(lane.rawValue)-apps")
@@ -682,7 +695,17 @@ private enum ScreenTimeSelectionLane: String, Identifiable {
     case distraction
 
     var id: String { rawValue }
-    var title: String { self == .learning ? "勉強のgem" : "黒いgem" }
+    /// Whole phrases per lane rather than a noun spliced into a sentence.
+    var appsTitle: String {
+        self == .learning
+            ? String(localized: "勉強アプリ", table: "ScreenTime", comment: "Picker title: study apps")
+            : String(localized: "控えたいアプリ", table: "ScreenTime", comment: "Picker title: apps to cut down")
+    }
+    var chooseAppsLabel: String {
+        self == .learning
+            ? String(localized: "勉強アプリを選ぶ", table: "ScreenTime", comment: "VoiceOver: open the study-app picker")
+            : String(localized: "控えたいアプリを選ぶ", table: "ScreenTime", comment: "VoiceOver: open the picker for apps to cut down")
+    }
 }
 
 private enum ScreenTimeSelectionValidation {
@@ -710,7 +733,8 @@ private enum ScreenTimeSelectionValidation {
             return "カテゴリやWebサイトは選べません。カテゴリを開き、アプリを1つずつ選んでください。"
         }
         if !selection.applicationTokens.isDisjoint(with: otherSelection.applicationTokens) {
-            return "同じアプリを勉強のgemと黒いgemの両方には登録できません。もう一方の選択から外してください。"
+            return String(localized: "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。もう一方の選択から外してください。",
+                          table: "ScreenTime", comment: "Validation: an app is in both lanes")
         }
         return nil
     }
@@ -773,7 +797,7 @@ private struct ScreenTimeAppSelectionSheet: View {
                     : "アプリ数は無制限です。",
                 selection: $selection
             )
-            .navigationTitle("\(lane.title)のアプリ")
+            .navigationTitle(lane.appsTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

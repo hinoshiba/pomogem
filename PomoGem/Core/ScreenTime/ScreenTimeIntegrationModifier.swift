@@ -115,7 +115,8 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
             .onChange(of: isReady) { _, ready in
                 if !ready { controller.suspendForContextRetirement(contextKey: contextKey, dataEpochID: dataEpochID) }
             }
-            .alert("Screen Timeの記録を保留しています", isPresented: Binding(
+            .alert(String(localized: "スクリーンタイムの記録を保留しています", table: "ScreenTime",
+                          comment: "Alert title: imported Screen Time records are on hold"), isPresented: Binding(
                 get: { importError != nil }, set: { if !$0 { importError = nil } }
             )) {
                 Button("閉じる", role: .cancel) { importError = nil }
