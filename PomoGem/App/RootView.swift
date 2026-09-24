@@ -1062,6 +1062,23 @@ struct RootView: View {
                 colorHex: preset.colorHex,
                 sortOrder: 0
             ))
+#if DEBUG
+            // A long-term user's history: themes deleted over the years stay
+            // as tombstones and must not hide the live ones.
+            let deletedCount = Int(ProcessInfo.processInfo.environment[
+                LocalPreviewLaunchPolicy.deletedThemeHistoryUITestEnvironmentKey
+            ] ?? "") ?? 0
+            let deletedAt = Date(timeIntervalSince1970: 1_800_000_000)
+            for index in 0 ..< min(max(0, deletedCount), 2_000) {
+                modelContext.insert(Subject(
+                    name: "削除したテーマ\(index + 1)",
+                    colorHex: preset.colorHex,
+                    sortOrder: index + 1,
+                    isArchived: true,
+                    deletedAt: deletedAt.addingTimeInterval(TimeInterval(index))
+                ))
+            }
+#endif
         }
         if modelContext.hasChanges { try modelContext.save() }
     }
