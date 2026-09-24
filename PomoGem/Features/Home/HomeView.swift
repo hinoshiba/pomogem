@@ -1782,6 +1782,21 @@ struct HomeView: View {
                     showAchievementEntry = true
                 }
             }
+            // screentime-10: the third way to add to the jar, next to the
+            // other two, instead of three levels down in Settings.
+            if ScreenTimeReleasePolicy.showsHomeEntry {
+                menuActionButton(
+                    title: String(localized: "アプリの時間を積む", table: "Home",
+                                  comment: "Home menu row: open the Screen Time settings"),
+                    detail: String(localized: "スクリーンタイムで選んだ勉強アプリを10分ごとに粒に", table: "Home",
+                                   comment: "Home menu row detail: Screen Time"),
+                    symbol: "hourglass"
+                ) {
+                    showHomeMenu = false
+                    router.selectedTab = .screenTime
+                }
+                .accessibilityIdentifier("home.menu.screen-time")
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }

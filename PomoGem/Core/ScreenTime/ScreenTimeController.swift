@@ -658,6 +658,14 @@ final class ScreenTimeController: ObservableObject {
     }
 }
 
+/// Where Screen Time is promoted, kept in one place. The Settings row is the
+/// feature's home and always stays; the Home menu row is a promotion, and it
+/// must be possible to hide it with one change if Family Controls
+/// distribution approval does not arrive for a release.
+enum ScreenTimeReleasePolicy {
+    static let showsHomeEntry = true
+}
+
 /// What the Settings row says about Screen Time, so a stop is visible
 /// without opening the page. 要確認 is tied to a real failure (an error the
 /// ledger or the permission reports, or a removed destination theme) and

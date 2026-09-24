@@ -299,6 +299,26 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         XCTAssertTrue(ledger.label.contains("enabled=1"), "A discarded edit must not reach the ledger: \(ledger.label)")
     }
 
+    /// screentime-10: Home's menu reaches the Screen Time page directly, next
+    /// to the other two ways to add to the jar, and back returns to Home.
+    func testTheHomeMenuOpensScreenTimeDirectly() {
+        app.launch()
+        let menu = app.buttons["メニュー"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 12))
+        menu.tap()
+        let entry = app.buttons["home.menu.screen-time"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 8))
+        XCTAssertTrue(reveal(entry))
+        XCTAssertTrue(entry.label.contains("アプリの時間を積む"), entry.label)
+        attach("Home menu — Screen Time entry")
+        entry.tap()
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["screen-time.authorization-status"].waitForExistence(timeout: 6))
+        attach("Screen Time opened from the Home menu")
+        app.navigationBars["スクリーンタイム"].buttons.firstMatch.tap()
+        XCTAssertTrue(menu.waitForExistence(timeout: 8), "Back returns to Home")
+    }
+
     private func openFixtureSettings() {
         let open = app.descendants(matching: .any)["screen-time.fixture-open"].firstMatch
         XCTAssertTrue(open.waitForExistence(timeout: 10))

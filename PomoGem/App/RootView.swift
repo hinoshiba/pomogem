@@ -2944,6 +2944,8 @@ struct MainNavigationView: View {
                         LogView()
                     case .settings:
                         SettingsView(persistenceMode: persistenceMode)
+                    case .screenTime:
+                        ScreenTimeSettingsView()
                     }
                 }
         }
