@@ -204,7 +204,13 @@ enum FocusCloudSyncError: Error, LocalizedError, Equatable {
         case .timerAlreadyTerminal:
             "このタイマーはすでに完了または終了しています。"
         case .timerHistoryRequiresMaintenance:
-            "タイマーの記録を確認できませんでした。少し時間をおいてから、もう一度お試しください。"
+            // Shown by timer operations and handoff as well as by storage
+            // switching, which adds the action it could not finish.
+            // It can be transient (rows changed during a CloudKit import) or
+            // persistent (a damaged history), so it offers both next steps.
+            // 「履歴」 matches the launch toast; 「記録」 would read as the
+            // user's completed focus records.
+            "タイマーの履歴を確認できませんでした。少し時間をおいてから、もう一度お試しください。解決しない場合は、設定のサポートからお問い合わせください。"
         case .ownershipSequenceExhausted:
             "タイマーの引き継ぎ履歴が上限に達しました。サポートへお問い合わせください。"
         case .recoveryOfferChanged:

@@ -78,6 +78,27 @@ final class StorageTransferControllerTests: XCTestCase {
         XCTAssertTrue(controller.isStarting, "The host still owns the durable transfer boundary")
     }
 
+    /// The error is shown on its own under 「iCloudと保存先」, so the shared
+    /// timer message must say that the switch did not happen.
+    func testTimerHistoryFailureNamesTheSwitchThatDidNotHappen() async {
+        let controller = StorageTransferController()
+        controller.install({ _ in throw FocusCloudSyncError.timerHistoryRequiresMaintenance },
+                           dataset: { _ in throw FocusCloudSyncError.timerHistoryRequiresMaintenance })
+        let expected = "タイマーの履歴を確認できなかったため、保存先を切り替えられませんでした。少し時間をおいてから、もう一度お試しください。解決しない場合は、設定のサポートからお問い合わせください。"
+
+        controller.start(.enableCloudKeepingCloud)
+        await waitUntil { !controller.isStarting }
+        XCTAssertEqual(controller.error, expected)
+
+        controller.startDataset(.refreshFromCloud, policy: .standard)
+        await waitUntil { !controller.isStarting }
+        XCTAssertEqual(controller.error, expected)
+
+        for other: Error in [FocusCloudSyncError.invalidPayload, StorageTransferError.activeTimer] {
+            XCTAssertEqual(StorageTransferController.failureMessage(for: other), other.localizedDescription)
+        }
+    }
+
     func testNoInstalledOperationCannotStart() {
         let controller = StorageTransferController()
         XCTAssertFalse(controller.isAvailable)
