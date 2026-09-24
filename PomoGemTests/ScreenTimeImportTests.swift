@@ -52,7 +52,7 @@ final class ScreenTimeImportTests: XCTestCase {
         _ = try ScreenTimeImportCoordinator.insert([receipt(themeID: missingTheme)], container: store, contextKey: "local", dataEpochID: nil)
         let session = try XCTUnwrap(ModelContext(store).fetch(FetchDescriptor<StudySession>()).first)
         XCTAssertEqual(session.subjectIDSnapshot, missingTheme)
-        XCTAssertEqual(session.displaySubjectName, "Screen Timeの学習")
+        XCTAssertEqual(session.displaySubjectName, "スクリーンタイムの勉強")
     }
     func testSourceParticipatesInMeasuredTotalsAndShareButOnlyExactChunksAreValid() {
         XCTAssertTrue(SessionSource.screenTime.isMeasured)

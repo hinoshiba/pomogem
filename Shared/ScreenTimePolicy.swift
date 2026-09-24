@@ -26,8 +26,12 @@ enum ScreenTimeError: LocalizedError {
         case .overlappingApplications:
             return String(localized: "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。",
                           table: "ScreenTime", comment: "Error: an app is in both Screen Time lanes")
-        case .freeApplicationLimit: return "無料で登録できる学習アプリは5つまでです。5つ以下にするか、Proをご利用ください。"
-        case .missingTheme: return "学習時間を記録するテーマを選んでください。"
+        case .freeApplicationLimit:
+            return String(localized: "無料で登録できる勉強アプリは5つまでです。5つ以下にするか、Proをご利用ください。",
+                          table: "ScreenTime", comment: "Error: more study apps than the free plan records")
+        case .missingTheme:
+            return String(localized: "勉強時間を記録するテーマを選んでください。",
+                          table: "ScreenTime", comment: "Error: study apps are chosen but no destination theme")
         case .corruptedState: return "スクリーンタイムの記録を読み込めませんでした。記録の上書きは行っていません。"
         }
     }
