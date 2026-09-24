@@ -29,11 +29,30 @@ private enum ExplicitFocusActivityState: Equatable {
     case paused(remainingSeconds: Int)
 }
 
-/// Decides whether an elapsed timer still needs an in-app completion cue.
+/// Decides which in-app cue an elapsed focus or break timer still needs.
 /// A persisted delivery date is trusted only while wall and monotonic clocks
 /// still agree; a relative OS notification may remain pending after a manual
 /// wall-clock jump.
 enum TimerCompletionForegroundFeedbackPolicy {
+    /// The in-app cue for one resolved completion.
+    enum Cue: Equatable, Sendable {
+        /// The timer ended while the app was on screen. Repeat the chosen
+        /// sound and haptic until the person stops it, like an alarm clock:
+        /// they may have stepped away from a phone kept awake on the desk.
+        case repeating
+        /// The person has just brought the app back, nothing else announced
+        /// the end, and it ended moments ago. Mark the moment once.
+        case single
+        /// A notification already announced the end, or the person returned
+        /// long after it. They are looking at the screen, so go straight to
+        /// the saved result without any cue.
+        case none
+    }
+
+    /// A return within this window still counts as "at the end" for the
+    /// single cue. Later returns are old news and stay silent.
+    static let lateReturnGrace: TimeInterval = 60
+
     static func notificationMayHaveDelivered(
         isAuthorized: Bool,
         expectedDeliveryDate: Date?,
@@ -43,13 +62,24 @@ enum TimerCompletionForegroundFeedbackPolicy {
             && (expectedDeliveryDate ?? .distantFuture) <= now
     }
 
-    static func shouldPlay(
+    /// A repeating alarm exists to reach someone who is not looking at the
+    /// screen. An app only becomes active again because the person brought
+    /// it forward, so a completion resolved on a return or a recovery never
+    /// loops: it is either marked once or shown silently.
+    static func cue(
         recoveredAfterExpiration: Bool,
         returnedFromBackground: Bool,
-        notificationMayHaveDelivered: Bool
-    ) -> Bool {
-        !((recoveredAfterExpiration || returnedFromBackground)
-            && notificationMayHaveDelivered)
+        notificationMayHaveDelivered: Bool,
+        endedAt: Date,
+        now: Date
+    ) -> Cue {
+        guard recoveredAfterExpiration || returnedFromBackground else {
+            return .repeating
+        }
+        guard !notificationMayHaveDelivered else { return .none }
+        let elapsed = now.timeIntervalSince(endedAt)
+        guard elapsed.isFinite, elapsed <= lateReturnGrace else { return .none }
+        return .single
     }
 
     static func notificationTimingIsTrustworthy(
@@ -691,18 +721,17 @@ struct FocusView: View {
                 // Notification Center add has a definite success/failure.
                 guard !notificationScheduleState.isScheduling else { return }
                 let completionUptime = ContinuousUptime.now()
-                let playsSensoryFeedback =
-                    foregroundFeedbackShouldPlayForElapsedCompletion(
-                        at: date,
-                        uptime: completionUptime,
-                        returnedFromBackground:
-                            didEnterBackgroundSinceLastActive
-                    )
+                let cue = completionCueForElapsedTimer(
+                    at: date,
+                    uptime: completionUptime,
+                    returnedFromBackground:
+                        didEnterBackgroundSinceLastActive
+                )
                 didEnterBackgroundSinceLastActive = false
                 advanceIfNeeded(
                     at: date,
                     uptime: completionUptime,
-                    playsSensoryFeedback: playsSensoryFeedback
+                    cue: cue
                 )
                 return
             }
@@ -1081,21 +1110,21 @@ struct FocusView: View {
             guard !completionIsAlreadyElapsed || scenePhase == .active else {
                 return
             }
-            let playsSensoryFeedback: Bool
+            let cue: TimerCompletionForegroundFeedbackPolicy.Cue
             if completionIsAlreadyElapsed {
-                playsSensoryFeedback = foregroundFeedbackShouldPlayForElapsedCompletion(
+                cue = completionCueForElapsedTimer(
                     at: now,
                     uptime: completionUptime,
                     returnedFromBackground: false
                 )
             } else {
                 isAwaitingRecoveryActivation = false
-                playsSensoryFeedback = true
+                cue = .repeating
             }
             advanceIfNeeded(
                 at: now,
                 uptime: completionUptime,
-                playsSensoryFeedback: playsSensoryFeedback
+                cue: cue
             )
             if pendingCompletion == nil {
                 await scheduleCurrentCompletionNotification()
@@ -1431,7 +1460,7 @@ struct FocusView: View {
     private func advanceIfNeeded(
         at now: Date,
         uptime: TimeInterval,
-        playsSensoryFeedback: Bool = true
+        cue: TimerCompletionForegroundFeedbackPolicy.Cue = .repeating
     ) {
         // Freeze an elapsed completion before consulting mutable CloudKit
         // ownership. A handoff followed by a cancellation at/after the frozen
@@ -1448,10 +1477,7 @@ struct FocusView: View {
                 clockAnchor: clockAnchor
             )
             fairnessNotice = finalized.source == .timerDemoted
-            handleFocusCompletion(
-                finalized,
-                playsSensoryFeedback: playsSensoryFeedback
-            )
+            handleFocusCompletion(finalized, cue: cue)
         case .breakCompleted:
             FocusPersistence.clear()
             UIApplication.shared.isIdleTimerDisabled = false
@@ -1500,15 +1526,12 @@ struct FocusView: View {
 
     private func handleFocusCompletion(
         _ result: PomodoroCompletion,
-        playsSensoryFeedback: Bool = true
+        cue: TimerCompletionForegroundFeedbackPolicy.Cue
     ) {
         guard pendingCompletion == nil else { return }
         pendingCompletion = result
         saveRecoveryState(pendingCompletion: result)
-        signalCompletionIfNeeded(
-            result,
-            playsSensoryFeedback: playsSensoryFeedback
-        )
+        signalCompletionIfNeeded(result, cue: cue)
         Task { await commitCompletion(result) }
     }
 
@@ -1604,10 +1627,7 @@ struct FocusView: View {
 
     @MainActor
     private func acknowledgeCompletionAlert(_ result: PomodoroCompletion) {
-        TimerCompletionAlertAcknowledgementStore.mark(
-            sessionID: result.sessionID
-        )
-        completionAlertWasAcknowledged = true
+        markCompletionAlertAcknowledged(result)
         completionAlert.stop(sessionID: result.sessionID)
         guard completionPersistenceSucceeded else { return }
         Task { await finishCommittedCompletion(result) }
@@ -2149,7 +2169,7 @@ struct FocusView: View {
 
     private func signalCompletionIfNeeded(
         _ result: PomodoroCompletion,
-        playsSensoryFeedback: Bool = true
+        cue: TimerCompletionForegroundFeedbackPolicy.Cue
     ) {
         guard !didSignalCompletion else { return }
         didSignalCompletion = true
@@ -2164,19 +2184,23 @@ struct FocusView: View {
             TimerCompletionAlertAcknowledgementStore.contains(
                 sessionID: result.sessionID
             )
+        let configuration = TimerCompletionAlertConfiguration(
+            sessionID: result.sessionID,
+            sound: soundOn ? sensoryPreferences.timerCompletionSound : nil,
+            haptic: hapticsOn ? sensoryPreferences.timerCompletionHaptic : nil
+        )
         if !completionAlertWasAcknowledged {
-            completionAlert.start(
-                TimerCompletionAlertConfiguration(
-                    sessionID: result.sessionID,
-                    sound: soundOn
-                        ? sensoryPreferences.timerCompletionSound
-                        : nil,
-                    haptic: hapticsOn
-                        ? sensoryPreferences.timerCompletionHaptic
-                        : nil
-                ),
-                playsImmediately: playsSensoryFeedback
-            )
+            switch cue {
+            case .repeating:
+                completionAlert.start(configuration)
+            case .single:
+                // The person is already looking at the screen. Mark the end
+                // once and let the saved result continue to Home by itself.
+                markCompletionAlertAcknowledged(result)
+                completionAlert.playOnce(configuration)
+            case .none:
+                markCompletionAlertAcknowledged(result)
+            }
         }
         UIApplication.shared.isIdleTimerDisabled = false
         if UIAccessibility.isVoiceOverRunning {
@@ -2187,6 +2211,12 @@ struct FocusView: View {
         }
     }
 
+    /// A pending completion restored into a new view was consumed earlier,
+    /// while the app was in the foreground. Reaching it again means the app
+    /// was relaunched or its iCloud container remounted, which in practice
+    /// happens only after the person left and came back. They are looking at
+    /// the screen, so never re-arm the loop; the return is the acknowledgement.
+    /// A loop still alive in this process keeps its Stop control instead.
     private func resumeCompletionAlertIfNeeded(
         _ result: PomodoroCompletion
     ) {
@@ -2197,25 +2227,14 @@ struct FocusView: View {
         guard !completionAlertWasAcknowledged,
               !completionAlert.isActive(sessionID: result.sessionID)
         else { return }
-        let soundOn = sensoryPreferences.soundOn
-        let hapticsOn = sensoryPreferences.hapticsOn
-        SoundSynth.shared.isEnabled = soundOn
-        Haptics.shared.isEnabled = hapticsOn
-        completionAlert.start(
-            TimerCompletionAlertConfiguration(
-                sessionID: result.sessionID,
-                sound: soundOn
-                    ? sensoryPreferences.timerCompletionSound
-                    : nil,
-                haptic: hapticsOn
-                    ? sensoryPreferences.timerCompletionHaptic
-                    : nil
-            ),
-            // A recovered local notification may have sounded immediately
-            // before launch. Resume the repeating in-app cue after one interval
-            // instead of stacking two completion tones.
-            playsImmediately: false
+        markCompletionAlertAcknowledged(result)
+    }
+
+    private func markCompletionAlertAcknowledged(_ result: PomodoroCompletion) {
+        TimerCompletionAlertAcknowledgementStore.mark(
+            sessionID: result.sessionID
         )
+        completionAlertWasAcknowledged = true
     }
 
     /// A failed commit replaces a passive progress state with recovery
@@ -2587,13 +2606,12 @@ struct FocusView: View {
             advanceIfNeeded(
                 at: now,
                 uptime: completionUptime,
-                playsSensoryFeedback:
-                    foregroundFeedbackShouldPlayForElapsedCompletion(
-                        at: now,
-                        uptime: completionUptime,
-                        returnedFromBackground:
-                            didEnterBackgroundSinceLastActive
-                    )
+                cue: completionCueForElapsedTimer(
+                    at: now,
+                    uptime: completionUptime,
+                    returnedFromBackground:
+                        didEnterBackgroundSinceLastActive
+                )
             )
             if pendingCompletion != nil { return false }
         }
@@ -2684,6 +2702,15 @@ struct FocusView: View {
 
         guard newPhase == .active else { return }
 
+        if didEnterBackgroundSinceLastActive,
+           let pendingCompletion,
+           completionAlert.isActive(sessionID: pendingCompletion.sessionID) {
+            // The phone locked or the person switched apps while the alarm was
+            // repeating. Coming back is the acknowledgement: stop it and let
+            // the saved result continue instead of ringing at them again.
+            acknowledgeCompletionAlert(pendingCompletion)
+        }
+
         let returnDate = Date.now
         let returnUptime = ContinuousUptime.now()
         let completionIsElapsed = (engine.endDate ?? .distantFuture) <= returnDate
@@ -2694,16 +2721,16 @@ struct FocusView: View {
             UIApplication.shared.isIdleTimerDisabled = false
             return
         }
-        let playsSensoryFeedback: Bool
+        let cue: TimerCompletionForegroundFeedbackPolicy.Cue
         if completionIsElapsed {
-            playsSensoryFeedback = foregroundFeedbackShouldPlayForElapsedCompletion(
+            cue = completionCueForElapsedTimer(
                 at: returnDate,
                 uptime: returnUptime,
                 returnedFromBackground: didEnterBackgroundSinceLastActive
             )
         } else {
             isAwaitingRecoveryActivation = false
-            playsSensoryFeedback = true
+            cue = .repeating
         }
         didEnterBackgroundSinceLastActive = false
         displayNow = returnDate
@@ -2711,15 +2738,15 @@ struct FocusView: View {
         advanceIfNeeded(
             at: returnDate,
             uptime: returnUptime,
-            playsSensoryFeedback: playsSensoryFeedback
+            cue: cue
         )
     }
 
-    private func foregroundFeedbackShouldPlayForElapsedCompletion(
+    private func completionCueForElapsedTimer(
         at now: Date,
         uptime: TimeInterval,
         returnedFromBackground: Bool
-    ) -> Bool {
+    ) -> TimerCompletionForegroundFeedbackPolicy.Cue {
         let recoveredAfterExpiration = isAwaitingRecoveryActivation
         isAwaitingRecoveryActivation = false
         // Time-interval notifications run against elapsed time, while the
@@ -2734,7 +2761,7 @@ struct FocusView: View {
                     now: now,
                     uptime: uptime
                 )
-        return TimerCompletionForegroundFeedbackPolicy.shouldPlay(
+        return TimerCompletionForegroundFeedbackPolicy.cue(
             recoveredAfterExpiration: recoveredAfterExpiration,
             returnedFromBackground: returnedFromBackground,
             notificationMayHaveDelivered:
@@ -2746,7 +2773,9 @@ struct FocusView: View {
                             ? currentNotificationDeliveryWitness
                             : nil,
                         now: now
-                    )
+                    ),
+            endedAt: engine.endDate ?? now,
+            now: now
         )
     }
 

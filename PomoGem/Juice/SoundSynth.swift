@@ -330,6 +330,16 @@ final class TimerCompletionAlertController {
         }
     }
 
+    /// Plays the chosen completion cue exactly once without arming the
+    /// repeating alert, for a person who has just brought the app back. It
+    /// never interrupts or replaces an alert that is already repeating.
+    func playOnce(_ configuration: TimerCompletionAlertConfiguration) {
+        guard !configuration.isSilent,
+              activeConfiguration == nil,
+              applicationIsActive() else { return }
+        playback(configuration)
+    }
+
     func stop(sessionID: UUID? = nil) {
         guard let activeConfiguration else { return }
         if let sessionID, activeConfiguration.sessionID != sessionID { return }

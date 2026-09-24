@@ -317,9 +317,10 @@ final class NotificationManager {
         let content = notificationContent(
             // Notification Center can deliver a request while this process is
             // suspended and therefore cannot re-check the active iCloud
-            // account. Keep the immutable payload account-neutral. Live
-            // Activity content is gated independently by account identity.
-            body: "集中時間が終わりました。アプリを開いて状態を確認してください。",
+            // account. Keep the immutable payload account-neutral, and never
+            // promise a gem: the completion is saved only when the app opens.
+            // Live Activity content is gated independently by account identity.
+            body: "集中時間が終わりました。おつかれさまでした。",
             playsSound: playsSound,
             timerCompletionSound: completionSound
         )

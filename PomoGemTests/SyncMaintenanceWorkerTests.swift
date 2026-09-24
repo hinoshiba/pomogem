@@ -1415,32 +1415,65 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         XCTAssertEqual(result.audit.saveCount, 0)
     }
 
-    func testForegroundCompletionFeedbackAvoidsRecoveredAndNotificationDuplicates() {
-        XCTAssertTrue(TimerCompletionForegroundFeedbackPolicy.shouldPlay(
-            recoveredAfterExpiration: false,
-            returnedFromBackground: false,
-            notificationMayHaveDelivered: false
-        ))
-        XCTAssertTrue(TimerCompletionForegroundFeedbackPolicy.shouldPlay(
-            recoveredAfterExpiration: false,
-            returnedFromBackground: true,
-            notificationMayHaveDelivered: false
-        ))
-        XCTAssertFalse(TimerCompletionForegroundFeedbackPolicy.shouldPlay(
-            recoveredAfterExpiration: false,
-            returnedFromBackground: true,
-            notificationMayHaveDelivered: true
-        ))
-        XCTAssertTrue(TimerCompletionForegroundFeedbackPolicy.shouldPlay(
-            recoveredAfterExpiration: true,
-            returnedFromBackground: false,
-            notificationMayHaveDelivered: false
-        ))
-        XCTAssertFalse(TimerCompletionForegroundFeedbackPolicy.shouldPlay(
-            recoveredAfterExpiration: true,
-            returnedFromBackground: false,
-            notificationMayHaveDelivered: true
-        ))
+    func testCompletionCueRepeatsOnlyForATimerThatEndedOnScreen() {
+        typealias Policy = TimerCompletionForegroundFeedbackPolicy
+        let endedAt = Date(timeIntervalSinceReferenceDate: 50_000)
+        func cue(
+            recovered: Bool = false,
+            returned: Bool = false,
+            delivered: Bool = false,
+            after seconds: TimeInterval
+        ) -> Policy.Cue {
+            Policy.cue(
+                recoveredAfterExpiration: recovered,
+                returnedFromBackground: returned,
+                notificationMayHaveDelivered: delivered,
+                endedAt: endedAt,
+                now: endedAt.addingTimeInterval(seconds)
+            )
+        }
+
+        // Live foreground completion: the alarm-clock loop, even when an
+        // inactive-only interruption (Control Center) delayed consumption.
+        XCTAssertEqual(cue(after: 0), .repeating)
+        XCTAssertEqual(cue(after: 5), .repeating)
+
+        // A return shortly after the end with no other announcement is
+        // marked once; the person is already looking at the screen.
+        XCTAssertEqual(cue(returned: true, after: 30), .single)
+        XCTAssertEqual(cue(recovered: true, after: 30), .single)
+        XCTAssertEqual(cue(returned: true, after: Policy.lateReturnGrace), .single)
+
+        // Old news stays silent, including a relaunch long after the end.
+        XCTAssertEqual(cue(returned: true, after: 600), .none)
+        XCTAssertEqual(cue(recovered: true, after: 600), .none)
+        XCTAssertEqual(
+            cue(returned: true, after: Policy.lateReturnGrace + 1),
+            .none
+        )
+
+        // A delivered notification already announced the end, however
+        // recently: opening the app from it never rings again.
+        XCTAssertEqual(cue(returned: true, delivered: true, after: 2), .none)
+        XCTAssertEqual(cue(recovered: true, delivered: true, after: 2), .none)
+        XCTAssertEqual(cue(returned: true, delivered: true, after: 600), .none)
+
+        // Notifications denied: a live end still loops, a return still
+        // follows the grace rule.
+        XCTAssertEqual(cue(delivered: false, after: 1), .repeating)
+        XCTAssertEqual(cue(returned: true, delivered: false, after: 10), .single)
+
+        // A non-finite interval can never produce a cue.
+        XCTAssertEqual(
+            Policy.cue(
+                recoveredAfterExpiration: true,
+                returnedFromBackground: false,
+                notificationMayHaveDelivered: false,
+                endedAt: .distantPast,
+                now: endedAt
+            ),
+            .none
+        )
     }
 
     func testForegroundCompletionFeedbackTrustsWitnessOnlyWithAlignedClocks() {
@@ -1764,6 +1797,55 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         await gate.resumeNext()
         await Task.yield()
         XCTAssertEqual(spy.configurations, [configuration])
+    }
+
+    func testTimerCompletionAlertPlayOnceNeverArmsTheRepeatingLoop() async {
+        let gate = TimerCompletionAlertSleepGate()
+        let spy = TimerCompletionAlertPlaybackSpy()
+        let controller = TimerCompletionAlertController(
+            sleeper: { try await gate.sleep() },
+            playback: { spy.configurations.append($0) },
+            stopPlayback: { spy.stopCount += 1 },
+            applicationIsActive: { spy.applicationIsActive }
+        )
+        let configuration = TimerCompletionAlertConfiguration(
+            sessionID: UUID(),
+            sound: .standard,
+            haptic: .standard
+        )
+
+        controller.playOnce(configuration)
+        XCTAssertEqual(spy.configurations, [configuration])
+        XCTAssertFalse(controller.isActive(sessionID: configuration.sessionID))
+        await Task.yield()
+        let pendingSleeps = await gate.pendingCount
+        XCTAssertEqual(pendingSleeps, 0, "A single cue must not start the repeat loop")
+
+        // Silent preferences and a backgrounded app stay quiet.
+        controller.playOnce(TimerCompletionAlertConfiguration(
+            sessionID: UUID(), sound: nil, haptic: nil
+        ))
+        spy.applicationIsActive = false
+        controller.playOnce(configuration)
+        XCTAssertEqual(spy.configurations, [configuration])
+
+        // A live alarm for a foreground completion is never interrupted.
+        spy.applicationIsActive = true
+        let live = TimerCompletionAlertConfiguration(
+            sessionID: UUID(),
+            sound: .bright,
+            haptic: nil
+        )
+        controller.start(live)
+        await waitForCompletionAlertSleep(gate, count: 1)
+        controller.playOnce(configuration)
+        XCTAssertEqual(spy.configurations, [configuration, live])
+        XCTAssertTrue(controller.isActive(sessionID: live.sessionID))
+        XCTAssertEqual(spy.stopCount, 0)
+        controller.stop(sessionID: live.sessionID)
+        await gate.resumeNext()
+        await Task.yield()
+        XCTAssertEqual(spy.configurations, [configuration, live])
     }
 
     func testTimerCompletionAlertIsSilentOnlyWhenBothChannelsAreOff() {

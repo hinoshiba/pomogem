@@ -151,16 +151,12 @@ struct BreakTimerView: View {
                 let returnedFromBackground = didEnterBackgroundSinceLastActive
                 didEnterBackgroundSinceLastActive = false
                 signalBreakCompletionIfNeeded(
-                    playsSensoryFeedback:
-                        TimerCompletionForegroundFeedbackPolicy.shouldPlay(
-                            recoveredAfterExpiration: false,
-                            returnedFromBackground: returnedFromBackground,
-                            notificationMayHaveDelivered:
-                                notificationMayHaveDelivered(
-                                    at: date,
-                                    uptime: completionUptime
-                                )
-                        )
+                    cue: completionCue(
+                        at: date,
+                        uptime: completionUptime,
+                        recoveredAfterExpiration: false,
+                        returnedFromBackground: returnedFromBackground
+                    )
                 )
             }
         }
@@ -178,6 +174,17 @@ struct BreakTimerView: View {
         }
         .onChange(of: scenePhase) { _, newPhase in
             updateIdleTimer(sceneIsActive: newPhase == .active)
+            if newPhase == .active,
+               didEnterBackgroundSinceLastActive,
+               completionAlert.isActive(sessionID: sessionID) {
+                // The phone locked or the person switched apps while the
+                // break-end alarm was repeating. Coming back is the
+                // acknowledgement; 「瓶へ戻る」 stays for them to choose.
+                TimerCompletionAlertAcknowledgementStore.mark(
+                    sessionID: sessionID
+                )
+                completionAlert.stop(sessionID: sessionID)
+            }
             if newPhase == .background {
                 didEnterBackgroundSinceLastActive = true
             }
@@ -426,9 +433,11 @@ struct BreakTimerView: View {
             let completionDate = Date.now
             let completionUptime = ContinuousUptime.now()
             signalBreakCompletionIfNeeded(
-                playsSensoryFeedback: !notificationMayHaveDelivered(
+                cue: completionCue(
                     at: completionDate,
-                    uptime: completionUptime
+                    uptime: completionUptime,
+                    recoveredAfterExpiration: true,
+                    returnedFromBackground: false
                 )
             )
             return
@@ -452,16 +461,12 @@ struct BreakTimerView: View {
             // A background notification may already have announced this end;
             // an inactive-only interruption still deserves the foreground cue.
             signalBreakCompletionIfNeeded(
-                playsSensoryFeedback:
-                    TimerCompletionForegroundFeedbackPolicy.shouldPlay(
-                        recoveredAfterExpiration: false,
-                        returnedFromBackground: returnedFromBackground,
-                        notificationMayHaveDelivered:
-                            notificationMayHaveDelivered(
-                                at: now,
-                                uptime: completionUptime
-                            )
-                    )
+                cue: completionCue(
+                    at: now,
+                    uptime: completionUptime,
+                    recoveredAfterExpiration: false,
+                    returnedFromBackground: returnedFromBackground
+                )
             )
             return
         }
@@ -484,7 +489,9 @@ struct BreakTimerView: View {
     }
 
     @MainActor
-    private func signalBreakCompletionIfNeeded(playsSensoryFeedback: Bool) {
+    private func signalBreakCompletionIfNeeded(
+        cue: TimerCompletionForegroundFeedbackPolicy.Cue
+    ) {
         guard !didSignalCompletion else { return }
         didSignalCompletion = true
         UIApplication.shared.isIdleTimerDisabled = false
@@ -497,20 +504,40 @@ struct BreakTimerView: View {
         if !TimerCompletionAlertAcknowledgementStore.contains(
             sessionID: sessionID
         ) {
-            completionAlert.start(
-                TimerCompletionAlertConfiguration(
-                    sessionID: sessionID,
-                    sound: soundOn
-                        ? sensoryPreferences.timerCompletionSound
-                        : nil,
-                    haptic: hapticsOn
-                        ? sensoryPreferences.timerCompletionHaptic
-                        : nil
-                ),
-                playsImmediately: playsSensoryFeedback
+            let configuration = TimerCompletionAlertConfiguration(
+                sessionID: sessionID,
+                sound: soundOn ? sensoryPreferences.timerCompletionSound : nil,
+                haptic: hapticsOn ? sensoryPreferences.timerCompletionHaptic : nil
             )
+            switch cue {
+            case .repeating:
+                completionAlert.start(configuration)
+            case .single:
+                TimerCompletionAlertAcknowledgementStore.mark(sessionID: sessionID)
+                completionAlert.playOnce(configuration)
+            case .none:
+                TimerCompletionAlertAcknowledgementStore.mark(sessionID: sessionID)
+            }
         }
         UIAccessibility.post(notification: .announcement, argument: "休憩が終わりました")
+    }
+
+    private func completionCue(
+        at date: Date,
+        uptime: TimeInterval,
+        recoveredAfterExpiration: Bool,
+        returnedFromBackground: Bool
+    ) -> TimerCompletionForegroundFeedbackPolicy.Cue {
+        TimerCompletionForegroundFeedbackPolicy.cue(
+            recoveredAfterExpiration: recoveredAfterExpiration,
+            returnedFromBackground: returnedFromBackground,
+            notificationMayHaveDelivered: notificationMayHaveDelivered(
+                at: date,
+                uptime: uptime
+            ),
+            endedAt: endDate ?? date,
+            now: date
+        )
     }
 
     @MainActor
