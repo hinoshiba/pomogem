@@ -673,14 +673,19 @@ final class StorageTransferSettingsUITests: XCTestCase {
     func testAX5PostMirrorTimeoutOffersOnlineRetryWithoutStartingOfflineOrTransfer() {
         launch("cloudLaunchTimedOut", accessibility5: true)
         XCTAssertTrue(app.staticTexts["iCloudの確認に時間がかかっています"].waitForExistence(timeout: 4))
-        XCTAssertFalse(app.staticTexts["オフラインで開くには再起動が必要です"].exists)
+        XCTAssertFalse(app.staticTexts["通信が戻るのを待っています"].exists)
         XCTAssertFalse(app.buttons["cloud-offline-continue"].exists)
         XCTAssertFalse(app.buttons["storage-transfer-recover"].exists)
         XCTAssertFalse(app.buttons["iCloudに保存して同期"].exists)
         let explanation = app.staticTexts["cloud-launch-timeout-offline-explanation"]
         XCTAssertTrue(reveal(explanation))
-        XCTAssertTrue(explanation.label.contains("この画面からオンラインで確認し直せます"))
-        XCTAssertTrue(explanation.label.contains("アプリ自体は削除しないでください"))
+        // quality-01. The retry is named, the automatic check after a lost
+        // connection is promised, and relaunching is offered only for use
+        // without any connection.
+        XCTAssertTrue(explanation.label.contains("「オンラインで再試行」で確認し直せます"))
+        XCTAssertTrue(explanation.label.contains("つながると自動で確認します"))
+        XCTAssertTrue(explanation.label.contains("通信のない場所で使うときは"))
+        XCTAssertTrue(explanation.label.contains("アプリは削除しないでください"))
         let retry = app.buttons["cloud-offline-online-retry"]
         XCTAssertTrue(reveal(retry, upwards: false))
         XCTAssertEqual(retry.label, "オンラインで再試行")
@@ -774,6 +779,61 @@ final class StorageTransferSettingsUITests: XCTestCase {
         try auditDescriptionsAndTraits()
         assertNoOperation()
         assertOfflineRetryCallsOnce()
+    }
+
+    /// quality-01. Every iCloud waiting screen keeps the closed session's
+    /// running focus visible — as a time and a phase only, the Live
+    /// Activity's payload — and the offline wall leads with the automatic
+    /// check instead of a relaunch.
+    func testICloudWaitingScreensShowTheRunningFocusWithoutAccountData() {
+        let screens: [(scenario: String, title: String)] = [
+            ("cloudBackgroundReturnWithFocus", "準備中"),
+            ("cloudOfflineWallWithFocus", "通信が戻るのを待っています"),
+            ("cloudLaunchTimedOutWithFocus", "iCloudの確認に時間がかかっています"),
+        ]
+        for screen in screens {
+            launch(screen.scenario)
+            XCTAssertTrue(app.staticTexts[screen.title].waitForExistence(timeout: 4), screen.scenario)
+            let card = app.descendants(matching: .any)["launch-timer-status"]
+            XCTAssertTrue(card.waitForExistence(timeout: 4), screen.scenario)
+            XCTAssertTrue(card.label.hasPrefix("集中は続いています。残り"), card.label)
+            XCTAssertFalse(card.label.contains("テーマ"), "No theme, memo or mass on a wait screen")
+            attach("waiting-\(screen.scenario)")
+        }
+        // The offline wall: the automatic check first, the manual retry kept,
+        // and the relaunch only for immediate use without a connection.
+        launch("cloudOfflineWallWithFocus")
+        let message = app.staticTexts["storage-launch-message"]
+        XCTAssertTrue(message.waitForExistence(timeout: 4))
+        XCTAssertTrue(message.label.hasPrefix("通信が戻ると自動で確認して"))
+        XCTAssertFalse(app.staticTexts["オフラインで開くには再起動が必要です"].exists)
+        let relaunch = app.staticTexts["cloud-offline-relaunch-explanation"]
+        XCTAssertTrue(reveal(relaunch))
+        XCTAssertTrue(relaunch.label.hasPrefix("すぐに通信なしで使うときは"))
+        let retry = app.buttons["cloud-offline-online-retry"]
+        XCTAssertTrue(reveal(retry, upwards: false))
+        assertTouchTarget(retry)
+        XCTAssertFalse(app.buttons["cloud-offline-continue"].exists,
+                       "A process that opened a mirror never offers the .none door")
+        assertNoOperation()
+    }
+
+    func testAX5OfflineWallKeepsTheTimerAndTheRetryReachable() throws {
+        launch("cloudOfflineWallWithFocus", accessibility5: true)
+        XCTAssertTrue(app.staticTexts["通信が戻るのを待っています"].waitForExistence(timeout: 4))
+        let card = app.descendants(matching: .any)["launch-timer-status"]
+        XCTAssertTrue(card.waitForExistence(timeout: 4))
+        XCTAssertTrue(reveal(card))
+        attach("waiting-offline-wall-ax5-timer")
+        let retry = app.buttons["cloud-offline-online-retry"]
+        XCTAssertTrue(reveal(retry, upwards: false))
+        assertTouchTarget(retry)
+        attach("waiting-offline-wall-ax5-retry")
+        try auditDescriptionsAndTraits()
+        retry.tap()
+        let retried = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "retryCalls=1"),
+            object: app.staticTexts["cloud-launch-timeout.fixture-state"])
+        XCTAssertEqual(XCTWaiter.wait(for: [retried], timeout: 4), .completed)
     }
 
     func testNativeCloudNetworkWaitExplainsAutomaticRetryWithoutManualAdmission() {
@@ -1290,5 +1350,7 @@ final class StorageTransferSettingsUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+        // Also written as a PNG for review when the runner is given a folder.
+        guard let directory = ProcessInfo.processInfo.environment["POMOGEM_SHOTS_DIR"] else { return }
     }
 }

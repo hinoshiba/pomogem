@@ -987,6 +987,30 @@ enum FocusPersistence {
         }
     }
 
+    /// quality-01. A read-only look at one namespace's timer for the launch
+    /// host, which shows an account-neutral status card while no iCloud
+    /// session is mounted. It decodes and validates exactly like `load()` and
+    /// `loadBreak`, but never clears, repairs or migrates anything: the
+    /// account behind `namespace` has not been verified again in this launch,
+    /// so nothing here may change its state. Only a time and a phase leave
+    /// this function's caller (`LaunchTimerStatus`), the same payload the
+    /// Live Activity already shows on the lock screen.
+    static func peekTimerEnvelopes(
+        namespace: AccountDataNamespace,
+        defaults: UserDefaults = .standard,
+        at now: Date = .now
+    ) -> (focus: FocusRecoveryEnvelope?, rest: BreakRecoveryEnvelope?) {
+        let focusKey = AccountScopedLocalState.defaultsKey(base: baseKey, namespace: namespace)
+        let focus = defaults.data(forKey: focusKey)
+            .flatMap { try? JSONDecoder().decode(FocusRecoveryEnvelope.self, from: $0) }
+            .flatMap { hasValidPersistedStructure($0) ? $0 : nil }
+        let breakKey = AccountScopedLocalState.defaultsKey(base: baseBreakKey, namespace: namespace)
+        let rest = defaults.data(forKey: breakKey)
+            .flatMap { try? JSONDecoder().decode(BreakRecoveryEnvelope.self, from: $0) }
+            .flatMap { BreakRecoveryPolicy.isValid($0, at: now) ? $0 : nil }
+        return (focus, rest)
+    }
+
     static func saveBreak(
         _ value: BreakRecoveryEnvelope,
         defaults: UserDefaults = .standard,

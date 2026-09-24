@@ -93,9 +93,22 @@ enum CloudOfflineAccountStateReaction: Equatable, Sendable {
 enum CloudOfflineSessionError: Error, LocalizedError {
     case relaunchRequired
 
+    /// quality-01. This screen is reached by an ordinary lock or app switch
+    /// that ends offline, so it leads with what happens next on its own: a
+    /// restored connection is checked automatically. Relaunching is only the
+    /// way to use the phone's copy without a connection, and says so second.
     var errorDescription: String? {
-        "端末の記録を保護したままオフラインで開くため、先ほどの同期処理を終了する必要があります。Appスイッチャーでポモジェムを終了し、もう一度開いてください。アプリ自体は削除しないでください。"
+        String(localized: "通信が戻ると自動で確認して、いつもの画面に戻ります。記録はこのiPhoneに残っています。", table: "Launch",
+               comment: "Launch wall after an iCloud session was closed in the background and the phone is now offline")
     }
+}
+
+/// The two launch walls a restored connection can clear by itself. Both are
+/// reached only after this process opened a CloudKit mirror, so neither may
+/// fall back to the phone's copy in-process; an online check is the one way
+/// back, and it needs nothing from the user but a connection.
+enum CloudLaunchReconnectWall: Equatable, Sendable {
+    case offlineRelaunchRequired, cloudVerificationTimedOut
 }
 
 /// Pure host decisions. None of these classifications authorizes offline
@@ -178,6 +191,50 @@ enum CloudOfflineHostPolicy {
                                      hasUnresolvedAccountStateMovement: Bool) -> Bool {
         guard !hasUnresolvedAccountStateMovement else { return false }
         return !explicitOnlineRetry && (requestedOfflineFallback || networkIsOffline == true)
+    }
+
+    /// quality-01 / launch-01. Whether a network-path change starts the same
+    /// online retry that 「オンラインで再試行」 starts.
+    ///
+    /// Only an observed offline → online transition counts: the path is a
+    /// retry hint, never evidence of an account or a dataset, and the retry it
+    /// triggers runs every ordinary launch gate again. It applies only to the
+    /// two walls a connection can clear and only while nothing is mounted. The
+    /// host's single-flight entry point (`requestOnlineCloudRetry`) still
+    /// refuses while a launch or an account quiescence is running, while the
+    /// scene is not active, or when iCloud is no longer the selection.
+    static func retriesOnlineAfterReconnect(
+        previousIsOffline: Bool?,
+        currentIsOffline: Bool?,
+        hasSession: Bool,
+        wall: CloudLaunchReconnectWall?
+    ) -> Bool {
+        guard previousIsOffline == true, currentIsOffline == false,
+              !hasSession, wall != nil else { return false }
+        return true
+    }
+
+    /// quality-01 / launch-01. Whether a launch that failed after an iCloud
+    /// session was closed must also retire the OS-owned timer surfaces
+    /// (timer notifications, the passive schedule and the Live Activity).
+    ///
+    /// Those surfaces carry no account data — only a time and a phase, the
+    /// same payload the Live Activity always shows — and they belong to the
+    /// focus the person is still running. A failure that says nothing about
+    /// WHO is signed in (no network, a slow server, a timeout, an identity
+    /// read that disagreed with itself) must not stop that focus. Only an
+    /// identity verdict retires them: the resolver's `.blocked` outcomes, a
+    /// signed-out or restricted account, or an account-state movement this
+    /// process has not resolved. When this returns false the host keeps the
+    /// suspended binding, so the next complete resolution still compares it
+    /// and retires everything if the account really changed.
+    static func retiresExternalTimerState(
+        after error: Error,
+        hasUnresolvedAccountStateMovement: Bool
+    ) -> Bool {
+        if hasUnresolvedAccountStateMovement { return true }
+        if case AppleAccountBoundaryResolutionError.blocked = error { return true }
+        return revocationReason(for: error) != nil
     }
 
     /// What a bare account-state notification authorizes.

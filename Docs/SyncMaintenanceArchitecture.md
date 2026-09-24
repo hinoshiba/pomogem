@@ -173,8 +173,19 @@ store fileを作る前にprocessが終了した境界だけは、fileが0件で�
 
 `.CKAccountChanged`を受けたときは、Rootと既知のtimer side effectを
 退役させ、旧`ModelContainer`が解放されてからidentityを再解決します。
-通常backgroundでもstoreをunmountし、foregroundで再検証するため、processがaccount change通知を受ける
-前にsuspendされた場合の旧store再利用を避けます。このboundaryはCloudKit import完了を意味しません。
+通常backgroundでもsuspend前にstoreをunmountし、foregroundで再検証するため、processがaccount change通知を
+受ける前にsuspendされた場合の旧store再利用を避けます。このboundaryはCloudKit import完了を意味しません。
+
+2026-09-24の所有者承認により、unmountは`.background`の瞬間ではなく約15秒の猶予後に行います
+（`CloudBackgroundGraceController`）。猶予中は`UIApplication` background taskを保持するのでprocessは
+suspendされず、account change通知も配送されます。猶予はiOSの残りbackground時間から5秒を引いた値で頭打ちに
+し、taskを得られない・時間が足りない場合は即座にunmountします。task期限の通知、`CKAccountChanged`、
+storage transfer、complete deletionでは猶予を打ち切って即座にunmountし、taskは退役したcontainerの解放を
+確認してから終了します（上限10秒、期限通知時は同期的にsessionを外してから終了）。猶予内にsceneが
+activeへ戻った場合はRoot・sheet・瓶を維持し、background中に識別を1回再確認します。再確認で
+`accountMismatch`・`noAccount`・`restricted`・registryの`blocked`が出た場合だけ`CKAccountChanged`と同じ
+quiescenceへ進み、通信・期限の失敗ではsessionを維持します。猶予後の再マウントでは、同じnamespaceの
+場合に限り直前のtab（瓶・記録・設定）を復元し、account changeやtransferで記憶を破棄します。
 
 ### 3.3 起動時の読み取りは意図的に小さい
 

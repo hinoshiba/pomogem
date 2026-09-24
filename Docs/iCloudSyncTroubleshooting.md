@@ -236,7 +236,7 @@ CloudKit・端末内通知・連続稼働時間APIの範囲で、SDK、送信先
 
 | 確認した問題 | 修正 |
 |---|---|
-| 通知許可ダイアログやControl Centerの一時的な`inactive`でも、公開済みのiCloud保存領域を閉じる | 公開済み領域は一時的な非アクティブ化で維持し、backgroundまたはアカウント変更時に閉じる。準備中の領域は従来どおり非アクティブ化で認可を失う |
+| 通知許可ダイアログやControl Centerの一時的な`inactive`でも、公開済みのiCloud保存領域を閉じる | 公開済み領域は一時的な非アクティブ化で維持し、backgroundでは約15秒の猶予（background taskで保持し、suspend前に必ず閉じる）の後、またはアカウント変更時に閉じる。準備中の領域は従来どおり非アクティブ化で認可を失う |
 | 任意のqueueから届く`CKAccountChanged`でSwiftUIの状態を変更する | 通知をmain run loopへ配送してからアカウント境界を更新する |
 | 消えたRoot／設定画面が通知許可やStoreKitの応答待ちで古い`ModelContext`を保持し、解放待ちtimeoutや遅延書き込みを起こす | 画面に属するTaskを終了時に取り消し、システム応答待ちから即座に離脱する。受付済みの通知更新は管理側で直列実行し、次の更新との順序を保持する |
 | 上限まで取得した所有権の候補が別の解放履歴によって除外されると、未取得の有効な所有者がいるのに新しいclaimを書き込む | 最初のページが不完全である可能性を最後まで保持し、所有者不在を証明できない場合は更新を拒否する |
@@ -245,6 +245,8 @@ CloudKit・端末内通知・連続稼働時間APIの範囲で、SDK、送信先
 
 Appleは`CKAccountChanged`の通知queueを保証せず、一時的な`inactive`とbackgroundを別の状態として
 定義しています。保存領域の公開前後の認可検証とbackground時のアカウント再確認は維持します。
+backgroundの猶予中はprocessがsuspendされないため、`CKAccountChanged`は配送され、その時点で猶予を
+打ち切って閉じます。猶予内に戻った場合も、識別をbackgroundで1回再確認します。
 ([Apple: CKAccountChanged](https://developer.apple.com/documentation/cloudkit/ckaccountchangednotification)、
 [Apple: ScenePhase.inactive](https://developer.apple.com/documentation/swiftui/scenephase/inactive))
 

@@ -67,8 +67,11 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
 - Offline in iCloud mode: 確認済みの端末dataが利用条件を満たせば、同じ端末storeを同期なしで開き、
   timer・記録・設定を利用できる。「このiPhoneに保存・同期は待機中」と表示する。通信が戻れば
   account・保存先・リセット履歴を確認して同期再開へ進む。account変更や未対応の履歴不一致では停止し、
-  記録の自動削除・修復はしない。同期用storeを一度開いたprocessでbackgroundから戻る場合などは、
-  安全にoffline用storeへ切り替えられず、app終了・再起動を案内する
+  記録の自動削除・修復はしない。同期用storeを一度開いたprocessでbackgroundの猶予（約15秒、
+  background taskで保持しsuspend前に必ず閉じる）を過ぎてから通信なしで戻った場合は、
+  安全にoffline用storeへ切り替えられないため「通信が戻るのを待っています」を表示し、通信の回復で
+  自動的に再確認する（すぐにofflineで使う場合だけapp終了・再起動を案内）。待機中も集中・休憩timerは
+  残り時間と状態だけ表示する
 - This iPhone only: 全ての基本機能をApple Account／networkなしで利用可能。専用random namespaceの
   local storeだけへ保存し、iCloudへ自動切替／uploadしない
 - Local projection: 瓶とまとまり粒に使う`AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`は

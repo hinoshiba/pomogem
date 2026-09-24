@@ -8,6 +8,9 @@ enum StorageTransferSettingsUITestFixture {
 
     enum Scenario: String {
         case offlineNavigation, offlineNavigationRecovered, offlineBreakNavigation, local, cloud, offline, offlineRecovery, offlineHistory, cloudNetworkWaiting, cloudLaunchTimedOut, activeTimer, exporting, deleting, unavailable
+        /// quality-01. The iCloud waiting screens with a running focus of the
+        /// closed session behind them, shown as the account-neutral card.
+        case cloudLaunchTimedOutWithFocus, cloudOfflineWallWithFocus, cloudBackgroundReturnWithFocus
         /// Cloud mode with the Settings dataset doors PUBLISHED, so their
         /// consent flow can be exercised. `cloud` is the shipping screen, where
         /// the same doors render disabled with their reason.
@@ -183,6 +186,12 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                 startsRecoveredBreak: scenario == .offlineBreakNavigation)
         } else if scenario == .cloudLaunchTimedOut {
             CloudLaunchTimeoutUITestFixtureView()
+        } else if scenario == .cloudLaunchTimedOutWithFocus {
+            CloudLaunchTimeoutUITestFixtureView(wall: .timedOut, showsRunningFocus: true)
+        } else if scenario == .cloudOfflineWallWithFocus {
+            CloudLaunchTimeoutUITestFixtureView(wall: .offline, showsRunningFocus: true)
+        } else if scenario == .cloudBackgroundReturnWithFocus {
+            CloudLaunchTimeoutUITestFixtureView(wall: .backgroundReturn, showsRunningFocus: true)
         } else if scenario == .cloudResetGuidance {
             NavigationStack {
                 List {

@@ -347,6 +347,9 @@ struct RootView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    /// quality-01. The tab to reopen after the host remounted this account's
+    /// data (see `CloudRemountNavigationMemory`). nil outside iCloud mode.
+    @Environment(\.cloudRemountNavigation) private var remountNavigation
     @AppStorage(AccountScopedLocalState.defaultsKey(base: "onboarding.completed"))
     private var didCompleteOnboarding = false
     @AppStorage(AccountScopedLocalState.defaultsKey(base: UsagePurpose.storageKey))
@@ -863,6 +866,7 @@ struct RootView: View {
             router.selectedTab = .settings
         }
         .onChange(of: router.selectedTab) { _, selectedTab in
+            remountNavigation?.record(selectedTab)
             guard isFirstFramePresented else { return }
             guard SyncMaintenanceLaunchPolicy.permitsForegroundDrain(
                 on: selectedTab
@@ -939,6 +943,9 @@ struct RootView: View {
             }
         }
         .onAppear {
+            if let restoredTab = remountNavigation?.takeRestoredTab() {
+                router.selectedTab = restoredTab
+            }
             viewTasks.activate()
             installStorageTransferOperation()
         }
