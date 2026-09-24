@@ -72,6 +72,10 @@ struct ShareComposerView: View {
     @State private var allSessionRowCount = 0
     @State private var dataLoadError: String?
     @State private var isLoadingData = true
+    /// Bumped whenever the loaded records or their page flags change, which
+    /// is the only time the cached selection must be rebuilt for them.
+    @State private var shareRecordsGeneration = 0
+    @State private var selectionCache = ShareSelectionCache()
 #if DEBUG
     @State private var debugGIFShareLifecycle = DebugGIFShareLifecycle()
 #endif
@@ -94,255 +98,68 @@ struct ShareComposerView: View {
     private var resolvedSharePreference: Bool {
         resolvedPreferences?.shareIncludesManual ?? false
     }
-    private var sessions: [StudySession] {
-        storedSessions.filter {
-            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetSnapshots)
-                && StudySessionIntegrityPolicy.isSupported($0)
+    /// The card's content, resolved once per change of its inputs rather
+    /// than on every body pass (history-10). Keystrokes, chips, format and
+    /// media changes reuse the cached value.
+    private var selection: ShareSelectionModel {
+        selectionCache.model(for: selectionKey) {
+            ShareSelectionModel.make(selectionInput)
         }
-    }
-    private var achievementStones: [AchievementStone] {
-        storedAchievementStones.filter {
-            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetSnapshots)
-        }
-    }
-    private var aggregatePebbles: [AggregatePebble] {
-        guard aggregateProjectionPresentation
-            .acceptsVerifiedAggregateCache(aggregateProjectionCacheStamp)
-        else { return [] }
-        return storedAggregatePebbles.filter {
-            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetSnapshots)
-        }
-    }
-    private var strata: [Stratum] {
-        guard aggregateProjectionPresentation
-            .acceptsVerifiedAggregateCache(aggregateProjectionCacheStamp)
-        else { return [] }
-        return storedStrata.filter {
-            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetSnapshots)
-        }
-    }
-    private var uniqueSessions: [StudySession] {
-        StudySessionSyncPolicy.canonicalSessions(from: sessions)
-        .sorted { $0.endAt < $1.endAt }
-    }
-    private var uniqueLooseSessions: [StudySession] {
-        StudySessionSyncPolicy.canonicalSessions(from: looseSessions)
-        .sorted { $0.endAt < $1.endAt }
-    }
-    private var compactLooseSessions: [StudySession] {
-        uniqueLooseSessions.filter { !localRepresentedSessionIDs.contains($0.id) }
-    }
-    private var uniqueAggregates: [AggregatePebble] {
-        Dictionary(grouping: aggregatePebbles, by: \.id).values.compactMap { duplicates in
-            duplicates.max { lhs, rhs in
-                if lhs.level == rhs.level { return lhs.createdAt < rhs.createdAt }
-                return lhs.level < rhs.level
-            }
-        }
-        .sorted { $0.createdAt < $1.createdAt }
-    }
-    private var uniqueAchievements: [AchievementStone] {
-        AchievementStonePolicy.canonicalStones(from: achievementStones)
-        .filter { $0.deletedAt == nil }
-        .sorted { $0.achievedAt < $1.achievedAt }
-    }
-    private var uniqueStrata: [Stratum] {
-        Dictionary(grouping: strata, by: \.id).values.compactMap { duplicates in
-            duplicates.min { lhs, rhs in lhs.bakedAt < rhs.bakedAt }
-        }
-        .sorted { $0.bakedAt < $1.bakedAt }
-    }
-    private var scopedSessions: [StudySession] {
-        switch scope {
-        case .all:
-            return uniqueSessions
-        case .month:
-            return uniqueSessions.filter { scope.contains($0.endAt) }
-        case let .aggregate(id, _):
-            guard aggregateProjectionPresentation.allowsAggregateSummaries else {
-                return []
-            }
-            if let aggregate = uniqueAggregates.first(where: { $0.id == id }) {
-                let membership = Set(AggregatePebblePolicy.descendantSessionIDs(
-                    of: aggregate,
-                    in: uniqueAggregates
-                ))
-                return uniqueSessions.filter { membership.contains($0.id) }
-            }
-            guard let layer = uniqueStrata.first(where: { $0.id == id }) else { return [] }
-            let membership = Set(layer.sessionIDs)
-            return uniqueSessions.filter { membership.contains($0.id) }
-        }
-    }
-    private var scopedAggregates: [AggregatePebble] {
-        guard aggregateProjectionPresentation.allowsAggregateSummaries else {
-            return []
-        }
-        switch scope {
-        case .all:
-            let trusted = uniqueAggregates.filter {
-                acceptedAggregateRootIDs.contains($0.id)
-            }
-            return AggregatePebblePolicy.disjointRootSummaries(from: trusted)
-        case .month:
-            let scopedIDs = Set(scopedSessions.map(\.id))
-            return AggregatePebblePolicy.activeRoots(from: uniqueAggregates).filter {
-                let membership = AggregatePebblePolicy.descendantSessionIDs(
-                    of: $0,
-                    in: uniqueAggregates
-                )
-                return !membership.isEmpty && !scopedIDs.isDisjoint(with: membership)
-            }
-        case let .aggregate(id, _):
-            return uniqueAggregates.filter { $0.id == id }
-        }
-    }
-    private var scopedAchievements: [AchievementStone] {
-        switch scope {
-        case .all:
-            return uniqueAchievements
-        case .month:
-            return uniqueAchievements.filter { scope.contains($0.achievedAt) }
-        case .aggregate:
-            return []
-        }
-    }
-    private var selectedSessions: [StudySession] {
-        var selected: [StudySession]
-        if scopedAggregateProjection == .authoritativeSummary {
-            // A scoped aggregate summary already owns the exact mass/counts.
-            // Passing its descendants as loose rows would count every reward
-            // twice in the preview, export, caption, and accessibility value.
-            selected = []
-        } else if usesCompactRootProjection {
-            // Compact roots are local projections. Only exact local leaf or
-            // legacy membership can remove a synchronized session candidate.
-            selected = compactLooseSessions
-        } else {
-            selected = includeManual ? scopedSessions : scopedSessions.filter { $0.effectiveSource.isMeasured }
-        }
-        return selected
-    }
-    private var scopedAggregateProjection: ScopedAggregateShareProjection? {
-        guard case .aggregate = scope,
-              let aggregate = scopedAggregates.first
-        else { return nil }
-        return .mode(
-            for: aggregate,
-            includesSelfReportedFocus: includeManual
-        )
-    }
-    private var selectedAggregates: [ShareAggregateVisual] {
-        if usesCompactRootProjection {
-            let modern = scopedAggregates.map(ShareAggregateVisual.init(aggregateSummary:))
-            let modernIDs = Set(uniqueAggregates.map(\.id))
-            let legacy = scopedLegacyStrata
-                .filter { !modernIDs.contains($0.id) }
-                .map(ShareAggregateVisual.init(legacySummary:))
-            return (modern + legacy).sorted { $0.createdAt < $1.createdAt }
-        }
-
-        if scopedAggregateProjection == .authoritativeSummary,
-           let aggregate = scopedAggregates.first {
-            return [ShareAggregateVisual(aggregateSummary: aggregate)]
-        }
-
-        let modern = scopedAggregates.compactMap { aggregate -> ShareAggregateVisual? in
-            let resolvedMembership = AggregatePebblePolicy.descendantSessionIDs(
-                of: aggregate,
-                in: uniqueAggregates
-            )
-            let membership = Set(resolvedMembership)
-            if membership.isEmpty {
-                // A compact parent arriving before its children is not a
-                // membership-less legacy summary. Omitting that transient
-                // visual prevents its full mass being added on top of sessions.
-                guard AggregatePebblePolicy.isUnattributedCompatibility(aggregate) else {
-                    return nil
-                }
-                let isExplicitlyAllMeasured = aggregate.manualPebbleCount == 0
-                    && aggregate.measuredPebbleCount == aggregate.pebbleCount
-                    && aggregate.pebbleCount > 0
-                return includeManual || isExplicitlyAllMeasured
-                    ? ShareAggregateVisual(aggregate: aggregate)
-                    : nil
-            }
-            return ShareAggregateVisual(
-                reconstructing: aggregate,
-                resolvedSessionIDs: resolvedMembership,
-                allMemberSessions: uniqueSessions.filter { membership.contains($0.id) },
-                includedMemberSessions: selectedSessions.filter { membership.contains($0.id) }
-            )
-        }
-
-        let modernIDs = Set(uniqueAggregates.map(\.id))
-        let legacy = scopedLegacyStrata
-            .filter { !modernIDs.contains($0.id) }
-            .compactMap { layer -> ShareAggregateVisual? in
-                let membership = Set(layer.sessionIDs)
-                if membership.isEmpty {
-                    return includeManual ? ShareAggregateVisual(legacy: layer) : nil
-                }
-                return ShareAggregateVisual(
-                    reconstructing: layer,
-                    allMemberSessions: uniqueSessions.filter { membership.contains($0.id) },
-                    includedMemberSessions: selectedSessions.filter { membership.contains($0.id) }
-                )
-            }
-        return (modern + legacy).sorted { $0.createdAt < $1.createdAt }
     }
 
-    /// Aggregate visuals index the sessions they contain, so only compatibility
-    /// aggregates without membership contribute additional mass.
-    private var selectedTotalGrams: Int {
-        NonnegativeIntPolicy.sum(
-            selectedSessions.map(\.grams)
-                + selectedAggregates
-                    .filter(\.contributesStandaloneTotals)
-                    .map(\.grams)
+    private var selectionKey: ShareSelectionInput.Key {
+        ShareSelectionInput.Key(
+            recordsGeneration: shareRecordsGeneration,
+            scope: scope,
+            includeManual: includeManual,
+            resetSnapshots: resetSnapshots,
+            allowsAggregateSummaries: aggregateProjectionPresentation.allowsAggregateSummaries,
+            acceptsVerifiedAggregateCache: aggregateProjectionPresentation
+                .acceptsVerifiedAggregateCache(aggregateProjectionCacheStamp)
         )
     }
 
-    /// Disclose what is actually present in the selected card, rather than the
-    /// state of the toggle itself. Membership-less compatibility aggregates are
-    /// conservative: they are only included when self-reporting is enabled, so
-    /// their unknown composition is disclosed as self-reported.
-    private var selectedIncludesSelfReportedFocus: Bool {
-        selectedSessions.contains { $0.effectiveSource.isSelfReported }
-            || selectedAggregates.contains { $0.manualPebbleCount > 0 }
-            || selectedHasUnknownSelfReportComposition
-    }
-
-    private var selectedHasUnknownSelfReportComposition: Bool {
-        guard includeManual else { return false }
-        let unknownModernIDs = Set(scopedAggregates
-            .filter(AggregatePebblePolicy.isUnattributedCompatibility)
-            .map(\.id))
-        let modernIDs = Set(scopedAggregates.map(\.id))
-        let unknownLegacyIDs = Set(scopedLegacyStrata
-            .filter { !modernIDs.contains($0.id) && $0.sessionIDs.isEmpty }
-            .map(\.id))
-        let unknownIDs = unknownModernIDs.union(unknownLegacyIDs)
-        return selectedAggregates.contains { unknownIDs.contains($0.id) }
+    private var selectionInput: ShareSelectionInput {
+        ShareSelectionInput(
+            scope: scope,
+            includeManual: includeManual,
+            resetSnapshots: resetSnapshots,
+            allowsAggregateSummaries: aggregateProjectionPresentation.allowsAggregateSummaries,
+            acceptsVerifiedAggregateCache: aggregateProjectionPresentation
+                .acceptsVerifiedAggregateCache(aggregateProjectionCacheStamp),
+            storedSessions: storedSessions,
+            looseSessions: looseSessions,
+            storedAchievementStones: storedAchievementStones,
+            storedAggregatePebbles: storedAggregatePebbles,
+            storedStrata: storedStrata,
+            acceptedAggregateRootIDs: acceptedAggregateRootIDs,
+            localRepresentedSessionIDs: localRepresentedSessionIDs,
+            historyPageIsPartial: historyPageIsPartial,
+            loosePageIsPartial: loosePageIsPartial,
+            aggregatePageIsPartial: aggregatePageIsPartial,
+            aggregateValidationIsIncomplete: aggregateValidationIsIncomplete,
+            allSessionRowCount: allSessionRowCount
+        )
     }
 
     private var shareCaption: String {
+        let selection = selection
         let semantics = shareRewardSemantics(
-            sessions: selectedSessions.map(ShareSessionVisual.init),
-            aggregates: selectedAggregates,
-            achievements: scopedAchievements.map(ShareAchievementVisual.init)
+            sessions: selection.sessions,
+            aggregates: selection.aggregates,
+            achievements: selection.achievements
         )
         let hiddenContent = shareHiddenContent(
-            sessions: selectedSessions.map(ShareSessionVisual.init),
-            aggregates: selectedAggregates,
-            achievements: scopedAchievements.map(ShareAchievementVisual.init),
+            sessions: selection.sessions,
+            aggregates: selection.aggregates,
+            achievements: selection.achievements,
             format: format
         )
         return ShareCopy.caption(
             subject: shareCaptionSubject,
-            grams: ShareMassFormatter.visual(selectedTotalGrams),
-            includesSelfReportedFocus: selectedIncludesSelfReportedFocus,
-            achievementCount: scopedAchievements.count,
+            grams: ShareMassFormatter.visual(selection.totalGrams),
+            includesSelfReportedFocus: selection.includesSelfReportedFocus,
+            achievementCount: selection.achievements.count,
             rewardDetail: semantics.captionDetail,
             visualDisclosure: hiddenContent.captionDisclosure,
             hashtags: activeHashtags
@@ -368,12 +185,13 @@ struct ShareComposerView: View {
         }
         switch scope {
         case .all:
-            if historyPageIsPartial && !usesCompactRootProjection {
+            let selection = selection
+            if historyPageIsPartial && !selection.usesCompactRootProjection {
                 return includeManual
                     ? "最近の記録から選んだ集中"
                     : "最近の記録から選んだ実測集中"
             }
-            if compactProjectionIsIncomplete {
+            if selection.compactProjectionIsIncomplete {
                 return "読み込めた結晶と最新層の集中"
             }
             return achievementPageIsPartial
@@ -391,12 +209,13 @@ struct ShareComposerView: View {
         if aggregateProjectionPresentation.isCloudVerificationPending {
             return "この端末で確認済み・iCloud再集計中"
         }
+        let selection = selection
         switch scope {
-        case .all where historyPageIsPartial && !includeManual && !usesCompactRootProjection:
+        case .all where historyPageIsPartial && !includeManual && !selection.usesCompactRootProjection:
             return "最近の実測・最新\(BoundedHistoryPolicy.periodSessionLimit)件の記録内"
-        case .all where historyPageIsPartial && !usesCompactRootProjection:
+        case .all where historyPageIsPartial && !selection.usesCompactRootProjection:
             return "最近の記録・最新\(BoundedHistoryPolicy.periodSessionLimit)件"
-        case .all where compactProjectionIsIncomplete:
+        case .all where selection.compactProjectionIsIncomplete:
             return "これまで・読み込み分"
         case .month where historyPageIsPartial:
             return "\(scope.periodLabel)・表示分"
@@ -405,77 +224,14 @@ struct ShareComposerView: View {
         }
     }
 
-    private var usesCompactRootProjection: Bool {
-        guard aggregateProjectionPresentation.allowsAggregateSummaries else {
-            return false
-        }
-        guard scope == .all, historyPageIsPartial else { return false }
-        let modernIDs = Set(uniqueAggregates.map(\.id))
-        let hasDistinctLegacySummaries = scopedLegacyStrata.contains {
-            !modernIDs.contains($0.id)
-        }
-        guard !scopedAggregates.isEmpty || hasDistinctLegacySummaries else {
-            return false
-        }
-        return CompactShareProjectionPolicy.canUseLifetimeRoots(
-            includesSelfReportedFocus: includeManual,
-            modernSummaryComposition: scopedAggregates.map {
-                .init(
-                    pebbleCount: $0.pebbleCount,
-                    measuredPebbleCount: $0.measuredPebbleCount,
-                    manualPebbleCount: $0.manualPebbleCount
-                )
-            },
-            hasLegacySummaries: hasDistinctLegacySummaries,
-            looseSources: compactLooseSessions.map(\.effectiveSource)
-        )
-    }
-
-    private var compactProjectionIsIncomplete: Bool {
-        guard usesCompactRootProjection else { return false }
-        if aggregatePageIsPartial
-            || aggregateValidationIsIncomplete
-            || loosePageIsPartial {
-            return true
-        }
-        let modernIDs = Set(scopedAggregates.map(\.id))
-        let represented = NonnegativeIntPolicy.sum(
-            scopedAggregates.map(\.pebbleCount)
-                + scopedLegacyStrata
-                    .filter { !modernIDs.contains($0.id) }
-                    .map(\.pebbleCount)
-                + [compactLooseSessions.count]
-        )
-        // Logical CloudKit duplicates make this conservative ("読み込み分")
-        // rather than allowing a partial compact projection to claim lifetime.
-        return represented != allSessionRowCount
-    }
-
-    private var hasShareableContent: Bool {
-        !selectedSessions.isEmpty
-            || !selectedAggregates.isEmpty
-            || !scopedAchievements.isEmpty
-            || selectedTotalGrams > 0
-    }
-
-    private var hasExcludedSelfReportedContent: Bool {
-        guard !includeManual else { return false }
-        if scopedSessions.contains(where: { $0.effectiveSource.isSelfReported }) {
-            return true
-        }
-        return scopedAggregates.contains {
-            $0.manualPebbleCount > 0 || AggregatePebblePolicy.isUnattributedCompatibility($0)
-        }
-            || scopedLegacyStrata.contains { $0.sessionIDs.isEmpty }
-    }
-
     private var settingsSummary: String {
+        let selection = selection
         let medium = mediaKind == .animatedGIF ? "GIF" : "静止画"
         let shape = format == .feed ? "4:5" : "9:16"
         let scopeLabel: String
-        if selectedIncludesSelfReportedFocus || !scopedAchievements.isEmpty {
+        if selection.includesSelfReportedFocus || !selection.achievements.isEmpty {
             scopeLabel = "自己申告あり"
-        } else if hasExcludedSelfReportedContent {
+        } else if selection.hasExcludedSelfReportedContent {
             scopeLabel = "実測のみ（自己申告は除外）"
         } else {
             scopeLabel = "実測のみ"
@@ -484,23 +240,6 @@ struct ShareComposerView: View {
             ? "タグなし"
             : "タグ\(activeHashtags.count)個"
         return "\(medium)・\(shape)・\(scopeLabel)・\(hashtagLabel)"
-    }
-
-    private var scopedLegacyStrata: [Stratum] {
-        guard aggregateProjectionPresentation.allowsAggregateSummaries else {
-            return []
-        }
-        switch scope {
-        case .all:
-            return uniqueStrata
-        case .month:
-            let scopedIDs = Set(scopedSessions.map(\.id))
-            return uniqueStrata.filter {
-                !$0.sessionIDs.isEmpty && !scopedIDs.isDisjoint(with: $0.sessionIDs)
-            }
-        case let .aggregate(id, _):
-            return uniqueStrata.filter { $0.id == id }
-        }
     }
 
     var body: some View {
@@ -531,12 +270,12 @@ struct ShareComposerView: View {
                     if isLoadingData {
                         ProgressView("カードの記録を読み込み中")
                             .frame(maxWidth: .infinity, minHeight: 280)
-                    } else if hasShareableContent {
+                    } else if selection.hasShareableContent {
                         AnimatedShareCardPreview(
-                            sessions: selectedSessions.map(ShareSessionVisual.init),
-                            aggregates: selectedAggregates,
-                            achievements: scopedAchievements.map(ShareAchievementVisual.init),
-                            includesSelfReportedFocus: selectedIncludesSelfReportedFocus,
+                            sessions: selection.sessions,
+                            aggregates: selection.aggregates,
+                            achievements: selection.achievements,
+                            includesSelfReportedFocus: selection.includesSelfReportedFocus,
                             format: format,
                             jarSnapshot: jarSnapshot,
                             periodLabel: effectivePeriodLabel,
@@ -587,6 +326,16 @@ struct ShareComposerView: View {
                             .accessibilityLabel("GIF share lifecycle probe")
                             .accessibilityValue(Text(verbatim: debugGIFShareLifecycle.accessibilityValue))
                             .allowsHitTesting(false)
+                        // How often this process resolved the card selection
+                        // versus reused it; typing a tag must only reuse it.
+                        Text("Share selection probe")
+                            .font(.system(size: 1))
+                            .foregroundStyle(Color.clear)
+                            .frame(width: 1, height: 1)
+                            .accessibilityIdentifier("share.debug.selection")
+                            .accessibilityLabel("Share selection probe")
+                            .accessibilityValue(Text(verbatim: "builds=\(ShareSelectionCache.debugBuildCount);lookups=\(ShareSelectionCache.debugLookupCount)"))
+                            .allowsHitTesting(false)
                     }
 #endif
 
@@ -606,7 +355,7 @@ struct ShareComposerView: View {
                         shareLaunchLabel
                     }
                     .buttonStyle(PomoGemPrimaryButtonStyle())
-                    .disabled(isRendering || !hasShareableContent)
+                    .disabled(isRendering || !selection.hasShareableContent)
                     .accessibilityIdentifier("share.primary-action")
                     .accessibilityHint(
                         mediaKind == .animatedGIF
@@ -895,7 +644,7 @@ struct ShareComposerView: View {
             }
         }
         .buttonStyle(PomoGemSecondaryButtonStyle())
-        .disabled(isRendering || isSaving || !hasShareableContent)
+        .disabled(isRendering || isSaving || !selection.hasShareableContent)
     }
 
     private var shareHashtagStrip: some View {
@@ -1111,7 +860,7 @@ struct ShareComposerView: View {
                     Text(
                         aggregateProjectionPresentation.isCloudVerificationPending
                             ? "iCloudを再集計中"
-                            : hasExcludedSelfReportedContent
+                            : selection.hasExcludedSelfReportedContent
                             ? "自己申告の粒があります"
                             : "カードにする粒が、まだありません"
                     )
@@ -1127,7 +876,7 @@ struct ShareComposerView: View {
                     ProgressView()
                         .tint(PomoGemTheme.amber)
                         .accessibilityLabel("iCloudの集計を確認中")
-                } else if hasExcludedSelfReportedContent {
+                } else if selection.hasExcludedSelfReportedContent {
                     Button("自己申告を含めてカードにする") {
                         includeManual = true
                     }
@@ -1180,10 +929,10 @@ struct ShareComposerView: View {
         }
         if case .aggregate = scope,
            !includeManual,
-           scopedAggregates.contains(where: { $0.manualPebbleCount > 0 }) {
+           selection.scopedAggregateHasSelfReportedPebbles {
             return "この結晶には自己申告が含まれます。「自己申告を含める」をオンにすると、結晶全体の正確な質量をカードにできます。"
         }
-        if !includeManual, scopedSessions.contains(where: { $0.effectiveSource.isSelfReported }) {
+        if !includeManual, selection.scopeHasSelfReportedSessions {
             return "自己申告を含めると、この期間の瓶をカードにできます。"
         }
         return "集中を完走すると、瓶の画像とグラム数を一緒に残せます。"
@@ -1195,8 +944,8 @@ struct ShareComposerView: View {
         }
         if historyPageIsPartial {
             switch scope {
-            case .all where usesCompactRootProjection:
-                if compactProjectionIsIncomplete {
+            case .all where selection.usesCompactRootProjection:
+                if selection.compactProjectionIsIncomplete {
                     return "全履歴を一括展開せず、取得できた結晶集計と最新層だけで構成しています。カードは「読み込み分」と明記されます。"
                 }
                 if achievementPageIsPartial {
@@ -1389,18 +1138,21 @@ struct ShareComposerView: View {
             }
             // Publish the aggregate page lease only after every bounded fetch
             // and structural validation above succeeded. This assignment is
-            // needed for `scopedAggregates` in the membership projection and
-            // is revoked again by the catch path below.
+            // needed for the scoped aggregates in the membership projection
+            // and is revoked again by the catch path below.
             if let verifiedProjectionStamp,
                aggregateProjectionPresentation.acceptsVerifiedAggregateCache(
                    verifiedProjectionStamp
                ) {
                 aggregateProjectionCacheStamp = verifiedProjectionStamp
             }
+            // Resolved directly, not through the cache: the page is still
+            // being assembled and its generation has not been published.
+            let loadedSelection = ShareSelectionModel.make(selectionInput)
             let membership = try HomeProjectionPolicy.localMembershipProjection(
                 for: looseSessions,
-                representedAggregateRoots: scopedAggregates,
-                legacyStrata: scopedLegacyStrata,
+                representedAggregateRoots: loadedSelection.scopedAggregates,
+                legacyStrata: loadedSelection.scopedLegacyStrata,
                 context: modelContext,
                 resetMarkers: resetSnapshots
             )
@@ -1409,10 +1161,12 @@ struct ShareComposerView: View {
             acceptedAggregateRootIDs.subtract(membership.conflictedRootIDs)
             aggregateValidationIsIncomplete = aggregateValidationIsIncomplete
                 || !localMembershipProjectionIsComplete
+            shareRecordsGeneration &+= 1
             isLoadingData = false
             refreshJarSnapshot()
         } catch {
             aggregateProjectionCacheStamp = nil
+            shareRecordsGeneration &+= 1
             isLoadingData = false
             dataLoadError = "記録を安全な範囲で読み込めませんでした。もう一度この画面を開いてください。"
         }
@@ -1434,6 +1188,7 @@ struct ShareComposerView: View {
         storedAchievementStones = []
         storedAggregatePebbles = []
         storedStrata = []
+        shareRecordsGeneration &+= 1
     }
 
     private func persistSharePreference(from oldValue: Bool, to value: Bool) {
@@ -1534,13 +1289,14 @@ struct ShareComposerView: View {
 
     @MainActor
     private func captureExportSnapshot() -> ShareExportSnapshot {
-        let capturedSessions = selectedSessions.map(ShareSessionVisual.init)
-        let capturedAchievements = scopedAchievements.map(ShareAchievementVisual.init)
-        let capturedAggregates = selectedAggregates
-        let capturedGrams = selectedTotalGrams
-        let capturedIncludesSelfReportedFocus = capturedSessions.contains { $0.source.isSelfReported }
-            || capturedAggregates.contains { $0.manualPebbleCount > 0 }
-            || selectedHasUnknownSelfReportComposition
+        // The same resolved selection the preview shows, so the exported card,
+        // its caption, and the on-screen card cannot disagree.
+        let selection = selection
+        let capturedSessions = selection.sessions
+        let capturedAchievements = selection.achievements
+        let capturedAggregates = selection.aggregates
+        let capturedGrams = selection.totalGrams
+        let capturedIncludesSelfReportedFocus = selection.includesSelfReportedFocus
         let capturedPeriod = effectivePeriodLabel
         let capturedHashtags = activeHashtags
         let capturedRewardSemantics = shareRewardSemantics(
@@ -1585,7 +1341,7 @@ struct ShareComposerView: View {
 
     @MainActor
     private func startShareExport() {
-        guard hasShareableContent else {
+        guard selection.hasShareableContent else {
             updateStatus("最初の一粒を積むと、カードにできます。")
             return
         }
@@ -1844,7 +1600,7 @@ struct ShareComposerView: View {
 
     @MainActor
     private func renderAndSave() {
-        guard hasShareableContent else {
+        guard selection.hasShareableContent else {
             updateStatus("最初の一粒を積むと、カードにできます。")
             return
         }

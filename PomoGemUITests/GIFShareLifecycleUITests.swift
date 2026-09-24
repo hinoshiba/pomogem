@@ -262,6 +262,53 @@ final class GIFShareLifecycleUITests: XCTestCase {
         )
     }
 
+    /// history-10: typing a tag must reuse the resolved card instead of
+    /// re-reading every record.
+    func testTypingATagReusesTheResolvedCard() {
+        addShareableSession()
+        openMenuAction(containing: "動く瓶をシェア")
+        XCTAssertTrue(app.navigationBars["カードにする"].waitForExistence(timeout: 8))
+        includeSelfReportedDirectlyIfOffered()
+        expandAdjustmentsIfNeeded()
+        app.swipeUp()
+
+        let probe = app.staticTexts["share.debug.selection"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 5))
+        let before = parseProbe(probe.value as? String ?? "")
+
+        let custom = app.textFields["share.custom-hashtag"]
+        XCTAssertTrue(scrollUntilHittable(custom))
+        app.swipeUp()
+        XCTAssertTrue(scrollUntilHittable(custom))
+        custom.tap()
+        custom.typeText("FocusLog")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        XCTAssertTrue(
+            app.staticTexts["選択中：#ポモジェム #ポモドーロ #FocusLog"].waitForExistence(timeout: 5)
+        )
+
+        let after = parseProbe(probe.value as? String ?? "")
+        XCTAssertEqual(
+            after["builds"],
+            before["builds"],
+            "Typing must not re-resolve the card's records; before=\(before) after=\(after)"
+        )
+        XCTAssertGreaterThan(
+            Int(after["lookups"] ?? "0") ?? 0,
+            Int(before["lookups"] ?? "0") ?? 0,
+            "The composer must have redrawn while typing"
+        )
+
+        attachScreenshot(named: "Share — a custom tag typed without re-resolving the card")
+    }
+
+    private func attachScreenshot(named name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     private func addShareableSession() {
         openMenuAction(containing: "時間を手動で積む")
         let thirtyMinutes = app.buttons.matching(
