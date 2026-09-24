@@ -1063,9 +1063,10 @@ enum HomeProjectionPolicy {
         let weeklyMeasuredGrams: Int
     }
 
-    /// Aggregate-backed lifetime cadence plus a paged seven-day query. Every
-    /// loose or weekly source page is logically deduplicated; no multi-decade
-    /// collection of source model objects is materialized on Home.
+    /// Aggregate-backed lifetime cadence plus a paged calendar-week query
+    /// (`WeeklyProgressPolicy.week`). Every loose or weekly source page is
+    /// logically deduplicated; no multi-decade collection of source model
+    /// objects is materialized on Home.
     @MainActor
     static func completionMetrics(
         context: ModelContext,
@@ -1089,7 +1090,7 @@ enum HomeProjectionPolicy {
             uniqueLoose.filter { $0.effectiveSource.isMeasured }.count
         ])
 
-        guard let interval = calendar.dateInterval(of: .weekOfYear, for: date) else {
+        guard let interval = WeeklyProgressPolicy.week(containing: date, calendar: calendar) else {
             return CompletionMetrics(
                 completedFocusCount: completedCount,
                 weeklyMeasuredSessionIDs: [],

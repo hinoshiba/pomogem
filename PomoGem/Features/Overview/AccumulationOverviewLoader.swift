@@ -40,9 +40,9 @@ enum AccumulationOverviewLoaderPolicy {
         referenceDate: Date = .now,
         calendar: Calendar = .autoupdatingCurrent
     ) throws -> [StudySession] {
-        guard let interval = calendar.dateInterval(
-            of: .weekOfYear,
-            for: referenceDate
+        guard let interval = WeeklyProgressPolicy.week(
+            containing: referenceDate,
+            calendar: calendar
         ) else { return [] }
         return try BoundedHistoryPolicy.resolvedSessionsInFiniteInterval(
             context: context,

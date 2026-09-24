@@ -23,7 +23,22 @@ struct AccumulationWeeklySummary: Equatable, Sendable {
     /// Timers that ran to their end this week (the 「戻った回数」).
     let timerCompletionCount: Int
     let measuredGrams: Int
+    /// Self-reported mass this week. The weekly headline stays measured-only
+    /// (EngagementArchitecture §3.3), but the card must not call a week empty
+    /// while the jar below it and 記録 both show this mass.
+    let selfReportedGrams: Int
     let dominantColorHex: String
+
+    var cardState: AccumulationWeeklyCardState {
+        if measuredGrams > 0 { return .measured }
+        return selfReportedGrams > 0 ? .selfReportedOnly : .empty
+    }
+}
+
+enum AccumulationWeeklyCardState: Equatable, Sendable {
+    case measured
+    case selfReportedOnly
+    case empty
 }
 
 enum AccumulationWeeklyPolicy {
@@ -42,6 +57,9 @@ enum AccumulationWeeklyPolicy {
             timerCompletionCount: records.filter(\.isTimerCompletion).count,
             measuredGrams: HomeProjectionPolicy.saturatingNonnegativeSum(
                 measured.map(\.grams)
+            ),
+            selfReportedGrams: HomeProjectionPolicy.saturatingNonnegativeSum(
+                records.filter { !$0.isMeasured }.map(\.grams)
             ),
             dominantColorHex: dominantColor
         )
@@ -651,7 +669,7 @@ struct AccumulationOverviewView: View {
     }
 
     private var currentWeekRecords: [AccumulationRecord] {
-        guard let interval = calendar.dateInterval(of: .weekOfYear, for: .now) else {
+        guard let interval = WeeklyProgressPolicy.week(calendar: calendar) else {
             return []
         }
         return uniqueRecords.filter { interval.contains($0.date) }
@@ -663,6 +681,10 @@ struct AccumulationOverviewView: View {
 
     private var currentWeekGrams: Int {
         currentWeekSummary.measuredGrams
+    }
+
+    private var currentWeekSelfReportedGrams: Int {
+        currentWeekSummary.selfReportedGrams
     }
 
     private var currentWeekColorHex: String {
@@ -840,11 +862,40 @@ struct AccumulationOverviewView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier("overview.weekly-crystal")
-        .accessibilityLabel(
-            currentWeekGrams == 0
-                ? "今週の積み上げ。今週のタイマー完走はまだありません。休んでも、以前の記録は減りません"
-                : "今週の積み上げ、\(EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams))、\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekTimerCompletionCount)回。回数は戻った文脈で、時間価値とは別です"
-        )
+        .accessibilityLabel(currentWeekAccessibilityLabel)
+    }
+
+    private var currentWeekAccessibilityLabel: String {
+        switch currentWeekSummary.cardState {
+        case .measured:
+            let selfReported = currentWeekSelfReportedGrams > 0
+                ? "このほか自己申告\(formattedMass(currentWeekSelfReportedGrams))。"
+                : ""
+            return "今週の積み上げ、\(EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekTimerCompletionCount)回。\(selfReported)回数は戻った文脈で、時間価値とは別です"
+        case .selfReportedOnly:
+            return "今週の積み上げ。タイマーの完走はまだありません。自己申告の\(formattedMass(currentWeekSelfReportedGrams))は、瓶とこれまでの記録に入っています"
+        case .empty:
+            return "今週の積み上げ。今週のタイマー完走はまだありません。休んでも、以前の記録は減りません"
+        }
+    }
+
+    private var currentWeekHeadline: String {
+        switch currentWeekSummary.cardState {
+        case .measured: "今週の時間が積み上がっている。"
+        case .selfReportedOnly: "今週は、自己申告で積んでいる。"
+        case .empty: "今週は、まだ透明。"
+        }
+    }
+
+    private var currentWeekCaption: String {
+        switch currentWeekSummary.cardState {
+        case .measured:
+            "価値は集中時間で加算。完走回数は、戻ってきた文脈として別に残します。"
+        case .selfReportedOnly:
+            "タイマーの完走はまだありません。自己申告の\(formattedMass(currentWeekSelfReportedGrams))も、瓶とこれまでの記録に入っています。"
+        case .empty:
+            "次の完走から時間と質量を加えます。休んでも、これまでの瓶は減りません。"
+        }
     }
 
     @ViewBuilder
@@ -877,16 +928,12 @@ struct AccumulationOverviewView: View {
 
         VStack(alignment: .leading, spacing: 9) {
             SectionEyebrow(text: "THIS WEEK")
-            Text(currentWeekGrams == 0 ? "今週は、まだ透明。" : "今週の時間が積み上がっている。")
+            Text(currentWeekHeadline)
                 .font(PomoGemTheme.brand(22))
-            Text(
-                currentWeekGrams == 0
-                    ? "次の完走から時間と質量を加えます。休んでも、これまでの瓶は減りません。"
-                    : "価値は集中時間で加算。完走回数は、戻ってきた文脈として別に残します。"
-            )
-            .font(.caption)
-            .foregroundStyle(PomoGemTheme.muted)
-            .fixedSize(horizontal: false, vertical: true)
+            Text(currentWeekCaption)
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
             Group {
                 if dynamicTypeSize.isAccessibilitySize {
                     VStack(spacing: 8) {
@@ -897,6 +944,16 @@ struct AccumulationOverviewView: View {
                         currentWeekStats
                     }
                 }
+            }
+            if currentWeekSummary.cardState == .measured,
+               currentWeekSelfReportedGrams > 0 {
+                // The tiles are measured-only; say where the rest of the
+                // week's mass is instead of letting it look lost.
+                Text("このほか自己申告 \(formattedMass(currentWeekSelfReportedGrams))")
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("overview.weekly-self-reported")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -909,7 +966,7 @@ struct AccumulationOverviewView: View {
             value: EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams)
         )
         OverviewStat(title: "戻った回数", value: "\(currentWeekTimerCompletionCount)回")
-        OverviewStat(title: "今週", value: formattedMass(currentWeekGrams))
+        OverviewStat(title: "今週の実測", value: formattedMass(currentWeekGrams))
     }
 
     private var currentJar: some View {

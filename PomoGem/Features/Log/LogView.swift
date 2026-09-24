@@ -880,10 +880,84 @@ enum BoundedHistoryPolicy {
     }
 }
 
+/// 記録's 「今週」 and 「今月」 are the calendar week and month that contain
+/// today: the same 「今週」 the completion card and 積み上がり use, never a
+/// rolling seven days.
+enum LogPeriodPolicy {
+    static func interval(
+        for period: LogView.Period,
+        now: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> DateInterval? {
+        switch period {
+        case .week:
+            WeeklyProgressPolicy.week(containing: now, calendar: calendar)
+        case .month:
+            calendar.dateInterval(of: .month, for: now)
+        }
+    }
+
+    /// Every day of the period, including the days still to come, so the
+    /// chart reads like a calendar rather than a window that slides.
+    static func days(
+        in interval: DateInterval,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> [Date] {
+        var days: [Date] = []
+        var day = calendar.startOfDay(for: interval.start)
+        while day < interval.end, days.count < 32 {
+            days.append(day)
+            guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+            day = next
+        }
+        return days
+    }
+
+    /// 「9月21日(日)〜9月27日(土)」: says which days 「今週」 covers.
+    static func rangeLabel(
+        for interval: DateInterval,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> String {
+        let lastDay = calendar.date(byAdding: .day, value: -1, to: interval.end)
+            ?? interval.start
+        var style = Date.FormatStyle.dateTime.month().day().weekday(.abbreviated)
+        style.locale = calendar.locale ?? .autoupdatingCurrent
+        style.calendar = calendar
+        style.timeZone = calendar.timeZone
+        return "\(interval.start.formatted(style))〜\(lastDay.formatted(style))"
+    }
+}
+
+/// The period tiles in 記録. Totals include every source; the split says how
+/// much of it was self-reported and how much came from Screen Time, so the
+/// measured part matches 「今週の実測」 in 積み上がり.
+struct LogPeriodSummary: Equatable {
+    let totalSeconds: Int
+    let grams: Int
+    /// Timers that ran to their end (「完走ポモ」).
+    let timerCompletionCount: Int
+    let selfReportedGrams: Int
+    let screenTimeSeconds: Int
+
+    init(sessions: [StudySession]) {
+        totalSeconds = NonnegativeIntPolicy.sum(sessions.map(\.seconds))
+        grams = NonnegativeIntPolicy.sum(sessions.map(\.grams))
+        timerCompletionCount = sessions
+            .filter { $0.effectiveSource.isTimerCompletion }
+            .count
+        selfReportedGrams = NonnegativeIntPolicy.sum(
+            sessions.filter { $0.effectiveSource.isSelfReported }.map(\.grams)
+        )
+        screenTimeSeconds = NonnegativeIntPolicy.sum(
+            sessions.filter { $0.effectiveSource == .screenTime }.map(\.seconds)
+        )
+    }
+}
+
 struct LogView: View {
     enum Period: String, CaseIterable, Identifiable {
-        case week = "週"
-        case month = "月"
+        case week = "今週"
+        case month = "今月"
         var id: Self { self }
     }
 
@@ -943,7 +1017,16 @@ struct LogView: View {
                     ForEach(Period.allCases) { item in Text(item.rawValue).tag(item) }
                 }
                 .pickerStyle(.segmented)
-                .padding(.bottom, 2)
+
+                if let interval = LogPeriodPolicy.interval(for: period) {
+                    Text(LogPeriodPolicy.rangeLabel(for: interval))
+                        .font(.caption)
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, 2)
+                        .accessibilityLabel("\(period.rawValue)、\(LogPeriodPolicy.rangeLabel(for: interval))")
+                        .accessibilityIdentifier("log.period-range")
+                }
 
                 achievementUndoNotice
 
@@ -1021,43 +1104,67 @@ struct LogView: View {
     }
 
     private var summaryGrid: some View {
-        // 「完走ポモ」 counts timers that ran to their end. Screen Time chunks
-        // are measured time but not completions.
-        let timerCompletionCount = filteredSessions
-            .filter { $0.effectiveSource.isTimerCompletion }
-            .count
-        let totalMinutes = NonnegativeIntPolicy.sum(
-            filteredSessions.map(\.seconds)
-        ) / 60
-        return Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: 10) {
-                    summaryTiles(timerCompletionCount: timerCompletionCount, totalMinutes: totalMinutes)
-                }
-            } else {
-                HStack(spacing: 10) {
-                    summaryTiles(timerCompletionCount: timerCompletionCount, totalMinutes: totalMinutes)
+        let summary = LogPeriodSummary(sessions: filteredSessions)
+        return VStack(alignment: .leading, spacing: 8) {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: 10) {
+                        summaryTiles(summary)
+                    }
+                } else {
+                    HStack(spacing: 10) {
+                        summaryTiles(summary)
+                    }
                 }
             }
+            summaryComposition(summary)
         }
     }
 
     @ViewBuilder
-    private func summaryTiles(timerCompletionCount: Int, totalMinutes: Int) -> some View {
-        SummaryTile(label: periodPageIsPartial ? "表示分の時間" : "積んだ時間", value: formatMinutes(totalMinutes), symbol: "hourglass")
-        SummaryTile(label: periodPageIsPartial ? "表示分の完走" : "完走ポモ", value: "\(timerCompletionCount)", symbol: "checkmark.circle")
+    private func summaryTiles(_ summary: LogPeriodSummary) -> some View {
+        SummaryTile(label: periodPageIsPartial ? "表示分の時間" : "積んだ時間", value: formatMinutes(summary.totalSeconds / 60), symbol: "hourglass")
+        // Timers that ran to their end; Screen Time chunks are not completions.
+        SummaryTile(label: periodPageIsPartial ? "表示分の完走" : "完走ポモ", value: "\(summary.timerCompletionCount)", symbol: "checkmark.circle")
         SummaryTile(
-            label: periodPageIsPartial ? "表示分の質量" : "今期の質量",
-            value: formatMass(NonnegativeIntPolicy.sum(filteredSessions.map(\.grams))),
+            label: periodPageIsPartial
+                ? "表示分の質量"
+                : (period == .week ? "今週の質量" : "今月の質量"),
+            value: formatMass(summary.grams),
             symbol: "scalemass"
         )
+    }
+
+    /// Only shown when it applies, so a timer-only week stays uncluttered.
+    @ViewBuilder
+    private func summaryComposition(_ summary: LogPeriodSummary) -> some View {
+        if summary.selfReportedGrams > 0 {
+            Label(
+                "このうち自己申告 \(formatMass(summary.selfReportedGrams))",
+                systemImage: "hand.tap"
+            )
+            .font(.caption)
+            .foregroundStyle(PomoGemTheme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("log.self-reported-share")
+        }
+        if summary.screenTimeSeconds > 0 {
+            Label(
+                "Screen Timeの\(DurationPresentation.minutesLabel(seconds: summary.screenTimeSeconds))は、完走ポモに含みません",
+                systemImage: "apps.iphone"
+            )
+            .font(.caption)
+            .foregroundStyle(PomoGemTheme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("log.screen-time-share")
+        }
     }
 
     private var massChart: some View {
         let values = dailyMass
         let descriptor = DailyMassChartDescriptor(
             values: values,
-            periodTitle: period == .week ? "直近7日" : "今月",
+            periodTitle: period.rawValue,
             isPartial: periodPageIsPartial
         )
         return PomoGemCard {
@@ -1406,17 +1513,11 @@ struct LogView: View {
 
     private var dailyMass: [DailyMass] {
         let calendar = Calendar.autoupdatingCurrent
-        let days: [Date]
-        switch period {
-        case .week:
-            let today = calendar.startOfDay(for: .now)
-            days = (0..<7).compactMap { calendar.date(byAdding: .day, value: $0 - 6, to: today) }
-        case .month:
-            guard let interval = calendar.dateInterval(of: .month, for: .now),
-                  let range = calendar.range(of: .day, in: .month, for: .now)
-            else { return [] }
-            days = range.compactMap { day in calendar.date(byAdding: .day, value: day - 1, to: interval.start) }
-        }
+        guard let interval = LogPeriodPolicy.interval(
+            for: period,
+            calendar: calendar
+        ) else { return [] }
+        let days = LogPeriodPolicy.days(in: interval, calendar: calendar)
         return days.map { day in
             DailyMass(
                 date: day,
@@ -1468,23 +1569,18 @@ struct LogView: View {
         let epochID = ActivityResetPolicy.currentEpochID(from: resetSnapshots)
         let calendar = Calendar.autoupdatingCurrent
         let now = Date.now
-        let periodStart: Date
-        switch period {
-        case .week:
-            periodStart = calendar.date(
-                byAdding: .day,
-                value: -6,
-                to: calendar.startOfDay(for: now)
-            ) ?? .distantPast
-        case .month:
-            periodStart = calendar.dateInterval(of: .month, for: now)?.start ?? .distantPast
-        }
+        let periodInterval = LogPeriodPolicy.interval(
+            for: period,
+            now: now,
+            calendar: calendar
+        )
 
         do {
             let periodPage = try BoundedHistoryPolicy.resolvedSessionPage(
                 context: modelContext,
                 epochID: epochID,
-                start: periodStart,
+                start: periodInterval?.start ?? .distantPast,
+                end: periodInterval?.end,
                 order: .reverse,
                 logicalLimit: BoundedHistoryPolicy.periodSessionLimit
             )

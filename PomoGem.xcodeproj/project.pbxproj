@@ -104,6 +104,7 @@
 		5DB48410BC347FAE6BD91C78 /* FocusCompletionFailureRecoveryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88643D553679C84D93A636AE /* FocusCompletionFailureRecoveryUITests.swift */; };
 		5E521D17EFF0330DC4D121CD /* CriticalFlowAdversarialUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 553C936224E8783AF264B56A /* CriticalFlowAdversarialUITests.swift */; };
 		5F3E44D05AD0E99DC817C83D /* StrataMathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE6330E992C4131296B0D702 /* StrataMathTests.swift */; };
+		611EBE966E4A690F7700E246 /* DurationPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F8B21D28766085BF33F6320 /* DurationPresentation.swift */; };
 		6382EF8D628902B73C5C9B85 /* CloudActivityHistoryPreflightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E64D7EC1B176F2D176D0D4 /* CloudActivityHistoryPreflightTests.swift */; };
 		64746653CB3D9567E89EA4FE /* StorageTransferManagedZoneDeletionAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E0B444504AFC6C0DB686F4F /* StorageTransferManagedZoneDeletionAdapters.swift */; };
 		64EFCFE12308AE584188A2BA /* ViewTaskScope.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5365DD134569D0BA0958D3E2 /* ViewTaskScope.swift */; };
@@ -480,6 +481,7 @@
 		8B4CF11C44B1C6941E51EF0D /* CompleteDataDeletionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompleteDataDeletionCoordinator.swift; sourceTree = "<group>"; };
 		8CEE148CEBF14D1D1A0C63F0 /* CustomDurationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomDurationView.swift; sourceTree = "<group>"; };
 		8F80442D2D22E628B70A0E36 /* PomoGemDataExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemDataExporterTests.swift; sourceTree = "<group>"; };
+		8F8B21D28766085BF33F6320 /* DurationPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DurationPresentation.swift; sourceTree = "<group>"; };
 		9067A4176EA91B2C33852DEC /* PomoGem.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PomoGem.entitlements; sourceTree = "<group>"; };
 		90CE44E5D1B41AEA7AE5E479 /* ScreenTimeCallbackDiagnosticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeCallbackDiagnosticsTests.swift; sourceTree = "<group>"; };
 		91B5D3DADE9BB942B8D5A6E7 /* FortyYearDebugScenarioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FortyYearDebugScenarioTests.swift; sourceTree = "<group>"; };
@@ -832,6 +834,7 @@
 				0B4D2704A867D651C6A15FB7 /* CloudOfflineHostPolicy.swift */,
 				9DD41B95531C607AD6AEFA85 /* CloudSyncMonitor.swift */,
 				7EFB20CEF01CE01A6FC6CBB9 /* Constants.swift */,
+				8F8B21D28766085BF33F6320 /* DurationPresentation.swift */,
 				1A889309BC037B43F7C5906A /* FairnessPolicy.swift */,
 				F5F337E4E147E9E6B47EEAA3 /* GachaEngine.swift */,
 				4213EFBA64EE041E199C469F /* LaunchActivationWatchdogPolicy.swift */,
@@ -1363,6 +1366,7 @@
 				7CB82FE804B2887172375629 /* Constants.swift in Sources */,
 				85E42B45C3640BEAFFF9A520 /* CustomDurationEditingState.swift in Sources */,
 				78B9055A72C9DC3FFE5842F0 /* CustomDurationView.swift in Sources */,
+				611EBE966E4A690F7700E246 /* DurationPresentation.swift in Sources */,
 				F36027E2DA6CA68B2A3CB5F9 /* EffortConstellationView.swift in Sources */,
 				01CAA824E44B0D8235C83A8E /* FairnessPolicy.swift in Sources */,
 				3A4AEA37D55B4E47E777E3A8 /* FocusActivityAttributes.swift in Sources */,
