@@ -3548,6 +3548,7 @@ private struct PersistenceLaunchStatusView: View {
     /// actually chose, so the current size is read here and re-applied below.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var storageConfirmation: StorageConfirmation?
+    @State private var storageChoiceViewportHeight: CGFloat = 0
     @State private var confirmsTransferCancellation = false
     @State private var understandsRefreshDataLoss = false
     /// The two directions must never share a consent. This one lives on the
@@ -3766,6 +3767,20 @@ private struct PersistenceLaunchStatusView: View {
                 }
                 .frame(maxWidth: 520)
                 .padding(24)
+                // launch-03. The first-run choice sits in the middle of the
+                // screen when it fits, instead of hanging from the top of
+                // an otherwise empty first frame. Taller content (AX sizes)
+                // scrolls exactly as before; every other state is unchanged.
+                .frame(minHeight: isChoosingStorage ? storageChoiceViewportHeight : nil)
+            }
+            .background {
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { storageChoiceViewportHeight = proxy.size.height }
+                        .onChange(of: proxy.size.height) { _, height in
+                            storageChoiceViewportHeight = height
+                        }
+                }
             }
         }
         .alert(item: $storageConfirmation) { confirmation in
@@ -4338,7 +4353,9 @@ private struct PersistenceLaunchStatusView: View {
     /// first; the storage question follows.
     private var storageChoiceHeader: some View {
         VStack(spacing: 12) {
+            // Branding, not content: capped so AX5 does not wrap the name.
             PomoGemLogo()
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             Text("集中した時間が、粒になって瓶にたまっていきます。", tableName: "Launch",
                  comment: "First-run storage choice: the app's one-line promise under the logo")
                 .font(.subheadline.weight(.semibold))
@@ -4359,12 +4376,18 @@ private struct PersistenceLaunchStatusView: View {
         identifier: String,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        // At accessibility sizes the text needs the card's whole width: the
+        // symbol and chevron are decoration, and beside AX5 text they left a
+        // column a few characters wide.
+        let isAccessibilitySize = dynamicTypeSize.isAccessibilitySize
+        return Button(action: action) {
             HStack(alignment: .center, spacing: 14) {
-                Image(systemName: symbol)
-                    .font(.title3)
-                    .foregroundStyle(PomoGemTheme.amber)
-                    .frame(width: 28)
+                if !isAccessibilitySize {
+                    Image(systemName: symbol)
+                        .font(.title3)
+                        .foregroundStyle(PomoGemTheme.amber)
+                        .frame(width: 28)
+                }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
                         .font(.system(.headline, design: .rounded, weight: .bold))
@@ -4376,9 +4399,11 @@ private struct PersistenceLaunchStatusView: View {
                 }
                 .multilineTextAlignment(.leading)
                 Spacer(minLength: 4)
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.muted)
+                if !isAccessibilitySize {
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(PomoGemTheme.muted)
+                }
             }
             .padding(16)
             .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
