@@ -496,8 +496,12 @@ enum PendingRewardReceiptStore {
 /// Counting completions made six 10-minute sessions advance that cadence six
 /// times faster than one 60-minute session. We instead accumulate measured
 /// mass (10g/minute) and cross the same 100-minute boundary regardless of how
-/// that time was split. Recent session IDs make crash/replay handling
-/// idempotent; accepting the suggested break is always optional.
+/// that time was split. A single uninterrupted block of 60 minutes or more
+/// also earns the long break and restarts the cycle: split sessions already
+/// had rests between them, one long block had none, and splitting can only
+/// delay (never bring forward) that suggestion. Recent session IDs make
+/// crash/replay handling idempotent; accepting the suggested break is always
+/// optional.
 struct FocusRestCadenceSnapshot: Codable, Equatable, Sendable {
     struct Record: Codable, Equatable, Sendable {
         let sessionID: UUID
@@ -511,6 +515,7 @@ struct FocusRestCadenceSnapshot: Codable, Equatable, Sendable {
 enum FocusRestCadenceStore {
     static let defaultsKey = "focus.rest-cadence.v2"
     static let longBreakIntervalGrams = 100 * Constants.Mass.gramsPerMinute
+    static let singleSessionLongBreakGrams = 60 * Constants.Mass.gramsPerMinute
     private static let maximumRecentRecordCount = 32
 
     static func load(defaults: UserDefaults = .standard) -> FocusRestCadenceSnapshot {
@@ -547,17 +552,23 @@ enum FocusRestCadenceStore {
         }
 
         let contributionGrams = max(0, rawContributionGrams)
-        // Keep only quotient/remainder facts so even a corrupt Int.max input
-        // cannot overflow or change the mathematical remainder.
-        let contributionCrossesBoundary = contributionGrams >= longBreakIntervalGrams
-        let contributionRemainder = contributionGrams % longBreakIntervalGrams
-        let remainderTotal = state.creditedGrams + contributionRemainder
-        let crossedLongBreakBoundary = contributionCrossesBoundary
-            || remainderTotal >= longBreakIntervalGrams
-        state.creditedGrams = remainderTotal % longBreakIntervalGrams
-        let breakMinutes = crossedLongBreakBoundary
-            ? Constants.Timer.longBreakMinutes
-            : Constants.Timer.shortBreakMinutes
+        let breakMinutes: Int
+        if contributionGrams >= singleSessionLongBreakGrams {
+            // One long block had no rest inside it. Suggest the long break
+            // now and start the next cycle from zero, so the following short
+            // session does not immediately earn a second long break.
+            state.creditedGrams = 0
+            breakMinutes = Constants.Timer.longBreakMinutes
+        } else {
+            // Keep only quotient/remainder facts so even a corrupt Int.max
+            // input cannot overflow or change the mathematical remainder.
+            let contributionRemainder = contributionGrams % longBreakIntervalGrams
+            let remainderTotal = state.creditedGrams + contributionRemainder
+            state.creditedGrams = remainderTotal % longBreakIntervalGrams
+            breakMinutes = remainderTotal >= longBreakIntervalGrams
+                ? Constants.Timer.longBreakMinutes
+                : Constants.Timer.shortBreakMinutes
+        }
         state.recentRecords.append(FocusRestCadenceSnapshot.Record(
             sessionID: sessionID,
             breakMinutes: breakMinutes
