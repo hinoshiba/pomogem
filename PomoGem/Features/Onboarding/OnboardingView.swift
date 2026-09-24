@@ -276,23 +276,22 @@ private struct ValuePage: View {
                         title: "責めない",
                         detail: "できない日があっても、警告や罰はない"
                     )
-                    ValuePromise(
-                        symbol: "arrow.triangle.2.circlepath.icloud.fill",
-                        title: persistenceMode == .localOnly
-                            ? "このiPhoneだけに保存"
-                            : "iCloudで引き継ぐ",
-                        detail: persistenceMode == .localOnly
-                            ? "このiPhoneの専用領域へ保存"
-                            : "同じApple AccountのiPhone間で同期。保存済みの端末データはオフラインでも利用できます"
-                    )
 
-                    Text(storageDetail)
-                        .font(.caption)
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 8)
-            }
+                    // product-01 / launch-04. The storage choice was made
+                    // seconds ago and confirmed with its full caveats; this
+                    // page no longer repeats it a third time. Only an iCloud
+                    // session keeps one caption, because it says something
+                    // this moment needs.
+                    if let storageDetail {
+                        Text(storageDetail)
+                            .font(.caption)
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 8)
+                            .accessibilityIdentifier("onboarding.storage-detail")
+                    }
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 24)
@@ -305,10 +304,8 @@ private struct ValuePage: View {
         verticalSizeClass == .compact || dynamicTypeSize.isAccessibilitySize ? 180 : 250
     }
 
-    private var storageDetail: String {
-        if persistenceMode == .localOnly {
-            return "記録はこのiPhoneに保存します。後でiCloudの記録を使う場合は、設定から端末の記録が置き換わることを確認して切り替えられます。端末の記録でiCloudを置き換える操作は現在利用できません。JSON書き出しは保管用で、アプリへ戻す機能はありません。"
-        }
+    private var storageDetail: String? {
+        guard persistenceMode == .cloudKit else { return nil }
         if isCloudOffline {
             return "現在は端末に保存済みのデータを使っています。まだ届いていないiCloudのデータは、接続回復後に確認します。"
         }

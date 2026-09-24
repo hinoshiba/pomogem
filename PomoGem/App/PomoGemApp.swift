@@ -3780,9 +3780,19 @@ private struct PersistenceLaunchStatusView: View {
                     }
                 )
             case .localOnly:
+                // launch-04. This alert is the step that commits local-only,
+                // so it states the consequences plainly and in the order a
+                // person meets them. Switching to iCloud later is possible,
+                // but it REPLACES this iPhone's records with the iCloud
+                // ones: `StorageTransferReleasePolicy.standard` keeps every
+                // device -> iCloud path closed, so nothing here merges or
+                // uploads. The old copy said 「後で…切り替えられます」 first
+                // and the loss last, in engineering terms.
                 Alert(
                     title: Text("このiPhoneだけに保存しますか？"),
-                    message: Text("記録をiCloudへ送信せず、このiPhoneに保存します。アプリを削除すると端末内の記録は失われます。後で設定からiCloudの記録を取り込み、端末の記録を置き換えて同期を始められます。端末の記録でiCloudを置き換える操作は現在利用できず、二つの記録も統合されません。"),
+                    message: Text("記録はこのiPhoneだけに保存し、iCloudへは送信しません。アプリを削除すると、記録は失われます。あとでiCloud同期に切り替えると、このiPhoneの記録はiCloudの記録に置き換わります。このiPhoneの記録をiCloudへ移すことは、現在できません。",
+                                  tableName: "Launch",
+                                  comment: "First-run storage choice: local-only confirmation message (full caveats)"),
                     primaryButton: .cancel(Text("キャンセル")),
                     secondaryButton: .default(Text("このiPhoneだけで始める")) {
                         onChooseLocalOnly?()

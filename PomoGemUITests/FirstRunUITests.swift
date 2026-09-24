@@ -68,6 +68,10 @@ final class FirstRunUITests: XCTestCase {
         let localAlert = app.alerts["このiPhoneだけに保存しますか？"]
         XCTAssertTrue(localAlert.waitForExistence(timeout: 4))
         XCTAssertTrue(alertMessage(localAlert, contains: "アプリを削除すると"))
+        // launch-04: the confirmation that commits local-only says plainly
+        // that a later switch to iCloud replaces this iPhone's records.
+        XCTAssertTrue(alertMessage(localAlert, contains: "このiPhoneの記録はiCloudの記録に置き換わります"))
+        XCTAssertFalse(alertMessage(localAlert, contains: "後で設定から"))
         attachScreenshot("storage-choice-local-confirmation")
         localAlert.buttons["キャンセル"].tap()
         XCTAssertTrue(waitForFixtureState("cloud=0;local=0"),
