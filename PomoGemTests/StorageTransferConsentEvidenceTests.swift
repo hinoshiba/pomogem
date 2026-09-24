@@ -95,20 +95,45 @@ final class StorageTransferConsentEvidenceTests: XCTestCase {
                        "A read that did not happen is never an empty server")
     }
 
-    // MARK: review-2-7 — the disabled door's reason
+    // MARK: device-01 — the shipping lineage screen
 
-    /// The reason line under 「このiPhoneのデータでiCloudを使い始める」 used to be
-    /// the overwrite string, which describes a 「置き換え」 and promises a
-    /// 復旧用コピー this path never stages before it is permitted to run.
-    func testTheDisabledLineageDoorIsExplainedInItsOwnTerms() {
-        let reason = StorageTransferLineageCopy.startUnavailable
-        XCTAssertTrue(reason.contains("使い始める操作は、いまは利用できません"))
-        XCTAssertFalse(reason.contains("置き換える操作"),
-            "The screen insists this is not a replacement; its reason line must agree")
-        XCTAssertFalse(reason.contains("復旧用コピー"),
-            "No recovery copy exists on this path at the point the door is refused")
-        XCTAssertNotEqual(reason,
-            StorageTransferReleaseError.datasetOverwriteUnavailable.localizedDescription)
+    /// A shipping build never renders the start-from-device door on this
+    /// screen, so no sentence on it may promise that door: not the message,
+    /// not the offline explanation (which used to say 「あとでこの画面から、
+    /// このiPhoneのデータでiCloudを使い始めることもできます」).
+    func testTheShippingLineageScreenPromisesNoDisabledDoor() {
+        let bit = StorageTransferReleasePolicy.standard.allowsDatasetOverwriteFromDevice
+        XCTAssertFalse(bit, "The premise: the start door is closed in a shipping build")
+        for text in [StorageTransferLineageCopy.screenMessage(offersLineageStart: bit),
+                     StorageTransferLineageCopy.offlineExplanation(offersLineageStart: bit),
+                     StorageTransferLineageCopy.offlineUnavailable] {
+            XCTAssertFalse(text.contains("使い始める"), text)
+        }
+        let offline = StorageTransferLineageCopy.offlineExplanation(offersLineageStart: bit)
+        XCTAssertTrue(offline.contains("同期は止まったまま"),
+            "Choosing offline must be described as what it is: sync stays stopped")
+        XCTAssertTrue(offline.contains("「復旧手順」"),
+            "and it names the way back an offline session actually carries")
+        XCTAssertTrue(StorageTransferLineageCopy.offlineExplanation(offersLineageStart: true)
+            .contains("使い始める"), "Only a build that publishes the door may name it")
+        XCTAssertTrue(StorageTransferLineageCopy.offlineSessionMessage.contains("止まったまま"))
+        XCTAssertFalse(StorageTransferLineageCopy.offlineSessionMessage.contains("接続回復後"))
+    }
+
+    /// transfer-01 / transfer-10. The stop reason is read by App Store users,
+    /// for whom a 「開発用／配布用」 build does not exist, and it is also the
+    /// offline banner's text after a retry. Plain words, no internal terms.
+    func testTheStopReasonIsPlainAndBlamesNoBuildTheUserCannotHave() {
+        for text in [StorageTransferLineageCopy.stopReason, StorageTransferLineageCopy.title,
+                     StorageTransferLineageCopy.refreshExplanation] {
+            XCTAssertFalse(text.contains("開発用"), text)
+            XCTAssertFalse(text.contains("配布用"), text)
+            XCTAssertFalse(text.contains("管理情報"), text)
+        }
+        XCTAssertTrue(StorageTransferLineageCopy.stopReason.contains("削除していません"))
+        XCTAssertEqual(StorageTransferRuntimeError.cloudLineageUnavailable.localizedDescription,
+                       StorageTransferLineageCopy.stopReason)
+        XCTAssertTrue(StorageTransferLineageCopy.refreshExplanation.contains("iCloudのデータは削除しません"))
     }
 
     // MARK: review-1-4 — the localLedgerMissing explanation

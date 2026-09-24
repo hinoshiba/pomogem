@@ -164,9 +164,9 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
         XCTAssertFalse(StorageTransferLineageCopy.screenMessage(offersLineageStart: false)
             .contains("選べます"),
             "While the door ships disabled the screen may not state that choice")
-        XCTAssertTrue(StorageTransferLineageCopy.screenMessage(offersLineageStart: false)
-            .contains("もう一度試す"),
-            "It must instead name a control the screen actually carries")
+        XCTAssertFalse(StorageTransferLineageCopy.screenMessage(offersLineageStart: false)
+            .contains("使い始める"),
+            "It may not name the door at all while the build keeps it shut")
     }
 
     func testRecoveryReviewIsSingleUseAndCannotRetireAChangedSessionOrAccount() {

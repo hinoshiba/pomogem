@@ -356,8 +356,9 @@ extension StorageTransferDatasetRequestDirection: Identifiable { var id: Self { 
 /// will do, restated in full, with its own unchecked acknowledgement and its
 /// own destructive action. A fresh instance is built for every presentation, so
 /// 戻る discards the acknowledgement and no other confirmation in this screen
-/// can ever arm this one (PLAN §3 S9).
-private struct StorageTransferDatasetConfirmationView: View {
+/// can ever arm this one (PLAN §3 S9). Shared with the launch host's
+/// `.cloudLineageUnavailable` screen, so both surfaces quote one text.
+struct StorageTransferDatasetConfirmationView: View {
     let direction: StorageTransferDatasetRequestDirection
     /// Non-nil for the device -> iCloud direction only, and non-nil is the
     /// precondition for presenting this view at all for that direction: the

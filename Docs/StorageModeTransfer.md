@@ -141,7 +141,7 @@ runtimeは**それぞれの名前のまま**投げます。
 | --- | --- | --- |
 | `datasetReplacedRemotely` | `.datasetRefresh`「iCloudのデータが置き換わりました」 | 「iCloudから再取得」と「このiPhoneのデータで置き換える」（各々に独立した同意）、書き出し |
 | `localLedgerMissing`（サーバに確定世代あり） | 同じ`.datasetRefresh`。ただし見出しは「iCloudのデータを受け取った記録がありません」 | 同上。台帳が欠けているのは端末側の事情なので、**置き換えられたとは主張しません** |
-| `cloudLineageUnavailable` | `.cloudLineageUnavailable`「iCloudの管理情報が見つかりません」 | 「このiPhoneのデータでiCloudを使い始める」（読み取り専用の事前確認が成功してから「最後の確認」を経て`startCloudLineageFromDevice`）、「オフラインのまま使う」、「もう一度試す」 |
+| `cloudLineageUnavailable` | `.cloudLineageUnavailable`「iCloudとの同期を止めています」 | 「オフラインのまま使う」、「iCloudのデータを取り込み直す」（読み取り専用の事前確認が成功してから「最後の確認」を経て`refreshCloudDatasetWithoutLineage`。ポリシービット無し）、書き出し、「もう一度試す」、サポート。`allowsDatasetOverwriteFromDevice`が有効なビルドだけ「このiPhoneのデータでiCloudを使い始める」（`startCloudLineageFromDevice`）も表示 |
 | `cloudEnvironmentMismatch` | 説明のみ「別のiCloud環境のデータです」 | 破壊的操作なし。もう一度試す／オフライン利用／サポート |
 | `localLedgerMissing`かつサーバにも確定世代が無いと判明した場合 | 説明のみ「iCloudのデータを受け取った記録がありません」 | 同上 |
 | `leftoverLocalStores`ほか | 汎用「保存領域を確認できません」 | 同上 |
@@ -151,10 +151,20 @@ runtimeは**それぞれの名前のまま**投げます。
 という**固有の文面**を表示します（P1-4）。救済UIを出せなかったことが利用者にも運用者にも見えます。
 
 「このiPhoneのデータでiCloudを使い始める」は、`allowsDatasetOverwriteFromDevice`が無効な通常版では
-**理由付きで無効表示**になります（文面はこの操作専用の`StorageTransferLineageCopy.startUnavailable`。
-「置き換え」を説明する文面は、この画面の他のすべての文が「置き換えではない」と言っているため使いません）。
+**表示しません**（2026-09-24、device-01）。停止画面は、そのビルドで実行できる方法だけを、削除する
+ものが少ない順に示します。以前は無効な扉を先頭の主ボタンとして表示し、オフライン利用の説明でも
+「あとでこの画面から…使い始めることもできます」と、通常版では開かない扉を約束していました。
 確定済みの世代が1つでも存在する場合は`startCloudLineageFromDevice`
 自身が拒否するので、画面が読んだ「台帳が無い」という前提は実行時に必ず再検証されます。
+
+通常版でこの画面から同期へ戻る唯一の方法は「iCloudのデータを取り込み直す」です。設定の
+「iCloudから再取得」と同じ`refreshCloudDatasetWithoutLineage`（サーバへは一切書かず、
+ポリシービットも持たない）で、読み取り専用の事前確認で**両側の件数**を表示し、iCloud側に
+利用者の記録と成果が無い場合は専用の警告、書き出し、未選択の確認を持つ「最後の確認」
+（設定と同じ画面）を経てから受け付けます。この方向に恒久的な復旧用コピーは無いため、
+開発中は保留していましたが、件数・空の警告・書き出しが揃ったので停止画面にも置きます。
+オフライン利用を選んだ場合は、利用中の画面の案内も「接続回復後に同期を再開します」ではなく
+「同期は止まったまま」「復旧手順からこの画面に戻れる」と表示します。
 
 **controlレコードが無いことは、iCloudにレコードが無いことではありません。**
 `cloudLineageUnavailable`が証明したのは`PomoGemStorageTransfer-v1/control-v1`の不在だけで、
@@ -165,12 +175,13 @@ runtimeは**それぞれの名前のまま**投げます。
 `.datasetRefresh`と同じく、読み取り専用の`previewCloudDataset`が成功するまで扉を開けません
 （PLAN §3 S14）。件数と他端末の痕跡は同意より前に画面と「最後の確認」の両方に表示します。
 
-この画面には「もう一度試す」も置きます。通常版ではこの扉が常に無効で、オフライン用の
-確認済みコピーが無い端末（`.enrol` + `requireNoArtifacts`でこの停止理由に至る経路そのもの）では
-オフラインの扉も出ないため、これが無いと**アプリを強制終了する以外に再試行の手段がありません**。
-画面の本文末尾の一文も`allowsDatasetOverwriteFromDevice`から組み立てます
-（`StorageTransferLineageCopy.screenMessage(offersLineageStart:)`）。無効なビルドで
-「使い始めるか、オフラインのまま使うかを選べます」と書いてから次の段落で断るのを避けるためです。
+この画面には「もう一度試す」とサポートも置きます。オフライン用の確認済みコピーが無い端末では
+オフラインの扉が出ないため、これらが無いと**アプリを強制終了する以外に再試行の手段がありません**。
+画面の本文も`allowsDatasetOverwriteFromDevice`から組み立てます
+（`StorageTransferLineageCopy.screenMessage(offersLineageStart:)`、
+`offlineExplanation(offersLineageStart:)`）。無効なビルドでは停止理由だけを述べ、開かない扉には
+触れません。停止理由の文面からは「別のビルド（開発用／配布用）」を削除しました（App Storeの利用者には
+存在しない原因のため）。
 
 ### 管理情報（転送台帳）が無いアカウント
 

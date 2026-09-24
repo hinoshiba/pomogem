@@ -300,7 +300,10 @@ final class StorageTransferAdmissionTaxonomyTests: XCTestCase {
         let shipping = StorageTransferLineageCopy.screenMessage(
             offersLineageStart: StorageTransferReleasePolicy.standard.allowsDatasetOverwriteFromDevice)
         XCTAssertFalse(shipping.contains("選べます"))
-        XCTAssertTrue(shipping.contains("もう一度試す"))
+        XCTAssertFalse(shipping.contains("使い始める"),
+            "device-01: a shipping build names no door it keeps shut")
+        XCTAssertEqual(shipping, StorageTransferLineageCopy.stopReason,
+            "and adds no closing sentence at all: each door below explains itself")
         XCTAssertTrue(StorageTransferLineageCopy.screenMessage(offersLineageStart: true)
             .contains("このiPhoneのデータでiCloudを使い始めるか、オフラインのまま使うかを選べます。"),
             "and only a build that publishes the door may state that choice")

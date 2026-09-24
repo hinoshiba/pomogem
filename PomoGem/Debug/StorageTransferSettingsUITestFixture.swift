@@ -55,6 +55,9 @@ enum StorageTransferSettingsUITestFixture {
         /// a working control), and the published door whose read-only server
         /// enumeration failed (the door must stay shut).
         case lineageUnavailableClosed, lineageUnavailableUnreadable
+        /// device-01. The shipping lineage screen for an account whose iCloud
+        /// side holds none of the user's records.
+        case lineageUnavailableEmptyCloud
         /// The two explanation-only screens. Neither carries any destructive
         /// control, in any policy.
         case environmentMismatch, localLedgerMissingExplain
@@ -76,6 +79,7 @@ enum StorageTransferSettingsUITestFixture {
             case .lineageUnavailableEnabled: .lineageUnavailableEnabled
             case .lineageUnavailableClosed: .lineageUnavailableClosed
             case .lineageUnavailableUnreadable: .lineageUnavailableUnreadable
+            case .lineageUnavailableEmptyCloud: .lineageUnavailableEmptyCloud
             case .environmentMismatch: .environmentMismatch
             case .localLedgerMissingExplain: .localLedgerMissingExplain
             default: nil

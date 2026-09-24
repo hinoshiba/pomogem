@@ -340,17 +340,19 @@ enum StorageTransferOverwriteCopy {
 /// taxonomy reaches (ROOT-CAUSE §6.2). Kept beside the other two copy holders
 /// so every sentence a stop reason can produce is diffable in one place.
 ///
-/// Two of the three screens are explanation-only. The third — 「iCloudの管理情報が
-/// 見つかりません」 — is the state the reported iPhone is actually in, and it is
-/// the only one that carries an action: starting a NEW iCloud lineage from this
-/// device. That action is destructive to nothing on this device and to nothing
-/// on the server (there is no lineage to destroy), but it does publish this
-/// device's whole dataset, so it sits behind 「最後の確認」 and the same closed
-/// `allowsDatasetOverwriteFromDevice` bit as the overwrite.
+/// Two of the three screens are explanation-only. The third — the
+/// `cloudLineageUnavailable` screen — is the state the reported iPhone is
+/// actually in. device-01: it leads with the choices this build can actually
+/// run (keep using this iPhone's records offline, or take iCloud's data back
+/// with 「iCloudから再取得」), and only a build that publishes
+/// `allowsDatasetOverwriteFromDevice` adds starting a NEW iCloud lineage from
+/// this device behind its own 「最後の確認」.
 enum StorageTransferLineageCopy {
-    // MARK: 「iCloudの管理情報が見つかりません」
+    // MARK: The `cloudLineageUnavailable` screen
 
-    static let title = "iCloudの管理情報が見つかりません"
+    /// Plain words for what the user can see happening. The old title named
+    /// an internal record (「iCloudの管理情報が見つかりません」).
+    static let title = "iCloudとの同期を止めています"
     static let startDoorTitle = "このiPhoneのデータでiCloudを使い始める"
     /// review-1-1 / review-2-2. The missing thing is the transfer CONTROL
     /// record, not the account's records: `refreshCloudDatasetWithoutLineage`
@@ -360,37 +362,56 @@ enum StorageTransferLineageCopy {
     static let startExplanation =
         "iCloud側に、このアプリが使っている管理情報が見つかりません。このiPhoneの記録をiCloudへ送信し、新しいiCloudのデータとして使い始めます。このiPhoneの記録は削除しません。iCloudに残っている記録は削除され、このiPhoneのデータで置き換えられます。"
 
-    /// review-2-7. The reason the door is closed, phrased for THIS door.
-    /// `StorageTransferReleaseError.datasetOverwriteUnavailable` describes the
-    /// 「置き換え」 operation and promises a 復旧用コピー that this path never
-    /// stages, on a screen whose every other sentence says the operation is
-    /// not a replacement.
-    static let startUnavailable =
-        "このiPhoneのデータでiCloudを使い始める操作は、いまは利用できません。この端末の記録は削除せず、そのまま保持します。"
-
-    /// review-2-5. The stop reason itself promises nothing: the screen's
-    /// closing sentence is built by the host from the release policy, because
-    /// while `allowsDatasetOverwriteFromDevice` is false the door it would
-    /// name ships permanently disabled.
+    /// review-2-5. The stop reason itself promises nothing: it is also the
+    /// error text an offline session shows when its retry meets this state.
+    /// transfer-01 / device-01: it no longer blames 「別のビルド（開発用／配布
+    /// 用）」, a cause that does not exist for an App Store user, and it names
+    /// the cause they can actually recognise.
     static let stopReason =
-        "iCloud側の管理情報を確認できませんでした。この端末のデータは削除していません。別のビルド（開発用／配布用）で開いた、またはiCloudのアプリデータが削除された可能性があります。"
+        "iCloudのデータとこのiPhoneの記録の対応を確認できないため、記録が混ざらないよう同期を止めています。iPhoneの設定からiCloudのPomoGemのデータを削除した場合などに起こります。このiPhoneの記録もiCloudのデータも削除していません。"
     static let startAndOfflineChoices =
         "このiPhoneのデータでiCloudを使い始めるか、オフラインのまま使うかを選べます。"
-    static let retryAndOfflineChoices =
-        "このiPhoneのデータでiCloudを使い始める操作は、いまは利用できません。「もう一度試す」で確認し直すか、オフラインのままお使いください。"
 
     /// The screen's message. `offersLineageStart` is the release bit, so the
-    /// app never states a choice and then refuses it in the next paragraph.
+    /// app never states a choice and then refuses it in the next paragraph;
+    /// a build that does not publish the start door adds no closing sentence
+    /// at all, and each door below explains itself.
     static func screenMessage(offersLineageStart: Bool) -> String {
-        stopReason + (offersLineageStart ? startAndOfflineChoices : retryAndOfflineChoices)
+        offersLineageStart ? stopReason + startAndOfflineChoices : stopReason
     }
     static let offlineDoorTitle = "オフラインのまま使う"
-    static let offlineExplanation =
-        "iCloudへ送信せず、このiPhoneに保存されている記録でそのまま使います。あとでこの画面から、このiPhoneのデータでiCloudを使い始めることもできます。"
+    /// device-01. The old sentence promised 「あとでこの画面から、このiPhoneの
+    /// データでiCloudを使い始めることもできます」 in a build where that door is
+    /// permanently disabled, so a user who chose offline had no enabled way
+    /// back. Built from the release bit, like `screenMessage`.
+    static func offlineExplanation(offersLineageStart: Bool) -> String {
+        let base = "iCloudへ送信せず、このiPhoneに保存されている記録でそのまま使います。変更はこのiPhoneに保存されますが、iCloudとの同期は止まったままです。どちらの記録も削除しません。"
+        return base + (offersLineageStart
+            ? "あとでこの画面から、このiPhoneのデータでiCloudを使い始めることもできます。"
+            : "同期を再開する方法は、利用中の画面上部の「復旧手順」からいつでも確認できます。")
+    }
     /// Offered only when the offline route is actually eligible. When it is
     /// not, the screen says why instead of showing a control that does nothing.
     static let offlineUnavailable =
-        "オフラインで利用するための確認済みデータが、この端末にまだありません。通信が使えるときに一度開いてください。どちらの記録も削除していません。"
+        "このiPhoneには、オフラインで開ける確認済みの記録がまだありません。どちらの記録も削除していません。"
+
+    /// The banner message of an offline session opened FROM a storage-transfer
+    /// stop screen. The generic 「接続回復後に同期を再開します」 is false there:
+    /// a restored connection meets the same stop again, so the banner carries
+    /// the 「復旧手順」 action instead of an automatic-resume promise.
+    static let offlineSessionMessage =
+        "iCloudとの同期は止まったままです。変更はこのiPhoneに保存されます。「復旧手順」から、同期を再開する方法をいつでも確認できます。"
+
+    // MARK: 「iCloudのデータを取り込み直す」 on this screen
+
+    /// The policy-free way back to sync on this screen. It is the SAME
+    /// `refreshCloudDatasetWithoutLineage` Settings already ships for accounts
+    /// without a ledger: it writes nothing to iCloud and deletes this
+    /// device's side only after the read-only pre-flight, the empty-iCloud
+    /// warning and its own unchecked acknowledgement in 「最後の確認」.
+    static let refreshDoorTitle = "iCloudのデータを取り込み直す"
+    static let refreshExplanation =
+        "iCloudにあるデータをこのiPhoneに取り込み直して、同期を再開します。このiPhoneのテーマ・記録・設定は削除され、iCloudのデータに置き換わります。2つのデータは結合しません。iCloudのデータは削除しません。"
 
     // MARK: 「最後の確認」 for the start-from-device action
 
