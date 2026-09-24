@@ -15,8 +15,9 @@ enum CloudRestoreWaitingPolicy {
     ///     that used PomoGem on this account writes (`CloudActivityHistoryObservation`).
     ///   - hasReceivedThemes: a theme already exists locally. A cloud cold
     ///     launch never seeds themes, and the ones this device creates are
-    ///     written by finishing onboarding, which sets `startsFresh` first —
-    ///     so before that, any theme here arrived from iCloud.
+    ///     written by finishing onboarding, in the same save as the row that
+    ///     says onboarding finished and after `startsFresh` is set — so before
+    ///     that, any theme here arrived from iCloud.
     ///   - isCloudOffline: an offline session cannot receive anything; it
     ///     keeps the tutorial and its own offline caption.
     ///   - startsFresh: the user chose 「新しく始める」, or has already answered

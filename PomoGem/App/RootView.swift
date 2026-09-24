@@ -2045,6 +2045,21 @@ struct RootView: View {
         isFinishingOnboarding = true
         defer { isFinishingOnboarding = false }
 
+        // Ask for the reminder permission before anything is written, then
+        // save the themes and the onboarding answers together. With the
+        // themes saved first and the answers after the prompt, a process
+        // that ended while iOS was asking (or a cancelled view task) left a
+        // theme this device created without the row that says onboarding
+        // finished. In iCloud mode that theme then reads as one that arrived
+        // from another device, and the next launch showed the restore screen
+        // over a first-time user (launch-06). One save has no such window:
+        // either nothing was written and the tutorial runs again, or all of
+        // it was.
+        let granted = wantsNotifications
+            ? await NotificationManager.shared.requestAuthorization()
+            : false
+        guard !Task.isCancelled else { return }
+
         do {
             let presetIDs = Set(SeedData.subjects.map(\.id))
             let presetNameKeys = Set(SeedData.subjects.map {
@@ -2192,18 +2207,6 @@ struct RootView: View {
                 nextSortOrder = NonnegativeIntPolicy.next(after: nextSortOrder)
                 remainingNewSubjectSlots -= 1
             }
-            try modelContext.save()
-        } catch {
-            modelContext.rollback()
-            router.showToast("初期設定を保存できませんでした。もう一度お試しください", symbol: "exclamationmark.triangle")
-            return
-        }
-
-        let granted = wantsNotifications
-            ? await NotificationManager.shared.requestAuthorization()
-            : false
-        guard !Task.isCancelled else { return }
-        do {
             try PrefsConsumerPolicy.recordOnboardingCompletion(
                 context: modelContext,
                 markers: resetSnapshots,
@@ -2214,10 +2217,7 @@ struct RootView: View {
             usagePurposeRawValue = UsagePurpose.study.rawValue
         } catch {
             modelContext.rollback()
-            router.showToast(
-                "初期設定をこのiPhoneへ保存できませんでした。もう一度お試しください",
-                symbol: "exclamationmark.triangle"
-            )
+            router.showToast("初期設定を保存できませんでした。もう一度お試しください", symbol: "exclamationmark.triangle")
             return
         }
 
