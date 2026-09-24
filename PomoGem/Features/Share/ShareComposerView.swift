@@ -924,7 +924,7 @@ struct ShareComposerView: View {
                         .accessibilityLabel("iCloudの集計を確認中")
                 } else if selection.hasExcludedSelfReportedContent {
                     Button("自己申告を含めてカードにする") {
-                        includeManual = true
+                        includeSelfReportedFocusHere()
                     }
                     .buttonStyle(PomoGemSecondaryButtonStyle())
                     .accessibilityIdentifier("share.include-self-reported-direct")
@@ -970,7 +970,80 @@ struct ShareComposerView: View {
         )
     }
 
+    /// Includes self-reported focus from the notice or the empty state, the
+    /// same way the toggle does. The notice and the button that had focus
+    /// leave the screen, so VoiceOver is told what the card now holds.
+    @MainActor
+    private func includeSelfReportedFocusHere() {
+        includeManual = true
+        guard UIAccessibility.isVoiceOverRunning else { return }
+        Task { @MainActor in
+            // Read the card after the selection has been resolved for the
+            // new toggle, and after the removed button's focus change.
+            try? await Task.sleep(for: .milliseconds(350))
+            let grams = selection.totalGrams
+            let message: String
+            if let time = ShareMassFormatter.focusTime(grams) {
+                message = String(
+                    localized: "自己申告を含めました。カードは\(ShareMassFormatter.spoken(grams))、\(time)です。",
+                    table: "Share",
+                    comment: "VoiceOver after including self-reported focus. Arguments: spoken mass (300グラム), focus time (30分)"
+                )
+            } else {
+                message = String(
+                    localized: "自己申告を含めました。カードは\(ShareMassFormatter.spoken(grams))です。",
+                    table: "Share",
+                    comment: "VoiceOver after including self-reported focus when the card holds under a minute. Argument: spoken mass"
+                )
+            }
+            UIAccessibility.post(notification: .announcement, argument: message)
+        }
+    }
+
+    /// The boxed notice with its large button is for a card that would
+    /// otherwise read as an unexplained 0g (walk-std-04). When measured
+    /// focus is already on the card, leaving self-reported time out may be
+    /// the saved choice (既定は実測のみ), so the fact stays as one quiet line
+    /// with an inline 含める rather than a box on every share.
+    @ViewBuilder
     private var excludedSelfReportedNotice: some View {
+        if selection.totalGrams == 0 {
+            prominentExcludedSelfReportedNotice
+        } else {
+            compactExcludedSelfReportedNote
+        }
+    }
+
+    private var compactExcludedSelfReportedNote: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 8))
+        return layout {
+            Text(excludedSelfReportedMessage)
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("share.excluded-self-reported")
+            Button {
+                includeSelfReportedFocusHere()
+            } label: {
+                Text("含める", tableName: "Share")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(PomoGemTheme.amber)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .buttonStyle(PomoGemBareButtonStyle())
+            .disabled(isRendering || isSaving)
+            .accessibilityIdentifier("share.include-self-reported-inline")
+            .accessibilityLabel(Text("自己申告を含める", tableName: "Share"))
+            .accessibilityHint(Text("自己申告として明記したうえで、この記録をカードに含めます", tableName: "Share"))
+        }
+        .padding(.horizontal, 14)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var prominentExcludedSelfReportedNotice: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
                 Text(excludedSelfReportedMessage)
@@ -987,7 +1060,7 @@ struct ShareComposerView: View {
             .accessibilityIdentifier("share.excluded-self-reported")
 
             Button {
-                includeManual = true
+                includeSelfReportedFocusHere()
             } label: {
                 Text("自己申告を含める", tableName: "Share")
                     .frame(maxWidth: .infinity)
