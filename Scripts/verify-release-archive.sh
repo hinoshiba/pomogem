@@ -167,6 +167,13 @@ if [ "$(/usr/bin/shasum -a 256 "$app_font_license" | /usr/bin/cut -d ' ' -f 1)" 
   fail 'bundled font license differs from the reviewed SIL Open Font License text'
 fi
 
+# Every bundle carries exactly this checkout's shipping localizations. Without
+# ja.lproj an extension could present itself in another language; an en.lproj
+# before activation would ship unreviewed English (Docs/Localization.md).
+PYTHONDONTWRITEBYTECODE=1 python3 "$POMOGEM_AUDIT_SCRIPT_DIRECTORY/l10n/l10n.py" \
+  verify-bundle "$app_bundle" >/dev/null \
+  || fail 'archive localizations differ from shipping_languages in Scripts/l10n/table-map.json'
+
 audit_tmp=$(mktemp -d "${TMPDIR:-/tmp}/pomogem-archive-audit.XXXXXX") \
   || fail 'could not create private audit workspace'
 readonly audit_tmp
