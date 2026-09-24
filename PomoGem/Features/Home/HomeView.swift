@@ -508,6 +508,9 @@ struct HomeView: View {
     }
 
     var body: some View {
+#if DEBUG
+        let _ = HomeRenderDiagnostics.recordBodyEvaluation()
+#endif
         observedContent
     }
 
@@ -4573,13 +4576,22 @@ private struct FortyYearPersistentFixtureProbe: View {
 #endif
 
 #if DEBUG
-/// Keeps the one-time jar hint's window frame for UI tests: the hint is
-/// hidden from accessibility (the jar speaks the same guidance), so a test
-/// cannot otherwise check that it stays clear of the gem it describes.
-/// Debug builds only.
+/// Counts `HomeView.body` evaluations so a UI test can hold Home to its idle
+/// budget: nothing re-renders it while nobody touches the phone. Observing a
+/// periodically publishing object (as Home once did with the Screen Time
+/// controller, re-rendering every three seconds) shows up here as a count
+/// that keeps climbing. Debug builds only.
+/// It also keeps the one-time jar hint's window frame: the hint is hidden
+/// from accessibility (the jar speaks the same guidance), so a test cannot
+/// otherwise check that it stays clear of the gem it describes.
 @MainActor
 enum HomeRenderDiagnostics {
+    private(set) static var bodyEvaluationCount = 0
     static var jarHintWindowFrame: CGRect?
+
+    static func recordBodyEvaluation() {
+        bodyEvaluationCount &+= 1
+    }
 }
 
 /// A stateful, explicit-UI-test-only readout of the live SpriteKit
@@ -4613,7 +4625,9 @@ private struct JarUITestPresentationProbe: View {
     @State private var dropSequence = 0
     @State private var dropFall: CGFloat = 0
     @State private var dropLanded = false
-    /// Sampled from `HomeRenderDiagnostics`.
+    /// Sampled from `HomeRenderDiagnostics`. Only this probe re-renders when
+    /// it changes, so reading it cannot inflate the count it reports.
+    @State private var homeBodyEvaluations = 0
     @State private var jarHintFrame: CGRect?
 
     var body: some View {
@@ -4639,7 +4653,7 @@ private struct JarUITestPresentationProbe: View {
 
     private var presentationValue: String {
         String(
-            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d;targetWindowX=%.1f;targetWindowY=%.1f;jarHint=%@",
+            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d;targetWindowX=%.1f;targetWindowY=%.1f;homeBodyEvaluations=%d;jarHint=%@",
             count,
             Double(maximumY),
             records,
@@ -4652,6 +4666,7 @@ private struct JarUITestPresentationProbe: View {
             dropLanded ? 1 : 0,
             Double(targetWindowX),
             Double(targetWindowY),
+            homeBodyEvaluations,
             jarHintFrame.map {
                 String(format: "%.1f,%.1f,%.1f,%.1f", $0.minX, $0.minY, $0.maxX, $0.maxY)
             } ?? "none"
@@ -4659,6 +4674,7 @@ private struct JarUITestPresentationProbe: View {
     }
 
     private func samplePresentation() {
+        homeBodyEvaluations = HomeRenderDiagnostics.bodyEvaluationCount
         jarHintFrame = HomeRenderDiagnostics.jarHintWindowFrame
         dropSequence = Int(truncatingIfNeeded: scene.completionDropSequence)
         dropFall = scene.completionDropMaximumFall
