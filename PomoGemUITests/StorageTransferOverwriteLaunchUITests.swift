@@ -168,9 +168,10 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         let named = "iCloudの内容をもう一度確認"
         XCTAssertTrue(comparison.label.contains("「\(named)」"),
             "The instruction must name the control this screen carries")
+        // The screen's own 「もう一度試す」 re-runs the whole launch; the
+        // sentence names the narrower control that re-reads iCloud only.
         XCTAssertFalse(comparison.label.contains("もう一度試す"),
-            "`.datasetRefresh` has no 「もう一度試す」 button")
-        XCTAssertFalse(app.buttons["もう一度試す"].exists)
+            "The failure sentence names the re-read control, not the relaunch retry")
 
         let retry = app.buttons["storage-overwrite-retry-preview"]
         XCTAssertTrue(reveal(retry))
@@ -818,8 +819,10 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         XCTAssertTrue(reveal(start, upwards: false))
         start.tap()
         XCTAssertTrue(app.navigationBars["最後の確認"].waitForExistence(timeout: 6))
+        // Scroll toward the toggle first: at AX5 it lies below the fold, and a
+        // downward swipe on a sheet dismisses it instead of scrolling.
         let toggle = app.switches["storage-lineage-confirm-data-loss"]
-        XCTAssertTrue(reveal(toggle, upwards: false))
+        XCTAssertTrue(reveal(toggle))
         assertTouchTarget(toggle)
         XCTAssertGreaterThan(toggle.frame.height, 100,
             "The confirmation must actually inherit AX5, not silently reset to normal text")
@@ -872,9 +875,15 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         if !reveal(checkbox) { XCTAssertTrue(reveal(checkbox, upwards: false)) }
         // SwiftUI exposes the label and trailing switch as one wide AX node;
         // its center is noninteractive text. Exercise the real switch control.
-        checkbox.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
-        let checked = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: checkbox)
-        XCTAssertEqual(XCTWaiter.wait(for: [checked], timeout: 3), .completed)
+        // A tap that lands while a correction scroll is still decelerating
+        // only stops the scroll, so an unchanged value earns one more tap.
+        let isChecked = NSPredicate(format: "value == %@", "1")
+        for attempt in 0..<2 {
+            checkbox.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+            let checked = XCTNSPredicateExpectation(predicate: isChecked, object: checkbox)
+            if XCTWaiter.wait(for: [checked], timeout: 3) == .completed { return }
+            if attempt == 1 { XCTFail("The acknowledgement did not turn on: \(identifier)") }
+        }
     }
 
     private func assertNoOperation() {

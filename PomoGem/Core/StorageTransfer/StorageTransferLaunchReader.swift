@@ -215,11 +215,11 @@ enum StorageTransferScreenTimeCopy {
 /// against the approved wording in one place.
 enum StorageTransferOverwriteCopy {
     static let comparisonReading = "iCloudの内容を確認しています"
-    /// It must name a control that is on THIS screen. `.datasetRefresh` carries
-    /// no 「もう一度試す」 — that button exists only on `.blocked`/`.failed` — so
-    /// pointing at it would leave a user on a flaky connection reading an
-    /// instruction they cannot follow, with no in-app way to re-read iCloud
-    /// and the destructive door permanently disabled behind a missing preview.
+    /// It must name a control that is on THIS screen, and the narrowest one:
+    /// the re-read below re-arms the door in place, while the screen's own
+    /// 「もう一度試す」 re-runs the whole launch. Without a named re-read a user on
+    /// a flaky connection would be left with the destructive door disabled
+    /// behind a missing preview.
     static let comparisonUnavailable =
         "iCloudの内容を確認できませんでした。通信を確認して「\(retryPreviewTitle)」を押してください。どちらの記録も削除していません。"
     /// The re-read control the sentence above names. Non-destructive: it

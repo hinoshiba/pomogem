@@ -1231,7 +1231,15 @@ final class StorageTransferSettingsUITests: XCTestCase {
     }
 
     @discardableResult
+    /// `upwards` is the first guess at where the element lies. When that scan
+    /// ends at a list edge without finding it — an AX5 row that grew moves
+    /// everything below it — the opposite direction is scanned before failing.
     private func reveal(_ element: XCUIElement, upwards: Bool = true) -> Bool {
+        if scan(element, upwards: upwards) { return true }
+        return scan(element, upwards: !upwards)
+    }
+
+    private func scan(_ element: XCUIElement, upwards: Bool) -> Bool {
         for _ in 0..<14 {
             if element.exists, element.isHittable {
                 if element.elementType != .button && element.elementType != .switch { return true }
