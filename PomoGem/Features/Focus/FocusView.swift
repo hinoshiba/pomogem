@@ -2367,38 +2367,69 @@ struct FocusView: View {
     }
 
     /// The completion screen shares the timer's orientation container. In
-    /// landscape the facts sit beside the status and actions so the whole
-    /// screen fits a ~400 pt tall scene; height always comes from the scene's
-    /// safe rectangle rather than the physical screen.
+    /// landscape the facts sit beside the status so the whole screen fits a
+    /// ~400 pt tall scene; height always comes from the scene's safe rectangle
+    /// rather than the physical screen. While the alarm repeats, its only
+    /// Stop control is pinned below the scrolling content so it is on screen
+    /// at every text size, including accessibility sizes on 4.7-inch phones.
     private func completionCommitView(
         _ result: PomodoroCompletion,
         context: TimerLayoutContext
     ) -> some View {
         let isAlerting = completionAlert.isActive(sessionID: result.sessionID)
         let usesColumns = context.isLandscape && !dynamicTypeSize.isAccessibilitySize
-        return ScrollView {
-            Group {
-                if usesColumns {
-                    HStack(spacing: 32) {
-                        completionSummary(result, isAlerting: isAlerting)
-                            .frame(maxWidth: .infinity)
-                        completionStatus(result, isAlerting: isAlerting)
-                            .frame(maxWidth: .infinity)
+        return VStack(spacing: 0) {
+            GeometryReader { proxy in
+                ScrollView {
+                    Group {
+                        if usesColumns {
+                            HStack(spacing: 32) {
+                                completionSummary(result, isAlerting: isAlerting)
+                                    .frame(maxWidth: .infinity)
+                                completionStatus(result, isAlerting: isAlerting)
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .padding(.horizontal, 28)
+                            .padding(.vertical, 16)
+                        } else {
+                            VStack(spacing: dynamicTypeSize.isAccessibilitySize ? 16 : 22) {
+                                completionSummary(result, isAlerting: isAlerting)
+                                completionStatus(result, isAlerting: isAlerting)
+                            }
+                            .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 12 : 40)
+                        }
                     }
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 16)
-                } else {
-                    VStack(spacing: 22) {
-                        completionSummary(result, isAlerting: isAlerting)
-                        completionStatus(result, isAlerting: isAlerting)
-                    }
-                    .padding(.vertical, 40)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: proxy.size.height)
                 }
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: context.size.height)
+
+            if isAlerting {
+                completionAlertStopButton(result)
+            }
         }
-        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    private func completionAlertStopButton(
+        _ result: PomodoroCompletion
+    ) -> some View {
+        Button {
+            acknowledgeCompletionAlert(result)
+        } label: {
+            Label("終了アラートを止める", systemImage: "stop.fill")
+        }
+        .buttonStyle(PomoGemPrimaryButtonStyle())
+        // Keep the pinned bar well under half of a 667 pt screen at AX5.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .accessibilityHint("音と触覚を止めます。記録の保存中でも操作できます")
+        .accessibilityIdentifier("focus.completion-alert.stop")
+        .frame(maxWidth: 520)
+        .padding(.horizontal, 24)
+        .padding(.top, 12)
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity)
+        .background(Color.black)
     }
 
     private func completionSummary(
@@ -2414,23 +2445,38 @@ struct FocusView: View {
         } else {
             "arrow.down.to.line.compact"
         }
-        return VStack(spacing: 22) {
+        let title = if completionSaveError != nil {
+            "記録をまだ安全に保存できていません"
+        } else if completionPersistenceSucceeded {
+            "集中を完走しました"
+        } else {
+            "粒を瓶へ運んでいます"
+        }
+        // Accessibility text sizes need the space for words and controls, so
+        // the decorative icon shrinks instead of pushing them off screen.
+        let isCompact = dynamicTypeSize.isAccessibilitySize
+        return VStack(spacing: isCompact ? 12 : 22) {
             ZStack {
                 Circle()
                     .fill(accent.opacity(0.16))
-                    .frame(width: 116, height: 116)
+                    .frame(width: isCompact ? 64 : 116, height: isCompact ? 64 : 116)
                 Image(systemName: completionIcon)
-                    .font(.system(size: 42, weight: .semibold))
+                    .font(.system(size: isCompact ? 26 : 42, weight: .semibold))
                     .foregroundStyle(completionSaveError == nil ? accent : PomoGemTheme.amber)
             }
+            .accessibilityHidden(true)
             VStack(spacing: 8) {
-                Text(completionSaveError == nil ? "粒を瓶へ運んでいます" : "記録をまだ安全に保存できていません")
+                Text(title)
                     .font(PomoGemTheme.brand(25))
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                     .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
                 Text("\(subjectSnapshot.name)  +\(result.grams)g")
                     .font(.system(.headline, design: .rounded, weight: .bold))
                     .foregroundStyle(PomoGemTheme.muted)
+                    .multilineTextAlignment(.center)
             }
+            .padding(.horizontal, 24)
         }
     }
 
@@ -2448,22 +2494,12 @@ struct FocusView: View {
                     )
                     .font(.headline.weight(.bold))
                     .foregroundStyle(PomoGemTheme.amber)
-                    Text("アプリが前面にある間、有効な音と触覚を停止するまで繰り返します")
+                    Text("止めるまで、音と触覚を繰り返します")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .multilineTextAlignment(.center)
                 }
                 .padding(.horizontal, 24)
-
-                Button {
-                    acknowledgeCompletionAlert(result)
-                } label: {
-                    Label("終了アラートを止める", systemImage: "stop.fill")
-                }
-                .buttonStyle(PomoGemPrimaryButtonStyle())
-                .padding(.horizontal, 24)
-                .accessibilityHint("音と触覚を止めます。記録の保存中でも操作できます")
-                .accessibilityIdentifier("focus.completion-alert.stop")
             }
 
             if let completionSaveError {

@@ -97,45 +97,55 @@ struct BreakTimerView: View {
             Color.black.ignoresSafeArea()
             RadialGradient(colors: [PomoGemTheme.amber.opacity(0.08), .clear], center: .center, startRadius: 0, endRadius: 340).ignoresSafeArea()
             TimerOrientationContainer(sessionID: sessionID) { context in
-                ScrollView {
-                    VStack(spacing: 20) {
-                        timerHeader
+                VStack(spacing: 0) {
+                    GeometryReader { proxy in
+                        ScrollView {
+                            VStack(spacing: 20) {
+                                timerHeader
 
-                        if context.isLandscape && !dynamicTypeSize.isAccessibilitySize {
-                            HStack(spacing: 32) {
-                                VStack(spacing: 16) {
-                                    timerFace(spacing: 12)
+                                if context.isLandscape && !dynamicTypeSize.isAccessibilitySize {
+                                    HStack(spacing: 32) {
+                                        VStack(spacing: 16) {
+                                            timerFace(spacing: 12)
+                                            waitingMessage
+                                        }
+                                        .frame(maxWidth: .infinity)
+
+                                        VStack(spacing: 20) {
+                                            if remaining > 0 {
+                                                completionNotificationStatus
+                                            }
+                                            completionActions
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                    }
+                                    .frame(minHeight: max(0, proxy.size.height - 88))
+                                } else {
+                                    Spacer(minLength: 8)
+                                    timerFace(spacing: 20)
                                     waitingMessage
-                                }
-                                .frame(maxWidth: .infinity)
 
-                                VStack(spacing: 20) {
                                     if remaining > 0 {
                                         completionNotificationStatus
                                     }
+
+                                    Spacer(minLength: 8)
                                     completionActions
                                 }
-                                .frame(maxWidth: .infinity)
                             }
-                            .frame(minHeight: max(0, context.size.height - 88))
-                        } else {
-                            Spacer(minLength: 8)
-                            timerFace(spacing: 20)
-                            waitingMessage
-
-                            if remaining > 0 {
-                                completionNotificationStatus
-                            }
-
-                            Spacer(minLength: 8)
-                            completionActions
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 12)
+                            .frame(maxWidth: .infinity, minHeight: proxy.size.height)
                         }
+                        .scrollBounceBehavior(.basedOnSize)
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-                    .frame(maxWidth: .infinity, minHeight: context.size.height)
+
+                    if remaining == 0 {
+                        // The break-end action (and its alarm's only Stop)
+                        // stays pinned on screen at every text size.
+                        breakEndButton
+                    }
                 }
-                .scrollBounceBehavior(.basedOnSize)
             }
         }
         .statusBarHidden()
@@ -277,32 +287,42 @@ struct BreakTimerView: View {
                     )
                     .font(.headline.weight(.bold))
                     .foregroundStyle(PomoGemTheme.amber)
-                    Text("アプリが前面にある間、有効な音と触覚を停止するまで繰り返します")
+                    Text("止めるまで、音と触覚を繰り返します")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .multilineTextAlignment(.center)
                 }
             }
-            Button {
-                closeBreak()
-            } label: {
-                Label(
-                    completionAlert.isActive(sessionID: sessionID)
-                        ? "停止して瓶へ戻る"
-                        : "瓶へ戻る",
-                    systemImage: completionAlert.isActive(sessionID: sessionID)
-                        ? "stop.fill"
-                        : "arrow.backward"
-                )
-            }
-            .buttonStyle(PomoGemPrimaryButtonStyle())
-            .frame(minHeight: 44)
-            .accessibilityIdentifier("break.completion-alert.stop")
         } else {
             Button("休憩をスキップ") { closeBreak() }
                 .buttonStyle(PomoGemSecondaryButtonStyle())
                 .frame(minHeight: 44)
         }
+    }
+
+    private var breakEndButton: some View {
+        Button {
+            closeBreak()
+        } label: {
+            Label(
+                completionAlert.isActive(sessionID: sessionID)
+                    ? "停止して瓶へ戻る"
+                    : "瓶へ戻る",
+                systemImage: completionAlert.isActive(sessionID: sessionID)
+                    ? "stop.fill"
+                    : "arrow.backward"
+            )
+        }
+        .buttonStyle(PomoGemPrimaryButtonStyle())
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .frame(minHeight: 44)
+        .accessibilityIdentifier("break.completion-alert.stop")
+        .frame(maxWidth: 520)
+        .padding(.horizontal, 24)
+        .padding(.top, 12)
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity)
+        .background(Color.black)
     }
 
     @ViewBuilder

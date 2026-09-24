@@ -338,6 +338,94 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         XCTAssertFalse(app.navigationBars["ランダムなレア粒"].exists)
     }
 
+    /// On a 4.7-inch iPhone at AX5 the repeating alarm's only Stop control
+    /// used to start below the screen. It must be visible without scrolling.
+    func testAX5CompletionAlarmStopIsOnScreenWithoutScrolling() throws {
+        let staleDismiss = app.buttons["reward.dismiss"]
+        if staleDismiss.waitForExistence(timeout: 2), staleDismiss.isHittable {
+            staleDismiss.tap()
+            XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
+        }
+        startAX5DemoFocus()
+        let timer = app.descendants(matching: .any)["focus.timer-display"].firstMatch
+        XCTAssertTrue(timer.waitForExistence(timeout: 8))
+        let running = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        running.name = "AX5 running focus — ring status"
+        running.lifetime = .keepAlways
+        add(running)
+
+        let stop = app.buttons["focus.completion-alert.stop"]
+        XCTAssertTrue(stop.waitForExistence(timeout: 25))
+        let viewport = app.windows.firstMatch.frame
+        XCTAssertTrue(stop.isHittable, "Stop must be operable without scrolling")
+        XCTAssertGreaterThanOrEqual(stop.frame.minY, viewport.minY)
+        XCTAssertLessThanOrEqual(
+            stop.frame.maxY, viewport.maxY,
+            "The alarm's only Stop control must be entirely inside the initial AX5 viewport"
+        )
+        XCTAssertGreaterThanOrEqual(stop.frame.height, 43.5)
+        let alarm = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        alarm.name = "AX5 completion alarm — pinned Stop"
+        alarm.lifetime = .keepAlways
+        add(alarm)
+        stop.tap()
+        XCTAssertTrue(app.buttons["reward.dismiss"].waitForExistence(timeout: 20))
+        app.buttons["reward.dismiss"].tap()
+    }
+
+    /// Waits through a real five-minute break in the foreground so the
+    /// break-end alarm and its pinned action are checked at AX5.
+    func testAX5BreakEndActionIsOnScreenWithoutScrolling() throws {
+        executionTimeAllowance = 540
+        let staleDismiss = app.buttons["reward.dismiss"]
+        if staleDismiss.waitForExistence(timeout: 2), staleDismiss.isHittable {
+            staleDismiss.tap()
+            XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
+        }
+        startAX5DemoFocus()
+        stopCompletionAlertIfPresented(in: app)
+        let startBreak = app.buttons["5分休憩する"]
+        XCTAssertTrue(startBreak.waitForExistence(timeout: 20))
+        XCTAssertTrue(scrollUntilHittable(startBreak))
+        startBreak.tap()
+        XCTAssertTrue(app.staticTexts["休憩"].waitForExistence(timeout: 12))
+
+        let breakEnd = app.buttons["break.completion-alert.stop"]
+        XCTAssertTrue(breakEnd.waitForExistence(timeout: 330))
+        XCTAssertEqual(breakEnd.label, "停止して瓶へ戻る")
+        let viewport = app.windows.firstMatch.frame
+        XCTAssertTrue(breakEnd.isHittable, "The break-end action must be operable without scrolling")
+        XCTAssertLessThanOrEqual(breakEnd.frame.maxY, viewport.maxY)
+        XCTAssertGreaterThanOrEqual(breakEnd.frame.minY, viewport.minY)
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "AX5 break-end alarm — pinned action"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        breakEnd.tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+    }
+
+    private func startAX5DemoFocus() {
+        let durationPicker = app.buttons["home.duration-picker"]
+        XCTAssertTrue(scrollUntilFullyVisibleInContent(durationPicker, attempts: 12))
+        durationPicker.tap()
+        let demoDuration = app.buttons["12秒、DEMO"]
+        XCTAssertTrue(demoDuration.waitForExistence(timeout: 4))
+        demoDuration.tap()
+        let launcher = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "12秒集中する")
+        ).firstMatch
+        XCTAssertTrue(scrollUntilHittable(launcher))
+        launcher.tap()
+        let rareChoice = app.descendants(matching: .any)["focus.rare-reward-choice"]
+        if rareChoice.waitForExistence(timeout: 1) {
+            app.buttons["rare-reward.choice.off"].tap()
+            let confirm = app.buttons["focus.rare-reward-choice.confirm"]
+            XCTAssertTrue(confirm.isEnabled)
+            confirm.tap()
+        }
+    }
+
     func testAX5RewardBridgeKeepsActionsBeforeUnclippedProgress() throws {
         // A durable receipt can outlive the in-memory SwiftData fixture when a
         // prior UI-test process is interrupted. Acknowledge it before earning
