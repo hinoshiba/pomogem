@@ -206,12 +206,17 @@ struct FocusView: View {
 
     private let ticker = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
 
+    /// `sessionID` must be owned by the presenting item, not created here.
+    /// SwiftUI re-runs this initializer whenever Home re-renders the cover, and
+    /// the session-scoped queries below adopt each new descriptor while the
+    /// `@State` engine keeps the first ID. A per-init UUID would silently point
+    /// ownership, handoff and cancellation queries at a session with no rows.
     init(
         subject: Subject,
         duration: PomodoroDuration,
+        sessionID: UUID,
         dataEpochID: UUID? = nil
     ) {
-        let sessionID = UUID()
         self.subject = subject
         self.subjectSnapshot = FocusSubjectSnapshot(subject: subject)
         self.recoveryOrigin = .local
@@ -625,6 +630,9 @@ struct FocusView: View {
     }
 
     var body: some View {
+#if DEBUG
+        let _ = assertStableSessionIdentity()
+#endif
         ZStack {
             Color.black.ignoresSafeArea()
             RadialGradient(
@@ -779,6 +787,19 @@ struct FocusView: View {
             Text(operationErrorMessage ?? "")
         }
     }
+
+#if DEBUG
+    /// Guards the query/engine identity contract documented on `init`. A
+    /// re-created view must keep targeting the session its engine is running.
+    private func assertStableSessionIdentity() {
+        guard let runningSessionID = engine.currentSessionID,
+              pendingCompletion == nil else { return }
+        assert(
+            runningSessionID == preparedSessionID,
+            "FocusView re-initialized with a different session ID than its running engine"
+        )
+    }
+#endif
 
     private var timerOrientationSessionID: AnyHashable {
         // The legacy engine break has no UUID. Its original start remains

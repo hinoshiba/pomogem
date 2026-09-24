@@ -603,7 +603,8 @@ struct HomeView: View {
                 FocusView(
                     subject: configuration.subject,
                     duration: configuration.duration,
-                    dataEpochID: currentActivityEpochID
+                    sessionID: configuration.id,
+                    dataEpochID: configuration.dataEpochID
                 )
             }
             .environment(\.dynamicTypeSize, dynamicTypeSize)
@@ -2905,7 +2906,11 @@ struct HomeView: View {
                 failureMessage: "前回使った時間として保存できませんでした"
             )
         }
-        focusConfiguration = FocusConfiguration(subject: subject, duration: duration)
+        focusConfiguration = FocusConfiguration(
+            subject: subject,
+            duration: duration,
+            dataEpochID: currentActivityEpochID
+        )
     }
 
     private func persistPreferredFocusSeconds(
@@ -4067,10 +4072,14 @@ enum PostDropProgressAccessibilityPresentation {
     }
 }
 
+/// One presentation of the focus cover. `id` doubles as the focus session ID,
+/// and the reset epoch is captured with it, so every re-render of Home rebuilds
+/// FocusView against the same session-scoped queries.
 private struct FocusConfiguration: Identifiable {
     let id = UUID()
     let subject: Subject
     let duration: PomodoroDuration
+    let dataEpochID: UUID?
 }
 
 private struct RewardDropContinuation {
