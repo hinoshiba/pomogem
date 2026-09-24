@@ -56,6 +56,10 @@ final class JarInteractionUITests: XCTestCase {
 
         app.buttons["メニュー"].tap()
         let aurora = app.buttons["オーロラ、光に包まれる"]
+        // 集中する空間 is the menu's last section, below its destinations.
+        for _ in 0..<8 where !(aurora.exists && aurora.isHittable) {
+            app.swipeUp()
+        }
         XCTAssertTrue(aurora.waitForExistence(timeout: 3))
         aurora.tap()
         app.buttons["home.menu.close"].tap()
