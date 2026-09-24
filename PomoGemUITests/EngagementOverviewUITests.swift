@@ -276,6 +276,48 @@ final class EngagementOverviewUITests: XCTestCase {
         add(attachment)
     }
 
+    /// With 設定 > 一般 > 言語と地域 > 暦法 set to 和暦, the current calendar
+    /// calls 2024 「6年」. The year chips must stay 西暦 like every other
+    /// month label in the app.
+    func testTimelineYearsStayGregorianWithTheJapaneseCalendar() {
+        let app = XCUIApplication()
+        app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_FORTY_YEAR_OVERVIEW"] = "1"
+        app.launchArguments += [
+            "-AppleLanguages", "(ja)",
+            "-AppleLocale", "ja_JP@calendar=japanese"
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            app.staticTexts["fixture.40y.timeline-ready"].waitForExistence(timeout: 8),
+            app.staticTexts["fixture.40y.timeline-error"].label
+        )
+        let lenses = app.segmentedControls["overview.lens"]
+        XCTAssertTrue(lenses.waitForExistence(timeout: 4))
+        lenses.buttons["年月"].tap()
+
+        let newestYear = app.buttons["overview.timeline.year.2024"]
+        XCTAssertTrue(scrollUntilVisible(newestYear, in: app))
+        XCTAssertEqual(newestYear.label, "2024年")
+        XCTAssertFalse(app.buttons["overview.timeline.year.6"].exists)
+        let yearSummary = app.descendants(matching: .any)["overview.timeline.year.summary"]
+        XCTAssertTrue(
+            waitForLabel(of: yearSummary, containing: ["2024年", "2粒"], timeout: 10),
+            yearSummary.label
+        )
+        let december = app.buttons["overview.timeline.month.2024-12"]
+        XCTAssertTrue(scrollUntilVisible(december, in: app))
+        XCTAssertTrue(december.label.contains("2024年12月"), december.label)
+
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "年月 with the Japanese calendar — Gregorian years"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     func testRewardReceiptSurvivesRelaunchWithoutDuplicatingTheSavedPebble() {
         let storeName = "reward-receipt-\(UUID().uuidString)"
         let initialCleaner = rewardReceiptApp(storeName: storeName, action: "clean")

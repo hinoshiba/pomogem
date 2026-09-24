@@ -73,6 +73,7 @@
 		4232571BF9FD777E141B4B3E /* PersistenceStoreTopologyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37C94826242029C7168F438B /* PersistenceStoreTopologyTests.swift */; };
 		432E3A239EAD37662DB890D2 /* StorageTransferManifestWriterFieldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C7F1C2440BE0CBAEAA0495 /* StorageTransferManifestWriterFieldTests.swift */; };
 		4382B547F714CB706ECAC9E2 /* StorageTransferPartialDestinationAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9270B3F7CC918D0D65A344B9 /* StorageTransferPartialDestinationAdapters.swift */; };
+		43C101AFBD956C24A6EF90D5 /* PomoGemCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B8327E4215747A6B624451A /* PomoGemCalendar.swift */; };
 		442DBE7C4D7F4A6D710C57C8 /* RealDeviceStorageTransferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AFF5B62C575F1F138A51D0C /* RealDeviceStorageTransferTests.swift */; };
 		453A0778BD86CCA955F5A42D /* CompleteDataDeletionCloudKitStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 615E94CC16260A4473F866A6 /* CompleteDataDeletionCloudKitStore.swift */; };
 		4595A98473AAEAE8ABE87EF3 /* CloudOfflineHostPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D13CDD4786F23B8D1C92CEE8 /* CloudOfflineHostPolicyTests.swift */; };
@@ -496,6 +497,7 @@
 		9A1EC5E455F08FF0861D2A12 /* TimerOrientationContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerOrientationContainer.swift; sourceTree = "<group>"; };
 		9A4A5EAD0BFF7E4E3075E3F2 /* StorageTransferAccountNamespaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferAccountNamespaceTests.swift; sourceTree = "<group>"; };
 		9AA276827B98A4CCACD8602E /* AccumulationTimelineBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationTimelineBrowser.swift; sourceTree = "<group>"; };
+		9B8327E4215747A6B624451A /* PomoGemCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemCalendar.swift; sourceTree = "<group>"; };
 		9C1A3EC45EA14A6C5E689533 /* FocusCloudSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusCloudSyncTests.swift; sourceTree = "<group>"; };
 		9D6F82AD688662A4AD7260E6 /* StorageTransferManagedZoneDeletionAdaptersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferManagedZoneDeletionAdaptersTests.swift; sourceTree = "<group>"; };
 		9DD41B95531C607AD6AEFA85 /* CloudSyncMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSyncMonitor.swift; sourceTree = "<group>"; };
@@ -840,6 +842,7 @@
 				4213EFBA64EE041E199C469F /* LaunchActivationWatchdogPolicy.swift */,
 				F8018C65F844DB234D0AAC3E /* NotificationManager.swift */,
 				D80F315027168B5F3C0DAD54 /* PersistenceStoreTopology.swift */,
+				9B8327E4215747A6B624451A /* PomoGemCalendar.swift */,
 				691189CE99E8C37EC486382D /* PurchaseManager.swift */,
 				205B46BDFDEE8825FF82511E /* RareRewardCloudKitLedgerRepository.swift */,
 				C496D64AA5AC2AD3BE657462 /* RareRewardLedgerLocalState.swift */,
@@ -1394,6 +1397,7 @@
 				17BC30315ED1C468B0A18CAC /* PebbleNode.swift in Sources */,
 				2B25657CFD257ECB14FC4ED3 /* PersistenceStoreTopology.swift in Sources */,
 				B1581E5B52C281BA5FE2F812 /* PomoGemApp.swift in Sources */,
+				43C101AFBD956C24A6EF90D5 /* PomoGemCalendar.swift in Sources */,
 				7D6C7A960DAE6D98765C0855 /* PomoGemDataExporter.swift in Sources */,
 				7E609DA4FFF63A35C8FA31DB /* PomoGemLogo.swift in Sources */,
 				E59840D5770474D6631626E7 /* PomoGemStorageSnapshot.swift in Sources */,

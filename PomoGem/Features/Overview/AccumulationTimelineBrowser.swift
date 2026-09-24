@@ -56,8 +56,10 @@ struct AccumulationTimelineBrowser: View {
         )
     }
 
+    /// Years and months are Gregorian buckets, like every stored month label;
+    /// with 和暦 the current calendar would name 2026 「8年」.
     private var calendar: Calendar {
-        Calendar.autoupdatingCurrent
+        PomoGemCalendar.gregorian
     }
 
     private var currentEpochID: UUID? {
@@ -317,7 +319,7 @@ struct AccumulationTimelineBrowser: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.muted)
                 }
-                Text(month.monthStart.formatted(.dateTime.month(.wide)))
+                Text(PomoGemCalendar.text(month.monthStart, .dateTime.month(.wide), calendar: calendar))
                     .font(PomoGemTheme.brand(18))
                     .foregroundStyle(PomoGemTheme.text)
                 VStack(alignment: .leading, spacing: 3) {
@@ -341,7 +343,7 @@ struct AccumulationTimelineBrowser: View {
             AccumulationTimelineAccessibilityID.month(month.monthStart, calendar: calendar)
         )
         .accessibilityLabel(
-            "\(month.monthStart.formatted(.dateTime.year().month()))、この端末に届いている\(month.exactLocalCount)粒、\(spokenMass(month.exactLocalGrams))"
+            "\(PomoGemCalendar.text(month.monthStart, .dateTime.year().month(), calendar: calendar))、この端末に届いている\(month.exactLocalCount)粒、\(spokenMass(month.exactLocalGrams))"
         )
         .accessibilityHint("最新96粒までの代表瓶を開きます")
     }
@@ -544,7 +546,7 @@ private struct AccumulationTimelineMonthSheet: View {
                 .padding(20)
             }
             .background(NightBackground())
-            .navigationTitle(month.monthStart.formatted(.dateTime.year().month(.wide)))
+            .navigationTitle(PomoGemCalendar.text(month.monthStart, .dateTime.year().month(.wide), calendar: calendar))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

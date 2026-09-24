@@ -282,6 +282,42 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
         XCTAssertEqual(years.last?.year, 1985)
     }
 
+    func testTimelineUsesGregorianYearsWhenTheIPhoneUsesTheJapaneseCalendar() throws {
+        var japanese = Calendar(identifier: .japanese)
+        japanese.locale = Locale(identifier: "ja_JP@calendar=japanese")
+        japanese.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo"))
+        let reiwa8 = try XCTUnwrap(japanese.date(from: DateComponents(
+            era: 236, year: 8, month: 9, day: 24, hour: 12
+        )))
+        XCTAssertEqual(japanese.component(.year, from: reiwa8), 8)
+
+        let gregorian = PomoGemCalendar.gregorian(basedOn: japanese)
+        XCTAssertEqual(gregorian.identifier, .gregorian)
+        XCTAssertEqual(gregorian.timeZone, japanese.timeZone)
+        let extent = AccumulationTimelineExtent(
+            currentEpochID: nil,
+            stamp: AccumulationTimelineSnapshotStamp(
+                rawRowCount: 2,
+                oldest: AccumulationTimelineEdge(
+                    id: UUID(),
+                    date: reiwa8.addingTimeInterval(-400 * 86_400)
+                ),
+                newest: AccumulationTimelineEdge(id: UUID(), date: reiwa8)
+            ),
+            capturedAt: reiwa8
+        )
+        let years = try AccumulationTimelineYearPolicy.years(in: extent, calendar: gregorian)
+        XCTAssertEqual(years.map(\.title), ["2026年", "2025年"])
+        XCTAssertEqual(
+            AccumulationTimelineAccessibilityID.month(reiwa8, calendar: gregorian),
+            "overview.timeline.month.2026-09"
+        )
+        XCTAssertEqual(
+            PomoGemCalendar.text(reiwa8, .dateTime.year().month(.wide), calendar: gregorian),
+            "2026年9月"
+        )
+    }
+
     func testStabilityPolicyReportsConcurrentSnapshotChange() {
         let capturedAt = date(year: 2025, month: 1, day: 1)
         let edge = AccumulationTimelineEdge(id: UUID(), date: capturedAt)
