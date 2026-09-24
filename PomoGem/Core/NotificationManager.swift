@@ -85,6 +85,25 @@ enum FocusReturnReminderPolicy {
     static let enabledDefaultsKey = "notifications.focus-return-reminder.enabled"
     static let delay: TimeInterval = 30
     static let completionQuietWindow: TimeInterval = 60
+    /// How long the app keeps running after an accepted reminder to learn
+    /// whether the person only locked the phone. With a passcode, iOS posts
+    /// `protectedDataWillBecomeUnavailable` about 10 seconds after locking.
+    /// The window ends well before the 30-second trigger and inside the short
+    /// background-task budget; at its end the reminder simply stays booked.
+    static let lockDetectionWindow: TimeInterval = 20
+
+    /// Background time running out says nothing about a lock. Only an add
+    /// that never finished is withdrawn; an accepted reminder must still reach
+    /// the person who switched apps.
+    static func shouldWithdrawOnBackgroundExpiry(addWasAccepted: Bool) -> Bool {
+        !addWasAccepted
+    }
+
+    /// A missed notification (for example, the lock happened while the add was
+    /// still in flight) is caught by reading the protected-data state at the end.
+    static func shouldWithdrawAtLockWindowEnd(protectedDataIsAvailable: Bool) -> Bool {
+        !protectedDataIsAvailable
+    }
 
     static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
         defaults.bool(forKey: enabledDefaultsKey)

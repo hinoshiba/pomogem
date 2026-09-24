@@ -505,7 +505,11 @@ struct SettingsView: View {
                 notificationPermissionStatus(identifier: "settings.focus-return-permission")
             }
 
-            Text("既定はオフ。集中タイマー中だけ通知し、戻ると取り消します。一時停止中・休憩中・終了間際は通知しません。画面をロックした場合も通知されます。")
+            Text(
+                "既定はオフ。集中タイマー中に別のアプリへ移ったときだけ通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。",
+                tableName: "Settings",
+                comment: "Settings caption under the return-to-focus reminder switch"
+            )
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
 

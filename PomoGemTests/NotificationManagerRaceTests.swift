@@ -809,3 +809,21 @@ final class PassiveReminderActivityReaderTests: XCTestCase {
         XCTAssertEqual(activity.monthsWithRecords, [])
     }
 }
+
+final class FocusReturnReminderLockPolicyTests: XCTestCase {
+    func testLockWindowEndsBeforeTheReminderAndAfterTheLockNotice() {
+        // iOS posts the protected-data notice about 10 s after a passcode lock.
+        XCTAssertGreaterThan(FocusReturnReminderPolicy.lockDetectionWindow, 12)
+        XCTAssertLessThanOrEqual(
+            FocusReturnReminderPolicy.lockDetectionWindow,
+            FocusReturnReminderPolicy.delay - 5
+        )
+    }
+
+    func testOnlyALockOrAnUnfinishedAddWithdrawsTheReminder() {
+        XCTAssertFalse(FocusReturnReminderPolicy.shouldWithdrawOnBackgroundExpiry(addWasAccepted: true))
+        XCTAssertTrue(FocusReturnReminderPolicy.shouldWithdrawOnBackgroundExpiry(addWasAccepted: false))
+        XCTAssertFalse(FocusReturnReminderPolicy.shouldWithdrawAtLockWindowEnd(protectedDataIsAvailable: true))
+        XCTAssertTrue(FocusReturnReminderPolicy.shouldWithdrawAtLockWindowEnd(protectedDataIsAvailable: false))
+    }
+}

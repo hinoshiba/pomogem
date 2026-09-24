@@ -574,6 +574,9 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var focusReturnReminderTask: Task<Void, Never>?
     @State private var focusReturnReminderGeneration: UInt64 = 0
     @State private var focusReturnReminderBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+    /// The phase generation whose return reminder Notification Center accepted.
+    @State private var focusReturnReminderAcceptedGeneration: UInt64?
+    @State private var focusReturnReminderLockObserver: NSObjectProtocol?
     @State private var containerLifetimes =
         PersistenceContainerLifetimeTracker<ModelContainer>()
     @State private var suspendedAccountBinding = AccountScopedLocalState
@@ -3356,6 +3359,12 @@ private struct PomoGemPersistenceLaunchHost: View {
     /// This host survives background CloudKit container retirement. Reserve the
     /// notification only at background, never for a permission sheet or
     /// Control Center's temporary inactive state.
+    ///
+    /// Locking the phone and switching apps both arrive as `.background`, but
+    /// only the switch is the drift this opt-in reminder exists for: locking
+    /// to study is what the app wants. iOS tells a passcode-protected phone's
+    /// app that protected data is going away about 10 seconds after a lock,
+    /// so the reminder is withdrawn when that arrives inside a bounded window.
     private func handleFocusReturnReminderScenePhase(_ phase: ScenePhase) {
         endFocusReturnReminderBackgroundTask()
         focusReturnReminderGeneration &+= 1
@@ -3366,16 +3375,37 @@ private struct PomoGemPersistenceLaunchHost: View {
         manager.cancelFocusReturnReminder()
         guard phase == .background else { return }
 
-        // Keep execution only for the short Notification Center add, not
-        // for the 30-second grace period; the OS owns the delivery timer.
+        // Keep execution for the short Notification Center add and the lock
+        // window, not for the 30-second grace; the OS owns the delivery timer.
         focusReturnReminderBackgroundTask = UIApplication.shared.beginBackgroundTask(
             withName: "Schedule focus return reminder"
         ) {
             // A later phase already ended the previous background task.
             guard generation == focusReturnReminderGeneration else { return }
             focusReturnReminderTask?.cancel()
-            manager.cancelFocusReturnReminder()
+            if FocusReturnReminderPolicy.shouldWithdrawOnBackgroundExpiry(
+                addWasAccepted: focusReturnReminderAcceptedGeneration == generation
+            ) {
+                manager.cancelFocusReturnReminder()
+            }
             endFocusReturnReminderBackgroundTask()
+        }
+        // Observe from the start: a lock during a slow add must also win.
+        focusReturnReminderLockObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.protectedDataWillBecomeUnavailableNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                guard generation == focusReturnReminderGeneration,
+                      scenePhase == .background else { return }
+                Self.persistenceLogger.info(
+                    "Focus return reminder withdrawn: the device locked while backgrounded"
+                )
+                focusReturnReminderTask?.cancel()
+                manager.cancelFocusReturnReminder()
+                endFocusReturnReminderBackgroundTask()
+            }
         }
         focusReturnReminderTask = Task { @MainActor in
             defer {
@@ -3386,11 +3416,29 @@ private struct PomoGemPersistenceLaunchHost: View {
             guard !Task.isCancelled,
                   generation == focusReturnReminderGeneration,
                   scenePhase == .background else { return }
-            _ = try? await manager.scheduleRegisteredFocusReturnReminder()
+            guard case .accepted = try? await manager.scheduleRegisteredFocusReturnReminder(),
+                  !Task.isCancelled,
+                  generation == focusReturnReminderGeneration else { return }
+            focusReturnReminderAcceptedGeneration = generation
+            // Wait for a lock notice without cancelling at the deadline: a
+            // plain app switch, or a phone without a passcode, never gets one.
+            try? await Task.sleep(for: .seconds(FocusReturnReminderPolicy.lockDetectionWindow))
+            guard !Task.isCancelled,
+                  generation == focusReturnReminderGeneration,
+                  scenePhase == .background else { return }
+            if FocusReturnReminderPolicy.shouldWithdrawAtLockWindowEnd(
+                protectedDataIsAvailable: UIApplication.shared.isProtectedDataAvailable
+            ) {
+                manager.cancelFocusReturnReminder()
+            }
         }
     }
 
     private func endFocusReturnReminderBackgroundTask() {
+        if let observer = focusReturnReminderLockObserver {
+            NotificationCenter.default.removeObserver(observer)
+            focusReturnReminderLockObserver = nil
+        }
         let identifier = focusReturnReminderBackgroundTask
         focusReturnReminderBackgroundTask = .invalid
         if identifier != .invalid {
