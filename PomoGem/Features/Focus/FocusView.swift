@@ -887,7 +887,20 @@ struct FocusView: View {
               !breakFinished,
               snapshot.phase.isRunning || snapshot.phase == .paused
         else { return }
+        let wasPaused = snapshot.phase == .paused
         togglePause()
+        // VoiceOver focus is rarely on the pause button, and the same gesture
+        // plays or pauses media elsewhere, so say what just happened.
+        let current = engine.snapshot(at: .now)
+        let announcement: String
+        if wasPaused, current.phase != .paused {
+            announcement = "再開しました。\(accessibleTime(current.remainingSeconds))"
+        } else if !wasPaused, current.phase == .paused {
+            announcement = "一時停止しました"
+        } else {
+            return
+        }
+        UIAccessibility.post(notification: .announcement, argument: announcement)
     }
 
     private var timerOrientationSessionID: AnyHashable {
