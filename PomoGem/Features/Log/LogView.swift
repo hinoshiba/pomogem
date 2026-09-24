@@ -954,6 +954,37 @@ struct LogPeriodSummary: Equatable {
     }
 }
 
+/// When 記録 reloads. The period page follows the 今週／今月 toggle; the
+/// twelve month summaries do not depend on it and load off the main actor.
+/// Neither reloads for an inactive flip (closing Control Center or the
+/// notification shade); coming back from the background reloads both.
+enum LogHistoryLoadPolicy {
+    static func isVisible(_ scenePhase: ScenePhase) -> Bool {
+        scenePhase != .background
+    }
+
+    static func periodKey(
+        epochID: UUID?,
+        period: LogView.Period,
+        scenePhase: ScenePhase,
+        isCloudVerificationPending: Bool
+    ) -> String {
+        "\(epochID?.uuidString ?? "pre-reset")|\(period.rawValue)|\(isVisible(scenePhase))|\(isCloudVerificationPending)"
+    }
+
+    static func monthSummaryKey(
+        epochID: UUID?,
+        scenePhase: ScenePhase,
+        isCloudVerificationPending: Bool,
+        now: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> String {
+        let month = calendar.dateInterval(of: .month, for: now)?.start
+            .timeIntervalSinceReferenceDate ?? 0
+        return "\(epochID?.uuidString ?? "pre-reset")|\(isVisible(scenePhase))|\(isCloudVerificationPending)|\(month)"
+    }
+}
+
 struct LogView: View {
     enum Period: String, CaseIterable, Identifiable {
         case week = "今週"
@@ -985,6 +1016,10 @@ struct LogView: View {
     @State private var achievementPageIsPartial = false
     @State private var aggregatePageIsPartial = false
     @State private var loadError: String?
+    /// False until the first page has loaded, so the first frame shows a
+    /// placeholder instead of 「この期間の粒は、まだありません。」 over years of
+    /// history that simply have not been read yet.
+    @State private var hasLoadedHistory = false
     @State private var mutationError: String?
     @State private var selectedAchievement: AchievementEditSelection?
     @State private var pendingAchievementUndo: AchievementStoneRevisionSnapshot?
@@ -1049,6 +1084,7 @@ struct LogView: View {
                 }
 
                 summaryGrid
+                    .redacted(reason: hasLoadedHistory ? [] : .placeholder)
                 // A chosen, real-world milestone is stronger evidence of
                 // progress than charts or a random visual variant. Keep it
                 // near the top of the log so a qualification or completed
@@ -1100,6 +1136,9 @@ struct LogView: View {
         }
         .task(id: loadKey) {
             loadBoundedHistory()
+        }
+        .task(id: monthSummaryKey) {
+            await loadMonthSummaries(for: monthSummaryKey)
         }
     }
 
@@ -1174,7 +1213,9 @@ struct LogView: View {
                     Text("質量の推移")
                         .font(PomoGemTheme.brand(20))
                 }
-                if values.allSatisfy({ $0.grams == 0 }) {
+                if !hasLoadedHistory {
+                    HistoryLoadingPlaceholder()
+                } else if values.allSatisfy({ $0.grams == 0 }) {
                     EmptyChartMessage(text: "この期間の粒は、まだありません。")
                         .accessibilityChartDescriptor(descriptor)
                 } else {
@@ -1221,7 +1262,9 @@ struct LogView: View {
                     Text("テーマの構成")
                         .font(PomoGemTheme.brand(20))
                 }
-                if subjectMass.isEmpty {
+                if !hasLoadedHistory {
+                    HistoryLoadingPlaceholder()
+                } else if subjectMass.isEmpty {
                     EmptyChartMessage(text: "積んだテーマがここに並びます。")
                 } else {
                     GeometryReader { proxy in
@@ -1495,7 +1538,9 @@ struct LogView: View {
                 Spacer()
                 Text("最新30件").font(.caption).foregroundStyle(PomoGemTheme.muted)
             }
-            if recentSessions.isEmpty {
+            if !hasLoadedHistory {
+                PomoGemCard { HistoryLoadingPlaceholder() }
+            } else if recentSessions.isEmpty {
                 PomoGemCard { EmptyChartMessage(text: "一粒積むと、ここに記録が残ります。") }
             } else {
                 VStack(spacing: 0) {
@@ -1559,13 +1604,26 @@ struct LogView: View {
     }
 
     private var loadKey: String {
-        let epoch = ActivityResetPolicy.currentEpochID(from: resetSnapshots)?.uuidString ?? "pre-reset"
-        return "\(epoch)|\(period.rawValue)|\(scenePhase == .active)|\(aggregateProjectionPresentation.isCloudVerificationPending)"
+        LogHistoryLoadPolicy.periodKey(
+            epochID: ActivityResetPolicy.currentEpochID(from: resetSnapshots),
+            period: period,
+            scenePhase: scenePhase,
+            isCloudVerificationPending: aggregateProjectionPresentation.isCloudVerificationPending
+        )
+    }
+
+    private var monthSummaryKey: String {
+        LogHistoryLoadPolicy.monthSummaryKey(
+            epochID: ActivityResetPolicy.currentEpochID(from: resetSnapshots),
+            scenePhase: scenePhase,
+            isCloudVerificationPending: aggregateProjectionPresentation.isCloudVerificationPending
+        )
     }
 
     @MainActor
     private func loadBoundedHistory() {
-        guard scenePhase == .active else { return }
+        guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
+        defer { hasLoadedHistory = true }
         let epochID = ActivityResetPolicy.currentEpochID(from: resetSnapshots)
         let calendar = Calendar.autoupdatingCurrent
         let now = Date.now
@@ -1623,44 +1681,43 @@ struct LogView: View {
                 strata = []
             }
 
-            monthSummaries = try loadMonthSummaries(epochID: epochID, now: now, calendar: calendar)
             loadError = nil
         } catch {
             loadError = "記録の一部を読み込めませんでした。もう一度この画面を開いてください。"
         }
     }
 
+    /// Runs on AccumulationTimelineRepository's actor. On an error the
+    /// section stays hidden, as it does for a person with no history.
     @MainActor
-    private func loadMonthSummaries(
-        epochID: UUID?,
-        now: Date,
-        calendar: Calendar
-    ) throws -> [LogMonthSummary] {
-        guard let currentStart = calendar.dateInterval(of: .month, for: now)?.start else {
-            return []
-        }
-        var summaries: [LogMonthSummary] = []
-        for offset in 0..<12 {
-            guard let start = calendar.date(byAdding: .month, value: -offset, to: currentStart),
-                  let end = calendar.date(byAdding: .month, value: 1, to: start)
-            else { continue }
-            let page = try BoundedHistoryPolicy.resolvedSessionPage(
-                context: modelContext,
-                epochID: epochID,
-                start: start,
-                end: end,
-                order: .reverse,
-                logicalLimit: BoundedHistoryPolicy.periodSessionLimit
+    private func loadMonthSummaries(for key: String) async {
+        guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
+        let epochID = ActivityResetPolicy.currentEpochID(from: resetSnapshots)
+        let calendar = Calendar.autoupdatingCurrent
+        let repository = AccumulationTimelineRepository(
+            modelContainer: modelContext.container
+        )
+        do {
+            let summaries = try await repository.recentMonthSummaries(
+                endingAt: .now,
+                currentEpochID: epochID,
+                calendar: calendar
             )
-            guard !page.sessions.isEmpty else { continue }
-            summaries.append(LogMonthSummary(
-                month: WrappedMonth(containing: start, calendar: calendar),
-                minutes: NonnegativeIntPolicy.sum(page.sessions.map(\.seconds)) / 60,
-                pebbleCount: page.sessions.count,
-                isPartial: page.isPartial
-            ))
+            try Task.checkCancellation()
+            guard key == monthSummaryKey else { return }
+            monthSummaries = summaries.map {
+                LogMonthSummary(
+                    month: WrappedMonth(containing: $0.monthStart, calendar: calendar),
+                    minutes: $0.seconds / 60,
+                    pebbleCount: $0.sessionCount
+                )
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            guard key == monthSummaryKey else { return }
+            monthSummaries = []
         }
-        return summaries
     }
 
     private func editableSubjects(
@@ -1827,15 +1884,11 @@ private struct LogMonthSummary: Identifiable {
     let month: WrappedMonth
     let minutes: Int
     let pebbleCount: Int
-    let isPartial: Bool
 
     var id: Date { month.id }
 
     func rowLabel(formatMinutes: (Int) -> String) -> String {
-        if isPartial {
-            return "表示分 \(formatMinutes(minutes))・\(pebbleCount)粒"
-        }
-        return "\(formatMinutes(minutes))・\(pebbleCount)粒"
+        "\(formatMinutes(minutes))・\(pebbleCount)粒"
     }
 }
 
@@ -2154,6 +2207,17 @@ private struct SummaryTile: View {
         .padding(13)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 14))
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Neutral while the first page loads: never the empty-history copy.
+private struct HistoryLoadingPlaceholder: View {
+    var body: some View {
+        ProgressView()
+            .tint(PomoGemTheme.amber)
+            .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
+            .accessibilityLabel("記録を読み込み中")
+            .accessibilityIdentifier("log.loading")
     }
 }
 

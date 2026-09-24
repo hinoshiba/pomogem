@@ -253,6 +253,49 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         attachment.name = "40-year persistent cold launch"
         attachment.lifetime = .keepAlways
         add(attachment)
+
+        // 記録 over 350,640 sessions: its twelve month summaries load off
+        // the main actor, so opening it and switching 今週／今月 stay quick.
+        secondColdLaunch.navigationBars["設定"].buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(secondColdLaunch.buttons["メニュー"].waitForExistence(timeout: 5))
+        secondColdLaunch.buttons["メニュー"].tap()
+        let log = secondColdLaunch.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "記録")
+        ).firstMatch
+        XCTAssertTrue(scrollUntilHittable(log, in: secondColdLaunch))
+        let logStartedAt = ProcessInfo.processInfo.systemUptime
+        log.tap()
+        XCTAssertTrue(secondColdLaunch.navigationBars["記録"].waitForExistence(timeout: 10))
+        let period = secondColdLaunch.segmentedControls.firstMatch
+        XCTAssertTrue(period.waitForExistence(timeout: 10))
+        let month = period.buttons["今月"]
+        XCTAssertTrue(month.waitForExistence(timeout: 5))
+        let logElapsed = ProcessInfo.processInfo.systemUptime - logStartedAt
+        let toggleStartedAt = ProcessInfo.processInfo.systemUptime
+        month.tap()
+        XCTAssertTrue(
+            NSPredicate(format: "selected == true").evaluate(with: month)
+                || XCTWaiter.wait(
+                    for: [XCTNSPredicateExpectation(
+                        predicate: NSPredicate(format: "selected == true"),
+                        object: month
+                    )],
+                    timeout: 5
+                ) == .completed
+        )
+        period.buttons["今週"].tap()
+        let toggleElapsed = ProcessInfo.processInfo.systemUptime - toggleStartedAt
+        XCTContext.runActivity(named: String(
+            format: "40-year Log open: %.3fs, 今週／今月 round trip: %.3fs",
+            logElapsed,
+            toggleElapsed
+        )) { _ in }
+        XCTAssertLessThan(logElapsed, 10, "記録 must open within ten seconds over forty years")
+        XCTAssertLessThan(toggleElapsed, 8, "今週／今月 must respond within eight seconds over forty years")
+        let logAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        logAttachment.name = "40-year persistent Log"
+        logAttachment.lifetime = .keepAlways
+        add(logAttachment)
         secondColdLaunch.terminate()
     }
 

@@ -1,4 +1,5 @@
 import SwiftData
+import SwiftUI
 import XCTest
 @testable import PomoGem
 
@@ -257,6 +258,88 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
         XCTAssertEqual(detail.representativeRecords.map(\.id), Array(orderedIDs.suffix(96)))
         XCTAssertTrue(detail.previewIsRepresentative)
         XCTAssertTrue(detail.coverage.isLocallyStable)
+    }
+
+    func testRecentMonthSummariesAreExactForTwelveMonthsOffTheMainActor() async throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let epochID = UUID()
+        let now = date(year: 2026, month: 9, day: 24)
+        let duplicateID = UUID()
+
+        // Thirteen months back is outside 記録's twelve.
+        insertSession(in: context, endAt: date(year: 2025, month: 8, day: 31), epochID: epochID)
+        // The first included month, including its first instant.
+        insertSession(in: context, endAt: date(year: 2025, month: 10, day: 1), epochID: epochID)
+        // The last instant of September and the first of October stay apart.
+        let endOfSeptember2025 = date(year: 2025, month: 10, day: 1).addingTimeInterval(-1)
+        insertSession(in: context, endAt: endOfSeptember2025, epochID: epochID)
+        // Two CloudKit copies of one completion count once.
+        insertSession(id: duplicateID, in: context, endAt: date(year: 2026, month: 9, day: 3), epochID: epochID)
+        insertSession(id: duplicateID, in: context, endAt: date(year: 2026, month: 9, day: 3), epochID: epochID)
+        insertSession(in: context, endAt: date(year: 2026, month: 9, day: 20), seconds: 3_600, grams: 600, epochID: epochID)
+        insertSession(in: context, endAt: date(year: 2026, month: 9, day: 21), epochID: UUID())
+        try context.save()
+
+        let summaries = try await AccumulationTimelineRepository(
+            modelContainer: container
+        ).recentMonthSummaries(
+            endingAt: now,
+            currentEpochID: epochID,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(summaries.map(\.monthStart), [
+            date(year: 2026, month: 9, day: 1),
+            date(year: 2025, month: 10, day: 1)
+        ], "Newest first, empty months omitted, September 2025 is outside the twelve")
+        XCTAssertEqual(summaries.first?.sessionCount, 2)
+        XCTAssertEqual(summaries.first?.seconds, 1_500 + 3_600)
+        XCTAssertEqual(summaries.last?.sessionCount, 1)
+        XCTAssertEqual(summaries.last?.seconds, 1_500)
+    }
+
+    func testLogReloadsOnlyWhatAToggleOrForegroundChanges() {
+        let epochID = UUID()
+        func periodKey(_ period: LogView.Period, _ phase: ScenePhase) -> String {
+            LogHistoryLoadPolicy.periodKey(
+                epochID: epochID,
+                period: period,
+                scenePhase: phase,
+                isCloudVerificationPending: false
+            )
+        }
+        func monthKey(_ phase: ScenePhase) -> String {
+            LogHistoryLoadPolicy.monthSummaryKey(
+                epochID: epochID,
+                scenePhase: phase,
+                isCloudVerificationPending: false,
+                now: date(year: 2026, month: 9, day: 24),
+                calendar: calendar
+            )
+        }
+
+        // 今週 → 今月 reloads the period page, never the twelve months.
+        XCTAssertNotEqual(periodKey(.week, .active), periodKey(.month, .active))
+        // Closing Control Center (active → inactive → active) reloads nothing.
+        XCTAssertEqual(periodKey(.week, .active), periodKey(.week, .inactive))
+        XCTAssertEqual(monthKey(.active), monthKey(.inactive))
+        // Returning from the background reloads both.
+        XCTAssertNotEqual(periodKey(.week, .active), periodKey(.week, .background))
+        XCTAssertNotEqual(monthKey(.active), monthKey(.background))
+        XCTAssertFalse(LogHistoryLoadPolicy.isVisible(.background))
+        XCTAssertTrue(LogHistoryLoadPolicy.isVisible(.inactive))
+        // A new month is a new list.
+        XCTAssertNotEqual(
+            monthKey(.active),
+            LogHistoryLoadPolicy.monthSummaryKey(
+                epochID: epochID,
+                scenePhase: .active,
+                isCloudVerificationPending: false,
+                now: date(year: 2026, month: 10, day: 1),
+                calendar: calendar
+            )
+        )
     }
 
     func testFortyYearExtentCreatesNewestFirstBoundedYearList() throws {

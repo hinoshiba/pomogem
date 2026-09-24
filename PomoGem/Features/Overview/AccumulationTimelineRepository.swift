@@ -6,6 +6,8 @@ enum AccumulationTimelineQueryPolicy {
     static let representativeRecordLimit = 96
     static let maximumBrowsableYearSpan = 200
     static let stabilityAttemptCount = 2
+    /// 記録 shows this month and the eleven before it.
+    static let recentMonthCount = 12
 
     static func latestResetMarkerDescriptor(
         now: Date = .now
@@ -178,6 +180,16 @@ struct AccumulationTimelineMonthSummary: Identifiable, Equatable, Sendable {
     var id: Date { monthStart }
 }
 
+/// One month of 記録's 「月ごとの瓶」: exact logical session count and focus
+/// time for the months that have any record.
+struct AccumulationRecentMonthSummary: Identifiable, Equatable, Sendable {
+    let monthStart: Date
+    let sessionCount: Int
+    let seconds: Int
+
+    var id: Date { monthStart }
+}
+
 struct AccumulationTimelineYearSummary: Equatable, Sendable {
     let year: AccumulationTimelineYear
     let months: [AccumulationTimelineMonthSummary]
@@ -297,6 +309,52 @@ actor AccumulationTimelineRepository {
             throw AccumulationTimelineRepositoryError.invalidCalendarInterval
         }
         return lastResult
+    }
+
+    /// 記録's 「月ごとの瓶」 for this month and the eleven before it. One
+    /// bounded interval read on this actor (at most 366 days, inside the
+    /// finite-interval guard) replaces twelve month pages that used to run on
+    /// the main thread on every open, 今週／今月 toggle and foreground. Counts
+    /// are exact logical sessions; months with no record are omitted.
+    func recentMonthSummaries(
+        endingAt now: Date,
+        currentEpochID: UUID?,
+        calendar: Calendar
+    ) throws -> [AccumulationRecentMonthSummary] {
+        guard let currentMonth = calendar.dateInterval(of: .month, for: now),
+              let firstMonthStart = calendar.date(
+                byAdding: .month,
+                value: -(AccumulationTimelineQueryPolicy.recentMonthCount - 1),
+                to: currentMonth.start
+              )
+        else { throw AccumulationTimelineRepositoryError.invalidCalendarInterval }
+
+        let sessions = try BoundedHistoryPolicy.resolvedSessionsInFiniteInterval(
+            context: modelContext,
+            epochID: currentEpochID,
+            interval: DateInterval(start: firstMonthStart, end: currentMonth.end),
+            maximumPhysicalRows: BoundedHistoryPolicy.finiteIntervalSessionRowLimit
+        )
+        var grouped: [Date: (count: Int, seconds: Int)] = [:]
+        for session in sessions {
+            try checkCancellation()
+            guard let monthStart = calendar.dateInterval(of: .month, for: session.endAt)?.start else {
+                throw AccumulationTimelineRepositoryError.invalidCalendarInterval
+            }
+            let current = grouped[monthStart] ?? (0, 0)
+            grouped[monthStart] = (
+                NonnegativeIntPolicy.adding(current.count, 1),
+                NonnegativeIntPolicy.adding(current.seconds, NonnegativeIntPolicy.clamped(session.seconds))
+            )
+        }
+        return grouped.map { monthStart, value in
+            AccumulationRecentMonthSummary(
+                monthStart: monthStart,
+                sessionCount: value.count,
+                seconds: value.seconds
+            )
+        }
+        .sorted { $0.monthStart > $1.monthStart }
     }
 
     private struct CanonicalMetric {

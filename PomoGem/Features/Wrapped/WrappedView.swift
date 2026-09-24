@@ -175,12 +175,14 @@ struct WrappedView: View {
         let epoch = ActivityResetPolicy.currentEpochID(from: resetSnapshots)?.uuidString ?? "pre-reset"
         let verification = aggregateProjectionPresentation
             .isCloudVerificationPending ? "cloud-pending" : "verified"
-        return "\(epoch)|\(month.start.timeIntervalSinceReferenceDate)|\(verification)|\(scenePhase == .active)"
+        // Same rule as 記録: an inactive flip (Control Center) is not a
+        // reason to re-read the month; returning from the background is.
+        return "\(epoch)|\(month.start.timeIntervalSinceReferenceDate)|\(verification)|\(LogHistoryLoadPolicy.isVisible(scenePhase))"
     }
 
     @MainActor
     private func loadMonth() {
-        guard scenePhase == .active else { return }
+        guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
         isLoading = true
         loadError = nil
         let calendar = Calendar.autoupdatingCurrent
