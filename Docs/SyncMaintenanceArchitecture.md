@@ -54,6 +54,13 @@ version 1.0は最初の`ModelContainer`を作る前に、同格の「iCloudで�
 それぞれの確認後に一方を確定します。どちらも推奨扱いにせず、選択はVersion 1.0では変更できません。
 shipping `ModelContainer`は選択に応じて次の分離を使います。
 
+#### 初回のiCloud取り込み中にオンボーディングを終えるとき（launch-06、2026-09-25）
+
+iCloudモードでオンボーディングを終える処理は、選ばなかった既存の組み込みテーマを削除（tombstone）も
+非表示化もしません。そのテーマは他の端末から届いたもので、記録がまだ届いていないだけかもしれないためです。
+毎日のリマインダーは、利用者がオンにし、iOSが通知を許可した場合だけ`reminderEnabled`／`reminderTime`へ
+記録します。それ以外はどちらのgroupにもstampを付けず、他の端末で設定したリマインダーがそのまま解決されます。
+
 - iCloud選択時の`iCloud.com.hinoshiba.pomogem`: `Subject`、`StudySession`、`AchievementStone`、`Prefs`、
   `ActivityResetMarker`、`SyncedFocusTimer`、`FocusTimerDeviceClaim`の7 modelだけをprivate CloudKitへ同期
 - iCloud選択時の`PomoGemLocalProjection`: `AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`の4 modelを

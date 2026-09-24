@@ -74,6 +74,49 @@ enum PrefsConsumerPolicy {
         )
     }
 
+    /// launch-06. The synced settings that finishing onboarding writes. On a
+    /// second iPhone or after a reinstall, the other devices' settings rows
+    /// can still be on their way, and this device's first stamps would tie
+    /// theirs at revision 1 — where reminder-off wins the tie. So only what
+    /// the user actually chose here is stamped: the daily reminder only when
+    /// they asked for it and iOS granted permission. Leaving the switch off,
+    /// or a denied permission, leaves both reminder groups unstamped, so a
+    /// reminder set up on another device still resolves as it was.
+    @MainActor
+    @discardableResult
+    static func recordOnboardingCompletion(
+        context: ModelContext,
+        markers: [ActivityResetSnapshot],
+        remindersGranted: Bool,
+        rareRewardMode: RareRewardMode,
+        changedAt: Date = .now
+    ) throws -> Prefs {
+        if remindersGranted {
+            try mutate(.reminderEnabled, context: context, markers: markers) {
+                $0.reminderEnabled = true
+            }
+            try mutate(.reminderTime, context: context, markers: markers) {
+                $0.reminderHour = Constants.Notification.defaultReminderHour
+                $0.reminderMinute = Constants.Notification.defaultReminderMinute
+            }
+        }
+        try mutate(.usagePurpose, context: context, markers: markers) {
+            // Kept only for backward-compatible CloudKit and JSON fields.
+            // Runtime UI no longer divides themes into study/work modes.
+            $0.usagePurposeRawValue = UsagePurpose.study.rawValue
+            $0.usagePurposeUpdatedAt = changedAt
+        }
+        // This timestamp is the synchronized evidence of informed choice.
+        // Without it, reward resolution stays off even when a legacy raw
+        // value happens to say `standard`.
+        let writer = try mutate(.rareReward, context: context, markers: markers) {
+            $0.rareRewardModeRawValue = rareRewardMode.rawValue
+            $0.rareRewardModeUpdatedAt = changedAt
+        }
+        writer.hasCompletedOnboarding = true
+        return writer
+    }
+
     @MainActor
     @discardableResult
     static func setPreferredFocusSeconds(
@@ -1975,26 +2018,33 @@ struct RootView: View {
                 let isSelected = selectedNameKeys.contains(
                     SubjectNamePolicy.comparisonKey(subject.name)
                 )
-                let logicalCopies = storedSubjects.filter { $0.id == subject.id }
-                let hasRelationshipHistory = logicalCopies.contains {
-                    !($0.studySessions?.isEmpty ?? true)
-                        || !($0.achievementStones?.isEmpty ?? true)
-                }
-                let targetSubjectID = subject.id
-                var snapshotHistoryDescriptor = FetchDescriptor<StudySession>(
-                    predicate: #Predicate {
-                        $0.subjectIDSnapshot == targetSubjectID
-                    }
-                )
-                snapshotHistoryDescriptor.fetchLimit = 1
-                let hasSnapshotHistory = try modelContext.fetch(
-                    snapshotHistoryDescriptor
-                ).isEmpty == false
-                let hasHistory = hasRelationshipHistory || hasSnapshotHistory
-                if OnboardingThemePolicy.shouldRetireBuiltInPreset(
+                // launch-06: in iCloud mode an existing preset arrived from
+                // the user's other devices, possibly ahead of its sessions,
+                // so an unselected one is left exactly as it arrived.
+                let change = try OnboardingThemePolicy.builtInPresetChange(
                     isSelected: isSelected,
-                    hasHistory: hasHistory
+                    isArchived: subject.isArchived,
+                    storesInCloud: persistenceMode == .cloudKit
                 ) {
+                    let logicalCopies = storedSubjects.filter { $0.id == subject.id }
+                    let hasRelationshipHistory = logicalCopies.contains {
+                        !($0.studySessions?.isEmpty ?? true)
+                            || !($0.achievementStones?.isEmpty ?? true)
+                    }
+                    let targetSubjectID = subject.id
+                    var snapshotHistoryDescriptor = FetchDescriptor<StudySession>(
+                        predicate: #Predicate {
+                            $0.subjectIDSnapshot == targetSubjectID
+                        }
+                    )
+                    snapshotHistoryDescriptor.fetchLimit = 1
+                    let hasSnapshotHistory = try modelContext.fetch(
+                        snapshotHistoryDescriptor
+                    ).isEmpty == false
+                    return hasRelationshipHistory || hasSnapshotHistory
+                }
+                switch change {
+                case .retire:
                     removedSubjectIDs.insert(subject.id)
                     subject.isArchived = true
                     subject.deletedAt = .now
@@ -2002,15 +2052,14 @@ struct RootView: View {
                         from: subject,
                         among: storedSubjects
                     )
-                } else {
-                    let archived = !isSelected
-                    if subject.isArchived != archived {
-                        subject.isArchived = archived
-                        try SubjectSyncPolicy.recordUserMutation(
-                            from: subject,
-                            among: storedSubjects
-                        )
-                    }
+                case .archive, .unarchive:
+                    subject.isArchived = change == .archive
+                    try SubjectSyncPolicy.recordUserMutation(
+                        from: subject,
+                        among: storedSubjects
+                    )
+                case .keep:
+                    break
                 }
             }
 
@@ -2109,44 +2158,12 @@ struct RootView: View {
             : false
         guard !Task.isCancelled else { return }
         do {
-            let changedAt = Date.now
-            try PrefsConsumerPolicy.mutate(
-                .reminderEnabled,
+            try PrefsConsumerPolicy.recordOnboardingCompletion(
                 context: modelContext,
-                markers: resetSnapshots
-            ) {
-                $0.reminderEnabled = granted
-            }
-            try PrefsConsumerPolicy.mutate(
-                .reminderTime,
-                context: modelContext,
-                markers: resetSnapshots
-            ) {
-                $0.reminderHour = Constants.Notification.defaultReminderHour
-                $0.reminderMinute = Constants.Notification.defaultReminderMinute
-            }
-            try PrefsConsumerPolicy.mutate(
-                .usagePurpose,
-                context: modelContext,
-                markers: resetSnapshots
-            ) {
-                // Kept only for backward-compatible CloudKit and JSON fields.
-                // Runtime UI no longer divides themes into study/work modes.
-                $0.usagePurposeRawValue = UsagePurpose.study.rawValue
-                $0.usagePurposeUpdatedAt = changedAt
-            }
-            // This timestamp is the synchronized evidence of informed choice.
-            // Without it, reward resolution stays off even when a legacy raw
-            // value happens to say `standard`.
-            let writer = try PrefsConsumerPolicy.mutate(
-                .rareReward,
-                context: modelContext,
-                markers: resetSnapshots
-            ) {
-                $0.rareRewardModeRawValue = rareRewardMode.rawValue
-                $0.rareRewardModeUpdatedAt = changedAt
-            }
-            writer.hasCompletedOnboarding = true
+                markers: resetSnapshots,
+                remindersGranted: granted,
+                rareRewardMode: rareRewardMode
+            )
             try modelContext.save()
             usagePurposeRawValue = UsagePurpose.study.rawValue
         } catch {

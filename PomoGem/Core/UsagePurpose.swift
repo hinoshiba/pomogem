@@ -154,6 +154,35 @@ enum OnboardingThemePolicy {
         !isSelected && !hasHistory
     }
 
+    enum BuiltInPresetChange: Equatable {
+        /// Tombstone it: a sticky, synced deletion.
+        case retire
+        case archive
+        case unarchive
+        case keep
+    }
+
+    /// What finishing onboarding does to one built-in preset row that already
+    /// exists. launch-06: in iCloud mode such a row can only have arrived from
+    /// the user's other devices (a cloud cold launch never seeds presets), and
+    /// its sessions may simply not have been imported yet. Tombstoning or
+    /// archiving it would sync that decision back to every device, so iCloud
+    /// mode leaves unselected presets exactly as they arrived. Local stores
+    /// keep the original cleanup of rows an older version seeded.
+    static func builtInPresetChange(
+        isSelected: Bool,
+        isArchived: Bool,
+        storesInCloud: Bool,
+        hasHistory: () throws -> Bool
+    ) rethrows -> BuiltInPresetChange {
+        if isSelected { return isArchived ? .unarchive : .keep }
+        if storesInCloud { return .keep }
+        if try shouldRetireBuiltInPreset(isSelected: false, hasHistory: hasHistory()) {
+            return .retire
+        }
+        return isArchived ? .keep : .archive
+    }
+
     static func countsAgainstThemeLimitBeforeSelection(
         isBuiltInPreset: Bool,
         hasHistory: Bool
