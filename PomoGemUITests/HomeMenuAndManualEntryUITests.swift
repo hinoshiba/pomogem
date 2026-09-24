@@ -104,12 +104,14 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         )
         saveScreenshot("manual-confirm")
 
-        confirm.tap()
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
         let toast = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "数学")
         ).firstMatch
-        XCTAssertTrue(toast.waitForExistence(timeout: 3), "The confirmation toast names the chosen theme")
+        confirm.tap()
+        // The toast lives three seconds: look for it first. (メニュー is no
+        // proof the sheet closed; Home's toolbar is there behind it.)
+        XCTAssertTrue(toast.waitForExistence(timeout: 5), "The confirmation toast names the chosen theme")
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
         XCTAssertEqual(homeTheme.label, homeThemeLabel, "Choosing a theme in the sheet must not change Home's theme")
     }
 
@@ -205,9 +207,9 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertTrue(launcher.waitForExistence(timeout: 3))
         let launcherFrame = launcher.frame
         let menuFrame = app.buttons["メニュー"].frame
-        addThirtyMinutesManually()
         let toast = app.descendants(matching: .any).matching(identifier: "app.toast").firstMatch
-        XCTAssertTrue(toast.waitForExistence(timeout: 3))
+        addThirtyMinutesManually()
+        XCTAssertTrue(toast.waitForExistence(timeout: 5))
         let toastFrame = toast.frame
         XCTAssertTrue(toast.label.contains("+300g"), "toast=\(toast.label)")
         XCTAssertFalse(toastFrame.intersects(launcherFrame), "toast=\(toastFrame) launcher=\(launcherFrame)")
@@ -232,6 +234,8 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 6))
     }
 
+    /// Returns right after 「確認して積む」. The toast that confirms the save
+    /// lives three seconds, so callers look for it before anything else.
     private func addThirtyMinutesManually() {
         openMenuRow("時間を手動で積む")
         let thirtyMinutes = app.buttons["30分、300グラム加算"]
@@ -240,7 +244,6 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         let confirm = app.buttons["manual.confirm"]
         XCTAssertTrue(waitForHittable(confirm))
         confirm.tap()
-        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
     }
 
     /// The UI-test store starts with one theme (英語); add a second one.
