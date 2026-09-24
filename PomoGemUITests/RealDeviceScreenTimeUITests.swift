@@ -2,8 +2,8 @@ import XCTest
 
 /// The app's free learning ceiling (`ScreenTimePolicy.freeLearningApplicationLimit`).
 /// The UI test target does not link the app module, so it is restated here; the
-/// on-screen 「無料では勉強アプリを5つまで選べます」 string the limits phase asserts
-/// is what keeps the two honest.
+/// on-screen 「無料で記録できる勉強アプリは5つまでです」 notice the limits phase
+/// asserts is what keeps the two honest.
 private let screenTimeFreeLearningLimit = 5
 
 /// Opt-in audit of the shipping Screen Time surface on a real, explicitly
@@ -754,9 +754,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
 
         // --- duplicate save: two taps in rapid succession ---------------------
         _ = reveal(save)
-        let toast = app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "スクリーンタイムの設定を保存しました")
-        ).firstMatch
+        let toast = saveToast(app)
         try require(save.exists && save.isEnabled,
                     "保存 must be re-enabled after a completed registration.",
                     evidence: "save-not-reenabled")
@@ -785,13 +783,13 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "A duplicate 保存 must not raise a registration error: \(alertMessage(app)).",
                     evidence: "save-duplicate-error-alert")
         try require(toastEdges <= 1,
-                    "A duplicate 保存 must show at most one 「スクリーンタイムの設定を保存しました」 toast; \(toastEdges) were observed.",
+                    "A duplicate 保存 must show at most one 「保存しました…」 toast; \(toastEdges) were observed.",
                     evidence: "save-duplicate-toasts")
         // `toastEdges == 0` satisfies the bound vacuously, so the duplicate
         // claim needs a positive observation behind it: either the second tap
         // was refused outright, or exactly one save was acknowledged.
         try require(!secondTapWasOffered || toastEdges == 1,
-                    "Neither duplicate-prevention signal was observed: the second 保存 tap was delivered and no 「スクリーンタイムの設定を保存しました」 toast was seen, so nothing here proves one save ran.",
+                    "Neither duplicate-prevention signal was observed: the second 保存 tap was delivered and no 「保存しました…」 toast was seen, so nothing here proves one save ran.",
                     evidence: "save-duplicate-unproved")
 
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: updating)
@@ -1063,7 +1061,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         for round in 1...2 {
             let relaunched = launchRealApplication()
             try reachHome(relaunched)
-            try require(!relaunched.alerts["Screen Timeの記録を保留しています"].exists,
+            try require(!relaunched.alerts["スクリーンタイムの記録を保留しています"].exists,
                         "Relaunch \(round) must not raise the pending-import alert: \(alertMessage(relaunched)).",
                         evidence: "relaunch-\(round)-import-alert")
             let home = readHomeTotals(relaunched, label: "relaunch-\(round)-home")
@@ -1723,11 +1721,20 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         note("TOGGLE: screen-time.enabled set to \(wanted).")
     }
 
+    /// The toast a completed save shows. Its wording states the result
+    /// (「保存しました。自動記録中です」, 「保存しました」 or
+    /// 「保存しました。自動記録はオフです」) and its combined label may start with
+    /// the symbol's name, so match the shared toast identifier and the common
+    /// 「保存しました」 rather than one exact sentence.
+    private func saveToast(_ app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier == %@ AND label CONTAINS %@", "app.toast", "保存しました"
+        )).firstMatch
+    }
+
     private func waitForToastToClear(_ app: XCUIApplication) throws {
         try guardAgainstSystemAlert("wait-toast")
-        let toast = app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "スクリーンタイムの設定を保存しました")
-        ).firstMatch
+        let toast = saveToast(app)
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: toast)
         let cleared = XCTWaiter.wait(for: [gone], timeout: 30) == .completed
         try guardAgainstSystemAlert("wait-toast-settled")
