@@ -3795,9 +3795,16 @@ private struct PersistenceLaunchStatusView: View {
         .alert(item: $storageConfirmation) { confirmation in
             switch confirmation {
             case .cloud:
+                // launch-03. The card above is one line; this alert is the
+                // step that commits iCloud, so it carries every caveat the
+                // old card did — including when a connection is needed and
+                // what still works offline (AppStore/app-privacy.md checks
+                // that this is shown before the choice is confirmed).
                 Alert(
                     title: Text("iCloudに保存して同期しますか？"),
-                    message: Text("テーマ名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。"),
+                    message: Text("テーマ名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。このiPhoneに保存済みの記録があれば、オフラインでも使えます。初回の取得や同期の再開には通信が必要です。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。",
+                                  tableName: "Launch",
+                                  comment: "First-run storage choice: iCloud confirmation message (full caveats)"),
                     primaryButton: .cancel(Text("キャンセル")),
                     secondaryButton: .default(Text("確認して続ける")) {
                         onChooseCloud()

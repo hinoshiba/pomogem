@@ -60,6 +60,10 @@ final class FirstRunUITests: XCTestCase {
         let cloudAlert = app.alerts["iCloudに保存して同期しますか？"]
         XCTAssertTrue(cloudAlert.waitForExistence(timeout: 4))
         XCTAssertTrue(alertMessage(cloudAlert, contains: "プライベートiCloudへ送信します"))
+        // The one-line card dropped these; the alert that commits iCloud must
+        // still say when a connection is needed and what works offline.
+        XCTAssertTrue(alertMessage(cloudAlert, contains: "オフラインでも使えます"))
+        XCTAssertTrue(alertMessage(cloudAlert, contains: "初回の取得や同期の再開には通信が必要です"))
         XCTAssertTrue(cloudAlert.buttons["確認して続ける"].exists)
         attachScreenshot("storage-choice-cloud-confirmation")
         cloudAlert.buttons["キャンセル"].tap()
