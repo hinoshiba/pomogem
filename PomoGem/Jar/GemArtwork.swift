@@ -527,11 +527,13 @@ enum GemArtwork {
 
     /// The lifetime gem bed behind the physics bodies, baked into one
     /// texture per height (Docs/EngagementArchitecture.md §3.2 いまの瓶).
-    /// Small faceted chips in the colours of the lifetime share fan, dimmer
-    /// and smaller than any real gem, with a few static sparkles and a soft
-    /// top edge. Chip positions depend only on (row, column), never on the
-    /// height, so a taller bucket only adds chips on top: the bed never
-    /// rearranges or dims as it grows.
+    /// A soft, glowing sediment of light: fine, low-contrast chips in the
+    /// colours of the lifetime share fan under a luminous veil, baked at
+    /// half the display scale so it reads out of focus behind the sharp
+    /// jewels in front, with a rare static glint and a soft top edge. Chip
+    /// positions depend only on (row, column), never on the height, so a
+    /// taller bucket only adds chips on top: the bed never rearranges or
+    /// dims as it grows.
     static func bedTexture(
         width rawWidth: CGFloat,
         height rawHeight: CGFloat,
@@ -540,8 +542,8 @@ enum GemArtwork {
     ) -> SKTexture {
         let width = max(8, rawWidth.rounded())
         let height = max(2, rawHeight.rounded())
-        let scale = renderScale(rawScale)
-        let key = NSString(string: bedTextureKey(width: width, height: height, slotHexes: slotHexes, scale: scale))
+        let scale = bedRenderScale(rawScale)
+        let key = NSString(string: bedTextureKey(width: width, height: height, slotHexes: slotHexes, scale: rawScale))
         if let cached = bodyCache.object(forKey: key) { return cached }
         let image = bedImage(width: width, height: height, slotHexes: slotHexes, scale: scale)
         let texture = SKTexture(image: image)
@@ -553,7 +555,14 @@ enum GemArtwork {
     static func bedTextureKey(width rawWidth: CGFloat, height rawHeight: CGFloat, slotHexes: [String], scale rawScale: CGFloat) -> String {
         let width = max(8, rawWidth.rounded())
         let height = max(2, rawHeight.rounded())
-        return "bed2|w\(Int(width))|h\(Int(height))|\(slotHexes.joined(separator: ","))|x\(renderScale(rawScale))"
+        return "bed3|w\(Int(width))|h\(Int(height))|\(slotHexes.joined(separator: ","))|x\(bedRenderScale(rawScale))"
+    }
+
+    /// The bed bakes at half the display scale (at least 1×): the sediment
+    /// is meant to sit out of focus behind the sharp gems (a quarter of the
+    /// pixels, too).
+    static func bedRenderScale(_ displayScale: CGFloat) -> CGFloat {
+        max(1, renderScale(displayScale) * 0.5)
     }
 
     /// A bed texture already baked, without baking.
@@ -561,13 +570,15 @@ enum GemArtwork {
         bodyCache.object(forKey: NSString(string: bedTextureKey(width: width, height: height, slotHexes: slotHexes, scale: scale)))
     }
 
-    /// Chip pitch of the bed (points). Chips are 4.5–8 pt across (one in
-    /// seven 8–10 pt), well below the smallest real gem (about 20 pt), so
-    /// they read as ground, not as something to tap.
-    static let bedRowPitch: CGFloat = 4.4
-    static let bedColumnPitch: CGFloat = 6.6
+    /// Chip pitch of the bed (points). Chips are 2.8–5 pt across (one in
+    /// ten 5–6.5 pt), a tenth of a young jar's gem, so the bed reads as fine
+    /// sediment of light, never as gravel or as something to tap.
+    static let bedRowPitch: CGFloat = 3.6
+    static let bedColumnPitch: CGFloat = 5.2
     /// Largest chip (points).
-    static let bedMaximumChipSize: CGFloat = 10
+    static let bedMaximumChipSize: CGFloat = 6.5
+    /// One chip in this many keeps a tiny static glint.
+    static let bedSparkleInterval: UInt64 = 48
 
     fileprivate struct BedChip {
         var center: CGPoint
@@ -596,8 +607,8 @@ enum GemArtwork {
             var x = (stagger - 0.5) * bedColumnPitch
             while x < width + bedColumnPitch * 0.5 {
                 var random = GemRandom(seed: UInt64(row) &* 7_919 &+ UInt64(column) &* 104_729 &+ 11)
-                // Mostly 4.5–8 pt, one in seven a larger 8–10 pt crystal.
-                let size = random.next() % 7 == 0 ? 8 + random.unit() * 2 : 4.5 + random.unit() * 3.5
+                // Mostly 2.8–5 pt, one in ten a larger 5–6.5 pt chip.
+                let size = random.next() % 10 == 0 ? 5 + random.unit() * 1.5 : 2.8 + random.unit() * 2.2
                 let sides = 4 + Int(random.next() % 3)
                 chips.append(BedChip(
                     center: CGPoint(
@@ -608,8 +619,8 @@ enum GemArtwork {
                     rotation: random.unit() * .pi * 2,
                     radii: (0 ..< sides).map { _ in 0.72 + random.unit() * 0.28 },
                     slot: Int(random.next() % 20),
-                    shade: 0.95 + random.unit() * 0.10,
-                    sparkle: random.next() % 14 == 0
+                    shade: 0.97 + random.unit() * 0.06,
+                    sparkle: random.next() % bedSparkleInterval == 0
                 ))
                 column += 1
                 x += bedColumnPitch
@@ -618,16 +629,16 @@ enum GemArtwork {
         return chips
     }
 
-    /// Chip colour of the bed for a theme tone: the theme's hue, calm
-    /// saturation (0.30–0.45) and a luminous value (never below 0.62), so
-    /// the bed reads as a layer of light rather than dark gravel, and stays
-    /// paler than every real gem.
+    /// Chip colour of the bed for a theme tone: the theme's hue, soft
+    /// saturation (0.22–0.34) and a luminous value (never below 0.66) that
+    /// barely changes from facet to facet (±4 %), so the bed reads as a
+    /// layer of light rather than gravel, and stays paler and flatter than
+    /// every real gem.
     static func bedChipColor(tone: GemTone, facet: CGFloat, lift: CGFloat) -> GemColor {
         let neutral = tone.saturation < 0.08
-        let saturation = neutral ? tone.saturation : min(0.45, max(0.30, tone.saturation * 0.52))
-        // Facets differ by ±10 % in value; `lift` (0…1) is the warm light
-        // that rises from the floor.
-        let value = min(1, max(0.62, 0.76 + 0.09 * facet + 0.10 * lift))
+        let saturation = neutral ? tone.saturation : min(0.34, max(0.22, tone.saturation * 0.42))
+        // `lift` (0…1) is the warm light that rises from the floor.
+        let value = min(1, max(0.66, 0.78 + 0.04 * facet + 0.08 * lift))
         return GemColor(hue: tone.hue, saturation: saturation * (1 - 0.25 * lift), brightness: value)
     }
 
@@ -674,9 +685,9 @@ enum GemArtwork {
             if let ground = CGGradient(
                 colorsSpace: CGColorSpaceCreateDeviceRGB(),
                 colors: [
-                    warm.mixed(with: calm, amount: 0.35).withAlpha(0.62).cgColor,
-                    calm.withAlpha(0.42).cgColor,
-                    calm.withAlpha(0.16).cgColor,
+                    warm.mixed(with: calm, amount: 0.35).withAlpha(0.66).cgColor,
+                    calm.withAlpha(0.50).cgColor,
+                    calm.withAlpha(0.24).cgColor,
                     calm.withAlpha(0).cgColor
                 ] as CFArray,
                 locations: [0, 0.35, 0.72, 1]
@@ -699,7 +710,7 @@ enum GemArtwork {
                 guard depth > chip.size * 0.15 else { continue }
                 // Soft top edge: chips fade in over the top 25 % of the bed.
                 let fade = min(1, depth / max(height * 0.25, 4))
-                let alpha = pow(fade, 0.9) * 0.95
+                let alpha = pow(fade, 0.9) * 0.78
                 let heightUnit = min(max(chip.center.y / max(height, 1), 0), 1)
                 // The bottom 30 % catches the warm light pooled on the floor.
                 let lift = max(0, 1 - heightUnit / 0.30)
@@ -724,8 +735,8 @@ enum GemArtwork {
                         color = color.mixed(with: warm, amount: 0.18 * lift)
                     }
                     if facing > 0.72 {
-                        // The facet that faces the light glints pale.
-                        color = color.mixed(with: .white, amount: 0.30)
+                        // The facet that faces the light is a touch paler.
+                        color = color.mixed(with: .white, amount: 0.12)
                     }
                     let path = CGMutablePath()
                     path.addLines(between: [map(apex), map(a), map(b)])
@@ -734,23 +745,35 @@ enum GemArtwork {
                     context.setFillColor(color.withAlpha(alpha).cgColor)
                     context.fillPath()
                 }
-                let outline = CGMutablePath()
-                outline.addLines(between: points.map(map))
-                outline.closeSubpath()
-                context.addPath(outline)
-                context.setStrokeColor(bedChipColor(tone: tone, facet: -1, lift: 0).darker(0.18).withAlpha(alpha * 0.40).cgColor)
-                context.setLineWidth(0.4)
-                context.strokePath()
-                // A hairline of light on the chip's table.
-                context.move(to: map(apex))
-                context.addLine(to: map(points[0]))
-                context.setStrokeColor(UIColor(white: 1, alpha: alpha * 0.35).cgColor)
-                context.setLineWidth(0.4)
-                context.strokePath()
+                // No outline and no hairline: chips melt into each other.
                 if chip.sparkle, fade > 0.45 {
-                    sparkles.append((map(apex), 1.8 + chip.size * 0.22, 0.60 * fade))
+                    sparkles.append((map(apex), 1.2 + chip.size * 0.15, 0.40 * fade))
                 }
             }
+
+            // A luminous veil over the chips lowers their contrast further:
+            // the sediment glows as one layer of light.
+            context.saveGState()
+            context.addPath(silhouette)
+            context.clip()
+            let veil = calm.mixed(with: warm, amount: 0.35)
+            if let wash = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: [
+                    veil.withAlpha(0.22).cgColor,
+                    veil.withAlpha(0.14).cgColor,
+                    veil.withAlpha(0.06).cgColor
+                ] as CFArray,
+                locations: [0, 0.6, 1]
+            ) {
+                context.drawLinearGradient(
+                    wash,
+                    start: map(CGPoint(x: 0, y: 0)),
+                    end: map(CGPoint(x: 0, y: height)),
+                    options: []
+                )
+            }
+            context.restoreGState()
 
             // Soft top edge that melts into the jar's light.
             context.saveGState()
@@ -761,8 +784,8 @@ enum GemArtwork {
                 colorsSpace: CGColorSpaceCreateDeviceRGB(),
                 colors: [
                     glow.withAlpha(0).cgColor,
-                    glow.withAlpha(0.06).cgColor,
-                    glow.withAlpha(0.22).cgColor,
+                    glow.withAlpha(0.08).cgColor,
+                    glow.withAlpha(0.26).cgColor,
                     glow.withAlpha(0).cgColor
                 ] as CFArray,
                 locations: [0, 0.45, 0.80, 1]

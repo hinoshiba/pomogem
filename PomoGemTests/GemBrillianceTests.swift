@@ -846,7 +846,7 @@ final class GemBrillianceTests: XCTestCase {
     }
 
     /// A clamped display scale (NaN, 4 …) still re-bakes the bed at the
-    /// resolved scale.
+    /// resolved scale (the bed bakes at half of it, softly out of focus).
     @MainActor
     func testClampedArtworkScaleStillRebakesTheBed() throws {
         let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
@@ -858,11 +858,12 @@ final class GemBrillianceTests: XCTestCase {
         )
         let bed = try XCTUnwrap(scene.childNode(withName: "//jar.gemBed") as? SKSpriteNode)
         let atTwo = try XCTUnwrap(bed.texture?.cgImage().width)
-        XCTAssertEqual(CGFloat(atTwo), bed.size.width * 2, accuracy: 2)
+        XCTAssertEqual(CGFloat(atTwo), bed.size.width * GemArtwork.bedRenderScale(2), accuracy: 2)
         scene.artworkScale = .nan
         XCTAssertEqual(scene.artworkScale, 3)
         let atThree = try XCTUnwrap(bed.texture?.cgImage().width)
-        XCTAssertEqual(CGFloat(atThree), bed.size.width * 3, accuracy: 2)
+        XCTAssertEqual(CGFloat(atThree), bed.size.width * GemArtwork.bedRenderScale(3), accuracy: 2)
+        XCTAssertNotEqual(atTwo, atThree)
     }
 
     /// Ten bodies fusing into one, or Screen Time obstacles arriving, leave
