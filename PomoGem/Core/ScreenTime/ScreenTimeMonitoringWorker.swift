@@ -12,6 +12,25 @@ struct ScreenTimeContextBinding: Equatable {
     }
 }
 
+extension ScreenTimeState {
+    /// The ledger a new binding starts from. A different owner (another Apple
+    /// Account or storage) starts empty. The same owner under a new reset
+    /// generation keeps its setup — the configuration and the subscription
+    /// gate — and a restarted diagnostics set; runs, black stones, receipts
+    /// and errors belong to the old generation and are dropped, and the fresh
+    /// ledger `epoch` gives every later receipt a new identity.
+    static func rebound(from previous: ScreenTimeState, to binding: ScreenTimeContextBinding) -> ScreenTimeState {
+        var state = ScreenTimeState()
+        state.contextKey = binding.contextKey
+        state.dataEpochID = binding.dataEpochID
+        guard let owner = previous.contextKey, owner == binding.contextKey else { return state }
+        state.configuration = previous.configuration
+        state.learningAllowedBySubscription = previous.learningAllowedBySubscription
+        state.callbackCounters = previous.callbackCounters?.restarted(epoch: state.epoch, dayStart: nil)
+        return state
+    }
+}
+
 final class ScreenTimeContextLease: @unchecked Sendable {
     let binding: ScreenTimeContextBinding
     private let lock = NSLock()

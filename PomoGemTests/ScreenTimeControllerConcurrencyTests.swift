@@ -536,6 +536,53 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertTrue(try store.snapshot().contextIsActive)
     }
 
+    /// screentime-06: 「表示中の記録をリセット」 moves the same owner to a new
+    /// reset generation. The runs, black stones and unimported receipts belong
+    /// to the old one and go; the app selections, theme and recording switch
+    /// are the user's setup and stay, as the reset dialog promises.
+    func testANewResetGenerationForTheSameOwnerKeepsTheSetupButNothingItProduced() async throws {
+        let oldEpoch = UUID()
+        let newEpoch = UUID()
+        let store = try makeStore(epoch: oldEpoch)
+        let tokens = try (0..<2).map { index in
+            try JSONDecoder().decode(ApplicationToken.self, from: JSONEncoder().encode(["data": Data([0x44, UInt8(index)])]))
+        }
+        try store.update { $0.configuration.learningSelection.applicationTokens = Set(tokens) }
+        let old = try store.snapshot()
+        let oldRunID = try XCTUnwrap(old.runs.first?.id)
+        try store.record(runID: oldRunID, threshold: 1, now: start.addingTimeInterval(601))
+        XCTAssertFalse(try store.pendingLearningReceipts().isEmpty)
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" }, monitoring: driver, authorization: { .approved })
+
+        try await controller.bindContext(contextKey: "owner", dataEpochID: newEpoch)
+        let rebound = try store.snapshot()
+        XCTAssertEqual(rebound.configuration, old.configuration)
+        XCTAssertTrue(rebound.configuration.enabled)
+        XCTAssertEqual(rebound.dataEpochID, newEpoch)
+        XCTAssertNotEqual(rebound.epoch, old.epoch, "Receipts of the new generation need new identities")
+        XCTAssertTrue(rebound.runs.isEmpty)
+        XCTAssertEqual(rebound.negativeGemCount, 0)
+        XCTAssertTrue(try store.pendingLearningReceipts().isEmpty)
+        XCTAssertEqual(driver.events.filter { $0 == "stop" }.count, 1, "Old registrations must come down")
+        XCTAssertEqual(controller.configuration, old.configuration)
+
+        // A late callback for the old generation's run awards nothing.
+        XCTAssertFalse(try store.record(runID: oldRunID, threshold: 2, now: start.addingTimeInterval(1_201)))
+    }
+
+    func testADifferentOwnerStillStartsWithAnEmptySetup() async throws {
+        let store = try makeStore(owner: "previous-owner")
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" }, monitoring: driver, authorization: { .approved })
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        let state = try store.snapshot()
+        XCTAssertEqual(state.contextKey, "owner")
+        XCTAssertEqual(state.configuration, ScreenTimeConfiguration())
+        XCTAssertTrue(state.runs.isEmpty)
+        XCTAssertEqual(state.negativeGemCount, 0)
+    }
+
     func testFailedBindingCanBeRetriedAfterLedgerRecovery() async throws {
         let store = try makeStore()
         let driver = Driver(store: store)

@@ -993,10 +993,21 @@ struct SettingsView: View {
     }
 
     private var resetDataMessage: String {
+        let message: String
         if persistenceMode == .localOnly {
-            return "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。旧世代の行は端末内に残り、データ書き出しには含まれる場合があります。端末内の物理データはアプリを削除すると消去できます。この操作は取り消せません。"
+            message = "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。旧世代の行は端末内に残り、データ書き出しには含まれる場合があります。端末内の物理データはアプリを削除すると消去できます。この操作は取り消せません。"
+        } else {
+            message = "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。同じiCloudの端末には接続後に反映されます。オフライン端末から古い記録が戻ることを防ぐため、旧世代の行は同期用に残り、データ書き出しには含まれます。端末内の物理データはアプリを削除すると消去できます。iCloud側のアプリデータはAppleのiCloudストレージ管理から削除してください。この操作は取り消せません。"
         }
-        return "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。同じiCloudの端末には接続後に反映されます。オフライン端末から古い記録が戻ることを防ぐため、旧世代の行は同期用に残り、データ書き出しには含まれます。端末内の物理データはアプリを削除すると消去できます。iCloud側のアプリデータはAppleのiCloudストレージ管理から削除してください。この操作は取り消せません。"
+        // Said only where Screen Time is set up: the reset starts its ledger's
+        // new generation too (ScreenTimeController.bindContext).
+        guard ScreenTimeController.shared.hasLocalSetup else { return message }
+        let screenTime = String(
+            localized: "スクリーンタイムの黒い石と、まだ取り込んでいない勉強アプリの記録も0に戻ります。アプリの選択と自動記録の設定は残ります。",
+            table: "Settings",
+            comment: "Reset confirmation: extra paragraph shown only when Screen Time is set up on this iPhone"
+        )
+        return message + "\n\n" + screenTime
     }
 
     private var dataStorageDisclosure: String {

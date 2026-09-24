@@ -85,13 +85,30 @@ final class ScreenTimeController: ObservableObject {
         reload()
     }
 
+    /// Whether this iPhone holds anything of the Screen Time feature that a
+    /// user could lose or be surprised by: a switched-on recording, an app
+    /// selection, or black stones. Explanations elsewhere in Settings use it
+    /// to mention Screen Time only to people who set it up.
+    var hasLocalSetup: Bool {
+        isBoundToContext && (configuration.enabled || negativeGemCount > 0
+            || !configuration.learningSelection.applicationTokens.isEmpty
+            || !configuration.distractionSelection.applicationTokens.isEmpty)
+    }
+
     func isBound(contextKey: String, dataEpochID: UUID?) -> Bool {
         !isErasing && bindingConfirmed && lease?.binding == ScreenTimeContextBinding(contextKey: contextKey, dataEpochID: dataEpochID)
             && contextKey == currentContextKey()
     }
 
     /// A changed owner or activity epoch revokes queued work before the first
-    /// await. A new owner always starts with empty opt-in settings.
+    /// await. A new owner always starts with empty opt-in settings. A new
+    /// reset generation under the SAME owner keeps them — the app selections,
+    /// the theme and the recording switch — and drops everything the old
+    /// generation produced: runs, black stones, unimported receipts and errors.
+    /// Retiring the runs is what keeps old callbacks from awarding (event names
+    /// carry the run UUID); wiping the setup as well contradicted the reset's
+    /// own promise that app settings survive it, and only Apple's picker could
+    /// rebuild the selections.
     func bindContext(contextKey: String, dataEpochID: UUID?) async throws {
         guard !isErasing, contextKey == currentContextKey() else { throw ScreenTimeError.unboundContext }
         let binding = ScreenTimeContextBinding(contextKey: contextKey, dataEpochID: dataEpochID)
@@ -117,9 +134,7 @@ final class ScreenTimeController: ObservableObject {
                             worker.monitoring.stop()
                             try newLease.whileCurrent {
                                 try worker.store.update { state in
-                                    state = ScreenTimeState()
-                                    state.contextKey = binding.contextKey
-                                    state.dataEpochID = binding.dataEpochID
+                                    state = ScreenTimeState.rebound(from: state, to: binding)
                                 }
                             }
                         }
