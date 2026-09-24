@@ -414,7 +414,17 @@ final class RuntimeFlowAuditUITests: XCTestCase {
             format: "label IN %@", ["許可", "Allow", "通知を許可", "Allow Notifications"]
         )).firstMatch
         guard allow.waitForExistence(timeout: 6) else {
-            cancelPresentedFocusIfNeeded()
+            // Do not race the 12-second demo with a give-up confirmation: the
+            // end closes it mid-tap and can leave an unacknowledged completion
+            // that the next launch's fresh preview store cannot save. Let the
+            // demo end, stop its alarm and retire the receipt instead.
+            stopCompletionAlertIfPresented(in: app)
+            let dismiss = app.buttons["休憩の提案を閉じる"]
+            if dismiss.waitForExistence(timeout: 20) {
+                XCTAssertTrue(waitForHittable(dismiss, timeout: 5))
+                dismiss.tap()
+                waitForLauncherEnabled()
+            }
             throw XCTSkip("Notification permission is already decided on this simulator")
         }
         retainScreenshot(named: "First focus — one-time end-notification permission")
