@@ -290,7 +290,7 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         if let action {
             app.launchEnvironment["POMOGEM_UI_TEST_PERSISTENT_ACTION"] = action
         }
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         return app
     }
 
@@ -570,7 +570,7 @@ final class FortyYearPlanningUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "0"
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
         defer { app.terminate() }
 
@@ -623,7 +623,7 @@ final class FortyYearPlanningUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
 
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 15))

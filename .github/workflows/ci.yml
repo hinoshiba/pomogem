@@ -234,5 +234,7 @@ jobs:
             -derivedDataPath DerivedData-CI-Tests \
             test \
             -only-testing:PomoGemTests \
+            -testLanguage ja \
+            -testRegion JP \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO

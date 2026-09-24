@@ -18,9 +18,8 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launchArguments += [
-            "-AppleLanguages", "(ja)",
-            "-AppleLocale", "ja_JP",
             // Ten completions intentionally cross the review threshold. Keep
             // the App Store review controller outside this aggregation test.
             "-review.requested-version", "1.0"

@@ -208,6 +208,11 @@ schemes:
       storeKitConfiguration: PomoGem/Resources/Products.storekit
     test:
       config: Debug
+      # Unit and UI tests assert Japanese copy. Pin the host language so a
+      # Simulator in another language (CI runs en-US) cannot switch them once
+      # the app ships a second localization.
+      language: ja
+      region: JP
       targets:
         - PomoGemTests
         - PomoGemUITests

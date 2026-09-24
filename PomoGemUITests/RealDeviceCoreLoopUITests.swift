@@ -9,7 +9,8 @@ import XCTest
 /// The Simulator cannot establish any of this: its clock, suspension,
 /// notification delivery and SpriteKit/Metal cost differ from a phone, so every
 /// test refuses to run there. The application is always launched with an empty
-/// launch environment and no launch arguments, exactly as it ships; no hook
+/// launch environment and no launch arguments other than the Japanese language
+/// pin every UI test uses (PomoGemUITestLanguage), exactly as it ships; no hook
 /// exists in the app target for this suite.
 ///
 /// Set these in the UI TEST RUNNER's environment (EnvironmentVariables in a
@@ -752,6 +753,7 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
         let application = XCUIApplication()
         application.launchEnvironment = [:]
         application.launchArguments = []
+        PomoGemUITestLanguage.configureJapanese(application)
         app = application
         if freshLaunch || application.state == .notRunning {
             note("APP launch (fresh=\(freshLaunch), state was \(application.state.rawValue))")

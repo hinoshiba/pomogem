@@ -17,7 +17,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
     }
@@ -436,7 +436,7 @@ final class RareRewardOptInUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_RARE_REWARD_UNSELECTED"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_RARE_REWARD_ONBOARDING"] = "1"
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
 
         let next = app.buttons["次へ"]
@@ -510,7 +510,7 @@ final class RareRewardOptInUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_RARE_REWARD_UNSELECTED"] = "1"
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
 
         let launcher = app.buttons.matching(

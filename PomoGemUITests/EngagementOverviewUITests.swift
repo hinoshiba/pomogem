@@ -10,9 +10,8 @@ final class EngagementOverviewUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launchArguments += [
-            "-AppleLanguages", "(ja)",
-            "-AppleLocale", "ja_JP",
             // Exercise the widest completion action row deterministically.
             // Argument-domain defaults override a prompt receipt that another
             // Simulator run may have left in the shared UserDefaults domain.
@@ -216,7 +215,7 @@ final class EngagementOverviewUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_FORTY_YEAR_OVERVIEW"] = "1"
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
 
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
@@ -386,7 +385,7 @@ final class EngagementOverviewUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_FORTY_YEAR_OVERVIEW"] = "1"
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
 
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
@@ -433,7 +432,7 @@ final class EngagementOverviewUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_FORTY_YEAR_OVERVIEW"] = "1"
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
 
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
@@ -572,7 +571,7 @@ final class EngagementOverviewUITests: XCTestCase {
         if let action {
             app.launchEnvironment["POMOGEM_UI_TEST_PERSISTENT_ACTION"] = action
         }
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         return app
     }
 
