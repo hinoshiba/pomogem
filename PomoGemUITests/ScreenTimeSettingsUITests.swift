@@ -265,7 +265,8 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         XCTAssertTrue(app.buttons["保存して戻る"].waitForExistence(timeout: 6))
         XCTAssertTrue(app.buttons["変更を破棄して戻る"].exists)
         attach("Screen Time — unsaved changes question")
-        app.buttons["編集を続ける"].tap()
+        keepEditing()
+        XCTAssertFalse(app.buttons["変更を破棄して戻る"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 4))
         XCTAssertTrue(reveal(enabled))
         XCTAssertEqual(enabled.value as? String, "1")
@@ -317,6 +318,22 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         attach("Screen Time opened from the Home menu")
         app.navigationBars["スクリーンタイム"].buttons.firstMatch.tap()
         XCTAssertTrue(menu.waitForExistence(timeout: 8), "Back returns to Home")
+    }
+
+    /// iOS 26 shows the question as a popover on the back button, whose
+    /// cancel is a tap outside rather than a button; older layouts show one.
+    private func keepEditing() {
+        let cancel = app.buttons["編集を続ける"]
+        if cancel.exists && cancel.isHittable {
+            cancel.tap()
+            return
+        }
+        let outside = app.otherElements["PopoverDismissRegion"]
+        if outside.exists {
+            outside.tap()
+        } else {
+            app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)).tap()
+        }
     }
 
     private func openFixtureSettings() {

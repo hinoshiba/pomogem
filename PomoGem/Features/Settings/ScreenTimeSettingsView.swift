@@ -137,6 +137,39 @@ struct ScreenTimeSettingsView: View {
                             .labelStyle(.titleAndIcon)
                     }
                     .accessibilityIdentifier("screen-time.back")
+                    // On the button, so the question points at what was tapped.
+                    .confirmationDialog(
+                        String(localized: "変更が保存されていません", table: "ScreenTime",
+                               comment: "Dialog title: leaving Screen Time settings with unsaved edits"),
+                        isPresented: $isLeaveConfirmationPresented,
+                        titleVisibility: .visible
+                    ) {
+                        if canSaveDraft {
+                            Button(String(localized: "保存して戻る", table: "ScreenTime",
+                                          comment: "Dialog action: save the Screen Time edits, then go back")) {
+                                leavesAfterSave = true
+                                save()
+                            }
+                        }
+                        Button(String(localized: "変更を破棄して戻る", table: "ScreenTime",
+                                      comment: "Dialog action: drop the Screen Time edits and go back"),
+                               role: .destructive) {
+                            draft = controller.configuration
+                            hasUserEdits = false
+                            dismiss()
+                        }
+                        Button(String(localized: "編集を続ける", table: "ScreenTime",
+                                      comment: "Dialog action: stay on the Screen Time settings"),
+                               role: .cancel) {}
+                    } message: {
+                        if canSaveDraft {
+                            Text("選んだアプリや記録の設定は、保存するまで反映されません。",
+                                 tableName: "ScreenTime", comment: "Dialog message: unsaved Screen Time edits")
+                        } else {
+                            Text("選んだアプリや記録の設定は、保存するまで反映されません。いまの内容のままでは保存できないため、戻ると変更は破棄されます。",
+                                 tableName: "ScreenTime", comment: "Dialog message: unsaved Screen Time edits that cannot be saved yet")
+                        }
+                    }
                 }
             }
             ToolbarItem(placement: .confirmationAction) {
@@ -146,38 +179,6 @@ struct ScreenTimeSettingsView: View {
                     ) || isRequestingAuthorization
                               || controller.isSaving || controller.isResetting || validationMessage != nil)
                     .accessibilityIdentifier("screen-time.save")
-            }
-        }
-        .confirmationDialog(
-            String(localized: "変更が保存されていません", table: "ScreenTime",
-                   comment: "Dialog title: leaving Screen Time settings with unsaved edits"),
-            isPresented: $isLeaveConfirmationPresented,
-            titleVisibility: .visible
-        ) {
-            if canSaveDraft {
-                Button(String(localized: "保存して戻る", table: "ScreenTime",
-                              comment: "Dialog action: save the Screen Time edits, then go back")) {
-                    leavesAfterSave = true
-                    save()
-                }
-            }
-            Button(String(localized: "変更を破棄して戻る", table: "ScreenTime",
-                          comment: "Dialog action: drop the Screen Time edits and go back"),
-                   role: .destructive) {
-                draft = controller.configuration
-                hasUserEdits = false
-                dismiss()
-            }
-            Button(String(localized: "編集を続ける", table: "ScreenTime",
-                          comment: "Dialog action: stay on the Screen Time settings"),
-                   role: .cancel) {}
-        } message: {
-            if canSaveDraft {
-                Text("選んだアプリや記録の設定は、保存するまで反映されません。",
-                     tableName: "ScreenTime", comment: "Dialog message: unsaved Screen Time edits")
-            } else {
-                Text("選んだアプリや記録の設定は、保存するまで反映されません。いまの内容のままでは保存できないため、戻ると変更は破棄されます。",
-                     tableName: "ScreenTime", comment: "Dialog message: unsaved Screen Time edits that cannot be saved yet")
             }
         }
         .sheet(item: $selectionLane) { lane in
