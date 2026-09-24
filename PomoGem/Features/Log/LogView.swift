@@ -2456,6 +2456,9 @@ private struct AchievementEditorSheet: View {
                             .accessibilityIdentifier("achievement.editor.error")
                     }
 
+                    // Right above the button it disables, as in 「成果を積む」.
+                    AchievementNoteLimitMessage(text: note)
+
                     Button {
                         save()
                     } label: {
@@ -2466,7 +2469,7 @@ private struct AchievementEditorSheet: View {
                         }
                     }
                     .buttonStyle(PomoGemPrimaryButtonStyle())
-                    .disabled(selectedSubjectID == nil || isCommitting)
+                    .disabled(selectedSubjectID == nil || isCommitting || AchievementNotePolicy.isTooLong(note))
                     .accessibilityIdentifier("achievement.editor.save")
 
                     Button(role: .destructive) {
@@ -2526,7 +2529,7 @@ private struct AchievementEditorSheet: View {
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 SectionEyebrow(text: "MILESTONE")
-                Text(note.isEmpty ? kind.title : note)
+                Text(AchievementStone.sanitizedNote(note).isEmpty ? kind.title : AchievementStone.sanitizedNote(note))
                     .font(PomoGemTheme.brand(22))
                     .lineLimit(2)
             }
@@ -2618,17 +2621,14 @@ private struct AchievementEditorSheet: View {
     }
 
     private var noteEditor: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            editorLabel("成果メモ（任意）")
-            TextField(kind.notePlaceholder, text: $note)
-                .textFieldStyle(.plain)
-                .padding(14)
-                .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 12))
-                .onChange(of: note) { _, value in
-                    note = AchievementStone.sanitizedNote(value)
-                }
-                .accessibilityIdentifier("achievement.editor.note")
-        }
+        // Kept as typed (spaces and IME composition included); bounded when
+        // saved. See AchievementNotePolicy.
+        AchievementNoteField(
+            title: "成果メモ（任意）",
+            placeholder: kind.notePlaceholder,
+            text: $note,
+            accessibilityIdentifier: "achievement.editor.note"
+        )
     }
 
     private var dateEditor: some View {
