@@ -266,6 +266,262 @@ final class ShareSelectionModelTests: XCTestCase {
         )
     }
 
+    // MARK: - Branches that decide mass and the 自己申告 disclosure
+
+    func testCompactLifetimeRootsCarryTheMassWhenOnlyTheNewestRecordsAreLoaded() throws {
+        // A long history loads only its newest page; measured-only roots
+        // stand for everything older without expanding it.
+        let now = Date.now
+        let roots: [AggregatePebble] = (0..<2).map { index in
+            root(
+                createdAt: now.addingTimeInterval(-Double(40 - index) * 86_400),
+                members: (0..<10).map { _ -> UUID in UUID() },
+                grams: 2_500,
+                measured: 10
+            )
+        }
+        let loose: [StudySession] = (0..<3).map { index in
+            session(endingAt: now.addingTimeInterval(-Double(3 - index) * 3_600), minutes: 25)
+        }
+        try context.save()
+
+        var input = makeInput(sessions: loose, aggregates: roots)
+        input.historyPageIsPartial = true
+        input.allSessionRowCount = 23
+        let complete = ShareSelectionModel.make(input)
+        XCTAssertTrue(complete.usesCompactRootProjection)
+        XCTAssertFalse(complete.compactProjectionIsIncomplete)
+        XCTAssertEqual(complete.sessions.map(\.id), loose.map(\.id))
+        XCTAssertEqual(Set(complete.aggregates.map(\.id)), Set(roots.map(\.id)))
+        XCTAssertTrue(complete.aggregates.allSatisfy(\.contributesStandaloneTotals))
+        XCTAssertEqual(complete.totalGrams, 2 * 2_500 + 3 * 250)
+        XCTAssertFalse(complete.includesSelfReportedFocus)
+        XCTAssertFalse(complete.hasExcludedSelfReportedContent)
+        XCTAssertNil(complete.excludedSelfReportedGrams)
+
+        // Rows the roots and the loose page do not account for (or a
+        // duplicate) make the card say 読み込み分 instead of lifetime.
+        input.allSessionRowCount = 25
+        XCTAssertTrue(ShareSelectionModel.make(input).compactProjectionIsIncomplete)
+        input.allSessionRowCount = 23
+        input.loosePageIsPartial = true
+        XCTAssertTrue(ShareSelectionModel.make(input).compactProjectionIsIncomplete)
+        input.loosePageIsPartial = false
+
+        // A loose record the local projection already represents is not
+        // added again on top of its root.
+        input.localRepresentedSessionIDs = [loose[0].id]
+        input.allSessionRowCount = 22
+        let represented = ShareSelectionModel.make(input)
+        XCTAssertEqual(represented.sessions.map(\.id), Array(loose.dropFirst()).map(\.id))
+        XCTAssertEqual(represented.totalGrams, 2 * 2_500 + 2 * 250)
+        XCTAssertFalse(represented.compactProjectionIsIncomplete)
+    }
+
+    func testSelfReportedLooseRecordKeepsAMeasuredOnlyCardOffCompactRoots() throws {
+        let now = Date.now
+        let roots = [root(
+            createdAt: now.addingTimeInterval(-40 * 86_400),
+            members: (0..<10).map { _ -> UUID in UUID() },
+            grams: 2_500,
+            measured: 10
+        )]
+        let measured = session(endingAt: now.addingTimeInterval(-7_200), minutes: 25)
+        let manual = session(endingAt: now.addingTimeInterval(-3_600), minutes: 30, source: .manual)
+        try context.save()
+
+        var input = makeInput(sessions: [measured, manual], aggregates: roots)
+        input.historyPageIsPartial = true
+        input.allSessionRowCount = 12
+        let measuredOnly = ShareSelectionModel.make(input)
+        XCTAssertFalse(
+            measuredOnly.usesCompactRootProjection,
+            "Roots cannot prove no self-reported time hides behind them here"
+        )
+        XCTAssertFalse(measuredOnly.compactProjectionIsIncomplete)
+        XCTAssertEqual(measuredOnly.sessions.map(\.id), [measured.id])
+        XCTAssertTrue(measuredOnly.aggregates.isEmpty, "Unloaded members cannot be reconstructed")
+        XCTAssertEqual(measuredOnly.totalGrams, 250)
+        XCTAssertTrue(measuredOnly.hasExcludedSelfReportedContent)
+        XCTAssertNil(measuredOnly.excludedSelfReportedGrams, "A partial page cannot name an exact amount")
+
+        input.includeManual = true
+        let included = ShareSelectionModel.make(input)
+        XCTAssertTrue(included.usesCompactRootProjection)
+        XCTAssertEqual(included.totalGrams, 2_500 + 250 + 300)
+        XCTAssertTrue(included.includesSelfReportedFocus)
+        XCTAssertFalse(included.hasExcludedSelfReportedContent)
+    }
+
+    func testLegacyStratumWithMembershipIsRebuiltFromItsMeasuredMembers() throws {
+        let now = Date.now
+        let members: [StudySession] = (0..<10).map { index in
+            let isManual = index < 2
+            return session(
+                endingAt: now.addingTimeInterval(-Double(20 - index) * 3_600),
+                minutes: isManual ? 60 : 25,
+                source: isManual ? SessionSource.manual : SessionSource.timer
+            )
+        }
+        let layer = Stratum(
+            bakedAt: members.last!.endAt,
+            pebbleCount: 10,
+            heightPt: 10,
+            colorMixJSON: "[]",
+            monthLabel: "2026年9月",
+            grams: 3_200,
+            sessionIDs: members.map(\.id)
+        )
+        context.insert(layer)
+        try context.save()
+
+        var input = makeInput(sessions: members, strata: [layer])
+        let measuredOnly = ShareSelectionModel.make(input)
+        XCTAssertEqual(measuredOnly.aggregates.map(\.id), [layer.id])
+        XCTAssertEqual(measuredOnly.aggregates.first?.pebbleCount, 8)
+        XCTAssertFalse(measuredOnly.aggregates.first?.contributesStandaloneTotals ?? true)
+        XCTAssertEqual(measuredOnly.totalGrams, 8 * 250, "The layer indexes its members; it adds no mass")
+        XCTAssertFalse(measuredOnly.includesSelfReportedFocus)
+        XCTAssertTrue(measuredOnly.hasExcludedSelfReportedContent)
+        XCTAssertEqual(measuredOnly.excludedSelfReportedGrams, 1_200, "Known members name an exact amount")
+
+        input.includeManual = true
+        let included = ShareSelectionModel.make(input)
+        XCTAssertEqual(included.aggregates.first?.pebbleCount, 10)
+        XCTAssertEqual(included.totalGrams, 3_200)
+        XCTAssertTrue(included.includesSelfReportedFocus)
+        XCTAssertFalse(included.hasExcludedSelfReportedContent)
+    }
+
+    func testLegacyStratumWithoutMembershipIsOnlySharedAsSelfReported() throws {
+        let measured = session(endingAt: .now, minutes: 25)
+        let layer = Stratum(
+            bakedAt: Date.now.addingTimeInterval(-90 * 86_400),
+            pebbleCount: 10,
+            heightPt: 10,
+            colorMixJSON: "[]",
+            monthLabel: "2026年6月",
+            grams: 2_500
+        )
+        context.insert(layer)
+        try context.save()
+
+        var input = makeInput(sessions: [measured], strata: [layer])
+        let measuredOnly = ShareSelectionModel.make(input)
+        XCTAssertTrue(measuredOnly.aggregates.isEmpty, "Its mix is unknown, so a measured-only card leaves it out")
+        XCTAssertEqual(measuredOnly.totalGrams, 250)
+        XCTAssertFalse(measuredOnly.includesSelfReportedFocus)
+        XCTAssertTrue(measuredOnly.hasExcludedSelfReportedContent)
+        XCTAssertNil(measuredOnly.excludedSelfReportedGrams)
+
+        input.includeManual = true
+        let included = ShareSelectionModel.make(input)
+        XCTAssertEqual(included.aggregates.map(\.id), [layer.id])
+        XCTAssertEqual(included.totalGrams, 2_750, "A membership-less layer carries its own mass")
+        XCTAssertTrue(included.includesSelfReportedFocus, "Unknown composition is disclosed as self-reported")
+        XCTAssertFalse(included.hasExcludedSelfReportedContent)
+    }
+
+    func testUnattributedCompatibilityAggregateFollowsItsKnownComposition() throws {
+        let measured = session(endingAt: .now, minutes: 25)
+        let unknownMix = root(
+            createdAt: Date.now.addingTimeInterval(-60 * 86_400),
+            members: [],
+            grams: 2_500,
+            measured: 0
+        )
+        let allMeasured = root(
+            createdAt: Date.now.addingTimeInterval(-30 * 86_400),
+            members: [],
+            grams: 2_500,
+            measured: 10
+        )
+        try context.save()
+
+        var input = makeInput(sessions: [measured], aggregates: [unknownMix])
+        let unknownOff = ShareSelectionModel.make(input)
+        XCTAssertTrue(unknownOff.aggregates.isEmpty)
+        XCTAssertEqual(unknownOff.totalGrams, 250)
+        XCTAssertFalse(unknownOff.includesSelfReportedFocus)
+        XCTAssertTrue(unknownOff.hasExcludedSelfReportedContent)
+        XCTAssertNil(unknownOff.excludedSelfReportedGrams)
+
+        input.includeManual = true
+        let unknownOn = ShareSelectionModel.make(input)
+        XCTAssertEqual(unknownOn.aggregates.map(\.id), [unknownMix.id])
+        XCTAssertEqual(unknownOn.totalGrams, 2_750)
+        XCTAssertTrue(unknownOn.includesSelfReportedFocus, "Unknown composition is disclosed as self-reported")
+        XCTAssertFalse(unknownOn.hasExcludedSelfReportedContent)
+
+        input = makeInput(sessions: [measured], aggregates: [allMeasured])
+        let measuredOff = ShareSelectionModel.make(input)
+        XCTAssertEqual(measuredOff.aggregates.map(\.id), [allMeasured.id])
+        XCTAssertEqual(measuredOff.totalGrams, 2_750)
+        XCTAssertFalse(measuredOff.includesSelfReportedFocus)
+        XCTAssertFalse(
+            measuredOff.hasExcludedSelfReportedContent,
+            "An all-measured summary stays on the card, so nothing was left out"
+        )
+        input.includeManual = true
+        let measuredOn = ShareSelectionModel.make(input)
+        XCTAssertEqual(measuredOn.totalGrams, 2_750)
+        XCTAssertTrue(measuredOn.includesSelfReportedFocus, "Its composition is still not attributed")
+    }
+
+    func testMonthScopeTakesOnlyThatMonthsPartOfARootSpanningTwoMonths() throws {
+        let august = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 20, hour: 10)))
+        let september = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 9, day: 10, hour: 10)))
+        let augustMembers: [StudySession] = (0..<5).map { index in
+            session(endingAt: august.addingTimeInterval(Double(index) * 3_600), minutes: 25)
+        }
+        let septemberMembers: [StudySession] = (0..<5).map { index in
+            let isManual = index == 0
+            return session(
+                endingAt: september.addingTimeInterval(Double(index) * 3_600),
+                minutes: isManual ? 60 : 25,
+                source: isManual ? SessionSource.manual : SessionSource.timer
+            )
+        }
+        let members = augustMembers + septemberMembers
+        let spanning = AggregatePebble(
+            createdAt: septemberMembers.last!.endAt,
+            level: 1,
+            pebbleCount: 10,
+            grams: NonnegativeIntPolicy.sum(members.map(\.grams)),
+            measuredPebbleCount: 9,
+            manualPebbleCount: 1,
+            colorMixJSON: "[]",
+            periodStart: augustMembers.first!.startAt,
+            periodEnd: septemberMembers.last!.endAt,
+            sessionIDs: members.map(\.id)
+        )
+        context.insert(spanning)
+        try context.save()
+
+        var input = makeInput(sessions: members, aggregates: [spanning])
+        input.scope = .month(september)
+        let measuredOnly = ShareSelectionModel.make(input)
+        XCTAssertEqual(measuredOnly.sessions.map(\.id), Array(septemberMembers.dropFirst()).map(\.id))
+        XCTAssertEqual(measuredOnly.aggregates.map(\.id), [spanning.id])
+        XCTAssertEqual(measuredOnly.aggregates.first?.pebbleCount, 4, "Only September's measured members")
+        XCTAssertEqual(measuredOnly.aggregates.first?.grams, 4 * 250)
+        XCTAssertEqual(measuredOnly.totalGrams, 4 * 250, "August's half of the root is not September's mass")
+        XCTAssertFalse(measuredOnly.includesSelfReportedFocus)
+        XCTAssertTrue(measuredOnly.hasExcludedSelfReportedContent)
+        XCTAssertTrue(measuredOnly.scopedAggregateHasSelfReportedPebbles)
+        XCTAssertNil(
+            measuredOnly.excludedSelfReportedGrams,
+            "Self-reported time inside a crystal is not named as an exact amount"
+        )
+
+        input.includeManual = true
+        let included = ShareSelectionModel.make(input)
+        XCTAssertEqual(included.aggregates.first?.pebbleCount, 5)
+        XCTAssertEqual(included.totalGrams, 600 + 4 * 250)
+        XCTAssertTrue(included.includesSelfReportedFocus)
+        XCTAssertFalse(included.hasExcludedSelfReportedContent)
+    }
+
     func testCacheReusesTheSelectionUntilAnInputChanges() {
         let cache = ShareSelectionCache()
         var builds = 0
@@ -326,10 +582,36 @@ final class ShareSelectionModelTests: XCTestCase {
         return value
     }
 
+    /// A level-one root whose members may not be loaded, or, with no
+    /// members, a membership-less compatibility summary.
+    private func root(
+        createdAt: Date,
+        members: [UUID],
+        grams: Int,
+        measured: Int,
+        manual: Int = 0
+    ) -> AggregatePebble {
+        let value = AggregatePebble(
+            createdAt: createdAt,
+            level: 1,
+            pebbleCount: 10,
+            grams: grams,
+            measuredPebbleCount: measured,
+            manualPebbleCount: manual,
+            colorMixJSON: "[]",
+            periodStart: createdAt.addingTimeInterval(-86_400),
+            periodEnd: createdAt,
+            sessionIDs: members
+        )
+        context.insert(value)
+        return value
+    }
+
     private func makeInput(
         sessions: [StudySession],
         achievements: [AchievementStone] = [],
-        aggregates: [AggregatePebble] = []
+        aggregates: [AggregatePebble] = [],
+        strata: [Stratum] = []
     ) -> ShareSelectionInput {
         ShareSelectionInput(
             scope: .all,
@@ -341,7 +623,7 @@ final class ShareSelectionModelTests: XCTestCase {
             looseSessions: sessions,
             storedAchievementStones: achievements,
             storedAggregatePebbles: aggregates,
-            storedStrata: [],
+            storedStrata: strata,
             acceptedAggregateRootIDs: Set(aggregates.map(\.id)),
             localRepresentedSessionIDs: [],
             historyPageIsPartial: false,

@@ -349,6 +349,15 @@ extension ShareSelectionModel {
                 : scopedSessions.filter { $0.effectiveSource.isMeasured }
         }
 
+        // A compatibility summary without membership has an unknown mix
+        // unless its counts say every pebble was measured; only then does a
+        // measured-only card keep it.
+        func isExplicitlyAllMeasured(_ aggregate: AggregatePebble) -> Bool {
+            aggregate.manualPebbleCount == 0
+                && aggregate.measuredPebbleCount == aggregate.pebbleCount
+                && aggregate.pebbleCount > 0
+        }
+
         let selectedAggregates: [ShareAggregateVisual]
         if usesCompactRootProjection {
             let modern = scopedAggregates.map(ShareAggregateVisual.init(aggregateSummary:))
@@ -375,10 +384,7 @@ extension ShareSelectionModel {
                     guard AggregatePebblePolicy.isUnattributedCompatibility(aggregate) else {
                         return nil
                     }
-                    let isExplicitlyAllMeasured = aggregate.manualPebbleCount == 0
-                        && aggregate.measuredPebbleCount == aggregate.pebbleCount
-                        && aggregate.pebbleCount > 0
-                    return includeManual || isExplicitlyAllMeasured
+                    return includeManual || isExplicitlyAllMeasured(aggregate)
                         ? ShareAggregateVisual(aggregate: aggregate)
                         : nil
                 }
@@ -441,8 +447,13 @@ extension ShareSelectionModel {
         let scopedAggregateHasSelfReportedPebbles = scopedAggregates.contains {
             $0.manualPebbleCount > 0
         }
+        // An all-measured compatibility summary stays on a measured-only
+        // card, so it hides nothing; saying 「自己申告は除外」 for it would
+        // name an exclusion that did not happen.
         let summariesHideSelfReportedContent = scopedAggregates.contains {
-            $0.manualPebbleCount > 0 || AggregatePebblePolicy.isUnattributedCompatibility($0)
+            $0.manualPebbleCount > 0
+                || (AggregatePebblePolicy.isUnattributedCompatibility($0)
+                    && !isExplicitlyAllMeasured($0))
         }
             || scopedLegacyStrata.contains { $0.sessionIDs.isEmpty }
         let hasExcludedSelfReportedContent = !includeManual
