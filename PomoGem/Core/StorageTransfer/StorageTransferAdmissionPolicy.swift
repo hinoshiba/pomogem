@@ -92,6 +92,69 @@ enum StorageTransferAdmissionPolicy {
     }
 }
 
+/// What this device remembers about its own cloud store, read by the launch
+/// host just before the preflight. The adoption rule below is pure; this value
+/// is the only thing it knows about the device.
+///
+/// 1.0 and 1.0.1 never wrote an admission receipt, but they did mount this
+/// very Production mirror at this very store path and recorded that mount.
+/// These three facts are how such a store is told apart from one that never
+/// mirrored this zone.
+struct StorageTransferLegacyCloudMountEvidence: Equatable, Sendable {
+    /// The selection is `.cloud(binding)` AND a previous build recorded a
+    /// successful mount of exactly that selection.
+    let recordedCloudMountOfThisBinding: Bool
+    /// The exact, complete store pair for `.cloud(binding)` is on disk.
+    let hasExactCompleteStorePair: Bool
+    /// The offline receipt shows that a receipt-writing build (1.0.2 or
+    /// later) already verified this installation online, or recorded a known
+    /// dataset generation. Such an installation must hold an admission
+    /// receipt; its absence is then NOT the pre-receipt shape. A receipt that
+    /// cannot be read counts as true, so an unreadable file fails closed.
+    let offlineReceiptPostdatesAdmissionReceipts: Bool
+
+    /// What every caller that does not explicitly gather evidence passes, so
+    /// the adoption rule can never apply by default.
+    static let none = Self(recordedCloudMountOfThisBinding: false,
+                           hasExactCompleteStorePair: false,
+                           offlineReceiptPostdatesAdmissionReceipts: false)
+}
+
+/// The one narrow exception to "enrolment always requires an empty store
+/// path" (Docs/MultiDeviceCloudSafety.md). It restores 1.0.2's behaviour for
+/// installations that 1.0 / 1.0.1 set up in iCloud mode and that never ran a
+/// receipt-writing build online: 1.0.2 enrolled them with a nil generation;
+/// 1.1.0 before this rule sent them to the lineage stop screen on every online
+/// launch, with no enabled way back to sync.
+///
+/// Joining the zone publishes nothing new for such a store: it has only ever
+/// mirrored this binding's Production zone. Every condition below must hold;
+/// any other enrolment keeps the store-artifact precondition.
+enum StorageTransferLegacyCloudAdoptionPolicy {
+    /// - Parameters:
+    ///   - scope: the environment THIS build talks to. Only Production: 1.0 and
+    ///     1.0.1 were only ever distributed as Production builds, and a
+    ///     Development build on a developer's phone keeps failing closed.
+    ///   - hasAdmissionReceiptUnderAnyName: a receipt exists for this namespace
+    ///     under the scoped, the unscoped legacy or another environment's name.
+    ///     Any receipt means a receipt-writing build has been here.
+    ///   - serverControl: the control record as read. It must be ABSENT, not
+    ///     merely terminal with a nil generation: a terminal control proves a
+    ///     transfer happened on this account after 1.0.1.
+    ///   - evidence: the device's own record of having mirrored this binding.
+    static func adoptsPreReceiptStore(scope: StorageTransferCloudScope,
+                                      hasAdmissionReceiptUnderAnyName: Bool,
+                                      serverControl: StorageTransferRecoveryControl?,
+                                      evidence: StorageTransferLegacyCloudMountEvidence) -> Bool {
+        guard scope.isKnown, scope.environment == .production,
+              !hasAdmissionReceiptUnderAnyName,
+              serverControl == nil else { return false }
+        return evidence.recordedCloudMountOfThisBinding
+            && evidence.hasExactCompleteStorePair
+            && !evidence.offlineReceiptPostdatesAdmissionReceipts
+    }
+}
+
 /// The "no store files may exist here" precondition, extracted from the
 /// runtime so each call site's meaning is separately expressible and testable.
 ///
@@ -109,5 +172,42 @@ enum StorageTransferStoreArtifactPrecondition {
             var info = stat()
             guard lstat(url.path, &info) != 0, errno == ENOENT else { throw error }
         }
+    }
+}
+
+extension StorageTransferLegacyCloudMountEvidence {
+    /// The live reading, taken by the launch host immediately before a cloud
+    /// preflight. Every input is this device's own record of a PREVIOUS launch
+    /// and none of them authorizes anything alone: the policy above still
+    /// requires a Production build, no receipt under any name and an absent
+    /// control record, and the preflight still re-reads that control record.
+    @MainActor
+    static func live(binding: ActiveAccountLocalBinding) -> Self {
+        let selection = PersistenceDeploymentSelection.cloud(binding: binding)
+        let recordedMount = PersistenceDeploymentState.load() == .selected(selection)
+            && PersistenceDeploymentState.loadMountState() == .mounted(selection)
+        let hasPair = PersistenceStoreTopology.persistenceArtifactHistory()
+            .hasExactCompleteStorePair(for: selection)
+        let postdates: Bool
+        do {
+            postdates = try CloudOfflineAccessState().load()
+                .map(offlineReceiptPostdatesAdmissionReceipts) ?? false
+        } catch {
+            postdates = true
+        }
+        return Self(recordedCloudMountOfThisBinding: recordedMount,
+                    hasExactCompleteStorePair: hasPair,
+                    offlineReceiptPostdatesAdmissionReceipts: postdates)
+    }
+
+    /// A `.verifiedOnline` receipt is only ever written after an online mount
+    /// that itself wrote an admission receipt (1.0.2 and later), and a known
+    /// generation means an admission receipt was read when it was recorded.
+    /// Either one means this installation is past the pre-receipt shape.
+    /// 1.0 / 1.0.1 wrote no offline receipt at all; 1.1.0's offline door on
+    /// such a store adopts it as `.legacySuccessfulMount` with an unknown
+    /// generation, which does not count.
+    static func offlineReceiptPostdatesAdmissionReceipts(_ receipt: CloudOfflineAccessReceipt) -> Bool {
+        receipt.hasVerifiedOnlineBaseline || receipt.isDatasetGenerationKnown
     }
 }

@@ -1586,8 +1586,13 @@ private struct PomoGemPersistenceLaunchHost: View {
         // Read remote recovery/control and dataset lineage before constructing
         // ANY ordinary mirror. Server-only pending work survives app deletion;
         // an error here is never permission to open the previous cloud store.
+        // The device's own mount record is offered for the one pre-receipt
+        // adoption rule (1.0 / 1.0.1 stores); the runtime reads it only when
+        // that rule could apply, and the later preflights of this mount find
+        // the receipt this one wrote.
         try await StorageTransferRuntime.live().preflightCloudMount(
             binding: binding,
+            legacyCloudMountEvidence: { .live(binding: binding) },
             validateAccess: {
                 try requireCloudMountAuthorization(
                     expectedBinding: binding,
@@ -1954,7 +1959,12 @@ private struct PomoGemPersistenceLaunchHost: View {
                           isEligible: { offlineCopyIsEligible(binding: $0) },
                           record: { recordLaunchRecovery($0) }) { () -> StorageTransferRuntime in
                         let runtime = try StorageTransferRuntime.live()
-                        try await runtime.preflightCloudMount(binding: binding, validateAccess: validate)
+                        // An offline session opened on a 1.0 / 1.0.1 store is
+                        // the other way such a store first meets this build
+                        // online, so it carries the same device evidence.
+                        try await runtime.preflightCloudMount(binding: binding,
+                            legacyCloudMountEvidence: { .live(binding: binding) },
+                            validateAccess: validate)
                         return runtime
                     }
                     guard let receipt = try CloudOfflineAccessState().load(), receipt.binding == binding else {

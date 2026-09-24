@@ -154,15 +154,21 @@ final class StorageTransferRuntime {
         try await remote(validateAccess).inspect(accountFingerprint: binding.accountFingerprint)?.control
     }
 
+    /// `legacyCloudMountEvidence` is read only when the pre-receipt adoption
+    /// rule could apply at all (an absent control record in a Production
+    /// build with no receipt), so an ordinary launch pays nothing for it. It
+    /// defaults to `.none`: the rule never applies unless the caller gathered
+    /// the device's own evidence on purpose.
     func preflightCloudMount(binding: ActiveAccountLocalBinding,
                              controlClient: StorageTransferCloudMountControlClient? = nil,
                              accountDefaults: UserDefaults = .standard,
+                             legacyCloudMountEvidence: @escaping @MainActor () -> StorageTransferLegacyCloudMountEvidence = { .none },
                              validateAccess: @escaping @MainActor () throws -> Void) async throws {
         let reader = StorageTransferCloudMountControlReader(client: controlClient,
             defaults: accountDefaults, transferJournalStore: store)
         try await preflightCloudMount(binding: binding, readControl: {
             try await reader.read(expectedBinding: binding, validateAccess: validateAccess)
-        }, validateAccess: validateAccess)
+        }, legacyCloudMountEvidence: legacyCloudMountEvidence, validateAccess: validateAccess)
     }
 
     /// The transport seam preserves the actual local admission files and final
@@ -170,6 +176,7 @@ final class StorageTransferRuntime {
     /// authorize a container just because the remote control stayed unchanged.
     func preflightCloudMount(binding: ActiveAccountLocalBinding,
                              readControl: @escaping @MainActor () async throws -> StorageTransferRecoveryControl?,
+                             legacyCloudMountEvidence: @escaping @MainActor () -> StorageTransferLegacyCloudMountEvidence = { .none },
                              validateAccess: @escaping @MainActor () throws -> Void) async throws {
         let validate: @MainActor () throws -> Void = {
             try Task.checkCancellation()
@@ -199,16 +206,33 @@ final class StorageTransferRuntime {
             try file.save(value, replacing: isLegacy ? nil : found)
             if isLegacy { try retireLegacyAdmission(binding) }
         case .enrol:
-            // Unconditional. An existing local cloud store joining a ledger
-            // this build has never recorded is a device -> iCloud publication,
-            // not an enrolment: preflight's success is what authorizes the host
-            // to build the mirror over that very store. When the remote ledger
-            // is EMPTY the publication is total, which is exactly the consented,
+            // An existing local cloud store joining a ledger this build has
+            // never recorded is a device -> iCloud publication, not an
+            // enrolment: preflight's success is what authorizes the host to
+            // build the mirror over that very store. When the remote ledger is
+            // EMPTY the publication is total, which is exactly the consented,
             // policy-gated `startCloudLineageFromDevice`, so it must not happen
             // by falling through a precondition that only ran for a non-nil
             // server generation.
-            try requireNoArtifacts(selection: .cloud(binding: binding),
-                error: status?.datasetGenerationID == nil ? .cloudLineageUnavailable : .localLedgerMissing)
+            //
+            // The single exception is a store 1.0 / 1.0.1 created before
+            // receipts existed, which has only ever mirrored this binding's
+            // Production zone: re-joining it publishes nothing new, and it is
+            // what 1.0.2 did. `StorageTransferLegacyCloudAdoptionPolicy` holds
+            // every condition; the evidence is read only once the cheap ones
+            // (absent control, Production scope) already hold.
+            var adoptsPreReceiptStore = false
+            if status == nil, cloudScope.environment == .production {
+                adoptsPreReceiptStore = StorageTransferLegacyCloudAdoptionPolicy.adoptsPreReceiptStore(
+                    scope: cloudScope,
+                    hasAdmissionReceiptUnderAnyName: try hasAdmissionReceiptUnderAnyName(binding),
+                    serverControl: status,
+                    evidence: legacyCloudMountEvidence())
+            }
+            if !adoptsPreReceiptStore {
+                try requireNoArtifacts(selection: .cloud(binding: binding),
+                    error: status?.datasetGenerationID == nil ? .cloudLineageUnavailable : .localLedgerMissing)
+            }
             try validate()
             try file.save(StorageTransferDatasetAdmission(binding: binding,
                 datasetGenerationID: status?.datasetGenerationID, cloudScope: recordedScope),
@@ -1351,6 +1375,23 @@ final class StorageTransferRuntime {
             guard url != mine else { return nil }
             return try StorageTransferStateFile<StorageTransferDatasetAdmission>(url: url).load()
         }
+    }
+    /// Whether ANY receipt exists for this namespace: this environment's, the
+    /// unscoped legacy one, or another environment's. Every file is decoded,
+    /// so a damaged receipt throws and the preflight fails closed rather than
+    /// reading as "no receipt". Only the pre-receipt adoption rule asks.
+    private func hasAdmissionReceiptUnderAnyName(_ binding: ActiveAccountLocalBinding) throws -> Bool {
+        let names = Set(StorageTransferCloudEnvironment.allCases.map { environment in
+            Self.admissionFileName(namespace: binding.namespace,
+                scope: StorageTransferCloudScope(environment: environment,
+                    containerIdentifier: cloudScope.containerIdentifier))
+        })
+        for name in names.sorted() {
+            let file = try StorageTransferStateFile<StorageTransferDatasetAdmission>(
+                url: root.appendingPathComponent(name))
+            if try file.load() != nil { return true }
+        }
+        return false
     }
     /// One-time migration. Only ever called after the scoped receipt has been
     /// written AND read back by `StorageTransferStateFile.save`, so the record
