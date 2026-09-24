@@ -45,7 +45,7 @@ final class CloudVerificationPresentationUITests: XCTestCase {
         dismissBreak()
 
         // Home: the jar says the confirmed mass instead of hiding it.
-        let jar = app.buttons["瓶"]
+        let jar = app.descendants(matching: .any)["瓶"]
         XCTAssertTrue(jar.waitForExistence(timeout: 5))
         let confirmed = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value CONTAINS %@", "iCloudを確認中。この端末で確認済みの集中時間の質量："),
@@ -74,7 +74,7 @@ final class CloudVerificationPresentationUITests: XCTestCase {
         XCTAssertTrue(progress.waitForExistence(timeout: 5))
         XCTAssertTrue(progress.label.contains("時間の核"), progress.label)
         saveScreenshot("restamp-after")
-        let jar = app.buttons["瓶"]
+        let jar = app.descendants(matching: .any)["瓶"]
         dismissBreak()
         let verified = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value CONTAINS %@", "記録した集中時間の質量："), object: jar)
@@ -83,7 +83,7 @@ final class CloudVerificationPresentationUITests: XCTestCase {
 
     func testAX5PendingHomeStaysReadable() {
         launch(verification: "pending", accessibility5: true)
-        let jar = app.buttons["瓶"]
+        let jar = app.descendants(matching: .any)["瓶"]
         XCTAssertTrue(jar.waitForExistence(timeout: 8))
         saveScreenshot("pending-home-ax5")
     }
@@ -95,10 +95,14 @@ final class CloudVerificationPresentationUITests: XCTestCase {
     }
 
     private func completeDemoFocus() {
-        app.buttons["home.duration-picker"].tap()
-        let demo = app.buttons["12秒、DEMO"]
-        XCTAssertTrue(demo.waitForExistence(timeout: 4))
-        demo.tap()
+        // The menu can still be animating in when the first tap lands.
+        for _ in 0..<3 where !demoLauncher.exists {
+            app.buttons["home.duration-picker"].tap()
+            let demo = app.buttons["12秒、DEMO"]
+            XCTAssertTrue(demo.waitForExistence(timeout: 4))
+            demo.tap()
+            _ = demoLauncher.waitForExistence(timeout: 3)
+        }
         XCTAssertTrue(demoLauncher.waitForExistence(timeout: 5))
         demoLauncher.tap()
         let stop = app.buttons["focus.completion-alert.stop"]

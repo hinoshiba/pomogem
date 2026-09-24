@@ -2368,6 +2368,9 @@ struct HomeView: View {
                 .padding(.vertical, 5)
                 .background(PomoGemTheme.card.opacity(0.72), in: Capsule())
         }
+        // sync-03: the frozen lower-bound receipt (shown on every card while
+        // iCloud is checked) has no bar to stretch the box; keep its width.
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
         .background(

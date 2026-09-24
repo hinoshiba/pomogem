@@ -102,6 +102,7 @@ enum LaunchTimerStatusPolicy {
 /// host doing anything.
 struct LaunchTimerStatusCard: View {
     let status: LaunchTimerStatus
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -113,7 +114,12 @@ struct LaunchTimerStatusCard: View {
 
     private func card(_ status: LaunchTimerStatus, now: Date) -> some View {
         let remaining = status.remainingSeconds(at: now)
-        return HStack(alignment: .center, spacing: 14) {
+        // At accessibility sizes the icon sits above the text so the time
+        // keeps the card's full width instead of wrapping beside the icon.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 14))
+        return layout {
             Image(systemName: symbol(status))
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(PomoGemTheme.amber)
@@ -136,7 +142,7 @@ struct LaunchTimerStatusCard: View {
                 }
             }
             .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)

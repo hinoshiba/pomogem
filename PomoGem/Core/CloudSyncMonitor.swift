@@ -963,18 +963,20 @@ struct CloudSyncSettingsSection: View {
             .accessibilityIdentifier("settings.icloud.export-failing")
         case nil:
             if let lastExport = state.lastExportSuccess {
-                TimelineView(.periodic(from: .now, by: 30)) { context in
-                    Label {
+                // The Label is the row itself (a List drops the icon of a
+                // Label nested in a TimelineView); only the text ticks.
+                Label {
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
                         Text(CloudKitMirroringCopy.lastExport(Self.relative(lastExport, now: context.date)))
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
-                    } icon: {
-                        Image(systemName: "arrow.up.icloud")
-                            .foregroundStyle(PomoGemTheme.amber)
                     }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier("settings.icloud.last-export")
+                } icon: {
+                    Image(systemName: "arrow.up.icloud")
+                        .foregroundStyle(PomoGemTheme.amber)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("settings.icloud.last-export")
             }
         }
     }
