@@ -591,7 +591,7 @@ private extension StorageSnapshotScalarConvertible { static var storageOptional:
             Field<StudySession>("startAt", \.startAt),
             Field<StudySession>("endAt", \.endAt),
             Field<StudySession>("seconds", \.seconds),
-            Field<StudySession>("source", \.source),
+            Field<StudySession>("source", \.persistedSource),
             Field<StudySession>("pebbleKind", \.pebbleKind),
             Field<StudySession>("grams", \.grams),
             Field<StudySession>("deviceDayKey", \.deviceDayKey),

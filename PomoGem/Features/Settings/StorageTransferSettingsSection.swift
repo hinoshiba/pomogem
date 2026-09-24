@@ -74,11 +74,21 @@ final class StorageTransferController {
             do {
                 try await operation(choice)
             } catch {
-                self?.error = error.localizedDescription
+                self?.error = Self.failureMessage(for: error)
                 self?.isStarting = false
             }
             self?.task = nil
         }
+    }
+
+    /// Shown alone under 「iCloudと保存先」. The shared timer check describes
+    /// the timer, not the switch it stopped, so its message is restated to
+    /// say what did not happen. Other errors keep their own message.
+    static func failureMessage(for error: Error) -> String {
+        guard (error as? FocusCloudSyncError) == .timerHistoryRequiresMaintenance else {
+            return error.localizedDescription
+        }
+        return "タイマーの履歴を確認できなかったため、保存先を切り替えられませんでした。少し時間をおいてから、もう一度お試しください。解決しない場合は、設定のサポートからお問い合わせください。"
     }
 
     /// Only an acknowledged direction reaches this method. The policy is passed
@@ -100,7 +110,7 @@ final class StorageTransferController {
             do {
                 try await datasetOperation(direction)
             } catch {
-                self?.error = error.localizedDescription
+                self?.error = Self.failureMessage(for: error)
                 self?.isStarting = false
             }
             self?.task = nil

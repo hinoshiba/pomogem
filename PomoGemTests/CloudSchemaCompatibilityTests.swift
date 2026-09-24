@@ -1,3 +1,4 @@
+import SQLite3
 import SwiftData
 import XCTest
 @testable import PomoGem
@@ -45,5 +46,188 @@ final class CloudSchemaCompatibilityTests: XCTestCase {
                 XCTAssertEqual(inverse.inverseName, relationship.name, label)
             }
         }
+    }
+
+    // MARK: - Devices still running 1.0.2
+
+    /// What the shipped 1.0.2 build (tag v1.0.2-build9) decodes, copied
+    /// verbatim rather than derived from today's enums. CloudKit delivers every
+    /// synced value to those devices; an unknown `StudySession.source` raw value
+    /// makes SwiftData call `fatalError` there on every launch.
+    private enum Shipped102 {
+        enum SessionSource: String, CaseIterable { case timer, manual, timerDemoted }
+        static let pebbleKinds: Set<String> = ["normal", "gold", "prism"]
+        static let achievementKinds: Set<String> = ["perfectScore", "examPass", "workMilestone"]
+        static let focusStatuses: Set<String> = [
+            "running", "paused", "completionPending", "completed", "cancelled"
+        ]
+        static let maximumFocusPayloadVersion = 2
+    }
+
+    func testPersistableSourceValuesAreFrozenToWhatVersion102Decodes() {
+        XCTAssertEqual(
+            SessionSource.legacyPersistableRawValues,
+            Set(Shipped102.SessionSource.allCases.map(\.rawValue))
+        )
+    }
+
+    func testEverySourceClassificationPersistsAVersion102Value() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        for source in SessionSource.allCases {
+            XCTAssertTrue(
+                SessionSource.legacyPersistableRawValues.contains(source.persistedEncoding.rawValue),
+                "\(source) must be stored as a value 1.0.2 can decode"
+            )
+            let session = StudySession(
+                startAt: start, endAt: start.addingTimeInterval(7_200),
+                seconds: shape(for: source), source: source, deviceDayKey: "day"
+            )
+            XCTAssertNotNil(
+                Shipped102.SessionSource(rawValue: session.persistedSource.rawValue),
+                "\(source)"
+            )
+            session.persistedSource = source
+            XCTAssertNotNil(Shipped102.SessionSource(rawValue: session.persistedSource.rawValue))
+            XCTAssertEqual(session.effectiveSource, source, "\(source) must round-trip in memory")
+        }
+    }
+
+    func testOtherSyncedValuesKeepTheirVersion102Encoding() {
+        XCTAssertTrue(Set(PebbleKind.allCases.map(\.rawValue)).isSubset(of: Shipped102.pebbleKinds))
+        XCTAssertTrue(Set(AchievementKind.allCases.map(\.rawValue)).isSubset(of: Shipped102.achievementKinds))
+        XCTAssertTrue(Set(SyncedFocusStatus.allCases.map(\.rawValue)).isSubset(of: Shipped102.focusStatuses))
+        // 1.0.2 rejects a newer payload version as invalid and quarantines it.
+        XCTAssertLessThanOrEqual(FocusCloudPayload.currentVersion, Shipped102.maximumFocusPayloadVersion)
+    }
+
+    func testScreenTimeSignatureNeverCollidesWithAManualEntry() {
+        for duration in ManualDuration.allCases {
+            XCTAssertFalse(SessionSource.hasScreenTimeSignature(
+                seconds: duration.seconds, grams: duration.grams
+            ), "\(duration)")
+        }
+        let start = Date.now.addingTimeInterval(-1_200)
+        // 1.0.2 applies exactly this `.manual` rule, so it hides the stored
+        // Screen Time row instead of trapping on it or counting it as manual.
+        XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(
+            startAt: start, endAt: start.addingTimeInterval(600),
+            seconds: SessionSource.screenTimeSeconds, source: .manual,
+            grams: SessionSource.screenTimeGrams
+        ))
+        let session = StudySession(
+            startAt: start, endAt: start.addingTimeInterval(600),
+            seconds: SessionSource.screenTimeSeconds, source: .screenTime,
+            deviceDayKey: "day"
+        )
+        XCTAssertEqual(session.persistedSource, .manual)
+        XCTAssertEqual(session.effectiveSource, .screenTime)
+        XCTAssertTrue(StudySessionIntegrityPolicy.isSupported(session))
+        // A timer that happened to last ten minutes is never reclassified.
+        let timer = StudySession(
+            startAt: start, endAt: start.addingTimeInterval(600),
+            seconds: 600, source: .timer, deviceDayKey: "day"
+        )
+        XCTAssertEqual(timer.effectiveSource, .timer)
+    }
+
+    /// Reads the SQLite column the way any reader of the store would, so the
+    /// assertion covers every writer (import, initializer, snapshot restore)
+    /// rather than one Swift accessor.
+    func testStoreOnDiskOnlyEverHoldsSourceValuesVersion102CanDecode() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CloudSchemaCompatibility-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("compat.store")
+        // The shipping schema, so the storage-transfer snapshot can read it too.
+        let schema = PersistenceStoreTopology.shippingSchema
+        let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(
+            "CloudSchemaCompatibility", schema: schema, url: url, cloudKitDatabase: .none
+        )])
+
+        let now = Date.now
+        let receipt = ScreenTimeLearningImport(
+            id: UUID(), themeID: nil, startedAt: now.addingTimeInterval(-1_200),
+            endedAt: now, contextKey: "local", dataEpochID: nil
+        )
+        _ = try ScreenTimeImportCoordinator.insert(
+            [receipt], container: container, contextKey: "local", dataEpochID: nil
+        )
+        let context = ModelContext(container)
+        for source in SessionSource.allCases {
+            context.insert(StudySession(
+                startAt: now.addingTimeInterval(-7_200), endAt: now,
+                seconds: shape(for: source), source: source, deviceDayKey: "day"
+            ))
+        }
+        // The shape a pre-release 1.1.0 build left behind, recorded while such
+        // builds ran (2026-09-20 12:00 JST).
+        let preReleaseEnd = Date(timeIntervalSince1970: 1_789_873_200)
+        let legacy = StudySession(
+            startAt: preReleaseEnd.addingTimeInterval(-1_200), endAt: preReleaseEnd,
+            seconds: 600, source: .manual, deviceDayKey: "day"
+        )
+        legacy.overwriteStoredSourceForTesting(.screenTime)
+        context.insert(legacy)
+        try context.save()
+
+        let before = try storedSourceValues(at: url)
+        XCTAssertEqual(before.count, SessionSource.allCases.count + 2)
+        XCTAssertEqual(before.filter { $0 == "screenTime" }.count, 1, "The harness must see a bad value")
+
+        let rewritten = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncoding(
+            container: container
+        )
+        XCTAssertEqual(rewritten, 1)
+        let after = try storedSourceValues(at: url)
+        XCTAssertEqual(after.count, before.count)
+        for raw in after {
+            XCTAssertNotNil(Shipped102.SessionSource(rawValue: raw), raw)
+        }
+        let reread = try ModelContext(container).fetch(FetchDescriptor<StudySession>())
+        XCTAssertEqual(reread.filter { $0.effectiveSource == .screenTime }.count, 3)
+        XCTAssertFalse(reread.contains(where: \.hasLegacySourceEncoding))
+        let rewrittenAgain = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncoding(
+            container: container
+        )
+        XCTAssertEqual(rewrittenAgain, 0, "A second pass must find nothing left to rewrite")
+
+        // A store-to-store copy restores the same encoding it captured.
+        let snapshot = try PomoGemStorageSnapshot.capture(from: ModelContext(container))
+        let sessionSources = snapshot.records
+            .filter { $0.entity == "StudySession" }
+            .compactMap { $0.fields["source"] }
+        XCTAssertEqual(sessionSources.count, after.count)
+        for value in sessionSources {
+            guard case let .string(raw) = value else { return XCTFail("\(value)") }
+            XCTAssertNotNil(Shipped102.SessionSource(rawValue: raw), raw)
+        }
+    }
+
+    /// A realistic duration per source: a manual entry is a `ManualDuration`,
+    /// never the Screen Time chunk that the stored `.manual` signature denotes.
+    private func shape(for source: SessionSource) -> Int {
+        source == .manual ? ManualDuration.thirtyMinutes.seconds : SessionSource.screenTimeSeconds
+    }
+
+    private func storedSourceValues(at url: URL) throws -> [String] {
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            sqlite3_close(database)
+            throw CocoaError(.fileReadUnknown)
+        }
+        defer { sqlite3_close(database) }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(
+            database, "SELECT ZSOURCE FROM ZSTUDYSESSION", -1, &statement, nil
+        ) == SQLITE_OK else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        defer { sqlite3_finalize(statement) }
+        var values: [String] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            values.append(sqlite3_column_text(statement, 0).map { String(cString: $0) } ?? "<null>")
+        }
+        return values
     }
 }
