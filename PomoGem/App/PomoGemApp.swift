@@ -175,6 +175,14 @@ enum LocalPreviewLaunchPolicy {
     static let rareRewardOnboardingUITestEnvironmentKey = "POMOGEM_UI_TEST_RARE_REWARD_ONBOARDING"
     /// Seeds this many deleted themes (tombstones) next to the fixture theme.
     static let deletedThemeHistoryUITestEnvironmentKey = "POMOGEM_UI_TEST_DELETED_THEMES"
+    /// Seeds the synced daily-reminder switch as ON, as another iPhone or an
+    /// earlier install would have left it, without touching this device's
+    /// notification permission.
+    static let syncedReminderIntentUITestEnvironmentKey = "POMOGEM_UI_TEST_SYNCED_REMINDER_ON"
+    /// Reads this iPhone's notification permission as never asked until the
+    /// app asks in this process, as on a new or reinstalled iPhone. A
+    /// simulator keeps its answer across UI tests and one cannot reset it.
+    static let unaskedNotificationPermissionUITestEnvironmentKey = "POMOGEM_UI_TEST_NOTIFICATIONS_UNASKED"
 #else
     // Keep the policy API available to ordinary production code while making
     // the test protocol and its environment tokens absent from Release output.
@@ -186,6 +194,8 @@ enum LocalPreviewLaunchPolicy {
     static let unselectedRareRewardUITestEnvironmentKey = ""
     static let rareRewardOnboardingUITestEnvironmentKey = ""
     static let deletedThemeHistoryUITestEnvironmentKey = ""
+    static let syncedReminderIntentUITestEnvironmentKey = ""
+    static let unaskedNotificationPermissionUITestEnvironmentKey = ""
 #endif
 
     static func isEnabled(
@@ -571,9 +581,11 @@ private struct PomoGemPersistenceLaunchHost: View {
     /// is re-checked and sync resumes.
     private static let defaultOfflineMessage = "タイマーや記録を利用できます。接続回復後に同期を再開します。"
     @State private var networkPath = CloudNetworkPathObserver()
-    @State private var focusReturnReminderTask: Task<Void, Never>?
-    @State private var focusReturnReminderGeneration: UInt64 = 0
-    @State private var focusReturnReminderBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+    /// This host survives background CloudKit container retirement, so the
+    /// return reminder's background window lives here, not in a focus view.
+    @State private var focusReturnReminderWindow = FocusReturnReminderLockWindow(
+        dependencies: .live
+    )
     @State private var containerLifetimes =
         PersistenceContainerLifetimeTracker<ModelContainer>()
     @State private var suspendedAccountBinding = AccountScopedLocalState
@@ -3248,10 +3260,10 @@ private struct PomoGemPersistenceLaunchHost: View {
             expire: endsLaunchActivationWait
         )
         guard !requiresStorageTransferRelaunch else {
-            NotificationManager.shared.cancelFocusReturnReminder()
+            focusReturnReminderWindow.cancel()
             return
         }
-        handleFocusReturnReminderScenePhase(phase)
+        focusReturnReminderWindow.handle(phase)
         let action = PersistenceLaunchScenePolicy.action(
             phase: phase,
             hasSession: session != nil,
@@ -3350,51 +3362,6 @@ private struct PomoGemPersistenceLaunchHost: View {
                 networkIsOffline: networkPath.isOffline)
         } catch {
             return .retireSession
-        }
-    }
-
-    /// This host survives background CloudKit container retirement. Reserve the
-    /// notification only at background, never for a permission sheet or
-    /// Control Center's temporary inactive state.
-    private func handleFocusReturnReminderScenePhase(_ phase: ScenePhase) {
-        endFocusReturnReminderBackgroundTask()
-        focusReturnReminderGeneration &+= 1
-        let generation = focusReturnReminderGeneration
-        focusReturnReminderTask?.cancel()
-        focusReturnReminderTask = nil
-        let manager = NotificationManager.shared
-        manager.cancelFocusReturnReminder()
-        guard phase == .background else { return }
-
-        // Keep execution only for the short Notification Center add, not
-        // for the 30-second grace period; the OS owns the delivery timer.
-        focusReturnReminderBackgroundTask = UIApplication.shared.beginBackgroundTask(
-            withName: "Schedule focus return reminder"
-        ) {
-            // A later phase already ended the previous background task.
-            guard generation == focusReturnReminderGeneration else { return }
-            focusReturnReminderTask?.cancel()
-            manager.cancelFocusReturnReminder()
-            endFocusReturnReminderBackgroundTask()
-        }
-        focusReturnReminderTask = Task { @MainActor in
-            defer {
-                if generation == focusReturnReminderGeneration {
-                    endFocusReturnReminderBackgroundTask()
-                }
-            }
-            guard !Task.isCancelled,
-                  generation == focusReturnReminderGeneration,
-                  scenePhase == .background else { return }
-            _ = try? await manager.scheduleRegisteredFocusReturnReminder()
-        }
-    }
-
-    private func endFocusReturnReminderBackgroundTask() {
-        let identifier = focusReturnReminderBackgroundTask
-        focusReturnReminderBackgroundTask = .invalid
-        if identifier != .invalid {
-            UIApplication.shared.endBackgroundTask(identifier)
         }
     }
 

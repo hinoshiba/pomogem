@@ -76,6 +76,7 @@
 		3B2D2923DBE000CA5D039A12 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 87A60A0D028B5457B8700CAF /* PrivacyInfo.xcprivacy */; };
 		3BF58B86FFA5863BFA36E46F /* StorageTransferSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9E630CC67F2B7AA44EC1740 /* StorageTransferSettingsSection.swift */; };
 		3D86CF9AAD0B75173E802096 /* FusionHierarchyPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2870FE2BF0209900A742B4C9 /* FusionHierarchyPresentationTests.swift */; };
+		3DF5FEDB26E02A74A8710500 /* FocusReturnReminderLockWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E3F46D9A68E7D74313DC720 /* FocusReturnReminderLockWindowTests.swift */; };
 		402D47F4D51A614035C8EA62 /* ShareActivityItemSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0922D0F864E131F54F7ECD29 /* ShareActivityItemSource.swift */; };
 		4056D870DB9DC84E0C032274 /* Jar.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 9A534586E1B58A5EB017BFEA /* Jar.xcstrings */; };
 		40A0452D3F88178D8765D82B /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0DB3E232484AC671632F8E7 /* Haptics.swift */; };
@@ -111,6 +112,7 @@
 		58B222E8475DA89303C3E339 /* StorageTransferBindingMismatchRefutationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ADD0283627FA63899DACAF3 /* StorageTransferBindingMismatchRefutationTests.swift */; };
 		59DA99795FF1C520795B4B50 /* PomodoroSecondPrecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8C8330300DB90728071EEB1 /* PomodoroSecondPrecisionTests.swift */; };
 		5AF52B7DF2C3A1C79561F1DA /* ScreenTimeMonitoring.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C9226A5C565CEEA15D7DA2C /* ScreenTimeMonitoring.swift */; };
+		5B0DE10ABFF656730C7580C9 /* FocusReturnReminderLockWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7E7D04E121BBF82B6577655 /* FocusReturnReminderLockWindow.swift */; };
 		5CA6B00BA26DECF78BFBF6C9 /* StorageTransferStoreFilesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DC88D84ADDBABCA34AF2AE3 /* StorageTransferStoreFilesTests.swift */; };
 		5D2FA6D5E83E23F68E15D4E6 /* ScreenTimeSettingsUITestFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A78F4AF55E67F22420886C69 /* ScreenTimeSettingsUITestFixture.swift */; };
 		5D55850C5F604998FC880591 /* CustomDurationEditingStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AE5C2F0BA5111841B70C41A /* CustomDurationEditingStateTests.swift */; };
@@ -440,6 +442,7 @@
 		2D26D449B8AEC9D324182BF9 /* StorageTransferCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferCleanupTests.swift; sourceTree = "<group>"; };
 		2DD50E345F510C6D928E8D62 /* CloudDataDeletionGuidanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDataDeletionGuidanceView.swift; sourceTree = "<group>"; };
 		2DDAE8A3E08C0FB57CB0FBE1 /* FortyYearPersistenceHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FortyYearPersistenceHarness.swift; sourceTree = "<group>"; };
+		2E3F46D9A68E7D74313DC720 /* FocusReturnReminderLockWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusReturnReminderLockWindowTests.swift; sourceTree = "<group>"; };
 		301B5DB2A2FAC88DC5015AF4 /* BreakTimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreakTimerView.swift; sourceTree = "<group>"; };
 		304682ED2010B4AFADAD2F75 /* StorageTransferRemoteRecoveryCloudKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferRemoteRecoveryCloudKit.swift; sourceTree = "<group>"; };
 		309EEEAE86F7DA78EA6C5841 /* StorageTransferCloudScopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferCloudScopeTests.swift; sourceTree = "<group>"; };
@@ -643,6 +646,7 @@
 		D58C3C1A3A761BDD16883051 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		D5DA97C297B2465DCA37429F /* SeedData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeedData.swift; sourceTree = "<group>"; };
 		D63C72D98EEA33AEBE1AD0DE /* RealDeviceScreenTimeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealDeviceScreenTimeUITests.swift; sourceTree = "<group>"; };
+		D7E7D04E121BBF82B6577655 /* FocusReturnReminderLockWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusReturnReminderLockWindow.swift; sourceTree = "<group>"; };
 		D80F315027168B5F3C0DAD54 /* PersistenceStoreTopology.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceStoreTopology.swift; sourceTree = "<group>"; };
 		D818B9CBC387B5C7C74CE301 /* WidgetSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSnapshotStore.swift; sourceTree = "<group>"; };
 		D8424F4E1E7EEFCE3451BD8E /* Log.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Log.xcstrings; sourceTree = "<group>"; };
@@ -990,6 +994,7 @@
 				9DD41B95531C607AD6AEFA85 /* CloudSyncMonitor.swift */,
 				7EFB20CEF01CE01A6FC6CBB9 /* Constants.swift */,
 				1A889309BC037B43F7C5906A /* FairnessPolicy.swift */,
+				D7E7D04E121BBF82B6577655 /* FocusReturnReminderLockWindow.swift */,
 				F5F337E4E147E9E6B47EEAA3 /* GachaEngine.swift */,
 				4213EFBA64EE041E199C469F /* LaunchActivationWatchdogPolicy.swift */,
 				F8018C65F844DB234D0AAC3E /* NotificationManager.swift */,
@@ -1059,6 +1064,7 @@
 				CD8419B499B862EA354F8CAA /* FocusActivityRetirementTests.swift */,
 				9C1A3EC45EA14A6C5E689533 /* FocusCloudSyncTests.swift */,
 				08A32F2347209B1E24B76281 /* FocusPersistenceTests.swift */,
+				2E3F46D9A68E7D74313DC720 /* FocusReturnReminderLockWindowTests.swift */,
 				91B5D3DADE9BB942B8D5A6E7 /* FortyYearDebugScenarioTests.swift */,
 				D0843F72D5D9544A2DC84ADA /* FortyYearPersistenceHarnessTests.swift */,
 				2870FE2BF0209900A742B4C9 /* FusionHierarchyPresentationTests.swift */,
@@ -1577,6 +1583,7 @@
 				1C672705C528E9BDA90A68A2 /* FocusActivityManager.swift in Sources */,
 				ECC0CC7314E35D33520215A1 /* FocusCloudSync.swift in Sources */,
 				C4208C5EDC386BA7697E0AD5 /* FocusPersistence.swift in Sources */,
+				5B0DE10ABFF656730C7580C9 /* FocusReturnReminderLockWindow.swift in Sources */,
 				85AE65A5717313B412A5A472 /* FocusView.swift in Sources */,
 				0720DDB7D513CB10C736C318 /* FortyYearDebugScenario.swift in Sources */,
 				A7435362437D268E3A0FACA2 /* FortyYearPersistenceHarness.swift in Sources */,
@@ -1707,6 +1714,7 @@
 				8657DFB4713C3196CA43AE0C /* FocusActivityRetirementTests.swift in Sources */,
 				BB4684F22CCCFCD20ADAA7FC /* FocusCloudSyncTests.swift in Sources */,
 				F63D0E1393564892B0F5C3AA /* FocusPersistenceTests.swift in Sources */,
+				3DF5FEDB26E02A74A8710500 /* FocusReturnReminderLockWindowTests.swift in Sources */,
 				0323372A629D0A491406B8DC /* FocusSystemLocalizationTests.swift in Sources */,
 				E105F7B8C90D3B25DBF3B861 /* FortyYearDebugScenarioTests.swift in Sources */,
 				D27F15FBC1CE684AF29DDABA /* FortyYearPersistenceHarnessTests.swift in Sources */,

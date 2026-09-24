@@ -363,6 +363,7 @@ struct RootView: View {
     @State private var bootstrapError: String?
     @State private var bootstrapAttempt = 0
     @State private var lastPassiveNotificationErrorFingerprint: String?
+    @State private var lastPassiveReminderActivity: PassiveReminderActivity?
     @State private var dismissedCloudFocusOfferID: UUID?
     @State private var didReportCloudFocusIntegrityIssue = false
     @State private var isReconcilingActivityData = false
@@ -788,6 +789,23 @@ struct RootView: View {
             // sorts the full lifetime table merely to detect a change.
             enqueueSessionDependentVerification()
             viewTasks.start { await reconcileIncomingActivityData() }
+            // A completion or a hand-added gem answers today's reminder.
+            refreshPassiveNotificationsIfActivityChanged()
+        }
+        .onChange(of: router.focusPresentationIsActive) { _, isActive in
+            // Home records a new focus before it opens one. A recovered focus
+            // answers today only if it began today: one that finished
+            // overnight and is committed this morning belongs to last night.
+            if isActive, let recovered = router.recoveredFocus {
+                PassiveReminderActivityReader.recordRecoveredFocus(
+                    engine: recovered.engine,
+                    pendingCompletion: recovered.pendingCompletion
+                )
+            }
+            // Opening re-reads the day the focus answers, so the reminder
+            // cannot ring over it on the lock screen; closing re-reads
+            // whether a record was saved.
+            refreshPassiveNotificationsIfActivityChanged()
         }
         .onChange(of: activityAuxiliaryFingerprint) { _, _ in
             guard isFirstFramePresented, !isDataDeletionQuiesced else { return }
@@ -1065,6 +1083,21 @@ struct RootView: View {
                 $0.rareRewardModeUpdatedAt = changedAt
             }
         }
+
+#if DEBUG
+        if ProcessInfo.processInfo.environment[
+            LocalPreviewLaunchPolicy.syncedReminderIntentUITestEnvironmentKey
+        ] == "1",
+           resolvedPreferences?.reminderEnabled != true {
+            try PrefsConsumerPolicy.mutate(
+                .reminderEnabled,
+                context: modelContext,
+                markers: resetSnapshots
+            ) {
+                $0.reminderEnabled = true
+            }
+        }
+#endif
 
         var descriptor = FetchDescriptor<Subject>(
             sortBy: [SortDescriptor(\Subject.sortOrder)]
@@ -2170,11 +2203,14 @@ struct RootView: View {
         wrappedNotifications = false
         if granted {
             do {
+                let activity = currentPassiveReminderActivity()
+                lastPassiveReminderActivity = activity
                 try await NotificationManager.shared.synchronizePassiveNotifications(
                     dailyReminderEnabled: true,
                     wrappedEnabled: false,
                     hour: Constants.Notification.defaultReminderHour,
-                    minute: Constants.Notification.defaultReminderMinute
+                    minute: Constants.Notification.defaultReminderMinute,
+                    activity: activity
                 )
                 guard !Task.isCancelled else { return }
                 lastPassiveNotificationErrorFingerprint = nil
@@ -2735,6 +2771,24 @@ struct RootView: View {
         router.recoveredBreak = recovery
     }
 
+    /// Opening or closing a focus, or a new record, can answer today's
+    /// reminder or give last month its jar. Re-book only when that changes;
+    /// launch and foreground returns always refresh.
+    @MainActor
+    private func refreshPassiveNotificationsIfActivityChanged() {
+        guard isFirstFramePresented, !isDataDeletionQuiesced else { return }
+        guard currentPassiveReminderActivity() != lastPassiveReminderActivity else { return }
+        viewTasks.start { await refreshPassiveNotifications() }
+    }
+
+    @MainActor
+    private func currentPassiveReminderActivity() -> PassiveReminderActivity {
+        PassiveReminderActivityReader.read(
+            context: modelContext,
+            markers: resetSnapshots
+        )
+    }
+
     @MainActor
     private func refreshPassiveNotifications() async {
         guard !Task.isCancelled else { return }
@@ -2747,13 +2801,19 @@ struct RootView: View {
                     from: resetSnapshots
                 )
             )
+            let activity = currentPassiveReminderActivity()
+            lastPassiveReminderActivity = activity
             schedulingStarted = true
+            // The synced switch is passed as the person's intent. The manager
+            // books nothing while this iPhone lacks notification permission,
+            // and nothing here rewrites the intent for the other devices.
             try await NotificationManager.shared.synchronizePassiveNotifications(
                 dailyReminderEnabled: prefs.reminderEnabled,
                 wrappedEnabled: wrappedNotifications,
                 hour: prefs.reminderHour,
                 minute: prefs.reminderMinute,
-                playsSound: prefs.soundOn
+                playsSound: prefs.soundOn,
+                activity: activity
             )
             guard !Task.isCancelled else { return }
             lastPassiveNotificationErrorFingerprint = nil
