@@ -74,7 +74,11 @@ final class JarSnapshotter {
         }
 
         scene.camera?.position = scene.cameraRestPosition
+        // Settled stars and alpha-blended light: the capture is deterministic
+        // and survives the transparent texture → PNG round trip.
+        let restoreLighting = scene.prepareForSnapshot()
         defer {
+            restoreLighting()
             scene.camera?.position = originalCameraPosition ?? scene.cameraRestPosition
             visibility.forEach { $0.node.isHidden = $0.wasHidden }
         }

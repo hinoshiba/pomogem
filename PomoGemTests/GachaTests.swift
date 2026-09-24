@@ -714,17 +714,32 @@ final class GachaTests: XCTestCase {
             rareRewardMode: .standard
         )
         let originalGlow = pebble.glowWidth
+        let originalHalo = pebble.gemHaloAlpha
         let originalFill = pebble.fillColor
         let originalStroke = pebble.strokeColor
         let originalMark = try XCTUnwrap(pebble.childNode(withName: "achievement.mark"))
         let originalBackdrop = try XCTUnwrap(
             pebble.childNode(withName: "achievement.markBackdrop")
         )
+        let loose = PebbleNode(
+            descriptor: PebbleDescriptor(
+                subjectName: "資格",
+                colorHex: Constants.Color.science,
+                source: .timer,
+                kind: .normal,
+                grams: Constants.Mass.measuredPebbleGrams
+            ),
+            reduceMotion: false
+        )
 
         pebble.setRareRewardMode(.quiet)
 
         XCTAssertEqual(pebble.rareRewardMode, .quiet)
-        XCTAssertEqual(originalGlow, descriptor.radius * 0.36, accuracy: 0.001)
+        // v1.2: the jewel glows through its copper-tinted halo sprite, which
+        // is stronger than a loose gem's and never changes with the mode.
+        XCTAssertEqual(originalGlow, 0, accuracy: 0.001)
+        XCTAssertGreaterThan(originalHalo, loose.gemHaloAlpha)
+        XCTAssertEqual(pebble.gemHaloAlpha, originalHalo, accuracy: 0.001)
         XCTAssertEqual(pebble.glowWidth, originalGlow, accuracy: 0.001)
         XCTAssertTrue(pebble.fillColor.isEqual(originalFill))
         XCTAssertTrue(pebble.strokeColor.isEqual(originalStroke))
@@ -781,31 +796,20 @@ final class GachaTests: XCTestCase {
             reduceMotion: true,
             rareRewardMode: .standard
         )
-        let aura = try XCTUnwrap(
-            pebble.childNode(withName: "aggregate.aura") as? SKShapeNode
-        )
-        let baseGlow = descriptor.radius * AggregatePresentation.glowScale(
-            level: metadata.level,
-            containsRare: false
-        )
-        let enhancedGlow = descriptor.radius * AggregatePresentation.glowScale(
-            level: metadata.level,
-            containsRare: true
-        )
-
-        XCTAssertGreaterThan(baseGlow, 0)
-        XCTAssertGreaterThan(enhancedGlow, baseGlow)
-        XCTAssertEqual(pebble.glowWidth, enhancedGlow, accuracy: 0.001)
-        XCTAssertEqual(aura.glowWidth, enhancedGlow, accuracy: 0.001)
+        // v1.2: the earned bloom is the halo sprite inside `aggregate.aura`
+        // (no glowWidth neon rim). Rare enhancement may brighten it; quiet
+        // and off return to the deterministic, gram-derived base glow.
+        XCTAssertNotNil(pebble.childNode(withName: "aggregate.aura/gem.halo"))
+        XCTAssertEqual(pebble.glowWidth, 0, accuracy: 0.001)
+        let enhancedHalo = pebble.gemHaloAlpha
 
         pebble.setRareRewardMode(.quiet)
-        XCTAssertEqual(pebble.glowWidth, baseGlow, accuracy: 0.001)
-        XCTAssertEqual(aura.glowWidth, baseGlow, accuracy: 0.001)
-        XCTAssertGreaterThan(pebble.glowWidth, 0, "The earned aggregate keeps its base glow")
+        let baseHalo = pebble.gemHaloAlpha
+        XCTAssertGreaterThan(baseHalo, 0, "The earned aggregate keeps its base glow")
+        XCTAssertGreaterThan(enhancedHalo, baseHalo)
 
         pebble.setRareRewardMode(.off)
-        XCTAssertEqual(pebble.glowWidth, baseGlow, accuracy: 0.001)
-        XCTAssertEqual(aura.glowWidth, baseGlow, accuracy: 0.001)
+        XCTAssertEqual(pebble.gemHaloAlpha, baseHalo, accuracy: 0.001)
     }
 
     @MainActor

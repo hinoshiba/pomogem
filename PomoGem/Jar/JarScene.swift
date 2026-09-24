@@ -224,19 +224,36 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private let backGlassNode = SKShapeNode()
     private let mouthDepthNode = SKShapeNode()
     private let glassNode = SKShapeNode()
-    private let baseRefractionNode = SKShapeNode()
-    private let baseCausticNode = SKShapeNode()
-    private let lensShadeNode = SKShapeNode()
     private let reducedMotionHighlightNode = SKShapeNode()
-    private let specularNode = SKShapeNode()
-    private let warmReflectionNode = SKShapeNode()
     private let rimNode = SKShapeNode()
     private let innerRimNode = SKShapeNode()
     private let tapCausticNode = SKShapeNode()
-    /// Second contour that reads as the thickness of the glass wall.
-    private let innerWallNode = SKShapeNode()
+    /// Glass v2: moving additive highlights (reflection bands, shoulder
+    /// light) over the pre-rendered front glass; ±6 pt with tilt.
+    private let glassHighlightNode = SKSpriteNode()
+    /// Copper neck collar: three pre-rendered tilt states (−1, 0, +1) of
+    /// which at most two are visible at once.
+    private let collarNode = SKNode()
+    private let collarCenterNode = SKSpriteNode()
+    private let collarLeftNode = SKSpriteNode()
+    private let collarRightNode = SKSpriteNode()
+    /// Long-term milestone traces engraved on the collar (0…6), mirrored
+    /// from the Home presence state. Presentation only.
+    var milestoneTraceCount = 0 {
+        didSet {
+            let clamped = min(max(milestoneTraceCount, 0), 6)
+            if clamped != milestoneTraceCount { milestoneTraceCount = clamped; return }
+            if oldValue != milestoneTraceCount { rebuildCollar() }
+        }
+    }
     /// Warm pool of light on the jar floor; shared halo texture, additive.
-    private let floorGlowNode = SKSpriteNode(texture: GemArtwork.haloTexture)
+    private let floorGlowNode = SKSpriteNode(texture: GemArtwork.poolTexture)
+    /// One sprite of light that the whole pile casts into the lower jar
+    /// (weighted pile colour mixed 50:50 with #FF9E6B, additive).
+    private let pileGlowNode = SKSpriteNode(texture: GemArtwork.poolTexture)
+    private var pileGlowBaseAlpha: CGFloat = 0
+    private var lastPileLightRefresh: TimeInterval = -.greatestFiniteMagnitude
+    private var reduceTransparency = UIAccessibility.isReduceTransparencyEnabled
     private let wallNode = SKNode()
     private let floorNode = SKNode()
     private let cameraNode = SKCameraNode()
@@ -261,8 +278,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var lastSpawnUptime = -Double.greatestFiniteMagnitude
     private var idleSampleStartedAt: TimeInterval?
     private var lastTwinkleUptime = ProcessInfo.processInfo.systemUptime
-    private var lastGemTwinkleUptime: TimeInterval = 0
+    private var lastGemTwinkleUptime: TimeInterval = -.greatestFiniteMagnitude
+    private var lastGemTwinkleCheck: TimeInterval = -.greatestFiniteMagnitude
     private var gemTwinkleSequence: UInt64 = 0
+    private var eventLightCount = 0
     private var lastTapBounceUptime = -Double.greatestFiniteMagnitude
     private(set) var lastAcceptedTapSelection: JarAcceptedTapSelection?
     private var lastShakeUptime = -Double.greatestFiniteMagnitude
@@ -554,6 +573,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     var isInteractionMotionActive: Bool { interactionMotionWindow != nil }
     var snapshotRect: CGRect { outerJarRect }
 
+    /// Share of the interior height left free between the highest body and
+    /// the mouth (worst-case capacity reviews; presentation only).
+    var pileHeadroomFraction: CGFloat {
+        let interior = interiorRect
+        let top = livePebbles.map { $0.position.y + $0.radius }.max() ?? interior.minY
+        return max(0, (interior.maxY - top) / max(interior.height, 1))
+    }
+
     init(
         size: CGSize = CGSize(
             width: Constants.Jar.defaultSceneWidth,
@@ -571,7 +598,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         appliedGravityVector = Constants.Jar.gravityVector
         physicsWorld.contactDelegate = self
         installSceneGraph()
-        observeReduceMotion()
+        observeAccessibilitySettings()
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -584,7 +611,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         appliedGravityVector = Constants.Jar.gravityVector
         physicsWorld.contactDelegate = self
         installSceneGraph()
-        observeReduceMotion()
+        observeAccessibilitySettings()
     }
 
     deinit {
@@ -1615,12 +1642,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             ? CGFloat.zero
             : min(max(horizontal / Constants.Jar.tiltGravityHorizontalScale, -1), 1)
         opticalTiltFraction = fraction
-        specularNode.position.x = fraction * 4
+        glassHighlightNode.position.x = outerJarRect.midX + fraction * 6
         backGlassNode.position.x = fraction * -1.6
-        baseRefractionNode.position.x = fraction * 0.8
-        lensShadeNode.position.x = fraction * -1.1
         mouthDepthNode.position.x = fraction * -0.55
         innerRimNode.position.x = fraction * 0.35
+        updateCollarTilt(fraction)
         livePebbles.forEach { $0.updatePresentationLighting(horizontal: fraction) }
     }
 
@@ -1666,6 +1692,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         publishPhysicalContentChangeIfNeeded()
         updateRareTwinkles()
         updateGemTwinkles(now: currentTime)
+        if abs(currentTime - lastPileLightRefresh) >= 0.5 {
+            lastPileLightRefresh = currentTime
+            refreshPileLight()
+        }
         updateIdlePause(
             currentTime: currentTime,
             uptime: ProcessInfo.processInfo.systemUptime
@@ -1781,34 +1811,41 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         wallNode.name = "jar.walls"
         floorNode.name = "jar.floor"
         glassNode.name = "jar.glass.front"
-        baseRefractionNode.name = "jar.glass.base"
-        baseCausticNode.name = "jar.glass.baseCaustic"
-        lensShadeNode.name = "jar.glass.lensShade"
+        glassHighlightNode.name = "jar.glass.highlights"
         reducedMotionHighlightNode.name = "jar.reducedMotion.highlight"
-        specularNode.name = "jar.glass.specular"
-        warmReflectionNode.name = "jar.glass.warmReflection"
         rimNode.name = "jar.glass.rim"
         innerRimNode.name = "jar.glass.innerRim"
         tapCausticNode.name = "jar.tap.caustic"
-        innerWallNode.name = "jar.glass.innerWall"
         floorGlowNode.name = "jar.floorGlow"
+        pileGlowNode.name = "jar.pileGlow"
+        collarNode.name = "jar.collar"
+        collarCenterNode.name = "jar.collar.center"
+        collarLeftNode.name = "jar.collar.left"
+        collarRightNode.name = "jar.collar.right"
+        // Glass v2 is three pre-rendered layers (back, front, moving
+        // highlights) plus the mouth rim; the former thin stroke nodes
+        // (specular, warm reflection, lens shade, base arcs) are gone.
         worldNode.addChild(jarShadowNode)
         worldNode.addChild(backGlassNode)
         worldNode.addChild(mouthDepthNode)
         worldNode.addChild(wallNode)
         worldNode.addChild(floorNode)
         worldNode.addChild(glassNode)
-        worldNode.addChild(baseRefractionNode)
-        worldNode.addChild(baseCausticNode)
-        worldNode.addChild(lensShadeNode)
+        worldNode.addChild(glassHighlightNode)
         worldNode.addChild(reducedMotionHighlightNode)
-        worldNode.addChild(specularNode)
-        worldNode.addChild(warmReflectionNode)
+        worldNode.addChild(collarNode)
+        collarNode.addChild(collarLeftNode)
+        collarNode.addChild(collarCenterNode)
+        collarNode.addChild(collarRightNode)
         worldNode.addChild(rimNode)
         worldNode.addChild(innerRimNode)
         worldNode.addChild(tapCausticNode)
-        worldNode.addChild(innerWallNode)
         worldNode.addChild(floorGlowNode)
+        worldNode.addChild(pileGlowNode)
+        pileGlowNode.blendMode = .add
+        pileGlowNode.colorBlendFactor = 1
+        pileGlowNode.alpha = 0
+        pileGlowNode.zPosition = JarZPosition.strata + 0.6
 
         cameraNode.position = cameraRestPosition
         addChild(cameraNode)
@@ -1816,15 +1853,19 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         rebuildGeometry()
     }
 
-    private func observeReduceMotion() {
+    private func observeAccessibilitySettings() {
         reduceTransparencyObserver = NotificationCenter.default.addObserver(
             forName: UIAccessibility.reduceTransparencyStatusDidChangeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                guard let self else { return }
                 let enabled = UIAccessibility.isReduceTransparencyEnabled
-                self?.allPebbleNodes.forEach { $0.setReduceTransparency(enabled) }
+                self.reduceTransparency = enabled
+                self.allPebbleNodes.forEach { $0.setReduceTransparency(enabled) }
+                self.floorGlowNode.alpha = enabled ? 0.12 : 0.28
+                self.refreshPileLight()
             }
         }
         reduceMotionObserver = NotificationCenter.default.addObserver(
@@ -1855,16 +1896,23 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             ),
             transform: nil
         )
-        jarShadowNode.fillColor = UIColor.black.withAlphaComponent(0.42)
+        // A light contact shadow only: the floor under the jar is lit by the
+        // pile (SwiftUI stage), not a dark shelf.
+        jarShadowNode.fillColor = UIColor.black.withAlphaComponent(0.20)
         jarShadowNode.strokeColor = .clear
-        jarShadowNode.glowWidth = 18
+        jarShadowNode.glowWidth = 10
         jarShadowNode.zPosition = JarZPosition.background - 2
 
+        // Glass v2: back and front are pre-rendered per jar size (cached),
+        // so the bottle is a handful of textured draws instead of a dozen
+        // hairline strokes.
+        let glassTextures = Self.glassTextures(for: outer.size, neckInset: neckInset)
         backGlassNode.path = jarPath
-        backGlassNode.fillColor = JarPalette.backGlass
-        backGlassNode.strokeColor = JarPalette.deepGlassEdge
-        backGlassNode.lineWidth = 2.4
-        backGlassNode.glowWidth = 0.8
+        backGlassNode.fillColor = .white
+        backGlassNode.fillTexture = glassTextures.back
+        backGlassNode.strokeColor = .clear
+        backGlassNode.lineWidth = 0
+        backGlassNode.glowWidth = 0
         backGlassNode.zPosition = JarZPosition.background
 
         let mouthRect = CGRect(
@@ -1875,78 +1923,25 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
         mouthDepthNode.path = CGPath(ellipseIn: mouthRect, transform: nil)
         mouthDepthNode.fillColor = JarPalette.mouthDepth
-        mouthDepthNode.strokeColor = JarPalette.specular.withAlphaComponent(0.36)
-        mouthDepthNode.lineWidth = 2.2
-        mouthDepthNode.glowWidth = 1.0
+        mouthDepthNode.strokeColor = JarPalette.specular.withAlphaComponent(0.30)
+        mouthDepthNode.lineWidth = 1.6
+        mouthDepthNode.glowWidth = 0
         mouthDepthNode.zPosition = JarZPosition.background + 0.6
 
         glassNode.path = jarPath
         glassNode.fillColor = .white
-        glassNode.fillTexture = Self.glassTexture(for: outer.size)
-        // Keep the silhouette legible without letting a uniform blue halo win
-        // over the mouth depth, base refraction, and asymmetric lens shading.
-        // This is especially important against Dawn's brighter background.
-        glassNode.strokeColor = JarPalette.glassEdge.withAlphaComponent(0.52)
-        glassNode.lineWidth = 1.6
-        glassNode.glowWidth = 0.22
+        glassNode.fillTexture = glassTextures.front
+        // The silhouette is carried by the thick-glass rims in the texture.
+        glassNode.strokeColor = .clear
+        glassNode.lineWidth = 0
+        glassNode.glowWidth = 0
         glassNode.zPosition = JarZPosition.glass
 
-        let frontBaseArc = CGMutablePath()
-        frontBaseArc.move(
-            to: CGPoint(
-                x: outer.minX + Constants.Jar.cornerRadius * 0.55,
-                y: outer.minY + 12
-            )
-        )
-        frontBaseArc.addQuadCurve(
-            to: CGPoint(
-                x: outer.maxX - Constants.Jar.cornerRadius * 0.55,
-                y: outer.minY + 12
-            ),
-            control: CGPoint(x: outer.midX, y: outer.minY + 1.5)
-        )
-        baseRefractionNode.path = frontBaseArc
-        baseRefractionNode.fillColor = .clear
-        baseRefractionNode.strokeColor = JarPalette.glassEdge.withAlphaComponent(0.34)
-        baseRefractionNode.lineWidth = 1.25
-        baseRefractionNode.zPosition = JarZPosition.glass + 0.2
-
-        baseCausticNode.path = CGPath(
-            ellipseIn: CGRect(
-                x: outer.midX - outer.width * 0.22,
-                y: outer.minY + 5,
-                width: outer.width * 0.44,
-                height: 17
-            ),
-            transform: nil
-        )
-        baseCausticNode.fillColor = JarPalette.warmSpecular.withAlphaComponent(0.07)
-        baseCausticNode.strokeColor = .clear
-        baseCausticNode.lineWidth = 0
-        baseCausticNode.glowWidth = 0
-        baseCausticNode.zPosition = JarZPosition.glass + 0.32
-
-        let lensShade = CGMutablePath()
-        lensShade.move(to: CGPoint(x: outer.minX + 8, y: outer.minY + 38))
-        lensShade.addCurve(
-            to: CGPoint(x: outer.minX + neckInset + 7, y: outer.maxY - 15),
-            control1: CGPoint(x: outer.minX + 4, y: outer.midY),
-            control2: CGPoint(x: outer.minX + 11, y: outer.maxY - 58)
-        )
-        lensShade.move(to: CGPoint(x: outer.maxX - 8, y: outer.minY + 38))
-        lensShade.addCurve(
-            to: CGPoint(x: outer.maxX - neckInset - 7, y: outer.maxY - 15),
-            control1: CGPoint(x: outer.maxX - 4, y: outer.midY),
-            control2: CGPoint(x: outer.maxX - 11, y: outer.maxY - 58)
-        )
-        lensShadeNode.path = lensShade
-        lensShadeNode.fillColor = .clear
-        lensShadeNode.strokeColor = JarPalette.lensShade
-        lensShadeNode.lineWidth = 14
-        lensShadeNode.lineCap = .round
-        lensShadeNode.glowWidth = 3.5
-        lensShadeNode.alpha = 0.54
-        lensShadeNode.zPosition = JarZPosition.glass + 0.42
+        glassHighlightNode.texture = glassTextures.highlights
+        glassHighlightNode.size = outer.size
+        glassHighlightNode.position = CGPoint(x: outer.midX + opticalTiltFraction * 6, y: outer.midY)
+        glassHighlightNode.blendMode = .add
+        glassHighlightNode.zPosition = JarZPosition.glass + 0.4
 
         reducedMotionHighlightNode.path = jarPath
         reducedMotionHighlightNode.fillColor = UIColor.white.withAlphaComponent(0.11)
@@ -1960,44 +1955,6 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         reducedMotionHighlightNode.zPosition = JarZPosition.glass + 0.72
 
-        let highlights = CGMutablePath()
-        highlights.move(to: CGPoint(x: outer.maxX - neckInset - 12, y: outer.maxY - 18))
-        highlights.addCurve(
-            to: CGPoint(x: outer.maxX - 13, y: outer.maxY - outer.height * 0.28),
-            control1: CGPoint(x: outer.maxX - 14, y: outer.maxY - 54),
-            control2: CGPoint(x: outer.maxX - 12, y: outer.maxY - outer.height * 0.18)
-        )
-        specularNode.path = highlights
-        specularNode.fillColor = .clear
-        specularNode.strokeColor = JarPalette.specular
-        specularNode.lineWidth = 2.4
-        specularNode.lineCap = .round
-        specularNode.glowWidth = 1.8
-        specularNode.alpha = 0.82
-        specularNode.zPosition = JarZPosition.glass + 1
-
-        let warmReflection = CGMutablePath()
-        warmReflection.move(to: CGPoint(x: outer.minX + 15, y: outer.maxY - 48))
-        warmReflection.addCurve(
-            to: CGPoint(x: outer.minX + 11, y: outer.maxY - outer.height * 0.34),
-            control1: CGPoint(x: outer.minX + 7, y: outer.maxY - 104),
-            control2: CGPoint(x: outer.minX + 9, y: outer.maxY - outer.height * 0.24)
-        )
-        warmReflection.move(to: CGPoint(x: outer.midX - outer.width * 0.08, y: outer.maxY - 2))
-        warmReflection.addCurve(
-            to: CGPoint(x: outer.minX + neckInset + 9, y: outer.maxY - 9),
-            control1: CGPoint(x: outer.midX - outer.width * 0.26, y: outer.maxY + 1),
-            control2: CGPoint(x: outer.minX + neckInset + 4, y: outer.maxY - 2)
-        )
-        warmReflectionNode.path = warmReflection
-        warmReflectionNode.fillColor = .clear
-        warmReflectionNode.strokeColor = JarPalette.warmSpecular
-        warmReflectionNode.lineWidth = 2.0
-        warmReflectionNode.lineCap = .round
-        warmReflectionNode.glowWidth = 2.0
-        warmReflectionNode.alpha = 0.86
-        warmReflectionNode.zPosition = JarZPosition.glass + 1.05
-
         rimNode.path = CGPath(
             ellipseIn: CGRect(
                 x: outer.minX + neckInset - 2,
@@ -2008,9 +1965,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             transform: nil
         )
         rimNode.fillColor = JarPalette.mouthDepth.withAlphaComponent(0.42)
-        rimNode.strokeColor = JarPalette.specular.withAlphaComponent(0.62)
-        rimNode.lineWidth = 2.05
-        rimNode.glowWidth = 0.65
+        rimNode.strokeColor = JarPalette.specular.withAlphaComponent(0.70)
+        rimNode.lineWidth = 1.8
+        rimNode.glowWidth = 0
         rimNode.zPosition = JarZPosition.glass + 1.2
 
         innerRimNode.path = CGPath(
@@ -2018,7 +1975,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             transform: nil
         )
         innerRimNode.fillColor = .clear
-        innerRimNode.strokeColor = JarPalette.warmSpecular.withAlphaComponent(0.17)
+        innerRimNode.strokeColor = JarPalette.warmSpecular.withAlphaComponent(0.22)
         innerRimNode.lineWidth = 0.9
         innerRimNode.glowWidth = 0
         innerRimNode.zPosition = JarZPosition.glass + 1.35
@@ -2039,19 +1996,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         tapCausticNode.alpha = 0
         tapCausticNode.zPosition = JarZPosition.glass + 1.5
 
-        innerWallNode.path = makeJarPath(in: outer.insetBy(dx: 6, dy: 5))
-        innerWallNode.fillColor = .clear
-        innerWallNode.strokeColor = UIColor.white.withAlphaComponent(0.085)
-        innerWallNode.lineWidth = 1
-        innerWallNode.glowWidth = 0
-        innerWallNode.zPosition = JarZPosition.glass + 0.1
+        rebuildCollar()
 
         floorGlowNode.size = CGSize(width: outer.width * 0.98, height: 72)
         floorGlowNode.position = CGPoint(x: outer.midX, y: interiorRect.minY + 4)
         floorGlowNode.color = UIColor(red: 1, green: 0.62, blue: 0.42, alpha: 1)
         floorGlowNode.colorBlendFactor = 1
         floorGlowNode.blendMode = .add
-        floorGlowNode.alpha = 0.42
+        floorGlowNode.alpha = reduceTransparency ? 0.12 : 0.28
         floorGlowNode.zPosition = JarZPosition.strata + 0.5
 
         wallNode.removeAllChildren()
@@ -2104,6 +2056,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     private func makeJarPath(in rect: CGRect) -> CGPath {
+        Self.jarPath(in: rect, neckInset: neckInset)
+    }
+
+    private static func jarPath(in rect: CGRect, neckInset: CGFloat) -> CGPath {
         let path = CGMutablePath()
         let bottomRadius = min(Constants.Jar.cornerRadius * 1.30, rect.width * 0.12)
         let shoulderDepth = min(52, rect.height * 0.13)
@@ -2142,225 +2098,428 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         return path
     }
 
-    private static let glassTextureCache = NSCache<NSString, SKTexture>()
+    private struct GlassTextures {
+        let back: SKTexture
+        let front: SKTexture
+        let highlights: SKTexture
+    }
 
-    private static func glassTexture(for size: CGSize) -> SKTexture {
-        let pixelWidth = max(1, Int(size.width.rounded()))
-        let pixelHeight = max(1, Int(size.height.rounded()))
-        let key = NSString(string: "\(pixelWidth)x\(pixelHeight)")
-        if let cached = glassTextureCache.object(forKey: key) { return cached }
+    private static let glassTextureCache = NSCache<NSString, NSArray>()
 
-        let renderSize = CGSize(width: CGFloat(pixelWidth), height: CGFloat(pixelHeight))
+    /// Glass v2 (Docs/GemExperienceDesign.md §7.8), pre-rendered once per jar
+    /// size. Back: absorption tint and inner shadows. Front: 7 pt wall band,
+    /// warm left rim, cool right rim with a lower-right flare, a 14 pt base
+    /// lens with its caustic line, neck ridges and a faint outline.
+    /// Highlights (additive, moved ±6 pt with tilt): two vertical reflection
+    /// bands and the shoulder light. No SKEffectNode or CIFilter.
+    private static func glassTextures(for size: CGSize, neckInset: CGFloat) -> GlassTextures {
+        let width = max(1, size.width.rounded())
+        let height = max(1, size.height.rounded())
+        let key = NSString(string: "\(Int(width))x\(Int(height))-\(Int(neckInset.rounded()))")
+        if let cached = glassTextureCache.object(forKey: key) as? [SKTexture], cached.count == 3 {
+            return GlassTextures(back: cached[0], front: cached[1], highlights: cached[2])
+        }
+        let renderSize = CGSize(width: width, height: height)
+        // Jar path in y-down texture space.
+        var flip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: height)
+        let outline = jarPath(
+            in: CGRect(origin: .zero, size: renderSize),
+            neckInset: neckInset
+        ).copy(using: &flip) ?? CGPath(rect: CGRect(origin: .zero, size: renderSize), transform: nil)
+        let space = CGColorSpaceCreateDeviceRGB()
         let format = UIGraphicsImageRendererFormat.preferred()
         format.opaque = false
-        let image = UIGraphicsImageRenderer(size: renderSize, format: format).image { renderer in
-            let context = renderer.cgContext
-            let colorSpace = CGColorSpaceCreateDeviceRGB()
-            let horizontalColors = [
-                JarPalette.warmSpecular.withAlphaComponent(0.12).cgColor,
-                JarPalette.warmSpecular.withAlphaComponent(0.025).cgColor,
-                UIColor.clear.cgColor,
-                JarPalette.specular.withAlphaComponent(0.10).cgColor
-            ] as CFArray
-            if let gradient = CGGradient(
-                colorsSpace: colorSpace,
-                colors: horizontalColors,
-                locations: [0, 0.18, 0.72, 1]
-            ) {
-                context.drawLinearGradient(
-                    gradient,
-                    start: CGPoint(x: 0, y: renderSize.height * 0.45),
-                    end: CGPoint(x: renderSize.width, y: renderSize.height * 0.55),
-                    options: []
-                )
-            }
+        format.preferredRange = .standard
+        let renderer = UIGraphicsImageRenderer(size: renderSize, format: format)
+        let warm = JarPalette.color(hex: Constants.Color.auroraWarm)
+        let peach = JarPalette.color(hex: "#FFB38A")
+        let cool = JarPalette.color(hex: Constants.Color.auroraCool)
+        let blue = JarPalette.color(hex: Constants.Color.floorGlow)
+        let shoulderY = min(52, height * 0.13)
+        let neckHeight = min(16, height * 0.04)
 
-            let verticalColors = [
-                UIColor.white.withAlphaComponent(0.07).cgColor,
-                UIColor.clear.cgColor,
-                UIColor(red: 0.10, green: 0.22, blue: 0.40, alpha: 0.10).cgColor
-            ] as CFArray
-            if let gradient = CGGradient(
-                colorsSpace: colorSpace,
-                colors: verticalColors,
-                locations: [0, 0.50, 1]
-            ) {
-                context.drawLinearGradient(
-                    gradient,
-                    start: CGPoint(x: renderSize.width / 2, y: 0),
-                    end: CGPoint(x: renderSize.width / 2, y: renderSize.height),
-                    options: []
-                )
-            }
-
-            // A narrow key-light ribbon and a cooler opposite rim create the
-            // asymmetric highlights people read as thick, curved glass.
+        /// Soft inner glow along the silhouette: widening strokes clipped to
+        /// the interior, masked to one side by a horizontal gradient.
+        func innerRim(
+            _ context: CGContext,
+            colors: [UIColor],
+            alpha: CGFloat,
+            depth: CGFloat,
+            fromLeft: Bool
+        ) {
             context.saveGState()
-            context.setBlendMode(.screen)
-            let keyRibbon = [
+            context.addPath(outline)
+            context.clip()
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            let passes = 6
+            for pass in 0 ..< passes {
+                let t = CGFloat(pass) / CGFloat(passes - 1)
+                let color = colors[min(colors.count - 1, Int(t * CGFloat(colors.count - 1) + 0.5))]
+                context.setStrokeColor(color.withAlphaComponent(alpha * pow(1 - t, 1.6) * 0.55).cgColor)
+                context.setLineWidth(max(1, depth * 2 * (0.12 + t)))
+                context.addPath(outline)
+                context.strokePath()
+            }
+            // Side mask.
+            context.setBlendMode(.destinationIn)
+            let mask = [
+                UIColor(white: 1, alpha: 1).cgColor,
+                UIColor(white: 1, alpha: 0.35).cgColor,
+                UIColor(white: 1, alpha: 0).cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: mask, locations: [0, 0.30, 0.56]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: fromLeft ? 0 : width, y: 0),
+                    end: CGPoint(x: fromLeft ? width : 0, y: 0),
+                    options: []
+                )
+            }
+            context.endTransparencyLayer()
+            context.restoreGState()
+        }
+
+        let back = renderer.image { rendererContext in
+            let context = rendererContext.cgContext
+            context.addPath(outline)
+            context.clip()
+            context.setFillColor(JarPalette.color(hex: Constants.Color.glassAbsorption).withAlphaComponent(0.24).cgColor)
+            context.fill(CGRect(origin: .zero, size: renderSize))
+            // Inner shadow in the lower back corners and under the shoulders.
+            for center in [
+                CGPoint(x: 0, y: height), CGPoint(x: width, y: height),
+                CGPoint(x: width * 0.08, y: shoulderY + 10), CGPoint(x: width * 0.92, y: shoulderY + 10)
+            ] {
+                let shade = [
+                    UIColor(red: 0.01, green: 0.02, blue: 0.06, alpha: 0.30).cgColor,
+                    UIColor(red: 0.01, green: 0.02, blue: 0.06, alpha: 0).cgColor
+                ] as CFArray
+                if let gradient = CGGradient(colorsSpace: space, colors: shade, locations: [0, 1]) {
+                    context.drawRadialGradient(
+                        gradient,
+                        startCenter: center, startRadius: 0,
+                        endCenter: center, endRadius: width * 0.22,
+                        options: []
+                    )
+                }
+            }
+            // Faint back wall contour seen through the front.
+            context.setStrokeColor(JarPalette.color(hex: Constants.Color.auroraViolet).withAlphaComponent(0.16).cgColor)
+            context.setLineWidth(2)
+            context.addPath(outline)
+            context.strokePath()
+        }
+
+        let front = renderer.image { rendererContext in
+            let context = rendererContext.cgContext
+            context.saveGState()
+            context.addPath(outline)
+            context.clip()
+            // Very light body tint: a hint of warm left, cool right.
+            let body = [
+                warm.withAlphaComponent(0.05).cgColor,
                 UIColor.clear.cgColor,
-                JarPalette.warmSpecular.withAlphaComponent(0.14).cgColor,
-                JarPalette.warmSpecular.withAlphaComponent(0.030).cgColor,
+                cool.withAlphaComponent(0.05).cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: body, locations: [0, 0.5, 1]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: 0, y: height / 2),
+                    end: CGPoint(x: width, y: height / 2),
+                    options: []
+                )
+            }
+            // Wall thickness: a 7 pt cool band inside the silhouette.
+            context.setStrokeColor(cool.withAlphaComponent(0.18).cgColor)
+            context.setLineWidth(14)
+            context.addPath(outline)
+            context.strokePath()
+            context.setStrokeColor(UIColor.white.withAlphaComponent(0.10).cgColor)
+            context.setLineWidth(15.5)
+            context.addPath(outline)
+            context.replacePathWithStrokedPath()
+            context.setLineWidth(0.8)
+            context.strokePath()
+
+            // Base lens: 14 pt thick, a dark refraction band over a bright
+            // caustic line at the floor the gems rest on.
+            let lensTop = height - 14
+            let refraction = [
+                UIColor(red: 0.04, green: 0.06, blue: 0.16, alpha: 0).cgColor,
+                UIColor(red: 0.04, green: 0.06, blue: 0.16, alpha: 0.12).cgColor,
+                UIColor(red: 0.30, green: 0.40, blue: 0.62, alpha: 0.14).cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: refraction, locations: [0, 0.35, 1]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: 0, y: lensTop - 6),
+                    end: CGPoint(x: 0, y: height),
+                    options: []
+                )
+            }
+            let caustic = [
+                UIColor.clear.cgColor,
+                warm.withAlphaComponent(0.50).cgColor,
+                UIColor.white.withAlphaComponent(0.60).cgColor,
+                cool.withAlphaComponent(0.50).cgColor,
                 UIColor.clear.cgColor
             ] as CFArray
             if let gradient = CGGradient(
-                colorsSpace: colorSpace,
-                colors: keyRibbon,
-                locations: [0, 0.36, 0.58, 1]
+                colorsSpace: space,
+                colors: caustic,
+                locations: [0.04, 0.26, 0.5, 0.74, 0.96]
             ) {
-                context.drawLinearGradient(
+                for (y, thickness, alpha) in [(height - 10, CGFloat(1.2), CGFloat(1)), (height - 2.5, CGFloat(1), CGFloat(0.55))] {
+                    context.saveGState()
+                    context.setAlpha(alpha)
+                    context.clip(to: CGRect(x: 0, y: y - thickness / 2, width: width, height: thickness))
+                    context.drawLinearGradient(
+                        gradient,
+                        start: CGPoint(x: 0, y: y),
+                        end: CGPoint(x: width, y: y),
+                        options: []
+                    )
+                    context.restoreGState()
+                }
+            }
+
+            // Neck ridges just under the collar: two thin lit lines.
+            for offset in [CGFloat(3), 7] {
+                let y = neckHeight + offset
+                let ridge = CGMutablePath()
+                ridge.move(to: CGPoint(x: neckInset - 4, y: y))
+                ridge.addQuadCurve(
+                    to: CGPoint(x: width - neckInset + 4, y: y),
+                    control: CGPoint(x: width / 2, y: y + 3)
+                )
+                context.setStrokeColor(UIColor.white.withAlphaComponent(offset < 5 ? 0.22 : 0.12).cgColor)
+                context.setLineWidth(0.8)
+                context.addPath(ridge)
+                context.strokePath()
+            }
+            context.restoreGState()
+
+            // Warm left rim (coral → peach) and cool right rim (cyan → blue).
+            innerRim(context, colors: [warm, peach], alpha: 0.9, depth: 10, fromLeft: true)
+            innerRim(context, colors: [cool, blue], alpha: 0.8, depth: 10, fromLeft: false)
+
+            // Lower-right flare streak in the cool rim.
+            context.saveGState()
+            context.addPath(outline)
+            context.clip()
+            let flare = [
+                UIColor.white.withAlphaComponent(0.55).cgColor,
+                cool.withAlphaComponent(0.22).cgColor,
+                UIColor.clear.cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: flare, locations: [0, 0.35, 1]) {
+                context.translateBy(x: width - 4, y: height * 0.80)
+                context.scaleBy(x: 0.10, y: 1)
+                context.drawRadialGradient(
                     gradient,
-                    start: CGPoint(x: renderSize.width * 0.03, y: renderSize.height / 2),
-                    end: CGPoint(x: renderSize.width * 0.34, y: renderSize.height / 2),
-                    options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+                    startCenter: .zero, startRadius: 0,
+                    endCenter: .zero, endRadius: height * 0.16,
+                    options: []
                 )
             }
             context.restoreGState()
 
-            let bottomCaustic = [
-                UIColor(red: 0.32, green: 0.70, blue: 1, alpha: 0.12).cgColor,
-                UIColor(red: 0.24, green: 0.48, blue: 0.88, alpha: 0.025).cgColor,
-                UIColor.clear.cgColor
-            ] as CFArray
-            if let gradient = CGGradient(
-                colorsSpace: colorSpace,
-                colors: bottomCaustic,
-                locations: [0, 0.44, 1]
-            ) {
-                context.drawRadialGradient(
-                    gradient,
-                    startCenter: CGPoint(
-                        x: renderSize.width * 0.52,
-                        y: renderSize.height * 0.94
-                    ),
-                    startRadius: 1,
-                    endCenter: CGPoint(
-                        x: renderSize.width * 0.52,
-                        y: renderSize.height * 0.94
-                    ),
-                    endRadius: renderSize.width * 0.52,
-                    options: [.drawsAfterEndLocation]
-                )
-            }
+            // Faint outline so the silhouette stays legible on Dawn.
+            context.setStrokeColor(JarPalette.color(hex: Constants.Color.glassEdge).withAlphaComponent(0.32).cgColor)
+            context.setLineWidth(1)
+            context.addPath(outline)
+            context.strokePath()
+        }
 
-            // Thick-glass rim light: warm key on the left wall, cool fill on
-            // the right, each fading inward over the wall's optical thickness.
-            let rimDepth = min(20, renderSize.width * 0.06)
-            let warmRim = [
-                JarPalette.warmSpecular.withAlphaComponent(0.58).cgColor,
-                JarPalette.warmSpecular.withAlphaComponent(0.14).cgColor,
-                UIColor.clear.cgColor
-            ] as CFArray
-            if let gradient = CGGradient(
-                colorsSpace: colorSpace,
-                colors: warmRim,
-                locations: [0, 0.38, 1]
-            ) {
-                context.drawLinearGradient(
-                    gradient,
-                    start: CGPoint(x: 0, y: renderSize.height / 2),
-                    end: CGPoint(x: rimDepth, y: renderSize.height / 2),
-                    options: []
-                )
-            }
-            let coolRim = [
-                JarPalette.specular.withAlphaComponent(0.54).cgColor,
-                JarPalette.specular.withAlphaComponent(0.12).cgColor,
-                UIColor.clear.cgColor
-            ] as CFArray
-            if let gradient = CGGradient(
-                colorsSpace: colorSpace,
-                colors: coolRim,
-                locations: [0, 0.38, 1]
-            ) {
-                context.drawLinearGradient(
-                    gradient,
-                    start: CGPoint(x: renderSize.width, y: renderSize.height / 2),
-                    end: CGPoint(x: renderSize.width - rimDepth, y: renderSize.height / 2),
-                    options: []
-                )
-            }
-
-            // Two soft vertical reflections on the curved front wall,
-            // drawn as stretched radial falloffs so both ends fade out.
-            for (center, width, alpha) in [
-                (renderSize.width * 0.17, renderSize.width * 0.05, CGFloat(0.075)),
-                (renderSize.width * 0.80, renderSize.width * 0.03, CGFloat(0.05))
-            ] {
+        let highlights = renderer.image { rendererContext in
+            let context = rendererContext.cgContext
+            context.addPath(outline)
+            context.clip()
+            // Two soft vertical reflection bands (0.2 and 0.75 of the width).
+            for (center, bandWidth) in [(width * 0.20, width * 0.05), (width * 0.75, width * 0.03)] {
                 let band = [
-                    UIColor.white.withAlphaComponent(alpha).cgColor,
-                    UIColor.white.withAlphaComponent(alpha * 0.55).cgColor,
+                    UIColor.white.withAlphaComponent(0.08).cgColor,
+                    UIColor.white.withAlphaComponent(0.04).cgColor,
                     UIColor.clear.cgColor
                 ] as CFArray
-                guard let gradient = CGGradient(
-                    colorsSpace: colorSpace,
-                    colors: band,
-                    locations: [0, 0.6, 1]
-                ) else { continue }
+                guard let gradient = CGGradient(colorsSpace: space, colors: band, locations: [0, 0.6, 1]) else { continue }
                 context.saveGState()
-                context.translateBy(x: center, y: renderSize.height * 0.48)
-                context.scaleBy(x: 1, y: renderSize.height * 0.40 / max(width, 1))
+                context.translateBy(x: center, y: height * 0.52)
+                context.scaleBy(x: 1, y: height * 0.36 / max(bandWidth, 1))
                 context.drawRadialGradient(
                     gradient,
                     startCenter: .zero, startRadius: 0,
-                    endCenter: .zero, endRadius: width,
+                    endCenter: .zero, endRadius: bandWidth,
                     options: []
                 )
                 context.restoreGState()
             }
+            // Shoulder light (α0.7) on the right shoulder, a warmer one left.
+            for (fromLeft, color, alpha) in [(false, GemColor(cool).mixed(with: .white, amount: 0.5).withAlpha(1), CGFloat(0.7)), (true, peach, CGFloat(0.42))] {
+                let x0 = fromLeft ? neckInset * 0.55 : width - neckInset * 0.55
+                let arc = CGMutablePath()
+                arc.move(to: CGPoint(x: fromLeft ? neckInset - 2 : width - neckInset + 2, y: neckHeight + 4))
+                arc.addQuadCurve(
+                    to: CGPoint(x: fromLeft ? 6 : width - 6, y: shoulderY + 6),
+                    control: CGPoint(x: x0, y: neckHeight + 6)
+                )
+                context.setLineCap(.round)
+                for pass in 0 ..< 3 {
+                    context.setStrokeColor(color.withAlphaComponent(alpha * [0.22, 0.4, 1][pass]).cgColor)
+                    context.setLineWidth([7, 4, 1.6][pass])
+                    context.addPath(arc)
+                    context.strokePath()
+                }
+            }
+        }
 
-            // A thick base: bright caustic line just above the bottom edge,
-            // below the resting gems, over a darker lens band.
-            let baseTop = renderSize.height - min(6, renderSize.height * 0.015)
-            context.setFillColor(UIColor(red: 0.05, green: 0.08, blue: 0.20, alpha: 0.16).cgColor)
-            context.fill(CGRect(
-                x: 0,
-                y: baseTop,
-                width: renderSize.width,
-                height: renderSize.height - baseTop
-            ))
-            let caustic = [
-                UIColor.clear.cgColor,
-                JarPalette.warmSpecular.withAlphaComponent(0.55).cgColor,
-                UIColor.white.withAlphaComponent(0.62).cgColor,
-                JarPalette.specular.withAlphaComponent(0.50).cgColor,
-                UIColor.clear.cgColor
-            ] as CFArray
-            if let gradient = CGGradient(
-                colorsSpace: colorSpace,
-                colors: caustic,
-                locations: [0.04, 0.28, 0.5, 0.72, 0.96]
-            ) {
-                context.saveGState()
-                context.clip(to: CGRect(x: 0, y: baseTop - 1.4, width: renderSize.width, height: 1.4))
+        let textures = [back, front, highlights].map { image -> SKTexture in
+            let texture = SKTexture(image: image)
+            texture.filteringMode = .linear
+            return texture
+        }
+        glassTextureCache.setObject(textures as NSArray, forKey: key)
+        return GlassTextures(back: textures[0], front: textures[1], highlights: textures[2])
+    }
+
+    // MARK: Copper collar
+
+    private static let collarTextureCache = NSCache<NSString, SKTexture>()
+
+    /// Rose-gold band around the neck: base #B8735A, highlight #F2C4A8,
+    /// shade #5A2E22, vertical anisotropic highlight bands whose position
+    /// follows the tilt state, and up to six engraved milestone marks on the
+    /// lower edge. The mouth stays open.
+    private static func collarTexture(width: CGFloat, tilt: Int, marks: Int) -> SKTexture {
+        let key = NSString(string: "\(Int(width.rounded()))-\(tilt)-\(marks)")
+        if let cached = collarTextureCache.object(forKey: key) { return cached }
+        let height: CGFloat = 14
+        let size = CGSize(width: width, height: height + 3)
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.opaque = false
+        format.preferredRange = .standard
+        let base = JarPalette.color(hex: "#B8735A")
+        let highlight = JarPalette.color(hex: "#F2C4A8")
+        let shade = JarPalette.color(hex: "#5A2E22")
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { rendererContext in
+            let context = rendererContext.cgContext
+            let space = CGColorSpaceCreateDeviceRGB()
+            // Cylinder band: both edges bow toward the viewer.
+            let band = CGMutablePath()
+            band.move(to: CGPoint(x: 0, y: 1.5))
+            band.addQuadCurve(to: CGPoint(x: width, y: 1.5), control: CGPoint(x: width / 2, y: 3.2))
+            band.addLine(to: CGPoint(x: width, y: height - 1))
+            band.addQuadCurve(to: CGPoint(x: 0, y: height - 1), control: CGPoint(x: width / 2, y: height + 2.4))
+            band.closeSubpath()
+            context.saveGState()
+            context.addPath(band)
+            context.clip()
+            let vertical = [highlight.cgColor, base.cgColor, base.cgColor, shade.cgColor] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: vertical, locations: [0, 0.28, 0.62, 1]) {
                 context.drawLinearGradient(
                     gradient,
-                    start: CGPoint(x: 0, y: baseTop),
-                    end: CGPoint(x: renderSize.width, y: baseTop),
+                    start: CGPoint(x: 0, y: 0),
+                    end: CGPoint(x: 0, y: height + 2),
                     options: []
                 )
-                context.restoreGState()
             }
-
-            // Microscopic deterministic grain keeps large translucent areas
-            // from looking like a flat vector fill without requiring an asset.
-            context.setFillColor(UIColor.white.withAlphaComponent(0.018).cgColor)
-            for index in 0..<54 {
-                let x = CGFloat((index * 73 + 19) % 997) / 997 * renderSize.width
-                let y = CGFloat((index * 151 + 47) % 991) / 991 * renderSize.height
-                let diameter = index.isMultiple(of: 3) ? CGFloat(0.9) : CGFloat(0.55)
-                context.fillEllipse(in: CGRect(
-                    x: x,
-                    y: y,
-                    width: diameter,
-                    height: diameter
-                ))
+            // Horizontal shading: the band turns away at both ends.
+            let ends = [
+                shade.withAlphaComponent(0.55).cgColor,
+                UIColor.clear.cgColor,
+                UIColor.clear.cgColor,
+                shade.withAlphaComponent(0.65).cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: ends, locations: [0, 0.16, 0.84, 1]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: .zero,
+                    end: CGPoint(x: width, y: 0),
+                    options: []
+                )
             }
+            // Anisotropic highlight streaks; tilt slides them.
+            let shift = CGFloat(tilt) * 0.07
+            for (center, streakWidth, alpha) in [
+                (0.20 + shift, 0.07, CGFloat(0.75)),
+                (0.34 + shift, 0.025, CGFloat(0.45)),
+                (0.80 + shift, 0.05, CGFloat(0.55))
+            ] {
+                let streak = [
+                    UIColor.clear.cgColor,
+                    GemColor(highlight).mixed(with: .white, amount: 0.5).withAlpha(alpha).cgColor,
+                    UIColor.clear.cgColor
+                ] as CFArray
+                if let gradient = CGGradient(colorsSpace: space, colors: streak, locations: [0, 0.5, 1]) {
+                    context.drawLinearGradient(
+                        gradient,
+                        start: CGPoint(x: width * (center - streakWidth), y: 0),
+                        end: CGPoint(x: width * (center + streakWidth), y: 0),
+                        options: []
+                    )
+                }
+            }
+            // Engraved milestone marks on the lower edge.
+            if marks > 0 {
+                let spacing: CGFloat = 5
+                let start = width / 2 - spacing * CGFloat(marks - 1) / 2
+                for index in 0 ..< marks {
+                    let x = start + spacing * CGFloat(index)
+                    context.setStrokeColor(shade.withAlphaComponent(0.95).cgColor)
+                    context.setLineWidth(1)
+                    context.move(to: CGPoint(x: x, y: height - 5.5))
+                    context.addLine(to: CGPoint(x: x, y: height - 1.5))
+                    context.strokePath()
+                    context.setStrokeColor(highlight.withAlphaComponent(0.8).cgColor)
+                    context.setLineWidth(0.5)
+                    context.move(to: CGPoint(x: x + 0.8, y: height - 5.5))
+                    context.addLine(to: CGPoint(x: x + 0.8, y: height - 1.5))
+                    context.strokePath()
+                }
+            }
+            context.restoreGState()
+            // Bright lip and dark lower edge.
+            context.setStrokeColor(GemColor(highlight).mixed(with: .white, amount: 0.4).withAlpha(0.9).cgColor)
+            context.setLineWidth(0.8)
+            context.move(to: CGPoint(x: 1.5, y: 1.9))
+            context.addQuadCurve(to: CGPoint(x: width - 1.5, y: 1.9), control: CGPoint(x: width / 2, y: 3.6))
+            context.strokePath()
+            context.setStrokeColor(shade.withAlphaComponent(0.9).cgColor)
+            context.move(to: CGPoint(x: 1.5, y: height - 1))
+            context.addQuadCurve(to: CGPoint(x: width - 1.5, y: height - 1), control: CGPoint(x: width / 2, y: height + 2.2))
+            context.strokePath()
         }
         let texture = SKTexture(image: image)
         texture.filteringMode = .linear
-        glassTextureCache.setObject(texture, forKey: key)
+        collarTextureCache.setObject(texture, forKey: key)
         return texture
+    }
+
+    private func rebuildCollar() {
+        guard size.width > .zero, size.height > .zero else { return }
+        let outer = outerJarRect
+        let mouthWidth = outer.width - neckInset * 2
+        let width = mouthWidth + 8
+        let height: CGFloat = 17
+        collarNode.position = CGPoint(x: outer.midX, y: outer.maxY - 9.5)
+        collarNode.zPosition = JarZPosition.glass + 1.1
+        for (node, tilt) in [(collarLeftNode, -1), (collarCenterNode, 0), (collarRightNode, 1)] {
+            node.texture = Self.collarTexture(width: width, tilt: tilt, marks: milestoneTraceCount)
+            node.size = CGSize(width: width, height: height)
+        }
+        updateCollarTilt(opticalTiltFraction)
+    }
+
+    /// Crossfades the three pre-rendered collar states; never more than two
+    /// are drawn.
+    private func updateCollarTilt(_ fraction: CGFloat) {
+        let amount = min(abs(fraction), 1)
+        collarCenterNode.alpha = 1 - amount
+        collarLeftNode.alpha = fraction < 0 ? amount : 0
+        collarRightNode.alpha = fraction > 0 ? amount : 0
+        for node in [collarCenterNode, collarLeftNode, collarRightNode] {
+            node.isHidden = node.alpha <= 0.001
+        }
     }
 
     private func addStaticEdge(
@@ -2693,21 +2852,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 dy: Constants.Jar.aggregateBirthImpulse
             )
             worldNode.addChild(aggregateNode)
-            if reduceMotion {
-                aggregateNode.setScale(1)
-                aggregateNode.alpha = 1
-            } else {
-                aggregateNode.run(.group([
-                    .scale(to: 1, duration: Constants.Jar.aggregateFormationDuration * 0.55),
-                    .fadeIn(withDuration: Constants.Jar.aggregateFormationDuration * 0.55)
-                ]))
-                spawnSparks(
-                    at: aggregateNode.position,
-                    color: aggregateNode.subjectColor,
-                    mark: "✦"
-                )
-            }
+            presentFusionFinale(for: aggregateNode)
         }
+        refreshPileLight()
         publishPhysicalContentChangeIfNeeded()
         let persistenceHandler = activeBake.persistenceHandler
         self.activeBake = nil
@@ -2783,7 +2930,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // SpriteKit contact callback/frame even when one output has been disabled.
         soundSynth.playThud(impactSpeed: speed)
         haptics.playLanding(impactSpeed: speed)
-        spawnDust(at: point, color: pebble.subjectColor)
+        if pebble.gemRung != nil, !pebble.descriptor.isTutorial {
+            spawnLandingLight(at: point, pebble: pebble)
+        } else {
+            spawnDust(at: point, color: pebble.subjectColor)
+        }
         shakeCamera(impactSpeed: speed)
 
         switch presentationKind(for: pebble.descriptor) {
@@ -3082,14 +3233,18 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
     }
 
-    /// Picks at most one gem per interval, weighted by its glint count, with
-    /// a deterministic sequence hash (no randomness, no reward semantics).
-    /// Higher tiers own more glints and therefore sparkle more often.
+    /// Spontaneous flares while the scene is awake: at most three at once,
+    /// at least `gemTwinkleInterval` apart, and 2.5 s between flares of one
+    /// gem. The pick is a deterministic sequence hash weighted by glint count
+    /// (higher rungs own more glints); there is no randomness and no reward
+    /// meaning. Off with Reduce Motion, Low Power Mode and serious heat.
     private func updateGemTwinkles(now: TimeInterval) {
         guard !reduceMotion,
-              abs(now - lastGemTwinkleUptime) >= Constants.Jar.gemTwinkleInterval
+              Self.allowsAmbientSparkle,
+              abs(now - lastGemTwinkleCheck) >= 0.15
         else { return }
-        lastGemTwinkleUptime = now
+        lastGemTwinkleCheck = now
+        guard abs(now - lastGemTwinkleUptime) >= Constants.Jar.gemTwinkleInterval else { return }
         var candidates: [PebbleNode] = []
         var totalWeight = 0
         var activeCount = 0
@@ -3098,6 +3253,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 activeCount += 1
                 continue
             }
+            guard pebble.canGemTwinkle(at: now) else { continue }
             candidates.append(pebble)
             totalWeight += pebble.gemTwinkleWeight
         }
@@ -3113,10 +3269,207 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         for pebble in candidates {
             pick -= pebble.gemTwinkleWeight
             if pick < 0 {
-                pebble.playGemTwinkle(sequence: mixed >> 7)
+                pebble.playGemTwinkle(sequence: mixed >> 7, at: now)
+                lastGemTwinkleUptime = now
                 return
             }
         }
+    }
+
+    /// Ambient sparkle (flares, event particles) pauses in Low Power Mode and
+    /// when the device is hot; static light stays.
+    static var allowsAmbientSparkle: Bool {
+        let info = ProcessInfo.processInfo
+        return !info.isLowPowerModeEnabled
+            && info.thermalState.rawValue < ProcessInfo.ThermalState.serious.rawValue
+    }
+
+    /// Recomputes the light the pile casts into the lower jar and marks the
+    /// crystal holding the most grams. O(n), a few times a second while
+    /// awake and once when the jar settles.
+    private func refreshPileLight() {
+        var minX = CGFloat.greatestFiniteMagnitude
+        var maxX = -CGFloat.greatestFiniteMagnitude
+        var minY = CGFloat.greatestFiniteMagnitude
+        var maxY = -CGFloat.greatestFiniteMagnitude
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var weight: CGFloat = 0
+        var heaviest: PebbleNode?
+        var aggregates: [PebbleNode] = []
+        for pebble in livePebbles where !pebble.isRemovedForBake
+            && !pebble.descriptor.isScreenTimeObstacle
+            && !pebble.descriptor.isTutorial {
+            let r = pebble.radius
+            minX = min(minX, pebble.position.x - r)
+            maxX = max(maxX, pebble.position.x + r)
+            minY = min(minY, pebble.position.y - r)
+            maxY = max(maxY, pebble.position.y + r)
+            let tone = GemTone(hex: pebble.descriptor.colorHex, muted: !pebble.descriptor.isMeasured, glass: false).halo
+            let w = r * r
+            red += tone.red * w
+            green += tone.green * w
+            blue += tone.blue * w
+            weight += w
+            if pebble.descriptor.isAggregate {
+                aggregates.append(pebble)
+                if heaviest == nil || pebble.descriptor.grams > heaviest?.descriptor.grams ?? 0 {
+                    heaviest = pebble
+                }
+            }
+        }
+        aggregates.forEach { $0.setPileEmphasis($0 === heaviest) }
+        guard weight > 0 else {
+            pileGlowNode.alpha = 0
+            pileGlowBaseAlpha = 0
+            return
+        }
+        let mean = GemColor(red: red / weight, green: green / weight, blue: blue / weight)
+        // Warm-biased (60 % #FF9E6B) so a blue/violet pile still reads as
+        // lit rather than foggy.
+        pileGlowNode.color = mean.mixed(with: GemColor(hex: "#FF9E6B"), amount: 0.6).withAlpha(1)
+        let width = max(120, (maxX - minX) * 1.3)
+        let height = min(max(84, (maxY - minY) * 1.8), width * 0.75)
+        pileGlowNode.size = CGSize(width: width, height: height)
+        // Seated on the floor so the base lens catches the pile's light.
+        pileGlowNode.position = CGPoint(
+            x: (minX + maxX) / 2,
+            y: max((minY + maxY) / 2, currentFloorY + height * 0.22)
+        )
+        pileGlowBaseAlpha = 0.55 * (reduceTransparency ? 0.45 : 1)
+        if pileGlowNode.action(forKey: "jar.pileGlow.pulse") == nil {
+            pileGlowNode.alpha = pileGlowBaseAlpha
+        }
+    }
+
+    /// Landing light: 6–8 soft sparks from the shared glint texture, at most
+    /// `maximumEventLightSprites` alive at once, plus a brief pile-light
+    /// swell. Reduce Motion never spawns them.
+    private func spawnLandingLight(at point: CGPoint, pebble: PebbleNode) {
+        guard !reduceMotion, Self.allowsAmbientSparkle else { return }
+        pebble.playLandingPulse()
+        let tint = GemTone(hex: pebble.descriptor.colorHex, muted: !pebble.descriptor.isMeasured, glass: false)
+            .glintUIColor
+        let count = 6 + Int(pebble.descriptor.id.presentationHash % 3)
+        for index in 0 ..< count where eventLightCount < Constants.Jar.maximumEventLightSprites {
+            let spark = SKSpriteNode(
+                texture: index.isMultiple(of: 3) ? GemArtwork.glintTexture : GemArtwork.haloTexture,
+                size: CGSize(width: 7, height: 7)
+            )
+            spark.name = "drop.light"
+            spark.color = tint
+            spark.colorBlendFactor = 1
+            spark.blendMode = .add
+            spark.position = CGPoint(x: point.x, y: point.y + pebble.radius * 0.2)
+            spark.zPosition = JarZPosition.effect
+            worldNode.addChild(spark)
+            eventLightCount += 1
+            let angle = CGFloat.pi * (0.15 + 0.7 * CGFloat(index) / CGFloat(max(count - 1, 1)))
+            let distance = pebble.radius * (1.3 + CGFloat(index % 3) * 0.45)
+            let lifetime: TimeInterval = 0.52
+            let move = SKAction.moveBy(x: cos(angle) * distance, y: sin(angle) * distance, duration: lifetime)
+            move.timingMode = .easeOut
+            spark.run(.sequence([
+                .group([move, .fadeOut(withDuration: lifetime), .scale(to: 0.4, duration: lifetime)]),
+                .run { [weak self] in self?.eventLightCount -= 1 },
+                .removeFromParent()
+            ]))
+        }
+        guard pileGlowBaseAlpha > 0 else { return }
+        let swell = SKAction.sequence([
+            .fadeAlpha(to: min(1, pileGlowBaseAlpha * 1.12), duration: 0.12),
+            .fadeAlpha(to: pileGlowBaseAlpha, duration: 0.28)
+        ])
+        pileGlowNode.run(swell, withKey: "jar.pileGlow.pulse")
+    }
+
+    /// Fusion finale by rung: A0 only fades in (200 ms). A1+ adds a white
+    /// flash (2.2R, 160 ms), a shock ring (1R → 3R, 420 ms) and a spring
+    /// birth (0.6 → 1.08 → 1.0, 380 ms); A2+ adds twelve shards. Reduce
+    /// Motion shows a static ring for 600 ms and no motion on the stone.
+    private func presentFusionFinale(for node: PebbleNode) {
+        let tier = GemCutLadder.aggregateTier(grams: node.descriptor.grams)
+        let point = node.position
+        if reduceMotion {
+            node.setScale(1)
+            node.alpha = 1
+            guard tier >= 1 else { return }
+            let ring = makeFusionRing(at: point, radius: node.radius)
+            ring.setScale(2)
+            ring.alpha = 0.55
+            ring.run(.sequence([.wait(forDuration: 0.6), .removeFromParent()]))
+            return
+        }
+        guard tier >= 1, Self.allowsAmbientSparkle else {
+            node.setScale(1)
+            node.alpha = 0
+            node.run(.fadeIn(withDuration: 0.2))
+            return
+        }
+        node.alpha = 1
+        node.setScale(0.6)
+        let grow = SKAction.scale(to: 1.08, duration: 0.20)
+        grow.timingMode = .easeOut
+        let settle = SKAction.scale(to: 1, duration: 0.18)
+        settle.timingMode = .easeInEaseOut
+        node.run(.sequence([grow, settle]))
+
+        let flash = SKSpriteNode(
+            texture: GemArtwork.haloTexture,
+            size: CGSize(width: node.radius * 4.4, height: node.radius * 4.4)
+        )
+        flash.name = "drop.fusionFlash"
+        flash.color = .white
+        flash.colorBlendFactor = 1
+        flash.blendMode = .add
+        flash.position = point
+        flash.zPosition = JarZPosition.effect
+        worldNode.addChild(flash)
+        flash.run(.sequence([.fadeOut(withDuration: 0.16), .removeFromParent()]))
+
+        let ring = makeFusionRing(at: point, radius: node.radius)
+        let expand = SKAction.scale(to: 3, duration: 0.42)
+        expand.timingMode = .easeOut
+        ring.run(.sequence([.group([expand, .fadeOut(withDuration: 0.42)]), .removeFromParent()]))
+
+        guard tier >= 2 else { return }
+        let tint = GemTone(hex: node.descriptor.colorHex, muted: false, glass: false).glintUIColor
+        for index in 0 ..< 12 where eventLightCount < Constants.Jar.maximumEventLightSprites {
+            let shard = SKSpriteNode(texture: GemArtwork.glintTexture, size: CGSize(width: 8, height: 8))
+            shard.name = "drop.fusionShard"
+            shard.color = tint
+            shard.colorBlendFactor = 1
+            shard.blendMode = .add
+            shard.position = point
+            shard.zPosition = JarZPosition.effect
+            worldNode.addChild(shard)
+            eventLightCount += 1
+            let angle = CGFloat(index) / 12 * .pi * 2
+            let distance = node.radius * 2.6
+            let move = SKAction.moveBy(x: cos(angle) * distance, y: sin(angle) * distance, duration: 0.6)
+            move.timingMode = .easeOut
+            shard.run(.sequence([
+                .group([move, .fadeOut(withDuration: 0.6)]),
+                .run { [weak self] in self?.eventLightCount -= 1 },
+                .removeFromParent()
+            ]))
+        }
+    }
+
+    private func makeFusionRing(at point: CGPoint, radius: CGFloat) -> SKSpriteNode {
+        let ring = SKSpriteNode(
+            texture: GemArtwork.ringTexture,
+            size: CGSize(width: radius * 2, height: radius * 2)
+        )
+        ring.name = "drop.fusionRing"
+        ring.color = JarPalette.color(hex: "#FFE3B0")
+        ring.colorBlendFactor = 1
+        ring.blendMode = .add
+        ring.position = point
+        ring.zPosition = JarZPosition.effect
+        worldNode.addChild(ring)
+        return ring
     }
 
     private func updateRareTwinkles() {
@@ -3257,11 +3610,40 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             body.usesPreciseCollisionDetection = false
             body.isResting = true
         }
+        // Never freeze a half-lit flare: settle every star to its resting
+        // (or tilt-lit) value before the frame stops.
+        livePebbles.forEach {
+            $0.settleGemTwinkle()
+            $0.updatePresentationLighting(horizontal: opticalTiltFraction)
+        }
+        refreshPileLight()
         if !isIdlePaused {
             isIdlePaused = true
             onIdlePauseChanged?(true)
         }
         isPaused = true
+    }
+
+    /// Prepares a deterministic, transparent-safe frame for `JarSnapshotter`:
+    /// flares settle, and additive light is drawn as ordinary alpha blending
+    /// (additive colour over a clear texture would be lost or saturated when
+    /// the PNG is un-premultiplied). Returns the restore closure.
+    func prepareForSnapshot() -> () -> Void {
+        let pebbles = allPebbleNodes
+        pebbles.forEach {
+            $0.settleGemTwinkle()
+            $0.updatePresentationLighting(horizontal: 0)
+            $0.setSnapshotBlending(true)
+        }
+        let sceneLights = [floorGlowNode, pileGlowNode, glassHighlightNode]
+        sceneLights.forEach { $0.blendMode = .alpha }
+        return { [weak self] in
+            pebbles.forEach {
+                $0.setSnapshotBlending(false)
+                $0.updatePresentationLighting(horizontal: self?.opticalTiltFraction ?? 0)
+            }
+            sceneLights.forEach { $0.blendMode = .add }
+        }
     }
 
     private func resetIdleObservation() {

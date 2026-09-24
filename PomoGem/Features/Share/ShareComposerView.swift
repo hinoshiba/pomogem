@@ -3365,12 +3365,9 @@ private struct ShareSessionGem: View {
             let isMeasured = session.source.isMeasured
             let rung = isMeasured ? GemCutLadder.standard.loose : GemCutLadder.standard.selfReported
             let spec = GemArtworkSpec(
-                cut: rung.cut,
-                symmetry: rung.symmetry,
+                rung: rung,
                 colors: [GemColorShare(hex: session.colorHex, fraction: 1)],
                 variant: variant % GemArtworkSpec.variantCount,
-                facetContrast: rung.facetContrast,
-                sparkleCount: rung.sparkleCount,
                 isMuted: !isMeasured,
                 showsDashedRing: !isMeasured
             )
@@ -3625,20 +3622,15 @@ private struct ShareAggregatePebble: View {
         }
     }
 
+    /// Same rung (by contained grams) and colour shares as the jar.
     private func artworkSpec(variant: Int) -> GemArtworkSpec {
-        let rung = GemCutLadder.standard.rung(aggregateLevel: aggregate.level)
-        let mix = aggregate.colorMix
-            .filter { $0.fraction > 0 }
-            .sorted { $0.fraction > $1.fraction }
-            .prefix(4)
-            .map { GemColorShare(hex: $0.hex, fraction: $0.fraction) }
-        return GemArtworkSpec(
-            cut: rung.cut,
-            symmetry: rung.symmetry,
-            colors: mix.isEmpty ? [GemColorShare(hex: Constants.Color.textMute, fraction: 1)] : Array(mix),
+        GemArtworkSpec(
+            rung: GemCutLadder.standard.rung(aggregateGrams: aggregate.grams),
+            colors: GemArtworkSpec.aggregateColors(
+                aggregate.colorMix,
+                fallbackHex: Constants.Color.textMute
+            ),
             variant: variant % GemArtworkSpec.variantCount,
-            facetContrast: rung.facetContrast,
-            sparkleCount: rung.sparkleCount,
             isMuted: aggregate.manualPebbleCount > aggregate.measuredPebbleCount,
             showsDashedRing: aggregate.manualPebbleCount > 0
         )
