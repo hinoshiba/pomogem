@@ -8,8 +8,12 @@ struct AchievementDraft {
 
 /// 「成果を積む」: turns a milestone into a 0 g 記念石. The details step keeps
 /// 「この成果を積む」 pinned above the home indicator (and above the keyboard
-/// while the name is being typed), so the save is never below the fold.
+/// while the name is being typed), so the save is never below the fold. When
+/// the button is disabled because the name is too long, the reason sits in
+/// the same pinned bar.
 struct AchievementEntrySheet: View {
+    private static let noteFieldScrollID = "achievement.create.note-field"
+
     let subjects: [Subject]
     /// Returns nil once saved, otherwise the reason, shown beside the button.
     let onAdd: (Subject, AchievementDraft) -> String?
@@ -21,6 +25,7 @@ struct AchievementEntrySheet: View {
     @State private var achievedAt = Date.now
     @State private var isSubmitting = false
     @State private var errorMessage: String?
+    @State private var noteIsFocused = false
 
     init(
         initialSubject: Subject?,
@@ -40,6 +45,7 @@ struct AchievementEntrySheet: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { scrollProxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     if let selectedKind {
@@ -57,6 +63,20 @@ struct AchievementEntrySheet: View {
                 if let selectedKind {
                     saveBar(kind: selectedKind)
                 }
+            }
+            // On a small phone the keyboard leaves only a sliver above the
+            // pinned bar, and the system's own scroll counts a field that is
+            // half under the bar as visible. Bring the whole field above the
+            // bar once the keyboard is up, and again when the bar grows to
+            // explain an over-long name.
+            .onChange(of: noteIsFocused) { _, focused in
+                guard focused else { return }
+                revealNoteField(scrollProxy, after: .milliseconds(350))
+            }
+            .onChange(of: AchievementNotePolicy.isTooLong(note)) { _, _ in
+                guard noteIsFocused else { return }
+                revealNoteField(scrollProxy, after: .milliseconds(50))
+            }
             }
             .background(NightBackground())
             .navigationTitle(selectedKind == nil ? "成果を選ぶ" : "記念石にする")
@@ -150,8 +170,10 @@ struct AchievementEntrySheet: View {
                 title: "成果名（任意）",
                 placeholder: kind.notePlaceholder,
                 text: $note,
-                accessibilityIdentifier: "achievement.create.note"
+                accessibilityIdentifier: "achievement.create.note",
+                onFocusChange: { noteIsFocused = $0 }
             )
+            .id(Self.noteFieldScrollID)
 
             DatePicker(
                 "達成した日",
@@ -171,8 +193,21 @@ struct AchievementEntrySheet: View {
         }
     }
 
+    private func revealNoteField(_ scrollProxy: ScrollViewProxy, after delay: Duration) {
+        Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            guard noteIsFocused else { return }
+            withAnimation(.easeOut(duration: 0.2)) {
+                // nil: the least scroll that shows the whole field, so
+                // nothing moves on a phone where it is already clear.
+                scrollProxy.scrollTo(Self.noteFieldScrollID, anchor: nil)
+            }
+        }
+    }
+
     private func saveBar(kind: AchievementKind) -> some View {
         VStack(spacing: 8) {
+            AchievementNoteLimitMessage(text: note)
             if let errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)

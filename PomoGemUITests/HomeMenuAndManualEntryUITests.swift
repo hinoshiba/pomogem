@@ -257,6 +257,39 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertLessThan(hint.maxY, CGFloat(gemY) - gemRadius, "hint=\(hint) gem=(\(gemX), \(gemY))")
     }
 
+    func testOverLongAchievementNameExplainsTheDisabledSave() {
+        launch()
+        openMenuRow("成果を積む")
+        let examPass = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "試験合格")).firstMatch
+        XCTAssertTrue(examPass.waitForExistence(timeout: 4))
+        examPass.tap()
+        let field = app.textFields["achievement.create.note"]
+        XCTAssertTrue(field.waitForExistence(timeout: 4))
+        field.tap()
+        field.typeText(String(repeating: "A", count: 42))
+
+        // With the keyboard up, the pinned save bar is what stays in view,
+        // so the reason for the greyed-out button is there.
+        let message = app.descendants(matching: .any)
+            .matching(identifier: "achievement.note.limit-message").firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: 3))
+        XCTAssertTrue(message.label.contains("2文字超過"), "message=\(message.label)")
+        XCTAssertTrue(waitForHittable(message), "The reason must be visible above the keyboard")
+        let save = app.buttons["この成果を積む"]
+        XCTAssertFalse(save.isEnabled)
+        XCTAssertLessThan(message.frame.maxY, save.frame.minY + 1, "The reason sits above the button")
+        // The whole field clears the pinned bar, not just its top half.
+        XCTAssertTrue(waitUntil(timeout: 3) { field.frame.maxY <= message.frame.minY },
+                      "field=\(field.frame) message=\(message.frame)")
+        saveScreenshot("achievement-name-too-long")
+
+        field.typeText(XCUIKeyboardKey.delete.rawValue + XCUIKeyboardKey.delete.rawValue)
+        XCTAssertTrue(waitUntil(timeout: 3) { !message.exists })
+        XCTAssertTrue(save.isEnabled)
+        app.buttons["achievement.create.close"].tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
+    }
+
     func testPickingABackgroundLowersTheMenuSoTheBackgroundShows() {
         launch()
         app.buttons["メニュー"].tap()

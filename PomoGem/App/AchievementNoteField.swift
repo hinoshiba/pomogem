@@ -3,12 +3,18 @@ import SwiftUI
 /// The 記念石 name field shared by 「成果を積む」 and the Log editor. It never
 /// rewrites what is being typed; see `AchievementNotePolicy`. The counter
 /// sits beside the title rather than under the field, so it stays visible
-/// above the keyboard on small phones.
+/// above the keyboard on small phones. The full over-limit sentence is not
+/// under the field: both screens show it next to the save button it
+/// disables (`AchievementNoteLimitMessage`), which on a small phone with the
+/// keyboard up is the part of the screen that is still visible.
 struct AchievementNoteField: View {
     let title: String
     let placeholder: String
     @Binding var text: String
     let accessibilityIdentifier: String
+    var onFocusChange: (Bool) -> Void = { _ in }
+
+    @FocusState private var isFocused: Bool
 
     private var isTooLong: Bool { AchievementNotePolicy.isTooLong(text) }
 
@@ -35,16 +41,11 @@ struct AchievementNoteField: View {
                         RoundedRectangle(cornerRadius: 12).stroke(Color.red.opacity(0.8), lineWidth: 1)
                     }
                 }
+                .focused($isFocused)
+                .onChange(of: isFocused) { _, focused in onFocusChange(focused) }
                 .accessibilityLabel(title)
                 .accessibilityHint(AchievementNotePolicy.statusMessage(for: text))
                 .accessibilityIdentifier(accessibilityIdentifier)
-            if isTooLong {
-                Text(AchievementNotePolicy.statusMessage(for: text))
-                    .font(.caption)
-                    .foregroundStyle(Color.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityHidden(true)
-            }
         }
     }
 
@@ -62,5 +63,26 @@ struct AchievementNoteField: View {
             .monospacedDigit()
             .foregroundStyle(isTooLong ? Color.red : PomoGemTheme.muted)
             .accessibilityIdentifier("achievement.note.counter")
+    }
+}
+
+/// Why a save button is disabled when the 記念石 name is over the limit,
+/// shown directly above that button.
+struct AchievementNoteLimitMessage: View {
+    let text: String
+
+    var body: some View {
+        if AchievementNotePolicy.isTooLong(text) {
+            Label(
+                AchievementNotePolicy.statusMessage(for: text),
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(Color.red.opacity(0.9))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("achievement.note.limit-message")
+        }
     }
 }

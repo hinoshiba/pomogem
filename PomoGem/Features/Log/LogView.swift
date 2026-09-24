@@ -2163,6 +2163,9 @@ private struct AchievementEditorSheet: View {
                             .accessibilityIdentifier("achievement.editor.error")
                     }
 
+                    // Right above the button it disables, as in 「成果を積む」.
+                    AchievementNoteLimitMessage(text: note)
+
                     Button {
                         save()
                     } label: {
