@@ -680,6 +680,7 @@ private struct AccumulationTimelineMonthSheet: View {
                     .foregroundStyle(PomoGemTheme.muted)
             }
             .padding(.horizontal, 14)
+            .padding(.vertical, 10)
             .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
             .contentShape(Rectangle())
         }
