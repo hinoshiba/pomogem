@@ -120,6 +120,7 @@ struct HomeView: View {
     @State private var selectedAggregateDetail: AccumulationClusterSummary?
     @State private var aggregateInspectionTask: Task<Void, Never>?
     @State private var showManualEntry = false
+    @State private var screenTimeArrivals = ScreenTimeArrivalAnnouncer()
     @State private var showAchievementEntry = false
     @State private var showCustomDuration = false
     @State private var showAccumulationPlan = false
@@ -716,6 +717,7 @@ struct HomeView: View {
             configureScene()
             screenTime.reload()
             scene.setScreenTimeObstacles(totalUnits: screenTime.negativeGemCount)
+            noteScreenTimeBlackStones(ScreenTimeController.shared.negativeGemCount)
             refreshAcceptedAggregateRoots()
             refreshAchievementProjection()
             refreshAchievementCount()
@@ -769,6 +771,7 @@ struct HomeView: View {
         .onChange(of: screenTime.negativeGemCount) { _, count in
             guard homeIsVisible else { return }
             scene.updateScreenTimeObstacles(totalUnits: count)
+            noteScreenTimeBlackStones(count)
         }
         .onChange(of: sessionChangeTokens) { _, _ in
             syncScene()
@@ -3312,6 +3315,16 @@ struct HomeView: View {
         }
     }
 
+    /// Screen Time black stones arrive silently in the jar; say how many
+    /// once, neutrally (see `ScreenTimeArrivalAnnouncer`).
+    private func noteScreenTimeBlackStones(_ count: Int) {
+        screenTimeArrivals.noteBlackStoneCount(
+            count, isBound: ScreenTimeController.shared.isBoundToContext
+        ) { text, symbol in
+            router.showToast(text, symbol: symbol)
+        }
+    }
+
     private func handleLanding(_ event: JarLandingEvent) {
         let descriptor = event.pebble
         if let achievementKind = descriptor.achievementKind {
@@ -3328,6 +3341,16 @@ struct HomeView: View {
         // resulting overview pebble as a fresh study session would announce a
         // misleading second “+2500g” reward.
         if descriptor.isAggregate { return }
+        if descriptor.source == .screenTime {
+            // One attributed summary per import (「スクリーンタイム：英語 +30分
+            // （3粒）」) instead of a generic toast per 10-minute pebble.
+            screenTimeArrivals.noteLearningLanding(subjectName: descriptor.subjectName) { text, symbol in
+                router.showToast(text, symbol: symbol)
+            }
+            ScreenTimeGemDropStore.remove(descriptor.id)
+            syncScene()
+            return
+        }
         var message: String
         let presentationKind = RareRewardPresentationPolicy.kind(descriptor.kind)
         switch presentationKind {
@@ -3351,11 +3374,6 @@ struct HomeView: View {
             && rareRewardMode.usesEnhancedPresentation
         router.showToast(message, symbol: usesRareSymbol ? "sparkles" : "scalemass")
 
-        if descriptor.source == .screenTime {
-            ScreenTimeGemDropStore.remove(descriptor.id)
-            syncScene()
-            return
-        }
         if PendingRewardReceiptStore.load().contains(where: {
             $0.id == descriptor.id && $0.dropPhase == .awaitingLanding
         }) {

@@ -355,3 +355,62 @@ final class ScreenTimeImportTests: XCTestCase {
         XCTAssertEqual(stopCount, 3)
     }
 }
+
+/// screentime-09: what Home says when Screen Time pebbles and black stones
+/// arrive — one attributed line instead of a generic toast per 10 minutes,
+/// and a plain count for black stones instead of silence.
+@MainActor
+final class ScreenTimeArrivalSummaryTests: XCTestCase {
+    func testOneThemeIsNamedWithItsMinutesAndPebbles() {
+        var tally = ScreenTimeArrivalTally()
+        XCTAssertNil(tally.message)
+        for _ in 0..<3 { tally.addLearning(subjectName: "英語") }
+        XCTAssertEqual(tally.message, "スクリーンタイム：英語 +30分（3粒）")
+        tally.addBlackStones(2)
+        XCTAssertEqual(tally.message, "スクリーンタイム：英語 +30分（3粒）、黒い石 +2")
+    }
+
+    func testSeveralThemesAreSummedAndBlackStonesAloneStayNeutral() {
+        var tally = ScreenTimeArrivalTally()
+        tally.addLearning(subjectName: "英語")
+        tally.addLearning(subjectName: "数学")
+        XCTAssertEqual(tally.message, "スクリーンタイム：勉強アプリの時間 +20分（2粒）")
+        var stones = ScreenTimeArrivalTally()
+        stones.addBlackStones(1)
+        XCTAssertEqual(stones.message, "スクリーンタイム：黒い石 +1（控えたいアプリ 10分）")
+        for word in ["ダメ", "注意", "失敗", "使いすぎ"] {
+            XCTAssertFalse(stones.message?.contains(word) == true, "No judgement: \(word)")
+        }
+    }
+
+    func testOnlyARiseSinceTheLastAcknowledgedCountIsAnnounced() {
+        typealias Tally = ScreenTimeArrivalTally
+        XCTAssertEqual(Tally.blackStoneStep(acknowledged: nil, current: 12).newStones, 0,
+                       "The first sighting is remembered, not announced")
+        XCTAssertEqual(Tally.blackStoneStep(acknowledged: nil, current: 12).acknowledge, 12)
+        XCTAssertEqual(Tally.blackStoneStep(acknowledged: 12, current: 12).newStones, 0)
+        XCTAssertEqual(Tally.blackStoneStep(acknowledged: 12, current: 14).newStones, 2)
+        XCTAssertEqual(Tally.blackStoneStep(acknowledged: 14, current: 0).newStones, 0, "A clear or reset says nothing")
+        XCTAssertEqual(Tally.blackStoneStep(acknowledged: 14, current: 0).acknowledge, 0)
+    }
+
+    func testTheAnnouncerWaitsForQuietAndIgnoresAnUnboundZero() async throws {
+        let suite = "ScreenTimeArrivalTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let announcer = ScreenTimeArrivalAnnouncer(defaults: defaults, acknowledgedKey: { "stones" })
+        var spoken: [String] = []
+        let announce: (String, String) -> Void = { text, _ in spoken.append(text) }
+
+        announcer.noteBlackStoneCount(5, isBound: true, announce: announce)
+        // Before binding the controller publishes 0; that must not be stored.
+        announcer.noteBlackStoneCount(0, isBound: false, announce: announce)
+        announcer.noteBlackStoneCount(7, isBound: true, announce: announce)
+        announcer.noteLearningLanding(subjectName: "英語", announce: announce)
+        announcer.noteLearningLanding(subjectName: "英語", announce: announce)
+        XCTAssertTrue(spoken.isEmpty, "Nothing is said while pebbles are still landing")
+        try await Task.sleep(for: .milliseconds(1_200))
+        XCTAssertEqual(spoken, ["スクリーンタイム：英語 +20分（2粒）、黒い石 +2"])
+        XCTAssertEqual(defaults.integer(forKey: "stones"), 7)
+    }
+}
