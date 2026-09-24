@@ -361,6 +361,9 @@ private final class PomoGemPersistenceSession: Identifiable {
     let persistentFixtureActionRawValue: String?
     let accountNamespace: AccountDataNamespace?
     let isCloudOffline: Bool
+    /// launch-06. What this mount's history preflight saw on the server;
+    /// presentation evidence for the first-run gate only.
+    let cloudHoldsUserRecords: Bool
 
     init(
         container: ModelContainer,
@@ -369,7 +372,8 @@ private final class PomoGemPersistenceSession: Identifiable {
         safetyNotice: String? = nil,
         persistentFixtureActionRawValue: String? = nil,
         accountNamespace: AccountDataNamespace? = nil,
-        isCloudOffline: Bool = false
+        isCloudOffline: Bool = false,
+        cloudHoldsUserRecords: Bool = false
     ) {
         self.container = container
         self.viewLifetime = PersistenceViewContainerLifetime(container: container)
@@ -379,6 +383,7 @@ private final class PomoGemPersistenceSession: Identifiable {
         self.persistentFixtureActionRawValue = persistentFixtureActionRawValue
         self.accountNamespace = accountNamespace
         self.isCloudOffline = isCloudOffline
+        self.cloudHoldsUserRecords = cloudHoldsUserRecords
     }
 }
 
@@ -963,7 +968,8 @@ private struct PomoGemPersistenceLaunchHost: View {
             },
             unmountForStorageTransfer: {
                 unmountForStorageTransfer(sessionID: sessionID)
-            }
+            },
+            cloudHoldsUserRecords: session.cloudHoldsUserRecords
         )
     }
 
@@ -1721,9 +1727,11 @@ private struct PomoGemPersistenceLaunchHost: View {
         // under an obsolete reset epoch. Keep Root, bootstrap, and all app
         // writers unmounted until the local winner covers the server history.
         launchState = .preparing("iCloudの記録の履歴を確認しています")
-        let historyBoundary = try await StorageTransferHostCloudPublicationGate.verify(
+        let (historyBoundary, history) = try await StorageTransferHostCloudPublicationGate.verify(
             prepareCandidate: {
-                try await CloudActivityHistoryPreflight().run(
+                // launch-06: the same traversal also tells the first-run
+                // gate whether this account already holds an earlier jar.
+                let history = try await CloudActivityHistoryPreflight().run(
                     context: container.mainContext,
                     expectedBinding: binding,
                     validateMount: {
@@ -1743,7 +1751,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                     attempt: attempt,
                     checkpoint: "after-history-identity"
                 )
-                return boundary
+                return (boundary, history)
             },
             verifyLatestDataset: {
                 // Another device may begin or finish replacing the dataset
@@ -1787,7 +1795,8 @@ private struct PomoGemPersistenceLaunchHost: View {
             container: container,
             mode: .cloudKit,
             safetyNotice: safetyNotice,
-            accountNamespace: binding.namespace
+            accountNamespace: binding.namespace,
+            cloudHoldsUserRecords: history.holdsUserRecords
         )
         try PersistenceDeploymentState.recordSuccessfulMount(selection)
         guard let admission = try StorageTransferRuntime.live().localDatasetAdmission(binding: binding) else {

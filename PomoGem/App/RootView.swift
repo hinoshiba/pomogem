@@ -387,6 +387,10 @@ struct RootView: View {
     let previewStorageTransferDataset:
         (@MainActor @Sendable () async throws -> StorageTransferDatasetPreviewSummary)?
     let unmountForStorageTransfer: (@MainActor @Sendable () -> Void)?
+    /// launch-06. The launch preflight's traversal of this account's iCloud
+    /// zones passed rows only a device that used PomoGem writes. Presentation
+    /// evidence for the first-run gate only; see `CloudRestoreWaitingPolicy`.
+    let cloudHoldsUserRecords: Bool
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
@@ -403,6 +407,10 @@ struct RootView: View {
     @State private var isBootstrapped = false
     @State private var viewTasks = ViewTaskScope()
     @State private var isFinishingOnboarding = false
+    /// launch-06. The user chose 「新しく始める」 on the restore screen, or has
+    /// answered the tutorial. From then on the tutorial stays, whatever
+    /// arrives, until the ordinary auto-exit opens the jar.
+    @State private var startsFreshFirstRun = false
     @State private var bootstrapError: String?
     @State private var bootstrapAttempt = 0
     @State private var lastPassiveNotificationErrorFingerprint: String?
@@ -469,7 +477,8 @@ struct RootView: View {
             (@MainActor @Sendable (StorageTransferDatasetRequestDirection) async throws -> Void)? = nil,
         previewStorageTransferDataset:
             (@MainActor @Sendable () async throws -> StorageTransferDatasetPreviewSummary)? = nil,
-        unmountForStorageTransfer: (@MainActor @Sendable () -> Void)? = nil
+        unmountForStorageTransfer: (@MainActor @Sendable () -> Void)? = nil,
+        cloudHoldsUserRecords: Bool = false
     ) {
         self.persistenceStartupError = persistenceStartupError
         self.persistenceMode = persistenceMode
@@ -479,6 +488,7 @@ struct RootView: View {
         self.requestStorageTransferDataset = requestStorageTransferDataset
         self.previewStorageTransferDataset = previewStorageTransferDataset
         self.unmountForStorageTransfer = unmountForStorageTransfer
+        self.cloudHoldsUserRecords = cloudHoldsUserRecords
         _activePersistenceSafetyNotice = State(initialValue: persistenceSafetyNotice)
         _aggregateProjectionPresentation = State(
             initialValue: .initial(for: persistenceMode)
@@ -619,7 +629,7 @@ struct RootView: View {
         if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess,
            ProcessInfo.processInfo.environment[
                LocalPreviewLaunchPolicy.rareRewardOnboardingUITestEnvironmentKey
-           ] == "1",
+           ] == "1" || isCloudRestoreUITest,
            !(resolvedPreferences?.hasCompletedOnboarding ?? false) {
             return false
         }
@@ -689,7 +699,15 @@ struct RootView: View {
                     .accessibilityIdentifier("root.first-frame.ready")
                     .task { await markFirstFramePresented() }
             } else {
-                OnboardingView(persistenceMode: persistenceMode) { selectedSubjectNames, wantsNotifications, rareRewardMode in
+                FirstRunView(
+                    persistenceMode: persistenceMode,
+                    restoresFromCloud: persistenceMode == .cloudKit || isCloudRestoreUITest,
+                    cloudHoldsUserRecords: cloudHoldsUserRecords || isCloudRestoreUITest,
+                    startsFresh: $startsFreshFirstRun
+                ) { selectedSubjectNames, wantsNotifications, rareRewardMode in
+                    // The user's own answers: nothing that arrives later may
+                    // swap the tutorial for the restore screen under them.
+                    startsFreshFirstRun = true
                     viewTasks.start {
                         await finishOnboarding(
                             selectedSubjectNames: selectedSubjectNames,
@@ -705,6 +723,7 @@ struct RootView: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("root.first-frame.ready")
                 .task { await markFirstFramePresented() }
+                .task { await deliverCloudRestoreUITestArrivalIfNeeded() }
             }
 
             if let toast = router.toast {
@@ -1032,6 +1051,10 @@ struct RootView: View {
                     didCompleteOnboarding = false
                 }
             }
+            if isCloudRestoreUITest {
+                // Same reason: the restore fixture is a first use too.
+                didCompleteOnboarding = false
+            }
             let localEnvelope = FocusPersistence.load()
             let preparation = try BoundedLaunchPreparation.prepare(
                 context: modelContext,
@@ -1068,6 +1091,29 @@ struct RootView: View {
             guard !Task.isCancelled else { return }
             bootstrapError = error.localizedDescription
         }
+    }
+
+    /// launch-06. The explicit Debug-only restore fixture; always false in
+    /// Release, where the fixture does not exist.
+    private var isCloudRestoreUITest: Bool {
+#if DEBUG
+        CloudRestoreUITestFixture.scenario != nil
+#else
+        false
+#endif
+    }
+
+    /// Stands in for an import delivering another device's finished
+    /// onboarding, so a UI test can watch the restore screen hand over to the
+    /// jar through the shipping auto-exit.
+    @MainActor
+    private func deliverCloudRestoreUITestArrivalIfNeeded() async {
+#if DEBUG
+        guard CloudRestoreUITestFixture.scenario == .arrives else { return }
+        try? await Task.sleep(for: CloudRestoreUITestFixture.arrivalDelay)
+        guard !Task.isCancelled else { return }
+        try? CloudRestoreUITestFixture.deliverOtherDevicesOnboarding(context: modelContext)
+#endif
     }
 
     /// UI tests intentionally bypass onboarding and use a fresh in-memory

@@ -54,6 +54,24 @@ version 1.0は最初の`ModelContainer`を作る前に、同格の「iCloudで�
 それぞれの確認後に一方を確定します。どちらも推奨扱いにせず、選択はVersion 1.0では変更できません。
 shipping `ModelContainer`は選択に応じて次の分離を使います。
 
+#### 初回のiCloud取り込み中の表示（launch-06、2026-09-25）
+
+再インストールや2台目のiPhoneでiCloudを選ぶと、Rootはreset markerの確認後すぐに開き、以前の記録は
+その後に届きます。オンボーディングを終えていない保存領域では、次のどちらかが成り立つ間、新規向けの
+案内ではなく「iCloudから記録を復元しています」を表示します（`CloudRestoreWaitingPolicy`）。
+
+- 起動時の`CloudActivityHistoryPreflight`がreset markerを探すために全zoneを走査した際、`Subject`・
+  `StudySession`・`AchievementStone`のrecordを1件以上見た（`CloudActivityHistoryObservation.holdsUserRecords`）。
+  追加の通信はありません。`Prefs`は数えません。起動のたびにこの端末の設定行がオンボーディング前に作られるため、
+  チュートリアルの途中で終了した新しい利用者が、次の起動で自分の行を「以前の瓶」と誤認されないようにするためです。
+- iCloudモードでテーマが端末に存在する。iCloudの通常起動はテーマを作らないため、オンボーディング完了前の
+  テーマはiCloudから届いたものです。
+
+この判定は表示を選ぶだけで、mountの許可・拒否・待機には使いません。画面には届いたテーマと集中の記録の
+件数、経過時間を表示し、既存の自動遷移（onboarding済みの`Prefs`・記録・成果の到着）で瓶を開きます。
+しばらく何も届かない場合はその旨を添えます。「新しく始める」は確認を経てから新規向けの案内へ進み、
+その選択はそのセッションの間変わりません。オフライン起動とlocal-onlyでは表示しません。
+
 #### 初回のiCloud取り込み中にオンボーディングを終えるとき（launch-06、2026-09-25）
 
 iCloudモードでオンボーディングを終える処理は、選ばなかった既存の組み込みテーマを削除（tombstone）も

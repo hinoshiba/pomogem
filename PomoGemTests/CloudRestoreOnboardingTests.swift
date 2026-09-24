@@ -2,9 +2,9 @@ import SwiftData
 import XCTest
 @testable import PomoGem
 
-/// launch-06: a reinstall or a second iPhone in iCloud mode. Finishing the
-/// new-user tutorial must not overwrite what the user's other devices
-/// already decided.
+/// launch-06: a reinstall or a second iPhone in iCloud mode. The new-user
+/// tutorial must not run over an import in progress, and finishing it must
+/// not overwrite what the user's other devices already decided.
 @MainActor
 final class CloudRestoreOnboardingTests: XCTestCase {
     private func makeContainer() throws -> ModelContainer {
@@ -29,6 +29,38 @@ final class CloudRestoreOnboardingTests: XCTestCase {
             cloudKitDatabase: .none
         )
         return try ModelContainer(for: schema, configurations: [configuration])
+    }
+
+    // MARK: - Which first-run screen
+
+    func testRestoreScreenReplacesTheTutorialOnlyForAnICloudRestoreWithEvidence() {
+        func shows(cloud: Bool = true, holds: Bool = false, themes: Bool = false,
+                   offline: Bool = false, fresh: Bool = false) -> Bool {
+            CloudRestoreWaitingPolicy.showsRestoreWaiting(
+                restoresFromCloud: cloud, cloudHoldsUserRecords: holds,
+                hasReceivedThemes: themes, isCloudOffline: offline, startsFresh: fresh)
+        }
+        // A new iCloud account: nothing on the server, nothing received.
+        XCTAssertFalse(shows())
+        // The server holds an earlier jar, or part of it already arrived.
+        XCTAssertTrue(shows(holds: true))
+        XCTAssertTrue(shows(themes: true))
+        XCTAssertTrue(shows(holds: true, themes: true))
+        // Local-only and preview stores never restore from iCloud.
+        XCTAssertFalse(shows(cloud: false, holds: true, themes: true))
+        // An offline session cannot receive anything.
+        XCTAssertFalse(shows(holds: true, themes: true, offline: true))
+        // 「新しく始める」, or answers already given, are final.
+        XCTAssertFalse(shows(holds: true, themes: true, fresh: true))
+    }
+
+    func testQuietHintNeedsAWhileWithoutNewRecords() {
+        let start = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        XCTAssertFalse(CloudRestoreWaitingPolicy.isQuiet(lastChangeAt: start, now: start))
+        XCTAssertFalse(CloudRestoreWaitingPolicy.isQuiet(
+            lastChangeAt: start, now: start.addingTimeInterval(CloudRestoreWaitingPolicy.quietInterval - 1)))
+        XCTAssertTrue(CloudRestoreWaitingPolicy.isQuiet(
+            lastChangeAt: start, now: start.addingTimeInterval(CloudRestoreWaitingPolicy.quietInterval)))
     }
 
     // MARK: - Imported presets

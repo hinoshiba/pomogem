@@ -238,6 +238,60 @@ final class FirstRunUITests: XCTestCase {
         XCTAssertTrue(waitUntilEnabled(next))
     }
 
+    // MARK: - iCloud restore (launch-06)
+
+    func testRestoreShowsWhatArrivedAndOpensTheJarByItself() {
+        launchOnboarding(extraEnvironment: ["POMOGEM_UI_TEST_CLOUD_RESTORE": "arrives"])
+        let title = app.staticTexts["cloud-restore.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 8))
+        XCTAssertEqual(title.label, "iCloudから記録を復元しています")
+        XCTAssertFalse(app.buttons["onboarding.next"].exists,
+                       "The new-user tutorial must not run over a restore")
+        let counts = app.descendants(matching: .any)["cloud-restore.counts"]
+        XCTAssertTrue(counts.waitForExistence(timeout: 4))
+        XCTAssertTrue(counts.label.contains("テーマ1件"), counts.label)
+        XCTAssertTrue(counts.label.contains("集中の記録0件"), counts.label)
+        attachScreenshot("cloud-restore-waiting")
+        // The fixture delivers another device's finished onboarding a few
+        // seconds in; the shipping auto-exit must open the jar by itself.
+        XCTAssertTrue(app.buttons["home.subject-picker"].waitForExistence(timeout: 15))
+        XCTAssertFalse(title.exists)
+    }
+
+    func testStartingFreshNeedsItsOwnConfirmationAndLeadsToTheTutorial() {
+        launchOnboarding(extraEnvironment: ["POMOGEM_UI_TEST_CLOUD_RESTORE": "waiting"])
+        let title = app.staticTexts["cloud-restore.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 8))
+        let fresh = app.buttons["cloud-restore.start-fresh"]
+        XCTAssertTrue(scrollUntilHittable(fresh))
+        XCTAssertEqual(fresh.label, "新しく始める")
+        fresh.tap()
+        let alert = app.alerts["新しく始めますか？"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 4))
+        XCTAssertTrue(alertMessage(alert, contains: "届きしだい"))
+        attachScreenshot("cloud-restore-start-fresh-confirmation")
+        alert.buttons["待つ"].tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 2), "Cancelling keeps waiting")
+        XCTAssertFalse(app.buttons["onboarding.next"].exists)
+
+        fresh.tap()
+        XCTAssertTrue(alert.waitForExistence(timeout: 4))
+        alert.buttons["新しく始める"].tap()
+        XCTAssertTrue(app.buttons["onboarding.next"].waitForExistence(timeout: 4))
+        XCTAssertFalse(title.exists, "The choice to start fresh stays for this session")
+    }
+
+    func testRestoreScreenStaysUsableAtTheLargestTextSize() {
+        launchOnboarding(accessibility5: true, extraEnvironment: ["POMOGEM_UI_TEST_CLOUD_RESTORE": "waiting"])
+        let title = app.staticTexts["cloud-restore.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 8))
+        XCTAssertTrue(title.isHittable)
+        attachScreenshot("cloud-restore-ax5-top")
+        let fresh = app.buttons["cloud-restore.start-fresh"]
+        XCTAssertTrue(scrollUntilHittable(fresh))
+        attachScreenshot("cloud-restore-ax5-bottom")
+    }
+
     // MARK: - Helpers
 
     private func launchOnboarding(accessibility5: Bool = false, extraEnvironment: [String: String] = [:]) {
