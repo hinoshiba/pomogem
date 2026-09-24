@@ -845,7 +845,12 @@ def collect_stringsdata(repo, derived_data, configuration=None):
             if not os.path.exists(source):
                 continue  # a deleted or renamed file; its old output is ignored
             relative = Path(source).relative_to(root).as_posix()
+            # The compiler leaves an unchanged .stringsdata untouched, so the
+            # object file next to it tells when the source was last compiled.
             modified = path.stat().st_mtime
+            object_file = path.with_suffix(".o")
+            if object_file.exists():
+                modified = max(modified, object_file.stat().st_mtime)
             key = (target, relative)
             if key not in found or found[key][0] < modified:
                 found[key] = (modified, data, path)
