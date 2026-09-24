@@ -198,9 +198,167 @@ struct AccumulationTimelineYearSummary: Equatable, Sendable {
     let coverage: AccumulationTimelineCoverage
 }
 
+/// One theme's part of a month or a day.
+struct AccumulationTimelineThemeSummary: Identifiable, Equatable, Sendable {
+    let id: String
+    let name: String
+    let colorHex: String
+    let sessionCount: Int
+    let seconds: Int
+    let grams: Int64
+}
+
+/// A day with records inside a month.
+struct AccumulationTimelineDaySummary: Identifiable, Equatable, Sendable {
+    let dayStart: Date
+    let sessionCount: Int
+    let seconds: Int
+    let grams: Int64
+    /// Up to three theme colors, the most time first.
+    let colorHexes: [String]
+
+    var id: Date { dayStart }
+}
+
+/// One record as a history row shows it. A value copy, so views never hold
+/// SwiftData objects that were read on the repository's actor.
+struct HistorySessionSummary: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let startAt: Date
+    let endAt: Date
+    let seconds: Int
+    let grams: Int
+    let subjectName: String
+    let colorHex: String
+    let source: SessionSource
+    let pebbleKind: PebbleKind
+    let rareRewardCounts: RareRewardCounts
+
+    init(_ session: StudySession) {
+        id = session.id
+        startAt = session.startAt
+        endAt = session.endAt
+        seconds = NonnegativeIntPolicy.clamped(session.seconds)
+        grams = NonnegativeIntPolicy.clamped(session.grams)
+        subjectName = session.displaySubjectName
+        colorHex = session.displaySubjectColorHex
+        source = session.effectiveSource
+        pebbleKind = session.pebbleKind
+        rareRewardCounts = session.rareRewardCounts
+    }
+}
+
+/// Every record of one day, newest first.
+struct AccumulationTimelineDayDetail: Equatable, Sendable {
+    let dayStart: Date
+    let sessions: [HistorySessionSummary]
+    let themes: [AccumulationTimelineThemeSummary]
+    let totalSeconds: Int
+    let totalGrams: Int64
+    let coverage: AccumulationTimelineCoverage
+}
+
+/// Per-theme and per-day totals, computed from records that are already
+/// exact and deduplicated. No streak-like counts: days are listed for
+/// looking back, never tallied against the month.
+enum AccumulationTimelineBreakdownPolicy {
+    struct Entry: Sendable {
+        let themeKey: String
+        let themeName: String
+        let colorHex: String
+        let endAt: Date
+        let seconds: Int
+        let grams: Int64
+
+        init(
+            themeKey: String,
+            themeName: String,
+            colorHex: String,
+            endAt: Date,
+            seconds: Int,
+            grams: Int64
+        ) {
+            self.themeKey = themeKey
+            self.themeName = themeName
+            self.colorHex = colorHex
+            self.endAt = endAt
+            self.seconds = NonnegativeIntPolicy.clamped(seconds)
+            self.grams = max(0, grams)
+        }
+
+        /// A renamed theme stays one row: records group by the theme's ID,
+        /// and the newest record names it. Records without an ID group by
+        /// their stored name and color.
+        init(session: StudySession) {
+            let name = session.displaySubjectName
+            let color = session.displaySubjectColorHex
+            self.init(
+                themeKey: session.subjectIDSnapshot?.uuidString
+                    ?? "snapshot|\(name)|\(color.uppercased())",
+                themeName: name,
+                colorHex: color,
+                endAt: session.endAt,
+                seconds: session.seconds,
+                grams: Int64(NonnegativeIntPolicy.clamped(session.grams))
+            )
+        }
+    }
+
+    /// Most time first; ties by mass, then name.
+    static func themes(_ entries: [Entry]) -> [AccumulationTimelineThemeSummary] {
+        Dictionary(grouping: entries, by: \.themeKey).compactMap { key, values in
+            guard let newest = values.max(by: { $0.endAt < $1.endAt }) else { return nil }
+            return AccumulationTimelineThemeSummary(
+                id: key,
+                name: newest.themeName,
+                colorHex: newest.colorHex,
+                sessionCount: values.count,
+                seconds: NonnegativeIntPolicy.sum(values.map(\.seconds)),
+                grams: NonnegativeIntPolicy.sum(values.map(\.grams))
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.seconds != rhs.seconds { return lhs.seconds > rhs.seconds }
+            if lhs.grams != rhs.grams { return lhs.grams > rhs.grams }
+            if lhs.name != rhs.name {
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
+    /// Days by the calendar's local midnight (DST-safe), newest first.
+    static func days(
+        _ entries: [Entry],
+        calendar: Calendar
+    ) -> [AccumulationTimelineDaySummary] {
+        Dictionary(grouping: entries) { calendar.startOfDay(for: $0.endAt) }
+            .map { dayStart, values in
+                let colors = themes(values)
+                    .map { $0.colorHex.uppercased() }
+                    .reduce(into: [String]()) { result, hex in
+                        if !result.contains(hex) { result.append(hex) }
+                    }
+                return AccumulationTimelineDaySummary(
+                    dayStart: dayStart,
+                    sessionCount: values.count,
+                    seconds: NonnegativeIntPolicy.sum(values.map(\.seconds)),
+                    grams: NonnegativeIntPolicy.sum(values.map(\.grams)),
+                    colorHexes: Array(colors.prefix(3))
+                )
+            }
+            .sorted { $0.dayStart > $1.dayStart }
+    }
+}
+
 struct AccumulationTimelineMonthDetail: Equatable, Sendable {
     let summary: AccumulationTimelineMonthSummary
     let representativeRecords: [AccumulationRecord]
+    /// Every day of the month that has a record, newest first (at most 31).
+    let days: [AccumulationTimelineDaySummary]
+    /// Every theme of the month, the most time first.
+    let themes: [AccumulationTimelineThemeSummary]
+    let totalSeconds: Int
     let coverage: AccumulationTimelineCoverage
 
     var previewIsRepresentative: Bool {
@@ -286,6 +444,9 @@ actor AccumulationTimelineRepository {
                 interval: interval
             )
             let preview = representativeRecords(from: metrics)
+            // The month is already exact and in memory: its days and themes
+            // are one more pass over it, with no further query.
+            let entries = metrics.values.map(\.breakdownEntry)
             let after = try snapshotStamp(currentEpochID: currentEpochID)
             let coverage = AccumulationTimelineStabilityPolicy.coverage(
                 before: before,
@@ -300,6 +461,61 @@ actor AccumulationTimelineRepository {
             let detail = AccumulationTimelineMonthDetail(
                 summary: summary,
                 representativeRecords: preview,
+                days: AccumulationTimelineBreakdownPolicy.days(entries, calendar: calendar),
+                themes: AccumulationTimelineBreakdownPolicy.themes(entries),
+                totalSeconds: NonnegativeIntPolicy.sum(entries.map(\.seconds)),
+                coverage: coverage
+            )
+            if coverage.isLocallyStable { return detail }
+            lastResult = detail
+        }
+        guard let lastResult else {
+            throw AccumulationTimelineRepositoryError.invalidCalendarInterval
+        }
+        return lastResult
+    }
+
+    /// One day, read as one bounded interval: the answer to 「あの日、何を
+    /// した？」 without paging the lifetime list.
+    func dayDetail(
+        dayStart: Date,
+        currentEpochID: UUID?,
+        calendar: Calendar
+    ) throws -> AccumulationTimelineDayDetail {
+        let start = calendar.startOfDay(for: dayStart)
+        guard let end = calendar.date(byAdding: .day, value: 1, to: start), end > start else {
+            throw AccumulationTimelineRepositoryError.invalidCalendarInterval
+        }
+        let interval = DateInterval(start: start, end: end)
+
+        var lastResult: AccumulationTimelineDayDetail?
+        for _ in 0 ..< AccumulationTimelineQueryPolicy.stabilityAttemptCount {
+            try checkCancellation()
+            let before = try snapshotStamp(currentEpochID: currentEpochID)
+            let metrics = try canonicalMetrics(
+                currentEpochID: currentEpochID,
+                interval: interval
+            )
+            let newestFirst = metrics.values.sorted { lhs, rhs in
+                if lhs.endAt == rhs.endAt {
+                    return lhs.id.uuidString > rhs.id.uuidString
+                }
+                return lhs.endAt > rhs.endAt
+            }
+            let entries = newestFirst.map(\.breakdownEntry)
+            let sessions = newestFirst.map { HistorySessionSummary($0.session) }
+            let after = try snapshotStamp(currentEpochID: currentEpochID)
+            let coverage = AccumulationTimelineStabilityPolicy.coverage(
+                before: before,
+                after: after,
+                capturedAt: .now
+            )
+            let detail = AccumulationTimelineDayDetail(
+                dayStart: start,
+                sessions: sessions,
+                themes: AccumulationTimelineBreakdownPolicy.themes(entries),
+                totalSeconds: NonnegativeIntPolicy.sum(entries.map(\.seconds)),
+                totalGrams: NonnegativeIntPolicy.sum(entries.map(\.grams)),
                 coverage: coverage
             )
             if coverage.isLocallyStable { return detail }
@@ -363,6 +579,9 @@ actor AccumulationTimelineRepository {
         var id: UUID { session.id }
         var endAt: Date { session.endAt }
         var grams: Int64 { Int64(max(0, session.grams)) }
+        var breakdownEntry: AccumulationTimelineBreakdownPolicy.Entry {
+            AccumulationTimelineBreakdownPolicy.Entry(session: session)
+        }
         var record: AccumulationRecord {
             AccumulationRecord(
                 id: session.id,

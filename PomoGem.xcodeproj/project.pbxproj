@@ -35,6 +35,7 @@
 		1F0A26CEDD94391DC3E98C20 /* CompleteDataDeletionTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A050345814C902A4AF65C03 /* CompleteDataDeletionTypes.swift */; };
 		1F96B5E7B41F562BB1529DA4 /* EngagementOverviewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4383D72800A4EF0F5C7823FE /* EngagementOverviewUITests.swift */; };
 		210B91AF5B3C606C22519C12 /* ActivityResetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C6C6F690DAE80124E03BFF0 /* ActivityResetTests.swift */; };
+		21ACF6156864778789CBE5DE /* DayHistorySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E02D9E42DA609F2E194DAE1E /* DayHistorySheet.swift */; };
 		2232B489F1EA669A7200CFB0 /* StorageTransferLegacyCloudAdoptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A55D40BDDEB56B47537EB376 /* StorageTransferLegacyCloudAdoptionTests.swift */; };
 		24FDE33C03F4B5B936F37337 /* BoundedLaunchPreparationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 189F9C27085367C86D86A859 /* BoundedLaunchPreparationTests.swift */; };
 		26A13C585B7493B72A6709E4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDFD2F7482C6D59F73C3C3DE /* RootView.swift */; };
@@ -568,6 +569,7 @@
 		DBD525CB72EF7C8BBA600020 /* LICENSE-fonts.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LICENSE-fonts.txt"; sourceTree = "<group>"; };
 		DC5D4F1A16DE0265ED6EBF24 /* PomoGemLogo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemLogo.swift; sourceTree = "<group>"; };
 		DE92572890DD4D8BE55C6A58 /* ProgressCrystal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressCrystal.swift; sourceTree = "<group>"; };
+		E02D9E42DA609F2E194DAE1E /* DayHistorySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayHistorySheet.swift; sourceTree = "<group>"; };
 		E2FBF7E577EC280E22DDC78A /* SyncMaintenanceWorkerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncMaintenanceWorkerTests.swift; sourceTree = "<group>"; };
 		E38675DCE672C29E9EBF0A56 /* GachaHistoryReconciliationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GachaHistoryReconciliationTests.swift; sourceTree = "<group>"; };
 		E3C6BE90662CAB5EDEAA5D74 /* StorageTransferCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferCoordinator.swift; sourceTree = "<group>"; };
@@ -759,6 +761,7 @@
 		552D4F913BCB67E653A9781D /* Log */ = {
 			isa = PBXGroup;
 			children = (
+				E02D9E42DA609F2E194DAE1E /* DayHistorySheet.swift */,
 				A3E82651684A6C991C347B6A /* LogView.swift */,
 			);
 			path = Log;
@@ -1369,6 +1372,7 @@
 				7CB82FE804B2887172375629 /* Constants.swift in Sources */,
 				85E42B45C3640BEAFFF9A520 /* CustomDurationEditingState.swift in Sources */,
 				78B9055A72C9DC3FFE5842F0 /* CustomDurationView.swift in Sources */,
+				21ACF6156864778789CBE5DE /* DayHistorySheet.swift in Sources */,
 				611EBE966E4A690F7700E246 /* DurationPresentation.swift in Sources */,
 				F36027E2DA6CA68B2A3CB5F9 /* EffortConstellationView.swift in Sources */,
 				01CAA824E44B0D8235C83A8E /* FairnessPolicy.swift in Sources */,

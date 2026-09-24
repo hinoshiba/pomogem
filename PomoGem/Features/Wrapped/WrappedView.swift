@@ -12,8 +12,19 @@ struct WrappedMonth: Identifiable, Hashable {
     var title: String { StrataMath.monthLabel(for: start) }
 }
 
+/// Where 「この月の瓶をカードにする」 opens the card.
+enum WrappedShareRoute {
+    /// Close Wrapped, then open Home's share sheet. For 記録, which is a
+    /// page under Home rather than a sheet.
+    case router
+    /// Open the card over Wrapped. For months opened from 年月, which sits in
+    /// a sheet that Home's share sheet cannot present over.
+    case inline
+}
+
 struct WrappedView: View {
     let month: WrappedMonth
+    let shareRoute: WrappedShareRoute
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -29,15 +40,26 @@ struct WrappedView: View {
     @State private var pageIsPartial = false
     @State private var isLoading = true
     @State private var loadError: String?
+    @State private var presentsInlineShare = false
 
-    init(month: WrappedMonth) {
+    init(month: WrappedMonth, shareRoute: WrappedShareRoute = .router) {
         self.month = month
+        self.shareRoute = shareRoute
         _activityResetMarkers = Query(BoundedHistoryPolicy.latestResetMarkerDescriptor())
     }
 
     private var totalMinutes: Int {
         NonnegativeIntPolicy.sum(monthSessions.map(\.seconds)) / 60
     }
+    /// Where the month's focus time went, from the records already loaded.
+    /// Deliberately no count of active days: that would read like a streak.
+    private var themeTimes: [AccumulationTimelineThemeSummary] {
+        AccumulationTimelineBreakdownPolicy.themes(
+            StudySessionSyncPolicy.canonicalSessions(from: monthSessions)
+                .map(AccumulationTimelineBreakdownPolicy.Entry.init(session:))
+        )
+    }
+
     private var topSubject: String {
         let groups = Dictionary(grouping: monthSessions, by: \.displaySubjectName)
         return groups.max { lhs, rhs in
@@ -133,16 +155,27 @@ struct WrappedView: View {
                 }
                 .padding(.horizontal, 18)
 
+                if !isLoading, loadError == nil, !themeTimes.isEmpty {
+                    WrappedThemeTimes(themes: themeTimes)
+                        .padding(.horizontal, 18)
+                }
+
                 Spacer(minLength: 12)
                 VStack(spacing: 10) {
                     Button(wrappedShareButtonTitle) {
-                        dismiss()
-                        Task {
-                            try? await Task.sleep(for: .milliseconds(320))
-                            router.presentShare(scope: .month(month.start))
+                        switch shareRoute {
+                        case .router:
+                            dismiss()
+                            Task {
+                                try? await Task.sleep(for: .milliseconds(320))
+                                router.presentShare(scope: .month(month.start))
+                            }
+                        case .inline:
+                            presentsInlineShare = true
                         }
                     }
                     .buttonStyle(PomoGemPrimaryButtonStyle())
+                    .accessibilityIdentifier("wrapped.share")
                     Button("瓶へ戻る") { dismiss() }
                         .buttonStyle(PomoGemSecondaryButtonStyle())
                 }
@@ -155,6 +188,10 @@ struct WrappedView: View {
             }
             .scrollIndicators(.hidden)
             .scrollBounceBehavior(.basedOnSize)
+        }
+        .sheet(isPresented: $presentsInlineShare) {
+            ShareComposerView(scope: .month(month.start))
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .task(id: loadKey) {
             loadMonth()
@@ -330,6 +367,72 @@ private struct MonthlyAggregatePebble: View {
             .shadow(color: colors[0].opacity(0.36), radius: 18, y: 8)
         }
         .accessibilityHidden(true)
+    }
+}
+
+private struct WrappedThemeTimes: View {
+    let themes: [AccumulationTimelineThemeSummary]
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var shown: [AccumulationTimelineThemeSummary] { Array(themes.prefix(5)) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("テーマ別の時間")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(PomoGemTheme.muted)
+            ForEach(shown) { theme in
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 3) {
+                            themeName(theme)
+                            themeTime(theme)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        HStack(alignment: .firstTextBaseline, spacing: 9) {
+                            themeName(theme)
+                            Spacer(minLength: 8)
+                            themeTime(theme)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    "\(theme.name)、\(DurationPresentation.minutesLabel(seconds: theme.seconds))"
+                )
+            }
+            if themes.count > shown.count {
+                Text("ほか\(themes.count - shown.count)テーマ")
+                    .font(.caption2)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("wrapped.theme-times")
+    }
+
+    private func themeName(_ theme: AccumulationTimelineThemeSummary) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 9) {
+            Circle()
+                .fill(Color(hex: theme.colorHex))
+                .frame(width: 9, height: 9)
+                .accessibilityHidden(true)
+            Text(theme.name)
+                .font(.subheadline.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func themeTime(_ theme: AccumulationTimelineThemeSummary) -> some View {
+        Text(DurationPresentation.minutesLabel(seconds: theme.seconds))
+            .font(.system(.subheadline, design: .rounded, weight: .heavy))
+            .monospacedDigit()
     }
 }
 

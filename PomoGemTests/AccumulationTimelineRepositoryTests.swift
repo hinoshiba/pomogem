@@ -342,6 +342,140 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
         )
     }
 
+    func testMonthDetailBreaksTheMonthIntoDaysAndThemesOnce() async throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let epochID = UUID()
+        let english = UUID()
+        let math = UUID()
+        let duplicateID = UUID()
+        let lastSecondOfThirteenth = date(year: 2024, month: 3, day: 14).addingTimeInterval(-1)
+
+        func insert(
+            id: UUID = UUID(),
+            _ endAt: Date,
+            seconds: Int,
+            theme: UUID,
+            name: String,
+            color: String
+        ) {
+            context.insert(StudySession(
+                id: id,
+                startAt: endAt.addingTimeInterval(-TimeInterval(seconds)),
+                endAt: endAt,
+                seconds: seconds,
+                source: .timer,
+                deviceDayKey: "breakdown",
+                subjectNameSnapshot: name,
+                subjectColorHexSnapshot: color,
+                subjectIDSnapshot: theme,
+                dataEpochID: epochID
+            ))
+        }
+        // 23:59:59 and 00:00 fall on two days.
+        insert(lastSecondOfThirteenth, seconds: 1_500, theme: english, name: "英語", color: "#2457C5")
+        insert(date(year: 2024, month: 3, day: 14), seconds: 3_600, theme: math, name: "数学", color: "#6BE4FF")
+        // A renamed theme stays one row, named by its newest record.
+        insert(date(year: 2024, month: 3, day: 20), seconds: 600, theme: english, name: "英会話", color: "#2457C5")
+        // Two copies of one completion count once.
+        insert(id: duplicateID, date(year: 2024, month: 3, day: 20).addingTimeInterval(3_600), seconds: 1_500, theme: math, name: "数学", color: "#6BE4FF")
+        insert(id: duplicateID, date(year: 2024, month: 3, day: 20).addingTimeInterval(3_600), seconds: 1_500, theme: math, name: "数学", color: "#6BE4FF")
+        try context.save()
+
+        let detail = try await AccumulationTimelineRepository(
+            modelContainer: container
+        ).monthDetail(
+            monthStart: date(year: 2024, month: 3, day: 1),
+            currentEpochID: epochID,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(detail.summary.exactLocalCount, 4)
+        XCTAssertEqual(detail.totalSeconds, 1_500 + 3_600 + 600 + 1_500)
+        XCTAssertEqual(detail.days.map(\.dayStart), [
+            date(year: 2024, month: 3, day: 20),
+            date(year: 2024, month: 3, day: 14),
+            date(year: 2024, month: 3, day: 13)
+        ])
+        XCTAssertEqual(detail.days.map(\.sessionCount), [2, 1, 1])
+        XCTAssertEqual(detail.days.first?.seconds, 2_100)
+        XCTAssertEqual(detail.days.first?.colorHexes, ["#6BE4FF", "#2457C5"])
+        XCTAssertEqual(detail.themes.map(\.name), ["数学", "英会話"])
+        XCTAssertEqual(detail.themes.map(\.seconds), [5_100, 2_100])
+        XCTAssertEqual(detail.themes.map(\.sessionCount), [2, 2])
+    }
+
+    func testDayBucketsFollowLocalMidnightAcrossDaylightSavingTime() throws {
+        var newYork = Calendar(identifier: .gregorian)
+        newYork.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+        func local(_ month: Int, _ day: Int, _ hour: Int, _ minute: Int = 0) throws -> Date {
+            try XCTUnwrap(newYork.date(from: DateComponents(
+                year: 2024, month: month, day: day, hour: hour, minute: minute
+            )))
+        }
+        func entry(_ endAt: Date) -> AccumulationTimelineBreakdownPolicy.Entry {
+            AccumulationTimelineBreakdownPolicy.Entry(
+                themeKey: "theme",
+                themeName: "英語",
+                colorHex: "#2457C5",
+                endAt: endAt,
+                seconds: 600,
+                grams: 100
+            )
+        }
+        // 3 November 2024 has 25 hours; 10 March 2024 has 23.
+        let entries = [
+            entry(try local(11, 3, 0, 30)),
+            entry(try local(11, 3, 23, 30)),
+            entry(try local(11, 4, 0, 10)),
+            entry(try local(3, 10, 23, 50)),
+            entry(try local(3, 11, 0, 5))
+        ]
+        let days = AccumulationTimelineBreakdownPolicy.days(entries, calendar: newYork)
+        XCTAssertEqual(days.map(\.sessionCount), [1, 2, 1, 1])
+        XCTAssertEqual(days.map(\.dayStart), [
+            try local(11, 4, 0),
+            try local(11, 3, 0),
+            try local(3, 11, 0),
+            try local(3, 10, 0)
+        ])
+    }
+
+    func testDayDetailListsEveryRecordOfOneDayNewestFirst() async throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let epochID = UUID()
+        let duplicateID = UUID()
+        let day = date(year: 1985, month: 1, day: 15)
+        insertSession(in: context, endAt: day.addingTimeInterval(-60), epochID: epochID)
+        insertSession(in: context, endAt: day.addingTimeInterval(9 * 3_600), epochID: epochID)
+        insertSession(id: duplicateID, in: context, endAt: day.addingTimeInterval(13 * 3_600), seconds: 3_600, grams: 600, epochID: epochID)
+        insertSession(id: duplicateID, in: context, endAt: day.addingTimeInterval(13 * 3_600), seconds: 3_600, grams: 600, epochID: epochID)
+        insertSession(in: context, endAt: day.addingTimeInterval(86_400), epochID: epochID)
+        insertSession(in: context, endAt: day.addingTimeInterval(10 * 3_600), epochID: UUID())
+        try context.save()
+
+        let detail = try await AccumulationTimelineRepository(
+            modelContainer: container
+        ).dayDetail(
+            dayStart: day.addingTimeInterval(12 * 3_600),
+            currentEpochID: epochID,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(detail.dayStart, day)
+        XCTAssertEqual(detail.sessions.map(\.endAt), [
+            day.addingTimeInterval(13 * 3_600),
+            day.addingTimeInterval(9 * 3_600)
+        ])
+        XCTAssertEqual(detail.sessions.first?.id, duplicateID)
+        XCTAssertEqual(detail.sessions.first?.source, .timer)
+        XCTAssertEqual(detail.totalSeconds, 3_600 + 1_500)
+        XCTAssertEqual(detail.totalGrams, 850)
+        XCTAssertEqual(detail.themes.map(\.name), ["数学"])
+        XCTAssertTrue(detail.coverage.isLocallyStable)
+    }
+
     func testFortyYearExtentCreatesNewestFirstBoundedYearList() throws {
         let extent = AccumulationTimelineExtent(
             currentEpochID: nil,

@@ -1022,6 +1022,8 @@ struct LogView: View {
     @State private var hasLoadedHistory = false
     @State private var mutationError: String?
     @State private var selectedAchievement: AchievementEditSelection?
+    @State private var selectedDay: HistoryDaySelection?
+    @State private var showsPastHistory = false
     @State private var pendingAchievementUndo: AchievementStoneRevisionSnapshot?
 
     init() {
@@ -1109,6 +1111,18 @@ struct LogView: View {
         .fullScreenCover(item: $selectedWrappedMonth) { month in
             WrappedView(month: month)
         }
+        .sheet(item: $selectedDay) { day in
+            DayHistorySheet(
+                dayStart: day.dayStart,
+                currentEpochID: ActivityResetPolicy.currentEpochID(from: resetSnapshots),
+                calendar: PomoGemCalendar.gregorian
+            )
+            .environment(\.dynamicTypeSize, dynamicTypeSize)
+        }
+        .sheet(isPresented: $showsPastHistory) {
+            PastHistorySheet()
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
+        }
         .sheet(item: $selectedAchievement, onDismiss: {
             selectedAchievement = nil
         }) { selection in
@@ -1185,6 +1199,7 @@ struct LogView: View {
             .font(.caption)
             .foregroundStyle(PomoGemTheme.muted)
             .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .combine)
             .accessibilityIdentifier("log.self-reported-share")
         }
         if summary.screenTimeSeconds > 0 {
@@ -1195,6 +1210,7 @@ struct LogView: View {
             .font(.caption)
             .foregroundStyle(PomoGemTheme.muted)
             .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .combine)
             .accessibilityIdentifier("log.screen-time-share")
         }
     }
@@ -1248,10 +1264,49 @@ struct LogView: View {
                         }
                     }
                     .frame(height: 180)
+                    .chartOverlay { proxy in
+                        GeometryReader { geometry in
+                            Rectangle()
+                                .fill(.clear)
+                                .contentShape(Rectangle())
+                                .onTapGesture { location in
+                                    openDay(at: location, proxy: proxy, geometry: geometry, values: values)
+                                }
+                        }
+                    }
                     .accessibilityChartDescriptor(descriptor)
+                    .accessibilityIdentifier("log.mass-chart")
+                    .accessibilityActions {
+                        ForEach(values.filter { $0.grams > 0 }) { item in
+                            Button("\(item.date.formatted(.dateTime.month().day()))の記録を見る") {
+                                selectedDay = HistoryDaySelection(dayStart: item.date)
+                            }
+                        }
+                    }
+                    Text("棒を選ぶと、その日の記録を一件ずつ見られます。")
+                        .font(.caption)
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
+    }
+
+    /// A tap anywhere in a day's column opens that day, when it has records.
+    private func openDay(
+        at location: CGPoint,
+        proxy: ChartProxy,
+        geometry: GeometryProxy,
+        values: [DailyMass]
+    ) {
+        guard let plotFrame = proxy.plotFrame else { return }
+        let origin = geometry[plotFrame].origin
+        guard let date = proxy.value(atX: location.x - origin.x, as: Date.self) else { return }
+        let calendar = Calendar.autoupdatingCurrent
+        guard let day = values.first(where: { calendar.isDate($0.date, inSameDayAs: date) }),
+              day.grams > 0
+        else { return }
+        selectedDay = HistoryDaySelection(dayStart: day.date)
     }
 
     private var subjectComposition: some View {
@@ -1545,13 +1600,25 @@ struct LogView: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(recentSessions.prefix(BoundedHistoryPolicy.recentSessionLimit)) { session in
-                        HistoryRow(session: session)
+                        HistorySessionRow(item: HistorySessionSummary(session))
                         if session.id != recentSessions.prefix(BoundedHistoryPolicy.recentSessionLimit).last?.id {
                             Divider().overlay(PomoGemTheme.glassEdge.opacity(0.08)).padding(.leading, 48)
                         }
                     }
                 }
                 .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 16))
+
+                // The list stays bounded; older history is one step away,
+                // by year, month and day.
+                Button {
+                    showsPastHistory = true
+                } label: {
+                    Label("過去の記録を月・日ごとに見る", systemImage: "calendar")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PomoGemSecondaryButtonStyle())
+                .accessibilityHint("年と月を選んで、日ごとの記録までたどれます")
+                .accessibilityIdentifier(HistoryDrillDownAccessibilityID.pastHistory)
             }
         }
     }
@@ -2675,73 +2742,5 @@ private struct AchievementHistoryRow: View {
         .accessibilityLabel(
             "\(stone.displaySubjectName)、\(stone.kind.title)、\(stone.displayTitle)、\(stone.achievedAt.formatted(date: .long, time: .omitted))"
         )
-    }
-}
-
-private struct HistoryRow: View {
-    let session: StudySession
-    var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(pebbleColor)
-                if session.effectiveSource.isSelfReported {
-                    Circle().stroke(.white.opacity(0.72), style: StrokeStyle(lineWidth: 1.4, dash: [3, 3]))
-                } else {
-                    Circle().fill(RadialGradient(colors: [.white.opacity(0.48), .clear], center: .topLeading, startRadius: 0, endRadius: 15))
-                }
-            }
-            .frame(width: 28, height: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.displaySubjectName)
-                    .font(.subheadline.weight(.semibold))
-                Text(session.endAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption2)
-                    .foregroundStyle(PomoGemTheme.muted)
-                if let batch = RareRewardPresentationPolicy
-                    .counts(session.rareRewardCounts).multiDrawSummary {
-                    Text(batch)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(PomoGemTheme.muted)
-                }
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("+\(session.grams)g").font(.system(.subheadline, design: .rounded, weight: .bold))
-                Text(session.effectiveSource.displayName)
-                    .font(.caption2)
-                    .foregroundStyle(PomoGemTheme.muted)
-            }
-        }
-        .padding(.horizontal, 14)
-        .frame(minHeight: 64)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(historyAccessibilityLabel)
-    }
-
-    private var historyAccessibilityLabel: String {
-        let source = session.effectiveSource.displayName
-        let date = session.endAt.formatted(date: .long, time: .shortened)
-        let batch = RareRewardPresentationPolicy
-            .counts(session.rareRewardCounts)
-            .multiDrawSummary
-            .map { "、\($0)" } ?? ""
-        return "\(session.displaySubjectName)、\(pebbleKindLabel)、\(source)、プラス\(session.grams)グラム\(batch)、\(date)"
-    }
-
-    private var pebbleKindLabel: String {
-        switch RareRewardPresentationPolicy.kind(session.pebbleKind) {
-        case .normal: "通常の粒"
-        case .gold: "金の粒"
-        case .prism: "虹の粒"
-        }
-    }
-
-    private var pebbleColor: AnyShapeStyle {
-        switch RareRewardPresentationPolicy.kind(session.pebbleKind) {
-        case .normal: AnyShapeStyle(Color(hex: session.displaySubjectColorHex))
-        case .gold: AnyShapeStyle(Color("pebble.gold"))
-        case .prism: AnyShapeStyle(AngularGradient(colors: [.red, .yellow, .green, .blue, .purple], center: .center))
-        }
     }
 }
