@@ -70,6 +70,10 @@ canonical rowへ書き戻したり、他copyへfan-outしたり、物理削除�
 例外は、supported reset markerで明示的に証明したstale epochと、同じUUIDの有効な`StudySession`がすでに
 materializeしているとexact queryで確認した後のclosed focus active tailだけです。4種類のlocal projectionは
 CloudKit sourceから再構築できる端末内dataなので、検証済みのmerge／compact／再作成を続けます。
+利用者の操作以外で同期元rowの値を書き換えるのは、開発中の1.1.0が`StudySession.source`へ保存した
+`screenTime`を、1.0.2も読める`manual`へ直す処理だけです。論理値（`effectiveSource`）は変わらず、
+background maintenanceではなくScreen Timeの取り込みと同じ前面の書き込み境界で行います
+（[ScreenTimeGems.md](ScreenTimeGems.md)）。
 
 #### 3.1.1 Version 1.0の最終CloudKit source schema
 

@@ -42,6 +42,11 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
     private var taskKey: String {
         "\(isReady):\(scenePhase == .active):\(timerPresented):\(contextKey):\(dataEpochID?.uuidString ?? "legacy")"
     }
+    /// The encoding rewrite is independent of timers and reset generations:
+    /// it re-runs only when the admitted store or its activation changes.
+    private var legacyEncodingTaskKey: String {
+        "\(isReady):\(scenePhase == .active):\(contextKey)"
+    }
     private var timerRunning: Bool {
         timerPresented || FocusPersistence.load().map {
             $0.dataEpochID == dataEpochID && $0.engine.snapshot(at: .now).phase.isRunning
@@ -50,6 +55,9 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .task(id: legacyEncodingTaskKey) {
+                await normalizeLegacySourceEncodingIfNeeded()
+            }
             .task(id: taskKey) {
                 guard isReady, scenePhase == .active else { return }
                 // `taskKey` carries `scenePhase == .active`, so this loop is
@@ -96,6 +104,25 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
             } message: {
                 Text(importError ?? "")
             }
+    }
+
+    /// Runs regardless of whether Screen Time is set up on this device: a
+    /// store can hold pre-release rows from an earlier configuration, and the
+    /// rewrite must not wait for the user to re-enable the feature.
+    @MainActor
+    private func normalizeLegacySourceEncodingIfNeeded() async {
+        guard isReady, scenePhase == .active, isCurrentOwner,
+              !ScreenTimeLegacySourceEncodingMarker.isComplete() else { return }
+        do {
+            _ = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncoding(
+                container: modelContext.container
+            )
+            guard !Task.isCancelled, isCurrentOwner else { return }
+            ScreenTimeLegacySourceEncodingMarker.markComplete()
+        } catch {
+            // Retried on the next activation. The rows stay readable here;
+            // nothing is shown because the user has nothing to act on.
+        }
     }
 
     @MainActor

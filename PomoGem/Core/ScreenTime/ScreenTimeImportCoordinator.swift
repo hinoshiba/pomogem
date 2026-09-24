@@ -48,15 +48,19 @@ enum ScreenTimeImportCoordinator {
             }
             guard StudySessionIntegrityPolicy.isSupported(
                 startAt: receipt.startedAt, endAt: receipt.endedAt,
-                seconds: 600, source: .screenTime, grams: 100, relativeTo: now
+                seconds: SessionSource.screenTimeSeconds, source: .screenTime,
+                grams: SessionSource.screenTimeGrams, relativeTo: now
             ) else { throw ImportError.invalidReceipt }
             let id = receipt.id
             var descriptor = FetchDescriptor<StudySession>(predicate: #Predicate { $0.id == id })
             descriptor.fetchLimit = 16
             let existing = try context.fetch(descriptor)
             if !existing.isEmpty {
+                // `effectiveSource` accepts both the stored `.manual` signature
+                // and a row a pre-release build stored as `screenTime`.
                 guard existing.allSatisfy({
-                    $0.source == .screenTime && $0.seconds == 600 && $0.grams == 100
+                    $0.effectiveSource == .screenTime
+                        && SessionSource.hasScreenTimeSignature(seconds: $0.seconds, grams: $0.grams)
                         && $0.dataEpochID == epoch && $0.subjectIDSnapshot == receipt.themeID
                 }) else { throw ImportError.conflictingRecord }
                 continue
@@ -67,10 +71,14 @@ enum ScreenTimeImportCoordinator {
                 subjects.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
                 subject = SubjectSyncPolicy.canonical(from: try context.fetch(subjects))
             }
+            // Persisted as `.manual` with the Screen Time signature (see
+            // `SessionSource.persistedEncoding`): 1.0.2 devices on the same
+            // iCloud data cannot decode a `screenTime` raw value.
             context.insert(StudySession(
                 id: receipt.id, subject: subject,
                 startAt: receipt.startedAt, endAt: receipt.endedAt,
-                seconds: 600, source: .screenTime, grams: 100,
+                seconds: SessionSource.screenTimeSeconds, source: .screenTime,
+                grams: SessionSource.screenTimeGrams,
                 deviceDayKey: FairnessPolicy.deviceDayKey(for: receipt.endedAt),
                 subjectNameSnapshot: subject?.safeDisplayName ?? "Screen Timeの学習",
                 subjectIDSnapshot: receipt.themeID,
@@ -82,6 +90,80 @@ enum ScreenTimeImportCoordinator {
         }
         if context.hasChanges { try context.save() }
         return inserted
+    }
+
+    static let legacySourceEncodingPageSize = 256
+
+    /// Pre-release 1.1.0 builds stored Screen Time rows with the raw value
+    /// `screenTime`, which a 1.0.2 device on the same iCloud data cannot
+    /// decode. This rewrites those rows to the stored `.manual` signature.
+    /// For this build it is a no-op (`effectiveSource` is unchanged); CloudKit
+    /// then carries the decodable value to every other device.
+    ///
+    /// Only Screen Time's own writer boundary runs it, with the same guards as
+    /// an import: a dedicated UI-authored context in the admitted, selected
+    /// store, never during storage switching or data deletion, and never from
+    /// background maintenance, whose source resolvers do not rewrite rows.
+    /// `Int` predicates narrow the scan to 600 s / 100 g rows; an enum cannot
+    /// be filtered in the store. The sort key never changes, so offset pages
+    /// stay stable while `source` is rewritten. Each page saves on its own and
+    /// yields, so a large history never blocks the main actor for long.
+    /// Returns the number of rows rewritten.
+    static func normalizeLegacySourceEncoding(
+        container: ModelContainer,
+        pageSize: Int = legacySourceEncodingPageSize
+    ) async throws -> Int {
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        if #available(iOS 18.0, *) {
+            context.author = SyncMaintenanceNotificationPolicy.uiAuthor
+        }
+        let seconds = SessionSource.screenTimeSeconds
+        let grams = SessionSource.screenTimeGrams
+        var descriptor = FetchDescriptor<StudySession>(
+            predicate: #Predicate { $0.seconds == seconds && $0.grams == grams },
+            sortBy: [SortDescriptor(\StudySession.syncRecordID)]
+        )
+        descriptor.fetchLimit = max(1, pageSize)
+        var offset = 0
+        var normalized = 0
+        while true {
+            try Task.checkCancellation()
+            descriptor.fetchOffset = offset
+            let page = try context.fetch(descriptor)
+            for row in page where row.normalizeLegacySourceEncoding() {
+                normalized += 1
+            }
+            if context.hasChanges {
+                do {
+                    try context.save()
+                } catch {
+                    context.rollback()
+                    throw error
+                }
+            }
+            guard page.count == descriptor.fetchLimit else { return normalized }
+            offset += page.count
+            await Task.yield()
+        }
+    }
+}
+
+/// Records that this store's pre-release `screenTime` rows were rewritten, so
+/// the full scan runs once per storage namespace rather than on every launch.
+/// A row that a still-unupdated pre-release build syncs in later is harmless
+/// to this build and is rewritten by that device once it updates.
+enum ScreenTimeLegacySourceEncodingMarker {
+    static func key(defaults: UserDefaults) -> String {
+        AccountScopedLocalState.defaultsKey(
+            base: "screen-time.legacy-source-encoding-normalized.v1", defaults: defaults
+        )
+    }
+    static func isComplete(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: key(defaults: defaults))
+    }
+    static func markComplete(defaults: UserDefaults = .standard) {
+        defaults.set(true, forKey: key(defaults: defaults))
     }
 }
 

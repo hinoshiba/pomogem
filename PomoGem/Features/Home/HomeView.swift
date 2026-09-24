@@ -2644,7 +2644,7 @@ struct HomeView: View {
             for id in screenTimeIDs {
                 if let session = try BoundedHistoryPolicy.resolvedSession(
                     id: id, epochID: currentActivityEpochID, context: modelContext
-                ), session.source == .screenTime, StudySessionIntegrityPolicy.isSupported(session) {
+                ), session.effectiveSource == .screenTime, StudySessionIntegrityPolicy.isSupported(session) {
                     resolved.append(session)
                 } else {
                     ScreenTimeGemDropStore.remove(id)
@@ -3585,7 +3585,7 @@ struct HomeView: View {
     }
 
     private func scheduleShareChipIfNeeded(for newSessions: [StudySession]) {
-        guard newSessions.contains(where: { $0.source == .timer }) else { return }
+        guard newSessions.contains(where: { $0.effectiveSource == .timer }) else { return }
         let dayKey = FairnessPolicy.deviceDayKey(for: .now)
         let promptKey = AccountScopedLocalState.defaultsKey(
             base: "share.prompt.\(dayKey)"
@@ -3610,11 +3610,11 @@ struct HomeView: View {
         }
         let uniqueSessions = StudySessionSyncPolicy.canonicalSessions(from: sessions)
         let looseMeasured = uniqueSessions.filter {
-            $0.source.isMeasured
+            $0.effectiveSource.isMeasured
                 && !representedSessionIDs.contains($0.id)
         }
         let measuredSessionGrams = uniqueSessions
-            .filter { $0.source.isMeasured }
+            .filter { $0.effectiveSource.isMeasured }
             .map(\.grams)
         let aggregateMeasuredGrams = HomeProjectionPolicy.saturatingNonnegativeSum([
             HomeProjectionPolicy.saturatingNonnegativeSum(

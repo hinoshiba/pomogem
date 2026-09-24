@@ -26,7 +26,7 @@ final class ScreenTimeImportTests: XCTestCase {
         XCTAssertEqual(sessions.count, 3)
         XCTAssertEqual(sessions.reduce(0) { $0 + $1.seconds }, 1_800)
         XCTAssertEqual(sessions.reduce(0) { $0 + $1.grams }, 300)
-        XCTAssertTrue(sessions.allSatisfy { $0.source.isMeasured && $0.source == .screenTime && $0.rareRewardParticipated == false && $0.rareRewardCreditedGrams == 0 })
+        XCTAssertTrue(sessions.allSatisfy { $0.effectiveSource.isMeasured && $0.effectiveSource == .screenTime && $0.persistedSource == .manual && $0.rareRewardParticipated == false && $0.rareRewardCreditedGrams == 0 })
     }
     func testAccountAndResetMismatchesCannotImportOrRebindOldReceipts() throws {
         let store = try container()
@@ -62,6 +62,112 @@ final class ScreenTimeImportTests: XCTestCase {
             XCTAssertFalse(StudySessionIntegrityPolicy.isSupported(startAt: .now.addingTimeInterval(-3_600), endAt: .now, seconds: seconds, source: .screenTime, grams: StudySession.grams(for: seconds)))
         }
     }
+    func testStoredScreenTimeRowsUseTheVersion102DecodableEncoding() throws {
+        let store = try container()
+        _ = try ScreenTimeImportCoordinator.insert([receipt()], container: store, contextKey: "local", dataEpochID: nil)
+        let session = try XCTUnwrap(ModelContext(store).fetch(FetchDescriptor<StudySession>()).first)
+        XCTAssertTrue(SessionSource.legacyPersistableRawValues.contains(session.persistedSource.rawValue))
+        XCTAssertFalse(session.hasLegacySourceEncoding)
+        XCTAssertEqual(session.effectiveSource, .screenTime)
+        XCTAssertTrue(StudySessionIntegrityPolicy.isSupported(session))
+    }
+
+    func testPreReleaseRowForTheSameReceiptIsRecognisedInsteadOfConflicting() throws {
+        let store = try container()
+        let value = receipt()
+        let context = ModelContext(store)
+        let legacy = StudySession(
+            id: value.id, startAt: value.startedAt, endAt: value.endedAt,
+            seconds: 600, source: .manual, grams: 100, deviceDayKey: "day"
+        )
+        legacy.overwriteStoredSourceForTesting(.screenTime)
+        context.insert(legacy)
+        try context.save()
+        XCTAssertTrue(try ScreenTimeImportCoordinator.insert([value], container: store, contextKey: "local", dataEpochID: nil).isEmpty)
+        // A real manual entry sharing the ID is still a conflict.
+        let manualStore = try container()
+        let manualContext = ModelContext(manualStore)
+        manualContext.insert(StudySession(
+            id: value.id, startAt: value.startedAt, endAt: value.endedAt,
+            seconds: ManualDuration.thirtyMinutes.seconds, source: .manual,
+            grams: ManualDuration.thirtyMinutes.grams, deviceDayKey: "day"
+        ))
+        try manualContext.save()
+        XCTAssertThrowsError(try ScreenTimeImportCoordinator.insert([value], container: manualStore, contextKey: "local", dataEpochID: nil))
+    }
+
+    func testNormalizationRewritesOnlyPreReleaseRowsAcrossPages() async throws {
+        let store = try container()
+        let context = ModelContext(store)
+        let start = Date.now.addingTimeInterval(-1_200)
+        var legacyIDs = Set<UUID>()
+        for _ in 0..<5 {
+            let row = StudySession(startAt: start, endAt: .now, seconds: 600, source: .manual, grams: 100, deviceDayKey: "day")
+            row.overwriteStoredSourceForTesting(.screenTime)
+            legacyIDs.insert(row.id)
+            context.insert(row)
+        }
+        let timers = (0..<3).map { _ in
+            StudySession(startAt: start, endAt: .now, seconds: 600, source: .timer, deviceDayKey: "day")
+        }
+        timers.forEach(context.insert)
+        let manual = StudySession(
+            startAt: start.addingTimeInterval(-3_600), endAt: .now,
+            seconds: ManualDuration.sixtyMinutes.seconds, source: .manual,
+            grams: ManualDuration.sixtyMinutes.grams, deviceDayKey: "day"
+        )
+        context.insert(manual)
+        try context.save()
+
+        let rewritten = try await ScreenTimeImportCoordinator.normalizeLegacySourceEncoding(container: store, pageSize: 2)
+        XCTAssertEqual(rewritten, 5)
+        let rows = try ModelContext(store).fetch(FetchDescriptor<StudySession>())
+        XCTAssertFalse(rows.contains(where: \.hasLegacySourceEncoding))
+        for row in rows {
+            XCTAssertTrue(SessionSource.legacyPersistableRawValues.contains(row.persistedSource.rawValue))
+            if legacyIDs.contains(row.id) {
+                XCTAssertEqual(row.effectiveSource, .screenTime)
+            } else if row.id == manual.id {
+                XCTAssertEqual(row.effectiveSource, .manual)
+            } else {
+                XCTAssertEqual(row.effectiveSource, .timer)
+            }
+        }
+    }
+
+    func testNormalizationMarkerIsScopedAndOnlySetExplicitly() throws {
+        let suite = "ScreenTimeImportTests.marker.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertFalse(ScreenTimeLegacySourceEncodingMarker.isComplete(defaults: defaults))
+        ScreenTimeLegacySourceEncodingMarker.markComplete(defaults: defaults)
+        XCTAssertTrue(ScreenTimeLegacySourceEncodingMarker.isComplete(defaults: defaults))
+    }
+
+    /// Every reader classifies the stored `.manual` signature as Screen Time,
+    /// exactly as it did the former `screenTime` raw value.
+    func testStoredSignatureKeepsScreenTimePresentationEverywhere() {
+        let start = Date.now.addingTimeInterval(-1_200)
+        let session = StudySession(startAt: start, endAt: .now, seconds: 600, source: .screenTime, deviceDayKey: "day")
+        XCTAssertEqual(session.persistedSource, .manual)
+        XCTAssertTrue(FairnessPolicy.isIncludedInShareByDefault(source: session.effectiveSource))
+        XCTAssertEqual(session.effectiveSource.displayName, "Screen Time")
+        XCTAssertEqual(ShareStratumVisual.radius(for: session), Double(Constants.Jar.measuredRadius))
+        let descriptor = PebbleDescriptor(session: session)
+        XCTAssertEqual(descriptor.source, .screenTime)
+        XCTAssertTrue(descriptor.isMeasured)
+        XCTAssertTrue(descriptor.accessibilityDescription.contains("Screen Time"))
+        let token = StudySessionSyncPolicy.changeToken(for: session)
+        XCTAssertEqual(token.source, .screenTime)
+        let legacy = StudySession(startAt: start, endAt: .now, seconds: 600, source: .manual, deviceDayKey: "day")
+        legacy.overwriteStoredSourceForTesting(.screenTime)
+        XCTAssertEqual(StudySessionSyncPolicy.changeToken(for: legacy), StudySessionSyncPolicy.changeToken(for: {
+            let copy = StudySession(id: legacy.id, startAt: start, endAt: legacy.endAt, seconds: 600, source: .screenTime,
+                                    deviceDayKey: "day", syncRecordID: legacy.syncRecordID)
+            return copy
+        }()), "Rewriting the encoding must not look like a changed record to projections")
+    }
+
     func testAnimationQueueDeduplicatesAndRemovesWithoutChangingStudyData() throws {
         let suite = "ScreenTimeImportTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

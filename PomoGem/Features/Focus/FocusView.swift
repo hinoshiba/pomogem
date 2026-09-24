@@ -2019,7 +2019,7 @@ struct FocusView: View {
               freshSessions.allSatisfy({
                   $0.id == payload.submission.sessionID
                       && $0.dataEpochID == dataEpochID
-                      && $0.source == payload.submission.source
+                      && $0.effectiveSource == payload.submission.source
                       && $0.seconds == payload.submission.completedSeconds
                       && $0.grams == payload.submission.completedGrams
               }) else {

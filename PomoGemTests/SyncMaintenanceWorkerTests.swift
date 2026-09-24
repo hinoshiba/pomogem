@@ -821,7 +821,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         )
         XCTAssertEqual(resolved.grams, 220)
         XCTAssertEqual(resolved.pebbleKind, .prism)
-        XCTAssertEqual(resolved.source, .timer)
+        XCTAssertEqual(resolved.effectiveSource, .timer)
         XCTAssertTrue(
             StudySessionSyncPolicy.canonicalSession(from: Array(copies.reversed()))
                 === resolved
@@ -879,7 +879,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         b.syncRecordID = orderedUUID(602)
         let c = makeSession(id: logicalID, grams: 220, kind: .prism, epochID: nil)
         c.syncRecordID = orderedUUID(603)
-        c.source = .timerDemoted
+        c.persistedSource = .timerDemoted
 
         XCTAssertTrue(StudySessionSyncPolicy.canonicalSession(from: [a, b]) === b)
         XCTAssertTrue(StudySessionSyncPolicy.canonicalSession(from: [b, a]) === b)
@@ -897,7 +897,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         // a destructive A/B fold would have erased that evidence.
         XCTAssertEqual(a.grams, 100)
         XCTAssertEqual(b.grams, 220)
-        XCTAssertEqual(c.source, .timerDemoted)
+        XCTAssertEqual(c.persistedSource, .timerDemoted)
     }
 
     func testEqualStudySessionCopiesUseStablePhysicalTotalOrder() throws {
@@ -2099,7 +2099,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         XCTAssertEqual(result.disposition, .completed)
         let sessions = try context.fetch(FetchDescriptor<StudySession>())
         XCTAssertEqual(Set(sessions.map(\.id)), [firstID, secondID])
-        XCTAssertTrue(sessions.allSatisfy { $0.source == .timer })
+        XCTAssertTrue(sessions.allSatisfy { $0.effectiveSource == .timer })
     }
 
     func testCleanSessionPageIsReadOnly() async throws {
@@ -4076,12 +4076,12 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
         )
         XCTAssertEqual(
             frontier.summaries.reduce(0) { $0 + $1.measuredPebbleCount },
-            expectedMeasured - retainedLooseSessions.filter(\.source.isMeasured).count
+            expectedMeasured - retainedLooseSessions.filter(\.effectiveSource.isMeasured).count
         )
         XCTAssertEqual(
             frontier.summaries.reduce(0) { $0 + $1.manualPebbleCount },
             expectedManual - retainedLooseSessions.filter {
-                !$0.source.isMeasured
+                !$0.effectiveSource.isMeasured
             }.count
         )
         XCTAssertEqual(
@@ -4452,7 +4452,7 @@ final class SyncMaintenanceWorkerTests: XCTestCase {
             value.startAt.timeIntervalSinceReferenceDate.description,
             value.endAt.timeIntervalSinceReferenceDate.description,
             String(value.seconds),
-            value.source.rawValue,
+            value.persistedSource.rawValue,
             value.pebbleKind.rawValue,
             String(value.grams),
             value.deviceDayKey,

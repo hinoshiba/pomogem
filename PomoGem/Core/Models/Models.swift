@@ -1,12 +1,64 @@
 import Foundation
 import SwiftData
 
+/// What produced a completed record.
+///
+/// `StudySession.source` stores this enum as its raw String, and CloudKit
+/// mirrors that value to every device on the Apple Account, including devices
+/// still running the shipped 1.0.2. That build decodes the field with a
+/// three-case enum, and SwiftData calls `fatalError` on any other raw value
+/// the first time the row is read. The persisted encoding is therefore frozen
+/// to `legacyPersistableRawValues`; a newer classification is stored in an
+/// older value plus a signature, and resolved by `StudySession.effectiveSource`.
 enum SessionSource: String, Codable, CaseIterable, Sendable {
     case timer
     case manual
     case timerDemoted
     /// Completed Screen Time usage thresholds; never a timer or rare draw.
+    ///
+    /// In-memory classification only. It is persisted as `.manual` with the
+    /// Screen Time signature (see `persistedEncoding`). The case stays so a
+    /// row a pre-release 1.1.0 build stored with this raw value still decodes.
     case screenTime
+
+    /// The raw values the shipped 1.0.2 decoder accepts. Frozen: a value added
+    /// here, or persisted outside it, crash-loops every older device that
+    /// shares the iCloud data. `CloudSchemaCompatibilityTests` pins it.
+    static let legacyPersistableRawValues: Set<String> = [
+        "timer", "manual", "timerDemoted"
+    ]
+
+    /// Screen Time learning is only ever recorded in fixed ten-minute chunks.
+    static let screenTimeSeconds = 600
+    static var screenTimeGrams: Int { StudySession.grams(for: screenTimeSeconds) }
+
+    /// The shape that identifies a Screen Time record stored as `.manual`.
+    /// The manual sheet offers only `ManualDuration` (30/60/120 minutes), so a
+    /// real manual entry never has it, and 1.0.2's integrity policy rejects it:
+    /// an older device keeps such a row hidden instead of misreading it.
+    static func hasScreenTimeSignature(seconds: Int, grams: Int) -> Bool {
+        seconds == screenTimeSeconds && grams == screenTimeGrams
+    }
+
+    /// The value the app writes to storage for this classification. Every
+    /// result is in `legacyPersistableRawValues`.
+    var persistedEncoding: SessionSource {
+        self == .screenTime ? .manual : self
+    }
+
+    /// Resolves a stored value back to its classification. A `.screenTime`
+    /// written by a pre-release build resolves to itself.
+    static func effective(
+        persisted: SessionSource,
+        seconds: Int,
+        grams: Int
+    ) -> SessionSource {
+        guard persisted == .manual,
+              hasScreenTimeSignature(seconds: seconds, grams: grams) else {
+            return persisted
+        }
+        return .screenTime
+    }
 
     var isMeasured: Bool { self == .timer || self == .screenTime }
     var isSelfReported: Bool { !isMeasured }
@@ -470,7 +522,13 @@ final class StudySession {
     var startAt: Date = Date()
     var endAt: Date = Date()
     var seconds: Int = 0
-    var source: SessionSource = SessionSource.timer
+    /// Stored, CloudKit-synchronized encoding of the record's source. Its name
+    /// and type are the shipped schema; only the Swift access level is narrow.
+    /// It is `fileprivate` so that no reader outside this file can mistake the
+    /// encoding for the classification: read `effectiveSource`, and write only
+    /// through the initializer or `persistedSource`, which both store
+    /// `SessionSource.persistedEncoding`.
+    fileprivate var source: SessionSource = SessionSource.timer
     var pebbleKind: PebbleKind = PebbleKind.normal
     var grams: Int = 0
     var deviceDayKey: String = ""
@@ -524,7 +582,9 @@ final class StudySession {
         self.startAt = startAt
         self.endAt = endAt
         self.seconds = max(0, seconds)
-        self.source = source
+        // `.screenTime` is written as `.manual`; the fixed 600 s / 100 g shape
+        // of a Screen Time chunk is what `effectiveSource` resolves it from.
+        self.source = source.persistedEncoding
         self.pebbleKind = pebbleKind
         self.grams = max(0, grams ?? Self.grams(for: seconds))
         self.deviceDayKey = deviceDayKey
@@ -535,6 +595,32 @@ final class StudySession {
             min(max(0, $0), Constants.Gacha.maximumCreditableGramsPerCompletion)
         }
         self.rareRewardOutcomesRawValue = rareRewardOutcomesRawValue
+    }
+
+    /// What this record is. Every consumer (integrity, history, share, jar,
+    /// fairness, reward and aggregation) reads this, never the stored encoding.
+    var effectiveSource: SessionSource {
+        SessionSource.effective(persisted: source, seconds: seconds, grams: grams)
+    }
+
+    /// The encoding this build persists for the record. Store-to-store copies
+    /// capture and restore this field, so both sides of a copy agree and a copy
+    /// never carries the pre-release raw value forward.
+    var persistedSource: SessionSource {
+        get { source.persistedEncoding }
+        set { source = newValue.persistedEncoding }
+    }
+
+    /// True only for a row a pre-release 1.1.0 build stored as `screenTime`.
+    var hasLegacySourceEncoding: Bool { source != source.persistedEncoding }
+
+    /// Rewrites a pre-release `screenTime` value to the encoding 1.0.2 can
+    /// decode. `effectiveSource` is unchanged; only older readers notice.
+    @discardableResult
+    func normalizeLegacySourceEncoding() -> Bool {
+        guard hasLegacySourceEncoding else { return false }
+        source = source.persistedEncoding
+        return true
     }
 
     var displaySubjectName: String {
@@ -572,6 +658,16 @@ final class StudySession {
         RareRewardCounts(outcomes: effectiveRareRewardOutcomes)
     }
 }
+
+#if DEBUG
+extension StudySession {
+    /// Tests only: stores a raw value exactly as a pre-release 1.1.0 build
+    /// did, bypassing `persistedEncoding`, to exercise legacy rows.
+    func overwriteStoredSourceForTesting(_ value: SessionSource) {
+        source = value
+    }
+}
+#endif
 
 /// Fail-closed trust boundary for completed activity loaded from CloudKit or a
 /// legacy store. Unsupported rows stay persisted (and therefore remain in the
@@ -616,7 +712,7 @@ enum StudySessionIntegrityPolicy {
             startAt: session.startAt,
             endAt: session.endAt,
             seconds: session.seconds,
-            source: session.source,
+            source: session.effectiveSource,
             grams: session.grams,
             relativeTo: now
         )
@@ -657,7 +753,7 @@ enum StudySessionIntegrityPolicy {
             return seconds.isMultiple(of: Constants.Timer.secondsPerMinute)
                 && grams == StudySession.grams(for: seconds)
         case .screenTime:
-            return seconds == 600 && grams == StudySession.grams(for: 600)
+            return SessionSource.hasScreenTimeSignature(seconds: seconds, grams: grams)
         case .manual:
             // The product has only these three explicit manual-entry choices.
             // Requiring the paired duration and mass prevents a corrupted row
@@ -846,7 +942,7 @@ enum StudySessionSyncPolicy {
             startAt: value.startAt,
             endAt: value.endAt,
             seconds: value.seconds,
-            source: value.source,
+            source: value.effectiveSource,
             pebbleKind: value.pebbleKind,
             grams: value.grams,
             deviceDayKey: value.deviceDayKey,
@@ -946,8 +1042,8 @@ enum StudySessionSyncPolicy {
         _ lhs: StudySession,
         _ rhs: StudySession
     ) -> Bool {
-        let leftSource = sourceSafetyRank(lhs.source)
-        let rightSource = sourceSafetyRank(rhs.source)
+        let leftSource = sourceSafetyRank(lhs.effectiveSource)
+        let rightSource = sourceSafetyRank(rhs.effectiveSource)
         if leftSource != rightSource { return leftSource < rightSource }
 
         let leftRule = lhs.rareRewardRuleVersion ?? -1
