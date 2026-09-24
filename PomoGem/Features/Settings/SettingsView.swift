@@ -2368,6 +2368,7 @@ private struct ScreenTimeSettingsRowLabel: View {
             enabled: controller.configuration.enabled,
             isMonitoring: controller.isMonitoring,
             monitoringError: controller.monitoringError,
+            learningStoppedByFreeLimit: controller.learningStoppedByFreeLimit,
             themeRemoved: controller.learningThemeWasRemoved
         )
     }

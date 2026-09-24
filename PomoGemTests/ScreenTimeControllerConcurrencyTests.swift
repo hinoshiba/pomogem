@@ -170,6 +170,13 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertEqual(controller.monitoringError, state.monitoringError)
         XCTAssertTrue(driver.events.contains("stop"),
                       "Registrations carrying voided tokens must not stay armed")
+        // Recording is now off, and the Settings row still says it stopped.
+        XCTAssertEqual(ScreenTimeRowStatus(
+            isBound: controller.isBoundToContext, enabled: controller.configuration.enabled,
+            isMonitoring: controller.isMonitoring, monitoringError: controller.monitoringError,
+            learningStoppedByFreeLimit: controller.learningStoppedByFreeLimit,
+            themeRemoved: controller.learningThemeWasRemoved
+        ), .needsAttention)
 
         // The cleared configuration is not re-invalidated on every later pass.
         await controller.invalidateAuthorizationIfRevoked()
@@ -651,12 +658,17 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertTrue(state.learningAllowedBySubscription)
         XCTAssertTrue(state.runs.contains { $0.id == runID && $0.active })
         XCTAssertNil(controller.monitoringError, "A Pro user must not be shown the free-plan limit")
+        XCTAssertFalse(controller.learningStoppedByFreeLimit)
 
         await controller.reconcile(isPro: false, learningPause: .none)
         try await controller.waitForPendingOperations()
         state = try store.snapshot()
         XCTAssertFalse(state.learningAllowedBySubscription)
         XCTAssertFalse(state.runs.contains { $0.id == runID && $0.active })
+        XCTAssertTrue(controller.learningStoppedByFreeLimit,
+                      "The page and the Settings row read the stop from the ledger's gate")
+        XCTAssertEqual(controller.monitoringError, ScreenTimeError.freeApplicationLimit.localizedDescription)
+        XCTAssertTrue(controller.monitoringError?.contains("勉強アプリ") == true)
 
         // Unknown again (a later process before StoreKit answers) keeps the
         // closed gate closed: nil can only keep or relax, never grant Pro.
@@ -1358,28 +1370,55 @@ final class ScreenTimeSettingsDraftTests: XCTestCase {
     // MARK: - screentime-03: a stop is visible outside the page
 
     func testTheSettingsRowSaysWhenRecordingStoppedButNeverForTheTimerHold() {
-        typealias Status = ScreenTimeRowStatus
-        XCTAssertEqual(Status(isBound: false, enabled: true, isMonitoring: true, monitoringError: "x", themeRemoved: true),
+        func status(
+            bound: Bool = true, enabled: Bool, monitoring: Bool = false, error: String? = nil,
+            freeLimit: Bool = false, themeRemoved: Bool = false
+        ) -> ScreenTimeRowStatus {
+            ScreenTimeRowStatus(isBound: bound, enabled: enabled, isMonitoring: monitoring, monitoringError: error,
+                                learningStoppedByFreeLimit: freeLimit, themeRemoved: themeRemoved)
+        }
+        XCTAssertEqual(status(bound: false, enabled: true, monitoring: true, error: "x", themeRemoved: true),
                        .feature, "An unbound owner has nothing it can report")
-        XCTAssertEqual(Status(isBound: true, enabled: false, isMonitoring: false, monitoringError: nil, themeRemoved: false),
-                       .feature)
-        XCTAssertEqual(Status(isBound: true, enabled: true, isMonitoring: true, monitoringError: nil, themeRemoved: false),
-                       .recording)
-        XCTAssertEqual(Status(isBound: true, enabled: true, isMonitoring: false, monitoringError: "監視エラー", themeRemoved: false),
-                       .needsAttention)
+        XCTAssertEqual(status(enabled: false), .feature)
+        XCTAssertEqual(status(enabled: true, monitoring: true), .recording)
+        XCTAssertEqual(status(enabled: true, error: "監視エラー"), .needsAttention)
+        // A revoked permission switches recording off and leaves only its
+        // error; that stop is what the row exists to show.
+        XCTAssertEqual(status(enabled: false, error: "スクリーンタイムの許可が解除されました。"), .needsAttention)
+        // Over the free limit only the study apps stop; black stones go on.
+        XCTAssertEqual(status(enabled: true, monitoring: true, error: "無料で登録できる勉強アプリは5つまでです。",
+                              freeLimit: true), .learningStopped)
+        XCTAssertEqual(status(enabled: true, error: "無料で登録できる勉強アプリは5つまでです。", freeLimit: true),
+                       .learningStopped)
         // Registering, or the timer holding the learning lane: no error, no alarm.
-        XCTAssertEqual(Status(isBound: true, enabled: true, isMonitoring: false, monitoringError: nil, themeRemoved: false),
-                       .feature)
+        XCTAssertEqual(status(enabled: true), .feature)
         // The destination went away; even with the black-stone lane still on.
-        XCTAssertEqual(Status(isBound: true, enabled: true, isMonitoring: true, monitoringError: nil, themeRemoved: true),
-                       .themeRemoved)
-        XCTAssertEqual(Status(isBound: true, enabled: false, isMonitoring: false, monitoringError: nil, themeRemoved: true),
-                       .themeRemoved)
-        XCTAssertTrue(Status.needsAttention.isWarning)
-        XCTAssertTrue(Status.themeRemoved.isWarning)
-        XCTAssertFalse(Status.recording.isWarning)
-        XCTAssertEqual(Status.recording.subtitle, "自動記録中")
-        XCTAssertTrue(Status.needsAttention.subtitle.hasPrefix("要確認"))
+        XCTAssertEqual(status(enabled: true, monitoring: true, themeRemoved: true), .themeRemoved)
+        XCTAssertEqual(status(enabled: false, themeRemoved: true), .themeRemoved)
+        XCTAssertTrue(ScreenTimeRowStatus.needsAttention.isWarning)
+        XCTAssertTrue(ScreenTimeRowStatus.learningStopped.isWarning)
+        XCTAssertTrue(ScreenTimeRowStatus.themeRemoved.isWarning)
+        XCTAssertFalse(ScreenTimeRowStatus.recording.isWarning)
+        XCTAssertEqual(ScreenTimeRowStatus.recording.subtitle, "自動記録中")
+        XCTAssertTrue(ScreenTimeRowStatus.needsAttention.subtitle.hasPrefix("要確認"))
+        XCTAssertEqual(ScreenTimeRowStatus.learningStopped.subtitle, "要確認：勉強アプリの記録が止まっています")
+    }
+
+    /// settings-01 on the Screen Time page: until StoreKit answers, a Pro
+    /// user reads as free. Saving over the free limit then would store a
+    /// closed gate and retire the study-app run, so 保存 waits for the answer;
+    /// anything the free plan allows anyway saves at once.
+    func testSavingOverTheFreeLimitWaitsForThePurchaseStatus() {
+        let limit = ScreenTimePolicy.freeLearningApplicationLimit
+        XCTAssertTrue(ScreenTimeDraftPolicy.waitsForPurchaseStatus(
+            draftEnabled: true, learningCount: limit + 1, entitlementsResolved: false))
+        XCTAssertFalse(ScreenTimeDraftPolicy.waitsForPurchaseStatus(
+            draftEnabled: true, learningCount: limit + 1, entitlementsResolved: true))
+        XCTAssertFalse(ScreenTimeDraftPolicy.waitsForPurchaseStatus(
+            draftEnabled: true, learningCount: limit, entitlementsResolved: false))
+        XCTAssertFalse(ScreenTimeDraftPolicy.waitsForPurchaseStatus(
+            draftEnabled: false, learningCount: limit + 1, entitlementsResolved: false),
+                       "Switching recording off is never held up")
     }
 
     func testTheThemeDeleteWarningAppliesOnlyToTheScreenTimeDestination() {

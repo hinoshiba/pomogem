@@ -58,6 +58,21 @@ struct ScreenTimeSettingsView: View {
     private var learningCount: Int { draft.learningSelection.applicationTokens.count }
     private var distractionCount: Int { draft.distractionSelection.applicationTokens.count }
 
+    /// Known to be on the free plan. Until StoreKit has answered
+    /// (`PurchaseManager.hasResolvedEntitlements`) a Pro user reads as free,
+    /// so the free-limit copy, the Pro offer and the limit itself wait for
+    /// the answer instead of flashing at a Pro user right after launch.
+    private var isKnownFree: Bool {
+        purchase.hasResolvedEntitlements && !purchase.isPro
+    }
+
+    private var waitsForPurchaseStatus: Bool {
+        ScreenTimeDraftPolicy.waitsForPurchaseStatus(
+            draftEnabled: draft.enabled, learningCount: learningCount,
+            entitlementsResolved: purchase.hasResolvedEntitlements
+        )
+    }
+
     private var selectedThemeExists: Bool {
         subjects.contains { $0.id == draft.themeID }
     }
@@ -73,7 +88,7 @@ struct ScreenTimeSettingsView: View {
             selection: draft.learningSelection,
             otherSelection: draft.distractionSelection,
             lane: .learning,
-            isPro: purchase.isPro
+            isPro: !isKnownFree
         ) {
             return message
         }
@@ -81,7 +96,7 @@ struct ScreenTimeSettingsView: View {
             selection: draft.distractionSelection,
             otherSelection: draft.learningSelection,
             lane: .distraction,
-            isPro: purchase.isPro
+            isPro: !isKnownFree
         ) {
             return message
         }
@@ -106,7 +121,7 @@ struct ScreenTimeSettingsView: View {
     private var canSaveDraft: Bool {
         !ScreenTimeDraftPolicy.blocksSave(bound: controller.isBoundToContext, draftEnabled: draft.enabled)
             && !isRequestingAuthorization && !controller.isSaving && !controller.isResetting
-            && validationMessage == nil
+            && validationMessage == nil && !waitsForPurchaseStatus
     }
 
     var body: some View {
@@ -177,7 +192,8 @@ struct ScreenTimeSettingsView: View {
                     .disabled(ScreenTimeDraftPolicy.blocksSave(
                         bound: controller.isBoundToContext, draftEnabled: draft.enabled
                     ) || isRequestingAuthorization
-                              || controller.isSaving || controller.isResetting || validationMessage != nil)
+                              || controller.isSaving || controller.isResetting || validationMessage != nil
+                              || waitsForPurchaseStatus)
                     .accessibilityIdentifier("screen-time.save")
             }
         }
@@ -188,7 +204,7 @@ struct ScreenTimeSettingsView: View {
                     ? draft.learningSelection : draft.distractionSelection,
                 otherSelection: lane == .learning
                     ? draft.distractionSelection : draft.learningSelection,
-                isPro: purchase.isPro
+                isPro: purchase.hasResolvedEntitlements ? purchase.isPro : nil
             ) { selection in
                 hasUserEdits = true
                 draft = ScreenTimeDraftPolicy.applying(
@@ -383,6 +399,9 @@ struct ScreenTimeSettingsView: View {
             if let validationMessage {
                 Text(validationMessage)
                     .foregroundStyle(.red)
+            } else if waitsForPurchaseStatus {
+                Text("購入状況を確認しています。確認が終わると保存できます。", tableName: "ScreenTime",
+                     comment: "Footer: StoreKit has not answered yet, so a selection over the free limit waits")
             } else if !controller.isBoundToContext {
                 Text(ScreenTimeDraftPolicy.unboundFooterMessage)
             } else {
@@ -407,7 +426,7 @@ struct ScreenTimeSettingsView: View {
             .disabled(controller.isSaving || controller.isResetting)
             .accessibilityIdentifier("screen-time.theme")
 
-            if !purchase.isPro {
+            if isKnownFree {
                 Button {
                     router.presentPaywall(from: .screenTimeApps)
                 } label: {
@@ -434,7 +453,7 @@ struct ScreenTimeSettingsView: View {
                     Text("テーマが未選択、または削除されています。記録先を選び直してください。")
                         .foregroundStyle(.red)
                 }
-                if !purchase.isPro && learningCount > 5 {
+                if isKnownFree && learningCount > ScreenTimePolicy.freeLearningApplicationLimit {
                     Text("現在の選択は無料枠を超えています。5つ以下に減らすか、Proの購入を確認してください。")
                         .foregroundStyle(.red)
                 }
@@ -522,11 +541,10 @@ struct ScreenTimeSettingsView: View {
         }
     }
 
+    /// From the ledger's own gate, not from `purchase`: an entitlement
+    /// StoreKit has not answered yet must not claim the study apps stopped.
     private var monitoringStatusText: String {
-        let learningOverLimit = !purchase.isPro
-            && controller.configuration.learningSelection.applicationTokens.count
-                > ScreenTimePolicy.freeLearningApplicationLimit
-        return controller.learningPausedByTimer || learningOverLimit
+        controller.learningPausedByTimer || controller.learningStoppedByFreeLimit
             ? String(localized: "控えたいアプリだけ自動記録中", table: "ScreenTime",
                      comment: "Status: only the black-stone lane is recording")
             : "自動記録中"
@@ -554,9 +572,7 @@ struct ScreenTimeSettingsView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("アプリを選ぶ")
                         .foregroundStyle(PomoGemTheme.text)
-                    Text(lane == .learning && !purchase.isPro
-                         ? "\(count) / 5アプリ"
-                         : "\(count)アプリ・無制限")
+                    Text(selectionCaption(lane, count: count))
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                 }
@@ -574,8 +590,31 @@ struct ScreenTimeSettingsView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(lane.chooseAppsLabel)
         .accessibilityValue("\(count)アプリ選択中")
-        .accessibilityHint(lane == .learning && !purchase.isPro ? "無料では5つまで選べます" : "アプリ数は無制限です")
+        .accessibilityHint(selectionHint(lane))
         .accessibilityIdentifier("screen-time.\(lane.rawValue)-apps")
+    }
+
+    /// A Pro user must not read 「3 / 5アプリ」 before StoreKit has answered,
+    /// nor a free user 「無制限」: while it is unknown, only the count.
+    private func selectionCaption(_ lane: ScreenTimeSelectionLane, count: Int) -> String {
+        guard lane == .learning, !purchase.isPro else {
+            return String(localized: "\(count)アプリ・無制限", table: "ScreenTime",
+                          comment: "Apps chosen in a lane with no limit")
+        }
+        guard purchase.hasResolvedEntitlements else {
+            return String(localized: "\(count)アプリ", table: "ScreenTime",
+                          comment: "Study apps chosen, before the purchase status is known")
+        }
+        return String(localized: "\(count) / 5アプリ", table: "ScreenTime",
+                      comment: "Study apps chosen out of the free plan's five")
+    }
+
+    private func selectionHint(_ lane: ScreenTimeSelectionLane) -> String {
+        guard lane == .learning, !purchase.isPro else {
+            return String(localized: "アプリ数は無制限です", table: "ScreenTime", comment: "VoiceOver hint: no app limit")
+        }
+        guard purchase.hasResolvedEntitlements else { return "" }
+        return String(localized: "無料では5つまで選べます", table: "ScreenTime", comment: "VoiceOver hint: the free plan's study-app limit")
     }
 
     /// Only user interaction goes through this setter, so a later re-seed
@@ -689,6 +728,15 @@ enum ScreenTimeDraftPolicy {
     /// destroy opaque selections only a new picker session could restore.
     static func blocksSave(bound: Bool, draftEnabled: Bool) -> Bool {
         !bound && draftEnabled
+    }
+
+    /// Whether 保存 waits for StoreKit. Saving more study apps than the free
+    /// plan records with an entitlement that is not known yet would store
+    /// `learningAllowedBySubscription = false` for a Pro user and retire the
+    /// study-app run it just registered; 5 or fewer, or recording off, is
+    /// the same on either plan.
+    static func waitsForPurchaseStatus(draftEnabled: Bool, learningCount: Int, entitlementsResolved: Bool) -> Bool {
+        draftEnabled && !entitlementsResolved && learningCount > ScreenTimePolicy.freeLearningApplicationLimit
     }
 
     /// What the footer says while the context is unbound. It must describe the
@@ -814,7 +862,9 @@ private enum ScreenTimeSelectionValidation {
 private struct ScreenTimeAppSelectionSheet: View {
     let lane: ScreenTimeSelectionLane
     let otherSelection: FamilyActivitySelection
-    let isPro: Bool
+    /// nil until StoreKit has answered; only a known free plan shows the
+    /// limit notice.
+    let isPro: Bool?
     let onApply: (FamilyActivitySelection) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -824,7 +874,7 @@ private struct ScreenTimeAppSelectionSheet: View {
         lane: ScreenTimeSelectionLane,
         initialSelection: FamilyActivitySelection,
         otherSelection: FamilyActivitySelection,
-        isPro: Bool,
+        isPro: Bool?,
         onApply: @escaping (FamilyActivitySelection) -> Void
     ) {
         self.lane = lane
@@ -843,7 +893,7 @@ private struct ScreenTimeAppSelectionSheet: View {
 
     private var noticeMessage: String? {
         if let blockingMessage { return blockingMessage }
-        guard ScreenTimeSelectionValidation.exceedsFreeLimit(selection: selection, lane: lane, isPro: isPro) else {
+        guard ScreenTimeSelectionValidation.exceedsFreeLimit(selection: selection, lane: lane, isPro: isPro != false) else {
             return nil
         }
         return String(localized: "無料で記録できる勉強アプリは5つまでです。このまま反映して、設定画面でProにするか、5つ以下に減らしてから保存してください。",
@@ -854,7 +904,7 @@ private struct ScreenTimeAppSelectionSheet: View {
         NavigationStack {
             FamilyActivityPicker(
                 headerText: "カテゴリを開き、記録するアプリを1つずつ選んでください。",
-                footerText: lane == .learning && !isPro
+                footerText: lane == .learning && isPro != true
                     ? "無料は5つまで。Proでは無制限です。"
                     : "アプリ数は無制限です。",
                 selection: $selection

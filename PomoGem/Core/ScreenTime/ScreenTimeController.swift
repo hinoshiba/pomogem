@@ -13,6 +13,11 @@ final class ScreenTimeController: ObservableObject {
     /// The timer's hold on the learning lane as of the last reload, already
     /// evaluated against its end date (`ScreenTimeState.isLearningPaused(at:)`).
     @Published private(set) var learningPausedByTimer = false
+    /// Recording is on, but the saved study apps exceed what the free plan
+    /// records, so only the black-stone lane counts. Published so the page
+    /// and the Settings row describe the stop from the ledger's own gate
+    /// rather than from an entitlement StoreKit may not have answered yet.
+    @Published private(set) var learningStoppedByFreeLimit = false
     @Published private(set) var isMonitoring = false
     @Published private(set) var isSaving = false
     @Published private(set) var isResetting = false
@@ -457,6 +462,8 @@ final class ScreenTimeController: ObservableObject {
                     noticeDefaults.bool(forKey: Self.themeRemovalNoticeKey(lease.binding.contextKey)))
             // Evaluated against the hold's end date, not the stored flag.
             publish(\.learningPausedByTimer, state.isLearningPaused(at: .now))
+            publish(\.learningStoppedByFreeLimit,
+                    granted && configuration.enabled && !state.learningAllowedBySubscription)
             publish(\.monitoringError, error)
             publish(\.isMonitoring, granted && state.runs.contains(where: \.active))
         } catch {
@@ -670,6 +677,7 @@ final class ScreenTimeController: ObservableObject {
         publish(\.configuration, ScreenTimeConfiguration())
         publish(\.negativeGemCount, 0)
         publish(\.learningPausedByTimer, false)
+        publish(\.learningStoppedByFreeLimit, false)
         publish(\.monitoringError, error)
         publish(\.isMonitoring, false)
     }
@@ -701,13 +709,30 @@ enum ScreenTimeRowStatus: Equatable {
     case feature
     case recording
     case needsAttention
+    /// Only the study apps stopped (the free plan's limit); the black-stone
+    /// lane still records.
+    case learningStopped
     case themeRemoved
 
-    init(isBound: Bool, enabled: Bool, isMonitoring: Bool, monitoringError: String?, themeRemoved: Bool) {
+    init(
+        isBound: Bool,
+        enabled: Bool,
+        isMonitoring: Bool,
+        monitoringError: String?,
+        learningStoppedByFreeLimit: Bool,
+        themeRemoved: Bool
+    ) {
         guard isBound else { self = .feature; return }
         if themeRemoved { self = .themeRemoved; return }
+        // Before the switch: a revoked permission turns recording off and
+        // leaves only its error to say why, which is exactly the stop this
+        // row exists to show. A save that turns recording off clears the
+        // ledger's error, so a deliberate stop still reads as the feature.
+        if monitoringError != nil {
+            self = learningStoppedByFreeLimit ? .learningStopped : .needsAttention
+            return
+        }
         guard enabled else { self = .feature; return }
-        if monitoringError != nil { self = .needsAttention; return }
         self = isMonitoring ? .recording : .feature
     }
 
@@ -721,13 +746,16 @@ enum ScreenTimeRowStatus: Equatable {
         case .needsAttention:
             String(localized: "要確認：自動記録が止まっています", table: "ScreenTime",
                    comment: "Settings row subtitle: recording stopped because of an error")
+        case .learningStopped:
+            String(localized: "要確認：勉強アプリの記録が止まっています", table: "ScreenTime",
+                   comment: "Settings row subtitle: study apps stopped recording (free-plan limit); black stones still record")
         case .themeRemoved:
             String(localized: "要確認：記録先のテーマが削除されました", table: "ScreenTime",
                    comment: "Settings row subtitle: the study-app destination theme was deleted")
         }
     }
 
-    var isWarning: Bool { self == .needsAttention || self == .themeRemoved }
+    var isWarning: Bool { self == .needsAttention || self == .learningStopped || self == .themeRemoved }
 }
 
 /// The extra paragraph of the theme-delete confirmation when that theme is
