@@ -487,6 +487,10 @@ struct PendingRewardReceipt: Identifiable, Codable, Equatable, Sendable {
 enum PendingRewardReceiptStore {
     static let defaultsKey = "home.pending-reward-receipts.v1"
     static let maximumPendingCount = 4
+    /// Posted after every write. Home derives what it shows (the start
+    /// button, queued celebrations) from these receipts, and SwiftUI does not
+    /// observe UserDefaults.
+    static let didChangeNotification = Notification.Name("PendingRewardReceiptStore.didChange")
 
     static func load(defaults: UserDefaults = .standard) -> [PendingRewardReceipt] {
         let key = AccountScopedLocalState.defaultsKey(
@@ -516,10 +520,12 @@ enum PendingRewardReceiptStore {
             .suffix(maximumPendingCount))
         guard !bounded.isEmpty else {
             defaults.removeObject(forKey: key)
+            NotificationCenter.default.post(name: didChangeNotification, object: defaults)
             return
         }
         guard let data = try? JSONEncoder().encode(bounded) else { return }
         defaults.set(data, forKey: key)
+        NotificationCenter.default.post(name: didChangeNotification, object: defaults)
     }
 
     @discardableResult
@@ -567,6 +573,7 @@ enum PendingRewardReceiptStore {
             base: defaultsKey,
             defaults: defaults
         ))
+        NotificationCenter.default.post(name: didChangeNotification, object: defaults)
     }
 }
 

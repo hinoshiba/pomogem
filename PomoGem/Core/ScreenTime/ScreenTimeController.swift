@@ -38,6 +38,12 @@ final class ScreenTimeController: ObservableObject {
     /// again, so the settings screen and its row can say why learning stopped
     /// instead of looking like a feature that was never set up.
     @Published private(set) var learningThemeWasRemoved = false
+    /// The only value Home needs. A stable, de-duplicated stream lets the jar
+    /// follow black-stone changes without observing the whole controller,
+    /// whose status fields the foreground loop re-reads every three seconds.
+    /// Created once so SwiftUI's `onReceive` keeps a single subscription.
+    private(set) lazy var negativeGemCountChanges: AnyPublisher<Int, Never> =
+        $negativeGemCount.removeDuplicates().eraseToAnyPublisher()
     let store: ScreenTimeStore
     private let worker: ScreenTimeMonitoringWorker
     /// A read-only copy of the callback diagnostics into the app's own
@@ -165,7 +171,7 @@ final class ScreenTimeController: ObservableObject {
                 }
                 bindingConfirmed = true
                 bindingTask = nil
-                bindingError = nil
+                publish(\.bindingError, nil)
                 reload()
             } catch {
                 if self.lease === newLease {
@@ -175,7 +181,9 @@ final class ScreenTimeController: ObservableObject {
                     bindingTask = nil
                     clearPublishedState()
                     // After clearPublishedState, which nils monitoringError.
-                    bindingError = error.localizedDescription
+                    // A context that can never bind (no App Group) fails the
+                    // same way on every refresh pass; publish only a change.
+                    publish(\.bindingError, error.localizedDescription)
                 }
                 throw error
             }
@@ -191,7 +199,7 @@ final class ScreenTimeController: ObservableObject {
         }
         let operation = beginOperation()
         defer { endOperation(operation) }
-        authorizationFailure = nil
+        publish(\.authorizationFailure, nil)
         do {
             let worker = worker
             try await worker.perform {
@@ -410,10 +418,17 @@ final class ScreenTimeController: ObservableObject {
         reload()
     }
 
+    /// Runs on every pass of the three-second foreground loop, so it must stay
+    /// silent when nothing changed: `@Published` fires `objectWillChange` on
+    /// every assignment, equal value or not, and each emission re-evaluates
+    /// every observing view. Final values are computed first and each
+    /// property is assigned at most once, only when it differs.
     func reload() {
-        authorizationStatus = authorization()
-        authorizationGranted = Self.isAuthorized(authorizationStatus)
-        if authorizationGranted, authorizationFailure != nil { authorizationFailure = nil }
+        let status = authorization()
+        let granted = Self.isAuthorized(status)
+        publish(\.authorizationStatus, status)
+        publish(\.authorizationGranted, granted)
+        if granted { publish(\.authorizationFailure, nil) }
         guard bindingConfirmed, let lease, lease.binding.contextKey == currentContextKey() else {
             clearPublishedState()
             return
@@ -429,21 +444,23 @@ final class ScreenTimeController: ObservableObject {
                 clearPublishedState()
                 return
             }
-            configuration = state.configuration
-            let themeRemoved = noticeDefaults.bool(forKey: Self.themeRemovalNoticeKey(lease.binding.contextKey))
-            if learningThemeWasRemoved != themeRemoved { learningThemeWasRemoved = themeRemoved }
-            negativeGemCount = state.negativeGemCount
-            learningPausedByTimer = state.isLearningPaused(at: .now)
-            monitoringError = state.monitoringError
-            isMonitoring = authorizationGranted && state.runs.contains(where: \.active)
-            if !authorizationGranted && configuration.enabled {
-                monitoringError = ScreenTimeError.unauthorized.localizedDescription
+            let configuration = state.configuration
+            var error = state.monitoringError
+            if !granted && configuration.enabled {
+                error = ScreenTimeError.unauthorized.localizedDescription
             } else if !state.learningAllowedBySubscription && configuration.enabled {
-                monitoringError = ScreenTimeError.freeApplicationLimit.localizedDescription
+                error = ScreenTimeError.freeApplicationLimit.localizedDescription
             }
+            publish(\.configuration, configuration)
+            publish(\.negativeGemCount, state.negativeGemCount)
+            publish(\.learningThemeWasRemoved,
+                    noticeDefaults.bool(forKey: Self.themeRemovalNoticeKey(lease.binding.contextKey)))
+            // Evaluated against the hold's end date, not the stored flag.
+            publish(\.learningPausedByTimer, state.isLearningPaused(at: .now))
+            publish(\.monitoringError, error)
+            publish(\.isMonitoring, granted && state.runs.contains(where: \.active))
         } catch {
-            clearPublishedState()
-            monitoringError = error.localizedDescription
+            clearPublishedState(monitoringError: error.localizedDescription)
         }
     }
 
@@ -537,7 +554,7 @@ final class ScreenTimeController: ObservableObject {
         isUpdatingMonitoring = false
         resetAuthorizationSettling()
         bindingError = nil
-        authorizationFailure = nil
+        publish(\.authorizationFailure, nil)
         // Fence delayed callbacks immediately without waiting for registration.
         try? store.update { state in
             guard retiring.binding.matches(state) else { return }
@@ -609,13 +626,13 @@ final class ScreenTimeController: ObservableObject {
     private func beginOperation() -> UUID {
         let id = UUID()
         operationIDs.insert(id)
-        isUpdatingMonitoring = true
+        publish(\.isUpdatingMonitoring, true)
         return id
     }
 
     private func endOperation(_ id: UUID) {
         operationIDs.remove(id)
-        isUpdatingMonitoring = !operationIDs.isEmpty
+        publish(\.isUpdatingMonitoring, !operationIDs.isEmpty)
     }
 
     private func resetAuthorizationSettling() {
@@ -633,14 +650,14 @@ final class ScreenTimeController: ObservableObject {
     func noteLearningThemeRemoved() {
         guard let lease = try? boundLease() else { return }
         noticeDefaults.set(true, forKey: Self.themeRemovalNoticeKey(lease.binding.contextKey))
-        learningThemeWasRemoved = true
+        publish(\.learningThemeWasRemoved, true)
     }
 
     /// The user has chosen again (a save) or started over (a reset).
     func clearLearningThemeRemovalNotice() {
         guard let lease else { return }
         noticeDefaults.removeObject(forKey: Self.themeRemovalNoticeKey(lease.binding.contextKey))
-        if learningThemeWasRemoved { learningThemeWasRemoved = false }
+        publish(\.learningThemeWasRemoved, false)
     }
 
     /// The owner key is already namespaced per account and storage mode.
@@ -648,13 +665,22 @@ final class ScreenTimeController: ObservableObject {
         "screen-time.learning-theme-removed.\(contextKey)"
     }
 
-    private func clearPublishedState() {
-        if learningThemeWasRemoved { learningThemeWasRemoved = false }
-        configuration = ScreenTimeConfiguration()
-        negativeGemCount = 0
-        learningPausedByTimer = false
-        monitoringError = nil
-        isMonitoring = false
+    private func clearPublishedState(monitoringError error: String? = nil) {
+        publish(\.learningThemeWasRemoved, false)
+        publish(\.configuration, ScreenTimeConfiguration())
+        publish(\.negativeGemCount, 0)
+        publish(\.learningPausedByTimer, false)
+        publish(\.monitoringError, error)
+        publish(\.isMonitoring, false)
+    }
+
+    /// Assigns a published property only when the value really changes, so a
+    /// periodic pass that re-reads an unchanged ledger emits nothing.
+    private func publish<Value: Equatable>(
+        _ keyPath: ReferenceWritableKeyPath<ScreenTimeController, Value>,
+        _ value: Value
+    ) {
+        if self[keyPath: keyPath] != value { self[keyPath: keyPath] = value }
     }
 }
 

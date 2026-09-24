@@ -445,68 +445,76 @@ struct JarSpriteView: View {
 /// peaks that Core Motion sampling can miss under a busy SpriteKit frame. The
 /// system path fires at motion-begin (not motion-end) to keep both detections
 /// inside JarScene's shared cooldown in normal use.
+///
+/// The shake is picked up where UIKit delivers it when nothing on screen is
+/// first responder: the window (see the `UIWindow` extension below). This view
+/// only tells the window which jar is in it and whether that jar wants shakes.
+/// It must never claim first responder itself. It used to, and while it held
+/// it, opening Home's theme or duration `Menu` let iOS 26's menu type-select
+/// attach its key input to it; wherever UIKit reports a hardware keyboard as
+/// available while the software keyboard is in use (the iOS Simulator by
+/// default), a full software keyboard then covered the lower half of the menu.
 private struct JarSystemShakeCapture: UIViewRepresentable {
     let isEnabled: Bool
     let onShake: @MainActor () -> Void
 
-    func makeUIView(context: Context) -> ShakeResponderView {
-        ShakeResponderView()
+    func makeUIView(context: Context) -> ShakeObserverView {
+        ShakeObserverView()
     }
 
-    func updateUIView(_ uiView: ShakeResponderView, context: Context) {
+    func updateUIView(_ uiView: ShakeObserverView, context: Context) {
         uiView.onShake = onShake
         uiView.acceptsShake = isEnabled
-        uiView.refreshFirstResponderStatus()
     }
 
-    static func dismantleUIView(_ uiView: ShakeResponderView, coordinator: ()) {
+    static func dismantleUIView(_ uiView: ShakeObserverView, coordinator: ()) {
         uiView.acceptsShake = false
         uiView.onShake = nil
     }
 
     @MainActor
-    final class ShakeResponderView: UIView {
+    final class ShakeObserverView: UIView {
         var onShake: (@MainActor () -> Void)?
-        private var retryIsScheduled = false
-        var acceptsShake = false {
-            didSet {
-                guard acceptsShake != oldValue else { return }
-                refreshFirstResponderStatus()
-            }
-        }
+        var acceptsShake = false
 
-        override var canBecomeFirstResponder: Bool { acceptsShake }
+        private static let attached = NSHashTable<ShakeObserverView>.weakObjects()
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
-            refreshFirstResponderStatus()
-        }
-
-        override func motionBegan(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
-            guard acceptsShake, motion == .motionShake else {
-                super.motionBegan(motion, with: event)
-                return
-            }
-            onShake?()
-        }
-
-        func refreshFirstResponderStatus() {
-            if acceptsShake, window != nil {
-                guard !isFirstResponder, !retryIsScheduled else { return }
-                guard !becomeFirstResponder() else { return }
-                retryIsScheduled = true
-                DispatchQueue.main.async { [weak self] in
-                    guard let self else { return }
-                    self.retryIsScheduled = false
-                    guard self.acceptsShake,
-                          self.window != nil,
-                          !self.isFirstResponder else { return }
-                    self.becomeFirstResponder()
-                }
-            } else if isFirstResponder {
-                resignFirstResponder()
+            if window == nil {
+                Self.attached.remove(self)
+            } else {
+                Self.attached.add(self)
             }
         }
+
+        /// Hands a shake that reached `window` to the jars in it that accept
+        /// one. Returns whether any did, so the window can keep the event, as
+        /// the old first-responder view did.
+        static func deliverShake(in window: UIWindow) -> Bool {
+            var delivered = false
+            for view in attached.allObjects
+            where view.window === window && view.acceptsShake {
+                view.onShake?()
+                delivered = true
+            }
+            return delivered
+        }
+    }
+}
+
+extension UIWindow {
+    /// Motion events go to the first responder and up its chain, and to the
+    /// key window when nothing is first responder, so every shake passes
+    /// through here unless a responder below handles it first. UIWindow does
+    /// not implement this method itself, so this adds the window's override
+    /// rather than replacing UIKit's; unhandled shakes continue to `super`.
+    override open func motionBegan(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+        if motion == .motionShake,
+           JarSystemShakeCapture.ShakeObserverView.deliverShake(in: self) {
+            return
+        }
+        super.motionBegan(motion, with: event)
     }
 }
 #endif

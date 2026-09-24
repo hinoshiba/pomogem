@@ -1316,9 +1316,10 @@ final class AchievementStone {
         note.isEmpty ? kind.title : note
     }
 
+    /// Applied when a stone is saved, never while its name is being typed.
     static func sanitizedNote(_ value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return String(trimmed.prefix(40))
+        return String(trimmed.prefix(AchievementNotePolicy.maximumCharacters))
     }
 }
 
