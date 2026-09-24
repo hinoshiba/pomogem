@@ -3107,6 +3107,9 @@ struct HomeView: View {
                 failureMessage: "前回使った時間として保存できませんでした"
             )
         }
+        // Starting a focus answers today's daily reminder. Record it before
+        // the cover opens, so the reminder is re-read with it (RootView).
+        PassiveReminderActivityReader.recordFocusStarted()
         focusConfiguration = FocusConfiguration(
             subject: subject,
             duration: duration,
