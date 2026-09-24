@@ -222,7 +222,64 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         cancelFocusIfPresented()
     }
 
+    func testFirstJarHintWaitsForTheToastAndStaysOffTheGem() {
+        // Show the one-time hint again for this launch only.
+        app.launchArguments += ["-jar.tap-hint-seen", "NO"]
+        launch()
+        let probe = app.descendants(matching: .any)["jar.presentation.probe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 5))
+        let toast = app.descendants(matching: .any).matching(identifier: "app.toast").firstMatch
+        addThirtyMinutesManually()
+        XCTAssertTrue(toast.waitForExistence(timeout: 5))
+
+        var fields: [String: String] = [:]
+        let deadline = Date().addingTimeInterval(15)
+        while Date() < deadline {
+            fields = probeFields(probe)
+            if let hint = fields["jarHint"], hint != "none" { break }
+            pause(0.2)
+        }
+        let hint = rect(fields["jarHint"])
+        XCTAssertNotNil(hint, "The first gem shows the jar hint once; probe=\(fields)")
+        XCTAssertFalse(toast.exists, "One message at a time: the hint waits for the toast")
+        pause(0.6) // let the hint finish fading in
+        saveScreenshot("jar-hint-after-toast")
+
+        guard let hint,
+              let gemX = fields["targetWindowX"].flatMap(Double.init),
+              let gemY = fields["targetWindowY"].flatMap(Double.init),
+              gemX >= 0, gemY >= 0 else {
+            return XCTFail("No resting gem in the probe: \(fields)")
+        }
+        // The hint asks people to tap the gem; it must not sit on it. The
+        // first gem rests on the jar floor, so the hint belongs above it.
+        let gemRadius: CGFloat = 18
+        XCTAssertLessThan(hint.maxY, CGFloat(gemY) - gemRadius, "hint=\(hint) gem=(\(gemX), \(gemY))")
+    }
+
     // MARK: - Helpers
+
+    private func probeFields(_ probe: XCUIElement) -> [String: String] {
+        guard let rawValue = probe.value as? String else { return [:] }
+        return Dictionary(rawValue.split(separator: ";").compactMap { field -> (String, String)? in
+            let pieces = field.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard pieces.count == 2 else { return nil }
+            return (String(pieces[0]), String(pieces[1]))
+        }, uniquingKeysWith: { $1 })
+    }
+
+    private func rect(_ value: String?) -> CGRect? {
+        guard let value, value != "none" else { return nil }
+        let numbers = value.split(separator: ",").compactMap { Double($0) }
+        guard numbers.count == 4 else { return nil }
+        return CGRect(x: numbers[0], y: numbers[1], width: numbers[2] - numbers[0], height: numbers[3] - numbers[1])
+    }
+
+    private func pause(_ seconds: TimeInterval) {
+        let idle = XCTestExpectation(description: "pause")
+        idle.isInverted = true
+        _ = XCTWaiter.wait(for: [idle], timeout: seconds)
+    }
 
     /// A running timer survives relaunch; end it so later tests start on Home.
     private func cancelFocusIfPresented() {

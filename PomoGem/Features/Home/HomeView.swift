@@ -989,37 +989,6 @@ struct HomeView: View {
                 .transition(.opacity)
             }
 
-            if aggregateInspectionSummary == nil, showsTiltHint, !isJarEmpty {
-                VStack {
-                    Spacer()
-                    Label(
-                        jarInteractionHintText,
-                        systemImage: jarInteractionHintSymbol
-                    )
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(PomoGemTheme.text)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 9)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .overlay {
-                            Capsule().stroke(PomoGemTheme.glassEdge.opacity(0.2), lineWidth: 1)
-                        }
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 18)
-                }
-                .transition(
-                    reduceMotion
-                        ? .opacity
-                        : .opacity.combined(with: .move(edge: .bottom))
-                )
-                // `JarSpriteView` exposes the same guidance as a persistent
-                // accessibility hint. Keep this transient visual hint out of
-                // the VoiceOver order so it is not spoken twice.
-                .accessibilityHidden(true)
-                .allowsHitTesting(false)
-            }
-
 #if DEBUG
             if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
                 JarUITestPresentationProbe(scene: scene)
@@ -1073,6 +1042,57 @@ struct HomeView: View {
     }
 
     private var jarMetricHUD: some View {
+        VStack(spacing: 14) {
+            jarMetricReadout
+            // The one-time hint hangs under the readout, in the jar's empty
+            // middle. On the floor it covered the first gem — the very
+            // pebble it asks people to tap.
+            if aggregateInspectionSummary == nil, showsTiltHint, !isJarEmpty {
+                jarInteractionHint
+                    // A short settle, not a slide from the edge: sliding in
+                    // from above would pass over the readout.
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .opacity.combined(with: .offset(y: -8))
+                    )
+            }
+        }
+        // Keep every glyph behind the mouth instead of straddling its bright
+        // rim; the occlusion cue is what makes the glass depth believable.
+        .padding(.top, 88)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .allowsHitTesting(false)
+    }
+
+    private var jarInteractionHint: some View {
+        Label(
+            jarInteractionHintText,
+            systemImage: jarInteractionHintSymbol
+        )
+            .font(.caption.weight(.bold))
+            .foregroundStyle(PomoGemTheme.text)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 9)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule().stroke(PomoGemTheme.glassEdge.opacity(0.2), lineWidth: 1)
+            }
+            .padding(.horizontal, 24)
+            // `JarSpriteView` exposes the same guidance as a persistent
+            // accessibility hint. Keep this transient visual hint out of
+            // the VoiceOver order so it is not spoken twice.
+            .accessibilityHidden(true)
+#if DEBUG
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
+                HomeRenderDiagnostics.jarHintWindowFrame = $0
+            }
+            .onDisappear { HomeRenderDiagnostics.jarHintWindowFrame = nil }
+#endif
+    }
+
+    private var jarMetricReadout: some View {
         VStack(spacing: 3) {
             Text("積み上げた集中")
                 // This HUD is decorative and excluded from VoiceOver. Keep it
@@ -1105,12 +1125,7 @@ struct HomeView: View {
                 }
             }
         }
-        // Keep every glyph behind the mouth instead of straddling its bright
-        // rim; the occlusion cue is what makes the glass depth believable.
-        .padding(.top, 88)
-        .frame(maxHeight: .infinity, alignment: .top)
         .shadow(color: .black.opacity(0.52), radius: 3, y: 1)
-        .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
@@ -4558,6 +4573,15 @@ private struct FortyYearPersistentFixtureProbe: View {
 #endif
 
 #if DEBUG
+/// Keeps the one-time jar hint's window frame for UI tests: the hint is
+/// hidden from accessibility (the jar speaks the same guidance), so a test
+/// cannot otherwise check that it stays clear of the gem it describes.
+/// Debug builds only.
+@MainActor
+enum HomeRenderDiagnostics {
+    static var jarHintWindowFrame: CGRect?
+}
+
 /// A stateful, explicit-UI-test-only readout of the live SpriteKit
 /// presentation. XCUITest cannot reliably sample a transient position from a
 /// `TimelineView`: accessibility snapshots can be delivered after the pebble
@@ -4589,6 +4613,8 @@ private struct JarUITestPresentationProbe: View {
     @State private var dropSequence = 0
     @State private var dropFall: CGFloat = 0
     @State private var dropLanded = false
+    /// Sampled from `HomeRenderDiagnostics`.
+    @State private var jarHintFrame: CGRect?
 
     var body: some View {
         Text("Jar presentation probe")
@@ -4613,7 +4639,7 @@ private struct JarUITestPresentationProbe: View {
 
     private var presentationValue: String {
         String(
-            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d;targetWindowX=%.1f;targetWindowY=%.1f",
+            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d;targetWindowX=%.1f;targetWindowY=%.1f;jarHint=%@",
             count,
             Double(maximumY),
             records,
@@ -4625,11 +4651,15 @@ private struct JarUITestPresentationProbe: View {
             Double(dropFall),
             dropLanded ? 1 : 0,
             Double(targetWindowX),
-            Double(targetWindowY)
+            Double(targetWindowY),
+            jarHintFrame.map {
+                String(format: "%.1f,%.1f,%.1f,%.1f", $0.minX, $0.minY, $0.maxX, $0.maxY)
+            } ?? "none"
         )
     }
 
     private func samplePresentation() {
+        jarHintFrame = HomeRenderDiagnostics.jarHintWindowFrame
         dropSequence = Int(truncatingIfNeeded: scene.completionDropSequence)
         dropFall = scene.completionDropMaximumFall
         dropLanded = scene.completionDropHasLanded
