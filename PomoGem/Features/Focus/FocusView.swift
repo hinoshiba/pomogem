@@ -1099,15 +1099,47 @@ struct FocusView: View {
     @ViewBuilder
     private var completionNotificationStatus: some View {
         if snapshot.phase == .paused {
-            // A paused timer does not run, so 「画面を閉じても進みます」 would be
-            // false and 「終了通知を設定」 could do nothing. Resuming schedules
-            // the end notification again when it is allowed.
+            pausedNotificationStatus
+        } else if snapshot.phase == .focusing {
+            focusingNotificationStatus
+        }
+    }
+
+    /// A paused timer does not run, so 「画面を閉じても進みます」 would be false
+    /// and 「終了通知を設定」 could do nothing; resuming schedules the end
+    /// notification when it is allowed. Someone who has not allowed it yet
+    /// keeps the in-app way to do so, on the same single 44 pt row so the
+    /// ring never moves between running and paused.
+    @ViewBuilder
+    private var pausedNotificationStatus: some View {
+        if notifications.authorizationStatus == .notDetermined {
+            Button {
+                Task { await enableCompletionNotification() }
+            } label: {
+                Label("一時停止中です。再開後の終了通知を許可", systemImage: "bell")
+                    .font(.caption.weight(.semibold))
+            }
+            .buttonStyle(PomoGemBareButtonStyle())
+            .frame(minHeight: 44)
+            .foregroundStyle(PomoGemTheme.amber)
+            .accessibilityIdentifier("focus.paused-notice")
+        } else if notifications.authorizationStatus == .denied {
+            Button {
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                UIApplication.shared.open(url)
+            } label: {
+                Label("一時停止中です。終了通知は端末の設定から", systemImage: "bell.slash")
+                    .font(.caption.weight(.semibold))
+            }
+            .buttonStyle(PomoGemBareButtonStyle())
+            .frame(minHeight: 44)
+            .foregroundStyle(PomoGemTheme.amber)
+            .accessibilityIdentifier("focus.paused-notice")
+        } else {
             Label("一時停止中はタイマーは進みません", systemImage: "pause.circle")
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .accessibilityIdentifier("focus.paused-notice")
-        } else if snapshot.phase == .focusing {
-            focusingNotificationStatus
         }
     }
 

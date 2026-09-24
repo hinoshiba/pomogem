@@ -485,7 +485,16 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(waitForHittable(resume, timeout: 4))
         let notice = app.descendants(matching: .any)["focus.paused-notice"].firstMatch
         XCTAssertTrue(notice.waitForExistence(timeout: 3))
-        XCTAssertEqual(notice.label, "一時停止中はタイマーは進みません")
+        // Allowed: 「一時停止中はタイマーは進みません」. Not yet decided or
+        // denied: the same row keeps the way to turn end notifications on.
+        XCTAssertTrue(
+            [
+                "一時停止中はタイマーは進みません",
+                "一時停止中です。再開後の終了通知を許可",
+                "一時停止中です。終了通知は端末の設定から"
+            ].contains(notice.label),
+            notice.label
+        )
         XCTAssertFalse(app.buttons["終了通知を設定"].exists,
                        "A paused timer must not offer a scheduling action that cannot run")
         XCTAssertFalse(
