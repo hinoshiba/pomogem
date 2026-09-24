@@ -4,6 +4,9 @@ import UIKit
 
 struct OnboardingView: View {
     let persistenceMode: PersistenceLaunchMode
+    /// launch-06. The user chose 「新しく始める」 over the iCloud restore
+    /// screen, so page 1 must not ask them to wait after all.
+    let startedFreshOverRestore: Bool
     let onComplete: (Set<String>, Bool, RareRewardMode) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -26,9 +29,11 @@ struct OnboardingView: View {
 
     init(
         persistenceMode: PersistenceLaunchMode = .inMemoryPreview,
+        startedFreshOverRestore: Bool = false,
         onComplete: @escaping (Set<String>, Bool, RareRewardMode) -> Void
     ) {
         self.persistenceMode = persistenceMode
+        self.startedFreshOverRestore = startedFreshOverRestore
         self.onComplete = onComplete
         _storedSubjects = Query(SubjectSyncPolicy.liveRowsDescriptor(sortBy: [
             SortDescriptor(\Subject.sortOrder),
@@ -113,7 +118,10 @@ struct OnboardingView: View {
                 .padding(.top, 12)
 
                 TabView(selection: pageSelection) {
-                    ValuePage(persistenceMode: persistenceMode)
+                    ValuePage(
+                        persistenceMode: persistenceMode,
+                        startedFreshOverRestore: startedFreshOverRestore
+                    )
                     .tag(0)
 
                     TrialDropPage(dropped: $trialDropped)
@@ -307,6 +315,7 @@ struct OnboardingView: View {
 
 private struct ValuePage: View {
     let persistenceMode: PersistenceLaunchMode
+    let startedFreshOverRestore: Bool
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.isCloudOfflineSession) private var isCloudOffline
@@ -344,8 +353,8 @@ private struct ValuePage: View {
                     // product-01 / launch-04. The storage choice was made
                     // seconds ago and confirmed with its full caveats; this
                     // page no longer repeats it a third time. Only an iCloud
-                    // session keeps one caption, because it says something
-                    // this moment needs.
+                    // session can have a caption, and only when it says
+                    // something this moment needs.
                     if let storageDetail {
                         Text(storageDetail)
                             .font(.caption)
@@ -404,7 +413,13 @@ private struct ValuePage: View {
         if isCloudOffline {
             return "現在は端末に保存済みのデータを使っています。まだ届いていないiCloudのデータは、接続回復後に確認します。"
         }
-        return "以前の瓶がある場合は、この画面を開いたままiCloudの反映を少しお待ちください。届くと自動で瓶が開きます。"
+        // launch-06. An earlier jar now gets the restore screen instead of
+        // this tutorial (see `CloudRestoreWaitingPolicy`), so the old 「この
+        // 画面を開いたまま…お待ちください」 only reached new users, or told
+        // someone who had just chosen not to wait to wait.
+        guard startedFreshOverRestore else { return nil }
+        return String(localized: "iCloudの記録は、届きしだいこのiPhoneにも表示されます。", table: "Onboarding",
+                      comment: "Onboarding page 1 after choosing to start fresh over an iCloud restore")
     }
 }
 

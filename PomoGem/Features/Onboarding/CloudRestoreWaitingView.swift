@@ -88,8 +88,12 @@ struct FirstRunView: View {
             }
             .transition(.opacity)
         } else {
-            OnboardingView(persistenceMode: persistenceMode, onComplete: onComplete)
-                .transition(.opacity)
+            OnboardingView(
+                persistenceMode: persistenceMode,
+                startedFreshOverRestore: startsFresh,
+                onComplete: onComplete
+            )
+            .transition(.opacity)
         }
     }
 }
