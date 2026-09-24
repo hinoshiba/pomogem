@@ -47,6 +47,12 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
     private var legacyEncodingTaskKey: String {
         "\(isReady):\(scenePhase == .active):\(contextKey)"
     }
+    /// nil until StoreKit has answered in this process. See
+    /// `ScreenTimeController.reconcile(isPro:timerRunning:)`: an unknown
+    /// entitlement must never retire a Pro user's learning run.
+    private var resolvedIsPro: Bool? {
+        purchase.hasResolvedEntitlements ? purchase.isPro : nil
+    }
     private var timerRunning: Bool {
         timerPresented || FocusPersistence.load().map {
             $0.dataEpochID == dataEpochID && $0.engine.snapshot(at: .now).phase.isRunning
@@ -78,14 +84,16 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
                 guard isReady, isCurrentOwner else { return }
                 controller.reconcileInBackground(
                     contextKey: contextKey, dataEpochID: dataEpochID,
-                    isPro: purchase.isPro, timerRunning: timerRunning
+                    isPro: resolvedIsPro, timerRunning: timerRunning
                 )
             }
-            .onChange(of: purchase.isPro) { _, _ in
+            .onChange(of: resolvedIsPro) { _, _ in
+                // Also fires when StoreKit first answers, which is when a gate
+                // held open for an unknown entitlement may finally close.
                 guard isReady, isCurrentOwner else { return }
                 controller.reconcileInBackground(
                     contextKey: contextKey, dataEpochID: dataEpochID,
-                    isPro: purchase.isPro, timerRunning: timerRunning
+                    isPro: resolvedIsPro, timerRunning: timerRunning
                 )
             }
             // Deliberately no `.onDisappear` retirement: PomoGemApp drops the
@@ -157,9 +165,9 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
             guard canContinueRefresh else { return }
             try await retireDeletedLearningThemeIfNeeded()
             guard canContinueRefresh else { return }
-            let monitoringKey = "\(bindingKey):\(purchase.isPro):\(timerRunning):\(controller.authorizationGranted):\(FairnessPolicy.deviceDayKey(for: .now))"
+            let monitoringKey = "\(bindingKey):\(resolvedIsPro.map(String.init) ?? "unresolved"):\(timerRunning):\(controller.authorizationGranted):\(FairnessPolicy.deviceDayKey(for: .now))"
             if forceReconcile || lastMonitoringKey != monitoringKey {
-                await controller.reconcile(isPro: purchase.isPro, timerRunning: timerRunning)
+                await controller.reconcile(isPro: resolvedIsPro, timerRunning: timerRunning)
                 guard canContinueRefresh else { return }
                 lastMonitoringKey = monitoringKey
             }

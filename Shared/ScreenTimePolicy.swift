@@ -69,6 +69,21 @@ enum ScreenTimePolicy {
         if !isPro, count > freeLearningApplicationLimit { throw ScreenTimeError.freeApplicationLimit }
     }
 
+    /// The learning lane's subscription gate. `isPro == nil` means StoreKit
+    /// has not answered yet: the gate the ledger already holds is kept (or
+    /// relaxed when the selection fits the free plan anyway), never tightened,
+    /// because retiring a run cannot be undone — its unfinished 10 minutes are
+    /// gone. Only a real answer may close it.
+    static func learningAllowedBySubscription(
+        isPro: Bool?,
+        learningApplicationCount: Int,
+        previouslyAllowed: Bool
+    ) -> Bool {
+        let fitsFreePlan = learningApplicationCount <= freeLearningApplicationLimit
+        guard let isPro else { return previouslyAllowed || fitsFreePlan }
+        return isPro || fitsFreePlan
+    }
+
     static func thresholds(batch: Int) -> ClosedRange<Int> {
         (batch * eventsPerActivity + 1)...min((batch + 1) * eventsPerActivity, maximumDailyThreshold)
     }

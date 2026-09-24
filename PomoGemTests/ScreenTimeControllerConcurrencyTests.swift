@@ -582,6 +582,52 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertFalse(try store.snapshot().runs.contains { $0.id == runID && $0.active })
     }
 
+    /// settings-01: at a cold launch the forced first pass can run before
+    /// StoreKit has answered. "Not known yet" used to read as "free", which
+    /// retired a Pro user's learning run and lost its unfinished 10 minutes.
+    /// An unknown entitlement now keeps the gate; the real answer still
+    /// decides, so a genuine downgrade retires exactly as before.
+    func testUnresolvedProEntitlementNeverRetiresTheLearningRunButARealDowngradeDoes() async throws {
+        let store = try makeStore()
+        let tokens = try (0..<6).map { index in
+            try JSONDecoder().decode(ApplicationToken.self, from: JSONEncoder().encode(["data": Data([UInt8(index)])]))
+        }
+        try store.update { $0.configuration.learningSelection.applicationTokens = Set(tokens) }
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" }, monitoring: driver, authorization: { .approved })
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        let runID = try XCTUnwrap(store.snapshot().runs.first?.id)
+
+        await controller.reconcile(isPro: nil, timerRunning: false)
+        try await controller.waitForPendingOperations()
+        var state = try store.snapshot()
+        XCTAssertTrue(state.learningAllowedBySubscription)
+        XCTAssertTrue(state.runs.contains { $0.id == runID && $0.active })
+        XCTAssertNil(controller.monitoringError, "A Pro user must not be shown the free-plan limit")
+
+        await controller.reconcile(isPro: false, timerRunning: false)
+        try await controller.waitForPendingOperations()
+        state = try store.snapshot()
+        XCTAssertFalse(state.learningAllowedBySubscription)
+        XCTAssertFalse(state.runs.contains { $0.id == runID && $0.active })
+
+        // Unknown again (a later process before StoreKit answers) keeps the
+        // closed gate closed: nil can only keep or relax, never grant Pro.
+        await controller.reconcile(isPro: nil, timerRunning: false)
+        XCTAssertFalse(try store.snapshot().learningAllowedBySubscription)
+    }
+
+    func testTheUnresolvedSubscriptionGateOnlyKeepsOrRelaxes() {
+        typealias Policy = ScreenTimePolicy
+        for previous in [true, false] {
+            XCTAssertTrue(Policy.learningAllowedBySubscription(isPro: true, learningApplicationCount: 50, previouslyAllowed: previous))
+            XCTAssertFalse(Policy.learningAllowedBySubscription(isPro: false, learningApplicationCount: 6, previouslyAllowed: previous))
+            XCTAssertTrue(Policy.learningAllowedBySubscription(isPro: false, learningApplicationCount: 5, previouslyAllowed: previous))
+            XCTAssertTrue(Policy.learningAllowedBySubscription(isPro: nil, learningApplicationCount: 5, previouslyAllowed: previous))
+            XCTAssertEqual(Policy.learningAllowedBySubscription(isPro: nil, learningApplicationCount: 6, previouslyAllowed: previous), previous)
+        }
+    }
+
     // MARK: - the diagnostics mirror
 
     /// The monitor extension counts the callbacks, but it cannot write into

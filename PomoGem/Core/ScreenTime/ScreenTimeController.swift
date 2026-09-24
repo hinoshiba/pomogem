@@ -210,27 +210,37 @@ final class ScreenTimeController: ObservableObject {
         }
     }
 
-    func reconcile(isPro: Bool, timerRunning: Bool) async {
+    /// `isPro` is nil while StoreKit has not answered yet
+    /// (`PurchaseManager.hasResolvedEntitlements`). An unknown entitlement may
+    /// keep or relax the learning gate the ledger already holds, but never
+    /// tighten it: treating "not known yet" as a refund retired Pro users'
+    /// learning runs at cold launches and threw away their unfinished 10
+    /// minutes. A real downgrade still arrives as `false` and still retires.
+    func reconcile(isPro: Bool?, timerRunning: Bool) async {
         guard let lease = updatePolicy(isPro: isPro, timerRunning: timerRunning) else { return }
         await finishReconciliation(lease)
     }
 
     /// SwiftUI change handlers call this synchronously so even a rapid
     /// pause/resume closes the old run before another UI event is delivered.
-    func reconcileInBackground(contextKey: String, dataEpochID: UUID?, isPro: Bool, timerRunning: Bool) {
+    func reconcileInBackground(contextKey: String, dataEpochID: UUID?, isPro: Bool?, timerRunning: Bool) {
         guard isBound(contextKey: contextKey, dataEpochID: dataEpochID),
               let lease = updatePolicy(isPro: isPro, timerRunning: timerRunning) else { return }
         Task { await finishReconciliation(lease) }
     }
 
-    private func updatePolicy(isPro: Bool, timerRunning: Bool) -> ScreenTimeContextLease? {
+    private func updatePolicy(isPro: Bool?, timerRunning: Bool) -> ScreenTimeContextLease? {
         guard let lease = try? boundLease() else { reload(); return nil }
         do {
             // Never wait for the monitoring lock to close the receipt gate.
             try store.update { state in
                 try validate(state, lease: lease)
                 state.learningPausedByTimer = timerRunning
-                state.learningAllowedBySubscription = isPro || state.configuration.learningSelection.applicationTokens.count <= ScreenTimePolicy.freeLearningApplicationLimit
+                state.learningAllowedBySubscription = ScreenTimePolicy.learningAllowedBySubscription(
+                    isPro: isPro,
+                    learningApplicationCount: state.configuration.learningSelection.applicationTokens.count,
+                    previouslyAllowed: state.learningAllowedBySubscription
+                )
                 // Keep this retirement even if a later resume arrives before
                 // the OS returns. The old run must not count timer usage.
                 if timerRunning || !state.learningAllowedBySubscription {
