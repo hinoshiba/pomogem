@@ -975,7 +975,9 @@ struct FocusView: View {
             .frame(maxWidth: .infinity)
             .frame(minHeight: context.size.height)
         }
-        .scrollIndicators(.hidden)
+        // At accessibility sizes the pause and give-up controls can start
+        // below the fold; show that the timer screen scrolls.
+        .scrollIndicators(dynamicTypeSize.isAccessibilitySize ? .visible : .hidden)
         .scrollBounceBehavior(.basedOnSize)
     }
 
@@ -2636,7 +2638,9 @@ struct FocusView: View {
             VStack(spacing: 8) {
                 Text(title)
                     .font(PomoGemTheme.brand(25))
-                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+                    // One line on a 4.7-inch screen at the largest sizes, so
+                    // a lone final kana never wraps under the heading.
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                     .multilineTextAlignment(.center)
                     .accessibilityAddTraits(.isHeader)
                 Text("\(subjectSnapshot.name)  +\(result.grams)g")
