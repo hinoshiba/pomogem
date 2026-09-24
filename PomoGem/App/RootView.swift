@@ -409,8 +409,13 @@ struct RootView: View {
     @State private var isFinishingOnboarding = false
     /// launch-06. The user chose 「新しく始める」 on the restore screen, or has
     /// answered the tutorial. From then on the tutorial stays, whatever
-    /// arrives, until the ordinary auto-exit opens the jar.
-    @State private var startsFreshFirstRun = false
+    /// arrives, until the ordinary auto-exit opens the jar. Kept per account
+    /// namespace, not per view: an iCloud session retires every time the app
+    /// leaves the foreground, and the remounted RootView must not ask again.
+    /// It only matters before onboarding completes; complete data deletion
+    /// clears it with the rest of the defaults.
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: "onboarding.starts-fresh"))
+    private var startsFreshFirstRun = false
     @State private var bootstrapError: String?
     @State private var bootstrapAttempt = 0
     @State private var lastPassiveNotificationErrorFingerprint: String?
@@ -1054,6 +1059,7 @@ struct RootView: View {
             if isCloudRestoreUITest {
                 // Same reason: the restore fixture is a first use too.
                 didCompleteOnboarding = false
+                startsFreshFirstRun = false
             }
             let localEnvelope = FocusPersistence.load()
             let preparation = try BoundedLaunchPreparation.prepare(

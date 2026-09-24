@@ -21,7 +21,8 @@ enum CloudRestoreWaitingPolicy {
     ///   - isCloudOffline: an offline session cannot receive anything; it
     ///     keeps the tutorial and its own offline caption.
     ///   - startsFresh: the user chose 「新しく始める」, or has already answered
-    ///     the tutorial. Their decision is final for this session.
+    ///     the tutorial. Their decision is final for this account on this
+    ///     iPhone until onboarding completes, across relaunches.
     static func showsRestoreWaiting(
         restoresFromCloud: Bool,
         cloudHoldsUserRecords: Bool,
