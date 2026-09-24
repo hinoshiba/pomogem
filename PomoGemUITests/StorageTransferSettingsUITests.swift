@@ -836,6 +836,43 @@ final class StorageTransferSettingsUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [retried], timeout: 4), .completed)
     }
 
+    /// sync-04. The iCloud section reports what the store's own mirroring
+    /// said: the last send, full iCloud storage, and failures that repeat.
+    func testICloudSettingsShowsLastSendQuotaAndRepeatedExportFailures() {
+        launch("cloudExportHealthy")
+        let lastExport = app.descendants(matching: .any)["settings.icloud.last-export"]
+        XCTAssertTrue(lastExport.waitForExistence(timeout: 8))
+        XCTAssertTrue(lastExport.label.contains("iCloudへの最終送信："), lastExport.label)
+        XCTAssertTrue(lastExport.label.contains("分前"), lastExport.label)
+        XCTAssertFalse(app.descendants(matching: .any)["settings.icloud.quota.open-settings"].exists)
+        attach("icloud-settings-last-send")
+
+        launch("cloudExportQuota")
+        let status = app.descendants(matching: .any)["settings.icloud.status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 8))
+        let quota = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "iCloudの空き容量が不足しています"),
+                                              object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [quota], timeout: 8), .completed, status.label)
+        XCTAssertTrue(status.label.contains("記録はこのiPhoneに保存されています"))
+        XCTAssertTrue(reveal(app.staticTexts["settings.icloud.quota.hint"]))
+        let open = app.buttons["settings.icloud.quota.open-settings"]
+        XCTAssertTrue(reveal(open, upwards: false))
+        assertTouchTarget(open)
+        XCTAssertFalse(app.descendants(matching: .any)["settings.icloud.last-export"].exists,
+                       "A stale last-send time is not shown beside a storage problem")
+        attach("icloud-settings-quota")
+
+        launch("cloudExportFailing")
+        let failing = app.descendants(matching: .any)["settings.icloud.export-failing"]
+        XCTAssertTrue(failing.waitForExistence(timeout: 8))
+        XCTAssertTrue(failing.label.contains("自動で再試行しています"))
+        let checked = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "iCloudに接続できます"),
+                                                object: app.descendants(matching: .any)["settings.icloud.status"])
+        XCTAssertEqual(XCTWaiter.wait(for: [checked], timeout: 8), .completed)
+        attach("icloud-settings-export-failing")
+        assertNoOperation()
+    }
+
     func testNativeCloudNetworkWaitExplainsAutomaticRetryWithoutManualAdmission() {
         launch("cloudNetworkWaiting")
         assertCompactOfflineBanner(expectsRetry: false)
@@ -1346,11 +1383,15 @@ final class StorageTransferSettingsUITests: XCTestCase {
     }
 
     private func attach(_ name: String) {
-        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        let screenshot = XCUIScreen.main.screenshot()
+        let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
         // Also written as a PNG for review when the runner is given a folder.
         guard let directory = ProcessInfo.processInfo.environment["POMOGEM_SHOTS_DIR"] else { return }
+        let safe = name.map { $0.isLetter || $0.isNumber || $0 == "-" ? $0 : "_" }
+        let url = URL(fileURLWithPath: directory).appendingPathComponent(String(safe) + ".png")
+        try? screenshot.pngRepresentation.write(to: url)
     }
 }

@@ -291,6 +291,9 @@ Privacy Manifest、`AppStore/app-privacy.md`を再監査し、既存のUserDefau
 
 `quotaExceeded`はデータの保存時にユーザーのiCloud容量を超えるエラーです。
 今回のオンライン確認はzoneの読み取りなので、「保存領域」という見出しを容量不足の証拠にしません。
+送信（export）側の`quotaExceeded`は、2026-09-25（sync-04）から同期用保存領域の送信結果を観測して
+設定の「iCloudとデバイス」に「iCloudの空き容量が不足しています」と表示します。詳細は
+[複数端末の安全性](MultiDeviceCloudSafety.md)の「送信の結果」を参照してください。
 ([Apple: quotaExceeded](https://developer.apple.com/documentation/cloudkit/ckerror/quotaexceeded))
 
 ## 配布設定・スキーマのレビュー結果

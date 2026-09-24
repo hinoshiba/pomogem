@@ -478,6 +478,8 @@ struct StorageTransferDatasetConfirmationView: View {
     var export: StorageTransferExportControl.Export?
     let confirmed: () -> Void
     @Environment(\.dismiss) private var dismiss
+    /// sync-04. nil on the launch host, which has no mounted session.
+    @Environment(\.cloudKitMirroringActivity) private var mirroringActivity
     @State private var understandsDeletion = false
 
     var body: some View {
@@ -509,6 +511,11 @@ struct StorageTransferDatasetConfirmationView: View {
                         // device side is what is discarded, and it has no
                         // backup — saying otherwise would be a false promise.
                         paragraph(StorageTransferRefreshCopy.dataLossWarning, suffix: "warning")
+                        if mirroringActivity?.state.mayHaveUnsentChanges == true {
+                            // sync-04. This direction deletes this iPhone's
+                            // side, and its recent exports did not succeed.
+                            paragraph(CloudKitMirroringCopy.unsentWarning, suffix: "unsent")
+                        }
                         // review-1-2 / review-2-4. 「iCloudのデータは残ります」
                         // says nothing about how much there is. W6 opened this
                         // direction to accounts with no ledger, which are the

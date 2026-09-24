@@ -606,6 +606,8 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var retainedSessionRecheckTask: Task<Void, Never>?
     /// quality-01. The tab a remount of the same account's data reopens.
     @State private var remountNavigation = CloudRemountNavigationMemory()
+    /// sync-04. The mounted online session's mirroring outcomes, for Settings.
+    @State private var mirroringActivity = CloudKitMirroringActivity()
     @State private var suspendedAccountBinding = AccountScopedLocalState
         .pendingPreviousBinding()
 
@@ -839,6 +841,8 @@ private struct PomoGemPersistenceLaunchHost: View {
             .environment(\.cloudRemountNavigation, current.mode == .cloudKit
                 ? CloudRemountNavigationHandle(memory: remountNavigation, namespace: current.accountNamespace)
                 : nil)
+            .environment(\.cloudKitMirroringActivity,
+                         current.mode == .cloudKit && !current.isCloudOffline ? mirroringActivity : nil)
             .task(id: scenePhase) {
                 if let cleanupID, let cleanupNamespace {
                     // The first settled cloud mount after a commit is also the
@@ -2469,6 +2473,8 @@ private struct PomoGemPersistenceLaunchHost: View {
         cloudLaunchMeasurement?.stage("published")
         cloudLaunchMeasurement?.finish(.published)
         cloudLaunchMeasurement = nil
+        // sync-04. Listen for this session's own export/import outcomes.
+        mirroringActivity.start()
         offlineRevocationWriteFailed = false
         NotificationManager.shared
             .resumeTimerSchedulingAfterAccountBoundary()
@@ -2533,6 +2539,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         backgroundGrace.sessionRetiredElsewhere()
         remountNavigation.clear()
         CloudActivityHistoryMarkerCacheStore.clearLive()
+        mirroringActivity.stop()
         session = nil
         launchState = .preparing("空の保存領域を準備しています")
         mustDestroyPersistentStores = true
@@ -3596,6 +3603,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         // controller keeps the background task until the containers are gone.
         backgroundGrace.sessionRetiredElsewhere()
         cancelRetainedSessionRecheck()
+        mirroringActivity.stop()
         didTimeOutContainerRetirement = false
         canContinueOffline = false
         // Cloud-backed RootView is absent while the account is revalidated,

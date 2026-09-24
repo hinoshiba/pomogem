@@ -746,7 +746,24 @@ struct CloudSyncSettingsSection: View {
     /// device-01. Set for a session opened from a stop screen, whose sync
     /// does not resume when the connection does.
     @Environment(\.cloudConnectionPresentation) private var connectionPresentation
-    @State private var monitor = CloudSyncMonitor()
+    /// sync-04. What the mounted store's mirroring reported (nil outside a
+    /// mounted online iCloud session). Observational only.
+    @Environment(\.cloudKitMirroringActivity) private var mirroringActivity
+    @State private var monitor: CloudSyncMonitor
+
+    @MainActor
+    init(persistenceMode: PersistenceLaunchMode, monitor: CloudSyncMonitor? = nil) {
+        self.persistenceMode = persistenceMode
+        _monitor = State(initialValue: monitor ?? CloudSyncMonitor())
+    }
+
+    /// Mirroring results are shown only beside a successful account check:
+    /// the account problem is the more useful thing to say otherwise.
+    private var mirroringState: CloudKitMirroringState? {
+        monitor.availability == .available ? mirroringActivity?.state : nil
+    }
+
+    private var showsQuotaIssue: Bool { mirroringState?.issue == .quotaExceeded }
 
     @ViewBuilder
     var body: some View {
@@ -813,6 +830,9 @@ struct CloudSyncSettingsSection: View {
                     if monitor.availability == .checking {
                         ProgressView()
                             .tint(PomoGemTheme.amber)
+                    } else if showsQuotaIssue {
+                        Image(systemName: "exclamationmark.icloud.fill")
+                            .foregroundStyle(Color.orange)
                     } else {
                         Image(systemName: monitor.availability.symbol)
                             .foregroundStyle(
@@ -826,9 +846,11 @@ struct CloudSyncSettingsSection: View {
                 .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(monitor.availability.title)
+                    Text(showsQuotaIssue ? CloudKitMirroringCopy.quotaTitle : monitor.availability.title)
                         .font(.headline)
-                    Text(monitor.failure?.errorDescription ?? monitor.availability.detail)
+                    Text(showsQuotaIssue
+                         ? CloudKitMirroringCopy.quotaDetail
+                         : monitor.failure?.errorDescription ?? monitor.availability.detail)
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -836,6 +858,11 @@ struct CloudSyncSettingsSection: View {
             }
             .frame(minHeight: 48)
             .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("settings.icloud.status")
+
+            if let mirroringState {
+                mirroringStatusRow(mirroringState)
+            }
 
             DisclosureGroup {
                 VStack(alignment: .leading, spacing: 10) {
@@ -874,6 +901,16 @@ struct CloudSyncSettingsSection: View {
                 } label: {
                     Label("この端末の設定を開く", systemImage: "gear")
                 }
+            } else if showsQuotaIssue {
+                // No public link opens iCloud storage itself; this opens the
+                // Settings app and the hint above says where to look.
+                Button {
+                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                    openURL(url)
+                } label: {
+                    Label(CloudKitMirroringCopy.openSettings, systemImage: "gear")
+                }
+                .accessibilityIdentifier("settings.icloud.quota.open-settings")
             }
         } header: {
             Text("iCloudとデバイス")
@@ -898,6 +935,57 @@ struct CloudSyncSettingsSection: View {
             guard phase == .active else { return }
             Task { await monitor.refresh() }
         }
+    }
+
+    /// sync-04. One line under the status: where storage is short, that the
+    /// app keeps retrying, or — when all is well — when records last reached
+    /// iCloud. Its absence says nothing: exports run only when there are
+    /// changes to send.
+    @ViewBuilder
+    private func mirroringStatusRow(_ state: CloudKitMirroringState) -> some View {
+        switch state.issue {
+        case .quotaExceeded:
+            Text(CloudKitMirroringCopy.quotaSettingsHint)
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("settings.icloud.quota.hint")
+        case .persistentExportFailure:
+            Label {
+                Text(CloudKitMirroringCopy.persistentFailure)
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
+                    .foregroundStyle(Color.orange)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("settings.icloud.export-failing")
+        case nil:
+            if let lastExport = state.lastExportSuccess {
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    Label {
+                        Text(CloudKitMirroringCopy.lastExport(Self.relative(lastExport, now: context.date)))
+                            .font(.caption)
+                            .foregroundStyle(PomoGemTheme.muted)
+                    } icon: {
+                        Image(systemName: "arrow.up.icloud")
+                            .foregroundStyle(PomoGemTheme.amber)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("settings.icloud.last-export")
+                }
+            }
+        }
+    }
+
+    private static func relative(_ date: Date, now: Date) -> String {
+        guard now.timeIntervalSince(date) >= 60 else {
+            return String(localized: "たった今", table: "Launch", comment: "Last iCloud send was less than a minute ago")
+        }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: date, relativeTo: now)
     }
 
     private func syncStep(_ number: Int, _ text: String) -> some View {
