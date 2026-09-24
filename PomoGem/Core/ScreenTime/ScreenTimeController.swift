@@ -27,6 +27,11 @@ final class ScreenTimeController: ObservableObject {
     /// published state. Without this the settings screen would show a greyed
     /// 保存 and no reason at all.
     @Published private(set) var bindingError: String?
+    /// Why the last 「アクセスを許可」 ended without an approval, kept apart from
+    /// `monitoringError` because `reload()` rewrites that from the ledger
+    /// every three seconds: the user needs time to read what to fix. Cleared
+    /// by the next request and once access is granted.
+    @Published private(set) var authorizationFailure: ScreenTimeAuthorizationFailure?
     let store: ScreenTimeStore
     private let worker: ScreenTimeMonitoringWorker
     /// A read-only copy of the callback diagnostics into the app's own
@@ -38,6 +43,7 @@ final class ScreenTimeController: ObservableObject {
     private let diagnosticsMirror: ScreenTimeDiagnosticsMirror
     private let currentContextKey: () -> String
     private let authorization: () -> AuthorizationStatus
+    private let requestIndividualAuthorization: () async throws -> Void
     /// FamilyControls reports a REVOKED authorization as `.notDetermined` — the
     /// same value a process reads before the framework has answered and the one
     /// a user who never opted in has. Treat `.notDetermined` as settled only
@@ -71,6 +77,9 @@ final class ScreenTimeController: ObservableObject {
         },
         monitoring: ScreenTimeMonitoringDriving? = nil,
         authorization: @escaping () -> AuthorizationStatus = { AuthorizationCenter.shared.authorizationStatus },
+        requestIndividualAuthorization: @escaping () async throws -> Void = {
+            try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+        },
         authorizationSettlingWindow: TimeInterval = 10,
         authorizationSettlingObservations: Int = 4,
         diagnosticsMirror: ScreenTimeDiagnosticsMirror = ScreenTimeDiagnosticsMirror()
@@ -78,6 +87,7 @@ final class ScreenTimeController: ObservableObject {
         self.store = store
         self.currentContextKey = currentContextKey
         self.authorization = authorization
+        self.requestIndividualAuthorization = requestIndividualAuthorization
         self.diagnosticsMirror = diagnosticsMirror
         self.authorizationSettlingWindow = authorizationSettlingWindow
         self.authorizationSettlingObservations = max(1, authorizationSettlingObservations)
@@ -172,6 +182,7 @@ final class ScreenTimeController: ObservableObject {
         }
         let operation = beginOperation()
         defer { endOperation(operation) }
+        authorizationFailure = nil
         do {
             let worker = worker
             try await worker.perform {
@@ -181,13 +192,16 @@ final class ScreenTimeController: ObservableObject {
                 try worker.monitoring.invalidateAuthorizationIfNeeded()
             }
             try requireCurrent(lease)
-            try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+            try await requestIndividualAuthorization()
             try requireCurrent(lease)
             reload()
         } catch {
             guard (try? requireCurrent(lease)) != nil else { return }
             reload()
-            monitoringError = "スクリーンタイムへのアクセスが許可されませんでした。設定を確認してください。"
+            // One generic sentence and a retry button left people retrying
+            // in a loop for causes a retry cannot fix. Closing Apple's sheet
+            // is the user's own answer and needs no message at all.
+            authorizationFailure = ScreenTimeAuthorizationFailure(error)
         }
     }
 
@@ -390,6 +404,7 @@ final class ScreenTimeController: ObservableObject {
     func reload() {
         authorizationStatus = authorization()
         authorizationGranted = Self.isAuthorized(authorizationStatus)
+        if authorizationGranted, authorizationFailure != nil { authorizationFailure = nil }
         guard bindingConfirmed, let lease, lease.binding.contextKey == currentContextKey() else {
             clearPublishedState()
             return
@@ -495,6 +510,7 @@ final class ScreenTimeController: ObservableObject {
         isUpdatingMonitoring = false
         resetAuthorizationSettling()
         bindingError = nil
+        authorizationFailure = nil
         // Fence delayed callbacks immediately without waiting for registration.
         try? store.update { state in
             guard retiring.binding.matches(state) else { return }
@@ -591,6 +607,77 @@ final class ScreenTimeController: ObservableObject {
         learningPausedByTimer = false
         monitoringError = nil
         isMonitoring = false
+    }
+}
+
+/// What the user can do about a Family Controls authorization request that
+/// did not end in an approval. Each `FamilyControlsError` names a different
+/// fix, and most of them are outside PomoGem, so the message says where.
+/// https://developer.apple.com/documentation/familycontrols/familycontrolserror
+enum ScreenTimeAuthorizationFailure: Equatable {
+    /// No passcode is set, so there is nothing to confirm the request with.
+    case passcodeRequired
+    /// Not signed in to an Apple Account, or an account type (a child in
+    /// Family Sharing, a managed account) that cannot grant individual access.
+    case accountNotSupported
+    /// The request needs the network.
+    case offline
+    /// Another app already provides parental controls on this iPhone.
+    case conflictingApp
+    /// Screen Time restrictions or a management profile forbid it.
+    case restricted
+    /// Anything else, including an error this version does not know.
+    case other
+
+    /// nil for `authorizationCanceled`: the user closed Apple's sheet, which
+    /// is an answer, not a failure to explain.
+    init?(_ error: Error) {
+        guard let error = error as? FamilyControlsError else {
+            self = .other
+            return
+        }
+        switch error {
+        case .authorizationCanceled: return nil
+        case .authenticationMethodUnavailable: self = .passcodeRequired
+        case .invalidAccountType: self = .accountNotSupported
+        case .networkError: self = .offline
+        case .authorizationConflict: self = .conflictingApp
+        case .restricted: self = .restricted
+        default: self = .other
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .passcodeRequired:
+            String(localized: "スクリーンタイムの許可には、iPhoneのパスコードが必要です。設定アプリの「Face IDとパスコード」（または「Touch IDとパスコード」）でパスコードを設定してから、もう一度お試しください。",
+                   table: "ScreenTime", comment: "Screen Time access failed: no device passcode")
+        case .accountNotSupported:
+            String(localized: "このiPhoneのApple Accountでは許可できませんでした。設定アプリの一番上で、Apple Accountにサインインしているか確認してください。ファミリー共有で保護者が管理している子どものアカウントでは、この機能を使えないことがあります。",
+                   table: "ScreenTime", comment: "Screen Time access failed: not signed in, or a child or managed account")
+        case .offline:
+            String(localized: "通信できなかったため、許可を確認できませんでした。インターネットにつながる状態で、もう一度お試しください。",
+                   table: "ScreenTime", comment: "Screen Time access failed: network error")
+        case .conflictingApp:
+            String(localized: "ほかのアプリがこのiPhoneで保護者による管理（ペアレンタルコントロール）をすでに行っているため、許可できませんでした。そのアプリでの管理をやめると、許可できるようになります。",
+                   table: "ScreenTime", comment: "Screen Time access failed: another parental-control app holds the authorization")
+        case .restricted:
+            String(localized: "このiPhoneでは、スクリーンタイムの制限や学校・会社などの管理設定によって許可できません。設定アプリの「スクリーンタイム」の制限や、管理プロファイルを確認してください。",
+                   table: "ScreenTime", comment: "Screen Time access failed: restricted by Screen Time limits or device management")
+        case .other:
+            String(localized: "スクリーンタイムへのアクセスを確認できませんでした。少し時間をおいて、もう一度お試しください。",
+                   table: "ScreenTime", comment: "Screen Time access failed for another reason")
+        }
+    }
+
+    /// Whether the fix lives in the Settings app. There is no public link to
+    /// the passcode, Apple Account or Screen Time pages, so the shortcut opens
+    /// the Settings app and the message names the page.
+    var fixIsInSettingsApp: Bool {
+        switch self {
+        case .passcodeRequired, .accountNotSupported, .restricted: true
+        case .offline, .conflictingApp, .other: false
+        }
     }
 }
 

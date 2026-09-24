@@ -789,6 +789,68 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertTrue(driver.events.isEmpty)
     }
 
+    /// critic-02: each Family Controls refusal names what to fix, the message
+    /// outlives the three-second reload, and closing Apple's sheet says nothing.
+    func testEachAuthorizationRefusalExplainsItsOwnFixAndSurvivesReload() async throws {
+        let cases: [(FamilyControlsError, ScreenTimeAuthorizationFailure?)] = [
+            (.authorizationCanceled, nil),
+            (.authenticationMethodUnavailable, .passcodeRequired),
+            (.invalidAccountType, .accountNotSupported),
+            (.networkError, .offline),
+            (.authorizationConflict, .conflictingApp),
+            (.restricted, .restricted),
+            (.unavailable, .other),
+            (.invalidArgument, .other)
+        ]
+        for (error, expected) in cases {
+            let store = try makeStore()
+            let driver = Driver(store: store)
+            let controller = ScreenTimeController(
+                store: store, currentContextKey: { "owner" }, monitoring: driver,
+                authorization: { .notDetermined },
+                requestIndividualAuthorization: { throw error }
+            )
+            try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+            await controller.requestAuthorization()
+            XCTAssertEqual(controller.authorizationFailure, expected, "\(error)")
+            controller.reload()
+            XCTAssertEqual(controller.authorizationFailure, expected, "The reload loop must not erase it")
+            XCTAssertFalse(controller.isUpdatingMonitoring)
+        }
+        XCTAssertEqual(ScreenTimeAuthorizationFailure(CancellationError()), .other)
+        for failure in [ScreenTimeAuthorizationFailure.passcodeRequired, .accountNotSupported, .offline,
+                        .conflictingApp, .restricted, .other] {
+            XCTAssertFalse(failure.message.isEmpty)
+        }
+        XCTAssertTrue(ScreenTimeAuthorizationFailure.passcodeRequired.message.contains("パスコード"))
+        XCTAssertTrue(ScreenTimeAuthorizationFailure.accountNotSupported.message.contains("Apple Account"))
+        XCTAssertTrue(ScreenTimeAuthorizationFailure.offline.message.contains("インターネット"))
+        XCTAssertTrue(ScreenTimeAuthorizationFailure.passcodeRequired.fixIsInSettingsApp)
+        XCTAssertFalse(ScreenTimeAuthorizationFailure.offline.fixIsInSettingsApp)
+    }
+
+    func testAGrantedRequestClearsTheEarlierRefusal() async throws {
+        let store = try makeStore()
+        let driver = Driver(store: store)
+        var status = AuthorizationStatus.notDetermined
+        var answer: Error? = FamilyControlsError.networkError
+        let controller = ScreenTimeController(
+            store: store, currentContextKey: { "owner" }, monitoring: driver,
+            authorization: { status },
+            requestIndividualAuthorization: {
+                if let answer { throw answer }
+                status = .approved
+            }
+        )
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        await controller.requestAuthorization()
+        XCTAssertEqual(controller.authorizationFailure, .offline)
+        answer = nil
+        await controller.requestAuthorization()
+        XCTAssertNil(controller.authorizationFailure)
+        XCTAssertTrue(controller.authorizationGranted)
+    }
+
 }
 
 /// The root Screen Time modifier lives inside the cloud persistence session,

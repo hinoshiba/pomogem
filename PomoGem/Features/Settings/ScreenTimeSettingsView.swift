@@ -1,12 +1,14 @@
 import FamilyControls
 import SwiftData
 import SwiftUI
+import UIKit
 
 /// Selections remain drafts until the user explicitly saves. The controller
 /// repeats these checks before registering any Device Activity monitoring.
 struct ScreenTimeSettingsView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
     @ObservedObject private var controller: ScreenTimeController
     @State private var purchase = PurchaseManager.shared
     @Environment(\.modelContext) private var modelContext
@@ -197,6 +199,29 @@ struct ScreenTimeSettingsView: View {
             .accessibilityAddTraits(.isStaticText)
             .accessibilityIdentifier("screen-time.authorization-status")
 
+            if let failure = controller.authorizationFailure, !controller.authorizationGranted {
+                Label(failure.message, systemImage: "exclamationmark.triangle")
+                    .font(.subheadline)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(failure.message)
+                    .accessibilityAddTraits(.isStaticText)
+                    .accessibilityIdentifier("screen-time.authorization-failure")
+                if failure.fixIsInSettingsApp {
+                    Button {
+                        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                        openURL(url)
+                    } label: {
+                        Label(String(localized: "設定アプリを開く", table: "ScreenTime",
+                                     comment: "Button: open the iOS Settings app to fix Screen Time access"),
+                              systemImage: "gear")
+                            .frame(minHeight: 44)
+                    }
+                    .accessibilityIdentifier("screen-time.open-settings-app")
+                }
+            }
+
             if !controller.authorizationGranted {
                 Button {
                     Task { await requestAuthorization() }
@@ -213,10 +238,16 @@ struct ScreenTimeSettingsView: View {
         } header: {
             Text("スクリーンタイムへのアクセス")
         } footer: {
-            if controller.authorizationStatus == .denied {
-                Text("アクセスが許可されていないため、自動記録は停止しています。「アクセスを許可」からもう一度確認してください。")
-            } else {
-                Text("このiPhoneで使うアプリを、Appleの選択画面から指定します。")
+            VStack(alignment: .leading, spacing: 5) {
+                if controller.authorizationStatus == .denied {
+                    Text("アクセスが許可されていないため、自動記録は停止しています。「アクセスを許可」からもう一度確認してください。")
+                } else {
+                    Text("このiPhoneで使うアプリを、Appleの選択画面から指定します。")
+                }
+                if !controller.authorizationGranted {
+                    Text("許可するには、iPhoneのパスコード、Apple Accountへのサインイン、インターネット接続が必要です。",
+                         tableName: "ScreenTime", comment: "Footer: prerequisites for Screen Time access")
+                }
             }
         }
     }
