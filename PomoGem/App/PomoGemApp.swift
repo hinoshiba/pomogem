@@ -4378,6 +4378,9 @@ private struct PersistenceLaunchStatusView: View {
                 .foregroundStyle(PomoGemTheme.amber)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+                // Branding too: uncapped, it took four lines of an SE's first
+                // screen at AX5 and pushed both options a screen further down.
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 .accessibilityIdentifier("storage-choice.value")
         }
     }
