@@ -136,7 +136,12 @@ final class FirstRunUITests: XCTestCase {
         // Neither 「選択」 nor Return: the typed name is what the user means.
         XCTAssertTrue(waitForLabel(summary, containing: "TOEIC"),
                       "The summary must name the typed theme, not the earlier chip")
-        XCTAssertEqual(english.value as? String, "未選択")
+        // The suggestion grid is lazy: on a small screen the chip may have
+        // scrolled out of the hierarchy while the field is in view.
+        if english.exists {
+            XCTAssertEqual(english.value as? String, "未選択",
+                           "Only the theme the button will create looks chosen")
+        }
         attachScreenshot("onboarding-typed-theme")
         let finish = app.buttons["瓶をひらく"]
         XCTAssertTrue(finish.isEnabled)
@@ -167,6 +172,51 @@ final class FirstRunUITests: XCTestCase {
         let picker = app.buttons["home.subject-picker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 8))
         XCTAssertTrue(waitForLabel(picker, containing: "簿記2級"))
+    }
+
+    // MARK: - Onboarding at the largest text size (walk-edge-04 / walk-edge-10)
+
+    func testOnboardingAtAX5KeepsEachPagesPointAboveThePinnedButton() {
+        launchOnboarding(accessibility5: true)
+        let next = app.buttons["onboarding.next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 8))
+        let step = app.descendants(matching: .any)["onboarding.step"]
+        XCTAssertEqual(step.label, "全3ページ中、1ページ。集中が残るしくみ")
+        let headline = app.staticTexts["onboarding.value-headline"]
+        XCTAssertTrue(headline.waitForExistence(timeout: 4))
+        XCTAssertTrue(headline.isHittable)
+        XCTAssertLessThanOrEqual(headline.frame.maxY, next.frame.minY,
+                                 "The promise must be on the first screen, not below the fold")
+        attachScreenshot("onboarding-ax5-page1")
+        next.tap()
+
+        let back = app.buttons["onboarding.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 4))
+        XCTAssertEqual(back.label, "戻る")
+        XCTAssertTrue(back.isHittable)
+        XCTAssertGreaterThanOrEqual(back.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(back.frame.width, 44)
+        XCTAssertLessThanOrEqual(back.frame.height, 100, "The pinned header must not grow into the page")
+        XCTAssertEqual(step.label, "全3ページ中、2ページ。一粒を体験（任意）")
+        attachScreenshot("onboarding-ax5-page2")
+        XCTAssertTrue(waitUntilEnabled(next))
+        next.tap()
+
+        let heading = app.staticTexts["最初のテーマを選ぶ"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 4))
+        XCTAssertLessThanOrEqual(heading.frame.maxY, next.frame.minY,
+                                 "The page heading must not be cut by the pinned button")
+        XCTAssertEqual(step.label, "全3ページ中、3ページ。最初のテーマ")
+        attachScreenshot("onboarding-ax5-page3")
+        let english = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "英語")).firstMatch
+        XCTAssertTrue(scrollUntilHittable(english))
+        english.tap()
+        let summary = app.descendants(matching: .any)["onboarding.selection-summary"]
+        XCTAssertTrue(waitForLabel(summary, containing: "英語"),
+                      "At AX sizes the theme summary lives in the page")
+        XCTAssertTrue(waitUntilEnabled(next))
+        next.tap()
+        XCTAssertTrue(app.buttons["home.subject-picker"].waitForExistence(timeout: 8))
     }
 
     // MARK: - Helpers
