@@ -29,11 +29,15 @@ enum StorageTransferLaunchReader {
         }
     }
 
-    /// The device side of the comparison is reduced by the **same** function as
-    /// the iCloud side (`StorageTransferCloudPreview.make`), over the same
-    /// mirrored models, so the two rows a user compares are computed
-    /// identically and a difference between them is a difference in the data.
-    /// `otherDeviceIDs` is meaningless for a local snapshot and is ignored by
+    /// The device side of the comparison is reduced by the **same** per-row
+    /// reduction as the iCloud side (`StorageTransferCloudPreview.Reducer`),
+    /// over the same mirrored models, so the two rows a user compares are
+    /// computed identically and a difference between them is a difference in
+    /// the data. It reads the rows directly rather than through a full
+    /// `PomoGemStorageSnapshot`: only the mirrored models' scalar fields, in
+    /// one pass, so a long-time user is not frozen on the stop screen while
+    /// every relationship of every entity is captured just to be counted.
+    /// `otherDeviceIDs` is meaningless for the local side and is ignored by
     /// the UI; only the counts and the newest dated row are read from it.
     static func captureDevicePreview(selection: PersistenceDeploymentSelection,
                                      localDeviceID: String = FocusDeviceIdentity.current())
@@ -41,8 +45,7 @@ enum StorageTransferLaunchReader {
         try withDisposableReader(selection: selection) { container in
             let context = ModelContext(container)
             context.autosaveEnabled = false
-            let snapshot = try PomoGemStorageSnapshot.capture(from: context)
-            return StorageTransferCloudPreview.make(snapshot: snapshot, localDeviceID: localDeviceID)
+            return try StorageTransferCloudPreview.make(context: context, localDeviceID: localDeviceID)
         }
     }
 

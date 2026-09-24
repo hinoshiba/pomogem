@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 /// Read-only pre-flight evidence about the iCloud dataset that a device →
 /// iCloud overwrite would destroy.
@@ -72,19 +73,58 @@ struct StorageTransferCloudPreview: Equatable, Sendable {
                      localDeviceID: String,
                      now: Date = .now,
                      ignoring ignoredIDs: Set<String> = StorageTransferCloudPreviewPolicy.ignoredWriterIDs) -> Self {
-        let local = StorageTransferCloudPreviewPolicy.normalize(localDeviceID)
-        var counts = Dictionary(uniqueKeysWithValues: PomoGemStorageSnapshot.cloudModelNames.map { ($0, 0) })
-        var latest: Date?
-        var others: Set<String> = []
-        var ignored: Set<String> = []
-        for row in snapshot.records {
+        var reducer = Reducer(localDeviceID: localDeviceID, now: now, ignoring: ignoredIDs)
+        for row in snapshot.records { reducer.consume(entity: row.entity, fields: row.fields) }
+        return reducer.preview
+    }
+
+    /// The device side, read straight from a context instead of from a
+    /// `PomoGemStorageSnapshot`. transfer-03 made every build read this side
+    /// on the screens that delete it, and a full snapshot — every field and
+    /// every relationship of all eleven entities, enumerated twice, budgeted
+    /// and validated — is what froze the screen on a large account. This
+    /// walks the seven mirrored entities once, reads only their scalar fields
+    /// (`PomoGemStorageSnapshot.visitMirroredRows`) and feeds each row to the
+    /// SAME `Reducer` as `make(snapshot:)`, so the two rows a user compares
+    /// are still reduced identically (pinned by
+    /// `StorageTransferCloudPreviewTests`). Main-actor bound only because the
+    /// snapshot's field table is.
+    @MainActor
+    static func make(context: ModelContext,
+                     localDeviceID: String,
+                     now: Date = .now,
+                     ignoring ignoredIDs: Set<String> = StorageTransferCloudPreviewPolicy.ignoredWriterIDs) throws -> Self {
+        var reducer = Reducer(localDeviceID: localDeviceID, now: now, ignoring: ignoredIDs)
+        try PomoGemStorageSnapshot.visitMirroredRows(in: context) { entity, fields in
+            reducer.consume(entity: entity, fields: fields)
+        }
+        return reducer.preview
+    }
+
+    /// The whole per-row policy, in one place for both sources.
+    struct Reducer {
+        private let local: String
+        private let now: Date
+        private let ignoredIDs: Set<String>
+        private var counts = Dictionary(uniqueKeysWithValues: PomoGemStorageSnapshot.cloudModelNames.map { ($0, 0) })
+        private var latest: Date?
+        private var others: Set<String> = []
+        private var ignored: Set<String> = []
+
+        init(localDeviceID: String, now: Date, ignoring ignoredIDs: Set<String>) {
+            local = StorageTransferCloudPreviewPolicy.normalize(localDeviceID)
+            self.now = now
+            self.ignoredIDs = ignoredIDs
+        }
+
+        mutating func consume(entity: String, fields: [String: PomoGemStorageSnapshot.Scalar]) {
             // Counts and dates are both restricted to the mirrored models, in
             // one branch, so the two cannot drift apart again: the device side
             // and the iCloud side must be reduced over the same models or the
             // comparison a deletion is chosen from is not a comparison.
-            if counts[row.entity] != nil {
-                counts[row.entity, default: 0] += 1
-                for value in row.fields.values {
+            if counts[entity] != nil {
+                counts[entity, default: 0] += 1
+                for value in fields.values {
                     guard case .dateBits(let bits) = value else { continue }
                     let interval = Double(bitPattern: bits)
                     guard interval.isFinite else { continue }
@@ -93,16 +133,20 @@ struct StorageTransferCloudPreview: Equatable, Sendable {
                     if let current = latest { latest = max(current, date) } else { latest = date }
                 }
             }
-            guard let field = witnessFields[row.entity],
-                  case .string(let raw)? = row.fields[field] else { continue }
+            guard let field = StorageTransferCloudPreview.witnessFields[entity],
+                  case .string(let raw)? = fields[field] else { return }
             let writer = StorageTransferCloudPreviewPolicy.normalize(raw)
-            guard !writer.isEmpty, writer != local else { continue }
+            guard !writer.isEmpty, writer != local else { return }
             if ignoredIDs.contains(writer) { ignored.insert(writer) } else { others.insert(writer) }
         }
-        return Self(recordCounts: counts, latestRecordAt: latest,
-                    otherDeviceIDs: others.count, ignoredWriterIDs: ignored.count)
+
+        var preview: StorageTransferCloudPreview {
+            StorageTransferCloudPreview(recordCounts: counts, latestRecordAt: latest,
+                                        otherDeviceIDs: others.count, ignoredWriterIDs: ignored.count)
+        }
     }
 }
+
 
 enum StorageTransferCloudPreviewPolicy {
     /// This repository's own audits wrote these writer identifiers into LIVE

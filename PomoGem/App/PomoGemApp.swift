@@ -2580,8 +2580,8 @@ private struct PomoGemPersistenceLaunchHost: View {
         // holds. transfer-03: always read, because 「iCloudから再取得」 ships in
         // every build and THIS iPhone is the side it deletes. The session is
         // mounted, so its own container is read through a fresh, unsaved
-        // context and reduced by the same function as the iCloud side — no
-        // byte copy of a live store.
+        // context and reduced by the same per-row reduction as the iCloud
+        // side — no byte copy of a live store, and no full snapshot.
         let device = try? Self.mountedDevicePreview(container: sourceSession.container,
                                                     localDeviceID: deviceID)
         try validate()
@@ -2628,18 +2628,17 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     /// The device side of a Settings comparison, read from the session that is
-    /// already mounted. `observeCloudReplica` accepts a mirrored container and
-    /// a local-only one alike, reads through a context that holds no changes,
-    /// and writes nothing; `StorageTransferCloudPreview.make` then reduces it
-    /// over the same mirrored models as the iCloud side.
+    /// already mounted, through a fresh context that holds no changes and
+    /// writes nothing. `StorageTransferCloudPreview.make(context:)` walks the
+    /// mirrored models' scalar fields once — not a full snapshot of every
+    /// field and relationship of every entity — and reduces them with the
+    /// same per-row reduction as the iCloud side.
     @MainActor
     static func mountedDevicePreview(container: ModelContainer,
                                      localDeviceID: String) throws -> StorageTransferCloudPreview {
         let context = ModelContext(container)
         context.autosaveEnabled = false
-        return StorageTransferCloudPreview.make(
-            snapshot: try PomoGemStorageSnapshot.observeCloudReplica(from: context),
-            localDeviceID: localDeviceID)
+        return try StorageTransferCloudPreview.make(context: context, localDeviceID: localDeviceID)
     }
 
     private func datasetRequestRelaunchMessage(
