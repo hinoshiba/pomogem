@@ -1021,27 +1021,31 @@ struct LogView: View {
     }
 
     private var summaryGrid: some View {
-        let measured = filteredSessions.filter { $0.effectiveSource.isMeasured }
+        // 「完走ポモ」 counts timers that ran to their end. Screen Time chunks
+        // are measured time but not completions.
+        let timerCompletionCount = filteredSessions
+            .filter { $0.effectiveSource.isTimerCompletion }
+            .count
         let totalMinutes = NonnegativeIntPolicy.sum(
             filteredSessions.map(\.seconds)
         ) / 60
         return Group {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: 10) {
-                    summaryTiles(measuredCount: measured.count, totalMinutes: totalMinutes)
+                    summaryTiles(timerCompletionCount: timerCompletionCount, totalMinutes: totalMinutes)
                 }
             } else {
                 HStack(spacing: 10) {
-                    summaryTiles(measuredCount: measured.count, totalMinutes: totalMinutes)
+                    summaryTiles(timerCompletionCount: timerCompletionCount, totalMinutes: totalMinutes)
                 }
             }
         }
     }
 
     @ViewBuilder
-    private func summaryTiles(measuredCount: Int, totalMinutes: Int) -> some View {
+    private func summaryTiles(timerCompletionCount: Int, totalMinutes: Int) -> some View {
         SummaryTile(label: periodPageIsPartial ? "表示分の時間" : "積んだ時間", value: formatMinutes(totalMinutes), symbol: "hourglass")
-        SummaryTile(label: periodPageIsPartial ? "表示分の完走" : "完走ポモ", value: "\(measuredCount)", symbol: "checkmark.circle")
+        SummaryTile(label: periodPageIsPartial ? "表示分の完走" : "完走ポモ", value: "\(timerCompletionCount)", symbol: "checkmark.circle")
         SummaryTile(
             label: periodPageIsPartial ? "表示分の質量" : "今期の質量",
             value: formatMass(NonnegativeIntPolicy.sum(filteredSessions.map(\.grams))),

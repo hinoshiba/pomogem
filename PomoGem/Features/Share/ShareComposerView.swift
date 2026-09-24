@@ -2492,6 +2492,8 @@ struct ShareCardView: View {
             RareRewardCounts.saturatedSum(unlinkedAggregates.map(\.grams))
         ])
     }
+    /// Measured gems (timer or Screen Time). Counted in 粒, not 回: one hour
+    /// of Screen Time is six ten-minute gems, not six timer completions.
     private var measuredCount: Int {
         NonnegativeIntPolicy.sum(
             [sessions.filter { $0.source.isMeasured }.count]
@@ -2618,7 +2620,7 @@ struct ShareCardView: View {
                             .font(.system(size: story ? 13 : 10, weight: .heavy, design: .rounded))
                             .foregroundStyle(PomoGemTheme.text)
                         HStack(spacing: 6) {
-                            Text("実測 \(measuredCount)回")
+                            Text("実測 \(measuredCount)粒")
                             Text("・")
                             Text("まとまり \(aggregates.count)")
                             if goldCount > 0 {
@@ -2695,7 +2697,7 @@ struct ShareCardView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "ポモジェムシェアカード。\(periodLabel)。瓶に積んだ集中、\(ShareMassFormatter.spoken(totalGrams))。\(pebbleCount)粒、実測\(measuredCount)回、まとまり粒\(aggregates.count)個、記念石\(achievements.count)個。\(rewardSemantics.accessibilityDetail)。\(hiddenContent.captionDisclosure ?? "すべての石を表示")。\(disclosure.accessibilityDisclosure)。公式サイト、\(ShareCopy.websiteDisplayName)。\(hashtags.isEmpty ? "ハッシュタグなし" : "ハッシュタグ、\(hashtags.joined(separator: "、"))")"
+            "ポモジェムシェアカード。\(periodLabel)。瓶に積んだ集中、\(ShareMassFormatter.spoken(totalGrams))。\(pebbleCount)粒、うち実測\(measuredCount)粒、まとまり粒\(aggregates.count)個、記念石\(achievements.count)個。\(rewardSemantics.accessibilityDetail)。\(hiddenContent.captionDisclosure ?? "すべての石を表示")。\(disclosure.accessibilityDisclosure)。公式サイト、\(ShareCopy.websiteDisplayName)。\(hashtags.isEmpty ? "ハッシュタグなし" : "ハッシュタグ、\(hashtags.joined(separator: "、"))")"
         )
         .accessibilityIdentifier("share.card")
     }

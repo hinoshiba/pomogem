@@ -1361,6 +1361,7 @@ final class ProgressPresentationTests: XCTestCase {
                 colorHex: "#2457C5",
                 grams: 250,
                 isMeasured: true,
+                isTimerCompletion: true,
                 isRepresentedByLocalAggregate: false
             ),
             AccumulationRecord(
@@ -1370,6 +1371,7 @@ final class ProgressPresentationTests: XCTestCase {
                 colorHex: "#E6A53A",
                 grams: 600,
                 isMeasured: true,
+                isTimerCompletion: true,
                 isRepresentedByLocalAggregate: false
             ),
             AccumulationRecord(
@@ -1379,14 +1381,38 @@ final class ProgressPresentationTests: XCTestCase {
                 colorHex: "#FF00FF",
                 grams: Int.max,
                 isMeasured: false,
+                isTimerCompletion: false,
                 isRepresentedByLocalAggregate: false
             )
         ]
 
         let summary = AccumulationWeeklyPolicy.summary(records: records)
-        XCTAssertEqual(summary.measuredCompletionCount, 2)
+        XCTAssertEqual(summary.timerCompletionCount, 2)
         XCTAssertEqual(summary.measuredGrams, 850)
         XCTAssertEqual(summary.dominantColorHex, "#E6A53A")
+
+        // Six ten-minute Screen Time chunks are an hour of measured study,
+        // not six returns to the timer.
+        let screenTimeChunks = (0 ..< 6).map { index in
+            AccumulationRecord(
+                id: UUID(),
+                date: base.addingTimeInterval(Double(10 + index)),
+                subjectName: "英語",
+                colorHex: "#2457C5",
+                grams: SessionSource.screenTimeGrams,
+                isMeasured: SessionSource.screenTime.isMeasured,
+                isTimerCompletion: SessionSource.screenTime.isTimerCompletion,
+                isRepresentedByLocalAggregate: false
+            )
+        }
+        let withScreenTime = AccumulationWeeklyPolicy.summary(
+            records: records + screenTimeChunks
+        )
+        XCTAssertEqual(withScreenTime.timerCompletionCount, 2)
+        XCTAssertEqual(
+            withScreenTime.measuredGrams,
+            850 + 6 * SessionSource.screenTimeGrams
+        )
 
         let saturated = AccumulationWeeklyPolicy.summary(records: [
             AccumulationRecord(
@@ -1396,6 +1422,7 @@ final class ProgressPresentationTests: XCTestCase {
                 colorHex: "#2457C5",
                 grams: Int.max,
                 isMeasured: true,
+                isTimerCompletion: true,
                 isRepresentedByLocalAggregate: false
             ),
             AccumulationRecord(
@@ -1405,6 +1432,7 @@ final class ProgressPresentationTests: XCTestCase {
                 colorHex: "#2457C5",
                 grams: 250,
                 isMeasured: true,
+                isTimerCompletion: true,
                 isRepresentedByLocalAggregate: false
             )
         ])

@@ -11,13 +11,17 @@ struct AccumulationRecord: Identifiable, Equatable, Sendable {
     let colorHex: String
     let grams: Int
     let isMeasured: Bool
+    /// A focus timer ran to its end. Screen Time chunks are measured but are
+    /// not completions (see `SessionSource.isTimerCompletion`).
+    let isTimerCompletion: Bool
     /// Derived exclusively from this device's local AggregatePebble/Stratum
     /// membership. It is never copied from StudySession.isBaked.
     let isRepresentedByLocalAggregate: Bool
 }
 
 struct AccumulationWeeklySummary: Equatable, Sendable {
-    let measuredCompletionCount: Int
+    /// Timers that ran to their end this week (the 「戻った回数」).
+    let timerCompletionCount: Int
     let measuredGrams: Int
     let dominantColorHex: String
 }
@@ -35,7 +39,7 @@ enum AccumulationWeeklyPolicy {
             return lhs.grams < rhs.grams
         }?.hex ?? Constants.Color.amberLamp
         return AccumulationWeeklySummary(
-            measuredCompletionCount: measured.count,
+            timerCompletionCount: records.filter(\.isTimerCompletion).count,
             measuredGrams: HomeProjectionPolicy.saturatingNonnegativeSum(
                 measured.map(\.grams)
             ),
@@ -623,7 +627,7 @@ struct AccumulationOverviewView: View {
         didApplyInitialFocus = true
         selectedLens = OverviewInitialLensPolicy.selection(
             hasInitialCluster: initialClusterID != nil,
-            currentWeekMeasuredCount: currentWeekMeasuredCount,
+            currentWeekMeasuredCount: currentWeekRecords.filter(\.isMeasured).count,
             currentRecordCount: currentRecords.count,
             clusterCount: clusters.count,
             lifetimePebbleCount: lifetimePebbleCount
@@ -653,8 +657,8 @@ struct AccumulationOverviewView: View {
         return uniqueRecords.filter { interval.contains($0.date) }
     }
 
-    private var currentWeekMeasuredCount: Int {
-        currentWeekSummary.measuredCompletionCount
+    private var currentWeekTimerCompletionCount: Int {
+        currentWeekSummary.timerCompletionCount
     }
 
     private var currentWeekGrams: Int {
@@ -837,9 +841,9 @@ struct AccumulationOverviewView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier("overview.weekly-crystal")
         .accessibilityLabel(
-            currentWeekMeasuredCount == 0
+            currentWeekGrams == 0
                 ? "今週の積み上げ。今週のタイマー完走はまだありません。休んでも、以前の記録は減りません"
-                : "今週の積み上げ、\(EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams))、\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekMeasuredCount)回。回数は戻った文脈で、時間価値とは別です"
+                : "今週の積み上げ、\(EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams))、\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekTimerCompletionCount)回。回数は戻った文脈で、時間価値とは別です"
         )
     }
 
@@ -873,10 +877,10 @@ struct AccumulationOverviewView: View {
 
         VStack(alignment: .leading, spacing: 9) {
             SectionEyebrow(text: "THIS WEEK")
-            Text(currentWeekMeasuredCount == 0 ? "今週は、まだ透明。" : "今週の時間が積み上がっている。")
+            Text(currentWeekGrams == 0 ? "今週は、まだ透明。" : "今週の時間が積み上がっている。")
                 .font(PomoGemTheme.brand(22))
             Text(
-                currentWeekMeasuredCount == 0
+                currentWeekGrams == 0
                     ? "次の完走から時間と質量を加えます。休んでも、これまでの瓶は減りません。"
                     : "価値は集中時間で加算。完走回数は、戻ってきた文脈として別に残します。"
             )
@@ -904,7 +908,7 @@ struct AccumulationOverviewView: View {
             title: "標準換算",
             value: EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams)
         )
-        OverviewStat(title: "戻った回数", value: "\(currentWeekMeasuredCount)回")
+        OverviewStat(title: "戻った回数", value: "\(currentWeekTimerCompletionCount)回")
         OverviewStat(title: "今週", value: formattedMass(currentWeekGrams))
     }
 

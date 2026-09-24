@@ -60,8 +60,14 @@ enum SessionSource: String, Codable, CaseIterable, Sendable {
         return .screenTime
     }
 
+    /// Whether the time was measured (a timer or Screen Time) rather than
+    /// typed in. Drives mass disclosure, share scope and dashed pebbles.
     var isMeasured: Bool { self == .timer || self == .screenTime }
     var isSelfReported: Bool { !isMeasured }
+    /// Whether a focus timer ran to its end. Completion and return counts use
+    /// this, not `isMeasured`: a Screen Time chunk is measured study time, but
+    /// one hour in a learning app is six ten-minute records, not six timers.
+    var isTimerCompletion: Bool { self == .timer }
     var displayName: String { self == .screenTime ? "Screen Time" : (isMeasured ? "実測" : "自己申告") }
 }
 

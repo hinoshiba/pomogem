@@ -313,6 +313,7 @@ actor AccumulationTimelineRepository {
                 colorHex: session.displaySubjectColorHex,
                 grams: max(0, session.grams),
                 isMeasured: session.effectiveSource.isMeasured,
+                isTimerCompletion: session.effectiveSource.isTimerCompletion,
                 // Timeline records are raw activity. A caller that also
                 // presents local aggregates resolves membership separately.
                 isRepresentedByLocalAggregate: false

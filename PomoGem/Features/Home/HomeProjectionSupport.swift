@@ -1050,10 +1050,16 @@ enum HomeProjectionPolicy {
 
     struct CompletionMetrics {
         let completedFocusCount: Int
+        /// Measured (timer or Screen Time) sessions whose mass is already in
+        /// `weeklyMeasuredGrams`.
         let weeklyMeasuredSessionIDs: Set<UUID>
-        let weeklyMeasuredDates: [Date]
-        /// Exact timer mass for the bounded current-week query. Session count
-        /// remains a return-frequency cue; this is the value-bearing measure.
+        /// Timer completions only. A Screen Time chunk is measured time, but
+        /// it is not a return to the timer, so it never adds to 「戻った」.
+        let weeklyTimerCompletionSessionIDs: Set<UUID>
+        let weeklyTimerCompletionDates: [Date]
+        /// Exact measured mass for the bounded current-week query. Session
+        /// count remains a return-frequency cue; this is the value-bearing
+        /// measure.
         let weeklyMeasuredGrams: Int
     }
 
@@ -1087,7 +1093,8 @@ enum HomeProjectionPolicy {
             return CompletionMetrics(
                 completedFocusCount: completedCount,
                 weeklyMeasuredSessionIDs: [],
-                weeklyMeasuredDates: [],
+                weeklyTimerCompletionSessionIDs: [],
+                weeklyTimerCompletionDates: [],
                 weeklyMeasuredGrams: 0
             )
         }
@@ -1102,10 +1109,12 @@ enum HomeProjectionPolicy {
             maximumPhysicalRows: maximumWeeklyPhysicalRows
         )
             .filter { $0.effectiveSource.isMeasured }
+        let timerCompletions = unique.filter { $0.effectiveSource.isTimerCompletion }
         return CompletionMetrics(
             completedFocusCount: completedCount,
             weeklyMeasuredSessionIDs: Set(unique.map(\.id)),
-            weeklyMeasuredDates: unique.map(\.endAt),
+            weeklyTimerCompletionSessionIDs: Set(timerCompletions.map(\.id)),
+            weeklyTimerCompletionDates: timerCompletions.map(\.endAt),
             weeklyMeasuredGrams: saturatingNonnegativeSum(unique.map(\.grams))
         )
     }
