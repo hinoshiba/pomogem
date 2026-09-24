@@ -675,6 +675,38 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         }
     }
 
+    /// screentime-08: the black stones could only be cleared by the full
+    /// reset, which also deletes both app selections. Clearing them alone
+    /// keeps the setup and the runs, so nothing is re-registered and the next
+    /// threshold of the same run counts only the minutes after it.
+    func testClearingBlackStonesKeepsTheSetupAndCountsOnlyNewMinutesAfterwards() async throws {
+        let store = try makeStore()
+        let distraction = ScreenTimeRun(
+            lane: .distraction, dayStart: start, dayEnd: start.addingTimeInterval(86_400),
+            startedAt: start, timeZoneID: "UTC", includesPastActivity: false, themeID: nil
+        )
+        try store.update { $0.runs.append(distraction) }
+        try store.record(runID: distraction.id, threshold: 3, now: start.addingTimeInterval(1_801))
+        let before = try store.snapshot()
+        XCTAssertEqual(before.negativeGemCount, 12)
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" }, monitoring: driver, authorization: { .approved })
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+
+        try controller.clearBlackStones()
+        let cleared = try store.snapshot()
+        XCTAssertEqual(cleared.negativeGemCount, 0)
+        XCTAssertEqual(controller.negativeGemCount, 0)
+        XCTAssertEqual(cleared.configuration, before.configuration)
+        XCTAssertEqual(cleared.runs, before.runs, "Runs and their counted thresholds stay as they were")
+        XCTAssertEqual(cleared.epoch, before.epoch)
+        XCTAssertTrue(driver.events.isEmpty, "Clearing must not touch the OS registration")
+
+        try store.record(runID: distraction.id, threshold: 4, now: start.addingTimeInterval(2_401))
+        controller.reload()
+        XCTAssertEqual(controller.negativeGemCount, 1, "Only the ten minutes after the clear count")
+    }
+
     // MARK: - the diagnostics mirror
 
     /// The monitor extension counts the callbacks, but it cannot write into

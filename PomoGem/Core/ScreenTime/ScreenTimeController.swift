@@ -503,6 +503,22 @@ final class ScreenTimeController: ObservableObject {
         reload()
     }
 
+    /// 「黒い石を片付ける」: sets the black-stone count back to 0 and nothing
+    /// else. The app selections, recording, runs and their `highestThreshold`
+    /// stay, so monitoring is not re-registered and a later threshold of the
+    /// same run still adds only the minutes after the one already counted —
+    /// nothing is counted twice. The only other way to clear the stones was
+    /// the full reset, which also throws away both app selections.
+    func clearBlackStones() throws {
+        guard !isSaving, !isResetting, !isErasing else { throw OperationError.busy }
+        let lease = try boundLease()
+        try store.update { state in
+            try validate(state, lease: lease)
+            state.negativeGemCount = 0
+        }
+        reload()
+    }
+
     func suspendForContextRetirement(contextKey: String, dataEpochID: UUID?) {
         guard lease?.binding == ScreenTimeContextBinding(contextKey: contextKey, dataEpochID: dataEpochID) else { return }
         suspendForContextRetirement()

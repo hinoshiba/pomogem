@@ -22,6 +22,7 @@ struct ScreenTimeSettingsView: View {
     @State private var isRequestingAuthorization = false
     @State private var saveError: String?
     @State private var isResetConfirmationPresented = false
+    @State private var isClearBlackStonesConfirmationPresented = false
     @State private var hasUserEdits = false
     @State private var isLeaveConfirmationPresented = false
     /// Set by 「保存して戻る」: pop once the save has finished, never while it
@@ -205,6 +206,16 @@ struct ScreenTimeSettingsView: View {
             Button("閉じる", role: .cancel) {}
         } message: {
             Text(saveError ?? "")
+        }
+        .alert(String(localized: "黒い石を片付けますか？", table: "ScreenTime",
+                      comment: "Alert title: clear only the black stones"),
+               isPresented: $isClearBlackStonesConfirmationPresented) {
+            Button("キャンセル", role: .cancel) {}
+            Button(String(localized: "片付ける", table: "ScreenTime", comment: "Alert action: clear the black stones"),
+                   action: clearBlackStones)
+        } message: {
+            Text("瓶の黒い石を、このiPhoneから片付けます。選んだアプリと自動記録はそのまま続き、勉強時間と粒は変わりません。片付けた石は戻せません。",
+                 tableName: "ScreenTime", comment: "Alert message: what clearing the black stones does")
         }
         .alert("スクリーンタイムの内容をリセット", isPresented: $isResetConfirmationPresented) {
             Button("キャンセル", role: .cancel) {}
@@ -446,6 +457,20 @@ struct ScreenTimeSettingsView: View {
                                      tableName: "ScreenTime", comment: "VoiceOver: black-stone total and minutes"))
             .accessibilityAddTraits(.isStaticText)
             .accessibilityIdentifier("screen-time.negative-total")
+
+            if controller.negativeGemCount > 0 {
+                Button {
+                    isClearBlackStonesConfirmationPresented = true
+                } label: {
+                    Label(String(localized: "黒い石を片付ける", table: "ScreenTime",
+                                 comment: "Button: clear only the black stones"),
+                          systemImage: "sparkles")
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(minHeight: 44)
+                }
+                .disabled(controller.isSaving || controller.isResetting)
+                .accessibilityIdentifier("screen-time.clear-black-stones")
+            }
         } header: {
             Text("黒い石", tableName: "ScreenTime", comment: "Section header: apps to cut down that add black stones")
         } footer: {
@@ -485,8 +510,14 @@ struct ScreenTimeSettingsView: View {
             .disabled(controller.isSaving || controller.isResetting || isRequestingAuthorization)
             .accessibilityIdentifier("screen-time.reset")
         } footer: {
-            Text("アプリの選択・未取り込みの利用記録・黒い石を削除し、自動記録を停止します。保存済みの勉強時間と粒は残ります。",
-                 tableName: "ScreenTime", comment: "Footer under the full Screen Time reset")
+            VStack(alignment: .leading, spacing: 5) {
+                Text("アプリの選択・未取り込みの利用記録・黒い石を削除し、自動記録を停止します。保存済みの勉強時間と粒は残ります。",
+                     tableName: "ScreenTime", comment: "Footer under the full Screen Time reset")
+                if controller.negativeGemCount > 0 {
+                    Text("黒い石だけを片付けるときは、上の「黒い石を片付ける」を使います。アプリの選択はそのまま残ります。",
+                         tableName: "ScreenTime", comment: "Footer: point to the lighter black-stone clear")
+                }
+            }
         }
     }
 
@@ -606,6 +637,17 @@ struct ScreenTimeSettingsView: View {
                 leavesAfterSave = false
                 saveError = error.localizedDescription
             }
+        }
+    }
+
+    private func clearBlackStones() {
+        do {
+            try controller.clearBlackStones()
+            router.showToast(String(localized: "黒い石を片付けました", table: "ScreenTime",
+                                    comment: "Toast: the black stones were cleared"),
+                             symbol: "checkmark")
+        } catch {
+            saveError = error.localizedDescription
         }
     }
 
