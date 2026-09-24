@@ -1,0 +1,415 @@
+{
+  "_comment": [
+    "Localization map for PomoGem. Read by Scripts/l10n/l10n.py and by PomoGemTests (LocalizationCatalogTests, LocalizationEnvironmentTests).",
+    "rules: ordered globs over the shipping Swift sources; the first match decides the table (the catalog) and the package that owns the file. A string's table is chosen by the file it is written in, never by the screen that shows it.",
+    "catalogs: one String Catalog per table. There is deliberately no Localizable.xcstrings: an untabled literal must stay detectable.",
+    "shipping_languages: the localizations every bundle must contain. English is added here only by the localization integration change that also adds the English InfoPlist values (see Docs/Localization.md)."
+  ],
+  "source_language": "ja",
+  "shipping_languages": [
+    "ja"
+  ],
+  "source_roots": [
+    "PomoGem",
+    "PomoGemWidgets",
+    "PomoGemScreenTimeMonitor",
+    "Shared"
+  ],
+  "product_targets": [
+    "PomoGem",
+    "PomoGemWidgets",
+    "PomoGemScreenTimeMonitor"
+  ],
+  "rules": [
+    {
+      "glob": "PomoGem/Debug/**",
+      "table": null,
+      "package": "none",
+      "note": "DEBUG-only fixtures; never localized"
+    },
+    {
+      "glob": "PomoGem/App/Theme.swift",
+      "table": "Common",
+      "package": "l10n-00-infra"
+    },
+    {
+      "glob": "PomoGem/Core/Constants.swift",
+      "table": "Common",
+      "package": "l10n-00-infra"
+    },
+    {
+      "glob": "PomoGem/App/AppLinks.swift",
+      "table": "Common",
+      "package": "l10n-00-infra"
+    },
+    {
+      "glob": "PomoGem/App/PomoGemLogo.swift",
+      "table": "Common",
+      "package": "l10n-00-infra"
+    },
+    {
+      "glob": "PomoGem/Core/Localization/**",
+      "table": "Common",
+      "package": "l10n-00-infra"
+    },
+    {
+      "glob": "PomoGem/Core/DurationPresentation.swift",
+      "table": "Common",
+      "package": "l10n-00-infra",
+      "note": "created by plan pr-42; infra re-bases it on Duration.UnitsFormatStyle"
+    },
+    {
+      "glob": "PomoGem/Features/Home/**",
+      "table": "Home",
+      "package": "l10n-01-home"
+    },
+    {
+      "glob": "PomoGem/Features/Focus/**",
+      "table": "Focus",
+      "package": "l10n-02-focus-system"
+    },
+    {
+      "glob": "PomoGem/Core/TimerEngine/PomodoroEngine.swift",
+      "table": "Focus",
+      "package": "l10n-02-focus-system"
+    },
+    {
+      "glob": "PomoGem/App/TimerSceneOrientation.swift",
+      "table": "Focus",
+      "package": "l10n-02-focus-system"
+    },
+    {
+      "glob": "PomoGem/Core/NotificationManager.swift",
+      "table": "Notifications",
+      "package": "l10n-02-focus-system"
+    },
+    {
+      "glob": "PomoGem/Core/WidgetSnapshotStore.swift",
+      "table": "Focus",
+      "package": "l10n-02-focus-system"
+    },
+    {
+      "glob": "Shared/WidgetSnapshotMetadata.swift",
+      "table": "Focus",
+      "package": "l10n-02-focus-system"
+    },
+    {
+      "glob": "PomoGemWidgets/**",
+      "table": "Widgets",
+      "package": "l10n-02-focus-system",
+      "bundle": "widgets"
+    },
+    {
+      "glob": "Shared/FocusActivityAttributes.swift",
+      "table": "Widgets",
+      "package": "l10n-02-focus-system",
+      "bundle": "app+widgets",
+      "note": "prefer Duration formatting (no catalog entries); if a key is unavoidable the Widgets catalog must be a member of both targets"
+    },
+    {
+      "glob": "PomoGem/Features/Settings/ScreenTimeSettingsView.swift",
+      "table": "ScreenTime",
+      "package": "l10n-02-focus-system"
+    },
+    {
+      "glob": "PomoGem/Core/ScreenTime/**",
+      "table": "ScreenTime",
+      "package": "l10n-02-focus-system"
+    },
+    {
+      "glob": "Shared/ScreenTime*.swift",
+      "table": "ScreenTime",
+      "package": "l10n-02-focus-system",
+      "bundle": "app (monitor never renders user text)"
+    },
+    {
+      "glob": "PomoGemScreenTimeMonitor/**",
+      "table": "ScreenTime",
+      "package": "l10n-02-focus-system",
+      "bundle": "monitor"
+    },
+    {
+      "glob": "Shared/IntegrationConstants.swift",
+      "table": "ScreenTime",
+      "package": "l10n-02-focus-system"
+    },
+    {
+      "glob": "PomoGem/Features/Log/**",
+      "table": "Log",
+      "package": "l10n-03-log-progress"
+    },
+    {
+      "glob": "PomoGem/Features/Wrapped/**",
+      "table": "Log",
+      "package": "l10n-03-log-progress"
+    },
+    {
+      "glob": "PomoGem/Features/Overview/ProgressCrystal.swift",
+      "table": "Progress",
+      "package": "l10n-03-log-progress"
+    },
+    {
+      "glob": "PomoGem/Features/Planning/**",
+      "table": "Planning",
+      "package": "l10n-03-log-progress"
+    },
+    {
+      "glob": "PomoGem/Features/Overview/**",
+      "table": "Overview",
+      "package": "l10n-04-overview"
+    },
+    {
+      "glob": "PomoGem/Features/Share/**",
+      "table": "Share",
+      "package": "l10n-05-share-jar"
+    },
+    {
+      "glob": "PomoGem/App/AppRouter.swift",
+      "table": "Share",
+      "package": "l10n-05-share-jar"
+    },
+    {
+      "glob": "PomoGem/Jar/**",
+      "table": "Jar",
+      "package": "l10n-05-share-jar"
+    },
+    {
+      "glob": "PomoGem/Juice/**",
+      "table": "Jar",
+      "package": "l10n-05-share-jar"
+    },
+    {
+      "glob": "PomoGem/Features/Settings/StorageTransferSettingsSection.swift",
+      "table": "Storage",
+      "package": "l10n-09-storage-sync"
+    },
+    {
+      "glob": "PomoGem/Features/Settings/**",
+      "table": "Settings",
+      "package": "l10n-06-settings"
+    },
+    {
+      "glob": "PomoGem/Features/Onboarding/**",
+      "table": "Onboarding",
+      "package": "l10n-07-onboarding-paywall-models"
+    },
+    {
+      "glob": "PomoGem/Core/UsagePurpose.swift",
+      "table": "Onboarding",
+      "package": "l10n-07-onboarding-paywall-models"
+    },
+    {
+      "glob": "PomoGem/App/SeedData.swift",
+      "table": "Onboarding",
+      "package": "l10n-07-onboarding-paywall-models"
+    },
+    {
+      "glob": "PomoGem/Core/SubjectNamePolicy.swift",
+      "table": "Onboarding",
+      "package": "l10n-07-onboarding-paywall-models"
+    },
+    {
+      "glob": "PomoGem/Features/Paywall/**",
+      "table": "Paywall",
+      "package": "l10n-07-onboarding-paywall-models"
+    },
+    {
+      "glob": "PomoGem/Core/PurchaseManager.swift",
+      "table": "Paywall",
+      "package": "l10n-07-onboarding-paywall-models"
+    },
+    {
+      "glob": "PomoGem/Core/Models/**",
+      "table": "Models",
+      "package": "l10n-07-onboarding-paywall-models"
+    },
+    {
+      "glob": "PomoGem/Core/GachaEngine.swift",
+      "table": "Models",
+      "package": "l10n-07-onboarding-paywall-models"
+    },
+    {
+      "glob": "PomoGem/Core/StrataMath.swift",
+      "table": "Models",
+      "package": "l10n-07-onboarding-paywall-models"
+    },
+    {
+      "glob": "PomoGem/Core/FairnessPolicy.swift",
+      "table": "Models",
+      "package": "l10n-07-onboarding-paywall-models"
+    },
+    {
+      "glob": "PomoGem/Core/RareReward*.swift",
+      "table": "Models",
+      "package": "l10n-07-onboarding-paywall-models"
+    },
+    {
+      "glob": "PomoGem/App/AcceptedActivityResetCleanup.swift",
+      "table": "Models",
+      "package": "l10n-07-onboarding-paywall-models"
+    },
+    {
+      "glob": "PomoGem/App/PomoGemApp.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/App/RootView.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/App/CloudOfflinePresentation.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/App/BoundedLaunchPreparation.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/App/ViewTaskScope.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/App/StorageTransfer*.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/Core/LaunchActivationWatchdogPolicy.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/Core/CloudLaunchDeadline.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/Core/CloudOffline*.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/Core/CloudActivityHistoryPreflight.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/Core/PersistenceStoreTopology.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/Core/Analytics.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/Core/StorageTransfer/**",
+      "table": "Storage",
+      "package": "l10n-09-storage-sync"
+    },
+    {
+      "glob": "PomoGem/Core/DataDeletion/**",
+      "table": "Storage",
+      "package": "l10n-09-storage-sync"
+    },
+    {
+      "glob": "PomoGem/Core/CloudSyncMonitor.swift",
+      "table": "Launch",
+      "package": "l10n-08-launch"
+    },
+    {
+      "glob": "PomoGem/Core/SyncMaintenance*.swift",
+      "table": "Storage",
+      "package": "l10n-09-storage-sync"
+    },
+    {
+      "glob": "PomoGem/Core/TimerEngine/FocusCloudSync.swift",
+      "table": "Storage",
+      "package": "l10n-09-storage-sync"
+    },
+    {
+      "glob": "PomoGem/**",
+      "table": "UNASSIGNED",
+      "package": "UNASSIGNED",
+      "note": "new file from an in-flight PR: orchestrator assigns before the wave"
+    },
+    {
+      "glob": "Shared/**",
+      "table": "UNASSIGNED",
+      "package": "UNASSIGNED"
+    }
+  ],
+  "catalogs": {
+    "Common": "PomoGem/Localization/Common.xcstrings",
+    "Home": "PomoGem/Localization/Home.xcstrings",
+    "Focus": "PomoGem/Localization/Focus.xcstrings",
+    "Notifications": "PomoGem/Localization/Notifications.xcstrings",
+    "ScreenTime": "PomoGem/Localization/ScreenTime.xcstrings",
+    "Log": "PomoGem/Localization/Log.xcstrings",
+    "Progress": "PomoGem/Localization/Progress.xcstrings",
+    "Planning": "PomoGem/Localization/Planning.xcstrings",
+    "Overview": "PomoGem/Localization/Overview.xcstrings",
+    "Share": "PomoGem/Localization/Share.xcstrings",
+    "Jar": "PomoGem/Localization/Jar.xcstrings",
+    "Settings": "PomoGem/Localization/Settings.xcstrings",
+    "Onboarding": "PomoGem/Localization/Onboarding.xcstrings",
+    "Paywall": "PomoGem/Localization/Paywall.xcstrings",
+    "Models": "PomoGem/Localization/Models.xcstrings",
+    "Launch": "PomoGem/Localization/Launch.xcstrings",
+    "Storage": "PomoGem/Localization/Storage.xcstrings",
+    "Widgets": "PomoGemWidgets/Localization/Widgets.xcstrings"
+  },
+  "catalog_bundles": {
+    "PomoGem.app": [
+      "Common",
+      "Home",
+      "Focus",
+      "Notifications",
+      "ScreenTime",
+      "Log",
+      "Progress",
+      "Planning",
+      "Overview",
+      "Share",
+      "Jar",
+      "Settings",
+      "Onboarding",
+      "Paywall",
+      "Models",
+      "Launch",
+      "Storage"
+    ],
+    "PomoGemWidgets.appex": [
+      "Widgets"
+    ],
+    "PomoGemScreenTimeMonitor.appex": []
+  },
+  "info_plist_catalogs": [
+    {
+      "catalog": "PomoGem/Localization/InfoPlist.xcstrings",
+      "info_plist": "PomoGem/Info.plist",
+      "bundle": "PomoGem.app"
+    },
+    {
+      "catalog": "PomoGemWidgets/Localization/InfoPlist.xcstrings",
+      "info_plist": "PomoGemWidgets/Info.plist",
+      "bundle": "PomoGemWidgets.appex"
+    },
+    {
+      "catalog": "PomoGemScreenTimeMonitor/Localization/InfoPlist.xcstrings",
+      "info_plist": "PomoGemScreenTimeMonitor/Info.plist",
+      "bundle": "PomoGemScreenTimeMonitor.appex"
+    }
+  ],
+  "bundle_paths": {
+    "PomoGem.app": ".",
+    "PomoGemWidgets.appex": "PlugIns/PomoGemWidgets.appex",
+    "PomoGemScreenTimeMonitor.appex": "PlugIns/PomoGemScreenTimeMonitor.appex"
+  }
+}

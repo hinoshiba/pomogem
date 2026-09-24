@@ -1,0 +1,42 @@
+{
+  "sourceLanguage" : "ja",
+  "strings" : {
+    "CFBundleDisplayName" : {
+      "comment" : "Name under the app icon on the Home Screen and in Settings",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェム"
+          }
+        }
+      }
+    },
+    "NSMotionUsageDescription" : {
+      "comment" : "Motion permission prompt: why the jar reacts to tilting and shaking",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "端末の傾きや振る操作に合わせて瓶の粒を動かすために使います。値は保存・送信しません。"
+          }
+        }
+      }
+    },
+    "NSPhotoLibraryAddUsageDescription" : {
+      "comment" : "Photos permission prompt: why a share card is saved to Photos",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "シェアカードを写真に保存します。"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

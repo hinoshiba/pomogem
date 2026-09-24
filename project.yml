@@ -13,6 +13,11 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"
     GENERATE_INFOPLIST_FILE: true
     ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    # String Catalogs (Docs/Localization.md). The compiler records every
+    # String(localized:table:) and Text(_:tableName:) key in .stringsdata, which
+    # Scripts/l10n/l10n.py syncs into the per-feature catalogs and checks in CI.
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    SWIFT_EMIT_LOC_STRINGS: YES
 targets:
   PomoGem:
     type: application
