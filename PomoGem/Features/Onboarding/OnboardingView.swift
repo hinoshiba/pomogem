@@ -10,6 +10,10 @@ struct OnboardingView: View {
     @State private var page = 0
     @State private var trialDropped = false
     @State private var selectedSubjects = Set<String>()
+    /// launch-07. The theme-name field lives here, not in the page, so the
+    /// primary button can use a valid name the user typed but did not commit
+    /// with 「選択」 or Return (see `OnboardingThemePolicy.effectiveSelection`).
+    @State private var pendingSubjectName = ""
     @State private var wantsNotifications = false
     @State private var selectedRareRewardMode: RareRewardMode?
     @Environment(\.modelContext) private var modelContext
@@ -87,7 +91,9 @@ struct OnboardingView: View {
 
                     SubjectSetupPage(
                         selectedSubjects: $selectedSubjects,
+                        customSubjectName: $pendingSubjectName,
                         wantsNotifications: $wantsNotifications,
+                        effectiveSelection: effectiveSelectedSubjects,
                         existingSubjectNames: Set(existingSubjects.map(\.name)),
                         availableNewSubjectSlots: availableNewSubjectSlots
                     )
@@ -114,12 +120,12 @@ struct OnboardingView: View {
 
                     if page == 2 {
                         Text(
-                            selectedSubjects.isEmpty
+                            effectiveSelectedSubjects.isEmpty
                                 ? "テーマを1つ選ぶと、瓶をひらけます"
-                                : "最初のテーマ：\(selectedSubjects.sorted().first ?? "選択済み")"
+                                : "最初のテーマ：\(effectiveSelectedSubjects.sorted().first ?? "選択済み")"
                         )
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(selectedSubjects.isEmpty ? PomoGemTheme.muted : PomoGemTheme.amber)
+                        .foregroundStyle(effectiveSelectedSubjects.isEmpty ? PomoGemTheme.muted : PomoGemTheme.amber)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("onboarding.selection-summary")
@@ -161,7 +167,7 @@ struct OnboardingView: View {
         Binding(
             get: { page },
             set: { nextPage in
-                guard !(page == 2 && nextPage > page && selectedSubjects.isEmpty) else { return }
+                guard !(page == 2 && nextPage > page && effectiveSelectedSubjects.isEmpty) else { return }
                 page = nextPage
             }
         )
@@ -182,7 +188,7 @@ struct OnboardingView: View {
                 resolvedRareRewardMode = .off
             }
             onComplete(
-                selectedSubjects,
+                effectiveSelectedSubjects,
                 wantsNotifications,
                 resolvedRareRewardMode
             )
@@ -190,14 +196,14 @@ struct OnboardingView: View {
     }
 
     private var isPrimaryActionDisabled: Bool {
-        (page == 2 && selectedSubjects.isEmpty)
+        (page == 2 && effectiveSelectedSubjects.isEmpty)
             || (RareRewardReleasePolicy.isEnabled
                 && page == pageCount - 1
                 && selectedRareRewardMode == nil)
     }
 
     private var primaryActionHint: String {
-        if page == 2, selectedSubjects.isEmpty {
+        if page == 2, effectiveSelectedSubjects.isEmpty {
             return "テーマを1つ選ぶと瓶をひらけます"
         }
         if RareRewardReleasePolicy.isEnabled,
@@ -214,6 +220,22 @@ struct OnboardingView: View {
             return "ホームへ進みます。テーマと時間を確認してから集中を始められます"
         default:
             return "次のページへ進みます"
+        }
+    }
+
+    /// The theme 「瓶をひらく」 creates: a valid name still in the field wins
+    /// over a suggestion tapped earlier, so typing and tapping the button
+    /// never silently drops what was typed.
+    private var effectiveSelectedSubjects: Set<String> {
+        let existingKeys = Set(existingSubjects.map { SubjectNamePolicy.comparisonKey($0.name) })
+        let slots = availableNewSubjectSlots
+        return OnboardingThemePolicy.effectiveSelection(
+            selected: selectedSubjects,
+            pending: pendingSubjectName
+        ) { name in
+            // One theme is chosen here, so replacing the selection never
+            // needs more than one new slot.
+            existingKeys.contains(SubjectNamePolicy.comparisonKey(name)) || slots > 0
         }
     }
 
@@ -572,11 +594,14 @@ private struct TrialDropPage: View {
 
 private struct SubjectSetupPage: View {
     @Binding var selectedSubjects: Set<String>
+    @Binding var customSubjectName: String
     @Binding var wantsNotifications: Bool
+    /// What 「瓶をひらく」 will create. Chips and the chosen-theme rows show
+    /// this, so a valid typed name visibly replaces an earlier chip.
+    let effectiveSelection: Set<String>
     let existingSubjectNames: Set<String>
     let availableNewSubjectSlots: Int
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var customSubjectName = ""
     @State private var customSubjectFeedback: String?
     @FocusState private var customSubjectFocused: Bool
 
@@ -584,8 +609,9 @@ private struct SubjectSetupPage: View {
         Set(SubjectSuggestionCatalog.presets.map(\.name))
     }
 
+    /// Committed custom names that are still what the button will use.
     private var customSubjects: [String] {
-        selectedSubjects.subtracting(presetNames).sorted()
+        selectedSubjects.intersection(effectiveSelection).subtracting(presetNames).sorted()
     }
 
     private var existingSubjectKeys: Set<String> {
@@ -666,7 +692,7 @@ private struct SubjectSetupPage: View {
 
                 LazyVGrid(columns: suggestionColumns, spacing: 10) {
                     ForEach(SubjectSuggestionCatalog.presets) { preset in
-                        let isSelected = selectedSubjects.contains(preset.name)
+                        let isSelected = effectiveSelection.contains(preset.name)
                         Button {
                             choosePreset(preset)
                         } label: {
@@ -700,10 +726,8 @@ private struct SubjectSetupPage: View {
                     Text("自由に入力")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.muted)
-                    Text("新しく追加できるのはあと\(remainingNewSubjectSlots)件です（合計最大\(Constants.App.maximumSubjects)件）。")
-                        .font(.caption)
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // launch-07: no quota line for a one-theme step. The
+                    // message below still appears when no slot is left.
                     HStack(spacing: 8) {
                         TextField(SubjectSuggestionCatalog.inputPlaceholder, text: $customSubjectName)
                             .focused($customSubjectFocused)

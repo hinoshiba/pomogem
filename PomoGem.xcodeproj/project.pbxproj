@@ -137,6 +137,7 @@
 		827A5E1202E74FB391153A04 /* RuntimeFlowAuditUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4EF78A2F31B9E452F76E31F /* RuntimeFlowAuditUITests.swift */; };
 		827A82540869BCDB67A6AA53 /* StorageTransferPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE26DF765364BDD5BA91FCC4 /* StorageTransferPersistence.swift */; };
 		8285E34ACD8332D6C60A67A9 /* WidgetSnapshotMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 014830BCE0238FC2EDF6BF0D /* WidgetSnapshotMetadata.swift */; };
+		837E3C04E9FC4CBF01B2CE77 /* OnboardingThemePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC4BB22AFACB27DBB5A7397E /* OnboardingThemePolicyTests.swift */; };
 		83E357D8D9C4C20E08E32784 /* GachaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC25878D4247A90507703B3 /* GachaTests.swift */; };
 		84C6C795E78C8E64AEB16C1E /* StorageTransferAccountNamespaceAuthority.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC8710978C9D7210E418F881 /* StorageTransferAccountNamespaceAuthority.swift */; };
 		85AE65A5717313B412A5A472 /* FocusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C21086FA8AA02D4E255C5070 /* FocusView.swift */; };
@@ -561,6 +562,7 @@
 		D9E630CC67F2B7AA44EC1740 /* StorageTransferSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferSettingsSection.swift; sourceTree = "<group>"; };
 		DAFDB3F62B4EB377D79BA48D /* StorageTransferProcessState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferProcessState.swift; sourceTree = "<group>"; };
 		DBD525CB72EF7C8BBA600020 /* LICENSE-fonts.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LICENSE-fonts.txt"; sourceTree = "<group>"; };
+		DC4BB22AFACB27DBB5A7397E /* OnboardingThemePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingThemePolicyTests.swift; sourceTree = "<group>"; };
 		DC5D4F1A16DE0265ED6EBF24 /* PomoGemLogo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemLogo.swift; sourceTree = "<group>"; };
 		DE92572890DD4D8BE55C6A58 /* ProgressCrystal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressCrystal.swift; sourceTree = "<group>"; };
 		E2FBF7E577EC280E22DDC78A /* SyncMaintenanceWorkerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncMaintenanceWorkerTests.swift; sourceTree = "<group>"; };
@@ -912,6 +914,7 @@
 				E6C6D396C5FB8FF2FEC27957 /* LocalPreviewLaunchPolicyTests.swift */,
 				04027069D709F7336F78964D /* NotificationManagerRaceTests.swift */,
 				55359B654256C762CB953477 /* NotificationPreferenceIntentTests.swift */,
+				DC4BB22AFACB27DBB5A7397E /* OnboardingThemePolicyTests.swift */,
 				F1DC4428849BCE1969B53808 /* PebbleRadiusPolicyTests.swift */,
 				F49B587DE83A0369D3E30D76 /* PersistenceFrameworkArtifactTests.swift */,
 				3829BEEEE6E394C43D37A09B /* PersistenceSessionLifetimeTests.swift */,
@@ -1505,6 +1508,7 @@
 				EC756FBB0F108A7E2FA29232 /* LocalPreviewLaunchPolicyTests.swift in Sources */,
 				A4200548B90A8E41FD363269 /* NotificationManagerRaceTests.swift in Sources */,
 				4771665279406F3D656581D7 /* NotificationPreferenceIntentTests.swift in Sources */,
+				837E3C04E9FC4CBF01B2CE77 /* OnboardingThemePolicyTests.swift in Sources */,
 				A3E82C43D5DDA9CEB282918E /* PebbleRadiusPolicyTests.swift in Sources */,
 				EF9A8F2DEB9578262AD1E14A /* PersistenceFrameworkArtifactTests.swift in Sources */,
 				8D1960732F8C8127ECBD7105 /* PersistenceSessionLifetimeTests.swift in Sources */,

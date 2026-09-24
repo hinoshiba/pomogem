@@ -160,4 +160,30 @@ enum OnboardingThemePolicy {
     ) -> Bool {
         !isBuiltInPreset || hasHistory
     }
+
+    /// launch-07. The one theme 「瓶をひらく」 will create. A valid name still
+    /// in the text field is the user's latest intent, so it wins over a chip
+    /// tapped earlier: before this, the typed name was silently dropped
+    /// unless 「選択」 or Return committed it first, and the button stayed
+    /// disabled while a valid name sat in the field. A name matching a
+    /// suggestion resolves to that suggestion's own spelling, and a name the
+    /// theme limit cannot accept leaves the committed selection in place.
+    static func effectiveSelection(
+        selected: Set<String>,
+        pending: String,
+        canChoose: (String) -> Bool
+    ) -> Set<String> {
+        guard SubjectNamePolicy.validationError(for: pending) == nil,
+              let name = SubjectNamePolicy.validated(pending)
+        else { return selected }
+        let resolved = SubjectSuggestionCatalog.preset(named: name)?.name ?? name
+        let key = SubjectNamePolicy.comparisonKey(resolved)
+        if let committed = selected.first(where: {
+            SubjectNamePolicy.comparisonKey($0) == key
+        }) {
+            return [committed]
+        }
+        guard canChoose(resolved) else { return selected }
+        return [resolved]
+    }
 }

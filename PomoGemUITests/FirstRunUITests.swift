@@ -2,8 +2,9 @@ import UIKit
 import XCTest
 
 /// The first minutes of a new install: the storage choice every new user
-/// sees first. Each screen is rendered by an explicit Debug-only fixture, so
-/// no storage mode is recorded and no account or CloudKit call is made.
+/// sees first, then onboarding. Each screen is rendered by an explicit
+/// Debug-only fixture or the in-memory UI-test store, so no storage mode is
+/// recorded and no account or CloudKit call is made.
 @MainActor
 final class FirstRunUITests: XCTestCase {
     private var app: XCUIApplication!
@@ -107,7 +108,93 @@ final class FirstRunUITests: XCTestCase {
         XCTAssertTrue(waitForFixtureState("cloud=0;local=0"))
     }
 
+    // MARK: - Onboarding (launch-07)
+
+    func testTypedThemeNameOpensTheJarWithoutTappingSelect() {
+        launchOnboarding()
+        let next = app.buttons["onboarding.next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 8))
+        next.tap()
+        XCTAssertTrue(waitUntilEnabled(next))
+        next.tap()
+        XCTAssertTrue(app.staticTexts["最初のテーマを選ぶ"].waitForExistence(timeout: 4))
+        XCTAssertFalse(app.staticTexts.containing(
+            NSPredicate(format: "label BEGINSWITH %@", "新しく追加できるのはあと")).firstMatch.exists,
+            "A one-theme step must not show a quota line")
+
+        let english = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "英語")).firstMatch
+        XCTAssertTrue(english.waitForExistence(timeout: 4))
+        english.tap()
+        let summary = app.descendants(matching: .any)["onboarding.selection-summary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 4))
+        XCTAssertTrue(summary.label.contains("英語"))
+
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(scrollUntilHittable(field))
+        field.tap()
+        field.typeText("TOEIC")
+        // Neither 「選択」 nor Return: the typed name is what the user means.
+        XCTAssertTrue(waitForLabel(summary, containing: "TOEIC"),
+                      "The summary must name the typed theme, not the earlier chip")
+        XCTAssertEqual(english.value as? String, "未選択")
+        attachScreenshot("onboarding-typed-theme")
+        let finish = app.buttons["瓶をひらく"]
+        XCTAssertTrue(finish.isEnabled)
+        finish.tap()
+
+        let picker = app.buttons["home.subject-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 8))
+        XCTAssertTrue(waitForLabel(picker, containing: "TOEIC"),
+                      "Opening the jar must create the typed theme, not the chip tapped before typing")
+    }
+
+    func testTypedThemeNameAloneEnablesOpeningTheJar() {
+        launchOnboarding()
+        let next = app.buttons["onboarding.next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 8))
+        next.tap()
+        XCTAssertTrue(waitUntilEnabled(next))
+        next.tap()
+        let finish = app.buttons["瓶をひらく"]
+        XCTAssertTrue(finish.waitForExistence(timeout: 4))
+        XCTAssertFalse(finish.isEnabled)
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(scrollUntilHittable(field))
+        field.tap()
+        field.typeText("簿記2級")
+        XCTAssertTrue(waitUntilEnabled(finish), "A valid typed name is a chosen theme")
+        finish.tap()
+        let picker = app.buttons["home.subject-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 8))
+        XCTAssertTrue(waitForLabel(picker, containing: "簿記2級"))
+    }
+
     // MARK: - Helpers
+
+    private func launchOnboarding(accessibility5: Bool = false, extraEnvironment: [String: String] = [:]) {
+        app = XCUIApplication()
+        app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_RARE_REWARD_UNSELECTED"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_RARE_REWARD_ONBOARDING"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = accessibility5 ? "1" : "0"
+        for (key, value) in extraEnvironment { app.launchEnvironment[key] = value }
+        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        app.launch()
+    }
+
+    private func waitUntilEnabled(_ element: XCUIElement, timeout: TimeInterval = 4) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isEnabled == true"), object: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func waitForLabel(_ element: XCUIElement, containing text: String,
+                              timeout: TimeInterval = 4) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", text), object: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
 
     private func launchStorageChoice(accessibility5: Bool = false) {
         app = XCUIApplication()
