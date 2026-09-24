@@ -32,6 +32,7 @@ struct BreakTimerView: View {
     @State private var notificationAuthorizationIsCurrent = false
     @State private var notificationAuthorizationRefreshGeneration = 0
     @State private var scheduledCompletionNotificationDeliveryDate: Date? = nil
+    @AccessibilityFocusState private var breakEndButtonFocused: Bool
     private let ticker = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     init(minutes: Int) {
@@ -149,6 +150,12 @@ struct BreakTimerView: View {
             }
         }
         .statusBarHidden()
+        // VoiceOver's two-finger double-tap stops the break-end alarm and
+        // returns to the jar, the screen's only action once the break is over.
+        .accessibilityAction(.magicTap) {
+            guard remaining == 0 else { return }
+            closeBreak()
+        }
         .task { await prepareBreak() }
         .onReceive(ticker) { date in
             now = date
@@ -316,7 +323,9 @@ struct BreakTimerView: View {
         .buttonStyle(PomoGemPrimaryButtonStyle())
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .frame(minHeight: 44)
+        .accessibilityHint("2本指のダブルタップでも操作できます")
         .accessibilityIdentifier("break.completion-alert.stop")
+        .accessibilityFocused($breakEndButtonFocused)
         .frame(maxWidth: 520)
         .padding(.horizontal, 24)
         .padding(.top, 12)
@@ -539,7 +548,23 @@ struct BreakTimerView: View {
                 TimerCompletionAlertAcknowledgementStore.mark(sessionID: sessionID)
             }
         }
-        UIAccessibility.post(notification: .announcement, argument: "休憩が終わりました")
+        guard completionAlert.isActive(sessionID: sessionID),
+              UIAccessibility.isVoiceOverRunning else {
+            UIAccessibility.post(notification: .announcement, argument: "休憩が終わりました")
+            return
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard completionAlert.isActive(sessionID: sessionID) else { return }
+            breakEndButtonFocused = true
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: NSAttributedString(
+                    string: "休憩が終わりました。2本指でダブルタップすると、アラートを止めて瓶へ戻れます",
+                    attributes: [.accessibilitySpeechQueueAnnouncement: true]
+                )
+            )
+        }
     }
 
     private func completionCue(

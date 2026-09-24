@@ -233,6 +233,7 @@ struct FocusView: View {
     @State private var viewLifecycleGeneration: UInt64 = 0
     @State private var isViewActive = false
     @AccessibilityFocusState private var completionSaveRetryFocused: Bool
+    @AccessibilityFocusState private var completionAlertStopFocused: Bool
 
     private let ticker = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
 
@@ -713,6 +714,9 @@ struct FocusView: View {
         .foregroundStyle(PomoGemTheme.text)
         .interactiveDismissDisabled()
         .statusBarHidden()
+        // VoiceOver's two-finger double-tap performs the screen's main action:
+        // stop a repeating completion alarm, otherwise pause or resume.
+        .accessibilityAction(.magicTap) { performMagicTap() }
         .onAppear { router.beginFocusPresentation() }
         .task { await beginActivation() }
         .onReceive(ticker) { date in
@@ -838,6 +842,21 @@ struct FocusView: View {
         )
     }
 #endif
+
+    private func performMagicTap() {
+        if let pendingCompletion {
+            guard completionAlert.isActive(sessionID: pendingCompletion.sessionID)
+            else { return }
+            acknowledgeCompletionAlert(pendingCompletion)
+            return
+        }
+        guard !needsRareRewardChoice,
+              completion == nil,
+              !breakFinished,
+              snapshot.phase.isRunning || snapshot.phase == .paused
+        else { return }
+        togglePause()
+    }
 
     private var timerOrientationSessionID: AnyHashable {
         // The legacy engine break has no UUID. Its original start remains
@@ -2213,10 +2232,27 @@ struct FocusView: View {
             }
         }
         UIApplication.shared.isIdleTimerDisabled = false
-        if UIAccessibility.isVoiceOverRunning {
+        guard UIAccessibility.isVoiceOverRunning else { return }
+        guard completionAlert.isActive(sessionID: result.sessionID) else {
             UIAccessibility.post(
                 notification: .announcement,
                 argument: "集中が完了しました。\(subjectSnapshot.name)、\(result.grams)グラムを保存しています"
+            )
+            return
+        }
+        // Land VoiceOver on the only control that stops the repeating cue,
+        // then queue the facts and the gesture after the button is read, so
+        // neither announcement cuts the other off.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard completionAlert.isActive(sessionID: result.sessionID) else { return }
+            completionAlertStopFocused = true
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: NSAttributedString(
+                    string: "集中が完了しました。\(subjectSnapshot.name)、\(result.grams)グラム。2本指でダブルタップすると終了アラートを止められます",
+                    attributes: [.accessibilitySpeechQueueAnnouncement: true]
+                )
             )
         }
     }
@@ -2422,8 +2458,9 @@ struct FocusView: View {
         .buttonStyle(PomoGemPrimaryButtonStyle())
         // Keep the pinned bar well under half of a 667 pt screen at AX5.
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-        .accessibilityHint("音と触覚を止めます。記録の保存中でも操作できます")
+        .accessibilityHint("音と触覚を止めます。記録の保存中でも操作でき、2本指のダブルタップでも止められます")
         .accessibilityIdentifier("focus.completion-alert.stop")
+        .accessibilityFocused($completionAlertStopFocused)
         .frame(maxWidth: 520)
         .padding(.horizontal, 24)
         .padding(.top, 12)
