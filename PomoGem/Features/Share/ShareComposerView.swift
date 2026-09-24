@@ -31,6 +31,7 @@ struct ShareComposerView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityPlayAnimatedImages) private var playAnimatedImages
     @Environment(AppRouter.self) private var router
     @Environment(\.aggregateProjectionPresentation)
@@ -375,6 +376,9 @@ struct ShareComposerView: View {
                         shareLaunchLabel
                     }
                     .buttonStyle(PomoGemPrimaryButtonStyle())
+                    // Keep the pinned bar well under half of a 667 pt screen
+                    // at AX5, as the timer's pinned controls do.
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                     // One render at a time: a photo save renders the same
                     // cards on the main actor.
                     .disabled(isRendering || isSaving || !selection.hasShareableContent)
@@ -673,16 +677,23 @@ struct ShareComposerView: View {
     }
 
     private var shareHashtagStrip: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 7) {
-                Image(systemName: "number")
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(PomoGemTheme.amber)
-                    .accessibilityHidden(true)
+        // At accessibility sizes the heading and the copy button stack, so
+        // neither is squeezed into a one-character column.
+        let headerLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(spacing: 7))
+        return VStack(alignment: .leading, spacing: 9) {
+            headerLayout {
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Image(systemName: "number")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(PomoGemTheme.amber)
+                        .accessibilityHidden(true)
+                }
                 Text("一緒に渡すハッシュタグ")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(PomoGemTheme.muted)
-                Spacer()
+                Spacer(minLength: 0)
                 Button {
                     UIPasteboard.general.string = shareCaption
                     updateStatus(
@@ -801,13 +812,19 @@ struct ShareComposerView: View {
 
     @ViewBuilder
     private var shareLaunchLabel: some View {
+        // At accessibility sizes the pinned bar keeps only the action: the
+        // icons and the one-line description (also in the hint) used to grow
+        // it over half of the screen, above the card it shares.
+        let isCompact = dynamicTypeSize.isAccessibilitySize
         HStack(spacing: 13) {
-            ZStack {
-                Circle().fill(.white.opacity(0.18))
-                Image(systemName: mediaKind == .animatedGIF ? "play.fill" : "photo.fill")
-                    .font(.system(size: 15, weight: .black))
+            if !isCompact {
+                ZStack {
+                    Circle().fill(.white.opacity(0.18))
+                    Image(systemName: mediaKind == .animatedGIF ? "play.fill" : "photo.fill")
+                        .font(.system(size: 15, weight: .black))
+                }
+                .frame(width: 38, height: 38)
             }
-            .frame(width: 38, height: 38)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(
@@ -816,14 +833,16 @@ struct ShareComposerView: View {
                         : (mediaKind == .animatedGIF ? "GIF + ハッシュタグをシェア" : "画像 + ハッシュタグをシェア")
                 )
                 .font(.system(.body, design: .rounded, weight: .black))
-                Text(mediaKind == .animatedGIF ? "粒がきらめく短いループ" : "高解像度の一枚")
-                    .font(.caption.weight(.semibold))
-                    .opacity(0.72)
+                if !isCompact {
+                    Text(mediaKind == .animatedGIF ? "粒がきらめく短いループ" : "高解像度の一枚")
+                        .font(.caption.weight(.semibold))
+                        .opacity(0.72)
+                }
             }
             Spacer(minLength: 4)
             if isRendering {
                 ProgressView().tint(.white)
-            } else {
+            } else if !isCompact {
                 Image(systemName: "arrow.up.right")
                     .font(.system(size: 15, weight: .black))
                     .padding(9)
@@ -960,6 +979,8 @@ struct ShareComposerView: View {
                 Image(systemName: "info.circle.fill")
                     .foregroundStyle(PomoGemTheme.amber)
             }
+            // The sentence gets the full width at accessibility sizes.
+            .labelStyle(AccessibilitySizeTitleOnlyLabelStyle())
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("share.excluded-self-reported")
 

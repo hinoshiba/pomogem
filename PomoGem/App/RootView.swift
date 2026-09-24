@@ -2964,7 +2964,10 @@ struct MainNavigationView: View {
             PaywallView(context: router.paywallContext)
         }
         .sheet(isPresented: $router.sharePresented) {
+            // Like the covers below: a sheet does not inherit a Dynamic Type
+            // size set above it, so pass the resolved one through.
             ShareComposerView(scope: router.shareScope)
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .fullScreenCover(item: $router.recoveredFocus, onDismiss: {
             router.completeFocusPresentation()
