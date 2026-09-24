@@ -326,20 +326,14 @@ final class ScreenTimeSettingsUITests: XCTestCase {
     /// to the other two ways to add to the jar, and back returns to Home.
     func testTheHomeMenuOpensScreenTimeDirectly() {
         app.launch()
-        let menu = app.buttons["メニュー"]
-        XCTAssertTrue(menu.waitForExistence(timeout: 12))
-        menu.tap()
-        let entry = app.buttons["home.menu.screen-time"]
-        XCTAssertTrue(entry.waitForExistence(timeout: 8))
-        XCTAssertTrue(reveal(entry))
-        XCTAssertTrue(entry.label.contains("アプリの時間を積む"), entry.label)
+        let entry = openHomeMenuEntry()
         attach("Home menu — Screen Time entry")
         entry.tap()
         XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["screen-time.authorization-status"].waitForExistence(timeout: 6))
         attach("Screen Time opened from the Home menu")
         app.navigationBars["スクリーンタイム"].buttons.firstMatch.tap()
-        XCTAssertTrue(menu.waitForExistence(timeout: 8), "Back returns to Home")
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8), "Back returns to Home")
     }
 
     /// critic-02: a refused request names its own fix, and the shortcut says
@@ -390,6 +384,30 @@ final class ScreenTimeSettingsUITests: XCTestCase {
             start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -120)))
         }
         return false
+    }
+
+    /// The same row at the largest text size: reachable, a full-size target,
+    /// and still saying which apps count.
+    func testTheHomeMenuEntryStaysReachableAtAccessibilitySize() {
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        app.launch()
+        let entry = openHomeMenuEntry()
+        XCTAssertGreaterThanOrEqual(entry.frame.height, 43.5)
+        attach("Home menu AX5 — Screen Time entry")
+        entry.tap()
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 8))
+    }
+
+    private func openHomeMenuEntry() -> XCUIElement {
+        let menu = app.buttons["メニュー"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 12))
+        menu.tap()
+        let entry = app.buttons["home.menu.screen-time"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 8))
+        XCTAssertTrue(reveal(entry))
+        XCTAssertTrue(entry.label.contains("アプリの時間を積む"), entry.label)
+        XCTAssertTrue(entry.label.contains("勉強アプリ10分ごとに1粒"), "The detail names the apps that count: \(entry.label)")
+        return entry
     }
 
     /// `screen-time.enabled` is the whole row; a tap on its centre lands on
