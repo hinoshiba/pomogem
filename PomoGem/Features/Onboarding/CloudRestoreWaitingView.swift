@@ -100,6 +100,7 @@ struct CloudRestoreWaitingView: View {
     let onStartFresh: () -> Void
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query private var liveThemes: [Subject]
     /// Observed so a deletion delivered as a new physical row is not counted
     /// as a theme; see `SubjectSyncPolicy.presentationSubjects`.
@@ -150,6 +151,10 @@ struct CloudRestoreWaitingView: View {
                             .font(PomoGemTheme.brand(26))
                             .foregroundStyle(PomoGemTheme.text)
                             .multilineTextAlignment(.center)
+                            // One line at ordinary sizes, so it never breaks
+                            // mid-word (「…してい／ます」); AX sizes wrap.
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                            .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.7)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityAddTraits(.isHeader)
                             .accessibilityIdentifier("cloud-restore.title")
