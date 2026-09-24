@@ -362,7 +362,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var reduceTransparencyObserver: NSObjectProtocol?
     private var transientMotionGate = JarTransientMotionGate()
     private var sensorySequence: UInt64 = 0
-    private var opticalTiltFraction: CGFloat = 0
+    private(set) var opticalTiltFraction: CGFloat = 0
     private var lastPublishedPhysicalPebbleCount = 0
     private var earlyEffortSpotlightIDs = Set<UUID>()
     private var nextStackingIndex = 0
@@ -1711,7 +1711,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         ) > 0.01 else { return }
         appliedGravityVector = next
         physicsWorld.gravity = next
-        updateOpticalTilt(horizontal: next.dx)
+        applyOpticalTilt(horizontal: next.dx, uptime: ProcessInfo.processInfo.systemUptime)
         // Core Motion delivers up to 30 updates per second. Treating every
         // sample as a new interaction used to reset both the three-second
         // settling observation and the tapped gem's low damping, so a held
@@ -1729,15 +1729,50 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     func resetGravity() {
         setGravityVector(Constants.Jar.gravityVector, smoothing: false)
+        // A resting jar returns its light exactly to the level position.
+        updateOpticalTilt(horizontal: appliedGravityVector.dx)
+    }
+
+    /// Idle tilt (Docs/GemExperienceDesign.md §7.13). While the jar rests,
+    /// its scene is paused and SpriteKit draws a frame only when a node
+    /// changes, so a jar on a desk costs no frames. Tilt moves the glints
+    /// and the glass, so while idle the light follows the phone in steps
+    /// larger than `idleTiltRenderThreshold`, at most
+    /// `idleTiltFramesPerSecond` times a second: a deliberate tilt still
+    /// sparkles at once, while the sensor noise of a phone held still draws
+    /// nothing. An awake jar follows every sample, as before.
+    static let idleTiltRenderThreshold: CGFloat = 0.015
+    static let idleTiltFramesPerSecond: Double = 30
+    private var lastIdleTiltUptime: TimeInterval = -.greatestFiniteMagnitude
+    /// Light changes made while idle — each one is a frame SpriteKit draws
+    /// for a paused jar (tests and the Debug frame probe).
+    private(set) var idleTiltFrameCount = 0
+
+    private func applyOpticalTilt(horizontal: CGFloat, uptime: TimeInterval) {
+        if isIdlePaused {
+            guard abs(opticalFraction(horizontal: horizontal) - opticalTiltFraction)
+                    > Self.idleTiltRenderThreshold,
+                  uptime - lastIdleTiltUptime >= 1 / Self.idleTiltFramesPerSecond - 0.004
+            else { return }
+            lastIdleTiltUptime = uptime
+        }
+        updateOpticalTilt(horizontal: horizontal)
+    }
+
+    private func opticalFraction(horizontal: CGFloat) -> CGFloat {
+        reduceMotion
+            ? CGFloat.zero
+            : min(max(horizontal / Constants.Jar.tiltGravityHorizontalScale, -1), 1)
     }
 
     /// Reflections move a few points opposite the sensed gravity, producing a
     /// lens-like parallax response without rotating text or the whole screen.
     /// Reduce Motion removes this simulated depth while keeping physics stable.
     private func updateOpticalTilt(horizontal: CGFloat) {
-        let fraction = reduceMotion
-            ? CGFloat.zero
-            : min(max(horizontal / Constants.Jar.tiltGravityHorizontalScale, -1), 1)
+        let fraction = opticalFraction(horizontal: horizontal)
+        // Unchanged light: touch no node, so a paused jar stays undrawn.
+        guard fraction != opticalTiltFraction else { return }
+        if isIdlePaused { idleTiltFrameCount &+= 1 }
         opticalTiltFraction = fraction
         glassHighlightNode.position.x = outerJarRect.midX + fraction * 6
         backGlassNode.position.x = fraction * -1.6

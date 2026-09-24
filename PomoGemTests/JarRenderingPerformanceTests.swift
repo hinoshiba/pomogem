@@ -232,6 +232,52 @@ final class JarRenderingPerformanceTests: XCTestCase {
         }
     }
 
+    // MARK: Idle tilt
+
+    @MainActor
+    func testIdleJarFollowsTiltOnlyInStepsAboveTheThreshold() throws {
+        let scene = makeScene()
+        scene.reduceMotion = false
+        scene.restore(pebbles: [looseDescriptor(index: 7)])
+        scene.evaluateInteractionMotionForTesting(currentTime: 100, uptime: 100)
+        scene.evaluateInteractionMotionForTesting(currentTime: 110, uptime: 110)
+        XCTAssertTrue(scene.isIdlePaused)
+        let scale = Constants.Jar.tiltGravityHorizontalScale
+        let start = scene.idleTiltFrameCount
+
+        // Hand tremor below the threshold touches no node (no frame).
+        scene.setGravityVector(CGVector(dx: 0.012 * scale, dy: Constants.Jar.gravity), smoothing: false)
+        XCTAssertEqual(scene.idleTiltFrameCount, start)
+        XCTAssertEqual(scene.opticalTiltFraction, 0)
+
+        // A deliberate tilt lights the glints at once.
+        scene.setGravityVector(CGVector(dx: 0.2 * scale, dy: Constants.Jar.gravity), smoothing: false)
+        XCTAssertEqual(scene.idleTiltFrameCount, start + 1)
+        XCTAssertEqual(scene.opticalTiltFraction, 0.2, accuracy: 0.0001)
+
+        // At most one idle tilt frame per 1/30 s.
+        scene.setGravityVector(CGVector(dx: 0.3 * scale, dy: Constants.Jar.gravity), smoothing: false)
+        XCTAssertEqual(scene.idleTiltFrameCount, start + 1)
+        Thread.sleep(forTimeInterval: 0.04)
+        scene.setGravityVector(CGVector(dx: 0.31 * scale, dy: Constants.Jar.gravity), smoothing: false)
+        XCTAssertEqual(scene.idleTiltFrameCount, start + 2)
+        XCTAssertEqual(scene.opticalTiltFraction, 0.31, accuracy: 0.0001)
+
+        // Levelling the phone returns the light exactly to rest.
+        Thread.sleep(forTimeInterval: 0.04)
+        scene.setGravityVector(CGVector(dx: 0.02 * scale, dy: Constants.Jar.gravity), smoothing: false)
+        scene.resetGravity()
+        XCTAssertEqual(scene.opticalTiltFraction, 0)
+
+        // An awake jar follows every sample, as before.
+        scene.resumeSimulation()
+        XCTAssertFalse(scene.isIdlePaused)
+        let awake = scene.idleTiltFrameCount
+        scene.setGravityVector(CGVector(dx: 0.005 * scale, dy: Constants.Jar.gravity), smoothing: false)
+        XCTAssertEqual(scene.opticalTiltFraction, 0.005, accuracy: 0.0001)
+        XCTAssertEqual(scene.idleTiltFrameCount, awake)
+    }
+
     // MARK: Helpers
 
     @MainActor
