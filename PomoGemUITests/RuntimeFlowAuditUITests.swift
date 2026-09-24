@@ -1486,7 +1486,14 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         app.buttons["home.duration-picker"].tap()
         let demo = app.buttons["12秒、DEMO"]
         XCTAssertTrue(demo.waitForExistence(timeout: 4))
+        // A tap while the menu is still animating in can be dropped on a
+        // slower simulator, leaving the menu open over the launcher.
+        XCTAssertTrue(waitForHittable(demo, timeout: 3))
+        waitForUISettle(400_000)
         demo.tap()
+        if !waitForHittable(demoLauncherForVisualAudit, timeout: 3), demo.exists, demo.isHittable {
+            demo.tap()
+        }
         XCTAssertTrue(waitForHittable(demoLauncherForVisualAudit, timeout: 5))
     }
 

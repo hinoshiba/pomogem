@@ -451,10 +451,19 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         durationPicker.tap()
         let demoDuration = app.buttons["12秒、DEMO"]
         XCTAssertTrue(demoDuration.waitForExistence(timeout: 4))
+        // Home may still be settling from the scroll above while the menu
+        // animates in; a tap then can land on another duration or be lost.
+        usleep(600_000)
         demoDuration.tap()
         let launcher = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "12秒集中する")
         ).firstMatch
+        if !launcher.waitForExistence(timeout: 3) {
+            durationPicker.tap()
+            XCTAssertTrue(demoDuration.waitForExistence(timeout: 4))
+            usleep(600_000)
+            demoDuration.tap()
+        }
         XCTAssertTrue(scrollUntilHittable(launcher))
         launcher.tap()
         let rareChoice = app.descendants(matching: .any)["focus.rare-reward-choice"]
