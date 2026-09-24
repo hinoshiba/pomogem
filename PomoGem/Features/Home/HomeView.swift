@@ -77,7 +77,6 @@ struct HomeView: View {
     @AppStorage(AccountScopedLocalState.defaultsKey(base: HomeAtmosphere.storageKey))
     private var homeAtmosphereRawValue = HomeAtmosphere.aurora.rawValue
     @State private var scene = JarScene()
-    @ObservedObject private var screenTime = ScreenTimeController.shared
     @State private var sceneInitialized = false
     @State private var homeIsVisible = false
     @State private var rewardDropRevealIsPending = false
@@ -708,8 +707,10 @@ struct HomeView: View {
             rewardDropRevealIsPending = false
             restorePreferredDuration()
             configureScene()
-            screenTime.reload()
-            scene.setScreenTimeObstacles(totalUnits: screenTime.negativeGemCount)
+            ScreenTimeController.shared.reload()
+            scene.setScreenTimeObstacles(
+                totalUnits: ScreenTimeController.shared.negativeGemCount
+            )
             refreshAcceptedAggregateRoots()
             refreshAchievementProjection()
             refreshAchievementCount()
@@ -760,7 +761,11 @@ struct HomeView: View {
 
     private var observedContent: some View {
         lifecycleContent
-        .onChange(of: screenTime.negativeGemCount) { _, count in
+        // Subscribe to the one value the jar needs instead of observing the
+        // whole controller: its foreground loop re-reads authorization and
+        // monitoring state every three seconds, and each of those passes
+        // would otherwise re-evaluate this entire view while Home sits idle.
+        .onReceive(ScreenTimeController.shared.negativeGemCountChanges) { count in
             guard homeIsVisible else { return }
             scene.updateScreenTimeObstacles(totalUnits: count)
         }
