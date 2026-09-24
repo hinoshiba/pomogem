@@ -1338,6 +1338,12 @@ struct SettingsView: View {
     }
 
     private func deleteSubject(_ subject: Subject) {
+        // Read before the deletion: the dialog showed the Screen Time
+        // paragraph exactly when this held.
+        let warnedAboutScreenTime = ScreenTimeThemeDeletionNotice.applies(
+            to: subject.id, configuration: ScreenTimeController.shared.configuration,
+            isBound: ScreenTimeController.shared.isBoundToContext
+        )
         do {
             subject.isArchived = true
             subject.deletedAt = .now
@@ -1346,6 +1352,9 @@ struct SettingsView: View {
                 among: storedSubjects
             )
             try modelContext.save()
+            if warnedAboutScreenTime {
+                ScreenTimeController.shared.noteLearningThemeDeletionConfirmed(subject.id)
+            }
         } catch {
             modelContext.rollback()
             settingsError = "テーマを削除できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"

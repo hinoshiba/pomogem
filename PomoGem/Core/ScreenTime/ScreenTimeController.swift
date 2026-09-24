@@ -39,9 +39,10 @@ final class ScreenTimeController: ObservableObject {
     @Published private(set) var authorizationFailure: ScreenTimeAuthorizationFailure?
     /// The learning destination theme was deleted (here or on another device)
     /// and the study-app selection was cleared with it, as documented. Kept
-    /// per owner on this iPhone until the user saves the Screen Time settings
-    /// again, so the settings screen and its row can say why learning stopped
-    /// instead of looking like a feature that was never set up.
+    /// per owner on this iPhone until the user has seen the explanation on
+    /// the Screen Time page (or saves or resets there), so the page and the
+    /// Settings row can say why learning stopped instead of looking like a
+    /// feature that was never set up.
     @Published private(set) var learningThemeWasRemoved = false
     /// The only value Home needs. A stable, de-duplicated stream lets the jar
     /// follow black-stone changes without observing the whole controller,
@@ -82,6 +83,8 @@ final class ScreenTimeController: ObservableObject {
     private var bindingConfirmed = false { didSet { publishBindingState() } }
     private var operationIDs: Set<UUID> = []
     private var isErasing = false
+    /// See `noteLearningThemeDeletionConfirmed(_:)`.
+    private var confirmedLearningThemeDeletion: UUID?
 
     enum OperationError: LocalizedError {
         case busy
@@ -652,6 +655,49 @@ final class ScreenTimeController: ObservableObject {
         if isBoundToContext != bound { isBoundToContext = bound }
     }
 
+    /// The destination theme `themeID` is gone: clear the study apps, as
+    /// documented, and remember why. `cleared` is true once the ledger no
+    /// longer holds the study apps, whatever the registration then did.
+    ///
+    /// `save` commits the cleared configuration before it registers what is
+    /// left, so a refused registration still leaves the study apps cleared,
+    /// and nothing retries: the next pass finds no study apps to retire. Tying
+    /// the notice to the save's success left exactly that case, a selection
+    /// gone without a word, unexplained. `failure` is the save's error, for
+    /// the caller to report as before.
+    func retireLearningSelection(
+        ofRemovedTheme themeID: UUID,
+        isPro: Bool
+    ) async -> (cleared: Bool, failure: Error?) {
+        guard let lease = try? boundLease(), configuration.themeID == themeID,
+              !configuration.learningSelection.applicationTokens.isEmpty else { return (false, nil) }
+        var retired = configuration
+        retired.learningSelection = FamilyActivitySelection(includeEntireCategory: false)
+        retired.themeID = nil
+        if retired.distractionSelection.applicationTokens.isEmpty { retired.enabled = false }
+        // Existing receipts retain the original theme ID; future use is no
+        // longer silently attributed to a theme the user has removed.
+        var failure: Error?
+        do { try await save(configuration: retired, isPro: isPro) } catch { failure = error }
+        guard (try? requireCurrent(lease)) != nil,
+              let state = try? store.snapshot(), lease.binding.matches(state),
+              state.configuration.learningSelection.applicationTokens.isEmpty else { return (false, failure) }
+        // The delete dialog on this iPhone already said what deleting this
+        // theme does; a lasting 要確認 on top of that only nags. A deletion
+        // from another device, or one this process did not confirm, still
+        // leaves the explanation in place.
+        if confirmedLearningThemeDeletion != themeID { noteLearningThemeRemoved() }
+        confirmedLearningThemeDeletion = nil
+        return (true, failure)
+    }
+
+    /// The theme-delete dialog showed `ScreenTimeThemeDeletionNotice` for
+    /// `themeID` and the user deleted it anyway. Kept in memory only: the
+    /// retirement follows within one foreground pass.
+    func noteLearningThemeDeletionConfirmed(_ themeID: UUID) {
+        confirmedLearningThemeDeletion = themeID
+    }
+
     /// Called after the learning selection was cleared because its theme is
     /// gone. Device-local and per owner, like the rest of the Screen Time setup.
     func noteLearningThemeRemoved() {
@@ -660,7 +706,8 @@ final class ScreenTimeController: ObservableObject {
         publish(\.learningThemeWasRemoved, true)
     }
 
-    /// The user has chosen again (a save) or started over (a reset).
+    /// The user has read the explanation on the page, chosen again (a save)
+    /// or started over (a reset).
     func clearLearningThemeRemovalNotice() {
         guard let lease else { return }
         noticeDefaults.removeObject(forKey: Self.themeRemovalNoticeKey(lease.binding.contextKey))

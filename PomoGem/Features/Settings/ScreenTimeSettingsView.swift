@@ -29,6 +29,10 @@ struct ScreenTimeSettingsView: View {
     /// runs (the user can still go back themselves meanwhile).
     @State private var leavesAfterSave = false
     @State private var isVisible = false
+    /// The removed-theme explanation, kept for this visit once the page has
+    /// shown it. The controller's notice is cleared as soon as it is on
+    /// screen, so the Settings row stops asking after the user has read why.
+    @State private var showsThemeRemovedNotice = false
     @Environment(\.dismiss) private var dismiss
 
     /// Production always uses the shared controller; the parameter exists so
@@ -247,6 +251,11 @@ struct ScreenTimeSettingsView: View {
         }
         .onAppear { isVisible = true }
         .onDisappear { isVisible = false }
+        .onChange(of: controller.learningThemeWasRemoved, initial: true) { _, removed in
+            guard removed else { return }
+            showsThemeRemovedNotice = true
+            controller.clearLearningThemeRemovalNotice()
+        }
         .onChange(of: controller.isBoundToContext) { _, _ in
             // The controller publishes an empty configuration until the ledger
             // admits this owner, which can happen after this screen appears.
@@ -443,7 +452,7 @@ struct ScreenTimeSettingsView: View {
                 Text("選んだアプリを合計10分使うごとに、記録先のテーマへ粒（10分・100g）と勉強時間を追加します。",
                      tableName: "ScreenTime", comment: "Footer: how study-app time becomes pebbles")
                 Text(purchase.isPro ? "Pro：アプリ数は無制限です。" : "無料：5つまで。Pro：無制限。")
-                if controller.learningThemeWasRemoved && learningCount == 0 {
+                if showsThemeRemovedNotice && learningCount == 0 {
                     Text("記録先のテーマが削除されたため、勉強アプリの選択を解除しました。アプリとテーマを選び直して保存すると、記録を再開します。",
                          tableName: "ScreenTime", comment: "Footer: the destination theme was deleted and the study apps were cleared")
                         .foregroundStyle(PomoGemTheme.amber)
@@ -662,6 +671,7 @@ struct ScreenTimeSettingsView: View {
             do {
                 try await controller.save(configuration: configuration, isPro: isPro)
                 controller.clearLearningThemeRemovalNotice()
+                showsThemeRemovedNotice = false
                 draft = controller.configuration
                 hasUserEdits = false
                 if controller.monitoringError == nil {
@@ -698,6 +708,7 @@ struct ScreenTimeSettingsView: View {
             do {
                 try await controller.resetActivityData()
                 controller.clearLearningThemeRemovalNotice()
+                showsThemeRemovedNotice = false
                 draft = controller.configuration
                 hasUserEdits = false
                 router.showToast("スクリーンタイムの内容をリセットしました", symbol: "checkmark")

@@ -1109,13 +1109,18 @@ final class ScreenTimeIntegrationLifecycleTests: XCTestCase {
 /// restore.
 @MainActor
 final class ScreenTimeSettingsDraftTests: XCTestCase {
+    private enum DriverError: Error { case refused }
+
     private final class Driver: ScreenTimeMonitoringDriving {
         let store: ScreenTimeStore
+        /// Stands in for DeviceActivity refusing the registration.
+        var refusesRegistration = false
         init(store: ScreenTimeStore) { self.store = store }
         func stop() {}
         func invalidateAuthorizationIfNeeded() throws {}
         func synchronize(now: Date) throws -> Bool {
-            try store.withMonitoringLock { try store.snapshot().runs.contains(where: \.active) }
+            if refusesRegistration { throw DriverError.refused }
+            return try store.withMonitoringLock { try store.snapshot().runs.contains(where: \.active) }
         }
     }
 
@@ -1462,5 +1467,69 @@ final class ScreenTimeSettingsDraftTests: XCTestCase {
         XCTAssertFalse(relaunched.learningThemeWasRemoved)
         controller.reload()
         XCTAssertFalse(controller.learningThemeWasRemoved)
+    }
+
+    private func storeWithStudyApps(theme: UUID) throws -> ScreenTimeStore {
+        let store = try makeStore()
+        try store.update {
+            $0.configuration.themeID = theme
+            $0.configuration.learningSelection = selection(count: 2, seed: 0x81)
+            $0.configuration.distractionSelection = selection(count: 1, seed: 0x82)
+        }
+        return store
+    }
+
+    /// `save` commits the cleared configuration before it registers what is
+    /// left. When DeviceActivity then refused, the study apps were already
+    /// gone, nothing retried (no study apps left to retire), and neither the
+    /// toast nor the notice appeared: the silent loss screentime-03 is about.
+    func testARemovedThemeIsExplainedEvenWhenRegisteringTheRestFails() async throws {
+        let suite = "ScreenTimeNoticeTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let theme = UUID()
+        let store = try storeWithStudyApps(theme: theme)
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" }, monitoring: driver,
+                                              authorization: { .approved }, noticeDefaults: defaults)
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        driver.refusesRegistration = true
+
+        let outcome = await controller.retireLearningSelection(ofRemovedTheme: theme, isPro: false)
+        XCTAssertTrue(outcome.cleared)
+        XCTAssertNotNil(outcome.failure, "The refusal is still reported to the caller")
+        let state = try store.snapshot()
+        XCTAssertTrue(state.configuration.learningSelection.applicationTokens.isEmpty)
+        XCTAssertNil(state.configuration.themeID)
+        XCTAssertTrue(state.configuration.enabled, "The black-stone lane stays on")
+        XCTAssertTrue(controller.learningThemeWasRemoved)
+
+        // The next pass finds nothing to retire: this was the only chance.
+        let again = await controller.retireLearningSelection(ofRemovedTheme: theme, isPro: false)
+        XCTAssertFalse(again.cleared)
+        XCTAssertNil(again.failure)
+    }
+
+    /// The delete dialog on this iPhone already said what deleting the theme
+    /// does, so only a deletion it did not confirm leaves a lasting notice.
+    func testOnlyADeletionThisIPhoneDidNotConfirmLeavesALastingNotice() async throws {
+        for confirmedHere in [true, false] {
+            let suite = "ScreenTimeNoticeTests-\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let theme = UUID()
+            let store = try storeWithStudyApps(theme: theme)
+            let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                                  monitoring: Driver(store: store),
+                                                  authorization: { .approved }, noticeDefaults: defaults)
+            try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+            controller.noteLearningThemeDeletionConfirmed(confirmedHere ? theme : UUID())
+
+            let outcome = await controller.retireLearningSelection(ofRemovedTheme: theme, isPro: false)
+            XCTAssertTrue(outcome.cleared)
+            XCTAssertNil(outcome.failure)
+            XCTAssertEqual(controller.learningThemeWasRemoved, !confirmedHere,
+                           "confirmedHere=\(confirmedHere)")
+        }
     }
 }

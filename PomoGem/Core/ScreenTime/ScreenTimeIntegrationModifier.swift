@@ -240,22 +240,18 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
             throw ScreenTimeImportCoordinator.ImportError.invalidReceipt
         }
         guard SubjectSyncPolicy.presentationSubjects(from: candidates).isEmpty else { return }
-        var configuration = controller.configuration
-        configuration.learningSelection = FamilyActivitySelection(includeEntireCategory: false)
-        configuration.themeID = nil
-        if configuration.distractionSelection.applicationTokens.isEmpty { configuration.enabled = false }
-        // Existing receipts retain the original theme ID; future use is no
-        // longer silently attributed to a theme the user has removed.
-        try await controller.save(configuration: configuration, isPro: purchase.isPro)
+        let outcome = await controller.retireLearningSelection(ofRemovedTheme: themeID, isPro: purchase.isPro)
         // Clearing the selection is documented; doing it without a word read
-        // as a broken feature. Say it now, and keep saying it on the Screen
-        // Time page and its Settings row until the user chooses again.
-        controller.noteLearningThemeRemoved()
-        router?.showToast(
-            String(localized: "記録先のテーマが削除されたため、勉強アプリの記録を止めました", table: "ScreenTime",
-                   comment: "Toast: the Screen Time destination theme was deleted, so study-app recording stopped"),
-            symbol: "exclamationmark.triangle"
-        )
+        // as a broken feature. Say it once the study apps are gone, even when
+        // registering what is left then failed: nothing retries after that.
+        if outcome.cleared {
+            router?.showToast(
+                String(localized: "記録先のテーマが削除されたため、勉強アプリの記録を止めました", table: "ScreenTime",
+                       comment: "Toast: the Screen Time destination theme was deleted, so study-app recording stopped"),
+                symbol: "exclamationmark.triangle"
+            )
+        }
+        if let failure = outcome.failure { throw failure }
     }
 }
 
