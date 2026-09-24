@@ -32,6 +32,10 @@ enum ScreenTimeSettingsUITestFixture {
         /// The settings screen appears while the controller is still unbound;
         /// the ledger admits the owner only when the test says so.
         case lateBinding = "late-binding"
+        /// A bound owner that never set anything up, with one theme. The
+        /// settings screen is pushed from a root screen so going back — and
+        /// the unsaved-changes question it asks — can be exercised.
+        case firstSetup = "first-setup"
     }
 
     static var scenario: Scenario? {
@@ -121,15 +125,17 @@ final class ScreenTimeSettingsUITestFixtureModel {
     /// the theme its `themeID` points at. Both exist BEFORE the settings screen
     /// mounts, so the screen's first draft can only come from the still-empty
     /// published configuration.
-    func prepare(into context: ModelContext) {
+    func prepare(into context: ModelContext, scenario: ScreenTimeSettingsUITestFixture.Scenario) {
         try? store.update { state in
             state = ScreenTimeState()
             state.contextKey = ScreenTimeSettingsUITestFixture.ownerKey
             state.dataEpochID = nil
             state.contextIsActive = true
-            state.configuration = seeded
             state.learningAllowedBySubscription = true
-            state.negativeGemCount = ScreenTimeSettingsUITestFixture.negativeGemCount
+            if scenario == .lateBinding {
+                state.configuration = seeded
+                state.negativeGemCount = ScreenTimeSettingsUITestFixture.negativeGemCount
+            }
         }
         context.insert(Subject(
             id: themeID,
@@ -176,7 +182,25 @@ struct ScreenTimeSettingsUITestFixtureLaunchView: View {
         Group {
             if let model {
                 NavigationStack {
-                    ScreenTimeSettingsView(controller: model.controller)
+                    if ScreenTimeSettingsUITestFixture.scenario == .firstSetup {
+                        List {
+                            NavigationLink("fixture-open-settings") {
+                                ScreenTimeSettingsView(controller: model.controller)
+                            }
+                            .accessibilityIdentifier("screen-time.fixture-open")
+                        }
+                        .navigationTitle("fixture-root")
+                    } else {
+                        ScreenTimeSettingsView(controller: model.controller)
+                    }
+                }
+                .overlay(alignment: .top) {
+                    // The app draws toasts in RootView, which this fixture
+                    // replaces; show them the same way so a test can read one.
+                    if let toast = router.toast {
+                        ToastOverlay(message: toast)
+                            .accessibilityIdentifier("screen-time.fixture-toast")
+                    }
                 }
                 .safeAreaInset(edge: .bottom) {
                     ScreenTimeSettingsUITestFixtureBar(
@@ -196,10 +220,11 @@ struct ScreenTimeSettingsUITestFixtureLaunchView: View {
             isDebugBuild: true
         ) ? .accessibility5 : .large)
         .task {
-            guard model == nil, ScreenTimeSettingsUITestFixture.scenario != nil else { return }
+            guard model == nil, let scenario = ScreenTimeSettingsUITestFixture.scenario else { return }
             let prepared = ScreenTimeSettingsUITestFixtureModel()
-            prepared.prepare(into: modelContext)
+            prepared.prepare(into: modelContext, scenario: scenario)
             model = prepared
+            if scenario == .firstSetup { bind(prepared) }
         }
         .onDisappear { model?.tearDown() }
     }

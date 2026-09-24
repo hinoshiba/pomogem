@@ -1122,6 +1122,64 @@ final class ScreenTimeSettingsDraftTests: XCTestCase {
                       "An empty draft has nothing to lose and would otherwise stay empty")
     }
 
+    /// screentime-02: the switch is off by default, and a first setup saved
+    /// with it off stored everything and recorded nothing behind a success
+    /// toast. Picking apps on a first setup switches it on; nothing else does.
+    func testAFirstPickSwitchesRecordingOnButNeverOverridesAnExistingChoice() throws {
+        let theme = UUID()
+        let two = selection(count: 2, seed: 0x61)
+        let empty = FamilyActivitySelection(includeEntireCategory: false)
+
+        let first = ScreenTimeDraftPolicy.applying(two, toLearningLane: true, in: ScreenTimeConfiguration(),
+                                                   authorized: true, onlyThemeID: theme)
+        XCTAssertTrue(first.enabled)
+        XCTAssertEqual(first.learningSelection, two)
+        XCTAssertEqual(first.themeID, theme, "With one theme there is only one sensible destination")
+
+        let distractionFirst = ScreenTimeDraftPolicy.applying(two, toLearningLane: false, in: ScreenTimeConfiguration(),
+                                                              authorized: true, onlyThemeID: theme)
+        XCTAssertTrue(distractionFirst.enabled)
+        XCTAssertNil(distractionFirst.themeID, "The black-stone lane has no destination theme")
+
+        // Someone who already chose apps and switched recording off keeps it off.
+        var paused = first
+        paused.enabled = false
+        let edited = ScreenTimeDraftPolicy.applying(selection(count: 1, seed: 0x62), toLearningLane: false,
+                                                    in: paused, authorized: true, onlyThemeID: nil)
+        XCTAssertFalse(edited.enabled)
+
+        // Nothing picked, no permission, or a theme already chosen: untouched.
+        XCTAssertFalse(ScreenTimeDraftPolicy.applying(empty, toLearningLane: true, in: ScreenTimeConfiguration(),
+                                                      authorized: true, onlyThemeID: theme).enabled)
+        XCTAssertFalse(ScreenTimeDraftPolicy.applying(two, toLearningLane: true, in: ScreenTimeConfiguration(),
+                                                      authorized: false, onlyThemeID: nil).enabled)
+        var chosen = ScreenTimeConfiguration()
+        let other = UUID()
+        chosen.themeID = other
+        XCTAssertEqual(ScreenTimeDraftPolicy.applying(two, toLearningLane: true, in: chosen,
+                                                      authorized: true, onlyThemeID: theme).themeID, other)
+    }
+
+    func testTheSaveToastStatesWhetherRecordingIsOn() {
+        var configuration = ScreenTimeConfiguration()
+        configuration.enabled = true
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration).text, "保存しました。自動記録中です")
+        configuration.enabled = false
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration).text, "保存しました。自動記録はオフです")
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration).symbol, "checkmark")
+        configuration.learningSelection = selection(count: 1, seed: 0x63)
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration).symbol, "exclamationmark.circle",
+                       "Apps chosen but recording off is worth a second look")
+    }
+
+    private func selection(count: Int, seed: UInt8) -> FamilyActivitySelection {
+        var selection = FamilyActivitySelection(includeEntireCategory: false)
+        selection.applicationTokens = Set((0..<count).compactMap { index in
+            try? JSONDecoder().decode(ApplicationToken.self, from: JSONEncoder().encode(["data": Data([seed, UInt8(index)])]))
+        })
+        return selection
+    }
+
     /// 「スクリーンタイムの内容をリセット」 replaces the whole ledger, which used
     /// to drop the callback counters without a word. That is the one reading
     /// that exonerates the app — "every counter 0, nothing ever delivered" —

@@ -23,6 +23,12 @@ struct ScreenTimeSettingsView: View {
     @State private var saveError: String?
     @State private var isResetConfirmationPresented = false
     @State private var hasUserEdits = false
+    @State private var isLeaveConfirmationPresented = false
+    /// Set by 「保存して戻る」: pop once the save has finished, never while it
+    /// runs (the user can still go back themselves meanwhile).
+    @State private var leavesAfterSave = false
+    @State private var isVisible = false
+    @Environment(\.dismiss) private var dismiss
 
     /// Production always uses the shared controller; the parameter exists so
     /// the Simulator UI-test fixture can drive a temporary ledger that really
@@ -87,6 +93,21 @@ struct ScreenTimeSettingsView: View {
         return nil
     }
 
+    /// Edits the user made that 保存 has not applied. The back button asks
+    /// before it throws them away; the picker's selections in particular can
+    /// only be rebuilt one app at a time in Apple's picker. Never true while a
+    /// save or reset runs, so going back stays possible during registration.
+    private var hasUnsavedChanges: Bool {
+        hasUserEdits && draft != controller.configuration
+            && !controller.isSaving && !controller.isResetting
+    }
+
+    private var canSaveDraft: Bool {
+        !ScreenTimeDraftPolicy.blocksSave(bound: controller.isBoundToContext, draftEnabled: draft.enabled)
+            && !isRequestingAuthorization && !controller.isSaving && !controller.isResetting
+            && validationMessage == nil
+    }
+
     var body: some View {
         List {
             introductionSection
@@ -101,7 +122,22 @@ struct ScreenTimeSettingsView: View {
         .background(NightBackground())
         .navigationTitle("スクリーンタイム")
         .navigationBarTitleDisplayMode(.inline)
+        // The system back button would drop unsaved edits without a word.
+        .navigationBarBackButtonHidden(hasUnsavedChanges)
         .toolbar {
+            if hasUnsavedChanges {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        isLeaveConfirmationPresented = true
+                    } label: {
+                        Label(String(localized: "戻る", table: "ScreenTime",
+                                     comment: "Back button shown while Screen Time edits are unsaved"),
+                              systemImage: "chevron.backward")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .accessibilityIdentifier("screen-time.back")
+                }
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存", action: save)
                     .disabled(ScreenTimeDraftPolicy.blocksSave(
@@ -109,6 +145,38 @@ struct ScreenTimeSettingsView: View {
                     ) || isRequestingAuthorization
                               || controller.isSaving || controller.isResetting || validationMessage != nil)
                     .accessibilityIdentifier("screen-time.save")
+            }
+        }
+        .confirmationDialog(
+            String(localized: "変更が保存されていません", table: "ScreenTime",
+                   comment: "Dialog title: leaving Screen Time settings with unsaved edits"),
+            isPresented: $isLeaveConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            if canSaveDraft {
+                Button(String(localized: "保存して戻る", table: "ScreenTime",
+                              comment: "Dialog action: save the Screen Time edits, then go back")) {
+                    leavesAfterSave = true
+                    save()
+                }
+            }
+            Button(String(localized: "変更を破棄して戻る", table: "ScreenTime",
+                          comment: "Dialog action: drop the Screen Time edits and go back"),
+                   role: .destructive) {
+                draft = controller.configuration
+                hasUserEdits = false
+                dismiss()
+            }
+            Button(String(localized: "編集を続ける", table: "ScreenTime",
+                          comment: "Dialog action: stay on the Screen Time settings"),
+                   role: .cancel) {}
+        } message: {
+            if canSaveDraft {
+                Text("選んだアプリや記録の設定は、保存するまで反映されません。",
+                     tableName: "ScreenTime", comment: "Dialog message: unsaved Screen Time edits")
+            } else {
+                Text("選んだアプリや記録の設定は、保存するまで反映されません。いまの内容のままでは保存できないため、戻ると変更は破棄されます。",
+                     tableName: "ScreenTime", comment: "Dialog message: unsaved Screen Time edits that cannot be saved yet")
             }
         }
         .sheet(item: $selectionLane) { lane in
@@ -121,11 +189,13 @@ struct ScreenTimeSettingsView: View {
                 isPro: purchase.isPro
             ) { selection in
                 hasUserEdits = true
-                if lane == .learning {
-                    draft.learningSelection = selection
-                } else {
-                    draft.distractionSelection = selection
-                }
+                draft = ScreenTimeDraftPolicy.applying(
+                    selection,
+                    toLearningLane: lane == .learning,
+                    in: draft,
+                    authorized: controller.authorizationGranted,
+                    onlyThemeID: subjects.count == 1 ? subjects.first?.id : nil
+                )
             }
         }
         .alert("設定を完了できませんでした", isPresented: Binding(
@@ -146,6 +216,8 @@ struct ScreenTimeSettingsView: View {
             controller.reload()
             seedDraftIfNeeded()
         }
+        .onAppear { isVisible = true }
+        .onDisappear { isVisible = false }
         .onChange(of: controller.isBoundToContext) { _, _ in
             // The controller publishes an empty configuration until the ledger
             // admits this owner, which can happen after this screen appears.
@@ -490,7 +562,10 @@ struct ScreenTimeSettingsView: View {
     }
 
     private func save() {
-        guard validationMessage == nil, !controller.isSaving, !controller.isResetting else { return }
+        guard validationMessage == nil, !controller.isSaving, !controller.isResetting else {
+            leavesAfterSave = false
+            return
+        }
         let configuration = draft
         let isPro = purchase.isPro
         Task {
@@ -499,9 +574,16 @@ struct ScreenTimeSettingsView: View {
                 draft = controller.configuration
                 hasUserEdits = false
                 if controller.monitoringError == nil {
-                    router.showToast("スクリーンタイムの設定を保存しました", symbol: "checkmark")
+                    // Say what the save switched on or off. A first setup that
+                    // left recording off used to read 「保存しました」 and then
+                    // never recorded anything.
+                    let toast = ScreenTimeDraftPolicy.savedToast(for: configuration)
+                    router.showToast(toast.text, symbol: toast.symbol)
                 }
+                if leavesAfterSave, isVisible { dismiss() }
+                leavesAfterSave = false
             } catch {
+                leavesAfterSave = false
                 saveError = error.localizedDescription
             }
         }
@@ -548,6 +630,51 @@ enum ScreenTimeDraftPolicy {
     /// controller refuses.
     static let unboundFooterMessage =
         "記録の準備が完了していないため、いまは変更を保存できません。「保存」を押すと、理由をお知らせします。"
+
+    /// The draft after the picker's 反映. On a first setup — nothing chosen in
+    /// either lane yet — picking apps also switches recording on: the switch
+    /// is off by default, and a first save that kept it off stored everything
+    /// and recorded nothing. A user who already has apps chosen keeps
+    /// whatever they set the switch to. With exactly one theme, a learning
+    /// selection also gets that theme as its destination.
+    static func applying(
+        _ selection: FamilyActivitySelection,
+        toLearningLane isLearning: Bool,
+        in draft: ScreenTimeConfiguration,
+        authorized: Bool,
+        onlyThemeID: UUID?
+    ) -> ScreenTimeConfiguration {
+        var result = draft
+        let wasEmpty = draft.learningSelection.applicationTokens.isEmpty
+            && draft.distractionSelection.applicationTokens.isEmpty
+        if isLearning {
+            result.learningSelection = selection
+        } else {
+            result.distractionSelection = selection
+        }
+        let picked = !selection.applicationTokens.isEmpty
+        if !result.enabled, wasEmpty, picked, authorized {
+            result.enabled = true
+        }
+        if isLearning, picked, result.themeID == nil, let onlyThemeID {
+            result.themeID = onlyThemeID
+        }
+        return result
+    }
+
+    /// The toast after a save, stating the resulting status.
+    static func savedToast(for configuration: ScreenTimeConfiguration) -> (text: String, symbol: String) {
+        if configuration.enabled {
+            return (String(localized: "保存しました。自動記録中です", table: "ScreenTime",
+                           comment: "Toast after saving Screen Time settings with recording on"),
+                    "checkmark")
+        }
+        let hasApps = !configuration.learningSelection.applicationTokens.isEmpty
+            || !configuration.distractionSelection.applicationTokens.isEmpty
+        return (String(localized: "保存しました。自動記録はオフです", table: "ScreenTime",
+                       comment: "Toast after saving Screen Time settings with recording off"),
+                hasApps ? "exclamationmark.circle" : "checkmark")
+    }
 }
 
 private enum ScreenTimeSelectionLane: String, Identifiable {
@@ -565,17 +692,36 @@ private enum ScreenTimeSelectionValidation {
         lane: ScreenTimeSelectionLane,
         isPro: Bool
     ) -> String? {
+        if let blocking = blockingMessage(selection: selection, otherSelection: otherSelection) {
+            return blocking
+        }
+        if exceedsFreeLimit(selection: selection, lane: lane, isPro: isPro) {
+            return "無料では勉強アプリを5つまで選べます。5つ以下に減らしてください。Proでは無制限です。"
+        }
+        return nil
+    }
+
+    /// What no save could ever accept, so the picker keeps 反映 off for it.
+    static func blockingMessage(
+        selection: FamilyActivitySelection,
+        otherSelection: FamilyActivitySelection
+    ) -> String? {
         if !selection.categoryTokens.isEmpty || !selection.webDomainTokens.isEmpty {
             return "カテゴリやWebサイトは選べません。カテゴリを開き、アプリを1つずつ選んでください。"
         }
         if !selection.applicationTokens.isDisjoint(with: otherSelection.applicationTokens) {
             return "同じアプリを勉強のgemと黒いgemの両方には登録できません。もう一方の選択から外してください。"
         }
-        if lane == .learning && !isPro
-            && selection.applicationTokens.count > ScreenTimePolicy.freeLearningApplicationLimit {
-            return "無料では勉強アプリを5つまで選べます。5つ以下に減らしてください。Proでは無制限です。"
-        }
         return nil
+    }
+
+    /// The free plan's learning limit is NOT blocking in the picker: the
+    /// paywall cannot appear over this sheet, so blocking 反映 left a free user
+    /// who picked a sixth app only キャンセル — and every pick lost. The
+    /// settings screen keeps 保存 off over the limit and offers Pro there.
+    static func exceedsFreeLimit(selection: FamilyActivitySelection, lane: ScreenTimeSelectionLane, isPro: Bool) -> Bool {
+        lane == .learning && !isPro
+            && selection.applicationTokens.count > ScreenTimePolicy.freeLearningApplicationLimit
     }
 }
 
@@ -605,13 +751,17 @@ private struct ScreenTimeAppSelectionSheet: View {
         _selection = State(initialValue: explicitSelection)
     }
 
-    private var validationMessage: String? {
-        ScreenTimeSelectionValidation.message(
-            selection: selection,
-            otherSelection: otherSelection,
-            lane: lane,
-            isPro: isPro
-        )
+    private var blockingMessage: String? {
+        ScreenTimeSelectionValidation.blockingMessage(selection: selection, otherSelection: otherSelection)
+    }
+
+    private var noticeMessage: String? {
+        if let blockingMessage { return blockingMessage }
+        guard ScreenTimeSelectionValidation.exceedsFreeLimit(selection: selection, lane: lane, isPro: isPro) else {
+            return nil
+        }
+        return String(localized: "無料で記録できる勉強アプリは5つまでです。このまま反映して、設定画面でProにするか、5つ以下に減らしてから保存してください。",
+                      table: "ScreenTime", comment: "Picker notice: over the free learning-app limit; applying is still allowed")
     }
 
     var body: some View {
@@ -631,29 +781,44 @@ private struct ScreenTimeAppSelectionSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("反映") {
-                        guard validationMessage == nil else { return }
+                        guard blockingMessage == nil else { return }
                         onApply(selection)
                         dismiss()
                     }
-                    .disabled(validationMessage != nil)
+                    .disabled(blockingMessage != nil)
                     .accessibilityIdentifier("screen-time.picker-apply")
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("\(selection.applicationTokens.count)アプリ選択中")
-                        .font(.subheadline.weight(.semibold))
-                    if let validationMessage {
-                        Text(validationMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
+                VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("\(selection.applicationTokens.count)アプリ選択中")
+                            .font(.subheadline.weight(.semibold))
+                        if let noticeMessage {
+                            Text(noticeMessage)
+                                .font(.footnote)
+                                .foregroundStyle(blockingMessage == nil ? PomoGemTheme.amber : .red)
+                        }
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("screen-time.picker-status")
+#if DEBUG && targetEnvironment(simulator)
+                    // FamilyActivityPicker hands out no tokens on the
+                    // Simulator; the settings fixture stands in for it.
+                    if ScreenTimeSettingsUITestFixture.isActiveForCurrentProcess {
+                        Button("fixture-pick-apps") {
+                            selection.applicationTokens = ScreenTimeSettingsUITestFixture.applicationTokens(
+                                count: 2, seed: lane == .learning ? 0x51 : 0x52)
+                        }
+                        .font(.caption)
+                        .accessibilityIdentifier("screen-time.fixture-pick-apps")
+                    }
+#endif
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
                 .background(.regularMaterial)
-                .accessibilityElement(children: .combine)
             }
         }
     }

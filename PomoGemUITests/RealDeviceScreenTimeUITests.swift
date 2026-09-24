@@ -516,15 +516,18 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         }
 
         let overLimitMessage = app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "無料では勉強アプリを5つまで選べます")
+            NSPredicate(format: "label CONTAINS %@", "無料で記録できる勉強アプリは5つまで")
         ).firstMatch
         try require(overLimitMessage.waitForExistence(timeout: 5),
-                    "Six learning apps must raise 「無料では勉強アプリを5つまで選べます…」 in the picker.",
+                    "Six learning apps must raise 「無料で記録できる勉強アプリは5つまでです…」 in the picker.",
                     evidence: "limits-message-missing")
-        try require(apply.exists && !apply.isEnabled,
-                    "反映 (screen-time.picker-apply) must be disabled while the free learning ceiling is exceeded.",
-                    evidence: "limits-apply-enabled")
-        note("LIMITS PASS: 6 learning apps ⇒ 反映 disabled + free-tier message shown.")
+        // screentime-02: the ceiling no longer blocks 反映. The paywall cannot
+        // appear over this sheet, so blocking left only キャンセル and lost every
+        // pick; the settings screen keeps 保存 off over the ceiling instead.
+        try require(apply.exists && apply.isEnabled,
+                    "反映 (screen-time.picker-apply) must stay enabled over the free learning ceiling so the picks reach the settings screen.",
+                    evidence: "limits-apply-disabled")
+        note("LIMITS PASS: 6 learning apps ⇒ free-tier notice shown, 反映 still available.")
 
         // Back down to the ceiling: the picker must become applicable again.
         var removed = false
@@ -540,7 +543,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                 predicate: NSPredicate(format: "enabled == true"), object: apply
             )
             try require(XCTWaiter.wait(for: [enabled], timeout: 8) == .completed,
-                        "Reducing the learning selection to five apps must re-enable 反映.",
+                        "反映 must stay available with five apps.",
                         evidence: "limits-apply-still-disabled")
             try require(!overLimitMessage.exists,
                         "The free-tier message must disappear once five apps remain.",
@@ -1459,6 +1462,15 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         var guardCount = 0
         while guardCount < 6, !app.buttons["メニュー"].exists {
             guardCount += 1
+            // Unsaved Screen Time edits make 戻る ask first (screentime-02).
+            // Leaving is what every phase means here, so answer it.
+            let discard = app.buttons["変更を破棄して戻る"]
+            if discard.exists {
+                note("RETURN: unsaved Screen Time edits were discarded on the way back.")
+                discard.tap()
+                pause(1)
+                continue
+            }
             let bar = app.navigationBars.allElementsBoundByIndex.last ?? app.navigationBars.firstMatch
             let back = bar.buttons.firstMatch
             if back.exists && back.isHittable {

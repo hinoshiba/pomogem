@@ -217,6 +217,95 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         attach("Screen Time — save preserves the stored configuration")
     }
 
+    /// screentime-02 through the same DEBUG fixture, as a bound owner who has
+    /// set nothing up yet. Picking apps on a first setup switches recording on
+    /// (off by default, a save that kept it off recorded nothing), going back
+    /// with unsaved edits asks first instead of dropping picks only Apple's
+    /// picker can rebuild, and the save toast states the resulting status.
+    func testFirstSetupSwitchesRecordingOnAndBackAsksBeforeDroppingEdits() {
+        app.launchEnvironment["POMOGEM_UI_TEST_SCREEN_TIME"] = "first-setup"
+        app.launch()
+        let ledger = app.staticTexts["screen-time.fixture-ledger"]
+        XCTAssertTrue(ledger.waitForExistence(timeout: 20))
+        expectLedger(ledger, contains: "boundToContext=true", timeout: 20)
+        XCTAssertTrue(ledger.label.contains("enabled=0"), ledger.label)
+        XCTAssertTrue(ledger.label.contains("learning=0"), ledger.label)
+
+        openFixtureSettings()
+        let enabled = app.switches["screen-time.enabled"]
+        XCTAssertTrue(reveal(enabled))
+        XCTAssertEqual(enabled.value as? String, "0")
+        XCTAssertFalse(app.buttons["screen-time.back"].exists, "Nothing to lose yet: the system back button stays")
+
+        let learning = app.buttons["screen-time.learning-apps"]
+        XCTAssertTrue(reveal(learning))
+        learning.tap()
+        let pick = app.buttons["screen-time.fixture-pick-apps"]
+        XCTAssertTrue(pick.waitForExistence(timeout: 12))
+        pick.tap()
+        attach("Screen Time — picker with two apps")
+        let apply = app.buttons["screen-time.picker-apply"]
+        XCTAssertTrue(apply.isEnabled)
+        apply.tap()
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 6))
+
+        XCTAssertTrue(reveal(enabled))
+        XCTAssertEqual(enabled.value as? String, "1", "A first pick must switch recording on")
+        let theme = app.descendants(matching: .any)["screen-time.theme"].firstMatch
+        XCTAssertTrue(reveal(theme))
+        XCTAssertTrue("\(theme.value ?? "")\(theme.label)".contains("スクリーンタイム検証テーマ"),
+                      "The only theme becomes the destination: \(theme.debugDescription)")
+        XCTAssertTrue(ledger.label.contains("enabled=0"), "Nothing is saved before 保存: \(ledger.label)")
+        attach("Screen Time — first pick switched recording on")
+
+        // Unsaved: back asks, and staying keeps everything.
+        let back = app.buttons["screen-time.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 6))
+        back.tap()
+        XCTAssertTrue(app.buttons["保存して戻る"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.buttons["変更を破棄して戻る"].exists)
+        attach("Screen Time — unsaved changes question")
+        app.buttons["編集を続ける"].tap()
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 4))
+        XCTAssertTrue(reveal(enabled))
+        XCTAssertEqual(enabled.value as? String, "1")
+
+        // 保存 applies it and says what it switched on.
+        let save = app.buttons["screen-time.save"]
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+        expectLedger(ledger, contains: "enabled=1", timeout: 20)
+        XCTAssertTrue(ledger.label.contains("learning=2"), ledger.label)
+        XCTAssertTrue(text(containing: "保存しました。自動記録中です").waitForExistence(timeout: 6),
+                      "The toast must state the resulting status")
+        attach("Screen Time — saved with recording on")
+        XCTAssertFalse(app.buttons["screen-time.back"].waitForExistence(timeout: 2))
+
+        // Nothing unsaved: the ordinary back button leaves at once.
+        app.navigationBars["スクリーンタイム"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["fixture-root"].waitForExistence(timeout: 6))
+
+        // Discarding really discards.
+        openFixtureSettings()
+        XCTAssertTrue(reveal(enabled))
+        enabled.tap()
+        XCTAssertEqual(enabled.value as? String, "0")
+        XCTAssertTrue(back.waitForExistence(timeout: 6))
+        back.tap()
+        let discard = app.buttons["変更を破棄して戻る"]
+        XCTAssertTrue(discard.waitForExistence(timeout: 6))
+        discard.tap()
+        XCTAssertTrue(app.navigationBars["fixture-root"].waitForExistence(timeout: 6))
+        XCTAssertTrue(ledger.label.contains("enabled=1"), "A discarded edit must not reach the ledger: \(ledger.label)")
+    }
+
+    private func openFixtureSettings() {
+        let open = app.descendants(matching: .any)["screen-time.fixture-open"].firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout: 10))
+        open.tap()
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 8))
+    }
+
     private func expectLedger(_ ledger: XCUIElement, contains fragment: String, timeout: TimeInterval) {
         let matched = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "label CONTAINS %@", fragment), object: ledger)
