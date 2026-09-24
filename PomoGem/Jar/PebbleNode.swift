@@ -638,8 +638,8 @@ final class PebbleNode: SKShapeNode {
             // texture (one additive batch, no neon ring).
             let tint = GemTone(hex: descriptor.colorHex, muted: !descriptor.isMeasured, glass: false)
                 .haloUIColor
-            let bloom = SKSpriteNode(
-                texture: GemArtwork.haloTexture,
+            let bloom = Self.sharedLightSprite(
+                GemTextureAtlas.SharedName.halo,
                 size: CGSize(width: radius * 5.6, height: radius * 5.6)
             )
             bloom.name = "pebble.earlyEffortBloom"
@@ -651,8 +651,8 @@ final class PebbleNode: SKShapeNode {
             addChild(bloom)
             earlyEffortBloomNode = bloom
 
-            let aura = SKSpriteNode(
-                texture: GemArtwork.haloTexture,
+            let aura = Self.sharedLightSprite(
+                GemTextureAtlas.SharedName.halo,
                 size: CGSize(width: radius * 3.4, height: radius * 3.4)
             )
             aura.name = "pebble.earlyEffortAura"
@@ -782,13 +782,17 @@ final class PebbleNode: SKShapeNode {
         lineJoin = .round
         zPosition = JarZPosition.pebble
         if let obstacle = descriptor.screenTimeObstacle {
-            ScreenTimeObstacleAppearance.apply(to: self, descriptor: obstacle, radius: radius)
-            obstacleCountNode = children.first { $0.name == "obstacle.count" }
+            obstacleCountNode = ScreenTimeObstacleAppearance.apply(
+                to: self,
+                descriptor: obstacle,
+                radius: radius,
+                scale: artworkScale
+            )
             // Obstacles never glow. A normal-blended dark halo (1.6R, black
             // α0.35) sits above the reward halos, so neighbouring light is
             // absorbed instead of washing over the rubble.
-            let shadowHalo = SKSpriteNode(
-                texture: GemArtwork.haloTexture,
+            let shadowHalo = Self.sharedLightSprite(
+                GemTextureAtlas.SharedName.halo,
                 size: CGSize(width: radius * 3.2, height: radius * 3.2)
             )
             shadowHalo.name = "obstacle.shadowHalo"
@@ -933,10 +937,14 @@ final class PebbleNode: SKShapeNode {
         haloParent: SKNode? = nil
     ) {
         gemRung = rung
-        let body = SKSpriteNode(
-            texture: GemArtwork.bodyTexture(for: spec, radius: radius, scale: artworkScale),
-            size: GemArtwork.bodySpriteSize(radius: radius)
-        )
+        let body = SKSpriteNode(texture: nil, size: GemArtwork.bodySpriteSize(radius: radius))
+        let bodyScale = artworkScale
+        GemTextureAtlas.shared.show(
+            GemArtwork.bodyTextureName(for: spec, radius: radius, scale: bodyScale),
+            on: body
+        ) {
+            GemArtwork.renderBodyImage(for: spec, radius: radius, scale: bodyScale)
+        }
         body.name = "gem.body"
         body.zPosition = JarZPosition.pebbleDetail - 0.8
         addChild(body)
@@ -945,8 +953,8 @@ final class PebbleNode: SKShapeNode {
         // One shared additive texture for every halo: all halos in the jar
         // resolve to a single draw batch.
         let haloDiameter = radius * 2 * rung.haloScale
-        let halo = SKSpriteNode(
-            texture: GemArtwork.haloTexture,
+        let halo = Self.sharedLightSprite(
+            GemTextureAtlas.SharedName.halo,
             size: CGSize(width: haloDiameter, height: haloDiameter)
         )
         halo.name = "gem.halo"
@@ -964,8 +972,8 @@ final class PebbleNode: SKShapeNode {
         addChild(rig)
         gemLightRigNode = rig
 
-        let shadow = SKSpriteNode(
-            texture: GemArtwork.shadowTexture,
+        let shadow = Self.sharedLightSprite(
+            GemTextureAtlas.SharedName.shadow,
             size: CGSize(width: radius * 1.5, height: radius * 0.5)
         )
         shadow.name = "pebble.contactShadow"
@@ -974,8 +982,8 @@ final class PebbleNode: SKShapeNode {
         shadow.zPosition = -1
         rig.addChild(shadow)
 
-        let shade = SKSpriteNode(
-            texture: GemArtwork.lightRigShadeTexture,
+        let shade = Self.sharedLightSprite(
+            GemTextureAtlas.SharedName.lightShade,
             size: CGSize(width: radius * 2, height: radius * 2)
         )
         shade.name = "gem.rig.shade"
@@ -983,8 +991,8 @@ final class PebbleNode: SKShapeNode {
         shade.zPosition = JarZPosition.pebbleDetail - 0.3
         rig.addChild(shade)
 
-        let light = SKSpriteNode(
-            texture: GemArtwork.lightRigAddTexture,
+        let light = Self.sharedLightSprite(
+            GemTextureAtlas.SharedName.lightAdd,
             size: CGSize(width: radius * 2, height: radius * 2)
         )
         light.name = "pebble.dimensionalLight"
@@ -1006,8 +1014,8 @@ final class PebbleNode: SKShapeNode {
                 .truncatingRemainder(dividingBy: 140)
             let distance = 0.45 + distanceUnit * 0.30
             let side = radius * rung.glintScale * (index == 0 ? 1 : 0.72)
-            let glint = SKSpriteNode(
-                texture: GemArtwork.glintTexture,
+            let glint = Self.sharedLightSprite(
+                GemTextureAtlas.SharedName.glint,
                 size: CGSize(width: side, height: side)
             )
             glint.name = "gem.glint"
@@ -1027,6 +1035,13 @@ final class PebbleNode: SKShapeNode {
             gemGlintPhases.append(CGFloat(phaseBits) / 1_023 * 2 - 1)
             glint.alpha = glintRestAlpha(index: index)
         }
+    }
+
+    /// A shared light sprite on the gem atlas page (see `GemTextureAtlas`).
+    private static func sharedLightSprite(_ name: String, size: CGSize) -> SKSpriteNode {
+        let sprite = SKSpriteNode(texture: nil, size: size)
+        GemTextureAtlas.shared.showShared(name, on: sprite)
+        return sprite
     }
 
     private func glintRestAlpha(index: Int) -> CGFloat {
@@ -1786,6 +1801,19 @@ enum JarZPosition {
     static let pebbleDetail: CGFloat = 1
     static let effect: CGFloat = 10
     static let glass: CGFloat = 20
+
+    /// Per-body stacking offset. The jar's SKView ignores sibling order so
+    /// SpriteKit may batch; each body's own offset (insertion order) then
+    /// decides ties exactly as the node tree used to, while the whole span
+    /// (0.04) stays below the smallest gap between two layers of one body
+    /// (0.05), so every layer of every body remains one contiguous band.
+    static let stackingStep: CGFloat = 0.000_01
+    static let stackingSlots = 4_000
+    static var stackingSpan: CGFloat { stackingStep * CGFloat(stackingSlots) }
+
+    static func pebble(stackingIndex: Int) -> CGFloat {
+        pebble + stackingStep * CGFloat(min(max(stackingIndex, 0), stackingSlots - 1))
+    }
 }
 
 enum JarPalette {

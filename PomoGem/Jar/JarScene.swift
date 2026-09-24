@@ -365,6 +365,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var opticalTiltFraction: CGFloat = 0
     private var lastPublishedPhysicalPebbleCount = 0
     private var earlyEffortSpotlightIDs = Set<UUID>()
+    private var nextStackingIndex = 0
 
     private var outerJarRect: CGRect {
         Self.outerJarRect(sceneSize: size)
@@ -561,7 +562,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 )
                 node.zRotation = deterministicAngle(for: descriptor.id)
                 node.markLanded()
-                worldNode.addChild(node)
+                insertPebble(node)
             }
         }
         guard !removedIDs.isEmpty || !additions.isEmpty || previousTotal != screenTimeObstacleUnitCount else { return }
@@ -599,7 +600,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         for source in removedBodies {
             guard let obstacle = source.descriptor.screenTimeObstacle else { continue }
             let fragment = SKShapeNode()
-            ScreenTimeObstacleAppearance.apply(to: fragment, descriptor: obstacle, radius: source.radius)
+            ScreenTimeObstacleAppearance.apply(
+                to: fragment,
+                descriptor: obstacle,
+                radius: source.radius,
+                scale: artworkScale
+            )
             fragment.position = source.position
             fragment.zRotation = source.zRotation
             fragment.zPosition = JarZPosition.pebble
@@ -627,7 +633,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         node.physicsBody?.velocity = CGVector(dx: 0, dy: 32)
         node.run(.group([.scale(to: 1, duration: 0.28), .fadeIn(withDuration: 0.28)]))
         acceptedPebbleIDs.insert(destination.id)
-        worldNode.addChild(node)
+        insertPebble(node)
         return destination.id
     }
     /// Observation-only test seam: a tap must actively drive exactly one body.
@@ -833,7 +839,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             )
             node.zRotation = CGFloat.random(in: -.pi ... .pi)
             node.markLanded()
-            worldNode.addChild(node)
+            insertPebble(node)
             cursorX += node.radius * 2
         }
         let overflow = studyDescriptors.dropFirst(Constants.Jar.maxPhysicsBodies)
@@ -952,7 +958,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             )
             node.zRotation = deterministicAngle(for: descriptor.id)
             node.markLanded()
-            worldNode.addChild(node)
+            insertPebble(node)
         }
         installedHistoryIDs = wantedIDs
         publishPhysicalContentChangeIfNeeded(force: !replacements.isEmpty)
@@ -996,7 +1002,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
 
         oldNode.removeFromParent()
-        worldNode.addChild(node)
+        insertPebble(node)
         if let oldBody, let body = node.physicsBody {
             body.velocity = oldBody.velocity
             body.angularVelocity = oldBody.angularVelocity
@@ -1008,6 +1014,25 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         node.rememberObservedPosition()
         node.updatePresentationLighting(horizontal: opticalTiltFraction)
+    }
+
+    /// Adds a body on top of the bodies already in the jar. The view ignores
+    /// sibling order (so SpriteKit can batch), which leaves ties at equal z
+    /// unordered; each body therefore gets its own tiny stacking offset in
+    /// insertion order — the order the node tree used to give — kept inside
+    /// every layer's band (`JarZPosition.stackingSpan`).
+    private func insertPebble(_ node: PebbleNode) {
+        if nextStackingIndex >= JarZPosition.stackingSlots {
+            // Renumber the live bodies compactly, keeping their order.
+            let ordered = allPebbleNodes.sorted { $0.zPosition < $1.zPosition }
+            for (index, pebble) in ordered.enumerated() {
+                pebble.zPosition = JarZPosition.pebble(stackingIndex: index)
+            }
+            nextStackingIndex = ordered.count
+        }
+        node.zPosition = JarZPosition.pebble(stackingIndex: nextStackingIndex)
+        nextStackingIndex += 1
+        worldNode.addChild(node)
     }
 
     private func deterministicAngle(for id: UUID) -> CGFloat {
@@ -1625,6 +1650,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
         tapCausticNode.removeAction(forKey: ActionKey.tapCaustic)
         tapCausticNode.position = safePoint
+        tapCausticNode.isHidden = false
         tapCausticNode.alpha = 0.62
         tapCausticNode.setScale(expands ? 0.44 : 0.84)
         let action: SKAction = expands
@@ -1636,17 +1662,20 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 .wait(forDuration: 0.06),
                 .fadeOut(withDuration: 0.16)
             ])
-        tapCausticNode.run(action, withKey: ActionKey.tapCaustic)
+        // Hidden at rest: a transparent shape node still costs draws.
+        tapCausticNode.run(.sequence([action, .hide()]), withKey: ActionKey.tapCaustic)
     }
 
     private func playReducedMotionHighlight() {
         reducedMotionHighlightNode.removeAction(forKey: ActionKey.reducedMotionHighlight)
         reducedMotionHighlightNode.alpha = 0
+        reducedMotionHighlightNode.isHidden = false
         reducedMotionHighlightNode.run(
             .sequence([
                 .fadeAlpha(to: 1, duration: 0.07),
                 .wait(forDuration: 0.06),
-                .fadeOut(withDuration: 0.14)
+                .fadeOut(withDuration: 0.14),
+                .hide()
             ]),
             withKey: ActionKey.reducedMotionHighlight
         )
@@ -2030,6 +2059,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             forKey: ActionKey.reducedMotionHighlight
         ) == nil {
             reducedMotionHighlightNode.alpha = 0
+            reducedMotionHighlightNode.isHidden = true
         }
         reducedMotionHighlightNode.zPosition = JarZPosition.glass + 0.72
 
@@ -2072,6 +2102,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         tapCausticNode.lineWidth = 1.1
         tapCausticNode.glowWidth = 3.2
         tapCausticNode.alpha = 0
+        if tapCausticNode.action(forKey: ActionKey.tapCaustic) == nil {
+            tapCausticNode.isHidden = true
+        }
         tapCausticNode.zPosition = JarZPosition.glass + 1.5
 
         rebuildCollar()
@@ -2602,6 +2635,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         for (node, tilt) in [(collarLeftNode, -1), (collarCenterNode, 0), (collarRightNode, 1)] {
             node.texture = Self.collarTexture(width: width, tilt: tilt, marks: milestoneTraceCount)
             node.size = CGSize(width: width, height: height)
+            // Two states cross-fade: keep their former child order explicit
+            // now that the view ignores sibling order.
+            node.zPosition = CGFloat(tilt + 1) * 0.01
         }
         updateCollarTilt(opticalTiltFraction)
     }
@@ -2790,7 +2826,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         node.physicsBody?.angularVelocity = CGFloat.random(
             in: -Constants.Jar.dropHorizontalSpeed ... Constants.Jar.dropHorizontalSpeed
         )
-        worldNode.addChild(node)
+        insertPebble(node)
         if origin == .sceneTop {
             completionDropSequence &+= 1
             completionDropMaximumFall = 0
@@ -2949,7 +2985,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 dx: 0,
                 dy: Constants.Jar.aggregateBirthImpulse
             )
-            worldNode.addChild(aggregateNode)
+            insertPebble(aggregateNode)
             presentFusionFinale(for: aggregateNode)
         }
         refreshPileLight()

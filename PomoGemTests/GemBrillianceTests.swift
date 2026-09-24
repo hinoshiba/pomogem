@@ -181,14 +181,15 @@ final class GemBrillianceTests: XCTestCase {
 
         let gemBody = try XCTUnwrap(pebble.childNode(withName: "gem.body") as? SKSpriteNode)
         let halo = try XCTUnwrap(pebble.childNode(withName: "gem.halo") as? SKSpriteNode)
-        XCTAssertEqual(halo.texture, GemArtwork.haloTexture)
+        // Shared light comes from the gem atlas (stand-alone until packed).
+        XCTAssertEqual(GemTextureAtlas.shared.textureName(of: halo), GemTextureAtlas.SharedName.halo)
         XCTAssertEqual(halo.blendMode, .add)
         XCTAssertNotNil(pebble.childNode(withName: "//gem.glint"))
         let light = try XCTUnwrap(pebble.childNode(withName: "//pebble.dimensionalLight") as? SKSpriteNode)
-        XCTAssertEqual(light.texture, GemArtwork.lightRigAddTexture)
+        XCTAssertEqual(GemTextureAtlas.shared.textureName(of: light), GemTextureAtlas.SharedName.lightAdd)
         XCTAssertEqual(light.blendMode, .add)
         let shade = try XCTUnwrap(pebble.childNode(withName: "//gem.rig.shade") as? SKSpriteNode)
-        XCTAssertEqual(shade.texture, GemArtwork.lightRigShadeTexture)
+        XCTAssertEqual(GemTextureAtlas.shared.textureName(of: shade), GemTextureAtlas.SharedName.lightShade)
         XCTAssertLessThanOrEqual(
             gemBody.size.width,
             GemArtwork.bodySpriteSize(radius: descriptor.radius).width + 0.001

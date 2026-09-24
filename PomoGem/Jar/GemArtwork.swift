@@ -326,18 +326,26 @@ enum GemArtwork {
         return CGSize(width: side, height: side)
     }
 
-    /// `scale` is the display scale of the view that shows the texture
-    /// (the SKView's `contentScaleFactor` or SwiftUI's `displayScale`).
-    static func bodyTexture(for spec: GemArtworkSpec, radius: CGFloat, scale rawScale: CGFloat) -> SKTexture {
-        let bucket = sizeBucket(radius: radius)
-        let scale = renderScale(rawScale)
-        let key = NSString(string: "\(spec.cacheKey)|r\(bucket)|x\(scale)")
-        if let cached = bodyCache.object(forKey: key) { return cached }
-        let image = renderBody(spec: spec, radius: bucket, scale: scale)
-        let texture = SKTexture(image: image)
-        texture.filteringMode = .linear
-        bodyCache.setObject(texture, forKey: key, cost: byteCost(image))
-        return texture
+    /// Name of a jar body texture in `GemTextureAtlas`: one per (spec, size
+    /// bucket, display scale). `scale` is the display scale of the view that
+    /// shows it (the SKView's `contentScaleFactor` or SwiftUI's
+    /// `displayScale`).
+    static func bodyTextureName(for spec: GemArtworkSpec, radius: CGFloat, scale rawScale: CGFloat) -> String {
+        "gem.body|\(spec.cacheKey)|r\(sizeBucket(radius: radius))|x\(renderScale(rawScale))"
+    }
+
+    /// Uncached bake of a jar body (the atlas keeps the result). Thread-safe:
+    /// Core Graphics only, so it may run off the main thread.
+    static func renderBodyImage(for spec: GemArtworkSpec, radius: CGFloat, scale rawScale: CGFloat) -> UIImage {
+        renderBody(spec: spec, radius: sizeBucket(radius: radius), scale: renderScale(rawScale))
+    }
+
+    /// The body texture a jar sprite shows (atlas-backed once packed).
+    @MainActor
+    static func bodyTexture(for spec: GemArtworkSpec, radius: CGFloat, scale: CGFloat) -> SKTexture {
+        GemTextureAtlas.shared.texture(named: bodyTextureName(for: spec, radius: radius, scale: scale)) {
+            renderBodyImage(for: spec, radius: radius, scale: scale)
+        }
     }
 
     /// The same renderer as a SwiftUI/UIKit image (share cards, overview).
@@ -707,7 +715,8 @@ enum GemArtwork {
 
     /// Gaussian bloom: half maximum at about 1.2 × the gem radius for the
     /// standard 2.2–2.7 halo scales. Tinted per gem via `color`.
-    static let haloTexture: SKTexture = sharedTexture(pixels: 128) { context, size in
+    static let haloTexture = sharedTexture(haloImage)
+    static let haloImage: UIImage = sharedImage(pixels: 128) { context, size in
         let center = CGPoint(x: size / 2, y: size / 2)
         var colors: [CGColor] = []
         var locations: [CGFloat] = []
@@ -736,7 +745,8 @@ enum GemArtwork {
 
     /// Four-point star with a soft core; additive, white. The horizontal arm
     /// is a little longer than the vertical one, like a lens flare.
-    static let glintTexture: SKTexture = sharedTexture(pixels: 128) { context, size in
+    static let glintTexture = sharedTexture(glintImage)
+    static let glintImage: UIImage = sharedImage(pixels: 128) { context, size in
         let center = CGPoint(x: size / 2, y: size / 2)
         let space = CGColorSpaceCreateDeviceRGB()
         let core = [
@@ -832,7 +842,8 @@ enum GemArtwork {
     }
 
     /// Soft contact shadow ellipse drawn in a square; the sprite squashes it.
-    static let shadowTexture: SKTexture = sharedTexture(pixels: 64) { context, size in
+    static let shadowTexture = sharedTexture(shadowImage)
+    static let shadowImage: UIImage = sharedImage(pixels: 64) { context, size in
         let center = CGPoint(x: size / 2, y: size / 2)
         let colors = [
             UIColor(red: 0.01, green: 0.02, blue: 0.08, alpha: 0.9).cgColor,
@@ -857,7 +868,8 @@ enum GemArtwork {
     /// at the upper left (centre −0.28R, +0.34R; 0.62R × 0.40R), the warm rim
     /// on the upper-left edge and the cool bounce on the lower-left edge.
     /// Drawn in a square whose half side is the gem radius.
-    static let lightRigAddTexture: SKTexture = sharedTexture(pixels: 128) { context, size in
+    static let lightRigAddTexture = sharedTexture(lightRigAddImage)
+    static let lightRigAddImage: UIImage = sharedImage(pixels: 128) { context, size in
         let space = CGColorSpaceCreateDeviceRGB()
         let radius = size / 2
         // y-down texture space: unit (ux, uy up) → (radius + ux·r, radius − uy·r)
@@ -905,7 +917,8 @@ enum GemArtwork {
 
     /// Screen-fixed pavilion shade (blend `.alpha`): a crescent at the lower
     /// right, black α0.16.
-    static let lightRigShadeTexture: SKTexture = sharedTexture(pixels: 128) { context, size in
+    static let lightRigShadeTexture = sharedTexture(lightRigShadeImage)
+    static let lightRigShadeImage: UIImage = sharedImage(pixels: 128) { context, size in
         let space = CGColorSpaceCreateDeviceRGB()
         let radius = size / 2
         context.saveGState()
@@ -1018,13 +1031,25 @@ enum GemArtwork {
         pixels: Int,
         draw: (CGContext, CGFloat) -> Void
     ) -> SKTexture {
+        sharedTexture(sharedImage(pixels: pixels, draw: draw))
+    }
+
+    /// The shared light images are also packed into `GemTextureAtlas`, so
+    /// every gem layer can batch with the bodies of the same blend mode.
+    private static func sharedImage(
+        pixels: Int,
+        draw: (CGContext, CGFloat) -> Void
+    ) -> UIImage {
         let size = CGFloat(pixels)
-        let image = UIGraphicsImageRenderer(
+        return UIGraphicsImageRenderer(
             size: CGSize(width: size, height: size),
             format: rendererFormat(scale: 1)
         ).image { renderer in
             draw(renderer.cgContext, size)
         }
+    }
+
+    private static func sharedTexture(_ image: UIImage) -> SKTexture {
         let texture = SKTexture(image: image)
         texture.filteringMode = .linear
         return texture

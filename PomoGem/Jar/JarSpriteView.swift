@@ -310,7 +310,7 @@ struct JarSpriteView: View {
                     preferredFramesPerSecond: JarScene.allowsAmbientSparkle
                         ? Constants.Jar.targetFramesPerSecond
                         : min(30, Constants.Jar.targetFramesPerSecond),
-                    options: [.allowsTransparency, .shouldCullNonVisibleNodes],
+                    options: [.allowsTransparency, .ignoresSiblingOrder, .shouldCullNonVisibleNodes],
                     debugOptions: Self.spriteDebugOptions
                 )
 #if targetEnvironment(macCatalyst)
