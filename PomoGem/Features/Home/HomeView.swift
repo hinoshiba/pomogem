@@ -1143,10 +1143,16 @@ struct HomeView: View {
 
             VStack(spacing: 4) {
                 jarMetricPill(jarMetricSummary)
-                if aggregateProjectionPresentation.isCloudVerificationPending {
-                    Text(isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを再確認中")
+                // sync-03. The mass above is this device's confirmed mass while
+                // iCloud is checked; the caption says so instead of hiding it.
+                if let caption = AggregateProjectionPresentationPolicy.verificationCaption(
+                    context: aggregateProjectionPresentation,
+                    isCloudOfflineSession: isCloudOfflineSession
+                ) {
+                    Text(caption)
                         .font(.system(size: 9, weight: .bold, design: .rounded))
                         .foregroundStyle(Color.white.opacity(0.68))
+                        .accessibilityIdentifier("home.mass.verification-caption")
                 }
                 if showsPreFusionRail {
                     preFusionRail
@@ -1167,7 +1173,7 @@ struct HomeView: View {
             )
         }
         return AggregateProjectionPresentationPolicy.homeMassValue(
-            verifiedValue: verifiedValue,
+            deviceValue: verifiedValue,
             context: aggregateProjectionPresentation
         )
     }
@@ -1192,9 +1198,10 @@ struct HomeView: View {
     }
 
     private var homeMenuMassValue: String {
-        aggregateProjectionPresentation.isCloudVerificationPending
-            ? "再集計中"
-            : formattedMass(totalGrams)
+        AggregateProjectionPresentationPolicy.menuMassValue(
+            formattedMass: formattedMass(totalGrams),
+            context: aggregateProjectionPresentation
+        )
     }
 
     private var homeMenuCountValue: String {
@@ -1205,14 +1212,14 @@ struct HomeView: View {
 
     private var homeMenuAccessibilitySummary: String {
         if aggregateProjectionPresentation.isCloudVerificationPending {
-            let status = isCloudOfflineSession ? "このiPhoneの累計を確認中" : "iCloudの累計を再集計中"
-            return "\(status)。この端末で確認済みの集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
+            let status = isCloudOfflineSession ? "このiPhoneの累計を確認中" : "iCloudを確認中"
+            return "\(status)。この端末で確認済みの累計\(formattedMass(totalGrams))、集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
         }
         return "累計\(formattedMass(totalGrams))、集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
     }
 
     private var projectionVerificationTitle: String {
-        isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを再集計中"
+        isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを確認中"
     }
 
     private var effortProgressSnapshot: EffortProgressSnapshot {
@@ -2151,14 +2158,11 @@ struct HomeView: View {
     }
 
     private func postDropHeading(_ offer: BreakOffer) -> some View {
-        let canPublishHistory = !offer.projectionWasCloudUnverified
-            && canPublishBreakOfferProjection(offer)
-        let historyTitle = canPublishHistory
-            ? offer.weeklyTitle
-            : "今回の記録を保存"
-        let historySpokenTitle = canPublishHistory
-            ? offer.weeklySpokenTitle
-            : "今回の記録は保存済みです"
+        // sync-03. The weekly figures were frozen from this device's records
+        // at completion; while iCloud is checked the progress block below
+        // carries the 「iCloudを確認中」 caption for the whole card.
+        let historyTitle = offer.weeklyTitle
+        let historySpokenTitle = offer.weeklySpokenTitle
         return HStack(spacing: 11) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 34, weight: .black))
@@ -2207,31 +2211,77 @@ struct HomeView: View {
         )
     }
 
+    /// sync-03. Which projection this card shows (`PostDropProjectionPolicy`).
+    private func postDropSource(_ offer: BreakOffer) -> PostDropProjectionPolicy.Source {
+        PostDropProjectionPolicy.source(
+            usesCloudPersistence: aggregateProjectionPresentation.usesCloudPersistence,
+            isVerificationPending: aggregateProjectionPresentation.isCloudVerificationPending,
+            receiptWasCloudUnverified: offer.projectionWasCloudUnverified,
+            receiptStampIsCurrentVerified: aggregateProjectionPresentation
+                .acceptsVerifiedAggregateCache(offer.projectionCacheStamp),
+            verifiedProjectionIsLoaded: sceneSessionSnapshotIsCurrent
+                && currentAggregatePresentationPage != nil
+        )
+    }
+
+    /// The offer as the card shows it: re-stamped from the verified projection
+    /// once verification completed after the receipt froze, otherwise as saved.
+    private func presentedOffer(_ offer: BreakOffer) -> BreakOffer {
+        guard postDropSource(offer) == .verifiedProjection else { return offer }
+        return offer.restamped(
+            totalGrams: totalGrams,
+            totalPebbles: totalPebbles,
+            projectionIsLowerBound: localProjectionNeedsMaintenance,
+            stamp: aggregateProjectionPresentation.verifiedCacheStamp
+        )
+    }
+
     @ViewBuilder
     private func postDropFusionProgress(_ offer: BreakOffer) -> some View {
-        if aggregateProjectionPresentation.isCloudVerificationPending
-            || offer.projectionWasCloudUnverified
-            || !canPublishBreakOfferProjection(offer) {
-            postDropCloudVerificationPending(offer)
-        } else if let effortProgress = offer.effortProgress {
-            postDropEffortProgress(effortProgress, offer: offer)
-        } else {
-            postDropLegacyFusionProgress(offer)
+        switch postDropSource(offer) {
+        case .receipt, .verifiedProjection:
+            let shown = presentedOffer(offer)
+            if let effortProgress = shown.effortProgress {
+                postDropEffortProgress(effortProgress, offer: shown)
+            } else {
+                postDropLegacyFusionProgress(shown)
+            }
+        case .receiptWhileVerifying:
+            if let effortProgress = offer.effortProgress {
+                VStack(alignment: .leading, spacing: 8) {
+                    postDropEffortProgress(effortProgress, offer: offer)
+                    postDropVerificationCaption
+                }
+            } else {
+                postDropCloudVerificationPending(offer)
+            }
         }
     }
 
+    /// One line under the frozen, device-confirmed progress while iCloud is
+    /// checked. The card re-stamps itself when verification completes.
+    private var postDropVerificationCaption: some View {
+        Label {
+            Text(projectionVerificationTitle)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(PomoGemTheme.muted)
+        } icon: {
+            Image(systemName: isCloudOfflineSession ? "checklist" : "icloud")
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.amber)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("reward.projection-verification-caption")
+    }
+
+    /// A receipt from a build before mass was captured has no frozen
+    /// progress to show while iCloud is checked.
     private func postDropCloudVerificationPending(_ offer: BreakOffer) -> some View {
-        let isStillVerifying = aggregateProjectionPresentation
-            .isCloudVerificationPending
-        return Label {
+        Label {
             VStack(alignment: .leading, spacing: 4) {
-                Text(isStillVerifying ? projectionVerificationTitle : "集計を更新しました")
+                Text(projectionVerificationTitle)
                     .font(.headline.weight(.black))
-                Text(
-                    isStillVerifying
-                        ? "今回の +\(offer.grams)g は保存済みです。生涯合計は確認後に表示します。"
-                        : "今回の +\(offer.grams)g は保存済みです。更新前の生涯合計は再利用しません。"
-                )
+                Text("今回の +\(offer.grams)g は保存済みです。これまでの合計は確認が済むと表示します。")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(PomoGemTheme.muted)
             }
@@ -2245,17 +2295,8 @@ struct HomeView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier("reward.projection-verification-pending")
         .accessibilityLabel(
-            isStillVerifying
-                ? "\(projectionVerificationTitle)。今回の\(offer.grams)グラムは保存済みです。生涯合計は確認後に表示します"
-                : "集計を更新しました。今回の\(offer.grams)グラムは保存済みです。更新前の生涯合計は再利用しません"
+            "\(projectionVerificationTitle)。今回の\(offer.grams)グラムは保存済みです。これまでの合計は確認が済むと表示します"
         )
-    }
-
-    private func canPublishBreakOfferProjection(_ offer: BreakOffer) -> Bool {
-        !aggregateProjectionPresentation.usesCloudPersistence
-            || aggregateProjectionPresentation.acceptsVerifiedAggregateCache(
-                offer.projectionCacheStamp
-            )
     }
 
     private func postDropEffortProgress(
@@ -4137,23 +4178,22 @@ struct HomeView: View {
         else { return }
         announcedPostDropOfferID = offer.id
 
-        let progressMessage = (
-            aggregateProjectionPresentation.isCloudVerificationPending
-                || offer.projectionWasCloudUnverified
-                || !canPublishBreakOfferProjection(offer)
-        )
-            ? (aggregateProjectionPresentation.isCloudVerificationPending
-                ? "\(projectionVerificationTitle)。今回の記録は保存済みです。生涯合計は確認後に表示します"
-                : "集計を更新しました。今回の記録は保存済みです。更新前の生涯合計は再利用しません")
-            : PostDropProgressAccessibilityPresentation.description(
-                effortProgress: offer.effortProgress,
-                fusionState: offer.fusionState,
-                projectionIsLowerBound: offer.projectionIsLowerBound
+        let source = postDropSource(offer)
+        let shown = presentedOffer(offer)
+        let progressMessage: String
+        if source == .receiptWhileVerifying, offer.effortProgress == nil {
+            progressMessage = "\(projectionVerificationTitle)。今回の記録は保存済みです。これまでの合計は確認が済むと表示します"
+        } else {
+            let progress = PostDropProgressAccessibilityPresentation.description(
+                effortProgress: shown.effortProgress,
+                fusionState: shown.fusionState,
+                projectionIsLowerBound: shown.projectionIsLowerBound
             )
-        let historyMessage = offer.projectionWasCloudUnverified
-                || !canPublishBreakOfferProjection(offer)
-            ? "今回の記録は保存済みです"
-            : offer.weeklySpokenTitle
+            progressMessage = source == .receiptWhileVerifying
+                ? "\(progress)。\(projectionVerificationTitle)"
+                : progress
+        }
+        let historyMessage = offer.weeklySpokenTitle
         var message = "\(offer.dropTitle(for: rareRewardMode))\(offer.subjectName)、\(offer.grams)グラム、\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))。\(historyMessage)。\(offer.rareRewardCounts.multiDrawSummary.map { "\($0)。" } ?? "")\(progressMessage)。\(offer.minutes)分休憩できます"
         if showShareChip {
             message += "。今の瓶をカードにして共有できます"
@@ -4274,12 +4314,32 @@ private struct BreakOffer: Identifiable {
     let weeklyStudyGrams: Int?
     let kind: PebbleKind
     let rareRewardCounts: RareRewardCounts
-    let fusionState: FusionRewardBridgeState
-    let effortProgress: EffortProgressSnapshot?
-    let projectionIsLowerBound: Bool
-    let projectionWasCloudUnverified: Bool
-    let projectionCacheStamp: AggregateProjectionCacheStamp?
+    private(set) var fusionState: FusionRewardBridgeState
+    private(set) var effortProgress: EffortProgressSnapshot?
+    private(set) var projectionIsLowerBound: Bool
+    private(set) var projectionWasCloudUnverified: Bool
+    private(set) var projectionCacheStamp: AggregateProjectionCacheStamp?
     let isAwaitingDrop: Bool
+
+    /// sync-03. The same offer re-derived from a verified projection that
+    /// already contains this focus's session; the saved receipt is unchanged.
+    func restamped(
+        totalGrams: Int,
+        totalPebbles: Int,
+        projectionIsLowerBound: Bool,
+        stamp: AggregateProjectionCacheStamp?
+    ) -> BreakOffer {
+        var copy = self
+        copy.fusionState = FusionRewardBridgePresentation.state(totalPebbleCount: max(1, totalPebbles))
+        copy.effortProgress = EffortProgressPolicy.snapshot(
+            totalGrams: max(grams, totalGrams),
+            latestContributionGrams: grams
+        )
+        copy.projectionIsLowerBound = projectionIsLowerBound
+        copy.projectionWasCloudUnverified = false
+        copy.projectionCacheStamp = stamp
+        return copy
+    }
 
     init(receipt: PendingRewardReceipt) {
         isAwaitingDrop = receipt.requiresDrop

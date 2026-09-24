@@ -93,9 +93,11 @@ enum JarAccessibilityPresentation {
         let rareSuffix = rare.isEmpty ? "" : "、\(rare)"
         let massDescription: String
         if projectionIsUnverified {
+            // sync-03 (icloud-life batch): the visible HUD now shows this
+            // device's confirmed mass while iCloud is checked; say the same.
             massDescription = isCloudOfflineSession
-                ? "このiPhoneの集計を確認中。確認できた粒を表示"
-                : "iCloudの集計を再確認中。この端末で確認できた粒を表示"
+                ? "このiPhoneの集計を確認中。この端末で確認済みの集中時間の質量：\(formattedMass(totalGrams))"
+                : "iCloudを確認中。この端末で確認済みの集中時間の質量：\(formattedMass(totalGrams))"
         } else if projectionIsLowerBound {
             massDescription = "現在確認できた集中時間の質量：\(formattedMass(totalGrams))以上、集計整理中"
         } else {

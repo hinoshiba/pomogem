@@ -76,7 +76,8 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
   local storeだけへ保存し、iCloudへ自動切替／uploadしない
 - Local projection: 瓶とまとまり粒に使う`AggregatePebble`、`Stratum`、`Bedrock`、`GachaState`は
   CloudKitへuploadせず、選択した保存先の同期元記録から各端末で再構築。iCloudから後着した記録の
-  再検証中は、古いaggregateを生涯の正確値や`+`／`以上`として表示せず「再集計中」と表示し、完了後に更新
+  再検証中は、古いaggregateを生涯の正確値や`+`／`以上`として表示せず、この端末で確認済みの質量を
+  「iCloudを確認中」の注記付きで表示し、完了後に更新（その間の値は保存・共有しない）
 - Notifications: timer終了と、任意の「集中に戻るお知らせ」。集中・休憩timer終了の通知だけを
   Time Sensitive（即時通知）として送り、本人が開始したtimerの終了をFocus中にも届ける。毎日の
   リマインダー、今月の積み重ね、集中に戻るお知らせは通常の`.active`。後者はSettings → 集中でオンにして

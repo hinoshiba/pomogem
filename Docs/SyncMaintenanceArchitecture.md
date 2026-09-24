@@ -597,9 +597,15 @@ sessionから所属aggregateを逆引きするindexed relationshipは現行schem
 
 `projectionValidationVersion`未達のaggregateが一つでも存在する間は、Home／Overview／Share等の全consumerで
 aggregate rootを表示会計から除外します。cloud modeでは、起動後または新しいverification generationが
-pendingの間も同様に、生涯の正確値、`+`、`以上`を表示しません。代わりに「再集計中」と、その時点で
-端末上の同期元から確認できた範囲だけである旨を表示します。local-onlyにはremote blind spotがないため、
-localな書込み完了後の値をexactとして扱えます。
+pendingの間も同様に、生涯の正確値、`+`、`以上`を表示しません。2026-09-24の所有者承認（sync-03）により、
+その間のHomeの見出し・メニュー・Overviewの生涯値は「再集計中」で隠さず、その時点で端末上の同期元から
+確認できた質量（瓶と「この端末で確認済み N粒」と同じ範囲）を「iCloudを確認中」の注記付きで表示します。
+下限を示す`+`／`以上`は付けません。この値から保存・書き出し・共有は行わず（共有・書き出しは従来どおり
+`allowsAggregateSummaries`を要求）、verification完了で検証済みの値に置き換えます。完走直後の報酬カードは、
+完走時に端末のデータから凍結した今週の値と時間の核の進みを「iCloudを確認中」付きで表示し、完走後に
+verificationが完了した場合は検証済みprojectionから同じカードを作り直します（再stamp）。凍結値が下限の
+場合は従来どおり「時間の核を整理中」と表示し、進みの割合を推定しません。local-onlyにはremote blind spotが
+ないため、localな書込み完了後の値をexactとして扱えます。
 
 ### Phase 6: subjectsとrelationship
 

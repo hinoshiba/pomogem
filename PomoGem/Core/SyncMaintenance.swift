@@ -348,11 +348,33 @@ enum AggregateProjectionPresentationPolicy {
     static let cloudPendingNotice =
         "iCloudの集計を再確認中です。この端末で確認できた記録だけを表示しています。"
 
+    /// sync-03 (owner-approved, 2026-09-24). While iCloud verification is
+    /// pending, the headline mass is the mass already confirmed on this
+    /// device — the same records the jar and the 「この端末で確認済み N粒」
+    /// pill show — with this caption, instead of hiding the number behind
+    /// 「再集計中」. The lower-bound suffix (「以上」/「+」) stays suppressed:
+    /// pending is not a claim about the lifetime total. Nothing is written,
+    /// exported or shared from these values (sharing and exports still
+    /// require `allowsAggregateSummaries`), and the verified value replaces
+    /// them as soon as verification completes.
+    static func verificationCaption(
+        context: AggregateProjectionPresentationContext,
+        isCloudOfflineSession: Bool
+    ) -> String? {
+        guard context.isCloudVerificationPending else { return nil }
+        return isCloudOfflineSession
+            ? String(localized: "このiPhoneの集計を確認中", table: "Storage")
+            : String(localized: "iCloudを確認中", table: "Storage",
+                     comment: "Caption under the jar's mass while iCloud records are being checked")
+    }
+
+    /// The headline mass is always shown (sync-03); pending changes only the
+    /// caption and the unit's lower-bound suffix.
     static func homeMassValue(
-        verifiedValue: String,
+        deviceValue: String,
         context: AggregateProjectionPresentationContext
     ) -> String {
-        context.isCloudVerificationPending ? "再集計中" : verifiedValue
+        deviceValue
     }
 
     static func homeMassUnit(
@@ -360,8 +382,20 @@ enum AggregateProjectionPresentationPolicy {
         hasLocalLowerBound: Bool,
         context: AggregateProjectionPresentationContext
     ) -> String {
-        if context.isCloudVerificationPending { return "" }
+        if context.isCloudVerificationPending { return verifiedUnit }
         return hasLocalLowerBound ? "\(verifiedUnit)以上" : verifiedUnit
+    }
+
+    /// The menu's mass metric. While pending it says whose confirmation the
+    /// value carries, like the count metric beside it.
+    static func menuMassValue(
+        formattedMass: String,
+        context: AggregateProjectionPresentationContext
+    ) -> String {
+        context.isCloudVerificationPending
+            ? String(localized: "確認済み \(formattedMass)", table: "Storage",
+                     comment: "Menu mass metric while iCloud verification is pending, e.g. 確認済み 3.2 kg")
+            : formattedMass
     }
 
     static func homeCountSummary(
@@ -382,7 +416,7 @@ enum AggregateProjectionPresentationPolicy {
         isLocalLowerBound: Bool,
         context: AggregateProjectionPresentationContext
     ) -> String {
-        if context.isCloudVerificationPending { return "再集計中" }
+        if context.isCloudVerificationPending { return verifiedValue }
         return verifiedValue + (isLocalLowerBound ? "以上" : "")
     }
 }

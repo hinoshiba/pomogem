@@ -1191,7 +1191,8 @@ struct AccumulationOverviewView: View {
     private var lifetimeStats: some View {
         OverviewStat(
             title: lifetimeIsCloudUnverified
-                ? (isCloudOfflineSession ? "集中（端末の集計を確認中）" : "集中（iCloud再集計中）")
+                // sync-03: the value below is this device's confirmed mass.
+                ? (isCloudOfflineSession ? "集中（端末の集計を確認中）" : "集中（iCloudを確認中）")
                 : (lifetimeIsLowerBound ? "集中（集計整理中）" : "集中"),
             value: AggregateProjectionPresentationPolicy.overviewLifetimeValue(
                 verifiedValue: formattedMass(lifetimeGrams),

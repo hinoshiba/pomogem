@@ -440,9 +440,13 @@ struct RootView: View {
         self.previewStorageTransferDataset = previewStorageTransferDataset
         self.unmountForStorageTransfer = unmountForStorageTransfer
         _activePersistenceSafetyNotice = State(initialValue: persistenceSafetyNotice)
-        _aggregateProjectionPresentation = State(
-            initialValue: .initial(for: persistenceMode)
-        )
+        var initialPresentation = AggregateProjectionPresentationContext.initial(for: persistenceMode)
+#if DEBUG
+        if let fixture = CloudVerificationUITestFixture.initialPresentation {
+            initialPresentation = fixture
+        }
+#endif
+        _aggregateProjectionPresentation = State(initialValue: initialPresentation)
 
         _preferences = Query(PrefsConsumerPolicy.descriptor())
 
@@ -740,6 +744,15 @@ struct RootView: View {
         .task {
             installCompleteDeletionOperation()
         }
+#if DEBUG
+        .task {
+            // sync-03 UI fixture only: complete the forced verification later.
+            guard let delay = CloudVerificationUITestFixture.verificationDelay else { return }
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            aggregateProjectionPresentation.markVerified()
+        }
+#endif
         .alert(
             persistenceMode == .localOnly
                 ? "保存済みの進行中タイマーがあります"

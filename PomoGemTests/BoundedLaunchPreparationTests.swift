@@ -936,14 +936,33 @@ final class BoundedLaunchPreparationTests: XCTestCase {
             for: .cloudKit
         )
         XCTAssertTrue(pending.isCloudVerificationPending)
-        XCTAssertFalse(pending.allowsAggregateSummaries)
+        XCTAssertFalse(pending.allowsAggregateSummaries,
+                       "Sharing and exports still wait for verification")
+        // sync-03 (owner-approved, 2026-09-24): the headline keeps the mass
+        // this device has confirmed, captioned, instead of 「再集計中」.
         XCTAssertEqual(
             AggregateProjectionPresentationPolicy.homeMassValue(
-                verifiedValue: "12 kg",
+                deviceValue: "12",
                 context: pending
             ),
-            "再集計中"
+            "12"
         )
+        XCTAssertEqual(
+            AggregateProjectionPresentationPolicy.homeMassUnit(
+                verifiedUnit: "kg",
+                hasLocalLowerBound: true,
+                context: pending
+            ),
+            "kg"
+        )
+        XCTAssertEqual(AggregateProjectionPresentationPolicy.verificationCaption(
+            context: pending, isCloudOfflineSession: false), "iCloudを確認中")
+        XCTAssertEqual(AggregateProjectionPresentationPolicy.verificationCaption(
+            context: pending, isCloudOfflineSession: true), "このiPhoneの集計を確認中")
+        XCTAssertEqual(AggregateProjectionPresentationPolicy.menuMassValue(
+            formattedMass: "12 kg", context: pending), "確認済み 12 kg")
+        XCTAssertEqual(AggregateProjectionPresentationPolicy.overviewLifetimeValue(
+            verifiedValue: "12 kg", isLocalLowerBound: true, context: pending), "12 kg")
         let values = [
             AggregateProjectionPresentationPolicy.homeMassUnit(
                 verifiedUnit: "kg",
@@ -988,6 +1007,17 @@ final class BoundedLaunchPreparationTests: XCTestCase {
             ),
             "kg以上"
         )
+        XCTAssertNil(AggregateProjectionPresentationPolicy.verificationCaption(
+            context: local, isCloudOfflineSession: false))
+        XCTAssertEqual(AggregateProjectionPresentationPolicy.menuMassValue(
+            formattedMass: "12 kg", context: local), "12 kg")
+        var verified = pending
+        verified.markVerified()
+        XCTAssertNil(AggregateProjectionPresentationPolicy.verificationCaption(
+            context: verified, isCloudOfflineSession: false),
+            "The caption disappears the moment verification completes")
+        XCTAssertEqual(AggregateProjectionPresentationPolicy.overviewLifetimeValue(
+            verifiedValue: "12 kg", isLocalLowerBound: true, context: verified), "12 kg以上")
     }
 
     func testMaintenanceLaunchResumeAndRecurringPolicyIsTabIndependent() {
