@@ -503,6 +503,11 @@ final class PebbleNode: SKShapeNode {
     private var gemGlintRestPositions: [CGPoint] = []
     private var gemGlintPhases: [CGFloat] = []
     private var aggregateCountPlateNode: SKShapeNode?
+    /// Upright count on a Screen Time obstacle. Held directly: the lighting
+    /// pass runs for every body on every frame, and a name search there
+    /// (`childNode(withName:)` with a dotted name) scans the runtime's type
+    /// records each call — it was the jar's single largest frame cost.
+    private var obstacleCountNode: SKNode?
     private var gemHaloBaseAlpha: CGFloat = 0
     /// +10 % for the aggregate that holds the most grams in the pile.
     private var gemHaloEmphasis: CGFloat = 1
@@ -751,7 +756,7 @@ final class PebbleNode: SKShapeNode {
         aggregateCountPlateNode?.position = rotatedPlateOffset
         achievementMarkBackdropNode?.zRotation = -zRotation
         achievementMarkNode?.zRotation = -zRotation
-        childNode(withName: "obstacle.count")?.zRotation = -zRotation
+        obstacleCountNode?.zRotation = -zRotation
     }
 
     private func configurePhysics() {
@@ -778,6 +783,7 @@ final class PebbleNode: SKShapeNode {
         zPosition = JarZPosition.pebble
         if let obstacle = descriptor.screenTimeObstacle {
             ScreenTimeObstacleAppearance.apply(to: self, descriptor: obstacle, radius: radius)
+            obstacleCountNode = children.first { $0.name == "obstacle.count" }
             // Obstacles never glow. A normal-blended dark halo (1.6R, black
             // α0.35) sits above the reward halos, so neighbouring light is
             // absorbed instead of washing over the rubble.

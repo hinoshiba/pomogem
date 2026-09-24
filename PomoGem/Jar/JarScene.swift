@@ -506,7 +506,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let removedIDs = oldIDs.subtracting(desiredIDs)
         let removedBodies = livePebbles.filter { removedIDs.contains($0.descriptor.id) }
         if !removedIDs.isEmpty || previousTotal != screenTimeObstacleUnitCount {
-            worldNode.childNode(withName: "obstacle.fusion")?.removeFromParent()
+            worldNode.children.first { $0.name == "obstacle.fusion" }?.removeFromParent()
         }
         if !removedIDs.isEmpty {
             // A tap's pending impulse must not keep referencing a root that a
@@ -797,7 +797,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         worldNode.children
             .compactMap { $0 as? PebbleNode }
             .forEach { $0.removeFromParent() }
-        worldNode.childNode(withName: "obstacle.fusion")?.removeFromParent()
+        worldNode.children.first { $0.name == "obstacle.fusion" }?.removeFromParent()
 
         var cursorX = interiorRect.minX
         var cursorY = currentFloorY
