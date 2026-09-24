@@ -76,6 +76,8 @@ struct HomeView: View {
     private var didSeeVoiceOverTapHint = false
     @AppStorage(AccountScopedLocalState.defaultsKey(base: HomeAtmosphere.storageKey))
     private var homeAtmosphereRawValue = HomeAtmosphere.aurora.rawValue
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: RecentCustomFocusDurations.storageKey))
+    private var recentCustomFocusSecondsRawValue = ""
     @State private var scene = JarScene()
     @State private var sceneInitialized = false
     @State private var homeIsVisible = false
@@ -652,7 +654,7 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showCustomDuration) {
             CustomDurationView(
-                initialSeconds: selectedDuration.seconds,
+                initialSeconds: customDurationEditorInitialSeconds,
                 onConfirm: confirmCustomDuration
             )
                 .environment(\.dynamicTypeSize, dynamicTypeSize)
@@ -1409,9 +1411,18 @@ struct HomeView: View {
 
     private var homeDurationPicker: some View {
         Menu {
-            Section("無料の集中タイマー") {
+            Section(purchase.isPro ? "定番の時間" : "無料の集中タイマー") {
                 ForEach(PomodoroDuration.freePresets, id: \.self) { duration in
                     homeDurationOption(duration)
+                }
+            }
+            // A preset replaces the preferred duration, so without this a
+            // Pro user switching 50分 -> 25分 had to retype 50分 to go back.
+            if purchase.isPro, !recentCustomDurations.isEmpty {
+                Section("最近のカスタム時間") {
+                    ForEach(recentCustomDurations, id: \.self) { duration in
+                        homeDurationOption(duration)
+                    }
                 }
             }
             Button(action: requestCustomDuration) {
@@ -1453,7 +1464,7 @@ struct HomeView: View {
             selectDuration(duration)
         } label: {
             let title = duration.displayLabel
-            if selectedDuration == duration {
+            if selectedDuration.seconds == duration.seconds {
                 Label(title, systemImage: "checkmark")
             } else {
                 Text(title)
@@ -1532,6 +1543,28 @@ struct HomeView: View {
         return selectedSubject == nil
             ? "設定画面を開きます"
             : "タイマーを開始します。上のテーマと時間のボタンで内容を変更できます"
+    }
+
+    private var recentCustomDurations: [PomodoroDuration] {
+        RecentCustomFocusDurations.decode(recentCustomFocusSecondsRawValue)
+            .map(PomodoroDuration.init(totalSeconds:))
+    }
+
+    /// The editor opens at the custom time in use, or else at the most
+    /// recent one, not at a preset the user would have to retype over.
+    private var customDurationEditorInitialSeconds: Int {
+        if selectedDuration.requiresPro { return selectedDuration.seconds }
+        return recentCustomDurations.first?.seconds ?? selectedDuration.seconds
+    }
+
+    private func rememberCustomDuration(_ duration: PomodoroDuration) {
+        let updated = RecentCustomFocusDurations.recording(
+            duration.seconds,
+            in: recentCustomFocusSecondsRawValue
+        )
+        if updated != recentCustomFocusSecondsRawValue {
+            recentCustomFocusSecondsRawValue = updated
+        }
     }
 
     private var focusDurationLabel: String {
@@ -2847,6 +2880,8 @@ struct HomeView: View {
         guard restored.isValid else { return }
         if restored.requiresPro {
             selectedDuration = purchase.isPro ? restored : .twentyFiveMinutes
+            // Also catches a custom time chosen on another device.
+            if purchase.isPro { rememberCustomDuration(restored) }
         } else {
             selectedDuration = restored
         }
@@ -2870,6 +2905,7 @@ struct HomeView: View {
             failureMessage: "集中時間を保存できませんでした"
         ) else { return false }
         selectedDuration = duration
+        rememberCustomDuration(duration)
         showCustomDuration = false
         return true
     }
@@ -2909,6 +2945,7 @@ struct HomeView: View {
 #if DEBUG
         if duration == .demo { return }
 #endif
+        rememberCustomDuration(duration)
         _ = persistPreferredFocusSeconds(
             duration.seconds,
             failureMessage: "集中時間を保存できませんでした"
