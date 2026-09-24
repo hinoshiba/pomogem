@@ -115,10 +115,10 @@ struct CloudRestoreWaitingView: View {
     @Query private var themeTombstones: [Subject]
     @State private var startedAt = Date.now
     @State private var now = Date.now
-    /// Raw rows of every kind the import delivers first. Only a sign of
-    /// progress for the quiet hint, never shown: the first current, supported
-    /// focus record closes this screen, so a displayed focus count would read
-    /// 0 for almost the whole wait.
+    /// Raw focus-record rows, stale epochs included. Only a sign of progress
+    /// for the quiet hint, never shown: the first current, supported focus
+    /// record closes this screen, so a displayed focus count would read 0 for
+    /// almost the whole wait.
     @State private var arrivedSessionRows = 0
     @State private var lastChangeAt = Date.now
     @State private var lastObservedTotal = -1
