@@ -563,7 +563,10 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var hasUnresolvedAccountStateMovement = false
     @State private var offlineConnectionTask: Task<Void, Never>?
     @State private var offlineConnectionAttempt: UUID?
-    @State private var offlineMessage = "タイマーや記録を利用できます。接続回復後に同期を再開します。"
+    @State private var offlineMessage = PomoGemPersistenceLaunchHost.defaultOfflineMessage
+    /// The ordinary offline session's banner message: a restored connection
+    /// is re-checked and sync resumes.
+    private static let defaultOfflineMessage = "タイマーや記録を利用できます。接続回復後に同期を再開します。"
     @State private var networkPath = CloudNetworkPathObserver()
     @State private var focusReturnReminderTask: Task<Void, Never>?
     @State private var focusReturnReminderGeneration: UInt64 = 0
@@ -1954,6 +1957,13 @@ private struct PomoGemPersistenceLaunchHost: View {
             offlineMessage = StorageTransferLineageCopy.offlineSessionMessage
         } else {
             offlineRecovery.notice = nil
+            // A transfer-stop session earlier in this process left its own
+            // wording behind. Without the notice it would promise a 「復旧手順」
+            // the banner no longer carries, beside a 「同期を再開」 it
+            // contradicts. A message a caller set for THIS session is kept.
+            if offlineMessage == StorageTransferLineageCopy.offlineSessionMessage {
+                offlineMessage = Self.defaultOfflineMessage
+            }
         }
         requestedCloudSelection = false
         canChooseLocalOnly = false

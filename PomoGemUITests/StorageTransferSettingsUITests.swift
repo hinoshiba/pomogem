@@ -798,17 +798,24 @@ final class StorageTransferSettingsUITests: XCTestCase {
 
     func testOfflineRecoveryDetailsCanCloseWithoutRetiringOrAcceptingAnyTransfer() {
         launch("offlineRecovery")
-        assertCompactOfflineBanner(expectsRetry: false)
+        assertCompactOfflineBanner(expectsRetry: false, syncStopped: true)
         let entry = app.buttons["cloud-offline-recovery-details"]
         XCTAssertTrue(entry.isHittable)
         assertTouchTarget(entry)
         entry.tap()
         XCTAssertTrue(app.navigationBars["同期の状態"].waitForExistence(timeout: 4))
         let disclosure = app.staticTexts["cloud-offline-recovery-disclosure"]
+        // device-01. A session opened from a stop screen does not resume on
+        // its own, so neither the banner nor its details say 「待機中」.
+        let title = app.staticTexts["cloud-offline-details-title"]
+        XCTAssertTrue(reveal(title))
+        XCTAssertEqual(title.label, "このiPhoneに保存・iCloud同期は停止中")
         XCTAssertTrue(reveal(disclosure))
         XCTAssertTrue(disclosure.label.contains("データの置き換えや削除には、その後の確認が必要です"))
         closeOfflineDetails()
         let reviewState = app.staticTexts["cloud-offline.recovery-fixture-state"]
+        // Settings' own status row agrees with the banner.
+        XCTAssertTrue(reveal(text(containing: "通信が戻っても同期は自動では再開しません")))
         XCTAssertTrue(reveal(reviewState, upwards: false))
         XCTAssertEqual(reviewState.label, "reviewCalls=0")
         assertNoOperation()
@@ -827,7 +834,7 @@ final class StorageTransferSettingsUITests: XCTestCase {
 
     func testAX5OfflineRecoveryDisclosureAndExplicitReviewRemainReachable() throws {
         launch("offlineRecovery", accessibility5: true)
-        assertCompactOfflineBanner(expectsRetry: false)
+        assertCompactOfflineBanner(expectsRetry: false, syncStopped: true)
         let entry = app.buttons["cloud-offline-recovery-details"]
         XCTAssertTrue(entry.isHittable)
         assertTouchTarget(entry)
@@ -853,7 +860,7 @@ final class StorageTransferSettingsUITests: XCTestCase {
 
     func testResetHistoryConflictKeepsExportAndSupportChoicesWithoutInventingRefreshConsent() {
         launch("offlineHistory")
-        assertCompactOfflineBanner(expectsRetry: false)
+        assertCompactOfflineBanner(expectsRetry: false, syncStopped: true)
         app.buttons["cloud-offline-recovery-details"].tap()
         XCTAssertTrue(app.navigationBars["同期の状態"].waitForExistence(timeout: 4))
         let options = app.staticTexts["cloud-offline-history-options"]
@@ -1040,11 +1047,13 @@ final class StorageTransferSettingsUITests: XCTestCase {
 
     private var state: XCUIElement { app.staticTexts["storage-switch.fixture-state"] }
 
-    private func assertCompactOfflineBanner(expectsRetry: Bool = true) {
+    private func assertCompactOfflineBanner(expectsRetry: Bool = true, syncStopped: Bool = false) {
         let details = app.buttons["cloud-offline-details"]
         XCTAssertTrue(details.waitForExistence(timeout: 4))
         XCTAssertTrue(details.isHittable)
-        XCTAssertEqual(details.label, "このiPhoneに保存・iCloud同期は待機中。詳細を表示")
+        XCTAssertEqual(details.label, syncStopped
+            ? "このiPhoneに保存・iCloud同期は停止中。詳細を表示"
+            : "このiPhoneに保存・iCloud同期は待機中。詳細を表示")
         assertTouchTarget(details)
         XCTAssertEqual(app.buttons.matching(identifier: "cloud-offline-details").count, 1)
         let window = app.windows.firstMatch.frame

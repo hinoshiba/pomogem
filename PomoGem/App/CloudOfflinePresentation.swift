@@ -125,7 +125,7 @@ struct CloudOfflineBanner: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("端末に保存")
                             .font(.caption.weight(.semibold))
-                        Text("同期待ち")
+                        Text(syncIsStopped ? "同期停止中" : "同期待ち")
                             .font(.caption)
                     }
                     .fixedSize(horizontal: false, vertical: true)
@@ -137,7 +137,7 @@ struct CloudOfflineBanner: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("このiPhoneに保存・iCloud同期は待機中。詳細を表示")
+            .accessibilityLabel("\(statusTitle)。詳細を表示")
             .accessibilityIdentifier("cloud-offline-details")
 
             Spacer(minLength: 0)
@@ -199,12 +199,24 @@ struct CloudOfflineBanner: View {
         }
     }
 
+    /// device-01. A session opened from a stop screen (a storage-transfer stop
+    /// or a reset-history difference) does not resume on its own: a restored
+    /// connection meets the same stop. 「待ち」 would promise that it does, so
+    /// such a session says that sync is stopped, and its banner carries
+    /// 「復旧手順」 instead of 「同期を再開」.
+    private var syncIsStopped: Bool { recoveryKind != nil }
+
+    private var statusTitle: String {
+        syncIsStopped ? "このiPhoneに保存・iCloud同期は停止中" : "このiPhoneに保存・iCloud同期は待機中"
+    }
+
     private var details: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Text("このiPhoneに保存・iCloud同期は待機中")
+                    Text(statusTitle)
                         .font(.headline)
+                        .accessibilityIdentifier("cloud-offline-details-title")
                     Text(message)
                         .accessibilityIdentifier("cloud-offline-details-message")
                     if retry != nil {
