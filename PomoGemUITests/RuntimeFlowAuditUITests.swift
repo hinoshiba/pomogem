@@ -397,6 +397,44 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(landed.records.hasSuffix(":250"), landed.records)
     }
 
+    func testPausedFocusIsHonestAndTheRingDoesNotMove() throws {
+        app.buttons["home.duration-picker"].tap()
+        app.buttons["25分"].tap()
+        app.buttons["home.focus-launcher"].tap()
+        let timer = app.descendants(matching: .any)["focus.timer-display"].firstMatch
+        XCTAssertTrue(timer.waitForExistence(timeout: 8))
+        let pause = app.buttons["一時停止"]
+        XCTAssertTrue(waitForHittable(pause, timeout: 4))
+        waitForUISettle()
+        let runningFrame = timer.frame
+
+        pause.tap()
+        let resume = app.buttons["再開する"]
+        XCTAssertTrue(waitForHittable(resume, timeout: 4))
+        let notice = app.descendants(matching: .any)["focus.paused-notice"].firstMatch
+        XCTAssertTrue(notice.waitForExistence(timeout: 3))
+        XCTAssertEqual(notice.label, "一時停止中はタイマーは進みません")
+        XCTAssertFalse(app.buttons["終了通知を設定"].exists,
+                       "A paused timer must not offer a scheduling action that cannot run")
+        XCTAssertFalse(
+            app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "画面を閉じても進みます"))
+                .firstMatch.exists,
+            "A paused timer must not claim it keeps running"
+        )
+        waitForUISettle()
+        XCTAssertEqual(timer.frame.midY, runningFrame.midY, accuracy: 1,
+                       "Pausing must not move the ring")
+        retainScreenshot(named: "Paused focus — honest notice")
+
+        resume.tap()
+        XCTAssertTrue(waitForHittable(pause, timeout: 4))
+        waitForUISettle()
+        XCTAssertEqual(timer.frame.midY, runningFrame.midY, accuracy: 1,
+                       "Resuming must not move the ring")
+        XCTAssertFalse(notice.exists)
+        cancelPresentedFocusIfNeeded()
+    }
+
     private func verifyCompletionDropAfterRewardDismissal(reduceMotion: Bool) throws {
         app.terminate()
         app.launchEnvironment["POMOGEM_UI_TEST_REDUCE_MOTION"] = reduceMotion ? "1" : "0"

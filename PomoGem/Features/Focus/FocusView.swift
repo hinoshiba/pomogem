@@ -955,6 +955,10 @@ struct FocusView: View {
             completionNotificationStatus
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+                // Every one-line form (button, caption, spinner) takes the
+                // same height, so the ring above never jumps when the state
+                // changes on permission, pause or resume.
+                .frame(minHeight: 44)
         }
     }
 
@@ -1013,6 +1017,21 @@ struct FocusView: View {
 
     @ViewBuilder
     private var completionNotificationStatus: some View {
+        if snapshot.phase == .paused {
+            // A paused timer does not run, so 「画面を閉じても進みます」 would be
+            // false and 「終了通知を設定」 could do nothing. Resuming schedules
+            // the end notification again when it is allowed.
+            Label("一時停止中はタイマーは進みません", systemImage: "pause.circle")
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .accessibilityIdentifier("focus.paused-notice")
+        } else if snapshot.phase == .focusing {
+            focusingNotificationStatus
+        }
+    }
+
+    @ViewBuilder
+    private var focusingNotificationStatus: some View {
         switch notificationScheduleState {
         case .scheduled where notifications.isAuthorized:
             Label("画面を閉じてもタイマーは進み、終了時に通知します", systemImage: "bell.badge.fill")
