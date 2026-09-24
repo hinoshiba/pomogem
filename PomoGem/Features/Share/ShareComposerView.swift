@@ -159,6 +159,7 @@ struct ShareComposerView: View {
         return ShareCopy.caption(
             subject: shareCaptionSubject,
             grams: ShareMassFormatter.visual(selection.totalGrams),
+            focusTime: ShareMassFormatter.focusTime(selection.totalGrams),
             includesSelfReportedFocus: selection.includesSelfReportedFocus,
             achievementCount: selection.achievements.count,
             rewardDetail: semantics.captionDetail,
@@ -168,7 +169,7 @@ struct ShareComposerView: View {
     }
 
     private var activeHashtags: [String] {
-        var values = ShareCopy.hashtags.filter(selectedHashtags.contains)
+        var values = ShareCopy.hashtagChoices.filter(selectedHashtags.contains)
         if let custom = ShareHashtagPolicy.normalized(customHashtagInput),
            !values.contains(where: {
                $0.compare(custom, options: [.caseInsensitive, .widthInsensitive]) == .orderedSame
@@ -691,7 +692,7 @@ struct ShareComposerView: View {
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(ShareCopy.hashtags, id: \.self) { hashtag in
+                    ForEach(ShareCopy.hashtagChoices, id: \.self) { hashtag in
                         Button {
                             if selectedHashtags.contains(hashtag) {
                                 selectedHashtags.remove(hashtag)
@@ -1324,6 +1325,7 @@ struct ShareComposerView: View {
         let caption = ShareCopy.caption(
             subject: shareCaptionSubject,
             grams: ShareMassFormatter.visual(capturedGrams),
+            focusTime: ShareMassFormatter.focusTime(capturedGrams),
             includesSelfReportedFocus: capturedIncludesSelfReportedFocus,
             achievementCount: capturedAchievements.count,
             rewardDetail: capturedRewardSemantics.captionDetail,
@@ -1412,7 +1414,13 @@ struct ShareComposerView: View {
                 let source = AnimatedGIFActivityItemSource(
                     url: export.url,
                     previewImage: export.cover,
-                    title: "瓶に積んだ集中 \(ShareMassFormatter.visual(snapshot.totalGrams))"
+                    title: ShareMassFormatter.focusTime(snapshot.totalGrams).map {
+                        String(
+                            localized: "瓶に積んだ集中 \(ShareMassFormatter.visual(snapshot.totalGrams))（\($0)）",
+                            table: "Share",
+                            comment: "Share sheet title for the GIF. Arguments: mass, focus time"
+                        )
+                    } ?? "瓶に積んだ集中 \(ShareMassFormatter.visual(snapshot.totalGrams))"
                 )
                 preparedItems = [source, snapshot.caption]
                 status = snapshot.hashtags.isEmpty
@@ -2512,7 +2520,7 @@ struct ShareCardView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "ポモジェムシェアカード。\(periodLabel)。瓶に積んだ集中、\(ShareMassFormatter.spoken(totalGrams))。\(pebbleCount)粒、実測\(measuredCount)回、まとまり粒\(aggregates.count)個、記念石\(achievements.count)個。\(rewardSemantics.accessibilityDetail)。\(hiddenContent.captionDisclosure ?? "すべての石を表示")。\(disclosure.accessibilityDisclosure)。公式サイト、\(ShareCopy.websiteDisplayName)。\(hashtags.isEmpty ? "ハッシュタグなし" : "ハッシュタグ、\(hashtags.joined(separator: "、"))")"
+            "ポモジェムシェアカード。\(periodLabel)。瓶に積んだ集中、\(ShareMassFormatter.spoken(totalGrams))\(ShareMassFormatter.focusTime(totalGrams).map { "、\($0)" } ?? "")。\(pebbleCount)粒、実測\(measuredCount)回、まとまり粒\(aggregates.count)個、記念石\(achievements.count)個。\(rewardSemantics.accessibilityDetail)。\(hiddenContent.captionDisclosure ?? "すべての石を表示")。\(disclosure.accessibilityDisclosure)。公式サイト、\(ShareCopy.websiteDisplayName)。\(hashtags.isEmpty ? "ハッシュタグなし" : "ハッシュタグ、\(hashtags.joined(separator: "、"))")"
         )
         .accessibilityIdentifier("share.card")
     }
@@ -2642,6 +2650,16 @@ private struct ShareMassBadge: View {
                     )
                 )
                 .shadow(color: PomoGemTheme.auroraBlue.opacity(0.24), radius: 5, y: 2)
+            // Grams stay the headline (EngagementArchitecture §5); the time
+            // underneath is what a follower can actually read (history-08).
+            if let focusTime = ShareMassFormatter.focusTime(grams) {
+                Text("\(focusTime)の集中", tableName: "Share", comment: "Share card: focus time under the mass, e.g. 4時間10分の集中")
+                    .font(.system(size: story ? 12 : 10, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(PomoGemTheme.text.opacity(0.88))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
         .padding(.horizontal, story ? 22 : 17)
         .padding(.vertical, story ? 7 : 5)
@@ -2698,6 +2716,14 @@ private enum ShareMassFormatter {
 
     static func spoken(_ grams: Int) -> String {
         "\(max(0, grams).formatted(.number.grouping(.automatic)))グラム"
+    }
+
+    /// The focus time a card's mass stands for, or nil when it holds less
+    /// than a minute (a stones-only card): 「0分」 would read as nothing done.
+    static func focusTime(_ grams: Int) -> String? {
+        DurationPresentation.focusMinutes(grams: grams) > 0
+            ? DurationPresentation.focusLabel(grams: grams)
+            : nil
     }
 }
 

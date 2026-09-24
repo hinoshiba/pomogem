@@ -281,13 +281,22 @@ enum AnimatedShareExporter {
 
 enum ShareCopy {
     static let hashtags = ["#ポモジェム", "#ポモドーロ"]
+    /// Common Japanese study-post tags, offered unselected after the defaults.
+    /// Tags stay opt-in: nothing here is shared unless the person taps it.
+    static let suggestedHashtags = ["#勉強記録", "#勉強垢"]
+    /// Every chip the composer offers, in display order.
+    static var hashtagChoices: [String] { hashtags + suggestedHashtags }
     static let websiteURL = AppLinks.marketingWebsite
     static let websiteDisplayName = "pomogem.hinoshiba.com"
     static let wordmark = "POMOGEM"
 
+    /// - Parameter focusTime: the focus the mass stands for (「4時間10分」),
+    ///   stated after the grams because a follower cannot convert grams into
+    ///   time (history-08). Omitted when the card holds no focus.
     static func caption(
         subject: String,
         grams: String,
+        focusTime: String? = nil,
         includesSelfReportedFocus: Bool,
         achievementCount: Int,
         rewardDetail: String? = nil,
@@ -320,7 +329,14 @@ enum ShareCopy {
             ? ""
             : "\n\(uniqueHashtags.joined(separator: " "))"
         let websiteLine = "\n\(websiteURL.absoluteString)"
-        return "\(subject)を \(grams) 積みました\(fairness)。\(detailLine)\(websiteLine)\(hashtagLine)"
+        let claim = focusTime.map {
+            String(
+                localized: "\(subject)を \(grams)（\($0)）積みました\(fairness)。",
+                table: "Share",
+                comment: "Share caption. Arguments: what was stacked, mass, focus time, optional disclosure in parentheses"
+            )
+        } ?? "\(subject)を \(grams) 積みました\(fairness)。"
+        return "\(claim)\(detailLine)\(websiteLine)\(hashtagLine)"
     }
 }
 

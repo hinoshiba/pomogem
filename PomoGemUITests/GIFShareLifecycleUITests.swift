@@ -263,14 +263,20 @@ final class GIFShareLifecycleUITests: XCTestCase {
     }
 
     /// history-10: typing a tag must reuse the resolved card instead of
-    /// re-reading every record.
-    func testTypingATagReusesTheResolvedCard() {
+    /// re-reading every record; study tags are offered but stay opt-in.
+    func testTypingATagReusesTheResolvedCardAndStudyTagsStayOptional() {
         addShareableSession()
         openMenuAction(containing: "動く瓶をシェア")
         XCTAssertTrue(app.navigationBars["カードにする"].waitForExistence(timeout: 8))
         includeSelfReportedDirectlyIfOffered()
         expandAdjustmentsIfNeeded()
         app.swipeUp()
+
+        for tag in ["#勉強記録", "#勉強垢"] {
+            let chip = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", tag)).firstMatch
+            XCTAssertTrue(chip.waitForExistence(timeout: 5), "Missing suggested tag \(tag)")
+            XCTAssertFalse(chip.isSelected, "\(tag) must be offered unselected")
+        }
 
         let probe = app.staticTexts["share.debug.selection"]
         XCTAssertTrue(probe.waitForExistence(timeout: 5))
@@ -299,7 +305,14 @@ final class GIFShareLifecycleUITests: XCTestCase {
             "The composer must have redrawn while typing"
         )
 
-        attachScreenshot(named: "Share — a custom tag typed without re-resolving the card")
+        let studyTag = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "#勉強記録")).firstMatch
+        XCTAssertTrue(scrollUntilHittable(studyTag))
+        studyTag.tap()
+        XCTAssertTrue(
+            app.staticTexts["選択中：#ポモジェム #ポモドーロ #勉強記録 #FocusLog"]
+                .waitForExistence(timeout: 5)
+        )
+        attachScreenshot(named: "Share — suggested study tags and a custom tag")
     }
 
     private func attachScreenshot(named name: String) {

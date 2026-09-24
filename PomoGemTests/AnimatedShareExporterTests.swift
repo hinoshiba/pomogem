@@ -111,6 +111,42 @@ struct AnimatedShareExporterTests {
         #expect(!caption.contains("成果メモ"))
     }
 
+    @Test func captionStatesTheFocusTimeAfterTheMass() {
+        let caption = ShareCopy.caption(
+            subject: "これまでの集中",
+            grams: "2,500g",
+            focusTime: "4時間10分",
+            includesSelfReportedFocus: false,
+            achievementCount: 1
+        )
+        #expect(caption.hasPrefix("これまでの集中を 2,500g（4時間10分）積みました（記念石は自己申告）。"))
+        #expect(caption.contains(ShareCopy.websiteURL.absoluteString))
+
+        let stonesOnly = ShareCopy.caption(
+            subject: "これまでの集中",
+            grams: "0g",
+            includesSelfReportedFocus: false,
+            achievementCount: 1
+        )
+        #expect(stonesOnly.hasPrefix("これまでの集中を 0g 積みました（記念石は自己申告）。"))
+    }
+
+    @Test func studyTagsAreOfferedButNeverPreselected() {
+        #expect(ShareCopy.suggestedHashtags == ["#勉強記録", "#勉強垢"])
+        #expect(ShareCopy.hashtagChoices == ["#ポモジェム", "#ポモドーロ", "#勉強記録", "#勉強垢"])
+        for hashtag in ShareCopy.suggestedHashtags {
+            #expect(ShareHashtagPolicy.normalized(hashtag) == hashtag)
+            #expect(!ShareCopy.hashtags.contains(hashtag))
+        }
+        let defaultCaption = ShareCopy.caption(
+            subject: "これまでの集中",
+            grams: "250g",
+            includesSelfReportedFocus: false,
+            achievementCount: 0
+        )
+        #expect(!defaultCaption.contains("#勉強"))
+    }
+
     @Test func lifetimeCardIsLabelledSoFarNotWithTodaysDate() {
         #expect(ShareScope.all.periodLabel == "これまで")
         let september = Calendar(identifier: .gregorian).date(

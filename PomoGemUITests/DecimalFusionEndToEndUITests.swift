@@ -95,7 +95,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         let scopedShareCard = app.descendants(matching: .any).matching(
             NSPredicate(
                 format: "label CONTAINS %@ AND label CONTAINS %@ AND label CONTAINS %@ AND label CONTAINS %@",
-                "2,500グラム",
+                "2,500グラム、4時間10分",
                 "10粒",
                 "実測10回",
                 "まとまり粒1個"
@@ -103,7 +103,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(
             scopedShareCard.waitForExistence(timeout: 12),
-            "The celebration share route must preserve the aggregate's exact mass and source counts"
+            "The celebration share route must preserve the aggregate's exact mass, its focus time and source counts"
         )
         XCTAssertFalse(
             app.descendants(matching: .any)["share.partial-coverage-notice"].exists,
