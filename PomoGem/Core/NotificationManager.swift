@@ -755,8 +755,12 @@ final class NotificationManager {
                     body: body,
                     playsSound: playsSound
                 )
+                // Floating wall-clock components: no calendar and no time
+                // zone. A zone copied in here would travel with the archived
+                // trigger, so a 20:00 reminder booked in Tokyo would ring at
+                // 01:00 in Honolulu until the app is opened again.
                 var triggerComponents = calendar.dateComponents(
-                    [.calendar, .timeZone, .year, .month, .day, .hour, .minute],
+                    [.year, .month, .day, .hour, .minute],
                     from: date
                 )
                 triggerComponents.second = 0

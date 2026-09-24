@@ -328,6 +328,45 @@ final class NotificationManagerRaceTests: XCTestCase {
         XCTAssertGreaterThan(try XCTUnwrap(request.trigger as? UNTimeIntervalNotificationTrigger).timeInterval, 250)
     }
 
+    // MARK: - What the passive schedule books
+
+    func testPassiveTriggersFloatInTheLocalTimeZone() async throws {
+        let recorder = PendingNotificationRecorder()
+        let manager = recorder.makeManager()
+        try await manager.synchronizePassiveNotifications(
+            dailyReminderEnabled: true, wrappedEnabled: true,
+            hour: 20, minute: 15, playsSound: false,
+            now: date("2026-09-25T09:00"), calendar: Self.tokyo
+        )
+        XCTAssertFalse(recorder.pending.isEmpty)
+        for request in recorder.pending.values {
+            let trigger = try XCTUnwrap(request.trigger as? UNCalendarNotificationTrigger)
+            // A pinned zone travels with the archived trigger: a Tokyo 20:15
+            // would ring at 01:15 in Honolulu until the app is opened again.
+            XCTAssertNil(trigger.dateComponents.timeZone, request.identifier)
+            XCTAssertNil(trigger.dateComponents.calendar, request.identifier)
+            XCTAssertEqual(trigger.dateComponents.hour, 20)
+            XCTAssertEqual(trigger.dateComponents.minute, 15)
+            XCTAssertEqual(trigger.dateComponents.second, 0)
+            XCTAssertFalse(trigger.repeats)
+        }
+    }
+
+    private static let tokyo: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Tokyo")!
+        return calendar
+    }()
+
+    private func date(_ value: String) -> Date {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Self.tokyo
+        formatter.timeZone = Self.tokyo.timeZone
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        return formatter.date(from: value)!
+    }
+
     private func schedulePassive(_ manager: NotificationManager, hour: Int) async throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
