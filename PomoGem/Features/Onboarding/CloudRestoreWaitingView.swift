@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 /// launch-06. Which first-run screen a store that has not finished onboarding
 /// shows. A returning user who reinstalls, or sets up another iPhone, and
@@ -212,6 +213,14 @@ struct CloudRestoreWaitingView: View {
             .scrollBounceBehavior(.basedOnSize)
         }
         .accessibilityIdentifier("cloud-restore.waiting")
+        // The screen asks the user to keep it open, so keep it on. Auto-Lock
+        // would move the scene to the background, which retires the iCloud
+        // session and stops this import; unlocking then starts the launch
+        // (and this screen) over. Same reason as the transfer mirror wait
+        // (transfer-04 in PomoGemApp.swift). Nothing else owns the idle timer
+        // before onboarding ends: FocusView only exists after it.
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
         .task {
             // One cheap COUNT per second from the store, never a fetch of the
             // history itself: a returning user can have decades of records.
