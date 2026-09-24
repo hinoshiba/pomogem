@@ -734,6 +734,9 @@ struct RootView: View {
         .task {
             // The common gem textures bake off the main thread while the
             // stores open, so the jar's first frame rarely has to bake.
+#if DEBUG && targetEnvironment(simulator)
+            guard !JarFrameProbe.disablesPrebake else { return }
+#endif
             GemTextureAtlas.shared.prewarm(PebbleNode.commonBakeRequests(scale: displayScale))
         }
         .alert(

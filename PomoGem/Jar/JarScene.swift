@@ -821,6 +821,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let studyDescriptors = uniqueDescriptors.filter { !$0.isScreenTimeObstacle }
         let initiallyVisible = Array(studyDescriptors.prefix(Constants.Jar.maxPhysicsBodies))
             + uniqueDescriptors.filter(\.isScreenTimeObstacle)
+#if DEBUG && targetEnvironment(simulator)
+        let restoreStart = CACurrentMediaTime()
+        let bakedBefore = GemTextureAtlas.shared.statistics.keptImages
+#endif
         bakeBodies(for: initiallyVisible)
         for descriptor in initiallyVisible {
             let node = PebbleNode(
@@ -844,6 +848,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             insertPebble(node)
             cursorX += node.radius * 2
         }
+#if DEBUG && targetEnvironment(simulator)
+        JarFrameProbe.shared?.note(String(
+            format: "restore bodies=%d baked=%d ms=%.1f",
+            initiallyVisible.count,
+            GemTextureAtlas.shared.statistics.keptImages - bakedBefore,
+            (CACurrentMediaTime() - restoreStart) * 1_000
+        ))
+#endif
         let overflow = studyDescriptors.dropFirst(Constants.Jar.maxPhysicsBodies)
         let now = ProcessInfo.processInfo.systemUptime
         for descriptor in overflow {
@@ -1042,6 +1054,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// only), so a restore never bakes a full jar one body at a time on the
     /// main thread (§7.13).
     private func bakeBodies(for descriptors: [PebbleDescriptor]) {
+#if DEBUG && targetEnvironment(simulator)
+        guard !JarFrameProbe.disablesPrebake else { return }
+#endif
         let scale = artworkScale
         GemTextureAtlas.shared.bakeMissing(
             descriptors.compactMap { PebbleNode.bakeRequest(for: $0, scale: scale) }
@@ -1762,6 +1777,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private(set) var idleTiltFrameCount = 0
 
     private func applyOpticalTilt(horizontal: CGFloat, uptime: TimeInterval) {
+#if DEBUG && targetEnvironment(simulator)
+        if JarFrameProbe.disablesIdleTiltGate {
+            updateOpticalTilt(horizontal: horizontal)
+            return
+        }
+#endif
         if isIdlePaused {
             guard abs(opticalFraction(horizontal: horizontal) - opticalTiltFraction)
                     > Self.idleTiltRenderThreshold,
@@ -1824,6 +1845,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     override func update(_ currentTime: TimeInterval) {
         super.update(currentTime)
+#if DEBUG && targetEnvironment(simulator)
+        JarFrameProbe.shared?.sceneUpdated()
+#endif
         let capacity = StrataMath.capacityUnits(pebbleRadii: bakeEligibleRadii)
         if capacity >= Constants.Jar.aggregateCapacityUnits {
             isCapacityReliefActive = true
@@ -1862,6 +1886,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             $0.updatePresentationLighting(horizontal: opticalTiltFraction)
         }
     }
+
+#if DEBUG && targetEnvironment(simulator)
+    override func didFinishUpdate() {
+        super.didFinishUpdate()
+        JarFrameProbe.shared?.sceneFinishedUpdate()
+    }
+#endif
 
     /// A sleeping floor contact can consume a newly assigned upward velocity
     /// during the same SpriteKit step. Reassert it for three frames, then retain

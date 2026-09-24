@@ -339,6 +339,9 @@ struct JarSpriteView: View {
                 )
 #endif
                 .onAppear {
+#if DEBUG && targetEnvironment(simulator)
+                    JarFrameProbe.shared?.attach(scene)
+#endif
                     scene.size = proxy.size
                     scene.artworkScale = displayScale
                     scene.gemBed = gemBedState
