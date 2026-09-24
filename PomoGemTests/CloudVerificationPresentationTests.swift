@@ -3,7 +3,7 @@ import XCTest
 @testable import PomoGem
 
 /// sync-03. iCloud verification no longer hides the jar's mass or the reward
-/// card.
+/// card, and on iOS 18+ the app's own writes no longer revoke trust.
 @MainActor
 final class CloudVerificationPresentationTests: XCTestCase {
     // MARK: Reward card
@@ -43,5 +43,110 @@ final class CloudVerificationPresentationTests: XCTestCase {
         XCTAssertNil(display.progressFraction,
                      "A receipt frozen from an incomplete projection shows the contribution, not a guessed position")
         XCTAssertTrue(display.progressLabel.contains("今回"))
+    }
+
+    // MARK: History filter — policy
+
+    private typealias Summary = SyncHistoryTransactionSummary
+    private let ui = SyncMaintenanceNotificationPolicy.uiAuthor
+    private let maintenance = SyncMaintenanceNotificationPolicy.maintenanceAuthor
+
+    func testOwnUIAndMaintenanceWritesNeverRevokeTrust() {
+        let own: [Summary] = [
+            Summary(author: ui, changedEntityNames: ["Prefs"]),
+            Summary(author: ui, changedEntityNames: ["SyncedFocusTimer", "FocusTimerDeviceClaim"]),
+            Summary(author: maintenance, changedEntityNames: ["StudySession", "AggregatePebble"]),
+            Summary(author: ui, changedEntityNames: ["StudySession"]),
+        ]
+        XCTAssertEqual(SyncRemoteChangeHistoryPolicy.verdict(transactions: own, cursorHadToken: true), .ignoreOwnWrites)
+        XCTAssertEqual(SyncRemoteChangeHistoryPolicy.verdict(transactions: own, cursorHadToken: false), .ignoreOwnWrites)
+    }
+
+    func testAnyForeignChangeToASourceModelStillRevokesTrust() {
+        for entity in SyncRemoteChangeHistoryPolicy.sourceEntityNames {
+            for author in [nil, "NSCloudKitMirroringDelegate.import", "com.example.other"] as [String?] {
+                let transactions = [Summary(author: ui, changedEntityNames: ["Prefs"]),
+                                    Summary(author: author, changedEntityNames: [entity])]
+                XCTAssertEqual(SyncRemoteChangeHistoryPolicy.verdict(transactions: transactions, cursorHadToken: true),
+                               .invalidate, "\(entity) by \(author ?? "nil")")
+            }
+        }
+    }
+
+    func testForeignChangesOutsideTheSourceModelsAndAmbiguousAnswers() {
+        XCTAssertEqual(SyncRemoteChangeHistoryPolicy.verdict(
+            transactions: [Summary(author: nil, changedEntityNames: ["AggregatePebble", "Stratum"])],
+            cursorHadToken: true), .ignoreOwnWrites, "Local projection rebuilds are not imports")
+        XCTAssertEqual(SyncRemoteChangeHistoryPolicy.verdict(transactions: [], cursorHadToken: true), .ignoreOwnWrites,
+                       "With a token, an empty answer was already classified")
+        XCTAssertEqual(SyncRemoteChangeHistoryPolicy.verdict(transactions: [], cursorHadToken: false), .invalidate,
+                       "A time window cannot prove the change was already seen")
+        XCTAssertEqual(SyncRemoteChangeHistoryPolicy.verdict(
+            transactions: [Summary(author: ui, changedEntityNames: ["Prefs"])], cursorHadToken: true,
+            readWasTruncated: true), .invalidate, "Too much to classify in one read")
+        XCTAssertEqual(SyncRemoteChangeHistoryPolicy.sourceEntityNames,
+                       ["Subject", "StudySession", "AchievementStone", "Prefs", "ActivityResetMarker",
+                        "SyncedFocusTimer", "FocusTimerDeviceClaim"])
+    }
+
+    // MARK: History filter — real SwiftData history (iOS 18+)
+
+    private func makeContainer() throws -> (ModelContainer, URL) {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("HistoryFilter-\(UUID())",
+                                                                                       isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let configurations = PersistenceStoreTopology.readOnlyCloudConfigurations(
+            accountNamespace: AccountDataNamespace(), directory: directory).map {
+                ModelConfiguration($0.name, schema: $0.schema, url: $0.url, allowsSave: true, cloudKitDatabase: .none)
+            }
+        return (try ModelContainer(for: PersistenceStoreTopology.shippingSchema, configurations: configurations), directory)
+    }
+
+    func testTheRealHistoryIgnoresOwnWritesAndCatchesAnUnauthoredSourceChange() throws {
+        guard #available(iOS 18, *) else { throw XCTSkip("SwiftData History is iOS 18+; iOS 17 keeps escalating") }
+        let (container, directory) = try makeContainer()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let main = container.mainContext
+        main.author = ui
+        main.autosaveEnabled = false
+        var cursor = SyncRemoteChangeHistoryCursor(since: .now.addingTimeInterval(-1))
+
+        // A settings toggle and a timer write on the UI context.
+        main.insert(Prefs())
+        main.insert(Subject(name: "own theme", colorHex: "#abcdef", sortOrder: 0))
+        try main.save()
+        XCTAssertEqual(SyncRemoteChangeHistoryReader.classify(context: main, cursor: &cursor), .ignoreOwnWrites)
+        XCTAssertNotNil(cursor.tokenData, "The first read moves the cursor from a time to a token")
+
+        // Nothing new since: already classified.
+        XCTAssertEqual(SyncRemoteChangeHistoryReader.classify(context: main, cursor: &cursor), .ignoreOwnWrites)
+
+        // The maintenance worker's own save.
+        let worker = ModelContext(container)
+        worker.author = maintenance
+        worker.insert(Subject(name: "maintenance write", colorHex: "#123456", sortOrder: 1))
+        try worker.save()
+        XCTAssertEqual(SyncRemoteChangeHistoryReader.classify(context: main, cursor: &cursor), .ignoreOwnWrites)
+
+        // An unauthored write of a source model (an import looks like this).
+        let foreign = ModelContext(container)
+        foreign.insert(Subject(name: "arrived from elsewhere", colorHex: "#654321", sortOrder: 2))
+        try foreign.save()
+        XCTAssertEqual(SyncRemoteChangeHistoryReader.classify(context: main, cursor: &cursor), .invalidate)
+        XCTAssertEqual(SyncRemoteChangeHistoryReader.classify(context: main, cursor: &cursor), .ignoreOwnWrites,
+                       "Classified once, not re-escalated by the next notification")
+    }
+
+    func testAnUnreadableCursorFailsClosedAndStartsANewWindow() throws {
+        guard #available(iOS 18, *) else { throw XCTSkip("SwiftData History is iOS 18+") }
+        let (container, directory) = try makeContainer()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var cursor = SyncRemoteChangeHistoryCursor(since: .now.addingTimeInterval(-1))
+        cursor.corruptTokenForTesting()
+        let now = Date.now
+        XCTAssertEqual(SyncRemoteChangeHistoryReader.classify(context: container.mainContext, cursor: &cursor, now: now),
+                       .invalidate)
+        XCTAssertNil(cursor.tokenData)
+        XCTAssertEqual(cursor.since, now)
     }
 }

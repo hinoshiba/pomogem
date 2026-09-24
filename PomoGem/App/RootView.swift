@@ -403,6 +403,9 @@ struct RootView: View {
     @State private var storeChangeDebounceTask: Task<Void, Never>?
     @State private var storeChangeDebounceToken: UUID?
     @State private var deferredSourceInvalidationDuringWorker = false
+    /// sync-03 (PR 19). Where the iOS 18 remote-change history filter last
+    /// stopped; process-local and started at the first frame.
+    @State private var remoteChangeHistoryCursor: SyncRemoteChangeHistoryCursor?
     @State private var activePersistenceSafetyNotice: String?
     @Query private var preferences: [Prefs]
     @Query private var storedStudySessions: [StudySession]
@@ -1128,6 +1131,9 @@ struct RootView: View {
         try? await Task.sleep(for: .milliseconds(24))
         guard !Task.isCancelled, !isFirstFramePresented else { return }
         isFirstFramePresented = true
+        // Everything before this instant is covered by the launch verification
+        // sweep below; the history filter classifies what happens after it.
+        remoteChangeHistoryCursor = SyncRemoteChangeHistoryCursor(since: .now.addingTimeInterval(-1))
         // Home's bounded backfill may finish during the 24 ms render grace,
         // before SwiftUI delivers the router onChange callback. Consume the
         // latched request here as a race-safe catch-up.
@@ -1405,6 +1411,11 @@ struct RootView: View {
             maintenanceWorkerIsInFlight: maintenance.isWorkerInFlight,
             expectedCloudSourceStoreURL: activeCloudSourceStoreURL
         )
+        if signal.source == .persistentStoreRemoteChange,
+           classification == .invalidateSessionDependents,
+           remoteChangeHistoryIsOnlyOwnWrites() {
+            return
+        }
         switch SyncStoreChangeSchedulingPolicy.decision(
             classification: classification,
             source: signal.source,
@@ -1439,6 +1450,18 @@ struct RootView: View {
             durablyInvalidateSessionDependents()
             scheduleTrailingStoreInvalidation(at: deadline)
         }
+    }
+
+    /// sync-03 (PR 19). iOS 18+: true only when SwiftData History shows that
+    /// every change since the last classification was this app's own UI or
+    /// maintenance write, or touched no CloudKit source model. iOS 17, a
+    /// missing cursor and every history error keep the old escalation.
+    @MainActor
+    private func remoteChangeHistoryIsOnlyOwnWrites() -> Bool {
+        guard #available(iOS 18, *), var cursor = remoteChangeHistoryCursor else { return false }
+        let verdict = SyncRemoteChangeHistoryReader.classify(context: modelContext, cursor: &cursor)
+        remoteChangeHistoryCursor = cursor
+        return verdict == .ignoreOwnWrites
     }
 
     @MainActor

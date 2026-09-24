@@ -689,6 +689,17 @@ worker自身のsaveがHistoryへ戻って無限loopしないよう、iOS 18以�
 
 History transactionのsort APIにはOS世代差があります。アプリのdeployment targetはiOS 17なので、iOS 26でしか使えない`sortBy` initializerへ依存しません。
 
+実装済みの範囲（2026-09-25、sync-03／PR 19）: exact source URLの`NSPersistentStoreRemoteChange`を
+`invalidateSessionDependents`へ昇格する前に、iOS 18以降では`HistoryDescriptor<DefaultHistoryTransaction>`で
+process内cursor以後のtransactionを読みます（`SyncRemoteChangeHistoryReader`）。authorが`uiAuthor`／
+`maintenanceAuthor`以外のtransactionがCloudKit同期元の7 modelのどれかを変更した場合だけ従来どおり昇格し、
+それ以外（自分の一時停止・再開、設定の切り替え、claim、worker自身の保存）は無視します。authorなしの
+transaction（副contextやCloudKit import）は外部とみなします。cursorは最初のframe時刻から始まり（それ以前は
+起動時verificationが扱う）、tokenを得た後はtoken順で進めます。History取得の失敗、token失効、tokenを
+得る前の空の結果、1回500件以上の結果、iOS 17では従来どおり昇格します。main contextの`didSave`による
+`StudySession`／`ActivityResetMarker`の即時invalidationは変更しません。上記のreason分類・upper-bound token・
+「last fully repaired」の永続化は未実装で、`lastFullyRepairedHistoryToken`は引き続き使いません。
+
 ### 10.2 iOS 17
 
 iOS 17にはSwiftData History APIがありません。次をfallbackとします。
