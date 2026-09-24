@@ -49,6 +49,7 @@ struct ShareComposerView: View {
     @State private var shareCompleted = false
     @State private var statusMessage: String?
     @State private var jarSnapshot: UIImage?
+    @State private var jarMotion: ShareJarMotion?
     @State private var temporaryShareURL: URL?
     @State private var exportTask: Task<Void, Never>?
     @State private var activeExportID: UUID?
@@ -542,7 +543,8 @@ struct ShareComposerView: View {
                             periodLabel: effectivePeriodLabel,
                             hashtags: activeHashtags,
                             usesAnimatedArtwork: mediaKind == .animatedGIF,
-                            animates: mediaKind == .animatedGIF && !reduceMotion && playAnimatedImages
+                            animates: mediaKind == .animatedGIF && !reduceMotion && playAnimatedImages,
+                            jarMotion: jarMotion
                         )
                         .aspectRatio(format == .feed ? 4 / 5 : 9 / 16, contentMode: .fit)
                         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -673,6 +675,7 @@ struct ShareComposerView: View {
             showShareSheet = false
             cleanUpTemporaryShareFile()
             jarSnapshot = nil
+            jarMotion = nil
             aggregateProjectionCacheStamp = nil
             updateStatus("iCloudを再集計中です。確認済みの記録でカードを作り直してください。")
         }
@@ -1501,7 +1504,8 @@ struct ShareComposerView: View {
             periodLabel: snapshot.periodLabel,
             hashtags: snapshot.hashtags,
             usesAnimatedArtwork: snapshot.mediaKind == .animatedGIF,
-            animationPhase: animationPhase
+            animationPhase: animationPhase,
+            jarMotion: snapshot.jarMotion
         )
         .frame(width: logicalSize.width, height: logicalSize.height)
 
@@ -1513,11 +1517,13 @@ struct ShareComposerView: View {
 
     @MainActor
     private func refreshJarSnapshot() {
-        jarSnapshot = capturedJarSnapshot(includesSelfReportedFocus: includeManual)
+        let capture = capturedJarSnapshot(includesSelfReportedFocus: includeManual)
+        jarSnapshot = capture?.image
+        jarMotion = capture?.motion
     }
 
     @MainActor
-    private func capturedJarSnapshot(includesSelfReportedFocus: Bool) -> UIImage? {
+    private func capturedJarSnapshot(includesSelfReportedFocus: Bool) -> (image: UIImage, motion: ShareJarMotion?)? {
         guard !aggregateProjectionPresentation.isCloudVerificationPending,
               aggregateProjectionPresentation.acceptsVerifiedAggregateCache(
                   aggregateProjectionCacheStamp
@@ -1526,10 +1532,11 @@ struct ShareComposerView: View {
               let scene = router.jarScene else {
             return nil
         }
-        return try? JarSnapshotter.shared.image(
+        guard let image = try? JarSnapshotter.shared.image(
             of: scene,
             options: .share(includesSelfReported: includesSelfReportedFocus)
-        )
+        ) else { return nil }
+        return (image, JarSnapshotter.shared.shareMotion(of: scene))
     }
 
     @MainActor
@@ -1563,6 +1570,7 @@ struct ShareComposerView: View {
             visualDisclosure: capturedHiddenContent.captionDisclosure,
             hashtags: capturedHashtags
         )
+        let capturedJar = capturedJarSnapshot(includesSelfReportedFocus: capturedIncludesSelfReportedFocus)
         return ShareExportSnapshot(
             id: UUID(),
             mediaKind: mediaKind,
@@ -1571,7 +1579,8 @@ struct ShareComposerView: View {
             aggregates: capturedAggregates,
             achievements: capturedAchievements,
             includesSelfReportedFocus: capturedIncludesSelfReportedFocus,
-            jarSnapshot: capturedJarSnapshot(includesSelfReportedFocus: capturedIncludesSelfReportedFocus),
+            jarSnapshot: capturedJar?.image,
+            jarMotion: capturedJar?.motion,
             periodLabel: capturedPeriod,
             totalGrams: capturedGrams,
             hashtags: capturedHashtags,
@@ -2411,6 +2420,7 @@ private struct ShareExportSnapshot {
     let achievements: [ShareAchievementVisual]
     let includesSelfReportedFocus: Bool
     let jarSnapshot: UIImage?
+    let jarMotion: ShareJarMotion?
     let periodLabel: String
     let totalGrams: Int
     let hashtags: [String]
@@ -2479,6 +2489,8 @@ struct ShareCardView: View {
     let hashtags: [String]
     var usesAnimatedArtwork = false
     let animationPhase: Double
+    /// Breath and glints laid over the jar snapshot (GIF frames move them).
+    var jarMotion: ShareJarMotion? = nil
 
     /// Linked aggregates are a visual index over these sessions, not extra
     /// study. Only a compatibility aggregate with no membership contributes a
@@ -2581,6 +2593,15 @@ struct ShareCardView: View {
                                 Image(uiImage: jarSnapshot)
                                     .resizable()
                                     .scaledToFit()
+                                    .overlay {
+                                        if let jarMotion {
+                                            ShareJarMotionLayer(
+                                                motion: jarMotion,
+                                                imageAspect: jarSnapshot.size.width / max(jarSnapshot.size.height, 1),
+                                                phase: usesAnimatedArtwork ? animationPhase : 0.18
+                                            )
+                                        }
+                                    }
                                     .accessibilityHidden(true)
                             } else {
                                 ShareJarGraphic(
@@ -2957,17 +2978,19 @@ private struct ShareJarGraphic: View {
 
     private func bottleBackground(size: CGSize) -> some View {
         ZStack {
+            // The lit interior of the Home jar (JarStageArtwork): a violet
+            // body of light, warmer toward the floor.
             ShareBottleShape()
                 .fill(
                     LinearGradient(
                         colors: [
-                            PomoGemTheme.auroraBlue.opacity(0.11),
-                            Color(hex: Constants.Color.glassAbsorption).opacity(0.18),
-                            .white.opacity(0.025),
-                            PomoGemTheme.auroraViolet.opacity(0.09)
+                            Color(hex: "#3E3A80").opacity(0.50),
+                            Color(hex: "#443A88").opacity(0.46),
+                            Color(hex: "#563A8A").opacity(0.50),
+                            Color(hex: "#8A5484").opacity(0.60)
                         ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+                        startPoint: .top,
+                        endPoint: .bottom
                     )
                 )
             ShareBottleShape()
@@ -2992,17 +3015,16 @@ private struct ShareJarGraphic: View {
             .fill(
                 RadialGradient(
                     colors: [
-                        PomoGemTheme.auroraBlue.opacity(0.22),
-                        PomoGemTheme.auroraViolet.opacity(0.08),
+                        Color(hex: "#FFA27E").opacity(0.46),
+                        Color(hex: "#C46AA8").opacity(0.20),
                         .clear
                     ],
                     center: .center,
                     startRadius: 1,
-                    endRadius: size.width * 0.39
+                    endRadius: size.width * 0.42
                 )
             )
-            .frame(width: size.width * 0.78, height: size.height * 0.11)
-            .blur(radius: 3)
+            .frame(width: size.width * 0.86, height: size.height * 0.24)
             .padding(.bottom, size.height * 0.012)
     }
 
@@ -3207,32 +3229,33 @@ private struct ShareJarGraphic: View {
             )
     }
 
+    /// The copper neck collar of the Home jar (rose-gold band with a white
+    /// specular line), sitting on the bottle's mouth.
     private func bottleRim(size: CGSize) -> some View {
-        Capsule()
+        let height = min(size.height, size.width * 0.95)
+        let mouth = size.width - JarScene.neckInset(jarWidth: size.width) * 2
+        return RoundedRectangle(cornerRadius: 3, style: .continuous)
             .fill(
                 LinearGradient(
                     colors: [
-                        .white.opacity(0.12),
-                        Color(hex: Constants.Color.inkNight).opacity(0.92),
-                        PomoGemTheme.auroraViolet.opacity(0.12)
+                        Color(hex: "#FFE3CF"),
+                        Color(hex: "#D9967A"),
+                        Color(hex: "#B8735A"),
+                        Color(hex: "#8A4E3A")
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
             )
-            .overlay {
-                Capsule()
-                    .stroke(
-                        LinearGradient(
-                            colors: [.white.opacity(0.78), PomoGemTheme.auroraBlue.opacity(0.42)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: 1.5
-                    )
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(.white.opacity(0.85))
+                    .frame(height: 1)
+                    .padding(.top, 2.5)
+                    .padding(.horizontal, 3)
             }
-            .frame(width: size.width * 0.36, height: max(9, size.height * 0.045))
-            .padding(.top, size.height * 0.018)
+            .frame(width: mouth + 6, height: max(6, size.width * 0.034))
+            .padding(.top, size.height - height - 2)
     }
 
     private var aggregateBandHeight: CGFloat {
@@ -3510,47 +3533,17 @@ private struct ShareAchievementGem: View {
     }
 }
 
+/// The Home bottle's silhouette (`JarScene.jarPath`: wide body, round
+/// shoulders, short neck) fitted to `rect`, so a card drawn without a live
+/// snapshot shows the same jar as Home.
 private struct ShareBottleShape: Shape {
     func path(in rect: CGRect) -> Path {
-        let width = rect.width
-        let height = rect.height
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX + width * 0.36, y: rect.minY + height * 0.05))
-        path.addLine(to: CGPoint(x: rect.minX + width * 0.36, y: rect.minY + height * 0.14))
-        path.addCurve(
-            to: CGPoint(x: rect.minX + width * 0.10, y: rect.minY + height * 0.25),
-            control1: CGPoint(x: rect.minX + width * 0.34, y: rect.minY + height * 0.18),
-            control2: CGPoint(x: rect.minX + width * 0.14, y: rect.minY + height * 0.18)
-        )
-        path.addCurve(
-            to: CGPoint(x: rect.minX + width * 0.05, y: rect.minY + height * 0.35),
-            control1: CGPoint(x: rect.minX + width * 0.07, y: rect.minY + height * 0.28),
-            control2: CGPoint(x: rect.minX + width * 0.05, y: rect.minY + height * 0.31)
-        )
-        path.addLine(to: CGPoint(x: rect.minX + width * 0.035, y: rect.minY + height * 0.88))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.minX + width * 0.14, y: rect.minY + height * 0.97),
-            control: CGPoint(x: rect.minX + width * 0.035, y: rect.minY + height * 0.97)
-        )
-        path.addLine(to: CGPoint(x: rect.minX + width * 0.86, y: rect.minY + height * 0.97))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.minX + width * 0.965, y: rect.minY + height * 0.88),
-            control: CGPoint(x: rect.minX + width * 0.965, y: rect.minY + height * 0.97)
-        )
-        path.addLine(to: CGPoint(x: rect.minX + width * 0.95, y: rect.minY + height * 0.35))
-        path.addCurve(
-            to: CGPoint(x: rect.minX + width * 0.90, y: rect.minY + height * 0.25),
-            control1: CGPoint(x: rect.minX + width * 0.95, y: rect.minY + height * 0.31),
-            control2: CGPoint(x: rect.minX + width * 0.93, y: rect.minY + height * 0.28)
-        )
-        path.addCurve(
-            to: CGPoint(x: rect.minX + width * 0.64, y: rect.minY + height * 0.14),
-            control1: CGPoint(x: rect.minX + width * 0.86, y: rect.minY + height * 0.18),
-            control2: CGPoint(x: rect.minX + width * 0.66, y: rect.minY + height * 0.18)
-        )
-        path.addLine(to: CGPoint(x: rect.minX + width * 0.64, y: rect.minY + height * 0.05))
-        path.closeSubpath()
-        return path
+        // The live bottle is about 0.9 as tall as wide at its tallest.
+        let height = min(rect.height, rect.width * 0.95)
+        let jar = CGRect(x: rect.minX, y: rect.maxY - height, width: rect.width, height: height)
+        var flip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: jar.minY * 2 + jar.height)
+        let path = JarScene.jarPath(in: jar, neckInset: JarScene.neckInset(jarWidth: jar.width))
+        return Path(path.copy(using: &flip) ?? CGPath(rect: jar, transform: nil))
     }
 }
 
@@ -3653,6 +3646,7 @@ private struct AnimatedShareCardPreview: View {
     let hashtags: [String]
     let usesAnimatedArtwork: Bool
     let animates: Bool
+    var jarMotion: ShareJarMotion? = nil
 
     var body: some View {
         if animates {
@@ -3676,8 +3670,99 @@ private struct AnimatedShareCardPreview: View {
             periodLabel: periodLabel,
             hashtags: hashtags,
             usesAnimatedArtwork: usesAnimatedArtwork,
-            animationPhase: phase
+            animationPhase: phase,
+            jarMotion: jarMotion
         )
+    }
+}
+
+/// Motion over the flattened jar snapshot of a share card: the time core
+/// breathes (1.00 ↔ 1.04) inside a glow that swells with it, a soft sheen
+/// of light slides once across the glass, and glints on the highest gems
+/// light in turn (phase-shifted), so every GIF frame differs visibly while
+/// the jar itself stays the real capture. The still card uses one fixed
+/// phase.
+private struct ShareJarMotionLayer: View {
+    let motion: ShareJarMotion
+    let imageAspect: CGFloat
+    let phase: Double
+
+    var body: some View {
+        GeometryReader { proxy in
+            // The snapshot is drawn `scaledToFit`; find its rectangle.
+            let frame = proxy.size
+            let fitted: CGSize = frame.width / max(frame.height, 1) > imageAspect
+                ? CGSize(width: frame.height * imageAspect, height: frame.height)
+                : CGSize(width: frame.width, height: frame.width / max(imageAspect, 0.001))
+            let origin = CGPoint(x: (frame.width - fitted.width) / 2, y: (frame.height - fitted.height) / 2)
+            let stone = CGRect(
+                x: origin.x + motion.stoneRect.minX * fitted.width,
+                y: origin.y + motion.stoneRect.minY * fitted.height,
+                width: motion.stoneRect.width * fitted.width,
+                height: motion.stoneRect.height * fitted.height
+            )
+            let breath = (1 - cos(phase * .pi * 2)) / 2
+            ZStack {
+                // A sheen of light sliding across the glass (one pass per loop).
+                LinearGradient(
+                    colors: [.clear, .white.opacity(0.16), .clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: fitted.width * 0.34, height: fitted.height * 1.3)
+                .rotationEffect(.degrees(12))
+                .position(
+                    x: origin.x + fitted.width * CGFloat(-0.2 + 1.4 * phase),
+                    y: origin.y + fitted.height / 2
+                )
+                .blendMode(.screen)
+                .mask {
+                    RoundedRectangle(cornerRadius: fitted.width * 0.08, style: .continuous)
+                        .frame(width: fitted.width * 0.96, height: fitted.height * 0.97)
+                        .position(x: origin.x + fitted.width / 2, y: origin.y + fitted.height / 2)
+                }
+                if motion.stoneRect.width > 0 {
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    Color(uiColor: motion.glowColor).opacity(0.10 + 0.42 * breath),
+                                    Color(uiColor: motion.glowColor).opacity(0.04 + 0.16 * breath),
+                                    .clear
+                                ],
+                                center: .center,
+                                startRadius: stone.width * 0.30,
+                                endRadius: stone.width * (0.95 + 0.45 * breath)
+                            )
+                        )
+                        .frame(width: stone.width * 3, height: stone.width * 3)
+                        .position(x: stone.midX, y: stone.midY)
+                        .blendMode(.screen)
+                }
+                if let image = motion.stone {
+                    Image(uiImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: stone.width, height: stone.height)
+                        .scaleEffect(1 + 0.04 * breath)
+                        .position(x: stone.midX, y: stone.midY)
+                }
+                ForEach(Array(motion.glints.enumerated()), id: \.offset) { index, point in
+                    let wave = max(0, sin((phase + Double(index) / Double(max(motion.glints.count, 1))) * .pi * 2))
+                    Image(systemName: "sparkle")
+                        .font(.system(size: max(7, fitted.width * 0.06) * (0.6 + 0.6 * wave), weight: .bold))
+                        .foregroundStyle(.white)
+                        .shadow(color: .white.opacity(0.8), radius: 3)
+                        .opacity(0.15 + 0.85 * wave)
+                        .position(
+                            x: origin.x + point.x * fitted.width,
+                            y: origin.y + point.y * fitted.height
+                        )
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 

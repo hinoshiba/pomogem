@@ -269,6 +269,14 @@ struct JarSpriteView: View {
                         || layout.labelTop + coreLabelSize.height > abovePileLimit + 0.5
                 } ?? false
                 let coreLabelBottomLimit = coreLabelsBuried ? floorLabelLimit : abovePileLimit
+                let shareCore = Self.shareCore(
+                    stageSize: proxy.size,
+                    coreState: lifetimeCoreState,
+                    totalGrams: totalGrams,
+                    shares: lifetimeCoreColorShares.isEmpty
+                        ? [GemColorShare(hex: lifetimeCoreColorHex, fraction: 1)]
+                        : lifetimeCoreColorShares
+                )
                 if let coreState = lifetimeCoreState {
                     JarLifetimeCoreBackdrop(
                         state: coreState,
@@ -350,6 +358,9 @@ struct JarSpriteView: View {
                 .onChange(of: gemBedState) { _, state in
                     scene.gemBed = state
                 }
+                .onChange(of: shareCore, initial: true) { _, core in
+                    scene.shareCore = core
+                }
                 .onChange(of: proxy.size) { _, newSize in
                     scene.size = newSize
                 }
@@ -429,6 +440,31 @@ struct JarSpriteView: View {
             ),
             shown: scene.gemBed,
             isProvisional: projectionIsLowerBound || projectionIsUnverified
+        )
+    }
+
+    /// The centrepiece a share snapshot redraws behind the bottle.
+    private static func shareCore(
+        stageSize: CGSize,
+        coreState: JarLifetimeCoreState?,
+        totalGrams: Int,
+        shares: [GemColorShare]
+    ) -> JarShareCore? {
+        let jarWidth = max(1, stageSize.width - Constants.Jar.horizontalMargin * 2)
+        if let coreState {
+            return JarShareCore(
+                shares: GemArtwork.quantizedCoreShares(shares),
+                level: coreState.coreLevel,
+                vesselLitFacets: nil,
+                diameter: JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: coreState.coreLevel)
+            )
+        }
+        guard totalGrams > 0, totalGrams < GemCutLadder.firstCrystalTierGrams else { return nil }
+        return JarShareCore(
+            shares: [],
+            level: 0,
+            vesselLitFacets: min(10, max(0, totalGrams / max(1, Constants.Mass.measuredPebbleGrams))),
+            diameter: JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: 1)
         )
     }
 
@@ -1008,6 +1044,107 @@ enum JarStageArtwork {
         }
         context.restoreGState()
     }
+}
+
+/// The centrepiece Home draws behind the bottle, as data a share snapshot
+/// can redraw: the time core (share fan and level) or, before 2.5 kg, the
+/// colourless vessel with its lit facets.
+struct JarShareCore: Equatable {
+    let shares: [GemColorShare]
+    let level: Int
+    /// Lit facets of the colourless vessel; nil for the born core.
+    let vesselLitFacets: Int?
+    /// Diameter of the core frame on Home (points).
+    let diameter: CGFloat
+}
+
+/// Core Graphics twin of `JarLifetimeCoreBackdrop` / `JarLifetimeCoreVessel`
+/// for share snapshots: bloom, the two halo lobes, girdle bloom, a quiet
+/// orbit ring and the same baked stone image.
+enum JarShareCoreArtwork {
+    /// Share snapshots place the centrepiece in the upper middle of the
+    /// bottle (there is no HUD on a card): this share of the jar height
+    /// from the top.
+    static let centerFraction: CGFloat = 0.42
+
+    static func stoneImage(for core: JarShareCore, scale: CGFloat) -> UIImage {
+        if let lit = core.vesselLitFacets {
+            return GemArtwork.vesselImage(litFacets: lit, scale: scale)
+        }
+        return GemArtwork.coreImage(shares: core.shares, level: core.level, scale: scale)
+    }
+
+    /// Frame of the stone image around `center` (points).
+    static func stoneRect(for core: JarShareCore, center: CGPoint) -> CGRect {
+        let side = core.vesselLitFacets == nil ? core.diameter : core.diameter * 0.92
+        return CGRect(x: center.x - side / 2, y: center.y - side / 2, width: side, height: side)
+    }
+
+    /// Draws the lights and the stone around `center` (y-down context).
+    static func draw(_ core: JarShareCore, center: CGPoint, in context: CGContext, scale: CGFloat) {
+        let space = CGColorSpaceCreateDeviceRGB()
+        let d = core.diameter
+        func radial(_ colors: [UIColor], _ locations: [CGFloat], from r0: CGFloat, to r1: CGFloat, clip: CGRect? = nil, offset: CGFloat = 0) {
+            guard let gradient = CGGradient(colorsSpace: space, colors: colors.map(\.cgColor) as CFArray, locations: locations) else { return }
+            context.saveGState()
+            let c = CGPoint(x: center.x + offset, y: center.y)
+            if let clip { context.addEllipse(in: clip.offsetBy(dx: c.x, dy: c.y)); context.clip() }
+            context.drawRadialGradient(gradient, startCenter: c, startRadius: r0, endCenter: c, endRadius: r1, options: [.drawsBeforeStartLocation])
+            context.restoreGState()
+        }
+        if core.vesselLitFacets != nil {
+            let white = UIColor.white
+            radial([white.withAlphaComponent(0.30), white.withAlphaComponent(0.10), .clear], [0, 0.5, 1], from: d * 0.30, to: d * 0.65)
+        } else {
+            let halo = GemArtwork.coreHaloColor(shares: core.shares)
+            let lobes = GemArtwork.coreHaloLobeColors(shares: core.shares)
+            let rim = GemArtwork.coreRimGlowColor(shares: core.shares)
+            radial(
+                [halo.withAlphaComponent(0.24), GemColor(hex: Constants.Color.auroraViolet).withAlpha(0.05), .clear],
+                [0, 0.5, 1],
+                from: 3,
+                to: d * 1.25
+            )
+            // Quiet orbit ring (copper, dashed); the markers stay on Home.
+            context.saveGState()
+            context.setStrokeColor(GemColor(hex: "#D9967A").withAlpha(0.45).cgColor)
+            context.setLineWidth(1)
+            context.setLineDash(phase: 0, lengths: [3, 5])
+            let orbit = d * 1.075
+            context.strokeEllipse(in: CGRect(x: center.x - orbit, y: center.y - orbit, width: orbit * 2, height: orbit * 2))
+            context.restoreGState()
+            for (color, side) in [(lobes.left, CGFloat(-1)), (lobes.right, CGFloat(1))] {
+                radial(
+                    [color.withAlphaComponent(0.45), color.withAlphaComponent(0.20), .clear],
+                    [0, 0.5, 1],
+                    from: d * 0.30,
+                    to: d * 0.70,
+                    clip: CGRect(x: -d * 0.575, y: -d * 0.70, width: d * 1.15, height: d * 1.40),
+                    offset: side * d * 0.16
+                )
+            }
+            radial([rim.withAlphaComponent(0.95), rim.withAlphaComponent(0.34), .clear], [0, 0.5, 1], from: d * 0.44, to: d * 0.62)
+        }
+        guard let stone = stoneImage(for: core, scale: scale).cgImage else { return }
+        let rect = stoneRect(for: core, center: center)
+        context.saveGState()
+        context.translateBy(x: rect.minX, y: rect.maxY)
+        context.scaleBy(x: 1, y: -1)
+        context.interpolationQuality = .high
+        context.draw(stone, in: CGRect(origin: .zero, size: rect.size))
+        context.restoreGState()
+    }
+}
+
+/// What a share GIF animates over the flattened jar snapshot: the stone
+/// (for a slow 1.00 ↔ 1.04 breath and its glow) and a few glint anchors on
+/// the highest gems, all normalised to the snapshot (0…1, y down).
+struct ShareJarMotion {
+    /// The stone to breathe; nil when gems overlap it (it stays behind).
+    let stone: UIImage?
+    let stoneRect: CGRect
+    let glowColor: UIColor
+    let glints: [CGPoint]
 }
 
 /// Four static star glints on the floor, drawn once (no animation). Each is
