@@ -1361,6 +1361,67 @@ final class GemBrillianceTests: XCTestCase {
         XCTAssertEqual(pebble.presentationMass, reference.presentationMass, accuracy: reference.presentationMass * 0.01)
     }
 
+    /// Large gems are lit from within: a rotation-invariant additive glow
+    /// over the facets, tinted pale in the gem's own hue. It has no
+    /// direction (a rolling gem never turns its light), follows Reduce
+    /// Transparency and snapshots, and a black stone never gets one.
+    @MainActor
+    func testLargeGemsGlowFromWithinWithoutDirectionalLight() throws {
+        let pebble = PebbleNode(descriptor: looseDescriptor(), reduceMotion: true, jarScale: JarScalePolicy.maximumScale)
+        let glow = try XCTUnwrap(pebble.childNode(withName: "gem.innerGlow") as? SKSpriteNode)
+        let body = try XCTUnwrap(pebble.childNode(withName: "gem.body"))
+        XCTAssertEqual(glow.blendMode, .add)
+        XCTAssertEqual(GemTextureAtlas.shared.textureName(of: glow), GemTextureAtlas.SharedName.innerGlow)
+        XCTAssertGreaterThan(glow.zPosition, body.zPosition, "Over the facets")
+        XCTAssertEqual(glow.size.width, pebble.localRadius * 2, accuracy: 0.001)
+        XCTAssertEqual(glow.alpha, PebbleNode.looseInnerGlowAlpha, accuracy: 0.001)
+        let tint = GemColor(glow.color)
+        XCTAssertLessThanOrEqual(tint.hsb.saturation, 0.37, "Pale")
+        XCTAssertEqual(tint.hsb.brightness, 1, accuracy: 0.01)
+
+        // Symmetric: the luminance centroid is the centre.
+        let image = try XCTUnwrap(GemArtwork.innerGlowImage.cgImage)
+        let width = image.width
+        let height = image.height
+        var data = [UInt8](repeating: 0, count: width * height * 4)
+        let context = try XCTUnwrap(CGContext(
+            data: &data,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        var total: CGFloat = 0
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        for row in 0 ..< height {
+            for column in 0 ..< width {
+                let value = CGFloat(data[(row * width + column) * 4 + 3])
+                total += value
+                x += value * CGFloat(column)
+                y += value * CGFloat(row)
+            }
+        }
+        XCTAssertEqual(x / total, CGFloat(width - 1) / 2, accuracy: CGFloat(width) * 0.01)
+        XCTAssertEqual(y / total, CGFloat(height - 1) / 2, accuracy: CGFloat(height) * 0.01)
+
+        pebble.setSnapshotBlending(true)
+        XCTAssertEqual(glow.blendMode, .alpha)
+        pebble.setSnapshotBlending(false)
+        XCTAssertEqual(glow.blendMode, .add)
+        pebble.setReduceTransparency(true)
+        XCTAssertLessThan(glow.alpha, PebbleNode.looseInnerGlowAlpha)
+
+        let stone = PebbleNode(
+            descriptor: PebbleDescriptor(screenTimeObstacle: ScreenTimeObstacleProjection.decimalRoots(totalUnits: 10)[0]),
+            reduceMotion: true
+        )
+        XCTAssertNil(stone.childNode(withName: "//gem.innerGlow"), "Black stones never glow")
+    }
+
     // MARK: Black stones (D26 (a))
 
     /// Irregular matte obsidian: no bright pixel, no rim, an uneven outline

@@ -43,6 +43,7 @@ final class JarRenderingPerformanceTests: XCTestCase {
         "obstacle.body",
         "gem.body",
         "obstacle.count",
+        "gem.innerGlow",
         "gem.rig.shade",
         "pebble.dimensionalLight",
         "gem.glint",

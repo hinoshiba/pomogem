@@ -1036,6 +1036,47 @@ enum GemArtwork {
         context.restoreGState()
     }
 
+    /// Light inside a large jewel (D4 round): rotation-invariant, additive
+    /// and white, tinted per gem. A soft core lifts the pavilion as if lit
+    /// from within and a bright band just inside the silhouette makes the
+    /// edges glow, like the reference image's jewels. Symmetric, so it adds
+    /// no directional light to a rolling gem (§7.3).
+    static let innerGlowTexture = sharedTexture(innerGlowImage)
+    static let innerGlowImage: UIImage = sharedImage(pixels: 128) { context, size in
+        let space = CGColorSpaceCreateDeviceRGB()
+        let center = CGPoint(x: size / 2, y: size / 2)
+        let radius = size / 2
+        let core = [
+            UIColor(white: 1, alpha: 0.70).cgColor,
+            UIColor(white: 1, alpha: 0.34).cgColor,
+            UIColor(white: 1, alpha: 0.10).cgColor,
+            UIColor(white: 1, alpha: 0).cgColor
+        ] as CFArray
+        if let gradient = CGGradient(colorsSpace: space, colors: core, locations: [0, 0.38, 0.66, 0.84]) {
+            context.drawRadialGradient(
+                gradient,
+                startCenter: center, startRadius: 0,
+                endCenter: center, endRadius: radius,
+                options: []
+            )
+        }
+        let rim = [
+            UIColor(white: 1, alpha: 0).cgColor,
+            UIColor(white: 1, alpha: 0.30).cgColor,
+            UIColor(white: 1, alpha: 0.85).cgColor,
+            UIColor(white: 1, alpha: 0.30).cgColor,
+            UIColor(white: 1, alpha: 0).cgColor
+        ] as CFArray
+        if let gradient = CGGradient(colorsSpace: space, colors: rim, locations: [0.66, 0.80, 0.90, 0.96, 1]) {
+            context.drawRadialGradient(
+                gradient,
+                startCenter: center, startRadius: 0,
+                endCenter: center, endRadius: radius,
+                options: []
+            )
+        }
+    }
+
     /// Kept for callers that predate the split rig (tests, share previews):
     /// the additive part of the rig.
     static var keyLightTexture: SKTexture { lightRigAddTexture }
@@ -2511,6 +2552,16 @@ struct GemTone: Sendable {
     var glint: GemColor {
         GemColor(red: 1, green: 1, blue: 1).mixed(with: halo, amount: 1 - glintWhiteShare)
     }
+
+    /// Tint of the light inside a gem: the gem's hue, pale (at most 0.36
+    /// saturation) and full value, so the glow lifts it toward white.
+    var innerGlow: GemColor {
+        isGlass
+            ? GemColor(hex: "#EAF3FF")
+            : GemColor(hue: hue, saturation: saturation < 0.08 ? saturation : min(0.36, saturation * 0.48), brightness: 1)
+    }
+
+    var innerGlowUIColor: UIColor { innerGlow.withAlpha(1) }
 
     /// Facet colour for facet light b (0…1): hue ± 8°. Dark facets stay
     /// deep and saturated rather than going brown, bright facets turn pale

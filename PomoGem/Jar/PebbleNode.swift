@@ -549,6 +549,9 @@ final class PebbleNode: SKShapeNode {
     /// The baked rock of a Screen Time stone.
     private var obstacleBodyNode: SKSpriteNode?
     private var gemHaloNode: SKSpriteNode?
+    /// Light inside the jewel (shared additive sprite, tinted pale).
+    private var gemInnerGlowNode: SKSpriteNode?
+    private var gemInnerGlowBaseAlpha: CGFloat = 0
     /// Screen-fixed light rig: contact shadow, key sheen, pavilion shade,
     /// rims and glints counter-rotate together so the light source stays put
     /// in the scene while the body rolls.
@@ -1153,7 +1156,8 @@ final class PebbleNode: SKShapeNode {
             tone: tone,
             haloStrength: descriptor.isTutorial
                 ? 1
-                : GemCutLadder.looseHaloStrength(grams: descriptor.grams)
+                : GemCutLadder.looseHaloStrength(grams: descriptor.grams),
+            innerGlowAlpha: descriptor.isTutorial ? 0.18 : (spec.isMuted ? 0.34 : Self.looseInnerGlowAlpha)
         )
     }
 
@@ -1172,7 +1176,8 @@ final class PebbleNode: SKShapeNode {
             spec: spec,
             tone: GemTone(hex: GemColor(fill).hexString, muted: false, glass: false),
             haloStrength: 1,
-            haloColorOverride: JarPalette.color(hex: "#D9967A")
+            haloColorOverride: JarPalette.color(hex: "#D9967A"),
+            innerGlowAlpha: 0.22
         )
         addAchievementMark(achievementKind)
     }
@@ -1188,6 +1193,7 @@ final class PebbleNode: SKShapeNode {
         tone: GemTone,
         haloStrength: CGFloat,
         haloColorOverride: UIColor? = nil,
+        innerGlowAlpha: CGFloat = 0,
         haloParent: SKNode? = nil
     ) {
         gemRung = rung
@@ -1199,6 +1205,20 @@ final class PebbleNode: SKShapeNode {
         addChild(body)
         gemBodyNode = body
 
+        if innerGlowAlpha > 0 {
+            let glow = Self.sharedLightSprite(
+                GemTextureAtlas.SharedName.innerGlow,
+                size: CGSize(width: localRadius * 2, height: localRadius * 2)
+            )
+            glow.name = "gem.innerGlow"
+            glow.color = tone.innerGlowUIColor
+            glow.colorBlendFactor = 1
+            glow.blendMode = .add
+            glow.zPosition = JarZPosition.pebbleDetail - 0.45
+            addChild(glow)
+            gemInnerGlowNode = glow
+            gemInnerGlowBaseAlpha = innerGlowAlpha
+        }
 
         // One shared additive texture for every halo: all halos in the jar
         // resolve to a single draw batch.
@@ -1367,7 +1387,11 @@ final class PebbleNode: SKShapeNode {
     private func applyHaloAlpha() {
         gemHaloNode?.alpha = min(1, gemHaloBaseAlpha * gemHaloEmphasis)
             * (reducesTransparency ? 0.45 : 1)
+        gemInnerGlowNode?.alpha = gemInnerGlowBaseAlpha * (reducesTransparency ? 0.6 : 1)
     }
+
+    /// Inner light of a loose study gem (additive, over the facets).
+    static let looseInnerGlowAlpha: CGFloat = 0.56
 
     /// Current halo alpha (tests and the scene's pile light).
     var gemHaloAlpha: CGFloat { gemHaloNode?.alpha ?? 0 }
@@ -1469,7 +1493,7 @@ final class PebbleNode: SKShapeNode {
     /// Additive light composites incorrectly into a transparent snapshot
     /// texture; while capturing, bake it as ordinary alpha-blended light.
     func setSnapshotBlending(_ capturing: Bool) {
-        let additive: [SKSpriteNode?] = [gemHaloNode, dimensionalLightNode, earlyEffortAuraNode, earlyEffortBloomNode]
+        let additive: [SKSpriteNode?] = [gemHaloNode, gemInnerGlowNode, dimensionalLightNode, earlyEffortAuraNode, earlyEffortBloomNode]
         for node in additive.compactMap({ $0 }) + gemGlintNodes {
             node.blendMode = capturing ? .alpha : .add
         }
@@ -1679,6 +1703,7 @@ final class PebbleNode: SKShapeNode {
             spec: spec,
             tone: GemTone(hex: aggregate.dominantColorHex, muted: spec.isMuted, glass: false),
             haloStrength: aggregateHaloStrength(aggregate),
+            innerGlowAlpha: spec.isMuted ? 0.30 : 0.44,
             haloParent: aura
         )
         updateAggregateRarePresentation(aggregate)

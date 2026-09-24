@@ -27,6 +27,7 @@ final class GemTextureAtlas {
         static let glint = "gem.shared.glint"
         static let shadow = "gem.shared.shadow"
         static let lightAdd = "gem.shared.lightAdd"
+        static let innerGlow = "gem.shared.innerGlow"
         static let lightShade = "gem.shared.lightShade"
     }
 
@@ -94,6 +95,7 @@ final class GemTextureAtlas {
             (SharedName.glint, GemArtwork.glintImage, GemArtwork.glintTexture),
             (SharedName.shadow, GemArtwork.shadowImage, GemArtwork.shadowTexture),
             (SharedName.lightAdd, GemArtwork.lightRigAddImage, GemArtwork.lightRigAddTexture),
+            (SharedName.innerGlow, GemArtwork.innerGlowImage, GemArtwork.innerGlowTexture),
             (SharedName.lightShade, GemArtwork.lightRigShadeImage, GemArtwork.lightRigShadeTexture)
         ]
         for (name, image, texture) in shared {
