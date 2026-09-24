@@ -3709,6 +3709,13 @@ struct HomeView: View {
         tiltHintTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(700))
             guard !Task.isCancelled else { return }
+            // One message at a time: the first gem's toast goes first.
+            var waitedForToast = 0
+            while router.toast != nil, waitedForToast < 40 {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled else { return }
+                waitedForToast += 1
+            }
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
                 showsTiltHint = true
             }

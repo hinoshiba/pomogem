@@ -144,6 +144,27 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
     }
 
+    // MARK: - Toast
+
+    func testDropToastNeverCoversOrBlocksTheStartButton() {
+        launch()
+        addThirtyMinutesManually()
+        let toast = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "+300g")).firstMatch
+        XCTAssertTrue(toast.waitForExistence(timeout: 3))
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 3))
+        XCTAssertFalse(toast.frame.intersects(launcher.frame),
+                       "toast=\(toast.frame) launcher=\(launcher.frame)")
+        let menu = app.buttons["メニュー"]
+        XCTAssertFalse(toast.frame.intersects(menu.frame), "The toast must clear the メニュー button")
+        saveScreenshot("toast-after-manual")
+        // The upper-middle band of the button is where the old toast sat.
+        launcher.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        XCTAssertTrue(app.buttons["一時停止"].waitForExistence(timeout: 6),
+                      "A tap on the start button while a toast is visible must start the timer")
+        cancelFocusIfPresented()
+    }
+
     // MARK: - Helpers
 
     /// A running timer survives relaunch; end it so later tests start on Home.
@@ -154,6 +175,17 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         let alert = app.alerts["今日はここまで"]
         if alert.waitForExistence(timeout: 3) { alert.buttons["今日はここまで"].tap() }
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 6))
+    }
+
+    private func addThirtyMinutesManually() {
+        openMenuRow("時間を手動で積む")
+        let thirtyMinutes = app.buttons["30分、300グラム加算"]
+        XCTAssertTrue(thirtyMinutes.waitForExistence(timeout: 5))
+        thirtyMinutes.tap()
+        let confirm = app.buttons["manual.confirm"]
+        XCTAssertTrue(waitForHittable(confirm))
+        confirm.tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
     }
 
     /// The UI-test store starts with one theme (英語); add a second one.
