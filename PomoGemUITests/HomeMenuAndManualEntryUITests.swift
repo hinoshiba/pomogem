@@ -144,19 +144,44 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
     }
 
+    func testPaywallTitleDoesNotBreakInsideTheProductName() {
+        // The system text size itself, so the sheet renders at AX5 too.
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        launch()
+        openMenuRow("設定")
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        let customTimer = app.buttons["settings.custom-timer"]
+        XCTAssertTrue(scrollUntilHittable(customTimer, attempts: 20))
+        customTimer.tap()
+        let titles = app.staticTexts.matching(identifier: "ポモジェムPro")
+        XCTAssertTrue(titles.firstMatch.waitForExistence(timeout: 6))
+        saveScreenshot("paywall-ax5")
+        // The hero title is the topmost match; one line means the name
+        // shrinks instead of breaking as 「ポモジェ／ムPro」.
+        let hero = titles.allElementsBoundByIndex.min { $0.frame.minY < $1.frame.minY }
+        let frame = hero?.frame ?? .zero
+        XCTAssertGreaterThan(frame.height, 0)
+        XCTAssertLessThan(frame.height, 110, "title frame=\(frame)")
+        XCTAssertLessThanOrEqual(frame.maxX, app.windows.firstMatch.frame.maxX)
+    }
+
     // MARK: - Toast
 
     func testDropToastNeverCoversOrBlocksTheStartButton() {
         launch()
-        addThirtyMinutesManually()
-        let toast = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "+300g")).firstMatch
-        XCTAssertTrue(toast.waitForExistence(timeout: 3))
+        // A timer left running would take over every later launch.
+        addTeardownBlock { @MainActor [weak self] in self?.cancelFocusIfPresented() }
         let launcher = app.buttons["home.focus-launcher"]
         XCTAssertTrue(launcher.waitForExistence(timeout: 3))
-        XCTAssertFalse(toast.frame.intersects(launcher.frame),
-                       "toast=\(toast.frame) launcher=\(launcher.frame)")
-        let menu = app.buttons["メニュー"]
-        XCTAssertFalse(toast.frame.intersects(menu.frame), "The toast must clear the メニュー button")
+        let launcherFrame = launcher.frame
+        let menuFrame = app.buttons["メニュー"].frame
+        addThirtyMinutesManually()
+        let toast = app.descendants(matching: .any).matching(identifier: "app.toast").firstMatch
+        XCTAssertTrue(toast.waitForExistence(timeout: 3))
+        let toastFrame = toast.frame
+        XCTAssertTrue(toast.label.contains("+300g"), "toast=\(toast.label)")
+        XCTAssertFalse(toastFrame.intersects(launcherFrame), "toast=\(toastFrame) launcher=\(launcherFrame)")
+        XCTAssertFalse(toastFrame.intersects(menuFrame), "The toast must clear the メニュー button")
         saveScreenshot("toast-after-manual")
         // The upper-middle band of the button is where the old toast sat.
         launcher.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
@@ -218,14 +243,26 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
         app.buttons["メニュー"].tap()
         let row = menuRow(title)
-        // A row cut by the half-height sheet's bottom edge reports hittable
-        // while its sliver sits in the home-indicator area; scroll it fully in.
-        for _ in 0..<8 where !(row.exists && row.isHittable
-            && row.frame.maxY <= app.windows.firstMatch.frame.maxY) {
-            app.swipeUp()
-        }
-        XCTAssertTrue(row.exists && row.isHittable, "Missing menu row: \(title)")
+        XCTAssertTrue(bringFullyIntoView(row), "Missing menu row: \(title)")
         row.tap()
+    }
+
+    /// Short drags instead of flings: at large text a fling scrolls straight
+    /// past a row, and a row cut by the half-height sheet's edge reports
+    /// hittable while its visible sliver sits in the home-indicator area.
+    private func bringFullyIntoView(_ element: XCUIElement, attempts: Int = 16) -> Bool {
+        let window = app.windows.firstMatch.frame
+        let topInset: CGFloat = 100
+        for _ in 0..<attempts {
+            if element.exists, element.isHittable,
+               element.frame.minY >= window.minY + topInset,
+               element.frame.maxY <= window.maxY { return true }
+            let isAbove = element.exists && element.frame.minY < window.minY + topInset
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: isAbove ? 0.45 : 0.8))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: isAbove ? 0.75 : 0.5))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        return element.exists && element.isHittable
     }
 
     @discardableResult
