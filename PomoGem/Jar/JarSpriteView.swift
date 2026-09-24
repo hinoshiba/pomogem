@@ -288,6 +288,11 @@ struct JarSpriteView: View {
                         labelHeight: coreLabelSize.height
                     )
                     if coreLabelsBuried {
+                        // Buried under the pile, the labels stay laid out
+                        // (their measured size keeps the layout stable) but
+                        // are not drawn: behind the large gems of a young
+                        // jar (D4) only fragments of text would show through
+                        // the gaps. VoiceOver reads the jar as one element.
                         JarLifetimeCoreLabels(
                             state: coreState,
                             topClearance: coreTopClearance,
@@ -295,6 +300,7 @@ struct JarSpriteView: View {
                             labelBottomLimit: coreLabelBottomLimit,
                             measuredSize: $coreLabelSize
                         )
+                        .opacity(0)
                     }
                 } else if totalGrams > 0, totalGrams < GemCutLadder.firstCrystalTierGrams {
                     // Where the core will be born: a colourless vessel whose
