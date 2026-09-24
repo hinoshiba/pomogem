@@ -839,7 +839,7 @@ struct AccumulationOverviewView: View {
         .accessibilityLabel(
             currentWeekMeasuredCount == 0
                 ? "今週の積み上げ。今週のタイマー完走はまだありません。休んでも、以前の記録は減りません"
-                : "今週の積み上げ、\(EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams))、\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekMeasuredCount)回。回数は戻った文脈で、時間価値とは別です"
+                : "今週の積み上げ、\(DurationPresentation.focusLabel(grams: currentWeekGrams))、\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekMeasuredCount)回。回数は戻った文脈で、時間価値とは別です"
         )
     }
 
@@ -901,8 +901,8 @@ struct AccumulationOverviewView: View {
     @ViewBuilder
     private var currentWeekStats: some View {
         OverviewStat(
-            title: "標準換算",
-            value: EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams)
+            title: String(localized: "時間", table: "Overview", comment: "This week's focus time stat title"),
+            value: DurationPresentation.focusLabel(grams: currentWeekGrams)
         )
         OverviewStat(title: "戻った回数", value: "\(currentWeekMeasuredCount)回")
         OverviewStat(title: "今週", value: formattedMass(currentWeekGrams))

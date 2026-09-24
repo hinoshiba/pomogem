@@ -222,7 +222,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try returnHome(from: "設定")
         try openLog()
         let recordTimeout = try remainingHydrationTime(until: hydrationDeadline)
-        try require(summary(value: "30m", title: "積んだ時間").waitForExistence(
+        try require(summary(value: "30分", title: "積んだ時間").waitForExistence(
             timeout: recordTimeout),
                     "The original manual record did not hydrate from iCloud within the restore budget.")
         try assertAuditRecordAndTotals()
@@ -782,7 +782,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try returnHome(from: "設定")
         try openLog()
         let recordTimeout = try hydrationDeadline.map { try remainingHydrationTime(until: $0) } ?? 10
-        try require(summary(value: "30m", title: "積んだ時間").waitForExistence(timeout: recordTimeout),
+        try require(summary(value: "30分", title: "積んだ時間").waitForExistence(timeout: recordTimeout),
                     "The original 1,800-second manual record must remain after theme deletion.")
         try assertAuditRecordAndTotals()
         try returnHome(from: "記録")
@@ -1032,7 +1032,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
     }
 
     private func summary(value: String, title: String) -> XCUIElement {
-        // Token boundaries prevent 30m/300g from satisfying the zero checks.
+        // Token boundaries prevent 30分/300g from satisfying the zero checks.
         let pattern = "(?:.*[\\s,、])?" + NSRegularExpression.escapedPattern(for: value)
             + "[\\s,、]+" + NSRegularExpression.escapedPattern(for: title)
         return app!.descendants(matching: .any).matching(
@@ -1041,7 +1041,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
     }
 
     private func assertAuditRecordAndTotals() throws {
-        try scrollTo(summary(value: "30m", title: "積んだ時間"), direction: .down)
+        try scrollTo(summary(value: "30分", title: "積んだ時間"), direction: .down)
         try require(summary(value: "300g", title: "今期の質量").exists,
                     "The unique 30-minute record must contribute exactly 300g.")
         try scrollTo(auditHistoryRow, attempts: 24)
@@ -1049,7 +1049,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
     }
 
     private func assertEmptyRecordState() throws {
-        try scrollTo(summary(value: "0m", title: "積んだ時間"), direction: .down)
+        try scrollTo(summary(value: "0分", title: "積んだ時間"), direction: .down)
         try require(summary(value: "0g", title: "今期の質量").exists, "Record mass must be zero.")
         try scrollTo(app!.staticTexts["一粒積むと、ここに記録が残ります。"], attempts: 24)
         try require(!auditHistoryRow.exists, "The reset audit record must not remain in history.")

@@ -1702,7 +1702,7 @@ struct LogView: View {
     }
 
     private func formatMinutes(_ minutes: Int) -> String {
-        minutes >= 60 ? String(format: "%.1fh", Double(minutes) / 60) : "\(minutes)m"
+        DurationPresentation.minutesLabel(minutes)
     }
 }
 

@@ -213,10 +213,7 @@ struct WrappedView: View {
     }
 
     private func formatMinutes(_ minutes: Int) -> String {
-        guard minutes >= 60 else { return "\(minutes)分" }
-        let hours = minutes / 60
-        let remainder = minutes % 60
-        return remainder == 0 ? "\(hours)時間" : "\(hours)時間\(remainder)分"
+        DurationPresentation.minutesLabel(minutes)
     }
 
     @ViewBuilder
