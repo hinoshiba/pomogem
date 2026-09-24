@@ -21,7 +21,7 @@ enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .relaunchRequired:
-            "データを安全に切り替えるため、AppスイッチャーでPomoGemを一度終了し、もう一度開いてください。アプリ自体は削除しないでください。"
+            "データを安全に切り替えるため、Appスイッチャーでポモジェムを一度終了し、もう一度開いてください。アプリ自体は削除しないでください。"
         case .remoteRecoveryRequired:
             "iCloudで未完了のデータ切り替えが見つかりました。復旧が完了するまで通常の同期を停止しています。"
         case .datasetRefreshRequired:
@@ -46,7 +46,7 @@ enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
         case .cloudCopyStillPending:
             "iCloudのデータとこの端末のコピーがまだ一致しません。記録は保護されています。通信を確認して、もう一度お試しください。ほかの端末でポモジェムを使っている場合は、その端末を閉じてからお試しください。"
         case .cloudCopyStillArriving:
-            "iCloudからの受信に時間がかかっています。記録は保護されています。通信の安定した場所で、AppスイッチャーでPomoGemを終了してもう一度開くと、続きから確認します。アプリ自体は削除しないでください。"
+            "iCloudからの受信に時間がかかっています。記録は保護されています。通信の安定した場所で、Appスイッチャーでポモジェムを終了してもう一度開くと、続きから確認します。アプリ自体は削除しないでください。"
         case .recoveryNeedsReview:
             "中断時のデータを安全に自動復旧できません。復旧用コピーを保護し、削除を停止しています。"
         }

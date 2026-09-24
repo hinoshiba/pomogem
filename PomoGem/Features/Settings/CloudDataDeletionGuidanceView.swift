@@ -14,7 +14,8 @@ enum CloudDataDeletionGuidanceCopy {
     static let delete =
         "iCloudに保存したポモジェムのデータは、iPhoneの「設定」アプリから削除できます。同じApple Accountのすべての端末から消え、元に戻せません。"
     static let exportTitle = "先に記録を書き出す"
-    static let exportNote = "書き出したファイルはポモジェムに読み込めません。記録の控えとして保存します。"
+    /// The transfer screens' sentence, not a second spelling of it.
+    static let exportNote = StorageTransferOverwriteCopy.exportNote
     /// Version-neutral wording and no deep link: the labels of iOS Settings
     /// move between releases, and a link that lands on the wrong page is worse
     /// than a sentence.

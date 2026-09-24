@@ -306,7 +306,7 @@ private struct StorageTransferChoiceView: View {
         return StorageTransferDatasetConfirmationView(
             direction: direction,
             preview: datasetPreview,
-            disclosesScreenTimeReset: disclosesScreenTimeReset,
+            screenTimeDisclosure: disclosesScreenTimeReset ? StorageTransferScreenTimeCopy.switchResets : nil,
             export: export
         ) {
             confirmedDataset(direction)
@@ -456,8 +456,12 @@ struct StorageTransferDatasetConfirmationView: View {
     /// counts and the other-device evidence are what informed consent is
     /// consent TO (PLAN §3 S14/S15).
     var preview: StorageTransferDatasetPreviewSummary?
-    /// transfer-07. Only the direction whose own copy does not already say so.
-    var disclosesScreenTimeReset = false
+    /// transfer-07. What the switch resets in Screen Time, for the direction
+    /// whose own copy does not already say so; nil when nothing needs saying.
+    /// Settings passes the definite `switchResets` only while the feature is
+    /// in use. The launch host, which has no Screen Time owner mounted and so
+    /// cannot tell, passes the conditional `switchResetsIfInUse`.
+    var screenTimeDisclosure: String?
     /// 「先にこの端末の記録を書き出す」, for the direction that deletes this
     /// device's side. nil where the surface carries its own export (the launch
     /// host) or where the deleted side is iCloud's.
@@ -511,8 +515,8 @@ struct StorageTransferDatasetConfirmationView: View {
                         if let export {
                             StorageTransferExportControl(identifier: identifier("export"), export: export)
                         }
-                        if disclosesScreenTimeReset {
-                            paragraph(StorageTransferScreenTimeCopy.switchResets, suffix: "screen-time")
+                        if let screenTimeDisclosure {
+                            paragraph(screenTimeDisclosure, suffix: "screen-time")
                         }
                         paragraph(StorageTransferRefreshCopy.relaunch, suffix: "relaunch")
                     }

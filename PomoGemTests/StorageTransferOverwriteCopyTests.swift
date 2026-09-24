@@ -26,7 +26,7 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
                        "iCloudにある現在のPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータで置き換えます。2つのデータは結合しません。削除したiCloudのデータを元に戻すことはできません。同じApple Accountの他の端末は、次に開いたときにこの画面と同じ確認を求められ、その端末だけにある未送信のデータは残りません。")
         XCTAssertEqual(StorageTransferOverwriteCopy.exportTitle, "先にこの端末の記録を書き出す")
         XCTAssertEqual(StorageTransferOverwriteCopy.exportNote,
-                       "書き出したファイルはPomoGemに読み込めません。記録の控えとして保存します。")
+                       "書き出したファイルはポモジェムに読み込めません。記録の控えとして保存します。")
         XCTAssertEqual(StorageTransferOverwriteCopy.confirmTitle, "このiPhoneのデータで置き換える")
     }
 
@@ -101,9 +101,9 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
     /// promise a choice between the two directions.
     func testBlockedExplanationOnlyPromisesTheDirectionThisBuildCanOffer() {
         XCTAssertEqual(StorageTransferOverwriteCopy.blockedExplanation(offersOverwrite: true),
-                       "iCloudを読み取れると、「もう一度試す」から、iCloudのデータを再取得するか、このiPhoneのデータでiCloudを置き換えるかを選べます。")
+                       "iCloudを読み取れれば、「もう一度試す」のあとに、iCloudのデータを再取得するか、このiPhoneのデータでiCloudを置き換えるかを選べます。")
         XCTAssertEqual(StorageTransferOverwriteCopy.blockedExplanation(offersOverwrite: false),
-                       "iCloudを読み取れると、「もう一度試す」から、iCloudのデータを再取得する選択肢に進めます。")
+                       "iCloudを読み取れれば、「もう一度試す」のあとに、iCloudのデータを再取得する選択肢が表示されます。")
         // transfer-06. The message it sits under already says both of these.
         XCTAssertTrue(StorageTransferLineageCopy.refreshScreenUnavailable.contains("通信を確認"))
         XCTAssertTrue(StorageTransferLineageCopy.refreshScreenUnavailable.contains("どちらの記録も削除していません"))
@@ -136,9 +136,9 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
 
     func testRequestAcceptedCopyIsTheApprovedWordingForBothDirections() {
         XCTAssertEqual(StorageTransferOverwriteCopy.requestAccepted,
-                       "このiPhoneのデータでiCloudを置き換える手続きを受け付けました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。復旧用コピーの保存が終わるまで、iCloudの削除は始めません。")
+                       "このiPhoneのデータでiCloudを置き換える手続きを受け付けました。Appスイッチャーでポモジェムを終了し、もう一度開いてください。復旧用コピーの保存が終わるまで、iCloudの削除は始めません。")
         XCTAssertEqual(StorageTransferRefreshCopy.requestAccepted,
-                       "iCloudのデータでこの端末を置き換える手続きを受け付けました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。iCloudのデータは削除しません。")
+                       "iCloudのデータでこの端末を置き換える手続きを受け付けました。Appスイッチャーでポモジェムを終了し、もう一度開いてください。iCloudのデータは削除しません。")
     }
 
     /// transfer-10. Apple's Japanese name for the control is 「Appスイッチャー」.
@@ -149,6 +149,42 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
         for text in texts {
             XCTAssertTrue(text.contains("Appスイッチャー"), text)
             XCTAssertFalse(text.contains("アプリスイッチャー"), text)
+        }
+    }
+
+    /// Copy that sends the user into iOS — the App Switcher card, the Home
+    /// Screen icon — names the app as iOS shows it there (CFBundleDisplayName
+    /// 「ポモジェム」), not by its Latin brand name.
+    func testCopyThatSendsTheUserIntoIOSNamesTheAppAsIOSShowsIt() {
+        let texts = [StorageTransferOverwriteCopy.requestAccepted, StorageTransferRefreshCopy.requestAccepted,
+                     StorageTransferLineageCopy.requestAccepted, StorageTransferProgressCopy.refreshReady,
+                     StorageTransferProgressCopy.relaunchInstructions,
+                     StorageTransferRuntimeError.relaunchRequired.localizedDescription,
+                     StorageTransferRuntimeError.cloudCopyStillArriving.localizedDescription,
+                     StorageTransferRuntimeError.cloudCopyStillPending.localizedDescription,
+                     CloudOfflineSessionError.relaunchRequired.localizedDescription]
+        for text in texts {
+            XCTAssertTrue(text.contains("ポモジェム"), text)
+            XCTAssertFalse(text.contains("PomoGem"), text)
+        }
+        XCTAssertEqual(CloudDataDeletionGuidanceCopy.exportNote, StorageTransferOverwriteCopy.exportNote,
+            "One export note, not two spellings of it")
+    }
+
+    /// The relaunch screen shows a message and, under it, how to relaunch.
+    /// Whatever the message, 「アプリ自体は削除しないでください」 appears exactly
+    /// once on the screen.
+    func testTheRelaunchCaptionNeverRepeatsTheMessage() {
+        let keep = StorageTransferProgressCopy.keepTheApp
+        XCTAssertFalse(StorageTransferProgressCopy.relaunchInstructions.contains(keep))
+        for message in [StorageTransferRuntimeError.relaunchRequired.localizedDescription,
+                        StorageTransferRuntimeError.cloudCopyStillArriving.localizedDescription,
+                        StorageTransferLineageCopy.requestAccepted, StorageTransferProgressCopy.refreshReady,
+                        StorageTransferRefreshCopy.requestAccepted, StorageTransferOverwriteCopy.requestAccepted,
+                        "切り替えを取り消しました。元の記録を残しています。アプリを終了して開き直してください。"] {
+            let screen = message + StorageTransferProgressCopy.relaunchInstructions(after: message)
+            XCTAssertEqual(screen.components(separatedBy: keep).count - 1, 1, message)
+            XCTAssertTrue(screen.contains("ホーム画面のアイコンで開き直してください"), message)
         }
     }
 
@@ -169,7 +205,8 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
             "The overwrite keeps its approved sentences")
         XCTAssertFalse(StorageTransferProgressCopy.continuing.contains("中断"))
         XCTAssertTrue(StorageTransferProgressCopy.relaunchInstructions.contains("Appスイッチャー"))
-        XCTAssertTrue(StorageTransferProgressCopy.relaunchInstructions.contains("削除しないでください"))
+        XCTAssertTrue(StorageTransferProgressCopy.relaunchInstructions(after: "")
+            .contains("削除しないでください"))
         XCTAssertTrue(StorageTransferRuntimeError.relaunchRequired.localizedDescription.contains("Appスイッチャー"))
         XCTAssertTrue(StorageTransferRuntimeError.cloudCopyStillArriving.localizedDescription.contains("Appスイッチャー"))
         XCTAssertFalse(StorageTransferRuntimeError.cloudCopyStillArriving.localizedDescription.contains("もう一度試す"),
@@ -203,11 +240,15 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
     /// transfer-07. What a switch resets, and what it keeps, in the Screen
     /// Time settings' own nouns.
     func testTheScreenTimeDisclosureSaysWhatIsResetAndWhatIsKept() {
-        let text = StorageTransferScreenTimeCopy.switchResets
-        for noun in ["選んだアプリ", "まだ取り込んでいない利用記録", "黒いgem", "「スクリーンタイム」",
-                     "保存済みの勉強時間と通常gemは引き継ぎます"] {
-            XCTAssertTrue(text.contains(noun), noun)
+        for text in [StorageTransferScreenTimeCopy.switchResets, StorageTransferScreenTimeCopy.switchResetsIfInUse] {
+            for noun in ["選んだアプリ", "まだ取り込んでいない利用記録", "黒いgem", "「スクリーンタイム」",
+                         "保存済みの勉強時間と通常gemは引き継ぎます"] {
+                XCTAssertTrue(text.contains(noun), noun)
+            }
         }
+        // The launch host cannot read whether the feature is in use, so its
+        // sentence is conditional rather than an assertion about this user.
+        XCTAssertTrue(StorageTransferScreenTimeCopy.switchResetsIfInUse.hasPrefix("スクリーンタイムの自動記録を使っている場合、"))
     }
 
     /// transfer-10. A closed door has staged nothing, so its reason may not
@@ -216,7 +257,10 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
         let reason = StorageTransferOverwriteCopy.doorUnavailable
         XCTAssertFalse(reason.contains("復旧用コピー"))
         XCTAssertTrue(reason.contains("いまは利用できません"))
-        XCTAssertTrue(reason.contains("どちらの記録も削除していません"))
+        // Nobody pressed a closed door, so its reason reports no event:
+        // 「削除していません」 under it would reassure about a non-event.
+        XCTAssertFalse(reason.contains("削除していません"), reason)
+        XCTAssertEqual(reason, "複数端末での同時操作から記録を保護するため、この操作はいまは利用できません。")
     }
 
     func testLateArrivalBannerIsTheApprovedWordingAndOffersOnlyNonDestructiveActions() {

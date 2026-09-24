@@ -76,7 +76,9 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         assertOverwriteFixture(refresh: 0, overwrite: 0, export: 0)
     }
 
-    /// The shipping build still offers the door, describes it, and refuses it.
+    /// The shipping build still offers the door and refuses it, stating only
+    /// its reason (transfer-08, as in Settings). The door that deletes nothing
+    /// comes before it (review of transfer-04 / device-01).
     func testTheShippingBuildShowsTheOverwriteDoorDisabledWithItsReason() {
         launch("datasetRefreshChoice")
         let overwrite = app.buttons["storage-overwrite-confirm"]
@@ -85,13 +87,29 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         let reason = app.staticTexts["storage-overwrite-unavailable"]
         XCTAssertTrue(reveal(reason))
         XCTAssertTrue(reason.label.contains("いまは利用できません"))
-        // The device side is not read while this direction is unpublished, so
-        // it is omitted rather than reported as a failed look.
-        let comparison = app.staticTexts["storage-overwrite-comparison"]
+        XCTAssertFalse(reason.label.contains("削除していません"),
+            "Nobody pressed a closed door; its reason reports no event")
+        XCTAssertFalse(app.staticTexts["storage-overwrite-data-loss-warning"].exists,
+            "The long irreversible-deletion warning belongs to a door that can open")
+        XCTAssertFalse(app.staticTexts["storage-overwrite-other-devices"].exists)
+        // transfer-03. 「iCloudから再取得」 deletes THIS side and ships, so this
+        // iPhone is counted in every build now.
+        let comparison = app.staticTexts["storage-dataset-comparison"]
         XCTAssertTrue(reveal(comparison))
-        XCTAssertTrue(comparison.label.contains("iCloud: テーマ"))
-        XCTAssertFalse(comparison.label.contains("このiPhone"))
+        XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"), "saw: \(comparison.label)")
+        XCTAssertTrue(comparison.label.contains("iCloud: テーマ9・記録312・成果28"))
         XCTAssertFalse(comparison.label.contains("確認できませんでした"))
+        XCTAssertFalse(app.staticTexts["storage-refresh-empty-cloud"].exists,
+            "iCloud holds the user's records here")
+        // The offline door deletes nothing, says what a later refresh does to
+        // what is recorded meanwhile, and sits above the closed door.
+        let offlineExplanation = app.staticTexts["storage-refresh-offline-explanation"]
+        XCTAssertTrue(reveal(offlineExplanation))
+        XCTAssertTrue(offlineExplanation.label.contains("同期は止まったまま"))
+        XCTAssertTrue(offlineExplanation.label.contains("「iCloudから再取得」を選ぶと、オフラインで記録した変更も削除されます"))
+        let offline = app.buttons["cloud-offline-continue"]
+        XCTAssertTrue(reveal(offline))
+        XCTAssertLessThan(offline.frame.minY, app.buttons["storage-overwrite-confirm"].frame.minY)
         overwrite.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertFalse(app.navigationBars["最後の確認"].exists)
         // PLAN Step 6: the raw and the FILTERED witness count are both stated,
@@ -107,7 +125,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
 
     func testComparisonShowsBothSidesAndDisclosesOtherDevicesAsEvidence() {
         launch("datasetRefreshOtherDevices")
-        let comparison = app.staticTexts["storage-overwrite-comparison"]
+        let comparison = app.staticTexts["storage-dataset-comparison"]
         XCTAssertTrue(reveal(comparison))
         XCTAssertTrue(comparison.label.contains("このiPhone"))
         XCTAssertTrue(comparison.label.contains("iCloud"))
@@ -128,8 +146,13 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         assertOverwriteFixture(refresh: 0, overwrite: 0, export: 0)
     }
 
+    /// On the published screen: a shipping build's closed door states only
+    /// its reason, so the evidence is read after the named re-read succeeds.
     func testNoOtherDeviceIsStatedAsAbsenceOfEvidenceNotAsAGuarantee() {
-        launch("datasetRefreshChoice")
+        launch("datasetRefreshPreviewFailed")
+        let retry = app.buttons["storage-dataset-retry-preview"]
+        XCTAssertTrue(reveal(retry))
+        retry.tap()
         let evidence = app.staticTexts["storage-overwrite-other-devices"]
         XCTAssertTrue(reveal(evidence))
         XCTAssertTrue(evidence.label.contains("見つかりませんでした"))
@@ -141,7 +164,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
 
     func testPreviewFailureKeepsTheOverwriteDoorDisabledAndSaysNothingWasDeleted() {
         launch("datasetRefreshPreviewFailed")
-        let comparison = app.staticTexts["storage-overwrite-comparison"]
+        let comparison = app.staticTexts["storage-dataset-comparison"]
         XCTAssertTrue(reveal(comparison))
         XCTAssertTrue(comparison.label.contains("iCloudの内容を確認できませんでした"))
         XCTAssertTrue(comparison.label.contains("どちらの記録も削除していません"))
@@ -151,9 +174,14 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
             "Nobody may authorize deleting contents the app failed to enumerate")
         overwrite.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertFalse(app.navigationBars["最後の確認"].exists)
-        // The non-destructive direction is unaffected by a failed server read.
-        XCTAssertTrue(reveal(app.buttons["storage-refresh-confirm"]))
-        attach("Dataset refresh — unreadable iCloud keeps the overwrite closed")
+        // S14 for the refresh too: it deletes THIS side, and nobody is asked
+        // to do that on the strength of an iCloud read that never happened.
+        acknowledge("storage-refresh-confirm-data-loss")
+        let refresh = app.buttons["storage-refresh-confirm"]
+        XCTAssertTrue(reveal(refresh))
+        XCTAssertFalse(refresh.isEnabled,
+            "An acknowledgement alone must not arm 「iCloudから再取得」 over an unread iCloud")
+        attach("Dataset refresh — unreadable iCloud keeps both doors closed")
         assertNoOperation()
         assertOverwriteFixture(refresh: 0, overwrite: 0, export: 0)
     }
@@ -163,7 +191,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
     /// and the only escape is force-quitting the app.
     func testTheNamedRetryControlExistsAndReArmsTheDoorAfterASuccessfulReRead() {
         launch("datasetRefreshPreviewFailed")
-        let comparison = app.staticTexts["storage-overwrite-comparison"]
+        let comparison = app.staticTexts["storage-dataset-comparison"]
         XCTAssertTrue(reveal(comparison))
         let named = "iCloudの内容をもう一度確認"
         XCTAssertTrue(comparison.label.contains("「\(named)」"),
@@ -173,7 +201,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         XCTAssertFalse(comparison.label.contains("もう一度試す"),
             "The failure sentence names the re-read control, not the relaunch retry")
 
-        let retry = app.buttons["storage-overwrite-retry-preview"]
+        let retry = app.buttons["storage-dataset-retry-preview"]
         XCTAssertTrue(reveal(retry))
         XCTAssertEqual(retry.label, named)
         XCTAssertTrue(retry.isEnabled)
@@ -183,12 +211,12 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
 
         // The successful re-read replaces the failure sentence with the real
         // comparison and re-arms the door it was gating.
-        let rearmed = app.staticTexts["storage-overwrite-comparison"]
+        let rearmed = app.staticTexts["storage-dataset-comparison"]
         XCTAssertTrue(reveal(rearmed))
         XCTAssertTrue(rearmed.label.contains("このiPhone"))
         XCTAssertTrue(rearmed.label.contains("テーマ"))
         XCTAssertFalse(rearmed.label.contains("確認できませんでした"))
-        XCTAssertFalse(app.buttons["storage-overwrite-retry-preview"].exists,
+        XCTAssertFalse(app.buttons["storage-dataset-retry-preview"].exists,
             "A succeeded read is not offered a re-read")
         let overwrite = app.buttons["storage-overwrite-confirm"]
         XCTAssertTrue(reveal(overwrite, upwards: false))
@@ -245,6 +273,42 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         assertOverwriteFixture(refresh: 0, overwrite: 1, export: 0)
     }
 
+    /// transfer-03, the shipping build. 「iCloudから再取得」 deletes THIS iPhone's
+    /// side, so before its acknowledgement can arm it the screen counts both
+    /// sides, warns — with this iPhone's counts — when iCloud holds none of
+    /// the user's records, offers the export, and discloses the Screen Time
+    /// reset. The warning ends 「中止して…」, so the door is not the amber one.
+    func testTheShippingRefreshCountsBothSidesAndSaysSoWhenICloudIsEmpty() {
+        launch("datasetRefreshEmptyCloud")
+        let comparison = app.staticTexts["storage-dataset-comparison"]
+        XCTAssertTrue(reveal(comparison))
+        XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"), "saw: \(comparison.label)")
+        XCTAssertTrue(comparison.label.contains("iCloud: テーマ5・記録0・成果0"), "saw: \(comparison.label)")
+        let empty = app.staticTexts["storage-refresh-empty-cloud"]
+        XCTAssertTrue(reveal(empty))
+        XCTAssertTrue(empty.label.contains("1件も見つかりませんでした"), "saw: \(empty.label)")
+        XCTAssertTrue(empty.label.contains("このiPhoneのテーマ12・記録480・成果36"), "saw: \(empty.label)")
+        let screenTime = app.staticTexts["storage-refresh-screen-time"]
+        XCTAssertTrue(reveal(screenTime))
+        XCTAssertTrue(screenTime.label.hasPrefix("スクリーンタイムの自動記録を使っている場合"))
+        XCTAssertTrue(reveal(app.buttons["storage-refresh-export"]))
+        attach("Dataset refresh — iCloud holds none of the user's records")
+
+        let refresh = app.buttons["storage-refresh-confirm"]
+        XCTAssertTrue(reveal(refresh))
+        XCTAssertFalse(refresh.isEnabled, "Reading the evidence is never consent")
+        for evidence in [empty, screenTime] {
+            XCTAssertLessThan(evidence.frame.minY, app.switches["storage-refresh-confirm-data-loss"].frame.minY,
+                "Every disclosure comes before the acknowledgement")
+        }
+        acknowledge("storage-refresh-confirm-data-loss")
+        XCTAssertTrue(reveal(refresh))
+        XCTAssertTrue(refresh.isEnabled)
+        refresh.tap()
+        assertOverwriteFixture(refresh: 1, overwrite: 0, export: 0)
+        assertNoOperation()
+    }
+
     // MARK: - 4. `.blocked` explains, it does not offer
 
     func testBlockedOffersNoDestructiveActionButExplainsWhatComesNext() {
@@ -292,7 +356,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         XCTAssertTrue(export.isEnabled, "The rescue door must not require a data-loss acknowledgement")
         let note = app.staticTexts["storage-refresh-export-note"]
         XCTAssertTrue(reveal(note))
-        XCTAssertTrue(note.label.contains("PomoGemに読み込めません"))
+        XCTAssertTrue(note.label.contains("ポモジェムに読み込めません"))
         attach("Dataset refresh — non-destructive export before either replacement")
         XCTAssertTrue(reveal(export, upwards: false))
         export.tap()
@@ -346,10 +410,14 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         let instructions = app.staticTexts["storage-transfer-relaunch-required"]
         XCTAssertTrue(reveal(instructions))
         XCTAssertTrue(instructions.label.contains("Appスイッチャー"), "saw: \(instructions.label)")
-        XCTAssertTrue(instructions.label.contains("アプリ自体は削除しないでください"))
+        XCTAssertTrue(instructions.label.contains("ポモジェムを上にスワイプ"),
+            "The App Switcher card shows the Home Screen name, not the Latin brand")
         let message = app.staticTexts["storage-launch-message"]
         XCTAssertTrue(reveal(message))
         XCTAssertTrue(message.label.contains("Appスイッチャー"))
+        // Said once on the screen: the message already carries it.
+        XCTAssertTrue(message.label.contains("アプリ自体は削除しないでください"))
+        XCTAssertFalse(instructions.label.contains("アプリ自体は削除しないでください"))
         attach("Relaunch — last step, with instructions")
         assertNoOperation()
     }
@@ -439,26 +507,29 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
 
     func testAX5OverwriteDoorsAndFinalConfirmationRemainReachableAndDescribed() throws {
         launch("datasetRefreshOtherDevices", accessibility5: true)
-        let comparison = app.staticTexts["storage-overwrite-comparison"]
+        let comparison = app.staticTexts["storage-dataset-comparison"]
         XCTAssertTrue(reveal(comparison))
         XCTAssertGreaterThan(comparison.frame.width,
             app.windows.firstMatch.frame.width * 0.65,
             "The comparison must keep a readable line width instead of collapsing")
         attach("AX5 dataset refresh — comparison")
 
+        // Top to bottom, in the order the screen lays them out, so each reveal
+        // scrolls one way only: the export sits in the refresh door's own
+        // section, above its button, and the overwrite door comes last.
+        let export = app.buttons["storage-refresh-export"]
+        XCTAssertTrue(reveal(export))
+        assertTouchTarget(export)
         let refresh = app.buttons["storage-refresh-confirm"]
         XCTAssertTrue(reveal(refresh))
         assertTouchTarget(refresh)
         let overwrite = app.buttons["storage-overwrite-confirm"]
-        XCTAssertTrue(reveal(overwrite, upwards: false))
+        XCTAssertTrue(reveal(overwrite))
         assertTouchTarget(overwrite)
-        let export = app.buttons["storage-refresh-export"]
-        XCTAssertTrue(reveal(export))
-        assertTouchTarget(export)
         attach("AX5 dataset refresh — both doors and the rescue door reachable")
         try auditDescriptionsAndTraits()
 
-        openOverwriteSheet(upwards: false)
+        openOverwriteSheet(upwards: true)
         let toggle = app.switches["storage-overwrite-confirm-data-loss"]
         XCTAssertTrue(reveal(toggle))
         assertTouchTarget(toggle)
@@ -508,6 +579,9 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         let refreshExplanation = app.staticTexts["storage-lineage-refresh-explanation"]
         XCTAssertTrue(reveal(refreshExplanation, upwards: false))
         XCTAssertTrue(refreshExplanation.label.contains("iCloudのデータは削除しません"))
+        // One operation, one name: the section is named after its button.
+        XCTAssertTrue(app.staticTexts["iCloudから再取得"].exists)
+        XCTAssertFalse(app.staticTexts["iCloudのデータを取り込み直す"].exists)
         let comparison = app.staticTexts["storage-lineage-comparison"]
         XCTAssertTrue(reveal(comparison, upwards: false))
         XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"),
@@ -566,8 +640,16 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         XCTAssertTrue(reveal(comparison))
         XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"))
         XCTAssertTrue(comparison.label.contains("iCloud: テーマ9・記録312・成果28"))
+        // transfer-07. The switch resets Screen Time, and no Screen Time owner
+        // is mounted on the launch host, so the sheet always carries the
+        // conditional sentence — before the acknowledgement.
+        let screenTime = app.staticTexts["storage-switch.refresh-from-cloud-screen-time"]
+        XCTAssertTrue(reveal(screenTime, upwards: false))
+        XCTAssertTrue(screenTime.label.hasPrefix("スクリーンタイムの自動記録を使っている場合"), "saw: \(screenTime.label)")
+        XCTAssertTrue(screenTime.label.contains("黒いgemは引き継ぎません"))
         let toggle = app.switches["storage-switch.refresh-from-cloud-confirm-data-loss"]
         XCTAssertTrue(reveal(toggle, upwards: false))
+        XCTAssertLessThan(screenTime.frame.minY, toggle.frame.minY)
         XCTAssertEqual(toggle.value as? String, "0")
         let confirm = app.buttons["storage-switch.refresh-from-cloud-confirm"]
         XCTAssertTrue(reveal(confirm, upwards: false))

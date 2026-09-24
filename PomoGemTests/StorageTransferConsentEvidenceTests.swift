@@ -116,6 +116,8 @@ final class StorageTransferConsentEvidenceTests: XCTestCase {
             "and it names the way back an offline session actually carries")
         XCTAssertTrue(StorageTransferLineageCopy.offlineExplanation(offersLineageStart: true)
             .contains("使い始める"), "Only a build that publishes the door may name it")
+        XCTAssertTrue(offline.contains("あとで「iCloudから再取得」を選ぶと、オフラインで記録した変更も削除されます。"),
+            "Staying offline must say what the way back does to what is recorded meanwhile")
         XCTAssertTrue(StorageTransferLineageCopy.offlineSessionMessage.contains("止まったまま"))
         XCTAssertFalse(StorageTransferLineageCopy.offlineSessionMessage.contains("接続回復後"))
     }
@@ -133,6 +135,19 @@ final class StorageTransferConsentEvidenceTests: XCTestCase {
         XCTAssertTrue(StorageTransferLineageCopy.stopReason.contains("削除していません"))
         XCTAssertEqual(StorageTransferRuntimeError.cloudLineageUnavailable.localizedDescription,
                        StorageTransferLineageCopy.stopReason)
+        // The stop reason names no cause. Deleting the app's iCloud data does
+        // not lead here for an App Store user (a nil-generation receipt is
+        // admitted), so offering it as the example sent the people who CAN
+        // reach this screen — an older-generation receipt, or a 1.0.x store
+        // the adoption rule does not take — looking for something they never
+        // did. What was observed, and what was not done; nothing else.
+        XCTAssertEqual(StorageTransferLineageCopy.stopReason,
+                       "iCloudのデータとこのiPhoneの記録の対応を確認できないため、記録が混ざらないよう同期を止めています。このiPhoneの記録もiCloudのデータも削除していません。")
+        XCTAssertFalse(StorageTransferLineageCopy.stopReason.contains("場合"))
+        XCTAssertFalse(StorageTransferLineageCopy.stopReason.contains("PomoGem"))
+        // One operation, one name on the screen: the section, its button and
+        // the sheet's confirm are all 「iCloudから再取得」.
+        XCTAssertEqual(StorageTransferLineageCopy.refreshDoorTitle, StorageTransferRefreshCopy.confirmTitle)
         XCTAssertTrue(StorageTransferLineageCopy.refreshExplanation.contains("iCloudのデータは削除しません"))
     }
 

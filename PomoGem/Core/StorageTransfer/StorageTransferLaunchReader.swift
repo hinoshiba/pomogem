@@ -137,7 +137,7 @@ enum StorageTransferRefreshCopy {
     static let confirmTitle = "iCloudから再取得"
 
     static let requestAccepted =
-        "iCloudのデータでこの端末を置き換える手続きを受け付けました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。iCloudのデータは削除しません。"
+        "iCloudのデータでこの端末を置き換える手続きを受け付けました。Appスイッチャーでポモジェムを終了し、もう一度開いてください。iCloudのデータは削除しません。"
 
     /// review-1-2 / review-2-4. This direction deletes the DEVICE side and
     /// stages no recovery copy anywhere, so the user may not be asked to
@@ -210,6 +210,15 @@ enum StorageTransferEnableCopy {
 enum StorageTransferScreenTimeCopy {
     static let switchResets =
         "切り替えると、スクリーンタイムの自動記録はオフになり、選んだアプリ、まだ取り込んでいない利用記録、黒いgemは引き継ぎません。切り替えたあとで、設定の「スクリーンタイム」から選び直してください。保存済みの勉強時間と通常gemは引き継ぎます。"
+
+    /// The same facts for the launch host's 「iCloudから再取得」 doors. No store
+    /// is mounted there, so no Screen Time owner is bound and whether the
+    /// feature is in use cannot be read; Settings shows `switchResets` only
+    /// while it is. The conditional form is true either way, and these stop
+    /// screens are rare enough that a sentence a non-user can skip costs less
+    /// than a reset nobody was told about.
+    static let switchResetsIfInUse =
+        "スクリーンタイムの自動記録を使っている場合、切り替えると自動記録はオフになり、選んだアプリ、まだ取り込んでいない利用記録、黒いgemは引き継ぎません。切り替えたあとで、設定の「スクリーンタイム」から選び直してください。保存済みの勉強時間と通常gemは引き継ぎます。"
 }
 
 /// The fixed Japanese copy for the device → iCloud overwrite. It lives beside
@@ -240,12 +249,16 @@ enum StorageTransferOverwriteCopy {
     /// Settings and on the launch screen. `StorageTransferReleaseError` keeps
     /// its own text because it is also thrown when an already accepted
     /// replacement is refused on resume, where a recovery copy can exist; at a
-    /// closed door nothing was ever staged, so this line promises none.
+    /// closed door nothing was ever staged, so this line promises none. It
+    /// also reports no event: nobody pressed this door, so 「削除していません」
+    /// would reassure about an operation that never happened.
     static let doorUnavailable =
-        "複数端末での同時操作から記録を保護するため、この操作はいまは利用できません。どちらの記録も削除していません。"
+        "複数端末での同時操作から記録を保護するため、この操作はいまは利用できません。"
 
     static let exportTitle = "先にこの端末の記録を書き出す"
-    static let exportNote = "書き出したファイルはPomoGemに読み込めません。記録の控えとして保存します。"
+    /// One sentence for every export control (the transfer screens and the
+    /// reset guidance page), naming the app as its Home Screen icon does.
+    static let exportNote = "書き出したファイルはポモジェムに読み込めません。記録の控えとして保存します。"
     static let confirmTitle = "このiPhoneのデータで置き換える"
 
     /// Rendered instead of either §6.2 variant while no server read has
@@ -282,7 +295,7 @@ enum StorageTransferOverwriteCopy {
     // MARK: Progress and relaunch
 
     static let requestAccepted =
-        "このiPhoneのデータでiCloudを置き換える手続きを受け付けました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。復旧用コピーの保存が終わるまで、iCloudの削除は始めません。"
+        "このiPhoneのデータでiCloudを置き換える手続きを受け付けました。Appスイッチャーでポモジェムを終了し、もう一度開いてください。復旧用コピーの保存が終わるまで、iCloudの削除は始めません。"
 
     /// Derived from the durable journal phase, never from an optimistic guess
     /// about an in-flight effect.
@@ -316,9 +329,9 @@ enum StorageTransferOverwriteCopy {
     /// says nothing was deleted, so this adds only what comes next.
     static func blockedExplanation(offersOverwrite: Bool) -> String {
         guard offersOverwrite else {
-            return "iCloudを読み取れると、「もう一度試す」から、iCloudのデータを再取得する選択肢に進めます。"
+            return "iCloudを読み取れれば、「もう一度試す」のあとに、iCloudのデータを再取得する選択肢が表示されます。"
         }
-        return "iCloudを読み取れると、「もう一度試す」から、iCloudのデータを再取得するか、このiPhoneのデータでiCloudを置き換えるかを選べます。"
+        return "iCloudを読み取れれば、「もう一度試す」のあとに、iCloudのデータを再取得するか、このiPhoneのデータでiCloudを置き換えるかを選べます。"
     }
 
     // MARK: Late arrival (§6.5)
@@ -403,13 +416,24 @@ enum StorageTransferProgressCopy {
     /// After a confirmed 「iCloudから再取得」 has been recorded by the runtime:
     /// the next launch starts receiving iCloud's data.
     static let refreshReady =
-        "iCloudから取り込む準備ができました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。次に開くと、iCloudからの受信を始めます。iCloudのデータは削除しません。"
+        "iCloudから取り込む準備ができました。Appスイッチャーでポモジェムを終了し、もう一度開いてください。次に開くと、iCloudからの受信を始めます。iCloudのデータは削除しません。"
 
     static let nextLaunchCompletes = "次に開くと、保存先の切り替えが完了します。"
 
     /// How, not only that. The launch host deliberately offers no button here.
+    /// The app is named as the App Switcher card and the Home Screen icon name
+    /// it (CFBundleDisplayName), because that is where the user looks for it.
     static let relaunchInstructions =
-        "Appスイッチャーを開き（画面の下端から上にスワイプして指を止めるか、ホームボタンを2回押します）、PomoGemを上にスワイプして閉じてから、ホーム画面のアイコンで開き直してください。この画面で待っていても先へは進みません。アプリ自体は削除しないでください。"
+        "Appスイッチャーを開き（画面の下端から上にスワイプして指を止めるか、ホームボタンを2回押します）、ポモジェムを上にスワイプして閉じてから、ホーム画面のアイコンで開き直してください。この画面で待っていても先へは進みません。"
+    static let keepTheApp = "アプリ自体は削除しないでください。"
+
+    /// The caption under a relaunch message. Most messages already ask the
+    /// user to quit and reopen and some already say not to delete the app;
+    /// the caption adds the steps, and the warning only when it is missing,
+    /// so the screen never says the same sentence twice.
+    static func relaunchInstructions(after message: String) -> String {
+        message.contains(keepTheApp) ? relaunchInstructions : relaunchInstructions + keepTheApp
+    }
 
     /// Derived from the durable journal phase, never from an optimistic guess
     /// about an in-flight effect, so a relaunch shows the same sentence.
@@ -472,10 +496,14 @@ enum StorageTransferLineageCopy {
     /// review-2-5. The stop reason itself promises nothing: it is also the
     /// error text an offline session shows when its retry meets this state.
     /// transfer-01 / device-01: it no longer blames 「別のビルド（開発用／配布
-    /// 用）」, a cause that does not exist for an App Store user, and it names
-    /// the cause they can actually recognise.
+    /// 用）」, a cause that does not exist for an App Store user. Nor does it
+    /// guess any other cause: the state is reached by an older-generation
+    /// receipt, or by a receipt-less store the 1.0 / 1.0.1 adoption rule does
+    /// not take (Docs/iCloudSyncTroubleshooting.md), and a user whose iCloud
+    /// data was deleted usually holds neither. It states what was observed and
+    /// what was not done; the doors below say what can be done.
     static let stopReason =
-        "iCloudのデータとこのiPhoneの記録の対応を確認できないため、記録が混ざらないよう同期を止めています。iPhoneの設定からiCloudのPomoGemのデータを削除した場合などに起こります。このiPhoneの記録もiCloudのデータも削除していません。"
+        "iCloudのデータとこのiPhoneの記録の対応を確認できないため、記録が混ざらないよう同期を止めています。このiPhoneの記録もiCloudのデータも削除していません。"
     static let startAndOfflineChoices =
         "このiPhoneのデータでiCloudを使い始めるか、オフラインのまま使うかを選べます。"
 
@@ -491,12 +519,21 @@ enum StorageTransferLineageCopy {
     /// データでiCloudを使い始めることもできます」 in a build where that door is
     /// permanently disabled, so a user who chose offline had no enabled way
     /// back. Built from the release bit, like `screenMessage`.
+    ///
+    /// It also says what a later 「iCloudから再取得」 does to what is recorded
+    /// offline: that door is the shipping build's way back to sync, and it
+    /// discards this iPhone's records — including everything added meanwhile.
+    /// Also used on `.datasetRefresh`, whose offline session carries the same
+    /// 「復旧手順」 route back.
     static func offlineExplanation(offersLineageStart: Bool) -> String {
         let base = "iCloudへ送信せず、このiPhoneに保存されている記録でそのまま使います。変更はこのiPhoneに保存されますが、iCloudとの同期は止まったままです。どちらの記録も削除しません。"
         return base + (offersLineageStart
             ? "あとでこの画面から、このiPhoneのデータでiCloudを使い始めることもできます。"
             : "同期を再開する方法は、利用中の画面上部の「復旧手順」からいつでも確認できます。")
+            + offlineChangesAreDiscardedByRefresh
     }
+    static let offlineChangesAreDiscardedByRefresh =
+        "あとで「\(StorageTransferRefreshCopy.confirmTitle)」を選ぶと、オフラインで記録した変更も削除されます。"
     /// Offered only when the offline route is actually eligible. When it is
     /// not, the screen says why instead of showing a control that does nothing.
     static let offlineUnavailable =
@@ -509,14 +546,16 @@ enum StorageTransferLineageCopy {
     static let offlineSessionMessage =
         "iCloudとの同期は止まったままです。変更はこのiPhoneに保存されます。「復旧手順」から、同期を再開する方法をいつでも確認できます。"
 
-    // MARK: 「iCloudのデータを取り込み直す」 on this screen
+    // MARK: 「iCloudから再取得」 on this screen
 
     /// The policy-free way back to sync on this screen. It is the SAME
     /// `refreshCloudDatasetWithoutLineage` Settings already ships for accounts
     /// without a ledger: it writes nothing to iCloud and deletes this
     /// device's side only after the read-only pre-flight, the empty-iCloud
-    /// warning and its own unchecked acknowledgement in 「最後の確認」.
-    static let refreshDoorTitle = "iCloudのデータを取り込み直す"
+    /// warning and its own unchecked acknowledgement in 「最後の確認」. The
+    /// section is named after its button and the sheet's confirm, so one
+    /// operation has one name on this screen.
+    static let refreshDoorTitle = StorageTransferRefreshCopy.confirmTitle
     static let refreshExplanation =
         "iCloudにあるデータをこのiPhoneに取り込み直して、同期を再開します。このiPhoneのテーマ・記録・設定は削除され、iCloudのデータに置き換わります。2つのデータは結合しません。iCloudのデータは削除しません。"
 
@@ -543,7 +582,7 @@ enum StorageTransferLineageCopy {
     static let sheetConfirm = "iCloudを使い始める"
 
     static let requestAccepted =
-        "このiPhoneのデータでiCloudを使い始める手続きを受け付けました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。アプリ自体は削除しないでください。"
+        "このiPhoneのデータでiCloudを使い始める手続きを受け付けました。Appスイッチャーでポモジェムを終了し、もう一度開いてください。アプリ自体は削除しないでください。"
 
     // MARK: The explanation-only screens
 

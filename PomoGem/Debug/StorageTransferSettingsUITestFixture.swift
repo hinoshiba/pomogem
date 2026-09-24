@@ -50,6 +50,9 @@ enum StorageTransferSettingsUITestFixture {
         /// exists in the process.
         case datasetRefreshChoice, datasetRefreshOtherDevices, datasetRefreshPreviewFailed
         case datasetRefreshBlocked, overwriteInProgress
+        /// transfer-03. The shipping `.datasetRefresh` whose iCloud side holds
+        /// none of the user's records.
+        case datasetRefreshEmptyCloud
         /// transfer-04 / transfer-06: the generic blocked screen, a planned
         /// refresh continuation and the final relaunch.
         case launchBlockedGeneric, refreshInProgress, relaunchFinal
@@ -82,6 +85,7 @@ enum StorageTransferSettingsUITestFixture {
         var overwriteLaunch: StorageTransferOverwriteLaunchUITestScenario? {
             switch self {
             case .datasetRefreshChoice: .choice
+            case .datasetRefreshEmptyCloud: .refreshEmptyCloud
             case .datasetRefreshOtherDevices: .otherDevices
             case .datasetRefreshPreviewFailed: .previewFailed
             case .datasetRefreshBlocked: .blocked

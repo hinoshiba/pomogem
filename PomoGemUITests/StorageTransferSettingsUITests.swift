@@ -225,7 +225,8 @@ final class StorageTransferSettingsUITests: XCTestCase {
         let reason = app.staticTexts["storage-switch.overwrite-cloud-unavailable"]
         XCTAssertTrue(reveal(reason))
         XCTAssertTrue(reason.label.contains("いまは利用できません"))
-        XCTAssertTrue(reason.label.contains("どちらの記録も削除していません"))
+        XCTAssertFalse(reason.label.contains("削除していません"),
+            "Nobody pressed a closed door; its reason reports no event")
         XCTAssertFalse(reason.label.contains("復旧用コピー"))
         let door = app.buttons["storage-switch.overwrite-cloud"]
         XCTAssertTrue(reveal(door))
@@ -804,18 +805,18 @@ final class StorageTransferSettingsUITests: XCTestCase {
         assertTouchTarget(entry)
         entry.tap()
         XCTAssertTrue(app.navigationBars["同期の状態"].waitForExistence(timeout: 4))
-        let disclosure = app.staticTexts["cloud-offline-recovery-disclosure"]
         // device-01. A session opened from a stop screen does not resume on
         // its own, so neither the banner nor its details say 「待機中」.
         let title = app.staticTexts["cloud-offline-details-title"]
         XCTAssertTrue(reveal(title))
         XCTAssertEqual(title.label, "このiPhoneに保存・iCloud同期は停止中")
+        let disclosure = app.staticTexts["cloud-offline-recovery-disclosure"]
         XCTAssertTrue(reveal(disclosure))
         XCTAssertTrue(disclosure.label.contains("データの置き換えや削除には、その後の確認が必要です"))
         closeOfflineDetails()
-        let reviewState = app.staticTexts["cloud-offline.recovery-fixture-state"]
         // Settings' own status row agrees with the banner.
         XCTAssertTrue(reveal(text(containing: "通信が戻っても同期は自動では再開しません")))
+        let reviewState = app.staticTexts["cloud-offline.recovery-fixture-state"]
         XCTAssertTrue(reveal(reviewState, upwards: false))
         XCTAssertEqual(reviewState.label, "reviewCalls=0")
         assertNoOperation()
