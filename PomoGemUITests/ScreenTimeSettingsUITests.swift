@@ -291,15 +291,17 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         XCTAssertTrue(reveal(enabled))
         XCTAssertEqual(enabled.value as? String, "1")
 
-        // 保存 applies it and says what it switched on.
+        // 保存 applies it and says what it switched on. The toast lasts three
+        // seconds, so look for it first: every ledger query before it can
+        // take long enough on a loaded machine to miss it entirely.
         let save = app.buttons["screen-time.save"]
         XCTAssertTrue(save.isEnabled)
+        let toast = text(containing: "保存しました。自動記録中です")
         save.tap()
+        XCTAssertTrue(toast.waitForExistence(timeout: 20), "The toast must state the resulting status")
+        attach("Screen Time — saved with recording on")
         expectLedger(ledger, contains: "enabled=1", timeout: 20)
         XCTAssertTrue(ledger.label.contains("learning=2"), ledger.label)
-        XCTAssertTrue(text(containing: "保存しました。自動記録中です").waitForExistence(timeout: 6),
-                      "The toast must state the resulting status")
-        attach("Screen Time — saved with recording on")
         XCTAssertFalse(app.buttons["screen-time.back"].waitForExistence(timeout: 2))
 
         // Nothing unsaved: the ordinary back button leaves at once.
