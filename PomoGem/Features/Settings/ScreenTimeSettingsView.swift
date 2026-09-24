@@ -629,7 +629,9 @@ struct ScreenTimeSettingsView: View {
                     // Say what the save switched on or off. A first setup that
                     // left recording off used to read 「保存しました」 and then
                     // never recorded anything.
-                    let toast = ScreenTimeDraftPolicy.savedToast(for: configuration)
+                    let toast = ScreenTimeDraftPolicy.savedToast(
+                        for: configuration, isMonitoring: controller.isMonitoring
+                    )
                     router.showToast(toast.text, symbol: toast.symbol)
                 }
                 if leavesAfterSave, isVisible { dismiss() }
@@ -726,9 +728,18 @@ enum ScreenTimeDraftPolicy {
         return result
     }
 
-    /// The toast after a save, stating the resulting status.
-    static func savedToast(for configuration: ScreenTimeConfiguration) -> (text: String, symbol: String) {
+    /// The toast after a save, stating the resulting status: 自動記録中 only
+    /// when the save left monitoring registered, not merely switched on.
+    static func savedToast(
+        for configuration: ScreenTimeConfiguration,
+        isMonitoring: Bool
+    ) -> (text: String, symbol: String) {
         if configuration.enabled {
+            guard isMonitoring else {
+                return (String(localized: "保存しました", table: "ScreenTime",
+                               comment: "Toast after saving Screen Time settings before monitoring is confirmed"),
+                        "checkmark")
+            }
             return (String(localized: "保存しました。自動記録中です", table: "ScreenTime",
                            comment: "Toast after saving Screen Time settings with recording on"),
                     "checkmark")

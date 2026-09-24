@@ -1195,13 +1195,17 @@ final class ScreenTimeSettingsDraftTests: XCTestCase {
     func testTheSaveToastStatesWhetherRecordingIsOn() {
         var configuration = ScreenTimeConfiguration()
         configuration.enabled = true
-        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration).text, "保存しました。自動記録中です")
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, isMonitoring: true).text,
+                       "保存しました。自動記録中です")
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, isMonitoring: false).text,
+                       "保存しました", "Switched on is not yet recording; do not claim it")
         configuration.enabled = false
-        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration).text, "保存しました。自動記録はオフです")
-        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration).symbol, "checkmark")
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, isMonitoring: false).text,
+                       "保存しました。自動記録はオフです")
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, isMonitoring: false).symbol, "checkmark")
         configuration.learningSelection = selection(count: 1, seed: 0x63)
-        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration).symbol, "exclamationmark.circle",
-                       "Apps chosen but recording off is worth a second look")
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, isMonitoring: false).symbol,
+                       "exclamationmark.circle", "Apps chosen but recording off is worth a second look")
     }
 
     private func selection(count: Int, seed: UInt8) -> FamilyActivitySelection {

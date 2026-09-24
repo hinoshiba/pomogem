@@ -1,4 +1,5 @@
 #if DEBUG && targetEnvironment(simulator)
+import DeviceActivity
 import FamilyControls
 import ManagedSettings
 import SwiftData
@@ -74,11 +75,49 @@ enum ScreenTimeSettingsUITestFixture {
     }
 }
 
-/// Records what the controller asks of DeviceActivity without calling it. The
-/// worker invokes these off the main thread, like the real driver.
+/// Stands in for DeviceActivityCenter: keeps the registered names in memory
+/// and never calls the OS.
+private final class ScreenTimeSettingsUITestFixtureCenter: ScreenTimeActivityCenterDriving {
+    private let lock = NSLock()
+    private var names: Set<String> = []
+
+    var activities: [DeviceActivityName] {
+        lock.lock()
+        defer { lock.unlock() }
+        return names.map(DeviceActivityName.init(rawValue:))
+    }
+
+    func stopMonitoring(_ activities: [DeviceActivityName]) {
+        lock.lock()
+        defer { lock.unlock() }
+        if activities.isEmpty { names.removeAll() } else { names.subtract(activities.map(\.rawValue)) }
+    }
+
+    func startMonitoring(
+        _ activity: DeviceActivityName,
+        during schedule: DeviceActivitySchedule,
+        events: [DeviceActivityEvent.Name: DeviceActivityEvent]
+    ) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        names.insert(activity.rawValue)
+    }
+}
+
+/// Records what the controller asks of DeviceActivity and runs the real
+/// `ScreenTimeMonitoring` against an in-memory center, so a save produces the
+/// same runs — and the same 自動記録中 — it would on a device. The worker
+/// invokes these off the main thread, like the real driver.
 private final class ScreenTimeSettingsUITestFixtureDriver: ScreenTimeMonitoringDriving {
     private let lock = NSLock()
     private var calls: [String] = []
+    private let monitoring: ScreenTimeMonitoring
+
+    init(store: ScreenTimeStore) {
+        monitoring = ScreenTimeMonitoring(
+            store: store, center: ScreenTimeSettingsUITestFixtureCenter(), authorization: { true }
+        )
+    }
 
     var events: [String] {
         lock.lock()
@@ -92,11 +131,14 @@ private final class ScreenTimeSettingsUITestFixtureDriver: ScreenTimeMonitoringD
         calls.append(event)
     }
 
-    func stop() { record("stop") }
+    func stop() {
+        record("stop")
+        monitoring.stop()
+    }
     func invalidateAuthorizationIfNeeded() throws { record("invalidate") }
     func synchronize(now: Date) throws -> Bool {
         record("synchronize")
-        return false
+        return try monitoring.synchronize(now: now)
     }
 }
 
@@ -106,13 +148,14 @@ final class ScreenTimeSettingsUITestFixtureModel {
     let themeID = UUID()
     private let store: ScreenTimeStore
     private let directory: URL
-    private let driver = ScreenTimeSettingsUITestFixtureDriver()
+    private let driver: ScreenTimeSettingsUITestFixtureDriver
     private lazy var seeded = ScreenTimeSettingsUITestFixture.seededConfiguration(themeID: themeID)
 
     init() {
         directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ScreenTimeSettingsUITestFixture-\(UUID().uuidString)", isDirectory: true)
         store = ScreenTimeStore(directory: directory)
+        driver = ScreenTimeSettingsUITestFixtureDriver(store: store)
         controller = ScreenTimeController(
             store: store,
             currentContextKey: { ScreenTimeSettingsUITestFixture.ownerKey },

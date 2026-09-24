@@ -289,7 +289,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         // Discarding really discards.
         openFixtureSettings()
         XCTAssertTrue(reveal(enabled))
-        enabled.tap()
+        flip(enabled)
         XCTAssertEqual(enabled.value as? String, "0")
         XCTAssertTrue(back.waitForExistence(timeout: 6))
         back.tap()
@@ -318,6 +318,17 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         attach("Screen Time opened from the Home menu")
         app.navigationBars["スクリーンタイム"].buttons.firstMatch.tap()
         XCTAssertTrue(menu.waitForExistence(timeout: 8), "Back returns to Home")
+    }
+
+    /// `screen-time.enabled` is the whole row; a tap on its centre lands on
+    /// the label and changes nothing, so aim at the switch itself.
+    private func flip(_ toggle: XCUIElement) {
+        let inner = toggle.switches.firstMatch
+        if inner.exists && inner.isHittable {
+            inner.tap()
+        } else {
+            toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+        }
     }
 
     /// iOS 26 shows the question as a popover on the back button, whose
