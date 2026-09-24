@@ -502,6 +502,29 @@ final class GemBrillianceTests: XCTestCase {
         }
     }
 
+    /// The scene lights return to the blend mode each one had, instead of
+    /// being forced to `.add` after a capture.
+    @MainActor
+    func testSnapshotRestoresEachSceneLightsOwnBlendMode() throws {
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        scene.restore(pebbles: [looseDescriptor()])
+        let floorGlow = try XCTUnwrap(scene.childNode(withName: "//jar.floorGlow") as? SKSpriteNode)
+        let pileGlow = try XCTUnwrap(scene.childNode(withName: "//jar.pileGlow") as? SKSpriteNode)
+        let highlights = try XCTUnwrap(scene.childNode(withName: "//jar.glass.highlights") as? SKSpriteNode)
+        floorGlow.blendMode = .screen
+        highlights.blendMode = .alpha
+        let restore = scene.prepareForSnapshot()
+        for light in [floorGlow, pileGlow, highlights] {
+            XCTAssertEqual(light.blendMode, .alpha)
+        }
+        restore()
+        XCTAssertEqual(floorGlow.blendMode, .screen)
+        XCTAssertEqual(pileGlow.blendMode, .add)
+        XCTAssertEqual(highlights.blendMode, .alpha)
+    }
+
     /// A0 fusions (under 2.5 kg) only fade in; A1 adds a flash and a ring
     /// but no shards (those start at A2).
     @MainActor

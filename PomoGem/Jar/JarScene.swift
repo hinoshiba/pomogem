@@ -3635,14 +3635,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             $0.updatePresentationLighting(horizontal: 0)
             $0.setSnapshotBlending(true)
         }
-        let sceneLights = [floorGlowNode, pileGlowNode, glassHighlightNode]
-        sceneLights.forEach { $0.blendMode = .alpha }
+        // Each light keeps its own original mode for the restore, so a
+        // light that is not additive today is never forced to `.add`.
+        let sceneLights = [floorGlowNode, pileGlowNode, glassHighlightNode].map { ($0, $0.blendMode) }
+        sceneLights.forEach { $0.0.blendMode = .alpha }
         return { [weak self] in
             pebbles.forEach {
                 $0.setSnapshotBlending(false)
                 $0.updatePresentationLighting(horizontal: self?.opticalTiltFraction ?? 0)
             }
-            sceneLights.forEach { $0.blendMode = .add }
+            sceneLights.forEach { $0.0.blendMode = $0.1 }
         }
     }
 
