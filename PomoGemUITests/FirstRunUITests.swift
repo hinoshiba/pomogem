@@ -358,10 +358,16 @@ final class FirstRunUITests: XCTestCase {
         app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch
     }
 
-    private func scrollUntilHittable(_ element: XCUIElement, attempts: Int = 12) -> Bool {
+    /// Scrolls in short steps without momentum. A full `swipeUp()` at AX5 on
+    /// an SE-sized screen could carry a tall chip from under the pinned
+    /// button past the top of the page in one flick, after which the lazy
+    /// grid drops it from the hierarchy and the search never finds it.
+    private func scrollUntilHittable(_ element: XCUIElement, attempts: Int = 30) -> Bool {
         for _ in 0 ..< attempts {
             if element.exists, element.isHittable { return true }
-            app.swipeUp()
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.62))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.40))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
         }
         return element.exists && element.isHittable
     }
