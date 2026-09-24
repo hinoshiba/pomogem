@@ -134,7 +134,7 @@ enum StorageTransferRefreshCopy {
     static let confirmTitle = "iCloudから再取得"
 
     static let requestAccepted =
-        "iCloudのデータでこの端末を置き換える手続きを受け付けました。アプリスイッチャーでPomoGemを終了し、もう一度開いてください。iCloudのデータは削除しません。"
+        "iCloudのデータでこの端末を置き換える手続きを受け付けました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。iCloudのデータは削除しません。"
 
     /// review-1-2 / review-2-4. This direction deletes the DEVICE side and
     /// stages no recovery copy anywhere, so the user may not be asked to
@@ -144,12 +144,34 @@ enum StorageTransferRefreshCopy {
         "iCloudの内容を確認できませんでした。通信を確認して、もう一度「\(confirmTitle)」を押してください。どちらの記録も削除していません。"
 
     /// The one shape that turns this direction into silent data loss: the
-    /// account's iCloud side holds no PomoGem record at all — the state
+    /// account's iCloud side holds none of the user's records — the state
     /// ROOT-CAUSE §6.2 names when the app's data is deleted from iOS Settings.
     /// 「iCloudのデータは残ります」 is true and useless there, so the empty side
-    /// is stated in its own paragraph, before the acknowledgement.
-    static let cloudSideEmpty =
-        "iCloud側には、このアプリの記録が1件も見つかりませんでした。このまま実行すると、この端末のテーマ・記録・設定は削除され、元に戻すことはできません。中止して、先に設定から記録を書き出すか、他の端末の同期が終わるのをお待ちください。"
+    /// is stated in its own paragraph, before the acknowledgement, together
+    /// with what THIS device is about to lose when that was counted.
+    ///
+    /// transfer-03. "Empty" is decided by
+    /// `StorageTransferCloudPreview.userContentRecordCount`, never by the total
+    /// row count: a Prefs writer row and the seeded preset themes exist on
+    /// every account a device ever opened, and counting them made this
+    /// paragraph unreachable in practice.
+    static func cloudSideEmpty(device: StorageTransferCloudPreview?) -> String {
+        let loss: String
+        if let device {
+            let counts = device.recordCounts
+            loss = "このiPhoneのテーマ\(counts["Subject"] ?? 0)・記録\(counts["StudySession"] ?? 0)・成果\(counts["AchievementStone"] ?? 0)を含む、テーマ・記録・設定はすべて削除され、元に戻すことはできません。"
+        } else {
+            loss = "このiPhoneのテーマ・記録・設定は削除され、元に戻すことはできません。"
+        }
+        return "iCloudには、このアプリの記録と成果が1件も見つかりませんでした。このまま実行すると、" + loss
+            + "中止して、先にこの端末の記録を書き出すか、他の端末の同期が終わるのをお待ちください。"
+    }
+
+    /// True only when a read actually succeeded and found none of the user's
+    /// own records. A missing preview is never reported as an empty dataset.
+    static func cloudSideIsEmpty(_ preview: StorageTransferCloudPreview?) -> Bool {
+        preview?.userContentRecordCount == 0
+    }
 }
 
 /// The fixed Japanese copy for the device → iCloud overwrite. It lives beside
@@ -175,6 +197,14 @@ enum StorageTransferOverwriteCopy {
 
     static let dataLossWarning =
         "iCloudにある現在のPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータで置き換えます。2つのデータは結合しません。削除したiCloudのデータを元に戻すことはできません。同じApple Accountの他の端末は、次に開いたときにこの画面と同じ確認を求められ、その端末だけにある未送信のデータは残りません。"
+
+    /// transfer-10. The reason line under a CLOSED replacement door, in
+    /// Settings and on the launch screen. `StorageTransferReleaseError` keeps
+    /// its own text because it is also thrown when an already accepted
+    /// replacement is refused on resume, where a recovery copy can exist; at a
+    /// closed door nothing was ever staged, so this line promises none.
+    static let doorUnavailable =
+        "複数端末での同時操作から記録を保護するため、この操作はいまは利用できません。どちらの記録も削除していません。"
 
     static let exportTitle = "先にこの端末の記録を書き出す"
     static let exportNote = "書き出したファイルはPomoGemに読み込めません。記録の控えとして保存します。"
@@ -214,7 +244,7 @@ enum StorageTransferOverwriteCopy {
     // MARK: Progress and relaunch
 
     static let requestAccepted =
-        "このiPhoneのデータでiCloudを置き換える手続きを受け付けました。アプリスイッチャーでPomoGemを終了し、もう一度開いてください。復旧用コピーの保存が終わるまで、iCloudの削除は始めません。"
+        "このiPhoneのデータでiCloudを置き換える手続きを受け付けました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。復旧用コピーの保存が終わるまで、iCloudの削除は始めません。"
 
     /// Derived from the durable journal phase, never from an optimistic guess
     /// about an in-flight effect.
@@ -273,24 +303,36 @@ enum StorageTransferOverwriteCopy {
         return formatter
     }()
 
+    /// W6. The iCloud row when the server holds records but no transfer
+    /// control record. The counts come from the read-only snapshot and are
+    /// the same three a user recognizes on every other row.
+    ///
+    /// transfer-03 / transfer-10. It used to read 「iCloud側の管理情報なし（記録
+    /// 件数: n）」: an internal term, and one total across all seven mirrored
+    /// models, so a server holding only a Prefs row and a device claim read as
+    /// 「記録件数: 2」 — "your records are in iCloud" — on the screen where the
+    /// device's own records are deleted. The row still omits the 「最終」 date:
+    /// with no ledger the newest mirrored timestamp is as likely to be a Prefs
+    /// stamp as a record, and whether a ledger exists is stated, where it
+    /// changes what an action does, by its own paragraph.
+    static func cloudSideWithoutLineage(preview: StorageTransferCloudPreview?) -> String {
+        guard let preview else { return side("iCloud", preview: nil) }
+        return "iCloud: \(counts(preview))"
+    }
+
     /// 「テーマ12・記録480・成果36（最終 2026年9月20日）」. Only the three models a
     /// user recognizes are named; the remaining mirrored models are counted by
     /// the runtime but would not help someone decide.
-    /// W6. The iCloud row when the server holds records but no transfer
-    /// control record. The count still comes from the read-only snapshot — it
-    /// is the honest answer to 「what is over there」 — but the row does not
-    /// imply a lineage that does not exist.
-    static func cloudSideWithoutLineage(preview: StorageTransferCloudPreview?) -> String {
-        guard let preview else { return side("iCloud", preview: nil) }
-        return "iCloud側の管理情報なし（記録件数: \(preview.totalRecordCount)）"
-    }
-
     static func side(_ label: String, preview: StorageTransferCloudPreview?) -> String {
         guard let preview else { return "\(label): 確認できませんでした" }
-        let counts = preview.recordCounts
-        let body = "テーマ\(counts["Subject"] ?? 0)・記録\(counts["StudySession"] ?? 0)・成果\(counts["AchievementStone"] ?? 0)"
+        let body = counts(preview)
         guard let latest = preview.latestRecordAt else { return "\(label): \(body)（日付のある記録なし）" }
         return "\(label): \(body)（最終 \(comparisonFormatter.string(from: latest))）"
+    }
+
+    private static func counts(_ preview: StorageTransferCloudPreview) -> String {
+        let counts = preview.recordCounts
+        return "テーマ\(counts["Subject"] ?? 0)・記録\(counts["StudySession"] ?? 0)・成果\(counts["AchievementStone"] ?? 0)"
     }
 }
 
@@ -373,7 +415,7 @@ enum StorageTransferLineageCopy {
     static let sheetConfirm = "iCloudを使い始める"
 
     static let requestAccepted =
-        "このiPhoneのデータでiCloudを使い始める手続きを受け付けました。アプリスイッチャーでPomoGemを終了し、もう一度開いてください。アプリ自体は削除しないでください。"
+        "このiPhoneのデータでiCloudを使い始める手続きを受け付けました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。アプリ自体は削除しないでください。"
 
     // MARK: The explanation-only screens
 

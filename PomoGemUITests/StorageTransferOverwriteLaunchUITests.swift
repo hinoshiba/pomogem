@@ -431,7 +431,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         // before any consent is possible.
         let comparison = app.staticTexts["storage-lineage-comparison"]
         XCTAssertTrue(reveal(comparison))
-        XCTAssertTrue(comparison.label.contains("iCloud側の管理情報なし（記録件数: "),
+        XCTAssertTrue(comparison.label.contains("iCloud: テーマ9・記録312・成果28"),
             "saw: \(comparison.label)")
         XCTAssertFalse(comparison.label.contains("このiPhone: テーマ"),
             "The device side is not read while the direction it informs is unpublished")
@@ -508,7 +508,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         XCTAssertTrue(warning.label.contains("元に戻すことはできません"))
         let sheetComparison = app.staticTexts["storage-lineage-sheet-comparison"]
         XCTAssertTrue(reveal(sheetComparison))
-        XCTAssertTrue(sheetComparison.label.contains("iCloud側の管理情報なし（記録件数: "))
+        XCTAssertTrue(sheetComparison.label.contains("iCloud: テーマ9・記録312・成果28"))
         XCTAssertTrue(reveal(app.staticTexts["storage-lineage-sheet-other-devices"]))
         XCTAssertTrue(reveal(app.staticTexts["storage-lineage-other-builds"]))
         let toggle = app.switches["storage-lineage-confirm-data-loss"]
@@ -610,7 +610,7 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         reRead.tap()
         XCTAssertTrue(reveal(comparison))
         let counted = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "label CONTAINS %@", "iCloud側の管理情報なし（記録件数: "),
+            predicate: NSPredicate(format: "label CONTAINS %@", "iCloud: テーマ9・記録312・成果28"),
             object: comparison)
         XCTAssertEqual(XCTWaiter.wait(for: [counted], timeout: 6), .completed,
             "saw: \(comparison.label)")

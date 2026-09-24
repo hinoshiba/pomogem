@@ -28,6 +28,12 @@ enum StorageTransferSettingsUITestFixture {
         /// ROOT-CAUSE §6.2 names. Direction (B) would discard the device's only
         /// copy and mirror down nothing, so its confirmation must say so.
         case cloudDatasetDoorsEmptyCloud
+        /// transfer-03, the shipping build. The server holds only what every
+        /// account a device ever opened holds — five seeded preset themes, a
+        /// Prefs writer row and a device claim — and none of the user's own
+        /// records. The empty-iCloud warning must fire, and this iPhone's
+        /// counts must be on the screen that deletes them.
+        case cloudRefreshBookkeepingOnly
         /// The launch-host screens a fenced device actually lands on. Each one
         /// renders the shipping `PersistenceLaunchStatusView` with a recorder in
         /// place of the runtime, so no journal, container or CloudKit call
@@ -88,7 +94,7 @@ enum StorageTransferSettingsUITestFixture {
         var mode: PersistenceLaunchMode {
             self == .cloud || self == .cloudDatasetDoors
                 || self == .cloudDatasetDoorsUnreadable || self == .cloudDatasetDoorsNoLineage
-                || self == .cloudDatasetDoorsEmptyCloud
+                || self == .cloudDatasetDoorsEmptyCloud || self == .cloudRefreshBookkeepingOnly
                 || self == .lateArrival || isOffline
                 || self == .cloudNetworkWaiting ? .cloudKit : .localOnly
         }
@@ -217,18 +223,17 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                 guard scenario != .cloudDatasetDoorsUnreadable else {
                     throw CloudStorageTransferCloudError.timedOut
                 }
-                // The host captures the device side only while the direction
-                // that needs it is published, so the fixture models the same
-                // gate: a shipping scenario must not invent a device row the
-                // real screen would never have.
-                let readsDeviceSide = scenario.releasePolicy.allowsDatasetOverwriteFromDevice
+                // transfer-03. The host reads this iPhone for every build now,
+                // because 「iCloudから再取得」 ships and deletes this side.
                 switch scenario {
                 case .cloudDatasetDoorsNoLineage:
-                    return Self.previewSummaryWithoutLineage(readsDeviceSide: readsDeviceSide)
+                    return Self.previewSummaryWithoutLineage(readsDeviceSide: true)
                 case .cloudDatasetDoorsEmptyCloud:
-                    return Self.previewSummaryEmptyCloud(readsDeviceSide: readsDeviceSide)
+                    return Self.previewSummaryEmptyCloud(readsDeviceSide: true)
+                case .cloudRefreshBookkeepingOnly:
+                    return Self.previewSummaryBookkeepingOnly()
                 default:
-                    return Self.previewSummary(readsDeviceSide: readsDeviceSide)
+                    return Self.previewSummary(readsDeviceSide: true)
                 }
             })
         }
@@ -269,6 +274,20 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
             cloud: preview(subjects: 0, sessions: 0, stones: 0,
                            year: 2026, month: 9, day: 18, otherDeviceIDs: 0),
             device: deviceSide(readsDeviceSide),
+            hasCloudLineage: false)
+    }
+
+    /// transfer-03. Bookkeeping only: the rows every onboarded device mirrors.
+    private static func previewSummaryBookkeepingOnly() -> StorageTransferDatasetPreviewSummary {
+        let seeded = preview(subjects: 5, sessions: 0, stones: 0,
+                             year: 2026, month: 9, day: 23, otherDeviceIDs: 1)
+        var counts = seeded.recordCounts
+        counts["Prefs"] = 1
+        counts["FocusTimerDeviceClaim"] = 1
+        return StorageTransferDatasetPreviewSummary(
+            cloud: StorageTransferCloudPreview(recordCounts: counts,
+                latestRecordAt: seeded.latestRecordAt, otherDeviceIDs: 1, ignoredWriterIDs: 0),
+            device: deviceSide(true),
             hasCloudLineage: false)
     }
 

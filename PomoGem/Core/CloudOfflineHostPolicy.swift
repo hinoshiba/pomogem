@@ -93,7 +93,7 @@ enum CloudOfflineSessionError: Error, LocalizedError {
     case relaunchRequired
 
     var errorDescription: String? {
-        "端末の記録を保護したままオフラインで開くため、先ほどの同期処理を終了する必要があります。アプリスイッチャーでPomoGemを終了し、もう一度開いてください。アプリ自体は削除しないでください。"
+        "端末の記録を保護したままオフラインで開くため、先ほどの同期処理を終了する必要があります。AppスイッチャーでPomoGemを終了し、もう一度開いてください。アプリ自体は削除しないでください。"
     }
 }
 

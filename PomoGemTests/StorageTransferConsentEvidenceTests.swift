@@ -60,8 +60,39 @@ final class StorageTransferConsentEvidenceTests: XCTestCase {
     func testTheNoLineageCloudRowCountsTheRecordsAndImpliesNoLedger() {
         let row = StorageTransferOverwriteCopy.cloudSideWithoutLineage(preview: Self.preview(
             subjects: 9, sessions: 312, stones: 28, otherDeviceIDs: 1))
-        XCTAssertEqual(row, "iCloud側の管理情報なし（記録件数: 349）")
+        XCTAssertEqual(row, "iCloud: テーマ9・記録312・成果28")
         XCTAssertFalse(row.contains("最終"))
+        // transfer-10. No internal term on a screen where a deletion is chosen.
+        XCTAssertFalse(row.contains("管理情報"))
+    }
+
+    /// transfer-03. Bookkeeping rows are not the user's records. A server that
+    /// holds only a Prefs writer row, a device claim, a reset marker and the
+    /// five seeded preset themes still holds nothing the user made, and the
+    /// row may not read as if it did.
+    func testBookkeepingRowsNeitherInflateTheRowNorHideAnEmptyServer() {
+        var counts = Dictionary(uniqueKeysWithValues:
+            PomoGemStorageSnapshot.cloudModelNames.map { ($0, 0) })
+        counts["Subject"] = 5
+        counts["Prefs"] = 1
+        counts["FocusTimerDeviceClaim"] = 1
+        counts["ActivityResetMarker"] = 1
+        counts["SyncedFocusTimer"] = 1
+        let bookkeeping = StorageTransferCloudPreview(recordCounts: counts,
+            latestRecordAt: Date(timeIntervalSinceReferenceDate: 0), otherDeviceIDs: 1, ignoredWriterIDs: 0)
+        XCTAssertEqual(bookkeeping.totalRecordCount, 9)
+        XCTAssertEqual(bookkeeping.userContentRecordCount, 0)
+        XCTAssertTrue(StorageTransferRefreshCopy.cloudSideIsEmpty(bookkeeping),
+                      "The documented 0件 warning must fire for this account")
+        XCTAssertEqual(StorageTransferOverwriteCopy.cloudSideWithoutLineage(preview: bookkeeping),
+                       "iCloud: テーマ5・記録0・成果0")
+
+        let withRecords = Self.preview(subjects: 0, sessions: 1, stones: 0, otherDeviceIDs: 0)
+        XCTAssertFalse(StorageTransferRefreshCopy.cloudSideIsEmpty(withRecords))
+        let withStones = Self.preview(subjects: 0, sessions: 0, stones: 1, otherDeviceIDs: 0)
+        XCTAssertFalse(StorageTransferRefreshCopy.cloudSideIsEmpty(withStones))
+        XCTAssertFalse(StorageTransferRefreshCopy.cloudSideIsEmpty(nil),
+                       "A read that did not happen is never an empty server")
     }
 
     // MARK: review-2-7 — the disabled door's reason
@@ -109,9 +140,16 @@ final class StorageTransferConsentEvidenceTests: XCTestCase {
     func testTheRefreshDirectionDisclosesAnEmptyServerSide() {
         let empty = Self.preview(subjects: 0, sessions: 0, stones: 0, otherDeviceIDs: 0)
         XCTAssertEqual(empty.totalRecordCount, 0)
-        let warning = StorageTransferRefreshCopy.cloudSideEmpty
+        XCTAssertTrue(StorageTransferRefreshCopy.cloudSideIsEmpty(empty))
+        let warning = StorageTransferRefreshCopy.cloudSideEmpty(device: nil)
         XCTAssertTrue(warning.contains("1件も見つかりませんでした"))
         XCTAssertTrue(warning.contains("元に戻すことはできません"))
+        // transfer-03. When this iPhone was counted, the warning says what it
+        // is about to lose, in the same three nouns as the comparison rows.
+        let counted = StorageTransferRefreshCopy.cloudSideEmpty(device: Self.preview(
+            subjects: 12, sessions: 480, stones: 36, otherDeviceIDs: 0))
+        XCTAssertTrue(counted.contains("このiPhoneのテーマ12・記録480・成果36"), counted)
+        XCTAssertTrue(counted.contains("元に戻すことはできません"))
         // The reassurance sentence on its own must never be the whole story.
         XCTAssertTrue(StorageTransferRefreshCopy.dataLossWarning.contains("iCloudのデータは残ります"))
         XCTAssertFalse(StorageTransferRefreshCopy.dataLossWarning.contains("件"))

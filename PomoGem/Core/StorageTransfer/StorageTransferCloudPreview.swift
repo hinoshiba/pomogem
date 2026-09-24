@@ -46,6 +46,16 @@ struct StorageTransferCloudPreview: Equatable, Sendable {
     /// what turns 「iCloudのデータは残ります」 into silent data loss.
     var totalRecordCount: Int { recordCounts.values.reduce(0, +) }
 
+    /// The rows a person recognises as their own history: focus records and
+    /// achievement stones. This, not `totalRecordCount`, is what 「iCloudは空」
+    /// means on a confirmation screen. Every device that finishes onboarding
+    /// mirrors a Prefs writer row, markers and device claims are bookkeeping,
+    /// and five preset themes are seeded and mirrored on every device, so a
+    /// server that holds nothing the user made still holds all of those.
+    var userContentRecordCount: Int {
+        (recordCounts["StudySession"] ?? 0) + (recordCounts["AchievementStone"] ?? 0)
+    }
+
     /// The only two models whose writer identifier is a durable witness that a
     /// DIFFERENT installation wrote into this dataset. `SyncedFocusTimer`
     /// is deliberately excluded: its `writerDeviceID` is rewritten by whichever

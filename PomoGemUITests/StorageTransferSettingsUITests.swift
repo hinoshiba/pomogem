@@ -70,7 +70,9 @@ final class StorageTransferSettingsUITests: XCTestCase {
         let reason = app.staticTexts["storage-switch.replace-cloud-unavailable"]
         XCTAssertTrue(reveal(reason))
         XCTAssertTrue(reason.label.contains("複数端末での同時操作"))
-        XCTAssertTrue(reason.label.contains("一時的に利用できません"))
+        XCTAssertTrue(reason.label.contains("いまは利用できません"))
+        // transfer-10. Nothing was ever staged at a closed door.
+        XCTAssertFalse(reason.label.contains("復旧用コピー"))
         let replacement = app.buttons["storage-switch.replace-cloud"]
         XCTAssertTrue(reveal(replacement))
         XCTAssertFalse(replacement.isEnabled)
@@ -127,7 +129,8 @@ final class StorageTransferSettingsUITests: XCTestCase {
         let reason = app.staticTexts["storage-switch.overwrite-cloud-unavailable"]
         XCTAssertTrue(reveal(reason))
         XCTAssertTrue(reason.label.contains("いまは利用できません"))
-        XCTAssertTrue(reason.label.contains("削除せず保持します"))
+        XCTAssertTrue(reason.label.contains("どちらの記録も削除していません"))
+        XCTAssertFalse(reason.label.contains("復旧用コピー"))
         let door = app.buttons["storage-switch.overwrite-cloud"]
         XCTAssertTrue(reveal(door))
         XCTAssertFalse(door.isEnabled)
@@ -244,12 +247,41 @@ final class StorageTransferSettingsUITests: XCTestCase {
         openConfirmation("storage-switch.refresh-from-cloud")
         let comparison = app.staticTexts["storage-switch.refresh-from-cloud-comparison"]
         XCTAssertTrue(reveal(comparison))
-        XCTAssertTrue(comparison.label.contains("記録件数: 0"), "saw: \(comparison.label)")
+        XCTAssertTrue(comparison.label.contains("iCloud: テーマ0・記録0・成果0"), "saw: \(comparison.label)")
+        XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"),
+            "The side this direction deletes is counted too, saw: \(comparison.label)")
         let empty = app.staticTexts["storage-switch.refresh-from-cloud-empty-cloud"]
         XCTAssertTrue(reveal(empty))
         XCTAssertTrue(empty.label.contains("1件も見つかりませんでした"))
+        XCTAssertTrue(empty.label.contains("このiPhoneのテーマ12・記録480・成果36"), "saw: \(empty.label)")
         XCTAssertTrue(empty.label.contains("元に戻すことはできません"))
         attach("Settings refresh-from-cloud — the server side is empty")
+        assertUncheckedDatasetConfirmation("refresh-from-cloud")
+        app.navigationBars["最後の確認"].buttons["戻る"].tap()
+        XCTAssertTrue(app.navigationBars["iCloudと保存先の変更"].waitForExistence(timeout: 4))
+        app.navigationBars["iCloudと保存先の変更"].buttons["キャンセル"].tap()
+        assertPreviewReads(1)
+        assertNoDatasetRequest()
+        assertNoOperation()
+    }
+
+    /// transfer-03, the shipping build. Five seeded themes, a Prefs row and a
+    /// device claim are not the user's records: the row names the three things
+    /// a person recognises, never a bookkeeping total, and the warning fires.
+    func testTheRefreshDirectionWarnsWhenICloudHoldsOnlyBookkeepingRows() {
+        launch("cloudRefreshBookkeepingOnly")
+        openChoices()
+        openConfirmation("storage-switch.refresh-from-cloud")
+        let comparison = app.staticTexts["storage-switch.refresh-from-cloud-comparison"]
+        XCTAssertTrue(reveal(comparison))
+        XCTAssertTrue(comparison.label.contains("iCloud: テーマ5・記録0・成果0"), "saw: \(comparison.label)")
+        XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"), "saw: \(comparison.label)")
+        XCTAssertFalse(comparison.label.contains("管理情報"))
+        XCTAssertFalse(comparison.label.contains("記録件数"))
+        let empty = app.staticTexts["storage-switch.refresh-from-cloud-empty-cloud"]
+        XCTAssertTrue(reveal(empty), "The documented 0件 warning must reach a real account")
+        XCTAssertTrue(empty.label.contains("このiPhoneのテーマ12・記録480・成果36"), "saw: \(empty.label)")
+        attach("Settings refresh-from-cloud — only bookkeeping rows in iCloud")
         assertUncheckedDatasetConfirmation("refresh-from-cloud")
         app.navigationBars["最後の確認"].buttons["戻る"].tap()
         XCTAssertTrue(app.navigationBars["iCloudと保存先の変更"].waitForExistence(timeout: 4))
@@ -334,9 +366,10 @@ final class StorageTransferSettingsUITests: XCTestCase {
         let comparison = app.staticTexts["storage-switch.refresh-from-cloud-comparison"]
         XCTAssertTrue(reveal(comparison))
         XCTAssertTrue(comparison.label.contains("iCloud: テーマ"), "saw: \(comparison.label)")
-        XCTAssertFalse(comparison.label.contains("このiPhone:"),
-            "The device side is not read while the direction that needs it is unpublished, "
-            + "so 「確認できませんでした」 would claim a look that never happened")
+        // transfer-03. This direction ships and deletes THIS iPhone's side, so
+        // the shipping build counts it before the acknowledgement.
+        XCTAssertTrue(comparison.label.contains("このiPhone: テーマ12・記録480・成果36"),
+            "saw: \(comparison.label)")
         assertUncheckedDatasetConfirmation("refresh-from-cloud")
         app.navigationBars["最後の確認"].buttons["戻る"].tap()
         XCTAssertTrue(app.navigationBars["iCloudと保存先の変更"].waitForExistence(timeout: 4))
@@ -374,9 +407,10 @@ final class StorageTransferSettingsUITests: XCTestCase {
         let comparison = app.staticTexts["storage-switch.overwrite-cloud-comparison"]
         XCTAssertTrue(reveal(comparison))
         XCTAssertTrue(comparison.label.contains("このiPhone: テーマ"))
-        XCTAssertTrue(comparison.label.contains("iCloud側の管理情報なし（記録件数: "))
-        XCTAssertFalse(comparison.label.contains("iCloud: テーマ"),
-            "A dataset with no ledger must not be rendered as one that has it")
+        XCTAssertTrue(comparison.label.contains("iCloud: テーマ9・記録312・成果28"), "saw: \(comparison.label)")
+        XCTAssertFalse(comparison.label.contains("iCloud: テーマ9・記録312・成果28（最終"),
+            "A dataset with no ledger must not print a 「最終」 row that implies one")
+        XCTAssertFalse(comparison.label.contains("管理情報"))
         let starts = app.staticTexts["storage-switch.overwrite-cloud-starts-lineage"]
         XCTAssertTrue(reveal(starts))
         XCTAssertTrue(starts.label.contains("新しく使い始める"))

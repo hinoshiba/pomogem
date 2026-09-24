@@ -133,9 +133,29 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
 
     func testRequestAcceptedCopyIsTheApprovedWordingForBothDirections() {
         XCTAssertEqual(StorageTransferOverwriteCopy.requestAccepted,
-                       "このiPhoneのデータでiCloudを置き換える手続きを受け付けました。アプリスイッチャーでPomoGemを終了し、もう一度開いてください。復旧用コピーの保存が終わるまで、iCloudの削除は始めません。")
+                       "このiPhoneのデータでiCloudを置き換える手続きを受け付けました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。復旧用コピーの保存が終わるまで、iCloudの削除は始めません。")
         XCTAssertEqual(StorageTransferRefreshCopy.requestAccepted,
-                       "iCloudのデータでこの端末を置き換える手続きを受け付けました。アプリスイッチャーでPomoGemを終了し、もう一度開いてください。iCloudのデータは削除しません。")
+                       "iCloudのデータでこの端末を置き換える手続きを受け付けました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。iCloudのデータは削除しません。")
+    }
+
+    /// transfer-10. Apple's Japanese name for the control is 「Appスイッチャー」.
+    func testRelaunchInstructionsUseApplesNameForTheAppSwitcher() {
+        let texts = [StorageTransferOverwriteCopy.requestAccepted, StorageTransferRefreshCopy.requestAccepted,
+                     StorageTransferLineageCopy.requestAccepted,
+                     CloudOfflineSessionError.relaunchRequired.localizedDescription]
+        for text in texts {
+            XCTAssertTrue(text.contains("Appスイッチャー"), text)
+            XCTAssertFalse(text.contains("アプリスイッチャー"), text)
+        }
+    }
+
+    /// transfer-10. A closed door has staged nothing, so its reason may not
+    /// promise a recovery copy the way the resume-time refusal can.
+    func testAClosedDoorsReasonPromisesNoRecoveryCopy() {
+        let reason = StorageTransferOverwriteCopy.doorUnavailable
+        XCTAssertFalse(reason.contains("復旧用コピー"))
+        XCTAssertTrue(reason.contains("いまは利用できません"))
+        XCTAssertTrue(reason.contains("どちらの記録も削除していません"))
     }
 
     func testLateArrivalBannerIsTheApprovedWordingAndOffersOnlyNonDestructiveActions() {

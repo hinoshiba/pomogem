@@ -217,7 +217,7 @@ private struct StorageTransferChoiceView: View {
                     }
                     Section("このiPhoneのデータを残す") {
                         Text("現在iCloudにあるPomoGemのテーマ・記録・設定を削除し、このiPhoneのデータに置き換えます。同じApple Accountの他の端末にも影響します。")
-                        Text(StorageTransferReleaseError.cloudReplacementUnavailable.localizedDescription)
+                        Text(StorageTransferOverwriteCopy.doorUnavailable)
                             .accessibilityIdentifier("storage-switch.replace-cloud-unavailable")
                         Button("このiPhoneのデータで置き換える", role: .destructive) { choice = .enableCloudReplacingCloud }
                             .disabled(!StorageTransferReleasePolicy.standard.allowsCloudReplacement)
@@ -262,7 +262,7 @@ private struct StorageTransferChoiceView: View {
             Section("このiPhoneのデータでiCloudを置き換える") {
                 Text(StorageTransferOverwriteCopy.dataLossWarning)
                 if !releasePolicy.allowsDatasetOverwriteFromDevice {
-                    Text(StorageTransferReleaseError.datasetOverwriteUnavailable.localizedDescription)
+                    Text(StorageTransferOverwriteCopy.doorUnavailable)
                         .accessibilityIdentifier("storage-switch.overwrite-cloud-unavailable")
                 }
                 if isReading(.overwriteCloudFromDevice) {
@@ -403,8 +403,11 @@ private struct StorageTransferDatasetConfirmationView: View {
                         // ones most likely to have nothing on the server, and
                         // `retireSource` removes the device's only copy.
                         paragraph(comparison, suffix: "comparison")
-                        if cloudSideIsEmpty {
-                            paragraph(StorageTransferRefreshCopy.cloudSideEmpty,
+                        if StorageTransferRefreshCopy.cloudSideIsEmpty(preview?.cloud) {
+                            // transfer-03. Decided on the user's own records, and
+                            // names what THIS iPhone holds, because that is the
+                            // side the direction deletes.
+                            paragraph(StorageTransferRefreshCopy.cloudSideEmpty(device: preview?.device),
                                       suffix: "empty-cloud")
                         }
                         paragraph(StorageTransferRefreshCopy.relaunch, suffix: "relaunch")
@@ -428,9 +431,10 @@ private struct StorageTransferDatasetConfirmationView: View {
         let cloud = preview?.hasCloudLineage == false
             ? StorageTransferOverwriteCopy.cloudSideWithoutLineage(preview: preview?.cloud)
             : StorageTransferOverwriteCopy.side("iCloud", preview: preview?.cloud)
-        // The device side is captured only while the direction that needs it
-        // is published. On `.refreshFromCloud` in a shipping build no look at
-        // this iPhone happens at all, and 「確認できませんでした」 would claim one.
+        // The device side is best effort. When the host could not read this
+        // iPhone the refresh row is omitted rather than rendered as
+        // 「確認できませんでした」, which would claim a look that failed as if
+        // it were evidence; the overwrite direction always shows both rows.
         guard preview?.device != nil || direction == .overwriteCloudFromDevice else { return cloud }
         return StorageTransferOverwriteCopy.side("このiPhone", preview: preview?.device)
             + "\n" + cloud
@@ -441,10 +445,6 @@ private struct StorageTransferDatasetConfirmationView: View {
     /// last screen before a deletion. This view is not presented for the
     /// overwrite direction without one; the fallback exists so it cannot
     /// become one by accident later.
-    /// True only when a read actually succeeded and enumerated nothing.
-    /// A missing preview is never reported as an empty dataset.
-    private var cloudSideIsEmpty: Bool { preview?.cloud.totalRecordCount == 0 }
-
     private var otherDeviceEvidence: String {
         guard let preview else { return StorageTransferOverwriteCopy.otherDevicesUnknown }
         return StorageTransferOverwriteCopy.otherDevices(preview.cloud.otherDeviceIDs)

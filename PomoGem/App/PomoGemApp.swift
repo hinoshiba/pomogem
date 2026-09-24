@@ -2517,15 +2517,31 @@ private struct PomoGemPersistenceLaunchHost: View {
         try validate()
         // Best effort, exactly as on the launch screen: an unreadable device
         // side degrades the comparison, it never withholds what the SERVER
-        // holds. Skipped while the direction it informs is unpublished, so a
-        // build that cannot run the overwrite never pays for its evidence.
-        let device = StorageTransferReleasePolicy.standard.allowsDatasetOverwriteFromDevice
-            ? try? StorageTransferLaunchReader.captureDevicePreview(
-                selection: source, localDeviceID: deviceID)
-            : nil
+        // holds. transfer-03: always read, because 「iCloudから再取得」 ships in
+        // every build and THIS iPhone is the side it deletes. The session is
+        // mounted, so its own container is read through a fresh, unsaved
+        // context and reduced by the same function as the iCloud side — no
+        // byte copy of a live store.
+        let device = try? Self.mountedDevicePreview(container: sourceSession.container,
+                                                    localDeviceID: deviceID)
         try validate()
         return StorageTransferDatasetPreviewSummary(cloud: cloud, device: device,
                                                     hasCloudLineage: lineage)
+    }
+
+    /// The device side of a Settings comparison, read from the session that is
+    /// already mounted. `observeCloudReplica` accepts a mirrored container and
+    /// a local-only one alike, reads through a context that holds no changes,
+    /// and writes nothing; `StorageTransferCloudPreview.make` then reduces it
+    /// over the same mirrored models as the iCloud side.
+    @MainActor
+    static func mountedDevicePreview(container: ModelContainer,
+                                     localDeviceID: String) throws -> StorageTransferCloudPreview {
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        return StorageTransferCloudPreview.make(
+            snapshot: try PomoGemStorageSnapshot.observeCloudReplica(from: context),
+            localDeviceID: localDeviceID)
     }
 
     private func datasetRequestRelaunchMessage(
@@ -2565,7 +2581,7 @@ private struct PomoGemPersistenceLaunchHost: View {
         beginContainerRetirement()
         isQuiescingAccountChange = false
         isPreparing = false
-        launchState = .relaunchRequired(message ?? "保存先の切り替えを受け付けました。アプリスイッチャーでPomoGemを終了し、もう一度開いてください。元の記録を保護したまま切り替えを再開します。")
+        launchState = .relaunchRequired(message ?? "保存先の切り替えを受け付けました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。元の記録を保護したまま切り替えを再開します。")
         launchAttempt += 1
     }
 
@@ -3649,7 +3665,7 @@ private struct PersistenceLaunchStatusView: View {
         .disabled(!canRequestOverwrite)
         .accessibilityIdentifier("storage-overwrite-confirm")
         if !releasePolicy.allowsDatasetOverwriteFromDevice {
-            Text(StorageTransferReleaseError.datasetOverwriteUnavailable.localizedDescription)
+            Text(StorageTransferOverwriteCopy.doorUnavailable)
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
