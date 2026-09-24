@@ -151,7 +151,7 @@ enum CloudOfflineHostPolicy {
     static func launchRoute(for error: StorageTransferRuntimeError) -> CloudLaunchRoute {
         if let block = datasetLineageBlock(for: error) { return block.launchRoute }
         switch error {
-        case .relaunchRequired: return .relaunch
+        case .relaunchRequired, .cloudCopyStillArriving: return .relaunch
         case .remoteRecoveryRequired: return .remoteRecovery
         case .datasetRefreshRequired: return .datasetRefresh
         // `leftoverLocalStores`, `cloudCopyStillPending` and

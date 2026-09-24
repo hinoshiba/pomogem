@@ -101,9 +101,12 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
     /// promise a choice between the two directions.
     func testBlockedExplanationOnlyPromisesTheDirectionThisBuildCanOffer() {
         XCTAssertEqual(StorageTransferOverwriteCopy.blockedExplanation(offersOverwrite: true),
-                       "iCloudの状態を確認できていません。通信を確認して「もう一度試す」を押すと、iCloudのデータを再取得するか、このiPhoneのデータでiCloudを置き換えるかを選べます。この画面では、どちらの記録も削除していません。")
+                       "iCloudを読み取れると、「もう一度試す」から、iCloudのデータを再取得するか、このiPhoneのデータでiCloudを置き換えるかを選べます。")
         XCTAssertEqual(StorageTransferOverwriteCopy.blockedExplanation(offersOverwrite: false),
-                       "iCloudの状態を確認できていません。通信を確認して「もう一度試す」を押すと、iCloudのデータを再取得できます。この画面では、どちらの記録も削除していません。")
+                       "iCloudを読み取れると、「もう一度試す」から、iCloudのデータを再取得する選択肢に進めます。")
+        // transfer-06. The message it sits under already says both of these.
+        XCTAssertTrue(StorageTransferLineageCopy.refreshScreenUnavailable.contains("通信を確認"))
+        XCTAssertTrue(StorageTransferLineageCopy.refreshScreenUnavailable.contains("どちらの記録も削除していません"))
         XCTAssertFalse(StorageTransferOverwriteCopy.blockedExplanation(offersOverwrite: false)
             .contains("iCloudを置き換える"),
             "An unpublished direction must not be promised by the screen before it")
@@ -147,6 +150,30 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
             XCTAssertTrue(text.contains("Appスイッチャー"), text)
             XCTAssertFalse(text.contains("アプリスイッチャー"), text)
         }
+    }
+
+    /// transfer-04. Every choice gets phase copy for every phase, and none of
+    /// it calls a planned continuation an interruption.
+    func testEveryChoiceHasProgressCopyForEveryPhase() {
+        for choice in StorageTransferChoice.allCases {
+            for phase in StorageTransferJournal.Phase.allCases {
+                let text = StorageTransferProgressCopy.progress(
+                    StorageTransferProgress(choice: choice, phase: phase))
+                XCTAssertFalse(text.isEmpty, "\(choice) \(phase)")
+                XCTAssertFalse(text.contains("中断"), "\(choice) \(phase): \(text)")
+            }
+        }
+        XCTAssertEqual(StorageTransferProgressCopy.progress(
+            StorageTransferProgress(choice: .overwriteCloudFromDevice, phase: .preparingDestination)),
+            StorageTransferOverwriteCopy.progress(.preparingDestination),
+            "The overwrite keeps its approved sentences")
+        XCTAssertFalse(StorageTransferProgressCopy.continuing.contains("中断"))
+        XCTAssertTrue(StorageTransferProgressCopy.relaunchInstructions.contains("Appスイッチャー"))
+        XCTAssertTrue(StorageTransferProgressCopy.relaunchInstructions.contains("削除しないでください"))
+        XCTAssertTrue(StorageTransferRuntimeError.relaunchRequired.localizedDescription.contains("Appスイッチャー"))
+        XCTAssertTrue(StorageTransferRuntimeError.cloudCopyStillArriving.localizedDescription.contains("Appスイッチャー"))
+        XCTAssertFalse(StorageTransferRuntimeError.cloudCopyStillArriving.localizedDescription.contains("もう一度試す"),
+            "The relaunch screen carries no retry, so its text may not name one")
     }
 
     /// transfer-02. The local-only → iCloud door deletes this device's jar.

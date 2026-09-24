@@ -473,7 +473,13 @@ private struct PomoGemPersistenceLaunchHost: View {
     fileprivate enum LaunchState: Equatable {
         case choosingStorage
         case preparing(String)
-        case blocked(String)
+        /// `retryOffersDatasetChoice` is true only on the one route whose retry
+        /// leads to the dataset-refresh screen: `presentDatasetRefresh`
+        /// failed to READ iCloud. transfer-06 / launch-05: every other
+        /// producer (account errors, leftover stores, retirement timeouts,
+        /// the activation watchdog…) used to inherit a caption promising that
+        /// 「もう一度試す」 would re-fetch iCloud data.
+        case blocked(String, retryOffersDatasetChoice: Bool = false)
         case failed(String)
         case relaunchRequired(String)
         case offlineRelaunchRequired(String)
@@ -574,7 +580,13 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var cloudDatasetPreview: StorageTransferCloudPreview?
     @State private var deviceDatasetPreview: StorageTransferCloudPreview?
     @State private var cloudDatasetPreviewFailed = false
-    @State private var overwriteInProgressPhase: StorageTransferJournal.Phase?
+    /// transfer-04. The durable phase of the transfer this launch is
+    /// continuing, for EVERY choice (it used to exist for the unpublished
+    /// overwrite only), updated as the coordinator advances.
+    @State private var transferInProgress: StorageTransferProgress?
+    /// transfer-04. The relaunch screen says 「次に開くと…完了します」 only when
+    /// the durable checkpoint shows the next launch is the last one.
+    @State private var relaunchCompletesTransfer = false
     /// PLAN Step 9. Non-blocking banner state, set once per committed
     /// replacement by the single post-commit comparison and never again: the
     /// receipt is deleted whatever the outcome.
@@ -663,7 +675,8 @@ private struct PomoGemPersistenceLaunchHost: View {
             cloudPreview: cloudDatasetPreview,
             devicePreview: deviceDatasetPreview,
             cloudPreviewFailed: cloudDatasetPreviewFailed,
-            overwritePhase: overwriteInProgressPhase,
+            transferProgress: transferInProgress,
+            relaunchCompletesTransfer: relaunchCompletesTransfer,
             onCancelLocalTransfer: localTransferCancellationAction,
             retainsTransferCopyOnCancellation: retainsTransferCopyOnCancellation,
             onContinueOffline: offlineContinuationAction)
@@ -1072,6 +1085,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                         expectedGenerationID: generation, validateAccess: {
                         try requireActiveLaunchAttempt(attempt, checkpoint: "during-dataset-refresh")
                     })
+                    completionMessage = StorageTransferProgressCopy.refreshReady
                 case let .overwrite(generation):
                     guard let binding = storageTransferRecoveryBinding else { throw StorageTransferError.staleTransaction }
                     try await transferRuntime.overwriteCloudDataset(binding: binding,
@@ -1088,6 +1102,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                         validateAccess: {
                         try requireActiveLaunchAttempt(attempt, checkpoint: "during-dataset-refresh-no-lineage")
                     })
+                    completionMessage = StorageTransferProgressCopy.refreshReady
                 case .startLineage:
                     guard let binding = storageTransferRecoveryBinding else { throw StorageTransferError.staleTransaction }
                     // Same policy bit and same journal shape as the overwrite.
@@ -1119,16 +1134,24 @@ private struct PomoGemPersistenceLaunchHost: View {
             cancellableLocalTransferID = pendingTransfer?.permitsCancellation == true
                 ? pendingTransfer?.transactionID : nil
             retainsTransferCopyOnCancellation = pendingTransfer?.retainsImportOnCancellation == true
-            overwriteInProgressPhase = pendingTransfer?.choice == .overwriteCloudFromDevice
-                ? pendingTransfer?.phase : nil
+            transferInProgress = pendingTransfer.map {
+                StorageTransferProgress(choice: $0.choice, phase: $0.phase)
+            }
             if pendingTransfer != nil {
                 canChooseLocalOnly = false
                 guard scenePhase == .active else {
                     launchState = .preparing("保存先の切り替えを再開する準備をしています")
                     return
                 }
-                launchState = .preparing("中断された保存先の切り替えを再開しています")
+                // transfer-04. A planned continuation is not an interruption.
+                launchState = .preparing(StorageTransferProgressCopy.continuing)
                 var cancelledRetainedImport = false
+                // The mirror wait can take minutes, and auto-lock would end
+                // this launch attempt (the scene stops being active) and cost
+                // the user another relaunch. Only the launch host is on
+                // screen here; no focus view owns the idle timer.
+                UIApplication.shared.isIdleTimerDisabled = true
+                defer { UIApplication.shared.isIdleTimerDisabled = false }
                 _ = try await StorageTransferHostJournalGate.resumeIfPending(
                     readPending: { try transferRuntime.pendingLocalJournal() != nil },
                     requireReleased: { try containerLifetimes.requireAllReleased() },
@@ -1141,6 +1164,10 @@ private struct PomoGemPersistenceLaunchHost: View {
                         }, trackContainer: { container, cloudEnabled in
                             if cloudEnabled { StorageTransferProcessState.markCloudMirrorOpened() }
                             containerLifetimes.track(container)
+                        }, progress: { phase in
+                            if let current = transferInProgress {
+                                transferInProgress = StorageTransferProgress(choice: current.choice, phase: phase)
+                            }
                         })
                         cancelledRetainedImport = outcome == .cancelledRetainingImport
                     }
@@ -2652,7 +2679,9 @@ private struct PomoGemPersistenceLaunchHost: View {
         beginContainerRetirement()
         isQuiescingAccountChange = false
         isPreparing = false
-        launchState = .relaunchRequired(message ?? "保存先の切り替えを受け付けました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。元の記録を保護したまま切り替えを再開します。")
+        relaunchCompletesTransfer = (try? StorageTransferRuntime.live())?
+            .pendingTransferCompletesOnNextLaunch() ?? false
+        launchState = .relaunchRequired(message ?? "保存先の切り替えを受け付けました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。元の記録を保護したまま切り替えを続けます。")
         launchAttempt += 1
     }
 
@@ -2866,11 +2895,11 @@ private struct PomoGemPersistenceLaunchHost: View {
             let journal = try StorageTransferRuntime.live().pendingLocalJournal()
             cancellableLocalTransferID = journal?.permitsCancellation == true ? journal?.transactionID : nil
             retainsTransferCopyOnCancellation = journal?.retainsImportOnCancellation == true
-            overwriteInProgressPhase = journal?.choice == .overwriteCloudFromDevice ? journal?.phase : nil
+            transferInProgress = journal.map { StorageTransferProgress(choice: $0.choice, phase: $0.phase) }
         } catch {
             cancellableLocalTransferID = nil
             retainsTransferCopyOnCancellation = false
-            overwriteInProgressPhase = nil
+            transferInProgress = nil
         }
     }
 
@@ -2926,7 +2955,8 @@ private struct PomoGemPersistenceLaunchHost: View {
             // P1-4. The caught error is about READING iCloud, not about the
             // stop reason that sent us here; putting its text on the generic
             // screen hid the fact that the rescue UI could not be built at all.
-            launchState = .blocked(StorageTransferLineageCopy.refreshScreenUnavailable)
+            launchState = .blocked(StorageTransferLineageCopy.refreshScreenUnavailable,
+                                   retryOffersDatasetChoice: true)
         }
     }
 
@@ -3465,9 +3495,11 @@ private struct PersistenceLaunchStatusView: View {
     var cloudPreview: StorageTransferCloudPreview?
     var devicePreview: StorageTransferCloudPreview?
     var cloudPreviewFailed = false
-    /// Non-nil only while a device → iCloud replacement this installation
-    /// started is durably in flight; drives the phase-aware progress copy.
-    var overwritePhase: StorageTransferJournal.Phase?
+    /// Non-nil while a transfer this installation started is durably in
+    /// flight; drives the phase-aware progress copy for every choice.
+    var transferProgress: StorageTransferProgress?
+    /// transfer-04. The next launch completes the transfer.
+    var relaunchCompletesTransfer = false
     /// Injected so a Debug simulator fixture can render the published screen.
     /// The app always passes `.standard`, where every bit is still false.
     var releasePolicy: StorageTransferReleasePolicy = .standard
@@ -3520,21 +3552,24 @@ private struct PersistenceLaunchStatusView: View {
                         ProgressView()
                             .tint(PomoGemTheme.amber)
                             .accessibilityLabel(message)
-                        if let overwritePhase {
+                        if let transferProgress {
                             // Derived from the durable journal phase, never
                             // from an optimistic guess about an in-flight
                             // effect, so a relaunch shows the same sentence.
-                            Text(StorageTransferOverwriteCopy.progress(overwritePhase))
+                            Text(StorageTransferProgressCopy.progress(transferProgress))
                                 .foregroundStyle(PomoGemTheme.muted)
                                 .multilineTextAlignment(.center)
                                 .fixedSize(horizontal: false, vertical: true)
-                                .accessibilityIdentifier("storage-overwrite-progress")
-                            Text(StorageTransferOverwriteCopy.notCancellable)
-                                .font(.caption)
-                                .foregroundStyle(PomoGemTheme.muted)
-                                .multilineTextAlignment(.center)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .accessibilityIdentifier("storage-overwrite-not-cancellable")
+                                .accessibilityIdentifier(transferProgress.choice.replacesCloud
+                                    ? "storage-overwrite-progress" : "storage-transfer-progress")
+                            if transferProgress.choice.replacesCloud {
+                                Text(StorageTransferOverwriteCopy.notCancellable)
+                                    .font(.caption)
+                                    .foregroundStyle(PomoGemTheme.muted)
+                                    .multilineTextAlignment(.center)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .accessibilityIdentifier("storage-overwrite-not-cancellable")
+                            }
                         }
                     } else if isChoosingStorage {
                         storageChoiceDisclosure(
@@ -3592,6 +3627,14 @@ private struct PersistenceLaunchStatusView: View {
                                 .buttonStyle(PomoGemSecondaryButtonStyle())
                                 .accessibilityIdentifier("storage-transfer-cancel")
                         }
+                        // No stop screen may be a dead end: in a shipping build
+                        // the resume door is closed, and past `.backupVerified`
+                        // nothing here can be cancelled either. Re-checking
+                        // clears the screen once the other device finishes.
+                        Button("もう一度試す", action: onRetry)
+                            .buttonStyle(PomoGemSecondaryButtonStyle())
+                            .accessibilityIdentifier("storage-transfer-recovery-retry")
+                        supportLink
                     } else if case .cloudVerificationTimedOut = state {
                         Button("オンラインで再試行", action: onRetryOnline)
                             .buttonStyle(PomoGemPrimaryButtonStyle())
@@ -3610,18 +3653,27 @@ private struct PersistenceLaunchStatusView: View {
                             .disabled(!canRetryOnline)
                             .accessibilityIdentifier("cloud-offline-online-retry")
                     } else if case .relaunchRequired = state {
-                        Text("この画面から再試行せず、アプリを終了して開き直してください。")
+                        if relaunchCompletesTransfer {
+                            Text(StorageTransferProgressCopy.nextLaunchCompletes)
+                                .font(.headline)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("storage-transfer-relaunch-final")
+                        }
+                        // transfer-04. How to do it, not only that it must be
+                        // done: this screen deliberately has no button.
+                        Text(StorageTransferProgressCopy.relaunchInstructions)
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                             .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("storage-transfer-relaunch-required")
+                        supportLink
                     } else {
-                        if case .blocked = state {
-                            // `.blocked` means no terminal control record with a
-                            // generation id was readable, so a replacement would
-                            // have no lineage to act against. This screen
-                            // therefore explains what the next attempt offers
-                            // and carries NO destructive affordance of its own.
+                        if case .blocked(_, true) = state {
+                            // Only the dataset-refresh read failure: a retry
+                            // there can actually reach the refresh choice. It
+                            // carries NO destructive affordance of its own.
                             Text(StorageTransferOverwriteCopy.blockedExplanation(
                                 offersOverwrite: releasePolicy.allowsDatasetOverwriteFromDevice))
                                 .font(.caption)
@@ -3643,10 +3695,7 @@ private struct PersistenceLaunchStatusView: View {
                             }
                             .buttonStyle(PomoGemSecondaryButtonStyle())
                         }
-                        Link(destination: AppLinks.support) {
-                            Label("サポートを見る", systemImage: "questionmark.circle")
-                        }
-                        .buttonStyle(PomoGemSecondaryButtonStyle())
+                        supportLink
                     }
                     if onCancelLocalTransfer != nil, showsLocalTransferCancellation {
                         Text(localTransferCancellationExplanation)
@@ -3791,6 +3840,23 @@ private struct PersistenceLaunchStatusView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("storage-overwrite-unavailable")
         }
+        // No stop screen may leave a destructive door as the only way on.
+        if let onContinueOffline {
+            Button("端末のデータでオフライン利用", action: onContinueOffline)
+                .buttonStyle(PomoGemSecondaryButtonStyle())
+                .accessibilityIdentifier("cloud-offline-continue")
+        }
+        Button("もう一度試す", action: onRetry)
+            .buttonStyle(PomoGemSecondaryButtonStyle())
+            .accessibilityIdentifier("storage-refresh-retry")
+        supportLink
+    }
+
+    private var supportLink: some View {
+        Link(destination: AppLinks.support) {
+            Label("サポートを見る", systemImage: "questionmark.circle")
+        }
+        .buttonStyle(PomoGemSecondaryButtonStyle())
     }
 
     /// P0-2 / device-01. The `.cloudLineageUnavailable` screen. It leads with
@@ -4213,7 +4279,7 @@ private struct PersistenceLaunchStatusView: View {
         switch state {
         case .choosingStorage:
             "有効にすると、同じApple AccountのiPhone間で記録を同期します。利用しない場合は、このiPhoneだけに保存でき、記録はiCloudへ送信されません。"
-        case let .preparing(message), let .blocked(message), let .failed(message),
+        case let .preparing(message), let .blocked(message, _), let .failed(message),
              let .relaunchRequired(message), let .offlineRelaunchRequired(message),
              let .cloudVerificationTimedOut(message),
              let .remoteRecovery(message, _), let .datasetRefresh(message, _),
@@ -4296,11 +4362,20 @@ enum StorageTransferOverwriteLaunchUITestScenario {
     /// The published screen whose server read failed: nobody may authorize
     /// deleting contents the app never enumerated, so the door stays closed.
     case previewFailed
-    /// No terminal control record was readable. Explanation, no destructive
+    /// The dataset-refresh read failed. Explanation, no destructive
     /// affordance of any kind.
     case blocked
+    /// transfer-06. The same generic screen from any other producer: it must
+    /// not inherit the refresh caption.
+    case blockedGeneric
     /// A durable device -> iCloud replacement past the point of no return.
     case inProgress
+    /// transfer-04. A planned continuation of 「iCloudから再取得」 while the
+    /// mirror is received: progress copy, not 「中断」.
+    case refreshInProgress
+    /// transfer-04. The relaunch after the mirror was verified: the next
+    /// launch completes the transfer, and the screen says how to relaunch.
+    case relaunchFinal
     /// Another installation's transaction is parked before the destructive
     /// phase and this device is offered as its executor. Shipping build: the
     /// resume bit is closed, so the door is refused with its own reason.
@@ -4348,8 +4423,8 @@ enum StorageTransferOverwriteLaunchUITestScenario {
         case .lineageUnavailable, .lineageUnavailableEnabled, .lineageUnavailableClosed,
              .lineageUnavailableUnreadable, .lineageUnavailableEmptyCloud, .environmentMismatch,
              .localLedgerMissingExplain: true
-        case .choice, .otherDevices, .previewFailed, .blocked, .inProgress,
-             .remoteResumeClosed, .remoteResumeOpen: false
+        case .choice, .otherDevices, .previewFailed, .blocked, .blockedGeneric, .inProgress,
+             .refreshInProgress, .relaunchFinal, .remoteResumeClosed, .remoteResumeOpen: false
         }
     }
 }
@@ -4386,7 +4461,8 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
             cloudPreview: cloudPreview,
             devicePreview: devicePreview,
             cloudPreviewFailed: cloudPreviewFailed,
-            overwritePhase: scenario == .inProgress ? .preparingDestination : nil,
+            transferProgress: transferProgress,
+            relaunchCompletesTransfer: scenario == .relaunchFinal,
             releasePolicy: releasePolicy,
             onCancelLocalTransfer: nil, retainsTransferCopyOnCancellation: false,
             onContinueOffline: offersOffline ? { offlineCalls += 1 } : nil)
@@ -4456,9 +4532,15 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
     private var state: PomoGemPersistenceLaunchHost.LaunchState {
         switch scenario {
         case .blocked:
-            .blocked(StorageTransferRuntimeError.remoteRecoveryRequired.localizedDescription)
-        case .inProgress:
-            .preparing("中断された保存先の切り替えを再開しています")
+            // The one route whose retry can reach the refresh choice.
+            .blocked(StorageTransferLineageCopy.refreshScreenUnavailable, retryOffersDatasetChoice: true)
+        case .blockedGeneric:
+            // transfer-06. Any other producer, e.g. an account mismatch.
+            .blocked(AppleAccountBoundaryResolutionError.blocked(.accountMismatch).localizedDescription)
+        case .inProgress, .refreshInProgress:
+            .preparing(StorageTransferProgressCopy.continuing)
+        case .relaunchFinal:
+            .relaunchRequired(StorageTransferRuntimeError.relaunchRequired.localizedDescription)
         case .remoteResumeClosed, .remoteResumeOpen:
             .remoteRecovery(StorageTransferRuntimeError.remoteRecoveryRequired.localizedDescription,
                             canCancel: true)
@@ -4496,7 +4578,8 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
             .isolatedTestingPolicy(allowsDatasetOverwriteFromDevice: true)
         case .remoteResumeOpen:
             .isolatedTestingPolicy(allowsRemoteResumeBeforeReplacing: true)
-        case .choice, .blocked, .inProgress, .remoteResumeClosed, .lineageUnavailable,
+        case .choice, .blocked, .blockedGeneric, .inProgress, .refreshInProgress, .relaunchFinal,
+             .remoteResumeClosed, .lineageUnavailable,
              .lineageUnavailableClosed, .lineageUnavailableEmptyCloud, .environmentMismatch,
              .localLedgerMissingExplain:
             .standard
@@ -4532,7 +4615,8 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
             // Only what every onboarded device mirrors: preset themes.
             Self.preview(subjects: 5, sessions: 0, stones: 0,
                          latest: Self.date(2026, 9, 23), otherDeviceIDs: 0)
-        case .blocked, .inProgress, .remoteResumeClosed, .remoteResumeOpen,
+        case .blocked, .blockedGeneric, .inProgress, .refreshInProgress, .relaunchFinal,
+             .remoteResumeClosed, .remoteResumeOpen,
              .environmentMismatch, .localLedgerMissingExplain:
             // There is nothing to enumerate on these screens, and none of them
             // carries a control that a pre-flight could gate.
@@ -4553,8 +4637,20 @@ struct StorageTransferOverwriteLaunchUITestFixtureView: View {
             // because its 「iCloudから再取得」 deletes this side.
             Self.preview(subjects: 12, sessions: 480, stones: 36,
                          latest: Self.date(2026, 9, 20), otherDeviceIDs: 0)
-        case .blocked, .inProgress, .remoteResumeClosed, .remoteResumeOpen,
+        case .blocked, .blockedGeneric, .inProgress, .refreshInProgress, .relaunchFinal,
+             .remoteResumeClosed, .remoteResumeOpen,
              .environmentMismatch, .localLedgerMissingExplain:
+            nil
+        }
+    }
+
+    private var transferProgress: StorageTransferProgress? {
+        switch scenario {
+        case .inProgress:
+            StorageTransferProgress(choice: .overwriteCloudFromDevice, phase: .preparingDestination)
+        case .refreshInProgress:
+            StorageTransferProgress(choice: .enableCloudKeepingCloud, phase: .preparingDestination)
+        default:
             nil
         }
     }

@@ -50,6 +50,9 @@ enum StorageTransferSettingsUITestFixture {
         /// exists in the process.
         case datasetRefreshChoice, datasetRefreshOtherDevices, datasetRefreshPreviewFailed
         case datasetRefreshBlocked, overwriteInProgress
+        /// transfer-04 / transfer-06: the generic blocked screen, a planned
+        /// refresh continuation and the final relaunch.
+        case launchBlockedGeneric, refreshInProgress, relaunchFinal
         /// `.remoteRecovery`, whose 「復旧を続ける」 door is gated by the resume
         /// bit — not by the legacy `allowsCloudReplacement`.
         case remoteResumeClosed, remoteResumeOpen
@@ -83,6 +86,9 @@ enum StorageTransferSettingsUITestFixture {
             case .datasetRefreshPreviewFailed: .previewFailed
             case .datasetRefreshBlocked: .blocked
             case .overwriteInProgress: .inProgress
+            case .launchBlockedGeneric: .blockedGeneric
+            case .refreshInProgress: .refreshInProgress
+            case .relaunchFinal: .relaunchFinal
             case .remoteResumeClosed: .remoteResumeClosed
             case .remoteResumeOpen: .remoteResumeOpen
             case .lineageUnavailable: .lineageUnavailable

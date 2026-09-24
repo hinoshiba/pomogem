@@ -107,6 +107,9 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
     func testLaunchRouteCoversEveryRuntimeErrorCase() {
         let expected: [(StorageTransferRuntimeError, CloudLaunchRoute)] = [
             (.relaunchRequired, .relaunch),
+            // transfer-04. The mirror wait timed out in a process that already
+            // opened the mirror: only a relaunch can continue it.
+            (.cloudCopyStillArriving, .relaunch),
             (.remoteRecoveryRequired, .remoteRecovery),
             // Still thrown by the binding guard and the offline receipt path.
             (.datasetRefreshRequired, .datasetRefresh),
@@ -130,7 +133,7 @@ final class CloudOfflineHostPolicyTests: XCTestCase {
         }
         // A total table: every case above, and nothing missing. Adding a case
         // to the error without adding it here fails this count.
-        XCTAssertEqual(Set(expected.map(\.0.self).map { "\($0)" }).count, 10)
+        XCTAssertEqual(Set(expected.map(\.0.self).map { "\($0)" }).count, 11)
     }
 
     /// `localLedgerMissing` shares the refresh screen with a real remote

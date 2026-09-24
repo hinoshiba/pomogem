@@ -219,6 +219,7 @@ final class StorageTransferAdmissionTaxonomyTests: XCTestCase {
     /// `launchState = .datasetRefresh`.
     func testTheLaunchRouteIsTotalOverEveryRuntimeError() {
         XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .relaunchRequired), .relaunch)
+        XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .cloudCopyStillArriving), .relaunch)
         XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .remoteRecoveryRequired), .remoteRecovery)
         XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .datasetRefreshRequired), .datasetRefresh)
         XCTAssertEqual(CloudOfflineHostPolicy.launchRoute(for: .datasetReplacedRemotely), .datasetRefresh)

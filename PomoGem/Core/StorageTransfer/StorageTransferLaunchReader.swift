@@ -306,11 +306,16 @@ enum StorageTransferOverwriteCopy {
     /// the overwrite door there is permanently disabled, so naming it here
     /// would send a user to a greyed-out control and leave the direction that
     /// discards THEIR device data as the only door they can open.
+    ///
+    /// transfer-06. Shown only on the one `.blocked` route whose retry can
+    /// reach the refresh choice (`presentDatasetRefresh` could not read
+    /// iCloud). Its message already asks the user to check the connection and
+    /// says nothing was deleted, so this adds only what comes next.
     static func blockedExplanation(offersOverwrite: Bool) -> String {
         guard offersOverwrite else {
-            return "iCloudの状態を確認できていません。通信を確認して「もう一度試す」を押すと、iCloudのデータを再取得できます。この画面では、どちらの記録も削除していません。"
+            return "iCloudを読み取れると、「もう一度試す」から、iCloudのデータを再取得する選択肢に進めます。"
         }
-        return "iCloudの状態を確認できていません。通信を確認して「もう一度試す」を押すと、iCloudのデータを再取得するか、このiPhoneのデータでiCloudを置き換えるかを選べます。この画面では、どちらの記録も削除していません。"
+        return "iCloudを読み取れると、「もう一度試す」から、iCloudのデータを再取得するか、このiPhoneのデータでiCloudを置き換えるかを選べます。"
     }
 
     // MARK: Late arrival (§6.5)
@@ -375,6 +380,63 @@ enum StorageTransferOverwriteCopy {
     private static func counts(_ preview: StorageTransferCloudPreview) -> String {
         let counts = preview.recordCounts
         return "テーマ\(counts["Subject"] ?? 0)・記録\(counts["StudySession"] ?? 0)・成果\(counts["AchievementStone"] ?? 0)"
+    }
+}
+
+/// transfer-04. Which transfer the launch host is continuing, and where its
+/// durable journal is. Presentation only.
+struct StorageTransferProgress: Equatable, Sendable {
+    let choice: StorageTransferChoice
+    let phase: StorageTransferJournal.Phase
+}
+
+/// transfer-04. Every storage switch continues across one or more planned
+/// relaunches. The launch host used to call each planned continuation
+/// 「中断された保存先の切り替えを再開しています」, which reads as a failure,
+/// and showed phase copy for the unpublished overwrite only.
+enum StorageTransferProgressCopy {
+    static let continuing = "保存先の切り替えを続けています"
+
+    /// After a confirmed 「iCloudから再取得」 has been recorded by the runtime:
+    /// the next launch starts receiving iCloud's data.
+    static let refreshReady =
+        "iCloudから取り込む準備ができました。AppスイッチャーでPomoGemを終了し、もう一度開いてください。次に開くと、iCloudからの受信を始めます。iCloudのデータは削除しません。"
+
+    static let nextLaunchCompletes = "次に開くと、保存先の切り替えが完了します。"
+
+    /// How, not only that. The launch host deliberately offers no button here.
+    static let relaunchInstructions =
+        "Appスイッチャーを開き（画面の下端から上にスワイプして指を止めるか、ホームボタンを2回押します）、PomoGemを上にスワイプして閉じてから、ホーム画面のアイコンで開き直してください。この画面で待っていても先へは進みません。アプリ自体は削除しないでください。"
+
+    /// Derived from the durable journal phase, never from an optimistic guess
+    /// about an in-flight effect, so a relaunch shows the same sentence.
+    static func progress(_ progress: StorageTransferProgress) -> String {
+        switch progress.choice {
+        case .overwriteCloudFromDevice, .enableCloudReplacingCloud:
+            return StorageTransferOverwriteCopy.progress(progress.phase)
+        case .enableCloudKeepingCloud:
+            switch progress.phase {
+            case .requested, .sourceSaved, .recoveryCopySaved:
+                return "いまの記録を確認しています"
+            case .preparingDestination:
+                return "iCloudからデータを受け取っています。数分かかることがあります。画面を開いたままお待ちください"
+            case .destinationSaved, .destinationVerified:
+                return "受け取った内容を照合しています"
+            case .selectionCommitted, .sourceRetired:
+                return "切り替えを完了しています"
+            }
+        case .disableCloudKeepingCopy:
+            switch progress.phase {
+            case .requested, .sourceSaved, .recoveryCopySaved:
+                return "いまの記録を確認しています"
+            case .preparingDestination:
+                return "iCloudのデータをこのiPhoneへコピーしています"
+            case .destinationSaved, .destinationVerified:
+                return "コピーした内容を照合しています"
+            case .selectionCommitted, .sourceRetired:
+                return "切り替えを完了しています"
+            }
+        }
     }
 }
 

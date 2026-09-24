@@ -249,10 +249,14 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
     func testBlockedOffersNoDestructiveActionButExplainsWhatComesNext() {
         launch("datasetRefreshBlocked")
         XCTAssertTrue(app.staticTexts["保存領域を確認できません"].waitForExistence(timeout: 8))
+        let message = app.staticTexts["storage-launch-message"]
+        XCTAssertTrue(reveal(message))
+        XCTAssertTrue(message.label.contains("どちらの記録も削除していません"))
         let explanation = app.staticTexts["storage-refresh-blocked-explanation"]
         XCTAssertTrue(reveal(explanation))
         XCTAssertTrue(explanation.label.contains("もう一度試す"))
-        XCTAssertTrue(explanation.label.contains("どちらの記録も削除していません"))
+        XCTAssertFalse(explanation.label.contains("通信を確認"),
+            "transfer-06: the message above already says it; the caption only adds what comes next")
         XCTAssertFalse(app.buttons["storage-refresh-confirm"].exists,
             "A screen that could not read the terminal control record has no lineage to act on")
         XCTAssertFalse(app.buttons["storage-overwrite-confirm"].exists)
@@ -261,6 +265,21 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         attach("Blocked — explanation without any destructive affordance")
         assertNoOperation()
         assertOverwriteFixture(refresh: 0, overwrite: 0, export: 0)
+    }
+
+    /// transfer-06 / launch-05. Every other producer of the generic screen —
+    /// here an account mismatch — shows only its own message. A promise that
+    /// 「もう一度試す」 re-fetches iCloud data is false there.
+    func testTheGenericBlockedScreenShowsOnlyItsOwnMessage() {
+        launch("launchBlockedGeneric")
+        XCTAssertTrue(app.staticTexts["保存領域を確認できません"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.staticTexts["storage-refresh-blocked-explanation"].exists)
+        let message = app.staticTexts["storage-launch-message"]
+        XCTAssertTrue(reveal(message))
+        XCTAssertFalse(message.label.contains("再取得"), "saw: \(message.label)")
+        XCTAssertTrue(reveal(app.buttons["もう一度試す"]))
+        attach("Blocked — generic producer, no refresh caption")
+        assertNoOperation()
     }
 
     // MARK: - 5. The non-destructive rescue door
@@ -297,6 +316,51 @@ final class StorageTransferOverwriteLaunchUITests: XCTestCase {
         XCTAssertFalse(app.buttons["storage-overwrite-confirm"].exists)
         XCTAssertFalse(app.buttons["storage-refresh-confirm"].exists)
         attach("Replacement in progress — phase copy without a cancel control")
+        assertNoOperation()
+        assertOverwriteFixture(refresh: 0, overwrite: 0, export: 0)
+    }
+
+    /// transfer-04. A planned continuation of 「iCloudから再取得」 is progress,
+    /// not an interruption, and says what is happening in this phase.
+    func testAPlannedContinuationIsShownAsProgressNotAsAnInterruption() {
+        launch("refreshInProgress")
+        XCTAssertTrue(app.staticTexts["保存先の切り替えを続けています"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.staticTexts["中断された保存先の切り替えを再開しています"].exists)
+        let progress = app.staticTexts["storage-transfer-progress"]
+        XCTAssertTrue(reveal(progress))
+        XCTAssertTrue(progress.label.contains("iCloudからデータを受け取っています"), "saw: \(progress.label)")
+        XCTAssertFalse(app.staticTexts["storage-overwrite-not-cancellable"].exists,
+            "The replacement's warning belongs to the replacement only")
+        attach("Refresh continuing — phase copy")
+        assertNoOperation()
+    }
+
+    /// transfer-04. The relaunch screen has no button on purpose; it says how
+    /// to relaunch and, on the last step, that the next launch completes it.
+    func testTheFinalRelaunchSaysHowAndThatItIsTheLastOne() {
+        launch("relaunchFinal")
+        let final = app.staticTexts["storage-transfer-relaunch-final"]
+        XCTAssertTrue(final.waitForExistence(timeout: 8))
+        XCTAssertTrue(final.label.contains("次に開くと"))
+        let instructions = app.staticTexts["storage-transfer-relaunch-required"]
+        XCTAssertTrue(reveal(instructions))
+        XCTAssertTrue(instructions.label.contains("Appスイッチャー"), "saw: \(instructions.label)")
+        XCTAssertTrue(instructions.label.contains("アプリ自体は削除しないでください"))
+        let message = app.staticTexts["storage-launch-message"]
+        XCTAssertTrue(reveal(message))
+        XCTAssertTrue(message.label.contains("Appスイッチャー"))
+        attach("Relaunch — last step, with instructions")
+        assertNoOperation()
+    }
+
+    /// No stop screen is a dead end: the remote-recovery screen keeps a
+    /// re-check and support even while its resume door is closed.
+    func testTheRemoteRecoveryScreenAlwaysOffersARecheck() {
+        launch("remoteResumeClosed")
+        let retry = app.buttons["storage-transfer-recovery-retry"]
+        XCTAssertTrue(reveal(retry, upwards: false))
+        XCTAssertTrue(retry.isEnabled)
+        XCTAssertTrue(reveal(app.buttons["サポートを見る"], upwards: false))
         assertNoOperation()
         assertOverwriteFixture(refresh: 0, overwrite: 0, export: 0)
     }

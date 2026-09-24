@@ -12,11 +12,16 @@ enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
     case datasetReplacedRemotely, cloudLineageUnavailable, localLedgerMissing
     case cloudEnvironmentMismatch, leftoverLocalStores
     case cloudCopyStillPending, recoveryNeedsReview
+    /// transfer-04. The mirror wait timed out in a process that has already
+    /// opened the staged CloudKit mirror. An in-process retry can only end in
+    /// `relaunchRequired` (`resumePendingTransfer` refuses such a process), so
+    /// this is a relaunch, not a network error with a 「もう一度試す」.
+    case cloudCopyStillArriving
 
     var errorDescription: String? {
         switch self {
         case .relaunchRequired:
-            "データを安全に切り替えるため、アプリを一度終了し、もう一度開いてください。アプリ自体は削除しないでください。"
+            "データを安全に切り替えるため、AppスイッチャーでPomoGemを一度終了し、もう一度開いてください。アプリ自体は削除しないでください。"
         case .remoteRecoveryRequired:
             "iCloudで未完了のデータ切り替えが見つかりました。復旧が完了するまで通常の同期を停止しています。"
         case .datasetRefreshRequired:
@@ -39,7 +44,9 @@ enum StorageTransferRuntimeError: Error, LocalizedError, Equatable {
         case .leftoverLocalStores:
             "以前のiCloud用データがこの端末に残っているため、iCloudの利用を開始できません。記録が混ざらないよう停止しました。残っているデータを整理してから、もう一度お試しください。"
         case .cloudCopyStillPending:
-            "iCloudの全データと端末のコピーがまだ一致しません。通信を確認して再試行してください。"
+            "iCloudのデータとこの端末のコピーがまだ一致しません。記録は保護されています。通信を確認して、もう一度お試しください。ほかの端末でポモジェムを使っている場合は、その端末を閉じてからお試しください。"
+        case .cloudCopyStillArriving:
+            "iCloudからの受信に時間がかかっています。記録は保護されています。通信の安定した場所で、AppスイッチャーでPomoGemを終了してもう一度開くと、続きから確認します。アプリ自体は削除しないでください。"
         case .recoveryNeedsReview:
             "中断時のデータを安全に自動復旧できません。復旧用コピーを保護し、削除を停止しています。"
         }
@@ -571,9 +578,23 @@ final class StorageTransferRuntime {
         try store.begin(journal)
     }
 
+    /// transfer-04. Whether the pending transfer needs exactly one more launch:
+    /// the staged mirror was already verified by an earlier process, or the
+    /// journal is past saving the destination. The relaunch screen uses it to
+    /// say 「次に開くと切り替えが完了します」 only when that is true.
+    func pendingTransferCompletesOnNextLaunch() -> Bool {
+        guard let journal = try? store.load() else { return false }
+        if journal.phase >= .destinationSaved { return true }
+        guard let files = try? files(journal),
+              let saved = try? checkpoint(files, journal: journal) else { return false }
+        return saved.verifiedCloudProcessID != nil
+    }
+
     @discardableResult
     func resumePendingTransfer(validateAccess: @escaping @MainActor () throws -> Void,
-                               trackContainer: @escaping @MainActor (ModelContainer, Bool) -> Void) async throws -> StorageTransferResumeOutcome {
+                               trackContainer: @escaping @MainActor (ModelContainer, Bool) -> Void,
+                               progress: @escaping @MainActor (StorageTransferJournal.Phase) -> Void = { _ in })
+        async throws -> StorageTransferResumeOutcome {
         try requireNoPendingRemoteCancellation()
         guard let initial = try store.load() else { return .noPending }
         try initial.validate()
@@ -638,7 +659,7 @@ final class StorageTransferRuntime {
                 try self.cleanup().enqueue(journal: journal, recoveryManifest: manifest)
             })
         try await StorageTransferCoordinator(store: store, effects: effects).resume(
-            transactionID: initial.transactionID, validateTransfer: validate)
+            transactionID: initial.transactionID, validateTransfer: validate, progress: progress)
         try resumeLocalCleanup(validateAccess: validateAccess)
         return .completed
     }
@@ -1094,7 +1115,12 @@ final class StorageTransferRuntime {
                 try checkpointFile(files).save(checkpoint, replacing: previous)
                 throw StorageTransferRuntimeError.relaunchRequired
             }
-            guard ProcessInfo.processInfo.systemUptime < deadline else { throw StorageTransferRuntimeError.cloudCopyStillPending }
+            // transfer-04. This process opened the staged mirror above, so a
+            // retry here could only be refused; the honest remedy is the
+            // relaunch that continues the wait from the durable checkpoint.
+            guard ProcessInfo.processInfo.systemUptime < deadline else {
+                throw StorageTransferRuntimeError.cloudCopyStillArriving
+            }
             try await Task.sleep(for: .seconds(2))
         }
     }
