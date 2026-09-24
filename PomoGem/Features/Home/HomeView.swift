@@ -1371,6 +1371,10 @@ struct HomeView: View {
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
             }
+            // sync-03. The bottle is a fixed canvas and its readout above now
+            // stays visible while iCloud is checked; at accessibility sizes
+            // this message grew over it. VoiceOver reads the label below.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(
                 "\(projectionVerificationTitle)。この端末で確認できた記録だけを表示しています"

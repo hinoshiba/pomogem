@@ -963,8 +963,7 @@ struct CloudSyncSettingsSection: View {
             .accessibilityIdentifier("settings.icloud.export-failing")
         case nil:
             if let lastExport = state.lastExportSuccess {
-                // The Label is the row itself (a List drops the icon of a
-                // Label nested in a TimelineView); only the text ticks.
+                // Only the relative time ticks; the row stays one Label.
                 Label {
                     TimelineView(.periodic(from: .now, by: 30)) { context in
                         Text(CloudKitMirroringCopy.lastExport(Self.relative(lastExport, now: context.date)))
@@ -972,7 +971,7 @@ struct CloudSyncSettingsSection: View {
                             .foregroundStyle(PomoGemTheme.muted)
                     }
                 } icon: {
-                    Image(systemName: "arrow.up.icloud")
+                    Image(systemName: "icloud.and.arrow.up")
                         .foregroundStyle(PomoGemTheme.amber)
                 }
                 .accessibilityElement(children: .combine)
