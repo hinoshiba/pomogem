@@ -29,6 +29,15 @@ enum GemShowcaseUITestFixture {
         /// Worst case for rendering: the study body ceiling plus the maximum
         /// visible achievements and Screen Time obstacles, all at once.
         case stress
+        /// Worst case for capacity (Docs/GemExperienceDesign.md §7.5): nine
+        /// loose gems (long ones included), 18 roots, 12 achievement stones
+        /// and 36 obstacles in the lowest (320 pt) jar.
+        case worstcase
+        /// Reward-moment review: nine resting 25-minute gems, then a tenth
+        /// completion drops, lands and fuses into ×10 (A1). Frames of the
+        /// landing and the fusion finale are written to the app's tmp
+        /// directory (`fx-landing-*.png`, `fx-fusion-*.png`).
+        case fusionfx
     }
 
     static var modeForCurrentProcess: Mode? {
@@ -40,7 +49,10 @@ enum GemShowcaseUITestFixture {
     }
 
     static var showsGalleryForCurrentProcess: Bool {
-        modeForCurrentProcess == .gallery || modeForCurrentProcess == .stress
+        modeForCurrentProcess == .gallery
+            || modeForCurrentProcess == .stress
+            || modeForCurrentProcess == .worstcase
+            || modeForCurrentProcess == .fusionfx
     }
 
     /// Subject order chosen so the reference state mixes coral, blue and
@@ -52,7 +64,7 @@ enum GemShowcaseUITestFixture {
         case .first: 1
         case .home: 15
         case .tiers: 117
-        case .gallery, .stress, nil: nil
+        case .gallery, .stress, .worstcase, .fusionfx, nil: nil
         }
     }
 
@@ -240,6 +252,96 @@ enum GemShowcaseUITestFixture {
         return descriptors
     }
 
+    /// Nine resting 25-minute gems for the reward-moment review.
+    static func fusionEffectDescriptors() -> [PebbleDescriptor] {
+        let base = Date(timeIntervalSince1970: 1_790_000_000)
+        return (0 ..< 9).map { index in
+            let item = palette[subjectCycle[index] % palette.count]
+            return PebbleDescriptor(
+                id: UUID(uuidString: String(format: "6E4D5348-4658-4658-4658-%012X", index))!,
+                subjectName: item.name,
+                colorHex: item.hex,
+                source: .timer,
+                kind: .normal,
+                grams: Constants.Mass.measuredPebbleGrams,
+                createdAt: base.addingTimeInterval(Double(index))
+            )
+        }
+    }
+
+    static let fusionEffectDrop = PebbleDescriptor(
+        id: UUID(uuidString: "6E4D5348-4658-4658-4658-00000000000A")!,
+        subjectName: "英語",
+        colorHex: Constants.Color.english,
+        source: .timer,
+        kind: .normal,
+        grams: Constants.Mass.measuredPebbleGrams,
+        createdAt: Date(timeIntervalSince1970: 1_790_000_100)
+    )
+
+    /// 9 loose (25–120 min), 18 roots from ×10 to ×1万, 12 achievements.
+    static func worstCaseDescriptors() -> [PebbleDescriptor] {
+        let base = Date(timeIntervalSince1970: 1_790_000_000)
+        var descriptors: [PebbleDescriptor] = []
+        let rootLevels = [1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5]
+        for (index, level) in rootLevels.enumerated() {
+            let pebbleCount = Int(pow(10, Double(level)))
+            let item = palette[index % palette.count]
+            let mix = [
+                StratumColorFraction(hex: item.hex, fraction: 0.6),
+                StratumColorFraction(hex: palette[(index + 1) % palette.count].hex, fraction: 0.4)
+            ]
+            descriptors.append(PebbleDescriptor(
+                id: UUID(uuidString: String(format: "6E4D5348-5752-5354-%04X-%012X", level, index))!,
+                subjectName: item.name,
+                colorHex: item.hex,
+                source: .timer,
+                kind: .normal,
+                aggregate: AggregateMetadata(
+                    level: level,
+                    pebbleCount: pebbleCount,
+                    childAggregateCount: level == 1 ? 0 : 10,
+                    colorMix: mix,
+                    subjectMix: [AggregateSubjectFraction(name: item.name, colorHex: item.hex, pebbleCount: pebbleCount)],
+                    periodStart: base,
+                    periodEnd: base.addingTimeInterval(Double(pebbleCount) * 1_500),
+                    sessionIDs: [],
+                    measuredPebbleCount: pebbleCount,
+                    manualPebbleCount: 0,
+                    goldPebbleCount: 0,
+                    prismPebbleCount: 0
+                ),
+                grams: pebbleCount * Constants.Mass.measuredPebbleGrams,
+                createdAt: base.addingTimeInterval(Double(index))
+            ))
+        }
+        for (index, minutes) in [25, 25, 50, 60, 90, 120, 25, 45, 120].enumerated() {
+            let item = palette[index % palette.count]
+            descriptors.append(PebbleDescriptor(
+                id: UUID(uuidString: String(format: "6E4D5348-5752-4C4F-4F53-%012X", index))!,
+                subjectName: item.name,
+                colorHex: item.hex,
+                source: .timer,
+                kind: .normal,
+                grams: minutes * Constants.Mass.gramsPerMinute,
+                createdAt: base.addingTimeInterval(Double(100 + index))
+            ))
+        }
+        for index in 0 ..< Constants.Jar.maximumVisibleAchievementStones {
+            descriptors.append(PebbleDescriptor(
+                id: UUID(uuidString: String(format: "6E4D5348-5752-4143-4856-%012X", index))!,
+                subjectName: "記念",
+                colorHex: palette[index % palette.count].hex,
+                source: .manual,
+                kind: .normal,
+                achievementKind: AchievementKind.allCases[index % AchievementKind.allCases.count],
+                grams: 0,
+                createdAt: base.addingTimeInterval(Double(200 + index))
+            ))
+        }
+        return descriptors
+    }
+
     static func galleryDescriptors() -> [PebbleDescriptor] {
         let base = Date(timeIntervalSince1970: 1_790_000_000)
         var descriptors: [PebbleDescriptor] = []
@@ -328,52 +430,143 @@ enum GemShowcaseUITestFixture {
     }
 }
 
-/// Standalone jar for the `gallery` mode. It restores fixed descriptors and
-/// never installs aggregate persistence callbacks, so no fusion can occur.
+/// Standalone jar for the `gallery`, `stress` and `worstcase` modes. It
+/// restores fixed descriptors and never installs aggregate persistence
+/// callbacks, so no fusion can occur.
 struct GemShowcaseFixtureLaunchView: View {
+    private static var mode: GemShowcaseUITestFixture.Mode? { GemShowcaseUITestFixture.modeForCurrentProcess }
+
+    private static var descriptors: [PebbleDescriptor] {
+        switch mode {
+        case .stress: GemShowcaseUITestFixture.stressDescriptors()
+        case .worstcase: GemShowcaseUITestFixture.worstCaseDescriptors()
+        case .fusionfx: GemShowcaseUITestFixture.fusionEffectDescriptors()
+        default: GemShowcaseUITestFixture.galleryDescriptors()
+        }
+    }
+
+    /// The worst case uses the lowest jar the design supports (320 pt).
+    private static var jarHeight: CGFloat { mode == .worstcase ? 320 : Constants.Jar.height }
+
     @StateObject private var scene: JarScene = {
         let scene = JarScene(size: CGSize(
             width: Constants.Jar.defaultSceneWidth,
-            height: Constants.Jar.height
+            height: GemShowcaseFixtureLaunchView.jarHeight
         ))
         scene.soundEnabled = false
         scene.hapticsEnabled = false
-        let isStress = GemShowcaseUITestFixture.modeForCurrentProcess == .stress
-        scene.restore(pebbles: isStress
-            ? GemShowcaseUITestFixture.stressDescriptors()
-            : GemShowcaseUITestFixture.galleryDescriptors())
-        // 36 obstacle bodies is the Screen Time projection ceiling.
-        scene.setScreenTimeObstacles(totalUnits: isStress ? 9_999 : 12)
+        scene.restore(pebbles: GemShowcaseFixtureLaunchView.descriptors)
+        switch GemShowcaseFixtureLaunchView.mode {
+        case .fusionfx:
+            // Fusion without persistence: the request is simply dropped.
+            scene.onAggregateRequested = { _ in }
+        case .gallery:
+            scene.setScreenTimeObstacles(totalUnits: 12)
+        default:
+            // 36 obstacle bodies is the Screen Time projection ceiling.
+            scene.setScreenTimeObstacles(totalUnits: 9_999)
+        }
         return scene
     }()
 
+    /// Renders the live scene over an opaque night background (so additive
+    /// light composites as on screen) and writes it to the tmp directory.
+    @MainActor
+    private static func writeFrame(of scene: JarScene, name: String) {
+        guard let view = scene.view else { return }
+        let previous = scene.backgroundColor
+        scene.backgroundColor = UIColor(red: 0.05, green: 0.06, blue: 0.13, alpha: 1)
+        defer { scene.backgroundColor = previous }
+        guard let texture = view.texture(from: scene, crop: scene.snapshotRect) else { return }
+        let image = UIImage(cgImage: texture.cgImage())
+        try? image.pngData()?.write(to: FileManager.default.temporaryDirectory
+            .appendingPathComponent("fx-\(name).png"))
+    }
+
+    @MainActor
+    private static func captureSequence(of scene: JarScene, prefix: String, offsets: [Int]) {
+        for offset in offsets {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(offset)) {
+                writeFrame(of: scene, name: String(format: "%@-%04d", prefix, offset))
+            }
+        }
+    }
+
     var body: some View {
-        let descriptors = GemShowcaseUITestFixture.modeForCurrentProcess == .stress
-            ? GemShowcaseUITestFixture.stressDescriptors()
-            : GemShowcaseUITestFixture.galleryDescriptors()
+        let descriptors = Self.descriptors
         let grams = descriptors.reduce(0) { $0 + $1.grams }
+        let represented = descriptors.reduce(0) { total, descriptor in
+            total + (descriptor.aggregate?.pebbleCount ?? (descriptor.isAchievement ? 0 : 1))
+        }
+        let shares = [
+            GemColorShare(hex: Constants.Color.english, fraction: 0.36),
+            GemColorShare(hex: Constants.Color.mathematics, fraction: 0.26),
+            GemColorShare(hex: Constants.Color.japanese, fraction: 0.16),
+            GemColorShare(hex: Constants.Color.science, fraction: 0.12),
+            GemColorShare(hex: Constants.Color.socialStudies, fraction: 0.10)
+        ]
         ZStack {
             HomeAtmosphereBackground(atmosphere: .aurora)
                 .ignoresSafeArea()
             VStack(spacing: 12) {
-                Text("宝石ギャラリー（Debug）")
+                Text(Self.mode == .worstcase ? "最悪ケース（Debug・320pt）" : "宝石ギャラリー（Debug）")
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.8))
                 JarSpriteView(
                     scene: scene,
                     totalGrams: grams,
-                    pebbleCount: descriptors.count,
-                    achievementCount: 1,
-                    aggregateCount: 4,
-                    representedPebbleCount: 11_110 + 8,
+                    pebbleCount: descriptors.filter { !$0.isAggregate && !$0.isAchievement }.count,
+                    achievementCount: descriptors.filter(\.isAchievement).count,
+                    aggregateCount: descriptors.filter(\.isAggregate).count,
+                    representedPebbleCount: represented,
                     accentHex: Constants.Color.english,
-                    lifetimeCoreColorHex: Constants.Color.english
+                    lifetimeCoreColorHex: Constants.Color.english,
+                    lifetimeCoreColorShares: shares
                 )
-                .frame(height: 460)
+                .frame(height: Self.jarHeight + 40)
+                if Self.mode == .worstcase {
+                    // Acceptance: at least 15 % of the interior height stays
+                    // free below the mouth once the pile settles.
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        Text("口の下の余白 \(Int((scene.pileHeadroomFraction * 100).rounded()))%（基準15%以上）")
+                            .font(.system(size: 13, weight: .bold, design: .rounded).monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
+                }
             }
             .padding(.horizontal, 8)
         }
         .accessibilityIdentifier("gem.showcase.gallery")
+        .task {
+            guard Self.mode == .fusionfx else { return }
+            var landed = false
+            var fused = false
+            scene.onLanding = { event in
+                guard !landed, event.pebble.id == GemShowcaseUITestFixture.fusionEffectDrop.id else { return }
+                landed = true
+                Self.captureSequence(of: scene, prefix: "landing", offsets: [0, 80, 160, 320, 560])
+            }
+            scene.onCapacityEvent = { event in
+                guard !fused, case .bakeCompleted = event else { return }
+                fused = true
+                Self.captureSequence(of: scene, prefix: "fusion", offsets: [0, 80, 160, 320, 560, 1100])
+            }
+            try? await Task.sleep(for: .seconds(4))
+            scene.performCompletionDrop(GemShowcaseUITestFixture.fusionEffectDrop)
+        }
+        .task {
+            // Share/widget capture check: the same jar exported through
+            // JarSnapshotter lands in the app's tmp directory, so it can be
+            // compared with a screen capture (additive light must survive).
+            guard Self.mode == .gallery else { return }
+            try? await Task.sleep(for: .seconds(9))
+            guard let data = try? JarSnapshotter.shared.pngData(
+                of: scene,
+                options: .share(includesSelfReported: true)
+            ) else { return }
+            try? data.write(to: FileManager.default.temporaryDirectory
+                .appendingPathComponent("gem-showcase-snapshot.png"))
+        }
     }
 }
 #endif
