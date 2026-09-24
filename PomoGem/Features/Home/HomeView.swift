@@ -615,6 +615,7 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showHomeMenu) {
             homeMenuSheet
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
                 .presentationDetents(auxiliarySheetDetents)
                 .presentationDragIndicator(.visible)
         }
@@ -1552,18 +1553,21 @@ struct HomeView: View {
                 .contentShape(Rectangle())
         }
         .accessibilityLabel("メニュー")
-        .accessibilityHint("記録、設定、背景、手動追加などを開きます")
+        .accessibilityHint("記録、設定、手動での追加、背景などを開きます")
     }
 
     private var homeMenuSheet: some View {
         NavigationStack {
             ScrollView {
+                // The menu is Home's only way to 記録 and 設定, so the
+                // destinations people open it for come first and fit in the
+                // half-height sheet even on a 4.7-inch phone. The decorative
+                // background picker comes last.
                 VStack(spacing: 14) {
-                    menuAtmospherePicker
+                    menuDestinationActions
                     menuAccumulationActions
                     menuAccumulationPlanAction
-                    menuHistoryActions
-                    menuSettingsAction
+                    menuAtmospherePicker
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
@@ -1746,6 +1750,8 @@ struct HomeView: View {
 
     private var menuAccumulationActions: some View {
         VStack(spacing: 2) {
+            // The running totals sit with the two actions that add to them.
+            menuMetricsStrip
             menuActionButton(
                 title: "時間を手動で積む",
                 detail: "30分・1時間・2時間",
@@ -1782,30 +1788,36 @@ struct HomeView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var menuHistoryActions: some View {
-        VStack(spacing: 2) {
-            Group {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(spacing: 12) {
-                        menuMetric(value: homeMenuMassValue, label: "累計")
-                        menuMetric(value: homeMenuCountValue, label: "集中")
-                        menuMetric(value: "\(achievementCountLabel)個", label: "成果")
-                    }
-                } else {
-                    HStack(spacing: 0) {
-                        menuMetric(value: homeMenuMassValue, label: "累計")
-                        Divider().frame(height: 34)
-                        menuMetric(value: homeMenuCountValue, label: "集中")
-                        Divider().frame(height: 34)
-                        menuMetric(value: "\(achievementCountLabel)個", label: "成果")
-                    }
+    private var menuMetricsStrip: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 12) {
+                    menuMetric(value: homeMenuMassValue, label: "累計")
+                    menuMetric(value: homeMenuCountValue, label: "集中")
+                    menuMetric(value: "\(achievementCountLabel)個", label: "成果")
+                }
+            } else {
+                HStack(spacing: 0) {
+                    menuMetric(value: homeMenuMassValue, label: "累計")
+                    Divider().frame(height: 34)
+                    menuMetric(value: homeMenuCountValue, label: "集中")
+                    Divider().frame(height: 34)
+                    menuMetric(value: "\(achievementCountLabel)個", label: "成果")
                 }
             }
-            .padding(.vertical, 12)
-            .background(PomoGemTheme.card)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(homeMenuAccessibilitySummary)
+        }
+        .padding(.vertical, 12)
+        .background(PomoGemTheme.card)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(homeMenuAccessibilitySummary)
+    }
 
+    private var menuDestinationActions: some View {
+        VStack(spacing: 2) {
+            menuActionButton(title: "記録を見る", detail: "推移・内訳・履歴", symbol: "chart.bar.fill") {
+                showHomeMenu = false
+                router.selectedTab = .log
+            }
             menuActionButton(
                 title: "積み上がりを見る",
                 detail: "まとまり粒・生涯の瓶・月ごとの瓶",
@@ -1818,10 +1830,6 @@ struct HomeView: View {
                     showAccumulationOverview = true
                 }
             }
-            menuActionButton(title: "記録を見る", detail: "推移・内訳・履歴", symbol: "chart.bar.fill") {
-                showHomeMenu = false
-                router.selectedTab = .log
-            }
             menuActionButton(
                 title: "動く瓶をシェア",
                 detail: "GIF・質量・#ポモジェム をSNSへ",
@@ -1833,14 +1841,10 @@ struct HomeView: View {
                     router.presentShare()
                 }
             }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private var menuSettingsAction: some View {
-        menuActionButton(title: "設定", detail: "テーマ・通知・サウンド・Pro", symbol: "gearshape.fill") {
-            showHomeMenu = false
-            router.selectedTab = .settings
+            menuActionButton(title: "設定", detail: "テーマ・通知・サウンド・Pro", symbol: "gearshape.fill") {
+                showHomeMenu = false
+                router.selectedTab = .settings
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
