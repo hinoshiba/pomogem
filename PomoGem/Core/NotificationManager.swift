@@ -151,6 +151,9 @@ final class NotificationManager {
     static let shared = NotificationManager()
 
     private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
+    /// False until iOS has answered once in this process. `.notDetermined`
+    /// before that is only the initial value, not a fact about this device.
+    private(set) var hasLoadedAuthorizationStatus = false
     private(set) var lastErrorDescription: String?
 
     private let center: UNUserNotificationCenter
@@ -291,6 +294,7 @@ final class NotificationManager {
             guard !Task.isCancelled else { return authorizationStatus }
             guard let latestAuthorizationRefresh else {
                 authorizationStatus = status
+                hasLoadedAuthorizationStatus = true
                 return status
             }
             guard latestAuthorizationRefresh.generation
@@ -299,6 +303,7 @@ final class NotificationManager {
                 continue
             }
             authorizationStatus = status
+            hasLoadedAuthorizationStatus = true
             return status
         }
     }
@@ -642,6 +647,8 @@ final class NotificationManager {
     ///
     /// On the first of a month, Wrapped takes the daily reminder's slot. Both
     /// notification types remain opt-in and no request ever carries a badge.
+    /// `dailyReminderEnabled` and `wrappedEnabled` are the person's intent;
+    /// this device books requests only while iOS allows it to deliver them.
     func synchronizePassiveNotifications(
         dailyReminderEnabled: Bool,
         wrappedEnabled: Bool,
@@ -708,6 +715,17 @@ final class NotificationManager {
         guard passiveNotificationIntentIsCurrent(generation) else { return }
 
         guard dailyReminderEnabled || wrappedEnabled else {
+            lastErrorDescription = nil
+            return
+        }
+
+        // The reminder switch is synced, so on a new or reinstalled iPhone it
+        // can be on before this device was ever asked. iOS silently drops
+        // requests it may not deliver; book nothing, and leave the intent
+        // untouched so Settings can offer to allow it here.
+        await refreshAuthorizationStatus()
+        guard passiveNotificationIntentIsCurrent(generation) else { return }
+        guard isAuthorized else {
             lastErrorDescription = nil
             return
         }

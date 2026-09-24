@@ -352,6 +352,42 @@ final class NotificationManagerRaceTests: XCTestCase {
         }
     }
 
+    func testThisDevicesPermissionGatesBookingWithoutTouchingTheIntent() async throws {
+        for status in [UNAuthorizationStatus.notDetermined, .denied] {
+            let recorder = PendingNotificationRecorder()
+            let manager = recorder.makeManager()
+            try await schedulePassive(manager, hour: 20)
+            let booked = recorder.pending.count
+            XCTAssertGreaterThan(booked, 0)
+
+            // Permission is revoked on this iPhone (or never granted after a
+            // reinstall): nothing is booked that iOS would silently drop, and
+            // the stale requests are removed.
+            recorder.authorizationStatus = status
+            try await schedulePassive(manager, hour: 20)
+            XCTAssertTrue(recorder.pending.isEmpty, "\(status.rawValue)")
+            XCTAssertEqual(manager.authorizationStatus, status)
+            XCTAssertTrue(manager.hasLoadedAuthorizationStatus)
+            XCTAssertNil(manager.lastErrorDescription)
+
+            recorder.authorizationStatus = .authorized
+            try await schedulePassive(manager, hour: 20)
+            XCTAssertEqual(recorder.pending.count, booked)
+        }
+    }
+
+    func testFreshManagerHasNotLoadedPermissionYet() async {
+        let recorder = PendingNotificationRecorder()
+        recorder.authorizationStatus = .authorized
+        let manager = recorder.makeManager()
+        // The initial `.notDetermined` is a placeholder; Settings must not
+        // show 「まだ通知を許可していない」 for it.
+        XCTAssertFalse(manager.hasLoadedAuthorizationStatus)
+        await manager.refreshAuthorizationStatus()
+        XCTAssertTrue(manager.hasLoadedAuthorizationStatus)
+        XCTAssertTrue(manager.isAuthorized)
+    }
+
     private static let tokyo: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Tokyo")!
@@ -388,6 +424,7 @@ private final class PendingNotificationRecorder {
     var queryStarted: XCTestExpectation?
     var scheduleCompleted: XCTestExpectation?
     var targetAddCount: Int?
+    var authorizationStatus: UNAuthorizationStatus = .authorized
     private var addContinuation: CheckedContinuation<Void, Never>?
     private var queryContinuation: CheckedContinuation<Void, Never>?
     private var didHoldAdd = false
@@ -433,7 +470,7 @@ private final class PendingNotificationRecorder {
         return NotificationManager(
             requestClient: client,
             focusReturnReminderClient: FocusReturnReminderNotificationClient(
-                authorizationStatus: { .authorized }, add: client.add,
+                authorizationStatus: { self.authorizationStatus }, add: client.add,
                 removePending: client.removePending, removeDelivered: { _ in }
             )
         )

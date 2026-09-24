@@ -2,6 +2,7 @@ import Observation
 import SwiftData
 import SwiftUI
 import UIKit
+import UserNotifications
 
 enum NotificationPreference: Hashable {
     case dailyReminder
@@ -262,6 +263,12 @@ struct SettingsView: View {
             get: { notificationError != nil },
             set: { if !$0 { notificationError = nil } }
         )) {
+            // iOS never asks twice. Once denied, only its Settings can allow it.
+            if NotificationManager.shared.authorizationStatus == .denied {
+                Button(String(localized: "設定を開く", table: "Settings", comment: "Alert button: open this app's notification settings in iOS")) {
+                    openNotificationSettings()
+                }
+            }
             Button("閉じる", role: .cancel) {}
         } message: {
             Text(notificationError ?? "")
@@ -493,6 +500,10 @@ struct SettingsView: View {
                 )
             }
             .accessibilityIdentifier("settings.focus-return-reminder")
+
+            if focusReturnReminderEnabled {
+                notificationPermissionStatus(identifier: "settings.focus-return-permission")
+            }
 
             Text("既定はオフ。集中タイマー中だけ通知し、戻ると取り消します。一時停止中・休憩中・終了間際は通知しません。画面をロックした場合も通知されます。")
                 .font(.caption)
@@ -743,6 +754,10 @@ struct SettingsView: View {
                     set: { enabled in updateWrappedNotification(enabled: enabled) }
                 )) {
                     SettingLabel(title: "今月の積み重ね", subtitle: "毎月1日に一度だけ", symbol: "circle.grid.3x3.fill")
+                }
+
+                if resolvedPreferences.reminderEnabled || wrappedNotifications {
+                    notificationPermissionStatus(identifier: "settings.notification-permission")
                 }
             }
         } header: {
@@ -1556,7 +1571,8 @@ struct SettingsView: View {
             ), notificationPreferenceIntents.isCurrent(preference.intentKey, intent: intent)
             else { return }
             guard permitted else {
-                disableNotificationPreference(preference)
+                // Only an ON request can be refused, so nothing was saved yet.
+                // Writing OFF here could overwrite an ON synced meanwhile.
                 notificationError = notificationPermissionMessage(
                     underlyingError: manager.lastErrorDescription
                 )
@@ -1728,28 +1744,6 @@ struct SettingsView: View {
         }
     }
 
-    private func disableNotificationPreference(_ preference: PassiveNotificationPreference) {
-        switch preference {
-        case .dailyReminder:
-            guard resolvedPreferences?.reminderEnabled == true else { return }
-            do {
-                try PrefsConsumerPolicy.mutate(
-                    .reminderEnabled,
-                    context: modelContext,
-                    markers: resetSnapshots
-                ) {
-                    $0.reminderEnabled = false
-                }
-                try modelContext.save()
-            } catch {
-                modelContext.rollback()
-                settingsError = "毎日のリマインダをオフにできませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
-            }
-        case .wrapped:
-            wrappedNotifications = false
-        }
-    }
-
     private func refreshViewServices() async {
         // Only the process-wide service is retained by the system wait. The
         // Settings task can release its ModelContext when the view disappears.
@@ -1763,40 +1757,14 @@ struct SettingsView: View {
         await reconcileNotificationAuthorization()
     }
 
+    /// The switches keep the person's intent. The daily reminder's is synced,
+    /// so this iPhone's permission must never rewrite it: a new or reinstalled
+    /// iPhone reads `.notDetermined` and would switch reminders off on every
+    /// other device. Scheduling is gated per device instead, and the status
+    /// row under an enabled switch offers the one step that fixes it here.
     private func reconcileNotificationAuthorization() async {
-        let manager = NotificationManager.shared
-        await manager.refreshAuthorizationStatus()
+        await NotificationManager.shared.refreshAuthorizationStatus()
         guard !Task.isCancelled else { return }
-        let prefs = resolvedPreferences
-
-        if !manager.isAuthorized {
-            let hadEnabledPreference = (prefs?.reminderEnabled ?? false)
-                || wrappedNotifications
-                || focusReturnReminderEnabled
-            if prefs?.reminderEnabled == true {
-                do {
-                    try PrefsConsumerPolicy.mutate(
-                        .reminderEnabled,
-                        context: modelContext,
-                        markers: resetSnapshots
-                    ) {
-                        $0.reminderEnabled = false
-                    }
-                    try modelContext.save()
-                } catch {
-                    modelContext.rollback()
-                    settingsError = "通知の実際の状態を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
-                }
-            }
-            wrappedNotifications = false
-            focusReturnReminderEnabled = false
-            manager.cancelFocusReturnReminder()
-
-            if hadEnabledPreference {
-                notificationError = notificationPermissionMessage(underlyingError: nil)
-            }
-        }
-
         await synchronizeNotificationsNow()
     }
 
@@ -1820,6 +1788,39 @@ struct SettingsView: View {
             guard !Task.isCancelled else { return }
             notificationError = "通知の予定を更新できませんでした。\n\(error.localizedDescription)"
         }
+    }
+
+    /// Shown under an enabled notification switch while this iPhone cannot
+    /// deliver. Hidden until the first permission read so an allowed iPhone
+    /// never flashes the notice.
+    @ViewBuilder
+    private func notificationPermissionStatus(identifier: String) -> some View {
+        let manager = NotificationManager.shared
+        if manager.hasLoadedAuthorizationStatus, !manager.isAuthorized {
+            NotificationPermissionStatusRow(
+                status: manager.authorizationStatus,
+                identifier: identifier,
+                allow: allowNotificationsOnThisDevice,
+                openSettings: openNotificationSettings
+            )
+        }
+    }
+
+    private func allowNotificationsOnThisDevice() {
+        viewTasks.start {
+            let manager = NotificationManager.shared
+            await manager.requestAuthorization()
+            guard !Task.isCancelled else { return }
+            if let error = manager.lastErrorDescription, !manager.isAuthorized {
+                notificationError = notificationPermissionMessage(underlyingError: error)
+            }
+            await synchronizeNotificationsNow()
+        }
+    }
+
+    private func openNotificationSettings() {
+        guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     private func notificationPermissionMessage(underlyingError: String?) -> String {
@@ -2334,6 +2335,66 @@ private struct SubjectReorderAccessibilityModifier: ViewModifier {
                 .accessibilityAction(named: "上へ移動", moveUp)
                 .accessibilityAction(named: "下へ移動", moveDown)
         }
+    }
+}
+
+/// Explains why an enabled notification switch cannot deliver on this
+/// iPhone. The switch keeps the person's (possibly synced) intent; this row
+/// names what is missing here and offers the one step that fixes it.
+private struct NotificationPermissionStatusRow: View {
+    let status: UNAuthorizationStatus
+    let identifier: String
+    let allow: () -> Void
+    let openSettings: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label {
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(PomoGemTheme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "bell.slash")
+                    .foregroundStyle(PomoGemTheme.amber)
+                    .frame(width: 26)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier(identifier)
+
+            Button(action: status == .denied ? openSettings : allow) {
+                Text(actionTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .tint(PomoGemTheme.amber)
+            .accessibilityIdentifier("\(identifier).action")
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var message: String {
+        switch status {
+        case .denied:
+            String(
+                localized: "このiPhoneでは通知がオフのため、届きません。",
+                table: "Settings",
+                comment: "Settings notice under an enabled notification switch: notifications are turned off for this app in iOS"
+            )
+        default:
+            String(
+                localized: "このiPhoneではまだ通知を許可していないため、届きません。",
+                table: "Settings",
+                comment: "Settings notice under an enabled notification switch: iOS has not asked for notification permission on this device yet"
+            )
+        }
+    }
+
+    private var actionTitle: String {
+        status == .denied
+            ? String(localized: "設定を開く", table: "Settings", comment: "Button: open this app's notification settings in iOS")
+            : String(localized: "許可する", table: "Settings", comment: "Button: show the iOS notification permission prompt")
     }
 }
 

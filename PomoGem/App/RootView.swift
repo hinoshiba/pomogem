@@ -2741,6 +2741,9 @@ struct RootView: View {
                 )
             )
             schedulingStarted = true
+            // The synced switch is passed as the person's intent. The manager
+            // books nothing while this iPhone lacks notification permission,
+            // and nothing here rewrites the intent for the other devices.
             try await NotificationManager.shared.synchronizePassiveNotifications(
                 dailyReminderEnabled: prefs.reminderEnabled,
                 wrappedEnabled: wrappedNotifications,
