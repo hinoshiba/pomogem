@@ -3226,6 +3226,12 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     private func handleScenePhaseChange(_ phase: ScenePhase) {
+        if phase == .background {
+            // Leaving while the completion alarm repeats counts as Stop.
+            // Record it before any container retirement below, while the
+            // defaults key is still scoped to this timer's account.
+            TimerCompletionAlertController.shared.acknowledgeOnLeavingApp()
+        }
         if phase != .active {
             cancelOfflineConnectionCheck()
             cloudLaunchDeadline?.cancel()
@@ -3395,11 +3401,14 @@ private struct PomoGemPersistenceLaunchHost: View {
     private func beginContainerRetirement() {
         didTimeOutContainerRetirement = false
         canContinueOffline = false
-        // Cloud-backed RootView is absent while the account is revalidated.
-        // Pause any process-local completion loop so it cannot resume on the
-        // foreground edge without its Stop UI. Durable recovery restarts an
-        // unacknowledged alert after the verified container remounts.
-        TimerCompletionAlertController.shared.stop()
+        // Cloud-backed RootView is absent while the account is revalidated,
+        // so no Stop control would be on screen. A retirement on the way to
+        // the background finds the alarm already acknowledged and stopped
+        // (handleScenePhaseChange). One while the app stays on screen, such
+        // as CKAccountChanged, only suspends it: the timer's next view in
+        // this process restores it (resumeSuspendedAlert). A relaunch never
+        // re-arms a loop.
+        TimerCompletionAlertController.shared.suspendForContainerRetirement()
         if let container = session?.container {
             containerLifetimes.track(container)
         }
@@ -3413,7 +3422,10 @@ private struct PomoGemPersistenceLaunchHost: View {
         // A superseded launch must not cancel timers created by the next
         // verified session while this cleanup was awaiting the system.
         guard launchAttempt == generation, !Task.isCancelled else { return }
-        TimerCompletionAlertController.shared.stop()
+        // Keep a suspended alarm's memory: if the account turns out unchanged,
+        // the same timer remounts and restores it; otherwise its session never
+        // comes back in the new account's namespace.
+        TimerCompletionAlertController.shared.suspendForContainerRetirement()
         if let namespace = suspendedAccountBinding?.namespace {
             FocusPersistence.clearScheduledCompletionNotificationWitness(
                 namespace: namespace

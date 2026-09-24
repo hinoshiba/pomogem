@@ -754,9 +754,17 @@ struct RootView: View {
             }
         } message: { offer in
             let remaining = offer.request.engine.snapshot(at: .now).remainingSeconds
+            // Adoption can never prove this device measured the remote
+            // interval, so FocusPersistence.preparedForCrossDeviceAdoption
+            // always demotes a running timer. Say so before the choice.
+            let becomesSelfReported = offer.request.pendingCompletion == nil
+                && offer.request.engine.containsRecoverableFocus
+            let selfReportedNote = becomesSelfReported
+                ? "続けた回は自己申告あつかいになります。"
+                : ""
             Text(persistenceMode == .localOnly
-                 ? "\(offer.request.subjectSnapshot.name)・残り約\(max(0, (remaining + 59) / 60))分。保存済みの状態から再開すると、このiPhoneが終了通知を担当します。"
-                 : "\(offer.request.subjectSnapshot.name)・残り約\(max(0, (remaining + 59) / 60))分。この端末へ引き継ぐと、この端末が終了通知を担当します。元の端末がオフラインまたはロック中の場合は、古い通知が一度届くことがあります。")
+                 ? "\(offer.request.subjectSnapshot.name)・残り約\(max(0, (remaining + 59) / 60))分。保存済みの状態から再開すると、このiPhoneが終了通知を担当します。\(selfReportedNote)"
+                 : "\(offer.request.subjectSnapshot.name)・残り約\(max(0, (remaining + 59) / 60))分。この端末へ引き継ぐと、この端末が終了通知を担当します。\(selfReportedNote)元の端末がオフラインまたはロック中の場合は、古い通知が一度届くことがあります。")
         }
         .onChange(of: focusSyncFingerprint) { _, _ in
             guard isFirstFramePresented, !isDataDeletionQuiesced else { return }
@@ -2512,7 +2520,8 @@ struct RootView: View {
             pendingCompletion: envelope.pendingCompletion,
             scheduledCompletionNotificationDeliveryDate:
                 envelope.scheduledCompletionNotificationDeliveryDate,
-            dataEpochID: envelope.dataEpochID
+            dataEpochID: envelope.dataEpochID,
+            demotionReason: envelope.demotionReason
         )
         if let pendingID = envelope.pendingCompletion?.sessionID,
            DeferredFocusCompletionStore.sessionID() == pendingID {
@@ -2675,10 +2684,19 @@ struct RootView: View {
             savedAt: adoptedAt,
             dataEpochID: source.dataEpochID
         )
+        // The reason is saved in this device's envelope so the notice stays
+        // the same after every relaunch or iCloud remount. It matches the
+        // offer's alert: only another iPhone's record in an iCloud store is
+        // a handoff; the local-only offer resumes saved state.
         let envelope = FocusPersistence.preparedForCrossDeviceAdoption(
             candidateEnvelope,
             at: adoptedAt,
-            uptime: adoptionUptime
+            uptime: adoptionUptime,
+            demotionReason: .adopted(
+                isCloudBacked: persistenceMode != .localOnly,
+                sourceWriterDeviceID: offer.sourceWriterDeviceID,
+                currentDeviceID: FocusDeviceIdentity.current()
+            )
         )
         FocusPersistence.save(envelope)
         router.cloudFocusRecoveryOffer = nil
@@ -2690,7 +2708,8 @@ struct RootView: View {
             pendingCompletion: envelope.pendingCompletion,
             dataEpochID: source.dataEpochID,
             origin: .iCloud,
-            allowsLocalNotifications: true
+            allowsLocalNotifications: true,
+            demotionReason: envelope.demotionReason
         )
     }
 

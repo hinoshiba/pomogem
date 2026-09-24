@@ -13,6 +13,10 @@ App Store Connectでは1.0.2 (9)がReady for Distributionです。1.1.0のdraft�
 - [x] iCloud中の再取得の事前読取・空データ警告・未選択の削除同意と、端末→iCloud上書き禁止を区別する
 - [ ] 本体とMonitorそれぞれのFamily Controls distribution権限、App Group、最終Archive／IPAを確認。
   現在のローカルdistribution profileにはFamily Controlsがなく、配布承認済みとは扱わない
+- [ ] 本体App IDでTime Sensitive Notificationsを有効化し、開発・App Store用profileを再生成する
+  （Family Controlsのdistribution profileと同時に）。最終Archiveの本体だけが
+  `com.apple.developer.usernotifications.time-sensitive`を持つことを`verify-release-archive.sh`で確認し、
+  実機でおやすみモード／勉強用の集中モード中に集中・休憩の終了通知が届き、毎日のリマインダーは保留されることを確認
 - [ ] 修正後の最終候補で勉強・黒いgemの実10分到達、許可取消／再許可、Pro、再起動・日付・account境界を確認。
   2026-09-21の修正後の開発署名Releaseでは到達4件／4件が記録され、両レーンの付与を確認済み。
   20分の一括到達、日付／時刻変更、端末再起動などの未確認条件と最終配布候補の試験は引き続き残す

@@ -810,7 +810,7 @@ private struct SubjectSetupPage: View {
                 .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 16))
                 .accessibilityIdentifier("onboarding.daily-reminder")
 
-                Text("通知は任意です。時刻やオン・オフは設定で変更できます。タイマーの終了通知は、このリマインダーをオフにしていても使えます。")
+                Text("通知は任意です。時刻やオン・オフは設定で変更できます。タイマーの終了通知は、このリマインダーとは別に、最初に集中を始めるときに一度だけ許可をおたずねします。")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
