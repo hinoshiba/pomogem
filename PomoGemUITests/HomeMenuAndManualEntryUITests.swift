@@ -144,6 +144,36 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
     }
 
+    func testAchievementNameKeepsTheSpacesTyped() {
+        launch()
+        openMenuRow("成果を積む")
+        XCTAssertTrue(app.navigationBars["成果を選ぶ"].waitForExistence(timeout: 4))
+        let examPass = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "試験合格")).firstMatch
+        XCTAssertTrue(examPass.waitForExistence(timeout: 4))
+        examPass.tap()
+        let field = app.textFields["achievement.create.note"]
+        XCTAssertTrue(field.waitForExistence(timeout: 4))
+        field.tap()
+        field.typeText("TOEIC ")
+        XCTAssertEqual(field.value as? String, "TOEIC ", "A typed space must not disappear")
+        field.typeText("800点")
+        XCTAssertEqual(field.value as? String, "TOEIC 800点")
+        saveScreenshot("achievement-name-with-space")
+        // 「TOEIC 800点」 is 10 characters, the space included.
+        let counter = app.staticTexts["achievement.note.counter"]
+        XCTAssertTrue(counter.waitForExistence(timeout: 2))
+        XCTAssertEqual(counter.label, "あと30文字")
+        XCTAssertTrue(counter.isHittable, "The counter stays above the keyboard while typing")
+        app.buttons["この成果を積む"].tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
+
+        openMenuRow("記録を見る")
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 5))
+        let row = app.buttons["achievement.history.row"].firstMatch
+        XCTAssertTrue(scrollUntilHittable(row))
+        XCTAssertTrue(row.label.contains("TOEIC 800点"), "Saved with its space; label=\(row.label)")
+    }
+
     func testPaywallTitleDoesNotBreakInsideTheProductName() {
         // The system text size itself, so the sheet renders at AX5 too.
         app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]

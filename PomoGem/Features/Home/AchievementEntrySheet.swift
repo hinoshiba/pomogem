@@ -146,18 +146,12 @@ struct AchievementEntrySheet: View {
                 accessibilityIdentifier: "achievement.create.subject-picker"
             )
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("成果名（任意）")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.muted)
-                TextField(kind.notePlaceholder, text: $note)
-                    .textFieldStyle(.plain)
-                    .padding(14)
-                    .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 12))
-                    .onChange(of: note) { _, value in
-                        note = AchievementStone.sanitizedNote(value)
-                    }
-            }
+            AchievementNoteField(
+                title: "成果名（任意）",
+                placeholder: kind.notePlaceholder,
+                text: $note,
+                accessibilityIdentifier: "achievement.create.note"
+            )
 
             DatePicker(
                 "達成した日",
@@ -211,7 +205,7 @@ struct AchievementEntrySheet: View {
                 }
             }
             .buttonStyle(PomoGemPrimaryButtonStyle())
-            .disabled(selectedSubject == nil || isSubmitting)
+            .disabled(selectedSubject == nil || isSubmitting || AchievementNotePolicy.isTooLong(note))
             .accessibilityIdentifier("achievement.create.save")
         }
         .padding(.horizontal, 20)
