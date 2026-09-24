@@ -79,6 +79,10 @@ struct HomeView: View {
     @State private var scene = JarScene()
     @ObservedObject private var screenTime = ScreenTimeController.shared
     @State private var sceneInitialized = false
+    /// Measured HUD bottom and jar stage top in the jar card's coordinate
+    /// space; the time core's orbit is laid out below the HUD.
+    @State private var measuredJarHUDBottom: CGFloat?
+    @State private var measuredJarStageTop: CGFloat = 0
     @State private var homeIsVisible = false
     @State private var rewardDropRevealIsPending = false
     @State private var rewardDropRevealRequestID: UUID?
@@ -898,7 +902,7 @@ struct HomeView: View {
                 accentHex: selectedSubject?.colorHex ?? Constants.Color.amberLamp,
                 lifetimeCoreColorHex: lifetimeCoreColorHex,
                 lifetimeCoreColorShares: lifetimeCoreColorShares,
-                coreTopClearance: Self.previewsHUDAboveJar ? nil : jarMetricHUDBottom,
+                coreTopClearance: Self.previewsHUDAboveJar ? nil : jarMetricHUDClearance,
                 projectionIsLowerBound: localProjectionNeedsMaintenance,
                 projectionIsUnverified:
                     aggregateProjectionPresentation.isCloudVerificationPending,
@@ -909,10 +913,15 @@ struct HomeView: View {
                 onAggregateTapped: revealAggregateInspection,
                 onAggregateAccessibilityAction: presentAggregateDetail
             )
+                .onGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.frame(in: .named(Self.jarCardCoordinateSpace)).minY
+                } action: { top in
+                    measuredJarStageTop = top
+                }
                 .padding(.horizontal, 4)
                 .padding(.top, Self.previewsHUDAboveJar ? Self.hudAboveJarHeight : 0)
 
-            jarMetricHUD
+            jarMetricHUD(stageHeight: height)
 
             if isJarEmpty {
                 emptyJarMessage
@@ -1035,6 +1044,7 @@ struct HomeView: View {
 
         }
         .frame(height: height)
+        .coordinateSpace(.named(Self.jarCardCoordinateSpace))
     }
 
     /// SwiftUI keeps presenting views mounted behind sheets. The jar owns the
@@ -1075,16 +1085,32 @@ struct HomeView: View {
     }()
     private static let hudAboveJarHeight: CGFloat = 104
 
-    /// Approximate bottom edge of the metric HUD inside the jar stage (its
-    /// 88 pt top inset plus the label, value and pill rows), used to keep the
-    /// time core's orbit clear of the numbers.
-    private var jarMetricHUDBottom: CGFloat {
+    private static let jarCardCoordinateSpace = "home.jarCard"
+
+    /// Bottom edge of the metric HUD in the jar stage's own coordinates,
+    /// measured from the laid-out HUD (every Dynamic Type size, the cloud
+    /// status line and the pre-fusion rail included), so the time core's
+    /// orbit is placed below what is actually drawn. Before the first
+    /// layout pass it falls back to the HUD's nominal rows.
+    private var jarMetricHUDClearance: CGFloat {
+        if let measuredJarHUDBottom {
+            return max(0, measuredJarHUDBottom - measuredJarStageTop)
+        }
         let valueRow: CGFloat = dynamicTypeSize.isAccessibilitySize ? 36 : 47
         let rail: CGFloat = showsPreFusionRail ? 34 : 0
         return 88 + 15 + 3 + valueRow + 3 + 24 + rail
     }
 
-    private var jarMetricHUD: some View {
+    /// The bottle is at most `Constants.Jar.height` tall and centred in a
+    /// taller stage (accessibility sizes, large phones); the HUD follows its
+    /// mouth instead of the stage top, so it never meets the neck or the
+    /// 巡 pill.
+    private func jarMetricHUDTopInset(stageHeight: CGFloat) -> CGFloat {
+        let outer = JarScene.outerJarRect(sceneSize: CGSize(width: 1, height: stageHeight))
+        return 88 + max(0, stageHeight - outer.maxY)
+    }
+
+    private func jarMetricHUD(stageHeight: CGFloat) -> some View {
         VStack(spacing: 3) {
             Text("積み上げた集中")
                 // This HUD is decorative and excluded from VoiceOver. Keep it
@@ -1117,6 +1143,11 @@ struct HomeView: View {
                 }
             }
         }
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            geometry.frame(in: .named(Self.jarCardCoordinateSpace)).maxY
+        } action: { bottom in
+            measuredJarHUDBottom = bottom
+        }
         .shadow(color: .black.opacity(0.52), radius: 3, y: 1)
         // A soft ink scrim keeps the value legible over the brighter core,
         // orbit markers and glowing gems behind the glass. The text shadow
@@ -1136,7 +1167,7 @@ struct HomeView: View {
         }
         // Keep every glyph behind the mouth instead of straddling its bright
         // rim; the occlusion cue is what makes the glass depth believable.
-        .padding(.top, Self.previewsHUDAboveJar ? 0 : 88)
+        .padding(.top, Self.previewsHUDAboveJar ? 0 : jarMetricHUDTopInset(stageHeight: stageHeight))
         .frame(maxHeight: .infinity, alignment: .top)
         .allowsHitTesting(false)
         .accessibilityHidden(true)

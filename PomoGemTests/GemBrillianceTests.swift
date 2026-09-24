@@ -239,7 +239,7 @@ final class GemBrillianceTests: XCTestCase {
             )
         ]
         for spec in specs {
-            let image = GemArtwork.bodyImage(for: spec, radius: 30)
+            let image = GemArtwork.bodyImage(for: spec, radius: 30, scale: 3)
             let cgImage = try XCTUnwrap(image.cgImage)
             let width = cgImage.width
             let height = cgImage.height
@@ -619,13 +619,15 @@ final class GemBrillianceTests: XCTestCase {
             GemColorShare(hex: Constants.Color.english, fraction: 0.5),
             GemColorShare(hex: Constants.Color.mathematics, fraction: 0.5)
         ]
-        let first = GemArtwork.coreImage(shares: single, level: 1)
-        let second = GemArtwork.coreImage(shares: single, level: 1)
+        let first = GemArtwork.coreImage(shares: single, level: 1, scale: 3)
+        let second = GemArtwork.coreImage(shares: single, level: 1, scale: 3)
         XCTAssertTrue(first === second)
-        XCTAssertFalse(first === GemArtwork.coreImage(shares: mixed, level: 1))
-        XCTAssertFalse(first === GemArtwork.coreImage(shares: single, level: 2))
+        XCTAssertFalse(first === GemArtwork.coreImage(shares: mixed, level: 1, scale: 3))
+        XCTAssertFalse(first === GemArtwork.coreImage(shares: single, level: 2, scale: 3))
         XCTAssertEqual(first.size.width, GemArtwork.coreBakeDiameter, accuracy: 0.5)
-        XCTAssertTrue(GemArtwork.vesselImage(litFacets: 3) === GemArtwork.vesselImage(litFacets: 3))
+        XCTAssertTrue(
+            GemArtwork.vesselImage(litFacets: 3, scale: 3) === GemArtwork.vesselImage(litFacets: 3, scale: 3)
+        )
     }
 
     /// The core never stops growing visibly: size to 0.26 of the jar, then
@@ -650,5 +652,346 @@ final class GemBrillianceTests: XCTestCase {
             }
             previous = current
         }
+    }
+
+    // MARK: Time core v3
+
+    /// The twenty radial facets take the share fan (top five + その他, 5 %
+    /// steps, largest first from 12 o'clock), not a fixed hue sweep.
+    func testCoreColorsFollowTheThemeShareFan() throws {
+        let slots = GemArtwork.coreSlotHexes(shares: [
+            GemColorShare(hex: "#E85D4A", fraction: 0.5),
+            GemColorShare(hex: "#4D7CDE", fraction: 0.3),
+            GemColorShare(hex: "#8A6FD1", fraction: 0.2)
+        ])
+        XCTAssertEqual(slots.count, 20)
+        XCTAssertEqual(Array(slots[0 ..< 10]), Array(repeating: "#E85D4A", count: 10))
+        XCTAssertEqual(Array(slots[10 ..< 16]), Array(repeating: "#4D7CDE", count: 6))
+        XCTAssertEqual(Array(slots[16 ..< 20]), Array(repeating: "#8A6FD1", count: 4))
+
+        let many = (0 ..< 8).map { GemColorShare(hex: String(format: "#%02X4060", 40 + $0 * 20), fraction: Double(8 - $0)) }
+        XCTAssertLessThanOrEqual(Set(GemArtwork.coreSlotHexes(shares: many)).count, 6, "Top five plus その他")
+        XCTAssertEqual(GemArtwork.coreSlotHexes(shares: [GemColorShare(hex: "#3FA57C", fraction: 1)]), Array(repeating: "#3FA57C", count: 20))
+
+        // The baked stone really is painted by the fan: the right half
+        // (slots 0–9) carries the first share, the left half the second.
+        let halves = [
+            GemColorShare(hex: "#E85D4A", fraction: 0.5),
+            GemColorShare(hex: "#4D7CDE", fraction: 0.5)
+        ]
+        let fan = GemArtwork.coreSlotHexes(shares: halves)
+        let image = try XCTUnwrap(GemArtwork.coreImage(shares: halves, level: 1, scale: 1).cgImage)
+        let right = try pixel(in: image, clockwiseDegrees: 81, radiusFraction: 0.50)
+        let left = try pixel(in: image, clockwiseDegrees: 261, radiusFraction: 0.50)
+        let rightIsRed = fan[4] == "#E85D4A"
+        XCTAssertEqual(right.red > right.blue, rightIsRed, "3 o'clock follows slot 4 (\(fan[4]))")
+        XCTAssertEqual(left.red > left.blue, !rightIsRed, "9 o'clock follows slot 14 (\(fan[14]))")
+
+        // A single theme still sparkles: the two halves of a sector differ
+        // in light, both keep the theme's hue family.
+        let coral = try XCTUnwrap(
+            GemArtwork.coreImage(shares: [GemColorShare(hex: "#E85D4A", fraction: 1)], level: 1, scale: 1).cgImage
+        )
+        let lead = try pixel(in: coral, clockwiseDegrees: 45, radiusFraction: 0.58)
+        let trail = try pixel(in: coral, clockwiseDegrees: 63, radiusFraction: 0.58)
+        XCTAssertGreaterThan(abs(lead.luminance - trail.luminance), 0.04, "Facets must not be flat")
+        for sample in [lead, trail] {
+            XCTAssertGreaterThan(sample.red, sample.blue)
+        }
+        // A white-hot heart.
+        let heart = try pixel(in: coral, clockwiseDegrees: 0, radiusFraction: 0.02)
+        XCTAssertGreaterThan(heart.luminance, 0.92)
+    }
+
+    // MARK: Gem bed (積み上がりの光)
+
+    /// Lifetime grams are the only size input: 0–250 g keeps the ordinary
+    /// glow, then the bed grows logarithmically, never shrinks and never
+    /// passes its cap.
+    func testGemBedFollowsLifetimeGramsMonotoneAndCapped() {
+        let shares = [GemColorShare(hex: Constants.Color.english, fraction: 1)]
+        XCTAssertFalse(JarGemBedPresentation.state(totalGrams: 0, colorShares: shares).isVisible)
+        XCTAssertFalse(JarGemBedPresentation.state(totalGrams: 250, colorShares: shares).isVisible)
+        XCTAssertFalse(JarGemBedPresentation.state(totalGrams: -5, colorShares: shares).isVisible)
+        XCTAssertTrue(JarGemBedPresentation.state(totalGrams: 251, colorShares: shares).isVisible)
+
+        var samples: [Int] = [251, 300, 500, 1_000, 2_500, 3_750]
+        var grams = 5_000
+        while grams < Int.max / 3 {
+            samples.append(grams)
+            samples.append(grams + grams / 2)
+            grams *= 3
+        }
+        samples.append(Int.max)
+        let interiorHeight: CGFloat = 398
+        var previous: JarGemBedState?
+        for sample in samples {
+            let state = JarGemBedPresentation.state(totalGrams: sample, colorShares: shares)
+            XCTAssertLessThanOrEqual(state.heightBucket, JarGemBedPresentation.heightBucketCount)
+            XCTAssertLessThanOrEqual(state.growthFraction, 1)
+            XCTAssertLessThanOrEqual(
+                state.height(interiorHeight: interiorHeight),
+                (interiorHeight * JarGemBedPresentation.capFraction).rounded()
+            )
+            if let previous {
+                XCTAssertGreaterThanOrEqual(state.heightBucket, previous.heightBucket, "\(sample) g")
+                XCTAssertGreaterThanOrEqual(state.growthFraction, previous.growthFraction, "\(sample) g")
+            }
+            previous = state
+        }
+        XCTAssertEqual(
+            JarGemBedPresentation.state(
+                totalGrams: JarGemBedPresentation.saturationGrams,
+                colorShares: shares
+            ).heightBucket,
+            JarGemBedPresentation.heightBucketCount
+        )
+        // The first kilograms already read as a bed; heavy users grow on.
+        let early = JarGemBedPresentation.state(totalGrams: 3_750, colorShares: shares)
+        let heavy = JarGemBedPresentation.state(totalGrams: 250_000, colorShares: shares)
+        let veteran = JarGemBedPresentation.state(totalGrams: 2_500_000, colorShares: shares)
+        XCTAssertGreaterThanOrEqual(early.height(interiorHeight: interiorHeight), 24)
+        XCTAssertLessThan(early.heightBucket, heavy.heightBucket)
+        XCTAssertLessThan(heavy.heightBucket, veteran.heightBucket)
+        // Chip colours are the lifetime fan, like the core.
+        XCTAssertEqual(early.slotHexes, GemArtwork.coreSlotHexes(shares: shares))
+    }
+
+    /// Ten bodies fusing into one, or Screen Time obstacles arriving, leave
+    /// the bed exactly as it was: same texture, size, position and light.
+    @MainActor
+    func testFusionAndObstaclesDoNotChangeTheGemBed() throws {
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        scene.reduceMotion = false
+        let descriptors = (0 ..< Constants.Jar.aggregateFanIn).map { index in
+            PebbleDescriptor(
+                id: UUID(uuidString: String(format: "E1000000-0000-4000-8000-%012X", index + 1))!,
+                subjectName: "英語",
+                colorHex: Constants.Color.english,
+                source: .timer,
+                kind: .normal,
+                grams: Constants.Mass.measuredPebbleGrams,
+                createdAt: Date(timeIntervalSince1970: TimeInterval(index))
+            )
+        }
+        scene.gemBed = JarGemBedPresentation.state(
+            totalGrams: 3_750,
+            colorShares: [
+                GemColorShare(hex: Constants.Color.english, fraction: 0.6),
+                GemColorShare(hex: Constants.Color.mathematics, fraction: 0.4)
+            ]
+        )
+        let bed = try XCTUnwrap(scene.childNode(withName: "//jar.gemBed") as? SKSpriteNode)
+        XCTAssertFalse(bed.isHidden)
+        XCTAssertNil(bed.physicsBody, "Decoration only: never a physics body")
+        XCTAssertLessThan(bed.zPosition, JarZPosition.pebble, "Behind every body")
+        XCTAssertEqual(bed.blendMode, .alpha)
+        func snapshot() -> (SKTexture?, CGSize, CGPoint, CGFloat, Bool) {
+            (bed.texture, bed.size, bed.position, bed.alpha, bed.isHidden)
+        }
+        let before = snapshot()
+
+        var request: JarAggregateRequest?
+        scene.onAggregateRequested = { request = $0 }
+        scene.restore(pebbles: descriptors)
+        scene.update(0)
+        let finished = expectation(description: "fusion")
+        DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Jar.aggregateFormationDuration + 0.25) {
+            finished.fulfill()
+        }
+        wait(for: [finished], timeout: 3)
+        XCTAssertNotNil(request, "The ten bodies fused")
+        scene.setScreenTimeObstacles(totalUnits: 36)
+        scene.update(1)
+
+        let after = snapshot()
+        XCTAssertTrue(before.0 === after.0)
+        XCTAssertEqual(before.1, after.1)
+        XCTAssertEqual(before.2, after.2)
+        XCTAssertEqual(before.3, after.3)
+        XCTAssertEqual(before.4, after.4)
+    }
+
+    // MARK: Orbit and HUD
+
+    /// The orbit column never crosses the measured HUD or the core's own
+    /// labels, at every stage height and HUD size (default, xxxL, AX sizes
+    /// with the rail). The column stays above the gem bed (it is drawn behind
+    /// the scene); the labels, drawn in front, stay above the floor row.
+    /// Short bands tighten the orbit, then hide markers, then the orbit.
+    func testOrbitPlacementClearsTheMeasuredHUDFrame() {
+        let labelHeight = JarLifetimeCoreBackdrop.estimatedLabelHeight
+        for stageHeight: CGFloat in [360, 420, 470, 520] {
+            let floorRow = stageHeight - 10 - 30
+            for hudBottom: CGFloat in [138, 180, 214, 250] {
+                for bedTop: CGFloat? in [nil, stageHeight - 50, stageHeight - 90] {
+                    for labelBottomLimit: CGFloat? in [nil, floorRow] {
+                        for level in 1 ... 5 {
+                            let core = JarLifetimeCoreBackdrop.coreDiameter(jarWidth: 358, level: level)
+                            let layout = JarLifetimeCoreLayout.resolve(
+                                stageHeight: stageHeight,
+                                core: core,
+                                orbitCount: JarLifetimeCoreBackdrop.orbitCount(level: level),
+                                topClearance: hudBottom,
+                                bottomLimit: bedTop,
+                                labelBottomLimit: labelBottomLimit,
+                                labelHeight: labelHeight
+                            )
+                            let context = "stage \(stageHeight), HUD \(hudBottom), bed \(String(describing: bedTop)), labels \(String(describing: labelBottomLimit)), L\(level)"
+                            let stone = core * JarLifetimeCoreLayout.stoneRadiusFactor
+                            let columnBottom = bedTop ?? stageHeight - 16
+                            let labelBottom = labelBottomLimit ?? columnBottom
+                            let top = hudBottom + JarLifetimeCoreLayout.hudGap
+                            let fits = columnBottom - top >= stone * 2
+                                && labelBottom - top >= stone * 2 + JarLifetimeCoreLayout.labelGap + labelHeight
+                            guard fits else { continue }
+                            XCTAssertGreaterThanOrEqual(layout.columnTop, top - 0.5, context)
+                            XCTAssertLessThanOrEqual(layout.columnBottom, columnBottom + 0.5, context)
+                            XCTAssertGreaterThanOrEqual(layout.labelTop, layout.columnBottom, context)
+                            XCTAssertLessThanOrEqual(layout.labelTop + labelHeight, labelBottom + 0.5, context)
+                            if layout.showsMarkers {
+                                XCTAssertGreaterThanOrEqual(
+                                    layout.orbitRadius - JarLifetimeCoreLayout.markerSize / 2,
+                                    stone,
+                                    "Markers stay off the stone: \(context)"
+                                )
+                            }
+                            if layout.showsOrbit {
+                                XCTAssertGreaterThan(layout.orbitRadius, stone, context)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Room to spare: the nominal orbit with its markers.
+        let roomy = JarLifetimeCoreLayout.resolve(
+            stageHeight: 700, core: 80, orbitCount: 1, topClearance: 100, bottomLimit: 690, labelHeight: labelHeight
+        )
+        XCTAssertEqual(roomy.orbitRadius, 80 * 1.075, accuracy: 0.01)
+        XCTAssertTrue(roomy.showsMarkers)
+
+        // Labels drawn in front may reach below the bed's top edge, which
+        // leaves the heavy user's orbit its markers.
+        let behindOnly = JarLifetimeCoreLayout.resolve(
+            stageHeight: 420, core: 94, orbitCount: 2, topClearance: 170, bottomLimit: 344, labelHeight: labelHeight
+        )
+        let withFrontLabels = JarLifetimeCoreLayout.resolve(
+            stageHeight: 420, core: 94, orbitCount: 2, topClearance: 170, bottomLimit: 344,
+            labelBottomLimit: 380, labelHeight: labelHeight
+        )
+        XCTAssertGreaterThanOrEqual(withFrontLabels.orbitRadius, behindOnly.orbitRadius)
+        XCTAssertTrue(withFrontLabels.showsMarkers)
+
+        // Shrinking the band: the radius never grows, markers go before the
+        // orbit, and the orbit goes last.
+        var previousRadius = CGFloat.greatestFiniteMagnitude
+        var sawMarkersHidden = false
+        var sawOrbitHidden = false
+        for bottom in stride(from: CGFloat(420), through: 200, by: -5) {
+            let layout = JarLifetimeCoreLayout.resolve(
+                stageHeight: 440, core: 90, orbitCount: 1, topClearance: 100, bottomLimit: bottom, labelHeight: labelHeight
+            )
+            if layout.showsOrbit {
+                XCTAssertLessThanOrEqual(layout.orbitRadius, previousRadius + 0.01)
+                previousRadius = layout.orbitRadius
+            }
+            if !layout.showsMarkers { sawMarkersHidden = true }
+            if sawMarkersHidden { XCTAssertFalse(layout.showsMarkers) }
+            if !layout.showsOrbit {
+                XCTAssertTrue(sawMarkersHidden)
+                sawOrbitHidden = true
+            }
+            if sawOrbitHidden { XCTAssertFalse(layout.showsOrbit) }
+        }
+        XCTAssertTrue(sawMarkersHidden)
+    }
+
+    /// The pile profile the core's labels read counts resting bodies only,
+    /// per column, so a pile at one side never pushes labels in the middle
+    /// and a falling gem is never mistaken for the pile.
+    @MainActor
+    func testSettledPileProfileCountsRestingBodiesPerColumn() throws {
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        scene.reduceMotion = true
+        scene.restore(pebbles: [looseDescriptor()])
+        let pebble = try XCTUnwrap(scene.childNode(withName: "//pebble.*") as? PebbleNode)
+        pebble.position = CGPoint(x: 60, y: 80)
+        pebble.physicsBody?.velocity = .zero
+        scene.update(0)
+        scene.update(1)
+        let top = scene.settledPileTop(minX: 40, maxX: 80)
+        XCTAssertEqual(top, ((80 + pebble.radius) / 4).rounded(.up) * 4, accuracy: 0.001)
+        XCTAssertEqual(scene.settledPileTop(minX: 250, maxX: 340), 0, "Other columns stay clear")
+
+        pebble.physicsBody?.velocity = CGVector(dx: 0, dy: -400)
+        scene.update(2)
+        XCTAssertEqual(scene.settledPileTop(minX: 40, maxX: 80), 0, "A falling gem is not the pile")
+    }
+
+    /// Bakes follow the scale of the view that shows them (no UIScreen).
+    func testArtworkBakesAtTheViewsDisplayScale() {
+        let spec = GemArtworkSpec(
+            rung: GemCutLadder.standard.loose,
+            colors: [GemColorShare(hex: Constants.Color.english, fraction: 1)],
+            variant: 0,
+            isMuted: false,
+            showsDashedRing: false
+        )
+        XCTAssertEqual(GemArtwork.bodyImage(for: spec, radius: 20, scale: 2).scale, 2)
+        XCTAssertEqual(GemArtwork.bodyImage(for: spec, radius: 20, scale: 3).scale, 3)
+        XCTAssertEqual(
+            GemArtwork.coreImage(shares: [GemColorShare(hex: Constants.Color.english, fraction: 1)], level: 1, scale: 1).scale,
+            1
+        )
+        XCTAssertEqual(GemArtwork.renderScale(0.5), 1)
+        XCTAssertEqual(GemArtwork.renderScale(4), 3)
+        XCTAssertEqual(GemArtwork.renderScale(.nan), 3)
+        let node = PebbleNode(descriptor: looseDescriptor(), reduceMotion: true, artworkScale: 2)
+        XCTAssertEqual(node.artworkScale, 2)
+    }
+
+    // MARK: Pixel helpers
+
+    private struct Sample {
+        let red: CGFloat
+        let green: CGFloat
+        let blue: CGFloat
+        var luminance: CGFloat { 0.2126 * red + 0.7152 * green + 0.0722 * blue }
+    }
+
+    /// Samples the baked core at a clockwise angle from 12 o'clock and a
+    /// fraction of the stone radius.
+    private func pixel(in image: CGImage, clockwiseDegrees: CGFloat, radiusFraction: CGFloat) throws -> Sample {
+        let width = image.width
+        let height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let context = try XCTUnwrap(CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let stoneRadius = CGFloat(width) * JarLifetimeCoreLayout.stoneRadiusFactor
+        let radians = clockwiseDegrees * .pi / 180
+        let x = Int((CGFloat(width) / 2 + sin(radians) * stoneRadius * radiusFraction).rounded())
+        // Row 0 of the bitmap is the top of the image.
+        let y = Int((CGFloat(height) / 2 - cos(radians) * stoneRadius * radiusFraction).rounded())
+        let offset = (min(max(y, 0), height - 1) * width + min(max(x, 0), width - 1)) * 4
+        let alpha = max(CGFloat(pixels[offset + 3]) / 255, 0.001)
+        return Sample(
+            red: CGFloat(pixels[offset]) / 255 / alpha,
+            green: CGFloat(pixels[offset + 1]) / 255 / alpha,
+            blue: CGFloat(pixels[offset + 2]) / 255 / alpha
+        )
     }
 }

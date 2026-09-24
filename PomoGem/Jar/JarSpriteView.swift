@@ -140,7 +140,12 @@ struct JarSpriteView: View {
     @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
+    @Environment(\.displayScale) private var displayScale
     @StateObject private var motionObserver: JarMotionObserver
+    /// Measured size of the time core's label block (shared by the core
+    /// behind the scene and its labels in front, so both use one layout;
+    /// the width tells which columns of the pile lie under the labels).
+    @State private var coreLabelSize = CGSize(width: 220, height: JarLifetimeCoreBackdrop.estimatedLabelHeight)
 #if targetEnvironment(macCatalyst)
     @State private var catalystGestureOwnership = JarDragGestureOwnership()
 #endif
@@ -233,17 +238,69 @@ struct JarSpriteView: View {
                     )
                 }
 
+                // The core column (orbit and labels) stays above the gem
+                // bed, which the scene draws in front of this layer.
+                let coreBottomLimit = JarScene.gemBedTopFromStageTop(
+                    stageSize: proxy.size,
+                    bed: gemBedState
+                ) - 6
+                // The labels (drawn in front) sit above the resting bodies
+                // right under them: at least one floor row, higher when an
+                // achievement stone or a crystal rests there. Only when the
+                // pile rises so high that the orbit column and the labels no
+                // longer fit above it is the core buried; then the labels
+                // step behind the scene with it.
+                let floorLabelLimit = proxy.size.height
+                    - JarScene.interiorRect(sceneSize: proxy.size).minY
+                    - Constants.Jar.measuredRadius * 2 - 7
+                let pileUnderLabels = scene.settledPileTop(
+                    minX: (proxy.size.width - coreLabelSize.width) / 2,
+                    maxX: (proxy.size.width + coreLabelSize.width) / 2
+                )
+                let pileLabelLimit = pileUnderLabels > 0
+                    ? proxy.size.height - pileUnderLabels - 4
+                    : floorLabelLimit
+                let abovePileLimit = min(floorLabelLimit, pileLabelLimit)
+                let coreLabelsBuried = lifetimeCoreState.map { state -> Bool in
+                    let layout = JarLifetimeCoreLabels.layout(
+                        stageSize: proxy.size,
+                        state: state,
+                        topClearance: coreTopClearance,
+                        bottomLimit: coreBottomLimit,
+                        labelBottomLimit: abovePileLimit,
+                        labelHeight: coreLabelSize.height
+                    )
+                    return layout.labelTop + coreLabelSize.height > abovePileLimit + 0.5
+                } ?? false
+                let coreLabelBottomLimit = coreLabelsBuried ? floorLabelLimit : abovePileLimit
                 if let coreState = lifetimeCoreState {
                     JarLifetimeCoreBackdrop(
                         state: coreState,
                         colorHex: lifetimeCoreColorHex,
                         colorShares: lifetimeCoreColorShares,
-                        topClearance: coreTopClearance
+                        topClearance: coreTopClearance,
+                        bottomLimit: coreBottomLimit,
+                        labelBottomLimit: coreLabelBottomLimit,
+                        labelHeight: coreLabelSize.height
                     )
+                    if coreLabelsBuried {
+                        JarLifetimeCoreLabels(
+                            state: coreState,
+                            topClearance: coreTopClearance,
+                            bottomLimit: coreBottomLimit,
+                            labelBottomLimit: coreLabelBottomLimit,
+                            measuredSize: $coreLabelSize
+                        )
+                    }
                 } else if totalGrams > 0, totalGrams < GemCutLadder.firstCrystalTierGrams {
                     // Where the core will be born: a colourless vessel whose
                     // facets light up one per 250 g.
-                    JarLifetimeCoreVessel(totalGrams: totalGrams, topClearance: coreTopClearance)
+                    JarLifetimeCoreVessel(
+                        totalGrams: totalGrams,
+                        topClearance: coreTopClearance,
+                        bottomLimit: coreBottomLimit,
+                        labelBottomLimit: coreLabelBottomLimit
+                    )
                 }
 
                 SpriteView(
@@ -283,14 +340,32 @@ struct JarSpriteView: View {
 #endif
                 .onAppear {
                     scene.size = proxy.size
+                    scene.artworkScale = displayScale
+                    scene.gemBed = gemBedState
                     scene.milestoneTraceCount = milestoneTraceCount
                     updateMotionBehavior(reduceMotion: reduceMotion)
                 }
                 .onChange(of: milestoneTraceCount) { _, count in
                     scene.milestoneTraceCount = count
                 }
+                .onChange(of: gemBedState) { _, state in
+                    scene.gemBed = state
+                }
                 .onChange(of: proxy.size) { _, newSize in
                     scene.size = newSize
+                }
+
+                // The core's name plate and progress card sit in front of
+                // the scene (like the HUD): the bed can never hide them, and
+                // they may overlap its soft top edge.
+                if let coreState = lifetimeCoreState, !coreLabelsBuried {
+                    JarLifetimeCoreLabels(
+                        state: coreState,
+                        topClearance: coreTopClearance,
+                        bottomLimit: coreBottomLimit,
+                        labelBottomLimit: coreLabelBottomLimit,
+                        measuredSize: $coreLabelSize
+                    )
                 }
             }
         }
@@ -339,6 +414,17 @@ struct JarSpriteView: View {
             scene.cancelInteractionPresentation()
             motionObserver.stop()
         }
+    }
+
+    /// 「積み上がりの光」 as a gem bed: lifetime grams and the lifetime theme
+    /// mix only (the same fan as the time core).
+    private var gemBedState: JarGemBedState {
+        JarGemBedPresentation.state(
+            totalGrams: totalGrams,
+            colorShares: lifetimeCoreColorShares.isEmpty
+                ? [GemColorShare(hex: lifetimeCoreColorHex, fraction: 1)]
+                : lifetimeCoreColorShares
+        )
     }
 
     /// Long-term milestone traces, engraved on the jar's copper collar.

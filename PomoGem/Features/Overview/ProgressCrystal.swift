@@ -922,6 +922,66 @@ private struct FusionOrbitSourceShard: View {
     }
 }
 
+/// 「積み上がりの光」 drawn as a gem bed: small faceted crystal chips that
+/// lie behind the physics bodies (Docs/EngagementArchitecture.md §3.2).
+///
+/// The only inputs are lifetime study grams and the lifetime mass-weighted
+/// theme mix (the same fan as the time core). Body count, decimal digits,
+/// rarity and fusion timing cannot reach it, so ten bodies fusing into one
+/// leave the bed exactly as it was, and Screen Time obstacles (no study
+/// mass, no theme) never feed it. Growth is logarithmic and capped.
+struct JarGemBedState: Equatable, Sendable {
+    let totalGrams: Int
+    /// 0…1 share of the capped height (0 at or below 250 g).
+    let growthFraction: Double
+    /// 0…`JarGemBedPresentation.heightBucketCount`; one baked texture each.
+    let heightBucket: Int
+    /// The twenty 5 % colour slots of the lifetime fan (chip colours).
+    let slotHexes: [String]
+
+    var isVisible: Bool { heightBucket > 0 }
+
+    /// Bed height inside a jar interior of `interiorHeight` points. Nothing
+    /// ever rises above `JarGemBedPresentation.capFraction` of it, so the
+    /// foreground keeps its free space.
+    func height(interiorHeight: CGFloat) -> CGFloat {
+        let cap = max(0, interiorHeight) * JarGemBedPresentation.capFraction
+        return (cap * CGFloat(heightBucket) / CGFloat(JarGemBedPresentation.heightBucketCount)).rounded()
+    }
+}
+
+enum JarGemBedPresentation {
+    /// Up to 250 g (one ordinary focus) the jar keeps its ordinary glow.
+    static let baselineGrams = JarAccumulationPresencePresentation.baselineGrams
+    /// The same distant ceiling as the accumulation presence: a million
+    /// ordinary focuses fill the bed to its cap.
+    static let saturationGrams = JarAccumulationPresencePresentation.saturationGrams
+    /// Highest share of the jar interior the bed may cover.
+    static let capFraction: CGFloat = 0.18
+    static let heightBucketCount = 24
+
+    static func state(totalGrams rawTotalGrams: Int, colorShares: [GemColorShare]) -> JarGemBedState {
+        let totalGrams = max(0, rawTotalGrams)
+        let slots = GemArtwork.coreSlotHexes(shares: colorShares)
+        guard totalGrams > baselineGrams else {
+            return JarGemBedState(totalGrams: totalGrams, growthFraction: 0, heightBucket: 0, slotHexes: slots)
+        }
+        // Six decades from one focus to the cap, then a square root so the
+        // first kilograms already read as a bed (3.75 kg ≈ 44 %, 250 kg ≈
+        // 71 %, 2.5 t ≈ 82 %). Monotone, and never above 1.
+        let decades = log10(Double(saturationGrams) / Double(baselineGrams))
+        let progress = min(1, max(0, log10(Double(totalGrams) / Double(baselineGrams)) / decades))
+        let growth = progress.squareRoot()
+        let bucket = min(heightBucketCount, max(1, Int((growth * Double(heightBucketCount)).rounded(.up))))
+        return JarGemBedState(
+            totalGrams: totalGrams,
+            growthFraction: growth,
+            heightBucket: bucket,
+            slotHexes: slots
+        )
+    }
+}
+
 /// Pure, bounded geometry for the jar's non-physical accumulation memory.
 ///
 /// `totalGrams` is the only input. In particular, live SpriteKit body count,
@@ -1837,50 +1897,140 @@ enum JarLifetimeCorePresentation {
     }
 }
 
+/// Where the time core, its orbit and its labels sit on the jar stage.
+///
+/// Pure geometry (stage coordinates, y down). The Home HUD's measured bottom
+/// edge bounds the top. The orbit column (stone, rings, markers) is drawn
+/// behind the scene, so it stays above the gem bed's top edge; the label
+/// block below it is drawn in front of the scene, so it only has to stay
+/// above the first row of gems on the floor. Neither the orbit nor its
+/// diamond markers can cross the HUD or the core's own labels. When the
+/// band is short (large text, a short stage, a tall bed) the extra orbits
+/// close up first, then the orbit tightens toward the stone, then its
+/// markers hide, and last the orbit itself.
+struct JarLifetimeCoreLayout: Equatable {
+    let centerY: CGFloat
+    let orbitRadius: CGFloat
+    let extraOrbitSpacing: CGFloat
+    let showsOrbit: Bool
+    let showsMarkers: Bool
+    /// Highest and lowest drawn points of the stone, rings and markers.
+    let columnTop: CGFloat
+    let columnBottom: CGFloat
+    /// Top of the label block (name plate and progress card).
+    let labelTop: CGFloat
+
+    /// Double-diamond orbit slot (outer square side).
+    static let markerSize: CGFloat = 12
+    static let hudGap: CGFloat = 8
+    static let labelGap: CGFloat = 6
+    /// Stone radius as a share of the core frame (the bake keeps a margin).
+    static let stoneRadiusFactor: CGFloat = 0.46
+    /// Without an overlaid HUD the column starts below the neck and 巡 pill.
+    static let topFractionWithoutHUD: CGFloat = 0.16
+
+    /// - Parameters:
+    ///   - bottomLimit: lowest y of the orbit column (the gem bed's top).
+    ///   - labelBottomLimit: lowest y of the label block; `nil` keeps the
+    ///     labels above `bottomLimit` as well.
+    static func resolve(
+        stageHeight: CGFloat,
+        core: CGFloat,
+        orbitCount: Int,
+        topClearance: CGFloat?,
+        bottomLimit: CGFloat?,
+        labelBottomLimit: CGFloat? = nil,
+        labelHeight: CGFloat
+    ) -> JarLifetimeCoreLayout {
+        let top = topClearance.map { $0 + hudGap } ?? stageHeight * topFractionWithoutHUD
+        let bottom = min(bottomLimit ?? stageHeight - 16, stageHeight)
+        let labelBottom = min(labelBottomLimit ?? bottom, stageHeight)
+        let columnBudget = min(
+            bottom - top,
+            labelBottom - top - labelGap - max(0, labelHeight)
+        )
+        let stone = core * stoneRadiusFactor
+        let rings = CGFloat(max(1, orbitCount) - 1)
+        let markerHalf = markerSize / 2
+        let nominalRadius = core * 1.075
+        let nominalSpacing = core * 0.17
+
+        func halfHeight(radius: CGFloat, spacing: CGFloat, markers: Bool) -> CGFloat {
+            radius + rings * spacing + (markers ? markerHalf : 1)
+        }
+
+        var radius = nominalRadius
+        var spacing = nominalSpacing
+        var markers = true
+        var orbit = true
+        if 2 * halfHeight(radius: radius, spacing: spacing, markers: true) > columnBudget {
+            // 1. Close up the extra orbits, 2. tighten the main orbit while
+            // its markers stay clear of the stone.
+            spacing = min(nominalSpacing, 5)
+            radius = min(nominalRadius, columnBudget / 2 - markerHalf - rings * spacing)
+            if radius < stone + markerHalf + 3 {
+                // 3. Hide the markers at the same radius (the ring and its
+                // lit arc remain), so the orbit never jumps outward.
+                markers = false
+                if radius < stone + 3 {
+                    // 4. No room for any orbit: the stone alone.
+                    orbit = false
+                }
+            }
+        }
+        let half = orbit ? halfHeight(radius: radius, spacing: spacing, markers: markers) : stone
+        let slack = max(0, columnBudget - 2 * half)
+        let columnTop = top + slack / 2
+        let centerY = columnTop + half
+        return JarLifetimeCoreLayout(
+            centerY: centerY,
+            orbitRadius: orbit ? radius : 0,
+            extraOrbitSpacing: orbit ? spacing : 0,
+            showsOrbit: orbit,
+            showsMarkers: orbit && markers,
+            columnTop: columnTop,
+            columnBottom: centerY + half,
+            labelTop: centerY + half + labelGap
+        )
+    }
+}
+
 /// A noninteractive optical layer behind the SpriteKit bottle. The recent
 /// physical stones remain touchable in front; this centre makes compressed
 /// lifetime effort legible instead of letting higher tiers become a pile of
 /// similarly weighted discs.
 ///
-/// Time core v2 (Docs/GemExperienceDesign.md §7.9): a decagonal brilliant
-/// painted by the approximate theme shares, a copper dashed orbit with
-/// double-diamond slots (their meaning is unchanged: `litOrbitSlotCount`),
-/// and the name only. Growth never stalls: the stone grows to 0.26 of the
-/// jar width, then a second orbit (250 kg), a crown of lights (2.5 t) and
-/// a third orbit (25 t) appear.
+/// Time core v3 (Docs/GemExperienceDesign.md §7.9): a luminous radial
+/// brilliant painted by the approximate theme shares, a soft bloom that
+/// hugs its girdle, a copper dashed orbit with double-diamond slots (their
+/// meaning is unchanged: `litOrbitSlotCount`), and the name plate with the
+/// progress card below the orbit (`JarLifetimeCoreLayout`). Growth never
+/// stalls: the stone grows to 0.26 of the jar width, then a second orbit
+/// (250 kg), a crown of lights (2.5 t) and a third orbit (25 t) appear.
 struct JarLifetimeCoreBackdrop: View {
     let state: JarLifetimeCoreState
     let colorHex: String
     var colorShares: [GemColorShare] = []
-    /// Height reserved at the top of the stage for the Home HUD; the core
-    /// then sits lower and its orbit never crosses the numbers.
+    /// Measured bottom edge of an overlaid HUD at the top of the stage
+    /// (Home); the orbit column stays below it.
     var topClearance: CGFloat?
+    /// Stage y the orbit column stays above: the gem bed's top edge, which
+    /// the scene draws in front of this layer.
+    var bottomLimit: CGFloat?
+    /// Stage y the label block (`JarLifetimeCoreLabels`, drawn in front of
+    /// the scene) stays above; `nil` keeps it above `bottomLimit`.
+    var labelBottomLimit: CGFloat?
+    /// Measured height of the label block.
+    var labelHeight: CGFloat = JarLifetimeCoreBackdrop.estimatedLabelHeight
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @State private var breathing = false
 
-    /// Vertical position of the core in the jar stage (without a HUD).
-    static let centerFraction: CGFloat = 0.53
-    /// Below a HUD, the core moves down into the open middle of the jar.
-    static let centerFractionBelowHUD: CGFloat = 0.64
+    /// Name plate + two-line card before the first measurement.
+    static let estimatedLabelHeight: CGFloat = 56
 
-    /// Core centre and orbit radius. With a HUD above, the orbit's top slot
-    /// keeps 8 pt below the HUD: first by lowering the core, then (short
-    /// stages) by tightening the orbit, never inside the stone.
-    static func layout(
-        stageHeight: CGFloat,
-        core: CGFloat,
-        topClearance: CGFloat?
-    ) -> (centerY: CGFloat, orbitRadius: CGFloat) {
-        let nominal = core * 1.075
-        guard let topClearance else { return (stageHeight * centerFraction, nominal) }
-        let lowest = stageHeight - core / 2 - 64
-        let centerY = min(max(stageHeight * centerFractionBelowHUD, topClearance + nominal + 14), max(lowest, stageHeight * 0.5))
-        let radius = max(core * 0.64, min(nominal, centerY - topClearance - 8))
-        return (centerY, radius)
-    }
     /// Rose-gold orbit tone (#D9967A) from the reference mood (not a reward colour).
     static let orbitCopper = Color(red: 0.851, green: 0.588, blue: 0.478)
 
@@ -1907,9 +2057,19 @@ struct JarLifetimeCoreBackdrop: View {
         GeometryReader { proxy in
             let jarWidth = max(1, proxy.size.width - Constants.Jar.horizontalMargin * 2)
             let core = Self.coreDiameter(jarWidth: jarWidth, level: state.coreLevel)
-            let placement = Self.layout(stageHeight: proxy.size.height, core: core, topClearance: topClearance)
-            let orbitDiameter = placement.orbitRadius * 2
+            let orbitCount = Self.orbitCount(level: state.coreLevel)
+            let layout = JarLifetimeCoreLayout.resolve(
+                stageHeight: proxy.size.height,
+                core: core,
+                orbitCount: orbitCount,
+                topClearance: topClearance,
+                bottomLimit: bottomLimit,
+                labelBottomLimit: labelBottomLimit,
+                labelHeight: labelHeight
+            )
+            let orbitDiameter = layout.orbitRadius * 2
             let haloColor = Color(uiColor: GemArtwork.coreHaloColor(shares: shares))
+            let rimColor = Color(uiColor: GemArtwork.coreRimGlowColor(shares: shares))
             let quantized = shares
 
             ZStack {
@@ -1918,7 +2078,7 @@ struct JarLifetimeCoreBackdrop: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                haloColor.opacity(reduceTransparency ? 0.10 : 0.22),
+                                haloColor.opacity(reduceTransparency ? 0.10 : 0.24),
                                 PomoGemTheme.auroraViolet.opacity(reduceTransparency ? 0.04 : 0.10),
                                 .clear
                             ],
@@ -1929,19 +2089,19 @@ struct JarLifetimeCoreBackdrop: View {
                     )
                     .frame(width: core * 2.5, height: core * 2.5)
 
-                ForEach(1 ..< Self.orbitCount(level: state.coreLevel), id: \.self) { index in
-                    Circle()
-                        .stroke(
-                            Self.orbitCopper.opacity(colorSchemeContrast == .increased ? 0.62 : 0.30),
-                            style: StrokeStyle(lineWidth: 0.8, dash: [2, 6])
-                        )
-                        .frame(
-                            width: orbitDiameter + CGFloat(index) * core * 0.34,
-                            height: orbitDiameter + CGFloat(index) * core * 0.34
-                        )
-                }
+                if layout.showsOrbit {
+                    ForEach(1 ..< orbitCount, id: \.self) { index in
+                        let diameter = orbitDiameter + CGFloat(index) * layout.extraOrbitSpacing * 2
+                        Circle()
+                            .stroke(
+                                Self.orbitCopper.opacity(colorSchemeContrast == .increased ? 0.62 : 0.30),
+                                style: StrokeStyle(lineWidth: 0.8, dash: [2, 6])
+                            )
+                            .frame(width: diameter, height: diameter)
+                    }
 
-                orbit(diameter: orbitDiameter, shares: quantized)
+                    orbit(diameter: orbitDiameter, shares: quantized, showsMarkers: layout.showsMarkers)
+                }
 
                 // Halo: share colour with 30 % aurora violet, α0.45 out to
                 // 1.35R — light that leaves the stone, not a neon ring.
@@ -1960,50 +2120,28 @@ struct JarLifetimeCoreBackdrop: View {
                     )
                     .frame(width: core * 1.35, height: core * 1.35)
 
+                // Girdle bloom: pale light hugging the stone's edge.
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                rimColor.opacity(reduceTransparency ? 0.34 : 0.95),
+                                rimColor.opacity(reduceTransparency ? 0.12 : 0.34),
+                                .clear
+                            ],
+                            center: .center,
+                            startRadius: core * 0.44,
+                            endRadius: core * 0.62
+                        )
+                    )
+                    .frame(width: core * 1.24, height: core * 1.24)
+
                 LifetimeCorePrism(colorShares: quantized, level: state.coreLevel)
                     .frame(width: core, height: core)
                     .scaleEffect(breathing ? 1.02 : 1)
-
-                Text(state.title)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .tracking(1)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(
-                        PomoGemTheme.raised.opacity(
-                            reduceTransparency || colorSchemeContrast == .increased ? 0.98 : 0.88
-                        ),
-                        in: Capsule()
-                    )
-                    .overlay {
-                        Capsule()
-                            .stroke(
-                                .white.opacity(colorSchemeContrast == .increased ? 0.72 : 0.20),
-                                lineWidth: colorSchemeContrast == .increased ? 1.2 : 0.7
-                            )
-                    }
-                    .offset(y: core / 2 + 13)
-
-                VStack(spacing: 1) {
-                    Text(state.progressLabel)
-                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                    if let nextFusionLabel = state.nextFusionLabel {
-                        Text(nextFusionLabel)
-                            .font(.system(size: 8.5, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.66))
-                    }
-                }
-                .lineLimit(1)
-                .foregroundStyle(.white.opacity(0.78))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(PomoGemTheme.raised.opacity(0.62), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .offset(y: core / 2 + 38)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
-            .position(x: proxy.size.width / 2, y: placement.centerY)
+            .position(x: proxy.size.width / 2, y: layout.centerY)
         }
         // Reduce Transparency must make the summary more solid, not fainter.
         .opacity(reduceTransparency ? 1 : 0.96)
@@ -2015,8 +2153,9 @@ struct JarLifetimeCoreBackdrop: View {
 
     /// Copper dashed orbit (α0.55, 1 pt, [3, 5]) with double-diamond slots
     /// (outer 12 pt, inner 5 pt). Lit slots take the share colour of their
-    /// position and a white rim; the lit arc is drawn solid.
-    private func orbit(diameter: CGFloat, shares: [GemColorShare]) -> some View {
+    /// position and a white rim; the lit arc is drawn solid. Without room
+    /// for the markers the ring and its lit arc still show the progress.
+    private func orbit(diameter: CGFloat, shares: [GemColorShare], showsMarkers: Bool) -> some View {
         let lit = state.litOrbitSlotCount
         let slotCount = JarLifetimeCorePresentation.orbitSlotCount
         let radius = diameter / 2
@@ -2035,44 +2174,46 @@ struct JarLifetimeCoreBackdrop: View {
                     .rotationEffect(.degrees(-90))
                     .frame(width: diameter, height: diameter)
             }
-            ForEach(0 ..< slotCount, id: \.self) { index in
-                let angle = Angle.degrees(-90 + Double(index) * 360 / Double(max(slotCount, 1)))
-                let isLit = lit.map { index < $0 } ?? false
-                let slotColor = Color(hex: Self.shareColorHex(
-                    shares: shares,
-                    position: (Double(index) + 0.5) / Double(max(slotCount, 1))
-                ))
-                ZStack {
-                    DiamondSlot()
-                        .fill(PomoGemTheme.background.opacity(0.55))
-                        .frame(width: 12, height: 12)
-                    DiamondSlot()
-                        .stroke(
-                            isLit
-                                ? Color.white.opacity(0.85)
-                                : Self.orbitCopper.opacity(
-                                    colorSchemeContrast == .increased ? 0.95 : (lit == nil ? 0.40 : 0.70)
-                                ),
-                            lineWidth: colorSchemeContrast == .increased ? 1.3 : 1
-                        )
-                        .frame(width: 12, height: 12)
-                    DiamondSlot()
-                        .fill(isLit ? slotColor : Self.orbitCopper.opacity(0.30))
-                        .overlay {
-                            DiamondSlot()
-                                .stroke(
-                                    isLit ? Color.white.opacity(0.9) : Self.orbitCopper.opacity(0.6),
-                                    lineWidth: 0.6
-                                )
-                        }
-                        .frame(width: 5, height: 5)
+            if showsMarkers {
+                ForEach(0 ..< slotCount, id: \.self) { index in
+                    let angle = Angle.degrees(-90 + Double(index) * 360 / Double(max(slotCount, 1)))
+                    let isLit = lit.map { index < $0 } ?? false
+                    let slotColor = Color(hex: Self.shareColorHex(
+                        shares: shares,
+                        position: (Double(index) + 0.5) / Double(max(slotCount, 1))
+                    ))
+                    ZStack {
+                        DiamondSlot()
+                            .fill(PomoGemTheme.background.opacity(0.55))
+                            .frame(width: 12, height: 12)
+                        DiamondSlot()
+                            .stroke(
+                                isLit
+                                    ? Color.white.opacity(0.85)
+                                    : Self.orbitCopper.opacity(
+                                        colorSchemeContrast == .increased ? 0.95 : (lit == nil ? 0.40 : 0.70)
+                                    ),
+                                lineWidth: colorSchemeContrast == .increased ? 1.3 : 1
+                            )
+                            .frame(width: 12, height: 12)
+                        DiamondSlot()
+                            .fill(isLit ? slotColor : Self.orbitCopper.opacity(0.30))
+                            .overlay {
+                                DiamondSlot()
+                                    .stroke(
+                                        isLit ? Color.white.opacity(0.9) : Self.orbitCopper.opacity(0.6),
+                                        lineWidth: 0.6
+                                    )
+                            }
+                            .frame(width: 5, height: 5)
+                    }
+                    .shadow(color: isLit ? slotColor.opacity(0.85) : .clear, radius: isLit ? 5 : 0)
+                    .frame(width: JarLifetimeCoreLayout.markerSize, height: JarLifetimeCoreLayout.markerSize)
+                    .offset(
+                        x: CGFloat(cos(angle.radians)) * radius,
+                        y: CGFloat(sin(angle.radians)) * radius
+                    )
                 }
-                .shadow(color: isLit ? slotColor.opacity(0.85) : .clear, radius: isLit ? 5 : 0)
-                .frame(width: 12, height: 12)
-                .offset(
-                    x: CGFloat(cos(angle.radians)) * radius,
-                    y: CGFloat(sin(angle.radians)) * radius
-                )
             }
         }
     }
@@ -2100,13 +2241,121 @@ struct JarLifetimeCoreBackdrop: View {
     }
 }
 
-/// The one compressed lifetime core, drawn as a decagonal brilliant. Facets
+/// The time core's name plate and progress card. Normally drawn in front of
+/// the SpriteKit scene (like the Home HUD), so the gem bed cannot hide them;
+/// when a settled pile reaches them the owner draws them behind the scene
+/// instead, as the core itself is buried. Placed by the same
+/// `JarLifetimeCoreLayout` as the core: directly under the orbit column,
+/// never inside it.
+struct JarLifetimeCoreLabels: View {
+    let state: JarLifetimeCoreState
+    var topClearance: CGFloat?
+    var bottomLimit: CGFloat?
+    var labelBottomLimit: CGFloat?
+    /// Measured size of the block (the height feeds the layout, the width
+    /// tells the owner which part of the pile could cover it).
+    @Binding var measuredSize: CGSize
+
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    /// The layout the core and its labels share on a stage of `stageSize`.
+    static func layout(
+        stageSize: CGSize,
+        state: JarLifetimeCoreState,
+        topClearance: CGFloat?,
+        bottomLimit: CGFloat?,
+        labelBottomLimit: CGFloat?,
+        labelHeight: CGFloat
+    ) -> JarLifetimeCoreLayout {
+        let jarWidth = max(1, stageSize.width - Constants.Jar.horizontalMargin * 2)
+        return JarLifetimeCoreLayout.resolve(
+            stageHeight: stageSize.height,
+            core: JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: state.coreLevel),
+            orbitCount: JarLifetimeCoreBackdrop.orbitCount(level: state.coreLevel),
+            topClearance: topClearance,
+            bottomLimit: bottomLimit,
+            labelBottomLimit: labelBottomLimit,
+            labelHeight: labelHeight
+        )
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let layout = Self.layout(
+                stageSize: proxy.size,
+                state: state,
+                topClearance: topClearance,
+                bottomLimit: bottomLimit,
+                labelBottomLimit: labelBottomLimit,
+                labelHeight: measuredSize.height
+            )
+            labels
+                .onGeometryChange(for: CGSize.self) { geometry in
+                    geometry.size
+                } action: { size in
+                    measuredSize = size
+                }
+                .position(x: proxy.size.width / 2, y: layout.labelTop + measuredSize.height / 2)
+        }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
+    }
+
+    private var labels: some View {
+        VStack(spacing: 4) {
+            Text(state.title)
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .tracking(1)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(
+                    PomoGemTheme.raised.opacity(
+                        reduceTransparency || colorSchemeContrast == .increased ? 0.98 : 0.88
+                    ),
+                    in: Capsule()
+                )
+                .overlay {
+                    Capsule()
+                        .stroke(
+                            .white.opacity(colorSchemeContrast == .increased ? 0.72 : 0.20),
+                            lineWidth: colorSchemeContrast == .increased ? 1.2 : 0.7
+                        )
+                }
+
+            VStack(spacing: 1) {
+                Text(state.progressLabel)
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                if let nextFusionLabel = state.nextFusionLabel {
+                    Text(nextFusionLabel)
+                        .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.66))
+                }
+            }
+            .lineLimit(1)
+            .foregroundStyle(.white.opacity(0.80))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                PomoGemTheme.raised.opacity(reduceTransparency ? 0.94 : 0.82),
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+        }
+        .fixedSize()
+    }
+}
+
+/// The one compressed lifetime core, drawn as a radial brilliant. Facets
 /// are baked once by `GemArtwork` (Core Graphics) at a fixed size and cached
-/// per (quantised shares, level, screen scale); SwiftUI only scales the
+/// per (quantised shares, level, display scale); SwiftUI only scales the
 /// image, so an animated frame never re-renders on the main thread.
 private struct LifetimeCorePrism: View {
     let colorShares: [GemColorShare]
     let level: Int
+
+    @Environment(\.displayScale) private var displayScale
 
     init(colorShares: [GemColorShare], level: Int) {
         self.colorShares = colorShares
@@ -2118,7 +2367,7 @@ private struct LifetimeCorePrism: View {
     }
 
     var body: some View {
-        Image(uiImage: GemArtwork.coreImage(shares: colorShares, level: level))
+        Image(uiImage: GemArtwork.coreImage(shares: colorShares, level: level, scale: displayScale))
             .resizable()
             .interpolation(.high)
             .antialiased(true)
@@ -2128,13 +2377,16 @@ private struct LifetimeCorePrism: View {
 }
 
 /// Before the first 2.5 kg: a colourless vessel where the core will be
-/// born. Its ten upper facets light up one per 250 g; no colour enters until
+/// born. Its ten sectors light up one per 250 g; no colour enters until
 /// the core exists. Static (no animation), decorative.
 struct JarLifetimeCoreVessel: View {
     let totalGrams: Int
     var topClearance: CGFloat?
+    var bottomLimit: CGFloat?
+    var labelBottomLimit: CGFloat?
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         GeometryReader { proxy in
@@ -2152,7 +2404,7 @@ struct JarLifetimeCoreVessel: View {
                         )
                     )
                     .frame(width: core * 1.4, height: core * 1.4)
-                Image(uiImage: GemArtwork.vesselImage(litFacets: lit))
+                Image(uiImage: GemArtwork.vesselImage(litFacets: lit, scale: displayScale))
                     .resizable()
                     .interpolation(.high)
                     .frame(width: core * 0.86, height: core * 0.86)
@@ -2161,10 +2413,15 @@ struct JarLifetimeCoreVessel: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .position(
                 x: proxy.size.width / 2,
-                y: JarLifetimeCoreBackdrop.layout(
+                // Where the core will be born: the same column as the core.
+                y: JarLifetimeCoreLayout.resolve(
                     stageHeight: proxy.size.height,
                     core: core,
-                    topClearance: topClearance
+                    orbitCount: 1,
+                    topClearance: topClearance,
+                    bottomLimit: bottomLimit,
+                    labelBottomLimit: labelBottomLimit,
+                    labelHeight: JarLifetimeCoreBackdrop.estimatedLabelHeight
                 ).centerY
             )
         }

@@ -3312,6 +3312,9 @@ private struct ShareSessionGem: View {
     let variant: Int
     let glow: Double
 
+    /// The card's render scale (`ImageRenderer.scale` or the screen's).
+    @Environment(\.displayScale) private var displayScale
+
     private var identity: SharePebbleRewardIdentity {
         SharePebbleRewardIdentity(
             kind: session.presentationKind,
@@ -3371,7 +3374,7 @@ private struct ShareSessionGem: View {
                 isMuted: !isMeasured,
                 showsDashedRing: !isMeasured
             )
-            Image(uiImage: GemArtwork.bodyImage(for: spec, radius: side / 2))
+            Image(uiImage: GemArtwork.bodyImage(for: spec, radius: side / 2, scale: displayScale))
                 .resizable()
                 .interpolation(.high)
                 .frame(width: side, height: side)
@@ -3554,6 +3557,8 @@ private struct ShareBottleShape: Shape {
 private struct ShareAggregatePebble: View {
     let aggregate: ShareAggregateVisual
 
+    @Environment(\.displayScale) private var displayScale
+
     private var colors: [Color] {
         let values = aggregate.colorMix.prefix(5).map {
             ShareColorPolicy.color($0.hex, vivid: true)
@@ -3572,7 +3577,7 @@ private struct ShareAggregatePebble: View {
             let size = min(proxy.size.width, proxy.size.height)
             let variant = stableShareVariant(aggregate.id)
             ZStack {
-                Image(uiImage: GemArtwork.bodyImage(for: artworkSpec(variant: variant), radius: size / 2))
+                Image(uiImage: GemArtwork.bodyImage(for: artworkSpec(variant: variant), radius: size / 2, scale: displayScale))
                     .resizable()
                     .interpolation(.high)
                     .frame(width: size, height: size)

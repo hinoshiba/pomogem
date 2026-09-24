@@ -252,6 +252,27 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// (weighted pile colour mixed 50:50 with #FF9E6B, additive).
     private let pileGlowNode = SKSpriteNode(texture: GemArtwork.poolTexture)
     private var pileGlowBaseAlpha: CGFloat = 0
+    /// 「積み上がりの光」 as a gem bed: one baked sprite behind the physics
+    /// bodies, set from lifetime grams and the lifetime theme mix only.
+    private let gemBedNode = SKSpriteNode()
+    /// Lifetime gem bed input. Nothing inside the scene (body count,
+    /// fusion, obstacles) writes it; only the SwiftUI owner does.
+    var gemBed: JarGemBedState? {
+        didSet {
+            guard oldValue != gemBed else { return }
+            refreshGemBed()
+        }
+    }
+    /// Display scale for baked gem textures: the presenting SKView's
+    /// `contentScaleFactor` (or SwiftUI's `displayScale`). Until a view
+    /// reports it, textures bake at the 3× ceiling so nothing looks soft.
+    var artworkScale: CGFloat = PebbleNode.defaultArtworkScale {
+        didSet {
+            let resolved = GemArtwork.renderScale(artworkScale)
+            if resolved != artworkScale { artworkScale = resolved; return }
+            if oldValue != artworkScale { refreshGemBed() }
+        }
+    }
     private var lastPileLightRefresh: TimeInterval = -.greatestFiniteMagnitude
     private var reduceTransparency = UIAccessibility.isReduceTransparencyEnabled
     private let wallNode = SKNode()
@@ -269,6 +290,27 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private(set) var isBakeInProgress = false
     private(set) var isCapacityReliefActive = false
     private(set) var appliedGravityVector = Constants.Jar.gravityVector
+    /// Height profile of the settled pile: the top (scene y, 4 pt steps; 0
+    /// when empty) of the resting bodies over each of `pileProfileBinCount`
+    /// equal columns of the scene width. Refreshed with the pile light
+    /// (every 0.5 s while awake) and when the scene settles; falling or
+    /// fast bodies are ignored, so SwiftUI layers outside the scene (the
+    /// time core's labels) never follow a drop or a bounce.
+    @Published private(set) var settledPileProfile: [CGFloat] = []
+    static let pileProfileBinCount = 12
+    /// Bodies slower than this (pt/s) count as resting for the profile.
+    static let pileProfileRestingSpeed: CGFloat = 24
+
+    /// Highest settled body over the horizontal span `minX...maxX` (scene
+    /// coordinates), or 0 when that span is clear.
+    func settledPileTop(minX: CGFloat, maxX: CGFloat) -> CGFloat {
+        guard !settledPileProfile.isEmpty, size.width > 0 else { return 0 }
+        let binWidth = size.width / CGFloat(settledPileProfile.count)
+        let first = max(0, Int(minX / binWidth))
+        let last = min(settledPileProfile.count - 1, Int(maxX / binWidth))
+        guard first <= last else { return 0 }
+        return settledPileProfile[first ... last].max() ?? 0
+    }
     /// Observation-only revision for SwiftUI accessibility. The actual source
     /// of truth remains `livePebbles`; consumers read `physicalPebbleCount`
     /// after this revision invalidates their view.
@@ -325,6 +367,17 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var earlyEffortSpotlightIDs = Set<UUID>()
 
     private var outerJarRect: CGRect {
+        Self.outerJarRect(sceneSize: size)
+    }
+
+    private var interiorRect: CGRect {
+        Self.interiorRect(sceneSize: size)
+    }
+
+    /// The bottle in scene coordinates (y up) for a scene of `sceneSize`.
+    /// SwiftUI layers behind the scene use the same geometry, so light and
+    /// labels line up with the physics walls.
+    nonisolated static func outerJarRect(sceneSize size: CGSize) -> CGRect {
         let jarWidth = max(size.width - Constants.Jar.horizontalMargin * 2, 1)
         let jarHeight = min(Constants.Jar.height, max(size.height, 1))
         return CGRect(
@@ -335,8 +388,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
     }
 
-    private var interiorRect: CGRect {
-        let outer = outerJarRect
+    /// The physics interior (walls and floor) in scene coordinates (y up).
+    nonisolated static func interiorRect(sceneSize size: CGSize) -> CGRect {
+        let outer = outerJarRect(sceneSize: size)
         return CGRect(
             x: outer.minX + Constants.Jar.wallInset,
             y: outer.minY + Constants.Jar.floorInset,
@@ -346,6 +400,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 1
             )
         )
+    }
+
+    /// Top edge of the gem bed measured from the top of a stage of
+    /// `stageSize` (SwiftUI, y down), or the floor when there is no bed.
+    nonisolated static func gemBedTopFromStageTop(stageSize: CGSize, bed: JarGemBedState?) -> CGFloat {
+        let interior = interiorRect(sceneSize: stageSize)
+        let bedHeight = bed.map { $0.height(interiorHeight: interior.height) } ?? 0
+        return stageSize.height - (interior.minY + bedHeight)
     }
 
     private var currentFloorY: CGFloat {
@@ -486,7 +548,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 let node = PebbleNode(
                     descriptor: descriptor,
                     reduceMotion: reduceMotion,
-                    rareRewardMode: rareRewardMode
+                    rareRewardMode: rareRewardMode,
+                    artworkScale: artworkScale
                 )
                 let diameter = node.radius * 2
                 let columns = max(1, Int(interiorRect.width / diameter))
@@ -551,7 +614,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let node = PebbleNode(
             descriptor: destination,
             reduceMotion: reduceMotion,
-            rareRewardMode: rareRewardMode
+            rareRewardMode: rareRewardMode,
+            artworkScale: artworkScale
         )
         let range = allowedHorizontalRange(at: point.y, radius: node.radius)
         node.position = CGPoint(
@@ -624,6 +688,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     override func didMove(to view: SKView) {
+        artworkScale = view.contentScaleFactor
         view.preferredFramesPerSecond = Constants.Jar.targetFramesPerSecond
         view.ignoresSiblingOrder = true
         view.allowsTransparency = true
@@ -753,7 +818,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             let node = PebbleNode(
                 descriptor: descriptor,
                 reduceMotion: reduceMotion,
-                rareRewardMode: rareRewardMode
+                rareRewardMode: rareRewardMode,
+                artworkScale: artworkScale
             )
             if cursorX + node.radius * 2 > interiorRect.maxX {
                 cursorX = interiorRect.minX
@@ -868,7 +934,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             let node = PebbleNode(
                 descriptor: descriptor,
                 reduceMotion: reduceMotion,
-                rareRewardMode: rareRewardMode
+                rareRewardMode: rareRewardMode,
+                artworkScale: artworkScale
             )
             let columns = max(1, Int(interiorRect.width / max(node.radius * 2, 1)))
             let column = index % columns
@@ -904,7 +971,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let node = PebbleNode(
             descriptor: descriptor,
             reduceMotion: reduceMotion,
-            rareRewardMode: rareRewardMode
+            rareRewardMode: rareRewardMode,
+            artworkScale: artworkScale
         )
         let minimumY = currentFloorY + node.radius
         let maximumY = interiorRect.maxY - node.radius
@@ -1695,6 +1763,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         if abs(currentTime - lastPileLightRefresh) >= 0.5 {
             lastPileLightRefresh = currentTime
             refreshPileLight()
+            publishSettledPileTop()
         }
         updateIdlePause(
             currentTime: currentTime,
@@ -1818,6 +1887,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         tapCausticNode.name = "jar.tap.caustic"
         floorGlowNode.name = "jar.floorGlow"
         pileGlowNode.name = "jar.pileGlow"
+        gemBedNode.name = "jar.gemBed"
         collarNode.name = "jar.collar"
         collarCenterNode.name = "jar.collar.center"
         collarLeftNode.name = "jar.collar.left"
@@ -1841,7 +1911,15 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         worldNode.addChild(innerRimNode)
         worldNode.addChild(tapCausticNode)
         worldNode.addChild(floorGlowNode)
+        worldNode.addChild(gemBedNode)
         worldNode.addChild(pileGlowNode)
+        // Ordinary alpha: the bed is decoration that must survive the
+        // transparent snapshot as drawn, and it sits between the floor glow
+        // (below) and the pile light (above), behind every body.
+        gemBedNode.blendMode = .alpha
+        gemBedNode.anchorPoint = CGPoint(x: 0.5, y: 0)
+        gemBedNode.zPosition = JarZPosition.strata + 0.55
+        gemBedNode.isHidden = true
         pileGlowNode.blendMode = .add
         pileGlowNode.colorBlendFactor = 1
         pileGlowNode.alpha = 0
@@ -2005,6 +2083,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         floorGlowNode.blendMode = .add
         floorGlowNode.alpha = reduceTransparency ? 0.12 : 0.28
         floorGlowNode.zPosition = JarZPosition.strata + 0.5
+        refreshGemBed()
 
         wallNode.removeAllChildren()
         addStaticEdge(
@@ -2183,8 +2262,25 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             let context = rendererContext.cgContext
             context.addPath(outline)
             context.clip()
-            context.setFillColor(JarPalette.color(hex: Constants.Color.glassAbsorption).withAlphaComponent(0.24).cgColor)
-            context.fill(CGRect(origin: .zero, size: renderSize))
+            // Absorption follows the path length through the back wall:
+            // clear in the middle (where the time core glows through), deeper
+            // toward the side walls.
+            let absorption = JarPalette.color(hex: Constants.Color.glassAbsorption)
+            let wall = [
+                absorption.withAlphaComponent(0.32).cgColor,
+                absorption.withAlphaComponent(0.13).cgColor,
+                absorption.withAlphaComponent(0.08).cgColor,
+                absorption.withAlphaComponent(0.13).cgColor,
+                absorption.withAlphaComponent(0.32).cgColor
+            ] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: wall, locations: [0, 0.28, 0.5, 0.72, 1]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: 0, y: height / 2),
+                    end: CGPoint(x: width, y: height / 2),
+                    options: []
+                )
+            }
             // Inner shadow in the lower back corners and under the shoulders.
             for center in [
                 CGPoint(x: 0, y: height), CGPoint(x: width, y: height),
@@ -2662,7 +2758,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let node = PebbleNode(
             descriptor: descriptor,
             reduceMotion: reduceMotion,
-            rareRewardMode: rareRewardMode
+            rareRewardMode: rareRewardMode,
+            artworkScale: artworkScale
         )
         let xRange = interiorRect.width * Constants.Jar.dropHorizontalRangeFraction
         if origin == .sceneTop {
@@ -2827,7 +2924,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             let aggregateNode = PebbleNode(
                 descriptor: descriptor,
                 reduceMotion: reduceMotion,
-                rareRewardMode: rareRewardMode
+                rareRewardMode: rareRewardMode,
+                artworkScale: artworkScale
             )
             aggregateNode.position = CGPoint(
                 x: min(
@@ -3343,6 +3441,58 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
     }
 
+    private func publishSettledPileTop() {
+        let count = Self.pileProfileBinCount
+        guard size.width > 0 else { return }
+        let binWidth = size.width / CGFloat(count)
+        var profile = [CGFloat](repeating: 0, count: count)
+        for pebble in livePebbles where !pebble.isRemovedForBake {
+            if let velocity = pebble.physicsBody?.velocity,
+               hypot(velocity.dx, velocity.dy) > Self.pileProfileRestingSpeed {
+                continue
+            }
+            let top = max(0, pebble.position.y + pebble.radius)
+            let first = max(0, Int((pebble.position.x - pebble.radius) / binWidth))
+            let last = min(count - 1, Int((pebble.position.x + pebble.radius) / binWidth))
+            guard first <= last else { continue }
+            for bin in first ... last {
+                profile[bin] = max(profile[bin], (top / 4).rounded(.up) * 4)
+            }
+        }
+        if profile != settledPileProfile { settledPileProfile = profile }
+    }
+
+    /// Re-bakes (or reuses) the gem bed texture for the current lifetime
+    /// state and jar size. Depends on `gemBed`, the interior rect and the
+    /// display scale only.
+    private func refreshGemBed() {
+        guard size.width > .zero, size.height > .zero,
+              let state = gemBed, state.isVisible
+        else {
+            gemBedNode.isHidden = true
+            gemBedNode.texture = nil
+            return
+        }
+        let interior = interiorRect
+        let height = state.height(interiorHeight: interior.height)
+        guard height >= 2 else {
+            gemBedNode.isHidden = true
+            gemBedNode.texture = nil
+            return
+        }
+        let width = interior.width.rounded()
+        gemBedNode.texture = GemArtwork.bedTexture(
+            width: width,
+            height: height,
+            slotHexes: state.slotHexes,
+            scale: artworkScale
+        )
+        gemBedNode.size = CGSize(width: width, height: height)
+        gemBedNode.position = CGPoint(x: interior.midX, y: interior.minY)
+        gemBedNode.alpha = 1
+        gemBedNode.isHidden = false
+    }
+
     /// Landing light: 6–8 soft sparks from the shared glint texture, at most
     /// `maximumEventLightSprites` alive at once, plus a brief pile-light
     /// swell. Reduce Motion never spawns them.
@@ -3617,6 +3767,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             $0.updatePresentationLighting(horizontal: opticalTiltFraction)
         }
         refreshPileLight()
+        publishSettledPileTop()
         if !isIdlePaused {
             isIdlePaused = true
             onIdlePauseChanged?(true)

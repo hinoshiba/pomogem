@@ -472,6 +472,8 @@ struct PebbleDescriptor: Identifiable {
 final class PebbleNode: SKShapeNode {
     let descriptor: PebbleDescriptor
     let radius: CGFloat
+    /// Display scale of the gem body bake (from the owning scene's view).
+    let artworkScale: CGFloat
 
     private(set) var hasLanded = false
     private(set) var lastObservedPosition: CGPoint = .zero
@@ -519,15 +521,21 @@ final class PebbleNode: SKShapeNode {
         presentsRareRewardFeature ? descriptor.kind : .normal
     }
 
+    /// Bake scale used before a view reports its own (the 3× ceiling of
+    /// current iPhones, so a texture is never soft).
+    static let defaultArtworkScale: CGFloat = 3
+
     init(
         descriptor: PebbleDescriptor,
         reduceMotion: Bool = UIAccessibility.isReduceMotionEnabled,
-        rareRewardMode: RareRewardMode = .standard
+        rareRewardMode: RareRewardMode = .standard,
+        artworkScale: CGFloat = PebbleNode.defaultArtworkScale
     ) {
         self.descriptor = descriptor
         self.radius = descriptor.radius
         self.reducesVisualMotion = reduceMotion
         self.rareRewardMode = rareRewardMode
+        self.artworkScale = GemArtwork.renderScale(artworkScale)
         super.init()
         configureAppearance()
         configurePhysics()
@@ -545,6 +553,7 @@ final class PebbleNode: SKShapeNode {
         radius = Constants.Jar.measuredRadius
         reducesVisualMotion = UIAccessibility.isReduceMotionEnabled
         rareRewardMode = .standard
+        artworkScale = Self.defaultArtworkScale
         super.init(coder: aDecoder)
     }
 
@@ -919,7 +928,7 @@ final class PebbleNode: SKShapeNode {
     ) {
         gemRung = rung
         let body = SKSpriteNode(
-            texture: GemArtwork.bodyTexture(for: spec, radius: radius),
+            texture: GemArtwork.bodyTexture(for: spec, radius: radius, scale: artworkScale),
             size: GemArtwork.bodySpriteSize(radius: radius)
         )
         body.name = "gem.body"
