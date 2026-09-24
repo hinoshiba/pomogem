@@ -342,6 +342,13 @@ final class TimerOrientationUITests: XCTestCase {
             XCTAssertTrue(reveal(reward, towardStart: false))
             reward.tap()
             XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 8))
+            // The receipt is retired after the gem lands; the next start
+            // (and the next test) needs the launcher enabled again.
+            let launcherEnabled = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == true AND enabled == true"),
+                object: app.buttons["home.focus-launcher"]
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [launcherEnabled], timeout: 12), .completed)
         }
     }
 

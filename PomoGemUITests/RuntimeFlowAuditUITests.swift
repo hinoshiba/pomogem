@@ -451,6 +451,12 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         retainScreenshot(named: "Notified completion — receipt without an alarm")
         dismiss.tap()
         XCTAssertTrue(waitForAbsence(dismiss, timeout: 5))
+        let launcherEnabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND enabled == true"),
+            object: app.buttons["home.focus-launcher"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [launcherEnabled], timeout: 12), .completed,
+                       "The receipt must be retired once the gem lands")
 
         // A later explicit start never asks again. Returning from the
         // background restores the saved (25-minute) choice, so pick the demo.

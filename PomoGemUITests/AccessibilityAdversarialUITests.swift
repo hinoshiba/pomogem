@@ -369,8 +369,20 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         alarm.lifetime = .keepAlways
         add(alarm)
         stop.tap()
-        XCTAssertTrue(app.buttons["reward.dismiss"].waitForExistence(timeout: 20))
-        app.buttons["reward.dismiss"].tap()
+        let dismiss = app.buttons["reward.dismiss"]
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 20))
+        dismiss.tap()
+        // The durable receipt is retired only after the gem lands. Leave the
+        // shared simulator without a pending receipt for the next test.
+        XCTAssertTrue(waitForEnabled(app.buttons["home.focus-launcher"], timeout: 12))
+    }
+
+    private func waitForEnabled(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let enabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND enabled == true"),
+            object: element
+        )
+        return XCTWaiter.wait(for: [enabled], timeout: timeout) == .completed
     }
 
     /// Waits through a real five-minute break in the foreground so the
