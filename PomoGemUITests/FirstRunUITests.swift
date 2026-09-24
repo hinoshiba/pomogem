@@ -237,7 +237,7 @@ final class FirstRunUITests: XCTestCase {
         trialDrop.tap()
         let meaning = app.staticTexts["onboarding.trial-meaning"]
         XCTAssertTrue(meaning.waitForExistence(timeout: 4), "The landing must be explained")
-        XCTAssertEqual(meaning.label, "25分の集中を終えると、こんな一粒（250g）が瓶に残ります。")
+        XCTAssertEqual(meaning.label, "本番では、25分の集中でこの大きさの一粒（250g）が瓶に残ります。")
         attachScreenshot("onboarding-trial-landed")
         XCTAssertTrue(waitUntilEnabled(next))
     }

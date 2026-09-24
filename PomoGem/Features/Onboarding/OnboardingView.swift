@@ -600,8 +600,13 @@ private struct TrialDropPage: View {
 
                     if dropped {
                         // walk-std-12. The proof moment names the promise:
-                        // what this drop stands for in a real focus.
-                        Text("25分の集中を終えると、こんな一粒（250g）が瓶に残ります。",
+                        // what this drop stands for in a real focus. 「本番
+                        // では」 and 「この大きさ」 keep it from reading as
+                        // "real gems look like this grey pebble" or as a
+                        // contradiction of the 0g line below. The trial
+                        // gem's colour and glow belong to the gem-brilliance
+                        // branch (PebbleNode / GemArtwork), not this page.
+                        Text("本番では、25分の集中でこの大きさの一粒（250g）が瓶に残ります。",
                              tableName: "Onboarding",
                              comment: "Onboarding trial drop: shown after the trial gem lands")
                             .font(.callout.weight(.semibold))
@@ -630,7 +635,10 @@ private struct TrialDropPage: View {
                 guard event.pebble.isTutorial,
                       event.pebble.id == activeDropID
                 else { return }
-                completeDrop(announcement: "一粒、着地しました。次へ進めます")
+                completeDrop(announcement: String(
+                    localized: "一粒、着地しました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます",
+                    table: "Onboarding",
+                    comment: "VoiceOver announcement when the onboarding trial gem lands"))
             }
             scene.configureBase(strata: [], bedrock: nil, showsMonthLabels: false)
         }
@@ -677,7 +685,10 @@ private struct TrialDropPage: View {
         let pebble = tutorialPebble()
         activeDropID = pebble.id
         scene.restore(pebbles: [pebble])
-        completeDrop(announcement: "演出を省略して一粒を積みました。次へ進めます")
+        completeDrop(announcement: String(
+            localized: "演出を省略して一粒を積みました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます",
+            table: "Onboarding",
+            comment: "VoiceOver announcement when the onboarding trial gem is placed without animation"))
     }
 
     private func completeDrop(announcement: String) {
