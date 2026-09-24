@@ -509,7 +509,13 @@ maintenanceを継続します。interactiveなexact session queryは128行を上
 truncated winnerとして利用せずmaintenance要求としてfail closedします。maintenanceが全pageを読んでも
 source row数自体は減らないため、UIのbounded ceilingを超える履歴が自動的に解消すると主張しません。
 
-account-wide interactive recoveryが検査するactive logical sessionは最大256件です。invalid groupは表示・
+account-wide interactive recoveryは、最新のactive rowの開始時刻（現在時刻より後なら現在時刻）から
+`StudySessionIntegrityPolicy.maximumCompletionWallSpan`（7日）と端末間の時計差1日を引いた時刻以降に
+開始したsessionだけを検査します。それより前に始まった集中は有効な`StudySession`になれず、回復・引き継ぎ・
+完了のどれにも使えないためです。取り消した集中はrunning rowを残し続けるので、この下限がないと検査の
+費用が生涯の取消回数に比例し、257回目の取消で引き継ぎと保存先の切り替えが止まっていました。rowは
+削除せず、端末自身の回復は従来どおりlocal envelopeとexactな`completionGate`で判断します。
+この範囲で検査するactive logical sessionは最大256件です。invalid groupは表示・
 変更せず次の独立sessionへ進みますが、valid timerの前にinvalid active logical sessionが257件以上並ぶと
 有界scanを使い切り、maintenance後もfail closedが継続し得ます。checkpoint quarantineは他作業を飢餓
 させませんがrow自体をqueryから外さないため、この上限を解消しません。完全解消には、raw payloadを
