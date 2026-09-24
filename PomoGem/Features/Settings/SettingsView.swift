@@ -512,7 +512,7 @@ struct SettingsView: View {
             }
 
             Text(
-                "既定はオフ。集中タイマー中に別のアプリへ移ったときだけ通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。",
+                "既定はオフ。集中タイマー中にホーム画面や別のアプリへ移ると、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。",
                 tableName: "Settings",
                 comment: "Settings caption under the return-to-focus reminder switch"
             )
@@ -760,6 +760,12 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("settings.daily-reminder")
 
+                // The notice sits under the first switch that is on, so it is
+                // never read as a note about a switch that is off.
+                if resolvedPreferences.reminderEnabled {
+                    notificationPermissionStatus(identifier: "settings.notification-permission")
+                }
+
                 Toggle(isOn: Binding(
                     get: { wrappedNotifications },
                     set: { enabled in updateWrappedNotification(enabled: enabled) }
@@ -781,9 +787,11 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("settings.wrapped-notification")
 
-                if resolvedPreferences.reminderEnabled || wrappedNotifications {
+                if wrappedNotifications, !resolvedPreferences.reminderEnabled {
                     notificationPermissionStatus(identifier: "settings.notification-permission")
+                }
 
+                if resolvedPreferences.reminderEnabled || wrappedNotifications {
                     // One shared time for both notifications, so it stays
                     // visible and editable while either one is on.
                     DatePicker(
@@ -796,14 +804,14 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         if resolvedPreferences.reminderEnabled {
                             Text(
-                                "その日に集中を始めたり記録を積んだりしていれば、毎日のリマインダーは鳴りません。7日間アプリを開かなかったときは、次に開くまでお休みします。",
+                                "その日に集中を始めたり、時間を手動で積んだりした日は、毎日のリマインダーは届きません。7日間アプリを開かなかったときは、次に開くまでお休みします。",
                                 tableName: "Settings",
                                 comment: "Settings caption: when the daily reminder is skipped"
                             )
                         }
                         if wrappedNotifications {
                             Text(
-                                "先月の瓶のお知らせは、毎月1日のこの時刻に届きます。記録がない月には届きません。",
+                                "先月の瓶のお知らせは、毎月1日のこの時刻に届きます。前の月に記録がなければ届きません。",
                                 tableName: "Settings",
                                 comment: "Settings caption: when the monthly look-back notification is sent"
                             )
@@ -2443,13 +2451,13 @@ private struct NotificationPermissionStatusRow: View {
         switch status {
         case .denied:
             String(
-                localized: "このiPhoneでは通知がオフのため、届きません。",
+                localized: "オンにしている通知は、このiPhoneの設定でオフになっているため届きません。",
                 table: "Settings",
                 comment: "Settings notice under an enabled notification switch: notifications are turned off for this app in iOS"
             )
         default:
             String(
-                localized: "このiPhoneではまだ通知を許可していないため、届きません。",
+                localized: "オンにしている通知は、このiPhoneではまだ許可されていないため届きません。",
                 table: "Settings",
                 comment: "Settings notice under an enabled notification switch: iOS has not asked for notification permission on this device yet"
             )

@@ -179,6 +179,10 @@ enum LocalPreviewLaunchPolicy {
     /// earlier install would have left it, without touching this device's
     /// notification permission.
     static let syncedReminderIntentUITestEnvironmentKey = "POMOGEM_UI_TEST_SYNCED_REMINDER_ON"
+    /// Reads this iPhone's notification permission as never asked until the
+    /// app asks in this process, as on a new or reinstalled iPhone. A
+    /// simulator keeps its answer across UI tests and one cannot reset it.
+    static let unaskedNotificationPermissionUITestEnvironmentKey = "POMOGEM_UI_TEST_NOTIFICATIONS_UNASKED"
 #else
     // Keep the policy API available to ordinary production code while making
     // the test protocol and its environment tokens absent from Release output.
@@ -191,6 +195,7 @@ enum LocalPreviewLaunchPolicy {
     static let rareRewardOnboardingUITestEnvironmentKey = ""
     static let deletedThemeHistoryUITestEnvironmentKey = ""
     static let syncedReminderIntentUITestEnvironmentKey = ""
+    static let unaskedNotificationPermissionUITestEnvironmentKey = ""
 #endif
 
     static func isEnabled(

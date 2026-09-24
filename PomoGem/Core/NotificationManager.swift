@@ -426,7 +426,7 @@ struct NotificationRequestClient {
 @MainActor
 @Observable
 final class NotificationManager {
-    static let shared = NotificationManager()
+    static let shared = makeShared()
 
     private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
     /// False until iOS has answered once in this process. `.notDetermined`
@@ -512,6 +512,43 @@ final class NotificationManager {
             try await center.requestAuthorization(options: [.alert, .sound])
         }
     }
+
+    private static func makeShared() -> NotificationManager {
+#if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        if LocalPreviewLaunchPolicy.isUITestMode(environment: environment, isDebugBuild: true),
+           environment[LocalPreviewLaunchPolicy.unaskedNotificationPermissionUITestEnvironmentKey] == "1" {
+            return uiTestManagerWithUnaskedPermission()
+        }
+#endif
+        return NotificationManager()
+    }
+
+#if DEBUG
+    private final class UITestPermissionPrompt {
+        var hasAsked = false
+    }
+
+    /// Reports "not asked" until this process asks, then iOS's real answer,
+    /// so Settings shows what a new or reinstalled iPhone shows.
+    private static func uiTestManagerWithUnaskedPermission() -> NotificationManager {
+        let center = UNUserNotificationCenter.current()
+        let system = FocusReturnReminderNotificationClient.system(center: center)
+        let prompt = UITestPermissionPrompt()
+        var client = system
+        client.authorizationStatus = {
+            prompt.hasAsked ? await system.authorizationStatus() : .notDetermined
+        }
+        return NotificationManager(
+            center: center,
+            focusReturnReminderClient: client,
+            authorizationRequest: {
+                prompt.hasAsked = true
+                return try await center.requestAuthorization(options: [.alert, .sound])
+            }
+        )
+    }
+#endif
 
     var isAuthorized: Bool {
         switch authorizationStatus {

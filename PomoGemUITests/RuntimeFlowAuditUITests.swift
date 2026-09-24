@@ -116,7 +116,11 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     /// this device was ever asked. Opening Settings must keep that intent,
     /// raise no unprompted error, and offer the one step that fixes it here.
     func testSyncedReminderKeepsItsIntentAndSettingsOffersPermissionHere() throws {
-        relaunch(environment: ["POMOGEM_UI_TEST_SYNCED_REMINDER_ON": "1"])
+        relaunch(environment: [
+            "POMOGEM_UI_TEST_SYNCED_REMINDER_ON": "1",
+            // Whatever this simulator answered before, read as never asked.
+            "POMOGEM_UI_TEST_NOTIFICATIONS_UNASKED": "1"
+        ])
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
 
@@ -125,6 +129,13 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(liveActivity.label.contains("ロック画面などに残り時間・進捗を表示"),
                       "The Live Activity row must not name a Dynamic Island the iPhone may not have")
         XCTAssertFalse(liveActivity.label.contains("Dynamic Island"))
+        let returnCaption = app.staticTexts.containing(NSPredicate(
+            format: "label CONTAINS %@",
+            "集中タイマー中にホーム画面や別のアプリへ移ると、30秒後に一度通知し"
+        )).firstMatch
+        XCTAssertTrue(scrollUntilHittable(returnCaption, attempts: 4),
+                      "Going to the Home Screen also rings; the caption must say so")
+        XCTAssertTrue(returnCaption.label.contains("画面をロックしただけなら通知しません"))
         retainScreenshot(named: "Settings — focus section copy")
 
         let daily = app.switches["settings.daily-reminder"]
@@ -133,35 +144,52 @@ final class RuntimeFlowAuditUITests: XCTestCase {
                        "Opening Settings must not raise an unprompted permission error")
         XCTAssertEqual(daily.value as? String, "1",
                        "This iPhone's permission must never switch the synced reminder off")
+
+        // A new iPhone is always offered the one step that fixes it here,
+        // directly under the switch that is on.
+        let status = app.descendants(matching: .any)["settings.notification-permission"]
+        let statusAction = app.buttons["settings.notification-permission.action"]
+        XCTAssertTrue(scrollUntilHittable(statusAction, attempts: 3),
+                      "A synced reminder that cannot ring here must say so")
+        XCTAssertTrue(status.exists)
+        XCTAssertTrue(status.label.contains("オンにしている通知は、このiPhoneではまだ許可されていないため届きません"),
+                      status.label)
+        XCTAssertEqual(statusAction.label, "許可する")
+        XCTAssertGreaterThan(status.frame.minY, daily.frame.minY)
+        let wrapped = app.switches["settings.wrapped-notification"]
+        if wrapped.exists {
+            XCTAssertLessThan(status.frame.maxY, wrapped.frame.minY + 1,
+                              "The notice must not sit under the monthly switch that is off")
+        }
+        retainScreenshot(named: "Settings — synced reminder on, not yet allowed on this iPhone")
+
         // List rows below the fold are created while scrolling to them.
         let time = app.descendants(matching: .any)["settings.reminder-time"]
         XCTAssertTrue(scrollUntilHittable(time, attempts: 4))
         let rules = app.descendants(matching: .any)["settings.reminder-rules"]
         XCTAssertTrue(scrollUntilHittable(rules, attempts: 3))
+        XCTAssertTrue(rules.label.contains(
+            "その日に集中を始めたり、時間を手動で積んだりした日は、毎日のリマインダーは届きません"
+        ), rules.label)
+        retainScreenshot(named: "Settings — reminder rules under the shared time")
 
-        let status = app.descendants(matching: .any)["settings.notification-permission"]
-        let statusAction = app.buttons["settings.notification-permission.action"]
-        if status.waitForExistence(timeout: 3) {
-            retainScreenshot(named: "Settings — synced reminder on, not yet allowed on this iPhone")
-            if statusAction.label == "許可する" {
-                XCTAssertTrue(status.label.contains("まだ通知を許可していない"))
-                statusAction.tap()
-                allowReminderNotificationPermissionIfPresented(timeout: 5)
-                XCTAssertTrue(waitForAbsence(status, timeout: 6),
-                              "Allowing on this iPhone must clear the notice")
-            } else {
-                XCTAssertEqual(statusAction.label, "設定を開く")
-            }
+        XCTAssertTrue(scrollUntilHittable(statusAction, attempts: 4, swipingDown: true))
+        statusAction.tap()
+        allowReminderNotificationPermissionIfPresented(timeout: 5)
+        if !waitForAbsence(status, timeout: 6) {
+            // This simulator already declined, so iOS answered at once without
+            // asking. The notice must now lead to iOS Settings instead.
+            XCTAssertEqual(statusAction.label, "設定を開く")
+            XCTAssertTrue(status.label.contains("このiPhoneの設定でオフになっているため届きません"),
+                          status.label)
         }
         XCTAssertTrue(scrollUntilHittable(daily, attempts: 4, swipingDown: true))
         XCTAssertEqual(daily.value as? String, "1")
-        retainScreenshot(named: "Settings — reminder rules under the shared time")
 
         // The shared time stays visible while only the monthly look-back is on.
         tapSwitch(daily)
         XCTAssertTrue(waitForSwitch(daily, value: "0", timeout: 4))
         XCTAssertTrue(waitForAbsence(time, timeout: 3))
-        let wrapped = app.switches["settings.wrapped-notification"]
         XCTAssertTrue(scrollUntilHittable(wrapped, attempts: 4))
         XCTAssertTrue(wrapped.label.contains("先月の瓶のお知らせ"))
         needsWrappedNotificationCleanup = true
@@ -181,8 +209,8 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(time, attempts: 4),
                       "The Wrapped time must be visible while the daily reminder is off")
         XCTAssertTrue(scrollUntilHittable(rules, attempts: 3))
-        XCTAssertTrue(rules.label.contains("記録がない月には届きません"))
-        XCTAssertFalse(rules.label.contains("毎日のリマインダーは鳴りません"))
+        XCTAssertTrue(rules.label.contains("前の月に記録がなければ届きません"), rules.label)
+        XCTAssertFalse(rules.label.contains("毎日のリマインダーは届きません"))
         retainScreenshot(named: "Settings — Wrapped only keeps its time")
         XCTAssertTrue(restoreWrappedNotificationToOff())
     }
@@ -190,6 +218,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     func testNotificationSettingsAtAccessibilitySize() throws {
         relaunch(environment: [
             "POMOGEM_UI_TEST_SYNCED_REMINDER_ON": "1",
+            "POMOGEM_UI_TEST_NOTIFICATIONS_UNASKED": "1",
             "POMOGEM_UI_TEST_AX5": "1"
         ])
         openMenuAction(containing: "設定")
