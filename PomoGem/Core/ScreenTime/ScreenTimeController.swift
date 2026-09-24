@@ -10,6 +10,8 @@ final class ScreenTimeController: ObservableObject {
     @Published private(set) var authorizationGranted = false
     @Published private(set) var monitoringError: String?
     @Published private(set) var negativeGemCount = 0
+    /// The timer's hold on the learning lane as of the last reload, already
+    /// evaluated against its end date (`ScreenTimeState.isLearningPaused(at:)`).
     @Published private(set) var learningPausedByTimer = false
     @Published private(set) var isMonitoring = false
     @Published private(set) var isSaving = false
@@ -216,26 +218,40 @@ final class ScreenTimeController: ObservableObject {
     /// tighten it: treating "not known yet" as a refund retired Pro users'
     /// learning runs at cold launches and threw away their unfinished 10
     /// minutes. A real downgrade still arrives as `false` and still retires.
-    func reconcile(isPro: Bool?, timerRunning: Bool) async {
-        guard let lease = updatePolicy(isPro: isPro, timerRunning: timerRunning) else { return }
+    ///
+    /// `learningPause` is how long the focus timer holds the learning lane.
+    /// It is stored with its end, so the hold ends by itself when the phase
+    /// ends — even if PomoGem is closed by then — and the next synchronize
+    /// pre-arms the learning run to start at that moment.
+    func reconcile(isPro: Bool?, learningPause: ScreenTimeLearningPause, now: Date = .now) async {
+        guard let lease = updatePolicy(isPro: isPro, learningPause: learningPause, now: now) else { return }
         await finishReconciliation(lease)
     }
 
     /// SwiftUI change handlers call this synchronously so even a rapid
     /// pause/resume closes the old run before another UI event is delivered.
-    func reconcileInBackground(contextKey: String, dataEpochID: UUID?, isPro: Bool?, timerRunning: Bool) {
+    func reconcileInBackground(
+        contextKey: String,
+        dataEpochID: UUID?,
+        isPro: Bool?,
+        learningPause: ScreenTimeLearningPause,
+        now: Date = .now
+    ) {
         guard isBound(contextKey: contextKey, dataEpochID: dataEpochID),
-              let lease = updatePolicy(isPro: isPro, timerRunning: timerRunning) else { return }
+              let lease = updatePolicy(isPro: isPro, learningPause: learningPause, now: now) else { return }
         Task { await finishReconciliation(lease) }
     }
 
-    private func updatePolicy(isPro: Bool?, timerRunning: Bool) -> ScreenTimeContextLease? {
+    private func updatePolicy(
+        isPro: Bool?,
+        learningPause: ScreenTimeLearningPause,
+        now: Date
+    ) -> ScreenTimeContextLease? {
         guard let lease = try? boundLease() else { reload(); return nil }
         do {
             // Never wait for the monitoring lock to close the receipt gate.
             try store.update { state in
                 try validate(state, lease: lease)
-                state.learningPausedByTimer = timerRunning
                 state.learningAllowedBySubscription = ScreenTimePolicy.learningAllowedBySubscription(
                     isPro: isPro,
                     learningApplicationCount: state.configuration.learningSelection.applicationTokens.count,
@@ -243,7 +259,8 @@ final class ScreenTimeController: ObservableObject {
                 )
                 // Keep this retirement even if a later resume arrives before
                 // the OS returns. The old run must not count timer usage.
-                if timerRunning || !state.learningAllowedBySubscription {
+                state.applyTimerPause(learningPause, now: now)
+                if !state.learningAllowedBySubscription {
                     for index in state.runs.indices where state.runs[index].lane == .learning {
                         state.runs[index].active = false
                     }
@@ -375,7 +392,7 @@ final class ScreenTimeController: ObservableObject {
             }
             configuration = state.configuration
             negativeGemCount = state.negativeGemCount
-            learningPausedByTimer = state.learningPausedByTimer
+            learningPausedByTimer = state.isLearningPaused(at: .now)
             monitoringError = state.monitoringError
             isMonitoring = authorizationGranted && state.runs.contains(where: \.active)
             if !authorizationGranted && configuration.enabled {

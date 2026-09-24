@@ -126,7 +126,7 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
         let runID = try XCTUnwrap(store.snapshot().runs.first?.id)
 
-        await controller.reconcile(isPro: false, timerRunning: false)
+        await controller.reconcile(isPro: false, learningPause: .none)
         try await controller.waitForPendingOperations()
         var state = try store.snapshot()
         XCTAssertTrue(state.configuration.enabled)
@@ -134,7 +134,7 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertTrue(state.runs.contains { $0.id == runID && $0.active })
 
         status = .denied
-        await controller.reconcile(isPro: false, timerRunning: false)
+        await controller.reconcile(isPro: false, learningPause: .none)
         try await controller.waitForPendingOperations()
         state = try store.snapshot()
         XCTAssertFalse(state.configuration.enabled)
@@ -433,15 +433,15 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         let configuration = controller.configuration
         let save = Task { try await controller.save(configuration: configuration, isPro: false) }
         await fulfillment(of: [entered], timeout: 5)
-        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: false, timerRunning: true)
-        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: false, timerRunning: false)
+        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: false, learningPause: .indefinite)
+        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: false, learningPause: .none)
         XCTAssertFalse(try store.snapshot().learningPausedByTimer)
         XCTAssertFalse(try store.snapshot().runs.contains { $0.id == runID && $0.active })
         try store.record(runID: runID, threshold: 2, now: start.addingTimeInterval(1_201))
         XCTAssertEqual(try store.pendingLearningReceipts(), receipts)
         release.signal()
         try await save.value
-        await controller.reconcile(isPro: false, timerRunning: false)
+        await controller.reconcile(isPro: false, learningPause: .none)
         try await controller.waitForPendingOperations()
         XCTAssertFalse(try store.snapshot().runs.contains { $0.id == runID && $0.active })
     }
@@ -569,15 +569,15 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         let configuration = controller.configuration
         let save = Task { try await controller.save(configuration: configuration, isPro: true) }
         await fulfillment(of: [entered], timeout: 5)
-        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: false, timerRunning: false)
-        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: true, timerRunning: false)
+        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: false, learningPause: .none)
+        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: true, learningPause: .none)
         XCTAssertTrue(try store.snapshot().learningAllowedBySubscription)
         XCTAssertFalse(try store.snapshot().runs.contains { $0.id == runID && $0.active })
         try store.record(runID: runID, threshold: 2, now: start.addingTimeInterval(1_201))
         XCTAssertEqual(try store.pendingLearningReceipts(), receipts)
         release.signal()
         try await save.value
-        await controller.reconcile(isPro: true, timerRunning: false)
+        await controller.reconcile(isPro: true, learningPause: .none)
         try await controller.waitForPendingOperations()
         XCTAssertFalse(try store.snapshot().runs.contains { $0.id == runID && $0.active })
     }
@@ -598,14 +598,14 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
         let runID = try XCTUnwrap(store.snapshot().runs.first?.id)
 
-        await controller.reconcile(isPro: nil, timerRunning: false)
+        await controller.reconcile(isPro: nil, learningPause: .none)
         try await controller.waitForPendingOperations()
         var state = try store.snapshot()
         XCTAssertTrue(state.learningAllowedBySubscription)
         XCTAssertTrue(state.runs.contains { $0.id == runID && $0.active })
         XCTAssertNil(controller.monitoringError, "A Pro user must not be shown the free-plan limit")
 
-        await controller.reconcile(isPro: false, timerRunning: false)
+        await controller.reconcile(isPro: false, learningPause: .none)
         try await controller.waitForPendingOperations()
         state = try store.snapshot()
         XCTAssertFalse(state.learningAllowedBySubscription)
@@ -613,7 +613,7 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
 
         // Unknown again (a later process before StoreKit answers) keeps the
         // closed gate closed: nil can only keep or relax, never grant Pro.
-        await controller.reconcile(isPro: nil, timerRunning: false)
+        await controller.reconcile(isPro: nil, learningPause: .none)
         XCTAssertFalse(try store.snapshot().learningAllowedBySubscription)
     }
 

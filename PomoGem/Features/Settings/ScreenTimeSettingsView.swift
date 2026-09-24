@@ -257,7 +257,7 @@ struct ScreenTimeSettingsView: View {
             }
 
             if controller.learningPausedByTimer {
-                Text("タイマーの計測中は、勉強アプリの自動記録を休止しています。")
+                Text("タイマーの計測中は勉強アプリの自動記録を休止し、終了後に自動で再開します。", tableName: "ScreenTime")
                     .font(.subheadline)
                     .foregroundStyle(PomoGemTheme.muted)
             }

@@ -713,9 +713,28 @@ enum FocusPersistence {
         )
     }
 
+    /// Posted on the main thread after the saved timer is written or cleared.
+    /// The Screen Time integration listens so the learning lane's hold — and
+    /// its end date — reaches the App Group ledger in the same turn as the
+    /// start, pause, resume or stop that changed it (see
+    /// `ScreenTimeTimerHold`). The notification carries nothing: readers
+    /// load the saved state themselves.
+    static let didChange = Notification.Name("PomoGem.FocusPersistence.didChange")
+
+    private static func postDidChange() {
+        if Thread.isMainThread {
+            NotificationCenter.default.post(name: didChange, object: nil)
+        } else {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: didChange, object: nil)
+            }
+        }
+    }
+
     static func save(_ envelope: FocusRecoveryEnvelope) {
         guard let data = try? JSONEncoder().encode(envelope) else { return }
         UserDefaults.standard.set(data, forKey: key)
+        postDidChange()
     }
 
     static func load() -> FocusRecoveryEnvelope? {
@@ -934,6 +953,7 @@ enum FocusPersistence {
     static func clear() {
         UserDefaults.standard.removeObject(forKey: key)
         DeferredFocusCompletionStore.clear()
+        postDidChange()
     }
 
     /// Notification Center is global to the app, while recovery is namespaced
