@@ -893,7 +893,11 @@ struct LogView: View {
     @Environment(\.aggregateProjectionPresentation)
     private var aggregateProjectionPresentation
     @Query private var activityResetMarkers: [ActivityResetMarker]
+    /// Live theme rows only; tombstones never count toward the row bound.
     @Query(sort: \Subject.sortOrder) private var storedSubjects: [Subject]
+    /// Observed so a deletion delivered as a new physical row refreshes the
+    /// list; see `SubjectSyncPolicy.presentationSubjects(live:tombstones:context:)`.
+    @Query private var storedSubjectTombstones: [Subject]
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var period: Period = .week
     @State private var selectedWrappedMonth: WrappedMonth?
@@ -912,12 +916,11 @@ struct LogView: View {
     @State private var pendingAchievementUndo: AchievementStoneRevisionSnapshot?
 
     init() {
-        var subjectDescriptor = FetchDescriptor<Subject>(sortBy: [
+        _storedSubjects = Query(SubjectSyncPolicy.liveRowsDescriptor(sortBy: [
             SortDescriptor(\Subject.sortOrder),
             SortDescriptor(\Subject.syncRecordID)
-        ])
-        subjectDescriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
-        _storedSubjects = Query(subjectDescriptor)
+        ]))
+        _storedSubjectTombstones = Query(SubjectSyncPolicy.tombstoneRowsDescriptor())
         _activityResetMarkers = Query(BoundedHistoryPolicy.latestResetMarkerDescriptor())
     }
 
@@ -925,7 +928,9 @@ struct LogView: View {
         activityResetMarkers.map(\.policySnapshot)
     }
     private var subjects: [Subject] {
-        SubjectSyncPolicy.presentationSubjects(from: storedSubjects)
+        SubjectSyncPolicy.presentationSubjects(
+            live: storedSubjects, tombstones: storedSubjectTombstones, context: modelContext
+        )
     }
     private var filteredSessions: [StudySession] {
         StudySessionSyncPolicy.canonicalSessions(from: periodSessions)

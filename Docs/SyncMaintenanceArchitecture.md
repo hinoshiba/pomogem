@@ -593,6 +593,11 @@ localな書込み完了後の値をexactとして扱えます。
   全物理rowを保持する
 - version 1.0はsubject restore UIを持たないため、一度観測したsupportedな`deletedAt`は、より高いrevisionの
   offline renameより常に優先する
+- tombstoneは削除しないため、全物理rowの件数は削除したテーマの数だけ増え続ける。表示・編集・この
+  phaseの上限（256行）は削除されていない行だけに適用し、tombstoneはそれらと同じlogical IDのものだけを
+  読む。以前は全行を数えたため、長期利用で257行に達すると全画面のテーマが消え、このphaseは`.retry`を
+  繰り返して検証が終わらなかった。削除されていない行が上限を超える悪意ある複製は表示が空になるだけで、
+  read-onlyのこのphaseは修復対象がないため完了する
 - sessionとachievementはrelationshipをfan-out書換えせず、snapshot subject IDから論理表示を解決する
 - missing presetは挿入しない
 - `hasCompletedInitialSubjectSeed`をworkerから変更しない

@@ -366,9 +366,18 @@ final class Subject {
 
 enum SubjectSyncPolicy {
     static let maximumPhysicalRows = 256
-    enum MutationError: Error, Equatable {
+    enum MutationError: Error, Equatable, LocalizedError {
         case revisionLimitReached
         case tooManyPhysicalRows
+
+        var errorDescription: String? {
+            switch self {
+            case .revisionLimitReached:
+                "このテーマは変更の回数が上限に達したため、これ以上変更できません。"
+            case .tooManyPhysicalRows:
+                "テーマの保存データが多すぎるため、安全に変更できませんでした。"
+            }
+        }
     }
 
     static let maximumSupportedContentRevision = 1_000_000
@@ -415,6 +424,104 @@ enum SubjectSyncPolicy {
     static func presentationSubjects(from values: [Subject]) -> [Subject] {
         guard values.count <= maximumPhysicalRows else { return [] }
         return canonicalSubjects(from: values).filter { $0.deletedAt == nil }
+    }
+
+    // MARK: Live catalogue
+    //
+    // Deleting a theme only writes a tombstone, and nothing ever removes one:
+    // a physical row must stay so a delayed CloudKit copy cannot revive the
+    // theme. A read of every physical row therefore grows with each theme a
+    // user has ever deleted, and once it passed `maximumPhysicalRows` every
+    // theme disappeared app-wide. The bound applies to live rows instead, of
+    // which ordinary use has at most `Constants.App.maximumSubjects` logical
+    // themes. A tombstone still hides every copy of its logical ID, so only
+    // the tombstones that share a live row's ID are read.
+
+    /// Live physical rows, bounded so a hostile replica set still fails closed.
+    static func liveRowsDescriptor(
+        sortBy: [SortDescriptor<Subject>] = [SortDescriptor(\Subject.syncRecordID)]
+    ) -> FetchDescriptor<Subject> {
+        var descriptor = FetchDescriptor<Subject>(
+            predicate: #Predicate { $0.deletedAt == nil },
+            sortBy: sortBy
+        )
+        descriptor.fetchLimit = maximumPhysicalRows + 1
+        return descriptor
+    }
+
+    /// Size of the observed tombstone page. It is a fast path, not a limit on
+    /// correctness: past it, presentation reads each live ID's tombstones
+    /// exactly. About a thousand deleted themes is decades of ordinary use.
+    static let observedTombstoneLimit = 1_024
+
+    /// A bounded page of tombstones. Views observe it so a deletion that
+    /// arrives as a new physical row still refreshes the list; presentation
+    /// reads the page only while it is complete.
+    static func tombstoneRowsDescriptor() -> FetchDescriptor<Subject> {
+        var descriptor = FetchDescriptor<Subject>(
+            predicate: #Predicate { $0.deletedAt != nil },
+            sortBy: [SortDescriptor(\Subject.syncRecordID)]
+        )
+        descriptor.fetchLimit = observedTombstoneLimit + 1
+        return descriptor
+    }
+
+    /// Presentation from live rows plus the tombstones that share their IDs.
+    /// When the observed tombstone page is truncated, the tombstones for each
+    /// live logical ID are read exactly instead; a failed read fails closed.
+    @MainActor
+    static func presentationSubjects(
+        live: [Subject],
+        tombstones: [Subject],
+        context: ModelContext
+    ) -> [Subject] {
+        guard live.count <= maximumPhysicalRows else { return [] }
+        let liveIDs = Set(live.map(\.id))
+        let sameID: [Subject]
+        if tombstones.count <= observedTombstoneLimit {
+            sameID = tombstones.filter { liveIDs.contains($0.id) }
+        } else {
+            guard let exact = try? sameIDTombstones(for: liveIDs, context: context) else {
+                return []
+            }
+            sameID = exact
+        }
+        return canonicalSubjects(from: live + sameID).filter { $0.deletedAt == nil }
+    }
+
+    /// Every live row plus every tombstone that shares a live logical ID: all
+    /// the evidence presentation and a mutation need, however many themes
+    /// were deleted before.
+    @MainActor
+    static func liveCatalogue(context: ModelContext) throws -> [Subject] {
+        let live = try context.fetch(liveRowsDescriptor())
+        guard live.count <= maximumPhysicalRows else {
+            throw MutationError.tooManyPhysicalRows
+        }
+        return live + (try sameIDTombstones(for: Set(live.map(\.id)), context: context))
+    }
+
+    /// One exact query per logical ID, using only the equality and nil
+    /// predicates every supported SwiftData runtime evaluates in the store.
+    @MainActor
+    static func sameIDTombstones(
+        for ids: Set<UUID>,
+        context: ModelContext
+    ) throws -> [Subject] {
+        var result: [Subject] = []
+        for id in ids.sorted(by: { $0.uuidString < $1.uuidString }) {
+            var descriptor = FetchDescriptor<Subject>(
+                predicate: #Predicate { $0.id == id && $0.deletedAt != nil },
+                sortBy: [SortDescriptor(\Subject.syncRecordID)]
+            )
+            descriptor.fetchLimit = maximumPhysicalRows + 1
+            let rows = try context.fetch(descriptor)
+            guard rows.count <= maximumPhysicalRows else {
+                throw MutationError.tooManyPhysicalRows
+            }
+            result += rows
+        }
+        return result
     }
 
     @MainActor

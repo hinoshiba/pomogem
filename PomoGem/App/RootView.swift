@@ -1940,17 +1940,11 @@ struct RootView: View {
                 SubjectNamePolicy.validated($0)
             }
             let selectedNameKeys = Set(selectedNames.map(SubjectNamePolicy.comparisonKey))
-            var subjectDescriptor = FetchDescriptor<Subject>(sortBy: [
-                SortDescriptor(\Subject.syncRecordID)
-            ])
-            subjectDescriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
-            let storedSubjects = try modelContext.fetch(subjectDescriptor)
-            guard storedSubjects.count <= SubjectSyncPolicy.maximumPhysicalRows else {
-                throw SubjectSyncPolicy.MutationError.tooManyPhysicalRows
-            }
-            let subjects = SubjectSyncPolicy.presentationSubjects(
-                from: storedSubjects
-            )
+            // Live rows plus the tombstones sharing their IDs: deleted themes
+            // from earlier installs must not count toward the row bound.
+            let storedSubjects = try SubjectSyncPolicy.liveCatalogue(context: modelContext)
+            let subjects = SubjectSyncPolicy.canonicalSubjects(from: storedSubjects)
+                .filter { $0.deletedAt == nil }
             var removedSubjectIDs = Set<UUID>()
             for subject in subjects where presetIDs.contains(subject.id) {
                 let isSelected = selectedNameKeys.contains(

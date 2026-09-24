@@ -55,7 +55,13 @@ struct SettingsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
+    /// Live theme rows only; tombstones never count toward the row bound.
+    /// They are complete mutation evidence for a presented theme: a supported
+    /// tombstone for its ID would have hidden it.
     @Query private var storedSubjects: [Subject]
+    /// Observed so a deletion delivered as a new physical row refreshes the
+    /// list; see `SubjectSyncPolicy.presentationSubjects(live:tombstones:context:)`.
+    @Query private var storedSubjectTombstones: [Subject]
     @Query private var preferences: [Prefs]
     @Query private var activityResetMarkers: [ActivityResetMarker]
 
@@ -111,7 +117,9 @@ struct SettingsView: View {
         activityResetMarkers.map(\.policySnapshot)
     }
     private var subjects: [Subject] {
-        SubjectSyncPolicy.presentationSubjects(from: storedSubjects)
+        SubjectSyncPolicy.presentationSubjects(
+            live: storedSubjects, tombstones: storedSubjectTombstones, context: modelContext
+        )
     }
     private func isCurrentActivity(_ epochID: UUID?) -> Bool {
         ActivityResetPolicy.isCurrent(epochID, markers: resetSnapshots)
@@ -119,13 +127,12 @@ struct SettingsView: View {
 
     init(persistenceMode: PersistenceLaunchMode = .inMemoryPreview) {
         self.persistenceMode = persistenceMode
-        var subjectDescriptor = FetchDescriptor<Subject>(sortBy: [
+        _storedSubjects = Query(SubjectSyncPolicy.liveRowsDescriptor(sortBy: [
             SortDescriptor(\Subject.sortOrder),
             SortDescriptor(\Subject.createdAt),
             SortDescriptor(\Subject.id)
-        ])
-        subjectDescriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
-        _storedSubjects = Query(subjectDescriptor)
+        ]))
+        _storedSubjectTombstones = Query(SubjectSyncPolicy.tombstoneRowsDescriptor())
 
         _preferences = Query(PrefsConsumerPolicy.descriptor())
 

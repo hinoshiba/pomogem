@@ -56,7 +56,11 @@ struct HomeView: View {
     @ScaledMetric(relativeTo: .subheadline) private var atmosphereTitleFontSize: CGFloat = 15
     @ScaledMetric(relativeTo: .caption2) private var atmosphereSubtitleFontSize: CGFloat = 11
     @ScaledMetric(relativeTo: .subheadline) private var atmosphereCardHeight: CGFloat = 102
+    /// Live theme rows only; tombstones never count toward the row bound.
     @Query(sort: \Subject.sortOrder) private var storedSubjects: [Subject]
+    /// Observed so a deletion delivered as a new physical row refreshes the
+    /// list; see `SubjectSyncPolicy.presentationSubjects(live:tombstones:context:)`.
+    @Query private var storedSubjectTombstones: [Subject]
     @Query private var storedSessions: [StudySession]
     @Query private var storedAchievementStones: [AchievementStone]
     @Query private var storedAggregates: [AggregatePebble]
@@ -144,12 +148,11 @@ struct HomeView: View {
     @State private var announcedPostDropShareOfferID: UUID?
 
     init() {
-        var subjectDescriptor = FetchDescriptor<Subject>(sortBy: [
+        _storedSubjects = Query(SubjectSyncPolicy.liveRowsDescriptor(sortBy: [
             SortDescriptor(\Subject.sortOrder),
             SortDescriptor(\Subject.syncRecordID)
-        ])
-        subjectDescriptor.fetchLimit = SubjectSyncPolicy.maximumPhysicalRows + 1
-        _storedSubjects = Query(subjectDescriptor)
+        ]))
+        _storedSubjectTombstones = Query(SubjectSyncPolicy.tombstoneRowsDescriptor())
         _storedSessions = Query(
             HomeProjectionPolicy.sessionChangeSentinelDescriptor()
         )
@@ -161,7 +164,9 @@ struct HomeView: View {
     }
 
     private var subjects: [Subject] {
-        SubjectSyncPolicy.presentationSubjects(from: storedSubjects)
+        SubjectSyncPolicy.presentationSubjects(
+            live: storedSubjects, tombstones: storedSubjectTombstones, context: modelContext
+        )
     }
     private var activeSubjects: [Subject] { subjects.filter { !$0.isArchived } }
     private var resolvedPreferences: PrefsSyncPolicy.ResolvedState? {
