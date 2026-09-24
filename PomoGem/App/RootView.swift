@@ -2269,14 +2269,7 @@ struct RootView: View {
         if let preset = SubjectSuggestionCatalog.preset(named: name) {
             return preset.colorHex
         }
-        let palette = [
-            Constants.Color.english,
-            Constants.Color.mathematics,
-            Constants.Color.japanese,
-            Constants.Color.science,
-            Constants.Color.socialStudies,
-            "#D6863A", "#36A7AE", "#D56B82", "#739B45", "#5967C8", "#A76A3F", "#5688A8"
-        ]
+        let palette = SubjectPalette.hexes
         return palette[index % palette.count]
     }
 

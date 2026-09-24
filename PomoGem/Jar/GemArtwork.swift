@@ -2489,9 +2489,15 @@ enum GemArtwork {
 
 /// One theme colour turned into gem tones (Docs/GemExperienceDesign.md
 /// §7.4). Hue is never changed: it is how people tell their themes apart.
+/// Lightness keeps the palette's order (OKLab L, `GemToneLightness`): a
+/// lighter swatch always makes a lighter gem, so 琥珀 and 赤銅 or 菫 and 藍
+/// never collapse into one stone.
 struct GemTone: Sendable {
     let hue: CGFloat
     let saturation: CGFloat
+    /// HSB value of the gem's body colour (`body`): the facet light at
+    /// `referenceFacetLight`, chosen so the body's OKLab lightness follows
+    /// the theme's own lightness.
     let brightness: CGFloat
     let lightHueShift: CGFloat
     let contrastBoost: CGFloat
@@ -2501,20 +2507,23 @@ struct GemTone: Sendable {
     /// saturated reds stay whiter so they never flash red).
     let glintWhiteShare: CGFloat
 
+    /// Facet light at which a facet shows the body colour itself: the
+    /// facet saturation s₀ × (1.36 − 0.70b) equals s₀ there.
+    static let referenceFacetLight: CGFloat = 0.36 / 0.70
+    /// HSB value of the facet ramp 0.50 + 0.50b at `referenceFacetLight`
+    /// (the value every theme shared before the lightness mapping).
+    static let referenceValue: CGFloat = 0.50 + 0.50 * referenceFacetLight
+
     init(hex: String, muted: Bool, glass: Bool) {
         let key = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted).uppercased()
         let raw = GemColor(hex: key).hsb
         var saturationFloor: CGFloat = 0.74
-        var brightnessFloor: CGFloat = 0.88
         var lightShift: CGFloat = 8
         var boost: CGFloat = 0
         var whiteShare: CGFloat = 0.70
         switch key {
         case "3FA57C": lightShift = -4
-        case "739B45": brightnessFloor = 0.90
-        case "A76A3F":
-            brightnessFloor = 0.92
-            boost = 0.1
+        case "A76A3F": boost = 0.1
         case "5688A8": saturationFloor = 0.60
         case "E85D4A", "D56B82": whiteShare = 0.85
         default: break
@@ -2522,13 +2531,23 @@ struct GemTone: Sendable {
         hue = raw.hue
         // Neutral inputs (the tutorial glass, legacy greys) stay neutral.
         let base = raw.saturation < 0.08 ? raw.saturation : max(raw.saturation, saturationFloor)
-        saturation = muted ? base * 0.85 : base
-        brightness = max(raw.brightness, brightnessFloor)
+        let body = GemToneLightness.body(hex: key, hue: raw.hue, saturation: muted ? base * 0.85 : base)
+        saturation = body.saturation
+        brightness = body.value
         lightHueShift = lightShift / 360
         contrastBoost = boost
         isGlass = glass
         isMuted = muted
         glintWhiteShare = whiteShare
+    }
+
+    /// Scale of every facet value against the shared ramp (1 at
+    /// `referenceValue`).
+    var valueScale: CGFloat { brightness / Self.referenceValue }
+
+    /// The gem's own colour: a facet at `referenceFacetLight`.
+    var body: GemColor {
+        isGlass ? facet(brightness: Self.referenceFacetLight, hueJitter: 0) : GemColor(hue: hue, saturation: saturation, brightness: brightness)
     }
 
     var light: GemColor {
@@ -2540,7 +2559,7 @@ struct GemTone: Sendable {
     var deep: GemColor {
         isGlass
             ? GemColor(red: 0.30, green: 0.36, blue: 0.46)
-            : GemColor(hue: hue - 6 / 360, saturation: saturation < 0.08 ? saturation : 0.85, brightness: 0.44)
+            : GemColor(hue: hue - 6 / 360, saturation: saturation < 0.08 ? saturation : 0.85, brightness: 0.44 * valueScale)
     }
 
     var halo: GemColor {
@@ -2565,9 +2584,11 @@ struct GemTone: Sendable {
 
     /// Facet colour for facet light b (0…1): hue ± 8°. Dark facets stay
     /// deep and saturated rather than going brown, bright facets turn pale
-    /// and luminous: the HSB value is 0.50 + 0.50b and saturation
-    /// s₀ × (1.36 − 0.70b) (capped at 1), so a coral gem keeps red-orange depths and
-    /// near-white peach lights (luminance ratio ≈ 1:4).
+    /// and luminous: the HSB value is (0.50 + 0.50b) × `valueScale` (capped
+    /// at 1) and saturation s₀ × (1.36 − 0.70b) (capped at 1), so a coral
+    /// gem keeps red-orange depths and near-white peach lights (luminance
+    /// ratio ≈ 1:4). `valueScale` carries the theme's lightness into every
+    /// facet.
     func facet(brightness b: CGFloat, hueJitter: CGFloat) -> GemColor {
         if isGlass {
             let tone = 0.45 + b * 0.55
@@ -2577,12 +2598,86 @@ struct GemTone: Sendable {
         return GemColor(
             hue: hue + 8 / 360 * hueJitter,
             saturation: neutral ? saturation : min(1, saturation * (1.36 - 0.70 * b)),
-            brightness: 0.50 + 0.50 * b
+            brightness: (0.50 + 0.50 * b) * valueScale
         )
     }
 
     var haloUIColor: UIColor { halo.withAlpha(1) }
     var glintUIColor: UIColor { glint.withAlpha(1) }
+}
+
+/// The brightness-order render transform (Docs/GemExperienceDesign.md
+/// §7.4): a theme's OKLab lightness L picks the lightness of its gem body,
+/// through one strictly increasing curve. Hue and the vivid saturation
+/// floor stay as they were; only the HSB value moves (and, for a hue that
+/// cannot reach its lightness at full value, the saturation gives way).
+/// So the gems keep the palette's lightness order for any hex list,
+/// including one curated later.
+enum GemToneLightness {
+    /// Centre of the curve: the palette's mean lightness maps to the jar's
+    /// former mean body lightness (≈ 0.61).
+    static let inputCenter: CGFloat = 0.63
+    static let outputCenter: CGFloat = 0.61
+    /// Half the output range: every body lies within 0.61 ± 0.21.
+    static let amplitude: CGFloat = 0.21
+    /// Slope at the centre: the palette's small lightness steps are widened
+    /// by 1.4 so neighbouring swatches stay apart in the jar.
+    static let gain: CGFloat = 1.4
+
+    /// Body lightness for a theme of lightness `inputL` (strictly
+    /// increasing, bounded).
+    static func bodyLightness(forInput inputL: CGFloat) -> CGFloat {
+        outputCenter + amplitude * CGFloat(tanh(Double(gain * (inputL - inputCenter) / amplitude)))
+    }
+
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var cache: [String: (saturation: CGFloat, value: CGFloat)] = [:]
+
+    /// Saturation and value of the body colour (hue fixed). Solved by
+    /// bisection once per (hex, hue, saturation) and cached: the lighting
+    /// passes build tones several times a second.
+    static func body(hex: String, hue: CGFloat, saturation: CGFloat) -> (saturation: CGFloat, value: CGFloat) {
+        let key = "\(hex)|\(Int((hue * 3_600).rounded()))|\(Int((saturation * 1_000).rounded()))"
+        lock.lock()
+        if let cached = cache[key] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+        let target = bodyLightness(forInput: GemColor(hex: hex).oklabLightness)
+        let solved = solve(hue: hue, saturation: saturation, target: target)
+        lock.lock()
+        if cache.count > 512 { cache.removeAll(keepingCapacity: true) }
+        cache[key] = solved
+        lock.unlock()
+        return solved
+    }
+
+    /// The HSB value at which (hue, saturation) reaches OKLab lightness
+    /// `target`; at full value, the saturation that does.
+    static func solve(hue: CGFloat, saturation: CGFloat, target: CGFloat) -> (saturation: CGFloat, value: CGFloat) {
+        func lightness(_ s: CGFloat, _ v: CGFloat) -> CGFloat {
+            GemColor(hue: hue, saturation: s, brightness: v).oklabLightness
+        }
+        if lightness(saturation, 1) >= target {
+            var low: CGFloat = 0
+            var high: CGFloat = 1
+            for _ in 0 ..< 30 {
+                let mid = (low + high) / 2
+                if lightness(saturation, mid) < target { low = mid } else { high = mid }
+            }
+            return (saturation, (low + high) / 2)
+        }
+        // Lighter than this hue can be at the vivid saturation: move toward
+        // white (full value, less saturation) until the lightness matches.
+        var low: CGFloat = 0
+        var high = saturation
+        for _ in 0 ..< 30 {
+            let mid = (low + high) / 2
+            if lightness(mid, 1) < target { high = mid } else { low = mid }
+        }
+        return ((low + high) / 2, 1)
+    }
 }
 
 /// Tones by angular sector (clockwise from 12 o'clock). Colours change on
@@ -2705,6 +2800,27 @@ struct GemColor: Equatable, Sendable {
     var luminance: CGFloat {
         0.2126 * red + 0.7152 * green + 0.0722 * blue
     }
+
+    /// OKLab (Björn Ottosson, 2020) of the sRGB value: L is perceived
+    /// lightness (0 black … 1 white), a and b the opponent axes.
+    var oklab: (L: CGFloat, a: CGFloat, b: CGFloat) {
+        func linear(_ c: CGFloat) -> CGFloat {
+            c <= 0.040_45 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+        }
+        let r = linear(red)
+        let g = linear(green)
+        let b = linear(blue)
+        let l = cbrt(0.412_221_470_8 * r + 0.536_332_536_3 * g + 0.051_445_992_9 * b)
+        let m = cbrt(0.211_903_498_2 * r + 0.680_699_545_1 * g + 0.107_396_956_6 * b)
+        let s = cbrt(0.088_302_461_9 * r + 0.281_718_837_6 * g + 0.629_978_700_5 * b)
+        return (
+            0.210_454_255_3 * l + 0.793_617_785_0 * m - 0.004_072_046_8 * s,
+            1.977_998_495_1 * l - 2.428_592_205_0 * m + 0.450_593_709_9 * s,
+            0.025_904_037_1 * l + 0.782_771_766_2 * m - 0.808_675_766_0 * s
+        )
+    }
+
+    var oklabLightness: CGFloat { oklab.L }
 
     var hsb: (hue: CGFloat, saturation: CGFloat, brightness: CGFloat) {
         let maximum = max(red, green, blue)

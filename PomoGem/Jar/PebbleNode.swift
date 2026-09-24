@@ -1504,7 +1504,8 @@ final class PebbleNode: SKShapeNode {
         if descriptor.isTutorial {
             fill = JarPalette.glass.withAlphaComponent(Constants.Jar.tutorialOpacity)
         } else {
-            fill = fill.vivid(saturationFloor: 0.74, brightnessFloor: 0.88)
+            // The same lightness-ordered tone as the faceted gems (§7.4).
+            fill = GemTone(hex: descriptor.colorHex, muted: false, glass: false).body.withAlpha(1)
         }
         if !descriptor.isMeasured {
             fill = fill.reducingSaturation(by: Constants.Jar.manualSaturationReduction)

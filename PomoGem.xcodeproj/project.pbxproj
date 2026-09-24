@@ -50,6 +50,7 @@
 		2F07026E823B158E70DDDF0B /* StorageTransferRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A150837BBFAB5F4A33C3FED /* StorageTransferRuntime.swift */; };
 		3065CFF38231215168E38678 /* AccumulationPlanProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6545EB68BE25DE2F487A00 /* AccumulationPlanProjection.swift */; };
 		3129DA6A9A8D346C435F4FDF /* AccumulationTimelineBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AA276827B98A4CCACD8602E /* AccumulationTimelineBrowser.swift */; };
+		314D213F488CBF92E8A3D271 /* SubjectPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF46CB34414D4C7FDE090C09 /* SubjectPalette.swift */; };
 		31576D5BF6D43195672807F8 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 69C5703FB01685FF8A965F3B /* PrivacyInfo.xcprivacy */; };
 		32D3D9698B72B7CEF637763A /* CloudSchemaCompatibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 831FEB80C41BFDA6FC743C4D /* CloudSchemaCompatibilityTests.swift */; };
 		333DF582943D92E70B48938A /* TimerOrientationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A447FDE838FF146B199E1D /* TimerOrientationUITests.swift */; };
@@ -152,6 +153,7 @@
 		889193469D19B1FCA4AF74A9 /* CloudStorageTransferCloudKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 126E2BF9A3F46E163EA9B93E /* CloudStorageTransferCloudKitTests.swift */; };
 		8A28A396D48A4B30CA1B6444 /* StorageTransferAdmissionTaxonomyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 681E42884F4D17CEF31D7511 /* StorageTransferAdmissionTaxonomyTests.swift */; };
 		8C5EEF3EFBBAF90D1B11B0EA /* ScreenTimeImportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13BE379105C9A6C97BF7198D /* ScreenTimeImportCoordinator.swift */; };
+		8C75CC10DF0C56A24A115E56 /* GemThemeDistinctionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 581304079EEB5D6AF419D641 /* GemThemeDistinctionTests.swift */; };
 		8D116DC22C1FDE10D8DC85DD /* GemTextureAtlas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 255FD4B5A9B4B647ED209984 /* GemTextureAtlas.swift */; };
 		8D1960732F8C8127ECBD7105 /* PersistenceSessionLifetimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3829BEEEE6E394C43D37A09B /* PersistenceSessionLifetimeTests.swift */; };
 		8F52E791AAEFB8EDA44279E7 /* GemShowcaseUITestFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B49525595241A87B78C8AD0D /* GemShowcaseUITestFixture.swift */; };
@@ -441,6 +443,7 @@
 		5542B8EEF5204878A5734E13 /* UITestFaultInjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestFaultInjection.swift; sourceTree = "<group>"; };
 		55E64106E5BFD3302306C308 /* FairnessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FairnessTests.swift; sourceTree = "<group>"; };
 		5717D8DB966629633F7FABBD /* StorageTransferPartialDestinationRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferPartialDestinationRecovery.swift; sourceTree = "<group>"; };
+		581304079EEB5D6AF419D641 /* GemThemeDistinctionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GemThemeDistinctionTests.swift; sourceTree = "<group>"; };
 		5886D322F2E38AF563B7573B /* StorageTransferRemoteCancellation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferRemoteCancellation.swift; sourceTree = "<group>"; };
 		59BAE67DFFB9F4641C8314D6 /* ScreenTimeImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeImportTests.swift; sourceTree = "<group>"; };
 		5C58C458F3816E6A3F1E1E80 /* SubjectNamePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectNamePolicyTests.swift; sourceTree = "<group>"; };
@@ -609,6 +612,7 @@
 		FE10FA71F90EB663584AB5E6 /* ZenMaruGothic-Black.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "ZenMaruGothic-Black.ttf"; sourceTree = "<group>"; };
 		FE24992BDBEA2EE11809580B /* PostDropProgressAccessibilityPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDropProgressAccessibilityPresentationTests.swift; sourceTree = "<group>"; };
 		FE6330E992C4131296B0D702 /* StrataMathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataMathTests.swift; sourceTree = "<group>"; };
+		FF46CB34414D4C7FDE090C09 /* SubjectPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectPalette.swift; sourceTree = "<group>"; };
 		FF6143A14611EAA4A51FB4FB /* StorageTransferReleasePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferReleasePolicy.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -853,6 +857,7 @@
 				CD7BA595ACB195819AF7A8D3 /* RareRewardLedgerV2.swift */,
 				FB33553E11FE75154EDC5E34 /* StrataMath.swift */,
 				145E16DC0F8C5A77BA5070B5 /* SubjectNamePolicy.swift */,
+				FF46CB34414D4C7FDE090C09 /* SubjectPalette.swift */,
 				4BF84C957F5965D5E7377EAD /* SyncMaintenance.swift */,
 				75FEB1C5A7ADA079417D3332 /* SyncMaintenanceWorker.swift */,
 				C0A9C1314CC1B5A18521DFEA /* UsagePurpose.swift */,
@@ -916,6 +921,7 @@
 				E38675DCE672C29E9EBF0A56 /* GachaHistoryReconciliationTests.swift */,
 				4AC25878D4247A90507703B3 /* GachaTests.swift */,
 				9509CFC48334FF1DFC0E39F0 /* GemBrillianceTests.swift */,
+				581304079EEB5D6AF419D641 /* GemThemeDistinctionTests.swift */,
 				3A658F93291D3387937A39FF /* HomeAtmosphereTests.swift */,
 				B78F394CAE07C13C1BE00957 /* HomeProjectionTests.swift */,
 				4C5593DA547691E54AD22F76 /* InitialCloudHydrationTests.swift */,
@@ -1470,6 +1476,7 @@
 				E2B7506FAB263874D88CD2DC /* StrataMath.swift in Sources */,
 				9F5BC57BB4923D391D26B6E8 /* StrataRenderer.swift in Sources */,
 				A9170DFE871C52545745EAA6 /* SubjectNamePolicy.swift in Sources */,
+				314D213F488CBF92E8A3D271 /* SubjectPalette.swift in Sources */,
 				128570FAED1861610B4E0BCC /* SyncMaintenance.swift in Sources */,
 				EAEE7DC58351957E5F87FDB6 /* SyncMaintenanceWorker.swift in Sources */,
 				53FE675CF48B37882F6017A3 /* Theme.swift in Sources */,
@@ -1519,6 +1526,7 @@
 				A9C0D11803B6F1516CAB93B5 /* GachaHistoryReconciliationTests.swift in Sources */,
 				83E357D8D9C4C20E08E32784 /* GachaTests.swift in Sources */,
 				A7DCE33FA422C016F826FA7B /* GemBrillianceTests.swift in Sources */,
+				8C75CC10DF0C56A24A115E56 /* GemThemeDistinctionTests.swift in Sources */,
 				7601FA40A717E710583BE7E5 /* HomeAtmosphereTests.swift in Sources */,
 				FD5E7022FA135DA440D649AA /* HomeProjectionTests.swift in Sources */,
 				36C1AA1DA487981524206086 /* InitialCloudHydrationTests.swift in Sources */,
