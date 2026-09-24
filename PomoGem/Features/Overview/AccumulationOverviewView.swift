@@ -867,34 +867,53 @@ struct AccumulationOverviewView: View {
 
     private var currentWeekAccessibilityLabel: String {
         switch currentWeekSummary.cardState {
+        case .measured where currentWeekSelfReportedGrams > 0:
+            return String(
+                localized: "今週の積み上げ、\(EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekTimerCompletionCount)回。このほか自己申告\(formattedMass(currentWeekSelfReportedGrams))。回数は戻った文脈で、時間価値とは別です",
+                table: "Overview",
+                comment: "VoiceOver weekly card: standard units, measured mass, timer completions, self-reported mass"
+            )
         case .measured:
-            let selfReported = currentWeekSelfReportedGrams > 0
-                ? "このほか自己申告\(formattedMass(currentWeekSelfReportedGrams))。"
-                : ""
-            return "今週の積み上げ、\(EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekTimerCompletionCount)回。\(selfReported)回数は戻った文脈で、時間価値とは別です"
+            return String(
+                localized: "今週の積み上げ、\(EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekTimerCompletionCount)回。回数は戻った文脈で、時間価値とは別です",
+                table: "Overview",
+                comment: "VoiceOver weekly card: standard units, measured mass, timer completions"
+            )
         case .selfReportedOnly:
-            return "今週の積み上げ。タイマーの完走はまだありません。自己申告の\(formattedMass(currentWeekSelfReportedGrams))は、瓶とこれまでの記録に入っています"
+            return String(
+                localized: "今週の積み上げ。タイマーの完走はまだありません。自己申告の\(formattedMass(currentWeekSelfReportedGrams))は、瓶とこれまでの記録に入っています",
+                table: "Overview",
+                comment: "VoiceOver weekly card when the week has only self-reported mass"
+            )
         case .empty:
-            return "今週の積み上げ。今週のタイマー完走はまだありません。休んでも、以前の記録は減りません"
+            return String(
+                localized: "今週の積み上げ。今週のタイマー完走はまだありません。休んでも、以前の記録は減りません",
+                table: "Overview",
+                comment: "VoiceOver weekly card for an empty week"
+            )
         }
     }
 
     private var currentWeekHeadline: String {
         switch currentWeekSummary.cardState {
-        case .measured: "今週の時間が積み上がっている。"
-        case .selfReportedOnly: "今週は、自己申告で積んでいる。"
-        case .empty: "今週は、まだ透明。"
+        case .measured: String(localized: "今週の時間が積み上がっている。", table: "Overview")
+        case .selfReportedOnly: String(localized: "今週は、自己申告で積んでいる。", table: "Overview")
+        case .empty: String(localized: "今週は、まだ透明。", table: "Overview")
         }
     }
 
     private var currentWeekCaption: String {
         switch currentWeekSummary.cardState {
         case .measured:
-            "価値は集中時間で加算。完走回数は、戻ってきた文脈として別に残します。"
+            String(localized: "価値は集中時間で加算。完走回数は、戻ってきた文脈として別に残します。", table: "Overview")
         case .selfReportedOnly:
-            "タイマーの完走はまだありません。自己申告の\(formattedMass(currentWeekSelfReportedGrams))も、瓶とこれまでの記録に入っています。"
+            String(
+                localized: "タイマーの完走はまだありません。自己申告の\(formattedMass(currentWeekSelfReportedGrams))も、瓶とこれまでの記録に入っています。",
+                table: "Overview",
+                comment: "Weekly card caption when the week has only self-reported mass; the argument is a mass"
+            )
         case .empty:
-            "次の完走から時間と質量を加えます。休んでも、これまでの瓶は減りません。"
+            String(localized: "次の完走から時間と質量を加えます。休んでも、これまでの瓶は減りません。", table: "Overview")
         }
     }
 
@@ -949,7 +968,11 @@ struct AccumulationOverviewView: View {
                currentWeekSelfReportedGrams > 0 {
                 // The tiles are measured-only; say where the rest of the
                 // week's mass is instead of letting it look lost.
-                Text("このほか自己申告 \(formattedMass(currentWeekSelfReportedGrams))")
+                Text(
+                    "このほか自己申告 \(formattedMass(currentWeekSelfReportedGrams))",
+                    tableName: "Overview",
+                    comment: "Weekly card: self-reported mass outside the measured tiles; the argument is a mass"
+                )
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -966,7 +989,10 @@ struct AccumulationOverviewView: View {
             value: EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams)
         )
         OverviewStat(title: "戻った回数", value: "\(currentWeekTimerCompletionCount)回")
-        OverviewStat(title: "今週の実測", value: formattedMass(currentWeekGrams))
+        OverviewStat(
+            title: String(localized: "今週の実測", table: "Overview", comment: "Weekly card tile: measured mass this week"),
+            value: formattedMass(currentWeekGrams)
+        )
     }
 
     private var currentJar: some View {

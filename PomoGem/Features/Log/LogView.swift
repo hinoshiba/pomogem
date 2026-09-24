@@ -987,9 +987,16 @@ enum LogHistoryLoadPolicy {
 
 struct LogView: View {
     enum Period: String, CaseIterable, Identifiable {
-        case week = "今週"
-        case month = "今月"
+        case week
+        case month
         var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .week: String(localized: "今週", table: "Log", comment: "Log period picker: the calendar week that contains today")
+            case .month: String(localized: "今月", table: "Log", comment: "Log period picker: the calendar month that contains today")
+            }
+        }
     }
 
     @Environment(\.modelContext) private var modelContext
@@ -1051,7 +1058,7 @@ struct LogView: View {
         ScrollView {
             LazyVStack(spacing: 16) {
                 Picker("表示期間", selection: $period) {
-                    ForEach(Period.allCases) { item in Text(item.rawValue).tag(item) }
+                    ForEach(Period.allCases) { item in Text(item.title).tag(item) }
                 }
                 .pickerStyle(.segmented)
 
@@ -1061,7 +1068,11 @@ struct LogView: View {
                         .foregroundStyle(PomoGemTheme.muted)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.bottom, 2)
-                        .accessibilityLabel("\(period.rawValue)、\(LogPeriodPolicy.rangeLabel(for: interval))")
+                        .accessibilityLabel(String(
+                            localized: "\(period.title)、\(LogPeriodPolicy.rangeLabel(for: interval))",
+                            table: "Log",
+                            comment: "VoiceOver: the period (今週 or 今月), then its date range"
+                        ))
                         .accessibilityIdentifier("log.period-range")
                 }
 
@@ -1182,7 +1193,9 @@ struct LogView: View {
         SummaryTile(
             label: periodPageIsPartial
                 ? "表示分の質量"
-                : (period == .week ? "今週の質量" : "今月の質量"),
+                : (period == .week
+                    ? String(localized: "今週の質量", table: "Log", comment: "Log tile: mass added this calendar week")
+                    : String(localized: "今月の質量", table: "Log", comment: "Log tile: mass added this calendar month")),
             value: formatMass(summary.grams),
             symbol: "scalemass"
         )
@@ -1193,7 +1206,11 @@ struct LogView: View {
     private func summaryComposition(_ summary: LogPeriodSummary) -> some View {
         if summary.selfReportedGrams > 0 {
             Label(
-                "このうち自己申告 \(formatMass(summary.selfReportedGrams))",
+                String(
+                    localized: "このうち自己申告 \(formatMass(summary.selfReportedGrams))",
+                    table: "Log",
+                    comment: "Log: how much of the period's mass was self-reported; the argument is a mass such as 300g"
+                ),
                 systemImage: "hand.tap"
             )
             .font(.caption)
@@ -1204,7 +1221,11 @@ struct LogView: View {
         }
         if summary.screenTimeSeconds > 0 {
             Label(
-                "Screen Timeの\(DurationPresentation.minutesLabel(seconds: summary.screenTimeSeconds))は、完走ポモに含みません",
+                String(
+                    localized: "Screen Timeの\(DurationPresentation.minutesLabel(seconds: summary.screenTimeSeconds))は、完走ポモに含みません",
+                    table: "Log",
+                    comment: "Log: Screen Time learning in the period is not counted as completed timers; the argument is a duration"
+                ),
                 systemImage: "apps.iphone"
             )
             .font(.caption)
@@ -1219,7 +1240,7 @@ struct LogView: View {
         let values = dailyMass
         let descriptor = DailyMassChartDescriptor(
             values: values,
-            periodTitle: period.rawValue,
+            periodTitle: period.title,
             isPartial: periodPageIsPartial
         )
         return PomoGemCard {
@@ -1278,12 +1299,16 @@ struct LogView: View {
                     .accessibilityIdentifier("log.mass-chart")
                     .accessibilityActions {
                         ForEach(values.filter { $0.grams > 0 }) { item in
-                            Button("\(item.date.formatted(.dateTime.month().day()))の記録を見る") {
+                            Button(String(
+                                localized: "\(item.date.formatted(.dateTime.month().day()))の記録を見る",
+                                table: "Log",
+                                comment: "VoiceOver action on the mass chart; the argument is a date such as 9月24日"
+                            )) {
                                 selectedDay = HistoryDaySelection(dayStart: item.date)
                             }
                         }
                     }
-                    Text("棒を選ぶと、その日の記録を一件ずつ見られます。")
+                    Text("棒を選ぶと、その日の記録を一件ずつ見られます。", tableName: "Log")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1613,11 +1638,14 @@ struct LogView: View {
                 Button {
                     showsPastHistory = true
                 } label: {
-                    Label("過去の記録を月・日ごとに見る", systemImage: "calendar")
+                    Label(
+                        String(localized: "過去の記録を月・日ごとに見る", table: "Log", comment: "Log: opens 年月 to reach older history by month and day"),
+                        systemImage: "calendar"
+                    )
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(PomoGemSecondaryButtonStyle())
-                .accessibilityHint("年と月を選んで、日ごとの記録までたどれます")
+                .accessibilityHint(Text("年と月を選んで、日ごとの記録までたどれます", tableName: "Log"))
                 .accessibilityIdentifier(HistoryDrillDownAccessibilityID.pastHistory)
             }
         }
@@ -2283,7 +2311,7 @@ private struct HistoryLoadingPlaceholder: View {
         ProgressView()
             .tint(PomoGemTheme.amber)
             .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
-            .accessibilityLabel("記録を読み込み中")
+            .accessibilityLabel(Text("記録を読み込み中", tableName: "Log", comment: "VoiceOver: Log is loading"))
             .accessibilityIdentifier("log.loading")
     }
 }
@@ -2420,14 +2448,14 @@ private struct AchievementEditorSheet: View {
 
     private var keptSubjectMenuTitle: String {
         selection.subjectIsDeleted
-            ? "\(selection.subjectName)（削除したテーマ）"
-            : "\(selection.subjectName)（今のまま）"
+            ? String(localized: "\(selection.subjectName)（削除したテーマ）", table: "Log", comment: "Milestone editor theme menu: keep the milestone's deleted theme; the argument is the theme name")
+            : String(localized: "\(selection.subjectName)（今のまま）", table: "Log", comment: "Milestone editor theme menu: keep the milestone's theme as it is; the argument is the theme name")
     }
 
     private var keptSubjectNotice: String {
         selection.subjectIsDeleted
-            ? "「\(selection.subjectName)」は設定で削除したテーマです。ほかのテーマを選ばなければ、このまま残ります。"
-            : "「\(selection.subjectName)」は今のテーマ一覧にありません。ほかのテーマを選ばなければ、このまま残ります。"
+            ? String(localized: "「\(selection.subjectName)」は設定で削除したテーマです。ほかのテーマを選ばなければ、このまま残ります。", table: "Log", comment: "Milestone editor: why a deleted theme is shown; the argument is the theme name")
+            : String(localized: "「\(selection.subjectName)」は今のテーマ一覧にありません。ほかのテーマを選ばなければ、このまま残ります。", table: "Log", comment: "Milestone editor: why a theme missing from the list is shown; the argument is the theme name")
     }
 
     var body: some View {
@@ -2605,7 +2633,7 @@ private struct AchievementEditorSheet: View {
                 subjects.isEmpty
                     ? (keptSubjectChoiceID == nil
                         ? "テーマがないため変更できません"
-                        : "ほかに選べるテーマはありません")
+                        : String(localized: "ほかに選べるテーマはありません", table: "Log", comment: "VoiceOver hint: no other theme to choose"))
                     : "成果を結びつけるテーマを変更できます"
             )
             .accessibilityIdentifier("achievement.editor.subject")

@@ -2620,7 +2620,7 @@ struct ShareCardView: View {
                             .font(.system(size: story ? 13 : 10, weight: .heavy, design: .rounded))
                             .foregroundStyle(PomoGemTheme.text)
                         HStack(spacing: 6) {
-                            Text("実測 \(measuredCount)粒")
+                            Text("実測 \(measuredCount)粒", tableName: "Share", comment: "Share card: measured gems (timer or Screen Time)")
                             Text("・")
                             Text("まとまり \(aggregates.count)")
                             if goldCount > 0 {

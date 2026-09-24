@@ -379,7 +379,7 @@ private struct WrappedThemeTimes: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("テーマ別の時間")
+            Text("テーマ別の時間", tableName: "Log", comment: "Wrapped: heading of the month's time per theme")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(PomoGemTheme.muted)
             ForEach(shown) { theme in
@@ -404,7 +404,7 @@ private struct WrappedThemeTimes: View {
                 )
             }
             if themes.count > shown.count {
-                Text("ほか\(themes.count - shown.count)テーマ")
+                Text("ほか\(themes.count - shown.count)テーマ", tableName: "Log", comment: "Wrapped: how many more themes are not listed")
                     .font(.caption2)
                     .foregroundStyle(PomoGemTheme.muted)
                     .frame(maxWidth: .infinity, alignment: .trailing)

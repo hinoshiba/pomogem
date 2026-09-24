@@ -48,7 +48,7 @@ struct DayHistorySheet: View {
                     if let detail {
                         if !detail.coverage.isLocallyStable {
                             Label(
-                                "読み込み中にこの端末の記録が変わりました。開き直すと確かめられます。",
+                                String(localized: "読み込み中にこの端末の記録が変わりました。開き直すと確かめられます。", table: "Log"),
                                 systemImage: "arrow.triangle.2.circlepath.icloud"
                             )
                             .font(.caption.weight(.semibold))
@@ -58,7 +58,7 @@ struct DayHistorySheet: View {
                         summary(detail)
                         if detail.sessions.isEmpty {
                             PomoGemCard {
-                                Text("この日の記録は、この端末にはまだ届いていません。")
+                                Text("この日の記録は、この端末にはまだ届いていません。", tableName: "Log")
                                     .font(.subheadline)
                                     .foregroundStyle(PomoGemTheme.muted)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -66,7 +66,7 @@ struct DayHistorySheet: View {
                         } else {
                             if detail.themes.count > 1 {
                                 HistoryThemeBreakdown(
-                                    title: "テーマ別",
+                                    title: String(localized: "テーマ別", table: "Log", comment: "Heading of the per-theme time breakdown of a day"),
                                     themes: detail.themes,
                                     totalSeconds: detail.totalSeconds
                                 )
@@ -76,18 +76,18 @@ struct DayHistorySheet: View {
                         }
                     } else if let loadError {
                         ContentUnavailableView(
-                            "この日の記録を読み込めませんでした",
+                            String(localized: "この日の記録を読み込めませんでした", table: "Log"),
                             systemImage: "exclamationmark.triangle",
                             description: Text(loadError)
                         )
                     } else {
-                        ProgressView("この日の記録を読み込み中")
+                        ProgressView(String(localized: "この日の記録を読み込み中", table: "Log"))
                             .frame(maxWidth: .infinity, minHeight: 160)
                             .accessibilityIdentifier(HistoryDrillDownAccessibilityID.dayLoading)
                     }
 
                     Label(
-                        "この端末に届いている記録です。",
+                        String(localized: "この端末に届いている記録です。", table: "Log"),
                         systemImage: "icloud.and.arrow.down"
                     )
                     .font(.caption)
@@ -142,26 +142,36 @@ struct DayHistorySheet: View {
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier(HistoryDrillDownAccessibilityID.daySummary)
         .accessibilityLabel(
-            "この日の記録、\(DurationPresentation.minutesLabel(seconds: detail.totalSeconds))、\(detail.sessions.count)粒、\(max(0, detail.totalGrams).formatted())グラム"
+            String(
+                localized: "この日の記録、\(DurationPresentation.minutesLabel(seconds: detail.totalSeconds))、\(detail.sessions.count)粒、\(max(0, detail.totalGrams))グラム",
+                table: "Log",
+                comment: "VoiceOver summary of a day: focus time, gem count, mass in grams"
+            )
         )
     }
 
     private func timeMetric(_ detail: AccumulationTimelineDayDetail) -> some View {
         HistoryMetricTile(
-            title: "集中した時間",
+            title: String(localized: "集中した時間", table: "Log", comment: "Day summary tile: total focus time"),
             value: DurationPresentation.minutesLabel(seconds: detail.totalSeconds)
         )
     }
 
     @ViewBuilder
     private func countMetrics(_ detail: AccumulationTimelineDayDetail) -> some View {
-        HistoryMetricTile(title: "積んだ粒", value: "\(detail.sessions.count.formatted())粒")
-        HistoryMetricTile(title: "質量", value: HistoryMassText.text(detail.totalGrams))
+        HistoryMetricTile(
+            title: String(localized: "積んだ粒", table: "Log", comment: "Day summary tile: number of gems"),
+            value: String(localized: "\(detail.sessions.count)粒", table: "Log", comment: "Gem count")
+        )
+        HistoryMetricTile(
+            title: String(localized: "質量", table: "Log", comment: "Day summary tile: total mass"),
+            value: HistoryMassText.text(detail.totalGrams)
+        )
     }
 
     private func sessionList(_ sessions: [HistorySessionSummary]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("この日の記録")
+            Text("この日の記録", tableName: "Log", comment: "Heading of a day's record list")
                 .font(PomoGemTheme.brand(20))
             VStack(spacing: 0) {
                 ForEach(sessions) { session in
@@ -214,7 +224,7 @@ struct PastHistorySheet: View {
                     .padding(.bottom, 40)
             }
             .background(NightBackground())
-            .navigationTitle("過去の記録")
+            .navigationTitle(Text("過去の記録", tableName: "Log", comment: "Title of 年月 opened from Log"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(PomoGemTheme.background, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -250,7 +260,11 @@ struct HistoryThemeBreakdown: View {
                             // Name on its own line; the numbers below it.
                             VStack(alignment: .leading, spacing: 4) {
                                 themeName(theme)
-                                Text("\(DurationPresentation.minutesLabel(seconds: theme.seconds))・\(percentage(theme))%")
+                                Text(
+                                    "\(DurationPresentation.minutesLabel(seconds: theme.seconds))・\(percentage(theme))%",
+                                    tableName: "Log",
+                                    comment: "Theme row at large text sizes: time, then share of the period in percent"
+                                )
                                     .font(.system(.subheadline, design: .rounded, weight: .bold))
                                     .monospacedDigit()
                                     .fixedSize(horizontal: false, vertical: true)
@@ -263,7 +277,7 @@ struct HistoryThemeBreakdown: View {
                                 Text(DurationPresentation.minutesLabel(seconds: theme.seconds))
                                     .font(.system(.subheadline, design: .rounded, weight: .bold))
                                     .monospacedDigit()
-                                Text("\(percentage(theme))%")
+                                Text(verbatim: "\(percentage(theme))%")
                                     .font(.caption.monospacedDigit())
                                     .foregroundStyle(PomoGemTheme.muted)
                                     .frame(minWidth: 36, alignment: .trailing)
@@ -271,9 +285,11 @@ struct HistoryThemeBreakdown: View {
                         }
                     }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(
-                        "\(theme.name)、\(DurationPresentation.minutesLabel(seconds: theme.seconds))、\(percentage(theme))パーセント"
-                    )
+                    .accessibilityLabel(String(
+                        localized: "\(theme.name)、\(DurationPresentation.minutesLabel(seconds: theme.seconds))、\(percentage(theme))パーセント",
+                        table: "Log",
+                        comment: "VoiceOver theme row: theme name, time, share in percent"
+                    ))
                 }
             }
         }
@@ -376,7 +392,11 @@ struct HistorySessionRow: View {
                     .font(.caption2)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("+\(item.grams)g・\(item.source.displayName)")
+                Text(
+                    "+\(item.grams)g・\(item.source.displayName)",
+                    tableName: "Log",
+                    comment: "History row at large text sizes: mass added, then how it was recorded"
+                )
                     .font(.system(.subheadline, design: .rounded, weight: .bold))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -417,7 +437,8 @@ struct HistorySessionRow: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text("+\(item.grams)g").font(.system(.subheadline, design: .rounded, weight: .bold))
+                Text("+\(item.grams)g", tableName: "Log", comment: "Grams one record added to the jar")
+                    .font(.system(.subheadline, design: .rounded, weight: .bold))
                 Text(item.source.displayName)
                     .font(.caption2)
                     .foregroundStyle(PomoGemTheme.muted)
@@ -430,7 +451,11 @@ struct HistorySessionRow: View {
         case .dateAndTime:
             item.endAt.formatted(date: .abbreviated, time: .shortened)
         case .timeRange:
-            "\(item.startAt.formatted(date: .omitted, time: .shortened))〜\(item.endAt.formatted(date: .omitted, time: .shortened))"
+            String(
+                localized: "\(item.startAt.formatted(date: .omitted, time: .shortened))〜\(item.endAt.formatted(date: .omitted, time: .shortened))",
+                table: "Log",
+                comment: "A record's start and end time, e.g. 13:24〜13:49"
+            )
         }
     }
 
@@ -440,20 +465,28 @@ struct HistorySessionRow: View {
         case .dateAndTime:
             item.endAt.formatted(date: .long, time: .shortened)
         case .timeRange:
-            "\(item.startAt.formatted(date: .omitted, time: .shortened))から\(item.endAt.formatted(date: .omitted, time: .shortened))まで"
+            String(
+                localized: "\(item.startAt.formatted(date: .omitted, time: .shortened))から\(item.endAt.formatted(date: .omitted, time: .shortened))まで",
+                table: "Log",
+                comment: "VoiceOver: a record's start and end time"
+            )
         }
         let batch = RareRewardPresentationPolicy
             .counts(item.rareRewardCounts)
             .multiDrawSummary
             .map { "、\($0)" } ?? ""
-        return "\(item.subjectName)、\(pebbleKindLabel)、\(source)、プラス\(item.grams)グラム\(batch)、\(date)"
+        return String(
+            localized: "\(item.subjectName)、\(pebbleKindLabel)、\(source)、プラス\(item.grams)グラム\(batch)、\(date)",
+            table: "Log",
+            comment: "VoiceOver history row: theme, gem kind, how recorded, grams added, optional rare summary, date"
+        )
     }
 
     private var pebbleKindLabel: String {
         switch RareRewardPresentationPolicy.kind(item.pebbleKind) {
-        case .normal: "通常の粒"
-        case .gold: "金の粒"
-        case .prism: "虹の粒"
+        case .normal: String(localized: "通常の粒", table: "Log", comment: "VoiceOver: a normal gem")
+        case .gold: String(localized: "金の粒", table: "Log", comment: "VoiceOver: a gold gem")
+        case .prism: String(localized: "虹の粒", table: "Log", comment: "VoiceOver: a rainbow gem")
         }
     }
 

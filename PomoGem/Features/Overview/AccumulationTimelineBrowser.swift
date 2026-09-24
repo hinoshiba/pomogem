@@ -348,10 +348,12 @@ struct AccumulationTimelineBrowser: View {
         .accessibilityIdentifier(
             AccumulationTimelineAccessibilityID.month(month.monthStart, calendar: calendar)
         )
-        .accessibilityLabel(
-            "\(PomoGemCalendar.text(month.monthStart, .dateTime.year().month(), calendar: calendar))、この端末に届いている\(month.exactLocalCount)粒、\(spokenMass(month.exactLocalGrams))"
-        )
-        .accessibilityHint("テーマ別・日ごとの記録と、この月の代表瓶を開きます")
+        .accessibilityLabel(String(
+            localized: "\(PomoGemCalendar.text(month.monthStart, .dateTime.year().month(), calendar: calendar))、この端末に届いている\(month.exactLocalCount)粒、\(spokenMass(month.exactLocalGrams))",
+            table: "Overview",
+            comment: "VoiceOver month card: month, gem count on this iPhone, spoken mass"
+        ))
+        .accessibilityHint(Text("テーマ別・日ごとの記録と、この月の代表瓶を開きます", tableName: "Overview"))
     }
 
     private func timelineMetric(title: String, value: String) -> some View {
@@ -552,7 +554,7 @@ private struct AccumulationTimelineMonthSheet: View {
                         }
                         if !detail.themes.isEmpty {
                             HistoryThemeBreakdown(
-                                title: "テーマ別",
+                                title: String(localized: "テーマ別", table: "Overview", comment: "Heading of the per-theme time breakdown of a month"),
                                 themes: detail.themes,
                                 totalSeconds: detail.totalSeconds
                             )
@@ -614,19 +616,22 @@ private struct AccumulationTimelineMonthSheet: View {
         Button {
             wrappedMonth = WrappedMonth(containing: month.monthStart, calendar: calendar)
         } label: {
-            Label("この月の瓶を見る", systemImage: "sparkles.rectangle.stack.fill")
+            Label(
+                String(localized: "この月の瓶を見る", table: "Overview", comment: "Opens the month as its monthly jar (Wrapped)"),
+                systemImage: "sparkles.rectangle.stack.fill"
+            )
         }
         .buttonStyle(PomoGemPrimaryButtonStyle())
-        .accessibilityHint("この月の記録を、ひとつの瓶とカードで振り返ります")
+        .accessibilityHint(Text("この月の記録を、ひとつの瓶とカードで振り返ります", tableName: "Overview"))
         .accessibilityIdentifier(AccumulationTimelineAccessibilityID.monthWrapped)
     }
 
     private func dayList(_ days: [AccumulationTimelineDaySummary]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("日ごとの記録")
+                Text("日ごとの記録", tableName: "Overview", comment: "Heading of a month's list of days")
                     .font(PomoGemTheme.brand(20))
-                Text("日付を選ぶと、その日の記録を一件ずつ見られます。")
+                Text("日付を選ぶと、その日の記録を一件ずつ見られます。", tableName: "Overview")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -653,7 +658,11 @@ private struct AccumulationTimelineMonthSheet: View {
             .dateTime.month().day().weekday(.abbreviated),
             calendar: calendar
         )
-        let detailText = "\(DurationPresentation.minutesLabel(seconds: day.seconds))・\(day.sessionCount.formatted())粒"
+        let detailText = String(
+            localized: "\(DurationPresentation.minutesLabel(seconds: day.seconds))・\(day.sessionCount)粒",
+            table: "Overview",
+            comment: "Day row: focus time, then gem count"
+        )
         return Button {
             selectedDay = HistoryDaySelection(dayStart: day.dayStart)
         } label: {
@@ -686,10 +695,12 @@ private struct AccumulationTimelineMonthSheet: View {
         }
         .buttonStyle(PomoGemRowButtonStyle())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            "\(PomoGemCalendar.text(day.dayStart, .dateTime.month().day().weekday(.wide), calendar: calendar))、\(DurationPresentation.minutesLabel(seconds: day.seconds))、\(day.sessionCount)粒"
-        )
-        .accessibilityHint("この日の記録を開きます")
+        .accessibilityLabel(String(
+            localized: "\(PomoGemCalendar.text(day.dayStart, .dateTime.month().day().weekday(.wide), calendar: calendar))、\(DurationPresentation.minutesLabel(seconds: day.seconds))、\(day.sessionCount)粒",
+            table: "Overview",
+            comment: "VoiceOver day row: date with weekday, focus time, gem count"
+        ))
+        .accessibilityHint(Text("この日の記録を開きます", tableName: "Overview"))
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier(HistoryDrillDownAccessibilityID.day(day.dayStart, calendar: calendar))
     }
@@ -725,8 +736,17 @@ private struct AccumulationTimelineMonthSheet: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier(AccumulationTimelineAccessibilityID.monthSummary)
-        .accessibilityLabel(
-            "この端末に届いている\(displayedSummary.exactLocalCount)粒、\(spokenMass(displayedSummary.exactLocalGrams))\(detail.map { "、\(DurationPresentation.minutesLabel(seconds: $0.totalSeconds))" } ?? "")"
+        .accessibilityLabel(monthSummaryAccessibilityLabel)
+    }
+
+    private var monthSummaryAccessibilityLabel: String {
+        guard let detail else {
+            return "この端末に届いている\(displayedSummary.exactLocalCount)粒、\(spokenMass(displayedSummary.exactLocalGrams))"
+        }
+        return String(
+            localized: "この端末に届いている\(displayedSummary.exactLocalCount)粒、\(spokenMass(displayedSummary.exactLocalGrams))、\(DurationPresentation.minutesLabel(seconds: detail.totalSeconds))",
+            table: "Overview",
+            comment: "VoiceOver month summary: gem count on this iPhone, spoken mass, focus time"
         )
     }
 
@@ -740,7 +760,7 @@ private struct AccumulationTimelineMonthSheet: View {
     private var exactTimeMetric: some View {
         if let detail {
             monthMetric(
-                title: "集中した時間",
+                title: String(localized: "集中した時間", table: "Overview", comment: "Month summary tile: total focus time"),
                 value: DurationPresentation.minutesLabel(seconds: detail.totalSeconds)
             )
         }

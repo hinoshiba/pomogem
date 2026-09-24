@@ -7,10 +7,14 @@ enum DurationPresentation {
     /// Whole minutes, clamped at zero. Hours are grouped (「1,234時間」).
     static func minutesLabel(_ minutes: Int) -> String {
         let value = max(0, minutes)
-        guard value >= 60 else { return "\(value)分" }
-        let hours = (value / 60).formatted()
+        guard value >= 60 else {
+            return String(localized: "\(value)分", table: "Common", comment: "A duration in whole minutes")
+        }
+        let hours = value / 60
         let remainder = value % 60
-        return remainder == 0 ? "\(hours)時間" : "\(hours)時間\(remainder)分"
+        return remainder == 0
+            ? String(localized: "\(hours)時間", table: "Common", comment: "A duration in whole hours")
+            : String(localized: "\(hours)時間\(remainder)分", table: "Common", comment: "A duration in hours and minutes")
     }
 
     /// Rounds down to whole minutes, like every other duration in the app.
