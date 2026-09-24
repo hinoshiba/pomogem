@@ -380,6 +380,36 @@ enum AccumulationTimelineRepositoryError: Error, LocalizedError, Equatable {
     }
 }
 
+/// The only way views read AccumulationTimelineRepository.
+///
+/// A `@ModelActor` does not get a thread of its own: SwiftData's default
+/// model executor runs each call on the thread that awaits it. Awaited from
+/// a SwiftUI `.task`, which is main-actor code, the whole bounded read ran on
+/// the main thread and froze 記録, 年月 and the day sheet for as long as it
+/// took (measured on iOS 26.5; the repository's tests pin it). This creates
+/// the actor and awaits it from a detached task, so the read runs on the
+/// cooperative pool, and forwards cancellation, so a view that disappears or
+/// changes its key still stops the read at its next cancellation check.
+/// The task is detached on purpose: a plain nonisolated async hop would stop
+/// leaving the main actor under Swift 6.2's `nonisolated(nonsending)` default.
+enum AccumulationTimelineLoader {
+    static func read<Value: Sendable>(
+        from modelContainer: ModelContainer,
+        _ body: @escaping @Sendable (AccumulationTimelineRepository) async throws -> Value
+    ) async throws -> Value {
+        let work = Task.detached(priority: .userInitiated) {
+            try await body(AccumulationTimelineRepository(modelContainer: modelContainer))
+        }
+        return try await withTaskCancellationHandler {
+            try await work.value
+        } onCancel: {
+            work.cancel()
+        }
+    }
+}
+
+/// Views never create this actor directly; they go through
+/// `AccumulationTimelineLoader` so its reads stay off the main thread.
 @ModelActor
 actor AccumulationTimelineRepository {
     func extent(currentEpochID: UUID?) throws -> AccumulationTimelineExtent {
@@ -528,10 +558,11 @@ actor AccumulationTimelineRepository {
     }
 
     /// 記録's 「月ごとの瓶」 for this month and the eleven before it. One
-    /// bounded interval read on this actor (at most 366 days, inside the
-    /// finite-interval guard) replaces twelve month pages that used to run on
-    /// the main thread on every open, 今週／今月 toggle and foreground. Counts
-    /// are exact logical sessions; months with no record are omitted.
+    /// bounded interval read (at most 366 days, inside the finite-interval
+    /// guard) replaces the twelve month pages 記録 used to read on the main
+    /// thread on every open, 今週／今月 toggle and foreground; 記録 calls it
+    /// through AccumulationTimelineLoader so it stays off the main thread.
+    /// Counts are exact logical sessions; months with no record are omitted.
     func recentMonthSummaries(
         endingAt now: Date,
         currentEpochID: UUID?,

@@ -29,8 +29,8 @@ struct HistoryDaySelection: Identifiable, Hashable {
 
 /// Answers 「あの日、何をした？」: every record of one day, with its time,
 /// theme, mass and how it was recorded. Opened from a day in 記録's chart or
-/// from a month in 年月. It reads one bounded day on
-/// AccumulationTimelineRepository's actor, never the lifetime list.
+/// from a month in 年月. It reads one bounded day through
+/// AccumulationTimelineLoader, off the main thread, never the lifetime list.
 struct DayHistorySheet: View {
     let dayStart: Date
     let currentEpochID: UUID?
@@ -191,15 +191,19 @@ struct DayHistorySheet: View {
     @MainActor
     private func load() async {
         loadError = nil
-        let repository = AccumulationTimelineRepository(
-            modelContainer: modelContext.container
-        )
+        let dayStart = self.dayStart
+        let currentEpochID = self.currentEpochID
+        let calendar = self.calendar
         do {
-            let loaded = try await repository.dayDetail(
-                dayStart: dayStart,
-                currentEpochID: currentEpochID,
-                calendar: calendar
-            )
+            let loaded = try await AccumulationTimelineLoader.read(
+                from: modelContext.container
+            ) { repository in
+                try await repository.dayDetail(
+                    dayStart: dayStart,
+                    currentEpochID: currentEpochID,
+                    calendar: calendar
+                )
+            }
             try Task.checkCancellation()
             detail = loaded
         } catch is CancellationError {

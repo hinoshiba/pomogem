@@ -260,7 +260,7 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
         XCTAssertTrue(detail.coverage.isLocallyStable)
     }
 
-    func testRecentMonthSummariesAreExactForTwelveMonthsOffTheMainActor() async throws {
+    func testRecentMonthSummariesAreExactForTwelveMonths() async throws {
         let container = try makeContainer()
         let context = container.mainContext
         let epochID = UUID()
@@ -281,13 +281,15 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
         insertSession(in: context, endAt: date(year: 2026, month: 9, day: 21), epochID: UUID())
         try context.save()
 
-        let summaries = try await AccumulationTimelineRepository(
-            modelContainer: container
-        ).recentMonthSummaries(
-            endingAt: now,
-            currentEpochID: epochID,
-            calendar: calendar
-        )
+        // The way 記録 reads it: through the loader, off the main thread.
+        let calendar = self.calendar
+        let summaries = try await AccumulationTimelineLoader.read(from: container) { repository in
+            try await repository.recentMonthSummaries(
+                endingAt: now,
+                currentEpochID: epochID,
+                calendar: calendar
+            )
+        }
 
         XCTAssertEqual(summaries.map(\.monthStart), [
             date(year: 2026, month: 9, day: 1),
@@ -297,6 +299,70 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
         XCTAssertEqual(summaries.first?.seconds, 1_500 + 3_600)
         XCTAssertEqual(summaries.last?.sessionCount, 1)
         XCTAssertEqual(summaries.last?.seconds, 1_500)
+    }
+
+    /// SwiftData runs a `@ModelActor`'s work on the thread that awaits it, so
+    /// awaited straight from a main-actor `.task` the whole read froze 記録.
+    /// This test is itself on the main actor, like a view.
+    func testTimelineLoaderRunsTheRepositoryOffTheMainThread() async throws {
+        let container = try makeContainer()
+        XCTAssertTrue(Thread.isMainThread, "The caller must be on the main thread, as a view is")
+
+        let ranOnMainThread = try await AccumulationTimelineLoader.read(from: container) { repository in
+            await repository.probeIsRunningOnMainThread()
+        }
+
+        XCTAssertFalse(
+            ranOnMainThread,
+            "Repository reads awaited from main-actor code must not run on the main thread"
+        )
+    }
+
+    func testTimelineLoaderForwardsCancellationToTheRead() async throws {
+        let container = try makeContainer()
+        let started = expectation(description: "the read started")
+        let read = Task { @MainActor in
+            try await AccumulationTimelineLoader.read(from: container) { repository in
+                started.fulfill()
+                return await repository.probeWaitForCancellation(upTo: .seconds(10))
+            }
+        }
+        await fulfillment(of: [started], timeout: 10)
+        read.cancel()
+
+        let sawCancellation = try await read.value
+        XCTAssertTrue(sawCancellation, "Leaving the view must stop the repository's read")
+    }
+
+    /// Every view reads through AccumulationTimelineLoader; creating the
+    /// actor anywhere else would quietly bring the read back to the main thread.
+    func testOnlyTheLoaderCreatesTheTimelineRepository() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let appSources = projectRoot.appendingPathComponent("PomoGem", isDirectory: true)
+        let enumerator = try XCTUnwrap(FileManager.default.enumerator(
+            at: appSources,
+            includingPropertiesForKeys: nil
+        ))
+        var scannedFileCount = 0
+        var constructions: [String] = []
+        for case let fileURL as URL in enumerator where fileURL.pathExtension == "swift" {
+            let source = try String(contentsOf: fileURL, encoding: .utf8)
+            scannedFileCount += 1
+            for (index, line) in source.components(separatedBy: .newlines).enumerated()
+            where line.contains("AccumulationTimelineRepository(") {
+                constructions.append("\(fileURL.lastPathComponent):\(index + 1)")
+            }
+        }
+
+        XCTAssertGreaterThan(scannedFileCount, 100, "The scan must read the app sources at \(appSources.path)")
+        XCTAssertEqual(constructions.count, 1, "\(constructions)")
+        XCTAssertEqual(
+            constructions.first?.hasPrefix("AccumulationTimelineRepository.swift:"),
+            true,
+            "Only AccumulationTimelineLoader may create the repository: \(constructions)"
+        )
     }
 
     func testLogReloadsOnlyWhatAToggleOrForegroundChanges() {
@@ -319,14 +385,43 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
             )
         }
 
-        // 今週 → 今月 reloads the period page, never the twelve months.
+        func recentKey(_ phase: ScenePhase) -> String {
+            LogHistoryLoadPolicy.recentHistoryKey(
+                epochID: epochID,
+                scenePhase: phase,
+                isCloudVerificationPending: false
+            )
+        }
+
+        // 今週 → 今月 reloads the period page only: the newest thirty,
+        // milestones and aggregates (recentKey) and the twelve months
+        // (monthKey) have no period in their keys.
         XCTAssertNotEqual(periodKey(.week, .active), periodKey(.month, .active))
         // Closing Control Center (active → inactive → active) reloads nothing.
         XCTAssertEqual(periodKey(.week, .active), periodKey(.week, .inactive))
+        XCTAssertEqual(recentKey(.active), recentKey(.inactive))
         XCTAssertEqual(monthKey(.active), monthKey(.inactive))
-        // Returning from the background reloads both.
+        // Returning from the background reloads all three.
         XCTAssertNotEqual(periodKey(.week, .active), periodKey(.week, .background))
+        XCTAssertNotEqual(recentKey(.active), recentKey(.background))
         XCTAssertNotEqual(monthKey(.active), monthKey(.background))
+        // A reset (new epoch) or iCloud re-verification reloads the lists.
+        XCTAssertNotEqual(
+            recentKey(.active),
+            LogHistoryLoadPolicy.recentHistoryKey(
+                epochID: UUID(),
+                scenePhase: .active,
+                isCloudVerificationPending: false
+            )
+        )
+        XCTAssertNotEqual(
+            recentKey(.active),
+            LogHistoryLoadPolicy.recentHistoryKey(
+                epochID: epochID,
+                scenePhase: .active,
+                isCloudVerificationPending: true
+            )
+        )
         XCTAssertFalse(LogHistoryLoadPolicy.isVisible(.background))
         XCTAssertTrue(LogHistoryLoadPolicy.isVisible(.inactive))
         // A new month is a new list.
@@ -645,5 +740,23 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
                 cloudKitDatabase: .none
             )]
         )
+    }
+}
+
+/// Test-only probes that run on the repository's actor, where its reads run.
+private extension AccumulationTimelineRepository {
+    func probeIsRunningOnMainThread() -> Bool {
+        Thread.isMainThread
+    }
+
+    /// True once the read's task is cancelled; false if `limit` passes first.
+    func probeWaitForCancellation(upTo limit: Duration) async -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: limit)
+        while clock.now < deadline {
+            if Task.isCancelled { return true }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        return Task.isCancelled
     }
 }

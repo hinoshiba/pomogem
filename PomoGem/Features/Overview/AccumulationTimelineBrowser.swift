@@ -393,13 +393,13 @@ struct AccumulationTimelineBrowser: View {
         extentGeneration = generation
         isLoadingExtent = true
         extentError = nil
-        let repository = AccumulationTimelineRepository(
-            modelContainer: modelContext.container
-        )
+        let epochID = key.epochID
         do {
-            let loadedExtent = try await repository.extent(
-                currentEpochID: key.epochID
-            )
+            let loadedExtent = try await AccumulationTimelineLoader.read(
+                from: modelContext.container
+            ) { repository in
+                try await repository.extent(currentEpochID: epochID)
+            }
             let loadedYears = try AccumulationTimelineYearPolicy.years(
                 in: loadedExtent,
                 calendar: calendar
@@ -440,15 +440,18 @@ struct AccumulationTimelineBrowser: View {
         isLoadingYear = true
         yearError = nil
         yearSummary = nil
-        let repository = AccumulationTimelineRepository(
-            modelContainer: modelContext.container
-        )
+        let epochID = key.epochID
+        let calendar = self.calendar
         do {
-            let loaded = try await repository.yearSummary(
-                for: selectedYear,
-                currentEpochID: key.epochID,
-                calendar: calendar
-            )
+            let loaded = try await AccumulationTimelineLoader.read(
+                from: modelContext.container
+            ) { repository in
+                try await repository.yearSummary(
+                    for: selectedYear,
+                    currentEpochID: epochID,
+                    calendar: calendar
+                )
+            }
             try Task.checkCancellation()
             guard generation == yearGeneration,
                   key == yearLoadKey
@@ -821,15 +824,19 @@ private struct AccumulationTimelineMonthSheet: View {
         loadGeneration = generation
         isLoading = true
         loadError = nil
-        let repository = AccumulationTimelineRepository(
-            modelContainer: modelContext.container
-        )
+        let monthStart = month.monthStart
+        let currentEpochID = self.currentEpochID
+        let calendar = self.calendar
         do {
-            let loaded = try await repository.monthDetail(
-                monthStart: month.monthStart,
-                currentEpochID: currentEpochID,
-                calendar: calendar
-            )
+            let loaded = try await AccumulationTimelineLoader.read(
+                from: modelContext.container
+            ) { repository in
+                try await repository.monthDetail(
+                    monthStart: monthStart,
+                    currentEpochID: currentEpochID,
+                    calendar: calendar
+                )
+            }
             try Task.checkCancellation()
             guard generation == loadGeneration else { return }
             detail = loaded

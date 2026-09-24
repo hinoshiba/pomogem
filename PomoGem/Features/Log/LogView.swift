@@ -954,10 +954,14 @@ struct LogPeriodSummary: Equatable {
     }
 }
 
-/// When 記録 reloads. The period page follows the 今週／今月 toggle; the
-/// twelve month summaries do not depend on it and load off the main actor.
-/// Neither reloads for an inactive flip (closing Control Center or the
-/// notification shade); coming back from the background reloads both.
+/// When 記録 reloads. Three loads, each keyed by only what it depends on:
+/// - the period page follows the 今週／今月 toggle, and is all a toggle reads;
+/// - the newest thirty records, milestones and aggregate pebbles do not
+///   depend on the period;
+/// - the twelve month summaries are read off the main thread through
+///   AccumulationTimelineLoader, and change only with the month.
+/// None reloads for an inactive flip (closing Control Center or the
+/// notification shade); coming back from the background reloads all three.
 enum LogHistoryLoadPolicy {
     static func isVisible(_ scenePhase: ScenePhase) -> Bool {
         scenePhase != .background
@@ -970,6 +974,14 @@ enum LogHistoryLoadPolicy {
         isCloudVerificationPending: Bool
     ) -> String {
         "\(epochID?.uuidString ?? "pre-reset")|\(period.rawValue)|\(isVisible(scenePhase))|\(isCloudVerificationPending)"
+    }
+
+    static func recentHistoryKey(
+        epochID: UUID?,
+        scenePhase: ScenePhase,
+        isCloudVerificationPending: Bool
+    ) -> String {
+        "\(epochID?.uuidString ?? "pre-reset")|\(isVisible(scenePhase))|\(isCloudVerificationPending)"
     }
 
     static func monthSummaryKey(
@@ -1022,11 +1034,14 @@ struct LogView: View {
     @State private var periodPageIsPartial = false
     @State private var achievementPageIsPartial = false
     @State private var aggregatePageIsPartial = false
-    @State private var loadError: String?
+    @State private var periodLoadFailed = false
+    @State private var recentHistoryLoadFailed = false
     /// False until the first page has loaded, so the first frame shows a
     /// placeholder instead of 「この期間の粒は、まだありません。」 over years of
     /// history that simply have not been read yet.
-    @State private var hasLoadedHistory = false
+    @State private var hasLoadedPeriod = false
+    /// The same for 「一粒積むと、ここに記録が残ります。」 under 最近の記録.
+    @State private var hasLoadedRecentHistory = false
     @State private var mutationError: String?
     @State private var selectedAchievement: AchievementEditSelection?
     @State private var selectedDay: HistoryDaySelection?
@@ -1097,7 +1112,7 @@ struct LogView: View {
                 }
 
                 summaryGrid
-                    .redacted(reason: hasLoadedHistory ? [] : .placeholder)
+                    .redacted(reason: hasLoadedPeriod ? [] : .placeholder)
                 // A chosen, real-world milestone is stronger evidence of
                 // progress than charts or a random visual variant. Keep it
                 // near the top of the log so a qualification or completed
@@ -1160,7 +1175,10 @@ struct LogView: View {
             Text(mutationError ?? "もう一度お試しください。")
         }
         .task(id: loadKey) {
-            loadBoundedHistory()
+            loadPeriodPage()
+        }
+        .task(id: recentHistoryKey) {
+            loadRecentHistory()
         }
         .task(id: monthSummaryKey) {
             await loadMonthSummaries(for: monthSummaryKey)
@@ -1250,7 +1268,7 @@ struct LogView: View {
                     Text("質量の推移")
                         .font(PomoGemTheme.brand(20))
                 }
-                if !hasLoadedHistory {
+                if !hasLoadedPeriod {
                     HistoryLoadingPlaceholder()
                 } else if values.allSatisfy({ $0.grams == 0 }) {
                     EmptyChartMessage(text: "この期間の粒は、まだありません。")
@@ -1342,7 +1360,7 @@ struct LogView: View {
                     Text("テーマの構成")
                         .font(PomoGemTheme.brand(20))
                 }
-                if !hasLoadedHistory {
+                if !hasLoadedPeriod {
                     HistoryLoadingPlaceholder()
                 } else if subjectMass.isEmpty {
                     EmptyChartMessage(text: "積んだテーマがここに並びます。")
@@ -1618,7 +1636,7 @@ struct LogView: View {
                 Spacer()
                 Text("最新30件").font(.caption).foregroundStyle(PomoGemTheme.muted)
             }
-            if !hasLoadedHistory {
+            if !hasLoadedRecentHistory {
                 PomoGemCard { HistoryLoadingPlaceholder() }
             } else if recentSessions.isEmpty {
                 PomoGemCard { EmptyChartMessage(text: "一粒積むと、ここに記録が残ります。") }
@@ -1707,6 +1725,19 @@ struct LogView: View {
         )
     }
 
+    private var recentHistoryKey: String {
+        LogHistoryLoadPolicy.recentHistoryKey(
+            epochID: ActivityResetPolicy.currentEpochID(from: resetSnapshots),
+            scenePhase: scenePhase,
+            isCloudVerificationPending: aggregateProjectionPresentation.isCloudVerificationPending
+        )
+    }
+
+    private var loadError: String? {
+        guard periodLoadFailed || recentHistoryLoadFailed else { return nil }
+        return "記録の一部を読み込めませんでした。もう一度この画面を開いてください。"
+    }
+
     private var monthSummaryKey: String {
         LogHistoryLoadPolicy.monthSummaryKey(
             epochID: ActivityResetPolicy.currentEpochID(from: resetSnapshots),
@@ -1715,19 +1746,19 @@ struct LogView: View {
         )
     }
 
+    /// The 今週／今月 page: the only read a toggle causes. Bounded, on the
+    /// main thread (its rows are the SwiftData objects the tiles, chart and
+    /// theme bar use).
     @MainActor
-    private func loadBoundedHistory() {
+    private func loadPeriodPage() {
         guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
-        defer { hasLoadedHistory = true }
+        defer { hasLoadedPeriod = true }
         let epochID = ActivityResetPolicy.currentEpochID(from: resetSnapshots)
-        let calendar = Calendar.autoupdatingCurrent
-        let now = Date.now
         let periodInterval = LogPeriodPolicy.interval(
             for: period,
-            now: now,
-            calendar: calendar
+            now: .now,
+            calendar: .autoupdatingCurrent
         )
-
         do {
             let periodPage = try BoundedHistoryPolicy.resolvedSessionPage(
                 context: modelContext,
@@ -1739,7 +1770,21 @@ struct LogView: View {
             )
             periodPageIsPartial = periodPage.isPartial
             periodSessions = periodPage.sessions
+            periodLoadFailed = false
+        } catch {
+            periodLoadFailed = true
+        }
+    }
 
+    /// Everything 記録 shows that does not depend on 今週／今月: the newest
+    /// thirty records, milestones and aggregate pebbles. Bounded, on the main
+    /// thread; a toggle never re-reads it.
+    @MainActor
+    private func loadRecentHistory() {
+        guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
+        defer { hasLoadedRecentHistory = true }
+        let epochID = ActivityResetPolicy.currentEpochID(from: resetSnapshots)
+        do {
             let recentPage = try BoundedHistoryPolicy.resolvedSessionPage(
                 context: modelContext,
                 epochID: epochID,
@@ -1776,28 +1821,30 @@ struct LogView: View {
                 strata = []
             }
 
-            loadError = nil
+            recentHistoryLoadFailed = false
         } catch {
-            loadError = "記録の一部を読み込めませんでした。もう一度この画面を開いてください。"
+            recentHistoryLoadFailed = true
         }
     }
 
-    /// Runs on AccumulationTimelineRepository's actor. On an error the
-    /// section stays hidden, as it does for a person with no history.
+    /// Reads through AccumulationTimelineLoader, off the main thread. On an
+    /// error the section stays hidden, as it does for a person with no history.
     @MainActor
     private func loadMonthSummaries(for key: String) async {
         guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
         let epochID = ActivityResetPolicy.currentEpochID(from: resetSnapshots)
         let calendar = Calendar.autoupdatingCurrent
-        let repository = AccumulationTimelineRepository(
-            modelContainer: modelContext.container
-        )
+        let now = Date.now
         do {
-            let summaries = try await repository.recentMonthSummaries(
-                endingAt: .now,
-                currentEpochID: epochID,
-                calendar: calendar
-            )
+            let summaries = try await AccumulationTimelineLoader.read(
+                from: modelContext.container
+            ) { repository in
+                try await repository.recentMonthSummaries(
+                    endingAt: now,
+                    currentEpochID: epochID,
+                    calendar: calendar
+                )
+            }
             try Task.checkCancellation()
             guard key == monthSummaryKey else { return }
             monthSummaries = summaries.map {
@@ -1835,7 +1882,7 @@ struct LogView: View {
             let values = try achievementRevisionRows(for: selection.id, epochID: selection.dataEpochID)
             guard let canonical = AchievementStonePolicy.canonicalStone(from: values),
                   canonical.deletedAt == nil else {
-                loadBoundedHistory()
+                loadRecentHistory()
                 return "この記念石は別の端末ですでに削除されています。"
             }
             let result: AchievementStoneRevisionPolicy.MutationResult
@@ -1864,11 +1911,11 @@ struct LogView: View {
                 return "この記念石の編集履歴が上限に達したため、編集できませんでした。"
             }
             try modelContext.save()
-            loadBoundedHistory()
+            loadRecentHistory()
             return nil
         } catch {
             modelContext.rollback()
-            loadBoundedHistory()
+            loadRecentHistory()
             return "編集内容を保存できませんでした。通信状態を確認して、もう一度お試しください。"
         }
     }
@@ -1883,7 +1930,7 @@ struct LogView: View {
                 return "この記念石は見つかりませんでした。"
             }
             guard canonical.deletedAt == nil else {
-                loadBoundedHistory()
+                loadRecentHistory()
                 return "この記念石は別の端末ですでに削除されています。"
             }
             let snapshot = AchievementStoneRevisionSnapshot(canonical)
@@ -1892,11 +1939,11 @@ struct LogView: View {
             }
             try modelContext.save()
             pendingAchievementUndo = snapshot
-            loadBoundedHistory()
+            loadRecentHistory()
             return nil
         } catch {
             modelContext.rollback()
-            loadBoundedHistory()
+            loadRecentHistory()
             return "記念石を削除できませんでした。通信状態を確認して、もう一度お試しください。"
         }
     }
@@ -1916,7 +1963,7 @@ struct LogView: View {
             }
             if canonical.deletedAt == nil {
                 pendingAchievementUndo = nil
-                loadBoundedHistory()
+                loadRecentHistory()
                 return
             }
             let subject = snapshot.subjectID.flatMap { subjectID in
@@ -1932,10 +1979,10 @@ struct LogView: View {
             }
             try modelContext.save()
             pendingAchievementUndo = nil
-            loadBoundedHistory()
+            loadRecentHistory()
         } catch {
             modelContext.rollback()
-            loadBoundedHistory()
+            loadRecentHistory()
             mutationError = "削除した記念石を元に戻せませんでした。通信状態を確認して、もう一度お試しください。"
         }
     }
