@@ -65,7 +65,12 @@ are operations this process added to a private database; they carry no record,
 zone, account or namespace data.
 
 Fixed private-database round trips before Home on an established store, not counting
-zone-change pages:
+zone-change pages. These counts are analytic and only partially unit-pinned: the
+history-check part (one read between two identity checks that make no request of their
+own) is pinned by `CloudLaunchProofTests.testEachHistoryCheckIsIdentityReadIdentityAndCommitsLast`;
+the removal of the pre-mount and pre-publication resolves lives in the private launch host
+and no test asserts it or its order relative to the control reads. The device measurement
+below is what confirms the total.
 
 | Build | Account probes | Control fetches | History zone lists | Total |
 | --- | ---: | ---: | ---: | ---: |
