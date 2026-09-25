@@ -2964,13 +2964,17 @@ private struct ShareJarGraphic: View {
             compactSessionSize * 1.34
         )
         let sessionSize = visibleSessions.count <= 3 ? expandedSessionSize : compactSessionSize
-        let sessionRows = visibleSessions.isEmpty
-            ? 0
-            : Int(ceil(Double(visibleSessions.count) / Double(sessionColumnCount)))
-        let sessionBandHeight = CGFloat(sessionRows) * sessionSize * 0.78
         let highlightsSingleAggregate = visibleAggregates.count == 1
             && visibleSessions.isEmpty
             && visibleAchievements.isEmpty
+        let stoneSize: CGFloat = min(size.width / 7.2, 34)
+        let stoneBottoms = achievementBottoms(
+            availableWidth: size.width,
+            stoneSize: stoneSize,
+            sessionColumnCount: sessionColumnCount,
+            sessionSize: sessionSize,
+            story: story
+        )
 
         return ZStack(alignment: .bottom) {
             bottleBackground(size: size)
@@ -2981,10 +2985,7 @@ private struct ShareJarGraphic: View {
                 story: story
             )
             sessionLayer(columnCount: sessionColumnCount, sessionSize: sessionSize)
-            achievementLayer(
-                availableWidth: size.width,
-                sessionBandHeight: sessionBandHeight
-            )
+            achievementLayer(stoneSize: stoneSize, bottoms: stoneBottoms)
             leadingGlassHighlight(size: size)
             trailingGlassHighlight(size: size)
             movingGlassHighlight(size: size)
@@ -3070,22 +3071,18 @@ private struct ShareJarGraphic: View {
         highlightsSingleAggregate: Bool,
         story: Bool
     ) -> some View {
-        let columnCount = 4
         let pebbleSize = aggregateSize(
             for: aggregate,
             availableWidth: availableWidth,
             highlightsSingleAggregate: highlightsSingleAggregate,
             story: story
         )
-        let column = index % columnCount
-        let row = index / columnCount
-        let xStep = availableWidth / CGFloat(columnCount + 1)
-        let rowAdjustment: CGFloat = row.isMultiple(of: 2) ? -2 : 3
-        let regularX = CGFloat(column + 1) * xStep - availableWidth / 2 + rowAdjustment
-        let x = highlightsSingleAggregate ? CGFloat.zero : regularX
+        let x = highlightsSingleAggregate
+            ? CGFloat.zero
+            : aggregateCenterX(index: index, availableWidth: availableWidth)
         let y: CGFloat = highlightsSingleAggregate
             ? -(story ? 25 : 18)
-            : -CGFloat(row) * 39 - 12
+            : -aggregateBottom(index: index)
         let wave = sin(animationPhase * .pi * 2 + Double(index) * 1.19)
 
         return ZStack {
@@ -3134,11 +3131,8 @@ private struct ShareJarGraphic: View {
         columnCount: Int,
         size: CGFloat
     ) -> some View {
-        let column = index % columnCount
-        let row = index / columnCount
-        let rowAdjustment: CGFloat = row.isMultiple(of: 2) ? 0 : size * 0.42
-        let x = (CGFloat(column) - CGFloat(columnCount - 1) / 2) * size * 0.92 + rowAdjustment
-        let y = -CGFloat(row) * size * 0.78 - aggregateBandHeight
+        let x = sessionCenterX(index: index, columnCount: columnCount, size: size)
+        let y = -sessionBottom(index: index, columnCount: columnCount, size: size)
         let wave = sin(animationPhase * .pi * 2 + Double(index) * 0.91)
 
         return ShareSessionGem(
@@ -3152,13 +3146,13 @@ private struct ShareJarGraphic: View {
     }
 
     @ViewBuilder
-    private func achievementLayer(availableWidth: CGFloat, sessionBandHeight: CGFloat) -> some View {
+    private func achievementLayer(stoneSize: CGFloat, bottoms: [CGFloat]) -> some View {
         ForEach(Array(visibleAchievements.enumerated()), id: \.element.id) { index, stone in
             achievementView(
                 stone,
                 index: index,
-                availableWidth: availableWidth,
-                sessionBandHeight: sessionBandHeight
+                stoneSize: stoneSize,
+                bottom: index < bottoms.count ? bottoms[index] : aggregateBandHeight
             )
         }
     }
@@ -3166,17 +3160,9 @@ private struct ShareJarGraphic: View {
     private func achievementView(
         _ stone: ShareAchievementVisual,
         index: Int,
-        availableWidth: CGFloat,
-        sessionBandHeight: CGFloat
+        stoneSize: CGFloat,
+        bottom: CGFloat
     ) -> some View {
-        let columnCount = 4
-        let stoneSize: CGFloat = min(availableWidth / 7.2, 34)
-        let column = index % columnCount
-        let row = index / columnCount
-        let centeredColumn = CGFloat(column) - CGFloat(columnCount - 1) * 0.5
-        let rowOffset: CGFloat = row.isMultiple(of: 2) ? 0 : stoneSize * 0.4
-        let x = centeredColumn * stoneSize * 1.05 + rowOffset
-        let y = -CGFloat(row) * stoneSize * 0.74 - aggregateBandHeight - sessionBandHeight - 7
         let glowPhase = animationPhase * .pi * 2 + Double(index) * 0.74
         let glow = (sin(glowPhase) + 1) / 2
 
@@ -3186,7 +3172,89 @@ private struct ShareJarGraphic: View {
             glow: glow
         )
         .frame(width: stoneSize, height: stoneSize)
-        .offset(x: x, y: y)
+        .offset(x: achievementCenterX(index: index, stoneSize: stoneSize), y: -bottom)
+    }
+
+    /// Where each 記念石 rests: on the gems, crystals or earlier stones under
+    /// its middle, or on the floor. A fixed shelf above the highest gem row
+    /// left stones hovering over empty glass beside a few gems.
+    private func achievementBottoms(
+        availableWidth: CGFloat,
+        stoneSize: CGFloat,
+        sessionColumnCount: Int,
+        sessionSize: CGFloat,
+        story: Bool
+    ) -> [CGFloat] {
+        guard !visibleAchievements.isEmpty else { return [] }
+        let crystals = visibleAggregates.indices.map { index in
+            let pebbleSize = aggregateSize(
+                for: visibleAggregates[index],
+                availableWidth: availableWidth,
+                highlightsSingleAggregate: false,
+                story: story
+            )
+            let x = aggregateCenterX(index: index, availableWidth: availableWidth)
+            return ShareJarPileLayout.Footprint(
+                minX: x - pebbleSize / 2,
+                maxX: x + pebbleSize / 2,
+                top: aggregateBottom(index: index) + pebbleSize * 0.85
+            )
+        }
+        let gems = visibleSessions.indices.map { index in
+            let x = sessionCenterX(index: index, columnCount: sessionColumnCount, size: sessionSize)
+            return ShareJarPileLayout.Footprint(
+                minX: x - sessionSize * 0.46,
+                maxX: x + sessionSize * 0.46,
+                top: sessionBottom(index: index, columnCount: sessionColumnCount, size: sessionSize)
+                    + sessionSize * 0.78
+            )
+        }
+        return ShareJarPileLayout.stoneBottoms(
+            centerXs: visibleAchievements.indices.map {
+                achievementCenterX(index: $0, stoneSize: stoneSize)
+            },
+            stoneSize: stoneSize,
+            stackingHeight: stoneSize * 0.74,
+            floor: Self.floorHeight,
+            footprints: crystals + gems
+        )
+    }
+
+    /// The bottle's inner floor, where the first gem row rests when there
+    /// are no crystals.
+    private static let floorHeight: CGFloat = 7
+
+    private func achievementCenterX(index: Int, stoneSize: CGFloat) -> CGFloat {
+        let columnCount = 4
+        let column = index % columnCount
+        let row = index / columnCount
+        let centeredColumn = CGFloat(column) - CGFloat(columnCount - 1) * 0.5
+        let rowOffset: CGFloat = row.isMultiple(of: 2) ? 0 : stoneSize * 0.4
+        return centeredColumn * stoneSize * 1.05 + rowOffset
+    }
+
+    private func sessionCenterX(index: Int, columnCount: Int, size: CGFloat) -> CGFloat {
+        let column = index % columnCount
+        let row = index / columnCount
+        let rowAdjustment: CGFloat = row.isMultiple(of: 2) ? 0 : size * 0.42
+        return (CGFloat(column) - CGFloat(columnCount - 1) / 2) * size * 0.92 + rowAdjustment
+    }
+
+    private func sessionBottom(index: Int, columnCount: Int, size: CGFloat) -> CGFloat {
+        CGFloat(index / columnCount) * size * 0.78 + aggregateBandHeight
+    }
+
+    private func aggregateCenterX(index: Int, availableWidth: CGFloat) -> CGFloat {
+        let columnCount = 4
+        let column = index % columnCount
+        let row = index / columnCount
+        let xStep = availableWidth / CGFloat(columnCount + 1)
+        let rowAdjustment: CGFloat = row.isMultiple(of: 2) ? -2 : 3
+        return CGFloat(column + 1) * xStep - availableWidth / 2 + rowAdjustment
+    }
+
+    private func aggregateBottom(index: Int) -> CGFloat {
+        CGFloat(index / 4) * 39 + 12
     }
 
     private func leadingGlassHighlight(size: CGSize) -> some View {
@@ -3276,7 +3344,7 @@ private struct ShareJarGraphic: View {
     }
 
     private var aggregateBandHeight: CGFloat {
-        guard !visibleAggregates.isEmpty else { return 7 }
+        guard !visibleAggregates.isEmpty else { return Self.floorHeight }
         let rows = Int(ceil(Double(visibleAggregates.count) / 4.0))
         return CGFloat(rows) * 39 + 12
     }
