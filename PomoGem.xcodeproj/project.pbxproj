@@ -309,6 +309,7 @@
 		E105F7B8C90D3B25DBF3B861 /* FortyYearDebugScenarioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B5D3DADE9BB942B8D5A6E7 /* FortyYearDebugScenarioTests.swift */; };
 		E2B7506FAB263874D88CD2DC /* StrataMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB33553E11FE75154EDC5E34 /* StrataMath.swift */; };
 		E2F42042AC495B6C0FD84B2D /* StorageTransferReplacementWatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = E571A7097C77DBE0A728C04E /* StorageTransferReplacementWatch.swift */; };
+		E32A9568ED42700397ED8712 /* PaywallPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2442EB1ACBA10017174EFBB5 /* PaywallPresentationTests.swift */; };
 		E3850FBAACB7458D01C975F7 /* CloudLaunchDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = B285BE664C5A6D83DD62638F /* CloudLaunchDeadline.swift */; };
 		E3A94155E59E48383899488D /* StorageTransferReleasePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF6143A14611EAA4A51FB4FB /* StorageTransferReleasePolicy.swift */; };
 		E3DAE3143AB40F758DD85638 /* ProCustomDurationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7D891BB378DB446D31471AB /* ProCustomDurationUITests.swift */; };
@@ -453,6 +454,7 @@
 		23281121BA4A32647A92F516 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		23A59348CE223F32E2E77A9C /* CloudDataDeletionGuidanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDataDeletionGuidanceTests.swift; sourceTree = "<group>"; };
 		242F6C46DFBD7EB7FF76A689 /* FocusActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusActivityManager.swift; sourceTree = "<group>"; };
+		2442EB1ACBA10017174EFBB5 /* PaywallPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallPresentationTests.swift; sourceTree = "<group>"; };
 		24760DFB91CB1CC505994637 /* StorageSyncLocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageSyncLocalizationTests.swift; sourceTree = "<group>"; };
 		25D1619268B0924CA1E7949F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		26872AC4A355BAC071A5239C /* StorageTransferCloudPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferCloudPreview.swift; sourceTree = "<group>"; };
@@ -1135,6 +1137,7 @@
 				55359B654256C762CB953477 /* NotificationPreferenceIntentTests.swift */,
 				DC4BB22AFACB27DBB5A7397E /* OnboardingThemePolicyTests.swift */,
 				FBF79586A00A8A6E813B243D /* PaywallErrorCopyTests.swift */,
+				2442EB1ACBA10017174EFBB5 /* PaywallPresentationTests.swift */,
 				F1DC4428849BCE1969B53808 /* PebbleRadiusPolicyTests.swift */,
 				492C911842D0EDC7D5A093AF /* PendingRewardReceiptChangeTests.swift */,
 				F49B587DE83A0369D3E30D76 /* PersistenceFrameworkArtifactTests.swift */,
@@ -1820,6 +1823,7 @@
 				837E3C04E9FC4CBF01B2CE77 /* OnboardingThemePolicyTests.swift in Sources */,
 				34C6FD10064DFCCC5D995BF5 /* OverviewLocalizationTests.swift in Sources */,
 				360D42056BDF698E1172A7F1 /* PaywallErrorCopyTests.swift in Sources */,
+				E32A9568ED42700397ED8712 /* PaywallPresentationTests.swift in Sources */,
 				A3E82C43D5DDA9CEB282918E /* PebbleRadiusPolicyTests.swift in Sources */,
 				30551622D7BEC6AACFEF7512 /* PendingRewardReceiptChangeTests.swift in Sources */,
 				EF9A8F2DEB9578262AD1E14A /* PersistenceFrameworkArtifactTests.swift in Sources */,

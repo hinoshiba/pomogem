@@ -25,7 +25,7 @@ struct PaywallView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 26) {
+                VStack(spacing: 22) {
                     hero
                     features
                     paywallContent
@@ -72,16 +72,22 @@ struct PaywallView: View {
         }
     }
 
+    /// settings-04. Small enough that on a 5.4" iPhone the features and the
+    /// price start above the fold; at accessibility sizes the decorative
+    /// circle gives its room to the words.
     private var hero: some View {
-        VStack(spacing: 18) {
-            ZStack {
-                Circle()
-                    .fill(PomoGemTheme.amber.opacity(0.10))
-                    .frame(width: 112, height: 112)
-                Image(systemName: "sparkles")
-                    .font(.system(size: 44, weight: .medium))
-                    .foregroundStyle(PomoGemTheme.amber)
-                    .shadow(color: PomoGemTheme.amber.opacity(0.45), radius: 20)
+        VStack(spacing: 14) {
+            if !dynamicTypeSize.isAccessibilitySize {
+                ZStack {
+                    Circle()
+                        .fill(PomoGemTheme.amber.opacity(0.10))
+                        .frame(width: 72, height: 72)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 30, weight: .medium))
+                        .foregroundStyle(PomoGemTheme.amber)
+                        .shadow(color: PomoGemTheme.amber.opacity(0.45), radius: 14)
+                }
+                .accessibilityHidden(true)
             }
             VStack(spacing: 8) {
                 Text(Constants.UIStrings.paywallTitle)
@@ -96,7 +102,7 @@ struct PaywallView: View {
                     .multilineTextAlignment(.center)
             }
         }
-        .padding(.top, 24)
+        .padding(.top, 12)
     }
 
     private var contextCopy: String {
@@ -104,7 +110,7 @@ struct PaywallView: View {
         case .customTimer:
             "任意の集中時間を選べます。"
         case .aggregateLabels:
-            "まとまり粒に、積み上げた月を刻めます。"
+            String(localized: "結晶に、作った月を刻めます。", table: "Paywall", comment: "Paywall subtitle when opened from the crystal month-label hint")
         case .screenTimeApps:
             "勉強時間を記録するアプリを、数の制限なく選べます。"
         case .settings:
@@ -112,27 +118,40 @@ struct PaywallView: View {
         }
     }
 
+    /// settings-04. The feature the person came for comes first and is
+    /// marked; each row says what stays free next to what Pro adds; and
+    /// one line says everything else is free. Nothing here is a timer, a
+    /// countdown or a comparison designed to make the free plan look bad.
     private var features: some View {
-        VStack(spacing: 0) {
-            PaywallFeature(
-                symbol: "timer",
-                title: "任意の集中時間",
-                detail: Constants.UIStrings.customDurationRange
-            )
-            Divider().overlay(PomoGemTheme.glassEdge.opacity(0.08))
-            PaywallFeature(
-                symbol: "circle.hexagongrid.fill",
-                title: "まとまり粒の月刻印",
-                detail: "積み重ねた月を残す"
-            )
-            Divider().overlay(PomoGemTheme.glassEdge.opacity(0.08))
-            PaywallFeature(
-                symbol: "apps.iphone",
-                title: "勉強アプリ数が無制限",
-                detail: "スクリーンタイム連携。無料は5つまで"
-            )
+        let kinds = PaywallFeatureKind.ordered(for: context)
+        return VStack(alignment: .leading, spacing: 10) {
+            VStack(spacing: 0) {
+                ForEach(Array(kinds.enumerated()), id: \.element) { index, kind in
+                    if index > 0 {
+                        Divider().overlay(PomoGemTheme.glassEdge.opacity(0.08))
+                    }
+                    PaywallFeature(
+                        kind: kind,
+                        isHighlighted: index == 0 && PaywallFeatureKind.highlights(context),
+                        monthLabelExample: DateText.yearMonth(.now)
+                    )
+                }
+            }
+            .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 18))
+
+            if !purchase.isPro {
+                Text(
+                    "記録・テーマ・iCloud同期・シェアなど、ほかの機能はすべて無料で使えます。",
+                    tableName: "Paywall",
+                    comment: "Paywall note under the Pro features: everything else stays free"
+                )
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 4)
+                .accessibilityIdentifier("paywall.free-note")
+            }
         }
-        .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 18))
     }
 
     private var currentEntitlementCard: some View {
@@ -441,26 +460,138 @@ struct PaywallView: View {
     }
 }
 
+/// settings-04. The three things Pro adds, in one place so the paywall can
+/// put the one that matches its entry point first.
+enum PaywallFeatureKind: CaseIterable, Hashable {
+    case customDuration
+    case monthLabel
+    case studyApps
+
+    /// The entry point's feature first; the rest keep their usual order.
+    static func ordered(for context: PaywallContext) -> [PaywallFeatureKind] {
+        let first: PaywallFeatureKind? = switch context {
+        case .customTimer: .customDuration
+        case .aggregateLabels: .monthLabel
+        case .screenTimeApps: .studyApps
+        case .settings: nil
+        }
+        guard let first else { return allCases }
+        return [first] + allCases.filter { $0 != first }
+    }
+
+    /// Opened from a feature (not from Settings' general Pro row).
+    static func highlights(_ context: PaywallContext) -> Bool {
+        context != .settings
+    }
+
+    var symbol: String {
+        switch self {
+        case .customDuration: "timer"
+        case .monthLabel: "calendar"
+        case .studyApps: "apps.iphone"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .customDuration:
+            String(localized: "自由な集中時間", table: "Paywall", comment: "Paywall feature title: any focus length")
+        case .monthLabel:
+            String(localized: "結晶に月を刻む", table: "Paywall", comment: "Paywall feature title: crystals show the month they were made")
+        case .studyApps:
+            String(localized: "勉強アプリ数が無制限", table: "Paywall", comment: "Paywall feature title: unlimited Screen Time study apps")
+        }
+    }
+
+    /// What stays free is said next to what Pro adds, so nobody reads the
+    /// paywall as the free timers going away.
+    var detail: String {
+        switch self {
+        case .customDuration:
+            String(
+                localized: "無料の25・45・60・90分のほか、\(Constants.UIStrings.customDurationRange)を秒単位で選べます",
+                table: "Paywall",
+                comment: "Paywall feature detail; the argument is the Pro range, e.g. 1〜360分"
+            )
+        case .monthLabel:
+            String(
+                localized: "粒が10個集まってできる結晶に、作った月を刻みます",
+                table: "Paywall",
+                comment: "Paywall feature detail: what the month label is"
+            )
+        case .studyApps:
+            String(
+                localized: "スクリーンタイムで記録する勉強アプリ。無料は5つまで",
+                table: "Paywall",
+                comment: "Paywall feature detail: the free plan records up to five study apps"
+            )
+        }
+    }
+}
+
 private struct PaywallFeature: View {
-    let symbol: String
-    let title: String
-    let detail: String
+    let kind: PaywallFeatureKind
+    let isHighlighted: Bool
+    /// The current month, as a Pro crystal shows it (「2026年9月」).
+    let monthLabelExample: String
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: symbol)
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: kind.symbol)
                 .foregroundStyle(PomoGemTheme.amber)
                 .frame(width: 26)
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-            Spacer()
-            Text(detail)
-                .font(.caption)
-                .foregroundStyle(PomoGemTheme.muted)
-                .multilineTextAlignment(.trailing)
+                .padding(.top, 2)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(kind.title)
+                    .font(.subheadline.weight(.semibold))
+                Text(kind.detail)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if kind == .monthLabel {
+                    monthLabelPreview
+                        .padding(.top, 4)
+                }
+            }
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .frame(minHeight: 58)
+        .background {
+            if isHighlighted {
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(PomoGemTheme.amber.opacity(0.08))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18)
+                            .stroke(PomoGemTheme.amber.opacity(0.45), lineWidth: 1)
+                    }
+            }
+        }
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("paywall.feature.\(kind)")
+    }
+
+    /// A static example of the month a crystal carries, not a rendering of
+    /// the jar: the gem art belongs to the jar itself.
+    private var monthLabelPreview: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "diamond.fill")
+                .font(.caption2)
+                .foregroundStyle(PomoGemTheme.amber)
+            Text(verbatim: monthLabelExample)
+                .font(.system(.caption, design: .rounded, weight: .bold))
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(PomoGemTheme.amber.opacity(0.10), in: Capsule())
+        .overlay(Capsule().stroke(PomoGemTheme.amber.opacity(0.35), lineWidth: 0.7))
+        .accessibilityLabel(Text(
+            "表示の例：\(monthLabelExample)",
+            tableName: "Paywall",
+            comment: "VoiceOver: an example month label; the argument is a month such as 2026年9月"
+        ))
     }
 }
