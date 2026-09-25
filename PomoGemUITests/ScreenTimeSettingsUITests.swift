@@ -260,14 +260,19 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         let learning = app.buttons["screen-time.learning-apps"]
         XCTAssertTrue(reveal(learning))
         learning.tap()
+        // The fixture's two apps leave the sheet through 反映's own path the
+        // moment it is tapped: Apple's picker loads seconds late on a cold
+        // Simulator and drops any tokens still sitting in the sheet.
         let pick = app.buttons["screen-time.fixture-pick-apps"]
         XCTAssertTrue(pick.waitForExistence(timeout: 12))
+        XCTAssertTrue(app.buttons["screen-time.picker-apply"].exists)
+        attach("Screen Time — app picker open")
         pick.tap()
-        attach("Screen Time — picker with two apps")
-        let apply = app.buttons["screen-time.picker-apply"]
-        XCTAssertTrue(apply.isEnabled)
-        apply.tap()
+        let closed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: pick)
+        XCTAssertEqual(XCTWaiter.wait(for: [closed], timeout: 10), .completed, "The pick must close the sheet")
         XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 6))
+        XCTAssertTrue(reveal(learning))
+        XCTAssertEqual(learning.value as? String, "2アプリ選択中", "Both picked apps must reach the page")
 
         XCTAssertTrue(reveal(enabled))
         XCTAssertEqual(enabled.value as? String, "1", "A first pick must switch recording on")

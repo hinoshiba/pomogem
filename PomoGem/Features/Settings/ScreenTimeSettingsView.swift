@@ -915,6 +915,16 @@ private struct ScreenTimeAppSelectionSheet: View {
         ScreenTimeSelectionValidation.blockingMessage(selection: selection, otherSelection: otherSelection)
     }
 
+    /// The one way a selection leaves the sheet, so the Simulator fixture is
+    /// held to the same checks as 反映.
+    private func apply(_ picked: FamilyActivitySelection) {
+        guard ScreenTimeSelectionValidation.blockingMessage(
+            selection: picked, otherSelection: otherSelection
+        ) == nil else { return }
+        onApply(picked)
+        dismiss()
+    }
+
     private var noticeMessage: String? {
         if let blockingMessage { return blockingMessage }
         guard ScreenTimeSelectionValidation.exceedsFreeLimit(selection: selection, lane: lane, isPro: isPro != false) else {
@@ -940,11 +950,7 @@ private struct ScreenTimeAppSelectionSheet: View {
                     Button("キャンセル") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("反映") {
-                        guard blockingMessage == nil else { return }
-                        onApply(selection)
-                        dismiss()
-                    }
+                    Button("反映") { apply(selection) }
                     .disabled(blockingMessage != nil)
                     .accessibilityIdentifier("screen-time.picker-apply")
                 }
@@ -964,11 +970,18 @@ private struct ScreenTimeAppSelectionSheet: View {
                     .accessibilityIdentifier("screen-time.picker-status")
 #if DEBUG && targetEnvironment(simulator)
                     // FamilyActivityPicker hands out no tokens on the
-                    // Simulator; the settings fixture stands in for it.
+                    // Simulator; the settings fixture stands in for it. It
+                    // leaves through 反映's own path instead of writing
+                    // `selection`: on a cold Simulator the picker loads
+                    // seconds late, and its first write to the binding drops
+                    // tokens it never handed out, so fixture picks left in
+                    // the sheet could vanish before 反映 was tapped.
                     if ScreenTimeSettingsUITestFixture.isActiveForCurrentProcess {
                         Button("fixture-pick-apps") {
-                            selection.applicationTokens = ScreenTimeSettingsUITestFixture.applicationTokens(
+                            var picked = FamilyActivitySelection(includeEntireCategory: false)
+                            picked.applicationTokens = ScreenTimeSettingsUITestFixture.applicationTokens(
                                 count: 2, seed: lane == .learning ? 0x51 : 0x52)
+                            apply(picked)
                         }
                         .font(.caption)
                         .accessibilityIdentifier("screen-time.fixture-pick-apps")
