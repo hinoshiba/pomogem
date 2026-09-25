@@ -969,6 +969,15 @@ struct LogPeriodSummary: Equatable {
 /// None reloads for an inactive flip (closing Control Center or the
 /// notification shade); coming back from the background reloads all three.
 enum LogHistoryLoadPolicy {
+    enum Part: String, CaseIterable {
+        /// The 今週／今月 page.
+        case period
+        /// The newest thirty records and the aggregate pebbles.
+        case recent
+        /// The twelve monthly jars.
+        case months
+    }
+
     static func isVisible(_ scenePhase: ScenePhase) -> Bool {
         scenePhase != .background
     }
@@ -1029,6 +1038,9 @@ struct LogView: View {
     /// list; see `SubjectSyncPolicy.presentationSubjects(live:tombstones:context:)`.
     @Query private var storedSubjectTombstones: [Subject]
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+#if DEBUG
+    @Environment(AppRouter.self) private var router
+#endif
     @State private var period: Period = .week
     @State private var selectedWrappedMonth: WrappedMonth?
     @State private var periodSessions: [StudySession] = []
@@ -1182,13 +1194,32 @@ struct LogView: View {
         }
         .task(id: loadKey) {
             loadPeriodPage()
+            completeLoadAudit(.period)
         }
         .task(id: recentHistoryKey) {
             loadRecentHistory()
+            completeLoadAudit(.recent)
         }
         .task(id: monthSummaryKey) {
             await loadMonthSummaries(for: monthSummaryKey)
         }
+#if DEBUG
+        .onChange(of: period) { _, _ in
+            router.logLoadAudit.begin(.period)
+        }
+        .overlay(alignment: .topLeading) {
+            if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
+                LogLoadAuditProbe(audit: router.logLoadAudit)
+            }
+        }
+#endif
+    }
+
+    /// Tells the UI-test load audit that a load has arrived (see LogLoadAudit).
+    private func completeLoadAudit(_ part: LogHistoryLoadPolicy.Part) {
+#if DEBUG
+        router.logLoadAudit.complete(part)
+#endif
     }
 
     private var summaryGrid: some View {
@@ -1892,11 +1923,13 @@ struct LogView: View {
                     pebbleCount: $0.sessionCount
                 )
             }
+            completeLoadAudit(.months)
         } catch is CancellationError {
             return
         } catch {
             guard key == monthSummaryKey else { return }
             monthSummaries = []
+            completeLoadAudit(.months)
         }
     }
 

@@ -275,9 +275,38 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         let month = period.buttons["今月"]
         XCTAssertTrue(month.waitForExistence(timeout: 5))
         let logElapsed = ProcessInfo.processInfo.systemUptime - logStartedAt
+        // Timed inside the app (LogLoadAudit): from the tap until every load
+        // has arrived, and the longest the main thread was blocked meanwhile.
+        let openAudit = try waitForLogLoadAudit(
+            in: secondColdLaunch,
+            trigger: "open",
+            afterGeneration: 0
+        )
         // Straight away, while the month summaries may still be loading.
         let toggleElapsed = measureSelection(of: month, after: { month.tap() })
+        let monthAudit = try waitForLogLoadAudit(
+            in: secondColdLaunch,
+            trigger: "period",
+            afterGeneration: try integerField("generation", in: openAudit)
+        )
         let roundTripElapsed = measureSelection(of: week, after: { week.tap() })
+        let weekAudit = try waitForLogLoadAudit(
+            in: secondColdLaunch,
+            trigger: "period",
+            afterGeneration: try integerField("generation", in: monthAudit)
+        )
+        XCTContext.runActivity(named: String(
+            format: "40-year Log in app: open %ldms (longest main-thread stall %ldms; period %ldms, newest %ldms, months %ldms), 今月 %ldms (stall %ldms), 今週 %ldms (stall %ldms)",
+            try integerField("milliseconds", in: openAudit),
+            try integerField("longestStallMilliseconds", in: openAudit),
+            try integerField("periodMilliseconds", in: openAudit),
+            try integerField("recentMilliseconds", in: openAudit),
+            try integerField("monthsMilliseconds", in: openAudit),
+            try integerField("milliseconds", in: monthAudit),
+            try integerField("longestStallMilliseconds", in: monthAudit),
+            try integerField("milliseconds", in: weekAudit),
+            try integerField("longestStallMilliseconds", in: weekAudit)
+        )) { _ in }
 
         // Background, then back: 記録 reads again and still answers.
         XCUIDevice.shared.press(.home)
@@ -557,6 +586,33 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
             latest: canonicalDescription(of: latest),
             observed: observed.sorted()
         )
+    }
+
+    /// Waits for 記録's in-app load audit (LogLoadAudit) to finish a load
+    /// newer than `generation` that `trigger` started.
+    private func waitForLogLoadAudit(
+        in app: XCUIApplication,
+        trigger: String,
+        afterGeneration generation: Int,
+        timeout: TimeInterval = 60
+    ) throws -> [String: String] {
+        let probe = app.descendants(matching: .any)["log.load-audit.probe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 10))
+        let deadline = Date().addingTimeInterval(timeout)
+        var latest: [String: String] = [:]
+        repeat {
+            latest = try fields(from: probe)
+            if latest["state"] == "done",
+               latest["trigger"] == trigger,
+               let raw = latest["generation"],
+               let observed = Int(raw),
+               observed > generation {
+                return latest
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while Date() < deadline
+        XCTFail("記録's load audit did not finish: \(canonicalDescription(of: latest))")
+        return latest
     }
 
     private func waitForSettingsRenderAudit(

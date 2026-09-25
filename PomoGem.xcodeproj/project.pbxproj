@@ -65,6 +65,7 @@
 		32D3D9698B72B7CEF637763A /* CloudSchemaCompatibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 831FEB80C41BFDA6FC743C4D /* CloudSchemaCompatibilityTests.swift */; };
 		333DF582943D92E70B48938A /* TimerOrientationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A447FDE838FF146B199E1D /* TimerOrientationUITests.swift */; };
 		338C20A9DF31C10DF406E6AA /* DurationPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71EACC1F293AB51865EAEBAF /* DurationPresentationTests.swift */; };
+		33966782DC4051E4FDACC428 /* LogLoadAudit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3541C14BBED27E1C855BED58 /* LogLoadAudit.swift */; };
 		3439FEA3ACD444E912E983DF /* ProTransactionDeliveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70620F1FDA88831716FCBC0 /* ProTransactionDeliveryTests.swift */; };
 		34C6FD10064DFCCC5D995BF5 /* OverviewLocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80ED7D76D7E1D611C3CBB120 /* OverviewLocalizationTests.swift */; };
 		35F5FDBBEA7CB304A1DC55E5 /* PomoGemScreenTimeMonitor.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CFE4A3382A047BAEE9EF09C9 /* PomoGemScreenTimeMonitor.appex */; platformFilters = (ios, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -475,6 +476,7 @@
 		32B3ED837690E48E17E92214 /* StorageTransferReplacementWatchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferReplacementWatchTests.swift; sourceTree = "<group>"; };
 		32F1170A52D2828C079018C5 /* StorageTransferHostAdmissionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferHostAdmissionTests.swift; sourceTree = "<group>"; };
 		3501F761CF49E2795B6348BB /* Launch.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Launch.xcstrings; sourceTree = "<group>"; };
+		3541C14BBED27E1C855BED58 /* LogLoadAudit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogLoadAudit.swift; sourceTree = "<group>"; };
 		35D30256BB6F92C8BF9486BF /* ScreenTimeControllerPublishingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeControllerPublishingTests.swift; sourceTree = "<group>"; };
 		36D725F8C91299D814A75F92 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		37C94826242029C7168F438B /* PersistenceStoreTopologyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceStoreTopologyTests.swift; sourceTree = "<group>"; };
@@ -1330,6 +1332,7 @@
 				200C14C0D5A5A1A1A0342749 /* FortyYearDebugScenario.swift */,
 				2DDAE8A3E08C0FB57CB0FBE1 /* FortyYearPersistenceHarness.swift */,
 				7C4741B2BC35EDA4111889D3 /* FortyYearPersistentUITestFixture.swift */,
+				3541C14BBED27E1C855BED58 /* LogLoadAudit.swift */,
 				A78F4AF55E67F22420886C69 /* ScreenTimeSettingsUITestFixture.swift */,
 				4FB16E3D6A5C3CCBA74EFC70 /* StorageTransferSettingsUITestFixture.swift */,
 				5542B8EEF5204878A5734E13 /* UITestFaultInjection.swift */,
@@ -1665,6 +1668,7 @@
 				E9A82D7F751B0FE377D95E0F /* LaunchActivationWatchdogPolicy.swift in Sources */,
 				A4163C8D1001797D9E04D77D /* LocalizedDuration.swift in Sources */,
 				C6FC6B1605C454F9DE1B205B /* LocalizedFormat.swift in Sources */,
+				33966782DC4051E4FDACC428 /* LogLoadAudit.swift in Sources */,
 				660CC6C015B35FE94AFDB1F1 /* LogView.swift in Sources */,
 				5273D434EE94D3504C482BF8 /* ManualEntrySheet.swift in Sources */,
 				1EFC03E8D775BD2DDC551F2B /* Models.swift in Sources */,

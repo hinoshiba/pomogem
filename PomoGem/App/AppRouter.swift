@@ -58,6 +58,9 @@ final class AppRouter {
     var selectedTab: AppTab = .jar {
         didSet {
 #if DEBUG
+            if oldValue != .log, selectedTab == .log {
+                logLoadAudit.begin(.open)
+            }
             guard oldValue != .settings, selectedTab == .settings else { return }
             beginSettingsRenderAuditIfNeeded()
 #endif
@@ -96,6 +99,9 @@ final class AppRouter {
 
     @ObservationIgnored
     private var settingsRenderAuditStartedAt: TimeInterval?
+
+    /// 記録's loads, timed from the tap that opens it (see LogLoadAudit).
+    let logLoadAudit = LogLoadAudit()
 
     private func beginSettingsRenderAuditIfNeeded() {
         guard LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess else { return }
