@@ -570,6 +570,18 @@ enum GemArtwork {
         max(1, renderScale(displayScale) * 0.5)
     }
 
+    /// The bed as an image for SwiftUI surfaces (the ×N share card's
+    /// crystal rests on one), baked once per size, colours and scale.
+    static func bedCardImage(width rawWidth: CGFloat, height rawHeight: CGFloat, slotHexes: [String], scale rawScale: CGFloat) -> UIImage {
+        let width = max(8, rawWidth.rounded())
+        let height = max(2, rawHeight.rounded())
+        let key = NSString(string: "card|" + bedTextureKey(width: width, height: height, slotHexes: slotHexes, scale: rawScale))
+        if let cached = imageCache.object(forKey: key) { return cached }
+        let image = bedImage(width: width, height: height, slotHexes: slotHexes, scale: bedRenderScale(rawScale))
+        imageCache.setObject(image, forKey: key, cost: byteCost(image))
+        return image
+    }
+
     /// A bed texture already baked, without baking.
     static func cachedBedTexture(width: CGFloat, height: CGFloat, slotHexes: [String], scale: CGFloat) -> SKTexture? {
         bodyCache.object(forKey: NSString(string: bedTextureKey(width: width, height: height, slotHexes: slotHexes, scale: scale)))

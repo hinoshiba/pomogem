@@ -2918,6 +2918,9 @@ private struct ShareJarGraphic: View {
     let format: ShareComposerView.Format
     let animationPhase: Double
 
+    /// The card's render scale (`ImageRenderer.scale` or the screen's).
+    @Environment(\.displayScale) private var displayScale
+
     private var visibleSessions: [ShareSessionVisual] {
         Array(shareDrawableSessions(sessions: sessions, aggregates: aggregates).suffix(
             ShareJarVisibilityPolicy.loosePebbleLimit(for: format)
@@ -2962,8 +2965,12 @@ private struct ShareJarGraphic: View {
         return ZStack(alignment: .bottom) {
             bottleBackground(size: size)
             bottomGlow(size: size)
+            if highlightsSingleAggregate, let hero = visibleAggregates.first {
+                heroBed(hero, size: size)
+            }
             aggregateLayer(
                 availableWidth: size.width,
+                jarHeight: size.height,
                 highlightsSingleAggregate: highlightsSingleAggregate,
                 story: story
             )
@@ -3037,76 +3044,117 @@ private struct ShareJarGraphic: View {
     @ViewBuilder
     private func aggregateLayer(
         availableWidth: CGFloat,
+        jarHeight: CGFloat,
         highlightsSingleAggregate: Bool,
         story: Bool
     ) -> some View {
         ForEach(Array(visibleAggregates.enumerated()), id: \.element.id) { index, aggregate in
-            aggregateView(
-                aggregate,
-                index: index,
-                availableWidth: availableWidth,
-                highlightsSingleAggregate: highlightsSingleAggregate,
-                story: story
-            )
+            if highlightsSingleAggregate {
+                heroAggregateView(aggregate, size: CGSize(width: availableWidth, height: jarHeight), story: story)
+            } else {
+                aggregateView(aggregate, index: index, availableWidth: availableWidth, story: story)
+            }
         }
+    }
+
+    /// Floor of the bottle interior above the card's bottom edge (points).
+    private func heroFloor(width: CGFloat) -> CGFloat {
+        max(2.0, width * 0.012) + 1
+    }
+
+    /// Height of the bed of light a lone crystal rests on.
+    private func heroBedHeight(height: CGFloat) -> CGFloat {
+        max(18, height * 0.15)
+    }
+
+    /// The ×N card's crystal rests on a bed of light in its own colours:
+    /// the Home jar's gem bed art (soft, out of focus), across the floor.
+    private func heroBed(_ aggregate: ShareAggregateVisual, size: CGSize) -> some View {
+        let floor = heroFloor(width: size.width)
+        let width = max(8, size.width - floor * 2)
+        let height = heroBedHeight(height: size.height)
+        let slots = GemArtwork.coreSlotHexes(
+            shares: GemArtworkSpec.aggregateColors(aggregate.colorMix, fallbackHex: Constants.Color.textMute)
+        )
+        return Image(uiImage: GemArtwork.bedCardImage(width: width, height: height, slotHexes: slots, scale: displayScale))
+            .resizable()
+            .frame(width: width, height: height)
+            .padding(.bottom, floor)
+    }
+
+    /// A lone crystal (the ×N card) is the card's portrait: centred, large
+    /// and seated into its bed of light like a gem resting on the jar
+    /// floor. It never floats: only its light breathes (and the glass
+    /// highlight sweeps), so the GIF still moves.
+    private func heroAggregateView(
+        _ aggregate: ShareAggregateVisual,
+        size: CGSize,
+        story: Bool
+    ) -> some View {
+        let pebbleSize = aggregateSize(
+            for: aggregate,
+            availableWidth: size.width,
+            highlightsSingleAggregate: true,
+            story: story
+        )
+        let bed = heroBedHeight(height: size.height)
+        // The stone sinks into the upper half of the bed.
+        let bottom = heroFloor(width: size.width) + bed * 0.52
+        let glow = pebbleSize * 1.7
+        let wave = sin(animationPhase * .pi * 2)
+        return ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            aggregateHeroColor(aggregate).opacity(0.42),
+                            aggregateHeroColor(aggregate).opacity(0.12),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: pebbleSize * 0.86
+                    )
+                )
+                .frame(width: glow, height: glow)
+                .scaleEffect(1 + CGFloat(max(0, wave)) * 0.05)
+            Image(systemName: "sparkles")
+                .font(.system(size: pebbleSize * 0.18, weight: .bold))
+                .foregroundStyle(.white.opacity(0.74 + 0.16 * max(0, wave)))
+                .offset(x: pebbleSize * 0.58, y: -pebbleSize * 0.50)
+            ShareAggregatePebble(aggregate: aggregate)
+                .frame(width: pebbleSize, height: pebbleSize)
+        }
+        .frame(width: glow, height: glow)
+        // Glow frame centred on the stone, whose bottom rests at `bottom`.
+        .offset(y: -(bottom + pebbleSize / 2 - glow / 2))
     }
 
     private func aggregateView(
         _ aggregate: ShareAggregateVisual,
         index: Int,
         availableWidth: CGFloat,
-        highlightsSingleAggregate: Bool,
         story: Bool
     ) -> some View {
         let columnCount = 4
         let pebbleSize = aggregateSize(
             for: aggregate,
             availableWidth: availableWidth,
-            highlightsSingleAggregate: highlightsSingleAggregate,
+            highlightsSingleAggregate: false,
             story: story
         )
         let column = index % columnCount
         let row = index / columnCount
         let xStep = availableWidth / CGFloat(columnCount + 1)
         let rowAdjustment: CGFloat = row.isMultiple(of: 2) ? -2 : 3
-        let regularX = CGFloat(column + 1) * xStep - availableWidth / 2 + rowAdjustment
-        let x = highlightsSingleAggregate ? CGFloat.zero : regularX
-        let y: CGFloat = highlightsSingleAggregate
-            ? -(story ? 25 : 18)
-            : -CGFloat(row) * 39 - 12
+        let x = CGFloat(column + 1) * xStep - availableWidth / 2 + rowAdjustment
+        let y = -CGFloat(row) * 39 - 12
         let wave = sin(animationPhase * .pi * 2 + Double(index) * 1.19)
 
-        return ZStack {
-            if highlightsSingleAggregate {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                aggregateHeroColor(aggregate).opacity(0.42),
-                                aggregateHeroColor(aggregate).opacity(0.12),
-                                .clear
-                            ],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: pebbleSize * 0.86
-                        )
-                    )
-                    .frame(width: pebbleSize * 1.7, height: pebbleSize * 1.7)
-                    .scaleEffect(1 + CGFloat(max(0, wave)) * 0.05)
-                Image(systemName: "sparkles")
-                    .font(.system(size: pebbleSize * 0.22, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.78))
-                    .offset(x: pebbleSize * 0.66, y: -pebbleSize * 0.55)
-            }
-            ShareAggregatePebble(aggregate: aggregate)
-                .frame(width: pebbleSize, height: pebbleSize)
-        }
-        .frame(
-            width: highlightsSingleAggregate ? pebbleSize * 1.7 : pebbleSize,
-            height: highlightsSingleAggregate ? pebbleSize * 1.7 : pebbleSize
-        )
-        .rotationEffect(.degrees(wave * 3.2))
-        .offset(x: x + CGFloat(wave) * 1.7, y: y - CGFloat(max(0, wave)) * 2.2)
+        return ShareAggregatePebble(aggregate: aggregate)
+            .frame(width: pebbleSize, height: pebbleSize)
+            .rotationEffect(.degrees(wave * 3.2))
+            .offset(x: x + CGFloat(wave) * 1.7, y: y - CGFloat(max(0, wave)) * 2.2)
     }
 
     @ViewBuilder
@@ -3277,7 +3325,7 @@ private struct ShareJarGraphic: View {
         story: Bool
     ) -> CGFloat {
         if highlightsSingleAggregate {
-            return min(story ? 86 : 74, max(48, availableWidth * 0.25))
+            return min(story ? 124 : 110, max(56, availableWidth * 0.42))
         }
         return min(48, 34 + CGFloat(max(aggregate.level - 1, 0)) * 5)
     }
@@ -3607,25 +3655,39 @@ private struct ShareAggregatePebble: View {
                         )
                         .rotationEffect(.degrees(-90))
                 }
-                VStack(spacing: -1) {
-                    Text("×\(aggregate.pebbleCount)")
-                        .font(.system(size: aggregate.pebbleCount >= 100 ? 7 : 8, weight: .heavy, design: .rounded))
-                    if let rareLabel = rewardIdentity.compactLabel {
+                if let rareLabel = rewardIdentity.compactLabel {
+                    VStack(spacing: -1) {
+                        Text("×\(aggregate.pebbleCount)")
+                            .font(.system(size: aggregate.pebbleCount >= 100 ? 7 : 8, weight: .heavy, design: .rounded))
                         Text(rareLabel)
                             .font(.system(size: 5.5, weight: .black, design: .rounded))
                             .minimumScaleFactor(0.65)
                             .lineLimit(1)
                     }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1.5)
+                    .background(Color(red: 0.035, green: 0.05, blue: 0.11).opacity(0.78), in: Capsule())
+                    .shadow(color: .black.opacity(0.6), radius: 1.5)
+                } else {
+                    // The jar's own count tag (D26): a small engraved
+                    // copper tag below the table, the same text as Home.
+                    countTag(size: size)
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1.5)
-                .background(Color(red: 0.035, green: 0.05, blue: 0.11).opacity(0.78), in: Capsule())
-                .shadow(color: .black.opacity(0.6), radius: 1.5)
             }
             .frame(width: size, height: size)
             .shadow(color: colors[0].opacity(0.58), radius: size * 0.16)
         }
+    }
+
+    private func countTag(size: CGFloat) -> some View {
+        let text = AggregatePresentation.countLabel(aggregate.pebbleCount)
+        let fontSize = GemArtwork.countTagFontSize(sceneRadius: size / 2)
+        let tagSize = GemArtwork.countEngravingSize(text: text, fontSize: fontSize, style: .copperTag)
+        return Image(uiImage: GemArtwork.countEngravingImage(text: text, fontSize: fontSize, style: .copperTag, scale: displayScale))
+            .resizable()
+            .frame(width: tagSize.width, height: tagSize.height)
+            .offset(y: size / 2 * PebbleNode.aggregatePlateDrop)
     }
 
     /// Same rung (by contained grams) and colour shares as the jar.
