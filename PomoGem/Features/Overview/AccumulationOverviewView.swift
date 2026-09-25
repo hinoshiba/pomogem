@@ -869,15 +869,15 @@ struct AccumulationOverviewView: View {
         switch currentWeekSummary.cardState {
         case .measured where currentWeekSelfReportedGrams > 0:
             return String(
-                localized: "今週の積み上げ、\(EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekTimerCompletionCount)回。このほか自己申告\(formattedMass(currentWeekSelfReportedGrams))。回数は戻った文脈で、時間価値とは別です",
+                localized: "今週の積み上げ、\(DurationPresentation.focusLabel(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekTimerCompletionCount)回。このほか自己申告\(formattedMass(currentWeekSelfReportedGrams))。回数は戻った文脈で、時間価値とは別です",
                 table: "Overview",
-                comment: "VoiceOver weekly card: standard units, measured mass, timer completions, self-reported mass"
+                comment: "VoiceOver weekly card: focus time, measured mass, timer completions, self-reported mass"
             )
         case .measured:
             return String(
-                localized: "今週の積み上げ、\(EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekTimerCompletionCount)回。回数は戻った文脈で、時間価値とは別です",
+                localized: "今週の積み上げ、\(DurationPresentation.focusLabel(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekTimerCompletionCount)回。回数は戻った文脈で、時間価値とは別です",
                 table: "Overview",
-                comment: "VoiceOver weekly card: standard units, measured mass, timer completions"
+                comment: "VoiceOver weekly card: focus time, measured mass, timer completions"
             )
         case .selfReportedOnly:
             return String(
@@ -925,19 +925,20 @@ struct AccumulationOverviewView: View {
             Circle()
                 .stroke(Color(hex: currentWeekColorHex).opacity(0.34), lineWidth: 1)
             VStack(spacing: 4) {
-                Image(systemName: "scalemass.fill")
+                // The same time as the 時間 stat beside it; 標準単位 here gave
+                // the one week a second unit (history-08). At accessibility
+                // sizes the time would break mid-number inside the 112 pt
+                // crystal, and the stat under it already says it.
+                Image(systemName: "hourglass")
                     .font(.title2.weight(.black))
-                Text(
-                    dynamicTypeSize.isAccessibilitySize
-                        ? EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams)
-                            .replacingOccurrences(of: "標準", with: "\n標準")
-                        : EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams)
-                )
-                    .font(.caption2.weight(.black))
-                    .monospacedDigit()
-                    .multilineTextAlignment(.center)
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Text(DurationPresentation.focusLabel(grams: currentWeekGrams))
+                        .font(.caption2.weight(.black))
+                        .monospacedDigit()
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.8)
+                }
             }
             .foregroundStyle(Color(hex: currentWeekColorHex))
             .padding(8)
@@ -985,8 +986,8 @@ struct AccumulationOverviewView: View {
     @ViewBuilder
     private var currentWeekStats: some View {
         OverviewStat(
-            title: "標準換算",
-            value: EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams)
+            title: String(localized: "時間", table: "Overview", comment: "This week's focus time stat title"),
+            value: DurationPresentation.focusLabel(grams: currentWeekGrams)
         )
         OverviewStat(title: "戻った回数", value: "\(currentWeekTimerCompletionCount)回")
         OverviewStat(

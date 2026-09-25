@@ -180,12 +180,15 @@ struct AccumulationTimelineMonthSummary: Identifiable, Equatable, Sendable {
     var id: Date { monthStart }
 }
 
-/// One month of 記録's 「月ごとの瓶」: exact logical session count and focus
-/// time for the months that have any record.
+/// One month of 記録's 「月ごとの瓶」: exact logical session count, focus
+/// seconds and mass for the months that have any record. The row shows the
+/// time the mass stands for (`DurationPresentation.focusMinutes(grams:)`),
+/// like every other history screen.
 struct AccumulationRecentMonthSummary: Identifiable, Equatable, Sendable {
     let monthStart: Date
     let sessionCount: Int
     let seconds: Int
+    let grams: Int64
 
     var id: Date { monthStart }
 }
@@ -582,23 +585,25 @@ actor AccumulationTimelineRepository {
             interval: DateInterval(start: firstMonthStart, end: currentMonth.end),
             maximumPhysicalRows: BoundedHistoryPolicy.finiteIntervalSessionRowLimit
         )
-        var grouped: [Date: (count: Int, seconds: Int)] = [:]
+        var grouped: [Date: (count: Int, seconds: Int, grams: Int64)] = [:]
         for session in sessions {
             try checkCancellation()
             guard let monthStart = calendar.dateInterval(of: .month, for: session.endAt)?.start else {
                 throw AccumulationTimelineRepositoryError.invalidCalendarInterval
             }
-            let current = grouped[monthStart] ?? (0, 0)
+            let current = grouped[monthStart] ?? (0, 0, 0)
             grouped[monthStart] = (
                 NonnegativeIntPolicy.adding(current.count, 1),
-                NonnegativeIntPolicy.adding(current.seconds, NonnegativeIntPolicy.clamped(session.seconds))
+                NonnegativeIntPolicy.adding(current.seconds, NonnegativeIntPolicy.clamped(session.seconds)),
+                NonnegativeIntPolicy.adding(current.grams, Int64(NonnegativeIntPolicy.clamped(session.grams)))
             )
         }
         return grouped.map { monthStart, value in
             AccumulationRecentMonthSummary(
                 monthStart: monthStart,
                 sessionCount: value.count,
-                seconds: value.seconds
+                seconds: value.seconds,
+                grams: value.grams
             )
         }
         .sorted { $0.monthStart > $1.monthStart }

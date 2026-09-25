@@ -36,6 +36,18 @@ struct JarSnapshotOptions {
             outputSize: outputSize
         )
     }
+
+    /// The pebbles a capture leaves out. Device-local distraction history has
+    /// no study mass and is never published as part of a study-only share or
+    /// widget. Self-reported focus is left out unless it is included. A 記念石
+    /// weighs nothing and every share card lists it (disclosed as
+    /// 「記念石は自己申告」) whatever the self-reported choice, so it stays
+    /// visible (jar-04). The share composer reads this same rule to check that
+    /// hiding leaves no gem resting on a hole (`ShareJarSnapshotPolicy`).
+    func hides(_ descriptor: PebbleDescriptor) -> Bool {
+        descriptor.isScreenTimeObstacle
+            || (!includesSelfReported && !descriptor.isMeasured && !descriptor.isAchievement)
+    }
 }
 
 /// Captures the live jar without forcing the physics scene to be rebuilt or unpaused.
@@ -57,10 +69,7 @@ final class JarSnapshotter {
         var visibility: [(node: SKNode, wasHidden: Bool)] = []
         scene.enumerateChildNodes(withName: "//*") { node, _ in
             let shouldHidePebble = (node as? PebbleNode).map {
-                // Device-local distraction history has no study mass and is
-                // never published as part of a study-only share or widget.
-                $0.descriptor.isScreenTimeObstacle
-                    || (!options.includesSelfReported && !$0.descriptor.isMeasured)
+                options.hides($0.descriptor)
             } ?? false
             let isTransient = node.name?.hasPrefix("drop.") == true
                 || node.name?.hasPrefix("ambient.") == true

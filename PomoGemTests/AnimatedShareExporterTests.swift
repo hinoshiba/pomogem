@@ -111,6 +111,59 @@ struct AnimatedShareExporterTests {
         #expect(!caption.contains("成果メモ"))
     }
 
+    @Test func captionStatesTheFocusTimeAfterTheMass() {
+        let caption = ShareCopy.caption(
+            subject: "これまでの集中",
+            grams: "2,500g",
+            focusTime: "4時間10分",
+            includesSelfReportedFocus: false,
+            achievementCount: 1
+        )
+        #expect(caption.hasPrefix("これまでの集中を 2,500g（4時間10分）積みました（記念石は自己申告）。"))
+        #expect(caption.contains(ShareCopy.websiteURL.absoluteString))
+
+        let stonesOnly = ShareCopy.caption(
+            subject: "これまでの集中",
+            grams: "0g",
+            includesSelfReportedFocus: false,
+            achievementCount: 1
+        )
+        #expect(stonesOnly.hasPrefix("これまでの集中を 0g 積みました（記念石は自己申告）。"))
+    }
+
+    @Test func studyTagsAreOfferedButNeverPreselected() {
+        #expect(ShareCopy.suggestedHashtags == ["#勉強記録", "#勉強垢"])
+        #expect(ShareCopy.hashtagChoices == ["#ポモジェム", "#ポモドーロ", "#勉強記録", "#勉強垢"])
+        for hashtag in ShareCopy.suggestedHashtags {
+            #expect(ShareHashtagPolicy.normalized(hashtag) == hashtag)
+            #expect(!ShareCopy.hashtags.contains(hashtag))
+        }
+        let defaultCaption = ShareCopy.caption(
+            subject: "これまでの集中",
+            grams: "250g",
+            includesSelfReportedFocus: false,
+            achievementCount: 0
+        )
+        #expect(!defaultCaption.contains("#勉強"))
+    }
+
+    @Test func lifetimeCardIsLabelledSoFarNotWithTodaysDate() {
+        #expect(ShareScope.all.periodLabel == "これまで")
+        let september = Calendar(identifier: .gregorian).date(
+            from: DateComponents(year: 2026, month: 9, day: 1)
+        )!
+        #expect(ShareScope.month(september).periodLabel.contains("9月"))
+    }
+
+    @Test func gifScaleLadderStartsSharpAndOnlyStepsDown() {
+        let ladder = AnimatedShareExporter.renderScaleLadder
+        #expect(ladder.first == 2)
+        #expect(ladder.last == 1)
+        #expect(zip(ladder, ladder.dropFirst()).allSatisfy { $0 > $1 })
+        let feed = ShareCardLayoutPolicy.canvasSize(for: .feed)
+        #expect(feed.width * ladder[0] >= 720)
+    }
+
     @Test func editableHashtagsAreValidatedDeduplicatedAndOptional() {
         #expect(ShareHashtagPolicy.normalized(" 学習記録 ") == "#学習記録")
         #expect(ShareHashtagPolicy.normalized("#Study_2026") == "#Study_2026")
@@ -581,18 +634,22 @@ final class ShareVisualQAArtifactTests: XCTestCase {
             frameCount: AnimatedShareExporter.frameCount
         )
         let gifStartedAt = ContinuousClock.now
+        let preferredScale = try XCTUnwrap(AnimatedShareExporter.renderScaleLadder.first)
         let poses = try (0..<AnimatedShareExporter.renderedPoseCount).map { index in
             let phase = Double(index) / Double(AnimatedShareExporter.renderedPoseCount)
             let image = try XCTUnwrap(render(
                 format: .story,
                 phase: phase,
-                scale: 1.25,
+                scale: preferredScale,
                 usesAnimatedArtwork: true
             ).cgImage)
             print("SHARE_QA pose=\(index) elapsed=\(startedAt.duration(to: .now))")
             return image
         }
         XCTAssertEqual(Set(poses.map(imageDigest)).count, AnimatedShareExporter.renderedPoseCount)
+        // history-07: the preferred GIF is 720 px wide, not 450.
+        XCTAssertEqual(poses.first?.width, 720)
+        XCTAssertEqual(poses.first?.height, 1_280)
         var frames: [CGImage] = []
         for poseIndex in 0..<AnimatedShareExporter.renderedPoseCount {
             let pose = poses[poseIndex]

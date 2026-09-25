@@ -559,7 +559,7 @@ private struct AccumulationTimelineMonthSheet: View {
                             HistoryThemeBreakdown(
                                 title: String(localized: "テーマ別", table: "Overview", comment: "Heading of the per-theme time breakdown of a month"),
                                 themes: detail.themes,
-                                totalSeconds: detail.totalSeconds
+                                totalGrams: detail.summary.exactLocalGrams
                             )
                             .accessibilityElement(children: .contain)
                             .accessibilityIdentifier(
@@ -671,7 +671,7 @@ private struct AccumulationTimelineMonthSheet: View {
             calendar: calendar
         )
         let detailText = String(
-            localized: "\(DurationPresentation.minutesLabel(seconds: day.seconds))・\(day.sessionCount)粒",
+            localized: "\(DurationPresentation.focusLabel(grams: day.grams))・\(day.sessionCount)粒",
             table: "Overview",
             comment: "Day row: focus time, then gem count"
         )
@@ -708,7 +708,7 @@ private struct AccumulationTimelineMonthSheet: View {
         .buttonStyle(PomoGemRowButtonStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(
-            localized: "\(PomoGemCalendar.text(day.dayStart, .dateTime.month().day().weekday(.wide), calendar: calendar))、\(DurationPresentation.minutesLabel(seconds: day.seconds))、\(day.sessionCount)粒",
+            localized: "\(PomoGemCalendar.text(day.dayStart, .dateTime.month().day().weekday(.wide), calendar: calendar))、\(DurationPresentation.focusLabel(grams: day.grams))、\(day.sessionCount)粒",
             table: "Overview",
             comment: "VoiceOver day row: date with weekday, focus time, gem count"
         ))
@@ -756,7 +756,7 @@ private struct AccumulationTimelineMonthSheet: View {
             return "この端末に届いている\(displayedSummary.exactLocalCount)粒、\(spokenMass(displayedSummary.exactLocalGrams))"
         }
         return String(
-            localized: "この端末に届いている\(displayedSummary.exactLocalCount)粒、\(spokenMass(displayedSummary.exactLocalGrams))、\(DurationPresentation.minutesLabel(seconds: detail.totalSeconds))",
+            localized: "この端末に届いている\(displayedSummary.exactLocalCount)粒、\(spokenMass(displayedSummary.exactLocalGrams))、\(DurationPresentation.focusLabel(grams: detail.summary.exactLocalGrams))",
             table: "Overview",
             comment: "VoiceOver month summary: gem count on this iPhone, spoken mass, focus time"
         )
@@ -773,7 +773,7 @@ private struct AccumulationTimelineMonthSheet: View {
         if let detail {
             monthMetric(
                 title: String(localized: "集中した時間", table: "Overview", comment: "Month summary tile: total focus time"),
-                value: DurationPresentation.minutesLabel(seconds: detail.totalSeconds)
+                value: DurationPresentation.focusLabel(grams: detail.summary.exactLocalGrams)
             )
         }
     }

@@ -161,6 +161,9 @@
     "年と月を選んで、日ごとの記録までたどれます" : {
 
     },
+    "時間と粒には、自己申告の記録も含みます。" : {
+
+    },
     "月の記録へ戻る" : {
       "comment" : "Wrapped opened from a month in 年月: returns to that month's sheet"
     },
