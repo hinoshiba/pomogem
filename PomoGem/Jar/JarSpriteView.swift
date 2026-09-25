@@ -325,6 +325,9 @@ struct JarSpriteView: View {
                     )
                 }
 
+                // jar-01: the scene stops this SKView's render loop itself
+                // while it rests (`JarScene.isRenderLoopPaused`), because
+                // SpriteView applies `isPaused` only when it creates the view.
                 SpriteView(
                     scene: scene,
                     // Low Power Mode and a hot device drop to 30 fps (the
@@ -369,6 +372,8 @@ struct JarSpriteView: View {
                     scene.gemBed = gemBedState
                     scene.milestoneTraceCount = milestoneTraceCount
                     updateMotionBehavior(reduceMotion: reduceMotion)
+                    // Home shown again: draw the resting jar's frame.
+                    scene.requestRedraw()
                 }
                 .onChange(of: milestoneTraceCount) { _, count in
                     scene.milestoneTraceCount = count
@@ -412,8 +417,11 @@ struct JarSpriteView: View {
         .onChange(of: reduceMotion) { _, enabled in
             updateMotionBehavior(reduceMotion: enabled)
         }
-        .onChange(of: scenePhase) { _, _ in
+        .onChange(of: scenePhase) { _, phase in
             updateMotionBehavior(reduceMotion: reduceMotion)
+            // Back in front: redraw the resting jar (the system may have
+            // dropped its drawable), then its render loop stops again.
+            if phase == .active { scene.requestRedraw() }
         }
         .onChange(of: scene.physicalContentRevision) { _, _ in
             updateMotionBehavior(reduceMotion: reduceMotion)

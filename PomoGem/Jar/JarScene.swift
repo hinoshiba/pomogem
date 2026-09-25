@@ -55,6 +55,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     var rareRewardMode: RareRewardMode = .standard {
         didSet {
             guard rareRewardMode != oldValue else { return }
+            requestRedraw()
             livePebbles.forEach { $0.setRareRewardMode(rareRewardMode) }
             for index in dropQueue.indices {
                 dropQueue[index].needsSpecialAnticipation = shouldShowSpecialAnticipation(
@@ -81,6 +82,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     var reduceMotion: Bool = UIAccessibility.isReduceMotionEnabled {
         didSet {
             guard reduceMotion != oldValue else { return }
+            requestRedraw()
             allPebbleNodes.forEach { $0.setReduceMotion(reduceMotion) }
             if reduceMotion {
                 // Aggregation source nodes leave `livePebbles` before their
@@ -291,6 +293,22 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// persisted study projection. Rebuilding study bodies preserves it.
     private(set) var screenTimeObstacleUnitCount = 0
     private(set) var isIdlePaused = false
+    /// jar-01 (Docs/GemExperienceDesign.md §7.13): whether SpriteKit's render
+    /// loop — the SKView's display link — is stopped. True only while the
+    /// physics rests in its idle pause and nothing new waits to be drawn.
+    /// The scene drives its SKView's `isPaused` itself: `SpriteView` reads
+    /// its `isPaused` argument only when it creates the view (measured:
+    /// later changes of the argument never reach the SKView).
+    private(set) var isRenderLoopPaused = false
+    /// A light-only redraw of the resting jar keeps the render loop running
+    /// this long (several frames at 60 or 30 fps).
+    static let redrawHold: TimeInterval = 0.25
+    /// A tilt that moved the light keeps the render loop this long after
+    /// its last step, so a slow, deliberate tilt does not stop and restart
+    /// it between steps.
+    static let motionWakeHold: TimeInterval = 0.75
+    private var redrawUntil: TimeInterval = -.greatestFiniteMagnitude
+    private var isRenderLoopCheckScheduled = false
     private(set) var isBakeInProgress = false
     private(set) var isCapacityReliefActive = false
     private(set) var appliedGravityVector = Constants.Jar.gravityVector
@@ -860,6 +878,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         soundSynth.prepare()
         haptics.prepare()
         rebuildGeometry()
+        // A new SKView (Home shown again) presents a resting jar: draw its
+        // frame once, then let the render loop stop again (jar-01).
+        requestRedraw()
     }
 
     override func didChangeSize(_ oldSize: CGSize) {
@@ -1959,16 +1980,18 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     /// Idle tilt (Docs/GemExperienceDesign.md §7.13). While the jar rests,
-    /// its scene is paused and SpriteKit draws a frame only when a node
-    /// changes, so a jar on a desk costs no frames. Tilt moves the glints
-    /// and the glass, so while idle the light follows the phone in steps
-    /// larger than `idleTiltRenderThreshold`, at most
-    /// `idleTiltFramesPerSecond` times a second: a deliberate tilt still
-    /// sparkles at once, while the sensor noise of a phone held still draws
-    /// nothing. An awake jar follows every sample, as before.
+    /// its physics is paused and its render loop stops (jar-01), so a jar on
+    /// a desk costs no frames. Tilt moves the glints and the glass, so while
+    /// idle the light follows the phone in steps larger than
+    /// `idleTiltRenderThreshold`, at most `idleTiltFramesPerSecond` times a
+    /// second: a deliberate tilt still sparkles at once (the step restarts
+    /// the render loop for `motionWakeHold`), while the sensor noise of a
+    /// phone held still draws nothing. An awake jar follows every sample,
+    /// as before.
     static let idleTiltRenderThreshold: CGFloat = 0.015
     static let idleTiltFramesPerSecond: Double = 30
-    /// Clock of the idle tilt gate (tests inject one).
+    /// Clock of the idle tilt gate and of the render loop's redraw holds
+    /// (tests inject one).
     var tiltClock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     private var lastIdleTiltUptime: TimeInterval = -.greatestFiniteMagnitude
     /// Light changes made while idle — each one is a frame SpriteKit draws
@@ -1988,6 +2011,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                   uptime - lastIdleTiltUptime >= 1 / Self.idleTiltFramesPerSecond - 0.004
             else { return }
             lastIdleTiltUptime = uptime
+            let drawn = opticalTiltFraction
+            updateOpticalTilt(horizontal: horizontal)
+            // A tilt that moved the light keeps the jar drawing for a moment.
+            if opticalTiltFraction != drawn {
+                requestRedraw(for: Self.motionWakeHold)
+            }
+            return
         }
         updateOpticalTilt(horizontal: horizontal)
     }
@@ -2013,6 +2043,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         innerRimNode.position.x = fraction * 0.35
         updateCollarTilt(fraction)
         livePebbles.forEach { $0.updatePresentationLighting(horizontal: fraction) }
+        // A resting jar's render loop is stopped: draw the new light.
+        if isIdlePaused { requestRedraw() }
     }
 
     func resumeSimulation() {
@@ -2024,7 +2056,65 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             updateOpticalTilt(horizontal: appliedGravityVector.dx)
         }
         resetIdleObservation()
+        // Landing, fusion, tap, shake, content changes: the render loop
+        // comes back in this same turn.
+        updateRenderLoop(now: tiltClock())
     }
+
+    // MARK: Render loop (jar-01, §7.13)
+
+    /// Draws the resting jar again for `hold` seconds without waking its
+    /// physics: a light-only change (tilt, a setting, a new gem bed), a view
+    /// that must show the settled frame (a new SKView, a return to the
+    /// foreground) or a snapshot. An awake jar renders anyway.
+    func requestRedraw(for hold: TimeInterval = JarScene.redrawHold) {
+        let now = tiltClock()
+        redrawUntil = max(redrawUntil, now + max(0, hold))
+        updateRenderLoop(now: now)
+    }
+
+    /// Resolves the render loop from the idle pause and the open redraw
+    /// hold, applies it, and schedules the check that ends the hold (a
+    /// paused scene gets no `update(_:)` to do it).
+    private func updateRenderLoop(now: TimeInterval) {
+        isRenderLoopPaused = isIdlePaused && now >= redrawUntil
+        applyRenderLoopState()
+        if isIdlePaused, now < redrawUntil {
+            scheduleRenderLoopCheck(after: redrawUntil - now)
+        }
+    }
+
+    /// The SKView un-pauses its scene together with itself (measured), so a
+    /// light-only redraw re-freezes the resting physics in the same turn,
+    /// before any frame can step it.
+    private func applyRenderLoopState() {
+        if let view, view.isPaused != isRenderLoopPaused {
+            view.isPaused = isRenderLoopPaused
+        }
+        if isIdlePaused, !isPaused {
+            isPaused = true
+        }
+    }
+
+    private func scheduleRenderLoopCheck(after delay: TimeInterval) {
+        guard !isRenderLoopCheckScheduled else { return }
+        isRenderLoopCheckScheduled = true
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + min(max(delay, 0.02), 1)
+        ) { [weak self] in
+            guard let self else { return }
+            self.isRenderLoopCheckScheduled = false
+            self.updateRenderLoop(now: self.tiltClock())
+        }
+    }
+
+#if DEBUG
+    /// Deterministic seam: re-resolves the render loop at the injected
+    /// `tiltClock`, as the scheduled check would.
+    func evaluateRenderLoopForTesting() {
+        updateRenderLoop(now: tiltClock())
+    }
+#endif
 
     private func beginInteractionMotionWindow(uptime: TimeInterval) {
         interactionMotionWindow = JarInteractionMotionWindow(openedAt: uptime)
@@ -2264,6 +2354,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 self.allPebbleNodes.forEach { $0.setReduceTransparency(enabled) }
                 self.floorGlowNode.alpha = enabled ? 0.12 : 0.28
                 self.refreshPileLight()
+                self.requestRedraw()
             }
         }
         reduceMotionObserver = NotificationCenter.default.addObserver(
@@ -2296,6 +2387,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     private func rebuildGeometry() {
         guard size.width > .zero, size.height > .zero else { return }
+        // A new stage size (or a new view) shows even on a resting jar.
+        requestRedraw()
         let outer = outerJarRect
         if cameraNode.action(forKey: ActionKey.cameraShake) == nil {
             cameraNode.position = cameraRestPosition
@@ -2992,6 +3085,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     private func rebuildCollar() {
         guard size.width > .zero, size.height > .zero else { return }
+        requestRedraw()
         let outer = outerJarRect
         let mouthWidth = outer.width - neckInset * 2
         let width = mouthWidth + 8
@@ -3048,6 +3142,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     private func renderBaseLayers(animatedStratumID: UUID? = nil) {
+        requestRedraw()
         let previousScale = strataRenderer.compactionScale
         strataRenderer.render(
             strata: visualStrata,
@@ -3966,6 +4061,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             isGemBedBaking = false
             gemBedNode.isHidden = true
             gemBedNode.texture = nil
+            requestRedraw()
             return
         }
         let interior = interiorRect
@@ -3974,6 +4070,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             isGemBedBaking = false
             gemBedNode.isHidden = true
             gemBedNode.texture = nil
+            requestRedraw()
             return
         }
         let width = interior.width.rounded()
@@ -3986,6 +4083,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             self.gemBedNode.position = CGPoint(x: interior.midX, y: interior.minY)
             self.gemBedNode.alpha = 1
             self.gemBedNode.isHidden = false
+            // The bed may finish baking after the jar has come to rest.
+            self.requestRedraw()
         }
         if let cached = GemArtwork.cachedBedTexture(width: width, height: height, slotHexes: hexes, scale: scale) {
             isGemBedBaking = false
@@ -4297,6 +4396,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             onIdlePauseChanged?(true)
         }
         isPaused = true
+        // The settled frame is drawn, then the render loop stops (jar-01).
+        requestRedraw()
     }
 
     /// Prepares a deterministic, transparent-safe frame for `JarSnapshotter`:
@@ -4328,6 +4429,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 $0.0.blendMode = $0.1
                 $0.0.alpha = $0.2
             }
+            // A resting jar's render loop is stopped: show the restored
+            // (settled) frame, so the screen never lags the scene.
+            self?.requestRedraw()
         }
     }
 

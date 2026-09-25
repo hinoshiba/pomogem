@@ -21,6 +21,7 @@
 		0F722CD539417C08CE93C404 /* AccumulationPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94833894E32ECA0E88B3E8DD /* AccumulationPlanView.swift */; };
 		1110628FE44CB1EDE502B687 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FC4168C297AEE36A6F794B8 /* OnboardingView.swift */; };
 		1142A86A589A4BA6F25EC137 /* JarSpriteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C8318D569F3634174B05480 /* JarSpriteView.swift */; };
+		12853CA9A66F2E127BA49E9C /* JarIdleEnergyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAACD9E9BDD673452EBB1809 /* JarIdleEnergyTests.swift */; };
 		128570FAED1861610B4E0BCC /* SyncMaintenance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BF84C957F5965D5E7377EAD /* SyncMaintenance.swift */; };
 		12AC4E182FB22BF3688F80C7 /* PomodoroEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7413EEBB67AFE9BC30EF9C7E /* PomodoroEngine.swift */; };
 		13D3B47C5B15D391FBA37000 /* CloudOfflineHostPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B4D2704A867D651C6A15FB7 /* CloudOfflineHostPolicy.swift */; };
@@ -572,6 +573,7 @@
 		D8BB54CBBDDCDE71CCCF845D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D8C8330300DB90728071EEB1 /* PomodoroSecondPrecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomodoroSecondPrecisionTests.swift; sourceTree = "<group>"; };
 		D9E630CC67F2B7AA44EC1740 /* StorageTransferSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferSettingsSection.swift; sourceTree = "<group>"; };
+		DAACD9E9BDD673452EBB1809 /* JarIdleEnergyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarIdleEnergyTests.swift; sourceTree = "<group>"; };
 		DAFDB3F62B4EB377D79BA48D /* StorageTransferProcessState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferProcessState.swift; sourceTree = "<group>"; };
 		DBD525CB72EF7C8BBA600020 /* LICENSE-fonts.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LICENSE-fonts.txt"; sourceTree = "<group>"; };
 		DC5D4F1A16DE0265ED6EBF24 /* PomoGemLogo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemLogo.swift; sourceTree = "<group>"; };
@@ -925,6 +927,7 @@
 				3A658F93291D3387937A39FF /* HomeAtmosphereTests.swift */,
 				B78F394CAE07C13C1BE00957 /* HomeProjectionTests.swift */,
 				4C5593DA547691E54AD22F76 /* InitialCloudHydrationTests.swift */,
+				DAACD9E9BDD673452EBB1809 /* JarIdleEnergyTests.swift */,
 				203BABC145B85C09C2BFBA55 /* JarRenderingPerformanceTests.swift */,
 				E6C6D396C5FB8FF2FEC27957 /* LocalPreviewLaunchPolicyTests.swift */,
 				04027069D709F7336F78964D /* NotificationManagerRaceTests.swift */,
@@ -1530,6 +1533,7 @@
 				7601FA40A717E710583BE7E5 /* HomeAtmosphereTests.swift in Sources */,
 				FD5E7022FA135DA440D649AA /* HomeProjectionTests.swift in Sources */,
 				36C1AA1DA487981524206086 /* InitialCloudHydrationTests.swift in Sources */,
+				12853CA9A66F2E127BA49E9C /* JarIdleEnergyTests.swift in Sources */,
 				811FFD0C06EBC6EA0B6601D7 /* JarRenderingPerformanceTests.swift in Sources */,
 				EC756FBB0F108A7E2FA29232 /* LocalPreviewLaunchPolicyTests.swift in Sources */,
 				A4200548B90A8E41FD363269 /* NotificationManagerRaceTests.swift in Sources */,
