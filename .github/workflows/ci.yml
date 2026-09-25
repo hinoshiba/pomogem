@@ -162,6 +162,11 @@ jobs:
             fi
           done
 
+          # The app and both extensions carry exactly the shipping
+          # localizations: ja.lproj everywhere, and no en.lproj until English
+          # is activated (Docs/Localization.md).
+          python3 Scripts/l10n/l10n.py verify-bundle "$app_bundle"
+
       - name: Reject UI-test hooks in Release app
         shell: bash
         run: |
@@ -234,5 +239,13 @@ jobs:
             -derivedDataPath DerivedData-CI-Tests \
             test \
             -only-testing:PomoGemTests \
+            -testLanguage ja \
+            -testRegion JP \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO
+
+      # Compares the keys the compiler extracted with the String Catalogs.
+      # Report mode until the English integration switches on --strict
+      # (Docs/Localization.md).
+      - name: Localization check
+        run: python3 Scripts/l10n/l10n.py check --derived-data DerivedData-CI-Tests

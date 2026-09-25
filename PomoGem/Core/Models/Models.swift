@@ -68,7 +68,11 @@ enum SessionSource: String, Codable, CaseIterable, Sendable {
     /// this, not `isMeasured`: a Screen Time chunk is measured study time, but
     /// one hour in a learning app is six ten-minute records, not six timers.
     var isTimerCompletion: Bool { self == .timer }
-    var displayName: String { self == .screenTime ? "Screen Time" : (isMeasured ? "実測" : "自己申告") }
+    var displayName: String {
+        self == .screenTime
+            ? String(localized: "スクリーンタイム", table: "Models", comment: "Record source label: Screen Time")
+            : (isMeasured ? "実測" : "自己申告")
+    }
 }
 
 enum PebbleKind: String, Codable, CaseIterable, Sendable {

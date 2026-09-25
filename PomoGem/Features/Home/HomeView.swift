@@ -136,6 +136,7 @@ struct HomeView: View {
     @State private var selectedAggregateDetail: AccumulationClusterSummary?
     @State private var aggregateInspectionTask: Task<Void, Never>?
     @State private var showManualEntry = false
+    @State private var screenTimeArrivals = ScreenTimeArrivalAnnouncer()
     @State private var showAchievementEntry = false
     @State private var showCustomDuration = false
     @State private var showAccumulationPlan = false
@@ -828,6 +829,7 @@ struct HomeView: View {
             scene.setScreenTimeObstacles(
                 totalUnits: ScreenTimeController.shared.negativeGemCount
             )
+            noteScreenTimeBlackStones(ScreenTimeController.shared.negativeGemCount)
             refreshAcceptedAggregateRoots()
             refreshAchievementProjection()
             refreshAchievementCount()
@@ -901,6 +903,7 @@ struct HomeView: View {
         .onReceive(ScreenTimeController.shared.negativeGemCountChanges) { count in
             guard homeIsVisible else { return }
             scene.updateScreenTimeObstacles(totalUnits: count)
+            noteScreenTimeBlackStones(count)
         }
         .onReceive(Self.pendingRewardReceiptChanges) { _ in
             pendingRewardReceiptRevision &+= 1
@@ -1335,9 +1338,13 @@ struct HomeView: View {
     private var homeMenuAccessibilitySummary: String {
         if aggregateProjectionPresentation.isCloudVerificationPending {
             guard let mass = presentedLifetimeMassLabel else {
-                return "\(projectionVerificationTitle)。累計は確認が済むと表示します。この端末で確認済みの集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
+                return String(localized: "\(projectionVerificationTitle)。累計は確認が済むと表示します。この端末で確認済みの集中\(totalPebbles)粒、成果\(achievementCountLabel)個",
+                              table: "Home",
+                              comment: "VoiceOver, menu metrics while iCloud is checked and no lifetime total can be shown: status, focus count, achievement count")
             }
-            return "\(projectionVerificationTitle)。累計\(mass)、集中\(presentedLifetimePebbles)粒、成果\(achievementCountLabel)個"
+            return String(localized: "\(projectionVerificationTitle)。累計\(mass)、集中\(presentedLifetimePebbles)粒、成果\(achievementCountLabel)個",
+                          table: "Home",
+                          comment: "VoiceOver, menu metrics while iCloud is checked: status, lifetime mass, focus count, achievement count")
         }
         return "累計\(formattedMass(totalGrams))、集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
     }
@@ -2063,6 +2070,21 @@ struct HomeView: View {
                     try? await Task.sleep(for: .milliseconds(250))
                     showAchievementEntry = true
                 }
+            }
+            // screentime-10: the third way to add to the jar, next to the
+            // other two, instead of three levels down in Settings.
+            if ScreenTimeReleasePolicy.showsHomeEntry {
+                menuActionButton(
+                    title: String(localized: "アプリの時間を積む", table: "Home",
+                                  comment: "Home menu row: open the Screen Time settings"),
+                    detail: String(localized: "勉強アプリ10分ごとに1粒", table: "Home",
+                                   comment: "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble"),
+                    symbol: "hourglass"
+                ) {
+                    showHomeMenu = false
+                    router.selectedTab = .screenTime
+                }
+                .accessibilityIdentifier("home.menu.screen-time")
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -3719,6 +3741,16 @@ struct HomeView: View {
         }
     }
 
+    /// Screen Time black stones arrive silently in the jar; say how many
+    /// once, neutrally (see `ScreenTimeArrivalAnnouncer`).
+    private func noteScreenTimeBlackStones(_ count: Int) {
+        screenTimeArrivals.noteBlackStoneCount(
+            count, isBound: ScreenTimeController.shared.isBoundToContext
+        ) { text, symbol in
+            router.showToast(text, symbol: symbol)
+        }
+    }
+
     private func handleLanding(_ event: JarLandingEvent) {
         let descriptor = event.pebble
         if let achievementKind = descriptor.achievementKind {
@@ -3735,6 +3767,16 @@ struct HomeView: View {
         // resulting overview pebble as a fresh study session would announce a
         // misleading second “+2500g” reward.
         if descriptor.isAggregate { return }
+        if descriptor.source == .screenTime {
+            // One attributed summary per import (「スクリーンタイム：英語 +30分
+            // （3粒）」) instead of a generic toast per 10-minute pebble.
+            screenTimeArrivals.noteLearningLanding(subjectName: descriptor.subjectName) { text, symbol in
+                router.showToast(text, symbol: symbol)
+            }
+            ScreenTimeGemDropStore.remove(descriptor.id)
+            syncScene()
+            return
+        }
         var message: String
         let presentationKind = RareRewardPresentationPolicy.kind(descriptor.kind)
         switch presentationKind {
@@ -3758,11 +3800,6 @@ struct HomeView: View {
             && rareRewardMode.usesEnhancedPresentation
         router.showToast(message, symbol: usesRareSymbol ? "sparkles" : "scalemass")
 
-        if descriptor.source == .screenTime {
-            ScreenTimeGemDropStore.remove(descriptor.id)
-            syncScene()
-            return
-        }
         if PendingRewardReceiptStore.load().contains(where: {
             $0.id == descriptor.id && $0.dropPhase == .awaitingLanding
         }) {

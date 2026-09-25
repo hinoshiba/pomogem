@@ -99,9 +99,15 @@ enum JarAccessibilityPresentation {
             // that the total follows once checked (`pendingMass` nil).
             let status = isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを確認中"
             if let pendingMass {
-                massDescription = "\(status)。この端末で確認済みの集中時間の質量：\(formattedMass(max(0, pendingMass.grams)))\(pendingMass.isLowerBound ? "以上" : "")"
+                let mass = formattedMass(max(0, pendingMass.grams))
+                massDescription = pendingMass.isLowerBound
+                    ? String(localized: "\(status)。この端末で確認済みの集中時間の質量：\(mass)以上", table: "Jar",
+                             comment: "VoiceOver, jar while iCloud is checked: status, a lower bound of the lifetime mass")
+                    : String(localized: "\(status)。この端末で確認済みの集中時間の質量：\(mass)", table: "Jar",
+                             comment: "VoiceOver, jar while iCloud is checked: status, the lifetime mass")
             } else {
-                massDescription = "\(status)。これまでの合計は確認が済むと表示します"
+                massDescription = String(localized: "\(status)。これまでの合計は確認が済むと表示します", table: "Jar",
+                                         comment: "VoiceOver, jar while iCloud is checked and no lifetime total can be shown: status")
             }
         } else if projectionIsLowerBound {
             massDescription = "現在確認できた集中時間の質量：\(formattedMass(totalGrams))以上、集計整理中"

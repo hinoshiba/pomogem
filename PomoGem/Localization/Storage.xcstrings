@@ -1,0 +1,21 @@
+{
+  "sourceLanguage" : "ja",
+  "strings" : {
+    "iCloudを確認中" : {
+      "comment" : "Caption under the jar's mass while iCloud records are being checked"
+    },
+    "このiPhoneの集計を確認中" : {
+
+    },
+    "スクリーンタイムの自動記録を使っている場合、切り替えると自動記録はオフになり、選んだアプリ、まだ取り込んでいない利用記録、黒い石は引き継ぎません。切り替えたあとで、設定の「スクリーンタイム」から選び直してください。保存済みの勉強時間と粒は引き継ぎます。" : {
+      "comment" : "Launch stop screen: what happens to Screen Time if it is in use"
+    },
+    "再集計中" : {
+      "comment" : "Jar mass while iCloud is checked and this device cannot show a lifetime total"
+    },
+    "切り替えると、スクリーンタイムの自動記録はオフになり、選んだアプリ、まだ取り込んでいない利用記録、黒い石は引き継ぎません。切り替えたあとで、設定の「スクリーンタイム」から選び直してください。保存済みの勉強時間と粒は引き継ぎます。" : {
+      "comment" : "Storage switch: what happens to Screen Time"
+    }
+  },
+  "version" : "1.0"
+}

@@ -126,7 +126,7 @@ statusは公開前と各更新時に再監査します。新しいstorefrontの�
 | Review screenshot | `captured_live_price`。2026-09-22に1.1.0 (10)の実StoreKit価格$0.99を撮影・検証し、Connectへ登録・再読込確認済み。storefront国は未確認。正本は `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png` |
 | Review notes | `AppStore/iap-review-notes-connect.txt` |
 
-Unlockは無料preset以外の任意の1分00秒〜360分00秒、まとまり粒の月刻印、スクリーンタイムの勉強アプリ数無制限（無料5つ）です。黒いgem用アプリ数は無料でも無制限です。分・秒の数字入力とホイールに対応します。share cardは無料／Proともロゴと公式サイトを常設します。subscription、trial、
+Unlockは無料preset以外の任意の1分00秒〜360分00秒、まとまり粒の月刻印、スクリーンタイムの勉強アプリ数無制限（無料5つ）です。黒い石用アプリ数は無料でも無制限です。分・秒の数字入力とホイールに対応します。share cardは無料／Proともロゴと公式サイトを常設します。subscription、trial、
 external purchase、独自serverはありません。purchase、pending、cancel、restore、revocationと、
 entitlement反映後にtransactionをfinishすることをSandboxで検証します。初回IAPのversion 1.0提出は履歴です。1.1.0でも既存商品を維持し、購入済み利用者にも追加機能を提供します。
 
@@ -138,7 +138,7 @@ entitlement反映後にtransactionをfinishすることをSandboxで検証しま
 
 Settings → スクリーンタイムで個人認証後にアプリ・テーマ・記録を設定します。選択アプリの合計10分ごとに
 600秒／100gを取り込みます。OS通知の遅延を明記し、常時・即時計測や他アプリの強制起動を約束しません。
-黒いgemは黒同士だけで結合し、学習集計・報酬・共有から除外します。tokenと未取込情報・黒いgemは端末内、
+黒い石は黒同士だけで結合し、学習集計・報酬・共有から除外します。tokenと未取込情報・黒い石は端末内、
 取り込み済み学習記録は通常の選択保存先という区別を、掲載文・Privacy・Review Notesで統一します。
 本体／MonitorのFamily Controls distribution承認・最終profile・実到達は未確認です。
 
@@ -157,7 +157,7 @@ database、4種類の瓶用projectionは端末内だけに保存します。運�
 なしで全基本機能を使え、iCloudへ自動uploadしません。share／exportは利用者の明示操作です。1.0は
 rare reward用operations containerもdirect CloudKit一括削除も提供せず、app削除とAppleのiCloud
 ストレージ管理を案内します。現在のJSON exportは全11種類の出荷対象SwiftData modelを対象にします。
-スクリーンタイムのtoken・未取込情報・黒いgem・診断情報は端末内に限り、JSONには含めません。通常記録へ取り込み済みの学習分は選択した保存先の記録として同期・書き出し対象です。診断は件数・結果・時間に限り、運営者へ送信しません。
+スクリーンタイムのtoken・未取込情報・黒い石・診断情報は端末内に限り、JSONには含めません。通常記録へ取り込み済みの学習分は選択した保存先の記録として同期・書き出し対象です。診断は件数・結果・時間に限り、運営者へ送信しません。
 JSONを再importする機能はなく、このファイルによる復元・移行には対応しません。明示的な保存先切り替えも、このJSONを読み込む処理ではありません。
 ただしsupport mailがAppleのoptional disclosure条件を満たさない運用なら、Email Addressを
 App Functionality（customer support）、linked to user、not trackingとして申告します。Publish直前に

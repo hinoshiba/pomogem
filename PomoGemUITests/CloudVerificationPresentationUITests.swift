@@ -27,8 +27,8 @@ final class CloudVerificationPresentationUITests: XCTestCase {
         if let history {
             app.launchEnvironment["POMOGEM_UI_TEST_CLOUD_VERIFICATION_HISTORY"] = String(history)
         }
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP",
-                                "-review.requested-version", "1.0"]
+        app.launchArguments += ["-review.requested-version", "1.0"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 10))
     }

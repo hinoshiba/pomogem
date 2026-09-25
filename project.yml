@@ -13,6 +13,11 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"
     GENERATE_INFOPLIST_FILE: true
     ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    # String Catalogs (Docs/Localization.md). The compiler records every
+    # String(localized:table:) and Text(_:tableName:) key in .stringsdata, which
+    # Scripts/l10n/l10n.py syncs into the per-feature catalogs and checks in CI.
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    SWIFT_EMIT_LOC_STRINGS: YES
 targets:
   PomoGem:
     type: application
@@ -122,6 +127,9 @@ targets:
           - PrivacyInfo.xcprivacy
           - PomoGemWidgets.entitlements
       - path: Shared/FocusActivityAttributes.swift
+      # PomoGemLocale and DurationText, so the Live Activity and widgets format
+      # durations like the app (Docs/Localization.md).
+      - path: Shared/LocalizedDuration.swift
       - path: PomoGemWidgets/PrivacyInfo.xcprivacy
         buildPhase: resources
     settings:
@@ -211,6 +219,11 @@ schemes:
       storeKitConfiguration: PomoGem/Resources/Products.storekit
     test:
       config: Debug
+      # Unit and UI tests assert Japanese copy. Pin the host language so a
+      # Simulator in another language (CI runs en-US) cannot switch them once
+      # the app ships a second localization.
+      language: ja
+      region: JP
       targets:
         - PomoGemTests
         - PomoGemUITests

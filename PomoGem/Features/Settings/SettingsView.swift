@@ -850,11 +850,7 @@ struct SettingsView: View {
             NavigationLink {
                 ScreenTimeSettingsView()
             } label: {
-                SettingLabel(
-                    title: "スクリーンタイム",
-                    subtitle: "10分ごとに勉強のgem・黒いgemを積む",
-                    symbol: "hourglass"
-                )
+                ScreenTimeSettingsRowLabel()
             }
             .accessibilityIdentifier("settings.screen-time")
         }
@@ -1072,10 +1068,21 @@ struct SettingsView: View {
     }
 
     private var resetDataMessage: String {
+        let message: String
         if persistenceMode == .localOnly {
-            return "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。旧世代の行は端末内に残り、データ書き出しには含まれる場合があります。端末内の物理データはアプリを削除すると消去できます。この操作は取り消せません。"
+            message = "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。旧世代の行は端末内に残り、データ書き出しには含まれる場合があります。端末内の物理データはアプリを削除すると消去できます。この操作は取り消せません。"
+        } else {
+            message = "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。同じiCloudの端末には接続後に反映されます。オフライン端末から古い記録が戻ることを防ぐため、旧世代の行は同期用に残り、データ書き出しには含まれます。端末内の物理データはアプリを削除すると消去できます。iCloud側のアプリデータはAppleのiCloudストレージ管理から削除してください。この操作は取り消せません。"
         }
-        return "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。同じiCloudの端末には接続後に反映されます。オフライン端末から古い記録が戻ることを防ぐため、旧世代の行は同期用に残り、データ書き出しには含まれます。端末内の物理データはアプリを削除すると消去できます。iCloud側のアプリデータはAppleのiCloudストレージ管理から削除してください。この操作は取り消せません。"
+        // Said only where Screen Time is set up: the reset starts its ledger's
+        // new generation too (ScreenTimeController.bindContext).
+        guard ScreenTimeController.shared.hasLocalSetup else { return message }
+        let screenTime = String(
+            localized: "スクリーンタイムの黒い石、まだ取り込んでいない勉強アプリの記録、10分に満たない途中の利用時間も消えます。アプリの選択と自動記録の設定は残ります。",
+            table: "Settings",
+            comment: "Reset confirmation: extra paragraph shown only when Screen Time is set up on this iPhone"
+        )
+        return message + "\n\n" + screenTime
     }
 
     private var dataStorageDisclosure: String {
@@ -1410,6 +1417,12 @@ struct SettingsView: View {
     }
 
     private func deleteSubject(_ subject: Subject) {
+        // Read before the deletion: the dialog showed the Screen Time
+        // paragraph exactly when this held.
+        let warnedAboutScreenTime = ScreenTimeThemeDeletionNotice.applies(
+            to: subject.id, configuration: ScreenTimeController.shared.configuration,
+            isBound: ScreenTimeController.shared.isBoundToContext
+        )
         do {
             subject.isArchived = true
             subject.deletedAt = .now
@@ -1418,6 +1431,9 @@ struct SettingsView: View {
                 among: storedSubjects
             )
             try modelContext.save()
+            if warnedAboutScreenTime {
+                ScreenTimeController.shared.noteLearningThemeDeletionConfirmed(subject.id)
+            }
         } catch {
             modelContext.rollback()
             settingsError = "テーマを削除できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
@@ -1428,10 +1444,20 @@ struct SettingsView: View {
         for subject: Subject,
         recordCount: Int
     ) -> String {
+        let message: String
         if recordCount == 0 {
-            return "「\(subject.safeDisplayName)」を削除します。関連する過去の記録はありません。この操作は取り消せません。"
+            message = "「\(subject.safeDisplayName)」を削除します。関連する過去の記録はありません。この操作は取り消せません。"
+        } else {
+            message = "「\(subject.safeDisplayName)」だけを削除します。過去の記録\(recordCount)件と質量は消えず、現在の名前と色も残ります。この操作は取り消せません。"
         }
-        return "「\(subject.safeDisplayName)」だけを削除します。過去の記録\(recordCount)件と質量は消えず、現在の名前と色も残ります。この操作は取り消せません。"
+        // Deleting the Screen Time destination also clears the study-app
+        // selection (Docs/ScreenTimeGems.md). Say so while the user can still
+        // cancel and pick another destination first.
+        guard ScreenTimeThemeDeletionNotice.applies(
+            to: subject.id, configuration: ScreenTimeController.shared.configuration,
+            isBound: ScreenTimeController.shared.isBoundToContext
+        ) else { return message }
+        return message + "\n\n" + ScreenTimeThemeDeletionNotice.text
     }
 
     private func prepareSubjectDeletion(_ subject: Subject) {
@@ -2410,6 +2436,45 @@ private struct SubjectReorderAccessibilityModifier: ViewModifier {
                 .accessibilityAction(named: "上へ移動", moveUp)
                 .accessibilityAction(named: "下へ移動", moveDown)
         }
+    }
+}
+
+/// The Screen Time row, with the feature's status in place of a fixed
+/// caption: a stop used to be visible only inside the page. Its own view so
+/// that only this row follows the controller, not the whole Settings list.
+private struct ScreenTimeSettingsRowLabel: View {
+    @ObservedObject private var controller = ScreenTimeController.shared
+
+    private var status: ScreenTimeRowStatus {
+        ScreenTimeRowStatus(
+            isBound: controller.isBoundToContext,
+            enabled: controller.configuration.enabled,
+            isMonitoring: controller.isMonitoring,
+            monitoringError: controller.monitoringError,
+            learningStoppedByFreeLimit: controller.learningStoppedByFreeLimit,
+            themeRemoved: controller.learningThemeWasRemoved
+        )
+    }
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("スクリーンタイム", tableName: "Settings", comment: "Settings row title: Screen Time")
+                    .foregroundStyle(PomoGemTheme.text)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    if status.isWarning {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .accessibilityHidden(true)
+                    }
+                    Text(status.subtitle)
+                }
+                .font(.caption)
+                .foregroundStyle(status.isWarning ? PomoGemTheme.amber : PomoGemTheme.muted)
+            }
+        } icon: {
+            Image(systemName: "hourglass").foregroundStyle(PomoGemTheme.amber).frame(width: 26)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -828,7 +828,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         let application = XCUIApplication()
         application.terminate()
         application.launchEnvironment = [:]
-        application.launchArguments = ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(application)
         app = application
         didLaunch = true
         application.launch()

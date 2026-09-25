@@ -1241,7 +1241,7 @@ struct LogView: View {
         if summary.screenTimeSeconds > 0 {
             Label(
                 String(
-                    localized: "Screen Timeの\(DurationPresentation.minutesLabel(seconds: summary.screenTimeSeconds))は、完走ポモに含みません",
+                    localized: "スクリーンタイムの\(DurationPresentation.minutesLabel(seconds: summary.screenTimeSeconds))は、完走ポモに含みません",
                     table: "Log",
                     comment: "Log: Screen Time learning in the period is not counted as completed timers; the argument is a duration"
                 ),

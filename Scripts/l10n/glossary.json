@@ -1,0 +1,622 @@
+{
+  "_comment": "Machine-readable glossary and style rules for English UI text (Docs/Localization.md). 'en' is the canonical English term; alternatives are separated by ' / '. 'lint' = error|warn|none controls whether Scripts/l10n/l10n.py check requires the term in the English value when the Japanese source contains 'ja' (error: enforced with --strict; warn: advice only). 'forbidden_en' words must not translate this concept (advice). 'forbidden_en_anywhere' must not appear in any English value except in the negations listed in 'forbidden_en_allowed'.",
+  "style": {
+    "capitalization": "Title Case for buttons, navigation titles, tab titles, alert titles, menu items, toggle/picker labels and section headers. Sentence case for body text, subtitles, footers, toasts, notifications, VoiceOver labels/hints and placeholders.",
+    "voice": "Calm, warm, plain, second person. Invite, never pressure. No streaks, loss, urgency, scarcity, guilt or judgement. Contractions are fine. Exclamation marks only where the Japanese celebrates (！).",
+    "punctuation": {
+      "「」": "curly double quotes “ ”",
+      "『』": "curly single quotes ‘ ’",
+      "、": ", ",
+      "。": ". (omit at the end of short labels/buttons)",
+      "・ (compact stats)": " · (U+00B7 with spaces)",
+      "・ (in a sentence list)": ", or ListFormatStyle",
+      "（…）": " (…)",
+      "！": "!",
+      "〜 / ～ (range)": "– (en dash, no spaces: 1–360 min)",
+      "：": ": ",
+      "…": "…"
+    },
+    "units": {
+      "g": "250 g (space; never oz/lb)",
+      "kg": "2.5 kg",
+      "spoken g": "250 grams (Measurement .wide .asProvided)",
+      "min": "25 min (Duration .condensedAbbreviated)",
+      "sec": "30 sec",
+      "hr": "1 hr 15 min",
+      "spoken duration": "1 hour, 15 minutes (Duration .wide)",
+      "percent": "42%",
+      "time of day": "4:00 AM (Date.FormatStyle)",
+      "dates": "system Date.FormatStyle on the Gregorian calendar for month/year buckets"
+    },
+    "numbers": "Grouped by locale (1,234). Never interpolate a year as Int (it renders 2,026).",
+    "plurals": "Every counted English noun uses String Catalog plural variations (one/other)."
+  },
+  "terms": [
+    {
+      "ja": "ポモジェム",
+      "en": "PomoGem",
+      "lint": "error",
+      "forbidden_en": [
+        "Pomogem",
+        "Pomo Gem",
+        "POMOGEM"
+      ],
+      "notes": "Brand. Never translated or respelled. The share-card wordmark POMOGEM stays as artwork."
+    },
+    {
+      "ja": "ポモジェムPro",
+      "en": "PomoGem Pro",
+      "lint": "error"
+    },
+    {
+      "ja": "Pro",
+      "en": "Pro",
+      "lint": "none"
+    },
+    {
+      "ja": "粒",
+      "en": "gem",
+      "lint": "error",
+      "forbidden_en": [
+        "pebble",
+        "grain",
+        "drop",
+        "bead"
+      ],
+      "notes": "One per completed session (or 10 min of Screen Time). Counter: %lld gem/gems (plural). 一粒/ひと粒 → a gem / one gem. Legacy spelling つぶ → gem."
+    },
+    {
+      "ja": "瓶",
+      "en": "jar",
+      "lint": "error",
+      "forbidden_en": [
+        "bottle",
+        "vessel",
+        "vase"
+      ],
+      "notes": "瓶1杯 → a full jar; N杯目 → jar %lld; 瓶へ戻る → Back to Jar. The en-US description still says 'bottle' — integration fixes it."
+    },
+    {
+      "ja": "結晶",
+      "en": "crystal",
+      "lint": "error",
+      "notes": "10 gems → 1 crystal (pr-27 replaces まとまり粒/まとまり). 結晶の芽 → crystal seed; 今週の結晶 → this week's crystal; 結晶の内訳 → Crystal Details."
+    },
+    {
+      "ja": "まとまり粒",
+      "en": "crystal",
+      "lint": "warn",
+      "notes": "Legacy noun; pr-27 renames to 結晶. The product site's 'grouped gem' is superseded."
+    },
+    {
+      "ja": "時間の核",
+      "en": "time core",
+      "lint": "error",
+      "notes": "Lifetime time milestone. 'Time Core' in titles. Replaces the English eyebrow TIME CORE."
+    },
+    {
+      "ja": "記念石",
+      "en": "milestone stone",
+      "lint": "error",
+      "forbidden_en": [
+        "achievement star",
+        "trophy",
+        "badge"
+      ],
+      "notes": "Weighs 0 g, separate from mass. Matches site/store. 記念石にする → Make a Milestone Stone."
+    },
+    {
+      "ja": "成果",
+      "en": "achievement",
+      "lint": "warn",
+      "notes": "The real-world event (100点, 合格, 仕事の節目). 成果を積む → Add an Achievement; 成果メモ → achievement note; 成果を編集 → Edit Achievement."
+    },
+    {
+      "ja": "100点",
+      "en": "Perfect score",
+      "lint": "none"
+    },
+    {
+      "ja": "試験合格",
+      "en": "Passed an exam",
+      "lint": "none"
+    },
+    {
+      "ja": "仕事の節目",
+      "en": "Work milestone",
+      "lint": "none"
+    },
+    {
+      "ja": "黒い石",
+      "en": "black stone",
+      "lint": "error",
+      "forbidden_en": [
+        "bad gem",
+        "penalty"
+      ],
+      "notes": "pr-36 noun for Screen Time time on apps the user wants to use less (黒いgem legacy). Neutral, never shaming. Store copy currently says 'black gems' — integration aligns it."
+    },
+    {
+      "ja": "勉強アプリの粒",
+      "en": "study-app gem",
+      "lint": "warn",
+      "notes": "pr-36 noun (勉強のgem legacy)."
+    },
+    {
+      "ja": "控えたいアプリ",
+      "en": "apps you want to use less",
+      "lint": "warn"
+    },
+    {
+      "ja": "金の粒",
+      "en": "gold gem",
+      "lint": "warn",
+      "notes": "Rare reward (feature disabled in shipping builds)."
+    },
+    {
+      "ja": "虹の粒",
+      "en": "rainbow gem",
+      "lint": "warn"
+    },
+    {
+      "ja": "レア粒",
+      "en": "rare gem",
+      "lint": "warn",
+      "notes": "In-app only. Store metadata must never mention rare rewards (validate-store-metadata.py)."
+    },
+    {
+      "ja": "抽選",
+      "en": "draw",
+      "lint": "none",
+      "notes": "250gごとの抽選 → a draw every 250 g."
+    },
+    {
+      "ja": "質量",
+      "en": "mass",
+      "lint": "error",
+      "forbidden_en": [
+        "weight",
+        "score",
+        "points"
+      ],
+      "notes": "総質量 → total mass; 積んだ質量 → mass added. Grams are a game unit, never converted."
+    },
+    {
+      "ja": "標準単位",
+      "en": "standard unit",
+      "lint": "warn",
+      "notes": "Mostly removed by pr-27; keep in VoiceOver disclosures only."
+    },
+    {
+      "ja": "テーマ",
+      "en": "theme",
+      "lint": "error",
+      "forbidden_en": [
+        "subject",
+        "category",
+        "topic",
+        "tag"
+      ],
+      "notes": "User-defined study/work theme. テーマを管理 → Manage Themes; テーマを選ぶ → Choose a Theme."
+    },
+    {
+      "ja": "集中",
+      "en": "focus",
+      "lint": "warn",
+      "notes": "Noun and verb. 集中をはじめる/集中を始める → Start Focus (button); 集中する → Focus; 集中中/集中を続けています → Focusing; 集中完了 → Focus Complete."
+    },
+    {
+      "ja": "休憩",
+      "en": "break",
+      "lint": "warn",
+      "notes": "5分休憩 → 5-Min Break; 休憩をスキップ → Skip Break; ここで休む → Rest Here."
+    },
+    {
+      "ja": "完走",
+      "en": "complete / completed session",
+      "lint": "none",
+      "notes": "Verb: finish/complete a session. 完走した回数 → completed sessions. Never 'win'."
+    },
+    {
+      "ja": "一時停止",
+      "en": "Pause",
+      "lint": "none"
+    },
+    {
+      "ja": "再開",
+      "en": "Resume",
+      "lint": "none"
+    },
+    {
+      "ja": "今日はここまで",
+      "en": "Stop for Today",
+      "lint": "none",
+      "forbidden_en": [
+        "Give Up",
+        "Quit",
+        "Fail"
+      ],
+      "notes": "Gentle stop; not 'Done' (it does not complete the session)."
+    },
+    {
+      "ja": "中断",
+      "en": "stop",
+      "lint": "none",
+      "forbidden_en": [
+        "abandon",
+        "fail",
+        "give up"
+      ]
+    },
+    {
+      "ja": "実測",
+      "en": "timed",
+      "lint": "warn",
+      "notes": "Badge 'Timed'; running text 'timed sessions'. (Site uses 'Measured' — integration may align the site.)"
+    },
+    {
+      "ja": "自己申告",
+      "en": "self-reported",
+      "lint": "warn",
+      "notes": "Badge 'Self-reported'. Never implies dishonesty."
+    },
+    {
+      "ja": "手動で積む",
+      "en": "add manually",
+      "lint": "warn",
+      "notes": "時間を手動で積む → Add Time Manually; 確認して積む → Confirm and Add."
+    },
+    {
+      "ja": "積む",
+      "en": "add (to your jar)",
+      "lint": "none",
+      "forbidden_en": [
+        "earn",
+        "win",
+        "score",
+        "collect points"
+      ],
+      "notes": "積んだ → added; 積み上げ/積み重ね → build up."
+    },
+    {
+      "ja": "積み上がり",
+      "en": "progress",
+      "lint": "none",
+      "notes": "Screen title 'Progress'; 積み上がりを見る → See Progress; 積み上がり計画 → Plan Ahead (screen: 'Plan')."
+    },
+    {
+      "ja": "記録",
+      "en": "log (screen) / records (data)",
+      "lint": "none",
+      "notes": "Tab/screen 記録 → Log; 記録を見る → View Log; 集中記録 → focus sessions; 記録は削除していません → Your records have not been deleted."
+    },
+    {
+      "ja": "履歴",
+      "en": "history",
+      "lint": "none"
+    },
+    {
+      "ja": "月の振り返り",
+      "en": "Month in Review",
+      "lint": "none",
+      "notes": "Wrapped. 今月の積み重ね (setting) → Monthly Recap."
+    },
+    {
+      "ja": "年月",
+      "en": "Years & Months",
+      "lint": "none",
+      "notes": "年月の棚 → year and month shelf."
+    },
+    {
+      "ja": "集中の星図",
+      "en": "focus constellation",
+      "lint": "none",
+      "notes": "pr-27 replaces FOCUS CONSTELLATION."
+    },
+    {
+      "ja": "月の刻印",
+      "en": "month stamp",
+      "lint": "warn",
+      "notes": "Pro feature (まとまり粒の月刻印 → month stamps on crystals)."
+    },
+    {
+      "ja": "今週",
+      "en": "this week",
+      "lint": "none"
+    },
+    {
+      "ja": "保存先",
+      "en": "storage",
+      "lint": "none",
+      "notes": "記録の保存先 → where your records are stored."
+    },
+    {
+      "ja": "iCloudに保存して同期",
+      "en": "Save to iCloud and Sync",
+      "lint": "error"
+    },
+    {
+      "ja": "このiPhoneだけに保存",
+      "en": "Save on This iPhone Only",
+      "lint": "error"
+    },
+    {
+      "ja": "このiPhoneのみ",
+      "en": "This iPhone Only",
+      "lint": "warn",
+      "notes": "Matches the product site."
+    },
+    {
+      "ja": "このiPhoneだけで始める",
+      "en": "Start on This iPhone Only",
+      "lint": "error"
+    },
+    {
+      "ja": "この端末",
+      "en": "this device",
+      "lint": "none",
+      "notes": "端末 → device; keep 'iPhone' where the Japanese says iPhone."
+    },
+    {
+      "ja": "同期",
+      "en": "sync",
+      "lint": "none",
+      "notes": "再集計中 → Recounting…; 確認中 → Checking…"
+    },
+    {
+      "ja": "置き換え",
+      "en": "replace",
+      "lint": "warn",
+      "forbidden_en": [
+        "merge"
+      ],
+      "notes": "Histories are never merged. 上書き → replace (do not mix 'overwrite')."
+    },
+    {
+      "ja": "削除",
+      "en": "delete",
+      "lint": "none",
+      "notes": "ユーザー内容を削除 → Delete Your Content; typed confirmation word 削除 → DELETE."
+    },
+    {
+      "ja": "書き出し",
+      "en": "export",
+      "lint": "none"
+    },
+    {
+      "ja": "購入を復元",
+      "en": "Restore Purchases",
+      "lint": "error"
+    },
+    {
+      "ja": "買い切り",
+      "en": "one-time purchase",
+      "lint": "warn"
+    },
+    {
+      "ja": "基本無料",
+      "en": "free core features",
+      "lint": "none"
+    },
+    {
+      "ja": "通知",
+      "en": "notification",
+      "lint": "none",
+      "notes": "終了通知 → timer-end notification; 毎日のリマインダー → Daily Reminder; 集中に戻るお知らせ → Return-to-Focus Reminder."
+    },
+    {
+      "ja": "シェアカード",
+      "en": "share card",
+      "lint": "warn",
+      "notes": "カードにする → Make a Card; 本文をコピー → Copy Text; 写真に2サイズ保存 → Save 2 Sizes to Photos."
+    },
+    {
+      "ja": "ハッシュタグ",
+      "en": "hashtag",
+      "lint": "none",
+      "notes": "Default hashtags per language: ja #ポモジェム #ポモドーロ; en #PomoGem #pomodoro."
+    },
+    {
+      "ja": "スクリーンタイム",
+      "en": "Screen Time",
+      "lint": "error",
+      "notes": "Apple's feature name, always capitalized."
+    },
+    {
+      "ja": "設定",
+      "en": "Settings",
+      "lint": "none"
+    },
+    {
+      "ja": "閉じる",
+      "en": "Close",
+      "lint": "none"
+    },
+    {
+      "ja": "キャンセル",
+      "en": "Cancel",
+      "lint": "none"
+    },
+    {
+      "ja": "戻る",
+      "en": "Back",
+      "lint": "none"
+    },
+    {
+      "ja": "次へ",
+      "en": "Next",
+      "lint": "none"
+    },
+    {
+      "ja": "完了",
+      "en": "Done",
+      "lint": "none"
+    },
+    {
+      "ja": "再試行",
+      "en": "Try Again",
+      "lint": "none",
+      "notes": "もう一度試す → Try Again; もう一度お試しください → Please try again."
+    },
+    {
+      "ja": "サポートを見る",
+      "en": "Get Support",
+      "lint": "none"
+    },
+    {
+      "ja": "プライバシーポリシー",
+      "en": "Privacy Policy",
+      "lint": "none"
+    },
+    {
+      "ja": "利用規約",
+      "en": "Terms of Use",
+      "lint": "none"
+    },
+    {
+      "ja": "販売条件",
+      "en": "Terms of Sale",
+      "lint": "none"
+    },
+    {
+      "ja": "深夜",
+      "en": "Midnight",
+      "lint": "none",
+      "notes": "Home atmosphere."
+    },
+    {
+      "ja": "オーロラ",
+      "en": "Aurora",
+      "lint": "none"
+    },
+    {
+      "ja": "朝凪",
+      "en": "Morning Calm",
+      "lint": "none"
+    },
+    {
+      "ja": "書斎",
+      "en": "Den",
+      "lint": "none",
+      "notes": "Not 'Study' (collides with studying)."
+    },
+    {
+      "ja": "英語 (preset)",
+      "en": "English",
+      "lint": "none",
+      "notes": "Built-in theme display name (owner question 4)."
+    },
+    {
+      "ja": "数学 (preset)",
+      "en": "Math",
+      "lint": "none"
+    },
+    {
+      "ja": "国語 (preset)",
+      "en": "Language Arts",
+      "lint": "none"
+    },
+    {
+      "ja": "理科 (preset)",
+      "en": "Science",
+      "lint": "none"
+    },
+    {
+      "ja": "社会 (preset)",
+      "en": "Social Studies",
+      "lint": "none"
+    },
+    {
+      "ja": "企画 (preset)",
+      "en": "Planning",
+      "lint": "none"
+    },
+    {
+      "ja": "開発 (preset)",
+      "en": "Development",
+      "lint": "none"
+    },
+    {
+      "ja": "資料作成 (preset)",
+      "en": "Docs & Slides",
+      "lint": "none"
+    },
+    {
+      "ja": "顧客対応 (preset)",
+      "en": "Customer Support",
+      "lint": "none"
+    }
+  ],
+  "phrases": [
+    {
+      "ja": "減らない。消えない。責めない。",
+      "en": "Nothing shrinks. Nothing disappears. No guilt."
+    },
+    {
+      "ja": "集中した時間が、宝石になる。",
+      "en": "Your focused time becomes a gem."
+    },
+    {
+      "ja": "まだ空っぽ。",
+      "en": "Still empty."
+    },
+    {
+      "ja": "25分の集中で、ここにひと粒落ちる。",
+      "en": "Focus for 25 minutes and a gem drops in here."
+    },
+    {
+      "ja": "瓶が待ってる。今日のひと粒、積んでいく？",
+      "en": "Your jar is here whenever you're ready. Add a gem today?"
+    },
+    {
+      "ja": "先月の瓶ができた。積み上がりを眺めよう。",
+      "en": "Last month's jar is ready. Take a look at your progress."
+    },
+    {
+      "ja": "画面を離れたので、この回は自己申告あつかいになった",
+      "en": "You left the screen, so this session counts as self-reported."
+    },
+    {
+      "ja": "アプリが終了したため、この回は積まれませんでした",
+      "en": "The app was closed, so this session wasn't added."
+    },
+    {
+      "ja": "休んでも、これまでの瓶は減りません。",
+      "en": "Taking a break never shrinks your jar."
+    },
+    {
+      "ja": "次へ急ぐ必要はありません。",
+      "en": "There's no need to rush to the next one."
+    },
+    {
+      "ja": "\\(modeLabel)  ·  \\(remainingPercent)% 残り",
+      "en": "%1$@ · %2$lld%% left"
+    },
+    {
+      "ja": "朝4:00に回数が切り替わります",
+      "en": "The count resets at 4:00 AM."
+    },
+    {
+      "ja": "\\(displayPrice)でProを購入",
+      "en": "Buy Pro for %@"
+    }
+  ],
+  "forbidden_en_anywhere": [
+    "streak",
+    "don't lose",
+    "you missed",
+    "hurry",
+    "last chance",
+    "failed to focus",
+    "lazy",
+    "pebble",
+    "bottle"
+  ],
+  "forbidden_en_allowed": [
+    "no streaks?",
+    "no hurry",
+    "don't hurry",
+    "no need to hurry"
+  ],
+  "forbidden_en_notes": "'streak' is allowed only in the negation 'no streaks' (lint allowlist). 'bottle' and 'pebble' are old/incorrect nouns."
+}
