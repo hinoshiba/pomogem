@@ -133,8 +133,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         .resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
     }
 
+    /// Pro (D21): every crystal's copper tag carries its month ("2026.9")
+    /// under the count. Nothing else about a crystal depends on Pro.
     var showsMonthLabels = false {
-        didSet { renderBaseLayers() }
+        didSet {
+            renderBaseLayers()
+            guard showsMonthLabels != oldValue else { return }
+            allPebbleNodes.forEach { $0.setMonthEngraving(showsMonthLabels) }
+        }
     }
 
     private enum DropOrigin {
@@ -797,7 +803,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             rareRewardMode: rareRewardMode,
             artworkScale: artworkScale,
             jarScale: JarScalePolicy.bodyScale(for: descriptor, studyScale: studyScale ?? jarScale),
-            effectsIntensity: effectsIntensity
+            effectsIntensity: effectsIntensity,
+            showsMonthEngraving: showsMonthLabels
         )
     }
 

@@ -2975,24 +2975,65 @@ extension GemArtwork {
     }
 
     /// Scene-point size of an engraving (the tag plate or the stone text).
-    static func countEngravingSize(text: String, fontSize rawFontSize: CGFloat, style: CountEngraving) -> CGSize {
+    /// A copper tag with a `month` (D21) grows a second, smaller line below
+    /// the count; without one it is exactly the D26 tag.
+    static func countEngravingSize(text: String, fontSize rawFontSize: CGFloat, style: CountEngraving, month: String? = nil) -> CGSize {
         let fontSize = max(3, rawFontSize.isFinite ? rawFontSize : 7)
         let measured = countEngravingText(text, fontSize: fontSize, style: style).size()
         switch style {
         case .copperTag:
             let height = (fontSize * 1.50).rounded(.up)
-            return CGSize(width: (measured.width + fontSize * 0.95).rounded(.up), height: height)
+            let width = (measured.width + fontSize * 0.95).rounded(.up)
+            guard let month else { return CGSize(width: width, height: height) }
+            let monthFont = monthEngravingFontSize(countFontSize: fontSize)
+            let monthWidth = (countEngravingText(month, fontSize: monthFont, style: style).size().width + monthFont * 0.95).rounded(.up)
+            return CGSize(width: max(width, monthWidth), height: height + monthEngravingLineHeight(countFontSize: fontSize))
         case .stone:
             return CGSize(width: (measured.width + 2).rounded(.up), height: (measured.height + 1.5).rounded(.up))
         }
     }
 
+    /// Height of the count line on a copper tag (the D26 tag's height). A
+    /// tag with a month keeps this line where the single-line tag had it.
+    static func countEngravingCountLineHeight(fontSize rawFontSize: CGFloat) -> CGFloat {
+        let fontSize = max(3, rawFontSize.isFinite ? rawFontSize : 7)
+        return (fontSize * 1.50).rounded(.up)
+    }
+
+    /// The month line is 0.8 of the count's type size (5.6–7.2 pt).
+    static func monthEngravingFontSize(countFontSize: CGFloat) -> CGFloat {
+        countFontSize * 0.80
+    }
+
+    private static func monthEngravingLineHeight(countFontSize: CGFloat) -> CGFloat {
+        (monthEngravingFontSize(countFontSize: countFontSize) * 1.25).rounded(.up)
+    }
+
+    /// D21: the Pro month engraving under a crystal's count, "2026.9": the
+    /// month the crystal was formed, the same month the fusion sheet names
+    /// (`JarAggregateRequest.monthLabel`, 「2026年9月」). A hallmark of
+    /// digits that reads the same in every language, so it is never a
+    /// localised sentence; the year is formatted as a date field, never as
+    /// a grouped number.
+    static func monthHallmark(for date: Date, timeZone: TimeZone = .current) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let style = Date.VerbatimFormatStyle(
+            format: "\(year: .defaultDigits).\(month: .defaultDigits)",
+            timeZone: timeZone,
+            calendar: calendar
+        )
+        return date.formatted(style)
+    }
+
     /// Atlas name of an engraving. `SKTextureAtlas` keys must stay ASCII
     /// (a "×" in a key comes back as the missing-texture cross), so the text
     /// is spelled as its Unicode scalar values.
-    static func countEngravingTextureName(text: String, fontSize: CGFloat, style: CountEngraving, scale: CGFloat) -> String {
+    static func countEngravingTextureName(text: String, fontSize: CGFloat, style: CountEngraving, scale: CGFloat, month: String? = nil) -> String {
         let spelled = text.unicodeScalars.map { String($0.value, radix: 16) }.joined(separator: ".")
-        return "gem.engraving|\(style.rawValue)|\(spelled)|f\((fontSize * 4).rounded() / 4)|x\(renderScale(scale))"
+        let base = "gem.engraving|\(style.rawValue)|\(spelled)|f\((fontSize * 4).rounded() / 4)|x\(renderScale(scale))"
+        guard let month, style == .copperTag else { return base }
+        return "\(base)|m\(month.unicodeScalars.map { String($0.value, radix: 16) }.joined(separator: "."))"
     }
 
     /// The engraving as an image the size of `countEngravingSize`.
@@ -3004,17 +3045,22 @@ extension GemArtwork {
     /// - Stone: the count alone, a shade lighter than the rock (white α0.30)
     ///   with a dark upper lip, so it reads as cut into the stone and never
     ///   as a label.
-    static func countEngravingImage(text: String, fontSize rawFontSize: CGFloat, style: CountEngraving, scale: CGFloat) -> UIImage {
+    /// - Month (D21, copper tag only): a second, smaller line cut below the
+    ///   count on the same plate, under a faint groove.
+    static func countEngravingImage(text: String, fontSize rawFontSize: CGFloat, style: CountEngraving, scale: CGFloat, month: String? = nil) -> UIImage {
         let fontSize = max(3, rawFontSize.isFinite ? rawFontSize : 7)
-        let size = countEngravingSize(text: text, fontSize: fontSize, style: style)
+        let month = style == .copperTag ? month : nil
+        let size = countEngravingSize(text: text, fontSize: fontSize, style: style, month: month)
         let font = countEngravingFont(fontSize: fontSize, style: style)
+        // The count keeps the single-line tag's line at the top.
+        let countLine = month == nil ? size.height : countEngravingCountLineHeight(fontSize: fontSize)
         return UIGraphicsImageRenderer(size: size, format: rendererFormat(scale: scale)).image { renderer in
             let context = renderer.cgContext
             let bounds = CGRect(origin: .zero, size: size)
             let textSize = countEngravingText(text, fontSize: fontSize, style: style).size()
             let origin = CGPoint(
                 x: (size.width - textSize.width) / 2,
-                y: (size.height - textSize.height) / 2 - fontSize * 0.02
+                y: (countLine - textSize.height) / 2 - fontSize * 0.02
             )
             func draw(color: UIColor, offset: CGFloat) {
                 NSAttributedString(string: text, attributes: [
@@ -3022,6 +3068,20 @@ extension GemArtwork {
                     .kern: fontSize * 0.02,
                     .foregroundColor: color
                 ]).draw(at: CGPoint(x: origin.x, y: origin.y + offset))
+            }
+            func drawMonth(_ month: String, color: UIColor, offset: CGFloat) {
+                let monthFont = monthEngravingFontSize(countFontSize: fontSize)
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: countEngravingFont(fontSize: monthFont, style: style),
+                    .kern: monthFont * 0.04,
+                    .foregroundColor: color
+                ]
+                let monthSize = NSAttributedString(string: month, attributes: attributes).size()
+                let lineHeight = size.height - countLine
+                NSAttributedString(string: month, attributes: attributes).draw(at: CGPoint(
+                    x: (size.width - monthSize.width) / 2,
+                    y: countLine + (lineHeight - monthSize.height) / 2 - fontSize * 0.08 + offset
+                ))
             }
             switch style {
             case .copperTag:
@@ -3060,6 +3120,13 @@ extension GemArtwork {
                 // Cut letters: the pale lower lip first, the dark cut on top.
                 draw(color: UIColor(red: 1, green: 0.88, blue: 0.78, alpha: 0.55), offset: 0.55)
                 draw(color: UIColor(red: 0.27, green: 0.13, blue: 0.07, alpha: 0.92), offset: 0)
+                if let month {
+                    // A faint groove, then the month cut a little lighter.
+                    context.setFillColor(UIColor(red: 0.30, green: 0.14, blue: 0.08, alpha: 0.30).cgColor)
+                    context.fill(CGRect(x: plate.minX + plate.width * 0.18, y: countLine - 0.3, width: plate.width * 0.64, height: 0.5))
+                    drawMonth(month, color: UIColor(red: 1, green: 0.88, blue: 0.78, alpha: 0.50), offset: 0.5)
+                    drawMonth(month, color: UIColor(red: 0.27, green: 0.13, blue: 0.07, alpha: 0.82), offset: 0)
+                }
             case .stone:
                 draw(color: UIColor(white: 0, alpha: 0.65), offset: -0.5)
                 draw(color: UIColor(white: 1, alpha: 0.30), offset: 0)

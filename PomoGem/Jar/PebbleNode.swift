@@ -540,6 +540,10 @@ final class PebbleNode: SKShapeNode {
     private var aggregateTagNode: SKSpriteNode?
     /// The tag's text, exactly the former plate's (`AggregatePresentation`).
     private(set) var aggregateTagText: String?
+    /// D21: Pro's month engraving under the count ("2026.9"), or nil.
+    private(set) var aggregateTagMonth: String?
+    /// Pro shows every crystal's month on its tag (D21).
+    private(set) var showsMonthEngraving: Bool
     private var achievementMarkBackdropNode: SKShapeNode?
     private var achievementMarkNode: SKLabelNode?
     /// Faceted gem skin (loose normal gems, aggregates and achievement
@@ -594,12 +598,14 @@ final class PebbleNode: SKShapeNode {
         rareRewardMode: RareRewardMode = .standard,
         artworkScale: CGFloat = PebbleNode.defaultArtworkScale,
         jarScale: CGFloat = 1,
-        effectsIntensity: JarEffectsIntensity = .standard
+        effectsIntensity: JarEffectsIntensity = .standard,
+        showsMonthEngraving: Bool = false
     ) {
         self.descriptor = descriptor
         self.localRadius = descriptor.radius
         self.reducesVisualMotion = reduceMotion
         self.effectsIntensity = effectsIntensity
+        self.showsMonthEngraving = showsMonthEngraving
         self.rareRewardMode = rareRewardMode
         self.artworkScale = GemArtwork.renderScale(artworkScale)
         let scale = Self.sanitizedJarScale(jarScale)
@@ -625,6 +631,7 @@ final class PebbleNode: SKShapeNode {
         localRadius = Constants.Jar.measuredRadius
         reducesVisualMotion = UIAccessibility.isReduceMotionEnabled
         effectsIntensity = .standard
+        showsMonthEngraving = false
         rareRewardMode = .standard
         artworkScale = Self.defaultArtworkScale
         super.init(coder: aDecoder)
@@ -1429,17 +1436,42 @@ final class PebbleNode: SKShapeNode {
     }
 
     /// The count tag sized for the crystal's scene radius at the bake scale.
+    /// With Pro's month engraving (D21) the tag grows a second line below
+    /// the count, and its anchor keeps the count line exactly where the
+    /// single-line tag had it (0.40R below the centre).
     private func showAggregateTag() {
         guard let tag = aggregateTagNode, let text = aggregateTagText else { return }
         let fontSize = GemArtwork.countTagFontSize(sceneRadius: localRadius * textureJarScale)
-        tag.setUnscaledSize(GemArtwork.countEngravingSize(text: text, fontSize: fontSize, style: .copperTag))
+        let month = aggregateTagMonth
+        let size = GemArtwork.countEngravingSize(text: text, fontSize: fontSize, style: .copperTag, month: month)
+        tag.setUnscaledSize(size)
+        let countLine = GemArtwork.countEngravingCountLineHeight(fontSize: fontSize)
+        tag.anchorPoint = CGPoint(
+            x: 0.5,
+            y: month == nil ? 0.5 : 1 - countLine / 2 / max(size.height, 1)
+        )
         let scale = artworkScale
         GemTextureAtlas.shared.show(
-            GemArtwork.countEngravingTextureName(text: text, fontSize: fontSize, style: .copperTag, scale: scale),
+            GemArtwork.countEngravingTextureName(text: text, fontSize: fontSize, style: .copperTag, scale: scale, month: month),
             on: tag
         ) {
-            GemArtwork.countEngravingImage(text: text, fontSize: fontSize, style: .copperTag, scale: scale)
+            GemArtwork.countEngravingImage(text: text, fontSize: fontSize, style: .copperTag, scale: scale, month: month)
         }
+    }
+
+    /// D21 (Pro): engrave (or remove) the crystal's month under its count.
+    /// Only the tag changes: the cut, light, radius and halo of a crystal
+    /// never depend on Pro.
+    func setMonthEngraving(_ enabled: Bool) {
+        guard showsMonthEngraving != enabled else { return }
+        showsMonthEngraving = enabled
+        aggregateTagMonth = Self.monthEngraving(for: descriptor, enabled: enabled)
+        showAggregateTag()
+    }
+
+    private static func monthEngraving(for descriptor: PebbleDescriptor, enabled: Bool) -> String? {
+        guard enabled, descriptor.isAggregate else { return nil }
+        return GemArtwork.monthHallmark(for: descriptor.createdAt)
     }
 
     /// A shared light sprite on the gem atlas page (see `GemTextureAtlas`).
@@ -1813,6 +1845,7 @@ final class PebbleNode: SKShapeNode {
         addChild(tag)
         aggregateTagNode = tag
         aggregateTagText = AggregatePresentation.countLabel(aggregate.pebbleCount)
+        aggregateTagMonth = Self.monthEngraving(for: descriptor, enabled: showsMonthEngraving)
         showAggregateTag()
     }
 

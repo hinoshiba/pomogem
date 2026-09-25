@@ -542,7 +542,8 @@ enum GemShowcaseUITestFixture {
 
 /// Standalone jar for the `gallery`, `stress` and `worstcase` modes. It
 /// restores fixed descriptors and never installs aggregate persistence
-/// callbacks, so no fusion can occur.
+/// callbacks, so no fusion can occur. `POMOGEM_UI_TEST_PRO_MONTHS=1` shows
+/// Pro's month engraving on the crystals' tags (D21).
 struct GemShowcaseFixtureLaunchView: View {
     private static var mode: GemShowcaseUITestFixture.Mode? { GemShowcaseUITestFixture.modeForCurrentProcess }
 
@@ -566,6 +567,9 @@ struct GemShowcaseFixtureLaunchView: View {
         ))
         scene.soundEnabled = false
         scene.hapticsEnabled = false
+        // D21 review: Pro's month engraving under every crystal's count
+        // (the store purchase itself is not simulated).
+        scene.showsMonthLabels = ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_PRO_MONTHS"] == "1"
         scene.restore(pebbles: GemShowcaseFixtureLaunchView.descriptors)
         switch GemShowcaseFixtureLaunchView.mode {
         case .fusionfx:
