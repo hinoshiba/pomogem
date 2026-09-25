@@ -1409,37 +1409,26 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         // documents the selected storage contract promised by the product page.
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
-        let cloudStorage = app.staticTexts["iCloud"]
-        let localStorage = app.staticTexts["このiPhoneのみ"]
+        // settings-06. The storage state and privacy promise are the support
+        // section's footer, and the version is on the 「このアプリについて」
+        // row below it.
+        let privacyFooter = app.staticTexts["settings.privacy-footer"]
+        XCTAssertTrue(scrollUntilVisible(privacyFooter))
         XCTAssertTrue(
-            scrollUntilVisible(cloudStorage) || scrollUntilVisible(localStorage)
+            privacyFooter.label == "記録はあなたのiCloudに保存されます。開発者が記録を受け取ることはありません。"
+                || privacyFooter.label == "記録はこのiPhoneにだけ保存されます。開発者が記録を受け取ることはありません。",
+            privacyFooter.label
         )
-        let selectedStorage: XCUIElement
-        if cloudStorage.exists {
-            selectedStorage = cloudStorage
-            XCTAssertTrue(app.staticTexts[
-                "あなたのプライベートデータベースのみ"
-            ].exists)
-        } else {
-            selectedStorage = localStorage
-            XCTAssertTrue(app.staticTexts[
-                "iCloudへ送信しない端末内の専用領域"
-            ].exists)
-        }
         XCTAssertFalse(
             app.buttons.matching(
                 NSPredicate(format: "label CONTAINS %@", "ユーザー内容を削除")
             ).firstMatch.exists,
             "Version 1.0 must not expose the experimental cross-container deletion transaction"
         )
-        // Keep the privacy explanation and the version in the viewport using
-        // ordinary scrolling. SwiftUI exposes LabeledContent as one combined
-        // accessibility row, rather than a standalone version-value element.
-        XCTAssertTrue(selectedStorage.waitForExistence(timeout: 3))
-        let version = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label BEGINSWITH %@", "バージョン")
-        ).firstMatch
-        XCTAssertTrue(scrollUntilVisible(version))
+        let about = app.buttons["settings.about"]
+        XCTAssertTrue(scrollUntilVisible(about))
+        XCTAssertTrue(about.label.contains("バージョン"), about.label)
+        XCTAssertTrue(privacyFooter.exists)
         waitForUISettle()
         retainScreenshot(named: "ASC_05_iCloud-and-privacy")
     }

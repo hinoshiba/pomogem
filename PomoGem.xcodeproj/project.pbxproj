@@ -88,6 +88,7 @@
 		4056D870DB9DC84E0C032274 /* Jar.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 9A534586E1B58A5EB017BFEA /* Jar.xcstrings */; };
 		40A0452D3F88178D8765D82B /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0DB3E232484AC671632F8E7 /* Haptics.swift */; };
 		4129A240F273AA2DF7D27F5C /* LICENSE-fonts.txt in Resources */ = {isa = PBXBuildFile; fileRef = DBD525CB72EF7C8BBA600020 /* LICENSE-fonts.txt */; };
+		41DABA61F5FD5087EAB0F223 /* AboutAppView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40F05E7690A8D077F1397899 /* AboutAppView.swift */; };
 		4232571BF9FD777E141B4B3E /* PersistenceStoreTopologyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37C94826242029C7168F438B /* PersistenceStoreTopologyTests.swift */; };
 		432E3A239EAD37662DB890D2 /* StorageTransferManifestWriterFieldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C7F1C2440BE0CBAEAA0495 /* StorageTransferManifestWriterFieldTests.swift */; };
 		4382B547F714CB706ECAC9E2 /* StorageTransferPartialDestinationAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9270B3F7CC918D0D65A344B9 /* StorageTransferPartialDestinationAdapters.swift */; };
@@ -494,6 +495,7 @@
 		3FA4EE8D1FB7A66F05F42BD7 /* CloudOfflineHistoryPreflightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudOfflineHistoryPreflightTests.swift; sourceTree = "<group>"; };
 		405164FE628C5989DD6BDCAE /* AccessibilityAdversarialUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityAdversarialUITests.swift; sourceTree = "<group>"; };
 		405ABBE29080EBB7B18B775A /* ScreenTimeMonitoringInterleavingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeMonitoringInterleavingTests.swift; sourceTree = "<group>"; };
+		40F05E7690A8D077F1397899 /* AboutAppView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutAppView.swift; sourceTree = "<group>"; };
 		4213EFBA64EE041E199C469F /* LaunchActivationWatchdogPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchActivationWatchdogPolicy.swift; sourceTree = "<group>"; };
 		4383D72800A4EF0F5C7823FE /* EngagementOverviewUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngagementOverviewUITests.swift; sourceTree = "<group>"; };
 		448C5665A29F67E58E8ED641 /* CloudActivityHistoryPreflight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudActivityHistoryPreflight.swift; sourceTree = "<group>"; };
@@ -996,6 +998,7 @@
 		6303CCF965DC4FCB4BD972A0 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				40F05E7690A8D077F1397899 /* AboutAppView.swift */,
 				2DD50E345F510C6D928E8D62 /* CloudDataDeletionGuidanceView.swift */,
 				CF23306474C1C7B694067BD8 /* PomoGemDataExporter.swift */,
 				9365249A6EAC82E237E17D81 /* PreferredFocusDurationPicker.swift */,
@@ -1613,6 +1616,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				41DABA61F5FD5087EAB0F223 /* AboutAppView.swift in Sources */,
 				CD314C58727C0833F9311662 /* AcceptedActivityResetCleanup.swift in Sources */,
 				45C3432E965D93244196538F /* AccumulationOverviewLoader.swift in Sources */,
 				51F8EC43204320B66CC02E5E /* AccumulationOverviewView.swift in Sources */,

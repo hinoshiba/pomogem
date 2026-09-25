@@ -80,7 +80,6 @@ struct SettingsView: View {
     @State private var subjectPendingDeletion: Subject?
     @State private var subjectPendingDeletionRecordCount: Int?
     @State private var showResetData = false
-    @State private var showFontLicense = false
     @State private var showCustomDuration = false
     @State private var notificationError: String?
     @State private var notificationPreferenceIntents =
@@ -141,14 +140,24 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        // settings-06. Ordered by what people look for, not by when each
+        // feature was built: the timer, then Pro beside the timer it
+        // extends, then the other preferences, then everything about the
+        // records and iCloud together, then support and the app itself.
         List {
             subjectsSection
             focusSection
+            focusNoticesSection
+            proSection
             screenTimeSection
             if RareRewardReleasePolicy.isEnabled {
                 rarePebbleSection
             }
             sensorySection
+            notificationSection
+            shareSection
+            // 記録とiCloud: where the records live, moving them, exporting
+            // and resetting them.
             CloudSyncSettingsSection(persistenceMode: persistenceMode)
             StorageTransferSettingsSection(
                 persistenceMode: persistenceMode,
@@ -159,12 +168,9 @@ struct SettingsView: View {
                     || router.cloudFocusRecoveryOffer != nil,
                 disclosesScreenTimeReset: screenTimeIsInUse
             )
-            notificationSection
-            shareSection
-            proSection
-            privacySection
-            creditsSection
             dataSection
+            privacySection
+            aboutSection
         }
         .scrollContentBackground(.hidden)
         .background(NightBackground())
@@ -203,9 +209,6 @@ struct SettingsView: View {
             .environment(\.dynamicTypeSize, dynamicTypeSize)
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showFontLicense) {
-            FontLicenseView()
         }
         .sheet(isPresented: $showDataExportShareSheet, onDismiss: {
             removePresentedDataExport()
@@ -475,6 +478,76 @@ struct SettingsView: View {
 
     private var focusSection: some View {
         Section("集中") {
+            if let resolvedPreferences {
+                PreferredFocusDurationPicker(
+                    preferredSeconds: resolvedPreferences.preferredFocusSeconds,
+                    isPro: purchase.isPro,
+                    onSelectPreset: { duration in
+                        _ = savePreferredFocusSeconds(duration.seconds)
+                    },
+                    onCustomDuration: {
+                        if purchase.isPro {
+                            showCustomDuration = true
+                        } else {
+                            // settings-08. Buying reopens this editor, as
+                            // it does from Home.
+                            router.presentPaywall(
+                                from: .customTimer,
+                                pendingIntent: .settingsCustomDuration
+                            )
+                        }
+                    }
+                )
+
+                NavigationLink {
+                    TimerDisplayModeSelectionView(selection: timerDisplayModeBinding)
+                } label: {
+                    SettingLabel(
+                        title: "集中タイマーの表示",
+                        subtitle: resolvedPreferences.timerDisplayMode.title,
+                        symbol: "circle.dotted"
+                    )
+                }
+                .accessibilityIdentifier("settings.timer-display-mode")
+                .accessibilityHint("4つの見本から、タイマーの見た目を選べます")
+            }
+            NavigationLink {
+                TimerDefaultOrientationSettingsView(selection: Binding(
+                    get: { TimerDefaultOrientation(rawValue: defaultTimerOrientationRawValue) ?? .automatic },
+                    set: { defaultTimerOrientationRawValue = $0.rawValue }
+                ))
+            } label: {
+                SettingLabel(
+                    title: "タイマーの既定の向き",
+                    subtitle: (TimerDefaultOrientation(rawValue: defaultTimerOrientationRawValue) ?? .automatic).title,
+                    symbol: "rotate.right"
+                )
+            }
+            .accessibilityIdentifier("settings.timer-default-orientation")
+            .accessibilityHint("新しい集中・休憩タイマーを開く向きを選べます")
+
+            if let resolvedPreferences {
+                Toggle(isOn: settingBinding(
+                    .keepScreenAwake,
+                    currentValue: resolvedPreferences.keepScreenAwake,
+                    update: { $0.keepScreenAwake = $1 }
+                )) {
+                    SettingLabel(
+                        title: "タイマー中は画面をロックしない",
+                        subtitle: "集中・休憩のタイマー画面を開いている間だけ有効",
+                        symbol: "sun.max"
+                    )
+                }
+                .accessibilityIdentifier("settings.keep-screen-awake")
+            }
+        }
+    }
+
+    /// settings-06. The two switches that reach beyond the timer screen,
+    /// with their explanations as the card's footer instead of caption rows
+    /// between the switches. No header: it continues 「集中」.
+    private var focusNoticesSection: some View {
+        Section {
             Toggle(isOn: $liveActivityEnabled) {
                 SettingLabel(
                     title: "画面を閉じてもタイマーを表示",
@@ -499,10 +572,6 @@ struct SettingsView: View {
                 }
             }
 
-            Text("タイマーはバックグラウンドでも止まりません。iPhoneの設定でライブアクティビティが許可されている場合に表示します。")
-                .font(.caption)
-                .foregroundStyle(PomoGemTheme.muted)
-
             Toggle(isOn: Binding(
                 get: { focusReturnReminderEnabled },
                 set: { updateFocusReturnReminder(enabled: $0) }
@@ -518,75 +587,17 @@ struct SettingsView: View {
             if focusReturnReminderEnabled {
                 notificationPermissionStatus(identifier: "settings.focus-return-permission")
             }
-
-            Text(
-                "既定はオフ。集中タイマー中にホーム画面や別のアプリへ移ると、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。",
-                tableName: "Settings",
-                comment: "Settings caption under the return-to-focus reminder switch"
-            )
-                .font(.caption)
-                .foregroundStyle(PomoGemTheme.muted)
-
-            if let resolvedPreferences {
-                NavigationLink {
-                    TimerDisplayModeSelectionView(selection: timerDisplayModeBinding)
-                } label: {
-                    SettingLabel(
-                        title: "集中タイマーの表示",
-                        subtitle: resolvedPreferences.timerDisplayMode.title,
-                        symbol: "circle.dotted"
-                    )
-                }
-                .accessibilityIdentifier("settings.timer-display-mode")
-                .accessibilityHint("4つの見本から、タイマーの見た目を選べます")
-
-                Toggle(isOn: settingBinding(
-                    .keepScreenAwake,
-                    currentValue: resolvedPreferences.keepScreenAwake,
-                    update: { $0.keepScreenAwake = $1 }
-                )) {
-                    SettingLabel(
-                        title: "タイマー中は画面をロックしない",
-                        subtitle: "集中・休憩のタイマー画面を開いている間だけ有効",
-                        symbol: "sun.max"
-                    )
-                }
-                .accessibilityIdentifier("settings.keep-screen-awake")
-            }
-            NavigationLink {
-                TimerDefaultOrientationSettingsView(selection: Binding(
-                    get: { TimerDefaultOrientation(rawValue: defaultTimerOrientationRawValue) ?? .automatic },
-                    set: { defaultTimerOrientationRawValue = $0.rawValue }
-                ))
-            } label: {
-                SettingLabel(
-                    title: "タイマーの既定の向き",
-                    subtitle: (TimerDefaultOrientation(rawValue: defaultTimerOrientationRawValue) ?? .automatic).title,
-                    symbol: "rotate.right"
+        } footer: {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(
+                    "タイマーはバックグラウンドでも止まりません。画面を閉じたときの表示は、iPhoneの設定でライブアクティビティを許可している場合に出ます。",
+                    tableName: "Settings",
+                    comment: "Settings footer: the Live Activity switch"
                 )
-            }
-            .accessibilityIdentifier("settings.timer-default-orientation")
-            .accessibilityHint("新しい集中・休憩タイマーを開く向きを選べます")
-
-            if let resolvedPreferences {
-                PreferredFocusDurationPicker(
-                    preferredSeconds: resolvedPreferences.preferredFocusSeconds,
-                    isPro: purchase.isPro,
-                    onSelectPreset: { duration in
-                        _ = savePreferredFocusSeconds(duration.seconds)
-                    },
-                    onCustomDuration: {
-                        if purchase.isPro {
-                            showCustomDuration = true
-                        } else {
-                            // settings-08. Buying reopens this editor, as
-                            // it does from Home.
-                            router.presentPaywall(
-                                from: .customTimer,
-                                pendingIntent: .settingsCustomDuration
-                            )
-                        }
-                    }
+                Text(
+                    "既定はオフ。集中タイマー中にホーム画面や別のアプリへ移ると、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。",
+                    tableName: "Settings",
+                    comment: "Settings caption under the return-to-focus reminder switch"
                 )
             }
         }
@@ -869,6 +880,8 @@ struct SettingsView: View {
         }
     }
 
+    /// settings-06. Right after the timer settings, where its 「カスタム」
+    /// tile already points to it. A row, never a banner.
     private var proSection: some View {
         Section {
             Button {
@@ -878,6 +891,7 @@ struct SettingsView: View {
                     Image(systemName: purchase.isPro ? "checkmark.seal.fill" : "sparkles")
                         .foregroundStyle(PomoGemTheme.amber)
                         .frame(width: 28)
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(Constants.UIStrings.paywallTitle).font(.headline)
                         Text(proRowSubtitle)
@@ -890,6 +904,15 @@ struct SettingsView: View {
                 .frame(minHeight: 44)
             }
             .buttonStyle(PomoGemBareButtonStyle())
+            .accessibilityIdentifier("settings.pro")
+        } footer: {
+            if !purchase.isPro {
+                Text(
+                    "Proは1回だけの買い切りです。記録・テーマ・iCloud同期・シェアなど、ほかの機能は無料で使えます。",
+                    tableName: "Settings",
+                    comment: "Settings footer under the Pro row for free users"
+                )
+            }
         }
     }
 
@@ -904,48 +927,58 @@ struct SettingsView: View {
                 comment: "Settings Pro row subtitle while a purchase request awaits approval"
             )
         }
-        return "任意時間・月刻印・勉強アプリ数の無制限"
+        return String(
+            localized: "自由な集中時間・結晶の月刻印・勉強アプリ数の無制限",
+            table: "Settings",
+            comment: "Settings Pro row subtitle for free users: what Pro adds"
+        )
     }
 
+    /// settings-06. The storage row that used to open this section repeated
+    /// 「iCloudとデバイス」 above and did nothing when tapped; what it said
+    /// is now the footer, in plain words.
     private var privacySection: some View {
-        Section("サポートとプライバシー") {
-            if persistenceMode == .localOnly {
-                SettingLabel(
-                    title: "このiPhoneのみ",
-                    subtitle: "このiPhoneの専用領域",
-                    symbol: "iphone"
-                )
-            } else {
-                SettingLabel(
-                    title: "iCloud",
-                    subtitle: "あなたのプライベートデータベースのみ",
-                    symbol: "icloud"
-                )
-            }
+        Section {
             Link(destination: AppLinks.support) {
                 SettingLabel(title: "サポート・お問い合わせ", subtitle: "Webで開く", symbol: "questionmark.circle")
             }
             Link(destination: AppLinks.privacyPolicy) {
                 SettingLabel(title: "プライバシーポリシー", subtitle: "Webで開く", symbol: "doc.text")
             }
+        } header: {
+            Text("サポートとプライバシー")
+        } footer: {
+            Text(persistenceMode == .localOnly
+                 ? String(
+                     localized: "記録はこのiPhoneにだけ保存されます。開発者が記録を受け取ることはありません。",
+                     table: "Settings",
+                     comment: "Settings privacy footer when records stay on this iPhone"
+                 )
+                 : String(
+                     localized: "記録はあなたのiCloudに保存されます。開発者が記録を受け取ることはありません。",
+                     table: "Settings",
+                     comment: "Settings privacy footer in iCloud mode"
+                 ))
+            .accessibilityIdentifier("settings.privacy-footer")
         }
     }
 
-    private var creditsSection: some View {
-        Section("クレジット") {
-            LabeledContent("バージョン", value: appVersionLabel)
-            LabeledContent("著作権", value: "© 2026 hinoshiba")
-            LabeledContent("見出し書体", value: "Zen Maru Gothic")
-            Button("SIL Open Font License 1.1を読む") {
-                showFontLicense = true
-            }
-            Link(destination: AppLinks.sourceCode) {
+    private var aboutSection: some View {
+        Section {
+            NavigationLink {
+                AboutAppView()
+            } label: {
                 SettingLabel(
-                    title: "ソースコードとライセンス",
-                    subtitle: "MIT License・GitHub",
-                    symbol: "chevron.left.forwardslash.chevron.right"
+                    title: String(localized: "このアプリについて", table: "Settings", comment: "Settings row: the About page"),
+                    subtitle: String(
+                        localized: "バージョン \(AppVersionText.current)・クレジット・ライセンス",
+                        table: "Settings",
+                        comment: "Settings About row subtitle; the argument is the version, e.g. 1.1.0 (10)"
+                    ),
+                    symbol: "info.circle"
                 )
             }
+            .accessibilityIdentifier("settings.about")
         }
     }
 
@@ -956,18 +989,6 @@ struct SettingsView: View {
         let screenTime = ScreenTimeController.shared
         return screenTime.configuration.enabled || screenTime.isMonitoring
             || screenTime.negativeGemCount > 0
-    }
-
-    private var appVersionLabel: String {
-        let version = Bundle.main.object(
-            forInfoDictionaryKey: "CFBundleShortVersionString"
-        ) as? String ?? "—"
-        let build = Bundle.main.object(
-            forInfoDictionaryKey: "CFBundleVersion"
-        ) as? String
-
-        guard let build, !build.isEmpty else { return version }
-        return "\(version) (\(build))"
     }
 
     private var dataSection: some View {
@@ -1096,18 +1117,29 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            Text("データ")
+            Text("記録の書き出しとリセット", tableName: "Settings", comment: "Settings section header: export and reset")
         } footer: {
             Text(dataStorageDisclosure)
         }
     }
 
+    /// settings-06. Plain words for what the reset does and what stays; the
+    /// facts are the ones PRIVACY.md states (earlier records remain on the
+    /// iPhone, and in iCloud for sync, and can appear in an export).
     private var resetDataMessage: String {
         let message: String
         if persistenceMode == .localOnly {
-            message = "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。旧世代の行は端末内に残り、データ書き出しには含まれる場合があります。端末内の物理データはアプリを削除すると消去できます。この操作は取り消せません。"
+            message = String(
+                localized: "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。テーマと設定は残ります。リセット前の記録はこのiPhoneの中に残り、データの書き出しに含まれることがあります。このiPhoneから完全に消すには、アプリを削除してください。この操作は取り消せません。",
+                table: "Settings",
+                comment: "Reset confirmation on a local-only iPhone"
+            )
         } else {
-            message = "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。同じiCloudの端末には接続後に反映されます。オフライン端末から古い記録が戻ることを防ぐため、旧世代の行は同期用に残り、データ書き出しには含まれます。端末内の物理データはアプリを削除すると消去できます。iCloud側のアプリデータはAppleのiCloudストレージ管理から削除してください。この操作は取り消せません。"
+            message = String(
+                localized: "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。同じiCloudを使うほかのiPhoneにも、接続したときに反映されます。オフラインのiPhoneから古い記録が戻らないよう、リセット前の記録は同期のために残り、データの書き出しにも含まれます。このiPhoneから完全に消すにはアプリを削除し、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除してください。この操作は取り消せません。",
+                table: "Settings",
+                comment: "Reset confirmation in iCloud mode"
+            )
         }
         // Said only where Screen Time is set up: the reset starts its ledger's
         // new generation too (ScreenTimeController.bindContext).
@@ -1120,12 +1152,24 @@ struct SettingsView: View {
         return message + "\n\n" + screenTime
     }
 
+    /// settings-06. The export footer said 「全11種類の出荷対象保存データ」,
+    /// 「タイマー整合用のランダムな端末識別子」 and 「以前リセットした旧世代」:
+    /// review-notes wording. The privacy facts stay, in plain words: theme
+    /// names, memos, settings, every record including those from before a
+    /// reset, and a random device ID for timer sync.
     private var dataStorageDisclosure: String {
-        let contents = "書き出しファイルには、テーマ名・成果メモ・設定・タイマー整合用のランダムな端末識別子と、以前リセットした旧世代を含む、この端末で利用可能な全11種類の出荷対象保存データが入ります。SNS用の共有画像とは異なります。保存先を確認してください。"
         if persistenceMode == .localOnly {
-            return contents + " 通常のリセット後はテーマとアプリ設定が残ります。端末内の物理データはアプリの削除で消去できます。JSONは保管用で、アプリへ再読込したりiCloudの記録へ移行したりする機能はありません。"
+            return String(
+                localized: "書き出すファイル（JSON）には、テーマ名・成果メモ・設定・すべての記録（リセット前の記録を含む）と、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。保存先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。",
+                table: "Settings",
+                comment: "Settings export footer on a local-only iPhone"
+            )
         }
-        return contents + " 端末内の物理データはアプリの削除、iCloud側はAppleのiCloudストレージ管理から削除できます。"
+        return String(
+            localized: "書き出すファイル（JSON）には、テーマ名・成果メモ・設定・すべての記録（リセット前の記録を含む）と、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。保存先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。",
+            table: "Settings",
+            comment: "Settings export footer in iCloud mode"
+        )
     }
 
     private func startDataExport() {
@@ -2416,7 +2460,7 @@ private struct CompleteDataDeletionConfirmationView: View {
     }
 }
 
-private struct FontLicenseView: View {
+struct FontLicenseView: View {
     @Environment(\.dismiss) private var dismiss
 
     private var licenseText: String {
@@ -2573,7 +2617,7 @@ private struct NotificationPermissionStatusRow: View {
     }
 }
 
-private struct SettingLabel: View {
+struct SettingLabel: View {
     let title: String
     let subtitle: String
     let symbol: String

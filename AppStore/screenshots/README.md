@@ -21,6 +21,24 @@ Both selected tests passed: two tests, zero failures, zero skips. No images
 from the earlier capture attempt are selected; its Settings accessibility-row
 locator was corrected and the complete capture was rerun.
 
+## Pending recapture after the Settings reorganisation
+
+`ja-JP/05-iCloud-and-privacy.png` and `iap-review/01-pomogem-pro-live-price.png`
+show layouts that changed after this capture (settings-06 and settings-04):
+
+- Settings no longer has the inert 「iCloud／あなたのプライベートデータベースのみ」 row or the
+  top-level 「クレジット」 card. The storage and privacy promise is the footer of
+  「サポートとプライバシー」 (「記録はあなたのiCloudに保存されます。開発者が記録を受け取ることは
+  ありません。」), and the version is on the 「このアプリについて」 row below it.
+- The paywall orders its three Pro features by entry point, says what stays free,
+  and shows a month-label example.
+
+`testAppStoreScreenshotSetJapaneseReleaseCandidate` already captures the new
+Settings layout as `ASC_05_iCloud-and-privacy`. Recapture both images with the
+procedure below before the 1.1.0 submission and update this file, the checksums
+and `ASSET_LICENSES.md`. The images in this folder remain an exact record of the
+1.1.0 (10) capture until then.
+
 ## Japanese iPhone set
 
 The App Store listing order is:
