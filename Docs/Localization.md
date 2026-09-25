@@ -50,7 +50,7 @@
 - 空文字列は`defaultValue:`にも翻訳にも使えません。値が空だとFoundationはキーそのものを返します。
   言語によって空になる区切りは`SentenceText`のように言語で分けます。
 
-## 数・単位・日付（`PomoGem/Core/Localization/LocalizedFormat.swift`）
+## 数・単位・日付（`Shared/LocalizedDuration.swift`、`PomoGem/Core/Localization/LocalizedFormat.swift`）
 
 | helper | 日本語（今と同じ） | 英語 |
 |---|---|---|
@@ -64,6 +64,11 @@
 | `SentenceText.join` | 文と文の間に何も入れない | 1文字の空白 |
 | `CountText.gems(_:)` | 3粒・12,345粒 | 1 gem · 3 gems |
 
+- `PomoGemLocale`と`DurationText`は`Shared/LocalizedDuration.swift`にあり、appとwidget extension
+  （ウィジェットとLive Activity）の両方でコンパイルされます。ほかのhelper（`MassText`・`DateText`・`ListText`・
+  `SentenceText`・`CountText`、`PomoGemCalendar`）はappだけです。widgetやLive Activityで必要になったら、
+  自分で書式を組み立てず、基盤（infra）の変更で`Shared/`へ移します（`project.yml`を編集できるのは基盤と統合だけです）。
+  widgetのbundleには`Common`テーブルがないため、`Shared/`のhelperにはcatalogのキーを置きません。
 - helperは既定で`PomoGemLocale.current`（文字列を表示している言語＋利用者の地域）で書式を決めます。
   日本語と英語の2言語になると、韓国語のiPhoneでは文字列は日本語（開発地域）なのに`Locale.current`は
   en_KRになります（iOS 26.5 Simulatorで確認）。`Locale.current`で書式を決めると、日本語の画面に
@@ -72,7 +77,8 @@
   変わりうるICUデータに依存し、ここでは最新のSimulatorしか試せないためです。英語はFoundationの書式を使います。
 - `DurationText.Units`で単位を選びます。タイマーの長さは`.minutesSeconds`（90分）、
   積み上がりの合計は`.hoursMinutes`です。端数は切り捨て、0は最小の単位（「0秒」「0分」）で表します。
-  Live Activityの`FocusActivityConstants.durationLabel(seconds: 0)`だけは今「0分」を返すので、置き換えるときに確認してください。
+  Live Activityの`FocusActivityConstants.durationLabel(seconds: 0)`だけは今「0分」を返すので、置き換えるときに確認してください
+  （`Shared/FocusActivityAttributes.swift`はwidget extensionでもコンパイルされ、`DurationText`をそのまま使えます）。
 - `CountText`と`MassText.spoken`は桁区切りを入れます（1,234）。1,000未満は今の表示と同じです。
   今1,000以上を区切らずに表示している画面は、置き換えで「1234粒」が「1,234粒」になる点を確認してください。
 - 月や年の区切り（`StrataMath.monthLabel`、`FairnessPolicy`）はグレゴリオ暦です。そのラベルは`DateText`で

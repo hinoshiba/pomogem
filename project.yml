@@ -124,6 +124,9 @@ targets:
           - PrivacyInfo.xcprivacy
           - PomoGemWidgets.entitlements
       - path: Shared/FocusActivityAttributes.swift
+      # PomoGemLocale and DurationText, so the Live Activity and widgets format
+      # durations like the app (Docs/Localization.md).
+      - path: Shared/LocalizedDuration.swift
       - path: PomoGemWidgets/PrivacyInfo.xcprivacy
         buildPhase: resources
     settings:

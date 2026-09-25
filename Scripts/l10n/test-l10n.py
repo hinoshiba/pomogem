@@ -133,6 +133,7 @@ class TableMapTests(unittest.TestCase):
         self.assertEqual(self.repo.table_for("PomoGem/Features/Overview/ProgressCrystal.swift"), "Progress")
         self.assertEqual(self.repo.table_for("PomoGem/App/StorageTransferLateArrivalBanner.swift"), "Launch")
         self.assertEqual(self.repo.table_for("PomoGem/Core/Localization/LocalizedFormat.swift"), "Common")
+        self.assertEqual(self.repo.table_for("Shared/LocalizedDuration.swift"), "Common")
         self.assertIsNone(self.repo.table_for("PomoGem/Debug/Fixture.swift"))
         self.assertEqual(self.repo.table_for("PomoGem/Brand/New.swift"), "UNASSIGNED")
 

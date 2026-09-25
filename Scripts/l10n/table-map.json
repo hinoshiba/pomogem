@@ -53,6 +53,13 @@
       "package": "l10n-00-infra"
     },
     {
+      "glob": "Shared/LocalizedDuration.swift",
+      "table": "Common",
+      "package": "l10n-00-infra",
+      "bundle": "app+widgets",
+      "note": "PomoGemLocale and DurationText, compiled into the widget extension too; the widget bundle has no Common table, so this file holds no catalog keys"
+    },
+    {
       "glob": "PomoGem/Core/DurationPresentation.swift",
       "table": "Common",
       "package": "l10n-00-infra",
