@@ -189,12 +189,8 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         XCTAssertEqual(lifetimeCore.label, "時間の核")
         let lifetimeCoreValue = try XCTUnwrap(lifetimeCore.value as? String)
         XCTAssertTrue(lifetimeCoreValue.contains("集中2.50kg"), lifetimeCoreValue)
-        XCTAssertTrue(lifetimeCoreValue.contains("10.0標準単位"), lifetimeCoreValue)
-        XCTAssertTrue(lifetimeCoreValue.contains("物理履歴10粒"), lifetimeCoreValue)
-        XCTAssertTrue(
-            lifetimeCoreValue.contains("瓶の物理整理：集中10粒"),
-            lifetimeCoreValue
-        )
+        XCTAssertTrue(lifetimeCoreValue.contains("、10粒、"), lifetimeCoreValue)
+        XCTAssertFalse(lifetimeCoreValue.contains("標準単位"), lifetimeCoreValue)
         XCTAssertFalse(
             app.descendants(matching: .any)["overview.constellation.destination"].exists
         )

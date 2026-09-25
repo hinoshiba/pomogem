@@ -820,7 +820,6 @@ struct AccumulationOverviewView: View {
 
     private var introduction: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionEyebrow(text: "FOCUS CONSTELLATION")
             Text("一粒は消えず、\n時間の景色に変わる。")
                 .pomogemSectionTitle(size: 32)
                 .lineLimit(nil)
@@ -1154,31 +1153,33 @@ struct AccumulationOverviewView: View {
                 Group {
                     if dynamicTypeSize.isAccessibilitySize {
                         VStack(spacing: 7) {
-                            fusionStep("10分 = 0.4")
+                            fusionStep("10分 = 100g")
                             fusionArrow
-                            fusionStep("25分 = 1.0")
+                            fusionStep("25分 = 250g")
                             fusionArrow
-                            fusionStep("60分 = 2.4")
+                            fusionStep("60分 = 600g")
                             fusionArrow
                             fusionStep("時間の核")
                         }
                     } else {
                         HStack(spacing: 7) {
-                            fusionStep("10分 = 0.4")
+                            fusionStep("10分 = 100g")
                             fusionArrow
-                            fusionStep("25分 = 1.0")
+                            fusionStep("25分 = 250g")
                             fusionArrow
-                            fusionStep("60分 = 2.4")
+                            fusionStep("60分 = 600g")
                             fusionArrow
                             fusionStep("時間の核")
                         }
                     }
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("時間の核は集中時間で進みます。10分は0.4標準単位、25分は1.0標準単位、60分は2.4標準単位です")
+                // The legend counts in the grams the jar already shows, not in
+                // the internal 「標準単位」 (25分 = 1.0).
+                .accessibilityLabel(Text("時間の核は集中した時間で進みます。10分で100グラム、25分で250グラム、60分で600グラムです", tableName: "Overview"))
                 .accessibilityIdentifier("overview.fusion-legend")
 
-                Text("1完走につき粒は1つ。10粒→1の階層は瓶の整理で、時間の価値は変えません。まとまりをタップすると内訳を確認できます。")
+                Text("完走するたびに粒がひとつ増えます。10粒がひとつの結晶になるのは瓶を整理するためで、時間の価値は変わりません。結晶をタップすると内訳を確認できます。", tableName: "Overview")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.text)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1240,10 +1241,9 @@ struct AccumulationOverviewView: View {
 
     private var fusionHierarchyHeading: some View {
         VStack(alignment: .leading, spacing: 4) {
-            SectionEyebrow(text: "STORAGE HIERARCHY")
             Text("瓶の整理階層")
                 .pomogemSectionTitle(size: 22)
-            Text("10粒をひとつの表示へ圧縮します。これは価値の段階ではなく、記録と質量を失わず瓶を保つ仕組みです。")
+            Text("10粒をひとつの結晶にまとめます。価値の段階ではなく、記録と質量をそのまま残して瓶に余白をつくる仕組みです。", tableName: "Overview")
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1298,12 +1298,12 @@ struct AccumulationOverviewView: View {
                 context: lifetimePresentationContext
             )
         )
+        // Time, not 「標準換算」: the ungrouped 「350640.0標準単位」 of a 40-year
+        // history read as a code, and the unit was an accounting term.
         OverviewStat(
-            title: "標準換算",
+            title: String(localized: "集中時間", table: "Overview", comment: "Lifetime stat title: total focus time"),
             value: AggregateProjectionPresentationPolicy.overviewLifetimeValue(
-                verifiedValue: EffortProgressPresentation.formattedStandardUnits(
-                    grams: lifetimeGrams
-                ),
+                verifiedValue: DurationPresentation.focusLabel(grams: lifetimeGrams),
                 isLocalLowerBound: lifetimeIsLowerBound,
                 context: lifetimePresentationContext
             )
@@ -1311,10 +1311,8 @@ struct AccumulationOverviewView: View {
         OverviewStat(
             title: lifetimeIsCloudUnverified
                 ? "この端末で確認済み"
-                : "物理粒（履歴）",
-            value: lifetimeIsCloudUnverified
-                ? "\(lifetimePebbleCount.formatted(.number.grouping(.automatic)))粒"
-                : lifetimePebbleCount.formatted(.number.grouping(.automatic))
+                : String(localized: "積んだ粒", table: "Overview", comment: "Lifetime stat title: gems stacked so far"),
+            value: "\(lifetimePebbleCount.formatted(.number.grouping(.automatic)))粒"
         )
         OverviewStat(
             title: String(localized: "表示中の結晶", table: "Overview", comment: "Lifetime stat title: crystals on this page"),
@@ -1327,7 +1325,7 @@ struct AccumulationOverviewView: View {
             let status = isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudの集計を再確認中"
             return "\(status)。この端末で確認済みの記録は\(lifetimePebbleCount)粒。古い結晶は表示していません。\(pageScope.achievementAccessibilitySummary)"
         }
-        return "集中\(formattedMass(lifetimeGrams))\(lifetimeIsLowerBound ? "以上" : "")、\(EffortProgressPresentation.formattedStandardUnits(grams: lifetimeGrams))、物理履歴\(lifetimePebbleCount)粒、表示中の結晶\(clusters.count)個、\(pageScope.achievementAccessibilitySummary)。\(pageScope.bottleRepresentativeDisclosure(displayedRecordCount: bottleGraphicRecords.count, displayedClusterCount: bottleGraphicClusters.count, displayedAchievementCount: bottleGraphicMilestones.count))"
+        return "集中\(formattedMass(lifetimeGrams))\(lifetimeIsLowerBound ? "以上" : "")、\(DurationPresentation.focusLabel(grams: lifetimeGrams))、\(lifetimePebbleCount)粒、表示中の結晶\(clusters.count)個、\(pageScope.achievementAccessibilitySummary)。\(pageScope.bottleRepresentativeDisclosure(displayedRecordCount: bottleGraphicRecords.count, displayedClusterCount: bottleGraphicClusters.count, displayedAchievementCount: bottleGraphicMilestones.count))"
     }
 
     private var scaleGuide: some View {

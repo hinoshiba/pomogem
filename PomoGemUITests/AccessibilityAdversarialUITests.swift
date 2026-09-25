@@ -700,7 +700,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             "AX5 level count must stack after the hierarchy copy"
         )
 
-        for label in ["10分 = 0.4", "25分 = 1.0", "60分 = 2.4", "時間の核"] {
+        for label in ["10分 = 100g", "25分 = 250g", "60分 = 600g", "時間の核"] {
             let step = app.staticTexts["overview.fusion-step.\(label)"]
             XCTAssertTrue(step.exists, "Missing fusion legend step: \(label)")
             XCTAssertGreaterThan(
@@ -907,7 +907,7 @@ final class DynamicTypeSystemAuditUITests: XCTestCase {
             // component with a ScaledMetric font. XCTest nevertheless audits
             // its glyph nodes; the surrounding controls/cards carry the
             // localized semantic descriptions.
-            "SPACE", "FOCUS", "FOCUS CONSTELLATION",
+            "SPACE", "FOCUS",
             "THIS WEEK", "CRYSTAL HIERARCHY",
             // Decorative text inside the accessibility-hidden empty weekly
             // crystal. The parent card announces the same value semantically.

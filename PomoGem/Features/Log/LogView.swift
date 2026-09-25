@@ -1606,7 +1606,6 @@ struct LogView: View {
             PomoGemCard {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        SectionEyebrow(text: "OVERVIEW PEBBLES")
                         Text("結晶アーカイブ", tableName: "Log", comment: "Log section title: the jar's crystals")
                             .pomogemSectionTitle()
                         Text("小さな粒は消えません。10粒ずつ結晶になり、瓶の中で動き続けます。", tableName: "Log")
