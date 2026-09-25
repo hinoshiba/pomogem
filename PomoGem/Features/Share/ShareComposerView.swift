@@ -514,7 +514,13 @@ struct ShareComposerView: View {
     }
 
     private var mediaKindPicker: some View {
-        HStack(spacing: 8) {
+        // At accessibility sizes the two tiles stack and drop their icon and
+        // NEW badge; side by side they broke into 「動/く/GIF」 and 「静止/画」.
+        let isAccessibilitySize = dynamicTypeSize.isAccessibilitySize
+        let layout = isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
+        return layout {
             ForEach(MediaKind.allCases) { kind in
                 Button {
                     mediaKind = kind
@@ -522,11 +528,13 @@ struct ShareComposerView: View {
                     statusMessage = nil
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: kind.symbol)
-                            .font(.system(size: 14, weight: .bold))
+                        if !isAccessibilitySize {
+                            Image(systemName: kind.symbol)
+                                .font(.system(size: 14, weight: .bold))
+                        }
                         Text(kind.rawValue)
                             .font(.system(.subheadline, design: .rounded, weight: .bold))
-                        if kind == .animatedGIF {
+                        if kind == .animatedGIF, !isAccessibilitySize {
                             Text("NEW")
                                 .font(.system(size: 8, weight: .black, design: .rounded))
                                 .padding(.horizontal, 5)
@@ -616,6 +624,8 @@ struct ShareComposerView: View {
                     Image(systemName: "lock.shield.fill")
                         .foregroundStyle(PomoGemTheme.amber)
                 }
+                // The sentence gets the full width at accessibility sizes.
+                .labelStyle(AccessibilitySizeTitleOnlyLabelStyle())
                 .padding(14)
                 .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 14))
                 .accessibilityElement(children: .combine)
@@ -1078,22 +1088,36 @@ struct ShareComposerView: View {
     }
 
     private var shareBrandingNotice: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "signature")
-                .foregroundStyle(PomoGemTheme.amber)
-                .frame(width: 26)
+        // At accessibility sizes the fixed-width icon overlapped the text and
+        // the trailing 「常に表示」 squeezed the title into one word a line;
+        // the icon goes and 「常に表示」 moves under the text there.
+        let isAccessibilitySize = dynamicTypeSize.isAccessibilitySize
+        let layout = isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
+            if !isAccessibilitySize {
+                Image(systemName: "signature")
+                    .foregroundStyle(PomoGemTheme.amber)
+                    .frame(width: 26)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text("ポモジェムロゴと公式サイト")
                     .font(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
                 Text("すべてのカードと共有本文に表示します")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
+            if !isAccessibilitySize {
+                Spacer()
+            }
             Text("常に表示")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(PomoGemTheme.amber)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .frame(minHeight: 58)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 16))
