@@ -1369,7 +1369,7 @@ struct AccumulationOverviewView: View {
             VStack(alignment: .leading, spacing: 14) {
                 if layoutPolicy.stacksSummaryCards {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("成果の星")
+                        Text("記念石", tableName: "Overview", comment: "Overview section title: achievement stones")
                             .pomogemSectionTitle()
                         Text(pageScope.achievementSectionSubtitle)
                             .font(.caption)
@@ -1377,7 +1377,7 @@ struct AccumulationOverviewView: View {
                     }
                 } else {
                     HStack(alignment: .firstTextBaseline) {
-                        Text("成果の星")
+                        Text("記念石", tableName: "Overview", comment: "Overview section title: achievement stones")
                             .pomogemSectionTitle()
                         Spacer()
                         Text(pageScope.achievementSectionSubtitle)
@@ -1869,7 +1869,11 @@ private struct MilestoneSummaryCard: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "\(milestone.subjectName)、\(milestone.title)の成果の星、\(milestone.date.formatted(.dateTime.year().month().day()))"
+            String(
+                localized: "\(milestone.subjectName)、\(milestone.title)の記念石、\(milestone.date.formatted(.dateTime.year().month().day()))",
+                table: "Overview",
+                comment: "VoiceOver, one achievement stone card: theme, kind, date"
+            )
         )
     }
 

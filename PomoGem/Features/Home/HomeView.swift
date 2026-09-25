@@ -1209,9 +1209,17 @@ struct HomeView: View {
     private var homeMenuAccessibilitySummary: String {
         if aggregateProjectionPresentation.isCloudVerificationPending {
             let status = isCloudOfflineSession ? "このiPhoneの累計を確認中" : "iCloudの累計を再集計中"
-            return "\(status)。この端末で確認済みの集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
+            return String(
+                localized: "\(status)。この端末で確認済みの集中\(totalPebbles)粒、記念石\(achievementCountLabel)個",
+                table: "Home",
+                comment: "VoiceOver, menu metrics while totals are checked: status, confirmed focus count, achievement stone count"
+            )
         }
-        return "累計\(formattedMass(totalGrams))、集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
+        return String(
+            localized: "累計\(formattedMass(totalGrams))、集中\(totalPebbles)粒、記念石\(achievementCountLabel)個",
+            table: "Home",
+            comment: "VoiceOver, menu metrics: lifetime mass, focus count, achievement stone count"
+        )
     }
 
     private var projectionVerificationTitle: String {
@@ -1957,7 +1965,7 @@ struct HomeView: View {
                 VStack(spacing: 12) {
                     menuMetric(value: homeMenuMassValue, label: "累計")
                     menuMetric(value: homeMenuCountValue, label: "集中")
-                    menuMetric(value: "\(achievementCountLabel)個", label: "成果")
+                    menuMetric(value: "\(achievementCountLabel)個", label: String(localized: "記念石", table: "Home", comment: "Home menu metric caption: achievement stone count"))
                 }
             } else {
                 HStack(spacing: 0) {
@@ -1965,7 +1973,7 @@ struct HomeView: View {
                     Divider().frame(height: 34)
                     menuMetric(value: homeMenuCountValue, label: "集中")
                     Divider().frame(height: 34)
-                    menuMetric(value: "\(achievementCountLabel)個", label: "成果")
+                    menuMetric(value: "\(achievementCountLabel)個", label: String(localized: "記念石", table: "Home", comment: "Home menu metric caption: achievement stone count"))
                 }
             }
         }

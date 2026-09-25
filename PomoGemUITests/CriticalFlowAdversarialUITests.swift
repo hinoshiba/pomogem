@@ -75,7 +75,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
 
         openMenuAction(containing: "積み上がりを見る")
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["成果の星"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["記念石"].waitForExistence(timeout: 4))
         app.buttons["overview.close"].tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
 

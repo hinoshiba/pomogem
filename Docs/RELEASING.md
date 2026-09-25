@@ -275,7 +275,7 @@ unit test、主要UI test、static analyzerを実行します。40年soakはrele
 - onboardingの任意のためし粒を「次へ」で省略でき、勉強／仕事の利用目的を選ばず最初のテーマ1件で完了すること
 - 勉強・仕事共通の一つのテーマ一覧での追加・編集・並べ替え・削除
 - Homeのテーマ／集中時間の選択欄から変更でき、開始buttonのtapで集中を開始できること
-- 成果の石、10→1／100→1の融合、長期projection、計画modeが実績を書き換えないこと
+- 記念石、10→1／100→1の融合、長期projection、計画modeが実績を書き換えないこと
 - 静止画／GIF、写真追加拒否、共有取消、個人用theme・memoが画像へ入らないこと
 - StoreKit sandboxの購入、pending、cancel、復元、revocation後の権利更新
 - 同じApple Accountの2台と機種変更相当でCloudKitを確認し、theme名、成果memo、記録、設定、進行中timer
