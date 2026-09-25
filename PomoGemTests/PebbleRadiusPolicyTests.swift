@@ -375,6 +375,7 @@ final class PebbleRadiusPolicyTests: XCTestCase {
         let fixtures: [(name: String, bodies: [PebbleDescriptor])] = [
             ("first", [loose]),
             ("home", roots(1, 1) + Array(repeating: loose, count: 5)),
+            ("midload", roots(1, 3) + Array(repeating: loose, count: 9)),
             ("tiers", roots(2, 1) + roots(1, 1) + Array(repeating: loose, count: 7) + [achievement]),
             ("heavy", roots(3, 1) + Array(repeating: loose, count: 4)),
             ("veteran", roots(4, 1) + Array(repeating: loose, count: 6)),

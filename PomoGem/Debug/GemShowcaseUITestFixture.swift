@@ -24,6 +24,9 @@ enum GemShowcaseUITestFixture {
     enum Mode: String {
         case first
         case home
+        /// Mid-load jar for D4's acceptance (a) (Docs/GemExperienceDesign.md
+        /// §7.5): 39 completions, three ×10 roots and nine loose gems.
+        case midload
         case tiers
         case gallery
         /// Worst case for rendering: the study body ceiling plus the maximum
@@ -79,6 +82,7 @@ enum GemShowcaseUITestFixture {
         switch modeForCurrentProcess {
         case .first: 1
         case .home: 15
+        case .midload: 39
         case .tiers: 117
         case .heavy: 1_004
         case .veteran: 10_006
