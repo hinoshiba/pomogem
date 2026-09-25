@@ -722,50 +722,51 @@ struct ShareComposerView: View {
                         : "瓶の質量、固定の公式サイトURL、選択中のハッシュタグをコピーします"
                 )
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(ShareCopy.hashtagChoices, id: \.self) { hashtag in
-                        Button {
-                            if selectedHashtags.contains(hashtag) {
-                                selectedHashtags.remove(hashtag)
-                            } else {
-                                selectedHashtags.insert(hashtag)
-                            }
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: selectedHashtags.contains(hashtag) ? "checkmark" : "plus")
-                                    .font(.system(size: 9, weight: .black))
-                                Text(hashtag)
-                            }
-                            .font(.system(.caption, design: .rounded, weight: .bold))
-                            .foregroundStyle(
-                                selectedHashtags.contains(hashtag)
-                                    ? PomoGemTheme.background
-                                    : PomoGemTheme.text
-                            )
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 8)
-                            .frame(minHeight: 44)
-                            .background(
-                                selectedHashtags.contains(hashtag)
-                                    ? AnyShapeStyle(PomoGemTheme.amber)
-                                    : AnyShapeStyle(
-                                        LinearGradient(
-                                            colors: [.white.opacity(0.09), PomoGemTheme.amber.opacity(0.08)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    ),
-                                in: Capsule()
-                            )
-                            .overlay { Capsule().stroke(.white.opacity(0.10), lineWidth: 1) }
+            // Wrapping, not a sideways scroll: the study tags used to start
+            // off-screen on a 375 pt iPhone, and at AX5 only the first chip
+            // was visible (product-06).
+            ShareFlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                ForEach(ShareCopy.hashtagChoices, id: \.self) { hashtag in
+                    Button {
+                        if selectedHashtags.contains(hashtag) {
+                            selectedHashtags.remove(hashtag)
+                        } else {
+                            selectedHashtags.insert(hashtag)
                         }
-                        .buttonStyle(PomoGemBareButtonStyle())
-                        .disabled(isRendering || isSaving)
-                        .accessibilityAddTraits(
-                            selectedHashtags.contains(hashtag) ? .isSelected : []
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: selectedHashtags.contains(hashtag) ? "checkmark" : "plus")
+                                .font(.system(size: 9, weight: .black))
+                            Text(hashtag)
+                        }
+                        .font(.system(.caption, design: .rounded, weight: .bold))
+                        .foregroundStyle(
+                            selectedHashtags.contains(hashtag)
+                                ? PomoGemTheme.background
+                                : PomoGemTheme.text
                         )
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 8)
+                        .frame(minHeight: 44)
+                        .background(
+                            selectedHashtags.contains(hashtag)
+                                ? AnyShapeStyle(PomoGemTheme.amber)
+                                : AnyShapeStyle(
+                                    LinearGradient(
+                                        colors: [.white.opacity(0.09), PomoGemTheme.amber.opacity(0.08)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                ),
+                            in: Capsule()
+                        )
+                        .overlay { Capsule().stroke(.white.opacity(0.10), lineWidth: 1) }
                     }
+                    .buttonStyle(PomoGemBareButtonStyle())
+                    .disabled(isRendering || isSaving)
+                    .accessibilityAddTraits(
+                        selectedHashtags.contains(hashtag) ? .isSelected : []
+                    )
                 }
             }
 
@@ -2679,16 +2680,7 @@ struct ShareCardView: View {
 
                     Spacer(minLength: 0)
                     if !hashtags.isEmpty {
-                        HStack(spacing: story ? 10 : 7) {
-                            ForEach(hashtags, id: \.self) { hashtag in
-                                Text(hashtag)
-                            }
-                        }
-                        .font(.system(size: story ? 11 : 8, weight: .bold, design: .rounded))
-                        .tracking(story ? 0.7 : 0.25)
-                        .foregroundStyle(PomoGemTheme.amber)
-                        .minimumScaleFactor(0.72)
-                        .lineLimit(1)
+                        ShareCardHashtagRow(hashtags: hashtags, story: story)
                     }
                 }
                 .padding(ShareCardLayoutPolicy.contentInsets(for: format))
@@ -2720,6 +2712,33 @@ struct ShareCardView: View {
             "ポモジェムシェアカード。\(periodLabel)。瓶に積んだ集中、\(ShareMassFormatter.spoken(totalGrams))\(ShareMassFormatter.focusTime(totalGrams).map { "、\($0)" } ?? "")。\(pebbleCount)粒、実測\(measuredCount)回、まとまり粒\(aggregates.count)個、記念石\(achievements.count)個。\(rewardSemantics.accessibilityDetail)。\(hiddenContent.captionDisclosure ?? "すべての石を表示")。\(disclosure.accessibilityDisclosure)。公式サイト、\(ShareCopy.websiteDisplayName)。\(hashtags.isEmpty ? "ハッシュタグなし" : "ハッシュタグ、\(hashtags.joined(separator: "、"))")"
         )
         .accessibilityIdentifier("share.card")
+    }
+}
+
+/// The card's hashtags. They wrap instead of scaling one line: four chips
+/// and a 30-character custom tag were cut with 「…」 in the image while the
+/// caption kept them. A single tag wider than the card still shrinks to fit
+/// its own line.
+struct ShareCardHashtagRow: View {
+    let hashtags: [String]
+    let story: Bool
+
+    var body: some View {
+        ShareFlowLayout(
+            horizontalSpacing: story ? 10 : 7,
+            verticalSpacing: story ? 4 : 3,
+            alignment: .center
+        ) {
+            ForEach(hashtags, id: \.self) { hashtag in
+                Text(hashtag)
+            }
+        }
+        .font(.system(size: story ? 11 : 8, weight: .bold, design: .rounded))
+        .tracking(story ? 0.7 : 0.25)
+        .foregroundStyle(PomoGemTheme.amber)
+        .minimumScaleFactor(0.72)
+        .lineLimit(1)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
