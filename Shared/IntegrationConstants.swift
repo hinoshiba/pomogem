@@ -31,7 +31,13 @@ public enum IntegrationConstants {
     /// harmless (the app may replay the cue), while an implausibly late value
     /// is discarded instead of suppressing feedback indefinitely.
     public static let notificationWitnessRegistrationAllowance: TimeInterval = 30
+    /// The rolling window of one-shot passive requests. It is long enough to
+    /// reach the next 1st of the month, so monthly Wrapped always has a slot.
     public static let passiveNotificationHorizonDays = 35
+    /// The generic daily reminder is booked only this far past the last time
+    /// the app was open. Someone who stepped away is not pursued for weeks;
+    /// opening the app again quietly re-arms it.
+    public static let passiveDailyReminderHorizonDays = 7
 
     public static let freeFocusDurations: Set<Int> = [
         25 * secondsPerMinute,
