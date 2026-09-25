@@ -153,18 +153,26 @@ final class LocalizationFormattingTests: XCTestCase {
     }
 
     func testYearLabelsMatchTheTimelineAndNeverGroupDigits() throws {
+        let calendar = PomoGemCalendar.gregorian(timeZone: tokyo)
         for year in [1970, 1999, 2000, 2026, 2100, 9_999] {
-            let interval = DateInterval(start: Date(timeIntervalSince1970: 0), duration: 1)
-            XCTAssertEqual(
-                DateText.year(year, locale: ja, timeZone: tokyo),
-                AccumulationTimelineYear(year: year, interval: interval).title
-            )
+            let start = try XCTUnwrap(calendar.date(from: DateComponents(year: year, month: 1, day: 1)))
+            let end = try XCTUnwrap(calendar.date(byAdding: .year, value: 1, to: start))
+            let bucket = AccumulationTimelineYear(year: year, interval: DateInterval(start: start, end: end))
+            XCTAssertEqual(DateText.year(bucket.interval.start, locale: ja, timeZone: tokyo), bucket.title)
+            let lastSecond = end.addingTimeInterval(-1)
+            XCTAssertEqual(DateText.year(lastSecond, locale: ja, timeZone: tokyo), bucket.title, "any date inside the year")
         }
-        XCTAssertEqual(DateText.year(2026, locale: en, timeZone: tokyo), "2026")
+        let date = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 9, day: 24)))
+        XCTAssertEqual(DateText.year(date, locale: en, timeZone: tokyo), "2026")
     }
 
-    /// critic-04: an iPhone set to the Japanese calendar printed 「8年」 for a
-    /// Gregorian bucket. The pinned calendar keeps the bucket's own year.
+    /// The label half of critic-04 (still open, owned by l10n-04-overview): the
+    /// helpers label a date in the Gregorian calendar whatever the iPhone's
+    /// calendar is. They cannot repair a year number that is already an era
+    /// year. The 年月 timeline buckets years with `Calendar.autoupdatingCurrent`
+    /// (AccumulationTimelineBrowser), so on a 和暦 iPhone its bucket Int is 8;
+    /// the fix is to bucket with `PomoGemCalendar.gregorian()` and label with
+    /// `DateText.year(bucket.interval.start)`.
     func testBucketLabelsIgnoreANonGregorianDeviceCalendar() throws {
         let imperial = Locale(identifier: "ja_JP@calendar=japanese")
         var calendar = Calendar(identifier: .gregorian)
@@ -175,7 +183,15 @@ final class LocalizationFormattingTests: XCTestCase {
         )
         XCTAssertTrue(unpinned.contains("令和"), "the system style follows the device calendar: \(unpinned)")
         XCTAssertEqual(DateText.yearMonth(date, locale: imperial, timeZone: tokyo), "2026年9月")
+        XCTAssertEqual(DateText.year(date, locale: imperial, timeZone: tokyo), "2026年")
         XCTAssertEqual(DateText.longDate(date, locale: imperial, timeZone: tokyo), "2026年9月24日")
+
+        var japaneseCalendar = Calendar(identifier: .japanese)
+        japaneseCalendar.timeZone = tokyo
+        XCTAssertEqual(
+            japaneseCalendar.component(.year, from: date), 8,
+            "an era year like this must never be the input of a year label"
+        )
     }
 
     func testDatesInJapaneseAndEnglish() throws {

@@ -59,7 +59,7 @@
 | `DurationText.spoken(…)` | shortと同じ | 1 hour, 15 minutes |
 | `MassText.grams(_:)`・`kilograms(_:)` | 250g・2.5kg（数値は各画面が今の書式で渡す） | 250 g · 2.5 kg |
 | `MassText.spoken(grams:)`・`spoken(kilograms:fractionDigits:)` | 250グラム・2.5キログラム | 250 grams · 2.5 kilograms |
-| `DateText.yearMonth`・`year`・`monthDay`・`longDate` | 2026年9月・2026年・9月24日・2026年9月24日 | September 2026 · 2026 · Sep 24 · September 24, 2026 |
+| `DateText.yearMonth`・`year`・`monthDay`・`longDate`（どれも`Date`を受け取る） | 2026年9月・2026年・9月24日・2026年9月24日 | September 2026 · 2026 · Sep 24 · September 24, 2026 |
 | `ListText.compact`・`inSentence` | 通常3・金1／英語、数学、理科 | Standard 3 · Gold 1／English, Math, and Science |
 | `SentenceText.join` | 文と文の間に何も入れない | 1文字の空白 |
 | `CountText.gems(_:)` | 3粒・12,345粒 | 1 gem · 3 gems |
@@ -81,9 +81,13 @@
   （`Shared/FocusActivityAttributes.swift`はwidget extensionでもコンパイルされ、`DurationText`をそのまま使えます）。
 - `CountText`と`MassText.spoken`は桁区切りを入れます（1,234）。1,000未満は今の表示と同じです。
   今1,000以上を区切らずに表示している画面は、置き換えで「1234粒」が「1,234粒」になる点を確認してください。
-- 月や年の区切り（`StrataMath.monthLabel`、`FairnessPolicy`）はグレゴリオ暦です。そのラベルは`DateText`で
+- 月の区切り（`StrataMath.monthLabel`、`FairnessPolicy`）はグレゴリオ暦です。そのラベルは`DateText`で
   `PomoGemCalendar.gregorian`に固定します。和暦に設定したiPhoneでも「令和8年9月」ではなく「2026年9月」になります。
-  それ以外の日付は、これまでどおり利用者の暦で`Date.FormatStyle`を使います。
+- `DateText.year`は年の数字ではなく、その年の日付（区切りの開始日）を受け取ります。和暦のiPhoneでは
+  `Calendar.current`の年は2026ではなく8で、その数字からは「8年」しか作れないためです。ラベルだけでは直りません。
+  積み上がりの「年月」は年の区切りを`Calendar.autoupdatingCurrent`で作っているので（critic-04、未解決）、
+  区切りも`PomoGemCalendar.gregorian()`で作り、`DateText.year(区切りの開始日)`で表示します。
+- それ以外の日付は、これまでどおり利用者の暦で`Date.FormatStyle`を使います。
 - 書式の結果はテスト（`LocalizationFormattingTests`）で今の手書きの文字列と照合しています。
 
 ## 意図的な例外: `// l10n-ignore:`
