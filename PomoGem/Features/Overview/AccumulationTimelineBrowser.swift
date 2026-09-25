@@ -12,6 +12,9 @@ enum AccumulationTimelineAccessibilityID {
     static let monthSummary = "overview.timeline.month.summary"
     static let monthPreview = "overview.timeline.month.preview"
     static let monthClose = "overview.timeline.month.close"
+    static let monthThemes = "overview.timeline.month.themes"
+    static let monthDays = "overview.timeline.month.days"
+    static let monthWrapped = "overview.timeline.month.wrapped"
 
     static func year(_ value: Int) -> String {
         "overview.timeline.year.\(value)"
@@ -56,8 +59,10 @@ struct AccumulationTimelineBrowser: View {
         )
     }
 
+    /// Years and months are Gregorian buckets, like every stored month label;
+    /// with 和暦 the current calendar would name 2026 「8年」.
     private var calendar: Calendar {
-        Calendar.autoupdatingCurrent
+        PomoGemCalendar.gregorian
     }
 
     private var currentEpochID: UUID? {
@@ -116,6 +121,9 @@ struct AccumulationTimelineBrowser: View {
                 currentEpochID: currentEpochID,
                 calendar: calendar
             )
+            // A sheet is a separate presentation host; carry the text size
+            // (including the pinned AX5 of UI tests) into it and its sheets.
+            .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
     }
 
@@ -317,7 +325,7 @@ struct AccumulationTimelineBrowser: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.muted)
                 }
-                Text(month.monthStart.formatted(.dateTime.month(.wide)))
+                Text(PomoGemCalendar.text(month.monthStart, .dateTime.month(.wide), calendar: calendar))
                     .font(PomoGemTheme.brand(18))
                     .foregroundStyle(PomoGemTheme.text)
                 VStack(alignment: .leading, spacing: 3) {
@@ -340,10 +348,12 @@ struct AccumulationTimelineBrowser: View {
         .accessibilityIdentifier(
             AccumulationTimelineAccessibilityID.month(month.monthStart, calendar: calendar)
         )
-        .accessibilityLabel(
-            "\(month.monthStart.formatted(.dateTime.year().month()))、この端末に届いている\(month.exactLocalCount)粒、\(spokenMass(month.exactLocalGrams))"
-        )
-        .accessibilityHint("最新96粒までの代表瓶を開きます")
+        .accessibilityLabel(String(
+            localized: "\(PomoGemCalendar.text(month.monthStart, .dateTime.year().month(), calendar: calendar))、この端末に届いている\(month.exactLocalCount)粒、\(spokenMass(month.exactLocalGrams))",
+            table: "Overview",
+            comment: "VoiceOver month card: month, gem count on this iPhone, spoken mass"
+        ))
+        .accessibilityHint(Text("テーマ別・日ごとの記録と、この月の代表瓶を開きます", tableName: "Overview"))
     }
 
     private func timelineMetric(title: String, value: String) -> some View {
@@ -383,13 +393,13 @@ struct AccumulationTimelineBrowser: View {
         extentGeneration = generation
         isLoadingExtent = true
         extentError = nil
-        let repository = AccumulationTimelineRepository(
-            modelContainer: modelContext.container
-        )
+        let epochID = key.epochID
         do {
-            let loadedExtent = try await repository.extent(
-                currentEpochID: key.epochID
-            )
+            let loadedExtent = try await AccumulationTimelineLoader.read(
+                from: modelContext.container
+            ) { repository in
+                try await repository.extent(currentEpochID: epochID)
+            }
             let loadedYears = try AccumulationTimelineYearPolicy.years(
                 in: loadedExtent,
                 calendar: calendar
@@ -430,15 +440,18 @@ struct AccumulationTimelineBrowser: View {
         isLoadingYear = true
         yearError = nil
         yearSummary = nil
-        let repository = AccumulationTimelineRepository(
-            modelContainer: modelContext.container
-        )
+        let epochID = key.epochID
+        let calendar = self.calendar
         do {
-            let loaded = try await repository.yearSummary(
-                for: selectedYear,
-                currentEpochID: key.epochID,
-                calendar: calendar
-            )
+            let loaded = try await AccumulationTimelineLoader.read(
+                from: modelContext.container
+            ) { repository in
+                try await repository.yearSummary(
+                    for: selectedYear,
+                    currentEpochID: epochID,
+                    calendar: calendar
+                )
+            }
             try Task.checkCancellation()
             guard generation == yearGeneration,
                   key == yearLoadKey
@@ -493,11 +506,14 @@ private struct AccumulationTimelineMonthSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var detail: AccumulationTimelineMonthDetail?
     @State private var loadError: String?
     @State private var isLoading = true
     @State private var refreshGeneration = UUID()
     @State private var loadGeneration = UUID()
+    @State private var selectedDay: HistoryDaySelection?
+    @State private var wrappedMonth: WrappedMonth?
 
     var body: some View {
         NavigationStack {
@@ -515,6 +531,7 @@ private struct AccumulationTimelineMonthSheet: View {
                     .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 14))
 
                     exactSummary
+                    wrappedButton
 
                     if isLoading, detail == nil {
                         ProgressView("最新の代表粒を読み込み中")
@@ -538,13 +555,27 @@ private struct AccumulationTimelineMonthSheet: View {
                             .foregroundStyle(PomoGemTheme.amber)
                             .fixedSize(horizontal: false, vertical: true)
                         }
+                        if !detail.themes.isEmpty {
+                            HistoryThemeBreakdown(
+                                title: String(localized: "テーマ別", table: "Overview", comment: "Heading of the per-theme time breakdown of a month"),
+                                themes: detail.themes,
+                                totalSeconds: detail.totalSeconds
+                            )
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier(
+                                AccumulationTimelineAccessibilityID.monthThemes
+                            )
+                        }
+                        if !detail.days.isEmpty {
+                            dayList(detail.days)
+                        }
                         representativeBottle(detail)
                     }
                 }
                 .padding(20)
             }
             .background(NightBackground())
-            .navigationTitle(month.monthStart.formatted(.dateTime.year().month(.wide)))
+            .navigationTitle(PomoGemCalendar.text(month.monthStart, .dateTime.year().month(.wide), calendar: calendar))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -567,6 +598,133 @@ private struct AccumulationTimelineMonthSheet: View {
         .task(id: refreshGeneration) {
             await loadMonth()
         }
+        .sheet(item: $selectedDay) { day in
+            DayHistorySheet(
+                dayStart: day.dayStart,
+                currentEpochID: currentEpochID,
+                calendar: calendar
+            )
+            .environment(\.dynamicTypeSize, dynamicTypeSize)
+        }
+        .fullScreenCover(item: $wrappedMonth) { month in
+            // This sheet sits on 積み上がり (or 記録), so the card is presented
+            // from Wrapped itself instead of through Home's share sheet.
+            WrappedView(month: month, shareRoute: .inline)
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
+        }
+    }
+
+    /// Any month, however old, can open as its own monthly jar and card.
+    /// Named for what it does rather than 「この月の瓶」, which the 代表瓶
+    /// section below already draws; the caption says it makes a card.
+    private var wrappedButton: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                wrappedMonth = WrappedMonth(containing: month.monthStart, calendar: calendar)
+            } label: {
+                Label(
+                    String(localized: "この月を振り返る", table: "Overview", comment: "Opens the month's monthly wrap-up (Wrapped), which can become a share card"),
+                    systemImage: "sparkles.rectangle.stack.fill"
+                )
+            }
+            .buttonStyle(PomoGemPrimaryButtonStyle())
+            .accessibilityHint(Text("この月の記録を、ひとつの瓶とカードで振り返ります", tableName: "Overview"))
+            .accessibilityIdentifier(AccumulationTimelineAccessibilityID.monthWrapped)
+            Text("ひと月の瓶とテーマ別の時間を見て、カードにして残せます。", tableName: "Overview", comment: "Caption under 「この月を振り返る」")
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func dayList(_ days: [AccumulationTimelineDaySummary]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("日ごとの記録", tableName: "Overview", comment: "Heading of a month's list of days")
+                    .font(PomoGemTheme.brand(20))
+                Text("日付を選ぶと、その日の記録を一件ずつ見られます。", tableName: "Overview")
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(spacing: 0) {
+                ForEach(days) { day in
+                    dayRow(day)
+                    if day.id != days.last?.id {
+                        Divider()
+                            .overlay(PomoGemTheme.glassEdge.opacity(0.08))
+                            .padding(.leading, 14)
+                    }
+                }
+            }
+            .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(AccumulationTimelineAccessibilityID.monthDays)
+    }
+
+    private func dayRow(_ day: AccumulationTimelineDaySummary) -> some View {
+        let date = PomoGemCalendar.text(
+            day.dayStart,
+            .dateTime.month().day().weekday(.abbreviated),
+            calendar: calendar
+        )
+        let detailText = String(
+            localized: "\(DurationPresentation.minutesLabel(seconds: day.seconds))・\(day.sessionCount)粒",
+            table: "Overview",
+            comment: "Day row: focus time, then gem count"
+        )
+        return Button {
+            selectedDay = HistoryDaySelection(dayStart: day.dayStart)
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(date)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(PomoGemTheme.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(detailText)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if dynamicTypeSize.isAccessibilitySize {
+                        dayColors(day)
+                    }
+                }
+                Spacer(minLength: 8)
+                if !dynamicTypeSize.isAccessibilitySize {
+                    dayColors(day)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(PomoGemTheme.muted)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PomoGemRowButtonStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(
+            localized: "\(PomoGemCalendar.text(day.dayStart, .dateTime.month().day().weekday(.wide), calendar: calendar))、\(DurationPresentation.minutesLabel(seconds: day.seconds))、\(day.sessionCount)粒",
+            table: "Overview",
+            comment: "VoiceOver day row: date with weekday, focus time, gem count"
+        ))
+        .accessibilityHint(Text("この日の記録を開きます", tableName: "Overview"))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier(HistoryDrillDownAccessibilityID.day(day.dayStart, calendar: calendar))
+    }
+
+    private func dayColors(_ day: AccumulationTimelineDaySummary) -> some View {
+        HStack(spacing: 4) {
+            ForEach(day.colorHexes, id: \.self) { hex in
+                Circle()
+                    .fill(Color(hex: hex))
+                    .frame(width: 9, height: 9)
+            }
+        }
     }
 
     private var displayedSummary: AccumulationTimelineMonthSummary {
@@ -575,20 +733,49 @@ private struct AccumulationTimelineMonthSheet: View {
 
     private var exactSummary: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) { exactMetrics }
-            VStack(spacing: 10) { exactMetrics }
+            HStack(spacing: 10) {
+                exactCountMetrics
+                exactTimeMetric
+            }
+            VStack(spacing: 10) {
+                HStack(spacing: 10) { exactCountMetrics }
+                exactTimeMetric
+            }
+            VStack(spacing: 10) {
+                exactCountMetrics
+                exactTimeMetric
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier(AccumulationTimelineAccessibilityID.monthSummary)
-        .accessibilityLabel(
-            "この端末に届いている\(displayedSummary.exactLocalCount)粒、\(spokenMass(displayedSummary.exactLocalGrams))"
+        .accessibilityLabel(monthSummaryAccessibilityLabel)
+    }
+
+    private var monthSummaryAccessibilityLabel: String {
+        guard let detail else {
+            return "この端末に届いている\(displayedSummary.exactLocalCount)粒、\(spokenMass(displayedSummary.exactLocalGrams))"
+        }
+        return String(
+            localized: "この端末に届いている\(displayedSummary.exactLocalCount)粒、\(spokenMass(displayedSummary.exactLocalGrams))、\(DurationPresentation.minutesLabel(seconds: detail.totalSeconds))",
+            table: "Overview",
+            comment: "VoiceOver month summary: gem count on this iPhone, spoken mass, focus time"
         )
     }
 
     @ViewBuilder
-    private var exactMetrics: some View {
+    private var exactCountMetrics: some View {
         monthMetric(title: "この端末の粒", value: "\(displayedSummary.exactLocalCount.formatted())粒")
         monthMetric(title: "この端末の質量", value: formattedMass(displayedSummary.exactLocalGrams))
+    }
+
+    @ViewBuilder
+    private var exactTimeMetric: some View {
+        if let detail {
+            monthMetric(
+                title: String(localized: "集中した時間", table: "Overview", comment: "Month summary tile: total focus time"),
+                value: DurationPresentation.minutesLabel(seconds: detail.totalSeconds)
+            )
+        }
     }
 
     private func monthMetric(title: String, value: String) -> some View {
@@ -646,15 +833,19 @@ private struct AccumulationTimelineMonthSheet: View {
         loadGeneration = generation
         isLoading = true
         loadError = nil
-        let repository = AccumulationTimelineRepository(
-            modelContainer: modelContext.container
-        )
+        let monthStart = month.monthStart
+        let currentEpochID = self.currentEpochID
+        let calendar = self.calendar
         do {
-            let loaded = try await repository.monthDetail(
-                monthStart: month.monthStart,
-                currentEpochID: currentEpochID,
-                calendar: calendar
-            )
+            let loaded = try await AccumulationTimelineLoader.read(
+                from: modelContext.container
+            ) { repository in
+                try await repository.monthDetail(
+                    monthStart: monthStart,
+                    currentEpochID: currentEpochID,
+                    calendar: calendar
+                )
+            }
             try Task.checkCancellation()
             guard generation == loadGeneration else { return }
             detail = loaded

@@ -1836,8 +1836,66 @@ final class HomeProjectionTests: XCTestCase {
 
         XCTAssertEqual(metrics.completedFocusCount, 998)
         XCTAssertEqual(metrics.weeklyMeasuredSessionIDs, [measuredID])
-        XCTAssertEqual(metrics.weeklyMeasuredDates, [now])
+        XCTAssertEqual(metrics.weeklyTimerCompletionDates, [now])
         XCTAssertEqual(metrics.weeklyMeasuredGrams, 250)
+    }
+
+    func testWeeklyReturnsCountTimersWhileScreenTimeStillAddsMass() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = calendar.date(from: DateComponents(
+            year: 2026,
+            month: 9,
+            day: 2,
+            hour: 12
+        ))!
+        let timerID = UUID()
+        context.insert(StudySession(
+            id: timerID,
+            startAt: now.addingTimeInterval(-1_500),
+            endAt: now,
+            seconds: 1_500,
+            source: .timer,
+            grams: 250,
+            deviceDayKey: "fixture"
+        ))
+        // One hour in a learning app: six ten-minute chunks, stored the way
+        // the importer stores them (`.manual` plus the Screen Time signature).
+        var screenTimeIDs: [UUID] = []
+        for index in 0 ..< 6 {
+            let id = UUID()
+            screenTimeIDs.append(id)
+            let end = now.addingTimeInterval(TimeInterval(-3_600 - index * 600))
+            context.insert(StudySession(
+                id: id,
+                startAt: end.addingTimeInterval(TimeInterval(-SessionSource.screenTimeSeconds)),
+                endAt: end,
+                seconds: SessionSource.screenTimeSeconds,
+                source: .screenTime,
+                grams: SessionSource.screenTimeGrams,
+                deviceDayKey: "fixture"
+            ))
+        }
+        try context.save()
+
+        let metrics = try HomeProjectionPolicy.completionMetrics(
+            context: context,
+            resetMarkers: [],
+            roots: [],
+            looseSessions: [],
+            at: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(metrics.weeklyTimerCompletionSessionIDs, [timerID])
+        XCTAssertEqual(metrics.weeklyTimerCompletionDates, [now])
+        XCTAssertEqual(metrics.weeklyMeasuredSessionIDs, Set([timerID] + screenTimeIDs))
+        XCTAssertEqual(
+            metrics.weeklyMeasuredGrams,
+            250 + 6 * SessionSource.screenTimeGrams
+        )
     }
 
     func testWeeklyMeasuredMassPagesPastNonTimerRowsBeforeFiltering() throws {
@@ -1894,7 +1952,7 @@ final class HomeProjectionTests: XCTestCase {
         )
 
         XCTAssertEqual(metrics.weeklyMeasuredSessionIDs, Set(measuredIDs))
-        XCTAssertEqual(metrics.weeklyMeasuredDates.count, 6)
+        XCTAssertEqual(metrics.weeklyTimerCompletionDates.count, 6)
         XCTAssertEqual(metrics.weeklyMeasuredGrams, 600)
     }
 
@@ -1957,7 +2015,7 @@ final class HomeProjectionTests: XCTestCase {
         )
 
         XCTAssertEqual(metrics.weeklyMeasuredSessionIDs, [retainedID])
-        XCTAssertEqual(metrics.weeklyMeasuredDates, [inside])
+        XCTAssertEqual(metrics.weeklyTimerCompletionDates, [inside])
         XCTAssertEqual(metrics.weeklyMeasuredGrams, 100)
     }
 

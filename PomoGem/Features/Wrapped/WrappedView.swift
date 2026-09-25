@@ -1,19 +1,34 @@
 import SwiftData
 import SwiftUI
 
+/// A Gregorian month, as its title 「1985年1月」 says. 記録's month list,
+/// 年月, Wrapped and the month card all bucket and read months this way, so
+/// on an Islamic, Hebrew or Chinese calendar the jar and card cover the month
+/// the row was labelled with.
 struct WrappedMonth: Identifiable, Hashable {
     let start: Date
     var id: Date { start }
 
-    init(containing date: Date, calendar: Calendar = .autoupdatingCurrent) {
+    init(containing date: Date, calendar: Calendar = PomoGemCalendar.gregorian) {
         start = calendar.dateInterval(of: .month, for: date)?.start ?? date
     }
 
     var title: String { StrataMath.monthLabel(for: start) }
 }
 
+/// Where 「この月の瓶をカードにする」 opens the card.
+enum WrappedShareRoute {
+    /// Close Wrapped, then open Home's share sheet. For 記録, which is a
+    /// page under Home rather than a sheet.
+    case router
+    /// Open the card over Wrapped. For months opened from 年月, which sits in
+    /// a sheet that Home's share sheet cannot present over.
+    case inline
+}
+
 struct WrappedView: View {
     let month: WrappedMonth
+    let shareRoute: WrappedShareRoute
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -29,15 +44,26 @@ struct WrappedView: View {
     @State private var pageIsPartial = false
     @State private var isLoading = true
     @State private var loadError: String?
+    @State private var presentsInlineShare = false
 
-    init(month: WrappedMonth) {
+    init(month: WrappedMonth, shareRoute: WrappedShareRoute = .router) {
         self.month = month
+        self.shareRoute = shareRoute
         _activityResetMarkers = Query(BoundedHistoryPolicy.latestResetMarkerDescriptor())
     }
 
     private var totalMinutes: Int {
         NonnegativeIntPolicy.sum(monthSessions.map(\.seconds)) / 60
     }
+    /// Where the month's focus time went, from the records already loaded.
+    /// Deliberately no count of active days: that would read like a streak.
+    private var themeTimes: [AccumulationTimelineThemeSummary] {
+        AccumulationTimelineBreakdownPolicy.themes(
+            StudySessionSyncPolicy.canonicalSessions(from: monthSessions)
+                .map(AccumulationTimelineBreakdownPolicy.Entry.init(session:))
+        )
+    }
+
     private var topSubject: String {
         let groups = Dictionary(grouping: monthSessions, by: \.displaySubjectName)
         return groups.max { lhs, rhs in
@@ -133,17 +159,28 @@ struct WrappedView: View {
                 }
                 .padding(.horizontal, 18)
 
+                if !isLoading, loadError == nil, !themeTimes.isEmpty {
+                    WrappedThemeTimes(themes: themeTimes, isScoped: statsAreScoped)
+                        .padding(.horizontal, 18)
+                }
+
                 Spacer(minLength: 12)
                 VStack(spacing: 10) {
                     Button(wrappedShareButtonTitle) {
-                        dismiss()
-                        Task {
-                            try? await Task.sleep(for: .milliseconds(320))
-                            router.presentShare(scope: .month(month.start))
+                        switch shareRoute {
+                        case .router:
+                            dismiss()
+                            Task {
+                                try? await Task.sleep(for: .milliseconds(320))
+                                router.presentShare(scope: .month(month.start))
+                            }
+                        case .inline:
+                            presentsInlineShare = true
                         }
                     }
                     .buttonStyle(PomoGemPrimaryButtonStyle())
-                    Button("瓶へ戻る") { dismiss() }
+                    .accessibilityIdentifier("wrapped.share")
+                    Button(dismissButtonTitle) { dismiss() }
                         .buttonStyle(PomoGemSecondaryButtonStyle())
                 }
                 .padding(.horizontal, 22)
@@ -155,6 +192,10 @@ struct WrappedView: View {
             }
             .scrollIndicators(.hidden)
             .scrollBounceBehavior(.basedOnSize)
+        }
+        .sheet(isPresented: $presentsInlineShare) {
+            ShareComposerView(scope: .month(month.start))
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .task(id: loadKey) {
             loadMonth()
@@ -175,15 +216,17 @@ struct WrappedView: View {
         let epoch = ActivityResetPolicy.currentEpochID(from: resetSnapshots)?.uuidString ?? "pre-reset"
         let verification = aggregateProjectionPresentation
             .isCloudVerificationPending ? "cloud-pending" : "verified"
-        return "\(epoch)|\(month.start.timeIntervalSinceReferenceDate)|\(verification)|\(scenePhase == .active)"
+        // Same rule as 記録: an inactive flip (Control Center) is not a
+        // reason to re-read the month; returning from the background is.
+        return "\(epoch)|\(month.start.timeIntervalSinceReferenceDate)|\(verification)|\(LogHistoryLoadPolicy.isVisible(scenePhase))"
     }
 
     @MainActor
     private func loadMonth() {
-        guard scenePhase == .active else { return }
+        guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
         isLoading = true
         loadError = nil
-        let calendar = Calendar.autoupdatingCurrent
+        let calendar = PomoGemCalendar.gregorian
         guard let interval = calendar.dateInterval(of: .month, for: month.start) else {
             monthSessions = []
             pageIsPartial = false
@@ -219,10 +262,26 @@ struct WrappedView: View {
         return remainder == 0 ? "\(hours)時間" : "\(hours)時間\(remainder)分"
     }
 
+    /// The numbers cover only the records shown (a capped page, or iCloud
+    /// still re-counting), so every figure on the page says 確認済み.
+    private var statsAreScoped: Bool {
+        pageIsPartial || aggregateProjectionPresentation.isCloudVerificationPending
+    }
+
+    /// Opened from a month in 年月, dismissing returns to that month's
+    /// sheet, not to a jar. 記録 keeps its existing wording.
+    private var dismissButtonTitle: String {
+        switch shareRoute {
+        case .router:
+            "瓶へ戻る"
+        case .inline:
+            String(localized: "月の記録へ戻る", table: "Log", comment: "Wrapped opened from a month in 年月: returns to that month's sheet")
+        }
+    }
+
     @ViewBuilder
     private var wrappedStats: some View {
-        let scoped = pageIsPartial
-            || aggregateProjectionPresentation.isCloudVerificationPending
+        let scoped = statsAreScoped
         WrappedStat(title: scoped ? "確認済み時間" : "時間", value: formatMinutes(totalMinutes))
         WrappedStat(title: scoped ? "確認済み粒" : "元の粒", value: "\(monthSessions.count)")
         WrappedStat(title: scoped ? "確認済みトップ" : "いちばん積んだ", value: topSubject)
@@ -328,6 +387,78 @@ private struct MonthlyAggregatePebble: View {
             .shadow(color: colors[0].opacity(0.36), radius: 18, y: 8)
         }
         .accessibilityHidden(true)
+    }
+}
+
+private struct WrappedThemeTimes: View {
+    let themes: [AccumulationTimelineThemeSummary]
+    /// Built from the same capped records as the stats, so it is titled
+    /// the same way they are.
+    let isScoped: Bool
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var shown: [AccumulationTimelineThemeSummary] { Array(themes.prefix(5)) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Group {
+                if isScoped {
+                    Text("確認済みのテーマ別の時間", tableName: "Log", comment: "Wrapped: heading of the time per theme when only part of the month is shown or iCloud is re-counting")
+                } else {
+                    Text("テーマ別の時間", tableName: "Log", comment: "Wrapped: heading of the month's time per theme")
+                }
+            }
+                .font(.caption.weight(.bold))
+                .foregroundStyle(PomoGemTheme.muted)
+            ForEach(shown) { theme in
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 3) {
+                            themeName(theme)
+                            themeTime(theme)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        HStack(alignment: .firstTextBaseline, spacing: 9) {
+                            themeName(theme)
+                            Spacer(minLength: 8)
+                            themeTime(theme)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    "\(theme.name)、\(DurationPresentation.minutesLabel(seconds: theme.seconds))"
+                )
+            }
+            if themes.count > shown.count {
+                Text("ほか\(themes.count - shown.count)テーマ", tableName: "Log", comment: "Wrapped: how many more themes are not listed")
+                    .font(.caption2)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("wrapped.theme-times")
+    }
+
+    private func themeName(_ theme: AccumulationTimelineThemeSummary) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 9) {
+            HistoryThemeDot(colorHex: theme.colorHex)
+            Text(theme.name)
+                .font(.subheadline.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func themeTime(_ theme: AccumulationTimelineThemeSummary) -> some View {
+        Text(DurationPresentation.minutesLabel(seconds: theme.seconds))
+            .font(.system(.subheadline, design: .rounded, weight: .heavy))
+            .monospacedDigit()
     }
 }
 

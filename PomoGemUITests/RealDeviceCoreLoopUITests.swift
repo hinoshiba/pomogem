@@ -397,8 +397,9 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
         try require(app.navigationBars["記録"].waitForExistence(timeout: 10), "Record history must open.")
         pause(1)
         capture("log-top")
-        let time = summaryTile(title: "積んだ時間")
-        let mass = summaryTile(title: "今期の質量")
+        // The focus just completed, so it is inside the default 今週.
+        let time = summaryTile("log.summary.time")
+        let mass = summaryTile("log.summary.mass")
         try scrollTo(time, direction: .down)
         note("LOG summary: \(labelIfPresent(time)) / \(labelIfPresent(mass))")
         try require(mass.exists, "The log must show this period's mass.")
@@ -849,8 +850,9 @@ final class RealDeviceCoreLoopUITests: XCTestCase {
         try requireHome()
     }
 
-    private func summaryTile(title: String) -> XCUIElement {
-        app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", title)).firstMatch
+    /// By identifier: the tile's wording follows the period (今週の質量／今月の質量).
+    private func summaryTile(_ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any)[identifier].firstMatch
     }
 
     // MARK: - plumbing

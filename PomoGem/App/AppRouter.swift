@@ -17,7 +17,8 @@ enum ShareScope: Equatable {
     case month(Date)
     case aggregate(id: UUID, monthLabel: String)
 
-    func contains(_ date: Date, calendar: Calendar = .autoupdatingCurrent) -> Bool {
+    /// Months are Gregorian, as `periodLabel` names them.
+    func contains(_ date: Date, calendar: Calendar = PomoGemCalendar.gregorian) -> Bool {
         switch self {
         case .all:
             return true
