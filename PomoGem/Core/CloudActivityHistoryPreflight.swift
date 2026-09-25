@@ -79,15 +79,51 @@ enum CloudActivityHistoryPreflightError: Error, LocalizedError, Equatable {
     }
 }
 
+/// What one complete, account-verified traversal of the server's zones saw.
+struct CloudActivityHistoryObservation: Equatable, Sendable {
+    var markers: [ActivityResetSnapshot]
+    /// launch-06. Whether the traversal passed at least one theme, focus
+    /// record or achievement stone — rows only a device that finished
+    /// onboarding (or used the app) on this account writes. The traversal
+    /// already walks every record for the reset markers, so this costs no
+    /// request.
+    ///
+    /// Presentation evidence only: it chooses between the new-user tutorial
+    /// and 「iCloudから記録を復元しています」 on a store that has not finished
+    /// onboarding, and never authorizes, blocks or delays a mount. A false
+    /// positive costs a waiting screen that already offers 「新しく始める」;
+    /// a false negative shows the tutorial, which is today's behaviour.
+    var holdsUserRecords: Bool
+
+    init(markers: [ActivityResetSnapshot], holdsUserRecords: Bool = false) {
+        self.markers = markers
+        self.holdsUserRecords = holdsUserRecords
+    }
+}
+
 struct CloudActivityHistoryClient: Sendable {
     var verifyAccount: @MainActor @Sendable (ActiveAccountLocalBinding) async throws -> Void
-    var readMarkers: @Sendable () async throws -> [ActivityResetSnapshot]
+    var readHistory: @Sendable () async throws -> CloudActivityHistoryObservation
+
+    init(verifyAccount: @escaping @MainActor @Sendable (ActiveAccountLocalBinding) async throws -> Void,
+         readHistory: @escaping @Sendable () async throws -> CloudActivityHistoryObservation) {
+        self.verifyAccount = verifyAccount
+        self.readHistory = readHistory
+    }
+
+    /// A marker-only reader observes no user rows.
+    init(verifyAccount: @escaping @MainActor @Sendable (ActiveAccountLocalBinding) async throws -> Void,
+         readMarkers: @escaping @Sendable () async throws -> [ActivityResetSnapshot]) {
+        self.init(verifyAccount: verifyAccount, readHistory: {
+            CloudActivityHistoryObservation(markers: try await readMarkers())
+        })
+    }
 
     static var live: Self {
         Self(verifyAccount: { binding in
             _ = try await AppleAccountBoundaryResolver().resolve(expectedBinding: binding)
-        }, readMarkers: {
-            try await CloudActivityHistoryReader.readMarkers()
+        }, readHistory: {
+            try await CloudActivityHistoryReader.readHistory()
         })
     }
 }
@@ -107,10 +143,11 @@ struct CloudActivityHistoryPreflight {
         self.pollInterval = pollInterval.isFinite ? min(max(0.01, pollInterval), 1) : 0.25
     }
 
+    @discardableResult
     func run(context: ModelContext, expectedBinding: ActiveAccountLocalBinding,
-             validateMount: () throws -> Void) async throws {
+             validateMount: () throws -> Void) async throws -> CloudActivityHistoryObservation {
         let container = context.container
-        try await run(expectedBinding: expectedBinding, validateMount: validateMount) {
+        return try await run(expectedBinding: expectedBinding, validateMount: validateMount) {
             // A long-lived main context can retain a stale registered object.
             // A fresh reader sees imports committed by the mirroring stack.
             let reader = ModelContext(container)
@@ -159,7 +196,7 @@ struct CloudActivityHistoryPreflight {
         }
         try validate()
         let markers = try await cloudHistoryWithDeadline(deadline) {
-            try await client.readMarkers()
+            try await client.readHistory().markers
         }
         try validate()
         try await cloudHistoryWithDeadline(deadline) {
@@ -194,9 +231,10 @@ struct CloudActivityHistoryPreflight {
 
     /// The closure form also exercises the real asynchronous admission flow in
     /// tests without inventing a cloud-backed ModelContainer or local fixture.
+    @discardableResult
     func run(expectedBinding: ActiveAccountLocalBinding,
              validateMount: () throws -> Void,
-             localMarker: () throws -> ActivityResetSnapshot?) async throws {
+             localMarker: () throws -> ActivityResetSnapshot?) async throws -> CloudActivityHistoryObservation {
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
         func validate() throws {
             try Task.checkCancellation()
@@ -211,11 +249,11 @@ struct CloudActivityHistoryPreflight {
             try await client.verifyAccount(expectedBinding)
         }
         try validate()
-        let markers = try await cloudHistoryWithDeadline(deadline) {
-            try await client.readMarkers()
+        let history = try await cloudHistoryWithDeadline(deadline) {
+            try await client.readHistory()
         }
         try validate()
-        let remote = ActivityResetPolicy.currentMarker(from: markers)
+        let remote = ActivityResetPolicy.currentMarker(from: history.markers)
         try await cloudHistoryWithDeadline(deadline) {
             try await client.verifyAccount(expectedBinding)
         }
@@ -230,6 +268,7 @@ struct CloudActivityHistoryPreflight {
         // before publication. This callback checks its generation/selection on
         // both sides of every suspension, including the final import wait.
         try validate()
+        return history
     }
 }
 
@@ -268,9 +307,22 @@ enum CloudActivityHistoryRecordParser {
 /// zone fetch. Deletions and updates can lower a zone's observed live maximum.
 struct CloudActivityHistoryAccumulator {
     static let maximumMarkers = 10_000
+    /// launch-06. The mirrored rows that exist only because somebody set up
+    /// or used a jar on this account: finishing onboarding always creates a
+    /// theme. Prefs is deliberately not one of them — every launch's bounded
+    /// preparation creates this device's settings row before onboarding, so
+    /// a new user who quit during the tutorial would find their own row on
+    /// the next launch. Reset markers, timers and device claims are
+    /// bookkeeping and say nothing about an earlier jar either.
+    static let userRecordTypes: Set<CKRecord.RecordType> = [
+        "CD_Subject", "CD_StudySession", "CD_AchievementStone"
+    ]
     private var markers: [CKRecord.ID: ActivityResetSnapshot] = [:]
     private var failure: Error?
     private var finishedAllPages = false
+    /// A flag, not a count: a full traversal with no change token reports
+    /// current rows once, and the only consumer asks whether any exist.
+    private(set) var sawUserRecord = false
 
     mutating func record(_ id: CKRecord.ID, result: Result<CKRecord, Error>) {
         guard failure == nil else { return }
@@ -281,7 +333,10 @@ struct CloudActivityHistoryAccumulator {
                     throw CloudActivityHistoryPreflightError.historyLimit
                 }
                 markers[id] = marker
-            } else { markers[id] = nil }
+            } else {
+                markers[id] = nil
+                if Self.userRecordTypes.contains(record.recordType) { sawUserRecord = true }
+            }
         } catch { failure = CloudActivityHistoryPreflightError.sanitized(error) }
     }
 
@@ -294,15 +349,22 @@ struct CloudActivityHistoryAccumulator {
     }
 
     func result(operation: Result<Void, Error>) throws -> [ActivityResetSnapshot] {
+        try observation(operation: operation).markers
+    }
+
+    /// The zone's result only once every page arrived: an incomplete zone is
+    /// never evidence of anything, including of user rows.
+    func observation(operation: Result<Void, Error>) throws -> CloudActivityHistoryObservation {
         if let failure { throw failure }
         do { try operation.get() } catch { throw CloudActivityHistoryPreflightError.sanitized(error) }
         guard finishedAllPages else { throw CloudActivityHistoryPreflightError.incompleteHistory }
-        return Array(markers.values)
+        return CloudActivityHistoryObservation(markers: Array(markers.values),
+                                               holdsUserRecords: sawUserRecord)
     }
 }
 
 private enum CloudActivityHistoryReader {
-    static func readMarkers() async throws -> [ActivityResetSnapshot] {
+    static func readHistory() async throws -> CloudActivityHistoryObservation {
         let database = CKContainer(identifier: CloudSyncConfiguration.synchronizedDataContainerIdentifier).privateCloudDatabase
         let zones: [CKRecordZone] = try await cloudHistoryOperation { finish in
             let operation = CKFetchRecordZonesOperation.fetchAllRecordZonesOperation()
@@ -326,13 +388,14 @@ private enum CloudActivityHistoryReader {
         }
         guard zones.count <= 128 else { throw CloudActivityHistoryPreflightError.historyLimit }
         var markers: [ActivityResetSnapshot] = []
+        var holdsUserRecords = false
         for zone in zones {
             try Task.checkCancellation()
             if zone.zoneID == CKRecordZone.default().zoneID { continue }
             guard zone.capabilities.contains(.fetchChanges) else {
                 throw CloudActivityHistoryPreflightError.unsupportedZone
             }
-            let zoneMarkers: [ActivityResetSnapshot] = try await cloudHistoryOperation { finish in
+            let zoneHistory: CloudActivityHistoryObservation = try await cloudHistoryOperation { finish in
                 let configuration = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
                 configuration.previousServerChangeToken = nil
                 configuration.resultsLimit = 200
@@ -345,19 +408,20 @@ private enum CloudActivityHistoryReader {
                 operation.recordWithIDWasDeletedBlock = { id, _ in state.withValue { $0.deleted(id) } }
                 operation.recordZoneFetchResultBlock = { _, result in state.withValue { $0.page(result.map { $0.moreComing }) } }
                 operation.fetchRecordZoneChangesResultBlock = { result in
-                    do { finish(.success(try state.withValue { try $0.result(operation: result) })) }
+                    do { finish(.success(try state.withValue { try $0.observation(operation: result) })) }
                     catch { finish(.failure(error)) }
                 }
                 database.add(operation)
                 return operation
             }
-            markers.append(contentsOf: zoneMarkers)
+            markers.append(contentsOf: zoneHistory.markers)
+            holdsUserRecords = holdsUserRecords || zoneHistory.holdsUserRecords
             guard markers.count <= CloudActivityHistoryAccumulator.maximumMarkers else {
                 throw CloudActivityHistoryPreflightError.historyLimit
             }
         }
         try Task.checkCancellation()
-        return markers
+        return CloudActivityHistoryObservation(markers: markers, holdsUserRecords: holdsUserRecords)
     }
 
     private static func configure(_ operation: CKOperation) {

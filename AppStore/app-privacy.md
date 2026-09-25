@@ -76,8 +76,10 @@ Email AddressをApp Functionality（customer support）目的、linked to user�
 
 - production archiveの全network endpoint、runtime SDK、privacy manifest、entitlementを再走査する
 - CloudKitがprivate databaseだけで、運営者のserver、analytics、crash uploadへ転送されないことを確認する
-- 初回保存先の二択が同格で、iCloudへ送る具体的data、online確認とoffline利用の条件、明示的な
-  切り替えのコピー先・削除対象・cloud保持、app削除・JSONの制約が確認前に表示されることをRelease実機で確認する
+- 初回保存先の二択が同格で、選択を確定するそれぞれの確認alertに次が表示されることをRelease実機で確認する。
+  iCloud側はiCloudへ送る具体的data、online確認とoffline利用の条件、同期を止めるときのコピー先とcloud保持。
+  このiPhoneだけ側はapp削除で記録が失われること、あとでiCloud同期へ切り替えるとこのiPhoneの記録が
+  iCloudの記録に置き換わること、このiPhoneの記録をiCloudへ移せないこと（JSON書き出しの説明は初回画面に置かない）
 - Apple Developer team／CloudKit運用者が利用者dataを日常support、debug、分析、backup目的で取得・閲覧・
   exportしない運用をownerが確認する
 - support mailがAppleの現行optional disclosure条件を全て満たすか、実際の受付、保持、12か月以内の

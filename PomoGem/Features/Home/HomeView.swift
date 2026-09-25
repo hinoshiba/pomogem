@@ -3081,6 +3081,9 @@ struct HomeView: View {
                 failureMessage: "前回使った時間として保存できませんでした"
             )
         }
+        // Starting a focus answers today's daily reminder. Record it before
+        // the cover opens, so the reminder is re-read with it (RootView).
+        PassiveReminderActivityReader.recordFocusStarted()
         focusConfiguration = FocusConfiguration(
             subject: subject,
             duration: duration,
@@ -3580,8 +3583,8 @@ struct HomeView: View {
             looseSessions: looseSessions,
             at: descriptor.createdAt
         )
-        var measuredCompletionDates = historyMetrics?.weeklyMeasuredDates ?? []
-        if historyMetrics?.weeklyMeasuredSessionIDs.contains(descriptor.id) != true {
+        var measuredCompletionDates = historyMetrics?.weeklyTimerCompletionDates ?? []
+        if historyMetrics?.weeklyTimerCompletionSessionIDs.contains(descriptor.id) != true {
             // SwiftData query delivery can trail completion preparation.
             // Include the locally committed
             // timer exactly once so the completion card never says “0”.

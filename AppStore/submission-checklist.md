@@ -17,6 +17,11 @@ App Store Connectでは1.0.2 (9)がReady for Distributionです。1.1.0のdraft�
   （Family Controlsのdistribution profileと同時に）。最終Archiveの本体だけが
   `com.apple.developer.usernotifications.time-sensitive`を持つことを`verify-release-archive.sh`で確認し、
   実機でおやすみモード／勉強用の集中モード中に集中・休憩の終了通知が届き、毎日のリマインダーは保留されることを確認
+- [ ] 「集中に戻るお知らせ」をパスコード付きの実機で確認。25分の集中中に（1）画面をロックしただけなら
+  45秒待っても通知が出ない、（2）ホーム画面へ移ると約30秒後に一度だけ通知が出る、（3）ロック解除→再ロックを
+  3回繰り返しても通知が出ず、その後ホーム画面へ移ればまた約30秒で届く。パスコードなしの端末ではロックでも
+  届き得ることを設定の説明文と照合する。Simulatorはロック後のprotected-data通知を再現できないため、
+  単体テスト（`FocusReturnReminderLockWindowTests`）の合格だけでは閉じない
 - [ ] 修正後の最終候補で勉強・黒いgemの実10分到達、許可取消／再許可、Pro、再起動・日付・account境界を確認。
   2026-09-21の修正後の開発署名Releaseでは到達4件／4件が記録され、両レーンの付与を確認済み。
   20分の一括到達、日付／時刻変更、端末再起動などの未確認条件と最終配布候補の試験は引き続き残す
