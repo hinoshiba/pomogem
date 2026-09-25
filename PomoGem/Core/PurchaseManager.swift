@@ -19,6 +19,14 @@ enum PurchaseOutcome: Equatable, Sendable {
     case cancelled
 }
 
+/// What 「購入を復元」 found. A cancelled Apple Account prompt is the user's
+/// own choice, not a failure, so it is an outcome rather than an error.
+enum PurchaseRestoreOutcome: Equatable, Sendable {
+    case restored
+    case nothingFound
+    case cancelled
+}
+
 enum PurchaseManagerError: LocalizedError, Equatable {
     case productUnavailable(String)
     case failedVerification
@@ -181,7 +189,7 @@ final class PurchaseManager {
                     IntegrationConstants.proProductID
                 )
                 product = nil
-                productLoadErrorDescription = error.localizedDescription
+                productLoadErrorDescription = PaywallErrorCopy.message(for: error, action: .loadProduct)
                 lastErrorDescription = error.localizedDescription
                 return
             }
@@ -191,7 +199,9 @@ final class PurchaseManager {
             lastErrorDescription = nil
         } catch {
             product = nil
-            productLoadErrorDescription = error.localizedDescription
+            // Shown under 「商品情報を読み込めませんでした」: never StoreKit's
+            // own framework text (settings-02).
+            productLoadErrorDescription = PaywallErrorCopy.message(for: error, action: .loadProduct)
             lastErrorDescription = error.localizedDescription
         }
     }
@@ -251,6 +261,10 @@ final class PurchaseManager {
                 lastErrorDescription = nil
                 return .pending
             }
+        } catch StoreKitError.userCancelled {
+            // Some flows throw the cancel instead of returning it.
+            lastErrorDescription = nil
+            return .cancelled
         } catch {
             lastErrorDescription = error.localizedDescription
             throw error
@@ -259,7 +273,7 @@ final class PurchaseManager {
 
     /// Calls App Store sync only in response to the explicit "購入を復元" action.
     @discardableResult
-    func restorePurchases() async throws -> Bool {
+    func restorePurchases() async throws -> PurchaseRestoreOutcome {
         guard !isRestoring else {
             throw PurchaseManagerError.restoreInProgress
         }
@@ -274,7 +288,13 @@ final class PurchaseManager {
                 throw PurchaseManagerError.failedVerification
             }
             lastErrorDescription = nil
-            return isPro
+            return isPro ? .restored : .nothingFound
+        } catch StoreKitError.userCancelled {
+            // settings-02. `AppStore.sync()` throws this when the person
+            // closes the Apple Account prompt. They chose not to sign in;
+            // nothing failed, so nothing is reported.
+            lastErrorDescription = nil
+            return .cancelled
         } catch {
             lastErrorDescription = error.localizedDescription
             throw error

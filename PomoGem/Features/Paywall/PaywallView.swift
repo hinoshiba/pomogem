@@ -15,7 +15,7 @@ struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var purchase = PurchaseManager.shared
-    @State private var purchaseMessage: String?
+    @State private var alert: PaywallAlert?
     @State private var didPrepare = false
 
     private static let purchaseHistoryURL = URL(
@@ -47,15 +47,15 @@ struct PaywallView: View {
             }
         }
         .task { await preparePaywall() }
-        .alert("ポモジェムPro", isPresented: Binding(
-            get: { purchaseMessage != nil },
-            set: { if !$0 { purchaseMessage = nil } }
-        )) {
+        .alert(alert?.title ?? "", isPresented: Binding(
+            get: { alert != nil },
+            set: { if !$0 { alert = nil } }
+        ), presenting: alert) { _ in
             Button("閉じる", role: .cancel) {
                 if purchase.isPro { dismiss() }
             }
-        } message: {
-            Text(purchaseMessage ?? "")
+        } message: { alert in
+            Text(alert.message)
         }
     }
 
@@ -291,12 +291,18 @@ struct PaywallView: View {
         Button {
             Task {
                 do {
-                    let restored = try await purchase.restorePurchases()
-                    purchaseMessage = restored
-                        ? "購入を復元しました。"
-                        : "購入情報の同期は完了しました。現在このApple Accountで利用できるPro購入は確認できませんでした。"
+                    switch try await purchase.restorePurchases() {
+                    case .restored:
+                        alert = .restored
+                    case .nothingFound:
+                        alert = .nothingToRestore
+                    case .cancelled:
+                        break
+                    }
                 } catch {
-                    purchaseMessage = restoreFailureMessage(for: error)
+                    if let message = PaywallErrorCopy.message(for: error, action: .restore) {
+                        alert = .failure(.restore, message: message)
+                    }
                 }
             }
         } label: {
@@ -365,28 +371,28 @@ struct PaywallView: View {
         await purchase.loadProduct()
     }
 
-    private func restoreFailureMessage(for error: Error) -> String {
-        if let purchaseError = error as? PurchaseManagerError,
-           purchaseError == .failedVerification {
-            return "App Storeの購入情報を確認できませんでした。時間をおいて、もう一度お試しください。"
-        }
-        return "購入情報を復元できませんでした。通信状態を確認して、もう一度お試しください。\n\(error.localizedDescription)"
-    }
-
     @MainActor
     private func buy(_ product: Product) async {
         do {
             let outcome = try await purchase.purchase(product)
             switch outcome {
             case .purchased:
-                purchaseMessage = "ポモジェムProを利用できます。"
+                alert = PaywallAlert(
+                    title: Constants.UIStrings.paywallTitle,
+                    message: String(localized: "ポモジェムProを利用できます。", table: "Paywall", comment: "Paywall alert after a completed purchase")
+                )
             case .pending:
-                purchaseMessage = "購入の承認を待っています。"
+                alert = PaywallAlert(
+                    title: Constants.UIStrings.paywallTitle,
+                    message: String(localized: "購入の承認を待っています。", table: "Paywall", comment: "Paywall alert: the purchase awaits approval")
+                )
             case .cancelled:
                 break
             }
         } catch {
-            purchaseMessage = error.localizedDescription
+            if let message = PaywallErrorCopy.message(for: error, action: .purchase) {
+                alert = .failure(.purchase, message: message)
+            }
         }
     }
 }
