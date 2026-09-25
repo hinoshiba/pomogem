@@ -500,7 +500,7 @@ struct ShareComposerView: View {
                     .tracking(1.8)
                     .foregroundStyle(PomoGemTheme.amber)
                 Text("積み重ねを、動く一枚に")
-                    .font(PomoGemTheme.brand(22))
+                    .pomogemSectionTitle(size: 22)
                     .foregroundStyle(PomoGemTheme.text)
                 // No duration: 720-pixel GIFs take several seconds on a
                 // small iPhone, and a photo save renders two of them.

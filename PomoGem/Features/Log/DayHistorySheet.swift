@@ -173,7 +173,7 @@ struct DayHistorySheet: View {
     private func sessionList(_ sessions: [HistorySessionSummary]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("この日の記録", tableName: "Log", comment: "Heading of a day's record list")
-                .font(PomoGemTheme.brand(20))
+                .pomogemSectionTitle()
             VStack(spacing: 0) {
                 ForEach(sessions) { session in
                     HistorySessionRow(item: session, timeStyle: .timeRange)
@@ -261,7 +261,7 @@ struct HistoryThemeBreakdown: View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 12) {
                 Text(title)
-                    .font(PomoGemTheme.brand(20))
+                    .pomogemSectionTitle()
                 ForEach(themes) { theme in
                     Group {
                         if dynamicTypeSize.isAccessibilitySize {

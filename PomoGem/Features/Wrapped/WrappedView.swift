@@ -95,7 +95,7 @@ struct WrappedView: View {
                 Spacer(minLength: 4)
                 SectionEyebrow(text: "MONTHLY WRAPPED")
                 Text("\(month.title)の瓶")
-                    .font(PomoGemTheme.brand(36))
+                    .pomogemSectionTitle(size: 36)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 20)
                 Text("ひと粒ずつの手応えを、ひと月のまとまりでも眺める。")

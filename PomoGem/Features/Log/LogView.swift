@@ -1273,7 +1273,7 @@ struct LogView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     SectionEyebrow(text: "MASS")
                     Text("質量の推移")
-                        .font(PomoGemTheme.brand(20))
+                        .pomogemSectionTitle()
                 }
                 if !hasLoadedPeriod {
                     HistoryLoadingPlaceholder()
@@ -1365,7 +1365,7 @@ struct LogView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     SectionEyebrow(text: "SUBJECTS")
                     Text("テーマの構成")
-                        .font(PomoGemTheme.brand(20))
+                        .pomogemSectionTitle()
                 }
                 if !hasLoadedPeriod {
                     HistoryLoadingPlaceholder()
@@ -1449,7 +1449,7 @@ struct LogView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         SectionEyebrow(text: "MILESTONES")
                         Text("記念石アーカイブ")
-                            .font(PomoGemTheme.brand(20))
+                            .pomogemSectionTitle()
                         Text(achievementArchiveDescription(count: stones.count))
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
@@ -1523,7 +1523,7 @@ struct LogView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         SectionEyebrow(text: "MONTHLY WRAPPED")
                         Text("月ごとの瓶")
-                            .font(PomoGemTheme.brand(20))
+                            .pomogemSectionTitle()
                         Text("直近12か月を、月ごとの瓶で振り返れます。")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
@@ -1608,7 +1608,7 @@ struct LogView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         SectionEyebrow(text: "OVERVIEW PEBBLES")
                         Text("まとまり粒アーカイブ")
-                            .font(PomoGemTheme.brand(20))
+                            .pomogemSectionTitle()
                         Text("小さな粒は消えません。10粒ずつまとまり、瓶の中で動き続けます。")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
@@ -1666,7 +1666,9 @@ struct LogView: View {
     private var recentHistory: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("最近の記録").font(PomoGemTheme.brand(20))
+                // The trait sits on the title alone, so 「最新30件」 stays its
+                // own element.
+                Text("最近の記録").pomogemSectionTitle()
                 Spacer()
                 Text("最新30件").font(.caption).foregroundStyle(PomoGemTheme.muted)
             }
@@ -2646,7 +2648,7 @@ private struct AchievementEditorSheet: View {
             VStack(alignment: .leading, spacing: 3) {
                 SectionEyebrow(text: "MILESTONE")
                 Text(AchievementStone.sanitizedNote(note).isEmpty ? kind.title : AchievementStone.sanitizedNote(note))
-                    .font(PomoGemTheme.brand(22))
+                    .pomogemSectionTitle(size: 22)
                     .lineLimit(2)
             }
         }

@@ -1703,7 +1703,7 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         SectionEyebrow(text: "SPACE")
                         Text("集中する空間")
-                            .font(PomoGemTheme.brand(21))
+                            .pomogemSectionTitle(size: 21)
                     }
                     Spacer()
                 }

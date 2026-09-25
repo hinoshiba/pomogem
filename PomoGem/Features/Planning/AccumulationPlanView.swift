@@ -97,7 +97,7 @@ struct AccumulationPlanView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     SectionEyebrow(text: "SIMULATED · READ ONLY")
                     Text("これは予測です")
-                        .font(PomoGemTheme.brand(21))
+                        .pomogemSectionTitle(size: 21)
                     Text("ここで動かす瓶や数値は、実際の学習記録・保存領域・ウィジェットには保存されません。画面を閉じると入力も消えます。")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
@@ -115,7 +115,7 @@ struct AccumulationPlanView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     SectionEyebrow(text: "YOUR ROUTINE")
                     Text("続け方を選ぶ")
-                        .font(PomoGemTheme.brand(21))
+                        .pomogemSectionTitle(size: 21)
                     Text("1回の集中を完走する想定で、週あたりの回数から試算します。")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
@@ -212,7 +212,7 @@ struct AccumulationPlanView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         SectionEyebrow(text: "TIME TRAVEL PREVIEW")
                         Text(previewPeriodTitle)
-                            .font(PomoGemTheme.brand(23))
+                            .pomogemSectionTitle(size: 23)
                     }
                     Spacer()
                     Text("予測")
@@ -276,7 +276,7 @@ struct AccumulationPlanView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         SectionEyebrow(text: "BOTTLE CYCLE")
                         Text(bottleCycleTitle)
-                            .font(PomoGemTheme.brand(20))
+                            .pomogemSectionTitle()
                         Text(bottleCycleStatus)
                             .font(.caption.weight(.bold))
                             .foregroundStyle(PomoGemTheme.muted)
@@ -352,7 +352,7 @@ struct AccumulationPlanView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         SectionEyebrow(text: "SIMULATED ACCUMULATION")
                         Text("その時点の積み上がり")
-                            .font(PomoGemTheme.brand(21))
+                            .pomogemSectionTitle(size: 21)
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {
@@ -404,7 +404,7 @@ struct AccumulationPlanView: View {
     private var totalsGrid: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("\(previewPeriodTitle)の予測")
-                .font(PomoGemTheme.brand(20))
+                .pomogemSectionTitle()
             LazyVGrid(
                 columns: [GridItem(.flexible()), GridItem(.flexible())],
                 spacing: 10

@@ -814,7 +814,7 @@ struct AccumulationOverviewView: View {
         VStack(alignment: .leading, spacing: 8) {
             SectionEyebrow(text: "FOCUS CONSTELLATION")
             Text("一粒は消えず、\n時間の景色に変わる。")
-                .font(PomoGemTheme.brand(32))
+                .pomogemSectionTitle(size: 32)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
             Text(lifetimeIsCloudUnverified
@@ -1094,7 +1094,7 @@ struct AccumulationOverviewView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("時間の核")
-                            .font(PomoGemTheme.brand(22))
+                            .pomogemSectionTitle(size: 22)
                         Text("価値は集中時間、粒の階層は瓶を整理する形として見る")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
@@ -1231,7 +1231,7 @@ struct AccumulationOverviewView: View {
         VStack(alignment: .leading, spacing: 4) {
             SectionEyebrow(text: "STORAGE HIERARCHY")
             Text("瓶の整理階層")
-                .font(PomoGemTheme.brand(22))
+                .pomogemSectionTitle(size: 22)
             Text("10粒をひとつの表示へ圧縮します。これは価値の段階ではなく、記録と質量を失わず瓶を保つ仕組みです。")
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
@@ -1322,7 +1322,7 @@ struct AccumulationOverviewView: View {
     private var scaleGuide: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("時間をズームする")
-                .font(PomoGemTheme.brand(20))
+                .pomogemSectionTitle()
             if layoutPolicy.usesMenuLensPicker {
                 Picker("表示の距離", selection: $selectedLens) {
                     ForEach(AccumulationLens.allCases) { lens in
@@ -1370,7 +1370,7 @@ struct AccumulationOverviewView: View {
                 if layoutPolicy.stacksSummaryCards {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("成果の星")
-                            .font(PomoGemTheme.brand(20))
+                            .pomogemSectionTitle()
                         Text(pageScope.achievementSectionSubtitle)
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
@@ -1378,7 +1378,7 @@ struct AccumulationOverviewView: View {
                 } else {
                     HStack(alignment: .firstTextBaseline) {
                         Text("成果の星")
-                            .font(PomoGemTheme.brand(20))
+                            .pomogemSectionTitle()
                         Spacer()
                         Text(pageScope.achievementSectionSubtitle)
                             .font(.caption)
@@ -1414,7 +1414,7 @@ struct AccumulationOverviewView: View {
             if layoutPolicy.stacksSummaryCards {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("まとまり粒")
-                        .font(PomoGemTheme.brand(20))
+                        .pomogemSectionTitle()
                     Text("表示中 \(clusters.count)個")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.muted)
@@ -1422,7 +1422,7 @@ struct AccumulationOverviewView: View {
             } else {
                 HStack(alignment: .firstTextBaseline) {
                     Text("まとまり粒")
-                        .font(PomoGemTheme.brand(20))
+                        .pomogemSectionTitle()
                     Spacer()
                     Text("表示中 \(clusters.count)個")
                         .font(.caption.weight(.bold))
@@ -2022,7 +2022,7 @@ struct ClusterDetailSheet: View {
                         .padding(.top, 8)
                     VStack(spacing: 6) {
                         Text("\(cluster.pebbleCount.formatted())粒分の積み重ね")
-                            .font(PomoGemTheme.brand(24))
+                            .pomogemSectionTitle(size: 24)
                             .multilineTextAlignment(.center)
                         Text(cluster.detailSubtitle)
                             .font(.subheadline)
