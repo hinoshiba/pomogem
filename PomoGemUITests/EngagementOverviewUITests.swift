@@ -45,7 +45,7 @@ final class EngagementOverviewUITests: XCTestCase {
             "The guaranteed completion reward must explain real weekly progress"
         )
         XCTAssertTrue(
-            String(describing: weeklyCompletion.value).contains("戻った回数1回"),
+            String(describing: weeklyCompletion.value).contains("完走した回数1回"),
             "The reward heading must retain weekly recurrence context without presenting count as time value"
         )
         let rewardBridge = app.descendants(matching: .any)["reward.bridge"]
@@ -133,7 +133,7 @@ final class EngagementOverviewUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 6))
         let weeklyCrystal = app.descendants(matching: .any)["overview.weekly-crystal"]
         XCTAssertTrue(weeklyCrystal.waitForExistence(timeout: 4))
-        XCTAssertTrue((weeklyCrystal.label).contains("タイマー完走1回"))
+        XCTAssertTrue((weeklyCrystal.label).contains("完走した回数1回"))
 
         let lenses = app.segmentedControls["overview.lens"]
         XCTAssertTrue(lenses.waitForExistence(timeout: 4))

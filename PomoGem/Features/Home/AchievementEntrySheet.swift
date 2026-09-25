@@ -180,7 +180,7 @@ struct AchievementEntrySheet: View {
             )
 
             AchievementNoteField(
-                title: "成果名（任意）",
+                title: String(localized: "成果メモ（任意）", table: "Home", comment: "Achievement note field title; the same label as the edit sheet in 記録"),
                 placeholder: kind.notePlaceholder,
                 text: $note,
                 accessibilityIdentifier: "achievement.create.note",

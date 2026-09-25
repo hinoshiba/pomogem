@@ -1442,7 +1442,11 @@ struct JarAccumulationPresenceBackdrop: View {
 
     private var compactCycleCount: String {
         let count = AggregatePresentation.countLabel(state.completedCycleCount)
-        return "\(count.dropFirst())巡"
+        return String(
+            localized: "瓶\(String(count.dropFirst()))杯",
+            table: "Progress",
+            comment: "Jar chip: how many times the jar has filled (2.5 kg each); the argument is a compact count such as 3 or 1.2万"
+        )
     }
 }
 

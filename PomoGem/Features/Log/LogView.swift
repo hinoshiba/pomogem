@@ -934,7 +934,7 @@ enum LogPeriodPolicy {
 struct LogPeriodSummary: Equatable {
     let totalSeconds: Int
     let grams: Int
-    /// Timers that ran to their end (「完走ポモ」).
+    /// Timers that ran to their end (「完走した回数」).
     let timerCompletionCount: Int
     let selfReportedGrams: Int
     let screenTimeSeconds: Int
@@ -1213,7 +1213,7 @@ struct LogView: View {
     private func summaryTiles(_ summary: LogPeriodSummary) -> some View {
         SummaryTile(label: periodPageIsPartial ? "表示分の時間" : "積んだ時間", value: formatMinutes(summary.focusMinutes), symbol: "hourglass", identifier: "log.summary.time")
         // Timers that ran to their end; Screen Time chunks are not completions.
-        SummaryTile(label: periodPageIsPartial ? "表示分の完走" : "完走ポモ", value: "\(summary.timerCompletionCount)", symbol: "checkmark.circle", identifier: "log.summary.completions")
+        SummaryTile(label: periodPageIsPartial ? "表示分の完走" : String(localized: "完走した回数", table: "Log", comment: "Log tile: timers that ran to their end"), value: "\(summary.timerCompletionCount)", symbol: "checkmark.circle", identifier: "log.summary.completions")
         SummaryTile(
             label: periodPageIsPartial
                 ? "表示分の質量"
@@ -1247,7 +1247,7 @@ struct LogView: View {
         if summary.screenTimeSeconds > 0 {
             Label(
                 String(
-                    localized: "スクリーンタイムの\(DurationPresentation.minutesLabel(seconds: summary.screenTimeSeconds))は、完走ポモに含みません",
+                    localized: "スクリーンタイムの\(DurationPresentation.minutesLabel(seconds: summary.screenTimeSeconds))は、完走した回数に含みません",
                     table: "Log",
                     comment: "Log: Screen Time learning in the period is not counted as completed timers; the argument is a duration"
                 ),

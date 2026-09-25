@@ -322,7 +322,7 @@ struct AccumulationPlanView: View {
                         )
                 }
 
-                Text("瓶は2.50kg（集中250分相当）ごとに必ず満ち、満杯の光を見届けてから次の巡へ進みます。累計は消えず、2.50kg → 25kg → 250kg…の長期段階として別に残ります。回数ではなく、集中1分＝\(Constants.Mass.gramsPerMinute)gで両方が進みます。")
+                Text("瓶は2.50kg（集中250分相当）ごとに必ず満ち、満杯の光を見届けてから次の1杯へ進みます。累計は消えず、2.50kg → 25kg → 250kg…の長期段階として別に残ります。回数ではなく、集中1分＝\(Constants.Mass.gramsPerMinute)gで両方が進みます。", tableName: "Planning", comment: "Plan: how the jar fills; the argument is grams per minute")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -427,7 +427,7 @@ struct AccumulationPlanView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label("試算の前提", systemImage: "info.circle.fill")
                     .font(.subheadline.weight(.bold))
-                Text("1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を\(Constants.Mass.gramsPerMinute)gとして計算します。2.50kgごとの瓶の巡回、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は\(Constants.Jar.maxPhysicsBodies)体以内です。")
+                Text("1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を\(Constants.Mass.gramsPerMinute)gとして計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は\(Constants.Jar.maxPhysicsBodies)体以内です。", tableName: "Planning", comment: "Plan: calculation assumptions; the arguments are grams per minute and the physics body limit")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -466,7 +466,11 @@ struct AccumulationPlanView: View {
 
     private var bottleCycleTitle: String {
         if accumulationPresence.isCycleBoundary {
-            return "\(accumulationPresence.completedCycleCount.formatted())巡目が満ちた"
+            return String(
+                localized: "瓶\(accumulationPresence.completedCycleCount)杯目が満ちた",
+                table: "Planning",
+                comment: "Plan preview: the jar filled for the Nth time"
+            )
         }
         let percent = Int((accumulationPresence.cycleProgressFraction * 100).rounded())
         return projection.grams == 0
@@ -476,12 +480,16 @@ struct AccumulationPlanView: View {
 
     private var bottleCycleStatus: String {
         if accumulationPresence.isCycleBoundary {
-            return "満杯を確認 · 累計はそのまま次の巡へ"
+            return String(localized: "満杯を確認 · 累計はそのまま次の1杯へ", table: "Planning")
         }
         guard let next = accumulationPresence.nextCycleBoundaryGrams else {
-            return "1巡 2.50kg · 集中250分相当"
+            return String(localized: "瓶1杯 2.50kg · 集中250分相当", table: "Planning")
         }
-        return "あと\(formattedMass(max(0, next - projection.grams))) · 1巡は集中250分相当"
+        return String(
+            localized: "あと\(formattedMass(max(0, next - projection.grams))) · 瓶1杯は集中250分相当",
+            table: "Planning",
+            comment: "Plan preview: mass left until the jar fills; the argument is a mass"
+        )
     }
 
     private var majorMilestoneStatus: String {

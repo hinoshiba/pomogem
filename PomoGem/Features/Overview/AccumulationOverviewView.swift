@@ -20,7 +20,7 @@ struct AccumulationRecord: Identifiable, Equatable, Sendable {
 }
 
 struct AccumulationWeeklySummary: Equatable, Sendable {
-    /// Timers that ran to their end this week (the 「戻った回数」).
+    /// Timers that ran to their end this week (the 「完走した回数」).
     let timerCompletionCount: Int
     let measuredGrams: Int
     /// Self-reported mass this week. The weekly headline stays measured-only
@@ -877,13 +877,13 @@ struct AccumulationOverviewView: View {
         switch currentWeekSummary.cardState {
         case .measured where currentWeekSelfReportedGrams > 0:
             return String(
-                localized: "今週の積み上げ、\(DurationPresentation.focusLabel(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekTimerCompletionCount)回。このほか自己申告\(formattedMass(currentWeekSelfReportedGrams))。回数は戻った文脈で、時間価値とは別です",
+                localized: "今週の積み上げ、\(DurationPresentation.focusLabel(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、完走した回数\(currentWeekTimerCompletionCount)回。このほか自己申告\(formattedMass(currentWeekSelfReportedGrams))。回数は時間の価値とは別に数えています",
                 table: "Overview",
                 comment: "VoiceOver weekly card: focus time, measured mass, timer completions, self-reported mass"
             )
         case .measured:
             return String(
-                localized: "今週の積み上げ、\(DurationPresentation.focusLabel(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、タイマー完走\(currentWeekTimerCompletionCount)回。回数は戻った文脈で、時間価値とは別です",
+                localized: "今週の積み上げ、\(DurationPresentation.focusLabel(grams: currentWeekGrams))、実測\(formattedMass(currentWeekGrams))、完走した回数\(currentWeekTimerCompletionCount)回。回数は時間の価値とは別に数えています",
                 table: "Overview",
                 comment: "VoiceOver weekly card: focus time, measured mass, timer completions"
             )
@@ -913,7 +913,7 @@ struct AccumulationOverviewView: View {
     private var currentWeekCaption: String {
         switch currentWeekSummary.cardState {
         case .measured:
-            String(localized: "価値は集中時間で加算。完走回数は、戻ってきた文脈として別に残します。", table: "Overview")
+            String(localized: "積み上がるのは集中した時間です。完走した回数は、時間とは別に数えています。", table: "Overview")
         case .selfReportedOnly:
             String(
                 localized: "タイマーの完走はまだありません。自己申告の\(formattedMass(currentWeekSelfReportedGrams))も、瓶とこれまでの記録に入っています。",
@@ -997,7 +997,10 @@ struct AccumulationOverviewView: View {
             title: String(localized: "時間", table: "Overview", comment: "This week's focus time stat title"),
             value: DurationPresentation.focusLabel(grams: currentWeekGrams)
         )
-        OverviewStat(title: "戻った回数", value: "\(currentWeekTimerCompletionCount)回")
+        OverviewStat(
+            title: String(localized: "完走した回数", table: "Overview", comment: "Weekly card tile: timers that ran to their end this week"),
+            value: String(localized: "\(currentWeekTimerCompletionCount)回", table: "Overview", comment: "Weekly card tile value: a count of times")
+        )
         OverviewStat(
             title: String(localized: "今週の実測", table: "Overview", comment: "Weekly card tile: measured mass this week"),
             value: formattedMass(currentWeekGrams)

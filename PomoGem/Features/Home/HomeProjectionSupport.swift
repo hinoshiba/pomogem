@@ -1054,7 +1054,7 @@ enum HomeProjectionPolicy {
         /// `weeklyMeasuredGrams`.
         let weeklyMeasuredSessionIDs: Set<UUID>
         /// Timer completions only. A Screen Time chunk is measured time, but
-        /// it is not a return to the timer, so it never adds to 「戻った」.
+        /// it is not a completed timer, so it never adds to 「完走」.
         let weeklyTimerCompletionSessionIDs: Set<UUID>
         let weeklyTimerCompletionDates: [Date]
         /// Exact measured mass for the bounded current-week query. Session

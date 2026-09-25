@@ -4398,16 +4398,32 @@ private struct BreakOffer: Identifiable {
 
     var weeklyTitle: String {
         if let weeklyStudyGrams {
-            return "今週 \(formattedWeeklyMass(weeklyStudyGrams)) ・ 戻った\(weeklyCompletionCount)回"
+            return String(
+                localized: "今週 \(formattedWeeklyMass(weeklyStudyGrams)) ・ 完走\(weeklyCompletionCount)回",
+                table: "Home",
+                comment: "Completion card heading line: this week's measured mass, timers completed this week"
+            )
         }
-        return "今週戻った\(weeklyCompletionCount)回（時間価値とは別）"
+        return String(
+            localized: "今週の完走\(weeklyCompletionCount)回（時間の価値とは別）",
+            table: "Home",
+            comment: "Completion card heading line for an old receipt without mass: timers completed this week"
+        )
     }
 
     var weeklySpokenTitle: String {
         if let weeklyStudyGrams {
-            return "今週記録した集中時間の質量\(formattedWeeklyMass(weeklyStudyGrams))。戻った回数\(weeklyCompletionCount)回。回数は時間価値とは別です"
+            return String(
+                localized: "今週記録した集中時間の質量\(formattedWeeklyMass(weeklyStudyGrams))。完走した回数\(weeklyCompletionCount)回。回数は時間の価値とは別です",
+                table: "Home",
+                comment: "VoiceOver, completion card: this week's measured mass, timers completed this week"
+            )
         }
-        return "今週戻った回数\(weeklyCompletionCount)回。回数は時間価値とは別です"
+        return String(
+            localized: "今週の完走した回数\(weeklyCompletionCount)回。回数は時間の価値とは別です",
+            table: "Home",
+            comment: "VoiceOver, completion card for an old receipt: timers completed this week"
+        )
     }
 
     private func formattedWeeklyMass(_ grams: Int) -> String {
