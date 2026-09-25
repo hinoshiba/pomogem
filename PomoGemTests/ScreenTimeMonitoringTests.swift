@@ -361,7 +361,7 @@ final class ScreenTimeMonitoringTests: XCTestCase {
         do { try await controller.resetActivityData(); XCTFail("Retired owner must not reset") } catch {}
         do { try await controller.save(configuration: ScreenTimeConfiguration(), isPro: false); XCTFail("Retired owner must not save") } catch {}
         do { try await controller.bindContext(contextKey: "test-owner", dataEpochID: nil); XCTFail("Retired owner must not bind") } catch {}
-        await controller.reconcile(isPro: false, timerRunning: true)
+        await controller.reconcile(isPro: false, learningPause: .indefinite)
         let untouched = try store.snapshot()
         XCTAssertEqual(untouched.contextKey, "test-owner")
         XCTAssertEqual(untouched.negativeGemCount, 31)

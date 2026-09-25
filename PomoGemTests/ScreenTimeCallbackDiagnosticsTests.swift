@@ -559,7 +559,7 @@ final class ScreenTimeCallbackDiagnosticsTests: XCTestCase {
             let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
             XCTAssertEqual(Set(root.keys), [
                 "schemaVersion", "writtenAt", "configurationEnabled", "contextIsActive",
-                "learning", "distraction", "counters"
+                "learningPausedByTimer", "learning", "distraction", "counters"
             ])
             for lane in ["learning", "distraction"] {
                 let schedule = try XCTUnwrap(root[lane] as? [String: Any], lane)
@@ -701,6 +701,29 @@ final class ScreenTimeCallbackDiagnosticsTests: XCTestCase {
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
+
+    /// screentime-01 on a device: whether the timer's hold ended by itself is
+    /// read off this file, so it carries the hold and when it ends.
+    func testTheMirrorShowsTheTimersHoldAndWhenItEnds() throws {
+        try withMirror { mirror, _ in
+            var state = mirroredState()
+            state.applyTimerPause(.until(now.addingTimeInterval(1_500)), now: now)
+            mirror.write(state, now: now)
+            var report = try JSONDecoder().decode(
+                ScreenTimeDiagnosticsReport.self, from: Data(contentsOf: try XCTUnwrap(mirror.fileURL))
+            )
+            XCTAssertTrue(report.learningPausedByTimer)
+            XCTAssertEqual(report.learningPausedUntilOffsetSec, 1_500)
+
+            state.applyTimerPause(.indefinite, now: now)
+            mirror.write(state, now: now)
+            report = try JSONDecoder().decode(
+                ScreenTimeDiagnosticsReport.self, from: Data(contentsOf: try XCTUnwrap(mirror.fileURL))
+            )
+            XCTAssertTrue(report.learningPausedByTimer)
+            XCTAssertNil(report.learningPausedUntilOffsetSec, "A paused timer's hold has no end")
+        }
+    }
 
     /// A ledger with everything the mirror must NOT copy: a context key, a
     /// data epoch, a theme, run identifiers and a black-gem count.

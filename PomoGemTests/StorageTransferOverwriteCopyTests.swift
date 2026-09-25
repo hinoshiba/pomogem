@@ -241,8 +241,8 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
     /// Time settings' own nouns.
     func testTheScreenTimeDisclosureSaysWhatIsResetAndWhatIsKept() {
         for text in [StorageTransferScreenTimeCopy.switchResets, StorageTransferScreenTimeCopy.switchResetsIfInUse] {
-            for noun in ["選んだアプリ", "まだ取り込んでいない利用記録", "黒いgem", "「スクリーンタイム」",
-                         "保存済みの勉強時間と通常gemは引き継ぎます"] {
+            for noun in ["選んだアプリ", "まだ取り込んでいない利用記録", "黒い石", "「スクリーンタイム」",
+                         "保存済みの勉強時間と粒は引き継ぎます"] {
                 XCTAssertTrue(text.contains(noun), noun)
             }
         }

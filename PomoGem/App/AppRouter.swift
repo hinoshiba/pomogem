@@ -6,6 +6,9 @@ enum AppTab: Hashable {
     case jar
     case log
     case settings
+    /// The Screen Time settings pushed straight from Home's menu, the same
+    /// page Settings links to.
+    case screenTime
 }
 
 enum PaywallPendingIntent: Equatable {
