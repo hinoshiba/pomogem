@@ -3343,6 +3343,7 @@ private struct ShareSessionGem: View {
 
     /// The card's render scale (`ImageRenderer.scale` or the screen's).
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
     private var identity: SharePebbleRewardIdentity {
         SharePebbleRewardIdentity(
@@ -3401,7 +3402,8 @@ private struct ShareSessionGem: View {
                 colors: [GemColorShare(hex: session.colorHex, fraction: 1)],
                 variant: variant % GemArtworkSpec.variantCount,
                 isMuted: !isMeasured,
-                showsDashedRing: !isMeasured
+                showsDashedRing: !isMeasured,
+                showsThemeMarks: GemThemeMark.isEnabled(environment: differentiateWithoutColor)
             )
             Image(uiImage: GemArtwork.bodyImage(for: spec, radius: side / 2, scale: displayScale))
                 .resizable()
@@ -3576,9 +3578,9 @@ private struct ShareAggregatePebble: View {
             let size = min(proxy.size.width, proxy.size.height)
             let variant = stableShareVariant(aggregate.id)
             ZStack {
-                Image(uiImage: GemArtwork.bodyImage(for: artworkSpec(variant: variant), radius: size / 2, scale: displayScale))
-                    .resizable()
-                    .interpolation(.high)
+                // The jar's gem art with its screen-fixed light rig (the
+                // Overview and the fusion sheet show the same stone).
+                GemArtworkStone(spec: artworkSpec(variant: variant))
                     .frame(width: size, height: size)
                 if rewardIdentity.goldCount > 0 {
                     Circle()

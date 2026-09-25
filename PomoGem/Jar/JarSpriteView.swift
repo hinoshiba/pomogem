@@ -141,6 +141,7 @@ struct JarSpriteView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @StateObject private var motionObserver: JarMotionObserver
     /// Measured size of the time core's label block (shared by the core
     /// behind the scene and its labels in front, so both use one layout;
@@ -275,7 +276,8 @@ struct JarSpriteView: View {
                     totalGrams: totalGrams,
                     shares: lifetimeCoreColorShares.isEmpty
                         ? [GemColorShare(hex: lifetimeCoreColorHex, fraction: 1)]
-                        : lifetimeCoreColorShares
+                        : lifetimeCoreColorShares,
+                    themeMarks: GemThemeMark.isEnabled(environment: differentiateWithoutColor)
                 )
                 if let coreState = lifetimeCoreState {
                     JarLifetimeCoreBackdrop(
@@ -454,15 +456,17 @@ struct JarSpriteView: View {
         stageSize: CGSize,
         coreState: JarLifetimeCoreState?,
         totalGrams: Int,
-        shares: [GemColorShare]
+        shares: [GemColorShare],
+        themeMarks: Bool
     ) -> JarShareCore? {
         let jarWidth = max(1, stageSize.width - Constants.Jar.horizontalMargin * 2)
         if let coreState {
             return JarShareCore(
-                shares: GemArtwork.quantizedCoreShares(shares),
+                shares: shares,
                 level: coreState.coreLevel,
                 vesselLitFacets: nil,
-                diameter: JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: coreState.coreLevel)
+                diameter: JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: coreState.coreLevel),
+                themeMarks: themeMarks
             )
         }
         guard totalGrams > 0, totalGrams < GemCutLadder.firstCrystalTierGrams else { return nil }
@@ -1056,12 +1060,16 @@ enum JarStageArtwork {
 /// can redraw: the time core (share fan and level) or, before 2.5 kg, the
 /// colourless vessel with its lit facets.
 struct JarShareCore: Equatable {
+    /// The lifetime theme fan as Home has it (unquantised; every consumer
+    /// quantises it the same way, and the marks need the themes).
     let shares: [GemColorShare]
     let level: Int
     /// Lit facets of the colourless vessel; nil for the born core.
     let vesselLitFacets: Int?
     /// Diameter of the core frame on Home (points).
     let diameter: CGFloat
+    /// Differentiate Without Color: the stone carries its theme marks.
+    var themeMarks = false
 }
 
 /// Core Graphics twin of `JarLifetimeCoreBackdrop` / `JarLifetimeCoreVessel`
@@ -1077,7 +1085,7 @@ enum JarShareCoreArtwork {
         if let lit = core.vesselLitFacets {
             return GemArtwork.vesselImage(litFacets: lit, scale: scale)
         }
-        return GemArtwork.coreImage(shares: core.shares, level: core.level, scale: scale)
+        return GemArtwork.coreImage(shares: core.shares, level: core.level, scale: scale, themeMarks: core.themeMarks)
     }
 
     /// Frame of the stone image around `center` (points).

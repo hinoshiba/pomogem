@@ -850,7 +850,9 @@ private struct FusionOrbitSourceGem: View {
             GemArtworkStone(
                 spec: GemArtworkStone.looseSpec(hex: colorHex, variant: variant),
                 glowHex: isLit ? colorHex : nil,
-                glowOpacity: 0.36
+                glowOpacity: 0.36,
+                // A waiting slot is colourless: it belongs to no theme yet.
+                themeMarks: isLit ? nil : false
             )
             .saturation(isLit ? 1 : 0)
             .opacity(isLit ? 1 : (highContrast ? 0.70 : 0.45))
@@ -2169,7 +2171,12 @@ struct JarLifetimeCoreBackdrop: View {
                     )
                     .frame(width: stone * 1.24, height: stone * 1.24)
 
-                LifetimeCorePrism(colorShares: quantized, level: state.coreLevel)
+                // The unquantised fan: the core's marks (Differentiate
+                // Without Color) tell theme arcs from the mixed その他.
+                LifetimeCorePrism(
+                    colorShares: colorShares.isEmpty ? [GemColorShare(hex: colorHex, fraction: 1)] : colorShares,
+                    level: state.coreLevel
+                )
                     .frame(width: stone, height: stone)
                     .scaleEffect(breathing ? 1.02 : 1)
             }
@@ -2398,6 +2405,7 @@ private struct LifetimeCorePrism: View {
     let level: Int
 
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
     init(colorShares: [GemColorShare], level: Int) {
         self.colorShares = colorShares
@@ -2412,8 +2420,10 @@ private struct LifetimeCorePrism: View {
         let shares = colorShares
         let level = level
         let scale = displayScale
-        HeroArtworkImage(key: GemArtwork.coreImageKey(shares: shares, level: level, scale: scale)) {
-            GemArtwork.coreImage(shares: shares, level: level, scale: scale)
+        // Differentiate Without Color: each theme arc carries its mark.
+        let marks = GemThemeMark.isEnabled(environment: differentiateWithoutColor)
+        HeroArtworkImage(key: GemArtwork.coreImageKey(shares: shares, level: level, scale: scale, themeMarks: marks)) {
+            GemArtwork.coreImage(shares: shares, level: level, scale: scale, themeMarks: marks)
         }
     }
 }
@@ -2554,15 +2564,22 @@ struct GemArtworkStone: View {
     let spec: GemArtworkSpec
     var glowHex: String?
     var glowOpacity: Double = 0.42
+    /// Differentiate Without Color marks; nil follows the setting (a
+    /// colourless waiting slot or an achievement passes false).
+    var themeMarks: Bool?
 
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
     var body: some View {
         GeometryReader { proxy in
             let side = min(proxy.size.width, proxy.size.height)
             let radius = side / 2
             let sprite = GemArtwork.bodySpriteSize(radius: radius)
+            let spec = spec.withThemeMarks(
+                themeMarks ?? GemThemeMark.isEnabled(environment: differentiateWithoutColor)
+            )
             ZStack {
                 if let glowHex {
                     Circle()
@@ -2658,7 +2675,7 @@ struct ProgressCrystalGlyph: View {
         GeometryReader { proxy in
             let side = min(proxy.size.width, proxy.size.height)
             ZStack {
-                GemArtworkStone(spec: spec, glowHex: colorHex, glowOpacity: 0.40)
+                GemArtworkStone(spec: spec, glowHex: colorHex, glowOpacity: 0.40, themeMarks: isAchievement ? false : nil)
                     .frame(width: side * 0.80, height: side * 0.80)
                     .scaleEffect(breath ? 1.018 : 0.99)
 

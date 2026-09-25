@@ -1076,30 +1076,40 @@ final class PebbleNode: SKShapeNode {
         return requests
     }
 
-    static func bodySpec(for descriptor: PebbleDescriptor) -> GemArtworkSpec? {
+    /// `themeMarks` (Differentiate Without Color) engraves each theme's
+    /// mark on study gems and crystals; achievement stones keep their own
+    /// badge and the tutorial glass has no theme.
+    static func bodySpec(
+        for descriptor: PebbleDescriptor,
+        themeMarks: Bool = GemThemeMark.isSystemEnabled
+    ) -> GemArtworkSpec? {
         guard descriptor.screenTimeObstacle == nil else { return nil }
         if let aggregate = descriptor.aggregate {
-            return aggregateSpec(for: descriptor, aggregate: aggregate)
+            return aggregateSpec(for: descriptor, aggregate: aggregate, themeMarks: themeMarks)
         }
         if let achievementKind = descriptor.achievementKind {
             return achievementArtwork(for: descriptor, kind: achievementKind).spec
         }
         guard presentationKind(for: descriptor) == .normal else { return nil }
-        return looseSpec(for: descriptor)
+        return looseSpec(for: descriptor, themeMarks: themeMarks)
     }
 
     private static func presentationKind(for descriptor: PebbleDescriptor) -> PebbleKind {
         RareRewardReleasePolicy.permitsInternalTestOverride(true) ? descriptor.kind : .normal
     }
 
-    private static func looseSpec(for descriptor: PebbleDescriptor) -> GemArtworkSpec {
+    private static func looseSpec(
+        for descriptor: PebbleDescriptor,
+        themeMarks: Bool = GemThemeMark.isSystemEnabled
+    ) -> GemArtworkSpec {
         GemArtworkSpec(
             rung: cutLadder.rung(for: descriptor),
             colors: [GemColorShare(hex: descriptor.colorHex, fraction: 1)],
             variant: GemArtworkSpec.variant(for: descriptor.id),
             isMuted: !descriptor.isMeasured && !descriptor.isTutorial,
             showsDashedRing: !descriptor.isMeasured && !descriptor.isTutorial,
-            edgeBoost: edgeBoost
+            edgeBoost: edgeBoost,
+            showsThemeMarks: themeMarks && !descriptor.isTutorial
         )
     }
 
@@ -1126,7 +1136,8 @@ final class PebbleNode: SKShapeNode {
 
     private static func aggregateSpec(
         for descriptor: PebbleDescriptor,
-        aggregate: AggregateMetadata
+        aggregate: AggregateMetadata,
+        themeMarks: Bool = GemThemeMark.isSystemEnabled
     ) -> GemArtworkSpec {
         GemArtworkSpec(
             rung: cutLadder.rung(aggregateGrams: descriptor.grams),
@@ -1134,7 +1145,8 @@ final class PebbleNode: SKShapeNode {
             variant: GemArtworkSpec.variant(for: descriptor.id),
             isMuted: aggregate.manualPebbleCount > aggregate.measuredPebbleCount,
             showsDashedRing: aggregate.manualPebbleCount > 0,
-            edgeBoost: edgeBoost
+            edgeBoost: edgeBoost,
+            showsThemeMarks: themeMarks
         )
     }
 
@@ -1354,6 +1366,26 @@ final class PebbleNode: SKShapeNode {
             }
         }
         showAggregateTag()
+    }
+
+    /// The bake spec the body shows now (nil for obstacles and the legacy
+    /// rare materials).
+    var displayedBodySpec: GemArtworkSpec? { gemBodySpec }
+
+    /// Differentiate Without Color turned on or off: study gems and
+    /// crystals re-bake with or without their theme marks. Achievement
+    /// stones and the tutorial glass never carry one.
+    func setThemeMarks(_ enabled: Bool) {
+        guard let spec = gemBodySpec,
+              !descriptor.isAchievement,
+              !descriptor.isTutorial,
+              spec.showsThemeMarks != enabled
+        else { return }
+        let updated = spec.withThemeMarks(enabled)
+        gemBodySpec = updated
+        if let body = gemBodyNode {
+            showGemBody(updated, on: body)
+        }
     }
 
     /// The count tag sized for the crystal's scene radius at the bake scale.

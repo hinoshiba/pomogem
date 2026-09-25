@@ -47,6 +47,12 @@ enum GemShowcaseUITestFixture {
         /// (about 2.5 t: one ×1万 root and six loose gems).
         case heavy
         case veteran
+        /// Theme tone and mark review (Docs/GemExperienceDesign.md §7.4,
+        /// §7.12): one 25-minute gem in each `SubjectPalette` colour, two
+        /// off-palette legacy colours, and ×10 crystals that mix palette
+        /// colours, under a core whose fan holds seven themes (top five +
+        /// その他). Turn on Differentiate Without Color to see the marks.
+        case palette
     }
 
     static var modeForCurrentProcess: Mode? {
@@ -62,6 +68,7 @@ enum GemShowcaseUITestFixture {
             || modeForCurrentProcess == .stress
             || modeForCurrentProcess == .worstcase
             || modeForCurrentProcess == .fusionfx
+            || modeForCurrentProcess == .palette
     }
 
     /// Subject order chosen so the reference state mixes coral, blue and
@@ -75,7 +82,7 @@ enum GemShowcaseUITestFixture {
         case .tiers: 117
         case .heavy: 1_004
         case .veteran: 10_006
-        case .gallery, .stress, .worstcase, .fusionfx, nil: nil
+        case .gallery, .stress, .worstcase, .fusionfx, .palette, nil: nil
         }
     }
 
@@ -285,6 +292,60 @@ enum GemShowcaseUITestFixture {
         }
     }
 
+    /// Legacy theme colours from the old hue-rotation suggestion (outside
+    /// the palette): their marks sit in a ring.
+    static let offPaletteHexes = ["#F07A26", "#3AA0E8"]
+
+    /// The palette review jar (`palette`): twelve palette gems, two
+    /// off-palette gems and three ×10 crystals of two to four themes.
+    static func paletteDescriptors() -> [PebbleDescriptor] {
+        let base = Date(timeIntervalSince1970: 1_790_000_000)
+        let hexes = SubjectPalette.hexes
+        func uuid(_ group: Int, _ index: Int) -> UUID {
+            UUID(uuidString: String(format: "6E4D5348-5041-4C45-%04X-%012X", group, index))!
+        }
+        let mixes: [[(Int, Double)]] = [[(5, 0.6), (10, 0.4)], [(4, 0.5), (9, 0.3), (1, 0.2)], [(0, 0.4), (7, 0.3), (3, 0.2), (6, 0.1)]]
+        var descriptors: [PebbleDescriptor] = mixes.enumerated().map { index, mix in
+            let colorMix = mix.map { StratumColorFraction(hex: hexes[$0.0 % hexes.count], fraction: $0.1) }
+            let metadata = AggregateMetadata(
+                level: 1,
+                pebbleCount: 10,
+                childAggregateCount: 0,
+                colorMix: colorMix,
+                subjectMix: [],
+                periodStart: base,
+                periodEnd: base.addingTimeInterval(15_000),
+                sessionIDs: (0 ..< 10).map { uuid(0x10 + index, $0) },
+                measuredPebbleCount: 10,
+                manualPebbleCount: 0,
+                goldPebbleCount: 0,
+                prismPebbleCount: 0
+            )
+            return PebbleDescriptor(
+                id: uuid(0x20, index),
+                subjectName: "結晶",
+                colorHex: colorMix.first?.hex ?? Constants.Color.english,
+                source: .timer,
+                kind: .normal,
+                aggregate: metadata,
+                grams: 10 * Constants.Mass.measuredPebbleGrams,
+                createdAt: base.addingTimeInterval(Double(index))
+            )
+        }
+        for (index, hex) in (hexes + offPaletteHexes).enumerated() {
+            descriptors.append(PebbleDescriptor(
+                id: uuid(0x40, index),
+                subjectName: SubjectPalette.swatches.first { $0.hex == hex }?.name ?? "旧色",
+                colorHex: hex,
+                source: .timer,
+                kind: .normal,
+                grams: Constants.Mass.measuredPebbleGrams,
+                createdAt: base.addingTimeInterval(Double(10 + index))
+            ))
+        }
+        return descriptors
+    }
+
     static let fusionEffectDrop = PebbleDescriptor(
         id: UUID(uuidString: "6E4D5348-4658-4658-4658-00000000000A")!,
         subjectName: "英語",
@@ -490,6 +551,7 @@ struct GemShowcaseFixtureLaunchView: View {
         case .stress: GemShowcaseUITestFixture.stressDescriptors()
         case .worstcase: GemShowcaseUITestFixture.worstCaseDescriptors()
         case .fusionfx: GemShowcaseUITestFixture.fusionEffectDescriptors()
+        case .palette: GemShowcaseUITestFixture.paletteDescriptors()
         default: GemShowcaseUITestFixture.galleryDescriptors()
         }
     }
@@ -511,6 +573,8 @@ struct GemShowcaseFixtureLaunchView: View {
             scene.onAggregateRequested = { _ in }
         case .gallery:
             scene.setScreenTimeObstacles(totalUnits: 12)
+        case .palette:
+            break
         default:
             // 36 obstacle bodies is the Screen Time projection ceiling.
             scene.setScreenTimeObstacles(totalUnits: 9_999)
@@ -556,18 +620,22 @@ struct GemShowcaseFixtureLaunchView: View {
         let represented = descriptors.reduce(0) { total, descriptor in
             total + (descriptor.aggregate?.pebbleCount ?? (descriptor.isAchievement ? 0 : 1))
         }
-        let shares = [
-            GemColorShare(hex: Constants.Color.english, fraction: 0.36),
-            GemColorShare(hex: Constants.Color.mathematics, fraction: 0.26),
-            GemColorShare(hex: Constants.Color.japanese, fraction: 0.16),
-            GemColorShare(hex: Constants.Color.science, fraction: 0.12),
-            GemColorShare(hex: Constants.Color.socialStudies, fraction: 0.10)
-        ]
+        let shares = Self.mode == .palette
+            ? zip([0, 1, 5, 9, 3, 10, 7], [0.30, 0.22, 0.16, 0.12, 0.10, 0.06, 0.04]).map {
+                GemColorShare(hex: SubjectPalette.hexes[$0.0 % SubjectPalette.hexes.count], fraction: $0.1)
+            }
+            : [
+                GemColorShare(hex: Constants.Color.english, fraction: 0.36),
+                GemColorShare(hex: Constants.Color.mathematics, fraction: 0.26),
+                GemColorShare(hex: Constants.Color.japanese, fraction: 0.16),
+                GemColorShare(hex: Constants.Color.science, fraction: 0.12),
+                GemColorShare(hex: Constants.Color.socialStudies, fraction: 0.10)
+            ]
         ZStack {
             HomeAtmosphereBackground(atmosphere: .aurora)
                 .ignoresSafeArea()
             VStack(spacing: 12) {
-                Text(Self.mode == .worstcase ? "最悪ケース（Debug・320pt）" : "宝石ギャラリー（Debug）")
+                Text(Self.mode == .worstcase ? "最悪ケース（Debug・320pt）" : (Self.mode == .palette ? "テーマ12色（Debug）" : "宝石ギャラリー（Debug）"))
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.8))
                 JarSpriteView(

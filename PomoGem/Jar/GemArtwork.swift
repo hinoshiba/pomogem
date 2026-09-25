@@ -164,7 +164,7 @@ struct GemArtworkSpec: Hashable, Sendable {
     let cut: GemCut
     let symmetry: Int
     let colors: [GemColorShare]
-    let variant: Int
+    private(set) var variant: Int
     let facetContrast: CGFloat
     let sparkleCount: Int
     /// Reduces saturation for self-reported effort (existing convention).
@@ -175,6 +175,9 @@ struct GemArtworkSpec: Hashable, Sendable {
     var hasProngs = false
     /// Increase Contrast: brighter facet edges (+0.2 alpha).
     var edgeBoost: CGFloat = 0
+    /// Differentiate Without Color: each theme's engraved mark
+    /// (`GemThemeMark`). Off, the bake is exactly the default gem.
+    var showsThemeMarks = false
 
     static let variantCount = 4
 
@@ -190,7 +193,8 @@ struct GemArtworkSpec: Hashable, Sendable {
         hasWhiteCore: Bool = false,
         hasCrown: Bool = false,
         hasProngs: Bool = false,
-        edgeBoost: CGFloat = 0
+        edgeBoost: CGFloat = 0,
+        showsThemeMarks: Bool = false
     ) {
         self.cut = cut
         self.symmetry = symmetry
@@ -204,6 +208,7 @@ struct GemArtworkSpec: Hashable, Sendable {
         self.hasCrown = hasCrown
         self.hasProngs = hasProngs
         self.edgeBoost = edgeBoost
+        self.showsThemeMarks = showsThemeMarks
     }
 
     /// The one place that turns a rung plus colours into a bake spec, used
@@ -214,7 +219,8 @@ struct GemArtworkSpec: Hashable, Sendable {
         variant: Int,
         isMuted: Bool,
         showsDashedRing: Bool,
-        edgeBoost: CGFloat = 0
+        edgeBoost: CGFloat = 0,
+        showsThemeMarks: Bool = false
     ) {
         self.init(
             cut: rung.cut,
@@ -228,26 +234,23 @@ struct GemArtworkSpec: Hashable, Sendable {
             hasWhiteCore: rung.hasWhiteCore,
             hasCrown: rung.hasCrown,
             hasProngs: rung.hasProngs,
-            edgeBoost: edgeBoost
+            edgeBoost: edgeBoost,
+            showsThemeMarks: showsThemeMarks
         )
     }
 
     /// The same bake spec with another of the four variants.
     func withVariant(_ variant: Int) -> GemArtworkSpec {
-        GemArtworkSpec(
-            cut: cut,
-            symmetry: symmetry,
-            colors: colors,
-            variant: variant,
-            facetContrast: facetContrast,
-            sparkleCount: sparkleCount,
-            isMuted: isMuted,
-            showsDashedRing: showsDashedRing,
-            hasWhiteCore: hasWhiteCore,
-            hasCrown: hasCrown,
-            hasProngs: hasProngs,
-            edgeBoost: edgeBoost
-        )
+        var spec = self
+        spec.variant = variant
+        return spec
+    }
+
+    /// The same bake spec with the theme marks on or off.
+    func withThemeMarks(_ shows: Bool) -> GemArtworkSpec {
+        var spec = self
+        spec.showsThemeMarks = shows
+        return spec
     }
 
     /// Value-free individuality: one of four same-rung variants from the
@@ -286,7 +289,7 @@ struct GemArtworkSpec: Hashable, Sendable {
             hasCrown ? "k" : "-",
             hasProngs ? "p" : "-",
             "e\(Int((edgeBoost * 10).rounded()))"
-        ].joined(separator: "|")
+        ].joined(separator: "|") + (showsThemeMarks ? "|t" : "")
     }
 }
 
@@ -465,26 +468,28 @@ enum GemArtwork {
 
     /// Time core: a luminous radial brilliant whose twenty facets are
     /// painted by the approximate theme shares. Deterministic for (shares,
-    /// level, scale).
-    static func coreImage(shares: [GemColorShare], level: Int, scale rawScale: CGFloat) -> UIImage {
-        let key = NSString(string: coreImageKey(shares: shares, level: level, scale: rawScale))
+    /// level, scale, marks). `themeMarks` (Differentiate Without Color)
+    /// engraves each theme arc's mark.
+    static func coreImage(shares: [GemColorShare], level: Int, scale rawScale: CGFloat, themeMarks: Bool = false) -> UIImage {
+        let key = NSString(string: coreImageKey(shares: shares, level: level, scale: rawScale, themeMarks: themeMarks))
         if let cached = imageCache.object(forKey: key) { return cached }
         let image = renderHero(
             shares: quantizedCoreShares(shares),
             level: min(max(level, 1), 6),
             litVesselFacets: nil,
-            scale: renderScale(rawScale)
+            scale: renderScale(rawScale),
+            themeMarks: themeMarks ? coreThemeMarkPlacements(shares: shares) : []
         )
         imageCache.setObject(image, forKey: key, cost: byteCost(image))
         return image
     }
 
-    /// Cache key of a core bake (quantised shares, level, scale).
-    static func coreImageKey(shares: [GemColorShare], level: Int, scale rawScale: CGFloat) -> String {
+    /// Cache key of a core bake (quantised shares, level, scale, marks).
+    static func coreImageKey(shares: [GemColorShare], level: Int, scale rawScale: CGFloat, themeMarks: Bool = false) -> String {
         let palette = quantizedCoreShares(shares)
             .map { "\($0.hex)@\(Int(($0.fraction * 20).rounded()))" }
             .joined(separator: ",")
-        return "core4|\(palette)|L\(min(max(level, 1), 6))|x\(renderScale(rawScale))"
+        return "core4|\(palette)|L\(min(max(level, 1), 6))|x\(renderScale(rawScale))" + (themeMarks ? "|t" : "")
     }
 
     /// Cache key of a vessel bake.
@@ -1756,6 +1761,13 @@ enum GemArtwork {
                 drawDot(context: context, center: map(polar(angle, 0.52)), radius: max(0.6, radius * 0.035), alpha: 0.9)
             }
         }
+        // Differentiate Without Color: each theme's mark, engraved last so
+        // no sparkle sits on it (§7.12).
+        if spec.showsThemeMarks, !isGlass {
+            for placement in themeMarkPlacements(for: spec.colors, radius: radius) {
+                drawThemeMark(placement.mark, center: map(placement.center), radius: radius * placement.radius, in: context)
+            }
+        }
         context.restoreGState() // outline clip
 
         // 7. Girdle outline, white α0.75.
@@ -2137,7 +2149,8 @@ enum GemArtwork {
         shares: [GemColorShare],
         level: Int,
         litVesselFacets: Int?,
-        scale: CGFloat
+        scale: CGFloat,
+        themeMarks: [ThemeMarkPlacement] = []
     ) -> UIImage {
         let diameter = coreBakeDiameter
         let radius = diameter / 2 - margin(radius: diameter / 2)
@@ -2455,6 +2468,11 @@ enum GemArtwork {
             drawSparkle(context: context, center: map(.zero), length: radius * (isVessel ? 0.20 : 0.24), alpha: isVessel ? 0.9 : 1)
             drawSparkle(context: context, center: map(.zero), length: radius * (isVessel ? 0.11 : 0.13), alpha: 0.55, rotation: .pi / 4)
             drawSparkle(context: context, center: map(CoreGeometry.girdle(7)), length: radius * 0.13, alpha: isVessel ? 0.6 : 0.85)
+
+            // Differentiate Without Color: one mark per theme arc (§7.12).
+            for placement in themeMarks {
+                drawThemeMark(placement.mark, center: map(placement.center), radius: radius * placement.radius, in: context)
+            }
         }
     }
 
@@ -3034,6 +3052,239 @@ extension GemArtwork {
                 draw(color: UIColor(white: 0, alpha: 0.65), offset: -0.5)
                 draw(color: UIColor(white: 1, alpha: 0.30), offset: 0)
             }
+        }
+    }
+}
+
+// MARK: - Theme marks (Differentiate Without Color)
+
+/// Differentiate Without Color (Docs/GemExperienceDesign.md §7.12): a
+/// small engraved glyph that tells a theme's gems apart without its colour.
+/// Twelve simple glyphs are keyed by the theme's index in `SubjectPalette`;
+/// a colour outside the palette (older themes) shows the glyph of its hue
+/// slot inside a ring, so it never looks like a palette theme. Nothing is
+/// stored: the mark is derived from the colour each time a gem is baked.
+///
+/// The glyphs are told apart by their shape alone, whatever the angle (a
+/// loose gem rolls, and its engraving rolls with it): no square and
+/// diamond pair, no plus and cross pair.
+struct GemThemeMark: Hashable, Sendable {
+    enum Glyph: Int, CaseIterable, Sendable {
+        case dot, triangle, square, star, asterisk, plus, crescent, sparkle, bar, twoDots, heart, drop
+    }
+
+    let glyph: Glyph
+    /// A colour outside the palette: the glyph sits in a ring.
+    let isFramed: Bool
+
+    init(glyph: Glyph, isFramed: Bool = false) {
+        self.glyph = glyph
+        self.isFramed = isFramed
+    }
+
+    init(hex: String) {
+        let count = Glyph.allCases.count
+        if let index = SubjectPalette.index(of: hex) {
+            glyph = Glyph.allCases[index % count]
+            // A palette longer than the glyph set frames its second dozen.
+            isFramed = index >= count
+            return
+        }
+        let hsb = GemColor(hex: hex).hsb
+        let slot: Int
+        if hsb.saturation < 0.08 {
+            // Greys have no hue: a stable slot from the hex itself.
+            slot = Int(SubjectPalette.normalized(hex).unicodeScalars.reduce(UInt32(7)) { $0 &* 31 &+ $1.value } % UInt32(count))
+        } else {
+            slot = Int((hsb.hue * CGFloat(count)).rounded()) % count
+        }
+        glyph = Glyph.allCases[slot]
+        isFramed = true
+    }
+
+    /// The system setting (Settings › Accessibility › Display & Text Size).
+    static var isSystemEnabled: Bool { UIAccessibility.shouldDifferentiateWithoutColor }
+
+    /// SwiftUI's environment value, or the system setting where a view is
+    /// rendered outside a window (share-card export).
+    static func isEnabled(environment: Bool) -> Bool {
+        environment || isSystemEnabled
+    }
+}
+
+extension GemArtwork {
+    /// Smallest glyph (points across) a mark is drawn at.
+    static let minimumThemeMarkGlyphSize: CGFloat = 7
+
+    /// Where a gem's theme marks sit, in unit space (y up, gem radius 1).
+    struct ThemeMarkPlacement: Equatable, Sendable {
+        let mark: GemThemeMark
+        let center: CGPoint
+        /// Glyph radius as a share of the gem radius.
+        let radius: CGFloat
+    }
+
+    /// A single-theme gem carries one mark on its table (0.40 R, a 20 pt
+    /// gem shows an 8 pt glyph); a crystal of several themes carries one
+    /// smaller mark (0.23 R) in the middle of each theme's sector, 0.58 R
+    /// out (clear of the ×N tag below the table most of the time), in the
+    /// same sectors `SectorTones` paints (clockwise from 12 o'clock). A
+    /// crystal too small for those to reach `minimumGlyphSize` (`radius`
+    /// in points) shows its largest theme's mark on the table instead.
+    static func themeMarkPlacements(for colors: [GemColorShare], radius: CGFloat? = nil) -> [ThemeMarkPlacement] {
+        let shares = colors.filter { $0.fraction > 0 }
+        let sectorMarksFit = radius.map { $0 * 0.23 * 2 >= minimumThemeMarkGlyphSize } ?? true
+        guard shares.count > 1, sectorMarksFit else {
+            let largest = shares.max { $0.fraction < $1.fraction }
+            return largest.map { [ThemeMarkPlacement(mark: GemThemeMark(hex: $0.hex), center: .zero, radius: 0.40)] } ?? []
+        }
+        let total = shares.reduce(0) { $0 + $1.fraction }
+        var cursor: CGFloat = 0
+        return shares.map { share in
+            let span = CGFloat(share.fraction / max(total, 0.000_1))
+            defer { cursor += span }
+            let angle = .pi / 2 - (cursor + span / 2) * .pi * 2
+            return ThemeMarkPlacement(mark: GemThemeMark(hex: share.hex), center: polar(angle, 0.58), radius: 0.23)
+        }
+    }
+
+    /// Marks on the time core: one per theme arc of its colour field, on
+    /// the ring between the white heart and the crown (0.56 R, glyph
+    /// 0.105 R). The mixed その他 arc has no theme and carries none.
+    static func coreThemeMarkPlacements(shares: [GemColorShare]) -> [ThemeMarkPlacement] {
+        let themes = Set(shares.filter { $0.fraction > 0 }.map { SubjectPalette.normalized($0.hex) })
+        let field = CoreColorField(shares: quantizedCoreShares(shares))
+        return field.arcs.compactMap { arc in
+            guard themes.contains(SubjectPalette.normalized(arc.hex)) else { return nil }
+            let turn = (arc.start + arc.end) / 2
+            let angle = .pi / 2 - turn * .pi * 2
+            return ThemeMarkPlacement(mark: GemThemeMark(hex: arc.hex), center: polar(angle, 0.56), radius: 0.105)
+        }
+    }
+
+    /// The glyph as a filled path around `center` with radius `radius`, in
+    /// y-down image space (upright on an unrotated image).
+    static func themeMarkPath(_ mark: GemThemeMark, center: CGPoint, radius: CGFloat) -> CGPath {
+        var transform = CGAffineTransform(translationX: center.x, y: center.y).scaledBy(x: radius, y: radius)
+        return unitThemeMarkPath(mark).copy(using: &transform) ?? CGMutablePath()
+    }
+
+    /// Engraves `mark`: a lit rim where the cut's edge catches the light
+    /// (so the glyph reads on the darkest facets) and the deep cut inside
+    /// (so it reads on the palest).
+    static func drawThemeMark(_ mark: GemThemeMark, center: CGPoint, radius: CGFloat, in context: CGContext) {
+        let path = themeMarkPath(mark, center: center, radius: radius)
+        context.saveGState()
+        context.setBlendMode(.normal)
+        context.setLineJoin(.round)
+        context.addPath(path)
+        context.setStrokeColor(UIColor(white: 1, alpha: 0.84).cgColor)
+        context.setLineWidth(max(0.7, radius * 0.30))
+        context.strokePath()
+        context.addPath(path)
+        context.setFillColor(GemColor(red: 0.06, green: 0.07, blue: 0.14).withAlpha(0.84).cgColor)
+        context.fillPath()
+        context.restoreGState()
+    }
+
+    /// A stand-alone mark (legends and tests): the engraving on a clear
+    /// square `side` points wide.
+    static func themeMarkImage(_ mark: GemThemeMark, side: CGFloat, scale: CGFloat) -> UIImage {
+        let side = max(4, side)
+        return UIGraphicsImageRenderer(
+            size: CGSize(width: side, height: side),
+            format: rendererFormat(scale: scale)
+        ).image { renderer in
+            drawThemeMark(mark, center: CGPoint(x: side / 2, y: side / 2), radius: side * 0.40, in: renderer.cgContext)
+        }
+    }
+
+    private static let themeMarkPathLock = NSLock()
+    nonisolated(unsafe) private static var themeMarkPathCache: [GemThemeMark: CGPath] = [:]
+
+    /// The glyph within the unit circle (y down), built once per mark.
+    private static func unitThemeMarkPath(_ mark: GemThemeMark) -> CGPath {
+        themeMarkPathLock.lock()
+        defer { themeMarkPathLock.unlock() }
+        if let cached = themeMarkPathCache[mark] { return cached }
+        var path = unitGlyphPath(mark.glyph)
+        if mark.isFramed {
+            var shrink = CGAffineTransform(scaleX: 0.56, y: 0.56)
+            let inner = path.copy(using: &shrink) ?? path
+            let ring = CGPath(ellipseIn: CGRect(x: -1, y: -1, width: 2, height: 2), transform: nil)
+                .subtracting(CGPath(ellipseIn: CGRect(x: -0.80, y: -0.80, width: 1.6, height: 1.6), transform: nil))
+            path = ring.union(inner)
+        }
+        themeMarkPathCache[mark] = path
+        return path
+    }
+
+    private static func unitGlyphPath(_ glyph: GemThemeMark.Glyph) -> CGPath {
+        func circle(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat) -> CGPath {
+            CGPath(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2), transform: nil)
+        }
+        /// Regular star or polygon, first point straight up (y down).
+        func star(points: Int, outer: CGFloat, inner: CGFloat?, dy: CGFloat = 0) -> CGPath {
+            let path = CGMutablePath()
+            let count = inner == nil ? points : points * 2
+            for index in 0 ..< count {
+                let r = inner.map { index.isMultiple(of: 2) ? outer : $0 } ?? outer
+                let angle = -CGFloat.pi / 2 + CGFloat(index) / CGFloat(count) * .pi * 2
+                let point = CGPoint(x: cos(angle) * r, y: sin(angle) * r + dy)
+                if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+            path.closeSubpath()
+            return path
+        }
+        func bar(length: CGFloat, width: CGFloat, angle: CGFloat) -> CGPath {
+            var rotation = CGAffineTransform(rotationAngle: angle)
+            return CGPath(
+                roundedRect: CGRect(x: -length / 2, y: -width / 2, width: length, height: width),
+                cornerWidth: width * 0.5,
+                cornerHeight: width * 0.5,
+                transform: &rotation
+            )
+        }
+        switch glyph {
+        case .dot:
+            return circle(0, 0, 0.62)
+        case .triangle:
+            return star(points: 3, outer: 0.98, inner: nil, dy: 0.14)
+        case .square:
+            return CGPath(rect: CGRect(x: -0.64, y: -0.64, width: 1.28, height: 1.28), transform: nil)
+        case .star:
+            return star(points: 5, outer: 1.0, inner: 0.44, dy: 0.06)
+        case .asterisk:
+            return bar(length: 1.9, width: 0.40, angle: .pi / 2)
+                .union(bar(length: 1.9, width: 0.40, angle: .pi / 6))
+                .union(bar(length: 1.9, width: 0.40, angle: -.pi / 6))
+        case .plus:
+            let arm: CGFloat = 0.27
+            return CGPath(rect: CGRect(x: -0.86, y: -arm, width: 1.72, height: arm * 2), transform: nil)
+                .union(CGPath(rect: CGRect(x: -arm, y: -0.86, width: arm * 2, height: 1.72), transform: nil))
+        case .crescent:
+            return circle(-0.08, 0, 0.88).subtracting(circle(0.36, -0.20, 0.70))
+        case .sparkle:
+            return star(points: 4, outer: 1.0, inner: 0.30)
+        case .bar:
+            return bar(length: 1.84, width: 0.66, angle: 0)
+        case .twoDots:
+            return circle(-0.50, 0, 0.40).union(circle(0.50, 0, 0.40))
+        case .heart:
+            let lobes = circle(-0.40, -0.26, 0.46).union(circle(0.40, -0.26, 0.46))
+            let point = CGMutablePath()
+            point.move(to: CGPoint(x: -0.83, y: -0.12))
+            point.addLine(to: CGPoint(x: 0.83, y: -0.12))
+            point.addLine(to: CGPoint(x: 0, y: 0.90))
+            point.closeSubpath()
+            return lobes.union(point)
+        case .drop:
+            let tip = CGMutablePath()
+            tip.move(to: CGPoint(x: 0, y: -0.96))
+            tip.addLine(to: CGPoint(x: 0.535, y: -0.06))
+            tip.addLine(to: CGPoint(x: -0.535, y: -0.06))
+            tip.closeSubpath()
+            return circle(0, 0.26, 0.62).union(tip)
         }
     }
 }

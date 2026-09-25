@@ -366,6 +366,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var hasReportedHardLimit = false
     private var reduceMotionObserver: NSObjectProtocol?
     private var reduceTransparencyObserver: NSObjectProtocol?
+    private var differentiateWithoutColorObserver: NSObjectProtocol?
     private var transientMotionGate = JarTransientMotionGate()
     private var sensorySequence: UInt64 = 0
     private(set) var opticalTiltFraction: CGFloat = 0
@@ -840,6 +841,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         if let reduceTransparencyObserver {
             NotificationCenter.default.removeObserver(reduceTransparencyObserver)
+        }
+        if let differentiateWithoutColorObserver {
+            NotificationCenter.default.removeObserver(differentiateWithoutColorObserver)
         }
     }
 
@@ -2271,6 +2275,23 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 self?.reduceMotion = UIAccessibility.isReduceMotionEnabled
             }
         }
+        differentiateWithoutColorObserver = NotificationCenter.default.addObserver(
+            forName: UIAccessibility.differentiateWithoutColorDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.setThemeMarks(GemThemeMark.isSystemEnabled)
+            }
+        }
+    }
+
+    /// Differentiate Without Color: every study gem and crystal re-bakes
+    /// with (or without) its theme mark (§7.12). A jar resting in its idle
+    /// pause draws one more settled frame so the change shows at once.
+    func setThemeMarks(_ enabled: Bool) {
+        allPebbleNodes.forEach { $0.setThemeMarks(enabled) }
+        if isIdlePaused { resumeSimulation() }
     }
 
     private func rebuildGeometry() {
