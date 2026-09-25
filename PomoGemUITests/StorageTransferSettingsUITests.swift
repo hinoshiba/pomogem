@@ -682,10 +682,11 @@ final class StorageTransferSettingsUITests: XCTestCase {
         // quality-01. The retry is named, the automatic check after a lost
         // connection is promised, and relaunching is offered only for use
         // without any connection.
-        XCTAssertTrue(explanation.label.contains("「オンラインで再試行」で確認し直せます"))
         XCTAssertTrue(explanation.label.contains("つながると自動で確認します"))
-        XCTAssertTrue(explanation.label.contains("通信のない場所で使うときは"))
+        XCTAssertTrue(explanation.label.contains("通信のない場所で今すぐ使うには"))
         XCTAssertTrue(explanation.label.contains("アプリは削除しないでください"))
+        XCTAssertFalse(explanation.label.contains("記録はこのiPhoneに残っています"),
+                       "The wall's message above already says the records are kept")
         let retry = app.buttons["cloud-offline-online-retry"]
         XCTAssertTrue(reveal(retry, upwards: false))
         XCTAssertEqual(retry.label, "オンラインで再試行")
@@ -809,7 +810,7 @@ final class StorageTransferSettingsUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["オフラインで開くには再起動が必要です"].exists)
         let relaunch = app.staticTexts["cloud-offline-relaunch-explanation"]
         XCTAssertTrue(reveal(relaunch))
-        XCTAssertTrue(relaunch.label.hasPrefix("すぐに通信なしで使うときは"))
+        XCTAssertTrue(relaunch.label.hasPrefix("通信がないまま今すぐ使うには"))
         let retry = app.buttons["cloud-offline-online-retry"]
         XCTAssertTrue(reveal(retry, upwards: false))
         assertTouchTarget(retry)
