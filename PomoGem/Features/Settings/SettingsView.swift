@@ -56,6 +56,7 @@ struct SettingsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
+    @Environment(\.openURL) private var openURL
     /// Live theme rows only; tombstones never count toward the row bound.
     /// They are complete mutation evidence for a presented theme: a supported
     /// tombstone for its ID would have hidden it.
@@ -939,9 +940,44 @@ struct SettingsView: View {
     /// is now the footer, in plain words.
     private var privacySection: some View {
         Section {
-            Link(destination: AppLinks.support) {
-                SettingLabel(title: "サポート・お問い合わせ", subtitle: "Webで開く", symbol: "questionmark.circle")
+            // settings-07. Support used to be web pages only, and the site
+            // asks people to type their iOS and app versions by hand.
+            Button(action: composeSupportMail) {
+                SettingLabel(
+                    title: String(localized: "メールで問い合わせる", table: "Settings", comment: "Settings row: write to support by mail"),
+                    subtitle: String(
+                        localized: "アプリのバージョンなどを自動で記入します",
+                        table: "Settings",
+                        comment: "Settings row subtitle: the mail draft is pre-filled with versions and settings"
+                    ),
+                    symbol: "envelope"
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(PomoGemBareButtonStyle())
+            .accessibilityIdentifier("settings.support-mail")
+            Link(destination: AppLinks.support) {
+                SettingLabel(
+                    title: String(localized: "サポートページ", table: "Settings", comment: "Settings row: the support web page"),
+                    subtitle: String(
+                        localized: "購入・返金の案内など（Webで開く）",
+                        table: "Settings",
+                        comment: "Settings row subtitle: what the support web page covers"
+                    ),
+                    symbol: "questionmark.circle"
+                )
+            }
+            // product-08. Only ever a row the person chooses; the automatic
+            // review prompt keeps its own gate (10 completions over 7 days).
+            Link(destination: AppLinks.appStoreWriteReview) {
+                SettingLabel(
+                    title: String(localized: "App Storeで評価・レビューする", table: "Settings", comment: "Settings row: rate or review the app"),
+                    subtitle: String(localized: "App Storeを開きます", table: "Settings", comment: "Settings row subtitle: opens the App Store"),
+                    symbol: "star.bubble"
+                )
+            }
+            .accessibilityIdentifier("settings.write-review")
             Link(destination: AppLinks.privacyPolicy) {
                 SettingLabel(title: "プライバシーポリシー", subtitle: "Webで開く", symbol: "doc.text")
             }
@@ -960,6 +996,23 @@ struct SettingsView: View {
                      comment: "Settings privacy footer in iCloud mode"
                  ))
             .accessibilityIdentifier("settings.privacy-footer")
+        }
+    }
+
+    /// Opens a mail draft; with no mail app to take it (Mail deleted, no
+    /// account), the support page, which has the address and the FAQ.
+    private func composeSupportMail() {
+        let diagnostics = SupportMailDiagnostics.current(
+            persistenceMode: persistenceMode,
+            isCloudOfflineSession: isCloudOfflineSession,
+            purchase: purchase
+        )
+        guard let mail = SupportMailDraft.url(for: diagnostics) else {
+            openURL(AppLinks.support)
+            return
+        }
+        openURL(mail) { accepted in
+            if !accepted { openURL(AppLinks.support) }
         }
     }
 
