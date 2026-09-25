@@ -321,7 +321,7 @@ final class FirstRunUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_UI_TEST_RARE_REWARD_ONBOARDING"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = accessibility5 ? "1" : "0"
         for (key, value) in extraEnvironment { app.launchEnvironment[key] = value }
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
     }
 
@@ -344,7 +344,7 @@ final class FirstRunUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_STORAGE_TRANSFER"] = "firstRunStorageChoice"
         app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = accessibility5 ? "1" : "0"
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
         XCTAssertTrue(app.staticTexts["storage-choice.fixture-state"].waitForExistence(timeout: 12),
                       "The explicit Debug-only fixture must be selected")

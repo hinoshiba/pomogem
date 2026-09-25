@@ -294,7 +294,7 @@ final class EngagementOverviewUITests: XCTestCase {
         if accessibility5 {
             app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
         }
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
         let suffix = accessibility5 ? " — AX5" : ""
 
@@ -412,10 +412,7 @@ final class EngagementOverviewUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_FORTY_YEAR_OVERVIEW"] = "1"
-        app.launchArguments += [
-            "-AppleLanguages", "(ja)",
-            "-AppleLocale", "ja_JP@calendar=japanese"
-        ]
+        PomoGemUITestLanguage.configureJapaneseWithJapaneseCalendar(app)
         app.launch()
 
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))

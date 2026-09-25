@@ -16,6 +16,14 @@ enum PomoGemUITestLanguage {
         application.launchArguments = withoutLanguagePin(application.launchArguments) + japaneseArguments
     }
 
+    /// Launch in Japanese with 設定 > 一般 > 言語と地域 > 暦法 set to 和暦, for
+    /// tests that prove month and year labels stay 西暦. Idempotent like
+    /// `configureJapanese(_:)`.
+    static func configureJapaneseWithJapaneseCalendar(_ application: XCUIApplication) {
+        application.launchArguments = withoutLanguagePin(application.launchArguments)
+            + ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP@calendar=japanese"]
+    }
+
     private static func withoutLanguagePin(_ arguments: [String]) -> [String] {
         var result: [String] = []
         var index = arguments.startIndex
