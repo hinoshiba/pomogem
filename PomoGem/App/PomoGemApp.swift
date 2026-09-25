@@ -620,6 +620,9 @@ private struct PomoGemPersistenceLaunchHost: View {
     /// quality-01. Holds a verified iCloud session through a short background
     /// grace under a background task, and retires it before suspension.
     @State private var backgroundGrace = CloudBackgroundGraceController()
+    /// The live scene phase for the grace's closures and the retirement task,
+    /// which outlive the view update that created them (`LiveScenePhase`).
+    @State private var liveScenePhase = LiveScenePhase()
     @State private var retainedSessionRecheckTask: Task<Void, Never>?
     /// quality-01. The tab a remount of the same account's data reopens.
     @State private var remountNavigation = CloudRemountNavigationMemory()
@@ -3377,6 +3380,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     private func handleScenePhaseChange(_ phase: ScenePhase) {
+        liveScenePhase.update(phase)
         if phase == .background {
             // Leaving while the completion alarm repeats counts as Stop.
             // Record it before any container retirement below, while the
@@ -3461,8 +3465,10 @@ private struct PomoGemPersistenceLaunchHost: View {
                 retireCloudSessionForBackground()
             }, isReleased: {
                 !containerLifetimes.hasLiveContainers
-            }, isSceneInBackground: {
-                scenePhase == .background
+            }, isSceneInBackground: { [liveScenePhase] in
+                // Not `scenePhase`: this closure was created by the
+                // `.background` handler and would read that snapshot forever.
+                liveScenePhase.isBackground
             })
             return
         case .retireCloudSession:
@@ -3498,7 +3504,10 @@ private struct PomoGemPersistenceLaunchHost: View {
             case .retired:
                 isPreparing = false
                 isQuiescingAccountChange = false
-                if scenePhase == .active {
+                // The live phase, not the `scenePhase` this task captured when
+                // the grace (or `.background`) started it: an `.active` that
+                // arrived meanwhile must restart the launch here.
+                if liveScenePhase.isActive {
                     launchAttempt += 1
                 }
             case .timedOut:

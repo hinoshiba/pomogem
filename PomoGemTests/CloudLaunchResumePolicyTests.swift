@@ -276,7 +276,11 @@ final class CloudLaunchResumePolicyTests: XCTestCase {
         var retirements = 0
         var released = true
         var sceneInBackground = true
+        /// When set, the controller reads the phase through the same live
+        /// tracker the host uses instead of the flag above.
+        var livePhase: LiveScenePhase?
         let grace = GraceGate()
+        let sleeps = SleepLog()
         private var nextIdentifier = 1
 
         lazy var controller = CloudBackgroundGraceController(environment: .init(
@@ -289,7 +293,8 @@ final class CloudLaunchResumePolicyTests: XCTestCase {
             },
             endBackgroundTask: { [unowned self] in ended.append($0) },
             backgroundTimeRemaining: { [unowned self] in remaining },
-            sleep: { [grace] seconds in
+            sleep: { [grace, sleeps] seconds in
+                sleeps.append(seconds)
                 if seconds >= CloudBackgroundGracePolicy.minimumGrace {
                     try await grace.wait()
                 } else {
@@ -300,12 +305,21 @@ final class CloudLaunchResumePolicyTests: XCTestCase {
         func begin(sessionID: UUID = UUID()) -> Bool {
             controller.begin(sessionID: sessionID, retire: { [unowned self] in retirements += 1 },
                              isReleased: { [unowned self] in released },
-                             isSceneInBackground: { [unowned self] in sceneInBackground })
+                             isSceneInBackground: { [unowned self] in livePhase?.isBackground ?? sceneInBackground })
         }
 
         func settle() async {
             for _ in 0..<50 { await Task.yield() }
             try? await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    private final class SleepLog: @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: [TimeInterval] = []
+        func append(_ value: TimeInterval) { lock.withLock { values.append(value) } }
+        var graceTicks: Int {
+            lock.withLock { values.filter { $0 != CloudBackgroundGracePolicy.releasePollInterval }.count }
         }
     }
 
@@ -418,6 +432,84 @@ final class CloudLaunchResumePolicyTests: XCTestCase {
         await harness.settle()
         XCTAssertEqual(harness.retirements, 0, "Behind Notification Center the app is not about to be suspended")
         XCTAssertEqual(harness.ended.count, 1)
+    }
+
+    /// Review of PR #40: the host's closure read `@Environment(\.scenePhase)`,
+    /// a snapshot taken by the `.background` handler, so it always said
+    /// "background". Through the live tracker, a grace that ends while the
+    /// scene is inactive keeps the session — and the next `.active` still
+    /// rechecks the account.
+    @MainActor
+    func testAGraceThatEndsWhileInactiveKeepsTheSessionAndStillRechecks() async {
+        let harness = GraceHarness()
+        let phase = LiveScenePhase(.background)
+        harness.livePhase = phase
+        let id = UUID()
+        XCTAssertTrue(harness.begin(sessionID: id))
+        phase.update(.inactive)
+        await harness.grace.open()
+        await harness.settle()
+        XCTAssertEqual(harness.retirements, 0, "Root is not torn down in front of the person")
+        XCTAssertEqual(harness.ended.count, 1, "No background task is held in the foreground")
+        XCTAssertTrue(harness.controller.awaitsRecheck)
+        XCTAssertTrue(harness.controller.sceneBecameActive(), "The identity recheck still runs on .active")
+        XCTAssertFalse(harness.controller.sceneBecameActive())
+
+        // Inactive, then back to the background without ever being active:
+        // a new hold with its own task and grace.
+        let again = GraceHarness()
+        let againPhase = LiveScenePhase(.background)
+        again.livePhase = againPhase
+        XCTAssertTrue(again.begin(sessionID: id))
+        againPhase.update(.inactive)
+        await again.grace.open()
+        await again.settle()
+        againPhase.update(.background)
+        XCTAssertTrue(again.begin(sessionID: id))
+        XCTAssertEqual(again.began.count, 2, "A session kept after its grace is held again, never left mounted")
+        XCTAssertTrue(again.controller.holdsBackgroundTask)
+        await again.settle()
+        XCTAssertEqual(again.retirements, 1, "The second grace (its gate already open) retires in the background")
+    }
+
+    @MainActor
+    func testTheLivePhaseIsReadWhenTheClosureRunsNotWhenItWasMade() {
+        let phase = LiveScenePhase(.background)
+        let isBackground: @MainActor () -> Bool = { [phase] in phase.isBackground }
+        XCTAssertTrue(isBackground())
+        phase.update(.inactive)
+        XCTAssertFalse(isBackground())
+        phase.update(.active)
+        XCTAssertTrue(phase.isActive)
+    }
+
+    /// Review of PR #40: when `.background` still reports an unbounded budget
+    /// the grace starts at 15 s. Once iOS counts it, the grace must end
+    /// `suspensionMargin` before it runs out instead of leaving the
+    /// retirement to the expiration handler.
+    @MainActor
+    func testTheGraceShortensOnceIOSStartsCountingBackgroundTime() async {
+        let harness = GraceHarness()
+        harness.released = false
+        harness.remaining = .greatestFiniteMagnitude
+        XCTAssertTrue(harness.begin())
+        harness.remaining = 9
+        await harness.grace.open()
+        await harness.settle()
+        XCTAssertEqual(harness.retirements, 1)
+        XCTAssertEqual(harness.sleeps.graceTicks, 5,
+                       "One tick at 15 s left, then 9 − 5 s of grace: retired 5 s early, not after 15")
+        XCTAssertTrue(harness.ended.isEmpty, "Still waiting for the release, inside the margin")
+        harness.released = true
+        await harness.settle()
+        XCTAssertEqual(harness.ended.count, 1)
+
+        typealias Policy = CloudBackgroundGracePolicy
+        XCTAssertEqual(Policy.remainingGrace(14, backgroundTimeRemaining: .greatestFiniteMagnitude), 14)
+        XCTAssertEqual(Policy.remainingGrace(14, backgroundTimeRemaining: 9), 4)
+        XCTAssertEqual(Policy.remainingGrace(3, backgroundTimeRemaining: 20), 3)
+        XCTAssertEqual(Policy.remainingGrace(14, backgroundTimeRemaining: 4), 0)
+        XCTAssertEqual(Policy.remainingGrace(14, backgroundTimeRemaining: .nan), 0)
     }
 
     @MainActor

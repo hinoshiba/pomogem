@@ -25,9 +25,15 @@ import UIKit
 /// - `.CKAccountChanged`, a storage transfer or complete deletion retires it
 ///   through any other path (`sessionRetiredElsewhere`).
 /// The task is ended only after every retired container has been released, so
-/// the retirement always completes before iOS may suspend the process. If the
-/// scene becomes active again first, the hold is cancelled and the same Root,
-/// sheets and jar stay on screen.
+/// on every ordinary path the retirement completes before iOS may suspend the
+/// process. The one exception is iOS ending the background time early: the
+/// grace re-reads the remaining time every second and retires
+/// `suspensionMargin` before it runs out, but if iOS still calls the
+/// expiration handler first, the handler retires synchronously
+/// (`session = nil`) and must end the task at once; if SwiftUI has not
+/// released the container by then, a fault is logged. If the scene becomes
+/// active again first, the hold is cancelled and the same Root, sheets and
+/// jar stay on screen.
 enum CloudBackgroundGracePolicy {
     /// About as long as a glance at another app, a notification, Control
     /// Center plus a lock, or a round trip to iOS Settings.
@@ -46,6 +52,10 @@ enum CloudBackgroundGracePolicy {
     /// synchronously if iOS runs out of time first.
     static let releaseWaitLimit: TimeInterval = 10
     static let releasePollInterval: TimeInterval = 0.025
+    /// How often a running grace re-reads `backgroundTimeRemaining`. At
+    /// `.background` iOS often still reports it as unbounded; once it starts
+    /// counting, the grace must end `suspensionMargin` before it runs out.
+    static let budgetRecheckInterval: TimeInterval = 1
 
     enum Start: Equatable, Sendable {
         case retireNow
@@ -63,6 +73,13 @@ enum CloudBackgroundGracePolicy {
         let budget = backgroundTimeRemaining - suspensionMargin
         guard budget >= minimumGrace else { return .retireNow }
         return .retireAfter(min(graceInterval, budget))
+    }
+
+    /// The grace still to wait after a tick, given what iOS reports now.
+    static func remainingGrace(_ left: TimeInterval, backgroundTimeRemaining: TimeInterval) -> TimeInterval {
+        guard !backgroundTimeRemaining.isNaN else { return 0 }
+        guard backgroundTimeRemaining < unboundedBackgroundTimeThreshold else { return max(0, left) }
+        return max(0, min(left, backgroundTimeRemaining - suspensionMargin))
     }
 
     /// What the elapsed grace does. The session retires only while the scene
@@ -89,6 +106,29 @@ enum CloudBackgroundGracePolicy {
         if case AppleAccountBoundaryResolutionError.blocked = error { return .quiesce }
         return CloudOfflineHostPolicy.revocationReason(for: error) == nil ? .keepSession : .quiesce
     }
+}
+
+/// The scene phase as of now, for closures and tasks that outlive the view
+/// update that created them. A `@Environment(\.scenePhase)` value read from
+/// such a closure is the one captured with the view struct — `.background`
+/// for every closure created by the `.background` handler — not the current
+/// one, so the grace could never see that the scene had come back to the
+/// foreground (review of PR #40). The host updates this on every scene-phase
+/// change, before anything else reads it.
+@MainActor
+final class LiveScenePhase {
+    private(set) var phase: ScenePhase
+
+    init(_ phase: ScenePhase = .active) {
+        self.phase = phase
+    }
+
+    func update(_ phase: ScenePhase) {
+        self.phase = phase
+    }
+
+    var isBackground: Bool { phase == .background }
+    var isActive: Bool { phase == .active }
 }
 
 /// Owns the background task and the grace timer. The host supplies what to
@@ -130,6 +170,10 @@ final class CloudBackgroundGraceController {
     private var generation: UInt64 = 0
     private var taskIdentifier: UIBackgroundTaskIdentifier = .invalid
     private var hold: Hold?
+    /// A session whose grace ended while the scene was already back in the
+    /// foreground (inactive). It stays mounted, no background task is held,
+    /// and the next `.active` still gives it the identity recheck.
+    private var retainedAfterGrace: UUID?
     private var graceTask: Task<Void, Never>?
     private var releaseTask: Task<Void, Never>?
     private var isReleased: @MainActor () -> Bool = { true }
@@ -141,6 +185,8 @@ final class CloudBackgroundGraceController {
 
     /// A session is being held open by an unexpired grace.
     var isHoldingSession: Bool { hold != nil }
+    /// A kept session still owes the identity recheck at the next `.active`.
+    var awaitsRecheck: Bool { hold != nil || retainedAfterGrace != nil }
     /// The background task is still held (grace, or a release in progress).
     var holdsBackgroundTask: Bool { taskIdentifier != .invalid }
 
@@ -174,7 +220,16 @@ final class CloudBackgroundGraceController {
             hold = Hold(sessionID: sessionID, retire: retire)
             let sleep = environment.sleep
             graceTask = Task { @MainActor [weak self] in
-                do { try await sleep(delay) } catch { return }
+                var left = delay
+                while left > 0 {
+                    let step = min(CloudBackgroundGracePolicy.budgetRecheckInterval, left)
+                    do { try await sleep(step) } catch { return }
+                    guard let self, generation == self.generation else { return }
+                    left = CloudBackgroundGracePolicy.remainingGrace(
+                        left - step,
+                        backgroundTimeRemaining: self.environment.backgroundTimeRemaining()
+                    )
+                }
                 self?.graceElapsed(generation: generation)
             }
             return true
@@ -184,6 +239,10 @@ final class CloudBackgroundGraceController {
     /// `.active`. Returns true when a held session was kept on screen.
     @discardableResult
     func sceneBecameActive() -> Bool {
+        if hold == nil, retainedAfterGrace != nil {
+            retainedAfterGrace = nil
+            return true
+        }
         guard hold != nil else { return false }
         hold = nil
         generation &+= 1
@@ -197,6 +256,7 @@ final class CloudBackgroundGraceController {
     /// transfer, complete deletion). The grace ends at once; the background
     /// task stays until that retirement has released its containers.
     func sessionRetiredElsewhere() {
+        retainedAfterGrace = nil
         guard hold != nil else { return }
         hold = nil
         graceTask?.cancel()
@@ -209,6 +269,10 @@ final class CloudBackgroundGraceController {
         self.hold = nil
         graceTask = nil
         guard CloudBackgroundGracePolicy.retiresWhenGraceElapses(sceneIsInBackground: isSceneInBackground()) else {
+            // Inactive (behind Notification Center, or on the way back): not
+            // about to be suspended. Keep the session without a task; a new
+            // `.background` starts a new hold, `.active` rechecks it.
+            retainedAfterGrace = hold.sessionID
             endTask()
             return
         }
@@ -256,6 +320,7 @@ final class CloudBackgroundGraceController {
 
     private func cancelPendingWork() {
         hold = nil
+        retainedAfterGrace = nil
         graceTask?.cancel()
         graceTask = nil
         releaseTask?.cancel()

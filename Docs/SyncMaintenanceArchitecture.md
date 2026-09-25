@@ -223,7 +223,12 @@ store fileを作る前にprocessが終了した境界だけは、fileが0件で�
 suspendされず、account change通知も配送されます。猶予はiOSの残りbackground時間から5秒を引いた値で頭打ちに
 し、taskを得られない・時間が足りない場合は即座にunmountします。task期限の通知、`CKAccountChanged`、
 storage transfer、complete deletionでは猶予を打ち切って即座にunmountし、taskは退役したcontainerの解放を
-確認してから終了します（上限10秒、期限通知時は同期的にsessionを外してから終了）。猶予内にsceneが
+確認してから終了します（上限10秒）。例外はiOSが期限の通知を先に送った場合で、通知の中で同期的にsessionを
+外してtaskを終了するしかなく、SwiftUIがcontainerを解放し終える前にsuspendされ得ます（解放を確認できない
+ときはfaultを記録）。猶予の判定には`@Environment(\.scenePhase)`の値ではなく、scene phaseの変化ごとに
+更新する`LiveScenePhase`を読みます（`.background`の処理で作ったclosureが読むenvironment値は、その時点の
+snapshotのままになるため）。猶予が切れた時点でsceneが前面（inactive）に戻っていれば退役させず、次の
+`.active`で識別を再確認し、再び`.background`になれば新しい猶予を始めます。猶予内にsceneが
 activeへ戻った場合はRoot・sheet・瓶を維持し、background中に識別を1回再確認します。再確認で
 `accountMismatch`・`noAccount`・`restricted`・registryの`blocked`が出た場合だけ`CKAccountChanged`と同じ
 quiescenceへ進み、通信・期限の失敗ではsessionを維持します。猶予後の再マウントでは、同じnamespaceの
