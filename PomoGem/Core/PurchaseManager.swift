@@ -122,6 +122,13 @@ final class PurchaseManager {
     private(set) var isRestoring = false
     private(set) var productLoadErrorDescription: String?
     private(set) var lastErrorDescription: String?
+    /// Whether StoreKit has answered at least once in this process. Until it
+    /// has, `isPro == false` means "not known yet", not "free": the cold pass
+    /// starts at App.init but can still be running when the first screens
+    /// read the entitlement. Callers whose reaction to "free" is destructive
+    /// (Screen Time retiring a Pro user's learning run) must wait for this.
+    /// It never goes back to false, and it never grants anything by itself.
+    private(set) var hasResolvedEntitlements = false
 
     @ObservationIgnored
     private var transactionUpdatesTask: Task<Void, Never>?
@@ -304,6 +311,7 @@ final class PurchaseManager {
         // authority and must not be overwritten by this older snapshot.
         guard generation == entitlementRefreshGeneration else { return }
         entitlement = currentEntitlement
+        if !hasResolvedEntitlements { hasResolvedEntitlements = true }
         lastErrorDescription = encounteredVerificationFailure
             ? PurchaseManagerError.failedVerification.localizedDescription
             : nil
@@ -377,6 +385,8 @@ final class PurchaseManager {
                     // older snapshot before publishing this verified delivery.
                     entitlementRefreshGeneration &+= 1
                     entitlement = .lifetime(productID: transaction.productID)
+                    // A verified delivery is an answer from StoreKit too.
+                    if !hasResolvedEntitlements { hasResolvedEntitlements = true }
                     lastErrorDescription = nil
                 case .reconcileWithoutGrant:
                     // A refund, revocation, or upgraded-away transaction must

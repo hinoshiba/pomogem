@@ -651,6 +651,55 @@ final class SeedDataTests: XCTestCase {
         XCTAssertEqual(StrataMath.totalPebbleCount(sessions: [session], strata: []), 1)
     }
 
+    func testEditingAMilestoneOfADeletedThemeKeepsThatTheme() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let deletedTheme = Subject(name: "英検", colorHex: "#FF647F", sortOrder: 0)
+        let liveTheme = Subject(name: "数学", colorHex: "#6BE4FF", sortOrder: 1)
+        context.insert(deletedTheme)
+        context.insert(liveTheme)
+        let base = Date(timeIntervalSinceReferenceDate: 4_000_000)
+        let stone = AchievementStone(
+            subject: deletedTheme,
+            kind: .examPass,
+            note: "2級",
+            achievedAt: base,
+            createdAt: base,
+            updatedAt: base
+        )
+        context.insert(stone)
+        try context.save()
+        // Settings deletes a theme as a tombstone; the stone keeps its link.
+        deletedTheme.isArchived = true
+        deletedTheme.deletedAt = base.addingTimeInterval(10)
+        try context.save()
+
+        let revisedDate = base.addingTimeInterval(86_400)
+        let editDate = base.addingTimeInterval(100_000)
+        XCTAssertEqual(
+            AchievementStoneRevisionPolicy.editKeepingSubject(
+                [stone],
+                kind: .examPass,
+                note: "  2級 合格  ",
+                achievedAt: revisedDate,
+                now: editDate
+            ),
+            .applied
+        )
+        try context.save()
+
+        XCTAssertEqual(stone.revision, 2)
+        XCTAssertEqual(stone.note, "2級 合格")
+        XCTAssertEqual(stone.achievedAt, revisedDate)
+        XCTAssertEqual(stone.updatedAt, editDate)
+        XCTAssertNil(stone.deletedAt)
+        XCTAssertEqual(stone.subject?.id, deletedTheme.id, "The stone must not move to another theme")
+        XCTAssertEqual(stone.subjectNameSnapshot, "英検")
+        XCTAssertEqual(stone.subjectColorHexSnapshot, "#FF647F")
+        XCTAssertEqual(stone.displaySubjectName, "英検")
+        XCTAssertNotEqual(stone.subject?.id, liveTheme.id)
+    }
+
     func testAchievementDeleteUsesTombstoneAndUndoRestoresAtHigherRevision() throws {
         let container = try makeContainer()
         let context = container.mainContext

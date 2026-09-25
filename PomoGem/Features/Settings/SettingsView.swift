@@ -2,6 +2,7 @@ import Observation
 import SwiftData
 import SwiftUI
 import UIKit
+import UserNotifications
 
 enum NotificationPreference: Hashable {
     case dailyReminder
@@ -262,6 +263,12 @@ struct SettingsView: View {
             get: { notificationError != nil },
             set: { if !$0 { notificationError = nil } }
         )) {
+            // iOS never asks twice. Once denied, only its Settings can allow it.
+            if NotificationManager.shared.authorizationStatus == .denied {
+                Button(String(localized: "設定を開く", table: "Settings", comment: "Alert button: open this app's notification settings in iOS")) {
+                    openNotificationSettings()
+                }
+            }
             Button("閉じる", role: .cancel) {}
         } message: {
             Text(notificationError ?? "")
@@ -463,7 +470,13 @@ struct SettingsView: View {
             Toggle(isOn: $liveActivityEnabled) {
                 SettingLabel(
                     title: "画面を閉じてもタイマーを表示",
-                    subtitle: "ロック画面とDynamic Islandに残り時間・進捗を表示",
+                    // Neutral on purpose: most supported iPhones have no Dynamic
+                    // Island, and the Live Activity appears there too when one exists.
+                    subtitle: String(
+                        localized: "ロック画面などに残り時間・進捗を表示",
+                        table: "Settings",
+                        comment: "Settings row subtitle: where the Live Activity timer appears"
+                    ),
                     symbol: "lock.display"
                 )
             }
@@ -494,7 +507,15 @@ struct SettingsView: View {
             }
             .accessibilityIdentifier("settings.focus-return-reminder")
 
-            Text("既定はオフ。集中タイマー中だけ通知し、戻ると取り消します。一時停止中・休憩中・終了間際は通知しません。画面をロックした場合も通知されます。")
+            if focusReturnReminderEnabled {
+                notificationPermissionStatus(identifier: "settings.focus-return-permission")
+            }
+
+            Text(
+                "既定はオフ。集中タイマー中にホーム画面や別のアプリへ移ると、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。",
+                tableName: "Settings",
+                comment: "Settings caption under the return-to-focus reminder switch"
+            )
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
 
@@ -727,22 +748,80 @@ struct SettingsView: View {
                     get: { resolvedPreferences.reminderEnabled },
                     set: { enabled in updateReminder(enabled: enabled) }
                 )) {
-                    SettingLabel(title: "毎日のリマインダ", subtitle: Constants.UIStrings.eveningNotification, symbol: "bell")
-                }
-
-                if resolvedPreferences.reminderEnabled {
-                    DatePicker(
-                        "通知する時刻",
-                        selection: reminderTimeBinding,
-                        displayedComponents: .hourAndMinute
+                    SettingLabel(
+                        title: String(
+                            localized: "毎日のリマインダー",
+                            table: "Settings",
+                            comment: "Settings switch title: the opt-in daily reminder"
+                        ),
+                        subtitle: Constants.UIStrings.eveningNotification,
+                        symbol: "bell"
                     )
+                }
+                .accessibilityIdentifier("settings.daily-reminder")
+
+                // The notice sits under the first switch that is on, so it is
+                // never read as a note about a switch that is off.
+                if resolvedPreferences.reminderEnabled {
+                    notificationPermissionStatus(identifier: "settings.notification-permission")
                 }
 
                 Toggle(isOn: Binding(
                     get: { wrappedNotifications },
                     set: { enabled in updateWrappedNotification(enabled: enabled) }
                 )) {
-                    SettingLabel(title: "今月の積み重ね", subtitle: "毎月1日に一度だけ", symbol: "circle.grid.3x3.fill")
+                    // Wrapped looks back at the month that just ended.
+                    SettingLabel(
+                        title: String(
+                            localized: "先月の瓶のお知らせ",
+                            table: "Settings",
+                            comment: "Settings switch title: the opt-in monthly look-back notification"
+                        ),
+                        subtitle: String(
+                            localized: "毎月1日に一度だけ",
+                            table: "Settings",
+                            comment: "Settings switch subtitle: the monthly notification is sent on the 1st"
+                        ),
+                        symbol: "circle.grid.3x3.fill"
+                    )
+                }
+                .accessibilityIdentifier("settings.wrapped-notification")
+
+                if wrappedNotifications, !resolvedPreferences.reminderEnabled {
+                    notificationPermissionStatus(identifier: "settings.notification-permission")
+                }
+
+                if resolvedPreferences.reminderEnabled || wrappedNotifications {
+                    // One shared time for both notifications, so it stays
+                    // visible and editable while either one is on.
+                    DatePicker(
+                        String(localized: "通知する時刻", table: "Settings", comment: "Settings time picker label for reminders"),
+                        selection: reminderTimeBinding,
+                        displayedComponents: .hourAndMinute
+                    )
+                    .accessibilityIdentifier("settings.reminder-time")
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        if resolvedPreferences.reminderEnabled {
+                            Text(
+                                "その日に集中を始めたり、時間を手動で積んだりした日は、毎日のリマインダーは届きません。7日間アプリを開かなかったときは、次に開くまでお休みします。",
+                                tableName: "Settings",
+                                comment: "Settings caption: when the daily reminder is skipped"
+                            )
+                        }
+                        if wrappedNotifications {
+                            Text(
+                                "先月の瓶のお知らせは、毎月1日のこの時刻に届きます。前の月に記録がなければ届きません。",
+                                tableName: "Settings",
+                                comment: "Settings caption: when the monthly look-back notification is sent"
+                            )
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("settings.reminder-rules")
                 }
             }
         } header: {
@@ -771,11 +850,7 @@ struct SettingsView: View {
             NavigationLink {
                 ScreenTimeSettingsView()
             } label: {
-                SettingLabel(
-                    title: "スクリーンタイム",
-                    subtitle: "10分ごとに勉強のgem・黒いgemを積む",
-                    symbol: "hourglass"
-                )
+                ScreenTimeSettingsRowLabel()
             }
             .accessibilityIdentifier("settings.screen-time")
         }
@@ -993,10 +1068,21 @@ struct SettingsView: View {
     }
 
     private var resetDataMessage: String {
+        let message: String
         if persistenceMode == .localOnly {
-            return "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。旧世代の行は端末内に残り、データ書き出しには含まれる場合があります。端末内の物理データはアプリを削除すると消去できます。この操作は取り消せません。"
+            message = "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。旧世代の行は端末内に残り、データ書き出しには含まれる場合があります。端末内の物理データはアプリを削除すると消去できます。この操作は取り消せません。"
+        } else {
+            message = "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。同じiCloudの端末には接続後に反映されます。オフライン端末から古い記録が戻ることを防ぐため、旧世代の行は同期用に残り、データ書き出しには含まれます。端末内の物理データはアプリを削除すると消去できます。iCloud側のアプリデータはAppleのiCloudストレージ管理から削除してください。この操作は取り消せません。"
         }
-        return "集中の粒・まとまり粒・記念石を表示と集計から外し、0から始めます。同じiCloudの端末には接続後に反映されます。オフライン端末から古い記録が戻ることを防ぐため、旧世代の行は同期用に残り、データ書き出しには含まれます。端末内の物理データはアプリを削除すると消去できます。iCloud側のアプリデータはAppleのiCloudストレージ管理から削除してください。この操作は取り消せません。"
+        // Said only where Screen Time is set up: the reset starts its ledger's
+        // new generation too (ScreenTimeController.bindContext).
+        guard ScreenTimeController.shared.hasLocalSetup else { return message }
+        let screenTime = String(
+            localized: "スクリーンタイムの黒い石、まだ取り込んでいない勉強アプリの記録、10分に満たない途中の利用時間も消えます。アプリの選択と自動記録の設定は残ります。",
+            table: "Settings",
+            comment: "Reset confirmation: extra paragraph shown only when Screen Time is set up on this iPhone"
+        )
+        return message + "\n\n" + screenTime
     }
 
     private var dataStorageDisclosure: String {
@@ -1331,6 +1417,12 @@ struct SettingsView: View {
     }
 
     private func deleteSubject(_ subject: Subject) {
+        // Read before the deletion: the dialog showed the Screen Time
+        // paragraph exactly when this held.
+        let warnedAboutScreenTime = ScreenTimeThemeDeletionNotice.applies(
+            to: subject.id, configuration: ScreenTimeController.shared.configuration,
+            isBound: ScreenTimeController.shared.isBoundToContext
+        )
         do {
             subject.isArchived = true
             subject.deletedAt = .now
@@ -1339,6 +1431,9 @@ struct SettingsView: View {
                 among: storedSubjects
             )
             try modelContext.save()
+            if warnedAboutScreenTime {
+                ScreenTimeController.shared.noteLearningThemeDeletionConfirmed(subject.id)
+            }
         } catch {
             modelContext.rollback()
             settingsError = "テーマを削除できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
@@ -1349,10 +1444,20 @@ struct SettingsView: View {
         for subject: Subject,
         recordCount: Int
     ) -> String {
+        let message: String
         if recordCount == 0 {
-            return "「\(subject.safeDisplayName)」を削除します。関連する過去の記録はありません。この操作は取り消せません。"
+            message = "「\(subject.safeDisplayName)」を削除します。関連する過去の記録はありません。この操作は取り消せません。"
+        } else {
+            message = "「\(subject.safeDisplayName)」だけを削除します。過去の記録\(recordCount)件と質量は消えず、現在の名前と色も残ります。この操作は取り消せません。"
         }
-        return "「\(subject.safeDisplayName)」だけを削除します。過去の記録\(recordCount)件と質量は消えず、現在の名前と色も残ります。この操作は取り消せません。"
+        // Deleting the Screen Time destination also clears the study-app
+        // selection (Docs/ScreenTimeGems.md). Say so while the user can still
+        // cancel and pick another destination first.
+        guard ScreenTimeThemeDeletionNotice.applies(
+            to: subject.id, configuration: ScreenTimeController.shared.configuration,
+            isBound: ScreenTimeController.shared.isBoundToContext
+        ) else { return message }
+        return message + "\n\n" + ScreenTimeThemeDeletionNotice.text
     }
 
     private func prepareSubjectDeletion(_ subject: Subject) {
@@ -1447,6 +1552,8 @@ struct SettingsView: View {
             return false
         }
         guard savePreferredFocusSeconds(totalSeconds) else { return false }
+        // Home lists recent custom times so a preset never loses this one.
+        RecentCustomFocusDurations.record(totalSeconds)
         showCustomDuration = false
         return true
     }
@@ -1556,7 +1663,8 @@ struct SettingsView: View {
             ), notificationPreferenceIntents.isCurrent(preference.intentKey, intent: intent)
             else { return }
             guard permitted else {
-                disableNotificationPreference(preference)
+                // Only an ON request can be refused, so nothing was saved yet.
+                // Writing OFF here could overwrite an ON synced meanwhile.
                 notificationError = notificationPermissionMessage(
                     underlyingError: manager.lastErrorDescription
                 )
@@ -1577,7 +1685,11 @@ struct SettingsView: View {
                     try modelContext.save()
                 } catch {
                     modelContext.rollback()
-                    settingsError = "毎日のリマインダ設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
+                    settingsError = String(
+                        localized: "毎日のリマインダー設定を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)",
+                        table: "Settings",
+                        comment: "Settings error; the argument is the system error description"
+                    )
                     return
                 }
             case .wrapped:
@@ -1728,28 +1840,6 @@ struct SettingsView: View {
         }
     }
 
-    private func disableNotificationPreference(_ preference: PassiveNotificationPreference) {
-        switch preference {
-        case .dailyReminder:
-            guard resolvedPreferences?.reminderEnabled == true else { return }
-            do {
-                try PrefsConsumerPolicy.mutate(
-                    .reminderEnabled,
-                    context: modelContext,
-                    markers: resetSnapshots
-                ) {
-                    $0.reminderEnabled = false
-                }
-                try modelContext.save()
-            } catch {
-                modelContext.rollback()
-                settingsError = "毎日のリマインダをオフにできませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
-            }
-        case .wrapped:
-            wrappedNotifications = false
-        }
-    }
-
     private func refreshViewServices() async {
         // Only the process-wide service is retained by the system wait. The
         // Settings task can release its ModelContext when the view disappears.
@@ -1763,40 +1853,14 @@ struct SettingsView: View {
         await reconcileNotificationAuthorization()
     }
 
+    /// The switches keep the person's intent. The daily reminder's is synced,
+    /// so this iPhone's permission must never rewrite it: a new or reinstalled
+    /// iPhone reads `.notDetermined` and would switch reminders off on every
+    /// other device. Scheduling is gated per device instead, and the status
+    /// row under an enabled switch offers the one step that fixes it here.
     private func reconcileNotificationAuthorization() async {
-        let manager = NotificationManager.shared
-        await manager.refreshAuthorizationStatus()
+        await NotificationManager.shared.refreshAuthorizationStatus()
         guard !Task.isCancelled else { return }
-        let prefs = resolvedPreferences
-
-        if !manager.isAuthorized {
-            let hadEnabledPreference = (prefs?.reminderEnabled ?? false)
-                || wrappedNotifications
-                || focusReturnReminderEnabled
-            if prefs?.reminderEnabled == true {
-                do {
-                    try PrefsConsumerPolicy.mutate(
-                        .reminderEnabled,
-                        context: modelContext,
-                        markers: resetSnapshots
-                    ) {
-                        $0.reminderEnabled = false
-                    }
-                    try modelContext.save()
-                } catch {
-                    modelContext.rollback()
-                    settingsError = "通知の実際の状態を保存できませんでした。\n変更前の状態に戻しました。\n\(error.localizedDescription)"
-                }
-            }
-            wrappedNotifications = false
-            focusReturnReminderEnabled = false
-            manager.cancelFocusReturnReminder()
-
-            if hadEnabledPreference {
-                notificationError = notificationPermissionMessage(underlyingError: nil)
-            }
-        }
-
         await synchronizeNotificationsNow()
     }
 
@@ -1805,6 +1869,10 @@ struct SettingsView: View {
         await manager.refreshAuthorizationStatus()
         guard !Task.isCancelled else { return }
         let prefs = resolvedPreferences
+        let activity = PassiveReminderActivityReader.read(
+            context: modelContext,
+            markers: resetSnapshots
+        )
         do {
             try await manager.synchronizePassiveNotifications(
                 dailyReminderEnabled: (prefs?.reminderEnabled ?? false)
@@ -1814,12 +1882,46 @@ struct SettingsView: View {
                     ?? Constants.Notification.defaultReminderHour,
                 minute: prefs?.reminderMinute
                     ?? Constants.Notification.defaultReminderMinute,
-                playsSound: prefs?.soundOn ?? false
+                playsSound: prefs?.soundOn ?? false,
+                activity: activity
             )
         } catch {
             guard !Task.isCancelled else { return }
             notificationError = "通知の予定を更新できませんでした。\n\(error.localizedDescription)"
         }
+    }
+
+    /// Shown under an enabled notification switch while this iPhone cannot
+    /// deliver. Hidden until the first permission read so an allowed iPhone
+    /// never flashes the notice.
+    @ViewBuilder
+    private func notificationPermissionStatus(identifier: String) -> some View {
+        let manager = NotificationManager.shared
+        if manager.hasLoadedAuthorizationStatus, !manager.isAuthorized {
+            NotificationPermissionStatusRow(
+                status: manager.authorizationStatus,
+                identifier: identifier,
+                allow: allowNotificationsOnThisDevice,
+                openSettings: openNotificationSettings
+            )
+        }
+    }
+
+    private func allowNotificationsOnThisDevice() {
+        viewTasks.start {
+            let manager = NotificationManager.shared
+            await manager.requestAuthorization()
+            guard !Task.isCancelled else { return }
+            if let error = manager.lastErrorDescription, !manager.isAuthorized {
+                notificationError = notificationPermissionMessage(underlyingError: error)
+            }
+            await synchronizeNotificationsNow()
+        }
+    }
+
+    private func openNotificationSettings() {
+        guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     private func notificationPermissionMessage(underlyingError: String?) -> String {
@@ -2334,6 +2436,105 @@ private struct SubjectReorderAccessibilityModifier: ViewModifier {
                 .accessibilityAction(named: "上へ移動", moveUp)
                 .accessibilityAction(named: "下へ移動", moveDown)
         }
+    }
+}
+
+/// The Screen Time row, with the feature's status in place of a fixed
+/// caption: a stop used to be visible only inside the page. Its own view so
+/// that only this row follows the controller, not the whole Settings list.
+private struct ScreenTimeSettingsRowLabel: View {
+    @ObservedObject private var controller = ScreenTimeController.shared
+
+    private var status: ScreenTimeRowStatus {
+        ScreenTimeRowStatus(
+            isBound: controller.isBoundToContext,
+            enabled: controller.configuration.enabled,
+            isMonitoring: controller.isMonitoring,
+            monitoringError: controller.monitoringError,
+            learningStoppedByFreeLimit: controller.learningStoppedByFreeLimit,
+            themeRemoved: controller.learningThemeWasRemoved
+        )
+    }
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("スクリーンタイム", tableName: "Settings", comment: "Settings row title: Screen Time")
+                    .foregroundStyle(PomoGemTheme.text)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    if status.isWarning {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .accessibilityHidden(true)
+                    }
+                    Text(status.subtitle)
+                }
+                .font(.caption)
+                .foregroundStyle(status.isWarning ? PomoGemTheme.amber : PomoGemTheme.muted)
+            }
+        } icon: {
+            Image(systemName: "hourglass").foregroundStyle(PomoGemTheme.amber).frame(width: 26)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Explains why an enabled notification switch cannot deliver on this
+/// iPhone. The switch keeps the person's (possibly synced) intent; this row
+/// names what is missing here and offers the one step that fixes it.
+private struct NotificationPermissionStatusRow: View {
+    let status: UNAuthorizationStatus
+    let identifier: String
+    let allow: () -> Void
+    let openSettings: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label {
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(PomoGemTheme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "bell.slash")
+                    .foregroundStyle(PomoGemTheme.amber)
+                    .frame(width: 26)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier(identifier)
+
+            Button(action: status == .denied ? openSettings : allow) {
+                Text(actionTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .tint(PomoGemTheme.amber)
+            .accessibilityIdentifier("\(identifier).action")
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var message: String {
+        switch status {
+        case .denied:
+            String(
+                localized: "オンにしている通知は、このiPhoneの設定でオフになっているため届きません。",
+                table: "Settings",
+                comment: "Settings notice under an enabled notification switch: notifications are turned off for this app in iOS"
+            )
+        default:
+            String(
+                localized: "オンにしている通知は、このiPhoneではまだ許可されていないため届きません。",
+                table: "Settings",
+                comment: "Settings notice under an enabled notification switch: iOS has not asked for notification permission on this device yet"
+            )
+        }
+    }
+
+    private var actionTitle: String {
+        status == .denied
+            ? String(localized: "設定を開く", table: "Settings", comment: "Button: open this app's notification settings in iOS")
+            : String(localized: "許可する", table: "Settings", comment: "Button: show the iOS notification permission prompt")
     }
 }
 

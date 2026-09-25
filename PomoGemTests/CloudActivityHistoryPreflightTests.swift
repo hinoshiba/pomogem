@@ -60,6 +60,54 @@ final class CloudActivityHistoryPreflightTests: XCTestCase {
         XCTAssertTrue(try accumulator.result(operation: .success(())).isEmpty)
     }
 
+    /// launch-06. The restore screen's evidence comes from the traversal the
+    /// preflight already makes; bookkeeping rows are not a previous jar.
+    func testAccumulatorNoticesUserRowsButNotBookkeeping() throws {
+        var bookkeeping = CloudActivityHistoryAccumulator()
+        let kept = record(marker(sequence: 2))
+        bookkeeping.record(kept.recordID, result: .success(kept))
+        // Prefs included: every launch creates this device's settings row
+        // before onboarding, so a new user's own row is not an earlier jar.
+        for type in ["CD_FocusTimerDeviceClaim", "CD_SyncedFocusTimer", "CD_Prefs", "CD_Unknown"] {
+            let row = CKRecord(recordType: type)
+            row["CD_entityName"] = String(type.dropFirst(3)) as CKRecordValue
+            bookkeeping.record(row.recordID, result: .success(row))
+        }
+        bookkeeping.page(.success(false))
+        let quiet = try bookkeeping.observation(operation: .success(()))
+        XCTAssertFalse(quiet.holdsUserRecords)
+        XCTAssertEqual(quiet.markers.map(\.sequence), [2])
+
+        for type in ["CD_Subject", "CD_StudySession", "CD_AchievementStone"] {
+            var accumulator = CloudActivityHistoryAccumulator()
+            let row = CKRecord(recordType: type)
+            row["CD_entityName"] = String(type.dropFirst(3)) as CKRecordValue
+            accumulator.record(row.recordID, result: .success(row))
+            accumulator.page(.success(true))
+            // An unfinished zone is evidence of nothing, user rows included.
+            XCTAssertThrowsError(try accumulator.observation(operation: .success(())), type)
+            accumulator.page(.success(false))
+            let observed = try accumulator.observation(operation: .success(()))
+            XCTAssertTrue(observed.holdsUserRecords, type)
+            XCTAssertTrue(observed.markers.isEmpty, type)
+        }
+    }
+
+    func testRunReportsWhetherTheServerHoldsUserRecords() async throws {
+        for holds in [false, true] {
+            let client = CloudActivityHistoryClient(verifyAccount: { _ in }, readHistory: {
+                CloudActivityHistoryObservation(markers: [], holdsUserRecords: holds)
+            })
+            let observed = try await CloudActivityHistoryPreflight(client: client, timeout: 1)
+                .run(expectedBinding: binding(), validateMount: {}, localMarker: { nil })
+            XCTAssertEqual(observed.holdsUserRecords, holds)
+        }
+        let markerOnly = CloudActivityHistoryClient(verifyAccount: { _ in }, readMarkers: { [] })
+        let observed = try await CloudActivityHistoryPreflight(client: markerOnly, timeout: 1)
+            .run(expectedBinding: binding(), validateMount: {}, localMarker: { nil })
+        XCTAssertFalse(observed.holdsUserRecords)
+    }
+
     func testPerRecordPerZoneAndOperationErrorsNeverReturnPartialHistory() {
         for errorLocation in 0..<3 {
             var accumulator = CloudActivityHistoryAccumulator()

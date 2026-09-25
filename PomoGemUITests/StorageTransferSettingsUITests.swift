@@ -136,7 +136,7 @@ final class StorageTransferSettingsUITests: XCTestCase {
         let enable = app.staticTexts["storage-switch.screen-time"]
         XCTAssertTrue(reveal(enable))
         XCTAssertTrue(enable.label.contains("選び直してください"), "saw: \(enable.label)")
-        XCTAssertTrue(enable.label.contains("保存済みの勉強時間と通常gemは引き継ぎます"))
+        XCTAssertTrue(enable.label.contains("保存済みの勉強時間と粒は引き継ぎます"))
         app.navigationBars["最後の確認"].buttons["戻る"].tap()
         XCTAssertTrue(app.navigationBars["iCloudを有効にする"].waitForExistence(timeout: 4))
         app.navigationBars["iCloudを有効にする"].buttons["キャンセル"].tap()

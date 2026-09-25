@@ -80,8 +80,15 @@ struct HomeView: View {
     private var didSeeVoiceOverTapHint = false
     @AppStorage(AccountScopedLocalState.defaultsKey(base: HomeAtmosphere.storageKey))
     private var homeAtmosphereRawValue = HomeAtmosphere.aurora.rawValue
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: RecentCustomFocusDurations.storageKey))
+    private var recentCustomFocusSecondsRawValue = ""
     @State private var scene = JarScene()
-    @ObservedObject private var screenTime = ScreenTimeController.shared
+    /// Bumped whenever PendingRewardReceiptStore writes. The receipts live in
+    /// UserDefaults, which SwiftUI does not observe, so clearing the last one
+    /// must re-evaluate Home explicitly: otherwise the start button stays
+    /// disabled and a queued fusion celebration waits until some unrelated
+    /// state change (formerly the three-second Screen Time pass) re-renders.
+    @State private var pendingRewardReceiptRevision = 0
     @State private var sceneInitialized = false
     @State private var homeIsVisible = false
     @State private var rewardDropRevealIsPending = false
@@ -114,12 +121,16 @@ struct HomeView: View {
     @State private var selectedDuration: PomodoroDuration = .twentyFiveMinutes
     @State private var focusConfiguration: FocusConfiguration?
     @State private var showHomeMenu = false
+    /// The menu's height, bound so that picking a background can lower a
+    /// fully raised menu back to half height, where the new background shows.
+    @State private var homeMenuDetent: PresentationDetent = .medium
     @State private var showAccumulationOverview = false
     @State private var overviewInitialClusterID: UUID?
     @State private var aggregateInspectionID: UUID?
     @State private var selectedAggregateDetail: AccumulationClusterSummary?
     @State private var aggregateInspectionTask: Task<Void, Never>?
     @State private var showManualEntry = false
+    @State private var screenTimeArrivals = ScreenTimeArrivalAnnouncer()
     @State private var showAchievementEntry = false
     @State private var showCustomDuration = false
     @State private var showAccumulationPlan = false
@@ -162,6 +173,16 @@ struct HomeView: View {
         _activityResetMarkers = Query(ActivityResetPolicy.currentMarkerDescriptor())
         _preferences = Query(PrefsConsumerPolicy.descriptor())
     }
+
+    /// Delivered on the main queue: the store may be written off-main, and a
+    /// write made during a view update must not mutate state inside it. Not
+    /// `RunLoop.main`, whose Combine scheduler runs only in the default mode:
+    /// a change posted while the AX5 Home scroll view or a sheet is being
+    /// dragged would wait until the finger lifts, and with it the start
+    /// button and the queued celebration.
+    private static let pendingRewardReceiptChanges = NotificationCenter.default
+        .publisher(for: PendingRewardReceiptStore.didChangeNotification)
+        .receive(on: DispatchQueue.main)
 
     private var subjects: [Subject] {
         SubjectSyncPolicy.presentationSubjects(
@@ -480,7 +501,8 @@ struct HomeView: View {
         !celebrationPresentationBlockers.contains(true)
     }
     private var hasPendingRewardReceipt: Bool {
-        !PendingRewardReceiptStore.load().isEmpty
+        _ = pendingRewardReceiptRevision
+        return !PendingRewardReceiptStore.load().isEmpty
     }
     private var rewardDropSurfaceIsObscured: Bool {
         showHomeMenu || showAccumulationOverview || selectedAggregateDetail != nil
@@ -495,6 +517,9 @@ struct HomeView: View {
     }
 
     var body: some View {
+#if DEBUG
+        let _ = HomeRenderDiagnostics.recordBodyEvaluation()
+#endif
         observedContent
     }
 
@@ -622,7 +647,8 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showHomeMenu) {
             homeMenuSheet
-                .presentationDetents(auxiliarySheetDetents)
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
+                .presentationDetents(auxiliarySheetDetents, selection: homeMenuDetentSelection)
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showAccumulationOverview) {
@@ -633,13 +659,17 @@ struct HomeView: View {
             ClusterDetailSheet(cluster: cluster)
                 .presentationDragIndicator(.visible)
         }
+        // Both entry forms end in a commit button, so they open at full
+        // height; a half sheet hid the confirmation below its fold.
         .sheet(isPresented: $showManualEntry) {
             ManualEntrySheet(
-                subject: selectedSubject,
+                initialSubject: selectedSubject,
+                subjects: activeSubjects,
                 counterState: manualCounterState,
                 onAdd: addManualEntry
             )
-                .presentationDetents(auxiliarySheetDetents)
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showAchievementEntry) {
@@ -648,12 +678,13 @@ struct HomeView: View {
                 subjects: activeSubjects,
                 onAdd: addAchievementStone
             )
-                .presentationDetents(auxiliarySheetDetents)
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showCustomDuration) {
             CustomDurationView(
-                initialSeconds: selectedDuration.seconds,
+                initialSeconds: customDurationEditorInitialSeconds,
                 onConfirm: confirmCustomDuration
             )
                 .environment(\.dynamicTypeSize, dynamicTypeSize)
@@ -696,6 +727,17 @@ struct HomeView: View {
 #endif
     }
 
+    /// Always one of `auxiliarySheetDetents`: at accessibility sizes and in
+    /// landscape the menu only has the full height.
+    private var homeMenuDetentSelection: Binding<PresentationDetent> {
+        Binding(
+            get: {
+                auxiliarySheetDetents.contains(homeMenuDetent) ? homeMenuDetent : .large
+            },
+            set: { homeMenuDetent = $0 }
+        )
+    }
+
     private var auxiliarySheetDetents: Set<PresentationDetent> {
         if dynamicTypeSize.isAccessibilitySize || verticalSizeClass == .compact {
             return [.large]
@@ -714,8 +756,11 @@ struct HomeView: View {
             rewardDropRevealIsPending = false
             restorePreferredDuration()
             configureScene()
-            screenTime.reload()
-            scene.setScreenTimeObstacles(totalUnits: screenTime.negativeGemCount)
+            ScreenTimeController.shared.reload()
+            scene.setScreenTimeObstacles(
+                totalUnits: ScreenTimeController.shared.negativeGemCount
+            )
+            noteScreenTimeBlackStones(ScreenTimeController.shared.negativeGemCount)
             refreshAcceptedAggregateRoots()
             refreshAchievementProjection()
             refreshAchievementCount()
@@ -766,9 +811,17 @@ struct HomeView: View {
 
     private var observedContent: some View {
         lifecycleContent
-        .onChange(of: screenTime.negativeGemCount) { _, count in
+        // Subscribe to the one value the jar needs instead of observing the
+        // whole controller: its foreground loop re-reads authorization and
+        // monitoring state every three seconds, and each of those passes
+        // would otherwise re-evaluate this entire view while Home sits idle.
+        .onReceive(ScreenTimeController.shared.negativeGemCountChanges) { count in
             guard homeIsVisible else { return }
             scene.updateScreenTimeObstacles(totalUnits: count)
+            noteScreenTimeBlackStones(count)
+        }
+        .onReceive(Self.pendingRewardReceiptChanges) { _ in
+            pendingRewardReceiptRevision &+= 1
         }
         .onChange(of: sessionChangeTokens) { _, _ in
             syncScene()
@@ -962,37 +1015,6 @@ struct HomeView: View {
                 .transition(.opacity)
             }
 
-            if aggregateInspectionSummary == nil, showsTiltHint, !isJarEmpty {
-                VStack {
-                    Spacer()
-                    Label(
-                        jarInteractionHintText,
-                        systemImage: jarInteractionHintSymbol
-                    )
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(PomoGemTheme.text)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 9)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .overlay {
-                            Capsule().stroke(PomoGemTheme.glassEdge.opacity(0.2), lineWidth: 1)
-                        }
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 18)
-                }
-                .transition(
-                    reduceMotion
-                        ? .opacity
-                        : .opacity.combined(with: .move(edge: .bottom))
-                )
-                // `JarSpriteView` exposes the same guidance as a persistent
-                // accessibility hint. Keep this transient visual hint out of
-                // the VoiceOver order so it is not spoken twice.
-                .accessibilityHidden(true)
-                .allowsHitTesting(false)
-            }
-
 #if DEBUG
             if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
                 JarUITestPresentationProbe(scene: scene)
@@ -1046,6 +1068,62 @@ struct HomeView: View {
     }
 
     private var jarMetricHUD: some View {
+        VStack(spacing: 14) {
+            jarMetricReadout
+            // The one-time hint hangs under the readout, in the jar's empty
+            // middle. On the floor it covered the first gem — the very
+            // pebble it asks people to tap.
+            if aggregateInspectionSummary == nil, showsTiltHint, !isJarEmpty {
+                jarInteractionHint
+                    // A short settle, not a slide from the edge: sliding in
+                    // from above would pass over the readout.
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .opacity.combined(with: .offset(y: -8))
+                    )
+            }
+        }
+        // Keep every glyph behind the mouth instead of straddling its bright
+        // rim; the occlusion cue is what makes the glass depth believable.
+        .padding(.top, 88)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .allowsHitTesting(false)
+    }
+
+    private var jarInteractionHint: some View {
+        Label(
+            jarInteractionHintText,
+            systemImage: jarInteractionHintSymbol
+        )
+            .font(.caption.weight(.bold))
+            // Like the readout above it, the hint lives inside the jar's
+            // fixed canvas. At accessibility sizes it grew past the jar and
+            // back over the gem; VoiceOver reads the same guidance from the
+            // jar itself.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            .foregroundStyle(PomoGemTheme.text)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 9)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule().stroke(PomoGemTheme.glassEdge.opacity(0.2), lineWidth: 1)
+            }
+            .padding(.horizontal, 24)
+            // `JarSpriteView` exposes the same guidance as a persistent
+            // accessibility hint. Keep this transient visual hint out of
+            // the VoiceOver order so it is not spoken twice.
+            .accessibilityHidden(true)
+#if DEBUG
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
+                HomeRenderDiagnostics.jarHintWindowFrame = $0
+            }
+            .onDisappear { HomeRenderDiagnostics.jarHintWindowFrame = nil }
+#endif
+    }
+
+    private var jarMetricReadout: some View {
         VStack(spacing: 3) {
             Text("積み上げた集中")
                 // This HUD is decorative and excluded from VoiceOver. Keep it
@@ -1078,12 +1156,7 @@ struct HomeView: View {
                 }
             }
         }
-        // Keep every glyph behind the mouth instead of straddling its bright
-        // rim; the occlusion cue is what makes the glass depth believable.
-        .padding(.top, 88)
-        .frame(maxHeight: .infinity, alignment: .top)
         .shadow(color: .black.opacity(0.52), radius: 3, y: 1)
-        .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
@@ -1404,9 +1477,18 @@ struct HomeView: View {
 
     private var homeDurationPicker: some View {
         Menu {
-            Section("無料の集中タイマー") {
+            Section(purchase.isPro ? "定番の時間" : "無料の集中タイマー") {
                 ForEach(PomodoroDuration.freePresets, id: \.self) { duration in
                     homeDurationOption(duration)
+                }
+            }
+            // A preset replaces the preferred duration, so without this a
+            // Pro user switching 50分 -> 25分 had to retype 50分 to go back.
+            if purchase.isPro, !recentCustomDurations.isEmpty {
+                Section("最近のカスタム時間") {
+                    ForEach(recentCustomDurations, id: \.self) { duration in
+                        homeDurationOption(duration)
+                    }
                 }
             }
             Button(action: requestCustomDuration) {
@@ -1448,7 +1530,7 @@ struct HomeView: View {
             selectDuration(duration)
         } label: {
             let title = duration.displayLabel
-            if selectedDuration == duration {
+            if selectedDuration.seconds == duration.seconds {
                 Label(title, systemImage: "checkmark")
             } else {
                 Text(title)
@@ -1529,6 +1611,28 @@ struct HomeView: View {
             : "タイマーを開始します。上のテーマと時間のボタンで内容を変更できます"
     }
 
+    private var recentCustomDurations: [PomodoroDuration] {
+        RecentCustomFocusDurations.decode(recentCustomFocusSecondsRawValue)
+            .map(PomodoroDuration.init(totalSeconds:))
+    }
+
+    /// The editor opens at the custom time in use, or else at the most
+    /// recent one, not at a preset the user would have to retype over.
+    private var customDurationEditorInitialSeconds: Int {
+        if selectedDuration.requiresPro { return selectedDuration.seconds }
+        return recentCustomDurations.first?.seconds ?? selectedDuration.seconds
+    }
+
+    private func rememberCustomDuration(_ duration: PomodoroDuration) {
+        let updated = RecentCustomFocusDurations.recording(
+            duration.seconds,
+            in: recentCustomFocusSecondsRawValue
+        )
+        if updated != recentCustomFocusSecondsRawValue {
+            recentCustomFocusSecondsRawValue = updated
+        }
+    }
+
     private var focusDurationLabel: String {
 #if DEBUG
         if selectedDuration == .demo { return "12秒" }
@@ -1538,6 +1642,7 @@ struct HomeView: View {
 
     private var homeMenu: some View {
         Button {
+            homeMenuDetent = .medium
             showHomeMenu = true
         } label: {
             HStack(spacing: 6) {
@@ -1553,23 +1658,28 @@ struct HomeView: View {
                 .contentShape(Rectangle())
         }
         .accessibilityLabel("メニュー")
-        .accessibilityHint("記録、設定、背景、手動追加などを開きます")
+        .accessibilityHint("記録、設定、手動での追加、背景などを開きます")
     }
 
     private var homeMenuSheet: some View {
         NavigationStack {
+            ScrollViewReader { menuScrollProxy in
             ScrollView {
+                // The menu is Home's only way to 記録 and 設定, so the
+                // destinations people open it for come first and fit in the
+                // half-height sheet even on a 4.7-inch phone. The decorative
+                // background picker comes last.
                 VStack(spacing: 14) {
-                    menuAtmospherePicker
+                    menuDestinationActions
                     menuAccumulationActions
                     menuAccumulationPlanAction
-                    menuHistoryActions
-                    menuSettingsAction
+                    menuAtmospherePicker(scrollProxy: menuScrollProxy)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
             }
             .scrollBounceBehavior(.basedOnSize)
+            }
             .background(NightBackground())
             .navigationTitle("メニュー")
             .navigationBarTitleDisplayMode(.inline)
@@ -1586,7 +1696,7 @@ struct HomeView: View {
         }
     }
 
-    private var menuAtmospherePicker: some View {
+    private func menuAtmospherePicker(scrollProxy: ScrollViewProxy) -> some View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 13) {
                 HStack(alignment: .firstTextBaseline) {
@@ -1616,14 +1726,22 @@ struct HomeView: View {
                     spacing: 10
                 ) {
                     ForEach(HomeAtmosphere.allCases) { atmosphere in
-                        atmosphereButton(atmosphere)
+                        atmosphereButton(atmosphere, scrollProxy: scrollProxy)
+                            .id(Self.atmosphereScrollID(atmosphere))
                     }
                 }
             }
         }
     }
 
-    private func atmosphereButton(_ atmosphere: HomeAtmosphere) -> some View {
+    private static func atmosphereScrollID(_ atmosphere: HomeAtmosphere) -> String {
+        "home.menu.atmosphere.\(atmosphere.rawValue)"
+    }
+
+    private func atmosphereButton(
+        _ atmosphere: HomeAtmosphere,
+        scrollProxy: ScrollViewProxy
+    ) -> some View {
         let isSelected = homeAtmosphere == atmosphere
 
         return Button {
@@ -1632,6 +1750,7 @@ struct HomeView: View {
             if sensoryPreferences.hapticsOn {
                 Haptics.shared.playSecondaryCollision()
             }
+            revealChosenAtmosphere(atmosphere, scrollProxy: scrollProxy)
         } label: {
             HStack(alignment: .bottom, spacing: 8) {
                 Image(systemName: atmosphere.systemImage)
@@ -1640,24 +1759,23 @@ struct HomeView: View {
                     .frame(width: 30, height: 30)
                     .background(.ultraThinMaterial, in: Circle())
 
+                // Short Japanese names must never break mid-word
+                // (「オーロ／ラ」); shrink slightly before wrapping.
                 VStack(alignment: .leading, spacing: 1) {
                     Text(atmosphere.title)
                         .font(.system(size: atmosphereTitleFontSize, weight: .bold, design: .rounded))
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                        .minimumScaleFactor(0.8)
                         .accessibilityHidden(true)
                     Text(atmosphere.subtitle)
                         .font(.system(size: atmosphereSubtitleFontSize))
                         .foregroundStyle(.white)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                        .minimumScaleFactor(0.85)
                         .accessibilityHidden(true)
                 }
 
                 Spacer(minLength: 2)
-
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(PomoGemTheme.amber)
-                        .accessibilityHidden(true)
-                }
             }
             .padding(10)
             .foregroundStyle(.white)
@@ -1674,6 +1792,16 @@ struct HomeView: View {
                             endPoint: .bottom
                         )
                     }
+            }
+            // The badge sits in the empty artwork corner, outside the text
+            // row, so selecting a card never narrows or re-wraps its title.
+            .overlay(alignment: .topTrailing) {
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(PomoGemTheme.amber)
+                        .padding(8)
+                        .accessibilityHidden(true)
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
             .overlay {
@@ -1698,6 +1826,29 @@ struct HomeView: View {
         // target, so restore the interactive role that SwiftUI otherwise drops.
         .accessibilityAddTraits(.isButton)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// The background picker sits last in the menu, so reaching it usually
+    /// raises the sheet to full height, over Home. Lower it to half height
+    /// and keep the chosen card in view, so the new background shows behind
+    /// the sheet the moment it is picked.
+    private func revealChosenAtmosphere(
+        _ atmosphere: HomeAtmosphere,
+        scrollProxy: ScrollViewProxy
+    ) {
+        guard homeMenuDetent != .medium,
+              auxiliarySheetDetents.contains(.medium) else { return }
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.3)) {
+            homeMenuDetent = .medium
+        }
+        Task { @MainActor in
+            // Scroll once the sheet has its half-height frame; before that
+            // the card is still inside the taller visible area.
+            try? await Task.sleep(for: .milliseconds(reduceMotion ? 50 : 360))
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+                scrollProxy.scrollTo(Self.atmosphereScrollID(atmosphere), anchor: .center)
+            }
+        }
     }
 
     @ViewBuilder
@@ -1747,6 +1898,8 @@ struct HomeView: View {
 
     private var menuAccumulationActions: some View {
         VStack(spacing: 2) {
+            // The running totals sit with the two actions that add to them.
+            menuMetricsStrip
             menuActionButton(
                 title: "時間を手動で積む",
                 detail: "30分・1時間・2時間",
@@ -1779,34 +1932,55 @@ struct HomeView: View {
                     showAchievementEntry = true
                 }
             }
+            // screentime-10: the third way to add to the jar, next to the
+            // other two, instead of three levels down in Settings.
+            if ScreenTimeReleasePolicy.showsHomeEntry {
+                menuActionButton(
+                    title: String(localized: "アプリの時間を積む", table: "Home",
+                                  comment: "Home menu row: open the Screen Time settings"),
+                    detail: String(localized: "勉強アプリ10分ごとに1粒", table: "Home",
+                                   comment: "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble"),
+                    symbol: "hourglass"
+                ) {
+                    showHomeMenu = false
+                    router.selectedTab = .screenTime
+                }
+                .accessibilityIdentifier("home.menu.screen-time")
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var menuHistoryActions: some View {
-        VStack(spacing: 2) {
-            Group {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(spacing: 12) {
-                        menuMetric(value: homeMenuMassValue, label: "累計")
-                        menuMetric(value: homeMenuCountValue, label: "集中")
-                        menuMetric(value: "\(achievementCountLabel)個", label: "成果")
-                    }
-                } else {
-                    HStack(spacing: 0) {
-                        menuMetric(value: homeMenuMassValue, label: "累計")
-                        Divider().frame(height: 34)
-                        menuMetric(value: homeMenuCountValue, label: "集中")
-                        Divider().frame(height: 34)
-                        menuMetric(value: "\(achievementCountLabel)個", label: "成果")
-                    }
+    private var menuMetricsStrip: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 12) {
+                    menuMetric(value: homeMenuMassValue, label: "累計")
+                    menuMetric(value: homeMenuCountValue, label: "集中")
+                    menuMetric(value: "\(achievementCountLabel)個", label: "成果")
+                }
+            } else {
+                HStack(spacing: 0) {
+                    menuMetric(value: homeMenuMassValue, label: "累計")
+                    Divider().frame(height: 34)
+                    menuMetric(value: homeMenuCountValue, label: "集中")
+                    Divider().frame(height: 34)
+                    menuMetric(value: "\(achievementCountLabel)個", label: "成果")
                 }
             }
-            .padding(.vertical, 12)
-            .background(PomoGemTheme.card)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(homeMenuAccessibilitySummary)
+        }
+        .padding(.vertical, 12)
+        .background(PomoGemTheme.card)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(homeMenuAccessibilitySummary)
+    }
 
+    private var menuDestinationActions: some View {
+        VStack(spacing: 2) {
+            menuActionButton(title: "記録を見る", detail: "推移・内訳・履歴", symbol: "chart.bar.fill") {
+                showHomeMenu = false
+                router.selectedTab = .log
+            }
             menuActionButton(
                 title: "積み上がりを見る",
                 detail: "まとまり粒・生涯の瓶・月ごとの瓶",
@@ -1819,10 +1993,6 @@ struct HomeView: View {
                     showAccumulationOverview = true
                 }
             }
-            menuActionButton(title: "記録を見る", detail: "推移・内訳・履歴", symbol: "chart.bar.fill") {
-                showHomeMenu = false
-                router.selectedTab = .log
-            }
             menuActionButton(
                 title: "動く瓶をシェア",
                 detail: "GIF・質量・#ポモジェム をSNSへ",
@@ -1834,14 +2004,10 @@ struct HomeView: View {
                     router.presentShare()
                 }
             }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private var menuSettingsAction: some View {
-        menuActionButton(title: "設定", detail: "テーマ・通知・サウンド・Pro", symbol: "gearshape.fill") {
-            showHomeMenu = false
-            router.selectedTab = .settings
+            menuActionButton(title: "設定", detail: "テーマ・通知・サウンド・Pro", symbol: "gearshape.fill") {
+                showHomeMenu = false
+                router.selectedTab = .settings
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
@@ -2830,6 +2996,8 @@ struct HomeView: View {
         guard restored.isValid else { return }
         if restored.requiresPro {
             selectedDuration = purchase.isPro ? restored : .twentyFiveMinutes
+            // Also catches a custom time chosen on another device.
+            if purchase.isPro { rememberCustomDuration(restored) }
         } else {
             selectedDuration = restored
         }
@@ -2853,6 +3021,7 @@ struct HomeView: View {
             failureMessage: "集中時間を保存できませんでした"
         ) else { return false }
         selectedDuration = duration
+        rememberCustomDuration(duration)
         showCustomDuration = false
         return true
     }
@@ -2892,6 +3061,7 @@ struct HomeView: View {
 #if DEBUG
         if duration == .demo { return }
 #endif
+        rememberCustomDuration(duration)
         _ = persistPreferredFocusSeconds(
             duration.seconds,
             failureMessage: "集中時間を保存できませんでした"
@@ -2911,6 +3081,9 @@ struct HomeView: View {
                 failureMessage: "前回使った時間として保存できませんでした"
             )
         }
+        // Starting a focus answers today's daily reminder. Record it before
+        // the cover opens, so the reminder is re-read with it (RootView).
+        PassiveReminderActivityReader.recordFocusStarted()
         focusConfiguration = FocusConfiguration(
             subject: subject,
             duration: duration,
@@ -3099,16 +3272,25 @@ struct HomeView: View {
         }
     }
 
-    private func addManualEntry(_ duration: ManualDuration) -> Bool {
+    /// Saves to the theme chosen in the sheet. Home's own selection is left
+    /// alone: back-filling time for another theme must not change what the
+    /// next timer starts with. Returns nil once saved, otherwise the reason,
+    /// which the still-open sheet shows beside its button (a toast would sit
+    /// behind the full-height sheet).
+    private func addManualEntry(_ subject: Subject, _ duration: ManualDuration) -> String? {
         guard let resolvedPreferences else {
-            router.showToast("設定情報を読み込めませんでした", symbol: "exclamationmark.triangle")
-            return false
+            return "設定情報を読み込めませんでした。もう一度お試しください。"
         }
-        guard let subject = selectedSubject else {
+        guard !activeSubjects.isEmpty else {
             showManualEntry = false
             router.selectedTab = .settings
             router.showToast("先にテーマを追加してください", symbol: "books.vertical.fill")
-            return false
+            return "先にテーマを追加してください。"
+        }
+        // The sheet's list is a snapshot; the theme may have been archived
+        // or removed (for example from another device) while it was open.
+        guard activeSubjects.contains(where: { $0.id == subject.id }) else {
+            return "選んだテーマが見つかりません。テーマを選び直してください。"
         }
         let now = Date.now
         let decision = FairnessPolicy.consumeManualEntry(
@@ -3119,8 +3301,7 @@ struct HomeView: View {
             at: now
         )
         guard decision.isAllowed else {
-            router.showToast(Constants.UIStrings.manualCapToast, symbol: "info.circle")
-            return false
+            return "\(Constants.UIStrings.manualCapToast)です。"
         }
 
         // Apply the quota and session in the same SwiftData transaction. Merely
@@ -3133,8 +3314,7 @@ struct HomeView: View {
             )
         } catch {
             modelContext.rollback()
-            router.showToast("設定情報を安全に保存できませんでした", symbol: "exclamationmark.triangle")
-            return false
+            return "設定情報を安全に保存できませんでした。もう一度お試しください。"
         }
         writer.manualDayKey = decision.state.dayKey
         writer.manualUsedToday = decision.state.usedToday
@@ -3156,18 +3336,18 @@ struct HomeView: View {
                 Constants.UIStrings.manualToast(subject: subject.safeDisplayName, grams: duration.grams),
                 symbol: "plus.circle.fill"
             )
-            return true
+            return nil
         } catch {
             modelContext.rollback()
-            router.showToast(error.localizedDescription, symbol: "exclamationmark.triangle")
-            return false
+            return "保存できませんでした。もう一度お試しください。"
         }
     }
 
+    /// Returns nil once saved, otherwise the reason for the open sheet.
     private func addAchievementStone(
         subject: Subject,
         draft: AchievementDraft
-    ) -> Bool {
+    ) -> String? {
         let stone = AchievementStone(
             subject: subject,
             kind: draft.kind,
@@ -3178,11 +3358,10 @@ struct HomeView: View {
         modelContext.insert(stone)
         do {
             try modelContext.save()
-            return true
+            return nil
         } catch {
             modelContext.rollback()
-            router.showToast("記念石を保存できませんでした", symbol: "exclamationmark.triangle")
-            return false
+            return "記念石を保存できませんでした。もう一度お試しください。"
         }
     }
 
@@ -3312,6 +3491,16 @@ struct HomeView: View {
         }
     }
 
+    /// Screen Time black stones arrive silently in the jar; say how many
+    /// once, neutrally (see `ScreenTimeArrivalAnnouncer`).
+    private func noteScreenTimeBlackStones(_ count: Int) {
+        screenTimeArrivals.noteBlackStoneCount(
+            count, isBound: ScreenTimeController.shared.isBoundToContext
+        ) { text, symbol in
+            router.showToast(text, symbol: symbol)
+        }
+    }
+
     private func handleLanding(_ event: JarLandingEvent) {
         let descriptor = event.pebble
         if let achievementKind = descriptor.achievementKind {
@@ -3328,6 +3517,16 @@ struct HomeView: View {
         // resulting overview pebble as a fresh study session would announce a
         // misleading second “+2500g” reward.
         if descriptor.isAggregate { return }
+        if descriptor.source == .screenTime {
+            // One attributed summary per import (「スクリーンタイム：英語 +30分
+            // （3粒）」) instead of a generic toast per 10-minute pebble.
+            screenTimeArrivals.noteLearningLanding(subjectName: descriptor.subjectName) { text, symbol in
+                router.showToast(text, symbol: symbol)
+            }
+            ScreenTimeGemDropStore.remove(descriptor.id)
+            syncScene()
+            return
+        }
         var message: String
         let presentationKind = RareRewardPresentationPolicy.kind(descriptor.kind)
         switch presentationKind {
@@ -3351,11 +3550,6 @@ struct HomeView: View {
             && rareRewardMode.usesEnhancedPresentation
         router.showToast(message, symbol: usesRareSymbol ? "sparkles" : "scalemass")
 
-        if descriptor.source == .screenTime {
-            ScreenTimeGemDropStore.remove(descriptor.id)
-            syncScene()
-            return
-        }
         if PendingRewardReceiptStore.load().contains(where: {
             $0.id == descriptor.id && $0.dropPhase == .awaitingLanding
         }) {
@@ -3389,8 +3583,8 @@ struct HomeView: View {
             looseSessions: looseSessions,
             at: descriptor.createdAt
         )
-        var measuredCompletionDates = historyMetrics?.weeklyMeasuredDates ?? []
-        if historyMetrics?.weeklyMeasuredSessionIDs.contains(descriptor.id) != true {
+        var measuredCompletionDates = historyMetrics?.weeklyTimerCompletionDates ?? []
+        if historyMetrics?.weeklyTimerCompletionSessionIDs.contains(descriptor.id) != true {
             // SwiftData query delivery can trail completion preparation.
             // Include the locally committed
             // timer exactly once so the completion card never says “0”.
@@ -3690,6 +3884,13 @@ struct HomeView: View {
         tiltHintTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(700))
             guard !Task.isCancelled else { return }
+            // One message at a time: the first gem's toast goes first.
+            var waitedForToast = 0
+            while router.toast != nil, waitedForToast < 40 {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled else { return }
+                waitedForToast += 1
+            }
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
                 showsTiltHint = true
             }
@@ -4203,466 +4404,6 @@ private struct BreakOffer: Identifiable {
     }
 }
 
-private struct AchievementDraft {
-    let kind: AchievementKind
-    let note: String
-    let achievedAt: Date
-}
-
-private struct AchievementEntrySheet: View {
-    let subjects: [Subject]
-    let onAdd: (Subject, AchievementDraft) -> Bool
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var selectedKind: AchievementKind?
-    @State private var selectedSubjectID: UUID?
-    @State private var note = ""
-    @State private var achievedAt = Date.now
-    @State private var isSubmitting = false
-
-    init(
-        initialSubject: Subject?,
-        subjects: [Subject],
-        onAdd: @escaping (Subject, AchievementDraft) -> Bool
-    ) {
-        self.subjects = subjects
-        self.onAdd = onAdd
-        let initialID = initialSubject.flatMap { initial in
-            subjects.contains(where: { $0.id == initial.id }) ? initial.id : nil
-        } ?? subjects.first?.id
-        _selectedSubjectID = State(initialValue: initialID)
-    }
-
-    private var selectedSubject: Subject? {
-        subjects.first { $0.id == selectedSubjectID }
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    if let selectedKind {
-                        detailsStep(kind: selectedKind)
-                    } else {
-                        kindStep
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(20)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .background(NightBackground())
-            .navigationTitle(selectedKind == nil ? "成果を選ぶ" : "記念石にする")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if selectedKind != nil {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("戻る") { selectedKind = nil }
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    PomoGemSheetCloseButton(
-                        accessibilityIdentifier: "achievement.create.close"
-                    ) {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-
-    private var kindStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                SectionEyebrow(text: "MILESTONE")
-                Text("どんな成果だった？")
-                    .font(PomoGemTheme.brand(26))
-                Text(achievementIntroduction)
-                    .font(.subheadline)
-                    .foregroundStyle(PomoGemTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            ForEach(AchievementKind.allCases) { kind in
-                Button {
-                    selectedKind = kind
-                } label: {
-                    HStack(spacing: 14) {
-                        Image(systemName: kind.systemImage)
-                            .font(.title2)
-                            .foregroundStyle(PomoGemTheme.amber)
-                            .frame(width: 36)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(kind.title)
-                                .font(.system(.headline, design: .rounded, weight: .bold))
-                            Text(kind.detail)
-                                .font(.caption)
-                                .foregroundStyle(PomoGemTheme.muted)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                    }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-                    .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 16))
-                }
-                .buttonStyle(PomoGemBareButtonStyle())
-            }
-        }
-    }
-
-    private var achievementIntroduction: String {
-        "満点・試験合格・納品・公開などの節目を、集中時間とは別のひとまわり大きな記念石として残せます。"
-    }
-
-    private func detailsStep(kind: AchievementKind) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
-                Image(systemName: kind.systemImage)
-                    .font(.title)
-                    .foregroundStyle(PomoGemTheme.amber)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(kind.title)
-                        .font(PomoGemTheme.brand(24))
-                    Text(selectedSubject?.safeDisplayName ?? "テーマを選んでください")
-                        .font(.subheadline)
-                        .foregroundStyle(PomoGemTheme.muted)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("テーマ")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.muted)
-                Menu {
-                    ForEach(subjects) { subject in
-                        Button {
-                            selectedSubjectID = subject.id
-                        } label: {
-                            if selectedSubjectID == subject.id {
-                                Label(subject.safeDisplayName, systemImage: "checkmark")
-                            } else {
-                                Text(subject.safeDisplayName)
-                            }
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 10) {
-                        Circle()
-                            .fill(Color(hex: selectedSubject?.colorHex ?? Constants.Color.textMute))
-                            .frame(width: 12, height: 12)
-                            .accessibilityHidden(true)
-                        Text(selectedSubject?.safeDisplayName ?? "選択してください")
-                            .font(.system(.body, design: .rounded, weight: .bold))
-                        Spacer()
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                            .accessibilityHidden(true)
-                    }
-                    .foregroundStyle(PomoGemTheme.text)
-                    .padding(.horizontal, 14)
-                    .frame(maxWidth: .infinity, minHeight: 50)
-                    .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 12))
-                }
-                .accessibilityLabel("テーマ、\(selectedSubject?.safeDisplayName ?? "未選択")")
-                .accessibilityHint("成果を結びつけるテーマを変更できます")
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("成果名（任意）")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.muted)
-                TextField(kind.notePlaceholder, text: $note)
-                    .textFieldStyle(.plain)
-                    .padding(14)
-                    .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 12))
-                    .onChange(of: note) { _, value in
-                        note = AchievementStone.sanitizedNote(value)
-                    }
-            }
-
-            DatePicker(
-                "達成した日",
-                selection: $achievedAt,
-                in: ...Date.now,
-                displayedComponents: .date
-            )
-            .datePickerStyle(.compact)
-
-            Label(
-                "記念石は0gで、集中時間・質量・通常の粒数には加わりません。瓶では新しい12個が動き、前の石も記録棚にずっと残ります。",
-                systemImage: "checkmark.shield"
-            )
-            .font(.caption)
-            .foregroundStyle(PomoGemTheme.muted)
-            .fixedSize(horizontal: false, vertical: true)
-
-            Button {
-                guard !isSubmitting else { return }
-                guard let selectedSubject else { return }
-                isSubmitting = true
-                let saved = onAdd(
-                    selectedSubject,
-                    AchievementDraft(kind: kind, note: note, achievedAt: achievedAt)
-                )
-                if saved {
-                    dismiss()
-                } else {
-                    isSubmitting = false
-                }
-            } label: {
-                if isSubmitting {
-                    ProgressView().tint(PomoGemTheme.background)
-                } else {
-                    Label("この成果を積む", systemImage: "medal.fill")
-                }
-            }
-            .buttonStyle(PomoGemPrimaryButtonStyle())
-            .disabled(selectedSubject == nil || isSubmitting)
-        }
-    }
-}
-
-private struct ManualEntrySheet: View {
-    let subject: Subject?
-    let counterState: ManualCounterState
-    let onAdd: (ManualDuration) -> Bool
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var selectedDuration: ManualDuration?
-    @State private var isSubmitting = false
-
-    var body: some View {
-        TimelineView(.everyMinute) { context in
-            content(at: context.date)
-        }
-    }
-
-    private func content(at date: Date) -> some View {
-        let availability = FairnessPolicy.manualEntryAvailability(
-            state: counterState,
-            at: date
-        )
-
-        return NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    header
-                    remainingCount(availability)
-                    durationButtons(isEnabled: availability.isAllowed && subject != nil)
-                    if let selectedDuration, availability.isAllowed {
-                        confirmationCard(
-                            duration: selectedDuration,
-                            availability: availability
-                        )
-                    }
-                    fairnessCopy
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(20)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .background(NightBackground())
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    PomoGemSheetCloseButton { dismiss() }
-                }
-            }
-        }
-        .onChange(of: availability.isAllowed) { _, isAllowed in
-            if !isAllowed {
-                selectedDuration = nil
-                isSubmitting = false
-            }
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionEyebrow(text: "SELF-REPORTED")
-            Text("手動で積む")
-                .font(PomoGemTheme.brand(26))
-            Text(subject?.safeDisplayName ?? "テーマを選んでください")
-                .foregroundStyle(PomoGemTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func remainingCount(_ availability: ManualEntryAvailability) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: availability.isAllowed ? "checkmark.circle.fill" : "clock.badge.xmark")
-                .font(.title3)
-                .foregroundStyle(availability.isAllowed ? PomoGemTheme.amber : PomoGemTheme.muted)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("この端末で本日あと\(availability.remainingEntries)回")
-                    .font(.headline)
-                    .accessibilityIdentifier("manual.remaining-count")
-                Text(
-                    availability.isAllowed
-                        ? "選んだだけでは保存されません。次の画面で内容を確認できます。"
-                        : "この端末での本日の上限です。朝4:00に3回へ切り替わります。"
-                )
-                .font(.caption)
-                .foregroundStyle(PomoGemTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 13))
-    }
-
-    private var fairnessCopy: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(Constants.UIStrings.fairnessNote, systemImage: "circle.dashed")
-                .font(.caption)
-                .foregroundStyle(PomoGemTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("この端末で1日3回まで・朝4:00に回数が切り替わります")
-                .font(.caption2)
-                .foregroundStyle(PomoGemTheme.muted)
-        }
-    }
-
-    private func confirmationCard(
-        duration: ManualDuration,
-        availability: ManualEntryAvailability
-    ) -> some View {
-        PomoGemCard {
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 4) {
-                    SectionEyebrow(text: "CONFIRM")
-                    Text("この内容で積みますか？")
-                        .font(PomoGemTheme.brand(21))
-                }
-
-                VStack(spacing: 10) {
-                    confirmationRow(title: "テーマ", value: subject?.safeDisplayName ?? "未選択")
-                    confirmationRow(title: "時間", value: durationTitle(duration))
-                    confirmationRow(title: "加算", value: "+\(duration.grams)g")
-                    confirmationRow(
-                        title: "保存後",
-                        value: "この端末で本日あと\(availability.remainingEntriesAfterSaving)回"
-                    )
-                }
-
-                Button {
-                    guard !isSubmitting else { return }
-                    isSubmitting = true
-                    if !onAdd(duration) {
-                        isSubmitting = false
-                    }
-                } label: {
-                    if isSubmitting {
-                        ProgressView().tint(PomoGemTheme.background)
-                    } else {
-                        Label("確認して積む", systemImage: "plus.circle.fill")
-                    }
-                }
-                .buttonStyle(PomoGemPrimaryButtonStyle())
-                .disabled(subject == nil || !availability.isAllowed || isSubmitting)
-                .accessibilityIdentifier("manual.confirm")
-            }
-        }
-    }
-
-    private func confirmationRow(title: String, value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(PomoGemTheme.muted)
-            Spacer(minLength: 12)
-            Text(value)
-                .font(.subheadline.weight(.bold))
-                .multilineTextAlignment(.trailing)
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private func durationTitle(_ duration: ManualDuration) -> String {
-        switch duration {
-        case .thirtyMinutes: "30分"
-        case .sixtyMinutes: "1時間"
-        case .oneHundredTwentyMinutes: "2時間"
-        }
-    }
-
-    @ViewBuilder
-    private func durationButtons(isEnabled: Bool) -> some View {
-        if dynamicTypeSize.isAccessibilitySize || verticalSizeClass == .compact {
-            VStack(spacing: 10) {
-                manualButtons(isEnabled: isEnabled)
-            }
-        } else {
-            HStack(spacing: 10) {
-                manualButtons(isEnabled: isEnabled)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func manualButtons(isEnabled: Bool) -> some View {
-        ManualButton(
-            title: "30分",
-            grams: 300,
-            selected: selectedDuration == .thirtyMinutes,
-            isEnabled: isEnabled
-        ) { selectedDuration = .thirtyMinutes }
-        ManualButton(
-            title: "1時間",
-            grams: 600,
-            selected: selectedDuration == .sixtyMinutes,
-            isEnabled: isEnabled
-        ) { selectedDuration = .sixtyMinutes }
-        ManualButton(
-            title: "2時間",
-            grams: 1_200,
-            selected: selectedDuration == .oneHundredTwentyMinutes,
-            isEnabled: isEnabled
-        ) { selectedDuration = .oneHundredTwentyMinutes }
-    }
-}
-
-private struct ManualButton: View {
-    let title: String
-    let grams: Int
-    let selected: Bool
-    let isEnabled: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 5) {
-                Text(title).font(.system(.headline, design: .rounded, weight: .bold))
-                Text("+\(grams)g")
-                    .font(.caption)
-                    .foregroundStyle(
-                        selected
-                            ? PomoGemTheme.background.opacity(0.72)
-                            : PomoGemTheme.muted
-                    )
-            }
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: 78)
-            .foregroundStyle(selected ? PomoGemTheme.background : PomoGemTheme.text)
-            .background(
-                selected ? PomoGemTheme.amber : PomoGemTheme.raised,
-                in: RoundedRectangle(cornerRadius: 13)
-            )
-        }
-        .buttonStyle(PomoGemBareButtonStyle())
-        .disabled(!isEnabled)
-        .accessibilityLabel("\(title)、\(grams)グラム加算")
-        .accessibilityHint(isEnabled ? "内容の確認へ進みます" : "本日の手動追加上限です")
-        .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-}
-
 private struct StratumCelebrationView: View {
     let request: PendingStratumCelebration
     let showsMonthLabel: Bool
@@ -4939,6 +4680,24 @@ private struct FortyYearPersistentFixtureProbe: View {
 #endif
 
 #if DEBUG
+/// Counts `HomeView.body` evaluations so a UI test can hold Home to its idle
+/// budget: nothing re-renders it while nobody touches the phone. Observing a
+/// periodically publishing object (as Home once did with the Screen Time
+/// controller, re-rendering every three seconds) shows up here as a count
+/// that keeps climbing. Debug builds only.
+/// It also keeps the one-time jar hint's window frame: the hint is hidden
+/// from accessibility (the jar speaks the same guidance), so a test cannot
+/// otherwise check that it stays clear of the gem it describes.
+@MainActor
+enum HomeRenderDiagnostics {
+    private(set) static var bodyEvaluationCount = 0
+    static var jarHintWindowFrame: CGRect?
+
+    static func recordBodyEvaluation() {
+        bodyEvaluationCount &+= 1
+    }
+}
+
 /// A stateful, explicit-UI-test-only readout of the live SpriteKit
 /// presentation. XCUITest cannot reliably sample a transient position from a
 /// `TimelineView`: accessibility snapshots can be delivered after the pebble
@@ -4962,9 +4721,18 @@ private struct JarUITestPresentationProbe: View {
     @State private var bounceRise: CGFloat = 0
     @State private var targetX: CGFloat = 0.5
     @State private var targetY: CGFloat = 0.88
+    /// The same target in window points. The jar's accessibility frame is
+    /// wider than the SpriteKit view (its glow overflows), so a tap placed by
+    /// normalized offset in that frame drifts right of the gem.
+    @State private var targetWindowX: CGFloat = -1
+    @State private var targetWindowY: CGFloat = -1
     @State private var dropSequence = 0
     @State private var dropFall: CGFloat = 0
     @State private var dropLanded = false
+    /// Sampled from `HomeRenderDiagnostics`. Only this probe re-renders when
+    /// it changes, so reading it cannot inflate the count it reports.
+    @State private var homeBodyEvaluations = 0
+    @State private var jarHintFrame: CGRect?
 
     var body: some View {
         Text("Jar presentation probe")
@@ -4989,7 +4757,7 @@ private struct JarUITestPresentationProbe: View {
 
     private var presentationValue: String {
         String(
-            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d",
+            format: "count=%d;maxY=%.3f;records=%@;bounceSequence=%d;bounceRise=%.3f;targetX=%.5f;targetY=%.5f;dropSequence=%d;dropFall=%.3f;dropLanded=%d;targetWindowX=%.1f;targetWindowY=%.1f;homeBodyEvaluations=%d;jarHint=%@",
             count,
             Double(maximumY),
             records,
@@ -4999,11 +4767,19 @@ private struct JarUITestPresentationProbe: View {
             Double(targetY),
             dropSequence,
             Double(dropFall),
-            dropLanded ? 1 : 0
+            dropLanded ? 1 : 0,
+            Double(targetWindowX),
+            Double(targetWindowY),
+            homeBodyEvaluations,
+            jarHintFrame.map {
+                String(format: "%.1f,%.1f,%.1f,%.1f", $0.minX, $0.minY, $0.maxX, $0.maxY)
+            } ?? "none"
         )
     }
 
     private func samplePresentation() {
+        homeBodyEvaluations = HomeRenderDiagnostics.bodyEvaluationCount
+        jarHintFrame = HomeRenderDiagnostics.jarHintWindowFrame
         dropSequence = Int(truncatingIfNeeded: scene.completionDropSequence)
         dropFall = scene.completionDropMaximumFall
         dropLanded = scene.completionDropHasLanded
@@ -5022,6 +4798,11 @@ private struct JarUITestPresentationProbe: View {
         }), scene.size.width > 0, scene.size.height > 0 {
             targetX = min(max(target.position.x / scene.size.width, 0), 1)
             targetY = min(max(1 - target.position.y / scene.size.height, 0), 1)
+            if let view = scene.view, let window = view.window {
+                let point = view.convert(scene.convertPoint(toView: target.position), to: window)
+                targetWindowX = point.x
+                targetWindowY = point.y
+            }
         }
 
         if trackedRecords != currentRecords {

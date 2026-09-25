@@ -487,6 +487,10 @@ struct PendingRewardReceipt: Identifiable, Codable, Equatable, Sendable {
 enum PendingRewardReceiptStore {
     static let defaultsKey = "home.pending-reward-receipts.v1"
     static let maximumPendingCount = 4
+    /// Posted after every write. Home derives what it shows (the start
+    /// button, queued celebrations) from these receipts, and SwiftUI does not
+    /// observe UserDefaults.
+    static let didChangeNotification = Notification.Name("PendingRewardReceiptStore.didChange")
 
     static func load(defaults: UserDefaults = .standard) -> [PendingRewardReceipt] {
         let key = AccountScopedLocalState.defaultsKey(
@@ -516,10 +520,12 @@ enum PendingRewardReceiptStore {
             .suffix(maximumPendingCount))
         guard !bounded.isEmpty else {
             defaults.removeObject(forKey: key)
+            NotificationCenter.default.post(name: didChangeNotification, object: defaults)
             return
         }
         guard let data = try? JSONEncoder().encode(bounded) else { return }
         defaults.set(data, forKey: key)
+        NotificationCenter.default.post(name: didChangeNotification, object: defaults)
     }
 
     @discardableResult
@@ -567,6 +573,7 @@ enum PendingRewardReceiptStore {
             base: defaultsKey,
             defaults: defaults
         ))
+        NotificationCenter.default.post(name: didChangeNotification, object: defaults)
     }
 }
 
@@ -713,9 +720,28 @@ enum FocusPersistence {
         )
     }
 
+    /// Posted on the main thread after the saved timer is written or cleared.
+    /// The Screen Time integration listens so the learning lane's hold — and
+    /// its end date — reaches the App Group ledger in the same turn as the
+    /// start, pause, resume or stop that changed it (see
+    /// `ScreenTimeTimerHold`). The notification carries nothing: readers
+    /// load the saved state themselves.
+    static let didChange = Notification.Name("PomoGem.FocusPersistence.didChange")
+
+    private static func postDidChange() {
+        if Thread.isMainThread {
+            NotificationCenter.default.post(name: didChange, object: nil)
+        } else {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: didChange, object: nil)
+            }
+        }
+    }
+
     static func save(_ envelope: FocusRecoveryEnvelope) {
         guard let data = try? JSONEncoder().encode(envelope) else { return }
         UserDefaults.standard.set(data, forKey: key)
+        postDidChange()
     }
 
     static func load() -> FocusRecoveryEnvelope? {
@@ -934,6 +960,7 @@ enum FocusPersistence {
     static func clear() {
         UserDefaults.standard.removeObject(forKey: key)
         DeferredFocusCompletionStore.clear()
+        postDidChange()
     }
 
     /// Notification Center is global to the app, while recovery is namespaced

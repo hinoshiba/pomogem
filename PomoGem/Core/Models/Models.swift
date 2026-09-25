@@ -60,9 +60,19 @@ enum SessionSource: String, Codable, CaseIterable, Sendable {
         return .screenTime
     }
 
+    /// Whether the time was measured (a timer or Screen Time) rather than
+    /// typed in. Drives mass disclosure, share scope and dashed pebbles.
     var isMeasured: Bool { self == .timer || self == .screenTime }
     var isSelfReported: Bool { !isMeasured }
-    var displayName: String { self == .screenTime ? "Screen Time" : (isMeasured ? "実測" : "自己申告") }
+    /// Whether a focus timer ran to its end. Completion and return counts use
+    /// this, not `isMeasured`: a Screen Time chunk is measured study time, but
+    /// one hour in a learning app is six ten-minute records, not six timers.
+    var isTimerCompletion: Bool { self == .timer }
+    var displayName: String {
+        self == .screenTime
+            ? String(localized: "スクリーンタイム", table: "Models", comment: "Record source label: Screen Time")
+            : (isMeasured ? "実測" : "自己申告")
+    }
 }
 
 enum PebbleKind: String, Codable, CaseIterable, Sendable {
@@ -1312,9 +1322,10 @@ final class AchievementStone {
         note.isEmpty ? kind.title : note
     }
 
+    /// Applied when a stone is saved, never while its name is being typed.
     static func sanitizedNote(_ value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return String(trimmed.prefix(40))
+        return String(trimmed.prefix(AchievementNotePolicy.maximumCharacters))
     }
 }
 
@@ -1598,6 +1609,38 @@ enum AchievementStoneRevisionPolicy {
             subject: subject,
             subjectNameSnapshot: subject.safeDisplayName,
             subjectColorHexSnapshot: subject.colorHex,
+            kind: kind,
+            note: note,
+            achievedAt: achievedAt,
+            deletedAt: canonical?.deletedAt,
+            deletionRevision: canonical?.deletionRevision ?? 0,
+            deletionMutationID: canonical?.deletionMutationID,
+            restoredDeletionMutationID: canonical?.restoredDeletionMutationID,
+            now: now
+        )
+    }
+
+    /// Edits a milestone without touching its theme: the link and the name
+    /// and color snapshots stay exactly as they are. The 記録 editor uses it
+    /// when the stone's theme is no longer offered (deleted in Settings), so
+    /// correcting a memo or date never relabels it with an unrelated theme.
+    @discardableResult
+    static func editKeepingSubject(
+        _ values: [AchievementStone],
+        kind: AchievementKind,
+        note: String,
+        achievedAt: Date,
+        now: Date = .now
+    ) -> MutationResult {
+        let canonical = AchievementStonePolicy.canonicalStone(from: values)
+        guard let current = canonical
+            ?? AchievementStonePolicy.repairCandidate(from: values)
+        else { return .applied }
+        return apply(
+            values,
+            subject: current.subject,
+            subjectNameSnapshot: current.subjectNameSnapshot,
+            subjectColorHexSnapshot: current.subjectColorHexSnapshot,
             kind: kind,
             note: note,
             achievedAt: achievedAt,

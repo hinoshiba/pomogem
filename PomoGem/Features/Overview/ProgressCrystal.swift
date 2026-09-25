@@ -79,12 +79,23 @@ enum WeeklyProgressPolicy {
         let visibleRingCount: Int
     }
 
+    /// The one definition of 「今週」 for every screen: the calendar week that
+    /// contains `date`, starting on the person's first weekday. Log, the
+    /// completion card and 積み上がり all use it, so their weekly numbers
+    /// describe the same days.
+    static func week(
+        containing date: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> DateInterval? {
+        calendar.dateInterval(of: .weekOfYear, for: date)
+    }
+
     static func completionCount(
         dates: [Date],
         at referenceDate: Date = .now,
         calendar: Calendar = .autoupdatingCurrent
     ) -> Int {
-        guard let interval = calendar.dateInterval(of: .weekOfYear, for: referenceDate) else {
+        guard let interval = week(containing: referenceDate, calendar: calendar) else {
             return 0
         }
         return dates.reduce(into: 0) { count, date in

@@ -6,6 +6,9 @@ enum AppTab: Hashable {
     case jar
     case log
     case settings
+    /// The Screen Time settings pushed straight from Home's menu, the same
+    /// page Settings links to.
+    case screenTime
 }
 
 enum PaywallPendingIntent: Equatable {
@@ -17,7 +20,8 @@ enum ShareScope: Equatable {
     case month(Date)
     case aggregate(id: UUID, monthLabel: String)
 
-    func contains(_ date: Date, calendar: Calendar = .autoupdatingCurrent) -> Bool {
+    /// Months are Gregorian, as `periodLabel` names them.
+    func contains(_ date: Date, calendar: Calendar = PomoGemCalendar.gregorian) -> Bool {
         switch self {
         case .all:
             return true
@@ -210,6 +214,7 @@ struct ToastOverlay: View {
         .shadow(color: .black.opacity(0.32), radius: 24, y: 12)
         .padding(.horizontal, 16)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("app.toast")
         .onAppear {
             guard UIAccessibility.isVoiceOverRunning else { return }
             UIAccessibility.post(notification: .announcement, argument: message.text)

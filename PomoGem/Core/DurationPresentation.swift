@@ -17,7 +17,9 @@ import Foundation
 /// therefore derive time from mass (`focusMinutes(grams:)`,
 /// `creditedFocusMinutes(of:)`), never by adding raw seconds: summed seconds
 /// said 1時間21分 in 記録 and Wrapped for two such focuses while the card
-/// made from them, which only knows grams, said 1時間20分.
+/// made from them, which only knows grams, said 1時間20分. The 年月
+/// drill-down's month, day and theme rows, 記録's month list and Wrapped's
+/// theme rows read their time from the same mass for the same reason.
 enum DurationPresentation {
     /// Whole minutes as 「N分」, 「H時間」 or 「H時間M分」. Negative input is
     /// clamped to 「0分」; hours are digit-grouped (「1,234時間」).
@@ -64,5 +66,22 @@ enum DurationPresentation {
     /// The focus time a mass stands for, e.g. 2,500 g → 「4時間10分」.
     static func focusLabel(grams: Int) -> String {
         minutesLabel(focusMinutes(grams: grams))
+    }
+
+    /// The same, for the 64-bit totals of the 年月 repository.
+    static func focusMinutes(grams: Int64) -> Int {
+        focusMinutes(grams: Int(clamping: grams))
+    }
+
+    /// The same, for the 64-bit totals of the 年月 repository.
+    static func focusLabel(grams: Int64) -> String {
+        minutesLabel(focusMinutes(grams: grams))
+    }
+
+    /// Whole minutes of a span of seconds, rounded down. Only for time that
+    /// is not credited focus, such as Screen Time's whole ten-minute chunks;
+    /// focus totals go through the mass (see the type's comment).
+    static func minutesLabel(seconds: Int) -> String {
+        minutesLabel(NonnegativeIntPolicy.clamped(seconds) / 60)
     }
 }

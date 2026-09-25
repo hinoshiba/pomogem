@@ -44,6 +44,14 @@ final class DurationPresentationTests: XCTestCase {
         XCTAssertEqual(DurationPresentation.focusMinutes(grams: 1_259), 125)
         XCTAssertEqual(DurationPresentation.focusLabel(grams: 9), "0分")
         XCTAssertEqual(DurationPresentation.focusLabel(grams: -250), "0分")
+        // The 年月 repository's 64-bit totals read the same way.
+        XCTAssertEqual(DurationPresentation.focusMinutes(grams: Int64(1_259)), 125)
+        XCTAssertEqual(DurationPresentation.focusLabel(grams: Int64(2_500)), "4時間10分")
+        XCTAssertEqual(DurationPresentation.focusLabel(grams: Int64(-250)), "0分")
+        XCTAssertEqual(
+            DurationPresentation.focusMinutes(grams: Int64.max),
+            Int.max / Constants.Mass.gramsPerMinute
+        )
     }
 
     func testRecordsCreditWholeMinutesSoTimeMatchesTheirMass() {
