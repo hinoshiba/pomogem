@@ -20,29 +20,9 @@ import Foundation
 //
 // These helpers are compiled into the app only. `PomoGemLocale` and
 // `DurationText` live in Shared/LocalizedDuration.swift, which the widget
-// extension (widgets and the Live Activity) compiles too.
-
-/// The calendar for PomoGem's month and year buckets.
-///
-/// Month buckets are Gregorian (`StrataMath.monthLabel`, `FairnessPolicy`), so
-/// their labels must be too: on an iPhone set to the Japanese calendar the
-/// system style would print 令和8年9月 for the 2026年9月 bucket. Time zone and
-/// week settings still follow the user. The 年月 timeline still buckets years
-/// with `Calendar.autoupdatingCurrent` (critic-04); it must move to this
-/// calendar when its labels move to `DateText`.
-enum PomoGemCalendar {
-    static func gregorian(
-        timeZone: TimeZone = .current,
-        basedOn calendar: Calendar = .current
-    ) -> Calendar {
-        var gregorian = Calendar(identifier: .gregorian)
-        gregorian.timeZone = timeZone
-        gregorian.locale = calendar.locale
-        gregorian.firstWeekday = calendar.firstWeekday
-        gregorian.minimumDaysInFirstWeek = calendar.minimumDaysInFirstWeek
-        return gregorian
-    }
-}
+// extension (widgets and the Live Activity) compiles too. Month and year labels
+// use `PomoGemCalendar` (PomoGem/Core/PomoGemCalendar.swift), the Gregorian
+// calendar the app buckets months and years with.
 
 enum MassText {
     /// 「250g」. Pass the number exactly as the screen formats it today (grouping
@@ -117,10 +97,10 @@ enum DateText {
     /// It takes a date, not the bucket's year number, so an era year cannot
     /// reach the label: on an iPhone set to 和暦, `Calendar.current` numbers
     /// 2026 as 8, and 「\(year)年」 or a helper fed that Int prints 「8年」
-    /// (critic-04). The label alone does not fix that screen: the year buckets
-    /// themselves must come from `PomoGemCalendar.gregorian()` as well, or an
-    /// era change (May 2019) splits a year. Never interpolate the Int into a
-    /// localized string either: that prints 「2,026年」.
+    /// (critic-04). The label alone does not fix a screen: the year buckets
+    /// themselves must come from `PomoGemCalendar.gregorian` as well, as the
+    /// 年月 timeline's do, or an era change (May 2019) splits a year. Never
+    /// interpolate the Int into a localized string either: that prints 「2,026年」.
     static func year(_ date: Date, locale: Locale = PomoGemLocale.current, timeZone: TimeZone = .current) -> String {
         date.formatted(style(locale: locale, timeZone: timeZone).year())
     }

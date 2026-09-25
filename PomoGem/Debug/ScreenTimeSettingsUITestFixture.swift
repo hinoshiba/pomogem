@@ -1,4 +1,5 @@
 #if DEBUG && targetEnvironment(simulator)
+import DeviceActivity
 import FamilyControls
 import ManagedSettings
 import SwiftData
@@ -32,6 +33,14 @@ enum ScreenTimeSettingsUITestFixture {
         /// The settings screen appears while the controller is still unbound;
         /// the ledger admits the owner only when the test says so.
         case lateBinding = "late-binding"
+        /// A bound owner that never set anything up, with one theme. The
+        /// settings screen is pushed from a root screen so going back — and
+        /// the unsaved-changes question it asks — can be exercised.
+        case firstSetup = "first-setup"
+        /// A bound owner without access whose request Family Controls
+        /// refuses for want of a passcode, so the refusal, its fix and the
+        /// Settings shortcut can be seen. The Simulator cannot refuse itself.
+        case authorizationRefused = "authorization-refused"
     }
 
     static var scenario: Scenario? {
@@ -70,11 +79,49 @@ enum ScreenTimeSettingsUITestFixture {
     }
 }
 
-/// Records what the controller asks of DeviceActivity without calling it. The
-/// worker invokes these off the main thread, like the real driver.
+/// Stands in for DeviceActivityCenter: keeps the registered names in memory
+/// and never calls the OS.
+private final class ScreenTimeSettingsUITestFixtureCenter: ScreenTimeActivityCenterDriving {
+    private let lock = NSLock()
+    private var names: Set<String> = []
+
+    var activities: [DeviceActivityName] {
+        lock.lock()
+        defer { lock.unlock() }
+        return names.map(DeviceActivityName.init(rawValue:))
+    }
+
+    func stopMonitoring(_ activities: [DeviceActivityName]) {
+        lock.lock()
+        defer { lock.unlock() }
+        if activities.isEmpty { names.removeAll() } else { names.subtract(activities.map(\.rawValue)) }
+    }
+
+    func startMonitoring(
+        _ activity: DeviceActivityName,
+        during schedule: DeviceActivitySchedule,
+        events: [DeviceActivityEvent.Name: DeviceActivityEvent]
+    ) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        names.insert(activity.rawValue)
+    }
+}
+
+/// Records what the controller asks of DeviceActivity and runs the real
+/// `ScreenTimeMonitoring` against an in-memory center, so a save produces the
+/// same runs — and the same 自動記録中 — it would on a device. The worker
+/// invokes these off the main thread, like the real driver.
 private final class ScreenTimeSettingsUITestFixtureDriver: ScreenTimeMonitoringDriving {
     private let lock = NSLock()
     private var calls: [String] = []
+    private let monitoring: ScreenTimeMonitoring
+
+    init(store: ScreenTimeStore) {
+        monitoring = ScreenTimeMonitoring(
+            store: store, center: ScreenTimeSettingsUITestFixtureCenter(), authorization: { true }
+        )
+    }
 
     var events: [String] {
         lock.lock()
@@ -88,11 +135,14 @@ private final class ScreenTimeSettingsUITestFixtureDriver: ScreenTimeMonitoringD
         calls.append(event)
     }
 
-    func stop() { record("stop") }
+    func stop() {
+        record("stop")
+        monitoring.stop()
+    }
     func invalidateAuthorizationIfNeeded() throws { record("invalidate") }
     func synchronize(now: Date) throws -> Bool {
         record("synchronize")
-        return false
+        return try monitoring.synchronize(now: now)
     }
 }
 
@@ -102,18 +152,23 @@ final class ScreenTimeSettingsUITestFixtureModel {
     let themeID = UUID()
     private let store: ScreenTimeStore
     private let directory: URL
-    private let driver = ScreenTimeSettingsUITestFixtureDriver()
+    private let driver: ScreenTimeSettingsUITestFixtureDriver
     private lazy var seeded = ScreenTimeSettingsUITestFixture.seededConfiguration(themeID: themeID)
 
-    init() {
+    init(scenario: ScreenTimeSettingsUITestFixture.Scenario) {
         directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ScreenTimeSettingsUITestFixture-\(UUID().uuidString)", isDirectory: true)
         store = ScreenTimeStore(directory: directory)
+        driver = ScreenTimeSettingsUITestFixtureDriver(store: store)
+        let refused = scenario == .authorizationRefused
         controller = ScreenTimeController(
             store: store,
             currentContextKey: { ScreenTimeSettingsUITestFixture.ownerKey },
             monitoring: driver,
-            authorization: { .approved }
+            authorization: { refused ? .notDetermined : .approved },
+            requestIndividualAuthorization: {
+                if refused { throw FamilyControlsError.authenticationMethodUnavailable }
+            }
         )
     }
 
@@ -121,15 +176,17 @@ final class ScreenTimeSettingsUITestFixtureModel {
     /// the theme its `themeID` points at. Both exist BEFORE the settings screen
     /// mounts, so the screen's first draft can only come from the still-empty
     /// published configuration.
-    func prepare(into context: ModelContext) {
+    func prepare(into context: ModelContext, scenario: ScreenTimeSettingsUITestFixture.Scenario) {
         try? store.update { state in
             state = ScreenTimeState()
             state.contextKey = ScreenTimeSettingsUITestFixture.ownerKey
             state.dataEpochID = nil
             state.contextIsActive = true
-            state.configuration = seeded
             state.learningAllowedBySubscription = true
-            state.negativeGemCount = ScreenTimeSettingsUITestFixture.negativeGemCount
+            if scenario == .lateBinding {
+                state.configuration = seeded
+                state.negativeGemCount = ScreenTimeSettingsUITestFixture.negativeGemCount
+            }
         }
         context.insert(Subject(
             id: themeID,
@@ -176,7 +233,25 @@ struct ScreenTimeSettingsUITestFixtureLaunchView: View {
         Group {
             if let model {
                 NavigationStack {
-                    ScreenTimeSettingsView(controller: model.controller)
+                    if ScreenTimeSettingsUITestFixture.scenario == .firstSetup {
+                        List {
+                            NavigationLink("fixture-open-settings") {
+                                ScreenTimeSettingsView(controller: model.controller)
+                            }
+                            .accessibilityIdentifier("screen-time.fixture-open")
+                        }
+                        .navigationTitle("fixture-root")
+                    } else {
+                        ScreenTimeSettingsView(controller: model.controller)
+                    }
+                }
+                .overlay(alignment: .top) {
+                    // The app draws toasts in RootView, which this fixture
+                    // replaces; show them the same way so a test can read one.
+                    if let toast = router.toast {
+                        ToastOverlay(message: toast)
+                            .accessibilityIdentifier("screen-time.fixture-toast")
+                    }
                 }
                 .safeAreaInset(edge: .bottom) {
                     ScreenTimeSettingsUITestFixtureBar(
@@ -196,10 +271,11 @@ struct ScreenTimeSettingsUITestFixtureLaunchView: View {
             isDebugBuild: true
         ) ? .accessibility5 : .large)
         .task {
-            guard model == nil, ScreenTimeSettingsUITestFixture.scenario != nil else { return }
-            let prepared = ScreenTimeSettingsUITestFixtureModel()
-            prepared.prepare(into: modelContext)
+            guard model == nil, let scenario = ScreenTimeSettingsUITestFixture.scenario else { return }
+            let prepared = ScreenTimeSettingsUITestFixtureModel(scenario: scenario)
+            prepared.prepare(into: modelContext, scenario: scenario)
             model = prepared
+            if scenario != .lateBinding { bind(prepared) }
         }
         .onDisappear { model?.tearDown() }
     }
@@ -245,6 +321,8 @@ private struct ScreenTimeSettingsUITestFixtureBar: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
         .background(.regularMaterial)
+        // A test readout, not app UI: at AX5 it would cover half the page.
+        .dynamicTypeSize(.large)
     }
 }
 #endif

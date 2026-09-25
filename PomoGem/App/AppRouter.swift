@@ -6,6 +6,9 @@ enum AppTab: Hashable {
     case jar
     case log
     case settings
+    /// The Screen Time settings pushed straight from Home's menu, the same
+    /// page Settings links to.
+    case screenTime
 }
 
 enum PaywallPendingIntent: Equatable {
@@ -17,7 +20,8 @@ enum ShareScope: Equatable {
     case month(Date)
     case aggregate(id: UUID, monthLabel: String)
 
-    func contains(_ date: Date, calendar: Calendar = .autoupdatingCurrent) -> Bool {
+    /// Months are Gregorian, as `periodLabel` names them.
+    func contains(_ date: Date, calendar: Calendar = PomoGemCalendar.gregorian) -> Bool {
         switch self {
         case .all:
             return true

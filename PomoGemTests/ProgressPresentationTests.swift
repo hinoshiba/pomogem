@@ -527,6 +527,25 @@ final class ProgressPresentationTests: XCTestCase {
         XCTAssertEqual(complete.shelfScopeLabel, "月ごと・全9件")
         XCTAssertEqual(complete.achievementSectionSubtitle, "質量とは別の記念・全2個")
         XCTAssertEqual(complete.achievementAccessibilitySummary, "記念石2個")
+
+        // A full candidate page only proves a lower bound. Both strings must
+        // carry the numbers, never the interpolation source text.
+        let lowerBound = AccumulationOverviewPageScope(
+            totalSessionCount: 1,
+            displayedSessionCount: 1,
+            totalAchievementCount: 1_200,
+            displayedAchievementCount: 120,
+            totalAchievementCountIsLowerBound: true
+        )
+        XCTAssertTrue(lowerBound.achievementPageIsPartial)
+        XCTAssertEqual(
+            lowerBound.achievementSectionSubtitle,
+            "記念石1,200個以上・最新120個を表示"
+        )
+        XCTAssertEqual(
+            lowerBound.achievementAccessibilitySummary,
+            "記念石1,200個以上、最新120個を表示"
+        )
     }
 
     func testOverviewPageScopeDoesNotClaimEmptyLifetimeForUnloadedHistory() {
@@ -1332,6 +1351,89 @@ final class ProgressPresentationTests: XCTestCase {
         )
     }
 
+    func testEveryScreenUsesTheSameCalendarWeek() throws {
+        // ja_JP weeks start on Sunday; ISO-style calendars start on Monday.
+        for firstWeekday in [1, 2] {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.locale = Locale(identifier: "ja_JP")
+            calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo"))
+            calendar.firstWeekday = firstWeekday
+            // Monday 2026-09-21 at noon.
+            let now = try XCTUnwrap(calendar.date(from: DateComponents(
+                year: 2026, month: 9, day: 21, hour: 12
+            )))
+            let week = try XCTUnwrap(WeeklyProgressPolicy.week(containing: now, calendar: calendar))
+            XCTAssertEqual(week, calendar.dateInterval(of: .weekOfYear, for: now))
+            XCTAssertEqual(
+                calendar.component(.weekday, from: week.start),
+                firstWeekday,
+                "The week must start on the person's first weekday"
+            )
+
+            let logWeek = try XCTUnwrap(LogPeriodPolicy.interval(for: .week, now: now, calendar: calendar))
+            XCTAssertEqual(logWeek, week, "記録's 今週 must be the calendar week, not the last seven days")
+            let days = LogPeriodPolicy.days(in: logWeek, calendar: calendar)
+            XCTAssertEqual(days.count, 7)
+            XCTAssertEqual(days.first, week.start)
+            XCTAssertTrue(days.contains { $0 > now }, "Days still to come stay on the chart")
+
+            let logMonth = try XCTUnwrap(LogPeriodPolicy.interval(for: .month, now: now, calendar: calendar))
+            XCTAssertEqual(LogPeriodPolicy.days(in: logMonth, calendar: calendar).count, 30)
+        }
+
+        var japanese = Calendar(identifier: .gregorian)
+        japanese.locale = Locale(identifier: "ja_JP")
+        japanese.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo"))
+        japanese.firstWeekday = 1
+        let wednesday = try XCTUnwrap(japanese.date(from: DateComponents(
+            year: 2026, month: 9, day: 23, hour: 9
+        )))
+        let week = try XCTUnwrap(LogPeriodPolicy.interval(for: .week, now: wednesday, calendar: japanese))
+        XCTAssertEqual(
+            LogPeriodPolicy.rangeLabel(for: week, calendar: japanese),
+            "9月20日(日)〜9月26日(土)"
+        )
+    }
+
+    func testLogPeriodSummarySplitsSelfReportedAndScreenTimeFromTimerCompletions() {
+        let end = Date(timeIntervalSince1970: 1_800_000_000)
+        func session(_ source: SessionSource, seconds: Int) -> StudySession {
+            StudySession(
+                startAt: end.addingTimeInterval(TimeInterval(-seconds)),
+                endAt: end,
+                seconds: seconds,
+                source: source,
+                deviceDayKey: "log-summary"
+            )
+        }
+        let sessions = [
+            session(.timer, seconds: 1_500),
+            session(.timer, seconds: 1_500),
+            session(.timerDemoted, seconds: 1_500),
+            session(.manual, seconds: 3_600)
+        ] + (0 ..< 6).map { _ in
+            session(.screenTime, seconds: SessionSource.screenTimeSeconds)
+        }
+
+        let summary = LogPeriodSummary(sessions: sessions)
+        XCTAssertEqual(summary.timerCompletionCount, 2)
+        XCTAssertEqual(summary.totalSeconds, 1_500 * 3 + 3_600 + 3_600)
+        XCTAssertEqual(summary.grams, 250 * 3 + 600 + 600)
+        XCTAssertEqual(summary.selfReportedGrams, 250 + 600)
+        XCTAssertEqual(summary.screenTimeSeconds, 3_600)
+    }
+
+    func testDurationPresentationReadsLikePlainJapanese() {
+        XCTAssertEqual(DurationPresentation.minutesLabel(0), "0分")
+        XCTAssertEqual(DurationPresentation.minutesLabel(59), "59分")
+        XCTAssertEqual(DurationPresentation.minutesLabel(60), "1時間")
+        XCTAssertEqual(DurationPresentation.minutesLabel(75), "1時間15分")
+        XCTAssertEqual(DurationPresentation.minutesLabel(-5), "0分")
+        XCTAssertEqual(DurationPresentation.minutesLabel(74_040), "1,234時間")
+        XCTAssertEqual(DurationPresentation.minutesLabel(seconds: 3_659), "1時間")
+        XCTAssertEqual(DurationPresentation.minutesLabel(seconds: -1), "0分")
+    }
+
     func testWeeklySummaryValuesMeasuredMassNotManualTapCount() {
         let base = Date(timeIntervalSince1970: 1_800_000_000)
         let records = [
@@ -1342,6 +1444,7 @@ final class ProgressPresentationTests: XCTestCase {
                 colorHex: "#2457C5",
                 grams: 250,
                 isMeasured: true,
+                isTimerCompletion: true,
                 isRepresentedByLocalAggregate: false
             ),
             AccumulationRecord(
@@ -1351,6 +1454,7 @@ final class ProgressPresentationTests: XCTestCase {
                 colorHex: "#E6A53A",
                 grams: 600,
                 isMeasured: true,
+                isTimerCompletion: true,
                 isRepresentedByLocalAggregate: false
             ),
             AccumulationRecord(
@@ -1360,14 +1464,58 @@ final class ProgressPresentationTests: XCTestCase {
                 colorHex: "#FF00FF",
                 grams: Int.max,
                 isMeasured: false,
+                isTimerCompletion: false,
                 isRepresentedByLocalAggregate: false
             )
         ]
 
         let summary = AccumulationWeeklyPolicy.summary(records: records)
-        XCTAssertEqual(summary.measuredCompletionCount, 2)
+        XCTAssertEqual(summary.timerCompletionCount, 2)
         XCTAssertEqual(summary.measuredGrams, 850)
+        XCTAssertEqual(summary.selfReportedGrams, Int.max)
         XCTAssertEqual(summary.dominantColorHex, "#E6A53A")
+        XCTAssertEqual(summary.cardState, .measured)
+
+        // A week of only self-reported entries is not an empty week.
+        let selfReportedOnly = AccumulationWeeklyPolicy.summary(records: [
+            AccumulationRecord(
+                id: UUID(),
+                date: base,
+                subjectName: "資格",
+                colorHex: "#E6A53A",
+                grams: 900,
+                isMeasured: false,
+                isTimerCompletion: false,
+                isRepresentedByLocalAggregate: false
+            )
+        ])
+        XCTAssertEqual(selfReportedOnly.measuredGrams, 0)
+        XCTAssertEqual(selfReportedOnly.selfReportedGrams, 900)
+        XCTAssertEqual(selfReportedOnly.cardState, .selfReportedOnly)
+        XCTAssertEqual(AccumulationWeeklyPolicy.summary(records: []).cardState, .empty)
+
+        // Six ten-minute Screen Time chunks are an hour of measured study,
+        // not six returns to the timer.
+        let screenTimeChunks = (0 ..< 6).map { index in
+            AccumulationRecord(
+                id: UUID(),
+                date: base.addingTimeInterval(Double(10 + index)),
+                subjectName: "英語",
+                colorHex: "#2457C5",
+                grams: SessionSource.screenTimeGrams,
+                isMeasured: SessionSource.screenTime.isMeasured,
+                isTimerCompletion: SessionSource.screenTime.isTimerCompletion,
+                isRepresentedByLocalAggregate: false
+            )
+        }
+        let withScreenTime = AccumulationWeeklyPolicy.summary(
+            records: records + screenTimeChunks
+        )
+        XCTAssertEqual(withScreenTime.timerCompletionCount, 2)
+        XCTAssertEqual(
+            withScreenTime.measuredGrams,
+            850 + 6 * SessionSource.screenTimeGrams
+        )
 
         let saturated = AccumulationWeeklyPolicy.summary(records: [
             AccumulationRecord(
@@ -1377,6 +1525,7 @@ final class ProgressPresentationTests: XCTestCase {
                 colorHex: "#2457C5",
                 grams: Int.max,
                 isMeasured: true,
+                isTimerCompletion: true,
                 isRepresentedByLocalAggregate: false
             ),
             AccumulationRecord(
@@ -1386,6 +1535,7 @@ final class ProgressPresentationTests: XCTestCase {
                 colorHex: "#2457C5",
                 grams: 250,
                 isMeasured: true,
+                isTimerCompletion: true,
                 isRepresentedByLocalAggregate: false
             )
         ])

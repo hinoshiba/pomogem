@@ -56,6 +56,7 @@ private struct ScreenTimeMonitoringGeneration: Equatable {
     let contextIsActive: Bool
     let configuration: ScreenTimeConfiguration
     let learningPausedByTimer: Bool
+    let learningPausedUntil: Date?
     let learningAllowedBySubscription: Bool
     let activeRunIDs: Set<UUID>
 
@@ -66,6 +67,7 @@ private struct ScreenTimeMonitoringGeneration: Equatable {
         contextIsActive = state.contextIsActive
         configuration = state.configuration
         learningPausedByTimer = state.learningPausedByTimer
+        learningPausedUntil = state.learningPausedUntil
         learningAllowedBySubscription = state.learningAllowedBySubscription
         activeRunIDs = Set(state.runs.filter(\.active).map(\.id))
     }
@@ -261,9 +263,14 @@ final class ScreenTimeMonitoring {
             // Capture continuity before retiring yesterday's dated run. The
             // foreground app and the extension must reach the same decision.
             let previousRuns = state.runs
+            // The timer's hold is evaluated at THIS pass's instant, not read
+            // as a stored flag: a hold whose end has passed is over even
+            // though no process has written the ledger since.
+            let learningPaused = state.isLearningPaused(at: now)
             for index in state.runs.indices {
                 let run = state.runs[index]
-                let allowed = run.lane == .distraction || (!state.learningPausedByTimer && state.learningAllowedBySubscription)
+                let allowed = run.lane == .distraction || (state.learningAllowedBySubscription
+                    && (!learningPaused || state.isPreArmedLearningRun(run)))
                 let allInstalled = (0..<ScreenTimePolicy.batchesPerLane).allSatisfy {
                     installed.contains(run.activityPrefix + String($0))
                 }
@@ -272,8 +279,25 @@ final class ScreenTimeMonitoring {
             for lane in ScreenTimeLane.allCases {
                 let selection = lane == .learning ? state.configuration.learningSelection : state.configuration.distractionSelection
                 guard !selection.applicationTokens.isEmpty,
-                      lane == .distraction || (!state.learningPausedByTimer && state.learningAllowedBySubscription),
+                      lane == .distraction || state.learningAllowedBySubscription,
                       !state.runs.contains(where: { $0.active && $0.lane == lane }) else { continue }
+                if lane == .learning, learningPaused {
+                    // Register the lane now to start by itself when the timer
+                    // phase ends, so the minutes after it count even if nobody
+                    // opens PomoGem. A hold with no end, or one ending too
+                    // close to midnight, waits for a later pass instead.
+                    guard let start = ScreenTimePolicy.preArmedLearningStart(
+                        pausedUntil: state.learningPausedUntil, now: now, dayEnd: dayEnd
+                    ) else { continue }
+                    state.runs.append(ScreenTimeRun(
+                        lane: lane, dayStart: dayStart, dayEnd: dayEnd,
+                        startedAt: start,
+                        timeZoneID: calendar.timeZone.identifier,
+                        includesPastActivity: false,
+                        themeID: state.configuration.themeID
+                    ))
+                    continue
+                }
                 // A continuing prior-day registration includes this day's
                 // midnight usage even when the app beats a delayed scheduler.
                 // Retired/edited runs and same-day registration repair do not.
@@ -282,7 +306,7 @@ final class ScreenTimeMonitoring {
                     previousRuns: previousRuns,
                     dayStart: dayStart,
                     timeZoneID: calendar.timeZone.identifier,
-                    learningPausedByTimer: state.learningPausedByTimer,
+                    learningPausedByTimer: state.isLearningPaused(at: dayStart),
                     learningAllowedBySubscription: state.learningAllowedBySubscription,
                     supportsPastActivity: supportsPastActivity
                 )
@@ -329,7 +353,11 @@ final class ScreenTimeMonitoring {
                 let selection = run.lane == .learning ? state.configuration.learningSelection : state.configuration.distractionSelection
                 var scheduleCalendar = Calendar(identifier: .gregorian)
                 scheduleCalendar.timeZone = TimeZone(identifier: run.timeZoneID) ?? .current
-                var start = scheduleCalendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: run.dayStart)
+                // A pre-armed run's interval opens when the timer's hold ends.
+                // Every other run keeps the day's midnight start, which can
+                // never make an interval too short to register.
+                let intervalStart = run.startedAt > now ? run.startedAt : run.dayStart
+                var start = scheduleCalendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: intervalStart)
                 var end = scheduleCalendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: run.dayEnd.addingTimeInterval(-1))
                 start.timeZone = scheduleCalendar.timeZone
                 end.timeZone = scheduleCalendar.timeZone
@@ -360,7 +388,7 @@ final class ScreenTimeMonitoring {
                 }
                 if let notice = Self.laneScheduleNotice(
                     started: startedForRun, now: now,
-                    intervalStart: scheduleCalendar.date(from: start) ?? run.dayStart,
+                    intervalStart: scheduleCalendar.date(from: start) ?? intervalStart,
                     intervalEnd: scheduleCalendar.date(from: end) ?? run.dayEnd,
                     includesPastActivity: run.includesPastActivity
                 ) {
@@ -525,12 +553,18 @@ final class ScreenTimeMonitoring {
     /// for today repairs it with one bounded pass. A day in which no callback
     /// arrives at all has no trigger and still waits for the next scheduler
     /// interval or for the user to open the app.
+    ///
+    /// The learning lane gets the same repair on its own once the timer's hold
+    /// has ended: if the app was suspended before it could pre-arm the lane,
+    /// the next callback of the other lane registers it instead of leaving it
+    /// off until midnight.
     private func repairMissingRunIfNeeded(now: Date) {
         let calendar = Calendar.current
         let dayStart = calendar.startOfDay(for: now)
         guard let state = try? store.snapshot(), state.configuration.enabled,
               state.contextKey != nil, state.contextIsActive,
-              !state.runs.contains(where: { $0.active && $0.dayStart == dayStart }),
+              !state.runs.contains(where: { $0.active && $0.dayStart == dayStart })
+                || Self.learningLaneAwaitsRegistration(state, dayStart: dayStart, now: now),
               // At most one REFUSED attempt per device day. This runs on every
               // threshold and on every lane interval boundary, so a framework
               // refusal (excessiveActivities and friends) would otherwise be
@@ -547,6 +581,16 @@ final class ScreenTimeMonitoring {
         } catch {
             try? store.update { $0.lastRepairAttemptAt = now }
         }
+    }
+
+    /// Exactly the condition under which `synchronizeLocked` would append an
+    /// ordinary learning run, so a repair pass it triggers always registers
+    /// something and cannot repeat on every callback.
+    static func learningLaneAwaitsRegistration(_ state: ScreenTimeState, dayStart: Date, now: Date) -> Bool {
+        !state.configuration.learningSelection.applicationTokens.isEmpty
+            && state.learningAllowedBySubscription
+            && !state.isLearningPaused(at: now)
+            && !state.runs.contains { $0.active && $0.lane == .learning && $0.dayStart == dayStart }
     }
 
     static func schedulerName(epoch: UUID) -> String {

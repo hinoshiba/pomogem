@@ -81,6 +81,11 @@ enum StorageTransferSettingsUITestFixture {
         /// iCloud replacement raises when the one post-commit comparison finds
         /// user records the committed payload did not hold.
         case lateArrival
+        /// launch-03 / launch-04. The first screen of a new install: the
+        /// shipping `.choosingStorage` launch view with a recorder in place of
+        /// the host, so both confirmations can be read and cancelled without
+        /// selecting a storage mode.
+        case firstRunStorageChoice
 
         var overwriteLaunch: StorageTransferOverwriteLaunchUITestScenario? {
             switch self {
@@ -183,6 +188,8 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                 startsRecoveredBreak: scenario == .offlineBreakNavigation)
         } else if scenario == .cloudLaunchTimedOut {
             CloudLaunchTimeoutUITestFixtureView()
+        } else if scenario == .firstRunStorageChoice {
+            FirstRunStorageChoiceUITestFixtureView()
         } else if scenario == .cloudResetGuidance {
             NavigationStack {
                 List {

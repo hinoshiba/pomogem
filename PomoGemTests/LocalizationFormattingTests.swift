@@ -166,13 +166,12 @@ final class LocalizationFormattingTests: XCTestCase {
         XCTAssertEqual(DateText.year(date, locale: en, timeZone: tokyo), "2026")
     }
 
-    /// The label half of critic-04 (still open, owned by l10n-04-overview): the
-    /// helpers label a date in the Gregorian calendar whatever the iPhone's
-    /// calendar is. They cannot repair a year number that is already an era
-    /// year. The 年月 timeline buckets years with `Calendar.autoupdatingCurrent`
-    /// (AccumulationTimelineBrowser), so on a 和暦 iPhone its bucket Int is 8;
-    /// the fix is to bucket with `PomoGemCalendar.gregorian()` and label with
-    /// `DateText.year(bucket.interval.start)`.
+    /// The label half of critic-04: the helpers label a date in the Gregorian
+    /// calendar whatever the iPhone's calendar is. They cannot repair a year
+    /// number that is already an era year, which is why the 年月 timeline
+    /// buckets years with `PomoGemCalendar.gregorian` (see
+    /// AccumulationTimelineRepositoryTests) and a screen that moves to
+    /// `DateText.year` passes the bucket's start date.
     func testBucketLabelsIgnoreANonGregorianDeviceCalendar() throws {
         let imperial = Locale(identifier: "ja_JP@calendar=japanese")
         var calendar = Calendar(identifier: .gregorian)

@@ -4,12 +4,20 @@ import UIKit
 
 struct OnboardingView: View {
     let persistenceMode: PersistenceLaunchMode
+    /// launch-06. The user chose 「新しく始める」 over the iCloud restore
+    /// screen, so page 1 must not ask them to wait after all.
+    let startedFreshOverRestore: Bool
     let onComplete: (Set<String>, Bool, RareRewardMode) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var page = 0
     @State private var trialDropped = false
     @State private var selectedSubjects = Set<String>()
+    /// launch-07. The theme-name field lives here, not in the page, so the
+    /// primary button can use a valid name the user typed but did not commit
+    /// with 「選択」 or Return (see `OnboardingThemePolicy.effectiveSelection`).
+    @State private var pendingSubjectName = ""
     @State private var wantsNotifications = false
     @State private var selectedRareRewardMode: RareRewardMode?
     @Environment(\.modelContext) private var modelContext
@@ -21,9 +29,11 @@ struct OnboardingView: View {
 
     init(
         persistenceMode: PersistenceLaunchMode = .inMemoryPreview,
+        startedFreshOverRestore: Bool = false,
         onComplete: @escaping (Set<String>, Bool, RareRewardMode) -> Void
     ) {
         self.persistenceMode = persistenceMode
+        self.startedFreshOverRestore = startedFreshOverRestore
         self.onComplete = onComplete
         _storedSubjects = Query(SubjectSyncPolicy.liveRowsDescriptor(sortBy: [
             SortDescriptor(\Subject.sortOrder),
@@ -43,32 +53,61 @@ struct OnboardingView: View {
     }
 
     var body: some View {
+        // Read once per render. The theme field lives in this view, so every
+        // keystroke renders it again; each read walks the theme list.
+        let themeLimit = themeLimitSnapshot
+        let selection = effectiveSelectedSubjects(within: themeLimit)
         ZStack {
             NightBackground()
             VStack(spacing: 0) {
+                // walk-edge-04 / walk-edge-10. These bars sit outside the
+                // scrolling pages, so at accessibility sizes they must stay
+                // small or they leave the page a sliver of the screen: the
+                // back button becomes icon-only (its label, hint and Large
+                // Content Viewer still say 戻る), the step title is left to
+                // the page heading and VoiceOver, and the logo is capped.
                 HStack(spacing: 12) {
                     if page == 0 {
                         PomoGemLogo(compact: true)
+                            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     } else {
                         Button(action: retreat) {
-                            Label("戻る", systemImage: "chevron.left")
-                                .font(.subheadline.weight(.semibold))
-                                .frame(minWidth: 68, minHeight: 44, alignment: .leading)
-                                .contentShape(Rectangle())
+                            Group {
+                                if usesCompactChrome {
+                                    Label("戻る", systemImage: "chevron.left")
+                                        .labelStyle(.iconOnly)
+                                        .frame(minWidth: 44, minHeight: 44)
+                                } else {
+                                    Label("戻る", systemImage: "chevron.left")
+                                        .lineLimit(1)
+                                        .fixedSize()
+                                        .frame(minWidth: 68, minHeight: 44, alignment: .leading)
+                                }
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(PomoGemCompactButtonStyle(tint: PomoGemTheme.text, isProminent: false))
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                         .accessibilityLabel("戻る")
                         .accessibilityHint("選んだ内容を保ったまま、前のページへ戻ります")
+                        .accessibilityShowsLargeContentViewer {
+                            Label("戻る", systemImage: "chevron.left")
+                        }
                         .accessibilityIdentifier("onboarding.back")
                     }
                     Spacer(minLength: 8)
                     VStack(alignment: .trailing, spacing: 3) {
-                        Text(stepTitle)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(PomoGemTheme.text)
+                        if !usesCompactChrome {
+                            Text(stepTitle)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(PomoGemTheme.text)
+                        }
                         Text("\(page + 1) / \(pageCount)")
                             .font(.system(.caption2, design: .monospaced, weight: .bold))
                             .foregroundStyle(PomoGemTheme.muted)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("全\(pageCount)ページ中、\(page + 1)ページ。\(stepTitle)")
@@ -79,7 +118,10 @@ struct OnboardingView: View {
                 .padding(.top, 12)
 
                 TabView(selection: pageSelection) {
-                    ValuePage(persistenceMode: persistenceMode)
+                    ValuePage(
+                        persistenceMode: persistenceMode,
+                        startedFreshOverRestore: startedFreshOverRestore
+                    )
                     .tag(0)
 
                     TrialDropPage(dropped: $trialDropped)
@@ -87,9 +129,12 @@ struct OnboardingView: View {
 
                     SubjectSetupPage(
                         selectedSubjects: $selectedSubjects,
+                        customSubjectName: $pendingSubjectName,
                         wantsNotifications: $wantsNotifications,
-                        existingSubjectNames: Set(existingSubjects.map(\.name)),
-                        availableNewSubjectSlots: availableNewSubjectSlots
+                        effectiveSelection: selection,
+                        showsSelectionSummary: usesCompactChrome,
+                        existingSubjectNames: themeLimit.existingNames,
+                        availableNewSubjectSlots: themeLimit.availableNewSubjectSlots
                     )
                     .tag(2)
 
@@ -102,27 +147,23 @@ struct OnboardingView: View {
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: page)
 
                 VStack(spacing: 12) {
-                    HStack(spacing: 7) {
-                        ForEach(0..<pageCount, id: \.self) { index in
-                            Capsule()
-                                .fill(index == page ? PomoGemTheme.amber : PomoGemTheme.raised)
-                                .frame(width: index == page ? 24 : 7, height: 7)
-                                .animation(reduceMotion ? nil : .spring(response: 0.3), value: page)
+                    // At accessibility sizes only the primary button stays
+                    // pinned: the dots are decoration (already hidden from
+                    // VoiceOver) and the theme summary moves into the page.
+                    if !usesCompactChrome {
+                        HStack(spacing: 7) {
+                            ForEach(0..<pageCount, id: \.self) { index in
+                                Capsule()
+                                    .fill(index == page ? PomoGemTheme.amber : PomoGemTheme.raised)
+                                    .frame(width: index == page ? 24 : 7, height: 7)
+                                    .animation(reduceMotion ? nil : .spring(response: 0.3), value: page)
+                            }
                         }
+                        .accessibilityHidden(true)
                     }
-                    .accessibilityHidden(true)
 
-                    if page == 2 {
-                        Text(
-                            selectedSubjects.isEmpty
-                                ? "テーマを1つ選ぶと、瓶をひらけます"
-                                : "最初のテーマ：\(selectedSubjects.sorted().first ?? "選択済み")"
-                        )
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(selectedSubjects.isEmpty ? PomoGemTheme.muted : PomoGemTheme.amber)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("onboarding.selection-summary")
+                    if page == 2, !usesCompactChrome {
+                        OnboardingSelectionSummary(selection: selection)
                     }
 
                     Button {
@@ -131,14 +172,18 @@ struct OnboardingView: View {
                         Text(page == pageCount - 1 ? "瓶をひらく" : "次へ")
                     }
                     .buttonStyle(PomoGemPrimaryButtonStyle())
-                    .disabled(isPrimaryActionDisabled)
-                    .accessibilityHint(primaryActionHint)
+                    .disabled(isPrimaryActionDisabled(selection: selection))
+                    .accessibilityHint(primaryActionHint(selection: selection))
                     .accessibilityIdentifier("onboarding.next")
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 18)
             }
         }
+    }
+
+    private var usesCompactChrome: Bool {
+        dynamicTypeSize.isAccessibilitySize
     }
 
     private var stepTitle: String {
@@ -161,14 +206,16 @@ struct OnboardingView: View {
         Binding(
             get: { page },
             set: { nextPage in
-                guard !(page == 2 && nextPage > page && selectedSubjects.isEmpty) else { return }
+                guard !(page == 2 && nextPage > page
+                        && effectiveSelectedSubjects(within: themeLimitSnapshot).isEmpty) else { return }
                 page = nextPage
             }
         )
     }
 
     private func advance() {
-        guard !isPrimaryActionDisabled else { return }
+        let selection = effectiveSelectedSubjects(within: themeLimitSnapshot)
+        guard !isPrimaryActionDisabled(selection: selection) else { return }
         if page < pageCount - 1 {
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
                 page += 1
@@ -182,22 +229,22 @@ struct OnboardingView: View {
                 resolvedRareRewardMode = .off
             }
             onComplete(
-                selectedSubjects,
+                selection,
                 wantsNotifications,
                 resolvedRareRewardMode
             )
         }
     }
 
-    private var isPrimaryActionDisabled: Bool {
-        (page == 2 && selectedSubjects.isEmpty)
+    private func isPrimaryActionDisabled(selection: Set<String>) -> Bool {
+        (page == 2 && selection.isEmpty)
             || (RareRewardReleasePolicy.isEnabled
                 && page == pageCount - 1
                 && selectedRareRewardMode == nil)
     }
 
-    private var primaryActionHint: String {
-        if page == 2, selectedSubjects.isEmpty {
+    private func primaryActionHint(selection: Set<String>) -> String {
+        if page == 2, selection.isEmpty {
             return "テーマを1つ選ぶと瓶をひらけます"
         }
         if RareRewardReleasePolicy.isEnabled,
@@ -217,24 +264,58 @@ struct OnboardingView: View {
         }
     }
 
-    /// Built-in learning presets can exist before first-use setup is complete.
-    /// Unselected presets without history are reclaimed on completion and must
-    /// not consume one of the user's twelve theme slots here.
-    private var availableNewSubjectSlots: Int {
+    /// The theme 「瓶をひらく」 creates: a valid name still in the field wins
+    /// over a suggestion tapped earlier, so typing and tapping the button
+    /// never silently drops what was typed.
+    private func effectiveSelectedSubjects(within themeLimit: ThemeLimitSnapshot) -> Set<String> {
+        OnboardingThemePolicy.effectiveSelection(
+            selected: selectedSubjects,
+            pending: pendingSubjectName
+        ) { name in
+            // One theme is chosen here, so replacing the selection never
+            // needs more than one new slot.
+            themeLimit.existingKeys.contains(SubjectNamePolicy.comparisonKey(name))
+                || themeLimit.availableNewSubjectSlots > 0
+        }
+    }
+
+    /// What the theme step needs to know about the themes already here.
+    private struct ThemeLimitSnapshot {
+        let existingNames: Set<String>
+        let existingKeys: Set<String>
+        let availableNewSubjectSlots: Int
+    }
+
+    /// Themes can exist before first-use setup is complete: presets an older
+    /// version seeded, or, in iCloud mode, themes from the user's other
+    /// devices. Only the ones finishing onboarding keeps take one of the
+    /// twelve slots here (`countsAgainstThemeLimitBeforeSelection`); a local
+    /// store reclaims an unselected preset without history, iCloud mode keeps
+    /// everything that arrived.
+    private var themeLimitSnapshot: ThemeLimitSnapshot {
+        let subjects = existingSubjects
+        let storesInCloud = persistenceMode == .cloudKit
         let builtInIDs = Set(SeedData.subjects.map(\.id))
-        let occupiedCount = existingSubjects.filter { subject in
+        let occupiedCount = subjects.filter { subject in
             OnboardingThemePolicy.countsAgainstThemeLimitBeforeSelection(
                 isBuiltInPreset: builtInIDs.contains(subject.id),
+                storesInCloud: storesInCloud,
                 hasHistory: !(subject.studySessions?.isEmpty ?? true)
                     || !(subject.achievementStones?.isEmpty ?? true)
             )
         }.count
-        return max(0, Constants.App.maximumSubjects - occupiedCount)
+        let names = Set(subjects.map(\.name))
+        return ThemeLimitSnapshot(
+            existingNames: names,
+            existingKeys: Set(names.map(SubjectNamePolicy.comparisonKey)),
+            availableNewSubjectSlots: max(0, Constants.App.maximumSubjects - occupiedCount)
+        )
     }
 }
 
 private struct ValuePage: View {
     let persistenceMode: PersistenceLaunchMode
+    let startedFreshOverRestore: Bool
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.isCloudOfflineSession) private var isCloudOffline
@@ -243,26 +324,18 @@ private struct ValuePage: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 22) {
-                OnboardingJar(pebbleCount: 7)
-                    .frame(height: jarHeight)
-                VStack(spacing: 14) {
-                    SectionEyebrow(text: "YOUR TIME, IN THE JAR")
-                    Text("集中を終えると、一粒。")
-                        .font(PomoGemTheme.brand(30))
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(PomoGemTheme.text)
-                        .accessibilityAddTraits(.isHeader)
-                    Text("テーマと時間を選んで、集中をはじめる。\n完走すると、その時間が一粒になって残ります。")
-                        .font(.body)
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Label("25・45・60・90分のタイマーは無料", systemImage: "timer")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(PomoGemTheme.amber)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("onboarding.free-timers")
+                // walk-edge-04. At accessibility sizes the promise comes
+                // first and the decorative jar shrinks, so the first screen a
+                // new user sees says what the app does instead of showing
+                // only a jar and an English eyebrow.
+                if dynamicTypeSize.isAccessibilitySize {
+                    promise
+                    OnboardingJar(pebbleCount: 7)
+                        .frame(height: jarHeight)
+                } else {
+                    OnboardingJar(pebbleCount: 7)
+                        .frame(height: jarHeight)
+                    promise
                 }
 
                 VStack(spacing: 10) {
@@ -276,23 +349,22 @@ private struct ValuePage: View {
                         title: "責めない",
                         detail: "できない日があっても、警告や罰はない"
                     )
-                    ValuePromise(
-                        symbol: "arrow.triangle.2.circlepath.icloud.fill",
-                        title: persistenceMode == .localOnly
-                            ? "このiPhoneだけに保存"
-                            : "iCloudで引き継ぐ",
-                        detail: persistenceMode == .localOnly
-                            ? "このiPhoneの専用領域へ保存"
-                            : "同じApple AccountのiPhone間で同期。保存済みの端末データはオフラインでも利用できます"
-                    )
 
-                    Text(storageDetail)
-                        .font(.caption)
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 8)
-            }
+                    // product-01 / launch-04. The storage choice was made
+                    // seconds ago and confirmed with its full caveats; this
+                    // page no longer repeats it a third time. Only an iCloud
+                    // session can have a caption, and only when it says
+                    // something this moment needs.
+                    if let storageDetail {
+                        Text(storageDetail)
+                            .font(.caption)
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 8)
+                            .accessibilityIdentifier("onboarding.storage-detail")
+                    }
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 24)
@@ -301,18 +373,72 @@ private struct ValuePage: View {
         .scrollBounceBehavior(.basedOnSize)
     }
 
-    private var jarHeight: CGFloat {
-        verticalSizeClass == .compact || dynamicTypeSize.isAccessibilitySize ? 180 : 250
+    private var promise: some View {
+        VStack(spacing: 14) {
+            // The English eyebrow is decoration; at AX sizes it would take
+            // the first lines of the first screen.
+            if !dynamicTypeSize.isAccessibilitySize {
+                SectionEyebrow(text: "YOUR TIME, IN THE JAR")
+            }
+            Text("集中を終えると、一粒。")
+                .font(PomoGemTheme.brand(30))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(PomoGemTheme.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("onboarding.value-headline")
+            Text("テーマと時間を選んで、集中をはじめる。\n完走すると、その時間が一粒になって瓶に残ります。",
+                 tableName: "Onboarding",
+                 comment: "Onboarding page 1: how a focus becomes a gem in the jar")
+                .font(.body)
+                .foregroundStyle(PomoGemTheme.muted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Label("25・45・60・90分のタイマーは無料", systemImage: "timer")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(PomoGemTheme.amber)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("onboarding.free-timers")
+        }
     }
 
-    private var storageDetail: String {
-        if persistenceMode == .localOnly {
-            return "記録はこのiPhoneに保存します。後でiCloudの記録を使う場合は、設定から端末の記録が置き換わることを確認して切り替えられます。端末の記録でiCloudを置き換える操作は現在利用できません。JSON書き出しは保管用で、アプリへ戻す機能はありません。"
-        }
+    private var jarHeight: CGFloat {
+        if dynamicTypeSize.isAccessibilitySize { return 120 }
+        return verticalSizeClass == .compact ? 180 : 250
+    }
+
+    private var storageDetail: String? {
+        guard persistenceMode == .cloudKit else { return nil }
         if isCloudOffline {
             return "現在は端末に保存済みのデータを使っています。まだ届いていないiCloudのデータは、接続回復後に確認します。"
         }
-        return "以前の瓶がある場合は、この画面を開いたままiCloudの反映を少しお待ちください。届くと自動で瓶が開きます。"
+        // launch-06. An earlier jar now gets the restore screen instead of
+        // this tutorial (see `CloudRestoreWaitingPolicy`), so the old 「この
+        // 画面を開いたまま…お待ちください」 only reached new users, or told
+        // someone who had just chosen not to wait to wait.
+        guard startedFreshOverRestore else { return nil }
+        return String(localized: "iCloudの記録は、届きしだいこのiPhoneにも表示されます。", table: "Onboarding",
+                      comment: "Onboarding page 1 after choosing to start fresh over an iCloud restore")
+    }
+}
+
+/// The one line that says which theme 「瓶をひらく」 will create. Pinned above
+/// the button normally; inside the page at accessibility sizes.
+private struct OnboardingSelectionSummary: View {
+    let selection: Set<String>
+
+    var body: some View {
+        Text(
+            selection.isEmpty
+                ? "テーマを1つ選ぶと、瓶をひらけます"
+                : "最初のテーマ：\(selection.sorted().first ?? "選択済み")"
+        )
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(selection.isEmpty ? PomoGemTheme.muted : PomoGemTheme.amber)
+        .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityIdentifier("onboarding.selection-summary")
     }
 }
 
@@ -414,6 +540,7 @@ private struct OnboardingPebble: View {
 
 private struct TrialDropPage: View {
     @Binding var dropped: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -425,7 +552,11 @@ private struct TrialDropPage: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                SectionEyebrow(text: "THE FIRST DROP")
+                // Decorative English; at AX sizes it would take the page's
+                // first lines (walk-edge-04).
+                if !dynamicTypeSize.isAccessibilitySize {
+                    SectionEyebrow(text: "THE FIRST DROP")
+                }
                 JarSpriteView(scene: scene, totalGrams: 0, pebbleCount: dropped ? 1 : 0)
                     .frame(width: 240, height: jarHeight)
                     .shadow(color: Color("subj.math").opacity(0.12), radius: 45)
@@ -467,10 +598,32 @@ private struct TrialDropPage: View {
                         .accessibilityValue(isDropping ? "落下中" : dropped ? "着地済み" : "落下前")
                     }
 
+                    if dropped {
+                        // walk-std-12. The proof moment names the promise:
+                        // what this drop stands for in a real focus. 「本番
+                        // では」 and 「この大きさ」 keep it from reading as
+                        // "real gems look like this grey pebble" or as a
+                        // contradiction of the 0g line below. The trial
+                        // gem's colour and glow belong to the gem-brilliance
+                        // branch (PebbleNode / GemArtwork), not this page.
+                        Text("本番では、25分の集中でこの大きさの一粒（250g）が瓶に残ります。",
+                             tableName: "Onboarding",
+                             comment: "Onboarding trial drop: shown after the trial gem lands")
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(PomoGemTheme.amber)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("onboarding.trial-meaning")
+                            .transition(.opacity)
+                    }
+
                     Text("任意の体験です。0g・記録には入りません。「次へ」で省略できます。")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: dropped)
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 24)
@@ -482,7 +635,10 @@ private struct TrialDropPage: View {
                 guard event.pebble.isTutorial,
                       event.pebble.id == activeDropID
                 else { return }
-                completeDrop(announcement: "一粒、着地しました。次へ進めます")
+                completeDrop(announcement: String(
+                    localized: "一粒、着地しました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます",
+                    table: "Onboarding",
+                    comment: "VoiceOver announcement when the onboarding trial gem lands"))
             }
             scene.configureBase(strata: [], bedrock: nil, showsMonthLabels: false)
         }
@@ -517,7 +673,11 @@ private struct TrialDropPage: View {
         activeDropID = pebble.id
         isDropping = true
         scene.restore(pebbles: [])
-        scene.drop(pebble)
+        // walk-std-12. Enter through the neck and fall the jar's full
+        // height, the same path as Home's completion drop, instead of
+        // appearing near the floor and landing before anyone notices. The
+        // 2.5 s recovery below still covers the longer fall (under 1 s).
+        scene.dropFromAbove(pebble)
     }
 
     private func completeWithoutAnimation() {
@@ -525,7 +685,10 @@ private struct TrialDropPage: View {
         let pebble = tutorialPebble()
         activeDropID = pebble.id
         scene.restore(pebbles: [pebble])
-        completeDrop(announcement: "演出を省略して一粒を積みました。次へ進めます")
+        completeDrop(announcement: String(
+            localized: "演出を省略して一粒を積みました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます",
+            table: "Onboarding",
+            comment: "VoiceOver announcement when the onboarding trial gem is placed without animation"))
     }
 
     private func completeDrop(announcement: String) {
@@ -561,8 +724,8 @@ private struct TrialDropPage: View {
     }
 
     private var jarAccessibilityLabel: String {
-        if dropped { return "透明な一粒が瓶に積もりました" }
-        if isDropping { return "透明な一粒が瓶の中を落下しています" }
+        if dropped { return "ためしの一粒が瓶に積もりました" }
+        if isDropping { return "ためしの一粒が瓶の中を落下しています" }
         return "空の瓶"
     }
 
@@ -575,11 +738,17 @@ private struct TrialDropPage: View {
 
 private struct SubjectSetupPage: View {
     @Binding var selectedSubjects: Set<String>
+    @Binding var customSubjectName: String
     @Binding var wantsNotifications: Bool
+    /// What 「瓶をひらく」 will create. Chips and the chosen-theme rows show
+    /// this, so a valid typed name visibly replaces an earlier chip.
+    let effectiveSelection: Set<String>
+    /// At accessibility sizes the pinned footer drops this summary, so the
+    /// page shows it under its heading instead.
+    let showsSelectionSummary: Bool
     let existingSubjectNames: Set<String>
     let availableNewSubjectSlots: Int
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var customSubjectName = ""
     @State private var customSubjectFeedback: String?
     @FocusState private var customSubjectFocused: Bool
 
@@ -587,8 +756,9 @@ private struct SubjectSetupPage: View {
         Set(SubjectSuggestionCatalog.presets.map(\.name))
     }
 
+    /// Committed custom names that are still what the button will use.
     private var customSubjects: [String] {
-        selectedSubjects.subtracting(presetNames).sorted()
+        selectedSubjects.intersection(effectiveSelection).subtracting(presetNames).sorted()
     }
 
     private var existingSubjectKeys: Set<String> {
@@ -644,7 +814,9 @@ private struct SubjectSetupPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
                 VStack(alignment: .leading, spacing: 10) {
-                    SectionEyebrow(text: "YOUR BOTTLE")
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        SectionEyebrow(text: "YOUR BOTTLE")
+                    }
                     Text("最初のテーマを選ぶ")
                         .font(PomoGemTheme.brand(30))
                     Text(SubjectSuggestionCatalog.setupDetail)
@@ -655,6 +827,10 @@ private struct SubjectSetupPage: View {
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
+                    if showsSelectionSummary {
+                        OnboardingSelectionSummary(selection: effectiveSelection)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -669,7 +845,7 @@ private struct SubjectSetupPage: View {
 
                 LazyVGrid(columns: suggestionColumns, spacing: 10) {
                     ForEach(SubjectSuggestionCatalog.presets) { preset in
-                        let isSelected = selectedSubjects.contains(preset.name)
+                        let isSelected = effectiveSelection.contains(preset.name)
                         Button {
                             choosePreset(preset)
                         } label: {
@@ -703,10 +879,8 @@ private struct SubjectSetupPage: View {
                     Text("自由に入力")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.muted)
-                    Text("新しく追加できるのはあと\(remainingNewSubjectSlots)件です（合計最大\(Constants.App.maximumSubjects)件）。")
-                        .font(.caption)
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // launch-07: no quota line for a one-theme step. The
+                    // message below still appears when no slot is left.
                     HStack(spacing: 8) {
                         TextField(SubjectSuggestionCatalog.inputPlaceholder, text: $customSubjectName)
                             .focused($customSubjectFocused)
@@ -817,7 +991,7 @@ private struct SubjectSetupPage: View {
                     .padding(.bottom, 10)
             }
             .padding(.horizontal, 24)
-            .padding(.top, 36)
+            .padding(.top, dynamicTypeSize.isAccessibilitySize ? 16 : 36)
         }
         .scrollBounceBehavior(.basedOnSize)
         .scrollDismissesKeyboard(.interactively)

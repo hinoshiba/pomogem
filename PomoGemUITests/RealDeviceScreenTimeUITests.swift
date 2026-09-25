@@ -2,8 +2,8 @@ import XCTest
 
 /// The app's free learning ceiling (`ScreenTimePolicy.freeLearningApplicationLimit`).
 /// The UI test target does not link the app module, so it is restated here; the
-/// on-screen 「無料では勉強アプリを5つまで選べます」 string the limits phase asserts
-/// is what keeps the two honest.
+/// on-screen 「無料で記録できる勉強アプリは5つまでです」 notice the limits phase
+/// asserts is what keeps the two honest.
 private let screenTimeFreeLearningLimit = 5
 
 /// Opt-in audit of the shipping Screen Time surface on a real, explicitly
@@ -112,7 +112,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         var identifier: String {
             self == .learning ? "screen-time.learning-apps" : "screen-time.distraction-apps"
         }
-        var title: String { self == .learning ? "勉強のgem" : "黒いgem" }
+        var title: String { self == .learning ? "勉強アプリの粒" : "黒い石" }
     }
 
     private enum AuditFailure: Error { case stopped }
@@ -517,15 +517,18 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         }
 
         let overLimitMessage = app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "無料では勉強アプリを5つまで選べます")
+            NSPredicate(format: "label CONTAINS %@", "無料で記録できる勉強アプリは5つまで")
         ).firstMatch
         try require(overLimitMessage.waitForExistence(timeout: 5),
-                    "Six learning apps must raise 「無料では勉強アプリを5つまで選べます…」 in the picker.",
+                    "Six learning apps must raise 「無料で記録できる勉強アプリは5つまでです…」 in the picker.",
                     evidence: "limits-message-missing")
-        try require(apply.exists && !apply.isEnabled,
-                    "反映 (screen-time.picker-apply) must be disabled while the free learning ceiling is exceeded.",
-                    evidence: "limits-apply-enabled")
-        note("LIMITS PASS: 6 learning apps ⇒ 反映 disabled + free-tier message shown.")
+        // screentime-02: the ceiling no longer blocks 反映. The paywall cannot
+        // appear over this sheet, so blocking left only キャンセル and lost every
+        // pick; the settings screen keeps 保存 off over the ceiling instead.
+        try require(apply.exists && apply.isEnabled,
+                    "反映 (screen-time.picker-apply) must stay enabled over the free learning ceiling so the picks reach the settings screen.",
+                    evidence: "limits-apply-disabled")
+        note("LIMITS PASS: 6 learning apps ⇒ free-tier notice shown, 反映 still available.")
 
         // Back down to the ceiling: the picker must become applicable again.
         var removed = false
@@ -541,7 +544,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                 predicate: NSPredicate(format: "enabled == true"), object: apply
             )
             try require(XCTWaiter.wait(for: [enabled], timeout: 8) == .completed,
-                        "Reducing the learning selection to five apps must re-enable 反映.",
+                        "反映 must stay available with five apps.",
                         evidence: "limits-apply-still-disabled")
             try require(!overLimitMessage.exists,
                         "The free-tier message must disappear once five apps remain.",
@@ -579,7 +582,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             let tickedConflict = tickApplication(app, named: conflicting)
             if tickedConflict {
                 let conflictMessage = app.staticTexts.matching(
-                    NSPredicate(format: "label CONTAINS %@", "同じアプリを勉強のgemと黒いgemの両方には登録できません")
+                    NSPredicate(format: "label CONTAINS %@", "同じアプリを勉強アプリと控えたいアプリの両方には登録できません")
                 ).firstMatch
                 try require(conflictMessage.waitForExistence(timeout: 5),
                             "Selecting \(conflicting) — already in the black-gem lane — must raise the cross-lane conflict message.",
@@ -752,9 +755,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
 
         // --- duplicate save: two taps in rapid succession ---------------------
         _ = reveal(save)
-        let toast = app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "スクリーンタイムの設定を保存しました")
-        ).firstMatch
+        let toast = saveToast(app)
         try require(save.exists && save.isEnabled,
                     "保存 must be re-enabled after a completed registration.",
                     evidence: "save-not-reenabled")
@@ -783,13 +784,13 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "A duplicate 保存 must not raise a registration error: \(alertMessage(app)).",
                     evidence: "save-duplicate-error-alert")
         try require(toastEdges <= 1,
-                    "A duplicate 保存 must show at most one 「スクリーンタイムの設定を保存しました」 toast; \(toastEdges) were observed.",
+                    "A duplicate 保存 must show at most one 「保存しました…」 toast; \(toastEdges) were observed.",
                     evidence: "save-duplicate-toasts")
         // `toastEdges == 0` satisfies the bound vacuously, so the duplicate
         // claim needs a positive observation behind it: either the second tap
         // was refused outright, or exactly one save was acknowledged.
         try require(!secondTapWasOffered || toastEdges == 1,
-                    "Neither duplicate-prevention signal was observed: the second 保存 tap was delivered and no 「スクリーンタイムの設定を保存しました」 toast was seen, so nothing here proves one save ran.",
+                    "Neither duplicate-prevention signal was observed: the second 保存 tap was delivered and no 「保存しました…」 toast was seen, so nothing here proves one save ran.",
                     evidence: "save-duplicate-unproved")
 
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: updating)
@@ -799,7 +800,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         scrollSettingsToTop(app)
         let monitoring = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "自動記録中")).firstMatch
         try require(monitoring.waitForExistence(timeout: 30),
-                    "After a successful save the status must read 自動記録中 (or 黒いgemを自動記録中); the screen shows \(final).",
+                    "After a successful save the status must read 自動記録中 (or 控えたいアプリだけ自動記録中); the screen shows \(final).",
                     evidence: "save-not-monitoring")
         note("SAVE: final monitoring status = \(monitoring.label)")
         try require(!app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "自動記録は停止中です")).firstMatch.exists,
@@ -1015,7 +1016,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
                     "After the timer is cancelled the learning lane must re-register and the status must return to 自動記録中; the screen shows \(after).",
                     evidence: "timer-pause-not-resumed")
         try require(!app.staticTexts.matching(
-                        NSPredicate(format: "label CONTAINS %@", "タイマーの計測中は、勉強アプリの自動記録を休止しています")
+                        NSPredicate(format: "label CONTAINS %@", "タイマーの計測中は勉強アプリの自動記録を休止し")
                     ).firstMatch.exists,
                     "The timer-pause notice must disappear once no timer is running.",
                     evidence: "timer-pause-notice-sticky")
@@ -1026,7 +1027,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
 
         if reachable.isEmpty {
             try skipWithEvidence("timer-pause-paused-state-unreachable",
-                                 "PASSED the post-timer half (自動記録中 restored, no monitoring error) but the paused half is UNVERIFIED: FocusView is an interactive-dismiss-disabled fullScreenCover with no route back to Home, so 「タイマーの計測中は、勉強アプリの自動記録を休止しています。」 and 「黒いgemを自動記録中」 cannot be observed from XCUITest while a timer runs. Drive that half through iPhone Mirroring or by hand.")
+                                 "PASSED the post-timer half (自動記録中 restored, no monitoring error) but the paused half is UNVERIFIED: FocusView is an interactive-dismiss-disabled fullScreenCover with no route back to Home, so 「タイマーの計測中は勉強アプリの自動記録を休止し、終了後に自動で再開します。」 and 「控えたいアプリだけ自動記録中」 cannot be observed from XCUITest while a timer runs. Drive that half through iPhone Mirroring or by hand.")
         }
         note("TIMER-PAUSE COMPLETE.")
     }
@@ -1061,7 +1062,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         for round in 1...2 {
             let relaunched = launchRealApplication()
             try reachHome(relaunched)
-            try require(!relaunched.alerts["Screen Timeの記録を保留しています"].exists,
+            try require(!relaunched.alerts["スクリーンタイムの記録を保留しています"].exists,
                         "Relaunch \(round) must not raise the pending-import alert: \(alertMessage(relaunched)).",
                         evidence: "relaunch-\(round)-import-alert")
             let home = readHomeTotals(relaunched, label: "relaunch-\(round)-home")
@@ -1460,6 +1461,15 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         var guardCount = 0
         while guardCount < 6, !app.buttons["メニュー"].exists {
             guardCount += 1
+            // Unsaved Screen Time edits make 戻る ask first (screentime-02).
+            // Leaving is what every phase means here, so answer it.
+            let discard = app.buttons["変更を破棄して戻る"]
+            if discard.exists {
+                note("RETURN: unsaved Screen Time edits were discarded on the way back.")
+                discard.tap()
+                pause(1)
+                continue
+            }
             let bar = app.navigationBars.allElementsBoundByIndex.last ?? app.navigationBars.firstMatch
             let back = bar.buttons.firstMatch
             if back.exists && back.isHittable {
@@ -1514,8 +1524,8 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         // there reports every one of them as absent, which reads exactly like
         // "the app shows no status at all". Go back up first.
         scrollSettingsToTop(app)
-        for text in ["自動記録中", "黒いgemを自動記録中", "自動記録は停止中です。",
-                     "タイマーの計測中は、勉強アプリの自動記録を休止しています。",
+        for text in ["自動記録中", "控えたいアプリだけ自動記録中", "自動記録は停止中です。",
+                     "タイマーの計測中は勉強アプリの自動記録を休止し",
                      "スクリーンタイムの許可が解除されました"] {
             let element = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
             note("[\(label)] status text \"\(text)\" present=\(element.exists)")
@@ -1552,7 +1562,7 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
             "記録するアプリを1つ以上選んでください。",
             "勉強時間を記録するテーマを選んでください。",
             "カテゴリやWebサイトは選べません",
-            "同じアプリを勉強のgemと黒いgemの両方には登録できません",
+            "同じアプリを勉強アプリと控えたいアプリの両方には登録できません",
             "無料では勉強アプリを5つまで選べます"
         ]
         let found = candidates.filter {
@@ -1712,11 +1722,20 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         note("TOGGLE: screen-time.enabled set to \(wanted).")
     }
 
+    /// The toast a completed save shows. Its wording states the result
+    /// (「保存しました。自動記録中です」, 「保存しました」 or
+    /// 「保存しました。自動記録はオフです」) and its combined label may start with
+    /// the symbol's name, so match the shared toast identifier and the common
+    /// 「保存しました」 rather than one exact sentence.
+    private func saveToast(_ app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier == %@ AND label CONTAINS %@", "app.toast", "保存しました"
+        )).firstMatch
+    }
+
     private func waitForToastToClear(_ app: XCUIApplication) throws {
         try guardAgainstSystemAlert("wait-toast")
-        let toast = app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "スクリーンタイムの設定を保存しました")
-        ).firstMatch
+        let toast = saveToast(app)
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: toast)
         let cleared = XCTWaiter.wait(for: [gone], timeout: 30) == .completed
         try guardAgainstSystemAlert("wait-toast-settled")

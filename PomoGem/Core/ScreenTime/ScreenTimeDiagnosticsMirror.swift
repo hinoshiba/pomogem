@@ -82,12 +82,16 @@ final class ScreenTimeDiagnosticsMirror {
 
         var enabled: Bool
         var contextIsActive: Bool
+        var learningPausedByTimer: Bool
+        var learningPausedUntil: Date?
         var counters: ScreenTimeCallbackCounters?
         var activeRuns: [Run]
 
         init(_ state: ScreenTimeState) {
             enabled = state.configuration.enabled
             contextIsActive = state.contextIsActive
+            learningPausedByTimer = state.learningPausedByTimer
+            learningPausedUntil = state.learningPausedUntil
             counters = state.callbackCounters
             activeRuns = state.runs.filter(\.active).map {
                 Run(lane: $0.lane, dayStart: $0.dayStart, dayEnd: $0.dayEnd,
@@ -164,7 +168,7 @@ final class ScreenTimeDiagnosticsMirror {
 struct ScreenTimeDiagnosticsReport: Codable, Equatable {
     /// Bumped when a field is added, renamed or given a new meaning, so a file
     /// pulled off a phone can be read against the right description.
-    static let schemaVersion = 2
+    static let schemaVersion = 3
 
     /// What one lane's registration looks like in the ledger this pass read.
     struct LaneSchedule: Codable, Equatable {
@@ -241,6 +245,14 @@ struct ScreenTimeDiagnosticsReport: Codable, Equatable {
     var writtenAt: String?
     var configurationEnabled: Bool
     var contextIsActive: Bool
+    /// The focus timer's hold on the learning lane as the ledger stores it
+    /// (schema 3). `learningPausedUntilOffsetSec` is measured from `writtenAt`
+    /// to the hold's end — positive while it lies ahead — and is absent for a
+    /// hold with no end (a paused timer) or no hold. A learning run registered
+    /// while the hold lasts starts its interval at that end, so its
+    /// `runStartedAtOffsetSec` lands on the same instant.
+    var learningPausedByTimer: Bool
+    var learningPausedUntilOffsetSec: Int?
     var learning: LaneSchedule
     var distraction: LaneSchedule
     /// Absent when the ledger has never counted a callback.
@@ -251,6 +263,10 @@ struct ScreenTimeDiagnosticsReport: Codable, Equatable {
         writtenAt = Self.instant(now)
         configurationEnabled = state.configuration.enabled
         contextIsActive = state.contextIsActive
+        learningPausedByTimer = state.learningPausedByTimer
+        learningPausedUntilOffsetSec = state.learningPausedByTimer
+            ? state.learningPausedUntil.map { ScreenTimeDiagnosticSeconds.between($0, now) }
+            : nil
         learning = Self.laneSchedule(for: .learning, in: state, now: now)
         distraction = Self.laneSchedule(for: .distraction, in: state, now: now)
         counters = state.callbackCounters.map { Self.counters($0, now: now) }

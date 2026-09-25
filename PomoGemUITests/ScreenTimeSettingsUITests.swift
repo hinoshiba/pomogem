@@ -58,7 +58,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         let total = app.staticTexts["screen-time.negative-total"]
         XCTAssertTrue(reveal(total, upwards: false))
         let originalTotal = total.label
-        XCTAssertTrue(originalTotal.contains("黒いgem"))
+        XCTAssertTrue(originalTotal.contains("黒い石"))
         XCTAssertTrue(originalTotal.contains("0"))
         XCTAssertTrue(reveal(text(containing: "JSON書き出しや保存先の切り替えでは引き継ぎません")))
         assertResetConfirmationCanBeCancelled()
@@ -215,6 +215,238 @@ final class ScreenTimeSettingsUITests: XCTestCase {
                           "A save from the re-seeded draft must not change the ledger: \(ledger.label)")
         }
         attach("Screen Time — save preserves the stored configuration")
+
+        // screentime-08: the black stones alone can be cleared, keeping the
+        // app choices and recording exactly as they were.
+        let clear = app.buttons["screen-time.clear-black-stones"]
+        XCTAssertTrue(reveal(clear))
+        clear.tap()
+        let confirm = app.alerts["黒い石を片付けますか？"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 6))
+        attach("Screen Time — clear black stones confirmation")
+        confirm.buttons["片付ける"].tap()
+        XCTAssertTrue(reveal(total))
+        let cleared = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "0個ぶん"), object: total)
+        XCTAssertEqual(XCTWaiter.wait(for: [cleared], timeout: 8), .completed, "total was \(total.label)")
+        XCTAssertFalse(clear.exists, "Nothing left to clear")
+        for expected in ["learning=2", "distraction=1", "enabled=1", "theme=seed", "matchesSeed=true"] {
+            XCTAssertTrue(ledger.label.contains(expected),
+                          "Clearing black stones must keep the setup: \(ledger.label)")
+        }
+        attach("Screen Time — black stones cleared, setup kept")
+    }
+
+    /// screentime-02 through the same DEBUG fixture, as a bound owner who has
+    /// set nothing up yet. Picking apps on a first setup switches recording on
+    /// (off by default, a save that kept it off recorded nothing), going back
+    /// with unsaved edits asks first instead of dropping picks only Apple's
+    /// picker can rebuild, and the save toast states the resulting status.
+    func testFirstSetupSwitchesRecordingOnAndBackAsksBeforeDroppingEdits() {
+        app.launchEnvironment["POMOGEM_UI_TEST_SCREEN_TIME"] = "first-setup"
+        app.launch()
+        let ledger = app.staticTexts["screen-time.fixture-ledger"]
+        XCTAssertTrue(ledger.waitForExistence(timeout: 20))
+        expectLedger(ledger, contains: "boundToContext=true", timeout: 20)
+        XCTAssertTrue(ledger.label.contains("enabled=0"), ledger.label)
+        XCTAssertTrue(ledger.label.contains("learning=0"), ledger.label)
+
+        openFixtureSettings()
+        let enabled = app.switches["screen-time.enabled"]
+        XCTAssertTrue(reveal(enabled))
+        XCTAssertEqual(enabled.value as? String, "0")
+        XCTAssertFalse(app.buttons["screen-time.back"].exists, "Nothing to lose yet: the system back button stays")
+
+        let learning = app.buttons["screen-time.learning-apps"]
+        XCTAssertTrue(reveal(learning))
+        learning.tap()
+        // The fixture's two apps leave the sheet through 反映's own path the
+        // moment it is tapped: Apple's picker loads seconds late on a cold
+        // Simulator and drops any tokens still sitting in the sheet.
+        let pick = app.buttons["screen-time.fixture-pick-apps"]
+        XCTAssertTrue(pick.waitForExistence(timeout: 12))
+        XCTAssertTrue(app.buttons["screen-time.picker-apply"].exists)
+        attach("Screen Time — app picker open")
+        pick.tap()
+        let closed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: pick)
+        XCTAssertEqual(XCTWaiter.wait(for: [closed], timeout: 10), .completed, "The pick must close the sheet")
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 6))
+        XCTAssertTrue(reveal(learning))
+        XCTAssertEqual(learning.value as? String, "2アプリ選択中", "Both picked apps must reach the page")
+
+        XCTAssertTrue(reveal(enabled))
+        XCTAssertEqual(enabled.value as? String, "1", "A first pick must switch recording on")
+        let theme = app.descendants(matching: .any)["screen-time.theme"].firstMatch
+        XCTAssertTrue(reveal(theme))
+        XCTAssertTrue("\(theme.value ?? "")\(theme.label)".contains("スクリーンタイム検証テーマ"),
+                      "The only theme becomes the destination: \(theme.debugDescription)")
+        XCTAssertTrue(ledger.label.contains("enabled=0"), "Nothing is saved before 保存: \(ledger.label)")
+        attach("Screen Time — first pick switched recording on")
+
+        // Unsaved: back asks, and staying keeps everything.
+        let back = app.buttons["screen-time.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 6))
+        back.tap()
+        XCTAssertTrue(app.buttons["保存して戻る"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.buttons["変更を破棄して戻る"].exists)
+        attach("Screen Time — unsaved changes question")
+        keepEditing()
+        XCTAssertFalse(app.buttons["変更を破棄して戻る"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 4))
+        XCTAssertTrue(reveal(enabled))
+        XCTAssertEqual(enabled.value as? String, "1")
+
+        // 保存 applies it and says what it switched on. The toast lasts three
+        // seconds, so look for it first: every ledger query before it can
+        // take long enough on a loaded machine to miss it entirely.
+        let save = app.buttons["screen-time.save"]
+        XCTAssertTrue(save.isEnabled)
+        let toast = text(containing: "保存しました。自動記録中です")
+        save.tap()
+        XCTAssertTrue(toast.waitForExistence(timeout: 20), "The toast must state the resulting status")
+        attach("Screen Time — saved with recording on")
+        expectLedger(ledger, contains: "enabled=1", timeout: 20)
+        XCTAssertTrue(ledger.label.contains("learning=2"), ledger.label)
+        XCTAssertFalse(app.buttons["screen-time.back"].waitForExistence(timeout: 2))
+
+        // Nothing unsaved: the ordinary back button leaves at once.
+        app.navigationBars["スクリーンタイム"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["fixture-root"].waitForExistence(timeout: 6))
+
+        // Discarding really discards.
+        openFixtureSettings()
+        XCTAssertTrue(reveal(enabled))
+        flip(enabled)
+        XCTAssertEqual(enabled.value as? String, "0")
+        XCTAssertTrue(back.waitForExistence(timeout: 6))
+        back.tap()
+        let discard = app.buttons["変更を破棄して戻る"]
+        XCTAssertTrue(discard.waitForExistence(timeout: 6))
+        discard.tap()
+        XCTAssertTrue(app.navigationBars["fixture-root"].waitForExistence(timeout: 6))
+        XCTAssertTrue(ledger.label.contains("enabled=1"), "A discarded edit must not reach the ledger: \(ledger.label)")
+    }
+
+    /// screentime-10: Home's menu reaches the Screen Time page directly, next
+    /// to the other two ways to add to the jar, and back returns to Home.
+    func testTheHomeMenuOpensScreenTimeDirectly() {
+        app.launch()
+        let entry = openHomeMenuEntry()
+        attach("Home menu — Screen Time entry")
+        entry.tap()
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["screen-time.authorization-status"].waitForExistence(timeout: 6))
+        attach("Screen Time opened from the Home menu")
+        app.navigationBars["スクリーンタイム"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8), "Back returns to Home")
+    }
+
+    /// critic-02: a refused request names its own fix, and the shortcut says
+    /// where it lands: the only public link opens PomoGem's own page in the
+    /// Settings app, below the first screen the message starts from. The
+    /// fixture stubs Family Controls to refuse for want of a passcode; the
+    /// Simulator cannot produce a refusal itself.
+    func testARefusedAccessRequestSaysWhereTheSettingsShortcutLands() {
+        checkRefusedAccessRequest(accessibility5: false)
+    }
+
+    func testARefusedAccessRequestStaysReadableAtAccessibilitySize() {
+        checkRefusedAccessRequest(accessibility5: true)
+    }
+
+    private func checkRefusedAccessRequest(accessibility5: Bool) {
+        if accessibility5 { app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1" }
+        app.launchEnvironment["POMOGEM_UI_TEST_SCREEN_TIME"] = "authorization-refused"
+        app.launch()
+        let ledger = app.staticTexts["screen-time.fixture-ledger"]
+        XCTAssertTrue(ledger.waitForExistence(timeout: 12))
+        expectLedger(ledger, contains: "boundToContext=true", timeout: 20)
+        let authorize = app.buttons["screen-time.authorize"]
+        XCTAssertTrue(revealAboveFixtureBar(authorize))
+        authorize.tap()
+        let failure = app.staticTexts["screen-time.authorization-failure"]
+        XCTAssertTrue(failure.waitForExistence(timeout: 8))
+        XCTAssertTrue(failure.label.contains("設定アプリの最初の画面にある「Face IDとパスコード」"), failure.label)
+        let open = app.buttons["screen-time.open-settings-app"]
+        XCTAssertTrue(revealAboveFixtureBar(open))
+        XCTAssertGreaterThanOrEqual(open.frame.height, 43.5)
+        let route = app.staticTexts["screen-time.open-settings-app-route"]
+        XCTAssertTrue(revealAboveFixtureBar(route))
+        XCTAssertTrue(route.label.contains("ポモジェムの設定ページ"), route.label)
+        XCTAssertTrue(route.label.contains("設定の最初の画面まで戻って"), route.label)
+        attach(accessibility5
+               ? "Screen Time AX5 — refused access and where the Settings shortcut lands"
+               : "Screen Time — refused access and where the Settings shortcut lands")
+    }
+
+    /// `reveal` treats anything above the window's bottom inset as on screen,
+    /// but the fixture's ledger bar covers the bottom of the page; lift an
+    /// element that is only hidden under it.
+    private func revealAboveFixtureBar(_ element: XCUIElement) -> Bool {
+        for _ in 0..<6 {
+            if reveal(element) { return true }
+            let start = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -120)))
+        }
+        return false
+    }
+
+    /// The same row at the largest text size: reachable, a full-size target,
+    /// and still saying which apps count.
+    func testTheHomeMenuEntryStaysReachableAtAccessibilitySize() {
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        app.launch()
+        let entry = openHomeMenuEntry()
+        XCTAssertGreaterThanOrEqual(entry.frame.height, 43.5)
+        attach("Home menu AX5 — Screen Time entry")
+        entry.tap()
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 8))
+    }
+
+    private func openHomeMenuEntry() -> XCUIElement {
+        let menu = app.buttons["メニュー"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 12))
+        menu.tap()
+        let entry = app.buttons["home.menu.screen-time"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 8))
+        XCTAssertTrue(reveal(entry))
+        XCTAssertTrue(entry.label.contains("アプリの時間を積む"), entry.label)
+        XCTAssertTrue(entry.label.contains("勉強アプリ10分ごとに1粒"), "The detail names the apps that count: \(entry.label)")
+        return entry
+    }
+
+    /// `screen-time.enabled` is the whole row; a tap on its centre lands on
+    /// the label and changes nothing, so aim at the switch itself.
+    private func flip(_ toggle: XCUIElement) {
+        let inner = toggle.switches.firstMatch
+        if inner.exists && inner.isHittable {
+            inner.tap()
+        } else {
+            toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+        }
+    }
+
+    /// iOS 26 shows the question as a popover on the back button, whose
+    /// cancel is a tap outside rather than a button; older layouts show one.
+    private func keepEditing() {
+        let cancel = app.buttons["編集を続ける"]
+        if cancel.exists && cancel.isHittable {
+            cancel.tap()
+            return
+        }
+        let outside = app.otherElements["PopoverDismissRegion"]
+        if outside.exists {
+            outside.tap()
+        } else {
+            app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)).tap()
+        }
+    }
+
+    private func openFixtureSettings() {
+        let open = app.descendants(matching: .any)["screen-time.fixture-open"].firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout: 10))
+        open.tap()
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 8))
     }
 
     private func expectLedger(_ ledger: XCUIElement, contains fragment: String, timeout: TimeInterval) {
@@ -264,7 +496,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         let alert = app.alerts["スクリーンタイムの内容をリセット"]
         XCTAssertTrue(alert.waitForExistence(timeout: 4))
         XCTAssertTrue(alert.staticTexts.matching(NSPredicate(
-            format: "label CONTAINS %@", "保存済みの勉強時間と通常gemは残ります"
+            format: "label CONTAINS %@", "保存済みの勉強時間と粒は残ります"
         )).firstMatch.exists)
         XCTAssertTrue(alert.buttons["リセット"].exists)
         attach("Screen Time — explicit local reset confirmation")
@@ -305,7 +537,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
                 let top = app.navigationBars.allElementsBoundByIndex
                     .filter(\.isHittable).map(\.frame.maxY).max() ?? 0
                 let bottom = app.windows.firstMatch.frame.maxY - 36
-                let frame = element.frame
+                let frame = settledFrame(of: element)
                 if frame.height > 0 && frame.width > 0 {
                     if frame.minY >= top && frame.maxY <= bottom {
                         // Disabled controls still need to be visibly explained;
@@ -338,6 +570,20 @@ final class ScreenTimeSettingsUITests: XCTestCase {
             }
         }
         return element.exists && element.isHittable
+    }
+
+    /// A `.fast` swipe can leave the list coasting after XCUITest's idle wait
+    /// gives up, so one frame read may pass the viewport check while the row
+    /// is still sliding: `isHittable` then fails the test outright with
+    /// "Activation point invalid". Two equal reads mean the list has stopped.
+    private func settledFrame(of element: XCUIElement) -> CGRect {
+        var frame = element.frame
+        for _ in 0..<10 {
+            let next = element.frame
+            if next == frame { return next }
+            frame = next
+        }
+        return frame
     }
 
     private func attach(_ name: String) {

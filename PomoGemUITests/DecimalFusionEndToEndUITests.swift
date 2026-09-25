@@ -96,7 +96,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
                 format: "label CONTAINS %@ AND label CONTAINS %@ AND label CONTAINS %@ AND label CONTAINS %@",
                 "2,500グラム",
                 "10粒",
-                "実測10回",
+                "うち実測10粒",
                 "まとまり粒1個"
             )
         ).firstMatch

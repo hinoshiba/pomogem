@@ -154,10 +154,75 @@ enum OnboardingThemePolicy {
         !isSelected && !hasHistory
     }
 
+    enum BuiltInPresetChange: Equatable {
+        /// Tombstone it: a sticky, synced deletion.
+        case retire
+        case archive
+        case unarchive
+        case keep
+    }
+
+    /// What finishing onboarding does to one built-in preset row that already
+    /// exists. launch-06: in iCloud mode such a row can only have arrived from
+    /// the user's other devices (a cloud cold launch never seeds presets), and
+    /// its sessions may simply not have been imported yet. Tombstoning or
+    /// archiving it would sync that decision back to every device, so iCloud
+    /// mode leaves unselected presets exactly as they arrived. Local stores
+    /// keep the original cleanup of rows an older version seeded.
+    static func builtInPresetChange(
+        isSelected: Bool,
+        isArchived: Bool,
+        storesInCloud: Bool,
+        hasHistory: () throws -> Bool
+    ) rethrows -> BuiltInPresetChange {
+        if isSelected { return isArchived ? .unarchive : .keep }
+        if storesInCloud { return .keep }
+        if try shouldRetireBuiltInPreset(isSelected: false, hasHistory: hasHistory()) {
+            return .retire
+        }
+        return isArchived ? .keep : .archive
+    }
+
+    /// Whether a theme that already exists takes one of the twelve slots
+    /// while the user picks a first theme. It must match what finishing
+    /// onboarding keeps (`builtInPresetChange`), or the picker offers a slot
+    /// that completion then does not have and the chosen theme is silently
+    /// skipped. A local store reclaims an unselected built-in preset without
+    /// history, so that one is free; iCloud mode keeps every theme that
+    /// arrived (launch-06), so every live theme counts there. `hasHistory`
+    /// is read only for a local built-in preset, the one case that needs it.
     static func countsAgainstThemeLimitBeforeSelection(
         isBuiltInPreset: Bool,
-        hasHistory: Bool
+        storesInCloud: Bool,
+        hasHistory: @autoclosure () -> Bool
     ) -> Bool {
-        !isBuiltInPreset || hasHistory
+        if storesInCloud || !isBuiltInPreset { return true }
+        return hasHistory()
+    }
+
+    /// launch-07. The one theme 「瓶をひらく」 will create. A valid name still
+    /// in the text field is the user's latest intent, so it wins over a chip
+    /// tapped earlier: before this, the typed name was silently dropped
+    /// unless 「選択」 or Return committed it first, and the button stayed
+    /// disabled while a valid name sat in the field. A name matching a
+    /// suggestion resolves to that suggestion's own spelling, and a name the
+    /// theme limit cannot accept leaves the committed selection in place.
+    static func effectiveSelection(
+        selected: Set<String>,
+        pending: String,
+        canChoose: (String) -> Bool
+    ) -> Set<String> {
+        guard SubjectNamePolicy.validationError(for: pending) == nil,
+              let name = SubjectNamePolicy.validated(pending)
+        else { return selected }
+        let resolved = SubjectSuggestionCatalog.preset(named: name)?.name ?? name
+        let key = SubjectNamePolicy.comparisonKey(resolved)
+        if let committed = selected.first(where: {
+            SubjectNamePolicy.comparisonKey($0) == key
+        }) {
+            return [committed]
+        }
+        guard canChoose(resolved) else { return selected }
+        return [resolved]
     }
 }

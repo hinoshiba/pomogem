@@ -126,7 +126,7 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
         let runID = try XCTUnwrap(store.snapshot().runs.first?.id)
 
-        await controller.reconcile(isPro: false, timerRunning: false)
+        await controller.reconcile(isPro: false, learningPause: .none)
         try await controller.waitForPendingOperations()
         var state = try store.snapshot()
         XCTAssertTrue(state.configuration.enabled)
@@ -134,7 +134,7 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertTrue(state.runs.contains { $0.id == runID && $0.active })
 
         status = .denied
-        await controller.reconcile(isPro: false, timerRunning: false)
+        await controller.reconcile(isPro: false, learningPause: .none)
         try await controller.waitForPendingOperations()
         state = try store.snapshot()
         XCTAssertFalse(state.configuration.enabled)
@@ -170,6 +170,13 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertEqual(controller.monitoringError, state.monitoringError)
         XCTAssertTrue(driver.events.contains("stop"),
                       "Registrations carrying voided tokens must not stay armed")
+        // Recording is now off, and the Settings row still says it stopped.
+        XCTAssertEqual(ScreenTimeRowStatus(
+            isBound: controller.isBoundToContext, enabled: controller.configuration.enabled,
+            isMonitoring: controller.isMonitoring, monitoringError: controller.monitoringError,
+            learningStoppedByFreeLimit: controller.learningStoppedByFreeLimit,
+            themeRemoved: controller.learningThemeWasRemoved
+        ), .needsAttention)
 
         // The cleared configuration is not re-invalidated on every later pass.
         await controller.invalidateAuthorizationIfRevoked()
@@ -433,15 +440,15 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         let configuration = controller.configuration
         let save = Task { try await controller.save(configuration: configuration, isPro: false) }
         await fulfillment(of: [entered], timeout: 5)
-        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: false, timerRunning: true)
-        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: false, timerRunning: false)
+        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: false, learningPause: .indefinite)
+        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: false, learningPause: .none)
         XCTAssertFalse(try store.snapshot().learningPausedByTimer)
         XCTAssertFalse(try store.snapshot().runs.contains { $0.id == runID && $0.active })
         try store.record(runID: runID, threshold: 2, now: start.addingTimeInterval(1_201))
         XCTAssertEqual(try store.pendingLearningReceipts(), receipts)
         release.signal()
         try await save.value
-        await controller.reconcile(isPro: false, timerRunning: false)
+        await controller.reconcile(isPro: false, learningPause: .none)
         try await controller.waitForPendingOperations()
         XCTAssertFalse(try store.snapshot().runs.contains { $0.id == runID && $0.active })
     }
@@ -536,6 +543,53 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertTrue(try store.snapshot().contextIsActive)
     }
 
+    /// screentime-06: 「表示中の記録をリセット」 moves the same owner to a new
+    /// reset generation. The runs, black stones and unimported receipts belong
+    /// to the old one and go; the app selections, theme and recording switch
+    /// are the user's setup and stay, as the reset dialog promises.
+    func testANewResetGenerationForTheSameOwnerKeepsTheSetupButNothingItProduced() async throws {
+        let oldEpoch = UUID()
+        let newEpoch = UUID()
+        let store = try makeStore(epoch: oldEpoch)
+        let tokens = try (0..<2).map { index in
+            try JSONDecoder().decode(ApplicationToken.self, from: JSONEncoder().encode(["data": Data([0x44, UInt8(index)])]))
+        }
+        try store.update { $0.configuration.learningSelection.applicationTokens = Set(tokens) }
+        let old = try store.snapshot()
+        let oldRunID = try XCTUnwrap(old.runs.first?.id)
+        try store.record(runID: oldRunID, threshold: 1, now: start.addingTimeInterval(601))
+        XCTAssertFalse(try store.pendingLearningReceipts().isEmpty)
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" }, monitoring: driver, authorization: { .approved })
+
+        try await controller.bindContext(contextKey: "owner", dataEpochID: newEpoch)
+        let rebound = try store.snapshot()
+        XCTAssertEqual(rebound.configuration, old.configuration)
+        XCTAssertTrue(rebound.configuration.enabled)
+        XCTAssertEqual(rebound.dataEpochID, newEpoch)
+        XCTAssertNotEqual(rebound.epoch, old.epoch, "Receipts of the new generation need new identities")
+        XCTAssertTrue(rebound.runs.isEmpty)
+        XCTAssertEqual(rebound.negativeGemCount, 0)
+        XCTAssertTrue(try store.pendingLearningReceipts().isEmpty)
+        XCTAssertEqual(driver.events.filter { $0 == "stop" }.count, 1, "Old registrations must come down")
+        XCTAssertEqual(controller.configuration, old.configuration)
+
+        // A late callback for the old generation's run awards nothing.
+        XCTAssertFalse(try store.record(runID: oldRunID, threshold: 2, now: start.addingTimeInterval(1_201)))
+    }
+
+    func testADifferentOwnerStillStartsWithAnEmptySetup() async throws {
+        let store = try makeStore(owner: "previous-owner")
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" }, monitoring: driver, authorization: { .approved })
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        let state = try store.snapshot()
+        XCTAssertEqual(state.contextKey, "owner")
+        XCTAssertEqual(state.configuration, ScreenTimeConfiguration())
+        XCTAssertTrue(state.runs.isEmpty)
+        XCTAssertEqual(state.negativeGemCount, 0)
+    }
+
     func testFailedBindingCanBeRetriedAfterLedgerRecovery() async throws {
         let store = try makeStore()
         let driver = Driver(store: store)
@@ -569,17 +623,100 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         let configuration = controller.configuration
         let save = Task { try await controller.save(configuration: configuration, isPro: true) }
         await fulfillment(of: [entered], timeout: 5)
-        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: false, timerRunning: false)
-        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: true, timerRunning: false)
+        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: false, learningPause: .none)
+        controller.reconcileInBackground(contextKey: "owner", dataEpochID: nil, isPro: true, learningPause: .none)
         XCTAssertTrue(try store.snapshot().learningAllowedBySubscription)
         XCTAssertFalse(try store.snapshot().runs.contains { $0.id == runID && $0.active })
         try store.record(runID: runID, threshold: 2, now: start.addingTimeInterval(1_201))
         XCTAssertEqual(try store.pendingLearningReceipts(), receipts)
         release.signal()
         try await save.value
-        await controller.reconcile(isPro: true, timerRunning: false)
+        await controller.reconcile(isPro: true, learningPause: .none)
         try await controller.waitForPendingOperations()
         XCTAssertFalse(try store.snapshot().runs.contains { $0.id == runID && $0.active })
+    }
+
+    /// settings-01: at a cold launch the forced first pass can run before
+    /// StoreKit has answered. "Not known yet" used to read as "free", which
+    /// retired a Pro user's learning run and lost its unfinished 10 minutes.
+    /// An unknown entitlement now keeps the gate; the real answer still
+    /// decides, so a genuine downgrade retires exactly as before.
+    func testUnresolvedProEntitlementNeverRetiresTheLearningRunButARealDowngradeDoes() async throws {
+        let store = try makeStore()
+        let tokens = try (0..<6).map { index in
+            try JSONDecoder().decode(ApplicationToken.self, from: JSONEncoder().encode(["data": Data([UInt8(index)])]))
+        }
+        try store.update { $0.configuration.learningSelection.applicationTokens = Set(tokens) }
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" }, monitoring: driver, authorization: { .approved })
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        let runID = try XCTUnwrap(store.snapshot().runs.first?.id)
+
+        await controller.reconcile(isPro: nil, learningPause: .none)
+        try await controller.waitForPendingOperations()
+        var state = try store.snapshot()
+        XCTAssertTrue(state.learningAllowedBySubscription)
+        XCTAssertTrue(state.runs.contains { $0.id == runID && $0.active })
+        XCTAssertNil(controller.monitoringError, "A Pro user must not be shown the free-plan limit")
+        XCTAssertFalse(controller.learningStoppedByFreeLimit)
+
+        await controller.reconcile(isPro: false, learningPause: .none)
+        try await controller.waitForPendingOperations()
+        state = try store.snapshot()
+        XCTAssertFalse(state.learningAllowedBySubscription)
+        XCTAssertFalse(state.runs.contains { $0.id == runID && $0.active })
+        XCTAssertTrue(controller.learningStoppedByFreeLimit,
+                      "The page and the Settings row read the stop from the ledger's gate")
+        XCTAssertEqual(controller.monitoringError, ScreenTimeError.freeApplicationLimit.localizedDescription)
+        XCTAssertTrue(controller.monitoringError?.contains("勉強アプリ") == true)
+
+        // Unknown again (a later process before StoreKit answers) keeps the
+        // closed gate closed: nil can only keep or relax, never grant Pro.
+        await controller.reconcile(isPro: nil, learningPause: .none)
+        XCTAssertFalse(try store.snapshot().learningAllowedBySubscription)
+    }
+
+    func testTheUnresolvedSubscriptionGateOnlyKeepsOrRelaxes() {
+        typealias Policy = ScreenTimePolicy
+        for previous in [true, false] {
+            XCTAssertTrue(Policy.learningAllowedBySubscription(isPro: true, learningApplicationCount: 50, previouslyAllowed: previous))
+            XCTAssertFalse(Policy.learningAllowedBySubscription(isPro: false, learningApplicationCount: 6, previouslyAllowed: previous))
+            XCTAssertTrue(Policy.learningAllowedBySubscription(isPro: false, learningApplicationCount: 5, previouslyAllowed: previous))
+            XCTAssertTrue(Policy.learningAllowedBySubscription(isPro: nil, learningApplicationCount: 5, previouslyAllowed: previous))
+            XCTAssertEqual(Policy.learningAllowedBySubscription(isPro: nil, learningApplicationCount: 6, previouslyAllowed: previous), previous)
+        }
+    }
+
+    /// screentime-08: the black stones could only be cleared by the full
+    /// reset, which also deletes both app selections. Clearing them alone
+    /// keeps the setup and the runs, so nothing is re-registered and the next
+    /// threshold of the same run counts only the minutes after it.
+    func testClearingBlackStonesKeepsTheSetupAndCountsOnlyNewMinutesAfterwards() async throws {
+        let store = try makeStore()
+        let distraction = ScreenTimeRun(
+            lane: .distraction, dayStart: start, dayEnd: start.addingTimeInterval(86_400),
+            startedAt: start, timeZoneID: "UTC", includesPastActivity: false, themeID: nil
+        )
+        try store.update { $0.runs.append(distraction) }
+        try store.record(runID: distraction.id, threshold: 3, now: start.addingTimeInterval(1_801))
+        let before = try store.snapshot()
+        XCTAssertEqual(before.negativeGemCount, 12)
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" }, monitoring: driver, authorization: { .approved })
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+
+        try controller.clearBlackStones()
+        let cleared = try store.snapshot()
+        XCTAssertEqual(cleared.negativeGemCount, 0)
+        XCTAssertEqual(controller.negativeGemCount, 0)
+        XCTAssertEqual(cleared.configuration, before.configuration)
+        XCTAssertEqual(cleared.runs, before.runs, "Runs and their counted thresholds stay as they were")
+        XCTAssertEqual(cleared.epoch, before.epoch)
+        XCTAssertTrue(driver.events.isEmpty, "Clearing must not touch the OS registration")
+
+        try store.record(runID: distraction.id, threshold: 4, now: start.addingTimeInterval(2_401))
+        controller.reload()
+        XCTAssertEqual(controller.negativeGemCount, 1, "Only the ten minutes after the clear count")
     }
 
     // MARK: - the diagnostics mirror
@@ -694,6 +831,81 @@ final class ScreenTimeControllerConcurrencyTests: XCTestCase {
         XCTAssertEqual(controller.monitoringError, ScreenTimeError.unboundContext.localizedDescription)
         XCTAssertFalse(controller.isUpdatingMonitoring)
         XCTAssertTrue(driver.events.isEmpty)
+    }
+
+    /// critic-02: each Family Controls refusal names what to fix, the message
+    /// outlives the three-second reload, and closing Apple's sheet says nothing.
+    func testEachAuthorizationRefusalExplainsItsOwnFixAndSurvivesReload() async throws {
+        let cases: [(FamilyControlsError, ScreenTimeAuthorizationFailure?)] = [
+            (.authorizationCanceled, nil),
+            (.authenticationMethodUnavailable, .passcodeRequired),
+            (.invalidAccountType, .accountNotSupported),
+            (.networkError, .offline),
+            (.authorizationConflict, .conflictingApp),
+            (.restricted, .restricted),
+            (.unavailable, .other),
+            (.invalidArgument, .other)
+        ]
+        for (error, expected) in cases {
+            let store = try makeStore()
+            let driver = Driver(store: store)
+            let controller = ScreenTimeController(
+                store: store, currentContextKey: { "owner" }, monitoring: driver,
+                authorization: { .notDetermined },
+                requestIndividualAuthorization: { throw error }
+            )
+            try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+            await controller.requestAuthorization()
+            XCTAssertEqual(controller.authorizationFailure, expected, "\(error)")
+            controller.reload()
+            XCTAssertEqual(controller.authorizationFailure, expected, "The reload loop must not erase it")
+            XCTAssertFalse(controller.isUpdatingMonitoring)
+        }
+        XCTAssertEqual(ScreenTimeAuthorizationFailure(CancellationError()), .other)
+        for failure in [ScreenTimeAuthorizationFailure.passcodeRequired, .accountNotSupported, .offline,
+                        .conflictingApp, .restricted, .other] {
+            XCTAssertFalse(failure.message.isEmpty)
+        }
+        XCTAssertTrue(ScreenTimeAuthorizationFailure.passcodeRequired.message.contains("パスコード"))
+        XCTAssertTrue(ScreenTimeAuthorizationFailure.accountNotSupported.message.contains("Apple Account"))
+        XCTAssertTrue(ScreenTimeAuthorizationFailure.offline.message.contains("インターネット"))
+        XCTAssertTrue(ScreenTimeAuthorizationFailure.passcodeRequired.fixIsInSettingsApp)
+        XCTAssertFalse(ScreenTimeAuthorizationFailure.offline.fixIsInSettingsApp)
+        // The button opens PomoGem's own page; every message that sends the
+        // user to the Settings app starts from its first screen, and the
+        // caption beside the button says how to get back there.
+        for failure in [ScreenTimeAuthorizationFailure.passcodeRequired, .accountNotSupported, .restricted] {
+            XCTAssertTrue(failure.fixIsInSettingsApp)
+            XCTAssertTrue(failure.message.contains("設定アプリの最初の画面"), failure.message)
+        }
+        XCTAssertTrue(ScreenTimeAuthorizationFailure.settingsAppRoute.contains("ポモジェム"))
+        XCTAssertTrue(ScreenTimeAuthorizationFailure.settingsAppRoute.contains("最初の画面"))
+        // A conflict is usually a parent's app: point to the person, never
+        // advise switching the controls off.
+        XCTAssertTrue(ScreenTimeAuthorizationFailure.conflictingApp.message.contains("保護者など"))
+        XCTAssertFalse(ScreenTimeAuthorizationFailure.conflictingApp.message.contains("やめる"))
+    }
+
+    func testAGrantedRequestClearsTheEarlierRefusal() async throws {
+        let store = try makeStore()
+        let driver = Driver(store: store)
+        var status = AuthorizationStatus.notDetermined
+        var answer: Error? = FamilyControlsError.networkError
+        let controller = ScreenTimeController(
+            store: store, currentContextKey: { "owner" }, monitoring: driver,
+            authorization: { status },
+            requestIndividualAuthorization: {
+                if let answer { throw answer }
+                status = .approved
+            }
+        )
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        await controller.requestAuthorization()
+        XCTAssertEqual(controller.authorizationFailure, .offline)
+        answer = nil
+        await controller.requestAuthorization()
+        XCTAssertNil(controller.authorizationFailure)
+        XCTAssertTrue(controller.authorizationGranted)
     }
 
 }
@@ -910,13 +1122,18 @@ final class ScreenTimeIntegrationLifecycleTests: XCTestCase {
 /// restore.
 @MainActor
 final class ScreenTimeSettingsDraftTests: XCTestCase {
+    private enum DriverError: Error { case refused }
+
     private final class Driver: ScreenTimeMonitoringDriving {
         let store: ScreenTimeStore
+        /// Stands in for DeviceActivity refusing the registration.
+        var refusesRegistration = false
         init(store: ScreenTimeStore) { self.store = store }
         func stop() {}
         func invalidateAuthorizationIfNeeded() throws {}
         func synchronize(now: Date) throws -> Bool {
-            try store.withMonitoringLock { try store.snapshot().runs.contains(where: \.active) }
+            if refusesRegistration { throw DriverError.refused }
+            return try store.withMonitoringLock { try store.snapshot().runs.contains(where: \.active) }
         }
     }
 
@@ -965,6 +1182,68 @@ final class ScreenTimeSettingsDraftTests: XCTestCase {
                        "Edits the user can see must survive a late binding")
         XCTAssertTrue(ScreenTimeDraftPolicy.shouldReseed(bound: true, hasUserEdits: true, draftIsEmpty: true),
                       "An empty draft has nothing to lose and would otherwise stay empty")
+    }
+
+    /// screentime-02: the switch is off by default, and a first setup saved
+    /// with it off stored everything and recorded nothing behind a success
+    /// toast. Picking apps on a first setup switches it on; nothing else does.
+    func testAFirstPickSwitchesRecordingOnButNeverOverridesAnExistingChoice() throws {
+        let theme = UUID()
+        let two = selection(count: 2, seed: 0x61)
+        let empty = FamilyActivitySelection(includeEntireCategory: false)
+
+        let first = ScreenTimeDraftPolicy.applying(two, toLearningLane: true, in: ScreenTimeConfiguration(),
+                                                   authorized: true, onlyThemeID: theme)
+        XCTAssertTrue(first.enabled)
+        XCTAssertEqual(first.learningSelection, two)
+        XCTAssertEqual(first.themeID, theme, "With one theme there is only one sensible destination")
+
+        let distractionFirst = ScreenTimeDraftPolicy.applying(two, toLearningLane: false, in: ScreenTimeConfiguration(),
+                                                              authorized: true, onlyThemeID: theme)
+        XCTAssertTrue(distractionFirst.enabled)
+        XCTAssertNil(distractionFirst.themeID, "The black-stone lane has no destination theme")
+
+        // Someone who already chose apps and switched recording off keeps it off.
+        var paused = first
+        paused.enabled = false
+        let edited = ScreenTimeDraftPolicy.applying(selection(count: 1, seed: 0x62), toLearningLane: false,
+                                                    in: paused, authorized: true, onlyThemeID: nil)
+        XCTAssertFalse(edited.enabled)
+
+        // Nothing picked, no permission, or a theme already chosen: untouched.
+        XCTAssertFalse(ScreenTimeDraftPolicy.applying(empty, toLearningLane: true, in: ScreenTimeConfiguration(),
+                                                      authorized: true, onlyThemeID: theme).enabled)
+        XCTAssertFalse(ScreenTimeDraftPolicy.applying(two, toLearningLane: true, in: ScreenTimeConfiguration(),
+                                                      authorized: false, onlyThemeID: nil).enabled)
+        var chosen = ScreenTimeConfiguration()
+        let other = UUID()
+        chosen.themeID = other
+        XCTAssertEqual(ScreenTimeDraftPolicy.applying(two, toLearningLane: true, in: chosen,
+                                                      authorized: true, onlyThemeID: theme).themeID, other)
+    }
+
+    func testTheSaveToastStatesWhetherRecordingIsOn() {
+        var configuration = ScreenTimeConfiguration()
+        configuration.enabled = true
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, isMonitoring: true).text,
+                       "保存しました。自動記録中です")
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, isMonitoring: false).text,
+                       "保存しました", "Switched on is not yet recording; do not claim it")
+        configuration.enabled = false
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, isMonitoring: false).text,
+                       "保存しました。自動記録はオフです")
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, isMonitoring: false).symbol, "checkmark")
+        configuration.learningSelection = selection(count: 1, seed: 0x63)
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, isMonitoring: false).symbol,
+                       "exclamationmark.circle", "Apps chosen but recording off is worth a second look")
+    }
+
+    private func selection(count: Int, seed: UInt8) -> FamilyActivitySelection {
+        var selection = FamilyActivitySelection(includeEntireCategory: false)
+        selection.applicationTokens = Set((0..<count).compactMap { index in
+            try? JSONDecoder().decode(ApplicationToken.self, from: JSONEncoder().encode(["data": Data([seed, UInt8(index)])]))
+        })
+        return selection
     }
 
     /// 「スクリーンタイムの内容をリセット」 replaces the whole ledger, which used
@@ -1103,6 +1382,167 @@ final class ScreenTimeSettingsDraftTests: XCTestCase {
         } catch {
             XCTAssertEqual(error.localizedDescription,
                            ScreenTimeError.unboundContext.localizedDescription)
+        }
+    }
+
+    // MARK: - screentime-03: a stop is visible outside the page
+
+    func testTheSettingsRowSaysWhenRecordingStoppedButNeverForTheTimerHold() {
+        func status(
+            bound: Bool = true, enabled: Bool, monitoring: Bool = false, error: String? = nil,
+            freeLimit: Bool = false, themeRemoved: Bool = false
+        ) -> ScreenTimeRowStatus {
+            ScreenTimeRowStatus(isBound: bound, enabled: enabled, isMonitoring: monitoring, monitoringError: error,
+                                learningStoppedByFreeLimit: freeLimit, themeRemoved: themeRemoved)
+        }
+        XCTAssertEqual(status(bound: false, enabled: true, monitoring: true, error: "x", themeRemoved: true),
+                       .feature, "An unbound owner has nothing it can report")
+        XCTAssertEqual(status(enabled: false), .feature)
+        XCTAssertEqual(status(enabled: true, monitoring: true), .recording)
+        XCTAssertEqual(status(enabled: true, error: "監視エラー"), .needsAttention)
+        // A revoked permission switches recording off and leaves only its
+        // error; that stop is what the row exists to show.
+        XCTAssertEqual(status(enabled: false, error: "スクリーンタイムの許可が解除されました。"), .needsAttention)
+        // Over the free limit only the study apps stop; black stones go on.
+        XCTAssertEqual(status(enabled: true, monitoring: true, error: "無料で登録できる勉強アプリは5つまでです。",
+                              freeLimit: true), .learningStopped)
+        XCTAssertEqual(status(enabled: true, error: "無料で登録できる勉強アプリは5つまでです。", freeLimit: true),
+                       .learningStopped)
+        // Registering, or the timer holding the learning lane: no error, no alarm.
+        XCTAssertEqual(status(enabled: true), .feature)
+        // The destination went away; even with the black-stone lane still on.
+        XCTAssertEqual(status(enabled: true, monitoring: true, themeRemoved: true), .themeRemoved)
+        XCTAssertEqual(status(enabled: false, themeRemoved: true), .themeRemoved)
+        XCTAssertTrue(ScreenTimeRowStatus.needsAttention.isWarning)
+        XCTAssertTrue(ScreenTimeRowStatus.learningStopped.isWarning)
+        XCTAssertTrue(ScreenTimeRowStatus.themeRemoved.isWarning)
+        XCTAssertFalse(ScreenTimeRowStatus.recording.isWarning)
+        XCTAssertEqual(ScreenTimeRowStatus.recording.subtitle, "自動記録中")
+        XCTAssertTrue(ScreenTimeRowStatus.needsAttention.subtitle.hasPrefix("要確認"))
+        XCTAssertEqual(ScreenTimeRowStatus.learningStopped.subtitle, "要確認：勉強アプリの記録が止まっています")
+    }
+
+    /// settings-01 on the Screen Time page: until StoreKit answers, a Pro
+    /// user reads as free. Saving over the free limit then would store a
+    /// closed gate and retire the study-app run, so 保存 waits for the answer;
+    /// anything the free plan allows anyway saves at once.
+    func testSavingOverTheFreeLimitWaitsForThePurchaseStatus() {
+        let limit = ScreenTimePolicy.freeLearningApplicationLimit
+        XCTAssertTrue(ScreenTimeDraftPolicy.waitsForPurchaseStatus(
+            draftEnabled: true, learningCount: limit + 1, entitlementsResolved: false))
+        XCTAssertFalse(ScreenTimeDraftPolicy.waitsForPurchaseStatus(
+            draftEnabled: true, learningCount: limit + 1, entitlementsResolved: true))
+        XCTAssertFalse(ScreenTimeDraftPolicy.waitsForPurchaseStatus(
+            draftEnabled: true, learningCount: limit, entitlementsResolved: false))
+        XCTAssertFalse(ScreenTimeDraftPolicy.waitsForPurchaseStatus(
+            draftEnabled: false, learningCount: limit + 1, entitlementsResolved: false),
+                       "Switching recording off is never held up")
+    }
+
+    func testTheThemeDeleteWarningAppliesOnlyToTheScreenTimeDestination() {
+        let theme = UUID()
+        var configuration = ScreenTimeConfiguration()
+        configuration.themeID = theme
+        XCTAssertFalse(ScreenTimeThemeDeletionNotice.applies(to: theme, configuration: configuration, isBound: true),
+                       "No study apps chosen: nothing is lost")
+        configuration.learningSelection = selection(count: 2, seed: 0x71)
+        XCTAssertTrue(ScreenTimeThemeDeletionNotice.applies(to: theme, configuration: configuration, isBound: true))
+        XCTAssertFalse(ScreenTimeThemeDeletionNotice.applies(to: UUID(), configuration: configuration, isBound: true))
+        XCTAssertFalse(ScreenTimeThemeDeletionNotice.applies(to: theme, configuration: configuration, isBound: false))
+        XCTAssertTrue(ScreenTimeThemeDeletionNotice.text.contains("選び直す"))
+    }
+
+    func testTheRemovedThemeNoticeLastsUntilTheUserSavesAndStaysWithItsOwner() async throws {
+        let suite = "ScreenTimeNoticeTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = try makeStore()
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" }, monitoring: Driver(store: store),
+                                              authorization: { .approved }, noticeDefaults: defaults)
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        XCTAssertFalse(controller.learningThemeWasRemoved)
+        controller.noteLearningThemeRemoved()
+        XCTAssertTrue(controller.learningThemeWasRemoved)
+
+        // A later launch reads it back for the same owner only.
+        let relaunched = ScreenTimeController(store: store, currentContextKey: { "owner" }, monitoring: Driver(store: store),
+                                              authorization: { .approved }, noticeDefaults: defaults)
+        try await relaunched.bindContext(contextKey: "owner", dataEpochID: nil)
+        XCTAssertTrue(relaunched.learningThemeWasRemoved)
+        let otherStore = try makeStore(owner: "someone-else")
+        let other = ScreenTimeController(store: otherStore, currentContextKey: { "someone-else" },
+                                         monitoring: Driver(store: otherStore), authorization: { .approved },
+                                         noticeDefaults: defaults)
+        try await other.bindContext(contextKey: "someone-else", dataEpochID: nil)
+        XCTAssertFalse(other.learningThemeWasRemoved)
+
+        relaunched.clearLearningThemeRemovalNotice()
+        XCTAssertFalse(relaunched.learningThemeWasRemoved)
+        controller.reload()
+        XCTAssertFalse(controller.learningThemeWasRemoved)
+    }
+
+    private func storeWithStudyApps(theme: UUID) throws -> ScreenTimeStore {
+        let store = try makeStore()
+        try store.update {
+            $0.configuration.themeID = theme
+            $0.configuration.learningSelection = selection(count: 2, seed: 0x81)
+            $0.configuration.distractionSelection = selection(count: 1, seed: 0x82)
+        }
+        return store
+    }
+
+    /// `save` commits the cleared configuration before it registers what is
+    /// left. When DeviceActivity then refused, the study apps were already
+    /// gone, nothing retried (no study apps left to retire), and neither the
+    /// toast nor the notice appeared: the silent loss screentime-03 is about.
+    func testARemovedThemeIsExplainedEvenWhenRegisteringTheRestFails() async throws {
+        let suite = "ScreenTimeNoticeTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let theme = UUID()
+        let store = try storeWithStudyApps(theme: theme)
+        let driver = Driver(store: store)
+        let controller = ScreenTimeController(store: store, currentContextKey: { "owner" }, monitoring: driver,
+                                              authorization: { .approved }, noticeDefaults: defaults)
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        driver.refusesRegistration = true
+
+        let outcome = await controller.retireLearningSelection(ofRemovedTheme: theme, isPro: false)
+        XCTAssertTrue(outcome.cleared)
+        XCTAssertNotNil(outcome.failure, "The refusal is still reported to the caller")
+        let state = try store.snapshot()
+        XCTAssertTrue(state.configuration.learningSelection.applicationTokens.isEmpty)
+        XCTAssertNil(state.configuration.themeID)
+        XCTAssertTrue(state.configuration.enabled, "The black-stone lane stays on")
+        XCTAssertTrue(controller.learningThemeWasRemoved)
+
+        // The next pass finds nothing to retire: this was the only chance.
+        let again = await controller.retireLearningSelection(ofRemovedTheme: theme, isPro: false)
+        XCTAssertFalse(again.cleared)
+        XCTAssertNil(again.failure)
+    }
+
+    /// The delete dialog on this iPhone already said what deleting the theme
+    /// does, so only a deletion it did not confirm leaves a lasting notice.
+    func testOnlyADeletionThisIPhoneDidNotConfirmLeavesALastingNotice() async throws {
+        for confirmedHere in [true, false] {
+            let suite = "ScreenTimeNoticeTests-\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let theme = UUID()
+            let store = try storeWithStudyApps(theme: theme)
+            let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
+                                                  monitoring: Driver(store: store),
+                                                  authorization: { .approved }, noticeDefaults: defaults)
+            try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+            controller.noteLearningThemeDeletionConfirmed(confirmedHere ? theme : UUID())
+
+            let outcome = await controller.retireLearningSelection(ofRemovedTheme: theme, isPro: false)
+            XCTAssertTrue(outcome.cleared)
+            XCTAssertNil(outcome.failure)
+            XCTAssertEqual(controller.learningThemeWasRemoved, !confirmedHere,
+                           "confirmedHere=\(confirmedHere)")
         }
     }
 }

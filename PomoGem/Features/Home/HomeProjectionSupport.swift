@@ -1050,16 +1050,23 @@ enum HomeProjectionPolicy {
 
     struct CompletionMetrics {
         let completedFocusCount: Int
+        /// Measured (timer or Screen Time) sessions whose mass is already in
+        /// `weeklyMeasuredGrams`.
         let weeklyMeasuredSessionIDs: Set<UUID>
-        let weeklyMeasuredDates: [Date]
-        /// Exact timer mass for the bounded current-week query. Session count
-        /// remains a return-frequency cue; this is the value-bearing measure.
+        /// Timer completions only. A Screen Time chunk is measured time, but
+        /// it is not a return to the timer, so it never adds to 「戻った」.
+        let weeklyTimerCompletionSessionIDs: Set<UUID>
+        let weeklyTimerCompletionDates: [Date]
+        /// Exact measured mass for the bounded current-week query. Session
+        /// count remains a return-frequency cue; this is the value-bearing
+        /// measure.
         let weeklyMeasuredGrams: Int
     }
 
-    /// Aggregate-backed lifetime cadence plus a paged seven-day query. Every
-    /// loose or weekly source page is logically deduplicated; no multi-decade
-    /// collection of source model objects is materialized on Home.
+    /// Aggregate-backed lifetime cadence plus a paged calendar-week query
+    /// (`WeeklyProgressPolicy.week`). Every loose or weekly source page is
+    /// logically deduplicated; no multi-decade collection of source model
+    /// objects is materialized on Home.
     @MainActor
     static func completionMetrics(
         context: ModelContext,
@@ -1083,11 +1090,12 @@ enum HomeProjectionPolicy {
             uniqueLoose.filter { $0.effectiveSource.isMeasured }.count
         ])
 
-        guard let interval = calendar.dateInterval(of: .weekOfYear, for: date) else {
+        guard let interval = WeeklyProgressPolicy.week(containing: date, calendar: calendar) else {
             return CompletionMetrics(
                 completedFocusCount: completedCount,
                 weeklyMeasuredSessionIDs: [],
-                weeklyMeasuredDates: [],
+                weeklyTimerCompletionSessionIDs: [],
+                weeklyTimerCompletionDates: [],
                 weeklyMeasuredGrams: 0
             )
         }
@@ -1102,10 +1110,12 @@ enum HomeProjectionPolicy {
             maximumPhysicalRows: maximumWeeklyPhysicalRows
         )
             .filter { $0.effectiveSource.isMeasured }
+        let timerCompletions = unique.filter { $0.effectiveSource.isTimerCompletion }
         return CompletionMetrics(
             completedFocusCount: completedCount,
             weeklyMeasuredSessionIDs: Set(unique.map(\.id)),
-            weeklyMeasuredDates: unique.map(\.endAt),
+            weeklyTimerCompletionSessionIDs: Set(timerCompletions.map(\.id)),
+            weeklyTimerCompletionDates: timerCompletions.map(\.endAt),
             weeklyMeasuredGrams: saturatingNonnegativeSum(unique.map(\.grams))
         )
     }

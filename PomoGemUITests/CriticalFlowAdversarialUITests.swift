@@ -306,6 +306,273 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         XCTAssertFalse(app.buttons["achievement.undo-delete"].exists)
     }
 
+    /// 記録 says which days 「今週」 covers and what is inside its total, a day
+    /// in the chart opens every record of that day, and older history is
+    /// one step away instead of ending at the newest thirty records.
+    func testLogSaysWhichWeekItShowsAndReachesOlderHistory() {
+        openMenuAction(containing: "時間を手動で積む")
+        let thirtyMinutes = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "30分")
+        ).firstMatch
+        XCTAssertTrue(thirtyMinutes.waitForExistence(timeout: 4))
+        thirtyMinutes.tap()
+        let manualConfirm = app.buttons["manual.confirm"]
+        XCTAssertTrue(manualConfirm.waitForExistence(timeout: 4))
+        XCTAssertTrue(scrollUntilHittable(manualConfirm, swiping: .up))
+        manualConfirm.tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
+
+        // 積み上がり counts measured time only, but a self-reported week is
+        // not an empty one.
+        openMenuAction(containing: "積み上がりを見る")
+        XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 5))
+        let weekly = app.descendants(matching: .any)["overview.weekly-crystal"]
+        XCTAssertTrue(weekly.waitForExistence(timeout: 5))
+        XCTAssertTrue(weekly.label.contains("自己申告の300g"), weekly.label)
+        XCTAssertFalse(app.staticTexts["今週は、まだ透明。"].exists)
+        XCTAssertTrue(app.staticTexts["今週は、自己申告で積んでいる。"].exists)
+        let weeklyAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        weeklyAttachment.name = "積み上がり — a self-reported week"
+        weeklyAttachment.lifetime = .keepAlways
+        add(weeklyAttachment)
+        app.buttons["overview.close"].tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
+
+        openMenuAction(containing: "記録を見る")
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 5))
+        let period = app.segmentedControls.firstMatch
+        XCTAssertTrue(period.buttons["今週"].waitForExistence(timeout: 4))
+        XCTAssertTrue(period.buttons["今週"].isSelected)
+        XCTAssertTrue(period.buttons["今月"].exists)
+        let range = app.descendants(matching: .any)["log.period-range"].firstMatch
+        XCTAssertTrue(range.waitForExistence(timeout: 4))
+        XCTAssertTrue(range.label.contains("〜"), range.label)
+        let selfReported = app.descendants(matching: .any)["log.self-reported-share"].firstMatch
+        XCTAssertTrue(selfReported.waitForExistence(timeout: 4))
+        XCTAssertTrue(selfReported.label.contains("このうち自己申告 300g"), selfReported.label)
+        XCTAssertFalse(
+            app.staticTexts["この期間の粒は、まだありません。"].exists,
+            "A week with a record must never show the empty-period copy"
+        )
+        // The device audits find the tiles by identifier, whatever the period.
+        let mass = app.descendants(matching: .any)["log.summary.mass"].firstMatch
+        XCTAssertTrue(mass.exists)
+        XCTAssertTrue(mass.label.contains("300g") && mass.label.contains("今週の質量"), mass.label)
+        let weekAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        weekAttachment.name = "記録 — calendar week with its self-reported share"
+        weekAttachment.lifetime = .keepAlways
+        add(weekAttachment)
+
+        // Back from the background, 記録 reads again but keeps what it shows:
+        // never the empty-period copy over a week that has a record.
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(
+            app.wait(for: .runningBackground, timeout: 5)
+                || app.wait(for: .runningBackgroundSuspended, timeout: 5)
+        )
+        app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 5))
+        XCTAssertFalse(
+            app.staticTexts["この期間の粒は、まだありません。"].exists,
+            "Returning to 記録 must not show the empty-period copy"
+        )
+        XCTAssertTrue(selfReported.waitForExistence(timeout: 4))
+        XCTAssertTrue(selfReported.label.contains("このうち自己申告 300g"), selfReported.label)
+        XCTAssertTrue(period.buttons["今週"].isSelected, "Returning must keep the chosen period")
+
+        // Tap today's column in the chart.
+        let chart = app.descendants(matching: .any)["log.mass-chart"]
+        XCTAssertTrue(scrollUntilHittable(chart, swiping: .up))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "ja_JP")
+        let todayIndex = (calendar.component(.weekday, from: .now) - calendar.firstWeekday + 7) % 7
+        let plotLeading: CGFloat = 44
+        let plotWidth = chart.frame.width - plotLeading
+        chart.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+            dx: plotLeading + plotWidth * (CGFloat(todayIndex) + 0.5) / 7,
+            dy: chart.frame.height * 0.6
+        )).tap()
+        let daySummary = app.descendants(matching: .any)["history.day.summary"]
+        XCTAssertTrue(daySummary.waitForExistence(timeout: 8), "Tapping today's bar must open the day")
+        XCTAssertTrue(daySummary.label.contains("30分"), daySummary.label)
+        let dayAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        dayAttachment.name = "記録 — one day from the chart"
+        dayAttachment.lifetime = .keepAlways
+        add(dayAttachment)
+        app.buttons["history.day.close"].tap()
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 4))
+
+        // The twelve monthly jars end with the way to older months.
+        let olderMonths = app.buttons["log.past-history.from-months"]
+        XCTAssertTrue(scrollUntilHittable(olderMonths, swiping: .up))
+        let monthsAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        monthsAttachment.name = "記録 — 月ごとの瓶 leads to older months"
+        monthsAttachment.lifetime = .keepAlways
+        add(monthsAttachment)
+        olderMonths.tap()
+        XCTAssertTrue(app.navigationBars["過去の記録"].waitForExistence(timeout: 5))
+        app.buttons["log.past-history.close"].tap()
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 4))
+
+        let past = app.buttons["log.past-history"]
+        XCTAssertTrue(scrollUntilHittable(past, swiping: .up))
+        past.tap()
+        XCTAssertTrue(app.navigationBars["過去の記録"].waitForExistence(timeout: 5))
+        let yearSummary = app.descendants(matching: .any)["overview.timeline.year.summary"]
+        XCTAssertTrue(yearSummary.waitForExistence(timeout: 10))
+        let pastAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        pastAttachment.name = "記録 — 過去の記録 by year and month"
+        pastAttachment.lifetime = .keepAlways
+        add(pastAttachment)
+        app.buttons["log.past-history.close"].tap()
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 4))
+    }
+
+    /// The same 記録 at the largest text size: the period dates, the
+    /// self-reported line and the way to older history stay readable.
+    func testLogAtAccessibility5() {
+        app.terminate()
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+        openMenuAction(containing: "時間を手動で積む")
+        let thirtyMinutes = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "30分")
+        ).firstMatch
+        XCTAssertTrue(scrollUntilHittable(thirtyMinutes, swiping: .up))
+        thirtyMinutes.tap()
+        let manualConfirm = app.buttons["manual.confirm"]
+        XCTAssertTrue(manualConfirm.waitForExistence(timeout: 4))
+        XCTAssertTrue(scrollUntilHittable(manualConfirm, swiping: .up))
+        manualConfirm.tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
+
+        openMenuAction(containing: "記録を見る")
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 5))
+        let range = app.descendants(matching: .any)["log.period-range"].firstMatch
+        XCTAssertTrue(range.waitForExistence(timeout: 5))
+        let top = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        top.name = "記録 at AX5 — period and totals"
+        top.lifetime = .keepAlways
+        add(top)
+        let selfReported = app.descendants(matching: .any)["log.self-reported-share"].firstMatch
+        XCTAssertTrue(scrollUntilHittable(selfReported, swiping: .up))
+        let share = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        share.name = "記録 at AX5 — self-reported line"
+        share.lifetime = .keepAlways
+        add(share)
+        let past = app.buttons["log.past-history"]
+        XCTAssertTrue(scrollUntilHittable(past, swiping: .up))
+        let bottom = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        bottom.name = "記録 at AX5 — way to older history"
+        bottom.lifetime = .keepAlways
+        add(bottom)
+        past.tap()
+        XCTAssertTrue(app.navigationBars["過去の記録"].waitForExistence(timeout: 5))
+        let yearSummary = app.descendants(matching: .any)["overview.timeline.year.summary"]
+        XCTAssertTrue(yearSummary.waitForExistence(timeout: 10))
+        let pastShot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        pastShot.name = "過去の記録 at AX5"
+        pastShot.lifetime = .keepAlways
+        add(pastShot)
+    }
+
+    /// Deleting a theme keeps its history. Correcting only the memo of a
+    /// milestone recorded under it must not move the milestone to whichever
+    /// theme happens to sort first.
+    func testEditingAMilestoneKeepsItsDeletedTheme() {
+        let themeName = "英検QA"
+        openMenuAction(containing: "設定")
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        let addTheme = app.buttons["テーマを追加"]
+        XCTAssertTrue(scrollUntilHittable(addTheme, swiping: .up))
+        addTheme.tap()
+        XCTAssertTrue(app.navigationBars["テーマを追加"].waitForExistence(timeout: 5))
+        let nameField = app.textFields.firstMatch
+        XCTAssertTrue(nameField.waitForExistence(timeout: 4))
+        nameField.tap()
+        nameField.typeText(themeName)
+        app.navigationBars["テーマを追加"].buttons["保存"].tap()
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        waitForUISettle()
+        tapNavigationBack(from: "設定")
+
+        let themeMenu = app.buttons["home.subject-picker"]
+        XCTAssertTrue(themeMenu.waitForExistence(timeout: 4))
+        themeMenu.tap()
+        let themeChoice = app.buttons[themeName]
+        XCTAssertTrue(themeChoice.waitForExistence(timeout: 4))
+        themeChoice.tap()
+
+        openMenuAction(containing: "成果を積む")
+        XCTAssertTrue(app.navigationBars["成果を選ぶ"].waitForExistence(timeout: 4))
+        let examPass = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "試験合格")
+        ).firstMatch
+        XCTAssertTrue(examPass.waitForExistence(timeout: 4))
+        examPass.tap()
+        XCTAssertTrue(app.navigationBars["記念石にする"].waitForExistence(timeout: 4))
+        app.textFields.firstMatch.tap()
+        app.textFields.firstMatch.typeText("二次試験")
+        app.buttons["この成果を積む"].tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
+
+        openMenuAction(containing: "設定")
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
+        let themeRow = app.buttons[themeName]
+        XCTAssertTrue(scrollUntilHittable(themeRow, swiping: .up))
+        themeRow.swipeLeft()
+        let delete = app.buttons["削除"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 4))
+        delete.tap()
+        let confirm = app.buttons["「\(themeName)」を削除"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        XCTAssertFalse(app.buttons[themeName].waitForExistence(timeout: 2))
+        tapNavigationBack(from: "設定")
+
+        openMenuAction(containing: "記録を見る")
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 5))
+        let row = app.buttons["achievement.history.row"].firstMatch
+        XCTAssertTrue(scrollUntilHittable(row, swiping: .up))
+        XCTAssertTrue(row.label.contains(themeName), row.label)
+        waitForUISettle()
+        row.tap()
+
+        XCTAssertTrue(app.navigationBars["成果を編集"].waitForExistence(timeout: 4))
+        let subject = app.buttons["achievement.editor.subject"]
+        XCTAssertTrue(subject.waitForExistence(timeout: 4))
+        XCTAssertTrue(
+            subject.label.contains(themeName),
+            "The editor must start on the milestone's own theme; label=\(subject.label)"
+        )
+        XCTAssertTrue(
+            app.staticTexts["achievement.editor.kept-subject"].exists,
+            "The editor must say why the deleted theme is still shown"
+        )
+        let editor = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        editor.name = "Milestone editor keeps a deleted theme"
+        editor.lifetime = .keepAlways
+        add(editor)
+
+        let note = app.textFields["achievement.editor.note"]
+        XCTAssertTrue(note.exists)
+        note.tap()
+        note.typeText("合格")
+        let save = app.buttons["achievement.editor.save"]
+        XCTAssertTrue(scrollUntilHittable(save, swiping: .up))
+        save.tap()
+
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 4))
+        let revised = app.buttons["achievement.history.row"].firstMatch
+        XCTAssertTrue(scrollUntilHittable(revised, swiping: .up))
+        XCTAssertTrue(revised.label.contains("二次試験合格"), revised.label)
+        XCTAssertTrue(
+            revised.label.contains(themeName),
+            "Editing only the memo must keep the deleted theme; label=\(revised.label)"
+        )
+    }
+
     private func openMenuAction(containing title: String) {
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
         app.buttons["メニュー"].tap()
