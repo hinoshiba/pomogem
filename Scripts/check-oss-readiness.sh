@@ -128,6 +128,10 @@ ruby -e 'require "psych"; ARGV.each { |path| Psych.parse_file(path) }' \
 
 python3 Scripts/test-release-profile-policy.py
 python3 Scripts/test-public-metadata.py
+# Localization tooling and the static half of its check (catalogs, Info.plist
+# names, UI-test language pins). CI adds the compiler half after the build.
+python3 Scripts/l10n/test-l10n.py
+python3 Scripts/l10n/l10n.py check
 
 plutil -lint PomoGem/Info.plist >/dev/null
 plutil -lint PomoGem/Resources/PrivacyInfo.xcprivacy >/dev/null

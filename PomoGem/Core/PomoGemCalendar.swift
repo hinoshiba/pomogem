@@ -6,17 +6,24 @@ import Foundation
 /// (`StrataMath.monthLabel`, `FairnessPolicy.deviceDayKey`, the 年月
 /// timeline). With the iPhone set to 和暦, the current calendar's year of
 /// 2026 is 8, so a year chip built from it read 「8年」. Every other date keeps
-/// the person's calendar through `Date.FormatStyle`.
+/// the person's calendar through `Date.FormatStyle`. The localization helpers
+/// (`DateText`, Docs/Localization.md) label these buckets with this calendar
+/// too.
 enum PomoGemCalendar {
     /// Gregorian, in the person's time zone, language and week settings.
     static var gregorian: Calendar {
         gregorian(basedOn: .autoupdatingCurrent)
     }
 
-    static func gregorian(basedOn base: Calendar) -> Calendar {
+    /// Gregorian with `base`'s language and week settings, in `timeZone`, or
+    /// in `base`'s own time zone when `timeZone` is nil.
+    static func gregorian(
+        timeZone: TimeZone? = nil,
+        basedOn base: Calendar = .autoupdatingCurrent
+    ) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = base.locale
-        calendar.timeZone = base.timeZone
+        calendar.timeZone = timeZone ?? base.timeZone
         calendar.firstWeekday = base.firstWeekday
         calendar.minimumDaysInFirstWeek = base.minimumDaysInFirstWeek
         return calendar

@@ -25,7 +25,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
-        app.launchArguments = ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
     }
 
     override func tearDownWithError() throws {

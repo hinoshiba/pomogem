@@ -1,0 +1,18 @@
+{
+  "sourceLanguage" : "ja",
+  "strings" : {
+    "CFBundleDisplayName" : {
+      "comment" : "Name of the widget extension shown in the widget gallery and Settings",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェム"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
