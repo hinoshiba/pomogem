@@ -43,6 +43,8 @@ struct JarHomeWidget: Widget {
                 .containerBackground(for: .widget) {
                     WidgetPalette.backgroundGradient
                 }
+                // Home, where the focus button is (never starts a timer).
+                .widgetURL(StartFocusLink.url)
         }
         .configurationDisplayName("ポモジェム")
         .description("今日の集中を始める")
@@ -65,9 +67,10 @@ private struct JarHomeWidgetView: View {
     }
 
     private var smallLayout: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             wordmark
-            NeutralJarArtwork()
+            // The widget's own opaque navy is the plate here.
+            RawStoneWidgetArtwork(framed: false)
                 .frame(maxHeight: .infinity)
             Text("集中を始める")
                 .font(.system(size: 16, weight: .heavy, design: .rounded))
@@ -81,8 +84,9 @@ private struct JarHomeWidgetView: View {
 
     private var mediumLayout: some View {
         HStack(spacing: 16) {
-            NeutralJarArtwork()
+            RawStoneWidgetArtwork(framed: true)
                 .frame(width: 126)
+                .padding(.vertical, 12)
 
             VStack(alignment: .leading, spacing: 0) {
                 wordmark
@@ -121,24 +125,26 @@ private struct JarHomeWidgetView: View {
 
 }
 
-private struct NeutralJarArtwork: View {
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(WidgetPalette.card.opacity(0.62))
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(WidgetPalette.glassEdge, lineWidth: 1)
+/// D19 (Docs/GemExperienceDesign.md §8.7): the next gem as a still,
+/// colourless raw stone — the same picture for everyone, with no account
+/// data. In full colour it always sits on opaque deep navy (the widget's
+/// background, and in the medium widget a plate of its own), so a light
+/// wallpaper never muddies it; a tinted Home Screen draws its own
+/// background, so the plate is left out and the facets carry the stone.
+private struct RawStoneWidgetArtwork: View {
+    /// Draws the stone's own plate (the medium widget's specimen card).
+    let framed: Bool
 
-            VStack(spacing: 7) {
-                Image(systemName: "circle.grid.3x3.fill")
-                    .font(.system(size: 29, weight: .light))
-                    .foregroundStyle(WidgetPalette.amber)
-                Text("ひと粒ずつ")
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    .foregroundStyle(WidgetPalette.mutedText)
-            }
-        }
-        .accessibilityHidden(true)
+    @Environment(\.widgetRenderingMode) private var renderingMode
+
+    var body: some View {
+        RawStoneArtwork(
+            showsPlate: framed && renderingMode == .fullColor,
+            showsShadow: renderingMode == .fullColor
+        )
+            .aspectRatio(1, contentMode: .fit)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityHidden(true)
     }
 }
 
@@ -149,6 +155,7 @@ struct JarLockScreenWidget: Widget {
         StaticConfiguration(kind: kind, provider: JarTimelineProvider()) { entry in
             JarLockScreenView(entry: entry)
                 .containerBackground(for: .widget) { Color.clear }
+                .widgetURL(StartFocusLink.url)
         }
         .configurationDisplayName("ポモジェム")
         .description("集中を始める")

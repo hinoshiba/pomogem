@@ -119,6 +119,10 @@ targets:
           - PrivacyInfo.xcprivacy
           - PomoGemWidgets.entitlements
       - path: Shared/FocusActivityAttributes.swift
+      # D19: the data-free raw-stone widget (drawn by code; no data, no
+      # App Group) and the start link it opens.
+      - path: Shared/RawStoneArtwork.swift
+      - path: Shared/StartFocusLink.swift
       - path: PomoGemWidgets/PrivacyInfo.xcprivacy
         buildPhase: resources
     settings:

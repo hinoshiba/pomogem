@@ -30,4 +30,7 @@ enum AppLinks {
     static let standardEULA = URL(
         string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
     )!
+
+    /// The raw-stone widget's link to the start screen (`StartFocusLink`).
+    static let startFocus = StartFocusLink.url
 }

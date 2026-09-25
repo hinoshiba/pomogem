@@ -2953,6 +2953,8 @@ struct MainNavigationView: View {
                 }
         }
         .tint(PomoGemTheme.amber)
+        // The raw-stone widget (D19) opens the start screen.
+        .onOpenURL { router.openStartLink($0) }
         .onAppear { updateNavigationPath(for: router.selectedTab) }
         .onChange(of: router.selectedTab) { _, selectedTab in
             updateNavigationPath(for: selectedTab)
