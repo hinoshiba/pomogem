@@ -568,6 +568,41 @@ struct FusionOrbitStage: View {
     /// Grams the destination crystal holds (its rung follows grams, D8);
     /// defaults to its pebble count of 25-minute gems.
     var destinationGrams: Int? = nil
+    /// The destination's own colours, as Home shows the same object: the
+    /// lifetime fan for the time core (`JarLifetimeCorePresentation`), the
+    /// crystal's colour mix for a ×N. Empty falls back to `colorHex`.
+    var colorShares: [GemColorShare] = []
+
+    private var destinationShares: [GemColorShare] {
+        colorShares.isEmpty ? [GemColorShare(hex: colorHex, fraction: 1)] : colorShares
+    }
+
+    /// The source slots take the destination's colours in proportion (a
+    /// ×10 of six coral and four blue gems shows six coral and four blue
+    /// sources), laid out in share order from 12 o'clock.
+    static func sourceHexes(shares: [GemColorShare], count: Int) -> [String] {
+        let valid = shares.filter { $0.fraction > 0 }
+        guard count > 0, !valid.isEmpty else { return [] }
+        let total = valid.reduce(0) { $0 + $1.fraction }
+        var counts = valid.map { Int(($0.fraction / total * Double(count)).rounded(.down)) }
+        let order = valid.indices.sorted {
+            let a = valid[$0].fraction / total * Double(count) - Double(counts[$0])
+            let b = valid[$1].fraction / total * Double(count) - Double(counts[$1])
+            return a == b ? $0 < $1 : a > b
+        }
+        var remaining = count - counts.reduce(0, +)
+        var cursor = 0
+        while remaining > 0 {
+            counts[order[cursor % order.count]] += 1
+            remaining -= 1
+            cursor += 1
+        }
+        return zip(valid, counts).flatMap { Array(repeating: $0.0.hex, count: $0.1) }
+    }
+
+    private var sourceHexes: [String] {
+        Self.sourceHexes(shares: destinationShares, count: state.slotCount)
+    }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -636,7 +671,7 @@ struct FusionOrbitStage: View {
                         && index == state.latestLitSlotIndex
 
                     FusionOrbitSourceGem(
-                        colorHex: colorHex,
+                        colorHex: index < sourceHexes.count ? sourceHexes[index] : colorHex,
                         variant: index,
                         isLit: isLit,
                         isLatest: isLatest && !state.isFusionComplete,
@@ -665,7 +700,7 @@ struct FusionOrbitStage: View {
                     if state.destinationMaterialized, scale == .chronicle {
                         // The Overview's lifetime camera: the time core.
                         LifetimeCorePrism(
-                            colorHex: colorHex,
+                            colorShares: destinationShares,
                             level: state.destinationLevel
                         )
                     } else if state.destinationMaterialized {
@@ -674,7 +709,7 @@ struct FusionOrbitStage: View {
                             spec: GemArtworkStone.aggregateSpec(
                                 grams: destinationGrams
                                     ?? state.destinationPebbleCount * Constants.Mass.measuredPebbleGrams,
-                                colors: [GemColorShare(hex: colorHex, fraction: 1)],
+                                colors: destinationShares,
                                 variant: state.destinationLevel
                             )
                         )
@@ -1707,6 +1742,54 @@ struct JarLifetimeCoreState: Equatable, Sendable {
 enum JarLifetimeCorePresentation {
     static let orbitSlotCount = FusionHierarchyPresentation.fanIn
 
+    /// Grams under their colours: a root crystal (its colour mix) or a
+    /// loose gem (one colour).
+    struct ColorContribution: Equatable, Sendable {
+        let grams: Int
+        let colorMix: [StratumColorFraction]
+
+        init(grams: Int, colorMix: [StratumColorFraction]) {
+            self.grams = grams
+            self.colorMix = colorMix
+        }
+
+        init(grams: Int, hex: String) {
+            self.init(grams: grams, colorMix: [StratumColorFraction(hex: hex, fraction: 1)])
+        }
+    }
+
+    /// The lifetime core's colour weights: every root's grams split by its
+    /// colour mix plus every loose gem's grams. Home, the Overview and the
+    /// share cards all read the core's fan from here, so the same core is
+    /// the same colours everywhere. Aggregate mixes are count-weighted, so
+    /// the fan is "おおよそ", never a mass breakdown.
+    static func colorWeights(_ contributions: [ColorContribution]) -> [String: Double] {
+        var weights: [String: Double] = [:]
+        for contribution in contributions {
+            let grams = Double(max(0, contribution.grams))
+            for share in contribution.colorMix {
+                weights[share.hex, default: 0] += grams * max(0, share.fraction)
+            }
+        }
+        return weights
+    }
+
+    /// The weights as shares, largest first (ties by hex).
+    static func colorShares(weights: [String: Double]) -> [GemColorShare] {
+        let total = weights.values.reduce(0, +)
+        guard total > 0 else { return [] }
+        return weights
+            .sorted { lhs, rhs in
+                if lhs.value == rhs.value { return lhs.key < rhs.key }
+                return lhs.value > rhs.value
+            }
+            .map { GemColorShare(hex: $0.key, fraction: $0.value / total) }
+    }
+
+    static func colorShares(_ contributions: [ColorContribution]) -> [GemColorShare] {
+        colorShares(weights: colorWeights(contributions))
+    }
+
     /// Current projections materialize the optical core at 250 minutes / 2.5kg,
     /// independent of how many timer completions produced that mass. The
     /// count-only fallback preserves old physical-compaction presentations.
@@ -2412,10 +2495,6 @@ private struct LifetimeCorePrism: View {
         self.level = level
     }
 
-    init(colorHex: String, level: Int) {
-        self.init(colorShares: [GemColorShare(hex: colorHex, fraction: 1)], level: level)
-    }
-
     var body: some View {
         let shares = colorShares
         let level = level
@@ -2654,6 +2733,7 @@ struct ProgressCrystalGlyph: View {
     var isAchievement = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.displayScale) private var displayScale
     @State private var breath = false
 
     private var spec: GemArtworkSpec {
@@ -2680,15 +2760,15 @@ struct ProgressCrystalGlyph: View {
                     .scaleEffect(breath ? 1.018 : 0.99)
 
                 if showsCount {
-                    Text(AggregatePresentation.countLabel(completionCount))
-                        .font(.system(size: max(8, side * 0.14), weight: .black, design: .rounded))
-                        .foregroundStyle(.white)
-                        .minimumScaleFactor(0.65)
-                        .lineLimit(1)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1.5)
-                        .background(Color(red: 0.035, green: 0.05, blue: 0.11).opacity(0.86), in: Capsule())
-                        .offset(y: side * 0.25)
+                    // The jar's own count tag (D26): a small engraved copper
+                    // tag below the table, the same text as Home.
+                    let text = AggregatePresentation.countLabel(completionCount)
+                    let fontSize = GemArtwork.countTagFontSize(sceneRadius: side * 0.40)
+                    let tag = GemArtwork.countEngravingSize(text: text, fontSize: fontSize, style: .copperTag)
+                    Image(uiImage: GemArtwork.countEngravingImage(text: text, fontSize: fontSize, style: .copperTag, scale: displayScale))
+                        .resizable()
+                        .frame(width: tag.width, height: tag.height)
+                        .offset(y: side * 0.40 * PebbleNode.aggregatePlateDrop)
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)

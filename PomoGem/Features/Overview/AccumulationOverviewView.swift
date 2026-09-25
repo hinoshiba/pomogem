@@ -721,6 +721,28 @@ struct AccumulationOverviewView: View {
         }
     }
 
+    /// The time core's theme fan, computed as Home computes it (the same
+    /// root crystals and loose gems), so the core is the same colours here
+    /// as in the jar.
+    private var lifetimeCoreColorShares: [GemColorShare] {
+        JarLifetimeCorePresentation.colorShares(
+            clusters.map { cluster in
+                JarLifetimeCorePresentation.ColorContribution(
+                    grams: cluster.grams,
+                    colorMix: cluster.colorMix.isEmpty
+                        ? [StratumColorFraction(
+                            hex: cluster.subjectMix.first?.colorHex ?? Constants.Color.amberLamp,
+                            fraction: 1
+                        )]
+                        : cluster.colorMix
+                )
+            }
+            + currentRecords.map {
+                JarLifetimeCorePresentation.ColorContribution(grams: $0.grams, hex: $0.colorHex)
+            }
+        )
+    }
+
     /// Active decimal roots rendered without another bottle metaphor. Each
     /// aggregate is a digit in a base-ten hierarchy: ten roots at one level
     /// become one root at the next level, while their exact particles and mass
@@ -1031,7 +1053,8 @@ struct AccumulationOverviewView: View {
                         nodes: constellationNodes,
                         totalGrams: lifetimeGrams,
                         totalPebbleCount: lifetimePebbleCount,
-                        projectionIsLowerBound: lifetimeIsLowerBound
+                        projectionIsLowerBound: lifetimeIsLowerBound,
+                        coreColorShares: lifetimeCoreColorShares
                     ) { id in
                         selectedCluster = clusters.first { $0.id == id }
                     }

@@ -397,39 +397,29 @@ struct HomeView: View {
     /// mix + loose grams). Aggregate mixes are count-weighted, so this is
     /// called "おおよそ" and never a mass breakdown.
     private var lifetimeCoreColorShares: [GemColorShare] {
-        let weights = lifetimeCoreColorWeights
-        let total = weights.values.reduce(0, +)
-        guard total > 0 else { return [] }
-        return weights
-            .sorted { lhs, rhs in
-                if lhs.value == rhs.value { return lhs.key < rhs.key }
-                return lhs.value > rhs.value
-            }
-            .map { GemColorShare(hex: $0.key, fraction: $0.value / total) }
+        JarLifetimeCorePresentation.colorShares(weights: lifetimeCoreColorWeights)
     }
 
+    /// The same fan the Overview draws (`JarLifetimeCorePresentation`).
     private var lifetimeCoreColorWeights: [String: Double] {
-        var weights: [String: Double] = [:]
-
-        for aggregate in activeAggregateRoots {
-            let grams = Double(max(0, aggregate.grams))
-            let mix = aggregate.colorMix.isEmpty
-                ? [StratumColorFraction(
-                    hex: aggregate.subjectMix.first?.colorHex
-                        ?? selectedSubject?.colorHex
-                        ?? Constants.Color.amberLamp,
-                    fraction: 1
-                )]
-                : aggregate.colorMix
-            for contribution in mix {
-                weights[contribution.hex, default: 0] += grams * max(0, contribution.fraction)
+        JarLifetimeCorePresentation.colorWeights(
+            activeAggregateRoots.map { aggregate in
+                JarLifetimeCorePresentation.ColorContribution(
+                    grams: aggregate.grams,
+                    colorMix: aggregate.colorMix.isEmpty
+                        ? [StratumColorFraction(
+                            hex: aggregate.subjectMix.first?.colorHex
+                                ?? selectedSubject?.colorHex
+                                ?? Constants.Color.amberLamp,
+                            fraction: 1
+                        )]
+                        : aggregate.colorMix
+                )
             }
-        }
-
-        for session in looseSessions {
-            weights[session.displaySubjectColorHex, default: 0] += Double(max(0, session.grams))
-        }
-        return weights
+            + looseSessions.map {
+                JarLifetimeCorePresentation.ColorContribution(grams: $0.grams, hex: $0.displaySubjectColorHex)
+            }
+        )
     }
     private var visibleAchievementStones: [AchievementStone] {
         AchievementStonePolicy.visibleStones(from: achievementStones)
@@ -895,6 +885,14 @@ struct HomeView: View {
     private func stratumCelebrationSheet(_ request: PendingStratumCelebration) -> some View {
         StratumCelebrationView(
             request: request,
+            // The crystal's own colour mix, as the jar paints the same ×10
+            // (the receipt keeps only its dominant colour).
+            colorShares: storedAggregates.first { $0.id == request.id }.map {
+                GemArtworkSpec.aggregateColors(
+                    $0.colorMix,
+                    fallbackHex: request.colorHex ?? Constants.Color.amberLamp
+                )
+            } ?? [],
             showsMonthLabel: purchase.isPro,
             onExplore: exploreCompletedStratum,
             onShare: { shareCompletedStratum(request) },
@@ -4778,6 +4776,8 @@ private struct ManualButton: View {
 
 private struct StratumCelebrationView: View {
     let request: PendingStratumCelebration
+    /// The crystal's colour shares; empty uses the receipt's colour.
+    let colorShares: [GemColorShare]
     let showsMonthLabel: Bool
     let onExplore: () -> Void
     let onShare: () -> Void
@@ -4834,7 +4834,8 @@ private struct StratumCelebrationView: View {
                             state: orbitState,
                             colorHex: colorHex,
                             scale: .hero,
-                            destinationGrams: request.grams
+                            destinationGrams: request.grams,
+                            colorShares: colorShares
                         )
                         .frame(width: 218, height: 218)
 

@@ -210,6 +210,9 @@ struct EffortConstellationView: View {
     let totalGrams: Int
     let totalPebbleCount: Int
     let projectionIsLowerBound: Bool
+    /// The time core's theme fan, as Home computes it (roots and loose
+    /// gems). Empty derives it from the roots alone.
+    let coreColorShares: [GemColorShare]
     var onSelect: ((UUID) -> Void)?
 
     init(
@@ -217,12 +220,14 @@ struct EffortConstellationView: View {
         totalGrams: Int,
         totalPebbleCount: Int,
         projectionIsLowerBound: Bool = false,
+        coreColorShares: [GemColorShare] = [],
         onSelect: ((UUID) -> Void)? = nil
     ) {
         self.nodes = nodes
         self.totalGrams = totalGrams
         self.totalPebbleCount = totalPebbleCount
         self.projectionIsLowerBound = projectionIsLowerBound
+        self.coreColorShares = coreColorShares
         self.onSelect = onSelect
     }
 
@@ -236,6 +241,18 @@ struct EffortConstellationView: View {
 
     private var coreColorHex: String {
         EffortConstellationPresentation.dominantColorHex(nodes: nodes)
+    }
+
+    private var resolvedCoreColorShares: [GemColorShare] {
+        guard coreColorShares.isEmpty else { return coreColorShares }
+        return JarLifetimeCorePresentation.colorShares(nodes.map { node in
+            JarLifetimeCorePresentation.ColorContribution(
+                grams: node.grams,
+                colorMix: node.colorMix.isEmpty
+                    ? [StratumColorFraction(hex: node.colorHex, fraction: 1)]
+                    : node.colorMix
+            )
+        })
     }
 
     private var coreIsMaterialized: Bool {
@@ -355,7 +372,8 @@ struct EffortConstellationView: View {
                     projectionIsLowerBound: projectionIsLowerBound
                 ),
                 colorHex: coreColorHex,
-                scale: .chronicle
+                scale: .chronicle,
+                colorShares: resolvedCoreColorShares
             )
             .frame(width: stageDiameter, height: stageDiameter)
             .scaleEffect(auraExpanded ? 1.025 : 0.985)
@@ -454,7 +472,10 @@ struct EffortConstellationView: View {
                 completionCount: node.pebbleCount,
                 colorHex: node.colorHex,
                 level: node.level,
-                showsCount: true
+                showsCount: true,
+                grams: node.grams,
+                // The crystal's own colour mix, as the Home jar paints it.
+                colorShares: GemArtworkSpec.aggregateColors(node.colorMix, fallbackHex: node.colorHex)
             )
             .frame(width: diameter, height: diameter)
         }

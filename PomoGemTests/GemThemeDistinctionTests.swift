@@ -325,6 +325,52 @@ final class GemThemeDistinctionTests: XCTestCase {
         XCTAssertEqual(PebbleNode.bodySpec(for: tutorial, themeMarks: true)?.showsThemeMarks, false)
     }
 
+    // MARK: One object, one colour set (Home, Overview, share)
+
+    /// Home and the Overview read the time core's fan from one function:
+    /// root crystals by their colour mix plus loose gems.
+    func testTimeCoreFanIsOneFunctionOfRootsAndLooseGems() {
+        let coral = palette[0]
+        let blue = palette[1 % palette.count]
+        let shares = JarLifetimeCorePresentation.colorShares([
+            JarLifetimeCorePresentation.ColorContribution(
+                grams: 2_500,
+                colorMix: [StratumColorFraction(hex: coral, fraction: 0.6), StratumColorFraction(hex: blue, fraction: 0.4)]
+            ),
+            JarLifetimeCorePresentation.ColorContribution(grams: 250, hex: blue),
+            JarLifetimeCorePresentation.ColorContribution(grams: 250, hex: coral)
+        ])
+        XCTAssertEqual(shares.map(\.hex), [coral, blue])
+        XCTAssertEqual(shares[0].fraction, 1_750.0 / 3_000.0, accuracy: 0.000_1)
+        XCTAssertEqual(shares[1].fraction, 1_250.0 / 3_000.0, accuracy: 0.000_1)
+        XCTAssertTrue(JarLifetimeCorePresentation.colorShares([]).isEmpty)
+        XCTAssertTrue(JarLifetimeCorePresentation.colorShares([
+            JarLifetimeCorePresentation.ColorContribution(grams: 0, hex: coral)
+        ]).isEmpty)
+    }
+
+    /// The fusion sheet's ten sources show the crystal's own themes in
+    /// proportion, and its destination the crystal's colour mix.
+    func testFusionSourcesShowTheCrystalsOwnThemes() {
+        let coral = palette[0]
+        let blue = palette[1 % palette.count]
+        let violet = palette[4 % palette.count]
+        let sources = FusionOrbitStage.sourceHexes(
+            shares: [
+                GemColorShare(hex: coral, fraction: 0.52),
+                GemColorShare(hex: blue, fraction: 0.29),
+                GemColorShare(hex: violet, fraction: 0.19)
+            ],
+            count: 10
+        )
+        XCTAssertEqual(sources.count, 10)
+        XCTAssertEqual(sources.filter { $0 == coral }.count, 5)
+        XCTAssertEqual(sources.filter { $0 == blue }.count, 3)
+        XCTAssertEqual(sources.filter { $0 == violet }.count, 2)
+        XCTAssertEqual(FusionOrbitStage.sourceHexes(shares: [GemColorShare(hex: coral, fraction: 1)], count: 10), Array(repeating: coral, count: 10))
+        XCTAssertTrue(FusionOrbitStage.sourceHexes(shares: [], count: 10).isEmpty)
+    }
+
     // MARK: Pixel helpers
 
     private struct Pixels {
