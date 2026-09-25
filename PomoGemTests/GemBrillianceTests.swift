@@ -1367,7 +1367,9 @@ final class GemBrillianceTests: XCTestCase {
     /// Transparency and snapshots, and a black stone never gets one.
     @MainActor
     func testLargeGemsGlowFromWithinWithoutDirectionalLight() throws {
-        let pebble = PebbleNode(descriptor: looseDescriptor(), reduceMotion: true, jarScale: JarScalePolicy.maximumScale)
+        // 標準: Reduce Motion implies 控えめ, which dims the inner light
+        // (JarEffectsIntensityTests).
+        let pebble = PebbleNode(descriptor: looseDescriptor(), reduceMotion: false, jarScale: JarScalePolicy.maximumScale)
         let glow = try XCTUnwrap(pebble.childNode(withName: "gem.innerGlow") as? SKSpriteNode)
         let body = try XCTUnwrap(pebble.childNode(withName: "gem.body"))
         XCTAssertEqual(glow.blendMode, .add)

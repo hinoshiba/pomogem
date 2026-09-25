@@ -206,6 +206,10 @@ final class JarIdleEnergyTests: XCTestCase {
         assertRedrawing(scene, "rare reward mode")
 
         rest(scene, clock: clock)
+        scene.effectsIntensity = scene.effectsIntensity == .standard ? .subtle : .standard
+        assertRedrawing(scene, "effects intensity")
+
+        rest(scene, clock: clock)
         scene.milestoneTraceCount = 3
         assertRedrawing(scene, "collar traces")
 

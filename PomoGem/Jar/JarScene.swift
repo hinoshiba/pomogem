@@ -112,6 +112,27 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
     }
 
+    /// 演出の強さ (D17, §7.6): the device-local preference. What the jar
+    /// shows is `effects` — Reduce Motion implies 控えめ. A change only
+    /// redraws the light; it never wakes the physics.
+    var effectsIntensity: JarEffectsIntensity = .standard {
+        didSet {
+            guard effectsIntensity != oldValue else { return }
+            requestRedraw()
+            allPebbleNodes.forEach { $0.setEffectsIntensity(effectsIntensity) }
+            if !effects.allowsSpontaneousTwinkle {
+                worldNode.enumerateChildNodes(withName: "//ambient.twinkle") { node, _ in
+                    node.removeFromParent()
+                }
+            }
+        }
+    }
+
+    /// What the jar shows: the preference, or 控えめ under Reduce Motion.
+    var effects: JarEffectsIntensity {
+        .resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
+    }
+
     var showsMonthLabels = false {
         didSet { renderBaseLayers() }
     }
@@ -775,7 +796,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             reduceMotion: reduceMotion,
             rareRewardMode: rareRewardMode,
             artworkScale: artworkScale,
-            jarScale: JarScalePolicy.bodyScale(for: descriptor, studyScale: studyScale ?? jarScale)
+            jarScale: JarScalePolicy.bodyScale(for: descriptor, studyScale: studyScale ?? jarScale),
+            effectsIntensity: effectsIntensity
         )
     }
 
@@ -3415,20 +3437,22 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         if reduceMotion {
             completeActiveBake(token: bakeToken)
         } else {
+            // 標準 0.52 s; 控えめ converges in 0.32 s (D17).
+            let formation = effects.fusion.formation
             selected.forEach { pebble in
                 pebble.run(
                     .group([
-                        .fadeOut(withDuration: Constants.Jar.aggregateFormationDuration),
-                        .move(to: formationPoint, duration: Constants.Jar.aggregateFormationDuration),
+                        .fadeOut(withDuration: formation),
+                        .move(to: formationPoint, duration: formation),
                         .scale(
                             to: Constants.Jar.bakePebbleFinalScale * pebble.xScale,
-                            duration: Constants.Jar.aggregateFormationDuration
+                            duration: formation
                         )
                     ])
                 )
             }
             DispatchQueue.main.asyncAfter(
-                deadline: .now() + Constants.Jar.aggregateFormationDuration
+                deadline: .now() + formation
             ) { [weak self] in
                 self?.completeActiveBake(token: bakeToken)
             }
@@ -3685,8 +3709,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     private func spawnDust(at point: CGPoint, color: UIColor) {
         guard !reduceMotion else { return }
-        for index in 0..<Constants.Jar.dustCount {
-            let angle = CGFloat(index) / CGFloat(max(Constants.Jar.dustCount, 1)) * .pi
+        let beat = effects.landing
+        let count = beat.sparkCount(standard: Constants.Jar.dustCount)
+        let lifetime = Constants.Jar.dustLifetime * beat.particleLifetimeScale
+        for index in 0..<count {
+            let angle = CGFloat(index) / CGFloat(max(count, 1)) * .pi
             let particle = SKShapeNode(
                 circleOfRadius: Constants.Jar.measuredRadius * Constants.Jar.dustRadiusScale
             )
@@ -3700,7 +3727,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             let distance = Constants.Jar.measuredRadius * (
                 Constants.Jar.dustDistanceBase
                     + CGFloat(index % 3) * Constants.Jar.dustDistanceStep
-            )
+            ) * beat.particleReach
             let destination = CGPoint(
                 x: cos(angle) * distance,
                 y: sin(angle) * distance
@@ -3712,12 +3739,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                         .moveBy(
                             x: destination.x,
                             y: destination.y,
-                            duration: Constants.Jar.dustLifetime
+                            duration: lifetime
                         ),
-                        .fadeOut(withDuration: Constants.Jar.dustLifetime),
+                        .fadeOut(withDuration: lifetime),
                         .scale(
                             to: Constants.Jar.dustFinalScale,
-                            duration: Constants.Jar.dustLifetime
+                            duration: lifetime
                         )
                     ]),
                     .removeFromParent()
@@ -3728,8 +3755,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     private func spawnSparks(at point: CGPoint, color: UIColor, mark: String) {
         guard !reduceMotion else { return }
-        for index in 0..<Constants.Jar.goldSparkCount {
-            let angle = CGFloat(index) / CGFloat(max(Constants.Jar.goldSparkCount, 1)) * .pi * 2
+        let beat = effects.landing
+        let count = beat.sparkCount(standard: Constants.Jar.goldSparkCount)
+        let lifetime = Constants.Jar.goldPreDropDuration * beat.particleLifetimeScale
+        for index in 0..<count {
+            let angle = CGFloat(index) / CGFloat(max(count, 1)) * .pi * 2
             let spark = SKLabelNode(fontNamed: "HiraginoSans-W6")
             spark.name = "drop.spark"
             spark.text = mark
@@ -3739,18 +3769,19 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             spark.zPosition = JarZPosition.effect
             worldNode.addChild(spark)
             let distance = Constants.Jar.touchRadius * Constants.Jar.sparkDistanceScale
+                * beat.particleReach
             spark.run(
                 .sequence([
                     .group([
                         .moveBy(
                             x: cos(angle) * distance,
                             y: sin(angle) * distance,
-                            duration: Constants.Jar.goldPreDropDuration
+                            duration: lifetime
                         ),
-                        .fadeOut(withDuration: Constants.Jar.goldPreDropDuration),
+                        .fadeOut(withDuration: lifetime),
                         .scale(
                             to: Constants.Jar.sparkFinalScale,
-                            duration: Constants.Jar.goldPreDropDuration
+                            duration: lifetime
                         )
                     ]),
                     .removeFromParent()
@@ -3837,14 +3868,15 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     private func shakeCamera(impactSpeed: CGFloat) {
         guard !reduceMotion else { return }
+        let beat = effects.landing
         let amplitude = min(
             Constants.Jar.screenShakeMaxAmplitude,
             Constants.Jar.screenShakeBaseAmplitude + impactSpeed
-        )
+        ) * beat.cameraShake
         cameraNode.removeAction(forKey: ActionKey.cameraShake)
         cameraNode.position = cameraRestPosition
         let rest = cameraRestPosition
-        let shake = SKAction.customAction(withDuration: Constants.Jar.dustLifetime) {
+        let shake = SKAction.customAction(withDuration: beat.cameraShakeDuration) {
             [weak cameraNode] _, elapsed in
             let frames = CGFloat(elapsed) * CGFloat(Constants.Jar.targetFramesPerSecond)
             let current = amplitude * pow(Constants.Jar.screenShakeDecay, frames)
@@ -3866,9 +3898,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// at least `gemTwinkleInterval` apart, and 2.5 s between flares of one
     /// gem. The pick is a deterministic sequence hash weighted by glint count
     /// (higher rungs own more glints); there is no randomness and no reward
-    /// meaning. Off with Reduce Motion, Low Power Mode and serious heat.
+    /// meaning. Off at 控えめ (D17), with Reduce Motion, Low Power Mode and
+    /// serious heat.
     private func updateGemTwinkles(now: TimeInterval) {
-        guard !reduceMotion,
+        guard effects.allowsSpontaneousTwinkle,
               Self.allowsAmbientSparkle,
               abs(now - lastGemTwinkleCheck) >= 0.15
         else { return }
@@ -4141,15 +4174,17 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
     }
 
-    /// Landing light: 6–8 soft sparks from the shared glint texture, at most
-    /// `maximumEventLightSprites` alive at once, plus a brief pile-light
-    /// swell. Reduce Motion never spawns them.
+    /// Landing light: 6–8 soft sparks from the shared glint texture (3–4,
+    /// shorter and closer at 控えめ), at most `maximumEventLightSprites`
+    /// alive at once, plus a brief pile-light swell. Reduce Motion never
+    /// spawns them.
     private func spawnLandingLight(at point: CGPoint, pebble: PebbleNode) {
         guard !reduceMotion, Self.allowsAmbientSparkle else { return }
         pebble.playLandingPulse()
+        let beat = effects.landing
         let tint = GemTone(hex: pebble.descriptor.colorHex, muted: !pebble.descriptor.isMeasured, glass: false)
             .glintUIColor
-        let count = 6 + Int(pebble.descriptor.id.presentationHash % 3)
+        let count = beat.sparkCount(standard: 6 + Int(pebble.descriptor.id.presentationHash % 3))
         for index in 0 ..< count where eventLightCount < Constants.Jar.maximumEventLightSprites {
             let spark = SKSpriteNode(
                 texture: index.isMultiple(of: 3) ? GemArtwork.glintTexture : GemArtwork.haloTexture,
@@ -4164,8 +4199,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             worldNode.addChild(spark)
             eventLightCount += 1
             let angle = CGFloat.pi * (0.15 + 0.7 * CGFloat(index) / CGFloat(max(count - 1, 1)))
-            let distance = pebble.radius * (1.3 + CGFloat(index % 3) * 0.45)
-            let lifetime: TimeInterval = 0.52
+            let distance = pebble.radius * (1.3 + CGFloat(index % 3) * 0.45) * beat.particleReach
+            let lifetime: TimeInterval = 0.52 * beat.particleLifetimeScale
             let move = SKAction.moveBy(x: cos(angle) * distance, y: sin(angle) * distance, duration: lifetime)
             move.timingMode = .easeOut
             spark.run(.sequence([
@@ -4176,16 +4211,19 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         guard pileGlowBaseAlpha > 0 else { return }
         let swell = SKAction.sequence([
-            .fadeAlpha(to: min(1, pileGlowBaseAlpha * 1.12), duration: 0.12),
-            .fadeAlpha(to: pileGlowBaseAlpha, duration: 0.28)
+            .fadeAlpha(to: min(1, pileGlowBaseAlpha * beat.pileSwell), duration: beat.pileSwellRise),
+            .fadeAlpha(to: pileGlowBaseAlpha, duration: beat.pileSwellFall)
         ])
         pileGlowNode.run(swell, withKey: "jar.pileGlow.pulse")
     }
 
-    /// Fusion finale by rung: A0 only fades in (200 ms). A1+ adds a white
-    /// flash (2.2R, 160 ms), a shock ring (1R → 3R, 420 ms) and a spring
-    /// birth (0.6 → 1.08 → 1.0, 380 ms); A2+ adds twelve shards. Reduce
-    /// Motion shows a static ring for 600 ms and no motion on the stone.
+    /// Fusion finale by rung (`JarEffectsIntensity.fusion`). 標準: A0 only
+    /// fades in (200 ms); A1+ adds a white flash (2.2R, 160 ms), a shock
+    /// ring (1R → 3R, 420 ms) and a spring birth (0.6 → 1.08 → 1.0,
+    /// 380 ms); A2+ adds twelve shards. 控えめ: a 120 ms fade, a fainter
+    /// 100 ms flash, a 1R → 2.2R ring in 260 ms, a 0.85 → 1.0 birth with
+    /// no overshoot and no shards. Reduce Motion shows a static ring for
+    /// 600 ms and no motion on the stone.
     private func presentFusionFinale(for node: PebbleNode) {
         let tier = GemCutLadder.aggregateTier(grams: node.descriptor.grams)
         let point = node.position
@@ -4200,19 +4238,24 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             ring.run(.sequence([.wait(forDuration: 0.6), .removeFromParent()]))
             return
         }
+        let beat = effects.fusion
         guard tier >= 1, Self.allowsAmbientSparkle else {
             node.setScale(rest)
             node.alpha = 0
-            node.run(.fadeIn(withDuration: 0.2))
+            node.run(.fadeIn(withDuration: beat.fadeIn))
             return
         }
         node.alpha = 1
-        node.setScale(0.6 * rest)
-        let grow = SKAction.scale(to: 1.08 * rest, duration: 0.20)
+        node.setScale(beat.birthStart * rest)
+        let grow = SKAction.scale(to: beat.birthOvershoot * rest, duration: beat.birthGrow)
         grow.timingMode = .easeOut
-        let settle = SKAction.scale(to: rest, duration: 0.18)
-        settle.timingMode = .easeInEaseOut
-        node.run(.sequence([grow, settle]), withKey: PebbleNode.birthActionKey)
+        if beat.birthSettle > 0 {
+            let settle = SKAction.scale(to: rest, duration: beat.birthSettle)
+            settle.timingMode = .easeInEaseOut
+            node.run(.sequence([grow, settle]), withKey: PebbleNode.birthActionKey)
+        } else {
+            node.run(grow, withKey: PebbleNode.birthActionKey)
+        }
 
         let flash = SKSpriteNode(
             texture: GemArtwork.haloTexture,
@@ -4222,19 +4265,20 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         flash.color = .white
         flash.colorBlendFactor = 1
         flash.blendMode = .add
+        flash.alpha = beat.flashAlpha
         flash.position = point
         flash.zPosition = JarZPosition.effect
         worldNode.addChild(flash)
-        flash.run(.sequence([.fadeOut(withDuration: 0.16), .removeFromParent()]))
+        flash.run(.sequence([.fadeOut(withDuration: beat.flashDuration), .removeFromParent()]))
 
         let ring = makeFusionRing(at: point, radius: node.radius)
-        let expand = SKAction.scale(to: 3, duration: 0.42)
+        let expand = SKAction.scale(to: beat.ringScale, duration: beat.ringDuration)
         expand.timingMode = .easeOut
-        ring.run(.sequence([.group([expand, .fadeOut(withDuration: 0.42)]), .removeFromParent()]))
+        ring.run(.sequence([.group([expand, .fadeOut(withDuration: beat.ringDuration)]), .removeFromParent()]))
 
-        guard tier >= 2 else { return }
+        guard tier >= 2, beat.shardCount > 0 else { return }
         let tint = GemTone(hex: node.descriptor.colorHex, muted: false, glass: false).glintUIColor
-        for index in 0 ..< 12 where eventLightCount < Constants.Jar.maximumEventLightSprites {
+        for index in 0 ..< beat.shardCount where eventLightCount < Constants.Jar.maximumEventLightSprites {
             let shard = SKSpriteNode(texture: GemArtwork.glintTexture, size: CGSize(width: 8, height: 8))
             shard.name = "drop.fusionShard"
             shard.color = tint
@@ -4244,12 +4288,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             shard.zPosition = JarZPosition.effect
             worldNode.addChild(shard)
             eventLightCount += 1
-            let angle = CGFloat(index) / 12 * .pi * 2
+            let angle = CGFloat(index) / CGFloat(beat.shardCount) * .pi * 2
             let distance = node.radius * 2.6
-            let move = SKAction.moveBy(x: cos(angle) * distance, y: sin(angle) * distance, duration: 0.6)
+            let move = SKAction.moveBy(x: cos(angle) * distance, y: sin(angle) * distance, duration: beat.shardLifetime)
             move.timingMode = .easeOut
             shard.run(.sequence([
-                .group([move, .fadeOut(withDuration: 0.6)]),
+                .group([move, .fadeOut(withDuration: beat.shardLifetime)]),
                 .run { [weak self] in self?.eventLightCount -= 1 },
                 .removeFromParent()
             ]))
@@ -4272,7 +4316,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     private func updateRareTwinkles() {
-        guard !reduceMotion, rareRewardMode.usesEnhancedPresentation else { return }
+        guard effects.allowsSpontaneousTwinkle, rareRewardMode.usesEnhancedPresentation else { return }
         let now = ProcessInfo.processInfo.systemUptime
         guard now - lastTwinkleUptime >= Constants.Jar.rareTwinkleInterval else { return }
         lastTwinkleUptime = now

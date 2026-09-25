@@ -527,6 +527,8 @@ final class PebbleNode: SKShapeNode {
     private(set) var lastObservedPosition: CGPoint = .zero
     private(set) var isRemovedForBake = false
     private var reducesVisualMotion: Bool
+    /// 演出の強さ as chosen on this device (D17); `effects` is what shows.
+    private(set) var effectsIntensity: JarEffectsIntensity
     private(set) var rareRewardMode: RareRewardMode
     private var contactShadowNode: SKShapeNode?
     private var contactCausticNode: SKShapeNode?
@@ -591,11 +593,13 @@ final class PebbleNode: SKShapeNode {
         reduceMotion: Bool = UIAccessibility.isReduceMotionEnabled,
         rareRewardMode: RareRewardMode = .standard,
         artworkScale: CGFloat = PebbleNode.defaultArtworkScale,
-        jarScale: CGFloat = 1
+        jarScale: CGFloat = 1,
+        effectsIntensity: JarEffectsIntensity = .standard
     ) {
         self.descriptor = descriptor
         self.localRadius = descriptor.radius
         self.reducesVisualMotion = reduceMotion
+        self.effectsIntensity = effectsIntensity
         self.rareRewardMode = rareRewardMode
         self.artworkScale = GemArtwork.renderScale(artworkScale)
         let scale = Self.sanitizedJarScale(jarScale)
@@ -620,6 +624,7 @@ final class PebbleNode: SKShapeNode {
         )
         localRadius = Constants.Jar.measuredRadius
         reducesVisualMotion = UIAccessibility.isReduceMotionEnabled
+        effectsIntensity = .standard
         rareRewardMode = .standard
         artworkScale = Self.defaultArtworkScale
         super.init(coder: aDecoder)
@@ -719,13 +724,35 @@ final class PebbleNode: SKShapeNode {
     func setReduceMotion(_ enabled: Bool) {
         guard reducesVisualMotion != enabled else { return }
         reducesVisualMotion = enabled
-        configureAggregateAuraMotion()
-        configureEarlyEffortAuraMotion()
-        settleGemTwinkle()
+        // Reduce Motion implies 控えめ: halos and breaths follow as well.
+        applyEffects()
         guard presentationKind == .prism, !descriptor.isAggregate else { return }
         fillShader = rareRewardMode.usesEnhancedPresentation
             ? (enabled ? Self.staticPrismShader : Self.prismShader)
             : nil
+    }
+
+    /// What this gem shows: the preference, or 控えめ under Reduce Motion.
+    var effects: JarEffectsIntensity {
+        .resolved(preference: effectsIntensity, reduceMotion: reducesVisualMotion)
+    }
+
+    /// 演出の強さ changed (D17). Only light and motion change: the body,
+    /// its physics, mass and marks stay exactly as they are.
+    func setEffectsIntensity(_ intensity: JarEffectsIntensity) {
+        guard effectsIntensity != intensity else { return }
+        effectsIntensity = intensity
+        applyEffects()
+    }
+
+    /// Re-applies everything that follows `effects`: halo and inner light,
+    /// the early-effort light, the auras' breath and the glints' rest.
+    private func applyEffects() {
+        applyHaloAlpha()
+        applyEarlyEffortAlpha()
+        configureAggregateAuraMotion()
+        configureEarlyEffortAuraMotion()
+        settleGemTwinkle()
     }
 
     /// Changes only the optional random-reward presentation. The pebble's
@@ -783,7 +810,6 @@ final class PebbleNode: SKShapeNode {
             bloom.color = tint
             bloom.colorBlendFactor = 1
             bloom.blendMode = .add
-            bloom.alpha = reducesTransparency ? 0.12 : 0.26
             bloom.zPosition = -0.52
             addChild(bloom)
             earlyEffortBloomNode = bloom
@@ -796,12 +822,20 @@ final class PebbleNode: SKShapeNode {
             aura.color = tint
             aura.colorBlendFactor = 1
             aura.blendMode = .add
-            aura.alpha = reducesTransparency ? 0.16 : 0.34
             aura.zPosition = -0.45
             addChild(aura)
             earlyEffortAuraNode = aura
+            applyEarlyEffortAlpha()
         }
         configureEarlyEffortAuraMotion()
+    }
+
+    /// The early-effort light (§7.6): lighter with Reduce Transparency and
+    /// at 控えめ (the halo scale).
+    private func applyEarlyEffortAlpha() {
+        let scale = effects.haloScale
+        earlyEffortAuraNode?.alpha = (reducesTransparency ? 0.16 : 0.34) * scale
+        earlyEffortBloomNode?.alpha = (reducesTransparency ? 0.12 : 0.26) * scale
     }
 
     private func configureEarlyEffortAuraMotion() {
@@ -811,7 +845,7 @@ final class PebbleNode: SKShapeNode {
         aura.setScale(1)
         earlyEffortBloomNode?.removeAction(forKey: key)
         earlyEffortBloomNode?.setScale(1)
-        guard !reducesVisualMotion else { return }
+        guard effects.allowsBreathing else { return }
         // Scale-only breathing keeps the Reduce Transparency alpha intact.
         let expand = SKAction.scale(to: 1.10, duration: 1.15)
         expand.timingMode = .easeInEaseOut
@@ -867,8 +901,12 @@ final class PebbleNode: SKShapeNode {
                 // Each glint owns a narrow window (0.12 wide) in the smoothed
                 // tilt, so tilting the phone makes the pile catch the light
                 // one stone at a time (about four lit at once in a full jar).
+                // 控えめ (and Reduce Motion) keeps one static star: tilt
+                // never lights a glint.
                 let distance = abs(horizontal - gemGlintPhases[index])
-                let window = max(0, 1 - distance / (Self.glintTiltWindow / 2))
+                let window = effects.allowsTiltGlints
+                    ? max(0, 1 - distance / (Self.glintTiltWindow / 2))
+                    : 0
                 let tiltBoost = window * window * (3 - 2 * window)
                 let twinkleBoost = max(0, glint.xScale - 1) / (Self.gemTwinkleScale - 1)
                 glint.alpha = min(1, glintRestAlpha(index: index) + tiltBoost * 0.55 + twinkleBoost * 0.85)
@@ -1004,8 +1042,10 @@ final class PebbleNode: SKShapeNode {
     static let gemTwinkleCooldown: TimeInterval = 2.5
     /// Resting glint alpha while motion is allowed; tilt and flares add to it.
     static let glintRestAlpha: CGFloat = 0.15
-    /// Reduce Motion keeps one static star per gem instead of flares.
-    static let reducedMotionStarAlpha: CGFloat = 0.6
+    /// 控えめ (and Reduce Motion, which implies it) keeps one static star
+    /// per gem instead of flares and tilt glints: the former Reduce Motion
+    /// star (α0.6) at the 控えめ light scale (× 0.7, D17).
+    static let reducedMotionStarAlpha: CGFloat = 0.42
     /// The ×N plate sits below the table, as a fraction of the radius.
     static let aggregatePlateDrop: CGFloat = 0.40
 
@@ -1410,16 +1450,19 @@ final class PebbleNode: SKShapeNode {
     }
 
     private func glintRestAlpha(index: Int) -> CGFloat {
-        if reducesVisualMotion {
+        // Reduce Motion and 控えめ: one static star per gem, no tilt glints.
+        if !effects.allowsTiltGlints {
             return index == 0 ? Self.reducedMotionStarAlpha : 0
         }
         return Self.glintRestAlpha
     }
 
     private func applyHaloAlpha() {
+        let effects = effects
         gemHaloNode?.alpha = min(1, gemHaloBaseAlpha * gemHaloEmphasis)
-            * (reducesTransparency ? 0.45 : 1)
+            * (reducesTransparency ? 0.45 : 1) * effects.haloScale
         gemInnerGlowNode?.alpha = gemInnerGlowBaseAlpha * (reducesTransparency ? 0.6 : 1)
+            * effects.innerGlowScale
     }
 
     /// Inner light of a loose study gem (additive, over the facets).
@@ -1432,8 +1475,7 @@ final class PebbleNode: SKShapeNode {
         guard reducesTransparency != enabled else { return }
         reducesTransparency = enabled
         applyHaloAlpha()
-        earlyEffortAuraNode?.alpha = enabled ? 0.16 : 0.34
-        earlyEffortBloomNode?.alpha = enabled ? 0.12 : 0.26
+        applyEarlyEffortAlpha()
     }
 
     /// The aggregate holding the most grams in the pile glows 10 % more.
@@ -1449,7 +1491,7 @@ final class PebbleNode: SKShapeNode {
     /// Eligible for the scene's bounded twinkle scheduler (ignores cooldown;
     /// see `canGemTwinkle(at:)`).
     var canGemTwinkle: Bool {
-        !gemGlintNodes.isEmpty && !isRemovedForBake && !reducesVisualMotion
+        !gemGlintNodes.isEmpty && !isRemovedForBake && effects.allowsSpontaneousTwinkle
     }
 
     func canGemTwinkle(at time: TimeInterval) -> Bool {
@@ -1492,20 +1534,25 @@ final class PebbleNode: SKShapeNode {
         )
     }
 
-    /// Landing beat: the halo swells (to 0.95 in 80 ms, back in 360 ms) and
-    /// the first star flares once. Nothing runs under Reduce Motion.
+    static let landingPulseKey = "gem.halo.landing"
+
+    /// Landing beat (`JarEffectsIntensity.landing`): at 標準 the halo swells
+    /// (to 0.95 in 80 ms, back in 360 ms) and the first star flares once; at
+    /// 控えめ it swells halfway (60 ms, back in 200 ms) and no star flares.
+    /// Nothing runs under Reduce Motion.
     func playLandingPulse() {
         guard !reducesVisualMotion, let halo = gemHaloNode else { return }
-        let key = "gem.halo.landing"
-        halo.removeAction(forKey: key)
+        let beat = effects.landing
+        halo.removeAction(forKey: Self.landingPulseKey)
         applyHaloAlpha()
         let base = halo.alpha
-        let peak = max(base, 0.95 * (reducesTransparency ? 0.45 : 1))
-        let rise = SKAction.fadeAlpha(to: peak, duration: 0.08)
-        let fall = SKAction.fadeAlpha(to: base, duration: 0.36)
+        let full = max(base, 0.95 * (reducesTransparency ? 0.45 : 1))
+        let peak = base + (full - base) * beat.haloSwell
+        let rise = SKAction.fadeAlpha(to: peak, duration: beat.haloRise)
+        let fall = SKAction.fadeAlpha(to: base, duration: beat.haloFall)
         fall.timingMode = .easeOut
-        halo.run(.sequence([rise, fall]), withKey: key)
-        if !gemGlintNodes.isEmpty {
+        halo.run(.sequence([rise, fall]), withKey: Self.landingPulseKey)
+        if beat.flaresStar, !gemGlintNodes.isEmpty {
             playGemTwinkle(sequence: 0, at: lastGemTwinkleTime)
         }
     }
@@ -1799,7 +1846,7 @@ final class PebbleNode: SKShapeNode {
         let actionKey = "aggregate.aura.breath"
         aura.removeAction(forKey: actionKey)
         aura.setScale(1)
-        guard !reducesVisualMotion else { return }
+        guard effects.allowsBreathing else { return }
 
         let tier = GemCutLadder.aggregateTier(grams: descriptor.grams)
         let amplitude = min(1.06, 1.025 + CGFloat(tier) * 0.008)

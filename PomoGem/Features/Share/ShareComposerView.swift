@@ -2736,10 +2736,15 @@ private struct ShareCardAtmosphere: View {
     let story: Bool
     let usesAnimatedArtwork: Bool
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         GeometryReader { proxy in
             let resolvedPhase = usesAnimatedArtwork ? phase : 0.18
             let pulse = (sin(resolvedPhase * .pi * 2) + 1) / 2
+            // 控えめ (D17): the ambient sparkles hold still.
+            let sparklePhase = JarEffectsIntensity.current(reduceMotionEnvironment: reduceMotion)
+                .allowsSpontaneousTwinkle ? resolvedPhase : 0.18
             ZStack {
                 Color(hex: "050B1B")
 
@@ -2773,7 +2778,7 @@ private struct ShareCardAtmosphere: View {
                     endRadius: proxy.size.width * 0.58
                 )
 
-                ShareAmbientSparkles(phase: resolvedPhase, story: story)
+                ShareAmbientSparkles(phase: sparklePhase, story: story)
 
                 Rectangle()
                     .fill(
@@ -2920,6 +2925,7 @@ private struct ShareJarGraphic: View {
 
     /// The card's render scale (`ImageRenderer.scale` or the screen's).
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var visibleSessions: [ShareSessionVisual] {
         Array(shareDrawableSessions(sessions: sessions, aggregates: aggregates).suffix(
@@ -3101,14 +3107,17 @@ private struct ShareJarGraphic: View {
         // The stone sinks into the upper half of the bed.
         let bottom = heroFloor(width: size.width) + bed * 0.52
         let glow = pebbleSize * 1.7
-        let wave = sin(animationPhase * .pi * 2)
+        // 控えめ (D17): a dimmer glow that holds still, and a still sparkle.
+        let effects = JarEffectsIntensity.current(reduceMotionEnvironment: reduceMotion)
+        let wave = effects.allowsBreathing ? sin(animationPhase * .pi * 2) : 0
+        let halo = Double(effects.haloScale)
         return ZStack {
             Circle()
                 .fill(
                     RadialGradient(
                         colors: [
-                            aggregateHeroColor(aggregate).opacity(0.42),
-                            aggregateHeroColor(aggregate).opacity(0.12),
+                            aggregateHeroColor(aggregate).opacity(0.42 * halo),
+                            aggregateHeroColor(aggregate).opacity(0.12 * halo),
                             .clear
                         ],
                         center: .center,
@@ -3771,7 +3780,14 @@ private struct ShareJarMotionLayer: View {
                 width: motion.stoneRect.width * fitted.width,
                 height: motion.stoneRect.height * fitted.height
             )
-            let breath = (1 - cos(phase * .pi * 2)) / 2
+            // 控えめ (D17): the stone and its glow hold the still card's
+            // breath, the glow is dimmer and no glint lights up; the sheen
+            // still crosses the glass, so the GIF keeps moving.
+            let effects = motion.effects
+            let breath = effects.allowsBreathing
+                ? (1 - cos(phase * .pi * 2)) / 2
+                : (1 - cos(0.18 * .pi * 2)) / 2
+            let halo = Double(effects.haloScale)
             ZStack {
                 // A sheen of light sliding across the glass (one pass per loop).
                 LinearGradient(
@@ -3796,8 +3812,8 @@ private struct ShareJarMotionLayer: View {
                         .fill(
                             RadialGradient(
                                 colors: [
-                                    Color(uiColor: motion.glowColor).opacity(0.10 + 0.42 * breath),
-                                    Color(uiColor: motion.glowColor).opacity(0.04 + 0.16 * breath),
+                                    Color(uiColor: motion.glowColor).opacity((0.10 + 0.42 * breath) * halo),
+                                    Color(uiColor: motion.glowColor).opacity((0.04 + 0.16 * breath) * halo),
                                     .clear
                                 ],
                                 center: .center,
@@ -3817,7 +3833,7 @@ private struct ShareJarMotionLayer: View {
                         .scaleEffect(1 + 0.04 * breath)
                         .position(x: stone.midX, y: stone.midY)
                 }
-                ForEach(Array(motion.glints.enumerated()), id: \.offset) { index, point in
+                ForEach(Array((effects.allowsSpontaneousTwinkle ? motion.glints : []).enumerated()), id: \.offset) { index, point in
                     let wave = max(0, sin((phase + Double(index) / Double(max(motion.glints.count, 1))) * .pi * 2))
                     Image(systemName: "sparkle")
                         .font(.system(size: max(7, fitted.width * 0.06) * (0.6 + 0.6 * wave), weight: .bold))

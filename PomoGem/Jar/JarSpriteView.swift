@@ -142,6 +142,8 @@ struct JarSpriteView: View {
     @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
+    /// 演出の強さ (D17): device-local, read live from Settings.
+    @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
     @StateObject private var motionObserver: JarMotionObserver
     /// Measured size of the time core's label block (shared by the core
     /// behind the scene and its labels in front, so both use one layout;
@@ -280,6 +282,7 @@ struct JarSpriteView: View {
                 let coreLabelsBuried = coreLabelFit == .hidden
                 let coreLabelHeight = coreLabelFit.labelHeight(full: coreLabelMetrics.size.height, secondLine: coreSecondLine)
                 let coreLabelBottomLimit = coreLabelsBuried ? floorLabelLimit : abovePileLimit
+                let effects = JarEffectsIntensity.resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
                 let shareCore = Self.shareCore(
                     stageSize: proxy.size,
                     coreState: lifetimeCoreState,
@@ -287,7 +290,8 @@ struct JarSpriteView: View {
                     shares: lifetimeCoreColorShares.isEmpty
                         ? [GemColorShare(hex: lifetimeCoreColorHex, fraction: 1)]
                         : lifetimeCoreColorShares,
-                    themeMarks: GemThemeMark.isEnabled(environment: differentiateWithoutColor)
+                    themeMarks: GemThemeMark.isEnabled(environment: differentiateWithoutColor),
+                    effects: effects
                 )
                 if let coreState = lifetimeCoreState {
                     JarLifetimeCoreBackdrop(
@@ -297,7 +301,8 @@ struct JarSpriteView: View {
                         topClearance: coreTopClearance,
                         bottomLimit: coreBottomLimit,
                         labelBottomLimit: coreLabelBottomLimit,
-                        labelHeight: coreLabelHeight
+                        labelHeight: coreLabelHeight,
+                        effectsInEffect: effects
                     )
                     if coreLabelsBuried {
                         // Buried under the pile, the labels stay laid out
@@ -321,7 +326,8 @@ struct JarSpriteView: View {
                         totalGrams: totalGrams,
                         topClearance: coreTopClearance,
                         bottomLimit: coreBottomLimit,
-                        labelBottomLimit: coreLabelBottomLimit
+                        labelBottomLimit: coreLabelBottomLimit,
+                        effectsInEffect: effects
                     )
                 }
 
@@ -371,9 +377,13 @@ struct JarSpriteView: View {
                     scene.artworkScale = displayScale
                     scene.gemBed = gemBedState
                     scene.milestoneTraceCount = milestoneTraceCount
+                    scene.effectsIntensity = effectsIntensity
                     updateMotionBehavior(reduceMotion: reduceMotion)
                     // Home shown again: draw the resting jar's frame.
                     scene.requestRedraw()
+                }
+                .onChange(of: effectsIntensity) { _, intensity in
+                    scene.effectsIntensity = intensity
                 }
                 .onChange(of: milestoneTraceCount) { _, count in
                     scene.milestoneTraceCount = count
@@ -476,7 +486,8 @@ struct JarSpriteView: View {
         coreState: JarLifetimeCoreState?,
         totalGrams: Int,
         shares: [GemColorShare],
-        themeMarks: Bool
+        themeMarks: Bool,
+        effects: JarEffectsIntensity
     ) -> JarShareCore? {
         let jarWidth = max(1, stageSize.width - Constants.Jar.horizontalMargin * 2)
         if let coreState {
@@ -485,7 +496,8 @@ struct JarSpriteView: View {
                 level: coreState.coreLevel,
                 vesselLitFacets: nil,
                 diameter: JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: coreState.coreLevel),
-                themeMarks: themeMarks
+                themeMarks: themeMarks,
+                effects: effects
             )
         }
         guard totalGrams > 0, totalGrams < GemCutLadder.firstCrystalTierGrams else { return nil }
@@ -493,7 +505,8 @@ struct JarSpriteView: View {
             shares: [],
             level: 0,
             vesselLitFacets: min(10, max(0, totalGrams / max(1, Constants.Mass.measuredPebbleGrams))),
-            diameter: JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: 1)
+            diameter: JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: 1),
+            effects: effects
         )
     }
 
@@ -1091,6 +1104,8 @@ struct JarShareCore: Equatable {
     let diameter: CGFloat
     /// Differentiate Without Color: the stone carries its theme marks.
     var themeMarks = false
+    /// 演出の強さ in effect on Home (D17): 控えめ draws lighter lights.
+    var effects: JarEffectsIntensity = .standard
 }
 
 /// Core Graphics twin of `JarLifetimeCoreBackdrop` / `JarLifetimeCoreVessel`
@@ -1127,15 +1142,19 @@ enum JarShareCoreArtwork {
             context.drawRadialGradient(gradient, startCenter: c, startRadius: r0, endCenter: c, endRadius: r1, options: [.drawsBeforeStartLocation])
             context.restoreGState()
         }
+        // 控えめ (D17): the bloom, the lobes and the girdle bloom at the
+        // halo scale; the colourless vessel's light at the inner-glow scale.
+        let halo = core.effects.haloScale
+        let inner = core.effects.innerGlowScale
         if core.vesselLitFacets != nil {
             let white = UIColor.white
-            radial([white.withAlphaComponent(0.30), white.withAlphaComponent(0.10), .clear], [0, 0.5, 1], from: d * 0.30, to: d * 0.65)
+            radial([white.withAlphaComponent(0.30 * inner), white.withAlphaComponent(0.10 * inner), .clear], [0, 0.5, 1], from: d * 0.30, to: d * 0.65)
         } else {
-            let halo = GemArtwork.coreHaloColor(shares: core.shares)
+            let haloColor = GemArtwork.coreHaloColor(shares: core.shares)
             let lobes = GemArtwork.coreHaloLobeColors(shares: core.shares)
             let rim = GemArtwork.coreRimGlowColor(shares: core.shares)
             radial(
-                [halo.withAlphaComponent(0.24), GemColor(hex: Constants.Color.auroraViolet).withAlpha(0.05), .clear],
+                [haloColor.withAlphaComponent(0.24 * halo), GemColor(hex: Constants.Color.auroraViolet).withAlpha(0.05 * halo), .clear],
                 [0, 0.5, 1],
                 from: 3,
                 to: d * 1.25
@@ -1150,7 +1169,7 @@ enum JarShareCoreArtwork {
             context.restoreGState()
             for (color, side) in [(lobes.left, CGFloat(-1)), (lobes.right, CGFloat(1))] {
                 radial(
-                    [color.withAlphaComponent(0.45), color.withAlphaComponent(0.20), .clear],
+                    [color.withAlphaComponent(0.45 * halo), color.withAlphaComponent(0.20 * halo), .clear],
                     [0, 0.5, 1],
                     from: d * 0.30,
                     to: d * 0.70,
@@ -1158,7 +1177,7 @@ enum JarShareCoreArtwork {
                     offset: side * d * 0.16
                 )
             }
-            radial([rim.withAlphaComponent(0.95), rim.withAlphaComponent(0.34), .clear], [0, 0.5, 1], from: d * 0.44, to: d * 0.62)
+            radial([rim.withAlphaComponent(0.95 * halo), rim.withAlphaComponent(0.34 * halo), .clear], [0, 0.5, 1], from: d * 0.44, to: d * 0.62)
         }
         guard let stone = stoneImage(for: core, scale: scale).cgImage else { return }
         let rect = stoneRect(for: core, center: center)
@@ -1180,6 +1199,9 @@ struct ShareJarMotion {
     let stoneRect: CGRect
     let glowColor: UIColor
     let glints: [CGPoint]
+    /// 演出の強さ the jar showed (D17): 控えめ holds the breath, dims the
+    /// glow and lights no glints.
+    var effects: JarEffectsIntensity = .standard
 }
 
 /// Four static star glints on the floor, drawn once (no animation). Each is

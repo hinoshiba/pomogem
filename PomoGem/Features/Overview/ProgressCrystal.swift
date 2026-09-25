@@ -607,17 +607,27 @@ struct FusionOrbitStage: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
     @State private var latestSourceIsVisible = false
     @State private var convergencePulse = false
     @State private var completionFlareIsVisible = false
+
+    /// 演出の強さ in effect (D17): Reduce Motion implies 控えめ, which pulls
+    /// the ten in less, swells the crystal less, draws no rays and dims the
+    /// glow (`JarEffectsIntensity.fusionSheet`).
+    private var effects: JarEffectsIntensity {
+        .resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
+    }
 
     var body: some View {
         GeometryReader { proxy in
             let dimension = min(proxy.size.width, proxy.size.height)
             let fraction = CGFloat(state.progressFraction ?? 0)
             let baseRadius = dimension * 0.405
+            let beat = effects.fusionSheet
+            let halo = Double(effects.haloScale)
             let orbitRadius = state.isFusionComplete && convergencePulse
-                ? dimension * 0.285
+                ? dimension * beat.convergedOrbit
                 : baseRadius
             let sourceDiameter = max(8, dimension * scale.sourceDiameterFactor)
             let coreFactor = state.isFusionComplete
@@ -630,9 +640,9 @@ struct FusionOrbitStage: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                Color.white.opacity(completionFlareIsVisible ? 0.18 : 0.04),
-                                Color(hex: colorHex).opacity(reduceTransparency ? 0.10 : 0.30),
-                                PomoGemTheme.auroraViolet.opacity(reduceTransparency ? 0.03 : 0.13),
+                                Color.white.opacity((completionFlareIsVisible ? 0.18 : 0.04) * halo),
+                                Color(hex: colorHex).opacity((reduceTransparency ? 0.10 : 0.30) * halo),
+                                PomoGemTheme.auroraViolet.opacity((reduceTransparency ? 0.03 : 0.13) * halo),
                                 .clear
                             ],
                             center: .center,
@@ -722,17 +732,17 @@ struct FusionOrbitStage: View {
                     }
                 }
                 .frame(width: coreDiameter, height: coreDiameter)
-                .scaleEffect(state.isFusionComplete && convergencePulse ? 1.16 : 1)
+                .scaleEffect(state.isFusionComplete && convergencePulse ? beat.coreSwell : 1)
                 .opacity(state.litSlotCount == nil ? 0.66 : 1)
                 .shadow(
                     color: Color(hex: colorHex).opacity(
-                        state.destinationMaterialized
+                        (state.destinationMaterialized
                             ? (state.isFusionComplete ? 0.86 : 0.50)
-                            : 0.22
+                            : 0.22) * halo
                     ),
-                    radius: state.destinationMaterialized
+                    radius: (state.destinationMaterialized
                         ? (state.isFusionComplete ? 16 : 9)
-                        : 4
+                        : 4) * (0.5 + 0.5 * CGFloat(halo))
                 )
             }
             .frame(width: dimension, height: dimension)
@@ -750,7 +760,7 @@ struct FusionOrbitStage: View {
 
     @ViewBuilder
     private func completionFlare(dimension: CGFloat) -> some View {
-        if state.isFusionComplete {
+        if state.isFusionComplete, effects.fusionSheet.showsRays {
             ForEach(0 ..< 4, id: \.self) { index in
                 Capsule()
                     .fill(
@@ -775,25 +785,28 @@ struct FusionOrbitStage: View {
         completionFlareIsVisible = reduceMotion && state.isFusionComplete
         guard !reduceMotion else { return }
 
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.66)) {
+        // 標準 springs; 控えめ uses short eases and holds (D17).
+        let beat = effects.fusionSheet
+        let springs = beat.usesSprings
+        withAnimation(springs ? .spring(response: 0.34, dampingFraction: 0.66) : .easeOut(duration: 0.18)) {
             latestSourceIsVisible = true
         }
         guard state.isFusionComplete else { return }
 
-        try? await Task.sleep(for: .milliseconds(220))
+        try? await Task.sleep(for: .seconds(beat.convergenceDelay))
         guard !Task.isCancelled else { return }
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) {
+        withAnimation(springs ? .spring(response: 0.42, dampingFraction: 0.72) : .easeInOut(duration: 0.22)) {
             convergencePulse = true
             completionFlareIsVisible = true
         }
-        try? await Task.sleep(for: .milliseconds(430))
+        try? await Task.sleep(for: .seconds(beat.convergenceHold))
         guard !Task.isCancelled else { return }
-        withAnimation(.spring(response: 0.52, dampingFraction: 0.78)) {
+        withAnimation(springs ? .spring(response: 0.52, dampingFraction: 0.78) : .easeOut(duration: 0.22)) {
             convergencePulse = false
         }
-        try? await Task.sleep(for: .milliseconds(260))
+        try? await Task.sleep(for: .seconds(beat.releaseHold))
         guard !Task.isCancelled else { return }
-        withAnimation(.easeOut(duration: 0.36)) {
+        withAnimation(.easeOut(duration: springs ? 0.36 : 0.2)) {
             completionFlareIsVisible = false
         }
     }
@@ -2131,11 +2144,20 @@ struct JarLifetimeCoreBackdrop: View {
     var labelBottomLimit: CGFloat?
     /// Measured height of the label block.
     var labelHeight: CGFloat = JarLifetimeCoreBackdrop.estimatedLabelHeight
+    /// 演出の強さ as the jar resolved it (its Reduce Motion includes the
+    /// test override); nil resolves it here.
+    var effectsInEffect: JarEffectsIntensity?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
     @State private var breathing = false
+
+    /// 演出の強さ in effect (D17): Reduce Motion implies 控えめ.
+    private var effects: JarEffectsIntensity {
+        effectsInEffect ?? .resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
+    }
 
     /// Name plate + two-line card before the first measurement.
     static let estimatedLabelHeight: CGFloat = 56
@@ -2185,6 +2207,9 @@ struct JarLifetimeCoreBackdrop: View {
             let lobes = GemArtwork.coreHaloLobeColors(shares: shares)
             let rimColor = Color(uiColor: GemArtwork.coreRimGlowColor(shares: shares))
             let quantized = shares
+            // 控えめ (D17): the bloom, the lobes and the girdle bloom at the
+            // halo scale (the stone itself is unchanged).
+            let halo = Double(effects.haloScale)
 
             ZStack {
                 // Broad, soft bloom that seats the core in the jar's light.
@@ -2192,8 +2217,8 @@ struct JarLifetimeCoreBackdrop: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                haloColor.opacity(reduceTransparency ? 0.10 : 0.24),
-                                PomoGemTheme.auroraViolet.opacity(reduceTransparency ? 0.02 : 0.05),
+                                haloColor.opacity((reduceTransparency ? 0.10 : 0.24) * halo),
+                                PomoGemTheme.auroraViolet.opacity((reduceTransparency ? 0.02 : 0.05) * halo),
                                 .clear
                             ],
                             center: .center,
@@ -2225,8 +2250,8 @@ struct JarLifetimeCoreBackdrop: View {
                         .fill(
                             RadialGradient(
                                 colors: [
-                                    Color(uiColor: lobe.0).opacity(reduceTransparency ? 0.20 : 0.45),
-                                    Color(uiColor: lobe.0).opacity(reduceTransparency ? 0.08 : 0.20),
+                                    Color(uiColor: lobe.0).opacity((reduceTransparency ? 0.20 : 0.45) * halo),
+                                    Color(uiColor: lobe.0).opacity((reduceTransparency ? 0.08 : 0.20) * halo),
                                     .clear
                                 ],
                                 center: .center,
@@ -2243,8 +2268,8 @@ struct JarLifetimeCoreBackdrop: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                rimColor.opacity(reduceTransparency ? 0.34 : 0.95),
-                                rimColor.opacity(reduceTransparency ? 0.12 : 0.34),
+                                rimColor.opacity((reduceTransparency ? 0.34 : 0.95) * halo),
+                                rimColor.opacity((reduceTransparency ? 0.12 : 0.34) * halo),
                                 .clear
                             ],
                             center: .center,
@@ -2271,7 +2296,7 @@ struct JarLifetimeCoreBackdrop: View {
         .accessibilityHidden(true)
         .allowsHitTesting(false)
         .onAppear { updateMotion() }
-        .onChange(of: reduceMotion) { _, _ in updateMotion() }
+        .onChange(of: effects) { _, _ in updateMotion() }
     }
 
     /// Copper dashed orbit (α0.55, 1 pt, [3, 5]) with double-diamond slots
@@ -2356,10 +2381,10 @@ struct JarLifetimeCoreBackdrop: View {
     }
 
     /// Breathing is 1.0 ↔ 1.02 over 4 s on the sharp stone only (no blurred
-    /// layer animates). Off with Reduce Motion and in UI-test mode.
+    /// layer animates). Off at 控えめ, with Reduce Motion and in UI-test mode.
     private func updateMotion() {
         breathing = false
-        guard !reduceMotion,
+        guard effects.allowsBreathing,
               !LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess
         else { return }
         withAnimation(.easeInOut(duration: 4).repeatForever(autoreverses: true)) {
@@ -2623,15 +2648,22 @@ struct JarLifetimeCoreVessel: View {
     var topClearance: CGFloat?
     var bottomLimit: CGFloat?
     var labelBottomLimit: CGFloat?
+    /// 演出の強さ as the jar resolved it; nil resolves it here.
+    var effectsInEffect: JarEffectsIntensity?
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.displayScale) private var displayScale
+    @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
 
     var body: some View {
         GeometryReader { proxy in
             let jarWidth = max(1, proxy.size.width - Constants.Jar.horizontalMargin * 2)
             let core = JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: 1)
             let lit = min(10, max(0, totalGrams / max(1, Constants.Mass.measuredPebbleGrams)))
+            // 控えめ (D17): the vessel's light at the inner-glow scale.
+            let effects = effectsInEffect ?? .resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
+            let inner = Double(effects.innerGlowScale)
             ZStack {
                 // A clear crystal from the first day: white light (α0.3 out
                 // to 1.3R) around an ice-white stone. Still no theme colour.
@@ -2639,8 +2671,8 @@ struct JarLifetimeCoreVessel: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                Color.white.opacity(reduceTransparency ? 0.16 : 0.30),
-                                Color.white.opacity(reduceTransparency ? 0.06 : 0.10),
+                                Color.white.opacity((reduceTransparency ? 0.16 : 0.30) * inner),
+                                Color.white.opacity((reduceTransparency ? 0.06 : 0.10) * inner),
                                 .clear
                             ],
                             center: .center,
@@ -2809,7 +2841,13 @@ struct ProgressCrystalGlyph: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.displayScale) private var displayScale
+    @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
     @State private var breath = false
+
+    /// 演出の強さ in effect (D17): Reduce Motion implies 控えめ.
+    private var effects: JarEffectsIntensity {
+        .resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
+    }
 
     private var spec: GemArtworkSpec {
         let colors = colorShares.flatMap { $0.isEmpty ? nil : $0 } ?? [GemColorShare(hex: colorHex, fraction: 1)]
@@ -2830,7 +2868,7 @@ struct ProgressCrystalGlyph: View {
         GeometryReader { proxy in
             let side = min(proxy.size.width, proxy.size.height)
             ZStack {
-                GemArtworkStone(spec: spec, glowHex: colorHex, glowOpacity: 0.40, themeMarks: isAchievement ? false : nil)
+                GemArtworkStone(spec: spec, glowHex: colorHex, glowOpacity: 0.40 * Double(effects.haloScale), themeMarks: isAchievement ? false : nil)
                     .frame(width: side * 0.80, height: side * 0.80)
                     .scaleEffect(breath ? 1.018 : 0.99)
 
@@ -2849,12 +2887,12 @@ struct ProgressCrystalGlyph: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .onAppear { updateMotion() }
-        .onChange(of: reduceMotion) { _, _ in updateMotion() }
+        .onChange(of: effects) { _, _ in updateMotion() }
         .accessibilityHidden(true)
     }
 
     private func updateMotion() {
-        guard !reduceMotion,
+        guard effects.allowsBreathing,
               !LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess
         else {
             breath = false

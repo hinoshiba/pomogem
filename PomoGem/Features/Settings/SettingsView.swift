@@ -143,6 +143,7 @@ struct SettingsView: View {
         List {
             subjectsSection
             focusSection
+            JarEffectsSettingsSection()
             screenTimeSection
             if RareRewardReleasePolicy.isEnabled {
                 rarePebbleSection

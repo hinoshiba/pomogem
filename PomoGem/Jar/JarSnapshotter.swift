@@ -160,7 +160,13 @@ final class JarSnapshotter {
             normalized(stage: CGPoint(x: point.x, y: scene.size.height - point.y))
         }
         guard let core = scene.shareCore else {
-            return glints.isEmpty ? nil : ShareJarMotion(stone: nil, stoneRect: .zero, glowColor: .white, glints: glints)
+            return glints.isEmpty ? nil : ShareJarMotion(
+                stone: nil,
+                stoneRect: .zero,
+                glowColor: .white,
+                glints: glints,
+                effects: scene.effects
+            )
         }
         let rect = JarShareCoreArtwork.stoneRect(for: core, center: shareCoreCenter(of: scene))
         let origin = normalized(stage: rect.origin)
@@ -172,7 +178,8 @@ final class JarSnapshotter {
             stone: stoneIsClear ? JarShareCoreArtwork.stoneImage(for: core, scale: 3) : nil,
             stoneRect: CGRect(x: origin.x, y: origin.y, width: rect.width / crop.width, height: rect.height / crop.height),
             glowColor: core.vesselLitFacets == nil ? GemArtwork.coreRimGlowColor(shares: core.shares) : .white,
-            glints: glints
+            glints: glints,
+            effects: scene.effects
         )
     }
 
