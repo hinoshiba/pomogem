@@ -231,6 +231,7 @@
 		BEF371ED4930286E44B1E2A1 /* AccumulationPlanProjectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123F29DD48209F44DCBF4C6E /* AccumulationPlanProjectionTests.swift */; };
 		BF7DD5350DC9AC367DB53339 /* TimerSceneOrientation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC30199EBC23F0C5AAE235B6 /* TimerSceneOrientation.swift */; };
 		BFEDE3F131BBB58B6252245A /* CloudLaunchDeadlineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21C0823291E12749CF291866 /* CloudLaunchDeadlineTests.swift */; };
+		C067DD776707C338E4EA471A /* PendingMassPresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A396DBA50DC9A3ACC662DD72 /* PendingMassPresentationPolicy.swift */; };
 		C1A6F71A16C201FA8B534B8B /* TimerOrientationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04E9E2DA32B1E56F9400B993 /* TimerOrientationTests.swift */; };
 		C31D583787B341043A788CED /* PomoGemWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E75DF8EA8E1254BF65A52583 /* PomoGemWidgets.appex */; platformFilters = (ios, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C3F08F5515ECD57828C3853B /* CloudLaunchInstrumentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D0DDA4E7A206E3AAE343B48 /* CloudLaunchInstrumentation.swift */; };
@@ -561,6 +562,7 @@
 		9FC4168C297AEE36A6F794B8 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		A0675ECF97B0B14175907951 /* StorageTransferSingleDeviceAdmissionRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferSingleDeviceAdmissionRegressionTests.swift; sourceTree = "<group>"; };
 		A0E0EDB2F608DC1E93CDD601 /* ThemeSelectionMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeSelectionMenu.swift; sourceTree = "<group>"; };
+		A396DBA50DC9A3ACC662DD72 /* PendingMassPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingMassPresentationPolicy.swift; sourceTree = "<group>"; };
 		A3E82651684A6C991C347B6A /* LogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogView.swift; sourceTree = "<group>"; };
 		A46EC111083ACA7C8AC45F2B /* IntegrationConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntegrationConstants.swift; sourceTree = "<group>"; };
 		A4876B16EDE82FFACCC197D8 /* ProgressPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressPresentationTests.swift; sourceTree = "<group>"; };
@@ -826,6 +828,7 @@
 				7A8CBB070CBE2C504813FD08 /* HomeProjectionSupport.swift */,
 				E44B05ED15660B2277666445 /* HomeView.swift */,
 				7608D5D6319C1049FCF4BB3F /* ManualEntrySheet.swift */,
+				A396DBA50DC9A3ACC662DD72 /* PendingMassPresentationPolicy.swift */,
 				FECEA2D96DAE59D314C6C8AA /* PostDropProjectionPolicy.swift */,
 				01719F0A0EBA1F9491954E08 /* RecentCustomFocusDurations.swift */,
 				A0E0EDB2F608DC1E93CDD601 /* ThemeSelectionMenu.swift */,
@@ -1518,6 +1521,7 @@
 				1110628FE44CB1EDE502B687 /* OnboardingView.swift in Sources */,
 				5669E1873627D0F098F108BF /* PaywallView.swift in Sources */,
 				17BC30315ED1C468B0A18CAC /* PebbleNode.swift in Sources */,
+				C067DD776707C338E4EA471A /* PendingMassPresentationPolicy.swift in Sources */,
 				2B25657CFD257ECB14FC4ED3 /* PersistenceStoreTopology.swift in Sources */,
 				B1581E5B52C281BA5FE2F812 /* PomoGemApp.swift in Sources */,
 				43C101AFBD956C24A6EF90D5 /* PomoGemCalendar.swift in Sources */,

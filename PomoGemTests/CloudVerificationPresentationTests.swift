@@ -38,11 +38,106 @@ final class CloudVerificationPresentationTests: XCTestCase {
     }
 
     func testFrozenLowerBoundProgressNeverInventsAFraction() {
+        // While iCloud is checked the card shows a position only for a total
+        // this device can stand behind; a lower bound shows 「今回の +250g は
+        // 保存済みです…」 instead (HomeView.postDropFusionProgress).
         let snapshot = EffortProgressPolicy.snapshot(totalGrams: 320, latestContributionGrams: 250)
         let display = EffortProgressPresentation.display(snapshot: snapshot, projectionIsLowerBound: true)
         XCTAssertNil(display.progressFraction,
                      "A receipt frozen from an incomplete projection shows the contribution, not a guessed position")
         XCTAssertTrue(display.progressLabel.contains("今回"))
+    }
+
+    // MARK: Pending headline (review of PR #40)
+
+    private typealias Mass = PendingMassPresentationPolicy
+    private let epoch = UUID()
+
+    private func sessions(_ count: Int, newestEnd: Date = Date(timeIntervalSince1970: 1_800_000_000),
+                          grams: Int = 250) -> [Mass.Session] {
+        (0..<count).map { index in
+            Mass.Session(id: UUID(), endAt: newestEnd.addingTimeInterval(-3_600 * Double(index)), grams: grams)
+        }
+    }
+
+    private func record(grams: Int, pebbles: Int, lowerBound: Bool = false, epochID: UUID?,
+                        frontier: Mass.Session) -> VerifiedMassRecord {
+        VerifiedMassRecord(grams: grams, pebbleCount: pebbles, isLowerBound: lowerBound, epochID: epochID,
+                           frontierSessionID: frontier.id, frontierEndAt: frontier.endAt)
+    }
+
+    /// A multi-year jar: 1,000 kg verified, of which pending Home holds only
+    /// the newest 128 sessions (32 kg) and no aggregate. The headline is the
+    /// verified total plus the two focus records saved since — never 32 kg.
+    func testAPendingHeadlineNeverDropsAMultiYearJarToItsNewestSessions() {
+        let held = sessions(128)
+        let frontier = held[2]
+        let lastVerified = record(grams: 1_000_000, pebbles: 4_000, epochID: epoch, frontier: frontier)
+        let device = HomeProjectionPolicy.Totals(grams: 128 * 250, pebbleCount: 128)
+        XCTAssertEqual(Mass.headline(lastVerified: lastVerified, currentEpochID: epoch, deviceSessions: held,
+                                     deviceTotals: device, deviceCoversEverySession: false),
+                       .lastVerified(grams: 1_000_500, pebbleCount: 4_002, isLowerBound: false))
+
+        let partial = record(grams: 1_000_000, pebbles: 4_000, lowerBound: true, epochID: epoch, frontier: frontier)
+        XCTAssertEqual(Mass.headline(lastVerified: partial, currentEpochID: epoch, deviceSessions: held,
+                                     deviceTotals: device, deviceCoversEverySession: false).isLowerBound, true,
+                       "A last verified 「以上」 stays a lower bound")
+    }
+
+    func testWithoutAVerifiedTotalAPartialDeviceSumIsHidden() {
+        let held = sessions(128)
+        let device = HomeProjectionPolicy.Totals(grams: 128 * 250, pebbleCount: 128)
+        XCTAssertEqual(Mass.headline(lastVerified: nil, currentEpochID: epoch, deviceSessions: held,
+                                     deviceTotals: device, deviceCoversEverySession: false), .hidden,
+                       "More history than Home holds, and no verified total: 「再集計中」, not 32 kg")
+        XCTAssertEqual(Mass.headline(lastVerified: nil, currentEpochID: epoch, deviceSessions: sessions(3),
+                                     deviceTotals: .init(grams: 750, pebbleCount: 3),
+                                     deviceCoversEverySession: true), .device(grams: 750, pebbleCount: 3),
+                       "A device sum that covers every session is exact")
+    }
+
+    func testAVerifiedTotalOfOtherDataIsNeverShown() {
+        let held = sessions(128)
+        let device = HomeProjectionPolicy.Totals(grams: 128 * 250, pebbleCount: 128)
+        let otherEpoch = record(grams: 1_000_000, pebbles: 4_000, epochID: UUID(), frontier: held[0])
+        XCTAssertEqual(Mass.headline(lastVerified: otherEpoch, currentEpochID: epoch, deviceSessions: held,
+                                     deviceTotals: device, deviceCoversEverySession: false), .hidden,
+                       "Records were reset since")
+        let gone = record(grams: 1_000_000, pebbles: 4_000, epochID: epoch, frontier: sessions(1)[0])
+        XCTAssertEqual(Mass.headline(lastVerified: gone, currentEpochID: epoch, deviceSessions: held,
+                                     deviceTotals: device, deviceCoversEverySession: false), .hidden,
+                       "Its newest session is not here: deleted, replaced, or another account's data")
+        let smaller = record(grams: 1_000, pebbles: 4, epochID: epoch, frontier: held[0])
+        XCTAssertEqual(Mass.headline(lastVerified: smaller, currentEpochID: epoch, deviceSessions: held,
+                                     deviceTotals: device, deviceCoversEverySession: false),
+                       .lastVerified(grams: 128 * 250, pebbleCount: 128, isLowerBound: true),
+                       "Never less than this device can already count")
+    }
+
+    func testAVerifiedHomeRecordsItsNewestCountedSession() throws {
+        let held = sessions(5)
+        let made = try XCTUnwrap(Mass.record(grams: 1_250, pebbleCount: 5, isLowerBound: false, epochID: epoch,
+                                              countedSessions: held.shuffled(),
+                                              newestAggregatedEnd: held[4].endAt.addingTimeInterval(-60)))
+        XCTAssertEqual(made.frontierSessionID, held[0].id)
+        XCTAssertEqual(made.frontierEndAt, held[0].endAt)
+        XCTAssertNil(Mass.record(grams: 0, pebbleCount: 0, isLowerBound: false, epochID: epoch, countedSessions: [],
+                                 newestAggregatedEnd: nil))
+        // An aggregate newer than every session Home can name (its members
+        // are outside the counted list): pending would count them twice.
+        XCTAssertNil(Mass.record(grams: 1_250, pebbleCount: 5, isLowerBound: false, epochID: epoch,
+                                 countedSessions: [held[4]], newestAggregatedEnd: held[0].endAt),
+                     "An aggregate reaching past every session Home can name is never anchored")
+        XCTAssertEqual(Mass.record(grams: 1_250, pebbleCount: 5, isLowerBound: false, epochID: epoch,
+                                   countedSessions: held, newestAggregatedEnd: held[0].endAt)?.frontierSessionID,
+                       held[0].id, "A fusion that just folded the newest session in still anchors on it")
+
+        let suite = "VerifiedMassRecordStoreTests-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertNil(VerifiedMassRecordStore.load(defaults: defaults))
+        VerifiedMassRecordStore.save(made, defaults: defaults)
+        XCTAssertEqual(VerifiedMassRecordStore.load(defaults: defaults), made)
     }
 
     // MARK: History filter — policy

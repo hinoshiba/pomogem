@@ -817,11 +817,17 @@ struct RootView: View {
         }
 #if DEBUG
         .task {
-            // sync-03 UI fixture only: complete the forced verification later.
+            // sync-03 UI fixture only: seed the requested history, complete
+            // the forced verification later and, for a cycle, revoke it again.
+            CloudVerificationUITestFixture.seedHistoryIfRequested(context: modelContext)
             guard let delay = CloudVerificationUITestFixture.verificationDelay else { return }
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
             aggregateProjectionPresentation.markVerified()
+            guard let again = CloudVerificationUITestFixture.pendingAgainDelay else { return }
+            try? await Task.sleep(for: .seconds(again))
+            guard !Task.isCancelled else { return }
+            aggregateProjectionPresentation.invalidate()
         }
 #endif
         .alert(

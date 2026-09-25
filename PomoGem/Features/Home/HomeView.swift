@@ -118,6 +118,12 @@ struct HomeView: View {
     @State private var representedSessionIDs = Set<UUID>()
     @State private var localMembershipProjectionIsComplete = true
     @State private var conflictedAggregateRootIDs = Set<UUID>()
+    /// sync-03. The last lifetime total this Home presented as verified, for
+    /// the next pending phase (`PendingMassPresentationPolicy`).
+    @State private var lastVerifiedMass = VerifiedMassRecordStore.load()
+    /// sync-03. The completion card's weekly heading, re-derived once
+    /// verification completes after its receipt froze.
+    @State private var restampedWeekly: RestampedWeeklyMetrics?
     @State private var selectedDuration: PomodoroDuration = .twentyFiveMinutes
     @State private var focusConfiguration: FocusConfiguration?
     @State private var showHomeMenu = false
@@ -347,6 +353,69 @@ struct HomeView: View {
     }
     private var totalPebbles: Int {
         projectionTotals.pebbleCount
+    }
+    private var pendingMassSessions: [PendingMassPresentationPolicy.Session] {
+        looseSessions.map { .init(id: $0.id, endAt: $0.endAt, grams: $0.grams) }
+    }
+    /// While pending no aggregate is accepted, so Home's own sum is the whole
+    /// lifetime only when its complete candidate page fits in the jar's cap.
+    private var pendingProjectionCoversEverySession: Bool {
+        sessionBackfillIsComplete
+            && localMembershipProjectionIsComplete
+            && acceptedAggregateRoots.isEmpty
+            && queriedLooseSessions.count == looseSessions.count
+    }
+    /// sync-03 after review. What the headline says while iCloud is checked.
+    private var pendingMassHeadline: PendingMassPresentationPolicy.Headline {
+        PendingMassPresentationPolicy.headline(
+            lastVerified: lastVerifiedMass,
+            currentEpochID: currentActivityEpochID,
+            deviceSessions: pendingMassSessions,
+            deviceTotals: projectionTotals,
+            deviceCoversEverySession: pendingProjectionCoversEverySession
+        )
+    }
+    /// The lifetime mass the headline, the menu and the jar's VoiceOver value
+    /// present; nil while pending with nothing this device can stand behind.
+    private var presentedLifetimeGrams: Int? {
+        aggregateProjectionPresentation.isCloudVerificationPending
+            ? pendingMassHeadline.grams
+            : totalGrams
+    }
+    private var presentedLifetimePebbles: Int {
+        aggregateProjectionPresentation.isCloudVerificationPending
+            ? (pendingMassHeadline.pebbleCount ?? totalPebbles)
+            : totalPebbles
+    }
+    private var presentedLifetimeIsLowerBound: Bool {
+        aggregateProjectionPresentation.isCloudVerificationPending
+            ? pendingMassHeadline.isLowerBound
+            : localProjectionNeedsMaintenance
+    }
+    /// What a verified Home leaves for the next pending phase. Only a total
+    /// that is actually on screen as verified is ever recorded.
+    private var verifiedMassRecordCandidate: VerifiedMassRecord? {
+        guard aggregateProjectionPresentation.usesCloudPersistence,
+              !aggregateProjectionPresentation.isCloudVerificationPending,
+              currentAggregatePresentationPage != nil,
+              sceneSessionSnapshotIsCurrent else { return nil }
+        return PendingMassPresentationPolicy.record(
+            grams: totalGrams,
+            pebbleCount: totalPebbles,
+            isLowerBound: localProjectionNeedsMaintenance,
+            epochID: currentActivityEpochID,
+            countedSessions: verifiedCountedSessions,
+            newestAggregatedEnd: acceptedAggregateRoots.map(\.periodEnd).max()
+        )
+    }
+    /// The sessions a verified total counts: loose, or represented by an
+    /// accepted aggregate. The newest of them anchors the record even when a
+    /// decimal fusion has just folded it into an aggregate.
+    private var verifiedCountedSessions: [PendingMassPresentationPolicy.Session] {
+        let looseIDs = Set(looseSessions.map(\.id))
+        return sessions
+            .filter { looseIDs.contains($0.id) || representedSessionIDs.contains($0.id) }
+            .map { .init(id: $0.id, endAt: $0.endAt, grams: $0.grams) }
     }
     private var activeAggregateRoots: [AggregatePebble] {
         acceptedAggregateRoots
@@ -807,8 +876,24 @@ struct HomeView: View {
         }
     }
 
-    private var observedContent: some View {
+    /// sync-03 (review of PR #40), kept out of the long modifier chains below
+    /// so each stays within the type checker's budget.
+    private var verificationContent: some View {
         lifecycleContent
+        // Remember the verified total this Home presents, for the next time
+        // iCloud is checked (`PendingMassPresentationPolicy`).
+        .onChange(of: verifiedMassRecordCandidate) { _, record in
+            guard let record, record != lastVerifiedMass else { return }
+            lastVerifiedMass = record
+            VerifiedMassRecordStore.save(record)
+        }
+        .onChange(of: weeklyRestampRequest, initial: true) { _, request in
+            rederiveWeeklyMetrics(for: request)
+        }
+    }
+
+    private var observedContent: some View {
+        verificationContent
         // Subscribe to the one value the jar needs instead of observing the
         // whole controller: its foreground loop re-reads authorization and
         // monitoring state every three seconds, and each of those passes
@@ -923,21 +1008,27 @@ struct HomeView: View {
 
     private func jarCard(height: CGFloat) -> some View {
         ZStack {
+            // sync-03 (review of PR #40). While iCloud is checked the jar's
+            // lifetime core describes the same total as the headline above,
+            // not the newest sessions Home happens to hold.
             JarSpriteView(
                 scene: scene,
-                totalGrams: totalGrams,
+                totalGrams: presentedLifetimeGrams ?? totalGrams,
                 pebbleCount: looseSessions.count,
                 achievementCount: uniqueAchievementCount,
                 aggregateCount: activeAggregateRoots.count,
                 legacyAggregateCount: activeLegacyStratumVisuals.count,
-                representedPebbleCount: totalPebbles,
+                representedPebbleCount: presentedLifetimePebbles,
                 goldPebbleCount: visibleGoldPebbleCount,
                 prismPebbleCount: visiblePrismPebbleCount,
                 accentHex: selectedSubject?.colorHex ?? Constants.Color.amberLamp,
                 lifetimeCoreColorHex: lifetimeCoreColorHex,
-                projectionIsLowerBound: localProjectionNeedsMaintenance,
+                projectionIsLowerBound: presentedLifetimeGrams == nil || presentedLifetimeIsLowerBound,
                 projectionIsUnverified:
                     aggregateProjectionPresentation.isCloudVerificationPending,
+                pendingMass: presentedLifetimeGrams.map {
+                    .init(grams: $0, isLowerBound: presentedLifetimeIsLowerBound)
+                },
                 fusionProgressDescription: fusionAccessibilityDescription,
                 isMotionEnabled: homeJarMotionIsEnabled,
                 inspectableAggregateID: latestInspectableAggregateID,
@@ -1143,15 +1234,20 @@ struct HomeView: View {
 
             VStack(spacing: 4) {
                 jarMetricPill(jarMetricSummary)
-                // sync-03. The mass above is this device's confirmed mass while
-                // iCloud is checked; the caption says so instead of hiding it.
-                if let caption = AggregateProjectionPresentationPolicy.verificationCaption(
+                // sync-03. While iCloud is checked the mass above is one this
+                // device can stand behind (`PendingMassPresentationPolicy`);
+                // the caption says so. Hidden while the in-jar pending message
+                // says the same.
+                if !isJarEmpty, let caption = AggregateProjectionPresentationPolicy.verificationCaption(
                     context: aggregateProjectionPresentation,
                     isCloudOfflineSession: isCloudOfflineSession
                 ) {
+                    // The only visible qualifier of the number above: readable
+                    // at 11 pt and scaled with Dynamic Type up to the HUD's
+                    // xxxLarge cap (a fixed 9 pt caption was too small).
                     Text(caption)
-                        .font(.system(size: 9, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.68))
+                        .font(.system(size: verificationCaptionSize, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.78))
                         .accessibilityIdentifier("home.mass.verification-caption")
                 }
                 if showsPreFusionRail {
@@ -1163,26 +1259,42 @@ struct HomeView: View {
         .accessibilityHidden(true)
     }
 
+    private var verificationCaptionSize: CGFloat {
+        let scale: CGFloat = switch dynamicTypeSize {
+        case .xSmall, .small, .medium, .large: 1
+        case .xLarge: 1.1
+        case .xxLarge: 1.2
+        default: 1.3
+        }
+        return 11 * scale
+    }
+
     private var homeMassValue: String {
-        let verifiedValue: String
-        if totalGrams < 1_000 {
-            verifiedValue = totalGrams.formatted()
+        guard let grams = presentedLifetimeGrams else {
+            return AggregateProjectionPresentationPolicy.homeMassValue(
+                deviceValue: nil,
+                context: aggregateProjectionPresentation
+            )
+        }
+        let value: String
+        if grams < 1_000 {
+            value = grams.formatted()
         } else {
-            verifiedValue = (Double(totalGrams) / 1_000).formatted(
+            value = (Double(grams) / 1_000).formatted(
                 .number.precision(.fractionLength(1 ... 2))
             )
         }
         return AggregateProjectionPresentationPolicy.homeMassValue(
-            deviceValue: verifiedValue,
+            deviceValue: value,
             context: aggregateProjectionPresentation
         )
     }
 
     private var homeMassUnit: String {
-        let unit = totalGrams < 1_000 ? "g" : "kg"
+        guard let grams = presentedLifetimeGrams else { return "" }
         return AggregateProjectionPresentationPolicy.homeMassUnit(
-            verifiedUnit: unit,
-            hasLocalLowerBound: localProjectionNeedsMaintenance,
+            verifiedUnit: grams < 1_000 ? "g" : "kg",
+            hasLocalLowerBound: presentedLifetimeIsLowerBound,
             context: aggregateProjectionPresentation
         )
     }
@@ -1190,30 +1302,42 @@ struct HomeView: View {
     private var jarMetricSummary: String {
         let milestones = uniqueAchievementCount > 0 ? " ・ 記念石 \(achievementCountLabel)" : ""
         return AggregateProjectionPresentationPolicy.homeCountSummary(
-            count: totalPebbles,
+            count: presentedLifetimePebbles,
             milestoneSuffix: milestones,
             hasLocalLowerBound: localProjectionNeedsMaintenance,
             context: aggregateProjectionPresentation
         )
     }
 
+    private var presentedLifetimeMassLabel: String? {
+        presentedLifetimeGrams.map {
+            formattedMass($0) + (presentedLifetimeIsLowerBound ? "以上" : "")
+        }
+    }
+
     private var homeMenuMassValue: String {
         AggregateProjectionPresentationPolicy.menuMassValue(
-            formattedMass: formattedMass(totalGrams),
+            formattedMass: presentedLifetimeMassLabel,
             context: aggregateProjectionPresentation
         )
     }
 
     private var homeMenuCountValue: String {
-        aggregateProjectionPresentation.isCloudVerificationPending
+        guard aggregateProjectionPresentation.isCloudVerificationPending else {
+            return "\(totalPebbles)粒"
+        }
+        // 「再集計中」 beside a bare device count would read as the total.
+        return pendingMassHeadline == .hidden
             ? "確認済み \(totalPebbles)粒"
-            : "\(totalPebbles)粒"
+            : "\(presentedLifetimePebbles)粒"
     }
 
     private var homeMenuAccessibilitySummary: String {
         if aggregateProjectionPresentation.isCloudVerificationPending {
-            let status = isCloudOfflineSession ? "このiPhoneの累計を確認中" : "iCloudを確認中"
-            return "\(status)。この端末で確認済みの累計\(formattedMass(totalGrams))、集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
+            guard let mass = presentedLifetimeMassLabel else {
+                return "\(projectionVerificationTitle)。累計は確認が済むと表示します。この端末で確認済みの集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
+            }
+            return "\(projectionVerificationTitle)。累計\(mass)、集中\(presentedLifetimePebbles)粒、成果\(achievementCountLabel)個"
         }
         return "累計\(formattedMass(totalGrams))、集中\(totalPebbles)粒、成果\(achievementCountLabel)個"
     }
@@ -1945,7 +2069,7 @@ struct HomeView: View {
     }
 
     private var menuMetricsStrip: some View {
-        Group {
+        VStack(spacing: 8) {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: 12) {
                     menuMetric(value: homeMenuMassValue, label: "累計")
@@ -1960,6 +2084,16 @@ struct HomeView: View {
                     Divider().frame(height: 34)
                     menuMetric(value: "\(achievementCountLabel)個", label: "成果")
                 }
+            }
+            // sync-03. The same caption as the jar's headline, instead of a
+            // 「確認済み」 prefix that read as a verified lifetime total.
+            if let caption = AggregateProjectionPresentationPolicy.verificationCaption(
+                context: aggregateProjectionPresentation,
+                isCloudOfflineSession: isCloudOfflineSession
+            ) {
+                Label(caption, systemImage: isCloudOfflineSession ? "checklist" : "icloud")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(PomoGemTheme.muted)
             }
         }
         .padding(.vertical, 12)
@@ -2071,7 +2205,7 @@ struct HomeView: View {
     private func postDropCard(_ offer: BreakOffer) -> some View {
         PomoGemCard {
             VStack(alignment: .leading, spacing: 12) {
-                postDropHeading(offer)
+                postDropHeading(presentedOffer(offer))
                 if offer.isAwaitingDrop {
                     Text("閉じると、一粒が瓶に落ちます。")
                         .font(.caption)
@@ -2164,7 +2298,9 @@ struct HomeView: View {
     private func postDropHeading(_ offer: BreakOffer) -> some View {
         // sync-03. The weekly figures were frozen from this device's records
         // at completion; while iCloud is checked the progress block below
-        // carries the 「iCloudを確認中」 caption for the whole card.
+        // carries the 「iCloudを確認中」 caption for the whole card, and once
+        // verification completes they are re-derived with the progress
+        // (`presentedOffer`).
         let historyTitle = offer.weeklyTitle
         let historySpokenTitle = offer.weeklySpokenTitle
         return HStack(spacing: 11) {
@@ -2216,6 +2352,8 @@ struct HomeView: View {
     }
 
     /// sync-03. Which projection this card shows (`PostDropProjectionPolicy`).
+    /// A re-stamp waits until the weekly heading has been re-derived too, so
+    /// the card never mixes verified progress with a pre-verification week.
     private func postDropSource(_ offer: BreakOffer) -> PostDropProjectionPolicy.Source {
         PostDropProjectionPolicy.source(
             usesCloudPersistence: aggregateProjectionPresentation.usesCloudPersistence,
@@ -2223,8 +2361,63 @@ struct HomeView: View {
             receiptWasCloudUnverified: offer.projectionWasCloudUnverified,
             receiptStampIsCurrentVerified: aggregateProjectionPresentation
                 .acceptsVerifiedAggregateCache(offer.projectionCacheStamp),
-            verifiedProjectionIsLoaded: sceneSessionSnapshotIsCurrent
-                && currentAggregatePresentationPage != nil
+            verifiedProjectionIsLoaded: verifiedProjectionIsLoadedForRestamp
+                && restampedWeekly?.matches(offer: offer.id,
+                                            stamp: aggregateProjectionPresentation.verifiedCacheStamp) == true
+        )
+    }
+
+    private var verifiedProjectionIsLoadedForRestamp: Bool {
+        sceneSessionSnapshotIsCurrent && currentAggregatePresentationPage != nil
+    }
+
+    /// The open card whose weekly heading needs re-deriving from the verified
+    /// projection, if any.
+    private var weeklyRestampRequest: RestampedWeeklyMetrics.Request? {
+        guard let offer = breakOffer,
+              let stamp = aggregateProjectionPresentation.verifiedCacheStamp,
+              PostDropProjectionPolicy.source(
+                usesCloudPersistence: aggregateProjectionPresentation.usesCloudPersistence,
+                isVerificationPending: aggregateProjectionPresentation.isCloudVerificationPending,
+                receiptWasCloudUnverified: offer.projectionWasCloudUnverified,
+                receiptStampIsCurrentVerified: aggregateProjectionPresentation
+                    .acceptsVerifiedAggregateCache(offer.projectionCacheStamp),
+                verifiedProjectionIsLoaded: verifiedProjectionIsLoadedForRestamp
+              ) == .verifiedProjection
+        else { return nil }
+        return .init(offerID: offer.id, stamp: stamp)
+    }
+
+    /// Re-derives the week the same way the receipt froze it, now from the
+    /// verified projection, which may hold other devices' sessions of the week.
+    private func rederiveWeeklyMetrics(for request: RestampedWeeklyMetrics.Request?) {
+        guard let request, let offer = breakOffer, offer.id == request.offerID else { return }
+        guard restampedWeekly?.matches(offer: request.offerID, stamp: request.stamp) != true else { return }
+        guard let metrics = try? HomeProjectionPolicy.completionMetrics(
+            context: modelContext,
+            resetMarkers: resetSnapshots,
+            roots: acceptedAggregateRoots,
+            looseSessions: looseSessions,
+            at: offer.createdAt
+        ) else {
+            // A failed bounded read keeps the frozen week; the progress still
+            // re-stamps rather than waiting forever.
+            restampedWeekly = .init(request: request, completionCount: offer.weeklyCompletionCount,
+                                    studyGrams: offer.weeklyStudyGrams)
+            return
+        }
+        var dates = metrics.weeklyTimerCompletionDates
+        if !metrics.weeklyTimerCompletionSessionIDs.contains(offer.id) {
+            dates.append(offer.createdAt)
+        }
+        var grams = metrics.weeklyMeasuredGrams
+        if !metrics.weeklyMeasuredSessionIDs.contains(offer.id) {
+            grams = HomeProjectionPolicy.saturatingNonnegativeSum([grams, offer.grams])
+        }
+        restampedWeekly = .init(
+            request: request,
+            completionCount: max(1, WeeklyProgressPolicy.completionCount(dates: dates, at: offer.createdAt)),
+            studyGrams: grams
         )
     }
 
@@ -2236,7 +2429,8 @@ struct HomeView: View {
             totalGrams: totalGrams,
             totalPebbles: totalPebbles,
             projectionIsLowerBound: localProjectionNeedsMaintenance,
-            stamp: aggregateProjectionPresentation.verifiedCacheStamp
+            stamp: aggregateProjectionPresentation.verifiedCacheStamp,
+            weekly: restampedWeekly
         )
     }
 
@@ -2251,7 +2445,11 @@ struct HomeView: View {
                 postDropLegacyFusionProgress(shown)
             }
         case .receiptWhileVerifying:
-            if let effortProgress = offer.effortProgress {
+            // Only a receipt that froze a total this device can stand behind
+            // (`PendingMassPresentationPolicy`) shows a position. A lower
+            // bound would only draw 「時間の核を整理中」 with a spinner next to
+            // the cloud caption — two waiting indicators and no progress.
+            if let effortProgress = offer.effortProgress, !offer.projectionIsLowerBound {
                 VStack(alignment: .leading, spacing: 8) {
                     postDropEffortProgress(effortProgress, offer: offer)
                     postDropVerificationCaption
@@ -3623,6 +3821,7 @@ struct HomeView: View {
         // Freeze the projection when preparing the completion message. A delayed live read
         // can change underneath the user while CloudKit or a decimal fusion is
         // being applied, making the receipt claim a precision it does not have.
+        let frozenLifetime = receiptLifetime(includingSessionID: descriptor.id, grams: descriptor.grams)
         let receipt = PendingRewardReceipt(
             id: descriptor.id,
             createdAt: descriptor.createdAt,
@@ -3636,9 +3835,9 @@ struct HomeView: View {
             rareRewardDrawCount: descriptor.rareRewardCounts.drawCount,
             goldRewardCount: descriptor.rareRewardCounts.goldCount,
             prismRewardCount: descriptor.rareRewardCounts.prismCount,
-            totalPebbleCount: max(1, totalPebbles),
-            totalStudyGrams: max(descriptor.grams, totalGrams),
-            projectionIsLowerBound: localProjectionNeedsMaintenance,
+            totalPebbleCount: max(1, frozenLifetime.pebbles),
+            totalStudyGrams: max(descriptor.grams, frozenLifetime.grams),
+            projectionIsLowerBound: frozenLifetime.isLowerBound,
             projectionWasCloudUnverified:
                 aggregateProjectionPresentation.isCloudVerificationPending,
             projectionCacheStamp:
@@ -3652,6 +3851,31 @@ struct HomeView: View {
         UserDefaults.standard.removeObject(forKey: FocusPersistence.localCompletionIDKey)
         scheduleReviewRequestIfEarned()
         return receipt
+    }
+
+    /// sync-03 after review. The lifetime values a completion freezes. While
+    /// iCloud is checked they are the pending headline's
+    /// (`PendingMassPresentationPolicy`), so the card can show a real position
+    /// whenever this device can stand behind a total; otherwise the receipt
+    /// stays a lower bound, as before, and re-stamps after verification.
+    private func receiptLifetime(
+        includingSessionID sessionID: UUID,
+        grams: Int
+    ) -> (grams: Int, pebbles: Int, isLowerBound: Bool) {
+        guard aggregateProjectionPresentation.isCloudVerificationPending else {
+            return (totalGrams, totalPebbles, localProjectionNeedsMaintenance)
+        }
+        let headline = pendingMassHeadline
+        guard let headlineGrams = headline.grams, let pebbles = headline.pebbleCount else {
+            return (totalGrams, totalPebbles, true)
+        }
+        // The session was just saved; Home's page may not hold it yet.
+        guard !looseSessions.contains(where: { $0.id == sessionID }) else {
+            return (headlineGrams, pebbles, headline.isLowerBound)
+        }
+        return (HomeProjectionPolicy.saturatingNonnegativeSum([headlineGrams, grams]),
+                HomeProjectionPolicy.saturatingNonnegativeSum([pebbles, 1]),
+                headline.isLowerBound)
     }
 
     private func recoverPendingRewardReceipt() {
@@ -4191,7 +4415,7 @@ struct HomeView: View {
         let source = postDropSource(offer)
         let shown = presentedOffer(offer)
         let progressMessage: String
-        if source == .receiptWhileVerifying, offer.effortProgress == nil {
+        if source == .receiptWhileVerifying, offer.effortProgress == nil || offer.projectionIsLowerBound {
             progressMessage = "\(projectionVerificationTitle)。今回の記録は保存済みです。これまでの合計は確認が済むと表示します"
         } else {
             let progress = PostDropProgressAccessibilityPresentation.description(
@@ -4203,7 +4427,7 @@ struct HomeView: View {
                 ? "\(progress)。\(projectionVerificationTitle)"
                 : progress
         }
-        let historyMessage = offer.weeklySpokenTitle
+        let historyMessage = shown.weeklySpokenTitle
         var message = "\(offer.dropTitle(for: rareRewardMode))\(offer.subjectName)、\(offer.grams)グラム、\(EffortProgressPresentation.formattedStandardUnits(grams: offer.grams))。\(historyMessage)。\(offer.rareRewardCounts.multiDrawSummary.map { "\($0)。" } ?? "")\(progressMessage)。\(offer.minutes)分休憩できます"
         if showShareChip {
             message += "。今の瓶をカードにして共有できます"
@@ -4314,14 +4538,32 @@ private struct RewardDropContinuation {
     var hasLanded = false
 }
 
+/// sync-03. The completion card's weekly heading re-derived from a verified
+/// projection, for one offer and one verified epoch.
+private struct RestampedWeeklyMetrics: Equatable {
+    struct Request: Equatable {
+        let offerID: UUID
+        let stamp: AggregateProjectionCacheStamp
+    }
+
+    let request: Request
+    let completionCount: Int
+    let studyGrams: Int?
+
+    func matches(offer id: UUID, stamp: AggregateProjectionCacheStamp?) -> Bool {
+        request.offerID == id && request.stamp == stamp
+    }
+}
+
 private struct BreakOffer: Identifiable {
     let id: UUID
+    let createdAt: Date
     let minutes: Int
     let grams: Int
     let subjectName: String
     let colorHex: String
-    let weeklyCompletionCount: Int
-    let weeklyStudyGrams: Int?
+    private(set) var weeklyCompletionCount: Int
+    private(set) var weeklyStudyGrams: Int?
     let kind: PebbleKind
     let rareRewardCounts: RareRewardCounts
     private(set) var fusionState: FusionRewardBridgeState
@@ -4337,9 +4579,14 @@ private struct BreakOffer: Identifiable {
         totalGrams: Int,
         totalPebbles: Int,
         projectionIsLowerBound: Bool,
-        stamp: AggregateProjectionCacheStamp?
+        stamp: AggregateProjectionCacheStamp?,
+        weekly: RestampedWeeklyMetrics? = nil
     ) -> BreakOffer {
         var copy = self
+        if let weekly, weekly.request.offerID == id {
+            copy.weeklyCompletionCount = weekly.completionCount
+            copy.weeklyStudyGrams = weekly.studyGrams
+        }
         copy.fusionState = FusionRewardBridgePresentation.state(totalPebbleCount: max(1, totalPebbles))
         copy.effortProgress = EffortProgressPolicy.snapshot(
             totalGrams: max(grams, totalGrams),
@@ -4354,6 +4601,7 @@ private struct BreakOffer: Identifiable {
     init(receipt: PendingRewardReceipt) {
         isAwaitingDrop = receipt.requiresDrop
         id = receipt.id
+        createdAt = receipt.createdAt
         minutes = receipt.breakMinutes
         grams = receipt.grams
         subjectName = receipt.subjectName

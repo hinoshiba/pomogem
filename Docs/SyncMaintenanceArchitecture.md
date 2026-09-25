@@ -221,7 +221,9 @@ store fileを作る前にprocessが終了した境界だけは、fileが0件で�
 2026-09-24の所有者承認により、unmountは`.background`の瞬間ではなく約15秒の猶予後に行います
 （`CloudBackgroundGraceController`）。猶予中は`UIApplication` background taskを保持するのでprocessは
 suspendされず、account change通知も配送されます。猶予はiOSの残りbackground時間から5秒を引いた値で頭打ちに
-し、taskを得られない・時間が足りない場合は即座にunmountします。task期限の通知、`CKAccountChanged`、
+し、taskを得られない・時間が足りない場合は即座にunmountします。`.background`の時点ではiOSが残り時間を
+まだ数えていない（無制限と報告する）ことが多いため、猶予中は1秒ごとに残り時間を読み直し、数えはじめたら
+その5秒前に退役させます。task期限の通知、`CKAccountChanged`、
 storage transfer、complete deletionでは猶予を打ち切って即座にunmountし、taskは退役したcontainerの解放を
 確認してから終了します（上限10秒）。例外はiOSが期限の通知を先に送った場合で、通知の中で同期的にsessionを
 外してtaskを終了するしかなく、SwiftUIがcontainerを解放し終える前にsuspendされ得ます（解放を確認できない
@@ -641,15 +643,30 @@ sessionから所属aggregateを逆引きするindexed relationshipは現行schem
 
 `projectionValidationVersion`未達のaggregateが一つでも存在する間は、Home／Overview／Share等の全consumerで
 aggregate rootを表示会計から除外します。cloud modeでは、起動後または新しいverification generationが
-pendingの間も同様に、生涯の正確値、`+`、`以上`を表示しません。2026-09-24の所有者承認（sync-03）により、
-その間のHomeの見出し・メニュー・Overviewの生涯値は「再集計中」で隠さず、その時点で端末上の同期元から
-確認できた質量（瓶と「この端末で確認済み N粒」と同じ範囲）を「iCloudを確認中」の注記付きで表示します。
-下限を示す`+`／`以上`は付けません。この値から保存・書き出し・共有は行わず（共有・書き出しは従来どおり
-`allowsAggregateSummaries`を要求）、verification完了で検証済みの値に置き換えます。完走直後の報酬カードは、
-完走時に端末のデータから凍結した今週の値と時間の核の進みを「iCloudを確認中」付きで表示し、完走後に
-verificationが完了した場合は検証済みprojectionから同じカードを作り直します（再stamp）。凍結値が下限の
-場合は従来どおり「時間の核を整理中」と表示し、進みの割合を推定しません。local-onlyにはremote blind spotが
-ないため、localな書込み完了後の値をexactとして扱えます。
+pendingの間も同様に、aggregate由来の値を生涯の正確値として表示しません。2026-09-24の所有者承認（sync-03）と
+PR #40のreviewにより、その間のHomeの見出し・メニュー・瓶のVoiceOverの生涯値は、この端末が責任を持てる値
+だけを「iCloudを確認中」の注記付きで表示します（`PendingMassPresentationPolicy`）。
+
+1. 端末の合計が現在の全sessionを覆う場合（完全なpageがHomeの上限128件に収まる）は、その合計（exact）
+2. そうでなければ、同じdataについてHomeが最後に検証済みとして表示した合計に、その合計が数えた最新の
+   sessionより新しいこの端末の記録を足した値（端末の合計の方が大きければそちら）。最後の検証済み値は
+   account単位で端末内（`UserDefaults`）に保持し、同じreset epochで、その最新sessionが今も端末にある
+   場合だけ使います（記録のリセット、完全削除、dataの置き換え、別accountでは使いません）。検証済み値が
+   「以上」だった場合は「以上」を残します
+3. どちらもなければ、従来どおり「再集計中」
+
+pendingの間Homeはaggregateを受け入れず、新しい128件のsessionしか持たないため、端末の合計をそのまま
+出すと、長く使っている人の生涯値（例: 250 kg）が毎回の復帰で32 kg以下に見えていました。これらの値から
+保存・書き出し・共有は行わず（共有・書き出しは従来どおり`allowsAggregateSummaries`を要求）、verification
+完了で検証済みの値に置き換えます。Overviewはpendingの間、集計を表示しない「iCloudを確認中」の画面に
+なります（loaderが検証済みstampのpageしか使わないため）。
+
+完走直後の報酬カードは、完走時に凍結した今週の値と、上の規則で表示できる生涯値から求めた時間の核の
+進みを「iCloudを確認中」付きで表示します。上の規則で「再集計中」になる場合は凍結値が下限なので、進みの
+割合を推定せず「今回の +250g は保存済みです。これまでの合計は確認が済むと表示します。」と表示し、
+「時間の核を整理中」とspinnerを「iCloudを確認中」と並べることはしません。完走後にverificationが完了した
+場合は、検証済みprojectionから進みと今週の値の両方を作り直します（再stamp）。local-onlyにはremote
+blind spotがないため、localな書込み完了後の値をexactとして扱えます。
 
 ### Phase 6: subjectsとrelationship
 
