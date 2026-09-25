@@ -99,6 +99,61 @@ enum ProTransactionDelivery {
     }
 }
 
+/// settings-05. The only trace of a purchase StoreKit answered with
+/// `.pending` (Ask to Buy, or a payment that needs another step). StoreKit
+/// sends nothing when a request is declined or expires (Ask to Buy requests
+/// lapse after about a day), so the hint expires by itself after 24 hours
+/// and is never evidence of anything: it only lets the paywall say 承認待ち
+/// and lets the app say so when Pro then arrives. No entitlement path, no
+/// `canUseFocusDuration` and no button state reads it.
+struct ProApprovalWaitHint: Equatable, Sendable {
+    static let lifetime: TimeInterval = 24 * 60 * 60
+    static let defaultsKey = "pomogem.pro.approval-requested-at"
+
+    private(set) var requestedAt: Date?
+
+    init(requestedAt: Date? = nil) {
+        self.requestedAt = requestedAt
+    }
+
+    /// A clock set back before the request reads as expired rather than as
+    /// a wait that could last forever.
+    func isWaiting(at now: Date) -> Bool {
+        guard let requestedAt else { return false }
+        let elapsed = now.timeIntervalSince(requestedAt)
+        return elapsed >= 0 && elapsed < Self.lifetime
+    }
+
+    mutating func recordRequest(at now: Date) {
+        requestedAt = now
+    }
+
+    /// Pro arrived. True when it answers a wait that was still open, which is
+    /// the one case worth telling the user about.
+    mutating func resolveGrant(at now: Date) -> Bool {
+        let answersWait = isWaiting(at: now)
+        requestedAt = nil
+        return answersWait
+    }
+
+    /// Stored as seconds since 1970 so a UI test can seed it from the
+    /// argument domain. An expired value is dropped when read.
+    static func load(from defaults: UserDefaults, now: Date = .now) -> ProApprovalWaitHint {
+        let seconds = defaults.double(forKey: defaultsKey)
+        guard seconds > 0 else { return ProApprovalWaitHint() }
+        let hint = ProApprovalWaitHint(requestedAt: Date(timeIntervalSince1970: seconds))
+        return hint.isWaiting(at: now) ? hint : ProApprovalWaitHint()
+    }
+
+    func save(to defaults: UserDefaults) {
+        if let requestedAt {
+            defaults.set(requestedAt.timeIntervalSince1970, forKey: Self.defaultsKey)
+        } else {
+            defaults.removeObject(forKey: Self.defaultsKey)
+        }
+    }
+}
+
 /// Process-local arbitration for the same verified transaction arriving from
 /// `purchase()`, `Transaction.unfinished`, and `Transaction.updates` together.
 /// StoreKit remains the cross-launch authority: an interrupted finish is still
@@ -137,6 +192,11 @@ final class PurchaseManager {
     /// (Screen Time retiring a Pro user's learning run) must wait for this.
     /// It never goes back to false, and it never grants anything by itself.
     private(set) var hasResolvedEntitlements = false
+    /// settings-05. Display-only; see `ProApprovalWaitHint`.
+    private(set) var approvalWait = ProApprovalWaitHint.load(from: .standard)
+    /// Set when Pro arrives for a request that was waiting for approval, so
+    /// the app can say so wherever the person is. Consumed once.
+    private(set) var hasApprovalGrantNotice = false
 
     @ObservationIgnored
     private var transactionUpdatesTask: Task<Void, Never>?
@@ -161,6 +221,36 @@ final class PurchaseManager {
 
     var isPro: Bool {
         entitlement != nil
+    }
+
+    /// A purchase asked for approval within the last day and Pro has not
+    /// arrived. Never gates anything: the buy button stays available, since a
+    /// declined or expired request sends no signal at all.
+    func isAwaitingApproval(at now: Date = .now) -> Bool {
+        !isPro && approvalWait.isWaiting(at: now)
+    }
+
+    /// True once per approval that arrived while the app was waiting for it.
+    func consumeApprovalGrantNotice() -> Bool {
+        guard hasApprovalGrantNotice else { return false }
+        hasApprovalGrantNotice = false
+        return true
+    }
+
+    private func updateApprovalWait(_ change: (inout ProApprovalWaitHint) -> Void) {
+        var hint = approvalWait
+        change(&hint)
+        guard hint != approvalWait else { return }
+        approvalWait = hint
+        hint.save(to: .standard)
+    }
+
+    /// Pro was granted. `announces` is false on the purchase sheet's own
+    /// success path, which already thanks the user in place.
+    private func resolveApprovalWaitOnGrant(announces: Bool) {
+        var answeredWait = false
+        updateApprovalWait { answeredWait = $0.resolveGrant(at: .now) }
+        if answeredWait, announces { hasApprovalGrantNotice = true }
     }
 
     func prepare() async {
@@ -240,7 +330,10 @@ final class PurchaseManager {
             switch result {
             case let .success(verification):
                 let transaction = try verified(verification)
-                let decision = await processVerifiedTransaction(transaction)
+                let decision = await processVerifiedTransaction(
+                    transaction,
+                    announcesApprovalGrant: false
+                )
                 guard decision != .ignoreUnknownProduct else {
                     throw PurchaseManagerError.productUnavailable(transaction.productID)
                 }
@@ -251,6 +344,7 @@ final class PurchaseManager {
 
             case .pending:
                 lastErrorDescription = nil
+                updateApprovalWait { $0.recordRequest(at: .now) }
                 return .pending
 
             case .userCancelled:
@@ -259,6 +353,7 @@ final class PurchaseManager {
 
             @unknown default:
                 lastErrorDescription = nil
+                updateApprovalWait { $0.recordRequest(at: .now) }
                 return .pending
             }
         } catch StoreKitError.userCancelled {
@@ -332,6 +427,9 @@ final class PurchaseManager {
         guard generation == entitlementRefreshGeneration else { return }
         entitlement = currentEntitlement
         if !hasResolvedEntitlements { hasResolvedEntitlements = true }
+        // An approval can also surface here first (a restore, or a cold
+        // launch after StoreKit finished it elsewhere).
+        if currentEntitlement != nil { resolveApprovalWaitOnGrant(announces: true) }
         lastErrorDescription = encounteredVerificationFailure
             ? PurchaseManagerError.failedVerification.localizedDescription
             : nil
@@ -387,7 +485,8 @@ final class PurchaseManager {
 
     @discardableResult
     private func processVerifiedTransaction(
-        _ transaction: Transaction
+        _ transaction: Transaction,
+        announcesApprovalGrant: Bool = true
     ) async -> ProTransactionDeliveryDecision {
         let decision = ProTransactionDelivery.decision(
             isVerified: true,
@@ -408,6 +507,7 @@ final class PurchaseManager {
                     // A verified delivery is an answer from StoreKit too.
                     if !hasResolvedEntitlements { hasResolvedEntitlements = true }
                     lastErrorDescription = nil
+                    resolveApprovalWaitOnGrant(announces: announcesApprovalGrant)
                 case .reconcileWithoutGrant:
                     // A refund, revocation, or upgraded-away transaction must
                     // never grant Pro. Re-query in case another valid purchase

@@ -203,25 +203,22 @@ struct PaywallView: View {
                     destination: AppLinks.commercialDisclosure
                 )
 
-                Button {
-                    Task { await buy(product) }
-                } label: {
-                    if purchase.isPurchasing {
-                        HStack(spacing: 8) {
-                            ProgressView().tint(PomoGemTheme.background)
-                            Text("購入処理中…")
-                        }
-                    } else {
+                if purchase.isAwaitingApproval() {
+                    approvalPendingNotice
+                    // settings-05. Never disabled: a declined or expired
+                    // request sends no signal, so asking again must stay
+                    // possible. It is the quieter button while a request is
+                    // out, so it does not read as "buy again".
+                    purchaseButton(product) {
+                        Text("もう一度リクエスト", tableName: "Paywall", comment: "Paywall button while a purchase awaits approval: ask again")
+                    }
+                    .buttonStyle(PomoGemSecondaryButtonStyle())
+                } else {
+                    purchaseButton(product) {
                         Text("\(product.displayPrice)でProを購入")
                     }
+                    .buttonStyle(PomoGemPrimaryButtonStyle())
                 }
-                .buttonStyle(PomoGemPrimaryButtonStyle())
-                .disabled(
-                    purchase.isPurchasing
-                        || purchase.isLoadingProducts
-                        || purchase.isRestoring
-                )
-                .accessibilityIdentifier("paywall.purchase")
 
                 Text("自動更新・無料トライアルはありません。")
                     .font(.caption)
@@ -229,6 +226,59 @@ struct PaywallView: View {
                     .multilineTextAlignment(.center)
             }
         }
+    }
+
+    private func purchaseButton<Label: View>(
+        _ product: Product,
+        @ViewBuilder label: () -> Label
+    ) -> some View {
+        let idleLabel = label()
+        return Button {
+            Task { await buy(product) }
+        } label: {
+            if purchase.isPurchasing {
+                HStack(spacing: 8) {
+                    ProgressView().tint(PomoGemTheme.background)
+                    Text("購入処理中…")
+                }
+            } else {
+                idleLabel
+            }
+        }
+        .disabled(
+            purchase.isPurchasing
+                || purchase.isLoadingProducts
+                || purchase.isRestoring
+        )
+        .accessibilityIdentifier("paywall.purchase")
+    }
+
+    /// settings-05. What a pending purchase looks like after its alert is
+    /// gone: without it the paywall looked exactly as before the request.
+    private var approvalPendingNotice: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "hourglass")
+                .font(.title3)
+                .foregroundStyle(PomoGemTheme.amber)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("承認待ち", tableName: "Paywall", comment: "Paywall notice title: a purchase request awaits approval")
+                    .font(.subheadline.weight(.bold))
+                Text(
+                    "承認されると、自動でProが使えるようになります。届かないときは、もう一度リクエストできます。",
+                    tableName: "Paywall",
+                    comment: "Paywall notice under 承認待ち: what happens next"
+                )
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(PomoGemTheme.amber.opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("paywall.approval-pending")
     }
 
     private var loadingCatalog: some View {
@@ -382,10 +432,7 @@ struct PaywallView: View {
                     message: String(localized: "ポモジェムProを利用できます。", table: "Paywall", comment: "Paywall alert after a completed purchase")
                 )
             case .pending:
-                alert = PaywallAlert(
-                    title: Constants.UIStrings.paywallTitle,
-                    message: String(localized: "購入の承認を待っています。", table: "Paywall", comment: "Paywall alert: the purchase awaits approval")
-                )
+                alert = .approvalRequested
             case .cancelled:
                 break
             }

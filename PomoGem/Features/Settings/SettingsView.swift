@@ -867,7 +867,7 @@ struct SettingsView: View {
                         .frame(width: 28)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(Constants.UIStrings.paywallTitle).font(.headline)
-                        Text(purchase.isPro ? "利用中" : "任意時間・月刻印・勉強アプリ数の無制限")
+                        Text(proRowSubtitle)
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                     }
@@ -878,6 +878,20 @@ struct SettingsView: View {
             }
             .buttonStyle(PomoGemBareButtonStyle())
         }
+    }
+
+    private var proRowSubtitle: String {
+        if purchase.isPro { return "利用中" }
+        // settings-05. A request out for approval (Ask to Buy) is visible
+        // here too, not only inside the paywall.
+        if purchase.isAwaitingApproval() {
+            return String(
+                localized: "承認待ち・承認されると自動で使えます",
+                table: "Settings",
+                comment: "Settings Pro row subtitle while a purchase request awaits approval"
+            )
+        }
+        return "任意時間・月刻印・勉強アプリ数の無制限"
     }
 
     private var privacySection: some View {

@@ -1,5 +1,6 @@
 import Foundation
 import StoreKit
+import SwiftUI
 
 /// What the paywall was doing when StoreKit answered with an error. The same
 /// failure reads differently after a purchase, a restore or a catalog load.
@@ -7,6 +8,28 @@ enum PaywallAction: Equatable, Sendable {
     case purchase
     case restore
     case loadProduct
+}
+
+/// settings-05. Shown wherever the person is when a purchase that waited for
+/// approval (Ask to Buy) is granted. Without it Pro turned on silently,
+/// possibly hours after the request.
+struct ProApprovalNoticeModifier: ViewModifier {
+    let router: AppRouter
+    @State private var purchase = PurchaseManager.shared
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear(perform: announceIfNeeded)
+            .onChange(of: purchase.hasApprovalGrantNotice) { _, _ in announceIfNeeded() }
+    }
+
+    private func announceIfNeeded() {
+        guard purchase.consumeApprovalGrantNotice() else { return }
+        router.showToast(
+            String(localized: "ポモジェムProが使えるようになりました", table: "Paywall", comment: "Toast: an approved (Ask to Buy) Pro purchase arrived"),
+            symbol: "checkmark.seal.fill"
+        )
+    }
 }
 
 /// One alert on the paywall. Failures carry their own title, so a failed
@@ -28,6 +51,17 @@ struct PaywallAlert: Equatable {
     static let restored = PaywallAlert(
         title: Constants.UIStrings.paywallTitle,
         message: String(localized: "購入を復元しました。Proの機能を使えます。", table: "Paywall", comment: "Paywall alert: restore found the Pro purchase")
+    )
+
+    /// settings-05. StoreKit answered `.pending` (usually Ask to Buy). Says
+    /// what happens next, and that nothing is lost by closing the screen.
+    static let approvalRequested = PaywallAlert(
+        title: String(localized: "承認を待っています", table: "Paywall", comment: "Paywall alert title: the purchase awaits approval (Ask to Buy)"),
+        message: String(
+            localized: "購入のリクエストを送りました。承認されると、自動でProが使えるようになります。この画面は閉じても大丈夫です。",
+            table: "Paywall",
+            comment: "Paywall alert: the purchase request was sent and Pro turns on by itself once approved"
+        )
     )
 
     /// App Store sync finished and this Apple Account owns no Pro purchase.

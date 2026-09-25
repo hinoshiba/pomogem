@@ -125,4 +125,68 @@ final class ProTransactionDeliveryTests: XCTestCase {
         XCTAssertTrue(gate.claim(43))
         XCTAssertEqual(gate.claimedTransactionIDs, [42, 43])
     }
+
+    // MARK: settings-05 — the Ask to Buy wait is a display hint only
+
+    private let requested = Date(timeIntervalSince1970: 1_790_000_000)
+
+    func testApprovalWaitStartsAtThePendingAnswerAndLapsesAfterADay() {
+        var hint = ProApprovalWaitHint()
+        XCTAssertFalse(hint.isWaiting(at: requested))
+
+        hint.recordRequest(at: requested)
+        XCTAssertTrue(hint.isWaiting(at: requested))
+        XCTAssertTrue(hint.isWaiting(at: requested.addingTimeInterval(ProApprovalWaitHint.lifetime - 1)))
+        XCTAssertFalse(
+            hint.isWaiting(at: requested.addingTimeInterval(ProApprovalWaitHint.lifetime)),
+            "A declined or expired request sends nothing, so the hint must end by itself"
+        )
+        XCTAssertFalse(
+            hint.isWaiting(at: requested.addingTimeInterval(-60)),
+            "A clock set back before the request must not keep a wait open forever"
+        )
+    }
+
+    func testAGrantAnswersAnOpenWaitOnlyOnce() {
+        var hint = ProApprovalWaitHint()
+        hint.recordRequest(at: requested)
+
+        XCTAssertTrue(hint.resolveGrant(at: requested.addingTimeInterval(3_600)))
+        XCTAssertNil(hint.requestedAt)
+        XCTAssertFalse(hint.resolveGrant(at: requested.addingTimeInterval(3_601)),
+                       "The approval notice is said once")
+    }
+
+    func testAGrantAfterTheWaitLapsedIsNotAnnouncedAsAnApproval() {
+        var hint = ProApprovalWaitHint()
+        hint.recordRequest(at: requested)
+
+        XCTAssertFalse(hint.resolveGrant(at: requested.addingTimeInterval(ProApprovalWaitHint.lifetime + 1)))
+        XCTAssertNil(hint.requestedAt)
+    }
+
+    func testTheWaitSurvivesARelaunchUntilItLapses() throws {
+        let suite = "ProApprovalWaitHintTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertNil(ProApprovalWaitHint.load(from: defaults, now: requested).requestedAt)
+
+        var hint = ProApprovalWaitHint()
+        hint.recordRequest(at: requested)
+        hint.save(to: defaults)
+
+        let reloaded = ProApprovalWaitHint.load(from: defaults, now: requested.addingTimeInterval(600))
+        XCTAssertEqual(reloaded.requestedAt, requested)
+        XCTAssertNil(
+            ProApprovalWaitHint.load(
+                from: defaults,
+                now: requested.addingTimeInterval(ProApprovalWaitHint.lifetime + 1)
+            ).requestedAt
+        )
+
+        _ = hint.resolveGrant(at: requested)
+        hint.save(to: defaults)
+        XCTAssertNil(defaults.object(forKey: ProApprovalWaitHint.defaultsKey))
+    }
 }
