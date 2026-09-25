@@ -2383,7 +2383,11 @@ private struct SummaryTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // Decorative. A checkmark symbol carries its own 「選択済み」
+            // label and Selected trait, which `.combine` would hand to the
+            // whole tile (the 完走 tile read as selected).
             Image(systemName: symbol).font(.caption).foregroundStyle(PomoGemTheme.amber)
+                .accessibilityHidden(true)
             Text(value).font(.system(.headline, design: .rounded, weight: .heavy)).lineLimit(1).minimumScaleFactor(0.72)
             Text(label).font(.caption2).foregroundStyle(PomoGemTheme.muted)
         }

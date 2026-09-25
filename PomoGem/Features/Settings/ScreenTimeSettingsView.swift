@@ -401,7 +401,12 @@ struct ScreenTimeSettingsView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("screen-time.updating")
             } else if controller.isMonitoring {
-                Label(monitoringStatusText, systemImage: "checkmark.circle")
+                Label {
+                    Text(monitoringStatusText)
+                } icon: {
+                    Image(systemName: "checkmark.circle")
+                        .accessibilityHidden(true)
+                }
                     .font(.subheadline)
                     .foregroundStyle(PomoGemTheme.muted)
             } else {
