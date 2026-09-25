@@ -49,6 +49,46 @@ final class LocalizationEnvironmentTests: XCTestCase {
         XCTAssertEqual(Bundle.main.localizedInfoDictionary?["CFBundleDisplayName"] as? String, "ポモジェム")
     }
 
+    /// The fallback language iOS uses when a device prefers none of the shipped
+    /// ones comes from DEVELOPMENT_LANGUAGE in project.yml. The table map must
+    /// say the same, because it decides whether catalogs need explicit Japanese.
+    func testEveryBundleFallsBackToTheConfiguredDevelopmentRegion() throws {
+        let map = try LocalizationTestSupport.tableMap()
+        for (name, bundle) in try LocalizationTestSupport.productBundles() {
+            XCTAssertEqual(
+                bundle.developmentLocalization, map.developmentRegion,
+                "\(name): change DEVELOPMENT_LANGUAGE in project.yml and development_region in Scripts/l10n/table-map.json together"
+            )
+        }
+    }
+
+    /// A Japanese device reads Japanese from every key of every table.
+    ///
+    /// Japanese lives in the catalog keys. xcstringstool writes
+    /// `ja.lproj/<Table>.strings` only for explicit Japanese values, so with the
+    /// development region set to en a Japanese device finds no Japanese table and
+    /// reads `en.lproj` instead: the whole screen turns English (iOS 26.5
+    /// Simulator probe, 2026-09-25). `l10n.py sync` writes the Japanese values
+    /// whenever the table map's development region is not Japanese. While it is,
+    /// a missing value falls back to the key, and this test holds trivially.
+    func testJapaneseDevicesReadJapaneseFromEveryTable() throws {
+        let map = try LocalizationTestSupport.tableMap()
+        XCTAssertEqual(Bundle.main.preferredLocalizations.first, "ja", "run the suite in Japanese")
+        for (name, bundle) in try LocalizationTestSupport.productBundles() {
+            for table in map.catalogBundles[name] ?? [] {
+                let catalog = try LocalizationCatalogFile(table: table, relativePath: try XCTUnwrap(map.catalogs[table]))
+                for (key, entry) in catalog.strings where entry["extractionState"] as? String != "stale" {
+                    let japanese = catalog.sourceText(key: key, entry: entry)
+                    let shown = bundle.localizedString(forKey: key, value: japanese, table: table)
+                    XCTAssertEqual(
+                        shown, japanese,
+                        "\(name) \(table) \(key): a Japanese device reads \(shown). Run Scripts/l10n/l10n.py sync (Docs/Localization.md)"
+                    )
+                }
+            }
+        }
+    }
+
     /// Enabled by the English integration: `shipping_languages` gains "en" in
     /// Scripts/l10n/table-map.json. Until then this test is skipped on purpose,
     /// because main ships Japanese only.

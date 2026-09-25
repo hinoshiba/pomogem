@@ -34,6 +34,8 @@ enum LocalizationTestSupport {
     /// and the languages every bundle ships.
     struct TableMap: Decodable {
         let sourceLanguage: String
+        /// The language iOS falls back to (CFBundleDevelopmentRegion).
+        let developmentRegion: String
         let shippingLanguages: [String]
         let sourceRoots: [String]
         let catalogs: [String: String]
@@ -43,6 +45,7 @@ enum LocalizationTestSupport {
 
         enum CodingKeys: String, CodingKey {
             case sourceLanguage = "source_language"
+            case developmentRegion = "development_region"
             case shippingLanguages = "shipping_languages"
             case sourceRoots = "source_roots"
             case catalogs

@@ -7,7 +7,8 @@
 ## 原則
 
 - 開発言語は日本語です。String Catalog（`.xcstrings`）の`sourceLanguage`は`ja`、キーは日本語の原文そのものです。
-  翻訳がない言語ではキーがそのまま表示されるため、日本語の表示はcatalogの中身に左右されません。
+  開発地域（`CFBundleDevelopmentRegion`）が`ja`のあいだは、翻訳がない言語ではキーがそのまま表示されるため、
+  日本語の表示はcatalogの中身に左右されません。開発地域を`en`にすると、この前提は崩れます（「英語を有効にする手順」の3）。
 - テーブル（catalog）は**文字列を書いたファイル**で決まります。表示される画面では決まりません。
   対応は`Scripts/l10n/table-map.json`の`rules`で、上から順に最初に一致した規則を使います。
   例: `AchievementKind.title`は`Models.swift`にあるので、記録画面に出ても`Models`テーブルです。
@@ -110,13 +111,13 @@ Text("…") // l10n-ignore: 理由
 | コマンド | 用途 |
 |---|---|
 | `status` | catalogごとのキー数と翻訳の状態 |
-| `sync --derived-data <DD>` | ビルドで出力された`.stringsdata`を全catalogへ反映（Xcodeの`xcodebuild`は自動では反映しません） |
+| `sync --derived-data <DD>` | ビルドで出力された`.stringsdata`を全catalogへ反映（Xcodeの`xcodebuild`は自動では反映しません）。開発地域が`ja`でないあいだは、全キーに日本語の値（コードの日本語、`translated`）も書く |
 | `check [--strict] [--derived-data <DD>] [--tables A,B]` | catalog・コード・UIテストの検査 |
 | `report [--package ID \| --table T \| --file F]` | まだローカライズしていない日本語リテラルの一覧 |
 | `set --table T --from en.json` | 翻訳をまとめて書き込む（JSONかTSV） |
 | `carry --table T --from 旧キー --to 新キー` | 日本語を直したとき、英語を新しいキーへ移して`needs_review`にする |
 | `format [--check]` | catalogをXcodeと同じJSONの並びに整える |
-| `verify-bundle <PomoGem.app>` | appと2つの拡張に、出荷する言語の`.lproj`がちょうどあるか |
+| `verify-bundle <PomoGem.app>` | appと2つの拡張に、出荷する言語の`.lproj`がちょうどあるか。開発地域が`table-map.json`と同じか、日本語の端末が全キーを日本語で読めるか |
 
 catalogの同期は必ず全テーブルまとめて行います（一部だけだと、ほかのテーブルのキーが古いと判定されます）。
 同期の後、`git status`で自分のcatalogだけが変わっていることを確認します。
@@ -142,6 +143,7 @@ catalogの同期は必ず全テーブルまとめて行います（一部だけ�
 | InfoPlist catalogとInfo.plistの日本語の不一致 | catalogとコードのずれ（`sync`忘れ）、既定テーブルへ行く文字列 |
 | `table:`が文字列リテラルでない、識別子の翻訳 | 用語集の必須語、`streak`などの禁止語 |
 | 言語を固定せずに起動するUIテスト、ビルド出力がない・別のcheckoutのもの | `-AppleLanguages`の直書き、テーブル未割り当てのファイル |
+| `project.yml`と`table-map.json`の開発地域の食い違い、開発地域が`ja`でないときに日本語の値がないキー、コードと違う日本語の値（`--derived-data`） | |
 
 英語の値が1つでも入ったテーブルは、そのテーブルのファイルが自動的に厳格な検査の対象になります。
 
@@ -153,6 +155,9 @@ catalogの同期は必ず全テーブルまとめて行います（一部だけ�
 - UI testのすべての起動は`PomoGemUITestLanguage.configureJapanese(app)`を通します（実機用の2つのsuiteも同じ）。
   `l10n.py check`が、言語を固定しない起動を検出します。
 - `LocalizationCatalogTests`はcatalogのsourceを直接読み、構成・InfoPlistの日本語・出荷言語以外の値・翻訳の形を検査します。
+- `LocalizationEnvironmentTests`は、3つのbundleの開発地域が`table-map.json`の`development_region`と同じこと、
+  日本語の端末で全テーブルの全キーを引くと日本語（コードの日本語）が返ることを確かめます。開発地域が`ja`のあいだは
+  後者は必ず通り、`en`にした日から、日本語の値が抜けたキーを見つけます。
 - 英語の期待値は`PomoGemTests/Localization/<パッケージ>LocalizationTests.swift`に書きます。各パッケージは自分の
   ファイルだけを編集します。英語は`LocalizationTestSupport.englishBundle()`と`LocalizationTestSupport.english`で
   明示的に解決し、プロセスの言語は変えません。英語の有効化前は自動でskipします。
@@ -161,7 +166,8 @@ catalogの同期は必ず全テーブルまとめて行います（一部だけ�
 
 - `Scripts/check-oss-readiness.sh`: `Scripts/l10n/test-l10n.py`（ツール自身のテスト）と`l10n.py check`（静的検査）。
 - unit testの後: `l10n.py check --derived-data DerivedData-CI-Tests`（コンパイラが抽出したキーとcatalogの照合）。
-- Release build: `l10n.py verify-bundle`。今は3つのbundleすべてに`ja.lproj`があり、`en.lproj`がないことを確認します。
+- Release build: `l10n.py verify-bundle`。今は3つのbundleすべてに`ja.lproj`があり、`en.lproj`がないこと、
+  開発地域が`ja`であることを確認します。
   `Scripts/verify-release-archive.sh`も同じ検査をarchiveに行います。
 
 ## 英語を有効にする手順（統合ブランチ）
@@ -169,11 +175,24 @@ catalogの同期は必ず全テーブルまとめて行います（一部だけ�
 1. 3つのInfoPlist catalogへ英語を入れる: `CFBundleDisplayName`（PomoGem／PomoGem Screen Time）、
    `NSMotionUsageDescription`、`NSPhotoLibraryAddUsageDescription`。Info.plist自体は日本語のままです。
 2. `Scripts/l10n/table-map.json`の`shipping_languages`へ`"en"`を加え、`xcodegen generate`で`knownRegions`に`en`が入ることを確認する。
-3. 第3の言語（韓国語など）の扱いを決め、Simulatorの`-AppleLanguages (ko-KR) -AppleLocale ko_KR`で確認する。
-   開発地域が`ja`のままだと、日本語・英語のどちらも持たない端末には日本語が出ます。英語に倒す場合は、
-   3つのtargetのbuild setting `DEVELOPMENT_LANGUAGE`を`en`にします。Info.plistの`CFBundleDevelopmentRegion`を
-   直接書き換えても、buildが`$(DEVELOPMENT_LANGUAGE)`の値で上書きします（2026-09-25にprobe appで確認:
-   韓国語・中国語の端末は英語の文字列とen_KR／en_CNの書式になる）。catalogの`sourceLanguage`とキーは日本語のままです。
+3. 第3の言語（韓国語・中国語など、日本語も英語も持たない端末）に出す言語を決め、Simulatorの
+   `-AppleLanguages (ko-KR) -AppleLocale ko_KR`と`(ja-JP) ja_JP`の両方で確認する。
+   - 開発地域を`ja`のままにする: 第3の言語の端末には日本語が出ます（書式も`PomoGemLocale`が日本語に合わせます）。
+     catalogは今のまま（日本語はキーだけ）で安全です。
+   - 英語に倒す（韓国語・中国語の端末に英語の文字列とen_KR／en_CNの書式を出す）: **日本語の値を全キーに明示する**
+     ことが条件です。日本語がキーだけだと`xcstringstool`は`ja.lproj/<Table>.strings`を出力せず、開発地域が`en`の
+     bundleでは、日本語の端末がそのテーブルを`en.lproj`から読みます。**日本語の画面がすべて英語になります**
+     （2026-09-25、iOS 26.5 Simulatorのprobe appで確認。`defaultValue:`のキーも、日本語の値が`new`のままなら同じ）。
+     手順は次のとおりで、途中で止めません。
+     1. `Scripts/l10n/table-map.json`の`development_region`を`"en"`にし、`project.yml`の`settings.base`に
+        `DEVELOPMENT_LANGUAGE: en`を加えて`xcodegen generate`する。Info.plistの`CFBundleDevelopmentRegion`を
+        直接書き換えても、buildが`$(DEVELOPMENT_LANGUAGE)`の値で上書きするので効きません。
+     2. ビルドして`l10n.py sync --derived-data <DD>`を実行する。`development_region`が`ja`でないあいだ、`sync`は
+        全キーに日本語の値（コードの日本語そのもの、`translated`）を書きます。catalogの`sourceLanguage`とキーは日本語のままです。
+     3. 守りが働くことを確かめる: `l10n.py check`は日本語の値がないキーと、`project.yml`と`table-map.json`の食い違いで
+        失敗します。`verify-bundle`は英語の値があって日本語の値がないキーで失敗し、
+        `LocalizationEnvironmentTests.testJapaneseDevicesReadJapaneseFromEveryTable`は日本語の端末で全キーを引いて確かめます。
+     4. 以後、日本語の文言を変えたら毎回`sync`する（Xcodeが自動で足したキーには日本語の値がなく、`check`が失敗します）。
 4. 各パッケージが自分のテーブルへ英語を入れる（`sync` → `set` → `check --tables`）。
 5. 統合: CIを`check --strict`にし、英語のsmoke UI test（`PomoGemUITestLanguage`に英語の起動を追加）、
    英語のスクリーンショット、App Storeの英語資料、README・サイトの対応言語を更新する。

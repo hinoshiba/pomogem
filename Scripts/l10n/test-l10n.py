@@ -34,11 +34,12 @@ def has_xcstringstool():
 class FixtureRepo:
     """A throwaway checkout with the real table map and small catalogs."""
 
-    def __init__(self, shipping=("ja",)):
+    def __init__(self, shipping=("ja",), development_region="ja"):
         self.directory = tempfile.TemporaryDirectory()
         self.root = Path(self.directory.name)
         config = json.loads(json.dumps(REAL_CONFIG))
         config["shipping_languages"] = list(shipping)
+        config["development_region"] = development_region
         self.write("Scripts/l10n/table-map.json", json.dumps(config, ensure_ascii=False, indent=2))
         self.write("Scripts/l10n/glossary.json", (HERE / "glossary.json").read_text(encoding="utf-8"))
         for relative in config["catalogs"].values():
@@ -378,25 +379,39 @@ class CatalogCheckTests(unittest.TestCase):
             fixture.close()
 
 
+def stringsdata_item(key):
+    """A .stringsdata entry; a (key, value) tuple is a `defaultValue:` key."""
+    item = {"location": {"startingColumn": 1, "startingLine": 1, "startingOffset": 0}}
+    if isinstance(key, tuple):
+        item["key"], item["value"] = key
+    else:
+        item["key"] = key
+    return item
+
+
+def build_derived_data(fixture, entries_by_file, targets=("PomoGem", "PomoGemWidgets", "PomoGemScreenTimeMonitor"), outside=False):
+    derived = fixture.root / "DD"
+    for target in targets:
+        directory = derived / "Build/Intermediates.noindex/PomoGem.build/Debug-iphonesimulator" / f"{target}.build/Objects-normal/arm64"
+        directory.mkdir(parents=True, exist_ok=True)
+        for relative, tables in entries_by_file.get(target, {}).items():
+            source = fixture.root / relative
+            if not source.exists():
+                fixture.write(relative, "// source\n")
+            path = Path("/elsewhere") / relative if outside else source
+            data = {"source": str(path), "tables": {
+                table: [stringsdata_item(key) for key in keys]
+                for table, keys in tables.items()
+            }, "version": 1}
+            stringsdata = directory / (Path(relative).stem + ".stringsdata")
+            stringsdata.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            os.utime(stringsdata, (source.stat().st_mtime + 5, source.stat().st_mtime + 5))
+    return str(derived)
+
+
 class StringsdataTests(unittest.TestCase):
-    def build(self, fixture, entries_by_file, targets=("PomoGem", "PomoGemWidgets", "PomoGemScreenTimeMonitor"), outside=False):
-        derived = fixture.root / "DD"
-        for target in targets:
-            directory = derived / "Build/Intermediates.noindex/PomoGem.build/Debug-iphonesimulator" / f"{target}.build/Objects-normal/arm64"
-            directory.mkdir(parents=True, exist_ok=True)
-            for relative, tables in entries_by_file.get(target, {}).items():
-                source = fixture.root / relative
-                if not source.exists():
-                    fixture.write(relative, "// source\n")
-                path = Path("/elsewhere") / relative if outside else source
-                data = {"source": str(path), "tables": {
-                    table: [{"key": key, "location": {"startingColumn": 1, "startingLine": 1, "startingOffset": 0}} for key in keys]
-                    for table, keys in tables.items()
-                }, "version": 1}
-                stringsdata = directory / (Path(relative).stem + ".stringsdata")
-                stringsdata.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-                os.utime(stringsdata, (source.stat().st_mtime + 5, source.stat().st_mtime + 5))
-        return str(derived)
+    def build(self, fixture, entries_by_file, **options):
+        return build_derived_data(fixture, entries_by_file, **options)
 
     def test_routing_and_drift(self):
         fixture = FixtureRepo()
@@ -444,6 +459,90 @@ class StringsdataTests(unittest.TestCase):
             fixture.close()
 
 
+class DevelopmentRegionTests(unittest.TestCase):
+    """English as the fallback must never turn the Japanese UI English (Docs/Localization.md)."""
+
+    def test_project_spec_and_table_map_agree(self):
+        fixture = FixtureRepo()
+        try:
+            fixture.write("project.yml", "options:\n  developmentLanguage: ja\n")
+            self.assertEqual(fixture.run("check")[0], 0)
+            fixture.write("project.yml", "options:\n  developmentLanguage: ja\nsettings:\n  base:\n    DEVELOPMENT_LANGUAGE: en\n")
+            code, output = fixture.run("check")
+            self.assertEqual(code, 1)
+            self.assertIn("builds with development region en, but", output)
+        finally:
+            fixture.close()
+
+    def test_english_fallback_needs_a_japanese_value_for_every_key(self):
+        fixture = FixtureRepo(shipping=("ja", "en"), development_region="en")
+        try:
+            fixture.write("project.yml", "options:\n  developmentLanguage: ja\nsettings:\n  base:\n    DEVELOPMENT_LANGUAGE: en\n")
+            fixture.catalog("PomoGem/Localization/Home.xcstrings", {
+                "集中": {"localizations": {"en": unit("Focus")}},
+                "home.metric": {"extractionState": "extracted_with_value", "localizations": {
+                    "en": unit("Focus time"), "ja": unit("集中時間", state="new"),
+                }},
+                "記録": {"localizations": {"en": unit("Log"), "ja": unit("記録")}},
+                "古い": {"extractionState": "stale", "localizations": {"en": unit("Old")}},
+            })
+            code, output = fixture.run("check")
+            self.assertEqual(code, 1)
+            self.assertIn("'集中' has no 'ja' value", output)
+            self.assertIn("'home.metric' has no 'ja' value", output, "a 'new' source value is not compiled")
+            self.assertNotIn("'記録' has no 'ja' value", output)
+            self.assertNotIn("'古い' has no 'ja' value", output, "stale keys are not read by code")
+        finally:
+            fixture.close()
+
+    @unittest.skipUnless(has_xcstringstool(), "xcstringstool is part of Xcode")
+    def test_sync_writes_the_code_japanese_while_english_is_the_fallback(self):
+        fixture = FixtureRepo(shipping=("ja", "en"), development_region="en")
+        try:
+            path = fixture.root / "PomoGem/Localization/Home.xcstrings"
+            fixture.catalog("PomoGem/Localization/Home.xcstrings", {
+                "集中": {"localizations": {"en": unit("Focus")}},
+                "home.metric": {"localizations": {"en": unit("Focus time"), "ja": unit("集中")}},
+            })
+            derived = build_derived_data(fixture, {
+                "PomoGem": {"PomoGem/Features/Home/HomeView.swift": {"Home": ["集中", ("home.metric", "集中時間"), "%lld粒"]}},
+                "PomoGemWidgets": {"PomoGemWidgets/Widget.swift": {}},
+                "PomoGemScreenTimeMonitor": {"PomoGemScreenTimeMonitor/Monitor.swift": {}},
+            })
+            code, output = fixture.run("check", "--derived-data", derived)
+            self.assertEqual(code, 1)
+            self.assertIn("shows '集中' for 'home.metric', but the code says '集中時間'", output)
+            self.assertEqual(fixture.run("sync", "--derived-data", derived)[0], 0)
+            strings = json.loads(path.read_text(encoding="utf-8"))["strings"]
+            self.assertEqual(strings["集中"]["localizations"]["ja"], unit("集中"))
+            self.assertEqual(strings["集中"]["localizations"]["en"], unit("Focus"))
+            self.assertEqual(strings["home.metric"]["localizations"]["ja"], unit("集中時間"), "an edited defaultValue wins")
+            self.assertEqual(strings["%lld粒"]["localizations"]["ja"], unit("%lld粒"))
+            code, output = fixture.run("check", "--derived-data", derived)
+            self.assertNotIn("[source-value]", output)
+            with tempfile.TemporaryDirectory() as directory:
+                subprocess.run(["xcrun", "xcstringstool", "compile", str(path), "--output-directory", directory], check=True)
+                compiled = L10N.read_strings_file(Path(directory) / "ja.lproj" / "Home.strings")
+                self.assertEqual(compiled, {"集中": "集中", "home.metric": "集中時間", "%lld粒": "%lld粒"})
+        finally:
+            fixture.close()
+
+    @unittest.skipUnless(has_xcstringstool(), "xcstringstool is part of Xcode")
+    def test_sync_leaves_keys_alone_while_japanese_is_the_development_region(self):
+        fixture = FixtureRepo()
+        try:
+            path = fixture.root / "PomoGem/Localization/Home.xcstrings"
+            derived = build_derived_data(fixture, {
+                "PomoGem": {"PomoGem/Features/Home/HomeView.swift": {"Home": ["集中"]}},
+                "PomoGemWidgets": {"PomoGemWidgets/Widget.swift": {}},
+                "PomoGemScreenTimeMonitor": {"PomoGemScreenTimeMonitor/Monitor.swift": {}},
+            })
+            self.assertEqual(fixture.run("sync", "--derived-data", derived)[0], 0)
+            self.assertNotIn("localizations", json.loads(path.read_text(encoding="utf-8"))["strings"]["集中"])
+        finally:
+            fixture.close()
+
+
 class EditingTests(unittest.TestCase):
     def test_set_and_carry(self):
         fixture = FixtureRepo(shipping=("ja", "en"))
@@ -485,13 +584,15 @@ class EditingTests(unittest.TestCase):
 
 
 class BundleTests(unittest.TestCase):
-    def make_app(self, fixture, name, languages):
+    def make_app(self, fixture, name, languages, development_region="ja"):
         """A fake built app whose InfoPlist.strings repeat the fixture catalogs."""
         app = fixture.root / name / "PomoGem.app"
         catalogs = {item["bundle"]: item["catalog"] for item in REAL_CONFIG["info_plist_catalogs"]}
         for bundle_name, relative in REAL_CONFIG["bundle_paths"].items():
             bundle = app / relative
             bundle.mkdir(parents=True, exist_ok=True)
+            with (bundle / "Info.plist").open("wb") as handle:
+                plistlib.dump({"CFBundleDevelopmentRegion": development_region}, handle, fmt=plistlib.FMT_BINARY)
             strings = L10N.load_catalog(fixture.root / catalogs[bundle_name])["strings"]
             for language, bundles in languages.items():
                 if bundle_name not in bundles:
@@ -534,6 +635,37 @@ class BundleTests(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertIn("PomoGem.app: en.lproj has no Home table", output)
             (app / "en.lproj" / "Home.strings").write_text('"集中" = "Focus";\n', encoding="utf-8")
+            code, output = fixture.run("verify-bundle", str(app))
+            self.assertEqual(code, 0, output)
+        finally:
+            fixture.close()
+
+    def test_development_region_matches_the_table_map(self):
+        fixture = FixtureRepo()
+        try:
+            every = set(REAL_CONFIG["bundle_paths"])
+            app = self.make_app(fixture, "app", {"ja": every}, development_region="en")
+            code, output = fixture.run("verify-bundle", str(app))
+            self.assertEqual(code, 1)
+            self.assertIn("PomoGem.app: CFBundleDevelopmentRegion is 'en', but", output)
+        finally:
+            fixture.close()
+
+    def test_english_fallback_bundle_needs_japanese_for_every_translated_key(self):
+        fixture = FixtureRepo(shipping=("ja", "en"), development_region="en")
+        try:
+            fixture.catalog("PomoGem/Localization/Home.xcstrings", {"集中": {"localizations": {"en": unit("Focus"), "ja": unit("集中")}}})
+            every = set(REAL_CONFIG["bundle_paths"])
+            app = self.make_app(fixture, "app", {"ja": every, "en": every}, development_region="en")
+            with (app / "en.lproj" / "Home.strings").open("wb") as handle:
+                plistlib.dump({"集中": "Focus"}, handle, fmt=plistlib.FMT_BINARY)
+            with (app / "en.lproj" / "Home.stringsdict").open("wb") as handle:
+                plistlib.dump({"%lld粒": {"NSStringLocalizedFormatKey": "%#@value@"}}, handle)
+            code, output = fixture.run("verify-bundle", str(app))
+            self.assertEqual(code, 1)
+            self.assertIn("2 Home key(s) have en values but no ja.lproj value", output)
+            with (app / "ja.lproj" / "Home.strings").open("wb") as handle:
+                plistlib.dump({"集中": "集中", "%lld粒": "%lld粒"}, handle, fmt=plistlib.FMT_BINARY)
             code, output = fixture.run("verify-bundle", str(app))
             self.assertEqual(code, 0, output)
         finally:

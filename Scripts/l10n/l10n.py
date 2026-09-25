@@ -4,6 +4,8 @@
 Commands
   status                     Summarize every String Catalog.
   sync --derived-data DIR    Merge the compiler's .stringsdata into all feature catalogs.
+                             While the development region is not the source language,
+                             also write every key's Japanese value (see below).
   check [--strict] [--derived-data DIR] [--tables T,...]
                              Lint catalogs, code and UI tests. Without --strict the
                              check is a report: it fails only on problems that are
@@ -19,10 +21,17 @@ Commands
                              needs_review.
   format [--check]           Rewrite catalogs in Xcode's exact JSON layout.
   verify-bundle APP          Assert the built app and both extensions carry exactly the
-                             shipping localizations.
+                             shipping localizations, and that Japanese devices can read
+                             Japanese from every table.
 
-Keys are the Japanese source text. A missing translation falls back to that key,
-so Japanese output never depends on these catalogs.
+Keys are the Japanese source text. While the development region is ja, a missing
+translation falls back to that key, so Japanese output never depends on these
+catalogs. Setting the development region to en (so languages PomoGem does not
+ship fall back to English) changes that: xcstringstool writes ja.lproj/<Table>.strings
+only for explicit Japanese values, and without one iOS serves the table from
+en.lproj, in English, to Japanese devices. `development_region` in table-map.json
+therefore turns on explicit Japanese values: `sync` writes them, `check`,
+`verify-bundle` and LocalizationEnvironmentTests fail without them.
 """
 
 from __future__ import annotations
@@ -47,6 +56,7 @@ CONFIG_RELATIVE = Path("Scripts/l10n/table-map.json")
 GLOSSARY_RELATIVE = Path("Scripts/l10n/glossary.json")
 UI_TEST_DIRECTORY = "PomoGemUITests"
 UI_TEST_LANGUAGE_HELPER = "PomoGemUITests/PomoGemUITestLanguage.swift"
+PROJECT_SPEC = "project.yml"
 
 # Kana, kanji, CJK punctuation and full-width forms. Used both to find
 # Japanese literals in code and to reject Japanese left inside a translation.
@@ -108,6 +118,7 @@ class Repo:
         glossary_path = self.root / GLOSSARY_RELATIVE
         self.glossary = json.loads(glossary_path.read_text(encoding="utf-8")) if glossary_path.exists() else {}
         self.source_language = self.config["source_language"]
+        self.development_region = self.config.get("development_region", self.source_language)
         self.shipping_languages = list(self.config["shipping_languages"])
         self.catalogs = dict(self.config["catalogs"])
         self.rules = [(glob_to_regex(rule["glob"]), rule) for rule in self.config["rules"]]
@@ -143,6 +154,10 @@ class Repo:
 
     def target_languages(self):
         return [language for language in self.shipping_languages if language != self.source_language]
+
+    def needs_source_values(self):
+        """Every key needs an explicit source-language value once iOS falls back to another language."""
+        return self.development_region != self.source_language
 
 
 # --------------------------------------------------------------------------
@@ -210,6 +225,25 @@ def source_text(key, entry, source_language):
     if unit and "value" in unit:
         return unit["value"]
     return key
+
+
+def source_value_unit(entry, source_language):
+    """The source-language stringUnit that xcstringstool compiles, or None.
+
+    xcstringstool writes <source>.lproj/<Table>.strings only for explicit
+    source values, and skips the ones still in state 'new' (the unreviewed
+    value Xcode records for a `defaultValue:` key).
+    """
+    localization = (entry.get("localizations") or {}).get(source_language) or {}
+    unit = localization.get("stringUnit")
+    if unit is None or "value" not in unit or unit.get("state") == "new":
+        return None
+    return unit
+
+
+def needs_source_value(entry):
+    """Keys the code still uses; stale and do-not-translate keys never fall back to English."""
+    return entry.get("extractionState") != "stale" and entry.get("shouldTranslate") is not False
 
 
 def specifiers(text, substitutions=None):
@@ -807,6 +841,43 @@ def check_info_plist_catalogs(repo, findings):
                     findings.error("infoplist", f"{relative}: {key} [{language}] still contains Japanese")
 
 
+def project_development_regions(repo):
+    """Development regions project.yml builds with: DEVELOPMENT_LANGUAGE overrides, else developmentLanguage."""
+    path = repo.path(PROJECT_SPEC)
+    if not path.exists():
+        return None
+    text = path.read_text(encoding="utf-8")
+    overrides = set(re.findall(r"^\s*DEVELOPMENT_LANGUAGE:\s*[\"']?([A-Za-z_-]+)", text, re.M))
+    if overrides:
+        return overrides
+    return set(re.findall(r"^\s*developmentLanguage:\s*[\"']?([A-Za-z_-]+)", text, re.M)) or {"en"}
+
+
+def check_development_region(repo, findings, documents):
+    """Japanese devices read Japanese from every table, whatever the development region."""
+    regions = project_development_regions(repo)
+    if regions is not None and regions != {repo.development_region}:
+        findings.error(
+            "development-region",
+            f"{PROJECT_SPEC} builds with development region {', '.join(sorted(regions))}, but {CONFIG_RELATIVE} "
+            f"says {repo.development_region!r}; change both together (Docs/Localization.md)",
+        )
+    if not repo.needs_source_values():
+        return
+    for table, document in documents.items():
+        missing = [
+            key for key, entry in document.get("strings", {}).items()
+            if needs_source_value(entry) and source_value_unit(entry, repo.source_language) is None
+        ]
+        for key in missing:
+            findings.error(
+                "source-value",
+                f"{repo.catalogs[table]}: {key!r} has no {repo.source_language!r} value; with development region "
+                f"{repo.development_region!r} Japanese devices would read this table in {repo.development_region!r}. "
+                f"Build and run Scripts/l10n/l10n.py sync",
+            )
+
+
 # --------------------------------------------------------------------------
 # Compiler output (.stringsdata)
 
@@ -923,6 +994,16 @@ def check_code_against_catalogs(repo, findings, documents, derived_data, configu
         document = documents.get(table)
         if document is not None and entry["key"] not in document.get("strings", {}):
             findings.enforce("sync", f"{where}: {entry['key']!r} is not in {repo.catalogs[table]}; run Scripts/l10n/l10n.py sync", table in enforced)
+        elif document is not None:
+            # A compiled Japanese value wins over the code at runtime, so it must be the code's Japanese.
+            unit = source_value_unit(document["strings"][entry["key"]], repo.source_language)
+            code_text = entry["value"] if entry.get("value") is not None else entry["key"]
+            if unit is not None and unit["value"] != code_text:
+                findings.error(
+                    "source-value",
+                    f"{where}: {repo.catalogs[table]} shows {unit['value']!r} for {entry['key']!r}, but the code says "
+                    f"{code_text!r}; run Scripts/l10n/l10n.py sync",
+                )
     for table, document in documents.items():
         for key, value in document.get("strings", {}).items():
             state = value.get("extractionState")
@@ -969,6 +1050,7 @@ def command_check(repo, arguments):
             raise SystemExit(f"error: unknown table(s): {', '.join(sorted(unknown))}")
     documents = check_catalog_files(repo, findings)
     enforced = check_catalog_contents(repo, findings, documents, tables)
+    check_development_region(repo, findings, documents)
     check_info_plist_catalogs(repo, findings)
     static_code_checks(repo, findings)
     ui_test_language_checks(repo, findings)
@@ -1035,7 +1117,7 @@ def command_report(repo, arguments):
 
 def command_status(repo, _arguments):
     languages = repo.shipping_languages
-    print(f"source {repo.source_language}; shipping {', '.join(languages)}")
+    print(f"source {repo.source_language}; development region {repo.development_region}; shipping {', '.join(languages)}")
     for table, relative in list(repo.catalogs.items()) + [(item["bundle"] + " InfoPlist", item["catalog"]) for item in repo.info_plist_catalogs]:
         path = repo.path(relative)
         if not path.exists():
@@ -1077,12 +1159,47 @@ def command_sync(repo, arguments):
     for path in paths:
         command += ["--stringsdata", path]
     subprocess.run(command, check=True)
-    for relative in repo.catalogs.values():
+    written = 0
+    code_text = {(entry["table"], entry["key"]): entry["value"] if entry.get("value") is not None else entry["key"] for entry in entries}
+    for table, relative in repo.catalogs.items():
         path = repo.path(relative)
-        write_catalog(path, load_catalog(path))
+        document = load_catalog(path)
+        if repo.needs_source_values():
+            written += write_source_values(repo, table, document, code_text)
+        write_catalog(path, document)
     print(f"Synced {len(repo.catalogs)} catalogs from {len(paths)} .stringsdata files.")
-    subprocess.run(["git", "-C", str(repo.root), "status", "--short", "--", *repo.catalogs.values()], check=False)
+    if written:
+        print(f"Wrote {written} {repo.source_language} value(s): development region is {repo.development_region!r}.")
+    subprocess.run(
+        ["git", "-C", str(repo.root), "status", "--short", "--", *repo.catalogs.values()],
+        check=False,
+        stderr=subprocess.DEVNULL,
+    )
     return 0
+
+
+def write_source_values(repo, table, document, code_text):
+    """Give every live key an explicit, compiled source value equal to the code's Japanese.
+
+    Needed while the development region differs from the source language (see
+    the module docstring). The value is the code's `defaultValue:` or the key;
+    xcstringstool stops updating a source value once it is 'translated', so
+    this rewrite is also what keeps an edited `defaultValue:` in step.
+    """
+    written = 0
+    for key, entry in document.get("strings", {}).items():
+        if not needs_source_value(entry):
+            continue
+        localizations = entry.setdefault("localizations", {})
+        current = localizations.get(repo.source_language) or {}
+        if current.get("variations") or current.get("substitutions"):
+            continue  # a hand-made Japanese variation; check reports it if it does not compile
+        fallback = (current.get("stringUnit") or {}).get("value", key)
+        wanted = {"stringUnit": {"state": "translated", "value": code_text.get((table, key), fallback)}}
+        if current != wanted:
+            localizations[repo.source_language] = wanted
+            written += 1
+    return written
 
 
 def parse_translation_file(path):
@@ -1210,6 +1327,47 @@ def read_strings_file(path):
         return dict(re.findall(r'"((?:[^"\\]|\\.)*)"\s*=\s*"((?:[^"\\]|\\.)*)"\s*;', text))
 
 
+def bundle_development_region(bundle):
+    info = bundle / "Info.plist"
+    if not info.exists():
+        return None
+    with info.open("rb") as handle:
+        return plistlib.load(handle).get("CFBundleDevelopmentRegion")
+
+
+def table_keys(directory, table):
+    keys = set()
+    for suffix in (".strings", ".stringsdict"):
+        path = directory / f"{table}{suffix}"
+        if path.exists():
+            keys |= set(read_strings_file(path))
+    return keys
+
+
+def missing_source_values(repo, bundle_name, bundle, present, region):
+    """Keys another language translates but the source language does not carry.
+
+    iOS falls back to the development region's table when the preferred
+    localization has no such table, so with region 'en' a Japanese device
+    would read these keys in English.
+    """
+    errors = []
+    source = bundle / f"{repo.source_language}.lproj"
+    for language in sorted(present - {repo.source_language, "Base"}):
+        directory = bundle / f"{language}.lproj"
+        tables = sorted({path.stem for path in directory.iterdir() if path.suffix in (".strings", ".stringsdict")})
+        for table in tables:
+            missing = sorted(table_keys(directory, table) - table_keys(source, table))
+            if missing:
+                sample = ", ".join(repr(key) for key in missing[:3])
+                errors.append(
+                    f"{bundle_name}: {len(missing)} {table} key(s) have {language} values but no "
+                    f"{repo.source_language}.lproj value, so Japanese devices read them in {region!r} "
+                    f"(development region); run Scripts/l10n/l10n.py sync and rebuild: {sample}"
+                )
+    return errors
+
+
 def command_verify_bundle(repo, arguments):
     app = Path(arguments.app)
     errors = []
@@ -1220,6 +1378,13 @@ def command_verify_bundle(repo, arguments):
             errors.append(f"{bundle_name}: missing at {bundle}")
             continue
         present = {path.name[:-len(".lproj")] for path in bundle.glob("*.lproj")}
+        region = bundle_development_region(bundle)
+        if region != repo.development_region:
+            errors.append(
+                f"{bundle_name}: CFBundleDevelopmentRegion is {region!r}, but {CONFIG_RELATIVE} says {repo.development_region!r}"
+            )
+        if region and region != repo.source_language:
+            errors.extend(missing_source_values(repo, bundle_name, bundle, present, region))
         for language in sorted(shipping - present):
             errors.append(f"{bundle_name}: {language}.lproj is missing, so {language} users could be served another language")
         for language in sorted(present - shipping - {"Base"}):
@@ -1247,7 +1412,10 @@ def command_verify_bundle(repo, arguments):
         for error in errors:
             print(f"error: {error}", file=sys.stderr)
         return 1
-    print(f"Bundles carry exactly the shipping localizations ({', '.join(repo.shipping_languages)}).")
+    print(
+        f"Bundles carry exactly the shipping localizations ({', '.join(repo.shipping_languages)}); "
+        f"development region {repo.development_region}."
+    )
     return 0
 
 

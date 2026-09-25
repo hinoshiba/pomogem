@@ -3,9 +3,11 @@
     "Localization map for PomoGem. Read by Scripts/l10n/l10n.py and by PomoGemTests (LocalizationCatalogTests, LocalizationEnvironmentTests).",
     "rules: ordered globs over the shipping Swift sources; the first match decides the table (the catalog) and the package that owns the file. A string's table is chosen by the file it is written in, never by the screen that shows it.",
     "catalogs: one String Catalog per table. There is deliberately no Localizable.xcstrings: an untabled literal must stay detectable.",
-    "shipping_languages: the localizations every bundle must contain. English is added here only by the localization integration change that also adds the English InfoPlist values (see Docs/Localization.md)."
+    "shipping_languages: the localizations every bundle must contain. English is added here only by the localization integration change that also adds the English InfoPlist values (see Docs/Localization.md).",
+    "development_region: the language iOS falls back to (CFBundleDevelopmentRegion, from DEVELOPMENT_LANGUAGE in project.yml; both must agree). While it is not the source language, every key needs an explicit Japanese value, or Japanese devices read that table in the fallback language: l10n.py sync writes them, and check, verify-bundle and LocalizationEnvironmentTests enforce them."
   ],
   "source_language": "ja",
+  "development_region": "ja",
   "shipping_languages": [
     "ja"
   ],
