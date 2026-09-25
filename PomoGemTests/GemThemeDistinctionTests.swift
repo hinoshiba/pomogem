@@ -371,6 +371,31 @@ final class GemThemeDistinctionTests: XCTestCase {
         XCTAssertTrue(FusionOrbitStage.sourceHexes(shares: [], count: 10).isEmpty)
     }
 
+    /// The Overview's "いま" gem is the jar's art for this week's measured
+    /// grams in the week's colours; an empty week is clear glass.
+    func testWeeklyGemIsTheJarsArtForThisWeek() {
+        func record(_ hex: String, grams: Int, measured: Bool = true, index: Int) -> AccumulationRecord {
+            AccumulationRecord(
+                id: UUID(uuidString: String(format: "D0C10000-0000-4000-8000-%012X", index))!,
+                date: Date(timeIntervalSince1970: TimeInterval(index)),
+                subjectName: "テーマ",
+                colorHex: hex,
+                grams: grams,
+                isMeasured: measured,
+                isRepresentedByLocalAggregate: false
+            )
+        }
+        XCTAssertEqual(AccumulationWeeklyPolicy.gemSpec(records: []).cut, .glass)
+        XCTAssertEqual(AccumulationWeeklyPolicy.gemSpec(records: [record(palette[0], grams: 300, measured: false, index: 1)]).cut, .glass)
+
+        let week = (0 ..< 12).map { record(palette[$0 % 2 == 0 ? 0 : 1 % palette.count], grams: 250, index: $0) }
+            + [record(palette[2 % palette.count], grams: 600, measured: false, index: 99)]
+        let spec = AccumulationWeeklyPolicy.gemSpec(records: week)
+        XCTAssertEqual(spec.cut, GemCutLadder.standard.rung(aggregateGrams: 3_000).cut, "Rung by the week's measured grams")
+        XCTAssertEqual(Set(spec.colors.map(\.hex)), [palette[0], palette[1 % palette.count]], "Self-reported time does not colour it")
+        XCTAssertEqual(spec.colors.reduce(0) { $0 + $1.fraction }, 1, accuracy: 0.000_1)
+    }
+
     // MARK: Core labels on a shortened stage
 
     /// Whatever the stage height, the label block never reaches the pile:

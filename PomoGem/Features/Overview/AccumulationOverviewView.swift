@@ -42,6 +42,40 @@ enum AccumulationWeeklyPolicy {
             dominantColorHex: dominantColor
         )
     }
+
+    /// This week's measured grams by theme colour, as the shares a crystal
+    /// holding them would paint (up to four, largest first).
+    static func colorShares(records: [AccumulationRecord]) -> [GemColorShare] {
+        let measured = records.filter(\.isMeasured)
+        let total = Double(HomeProjectionPolicy.saturatingNonnegativeSum(measured.map(\.grams)))
+        guard total > 0 else { return [] }
+        let mix = Dictionary(grouping: measured, by: \.colorHex).map {
+            StratumColorFraction(
+                hex: $0.key,
+                fraction: Double(HomeProjectionPolicy.saturatingNonnegativeSum($0.value.map(\.grams))) / total
+            )
+        }
+        return GemArtworkSpec.aggregateColors(mix, fallbackHex: Constants.Color.amberLamp)
+    }
+
+    /// The Overview's "いま" gem: the Home jar's own art for this week's
+    /// measured grams (the rung a crystal of those grams would take, D8, in
+    /// the week's theme colours); an empty week is the clear glass of the
+    /// first-run gem (「今週は、まだ透明。」).
+    static func gemSpec(records: [AccumulationRecord]) -> GemArtworkSpec {
+        let shares = colorShares(records: records)
+        let grams = HomeProjectionPolicy.saturatingNonnegativeSum(records.filter(\.isMeasured).map(\.grams))
+        guard grams > 0, !shares.isEmpty else {
+            return GemArtworkSpec(
+                rung: GemCutLadder.standard.tutorial,
+                colors: [GemColorShare(hex: "#DCEBFF", fraction: 1)],
+                variant: 0,
+                isMuted: false,
+                showsDashedRing: false
+            )
+        }
+        return GemArtworkStone.aggregateSpec(grams: grams, colors: shares)
+    }
 }
 
 enum AccumulationClusterStorage: Equatable, Sendable {
@@ -873,8 +907,14 @@ struct AccumulationOverviewView: View {
             Circle()
                 .stroke(Color(hex: currentWeekColorHex).opacity(0.34), lineWidth: 1)
             VStack(spacing: 4) {
-                Image(systemName: "scalemass.fill")
-                    .font(.title2.weight(.black))
+                // This week's grams as the jar's own gem art (the same
+                // baked stone as Home), above the same standard units.
+                GemArtworkStone(
+                    spec: AccumulationWeeklyPolicy.gemSpec(records: currentWeekRecords),
+                    glowHex: currentWeekMeasuredCount == 0 ? nil : currentWeekColorHex,
+                    glowOpacity: 0.36
+                )
+                .frame(width: 50, height: 50)
                 Text(
                     dynamicTypeSize.isAccessibilitySize
                         ? EffortProgressPresentation.formattedStandardUnits(grams: currentWeekGrams)
