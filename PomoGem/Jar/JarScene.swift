@@ -2096,8 +2096,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// and the open holds, applies them, and schedules the check that ends
     /// the holds (a paused scene gets no `update(_:)` to do it).
     private func updateRenderLoop(now: TimeInterval) {
-        let paused = isIdlePaused && now >= redrawUntil
-        let fullRate = !isIdlePaused || now < motionWakeUntil
+        var paused = isIdlePaused && now >= redrawUntil
+        var fullRate = !isIdlePaused || now < motionWakeUntil
+#if DEBUG && targetEnvironment(simulator)
+        if JarIdleEnergyDebug.keepsRestingJarAwake {
+            paused = false
+            fullRate = true
+        }
+#endif
         isRenderLoopPaused = paused
         applyRenderLoopState()
         if fullRateMotionDemand.value != fullRate {
@@ -4980,7 +4986,13 @@ final class JarMotionObserver: ObservableObject {
     private var demandSubscription: AnyCancellable?
     private var isStarted = false
     /// The rate the sensor runs at now (tests and the Debug frame probe).
-    private(set) var rate: JarMotionRate = .stopped
+    private(set) var rate: JarMotionRate = .stopped {
+        didSet {
+#if DEBUG && targetEnvironment(simulator)
+            JarFrameProbe.shared?.motionRate = rate
+#endif
+        }
+    }
 
     init(scene: JarScene? = nil, source: JarMotionSource? = nil) {
         self.scene = scene
@@ -5010,7 +5022,12 @@ final class JarMotionObserver: ObservableObject {
     }
 
     private static func makeDefaultSource() -> JarMotionSource {
-        CoreMotionJarMotionSource()
+#if DEBUG && targetEnvironment(simulator)
+        if let synthetic = SyntheticJarMotionSource.forCurrentProcess() {
+            return synthetic
+        }
+#endif
+        return CoreMotionJarMotionSource()
     }
 
     func start(scene: JarScene? = nil, appliesGravity: Bool = true) {

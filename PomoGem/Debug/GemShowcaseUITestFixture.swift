@@ -604,6 +604,13 @@ struct GemShowcaseFixtureLaunchView: View {
         ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_FX_FRAMES"] != "0"
     }
 
+    /// `POMOGEM_UI_TEST_FX_DELAY=<s>`: when the fusionfx drop (default 4 s)
+    /// and the gallery's share snapshot (default 9 s) happen. A delay past
+    /// the idle pause reviews both from a stopped render loop (jar-01).
+    private static func effectDelay(default seconds: Double) -> Double {
+        ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_FX_DELAY"].flatMap(Double.init) ?? seconds
+    }
+
     @MainActor
     private static func captureSequence(of scene: JarScene, prefix: String, offsets: [Int]) {
         guard writesEffectFrames else { return }
@@ -677,7 +684,7 @@ struct GemShowcaseFixtureLaunchView: View {
                 fused = true
                 Self.captureSequence(of: scene, prefix: "fusion", offsets: [0, 80, 160, 320, 560, 1100])
             }
-            try? await Task.sleep(for: .seconds(4))
+            try? await Task.sleep(for: .seconds(Self.effectDelay(default: 4)))
             Self.captureSequence(of: scene, prefix: "before", offsets: [0])
             scene.performCompletionDrop(GemShowcaseUITestFixture.fusionEffectDrop)
         }
@@ -686,7 +693,7 @@ struct GemShowcaseFixtureLaunchView: View {
             // JarSnapshotter lands in the app's tmp directory, so it can be
             // compared with a screen capture (additive light must survive).
             guard Self.mode == .gallery else { return }
-            try? await Task.sleep(for: .seconds(9))
+            try? await Task.sleep(for: .seconds(Self.effectDelay(default: 9)))
             guard let data = try? JarSnapshotter.shared.pngData(
                 of: scene,
                 options: .share(includesSelfReported: true)

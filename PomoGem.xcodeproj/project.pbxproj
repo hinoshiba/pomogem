@@ -25,6 +25,7 @@
 		128570FAED1861610B4E0BCC /* SyncMaintenance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BF84C957F5965D5E7377EAD /* SyncMaintenance.swift */; };
 		12AC4E182FB22BF3688F80C7 /* PomodoroEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7413EEBB67AFE9BC30EF9C7E /* PomodoroEngine.swift */; };
 		13D3B47C5B15D391FBA37000 /* CloudOfflineHostPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B4D2704A867D651C6A15FB7 /* CloudOfflineHostPolicy.swift */; };
+		145C9139EA0BD9916E3F4457 /* SyntheticJarMotionSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCC233E37FF6841EB0FCAFCF /* SyntheticJarMotionSource.swift */; };
 		148D814EC01AF2D8600F3722 /* StorageTransferLateArrivalBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F283F9CEE51B606F5448365 /* StorageTransferLateArrivalBanner.swift */; };
 		17BC30315ED1C468B0A18CAC /* PebbleNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACEBB3395B953447C69946D /* PebbleNode.swift */; };
 		17BEB2E41142345A44CAC93A /* AccessibilityAdversarialUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 405164FE628C5989DD6BDCAE /* AccessibilityAdversarialUITests.swift */; };
@@ -578,6 +579,7 @@
 		DAFDB3F62B4EB377D79BA48D /* StorageTransferProcessState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferProcessState.swift; sourceTree = "<group>"; };
 		DBD525CB72EF7C8BBA600020 /* LICENSE-fonts.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LICENSE-fonts.txt"; sourceTree = "<group>"; };
 		DC5D4F1A16DE0265ED6EBF24 /* PomoGemLogo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemLogo.swift; sourceTree = "<group>"; };
+		DCC233E37FF6841EB0FCAFCF /* SyntheticJarMotionSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntheticJarMotionSource.swift; sourceTree = "<group>"; };
 		DE92572890DD4D8BE55C6A58 /* ProgressCrystal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressCrystal.swift; sourceTree = "<group>"; };
 		E025DEF0FDEB7B11EF0763BC /* GemArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GemArtwork.swift; sourceTree = "<group>"; };
 		E2FBF7E577EC280E22DDC78A /* SyncMaintenanceWorkerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncMaintenanceWorkerTests.swift; sourceTree = "<group>"; };
@@ -1110,6 +1112,7 @@
 				624C92181EF2C67AD84D3051 /* JarFrameProbe.swift */,
 				A78F4AF55E67F22420886C69 /* ScreenTimeSettingsUITestFixture.swift */,
 				4FB16E3D6A5C3CCBA74EFC70 /* StorageTransferSettingsUITestFixture.swift */,
+				DCC233E37FF6841EB0FCAFCF /* SyntheticJarMotionSource.swift */,
 				5542B8EEF5204878A5734E13 /* UITestFaultInjection.swift */,
 			);
 			path = Debug;
@@ -1486,6 +1489,7 @@
 				314D213F488CBF92E8A3D271 /* SubjectPalette.swift in Sources */,
 				128570FAED1861610B4E0BCC /* SyncMaintenance.swift in Sources */,
 				EAEE7DC58351957E5F87FDB6 /* SyncMaintenanceWorker.swift in Sources */,
+				145C9139EA0BD9916E3F4457 /* SyntheticJarMotionSource.swift in Sources */,
 				53FE675CF48B37882F6017A3 /* Theme.swift in Sources */,
 				1DA315121C0364E0A70DEE9E /* TimerDefaultOrientationSettingsView.swift in Sources */,
 				36692E1841949143EDE1393D /* TimerOrientationContainer.swift in Sources */,

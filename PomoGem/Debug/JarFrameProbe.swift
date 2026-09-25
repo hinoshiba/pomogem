@@ -12,6 +12,8 @@ import SpriteKit
 /// `t` seconds since launch, `frames` awake frames (scene updates; a
 /// paused, unchanged jar draws none), `tilt` frames a paused jar drew for
 /// tilt (light changes while idle), `idle` whether the physics is idle-paused,
+/// `loop` whether the render loop is stopped (jar-01: the SKView's own
+/// `isPaused`), `motion` the device-motion rate (stopped, full, idle; §7.13),
 /// and the main-thread time of the awake frames (`medMs`, `p95Ms`: from
 /// the scene's update until the frame has been encoded, i.e. update +
 /// physics + render submission), then the gem atlas: generation, packed
@@ -30,7 +32,9 @@ import SpriteKit
 /// scene's normal gravity input, so idle tilt rendering can be observed
 /// without a device: by default a hand-held rock of ±0.42 of full tilt over
 /// four seconds; an amplitude below 0.05 is a fast tremor instead (a phone
-/// held still).
+/// held still). With `POMOGEM_UI_TEST_MOTION=synthetic` the same tilt is
+/// played through `SyntheticJarMotionSource` instead, i.e. through the jar's
+/// motion observer and its rates.
 @MainActor
 final class JarFrameProbe {
     static let shared: JarFrameProbe? = {
@@ -61,6 +65,8 @@ final class JarFrameProbe {
         && ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_PREBAKE"] == "0"
 
     private let launch = CACurrentMediaTime()
+    /// Reported by the jar's motion observer.
+    var motionRate: JarMotionRate = .stopped
     private var updates = 0
     private var lastTiltSteps = 0
     private var frameStart: CFTimeInterval?
@@ -163,12 +169,19 @@ final class JarFrameProbe {
             guard !sorted.isEmpty else { return 0 }
             return sorted[min(sorted.count - 1, Int(Double(sorted.count - 1) * fraction))]
         }
+        let motion = switch motionRate {
+        case .stopped: "stopped"
+        case .full: "full"
+        case .idle: "idle"
+        }
         let line = String(
-            format: "t=%.0f frames=%d tilt=%d idle=%d medMs=%.2f p95Ms=%.2f atlas=g%d/%d names/%.1fMB kept/%.0fx%.0f page/%d loose/%.1fMB resident/%d live\n",
+            format: "t=%.0f frames=%d tilt=%d idle=%d loop=%@ motion=%@ medMs=%.2f p95Ms=%.2f atlas=g%d/%d names/%.1fMB kept/%.0fx%.0f page/%d loose/%.1fMB resident/%d live\n",
             now - launch,
             updates,
             (scene?.idleTiltFrameCount ?? 0) - lastTiltSteps,
             (scene?.isIdlePaused ?? false) ? 1 : 0,
+            (scene?.view?.isPaused ?? false) ? "paused" : "running",
+            motion,
             percentile(0.5),
             percentile(0.95),
             atlas.generation,
@@ -187,32 +200,55 @@ final class JarFrameProbe {
     }
 
     private func startTiltSweepIfRequested(for scene: JarScene) {
-        guard let value = ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_TILT_SWEEP"] else { return }
-        let parts = value.split(separator: ":")
-        let range = parts[0].split(separator: "-").compactMap { Double($0) }
-        guard range.count == 2 else { return }
-        let amplitude = parts.count > 1 ? Double(parts[1]) ?? 0.42 : 0.42
-        let period: Double = amplitude < 0.05 ? 0.35 : 4
-        let start = CACurrentMediaTime() + range[0]
-        let end = CACurrentMediaTime() + range[1]
+        // The synthetic motion source plays the sweep through the observer.
+        guard SyntheticJarMotionSource.isRequested == false,
+              let sweep = JarTiltSweep.forCurrentProcess
+        else { return }
+        let appeared = CACurrentMediaTime()
         let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak scene] timer in
             MainActor.assumeIsolated {
-                let now = CACurrentMediaTime()
-                guard let scene, now < end else {
+                let elapsed = CACurrentMediaTime() - appeared
+                guard let scene, elapsed < sweep.end else {
                     scene?.resetGravity()
                     timer.invalidate()
                     return
                 }
-                guard now >= start else { return }
-                let phase = (now - start) / period * 2 * .pi
-                let wobble = amplitude < 0.05 ? (sin(phase) + sin(phase * 2.7)) / 2 : sin(phase)
+                guard let gravityX = sweep.gravityX(elapsed: elapsed) else { return }
                 scene.setGravityVector(CGVector(
-                    dx: CGFloat(wobble * amplitude) * Constants.Jar.tiltGravityHorizontalScale,
+                    dx: CGFloat(gravityX) * Constants.Jar.tiltGravityHorizontalScale,
                     dy: Constants.Jar.gravity
                 ))
             }
         }
         RunLoop.main.add(timer, forMode: .common)
+    }
+}
+
+/// `POMOGEM_UI_TEST_TILT_SWEEP=<start>-<end>[:<amplitude>]`: a scripted
+/// sideways tilt (in g) between `start` and `end` seconds after the jar
+/// appears. By default a hand-held rock of ±0.42 over four seconds; an
+/// amplitude below 0.05 is a fast tremor (a phone held still).
+struct JarTiltSweep: Sendable {
+    let start: Double
+    let end: Double
+    let amplitude: Double
+
+    static let forCurrentProcess: JarTiltSweep? = {
+        guard let value = ProcessInfo.processInfo.environment["POMOGEM_UI_TEST_TILT_SWEEP"] else { return nil }
+        let parts = value.split(separator: ":")
+        let range = parts[0].split(separator: "-").compactMap { Double($0) }
+        guard range.count == 2 else { return nil }
+        let amplitude = parts.count > 1 ? Double(parts[1]) ?? 0.42 : 0.42
+        return JarTiltSweep(start: range[0], end: range[1], amplitude: amplitude)
+    }()
+
+    /// The sideways gravity at `elapsed` seconds, or nil outside the sweep.
+    func gravityX(elapsed: Double) -> Double? {
+        guard elapsed >= start, elapsed < end else { return nil }
+        let period: Double = amplitude < 0.05 ? 0.35 : 4
+        let phase = (elapsed - start) / period * 2 * .pi
+        let wobble = amplitude < 0.05 ? (sin(phase) + sin(phase * 2.7)) / 2 : sin(phase)
+        return wobble * amplitude
     }
 }
 #endif
