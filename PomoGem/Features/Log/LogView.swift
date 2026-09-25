@@ -1594,8 +1594,8 @@ struct LogView: View {
             PomoGemCard {
                 Label(
                     isCloudOfflineSession
-                        ? "このiPhoneのまとまり粒を確認中です。確認できた個別記録は引き続き表示しています。"
-                        : "iCloudのまとまり粒を再集計中です。この端末で確認できた個別記録は引き続き表示しています。",
+                        ? String(localized: "このiPhoneの結晶を確認中です。確認できた個別記録は引き続き表示しています。", table: "Log")
+                        : String(localized: "iCloudの結晶を再集計中です。この端末で確認できた個別記録は引き続き表示しています。", table: "Log"),
                     systemImage: isCloudOfflineSession ? "checklist" : "icloud.and.arrow.down"
                 )
                 .font(.caption.weight(.semibold))
@@ -1607,9 +1607,9 @@ struct LogView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
                         SectionEyebrow(text: "OVERVIEW PEBBLES")
-                        Text("まとまり粒アーカイブ")
+                        Text("結晶アーカイブ", tableName: "Log", comment: "Log section title: the jar's crystals")
                             .pomogemSectionTitle()
-                        Text("小さな粒は消えません。10粒ずつまとまり、瓶の中で動き続けます。")
+                        Text("小さな粒は消えません。10粒ずつ結晶になり、瓶の中で動き続けます。", tableName: "Log")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -2234,7 +2234,7 @@ private struct AggregateArchiveRow: View {
                 AggregateArchiveSwatch(item: item)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("×\(item.pebbleCount) のまとまり")
+                    Text("×\(item.pebbleCount) の結晶", tableName: "Log", comment: "Crystal archive row title; the argument is how many gems it holds")
                         .font(.system(.headline, design: .rounded, weight: .heavy))
                     Text(item.periodLabel)
                         .font(.caption2)
@@ -2289,7 +2289,7 @@ private struct AggregateArchiveRow: View {
     }
 
     private var accessibilityDescription: String {
-        let base = "\(item.pebbleCount)粒のまとまり、\(item.formattedMass)、\(item.periodLabel)、実測\(item.measuredPebbleCount)粒、手動\(item.manualPebbleCount)粒"
+        let base = "\(item.pebbleCount)粒の結晶、\(item.formattedMass)、\(item.periodLabel)、実測\(item.measuredPebbleCount)粒、手動\(item.manualPebbleCount)粒"
         guard RareRewardReleasePolicy.isEnabled else { return base }
         return "\(base)、金\(item.goldPebbleCount)粒、虹\(item.prismPebbleCount)粒"
     }

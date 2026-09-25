@@ -164,7 +164,7 @@ final class EngagementOverviewUITests: XCTestCase {
             "A single effort must expose only the destination vessel, not a completed core"
         )
         XCTAssertTrue(
-            scrollUntilVisible(app.staticTexts["まとまり粒"], in: app),
+            scrollUntilVisible(app.staticTexts["結晶"], in: app),
             "The cluster section must remain reachable below the constellation"
         )
 
@@ -566,7 +566,7 @@ final class EngagementOverviewUITests: XCTestCase {
         let cluster = app.buttons.matching(
             NSPredicate(
                 format: "label CONTAINS %@ AND label CONTAINS %@",
-                "まとまり粒",
+                "の結晶、",
                 "グラム"
             )
         ).firstMatch
@@ -577,7 +577,7 @@ final class EngagementOverviewUITests: XCTestCase {
         XCTAssertTrue(cluster.isHittable)
         cluster.tap()
 
-        XCTAssertTrue(app.navigationBars["まとまり粒"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.navigationBars["結晶の内訳"].waitForExistence(timeout: 4))
         let preservation = app.descendants(matching: .any)[
             "overview.cluster.preservation"
         ]

@@ -424,7 +424,7 @@ enum Constants {
         }
 
         static func strataToast(pebbleCount: Int) -> String {
-            "\(pebbleCount)粒が、ひとつのまとまり粒になった"
+            "\(pebbleCount)粒が、ひとつの結晶になった"
         }
 
         static func bedrockToast(hours: Int) -> String {

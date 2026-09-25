@@ -195,7 +195,7 @@ enum EffortConstellationPresentation {
         }
 
         components.append(
-            "表示中のまとまり結晶\(totalNodeCount)個のうち代表\(visibleNodeCount)個を配置"
+            "表示中の結晶\(totalNodeCount)個のうち代表\(visibleNodeCount)個を配置"
         )
         components.append("瓶の物理整理：集中\(totalPebbleCount)粒")
         return components.joined(separator: "、")

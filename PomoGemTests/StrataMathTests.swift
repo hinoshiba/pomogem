@@ -159,7 +159,7 @@ final class StrataMathTests: XCTestCase {
         XCTAssertTrue(attributedSummary.hasStrongPreservationEvidence)
         XCTAssertEqual(
             attributedSummary.preservationTitle,
-            "まとまり化で情報は削除されません"
+            "結晶になっても情報は削除されません"
         )
 
         let partialThemeAggregate = AggregatePebble(

@@ -277,7 +277,7 @@ actor PomoGemDataExportWorker {
             try Self.write(",", to: openedHandle)
             let aggregateCount = try writeCollection(
                 key: "aggregatePebbles",
-                displayName: "まとまり粒",
+                displayName: String(localized: "結晶", table: "Settings", comment: "Export progress: the collection being written (crystals)"),
                 descriptor: FetchDescriptor<AggregatePebble>(sortBy: [
                     SortDescriptor(\AggregatePebble.createdAt),
                     SortDescriptor(\AggregatePebble.id)

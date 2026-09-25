@@ -1512,7 +1512,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         )
         let nineJarValue = (app.buttons["瓶"].value as? String) ?? ""
         XCTAssertTrue(nineJarValue.contains("9粒"), nineJarValue)
-        XCTAssertFalse(nineJarValue.contains("まとまり粒"), nineJarValue)
+        XCTAssertFalse(nineJarValue.contains("結晶1個"), nineJarValue)
         waitForUISettle()
         retainScreenshot(named: "Nine measured particles — pre-fusion Home rail")
 
@@ -1537,7 +1537,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         closeCelebration.tap()
         XCTAssertTrue(waitForHittable(demoLauncherForVisualAudit, timeout: 8))
         let tenJarValue = (app.buttons["瓶"].value as? String) ?? ""
-        XCTAssertTrue(tenJarValue.contains("まとまり粒1個"), tenJarValue)
+        XCTAssertTrue(tenJarValue.contains("結晶1個"), tenJarValue)
         XCTAssertTrue(tenJarValue.contains("合計10粒分"), tenJarValue)
         waitForUISettle()
         retainScreenshot(named: "First decimal crystal — Home lifetime core")

@@ -966,7 +966,9 @@ struct HomeView: View {
                 VStack {
                     HStack(spacing: 7) {
                         Image(systemName: "circle.grid.2x2.fill")
-                        Text(remaining == 0 ? "まとまり粒をつくっています" : "あと\(remaining)%で、下の粒がひとつにまとまる")
+                        Text(remaining == 0
+                            ? String(localized: "結晶をつくっています", table: "Home", comment: "Jar capsule while ten gems fuse")
+                            : String(localized: "あと\(remaining)%で、下の粒がひとつの結晶に", table: "Home", comment: "Jar capsule before a fusion; the argument is the remaining capacity percent"))
                     }
                     .font(.caption.weight(.bold))
                     .foregroundStyle(PomoGemTheme.text)
@@ -991,7 +993,7 @@ struct HomeView: View {
                         Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
                             .foregroundStyle(PomoGemTheme.amber)
                             .accessibilityHidden(true)
-                        Text("まとまり粒は未保存です")
+                        Text("結晶は未保存です", tableName: "Home")
                             .font(.caption.weight(.bold))
                         Spacer(minLength: 4)
                         Button("保存を再試行") {
@@ -3412,7 +3414,7 @@ struct HomeView: View {
             scene.restore(pebbles: restored)
             knownLooseIDs = Set(restored.map(\.id))
             sceneInitialized = true
-            router.showToast("まとまり粒は未保存です。再試行してください", symbol: "exclamationmark.triangle")
+            router.showToast(String(localized: "結晶は未保存です。再試行してください", table: "Home"), symbol: "exclamationmark.triangle")
         }
     }
 
@@ -3427,7 +3429,7 @@ struct HomeView: View {
             router.showToast("再試行の準備ができませんでした", symbol: "exclamationmark.triangle")
             return
         }
-        router.showToast("まとまり粒の保存を再試行します", symbol: "arrow.clockwise")
+        router.showToast(String(localized: "結晶の保存を再試行します", table: "Home"), symbol: "arrow.clockwise")
     }
 
     private func handleCapacity(_ event: JarCapacityEvent) {
@@ -3493,8 +3495,10 @@ struct HomeView: View {
             pendingCapacityCelebrations.removeAll()
             enqueueStratumCelebration(finalCelebration)
             let message = completedSteps > 1
-                ? "小さな粒が\(completedSteps)段階でまとまり、瓶に余白ができた"
-                : "\(finalCelebration.pebbleCount)粒が、ひとつのまとまり粒になった"
+                ? String(localized: "小さな粒が\(completedSteps)段階で結晶になり、瓶に余白ができた", table: "Home",
+                         comment: "Toast after a cascade of fusions; the argument is how many levels formed")
+                : String(localized: "\(finalCelebration.pebbleCount)粒が、ひとつの結晶になった", table: "Home",
+                         comment: "Toast after ten gems fuse; the argument is the gem count")
             router.showToast(message, symbol: "circle.grid.2x2.fill")
         }
     }
@@ -4036,7 +4040,11 @@ struct HomeView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(
-            "\(summary.pebbleCount.formatted())粒のまとまり、\(aggregateInspectionSubtitle(summary))"
+            String(
+                localized: "\(summary.pebbleCount)粒の結晶、\(aggregateInspectionSubtitle(summary))",
+                table: "Home",
+                comment: "VoiceOver, crystal inspection card: gems inside, then what its detail shows"
+            )
         )
         .accessibilityHint(
             summary.hasStrongPreservationEvidence
@@ -4065,7 +4073,7 @@ struct HomeView: View {
                     .accessibilityHidden(!isPresented)
 
                 Label(
-                    "まとまり粒をタップすると、内訳を見られます",
+                    String(localized: "結晶をタップすると、内訳を見られます", table: "Home", comment: "Hint under the jar until a crystal's detail has been opened once"),
                     systemImage: "hand.tap"
                 )
                 .font(.caption.weight(.semibold))
@@ -4085,7 +4093,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 9) {
                     aggregateInspectionIcon
-                    Text("まとまり粒を見つけました")
+                    Text("結晶を見つけました", tableName: "Home")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.text)
                 }
@@ -4106,7 +4114,7 @@ struct HomeView: View {
             HStack(spacing: 11) {
                 aggregateInspectionIcon
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("まとまり粒を見つけました")
+                    Text("結晶を見つけました", tableName: "Home")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(PomoGemTheme.text)
                     Text("保存されている粒数・質量などの内訳")

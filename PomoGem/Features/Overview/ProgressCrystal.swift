@@ -190,7 +190,7 @@ struct FusionRewardBridgeState: Equatable, Sendable {
         if immediateHorizon.cascadingDestinationLevels.count > 1 {
             return "あと\(remaining)粒で\(immediateHorizon.cascadingDestinationLevels.count)段融合"
         }
-        return "次のまとまりまで、あと\(remaining)粒"
+        return String(localized: "次の結晶まで、あと\(remaining)粒", table: "Progress", comment: "Next step toward the next crystal; the argument is a gem count")
     }
 
     /// The first line always rewards the smallest current effort. A separate,

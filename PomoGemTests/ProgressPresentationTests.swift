@@ -500,7 +500,7 @@ final class ProgressPresentationTests: XCTestCase {
                 displayedClusterCount: 16,
                 displayedAchievementCount: 8
             ),
-            "瓶の中は、粒28個・表示中のまとまり16個・記念石8個の代表表示です。"
+            "瓶の中は、粒28個・表示中の結晶16個・記念石8個の代表表示です。"
         )
 
         let synchronizedLowerBound = AccumulationOverviewPageScope(
@@ -1652,13 +1652,13 @@ final class ProgressPresentationTests: XCTestCase {
         let one = FusionRewardBridgePresentation.state(totalPebbleCount: 1)
         XCTAssertEqual(one.progressLabel, "×10へ 1/10")
         XCTAssertEqual(one.litSlotCount, 1)
-        XCTAssertEqual(one.nextStepLabel, "次のまとまりまで、あと9粒")
+        XCTAssertEqual(one.nextStepLabel, "次の結晶まで、あと9粒")
         XCTAssertFalse(one.isFusionComplete)
 
         let nine = FusionRewardBridgePresentation.state(totalPebbleCount: 9)
         XCTAssertEqual(nine.progressLabel, "×10へ 9/10")
         XCTAssertEqual(nine.litSlotCount, 9)
-        XCTAssertEqual(nine.nextStepLabel, "次のまとまりまで、あと1粒")
+        XCTAssertEqual(nine.nextStepLabel, "次の結晶まで、あと1粒")
         XCTAssertFalse(nine.isFusionComplete)
 
         let ten = FusionRewardBridgePresentation.state(totalPebbleCount: 10)

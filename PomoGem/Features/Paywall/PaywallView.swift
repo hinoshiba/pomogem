@@ -104,7 +104,7 @@ struct PaywallView: View {
         case .customTimer:
             "任意の集中時間を選べます。"
         case .aggregateLabels:
-            "まとまり粒に、積み上げた月を刻めます。"
+            String(localized: "結晶に、積み上げた月を刻めます。", table: "Paywall")
         case .screenTimeApps:
             "勉強時間を記録するアプリを、数の制限なく選べます。"
         case .settings:
@@ -122,7 +122,7 @@ struct PaywallView: View {
             Divider().overlay(PomoGemTheme.glassEdge.opacity(0.08))
             PaywallFeature(
                 symbol: "circle.hexagongrid.fill",
-                title: "まとまり粒の月刻印",
+                title: String(localized: "結晶の月刻印", table: "Paywall", comment: "Paywall feature: month engraved on each crystal"),
                 detail: "積み重ねた月を残す"
             )
             Divider().overlay(PomoGemTheme.glassEdge.opacity(0.08))

@@ -393,7 +393,7 @@ struct AccumulationPlanView: View {
                 .frame(height: 260)
                 .accessibilityIdentifier("planning.accumulation.jar")
 
-                Text("星図と瓶は見え方の予測です。粒のまとまりは予定した完走リズムを、上の時間・質量は集中時間の累計を表します。成果石・実際の休止日は含めません。")
+                Text("星図と瓶は見え方の予測です。粒と結晶は予定した完走リズムを、上の時間・質量は集中時間の累計を表します。記念石・実際の休止日は含めません。", tableName: "Planning")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)

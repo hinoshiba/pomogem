@@ -97,7 +97,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
                 "2,500グラム、4時間10分",
                 "10粒",
                 "うち実測10粒",
-                "まとまり粒1個"
+                "結晶1個"
             )
         ).firstMatch
         XCTAssertTrue(
@@ -130,7 +130,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
 
         let jarValue = try XCTUnwrap(app.buttons["瓶"].value as? String)
         XCTAssertTrue(jarValue.contains("0粒"), jarValue)
-        XCTAssertTrue(jarValue.contains("まとまり粒1個"), jarValue)
+        XCTAssertTrue(jarValue.contains("結晶1個"), jarValue)
         XCTAssertTrue(jarValue.contains("合計10粒分"), jarValue)
         XCTAssertTrue(jarValue.contains("2.50キログラム"), jarValue)
         XCTAssertTrue(
@@ -158,7 +158,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             "Tapping the physical aggregate must reveal its non-obstructing detail affordance"
         )
         inspectAggregate.tap()
-        XCTAssertTrue(app.navigationBars["まとまり粒"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.navigationBars["結晶の内訳"].waitForExistence(timeout: 4))
         XCTAssertTrue(
             app.descendants(matching: .any)["overview.cluster.preservation"]
                 .waitForExistence(timeout: 3)
@@ -202,7 +202,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         let aggregateSummary = app.buttons.matching(
             NSPredicate(
                 format: "label CONTAINS %@ AND label CONTAINS %@ AND label CONTAINS %@",
-                "まとまり粒",
+                "×10の結晶",
                 "10粒",
                 "2.5キログラム"
             )
@@ -213,7 +213,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         )
         aggregateSummary.tap()
 
-        XCTAssertTrue(app.navigationBars["まとまり粒"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.navigationBars["結晶の内訳"].waitForExistence(timeout: 6))
         XCTAssertTrue(app.staticTexts["10粒分の積み重ね"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.staticTexts["2.5kg"].exists)
         XCTAssertTrue(app.staticTexts["タイマー"].exists)
