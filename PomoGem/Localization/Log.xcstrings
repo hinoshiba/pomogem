@@ -1,0 +1,205 @@
+{
+  "sourceLanguage" : "ja",
+  "strings" : {
+    "%@、%@" : {
+      "comment" : "VoiceOver: the period (今週 or 今月), then its date range",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@、%2$@"
+          }
+        }
+      }
+    },
+    "%@、%@、%@、プラス%lldグラム%@、%@" : {
+      "comment" : "VoiceOver history row: theme, gem kind, how recorded, grams added, optional rare summary, date",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@、%2$@、%3$@、プラス%4$lldグラム%5$@、%6$@"
+          }
+        }
+      }
+    },
+    "%@、%@、%lldパーセント" : {
+      "comment" : "VoiceOver theme row: theme name, time, share in percent",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@、%2$@、%3$lldパーセント"
+          }
+        }
+      }
+    },
+    "%@〜%@" : {
+      "comment" : "A record's start and end time, e.g. 13:24〜13:49",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@〜%2$@"
+          }
+        }
+      }
+    },
+    "%@から%@まで" : {
+      "comment" : "VoiceOver: a record's start and end time",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@から%2$@まで"
+          }
+        }
+      }
+    },
+    "%@の記録を見る" : {
+      "comment" : "VoiceOver action on the mass chart; the argument is a date such as 9月24日"
+    },
+    "%@・%lld%%" : {
+      "comment" : "Theme row at large text sizes: time, then share of the period in percent",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@・%2$lld%%"
+          }
+        }
+      }
+    },
+    "%@（今のまま）" : {
+      "comment" : "Milestone editor theme menu: keep the milestone's theme as it is; the argument is the theme name"
+    },
+    "%@（削除したテーマ）" : {
+      "comment" : "Milestone editor theme menu: keep the milestone's deleted theme; the argument is the theme name"
+    },
+    "%lld粒" : {
+      "comment" : "Gem count"
+    },
+    "+%lldg" : {
+      "comment" : "Grams one record added to the jar"
+    },
+    "+%lldg・%@" : {
+      "comment" : "History row at large text sizes: mass added, then how it was recorded",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "+%1$lldg・%2$@"
+          }
+        }
+      }
+    },
+    "「%@」は今のテーマ一覧にありません。ほかのテーマを選ばなければ、このまま残ります。" : {
+      "comment" : "Milestone editor: why a theme missing from the list is shown; the argument is the theme name"
+    },
+    "「%@」は設定で削除したテーマです。ほかのテーマを選ばなければ、このまま残ります。" : {
+      "comment" : "Milestone editor: why a deleted theme is shown; the argument is the theme name"
+    },
+    "このうち自己申告 %@" : {
+      "comment" : "Log: how much of the period's mass was self-reported; the argument is a mass such as 300g"
+    },
+    "この日の記録" : {
+      "comment" : "Heading of a day's record list"
+    },
+    "この日の記録、%@、%lld粒、%lldグラム" : {
+      "comment" : "VoiceOver summary of a day: focus time, gem count, mass in grams",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "この日の記録、%1$@、%2$lld粒、%3$lldグラム"
+          }
+        }
+      }
+    },
+    "この日の記録は、この端末にはまだ届いていません。" : {
+
+    },
+    "この日の記録を読み込み中" : {
+
+    },
+    "この日の記録を読み込めませんでした" : {
+
+    },
+    "この端末に届いている記録です。" : {
+
+    },
+    "ほか%lldテーマ" : {
+      "comment" : "Wrapped: how many more themes are not listed"
+    },
+    "ほかに選べるテーマはありません" : {
+      "comment" : "VoiceOver hint: no other theme to choose"
+    },
+    "もっと前の月を見る" : {
+      "comment" : "Log: row under the twelve monthly jars that opens 年月 for older months"
+    },
+    "スクリーンタイムの%@は、完走ポモに含みません" : {
+      "comment" : "Log: Screen Time learning in the period is not counted as completed timers; the argument is a duration"
+    },
+    "テーマ別" : {
+      "comment" : "Heading of the per-theme time breakdown of a day"
+    },
+    "テーマ別の時間" : {
+      "comment" : "Wrapped: heading of the month's time per theme"
+    },
+    "今月" : {
+      "comment" : "Log period picker: the calendar month that contains today"
+    },
+    "今月の質量" : {
+      "comment" : "Log tile: mass added this calendar month"
+    },
+    "今週" : {
+      "comment" : "Log period picker: the calendar week that contains today"
+    },
+    "今週の質量" : {
+      "comment" : "Log tile: mass added this calendar week"
+    },
+    "年と月を選んで、日ごとの記録までたどれます" : {
+
+    },
+    "月の記録へ戻る" : {
+      "comment" : "Wrapped opened from a month in 年月: returns to that month's sheet"
+    },
+    "棒を選ぶと、その日の記録を一件ずつ見られます。" : {
+
+    },
+    "確認済みのテーマ別の時間" : {
+      "comment" : "Wrapped: heading of the time per theme when only part of the month is shown or iCloud is re-counting"
+    },
+    "積んだ粒" : {
+      "comment" : "Day summary tile: number of gems"
+    },
+    "虹の粒" : {
+      "comment" : "VoiceOver: a rainbow gem"
+    },
+    "記録を読み込み中" : {
+      "comment" : "VoiceOver: Log is loading"
+    },
+    "読み込み中にこの端末の記録が変わりました。開き直すと確かめられます。" : {
+
+    },
+    "質量" : {
+      "comment" : "Day summary tile: total mass"
+    },
+    "通常の粒" : {
+      "comment" : "VoiceOver: a normal gem"
+    },
+    "過去の記録" : {
+      "comment" : "Title of 年月 opened from Log"
+    },
+    "過去の記録を月・日ごとに見る" : {
+      "comment" : "Log: opens 年月 to reach older history by month and day"
+    },
+    "金の粒" : {
+      "comment" : "VoiceOver: a gold gem"
+    },
+    "集中した時間" : {
+      "comment" : "Day summary tile: total focus time"
+    }
+  },
+  "version" : "1.0"
+}

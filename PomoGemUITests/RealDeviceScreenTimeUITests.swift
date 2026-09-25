@@ -14,7 +14,8 @@ private let screenTimeFreeLearningLimit = 5
 /// Set these in the UI TEST RUNNER's environment (xcodebuild
 /// TEST_RUNNER_… variables, or EnvironmentVariables in a private .xctestrun).
 /// No audit flag is ever passed to the application: it is launched with an
-/// empty launch environment and no launch arguments, exactly as it ships.
+/// empty launch environment and no launch arguments other than the Japanese
+/// language pin every UI test uses (PomoGemUITestLanguage), exactly as it ships.
 ///
 ///   POMOGEM_REAL_SCREEN_TIME_AUDIT=1                (required opt-in)
 ///   POMOGEM_REAL_SCREEN_TIME_PHASE=<phase>          (required, one per run)
@@ -3032,11 +3033,14 @@ final class RealDeviceScreenTimeUITests: XCTestCase {
         let application = XCUIApplication()
         application.terminate()
         // The shipping configuration, with no audit or fixture flags at all.
+        // Only the language is pinned: the queries below use Japanese labels,
+        // and a phone set to another language must not change what they see.
         application.launchEnvironment = [:]
         application.launchArguments = []
+        PomoGemUITestLanguage.configureJapanese(application)
         app = application
         application.launch()
-        note("Launched com.hinoshiba.pomogem with no launch arguments or environment.")
+        note("Launched com.hinoshiba.pomogem in Japanese with no other launch arguments or environment.")
         return application
     }
 

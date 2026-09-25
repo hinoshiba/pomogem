@@ -10,12 +10,17 @@
 6. 時間・質量・レア抽選・融合を変更する場合は、不変条件と公平性のtest、`Docs/EngagementArchitecture.md`を更新してください。
 7. CloudKit、StoreKit、通知、写真、モーション、共有を変更する場合は`PRIVACY.md`、Privacy Manifest、App Store資料を再監査してください。
 8. dependencyやassetには再配布・商用利用できる根拠を付け、`THIRD_PARTY_NOTICES.md`または`ASSET_LICENSES.md`を更新してください。
+9. 画面の文言を追加・変更する場合は`Docs/Localization.md`に従い、ファイルごとに決まったテーブルを
+   `String(localized:table:comment:)`または`Text(_:tableName:)`で指定してください。日本語が原文です。
+   保存・同期するデータやアクセシビリティ識別子は翻訳しません。UI testの起動は
+   `PomoGemUITestLanguage.configureJapanese(app)`を通してください。
 
 提出前に次を実行します。
 
 ```sh
 ./Scripts/check-oss-readiness.sh --current
 python3 Scripts/validate-site.py
+python3 Scripts/l10n/l10n.py check
 xcodegen generate
 ```
 

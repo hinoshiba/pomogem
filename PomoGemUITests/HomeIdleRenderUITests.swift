@@ -18,7 +18,7 @@ final class HomeIdleRenderUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "0"
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 10))
         let probe = app.descendants(matching: .any)["jar.presentation.probe"]

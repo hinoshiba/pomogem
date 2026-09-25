@@ -1,0 +1,18 @@
+{
+  "sourceLanguage" : "ja",
+  "strings" : {
+    "CFBundleDisplayName" : {
+      "comment" : "Name of the Screen Time monitor extension shown by iOS",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモジェム スクリーンタイム"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
