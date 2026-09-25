@@ -297,8 +297,10 @@ final class AccumulationTimelineRepositoryTests: XCTestCase {
         ], "Newest first, empty months omitted, September 2025 is outside the twelve")
         XCTAssertEqual(summaries.first?.sessionCount, 2)
         XCTAssertEqual(summaries.first?.seconds, 1_500 + 3_600)
+        XCTAssertEqual(summaries.first?.grams, 250 + 600)
         XCTAssertEqual(summaries.last?.sessionCount, 1)
         XCTAssertEqual(summaries.last?.seconds, 1_500)
+        XCTAssertEqual(summaries.last?.grams, 250)
     }
 
     /// SwiftData runs a `@ModelActor`'s work on the thread that awaits it, so

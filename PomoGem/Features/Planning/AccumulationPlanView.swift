@@ -294,7 +294,7 @@ struct AccumulationPlanView: View {
                     Text("累計")
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
-                    Text(formattedHours(projection.focusHours))
+                    Text(DurationPresentation.minutesLabel(projection.focusMinutes))
                         .font(.system(.title2, design: .rounded, weight: .heavy))
                     Spacer()
                     Text(formattedMass(projection.grams))
@@ -359,7 +359,7 @@ struct AccumulationPlanView: View {
                         Text(formattedMass(projection.grams))
                             .font(.system(.headline, design: .rounded, weight: .heavy))
                             .foregroundStyle(PomoGemTheme.amber)
-                        Text(formattedHours(projection.focusHours))
+                        Text(DurationPresentation.minutesLabel(projection.focusMinutes))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(PomoGemTheme.muted)
                     }
@@ -409,7 +409,7 @@ struct AccumulationPlanView: View {
                 columns: [GridItem(.flexible()), GridItem(.flexible())],
                 spacing: 10
             ) {
-                metric(title: "集中時間", value: formattedHours(projection.focusHours))
+                metric(title: "集中時間", value: DurationPresentation.minutesLabel(projection.focusMinutes))
                 metric(title: "質量", value: formattedMass(projection.grams))
                 metric(title: "予定リズム", value: "\(projection.completionCount.formatted())回")
                 metric(title: "表示する可動体", value: "\(projection.studyBodyCount)体")
@@ -500,11 +500,6 @@ struct AccumulationPlanView: View {
         accumulationPresence.isMajorMilestoneBoundary
             ? "到達した長期の質量段階"
             : "次の長期の質量段階まで"
-    }
-
-    private func formattedHours(_ hours: Double) -> String {
-        if hours.rounded() == hours { return "\(Int(hours).formatted())h" }
-        return String(format: "%.1fh", hours)
     }
 
     private func formattedMass(_ grams: Int) -> String {

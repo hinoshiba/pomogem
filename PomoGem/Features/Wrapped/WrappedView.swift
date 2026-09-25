@@ -53,7 +53,10 @@ struct WrappedView: View {
     }
 
     private var totalMinutes: Int {
-        NonnegativeIntPolicy.sum(monthSessions.map(\.seconds)) / 60
+        DurationPresentation.creditedFocusMinutes(of: monthSessions)
+    }
+    private var monthIncludesSelfReportedFocus: Bool {
+        monthSessions.contains { $0.effectiveSource.isSelfReported }
     }
     /// Where the month's focus time went, from the records already loaded.
     /// Deliberately no count of active days: that would read like a streak.
@@ -159,6 +162,19 @@ struct WrappedView: View {
                 }
                 .padding(.horizontal, 18)
 
+                // The card this screen offers defaults to measured focus only.
+                // Say that these totals include self-reported time, so the two
+                // screens explain each other (walk-std-04).
+                if !isLoading, loadError == nil, monthIncludesSelfReportedFocus {
+                    Text("時間と粒には、自己申告の記録も含みます。", tableName: "Log")
+                        .font(.caption)
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 28)
+                        .accessibilityIdentifier("wrapped.self-reported-note")
+                }
+
                 if !isLoading, loadError == nil, !themeTimes.isEmpty {
                     WrappedThemeTimes(themes: themeTimes, isScoped: statsAreScoped)
                         .padding(.horizontal, 18)
@@ -256,10 +272,7 @@ struct WrappedView: View {
     }
 
     private func formatMinutes(_ minutes: Int) -> String {
-        guard minutes >= 60 else { return "\(minutes)分" }
-        let hours = minutes / 60
-        let remainder = minutes % 60
-        return remainder == 0 ? "\(hours)時間" : "\(hours)時間\(remainder)分"
+        DurationPresentation.minutesLabel(minutes)
     }
 
     /// The numbers cover only the records shown (a capped page, or iCloud
@@ -429,7 +442,7 @@ private struct WrappedThemeTimes: View {
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(
-                    "\(theme.name)、\(DurationPresentation.minutesLabel(seconds: theme.seconds))"
+                    "\(theme.name)、\(DurationPresentation.focusLabel(grams: theme.grams))"
                 )
             }
             if themes.count > shown.count {
@@ -456,7 +469,10 @@ private struct WrappedThemeTimes: View {
     }
 
     private func themeTime(_ theme: AccumulationTimelineThemeSummary) -> some View {
-        Text(DurationPresentation.minutesLabel(seconds: theme.seconds))
+        // From the theme's mass, like the 時間 stat above, so a theme with
+        // Pro focuses of 40分30秒 does not read more time than the month
+        // (credited time; see DurationPresentation).
+        Text(DurationPresentation.focusLabel(grams: theme.grams))
             .font(.system(.subheadline, design: .rounded, weight: .heavy))
             .monospacedDigit()
     }

@@ -368,14 +368,7 @@ enum EffortProgressPresentation {
         guard grams.isMultiple(of: Constants.Mass.gramsPerMinute) else {
             return "\(grams.formatted(.number.grouping(.automatic)))g相当"
         }
-        let minutes = grams / Constants.Mass.gramsPerMinute
-        guard minutes >= 60 else { return "\(minutes)分" }
-        let hours = minutes / 60
-        let remainder = minutes % 60
-        let hourText = hours.formatted(.number.grouping(.automatic))
-        return remainder == 0
-            ? "\(hourText)時間"
-            : "\(hourText)時間\(remainder)分"
+        return DurationPresentation.focusLabel(grams: grams)
     }
 
     static func formattedStandardUnits(grams: Int) -> String {

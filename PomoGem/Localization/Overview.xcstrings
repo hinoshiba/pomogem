@@ -76,7 +76,7 @@
 
     },
     "今週の積み上げ、%@、実測%@、タイマー完走%lld回。このほか自己申告%@。回数は戻った文脈で、時間価値とは別です" : {
-      "comment" : "VoiceOver weekly card: standard units, measured mass, timer completions, self-reported mass",
+      "comment" : "VoiceOver weekly card: focus time, measured mass, timer completions, self-reported mass",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -87,7 +87,7 @@
       }
     },
     "今週の積み上げ、%@、実測%@、タイマー完走%lld回。回数は戻った文脈で、時間価値とは別です" : {
-      "comment" : "VoiceOver weekly card: standard units, measured mass, timer completions",
+      "comment" : "VoiceOver weekly card: focus time, measured mass, timer completions",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -117,6 +117,9 @@
     },
     "日付を選ぶと、その日の記録を一件ずつ見られます。" : {
 
+    },
+    "時間" : {
+      "comment" : "This week's focus time stat title"
     },
     "次の完走から時間と質量を加えます。休んでも、これまでの瓶は減りません。" : {
 

@@ -939,6 +939,12 @@ struct LogPeriodSummary: Equatable {
     let selfReportedGrams: Int
     let screenTimeSeconds: Int
 
+    /// The 「積んだ時間」 tile: credited focus time, read from the mass so it
+    /// matches Wrapped and the card built from the same records.
+    var focusMinutes: Int {
+        DurationPresentation.focusMinutes(grams: grams)
+    }
+
     init(sessions: [StudySession]) {
         totalSeconds = NonnegativeIntPolicy.sum(sessions.map(\.seconds))
         grams = NonnegativeIntPolicy.sum(sessions.map(\.grams))
@@ -1205,7 +1211,7 @@ struct LogView: View {
 
     @ViewBuilder
     private func summaryTiles(_ summary: LogPeriodSummary) -> some View {
-        SummaryTile(label: periodPageIsPartial ? "表示分の時間" : "積んだ時間", value: formatMinutes(summary.totalSeconds / 60), symbol: "hourglass", identifier: "log.summary.time")
+        SummaryTile(label: periodPageIsPartial ? "表示分の時間" : "積んだ時間", value: formatMinutes(summary.focusMinutes), symbol: "hourglass", identifier: "log.summary.time")
         // Timers that ran to their end; Screen Time chunks are not completions.
         SummaryTile(label: periodPageIsPartial ? "表示分の完走" : "完走ポモ", value: "\(summary.timerCompletionCount)", symbol: "checkmark.circle", identifier: "log.summary.completions")
         SummaryTile(
@@ -1880,7 +1886,9 @@ struct LogView: View {
             monthSummaries = summaries.map {
                 LogMonthSummary(
                     month: WrappedMonth(containing: $0.monthStart, calendar: calendar),
-                    minutes: $0.seconds / 60,
+                    // Credited time from the month's mass, like the tiles
+                    // above and Wrapped (see DurationPresentation).
+                    minutes: DurationPresentation.focusMinutes(grams: $0.grams),
                     pebbleCount: $0.sessionCount
                 )
             }
@@ -2044,7 +2052,7 @@ struct LogView: View {
     }
 
     private func formatMinutes(_ minutes: Int) -> String {
-        minutes >= 60 ? String(format: "%.1fh", Double(minutes) / 60) : "\(minutes)m"
+        DurationPresentation.minutesLabel(minutes)
     }
 }
 

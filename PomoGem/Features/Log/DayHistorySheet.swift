@@ -69,7 +69,7 @@ struct DayHistorySheet: View {
                                 HistoryThemeBreakdown(
                                     title: String(localized: "テーマ別", table: "Log", comment: "Heading of the per-theme time breakdown of a day"),
                                     themes: detail.themes,
-                                    totalSeconds: detail.totalSeconds
+                                    totalGrams: detail.totalGrams
                                 )
                                 .accessibilityIdentifier(HistoryDrillDownAccessibilityID.dayThemes)
                             }
@@ -144,7 +144,7 @@ struct DayHistorySheet: View {
         .accessibilityIdentifier(HistoryDrillDownAccessibilityID.daySummary)
         .accessibilityLabel(
             String(
-                localized: "この日の記録、\(DurationPresentation.minutesLabel(seconds: detail.totalSeconds))、\(detail.sessions.count)粒、\(max(0, detail.totalGrams))グラム",
+                localized: "この日の記録、\(DurationPresentation.focusLabel(grams: detail.totalGrams))、\(detail.sessions.count)粒、\(max(0, detail.totalGrams))グラム",
                 table: "Log",
                 comment: "VoiceOver summary of a day: focus time, gem count, mass in grams"
             )
@@ -154,7 +154,7 @@ struct DayHistorySheet: View {
     private func timeMetric(_ detail: AccumulationTimelineDayDetail) -> some View {
         HistoryMetricTile(
             title: String(localized: "集中した時間", table: "Log", comment: "Day summary tile: total focus time"),
-            value: DurationPresentation.minutesLabel(seconds: detail.totalSeconds)
+            value: DurationPresentation.focusLabel(grams: detail.totalGrams)
         )
     }
 
@@ -247,10 +247,13 @@ struct PastHistorySheet: View {
 }
 
 /// Theme rows with a share of the time. Each row is one VoiceOver element.
+/// Time and share are read from mass, the credited focus time every history
+/// screen shows (see DurationPresentation), so a day or a month reads the
+/// same time as its Wrapped and its card.
 struct HistoryThemeBreakdown: View {
     let title: String
     let themes: [AccumulationTimelineThemeSummary]
-    let totalSeconds: Int
+    let totalGrams: Int64
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -266,7 +269,7 @@ struct HistoryThemeBreakdown: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 themeName(theme)
                                 Text(
-                                    "\(DurationPresentation.minutesLabel(seconds: theme.seconds))・\(percentage(theme))%",
+                                    "\(DurationPresentation.focusLabel(grams: theme.grams))・\(percentage(theme))%",
                                     tableName: "Log",
                                     comment: "Theme row at large text sizes: time, then share of the period in percent"
                                 )
@@ -279,7 +282,7 @@ struct HistoryThemeBreakdown: View {
                             HStack(alignment: .firstTextBaseline, spacing: 10) {
                                 themeName(theme)
                                 Spacer(minLength: 8)
-                                Text(DurationPresentation.minutesLabel(seconds: theme.seconds))
+                                Text(DurationPresentation.focusLabel(grams: theme.grams))
                                     .font(.system(.subheadline, design: .rounded, weight: .bold))
                                     .monospacedDigit()
                                 Text(verbatim: "\(percentage(theme))%")
@@ -291,7 +294,7 @@ struct HistoryThemeBreakdown: View {
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(String(
-                        localized: "\(theme.name)、\(DurationPresentation.minutesLabel(seconds: theme.seconds))、\(percentage(theme))パーセント",
+                        localized: "\(theme.name)、\(DurationPresentation.focusLabel(grams: theme.grams))、\(percentage(theme))パーセント",
                         table: "Log",
                         comment: "VoiceOver theme row: theme name, time, share in percent"
                     ))
@@ -310,9 +313,9 @@ struct HistoryThemeBreakdown: View {
     }
 
     private func percentage(_ theme: AccumulationTimelineThemeSummary) -> Int {
-        guard totalSeconds > 0 else { return 0 }
+        guard totalGrams > 0 else { return 0 }
         return NonnegativeIntPolicy.clamped(
-            (Double(theme.seconds) / Double(totalSeconds) * 100).rounded(),
+            (Double(theme.grams) / Double(totalGrams) * 100).rounded(),
             maximum: 100
         )
     }

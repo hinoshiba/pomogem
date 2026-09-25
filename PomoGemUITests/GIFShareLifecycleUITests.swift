@@ -45,11 +45,18 @@ final class GIFShareLifecycleUITests: XCTestCase {
 
         cancelSystemShareSheet(systemSheet)
 
+        // The status element already shows the preparation message behind
+        // the sheet, so wait for the cancellation text rather than for the
+        // element to exist.
         let status = app.staticTexts["share.status"]
         XCTAssertTrue(status.waitForExistence(timeout: 12))
-        XCTAssertEqual(
-            status.label,
-            "共有はキャンセルされました。カードはこの画面に残っています。"
+        XCTAssertTrue(
+            waitForLabel(
+                status,
+                equalTo: "共有はキャンセルされました。カードはこの画面に残っています。",
+                timeout: 12
+            ),
+            status.label
         )
 
         let probe = app.staticTexts["share.debug.gif-lifecycle"]
@@ -117,7 +124,7 @@ final class GIFShareLifecycleUITests: XCTestCase {
 
         let copyCaption = app.buttons["share.copy-caption"]
         XCTAssertTrue(
-            scrollUntilHittable(copyCaption),
+            scrollUntilHittable(copyCaption, avoiding: primaryShare),
             "The copy CTA must remain independently discoverable and hittable"
         )
         XCTAssertTrue(copyCaption.isHittable)
@@ -255,11 +262,204 @@ final class GIFShareLifecycleUITests: XCTestCase {
             "Direct self-reported inclusion must continue to the real system share sheet"
         )
         cancelSystemShareSheet(systemSheet)
-        XCTAssertTrue(app.staticTexts["share.status"].waitForExistence(timeout: 8))
-        XCTAssertEqual(
-            app.staticTexts["share.status"].label,
-            "共有はキャンセルされました。カードはこの画面に残っています。"
+        let status = app.staticTexts["share.status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            waitForLabel(
+                status,
+                equalTo: "共有はキャンセルされました。カードはこの画面に残っています。",
+                timeout: 12
+            ),
+            status.label
         )
+    }
+
+    /// walk-std-04 / walk-edge-08: a month holding only self-reported focus
+    /// and a 記念石, opened from its Wrapped screen, must explain the excluded
+    /// time in 分 and offer to include it next to the card, not read as an
+    /// unexplained 0g.
+    func testWrappedMonthWithSelfReportedFocusAndAStoneExplainsAndIncludesTheTime() {
+        addShareableSession()
+        addExamPassStone()
+
+        openMenuAction(containing: "記録を見る")
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 6))
+        let monthRow = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", currentMonthTitle())
+        ).firstMatch
+        XCTAssertTrue(scrollUntilHittable(monthRow), "The month must be listed under 月ごとの瓶")
+        XCTAssertTrue(monthRow.label.contains("30分・1粒"), monthRow.label)
+        XCTAssertFalse(monthRow.label.contains("30m"), monthRow.label)
+        attachScreenshot(named: "Log — month row in 分")
+        monthRow.tap()
+
+        let note = app.descendants(matching: .any)["wrapped.self-reported-note"]
+        XCTAssertTrue(note.waitForExistence(timeout: 8))
+        XCTAssertEqual(note.label, "時間と粒には、自己申告の記録も含みます。")
+        attachScreenshot(named: "Wrapped — totals say they include self-reported time")
+        let makeCard = app.buttons["この月の瓶をカードにする"]
+        XCTAssertTrue(scrollUntilHittable(makeCard))
+        makeCard.tap()
+
+        XCTAssertTrue(app.navigationBars["カードにする"].waitForExistence(timeout: 8))
+        let summary = app.descendants(matching: .any)["share.settings-summary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            summary.label,
+            "現在の共有設定、GIF・4:5・実測のみ（自己申告は除外）・記念石は自己申告・タグ2個"
+        )
+        let card = app.descendants(matching: .any)["share.card"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+        XCTAssertTrue(card.label.contains("瓶に積んだ集中、0グラム。"), card.label)
+        let notice = app.descendants(matching: .any)["share.excluded-self-reported"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 5))
+        XCTAssertEqual(notice.label, "自己申告の30分は、カードに含めていません。")
+        attachScreenshot(named: "Share — stone-only month explains the excluded 30分")
+
+        let include = app.buttons["share.include-self-reported-inline"]
+        XCTAssertTrue(scrollUntilHittable(include))
+        include.tap()
+        XCTAssertTrue(
+            waitForLabel(
+                summary,
+                equalTo: "現在の共有設定、GIF・4:5・自己申告あり・記念石は自己申告・タグ2個",
+                timeout: 8
+            )
+        )
+        XCTAssertTrue(
+            waitForLabel(card, containing: "瓶に積んだ集中、300グラム、30分。", timeout: 8),
+            card.label
+        )
+        XCTAssertTrue(waitForNonExistence(notice, timeout: 5))
+        attachScreenshot(named: "Share — included card states 300g and 30分")
+    }
+
+    /// history-10: typing a tag must reuse the resolved card instead of
+    /// re-reading every record; study tags are offered but stay opt-in.
+    func testTypingATagReusesTheResolvedCardAndStudyTagsStayOptional() {
+        addShareableSession()
+        openMenuAction(containing: "動く瓶をシェア")
+        XCTAssertTrue(app.navigationBars["カードにする"].waitForExistence(timeout: 8))
+        includeSelfReportedDirectlyIfOffered()
+        expandAdjustmentsIfNeeded()
+        app.swipeUp()
+
+        for tag in ["#勉強記録", "#勉強垢"] {
+            let chip = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", tag)).firstMatch
+            XCTAssertTrue(chip.waitForExistence(timeout: 5), "Missing suggested tag \(tag)")
+            XCTAssertFalse(chip.isSelected, "\(tag) must be offered unselected")
+        }
+
+        let probe = app.staticTexts["share.debug.selection"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 5))
+        let before = parseProbe(probe.value as? String ?? "")
+
+        let custom = app.textFields["share.custom-hashtag"]
+        XCTAssertTrue(scrollUntilHittable(custom))
+        app.swipeUp()
+        XCTAssertTrue(scrollUntilHittable(custom))
+        custom.tap()
+        custom.typeText("FocusLog")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        XCTAssertTrue(
+            app.staticTexts["選択中：#ポモジェム #ポモドーロ #FocusLog"].waitForExistence(timeout: 5)
+        )
+
+        let after = parseProbe(probe.value as? String ?? "")
+        XCTAssertEqual(
+            after["builds"],
+            before["builds"],
+            "Typing must not re-resolve the card's records; before=\(before) after=\(after)"
+        )
+        XCTAssertGreaterThan(
+            Int(after["lookups"] ?? "0") ?? 0,
+            Int(before["lookups"] ?? "0") ?? 0,
+            "The composer must have redrawn while typing"
+        )
+
+        let studyTag = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "#勉強記録")).firstMatch
+        XCTAssertTrue(scrollUntilHittable(studyTag))
+        studyTag.tap()
+        XCTAssertTrue(
+            app.staticTexts["選択中：#ポモジェム #ポモドーロ #勉強記録 #FocusLog"]
+                .waitForExistence(timeout: 5)
+        )
+        attachScreenshot(named: "Share — suggested study tags and a custom tag")
+    }
+
+    /// The excluded-time notice, the two-part scope summary and the Log's
+    /// time tile must stay whole and reachable at the largest text size.
+    func testExcludedTimeNoticeAndLogTimeStayReadableAtAccessibilitySizes() {
+        app.terminate()
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+        addShareableSession()
+        addExamPassStone()
+
+        openMenuAction(containing: "動く瓶をシェア")
+        XCTAssertTrue(app.navigationBars["カードにする"].waitForExistence(timeout: 8))
+        let notice = app.descendants(matching: .any)["share.excluded-self-reported"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 8))
+        XCTAssertTrue(scrollUntilHittable(notice))
+        attachScreenshot(named: "AX5 Share — excluded-time notice")
+        let include = app.buttons["share.include-self-reported-inline"]
+        XCTAssertTrue(scrollUntilHittable(include), "The inline include button must be reachable at AX5")
+        let summary = app.descendants(matching: .any)["share.settings-summary"]
+        XCTAssertTrue(scrollUntilHittable(summary))
+        XCTAssertTrue(summary.label.hasSuffix("・記念石は自己申告・タグ2個"), summary.label)
+        attachScreenshot(named: "AX5 Share — two-part scope summary")
+        include.tap()
+        XCTAssertTrue(waitForNonExistence(notice, timeout: 8))
+        app.navigationBars["カードにする"].buttons["閉じる"].tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+
+        openMenuAction(containing: "記録を見る")
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 6))
+        let timeTile = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "30分", "積んだ時間")
+        ).firstMatch
+        XCTAssertTrue(scrollUntilHittable(timeTile), "The Log time tile must read 30分")
+        attachScreenshot(named: "AX5 Log — time tile in 分")
+    }
+
+    private func addExamPassStone() {
+        openMenuAction(containing: "成果を積む")
+        XCTAssertTrue(app.navigationBars["成果を選ぶ"].waitForExistence(timeout: 5))
+        let examPass = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "試験合格")
+        ).firstMatch
+        XCTAssertTrue(examPass.waitForExistence(timeout: 5))
+        examPass.tap()
+        XCTAssertTrue(app.navigationBars["記念石にする"].waitForExistence(timeout: 5))
+        let save = app.buttons["この成果を積む"]
+        XCTAssertTrue(scrollUntilHittable(save))
+        save.tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
+    }
+
+    private func currentMonthTitle() -> String {
+        let parts = Calendar(identifier: .gregorian).dateComponents([.year, .month], from: .now)
+        return "\(parts.year ?? 0)年\(parts.month ?? 0)月"
+    }
+
+    private func attachScreenshot(named name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    private func waitForLabel(
+        _ element: XCUIElement,
+        containing expected: String,
+        timeout: TimeInterval
+    ) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", expected),
+            object: element
+        )
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
     private func addShareableSession() {
@@ -282,8 +482,28 @@ final class GIFShareLifecycleUITests: XCTestCase {
         let action = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", title)
         ).firstMatch
-        XCTAssertTrue(scrollUntilHittable(action), "Missing menu action: \(title)")
+        XCTAssertTrue(bringFullyIntoView(action), "Missing menu action: \(title)")
         action.tap()
+    }
+
+    /// The Home menu is a half-height sheet whose last rows start below its
+    /// edge. XCTest reports a row cut by that edge as hittable, but the tap
+    /// lands in the home-indicator strip and opens nothing. Short drags (a
+    /// fling can carry a row straight past) until the whole row is inside the
+    /// window and below the sheet's top.
+    private func bringFullyIntoView(_ element: XCUIElement, attempts: Int = 16) -> Bool {
+        let window = app.windows.firstMatch.frame
+        let topInset: CGFloat = 100
+        for _ in 0..<attempts {
+            if element.exists, element.isHittable,
+               element.frame.minY >= window.minY + topInset,
+               element.frame.maxY <= window.maxY { return true }
+            let isAbove = element.exists && element.frame.minY < window.minY + topInset
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: isAbove ? 0.45 : 0.8))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: isAbove ? 0.75 : 0.5))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        return element.exists && element.isHittable
     }
 
     private func enableSelfReportedSessionIfNeeded(for shareButton: XCUIElement) {
@@ -370,19 +590,32 @@ final class GIFShareLifecycleUITests: XCTestCase {
         avoiding obstruction: XCUIElement,
         attempts: Int = 8
     ) -> Bool {
-        for _ in 0..<attempts {
-            if element.exists,
-               obstruction.exists,
-               element.isHittable,
-               !element.frame.intersects(obstruction.frame) {
-                return true
-            }
-            app.swipeUp()
+        // A fast fling can carry the element past the top, where XCTest still
+        // reports it hittable under the translucent navigation bar and a tap
+        // lands on the bar instead. Require it below the bar, and come back
+        // down slowly when it has gone past. The obstruction is the share CTA
+        // pinned to the bottom: its material bar covers everything from about
+        // 10 pt above the button to the screen edge, so an element below the
+        // button is just as covered as one overlapping it.
+        let navigationBar = app.navigationBars.firstMatch
+        func isClear() -> Bool {
+            element.exists
+                && obstruction.exists
+                && element.isHittable
+                && element.frame.maxY <= obstruction.frame.minY - 12
+                && (!navigationBar.exists || element.frame.minY >= navigationBar.frame.maxY)
         }
-        return element.exists
-            && obstruction.exists
-            && element.isHittable
-            && !element.frame.intersects(obstruction.frame)
+        for _ in 0..<attempts {
+            if isClear() { return true }
+            if navigationBar.exists,
+               element.exists,
+               element.frame.minY < navigationBar.frame.maxY {
+                app.swipeDown(velocity: .slow)
+            } else {
+                app.swipeUp(velocity: .slow)
+            }
+        }
+        return isClear()
     }
 
     private func expandAdjustmentsIfNeeded() {
