@@ -7,6 +7,23 @@
     "%@kg" : {
       "comment" : "Mass in kilograms. %@ is the number, already formatted. en: '%@ kg'."
     },
+    "%lld分" : {
+      "comment" : "A duration in whole minutes"
+    },
+    "%lld時間" : {
+      "comment" : "A duration in whole hours"
+    },
+    "%lld時間%lld分" : {
+      "comment" : "A duration in hours and minutes",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld時間%2$lld分"
+          }
+        }
+      }
+    },
     "%lld粒" : {
       "comment" : "Number of gems. %lld is the count. en needs plural variations: '%lld gem' / '%lld gems'."
     },

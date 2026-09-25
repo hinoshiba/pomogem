@@ -1,7 +1,33 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
-
+    "iCloudに保存して同期" : {
+      "comment" : "First-run storage choice: iCloud option (button label)"
+    },
+    "このiPhoneだけに保存" : {
+      "comment" : "First-run storage choice: local-only option (button label)"
+    },
+    "どちらを選んでも、タイマーと瓶は同じように使えます。" : {
+      "comment" : "First-run storage choice: one-sentence message under the title"
+    },
+    "テーマ名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。このiPhoneに保存済みの記録があれば、オフラインでも使えます。初回の取得や同期の再開には通信が必要です。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。" : {
+      "comment" : "First-run storage choice: iCloud confirmation message (full caveats)"
+    },
+    "同じApple AccountのiPhone間で、記録を同期します。" : {
+      "comment" : "First-run storage choice: the iCloud option's one line"
+    },
+    "記録の保存先を選んでください" : {
+      "comment" : "First-run storage choice: screen title"
+    },
+    "記録はこのiPhoneだけに保存し、iCloudへは送信しません。" : {
+      "comment" : "First-run storage choice: the local-only option's one line"
+    },
+    "記録はこのiPhoneだけに保存し、iCloudへは送信しません。アプリを削除すると、記録は失われます。あとでiCloud同期に切り替えると、このiPhoneの記録はiCloudの記録に置き換わります。このiPhoneの記録をiCloudへ移すことは、現在できません。" : {
+      "comment" : "First-run storage choice: local-only confirmation message (full caveats)"
+    },
+    "集中した時間が、粒になって瓶にたまっていきます。" : {
+      "comment" : "First-run storage choice: the app's one-line promise under the logo"
+    }
   },
   "version" : "1.0"
 }

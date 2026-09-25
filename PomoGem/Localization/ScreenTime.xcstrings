@@ -1,7 +1,267 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%lld / 5アプリ" : {
+      "comment" : "Study apps chosen out of the free plan's five"
+    },
+    "%lldアプリ" : {
+      "comment" : "Study apps chosen, before the purchase status is known"
+    },
+    "%lldアプリ・無制限" : {
+      "comment" : "Apps chosen in a lane with no limit"
+    },
+    "SNSなど、控えたいアプリを選べます。合計10分使うごとに、瓶の中で場所をとる黒い石が1つ増えます。" : {
+      "comment" : "Footer: what the black-stone lane does"
+    },
+    "このiPhoneでは、ほかのアプリがすでに保護者による管理（ペアレンタルコントロール）を行っているため、許可できませんでした。そのアプリを管理している人（保護者など）に相談してください。" : {
+      "comment" : "Screen Time access failed: another parental-control app holds the authorization"
+    },
+    "このiPhoneでは、スクリーンタイムの制限や学校・会社などの管理設定によって許可できません。設定アプリの最初の画面にある「スクリーンタイム」の制限や、「一般」の「VPNとデバイス管理」を確認してください。" : {
+      "comment" : "Screen Time access failed: restricted by Screen Time limits or device management"
+    },
+    "このiPhoneのApple Accountでは許可できませんでした。設定アプリの最初の画面のいちばん上で、Apple Accountにサインインしているか確認してください。ファミリー共有で保護者が管理している子どものアカウントでは、この機能を使えないことがあります。" : {
+      "comment" : "Screen Time access failed: not signed in, or a child or managed account"
+    },
+    "このテーマは、スクリーンタイムで選んだ勉強アプリの記録先です。削除すると勉強アプリの選択も解除され、記録を続けるにはアプリと記録先を選び直す必要があります。" : {
+      "comment" : "Theme delete confirmation: the theme is the Screen Time destination"
+    },
+    "アプリで過ごした時間も、瓶に。" : {
+      "comment" : "Screen Time settings: headline"
+    },
+    "アプリの選択、まだ取り込んでいない利用記録、黒い石をこのiPhoneから削除し、自動記録を停止します。取り消せません。保存済みの勉強時間と粒は残ります。" : {
+      "comment" : "Screen Time reset confirmation"
+    },
+    "アプリの選択、未取り込みの利用記録、黒い石は、このiPhoneだけに保存します。JSON書き出しや保存先の切り替えでは引き継ぎません。" : {
+      "comment" : "About recording: device-local data"
+    },
+    "アプリの選択・未取り込みの利用記録・黒い石を削除し、自動記録を停止します。保存済みの勉強時間と粒は残ります。" : {
+      "comment" : "Footer under the full Screen Time reset"
+    },
+    "アプリ数は無制限です" : {
+      "comment" : "VoiceOver hint: no app limit"
+    },
+    "スクリーンタイムの記録を保留しています" : {
+      "comment" : "Alert title: imported Screen Time records are on hold"
+    },
+    "スクリーンタイムの記録を確認できませんでした。" : {
+      "comment" : "Import error: a Screen Time record failed its checks"
+    },
+    "スクリーンタイムの許可には、iPhoneのパスコードが必要です。設定アプリの最初の画面にある「Face IDとパスコード」（または「Touch IDとパスコード」）でパスコードを設定してから、もう一度お試しください。" : {
+      "comment" : "Screen Time access failed: no device passcode"
+    },
+    "スクリーンタイムへのアクセスを確認できませんでした。少し時間をおいて、もう一度お試しください。" : {
+      "comment" : "Screen Time access failed for another reason"
+    },
+    "スクリーンタイム：%@ +%lld分（%lld粒）" : {
+      "comment" : "Toast: study-app time added. 1 = theme name, 2 = minutes, 3 = pebbles",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "スクリーンタイム：%1$@ +%2$lld分（%3$lld粒）"
+          }
+        }
+      }
+    },
+    "スクリーンタイム：%@ +%lld分（%lld粒）、黒い石 +%lld" : {
+      "comment" : "Toast: study time and black stones added. 1 = theme, 2 = minutes, 3 = pebbles, 4 = black stones",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "スクリーンタイム：%1$@ +%2$lld分（%3$lld粒）、黒い石 +%4$lld"
+          }
+        }
+      }
+    },
+    "スクリーンタイム：勉強アプリの時間 +%lld分（%lld粒）" : {
+      "comment" : "Toast: study-app time added to several themes. 1 = minutes, 2 = pebbles",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "スクリーンタイム：勉強アプリの時間 +%1$lld分（%2$lld粒）"
+          }
+        }
+      }
+    },
+    "スクリーンタイム：勉強アプリの時間 +%lld分（%lld粒）、黒い石 +%lld" : {
+      "comment" : "Toast: study time for several themes and black stones added. 1 = minutes, 2 = pebbles, 3 = black stones",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "スクリーンタイム：勉強アプリの時間 +%1$lld分（%2$lld粒）、黒い石 +%3$lld"
+          }
+        }
+      }
+    },
+    "スクリーンタイム：黒い石 +%lld" : {
+      "comment" : "Toast: black stones added (count only)"
+    },
+    "スクリーンタイム：黒い石 +%lld（控えたいアプリ %lld分）" : {
+      "comment" : "Toast: black stones added. 1 = stones, 2 = minutes in the apps to cut down",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "スクリーンタイム：黒い石 +%1$lld（控えたいアプリ %2$lld分）"
+          }
+        }
+      }
+    },
+    "タイマーの計測中は勉強アプリの自動記録を休止し、終了後に自動で再開します。" : {
 
+    },
+    "保存して戻る" : {
+      "comment" : "Dialog action: save the Screen Time edits, then go back"
+    },
+    "保存しました" : {
+      "comment" : "Toast after saving Screen Time settings before monitoring is confirmed"
+    },
+    "保存しました。自動記録はオフです" : {
+      "comment" : "Toast after saving Screen Time settings with recording off"
+    },
+    "保存しました。自動記録中です" : {
+      "comment" : "Toast after saving Screen Time settings with recording on"
+    },
+    "勉強アプリ" : {
+      "comment" : "Picker title: study apps"
+    },
+    "勉強アプリと控えたいアプリは別々に合計します。同じアプリを両方には登録できません。" : {
+      "comment" : "About recording: the two lanes are summed separately"
+    },
+    "勉強アプリの粒" : {
+      "comment" : "Section header: study apps that add pebbles"
+    },
+    "勉強アプリの粒と黒い石を10分ごとに積む" : {
+      "comment" : "Settings row subtitle: Screen Time, when there is nothing to report"
+    },
+    "勉強アプリを使った時間は10分ごとに粒として、控えたいアプリの時間は黒い石として、瓶に積みます。" : {
+      "comment" : "Screen Time settings: what the feature does"
+    },
+    "勉強アプリを選ぶ" : {
+      "comment" : "VoiceOver: open the study-app picker"
+    },
+    "勉強時間を記録するテーマを選んでください。" : {
+      "comment" : "Error: study apps are chosen but no destination theme"
+    },
+    "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。" : {
+      "comment" : "Error: an app is in both Screen Time lanes"
+    },
+    "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。もう一方の選択から外してください。" : {
+      "comment" : "Validation: an app is in both lanes"
+    },
+    "変更が保存されていません" : {
+      "comment" : "Dialog title: leaving Screen Time settings with unsaved edits"
+    },
+    "変更を破棄して戻る" : {
+      "comment" : "Dialog action: drop the Screen Time edits and go back"
+    },
+    "戻る" : {
+      "comment" : "Back button shown while Screen Time edits are unsaved"
+    },
+    "控えたいアプリ" : {
+      "comment" : "Picker title: apps to cut down"
+    },
+    "控えたいアプリだけ自動記録中" : {
+      "comment" : "Status: only the black-stone lane is recording"
+    },
+    "控えたいアプリを選ぶ" : {
+      "comment" : "VoiceOver: open the picker for apps to cut down"
+    },
+    "無料では5つまで選べます" : {
+      "comment" : "VoiceOver hint: the free plan's study-app limit"
+    },
+    "無料で登録できる勉強アプリは5つまでです。5つ以下にするか、Proをご利用ください。" : {
+      "comment" : "Error: more study apps than the free plan records"
+    },
+    "無料で記録できる勉強アプリは5つまでです。このまま反映して、設定画面でProにするか、5つ以下に減らしてから保存してください。" : {
+      "comment" : "Picker notice: over the free learning-app limit; applying is still allowed"
+    },
+    "片付ける" : {
+      "comment" : "Alert action: clear the black stones"
+    },
+    "瓶の黒い石を、このiPhoneから片付けます。選んだアプリと自動記録はそのまま続き、勉強時間と粒は変わりません。片付けた石は戻せません。" : {
+      "comment" : "Alert message: what clearing the black stones does"
+    },
+    "編集を続ける" : {
+      "comment" : "Dialog action: stay on the Screen Time settings"
+    },
+    "自動記録中" : {
+      "comment" : "Settings row subtitle: recording"
+    },
+    "要確認：勉強アプリの記録が止まっています" : {
+      "comment" : "Settings row subtitle: study apps stopped recording (free-plan limit); black stones still record"
+    },
+    "要確認：自動記録が止まっています" : {
+      "comment" : "Settings row subtitle: recording stopped because of an error"
+    },
+    "要確認：記録先のテーマが削除されました" : {
+      "comment" : "Settings row subtitle: the study-app destination theme was deleted"
+    },
+    "記録先のテーマが削除されたため、勉強アプリの記録を止めました" : {
+      "comment" : "Toast: the Screen Time destination theme was deleted, so study-app recording stopped"
+    },
+    "記録先のテーマが削除されたため、勉強アプリの選択を解除しました。アプリとテーマを選び直して保存すると、記録を再開します。" : {
+      "comment" : "Footer: the destination theme was deleted and the study apps were cleared"
+    },
+    "設定アプリを開く" : {
+      "comment" : "Button: open the iOS Settings app to fix Screen Time access"
+    },
+    "許可するには、iPhoneのパスコード、Apple Accountへのサインイン、インターネット接続が必要です。" : {
+      "comment" : "Footer: prerequisites for Screen Time access"
+    },
+    "購入状況を確認しています。確認が終わると保存できます。" : {
+      "comment" : "Footer: StoreKit has not answered yet, so a selection over the free limit waits"
+    },
+    "通信できなかったため、許可を確認できませんでした。インターネットにつながる状態で、もう一度お試しください。" : {
+      "comment" : "Screen Time access failed: network error"
+    },
+    "選んだアプリや記録の設定は、保存するまで反映されません。" : {
+      "comment" : "Dialog message: unsaved Screen Time edits"
+    },
+    "選んだアプリや記録の設定は、保存するまで反映されません。いまの内容のままでは保存できないため、戻ると変更は破棄されます。" : {
+      "comment" : "Dialog message: unsaved Screen Time edits that cannot be saved yet"
+    },
+    "選んだアプリを合計10分使うごとに、記録先のテーマへ粒（10分・100g）と勉強時間を追加します。" : {
+      "comment" : "Footer: how study-app time becomes pebbles"
+    },
+    "開くのはポモジェムの設定ページです。左上の「<」で設定の最初の画面まで戻ってください。" : {
+      "comment" : "Caption under the button that opens the Settings app: how to reach the page the message names"
+    },
+    "黒い石" : {
+      "comment" : "Section header: apps to cut down that add black stones"
+    },
+    "黒い石、10分 × %lld個ぶん、累計 %@" : {
+      "comment" : "VoiceOver: black-stone total and minutes",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "黒い石、10分 × %1$lld個ぶん、累計 %2$@"
+          }
+        }
+      }
+    },
+    "黒い石だけを片付けるときは、上の「黒い石を片付ける」を使います。アプリの選択はそのまま残ります。" : {
+      "comment" : "Footer: point to the lighter black-stone clear"
+    },
+    "黒い石を片付けました" : {
+      "comment" : "Toast: the black stones were cleared"
+    },
+    "黒い石を片付けますか？" : {
+      "comment" : "Alert title: clear only the black stones"
+    },
+    "黒い石を片付ける" : {
+      "comment" : "Button: clear only the black stones"
+    },
+    "黒い石同士だけがまとまります。勉強時間には加算されず、積んだ粒も減りません。" : {
+      "comment" : "Footer: black stones never reduce study"
+    },
+    "黒い石：10分 × %lld個ぶん" : {
+      "comment" : "Black-stone total; the number counts ten-minute units"
+    }
   },
   "version" : "1.0"
 }

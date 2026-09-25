@@ -1,7 +1,12 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
-
+    "アプリの時間を積む" : {
+      "comment" : "Home menu row: open the Screen Time settings"
+    },
+    "勉強アプリ10分ごとに1粒" : {
+      "comment" : "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble"
+    }
   },
   "version" : "1.0"
 }

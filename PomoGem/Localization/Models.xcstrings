@@ -1,7 +1,9 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
-
+    "スクリーンタイム" : {
+      "comment" : "Record source label: Screen Time"
+    }
   },
   "version" : "1.0"
 }

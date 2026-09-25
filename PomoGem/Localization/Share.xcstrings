@@ -1,7 +1,9 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
-
+    "実測 %lld粒" : {
+      "comment" : "Share card: measured gems (timer or Screen Time)"
+    }
   },
   "version" : "1.0"
 }
