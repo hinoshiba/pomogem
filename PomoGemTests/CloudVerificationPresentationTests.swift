@@ -137,6 +137,122 @@ final class CloudVerificationPresentationTests: XCTestCase {
                        "Classified once, not re-escalated by the next notification")
     }
 
+    // MARK: History filter — two stores
+
+    /// The shipping container has a source store and a projection store, and
+    /// History tokens are per store. A cursor that moved to a projection token
+    /// used to hide every later source transaction (review of PR #40).
+    func testAProjectionWriteBeforeTheFirstReadNeverHidesALaterImport() throws {
+        guard #available(iOS 18, *) else { throw XCTSkip("SwiftData History is iOS 18+") }
+        let (container, directory) = try makeContainer()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let main = container.mainContext
+        main.author = ui
+        main.autosaveEnabled = false
+        var cursor = SyncRemoteChangeHistoryCursor(since: .now.addingTimeInterval(-1))
+
+        // An unauthored projection write, then the app's own settings write.
+        let projection = ModelContext(container)
+        projection.insert(GachaState())
+        try projection.save()
+        XCTAssertEqual(SyncRemoteChangeHistoryReader.classify(context: main, cursor: &cursor), .invalidate,
+                       "No source transaction yet: a time window proves nothing")
+        main.insert(Prefs())
+        try main.save()
+        XCTAssertEqual(SyncRemoteChangeHistoryReader.classify(context: main, cursor: &cursor), .ignoreOwnWrites)
+
+        let foreign = ModelContext(container)
+        foreign.insert(Subject(name: "arrived from elsewhere", colorHex: "#654321", sortOrder: 2))
+        try foreign.save()
+        XCTAssertEqual(SyncRemoteChangeHistoryReader.classify(context: main, cursor: &cursor), .invalidate,
+                       "An unauthored source write after a projection write is still an import")
+    }
+
+    func testAMixedFirstReadNeverHidesALaterImport() throws {
+        guard #available(iOS 18, *) else { throw XCTSkip("SwiftData History is iOS 18+") }
+        for projectionFirst in [true, false] {
+            for extraProjectionWrites in [0, 5] {
+                let (container, directory) = try makeContainer()
+                defer { try? FileManager.default.removeItem(at: directory) }
+                let main = container.mainContext
+                main.author = ui
+                main.autosaveEnabled = false
+                var cursor = SyncRemoteChangeHistoryCursor(since: .now.addingTimeInterval(-1))
+                let worker = ModelContext(container)
+                worker.author = maintenance
+                func projectionWrites() throws {
+                    for _ in 0...extraProjectionWrites {
+                        worker.insert(GachaState())
+                        try worker.save()
+                    }
+                }
+                if projectionFirst { try projectionWrites() }
+                main.insert(Prefs())
+                try main.save()
+                if !projectionFirst { try projectionWrites() }
+                let label = "projectionFirst=\(projectionFirst) extra=\(extraProjectionWrites)"
+                XCTAssertEqual(SyncRemoteChangeHistoryReader.classify(context: main, cursor: &cursor),
+                               .ignoreOwnWrites, label)
+
+                // More maintenance on the projection store after the cursor.
+                try projectionWrites()
+                XCTAssertEqual(SyncRemoteChangeHistoryReader.classify(context: main, cursor: &cursor),
+                               .ignoreOwnWrites, label)
+
+                let foreign = ModelContext(container)
+                foreign.insert(Subject(name: "x", colorHex: "#654321", sortOrder: 2))
+                try foreign.save()
+                XCTAssertEqual(SyncRemoteChangeHistoryReader.classify(context: main, cursor: &cursor),
+                               .invalidate, label)
+            }
+        }
+    }
+
+    /// The maintenance worker writes the projection store all the time. Its
+    /// transactions must never pile up in the source cursor's reads until
+    /// every classification is a truncated read.
+    func testManyProjectionWritesDoNotTruncateTheSourceCursor() throws {
+        guard #available(iOS 18, *) else { throw XCTSkip("SwiftData History is iOS 18+") }
+        let (container, directory) = try makeContainer()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let main = container.mainContext
+        main.author = ui
+        main.autosaveEnabled = false
+        var cursor = SyncRemoteChangeHistoryCursor(since: .now.addingTimeInterval(-1))
+        main.insert(Prefs())
+        try main.save()
+        XCTAssertEqual(SyncRemoteChangeHistoryReader.classify(context: main, cursor: &cursor), .ignoreOwnWrites)
+
+        let worker = ModelContext(container)
+        worker.author = maintenance
+        for _ in 0..<(SyncRemoteChangeHistoryPolicy.maximumTransactionsPerRead + 20) {
+            worker.insert(GachaState())
+            try worker.save()
+        }
+        main.insert(Subject(name: "own theme", colorHex: "#abcdef", sortOrder: 0))
+        try main.save()
+        XCTAssertEqual(SyncRemoteChangeHistoryReader.classify(context: main, cursor: &cursor), .ignoreOwnWrites,
+                       "Projection transactions are not part of the source cursor's window")
+    }
+
+    func testTheSourceStoreIsTheOneThatChangesSourceModels() {
+        typealias Policy = SyncRemoteChangeHistoryPolicy
+        let source = Summary(author: ui, changedEntityNames: ["Prefs"], storeIdentifier: "S")
+        let projection = Summary(author: maintenance, changedEntityNames: ["GachaState"], storeIdentifier: "P")
+        XCTAssertEqual(Policy.sourceTransactions([projection, source], knownSourceStore: nil),
+                       .source(identifier: "S", transactions: [source]))
+        XCTAssertEqual(Policy.sourceTransactions([projection], knownSourceStore: nil),
+                       .source(identifier: nil, transactions: []),
+                       "Projection work alone never identifies, or advances, the source cursor")
+        XCTAssertEqual(Policy.sourceTransactions([projection], knownSourceStore: "S"),
+                       .source(identifier: "S", transactions: []))
+        let elsewhere = Summary(author: nil, changedEntityNames: ["Subject"], storeIdentifier: "X")
+        XCTAssertEqual(Policy.sourceTransactions([source, elsewhere], knownSourceStore: nil), .ambiguous,
+                       "Two stores changing source models is a doubt")
+        XCTAssertEqual(Policy.sourceTransactions([elsewhere], knownSourceStore: "S"), .ambiguous,
+                       "A source model changing in another store than the cursor's is a doubt")
+    }
+
     func testAnUnreadableCursorFailsClosedAndStartsANewWindow() throws {
         guard #available(iOS 18, *) else { throw XCTSkip("SwiftData History is iOS 18+") }
         let (container, directory) = try makeContainer()

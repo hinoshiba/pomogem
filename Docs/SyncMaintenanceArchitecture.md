@@ -734,8 +734,12 @@ process内cursor以後のtransactionを読みます（`SyncRemoteChangeHistoryRe
 `maintenanceAuthor`以外のtransactionがCloudKit同期元の7 modelのどれかを変更した場合だけ従来どおり昇格し、
 それ以外（自分の一時停止・再開、設定の切り替え、claim、worker自身の保存）は無視します。authorなしの
 transaction（副contextやCloudKit import）は外部とみなします。cursorは最初のframe時刻から始まり（それ以前は
-起動時verificationが扱う）、tokenを得た後はtoken順で進めます。History取得の失敗、token失効、tokenを
-得る前の空の結果、1回500件以上の結果、iOS 17では従来どおり昇格します。main contextの`didSave`による
+起動時verificationが扱う）、tokenを得た後はtoken順で進めます。History tokenはstore単位なので、cursorは
+同期元storeのtransactionだけから進め、local projection store（`AggregatePebble`等）のtransactionは判定にも
+cursorにも使いません（projectionのtokenへ進んだcursorは、以後の同期元transactionをすべて見落とします）。
+同期元modelを変更したstoreが2つ以上ある、または追っているstoreと異なる場合は疑わしいとして昇格します。
+History取得の失敗、token失効、tokenを得る前に同期元storeのtransactionがない結果、1回500件以上の結果、
+iOS 17では従来どおり昇格します。main contextの`didSave`による
 `StudySession`／`ActivityResetMarker`の即時invalidationは変更しません。上記のreason分類・upper-bound token・
 「last fully repaired」の永続化は未実装で、`lastFullyRepairedHistoryToken`は引き続き使いません。
 

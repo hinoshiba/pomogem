@@ -28,9 +28,21 @@ import SwiftData
 /// - more transactions than one read classifies escalates.
 /// The app's own session saves keep invalidating through the main context's
 /// `didSave` rule, which is unchanged.
+///
+/// The shipping container has two stores, the CloudKit source store and the
+/// local projection store (AggregatePebble, Stratum, Bedrock, GachaState),
+/// and a SwiftData History token is per store. The cursor therefore follows
+/// the source store only: it advances only from source-store transactions,
+/// and projection-store transactions — which cannot change a CloudKit source
+/// model — never decide a verdict. A cursor that advanced to a projection
+/// token used to hide every later source transaction, so each remote change,
+/// real imports included, read as "already classified" for the rest of that
+/// Root's life. Any doubt about which store is the source store escalates.
 struct SyncHistoryTransactionSummary: Equatable, Sendable {
     let author: String?
     let changedEntityNames: Set<String>
+    /// SwiftData's identifier of the store that recorded the transaction.
+    var storeIdentifier: String = ""
 }
 
 enum SyncRemoteChangeHistoryPolicy {
@@ -72,13 +84,45 @@ enum SyncRemoteChangeHistoryPolicy {
     }
 }
 
+extension SyncRemoteChangeHistoryPolicy {
+    enum StoreResolution: Equatable, Sendable {
+        /// The source store's identifier, and only its transactions.
+        case source(identifier: String?, transactions: [SyncHistoryTransactionSummary])
+        /// More than one store changed a source model, or a source model
+        /// changed in a store other than the one the cursor follows.
+        case ambiguous
+    }
+
+    /// Which of `transactions` belong to the CloudKit source store. The source
+    /// store is the one whose transactions change source models; once known,
+    /// the cursor keeps following it.
+    static func sourceTransactions(
+        _ transactions: [SyncHistoryTransactionSummary],
+        knownSourceStore: String?
+    ) -> StoreResolution {
+        let sourceStores = Set(transactions
+            .filter { !$0.changedEntityNames.isDisjoint(with: sourceEntityNames) }
+            .map(\.storeIdentifier))
+        guard sourceStores.count <= 1 else { return .ambiguous }
+        if let knownSourceStore, let seen = sourceStores.first, seen != knownSourceStore {
+            return .ambiguous
+        }
+        guard let store = knownSourceStore ?? sourceStores.first else {
+            return .source(identifier: nil, transactions: [])
+        }
+        return .source(identifier: store, transactions: transactions.filter { $0.storeIdentifier == store })
+    }
+}
+
 /// Process-local. The launch verification sweep covers everything before the
 /// first frame, so the cursor starts there and only needs to classify what
 /// happens while Root is mounted.
 struct SyncRemoteChangeHistoryCursor: Equatable, Sendable {
-    /// The last classified `DefaultHistoryToken`, JSON-encoded so this type
-    /// stays available on iOS 17.
+    /// The last classified source-store `DefaultHistoryToken`, JSON-encoded
+    /// so this type stays available on iOS 17. Never a projection token.
     fileprivate(set) var tokenData: Data?
+    /// The store `tokenData` belongs to: the CloudKit source store.
+    fileprivate(set) var sourceStoreIdentifier: String?
     fileprivate(set) var since: Date
 
     init(since: Date) {
@@ -110,28 +154,48 @@ enum SyncRemoteChangeHistoryReader {
             }
             descriptor.fetchLimit = UInt64(SyncRemoteChangeHistoryPolicy.maximumTransactionsPerRead)
             let transactions = try context.fetchHistory(descriptor)
-            if let latest = transactions.map(\.token).max() {
-                cursor.tokenData = try JSONEncoder().encode(latest)
-            }
             let summaries = transactions.map { transaction in
                 SyncHistoryTransactionSummary(
                     author: transaction.author,
-                    changedEntityNames: Set(transaction.changes.map(\.changedPersistentIdentifier.entityName))
+                    changedEntityNames: Set(transaction.changes.map(\.changedPersistentIdentifier.entityName)),
+                    storeIdentifier: transaction.storeIdentifier
                 )
             }
+            let truncated = transactions.count >= SyncRemoteChangeHistoryPolicy.maximumTransactionsPerRead
+            guard case let .source(store, sourceSummaries) = SyncRemoteChangeHistoryPolicy.sourceTransactions(
+                summaries, knownSourceStore: cursor.sourceStoreIdentifier
+            ) else {
+                return startNewWindow(&cursor, now: now)
+            }
+            // Only a source-store token may become the cursor: tokens of
+            // different stores do not order against each other.
+            if let store,
+               let latest = transactions.filter({ $0.storeIdentifier == store }).map(\.token).max() {
+                cursor.tokenData = try JSONEncoder().encode(latest)
+                cursor.sourceStoreIdentifier = store
+            }
             return SyncRemoteChangeHistoryPolicy.verdict(
-                transactions: summaries,
+                transactions: sourceSummaries,
                 cursorHadToken: hadToken,
-                readWasTruncated: transactions.count >= SyncRemoteChangeHistoryPolicy.maximumTransactionsPerRead
+                readWasTruncated: truncated
             )
         } catch {
-            // An expired or unreadable token starts a new time window; the
-            // escalation it causes re-verifies everything before it.
-            cursor.tokenData = nil
-            cursor.since = now
-            logger.notice("Remote-change history could not be classified; treating it as an import")
-            return .invalidate
+            return startNewWindow(&cursor, now: now)
         }
+    }
+
+    /// An expired or unreadable token, or a doubt about the stores, starts a
+    /// new time window; the escalation it causes re-verifies everything
+    /// before it.
+    private static func startNewWindow(
+        _ cursor: inout SyncRemoteChangeHistoryCursor,
+        now: Date
+    ) -> SyncRemoteChangeHistoryPolicy.Verdict {
+        cursor.tokenData = nil
+        cursor.sourceStoreIdentifier = nil
+        cursor.since = now
+        logger.notice("Remote-change history could not be classified; treating it as an import")
+        return .invalidate
     }
 }
 
