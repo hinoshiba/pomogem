@@ -31,20 +31,20 @@ enum DurationPresentation {
             return String(
                 localized: "\(remainder)分",
                 table: "Common",
-                comment: "Focus duration under an hour. Argument: minutes"
+                comment: "A duration in whole minutes"
             )
         }
         if remainder == 0 {
             return String(
                 localized: "\(hours)時間",
                 table: "Common",
-                comment: "Focus duration in whole hours. Argument: hours"
+                comment: "A duration in whole hours"
             )
         }
         return String(
             localized: "\(hours)時間\(remainder)分",
             table: "Common",
-            comment: "Focus duration. Arguments: hours, then minutes"
+            comment: "A duration in hours and minutes"
         )
     }
 
