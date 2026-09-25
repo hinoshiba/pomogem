@@ -86,7 +86,8 @@ final class CloudActivityHistoryMarkerCacheTests: XCTestCase {
                         deleted.forEach { accumulator.deleted($0) }
                         pages.forEach { accumulator.page(.success($0)) }
                         return CloudActivityHistoryZoneRead(markers: try accumulator.markerMap(operation: .success(())),
-                                                            changeToken: token.map { Data($0.utf8) })
+                                                            changeToken: token.map { Data($0.utf8) },
+                                                            holdsUserRecords: accumulator.sawUserRecord)
                     }
                 })
         }
@@ -163,6 +164,74 @@ final class CloudActivityHistoryMarkerCacheTests: XCTestCase {
         let full = try await CloudActivityHistoryReader.read(source: server.source, key: key, cached: nil)
         XCTAssertEqual(sorted(full.markers), sorted(delta.markers))
         XCTAssertEqual(full.cache, delta.cache, "Both paths leave the same cache behind")
+    }
+
+    /// launch-06 after the merge with #35. A steady-state delta only reports
+    /// rows changed since the token, so the restore screen's evidence must
+    /// come from the cache: a user who quit during the iCloud restore sees
+    /// 「iCloudから記録を復元しています」 again on the next launch, not the
+    /// new-user tutorial.
+    func testADeltaReadAfterAFullReadStillReportsUserRecords() async throws {
+        let server = Server()
+        let key = makeKey()
+        server.zones = zones(zoneA, zoneB)
+        server.answers["\(zoneA.zoneName)@nil"] = .changes(
+            changed: [record(marker(1), name: "m1", zone: zoneA), session(name: "s1", zone: zoneA)],
+            deleted: [], pages: [false], token: "A1")
+        server.answers["\(zoneB.zoneName)@nil"] = .changes(changed: [], deleted: [], pages: [false], token: "B1")
+        let full = try await CloudActivityHistoryReader.read(source: server.source, key: key, cached: nil)
+        XCTAssertTrue(full.holdsUserRecords)
+        let cache = try XCTUnwrap(full.cache)
+        XCTAssertEqual(cache.zones.first { $0.zoneID == zoneA }?.holdsUserRecords, true)
+        XCTAssertEqual(cache.zones.first { $0.zoneID == zoneB }?.holdsUserRecords, false)
+
+        // Nothing changed since the tokens: the delta passes no row at all.
+        server.answers["\(zoneA.zoneName)@A1"] = .changes(changed: [], deleted: [], pages: [false], token: "A2")
+        server.answers["\(zoneB.zoneName)@B1"] = .changes(changed: [], deleted: [], pages: [false], token: "B2")
+        let delta = try await CloudActivityHistoryReader.read(source: server.source, key: key, cached: cache)
+        XCTAssertEqual(delta.mode, .delta)
+        XCTAssertTrue(delta.holdsUserRecords, "The cache remembers what the full traversal saw")
+        let next = try XCTUnwrap(delta.cache)
+        XCTAssertEqual(next.zones.first { $0.zoneID == zoneA }?.holdsUserRecords, true)
+
+        // And again from the cache the delta left behind.
+        server.answers["\(zoneA.zoneName)@A2"] = .changes(changed: [], deleted: [], pages: [false], token: "A3")
+        server.answers["\(zoneB.zoneName)@B2"] = .changes(changed: [], deleted: [], pages: [false], token: "B3")
+        let again = try await CloudActivityHistoryReader.read(source: server.source, key: key, cached: next)
+        XCTAssertTrue(again.holdsUserRecords)
+
+        // A full traversal recomputes it from nothing.
+        server.answers["\(zoneA.zoneName)@nil"] = .changes(changed: [], deleted: [], pages: [false], token: "A4")
+        server.answers["\(zoneB.zoneName)@nil"] = .changes(changed: [], deleted: [], pages: [false], token: "B4")
+        let recomputed = try await CloudActivityHistoryReader.read(source: server.source, key: key, cached: nil)
+        XCTAssertFalse(recomputed.holdsUserRecords)
+    }
+
+    func testADeltaThatPassesAUserRowAddsItToTheCache() async throws {
+        let server = Server()
+        let key = makeKey()
+        let cache = try await cachedFirstRead(server, key: key, m1: marker(1), m2: marker(2))
+        XCTAssertFalse(cache.zones.contains { $0.holdsUserRecords }, "Markers alone are not an earlier jar")
+        server.answers["\(zoneA.zoneName)@A1"] = .changes(changed: [], deleted: [], pages: [false], token: "A2")
+        server.answers["\(zoneB.zoneName)@B1"] = .changes(
+            changed: [session(name: "s1", zone: zoneB)], deleted: [], pages: [false], token: "B2")
+        let delta = try await CloudActivityHistoryReader.read(source: server.source, key: key, cached: cache)
+        XCTAssertTrue(delta.holdsUserRecords)
+        XCTAssertEqual(delta.cache?.zones.first { $0.zoneID == zoneB }?.holdsUserRecords, true)
+        XCTAssertEqual(delta.cache?.zones.first { $0.zoneID == zoneA }?.holdsUserRecords, false)
+    }
+
+    func testTheLiveClientCarriesUserRecordsThroughThePreflight() async throws {
+        let binding = ActiveAccountLocalBinding(namespace: AccountDataNamespace(),
+                                                accountFingerprint: String(repeating: "a", count: 64))!
+        for holds in [false, true] {
+            let client = CloudActivityHistoryClient(verifyAccount: { _ in }, readHistory: { _ in
+                CloudActivityHistoryMarkerRead(markers: [], holdsUserRecords: holds)
+            })
+            let observed = try await CloudActivityHistoryPreflight(client: client, timeout: 1)
+                .run(expectedBinding: binding, validateMount: {}, localMarker: { nil })
+            XCTAssertEqual(observed.holdsUserRecords, holds)
+        }
     }
 
     func testARefusedTokenStartsOverFromNil() async throws {
@@ -307,7 +376,7 @@ final class CloudActivityHistoryMarkerCacheTests: XCTestCase {
         let key = makeKey()
         let cache = CloudActivityHistoryMarkerCache(key: key, zones: [
             .init(zoneName: zoneA.zoneName, ownerName: zoneA.ownerName, changeToken: Data("A1".utf8),
-                  markers: [.init(recordName: "m1", snapshot: marker(1))])])
+                  markers: [.init(recordName: "m1", snapshot: marker(1))], holdsUserRecords: true)])
         XCTAssertNil(store.load(matching: key), "No file is the ordinary first state")
         store.save(cache)
         XCTAssertEqual(store.load(matching: key), cache)
@@ -315,11 +384,22 @@ final class CloudActivityHistoryMarkerCacheTests: XCTestCase {
                        "Marker dates survive bit-exactly")
         XCTAssertNil(store.load(matching: makeKey()), "Another binding never reads this file")
 
+        // A file from before zones remembered user rows does not decode, so
+        // the next read is a full traversal that recomputes them.
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: store.url)) as? [String: Any])
+        legacy["zones"] = (legacy["zones"] as? [[String: Any]])?.map { zone in
+            zone.filter { $0.key != "holdsUserRecords" }
+        }
+        try JSONSerialization.data(withJSONObject: legacy).write(to: store.url)
+        XCTAssertNil(store.load(matching: key))
+        store.save(cache)
+
         try Data("{ not json".utf8).write(to: store.url)
         XCTAssertNil(store.load(matching: key))
 
         let unreadableToken = CloudActivityHistoryMarkerCache(key: key, zones: [
-            .init(zoneName: zoneA.zoneName, ownerName: zoneA.ownerName, changeToken: Data(), markers: [])])
+            .init(zoneName: zoneA.zoneName, ownerName: zoneA.ownerName, changeToken: Data(), markers: [],
+                  holdsUserRecords: false)])
         store.save(unreadableToken)
         XCTAssertNil(store.load(matching: key), "An empty token is not a starting point")
 

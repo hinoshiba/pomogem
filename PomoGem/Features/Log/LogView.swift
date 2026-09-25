@@ -880,11 +880,135 @@ enum BoundedHistoryPolicy {
     }
 }
 
+/// 記録's 「今週」 and 「今月」 are the calendar week and month that contain
+/// today: the same 「今週」 the completion card and 積み上がり use, never a
+/// rolling seven days.
+enum LogPeriodPolicy {
+    static func interval(
+        for period: LogView.Period,
+        now: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> DateInterval? {
+        switch period {
+        case .week:
+            WeeklyProgressPolicy.week(containing: now, calendar: calendar)
+        case .month:
+            calendar.dateInterval(of: .month, for: now)
+        }
+    }
+
+    /// Every day of the period, including the days still to come, so the
+    /// chart reads like a calendar rather than a window that slides.
+    static func days(
+        in interval: DateInterval,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> [Date] {
+        var days: [Date] = []
+        var day = calendar.startOfDay(for: interval.start)
+        while day < interval.end, days.count < 32 {
+            days.append(day)
+            guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+            day = next
+        }
+        return days
+    }
+
+    /// 「9月21日(日)〜9月27日(土)」: says which days 「今週」 covers.
+    static func rangeLabel(
+        for interval: DateInterval,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> String {
+        let lastDay = calendar.date(byAdding: .day, value: -1, to: interval.end)
+            ?? interval.start
+        var style = Date.FormatStyle.dateTime.month().day().weekday(.abbreviated)
+        style.locale = calendar.locale ?? .autoupdatingCurrent
+        style.calendar = calendar
+        style.timeZone = calendar.timeZone
+        return "\(interval.start.formatted(style))〜\(lastDay.formatted(style))"
+    }
+}
+
+/// The period tiles in 記録. Totals include every source; the split says how
+/// much of it was self-reported and how much came from Screen Time, so the
+/// measured part matches 「今週の実測」 in 積み上がり.
+struct LogPeriodSummary: Equatable {
+    let totalSeconds: Int
+    let grams: Int
+    /// Timers that ran to their end (「完走ポモ」).
+    let timerCompletionCount: Int
+    let selfReportedGrams: Int
+    let screenTimeSeconds: Int
+
+    init(sessions: [StudySession]) {
+        totalSeconds = NonnegativeIntPolicy.sum(sessions.map(\.seconds))
+        grams = NonnegativeIntPolicy.sum(sessions.map(\.grams))
+        timerCompletionCount = sessions
+            .filter { $0.effectiveSource.isTimerCompletion }
+            .count
+        selfReportedGrams = NonnegativeIntPolicy.sum(
+            sessions.filter { $0.effectiveSource.isSelfReported }.map(\.grams)
+        )
+        screenTimeSeconds = NonnegativeIntPolicy.sum(
+            sessions.filter { $0.effectiveSource == .screenTime }.map(\.seconds)
+        )
+    }
+}
+
+/// When 記録 reloads. Three loads, each keyed by only what it depends on:
+/// - the period page follows the 今週／今月 toggle, and is all a toggle reads;
+/// - the newest thirty records, milestones and aggregate pebbles do not
+///   depend on the period;
+/// - the twelve month summaries are read off the main thread through
+///   AccumulationTimelineLoader, and change only with the month.
+/// None reloads for an inactive flip (closing Control Center or the
+/// notification shade); coming back from the background reloads all three.
+enum LogHistoryLoadPolicy {
+    static func isVisible(_ scenePhase: ScenePhase) -> Bool {
+        scenePhase != .background
+    }
+
+    static func periodKey(
+        epochID: UUID?,
+        period: LogView.Period,
+        scenePhase: ScenePhase,
+        isCloudVerificationPending: Bool
+    ) -> String {
+        "\(epochID?.uuidString ?? "pre-reset")|\(period.rawValue)|\(isVisible(scenePhase))|\(isCloudVerificationPending)"
+    }
+
+    static func recentHistoryKey(
+        epochID: UUID?,
+        scenePhase: ScenePhase,
+        isCloudVerificationPending: Bool
+    ) -> String {
+        "\(epochID?.uuidString ?? "pre-reset")|\(isVisible(scenePhase))|\(isCloudVerificationPending)"
+    }
+
+    static func monthSummaryKey(
+        epochID: UUID?,
+        scenePhase: ScenePhase,
+        isCloudVerificationPending: Bool,
+        now: Date = .now,
+        calendar: Calendar = PomoGemCalendar.gregorian
+    ) -> String {
+        let month = calendar.dateInterval(of: .month, for: now)?.start
+            .timeIntervalSinceReferenceDate ?? 0
+        return "\(epochID?.uuidString ?? "pre-reset")|\(isVisible(scenePhase))|\(isCloudVerificationPending)|\(month)"
+    }
+}
+
 struct LogView: View {
     enum Period: String, CaseIterable, Identifiable {
-        case week = "週"
-        case month = "月"
+        case week
+        case month
         var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .week: String(localized: "今週", table: "Log", comment: "Log period picker: the calendar week that contains today")
+            case .month: String(localized: "今月", table: "Log", comment: "Log period picker: the calendar month that contains today")
+            }
+        }
     }
 
     @Environment(\.modelContext) private var modelContext
@@ -910,9 +1034,18 @@ struct LogView: View {
     @State private var periodPageIsPartial = false
     @State private var achievementPageIsPartial = false
     @State private var aggregatePageIsPartial = false
-    @State private var loadError: String?
+    @State private var periodLoadFailed = false
+    @State private var recentHistoryLoadFailed = false
+    /// False until the first page has loaded, so the first frame shows a
+    /// placeholder instead of 「この期間の粒は、まだありません。」 over years of
+    /// history that simply have not been read yet.
+    @State private var hasLoadedPeriod = false
+    /// The same for 「一粒積むと、ここに記録が残ります。」 under 最近の記録.
+    @State private var hasLoadedRecentHistory = false
     @State private var mutationError: String?
     @State private var selectedAchievement: AchievementEditSelection?
+    @State private var selectedDay: HistoryDaySelection?
+    @State private var showsPastHistory = false
     @State private var pendingAchievementUndo: AchievementStoneRevisionSnapshot?
 
     init() {
@@ -940,10 +1073,23 @@ struct LogView: View {
         ScrollView {
             LazyVStack(spacing: 16) {
                 Picker("表示期間", selection: $period) {
-                    ForEach(Period.allCases) { item in Text(item.rawValue).tag(item) }
+                    ForEach(Period.allCases) { item in Text(item.title).tag(item) }
                 }
                 .pickerStyle(.segmented)
-                .padding(.bottom, 2)
+
+                if let interval = LogPeriodPolicy.interval(for: period) {
+                    Text(LogPeriodPolicy.rangeLabel(for: interval))
+                        .font(.caption)
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, 2)
+                        .accessibilityLabel(String(
+                            localized: "\(period.title)、\(LogPeriodPolicy.rangeLabel(for: interval))",
+                            table: "Log",
+                            comment: "VoiceOver: the period (今週 or 今月), then its date range"
+                        ))
+                        .accessibilityIdentifier("log.period-range")
+                }
 
                 achievementUndoNotice
 
@@ -966,6 +1112,7 @@ struct LogView: View {
                 }
 
                 summaryGrid
+                    .redacted(reason: hasLoadedPeriod ? [] : .placeholder)
                 // A chosen, real-world milestone is stronger evidence of
                 // progress than charts or a random visual variant. Keep it
                 // near the top of the log so a qualification or completed
@@ -989,6 +1136,18 @@ struct LogView: View {
         .toolbarTitleDisplayMode(.large)
         .fullScreenCover(item: $selectedWrappedMonth) { month in
             WrappedView(month: month)
+        }
+        .sheet(item: $selectedDay) { day in
+            DayHistorySheet(
+                dayStart: day.dayStart,
+                currentEpochID: ActivityResetPolicy.currentEpochID(from: resetSnapshots),
+                calendar: PomoGemCalendar.gregorian
+            )
+            .environment(\.dynamicTypeSize, dynamicTypeSize)
+        }
+        .sheet(isPresented: $showsPastHistory) {
+            PastHistorySheet()
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .sheet(item: $selectedAchievement, onDismiss: {
             selectedAchievement = nil
@@ -1016,44 +1175,91 @@ struct LogView: View {
             Text(mutationError ?? "もう一度お試しください。")
         }
         .task(id: loadKey) {
-            loadBoundedHistory()
+            loadPeriodPage()
+        }
+        .task(id: recentHistoryKey) {
+            loadRecentHistory()
+        }
+        .task(id: monthSummaryKey) {
+            await loadMonthSummaries(for: monthSummaryKey)
         }
     }
 
     private var summaryGrid: some View {
-        let measured = filteredSessions.filter { $0.effectiveSource.isMeasured }
-        let totalMinutes = NonnegativeIntPolicy.sum(
-            filteredSessions.map(\.seconds)
-        ) / 60
-        return Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: 10) {
-                    summaryTiles(measuredCount: measured.count, totalMinutes: totalMinutes)
-                }
-            } else {
-                HStack(spacing: 10) {
-                    summaryTiles(measuredCount: measured.count, totalMinutes: totalMinutes)
+        let summary = LogPeriodSummary(sessions: filteredSessions)
+        return VStack(alignment: .leading, spacing: 8) {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: 10) {
+                        summaryTiles(summary)
+                    }
+                } else {
+                    HStack(spacing: 10) {
+                        summaryTiles(summary)
+                    }
                 }
             }
+            summaryComposition(summary)
         }
     }
 
     @ViewBuilder
-    private func summaryTiles(measuredCount: Int, totalMinutes: Int) -> some View {
-        SummaryTile(label: periodPageIsPartial ? "表示分の時間" : "積んだ時間", value: formatMinutes(totalMinutes), symbol: "hourglass")
-        SummaryTile(label: periodPageIsPartial ? "表示分の完走" : "完走ポモ", value: "\(measuredCount)", symbol: "checkmark.circle")
+    private func summaryTiles(_ summary: LogPeriodSummary) -> some View {
+        SummaryTile(label: periodPageIsPartial ? "表示分の時間" : "積んだ時間", value: formatMinutes(summary.totalSeconds / 60), symbol: "hourglass", identifier: "log.summary.time")
+        // Timers that ran to their end; Screen Time chunks are not completions.
+        SummaryTile(label: periodPageIsPartial ? "表示分の完走" : "完走ポモ", value: "\(summary.timerCompletionCount)", symbol: "checkmark.circle", identifier: "log.summary.completions")
         SummaryTile(
-            label: periodPageIsPartial ? "表示分の質量" : "今期の質量",
-            value: formatMass(NonnegativeIntPolicy.sum(filteredSessions.map(\.grams))),
-            symbol: "scalemass"
+            label: periodPageIsPartial
+                ? "表示分の質量"
+                : (period == .week
+                    ? String(localized: "今週の質量", table: "Log", comment: "Log tile: mass added this calendar week")
+                    : String(localized: "今月の質量", table: "Log", comment: "Log tile: mass added this calendar month")),
+            value: formatMass(summary.grams),
+            symbol: "scalemass",
+            identifier: "log.summary.mass"
         )
+    }
+
+    /// Only shown when it applies, so a timer-only week stays uncluttered.
+    @ViewBuilder
+    private func summaryComposition(_ summary: LogPeriodSummary) -> some View {
+        if summary.selfReportedGrams > 0 {
+            Label(
+                String(
+                    localized: "このうち自己申告 \(formatMass(summary.selfReportedGrams))",
+                    table: "Log",
+                    comment: "Log: how much of the period's mass was self-reported; the argument is a mass such as 300g"
+                ),
+                systemImage: "hand.tap"
+            )
+            .font(.caption)
+            .foregroundStyle(PomoGemTheme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("log.self-reported-share")
+        }
+        if summary.screenTimeSeconds > 0 {
+            Label(
+                String(
+                    localized: "Screen Timeの\(DurationPresentation.minutesLabel(seconds: summary.screenTimeSeconds))は、完走ポモに含みません",
+                    table: "Log",
+                    comment: "Log: Screen Time learning in the period is not counted as completed timers; the argument is a duration"
+                ),
+                systemImage: "apps.iphone"
+            )
+            .font(.caption)
+            .foregroundStyle(PomoGemTheme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("log.screen-time-share")
+        }
     }
 
     private var massChart: some View {
         let values = dailyMass
         let descriptor = DailyMassChartDescriptor(
             values: values,
-            periodTitle: period == .week ? "直近7日" : "今月",
+            periodTitle: period.title,
             isPartial: periodPageIsPartial
         )
         return PomoGemCard {
@@ -1063,7 +1269,9 @@ struct LogView: View {
                     Text("質量の推移")
                         .font(PomoGemTheme.brand(20))
                 }
-                if values.allSatisfy({ $0.grams == 0 }) {
+                if !hasLoadedPeriod {
+                    HistoryLoadingPlaceholder()
+                } else if values.allSatisfy({ $0.grams == 0 }) {
                     EmptyChartMessage(text: "この期間の粒は、まだありません。")
                         .accessibilityChartDescriptor(descriptor)
                 } else {
@@ -1096,10 +1304,53 @@ struct LogView: View {
                         }
                     }
                     .frame(height: 180)
+                    .chartOverlay { proxy in
+                        GeometryReader { geometry in
+                            Rectangle()
+                                .fill(.clear)
+                                .contentShape(Rectangle())
+                                .onTapGesture { location in
+                                    openDay(at: location, proxy: proxy, geometry: geometry, values: values)
+                                }
+                        }
+                    }
                     .accessibilityChartDescriptor(descriptor)
+                    .accessibilityIdentifier("log.mass-chart")
+                    .accessibilityActions {
+                        ForEach(values.filter { $0.grams > 0 }) { item in
+                            Button(String(
+                                localized: "\(item.date.formatted(.dateTime.month().day()))の記録を見る",
+                                table: "Log",
+                                comment: "VoiceOver action on the mass chart; the argument is a date such as 9月24日"
+                            )) {
+                                selectedDay = HistoryDaySelection(dayStart: item.date)
+                            }
+                        }
+                    }
+                    Text("棒を選ぶと、その日の記録を一件ずつ見られます。", tableName: "Log")
+                        .font(.caption)
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
+    }
+
+    /// A tap anywhere in a day's column opens that day, when it has records.
+    private func openDay(
+        at location: CGPoint,
+        proxy: ChartProxy,
+        geometry: GeometryProxy,
+        values: [DailyMass]
+    ) {
+        guard let plotFrame = proxy.plotFrame else { return }
+        let origin = geometry[plotFrame].origin
+        guard let date = proxy.value(atX: location.x - origin.x, as: Date.self) else { return }
+        let calendar = Calendar.autoupdatingCurrent
+        guard let day = values.first(where: { calendar.isDate($0.date, inSameDayAs: date) }),
+              day.grams > 0
+        else { return }
+        selectedDay = HistoryDaySelection(dayStart: day.date)
     }
 
     private var subjectComposition: some View {
@@ -1110,7 +1361,9 @@ struct LogView: View {
                     Text("テーマの構成")
                         .font(PomoGemTheme.brand(20))
                 }
-                if subjectMass.isEmpty {
+                if !hasLoadedPeriod {
+                    HistoryLoadingPlaceholder()
+                } else if subjectMass.isEmpty {
                     EmptyChartMessage(text: "積んだテーマがここに並びます。")
                 } else {
                     GeometryReader { proxy in
@@ -1296,6 +1549,33 @@ struct LogView: View {
                         }
                         .buttonStyle(PomoGemRowButtonStyle())
                     }
+
+                    // The twelve months end here; older months are one step
+                    // away instead of only at the bottom of 最近の記録.
+                    Divider().overlay(PomoGemTheme.glassEdge.opacity(0.08))
+                    Button {
+                        showsPastHistory = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "calendar")
+                                .foregroundStyle(PomoGemTheme.amber)
+                                .frame(width: 28)
+                                .accessibilityHidden(true)
+                            Text("もっと前の月を見る", tableName: "Log", comment: "Log: row under the twelve monthly jars that opens 年月 for older months")
+                                .font(.subheadline.weight(.bold))
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(PomoGemTheme.muted)
+                                .accessibilityHidden(true)
+                        }
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PomoGemRowButtonStyle())
+                    .accessibilityHint(Text("年と月を選んで、日ごとの記録までたどれます", tableName: "Log"))
+                    .accessibilityIdentifier(HistoryDrillDownAccessibilityID.pastHistoryFromMonths)
                 }
             }
         }
@@ -1384,35 +1664,46 @@ struct LogView: View {
                 Spacer()
                 Text("最新30件").font(.caption).foregroundStyle(PomoGemTheme.muted)
             }
-            if recentSessions.isEmpty {
+            if !hasLoadedRecentHistory {
+                PomoGemCard { HistoryLoadingPlaceholder() }
+            } else if recentSessions.isEmpty {
                 PomoGemCard { EmptyChartMessage(text: "一粒積むと、ここに記録が残ります。") }
             } else {
                 VStack(spacing: 0) {
                     ForEach(recentSessions.prefix(BoundedHistoryPolicy.recentSessionLimit)) { session in
-                        HistoryRow(session: session)
+                        HistorySessionRow(item: HistorySessionSummary(session))
                         if session.id != recentSessions.prefix(BoundedHistoryPolicy.recentSessionLimit).last?.id {
                             Divider().overlay(PomoGemTheme.glassEdge.opacity(0.08)).padding(.leading, 48)
                         }
                     }
                 }
                 .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 16))
+
+                // The list stays bounded; older history is one step away,
+                // by year, month and day.
+                Button {
+                    showsPastHistory = true
+                } label: {
+                    Label(
+                        String(localized: "過去の記録を月・日ごとに見る", table: "Log", comment: "Log: opens 年月 to reach older history by month and day"),
+                        systemImage: "calendar"
+                    )
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PomoGemSecondaryButtonStyle())
+                .accessibilityHint(Text("年と月を選んで、日ごとの記録までたどれます", tableName: "Log"))
+                .accessibilityIdentifier(HistoryDrillDownAccessibilityID.pastHistory)
             }
         }
     }
 
     private var dailyMass: [DailyMass] {
         let calendar = Calendar.autoupdatingCurrent
-        let days: [Date]
-        switch period {
-        case .week:
-            let today = calendar.startOfDay(for: .now)
-            days = (0..<7).compactMap { calendar.date(byAdding: .day, value: $0 - 6, to: today) }
-        case .month:
-            guard let interval = calendar.dateInterval(of: .month, for: .now),
-                  let range = calendar.range(of: .day, in: .month, for: .now)
-            else { return [] }
-            days = range.compactMap { day in calendar.date(byAdding: .day, value: day - 1, to: interval.start) }
-        }
+        guard let interval = LogPeriodPolicy.interval(
+            for: period,
+            calendar: calendar
+        ) else { return [] }
+        let days = LogPeriodPolicy.days(in: interval, calendar: calendar)
         return days.map { day in
             DailyMass(
                 date: day,
@@ -1454,39 +1745,74 @@ struct LogView: View {
     }
 
     private var loadKey: String {
-        let epoch = ActivityResetPolicy.currentEpochID(from: resetSnapshots)?.uuidString ?? "pre-reset"
-        return "\(epoch)|\(period.rawValue)|\(scenePhase == .active)|\(aggregateProjectionPresentation.isCloudVerificationPending)"
+        LogHistoryLoadPolicy.periodKey(
+            epochID: ActivityResetPolicy.currentEpochID(from: resetSnapshots),
+            period: period,
+            scenePhase: scenePhase,
+            isCloudVerificationPending: aggregateProjectionPresentation.isCloudVerificationPending
+        )
     }
 
-    @MainActor
-    private func loadBoundedHistory() {
-        guard scenePhase == .active else { return }
-        let epochID = ActivityResetPolicy.currentEpochID(from: resetSnapshots)
-        let calendar = Calendar.autoupdatingCurrent
-        let now = Date.now
-        let periodStart: Date
-        switch period {
-        case .week:
-            periodStart = calendar.date(
-                byAdding: .day,
-                value: -6,
-                to: calendar.startOfDay(for: now)
-            ) ?? .distantPast
-        case .month:
-            periodStart = calendar.dateInterval(of: .month, for: now)?.start ?? .distantPast
-        }
+    private var recentHistoryKey: String {
+        LogHistoryLoadPolicy.recentHistoryKey(
+            epochID: ActivityResetPolicy.currentEpochID(from: resetSnapshots),
+            scenePhase: scenePhase,
+            isCloudVerificationPending: aggregateProjectionPresentation.isCloudVerificationPending
+        )
+    }
 
+    private var loadError: String? {
+        guard periodLoadFailed || recentHistoryLoadFailed else { return nil }
+        return "記録の一部を読み込めませんでした。もう一度この画面を開いてください。"
+    }
+
+    private var monthSummaryKey: String {
+        LogHistoryLoadPolicy.monthSummaryKey(
+            epochID: ActivityResetPolicy.currentEpochID(from: resetSnapshots),
+            scenePhase: scenePhase,
+            isCloudVerificationPending: aggregateProjectionPresentation.isCloudVerificationPending
+        )
+    }
+
+    /// The 今週／今月 page: the only read a toggle causes. Bounded, on the
+    /// main thread (its rows are the SwiftData objects the tiles, chart and
+    /// theme bar use).
+    @MainActor
+    private func loadPeriodPage() {
+        guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
+        defer { hasLoadedPeriod = true }
+        let epochID = ActivityResetPolicy.currentEpochID(from: resetSnapshots)
+        let periodInterval = LogPeriodPolicy.interval(
+            for: period,
+            now: .now,
+            calendar: .autoupdatingCurrent
+        )
         do {
             let periodPage = try BoundedHistoryPolicy.resolvedSessionPage(
                 context: modelContext,
                 epochID: epochID,
-                start: periodStart,
+                start: periodInterval?.start ?? .distantPast,
+                end: periodInterval?.end,
                 order: .reverse,
                 logicalLimit: BoundedHistoryPolicy.periodSessionLimit
             )
             periodPageIsPartial = periodPage.isPartial
             periodSessions = periodPage.sessions
+            periodLoadFailed = false
+        } catch {
+            periodLoadFailed = true
+        }
+    }
 
+    /// Everything 記録 shows that does not depend on 今週／今月: the newest
+    /// thirty records, milestones and aggregate pebbles. Bounded, on the main
+    /// thread; a toggle never re-reads it.
+    @MainActor
+    private func loadRecentHistory() {
+        guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
+        defer { hasLoadedRecentHistory = true }
+        let epochID = ActivityResetPolicy.currentEpochID(from: resetSnapshots)
+        do {
             let recentPage = try BoundedHistoryPolicy.resolvedSessionPage(
                 context: modelContext,
                 epochID: epochID,
@@ -1523,44 +1849,47 @@ struct LogView: View {
                 strata = []
             }
 
-            monthSummaries = try loadMonthSummaries(epochID: epochID, now: now, calendar: calendar)
-            loadError = nil
+            recentHistoryLoadFailed = false
         } catch {
-            loadError = "記録の一部を読み込めませんでした。もう一度この画面を開いてください。"
+            recentHistoryLoadFailed = true
         }
     }
 
+    /// Reads through AccumulationTimelineLoader, off the main thread. On an
+    /// error the section stays hidden, as it does for a person with no history.
     @MainActor
-    private func loadMonthSummaries(
-        epochID: UUID?,
-        now: Date,
-        calendar: Calendar
-    ) throws -> [LogMonthSummary] {
-        guard let currentStart = calendar.dateInterval(of: .month, for: now)?.start else {
-            return []
+    private func loadMonthSummaries(for key: String) async {
+        guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
+        let epochID = ActivityResetPolicy.currentEpochID(from: resetSnapshots)
+        // Gregorian like the month titles, 年月, Wrapped and the card, so a
+        // row opens the same month it is labelled with on any calendar.
+        let calendar = PomoGemCalendar.gregorian
+        let now = Date.now
+        do {
+            let summaries = try await AccumulationTimelineLoader.read(
+                from: modelContext.container
+            ) { repository in
+                try await repository.recentMonthSummaries(
+                    endingAt: now,
+                    currentEpochID: epochID,
+                    calendar: calendar
+                )
+            }
+            try Task.checkCancellation()
+            guard key == monthSummaryKey else { return }
+            monthSummaries = summaries.map {
+                LogMonthSummary(
+                    month: WrappedMonth(containing: $0.monthStart, calendar: calendar),
+                    minutes: $0.seconds / 60,
+                    pebbleCount: $0.sessionCount
+                )
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            guard key == monthSummaryKey else { return }
+            monthSummaries = []
         }
-        var summaries: [LogMonthSummary] = []
-        for offset in 0..<12 {
-            guard let start = calendar.date(byAdding: .month, value: -offset, to: currentStart),
-                  let end = calendar.date(byAdding: .month, value: 1, to: start)
-            else { continue }
-            let page = try BoundedHistoryPolicy.resolvedSessionPage(
-                context: modelContext,
-                epochID: epochID,
-                start: start,
-                end: end,
-                order: .reverse,
-                logicalLimit: BoundedHistoryPolicy.periodSessionLimit
-            )
-            guard !page.sessions.isEmpty else { continue }
-            summaries.append(LogMonthSummary(
-                month: WrappedMonth(containing: start, calendar: calendar),
-                minutes: NonnegativeIntPolicy.sum(page.sessions.map(\.seconds)) / 60,
-                pebbleCount: page.sessions.count,
-                isPartial: page.isPartial
-            ))
-        }
-        return summaries
     }
 
     private func editableSubjects(
@@ -1583,27 +1912,40 @@ struct LogView: View {
             let values = try achievementRevisionRows(for: selection.id, epochID: selection.dataEpochID)
             guard let canonical = AchievementStonePolicy.canonicalStone(from: values),
                   canonical.deletedAt == nil else {
-                loadBoundedHistory()
+                loadRecentHistory()
                 return "この記念石は別の端末ですでに削除されています。"
             }
-            guard let subject = subjects.first(where: { $0.id == draft.subjectID }) else {
-                return "選んだテーマが見つかりません。テーマを選び直してください。"
+            let result: AchievementStoneRevisionPolicy.MutationResult
+            if let subjectID = draft.subjectID {
+                guard let subject = subjects.first(where: { $0.id == subjectID }) else {
+                    return "選んだテーマが見つかりません。テーマを選び直してください。"
+                }
+                result = AchievementStoneRevisionPolicy.edit(
+                    values,
+                    subject: subject,
+                    kind: draft.kind,
+                    note: draft.note,
+                    achievedAt: draft.achievedAt
+                )
+            } else {
+                // The stone's own theme is not offered (deleted in Settings).
+                // Keep it exactly as it is rather than relabelling the stone.
+                result = AchievementStoneRevisionPolicy.editKeepingSubject(
+                    values,
+                    kind: draft.kind,
+                    note: draft.note,
+                    achievedAt: draft.achievedAt
+                )
             }
-            guard AchievementStoneRevisionPolicy.edit(
-                values,
-                subject: subject,
-                kind: draft.kind,
-                note: draft.note,
-                achievedAt: draft.achievedAt
-            ) == .applied else {
+            guard result == .applied else {
                 return "この記念石の編集履歴が上限に達したため、編集できませんでした。"
             }
             try modelContext.save()
-            loadBoundedHistory()
+            loadRecentHistory()
             return nil
         } catch {
             modelContext.rollback()
-            loadBoundedHistory()
+            loadRecentHistory()
             return "編集内容を保存できませんでした。通信状態を確認して、もう一度お試しください。"
         }
     }
@@ -1618,7 +1960,7 @@ struct LogView: View {
                 return "この記念石は見つかりませんでした。"
             }
             guard canonical.deletedAt == nil else {
-                loadBoundedHistory()
+                loadRecentHistory()
                 return "この記念石は別の端末ですでに削除されています。"
             }
             let snapshot = AchievementStoneRevisionSnapshot(canonical)
@@ -1627,11 +1969,11 @@ struct LogView: View {
             }
             try modelContext.save()
             pendingAchievementUndo = snapshot
-            loadBoundedHistory()
+            loadRecentHistory()
             return nil
         } catch {
             modelContext.rollback()
-            loadBoundedHistory()
+            loadRecentHistory()
             return "記念石を削除できませんでした。通信状態を確認して、もう一度お試しください。"
         }
     }
@@ -1651,7 +1993,7 @@ struct LogView: View {
             }
             if canonical.deletedAt == nil {
                 pendingAchievementUndo = nil
-                loadBoundedHistory()
+                loadRecentHistory()
                 return
             }
             let subject = snapshot.subjectID.flatMap { subjectID in
@@ -1667,10 +2009,10 @@ struct LogView: View {
             }
             try modelContext.save()
             pendingAchievementUndo = nil
-            loadBoundedHistory()
+            loadRecentHistory()
         } catch {
             modelContext.rollback()
-            loadBoundedHistory()
+            loadRecentHistory()
             mutationError = "削除した記念石を元に戻せませんでした。通信状態を確認して、もう一度お試しください。"
         }
     }
@@ -1714,15 +2056,11 @@ private struct LogMonthSummary: Identifiable {
     let month: WrappedMonth
     let minutes: Int
     let pebbleCount: Int
-    let isPartial: Bool
 
     var id: Date { month.id }
 
     func rowLabel(formatMinutes: (Int) -> String) -> String {
-        if isPartial {
-            return "表示分 \(formatMinutes(minutes))・\(pebbleCount)粒"
-        }
-        return "\(formatMinutes(minutes))・\(pebbleCount)粒"
+        "\(formatMinutes(minutes))・\(pebbleCount)粒"
     }
 }
 
@@ -2030,6 +2368,8 @@ private struct SummaryTile: View {
     let label: String
     let value: String
     let symbol: String
+    /// Stable across the 今週／今月 wording, for the device audit.
+    let identifier: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -2041,6 +2381,18 @@ private struct SummaryTile: View {
         .padding(13)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 14))
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+/// Neutral while the first page loads: never the empty-history copy.
+private struct HistoryLoadingPlaceholder: View {
+    var body: some View {
+        ProgressView()
+            .tint(PomoGemTheme.amber)
+            .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
+            .accessibilityLabel(Text("記録を読み込み中", tableName: "Log", comment: "VoiceOver: Log is loading"))
+            .accessibilityIdentifier("log.loading")
     }
 }
 
@@ -2076,6 +2428,8 @@ private struct AchievementEditSelection: Identifiable {
     let id: UUID
     let dataEpochID: UUID?
     let subjectID: UUID?
+    /// The stone still points at a theme that was deleted in Settings.
+    let subjectIsDeleted: Bool
     let subjectName: String
     let subjectColorHex: String
     let kind: AchievementKind
@@ -2086,6 +2440,7 @@ private struct AchievementEditSelection: Identifiable {
         id = stone.id
         dataEpochID = stone.dataEpochID
         subjectID = stone.subject?.id
+        subjectIsDeleted = stone.subject?.deletedAt != nil
         subjectName = stone.displaySubjectName
         subjectColorHex = stone.displaySubjectColorHex
         kind = stone.kind
@@ -2095,7 +2450,8 @@ private struct AchievementEditSelection: Identifiable {
 }
 
 private struct AchievementEditDraft {
-    let subjectID: UUID
+    /// `nil` keeps the stone's current theme link and name/color snapshots.
+    let subjectID: UUID?
     let kind: AchievementKind
     let note: String
     let achievedAt: Date
@@ -2106,6 +2462,12 @@ private struct AchievementEditorSheet: View {
     let subjects: [Subject]
     let onSave: (AchievementEditDraft) -> String?
     let onDelete: () -> String?
+
+    /// Stands for "keep this stone's theme as it is" when that theme is not
+    /// among the offered ones (deleted in Settings, or not linked on this
+    /// iPhone). It never equals a live theme's ID, so "a theme is selected"
+    /// still decides whether 変更を保存 is available.
+    private let keptSubjectChoiceID: UUID?
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedSubjectID: UUID?
@@ -2126,13 +2488,27 @@ private struct AchievementEditorSheet: View {
         self.subjects = subjects
         self.onSave = onSave
         self.onDelete = onDelete
-        let initialSubjectID = selection.subjectID.flatMap { id in
+        // Never fall back to an unrelated theme: a stone whose theme is not
+        // offered starts on "keep as it is", so saving a memo or date fix
+        // cannot silently relabel it. Any live theme stays one tap away.
+        let offeredSubjectID = selection.subjectID.flatMap { id in
             subjects.contains(where: { $0.id == id }) ? id : nil
-        } ?? subjects.first(where: {
-            $0.safeDisplayName == selection.subjectName
-                && $0.colorHex.caseInsensitiveCompare(selection.subjectColorHex) == .orderedSame
-        })?.id ?? subjects.first?.id
-        _selectedSubjectID = State(initialValue: initialSubjectID)
+        }
+        // A stone that lost its link (never a deleted theme) may relink to
+        // the live theme with the same name and color: nothing visible moves.
+        let matchingSubjectID = selection.subjectID == nil
+            ? subjects.first(where: {
+                $0.safeDisplayName == selection.subjectName
+                    && $0.colorHex.caseInsensitiveCompare(selection.subjectColorHex) == .orderedSame
+            })?.id
+            : nil
+        let keptChoiceID = offeredSubjectID == nil && matchingSubjectID == nil
+            ? (selection.subjectID ?? selection.id)
+            : nil
+        keptSubjectChoiceID = keptChoiceID
+        _selectedSubjectID = State(
+            initialValue: offeredSubjectID ?? matchingSubjectID ?? keptChoiceID
+        )
         _kind = State(initialValue: selection.kind)
         _note = State(initialValue: selection.note)
         _achievedAt = State(initialValue: min(selection.achievedAt, .now))
@@ -2140,6 +2516,26 @@ private struct AchievementEditorSheet: View {
 
     private var selectedSubject: Subject? {
         subjects.first { $0.id == selectedSubjectID }
+    }
+
+    private var keepsOriginalSubject: Bool {
+        keptSubjectChoiceID != nil && selectedSubjectID == keptSubjectChoiceID
+    }
+
+    private var selectedSubjectTitle: String? {
+        keepsOriginalSubject ? selection.subjectName : selectedSubject?.safeDisplayName
+    }
+
+    private var keptSubjectMenuTitle: String {
+        selection.subjectIsDeleted
+            ? String(localized: "\(selection.subjectName)（削除したテーマ）", table: "Log", comment: "Milestone editor theme menu: keep the milestone's deleted theme; the argument is the theme name")
+            : String(localized: "\(selection.subjectName)（今のまま）", table: "Log", comment: "Milestone editor theme menu: keep the milestone's theme as it is; the argument is the theme name")
+    }
+
+    private var keptSubjectNotice: String {
+        selection.subjectIsDeleted
+            ? String(localized: "「\(selection.subjectName)」は設定で削除したテーマです。ほかのテーマを選ばなければ、このまま残ります。", table: "Log", comment: "Milestone editor: why a deleted theme is shown; the argument is the theme name")
+            : String(localized: "「\(selection.subjectName)」は今のテーマ一覧にありません。ほかのテーマを選ばなければ、このまま残ります。", table: "Log", comment: "Milestone editor: why a theme missing from the list is shown; the argument is the theme name")
     }
 
     var body: some View {
@@ -2280,6 +2676,17 @@ private struct AchievementEditorSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             editorLabel("テーマ")
             Menu {
+                if let keptSubjectChoiceID {
+                    Button {
+                        selectedSubjectID = keptSubjectChoiceID
+                    } label: {
+                        if keepsOriginalSubject {
+                            Label(keptSubjectMenuTitle, systemImage: "checkmark")
+                        } else {
+                            Text(keptSubjectMenuTitle)
+                        }
+                    }
+                }
                 ForEach(subjects) { subject in
                     Button {
                         selectedSubjectID = subject.id
@@ -2293,19 +2700,31 @@ private struct AchievementEditorSheet: View {
                 }
             } label: {
                 editorMenuLabel(
-                    title: selectedSubject?.safeDisplayName ?? "テーマを選択",
-                    colorHex: selectedSubject?.colorHex ?? Constants.Color.textMute,
+                    title: selectedSubjectTitle ?? "テーマを選択",
+                    colorHex: keepsOriginalSubject
+                        ? selection.subjectColorHex
+                        : (selectedSubject?.colorHex ?? Constants.Color.textMute),
                     symbol: "folder.fill"
                 )
             }
-            .disabled(subjects.isEmpty)
-            .accessibilityLabel("テーマ、\(selectedSubject?.safeDisplayName ?? "未選択")")
+            .disabled(subjects.isEmpty && keptSubjectChoiceID == nil)
+            .accessibilityLabel("テーマ、\(selectedSubjectTitle ?? "未選択")")
             .accessibilityHint(
                 subjects.isEmpty
-                    ? "テーマがないため変更できません"
+                    ? (keptSubjectChoiceID == nil
+                        ? "テーマがないため変更できません"
+                        : String(localized: "ほかに選べるテーマはありません", table: "Log", comment: "VoiceOver hint: no other theme to choose"))
                     : "成果を結びつけるテーマを変更できます"
             )
             .accessibilityIdentifier("achievement.editor.subject")
+
+            if keepsOriginalSubject {
+                Text(keptSubjectNotice)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("achievement.editor.kept-subject")
+            }
         }
     }
 
@@ -2367,7 +2786,7 @@ private struct AchievementEditorSheet: View {
         guard !isCommitting, let selectedSubjectID else { return }
         isCommitting = true
         errorMessage = onSave(AchievementEditDraft(
-            subjectID: selectedSubjectID,
+            subjectID: selectedSubjectID == keptSubjectChoiceID ? nil : selectedSubjectID,
             kind: kind,
             note: note,
             achievedAt: achievedAt
@@ -2431,73 +2850,5 @@ private struct AchievementHistoryRow: View {
         .accessibilityLabel(
             "\(stone.displaySubjectName)、\(stone.kind.title)、\(stone.displayTitle)、\(stone.achievedAt.formatted(date: .long, time: .omitted))"
         )
-    }
-}
-
-private struct HistoryRow: View {
-    let session: StudySession
-    var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(pebbleColor)
-                if session.effectiveSource.isSelfReported {
-                    Circle().stroke(.white.opacity(0.72), style: StrokeStyle(lineWidth: 1.4, dash: [3, 3]))
-                } else {
-                    Circle().fill(RadialGradient(colors: [.white.opacity(0.48), .clear], center: .topLeading, startRadius: 0, endRadius: 15))
-                }
-            }
-            .frame(width: 28, height: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.displaySubjectName)
-                    .font(.subheadline.weight(.semibold))
-                Text(session.endAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption2)
-                    .foregroundStyle(PomoGemTheme.muted)
-                if let batch = RareRewardPresentationPolicy
-                    .counts(session.rareRewardCounts).multiDrawSummary {
-                    Text(batch)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(PomoGemTheme.muted)
-                }
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("+\(session.grams)g").font(.system(.subheadline, design: .rounded, weight: .bold))
-                Text(session.effectiveSource.displayName)
-                    .font(.caption2)
-                    .foregroundStyle(PomoGemTheme.muted)
-            }
-        }
-        .padding(.horizontal, 14)
-        .frame(minHeight: 64)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(historyAccessibilityLabel)
-    }
-
-    private var historyAccessibilityLabel: String {
-        let source = session.effectiveSource.displayName
-        let date = session.endAt.formatted(date: .long, time: .shortened)
-        let batch = RareRewardPresentationPolicy
-            .counts(session.rareRewardCounts)
-            .multiDrawSummary
-            .map { "、\($0)" } ?? ""
-        return "\(session.displaySubjectName)、\(pebbleKindLabel)、\(source)、プラス\(session.grams)グラム\(batch)、\(date)"
-    }
-
-    private var pebbleKindLabel: String {
-        switch RareRewardPresentationPolicy.kind(session.pebbleKind) {
-        case .normal: "通常の粒"
-        case .gold: "金の粒"
-        case .prism: "虹の粒"
-        }
-    }
-
-    private var pebbleColor: AnyShapeStyle {
-        switch RareRewardPresentationPolicy.kind(session.pebbleKind) {
-        case .normal: AnyShapeStyle(Color(hex: session.displaySubjectColorHex))
-        case .gold: AnyShapeStyle(Color("pebble.gold"))
-        case .prism: AnyShapeStyle(AngularGradient(colors: [.red, .yellow, .green, .blue, .purple], center: .center))
-        }
     }
 }

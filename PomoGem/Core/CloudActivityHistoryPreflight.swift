@@ -79,16 +79,46 @@ enum CloudActivityHistoryPreflightError: Error, LocalizedError, Equatable {
     }
 }
 
+/// What one complete, account-verified traversal of the server's zones saw.
+struct CloudActivityHistoryObservation: Equatable, Sendable {
+    var markers: [ActivityResetSnapshot]
+    /// launch-06. Whether the traversal passed at least one theme, focus
+    /// record or achievement stone — rows only a device that finished
+    /// onboarding (or used the app) on this account writes. The traversal
+    /// already walks every record for the reset markers, so this costs no
+    /// request.
+    ///
+    /// Presentation evidence only: it chooses between the new-user tutorial
+    /// and 「iCloudから記録を復元しています」 on a store that has not finished
+    /// onboarding, and never authorizes, blocks or delays a mount. A false
+    /// positive costs a waiting screen that already offers 「新しく始める」;
+    /// a false negative shows the tutorial, which is today's behaviour.
+    ///
+    /// A delta read (PR 15) only sees what changed since the cached tokens,
+    /// so each cached zone carries what its last full traversal saw and
+    /// stays true for as long as the cache key matches
+    /// (`CloudActivityHistoryMarkerCache.Zone.holdsUserRecords`).
+    var holdsUserRecords: Bool
+
+    init(markers: [ActivityResetSnapshot], holdsUserRecords: Bool = false) {
+        self.markers = markers
+        self.holdsUserRecords = holdsUserRecords
+    }
+}
+
 /// One read of the server's reset markers. `commit` remembers what the read
 /// saw for the next one (PR 15); the preflight calls it only after the
 /// identity check that follows the read, and after its own mount validation,
 /// have both passed. A read that is abandoned is never committed.
 struct CloudActivityHistoryMarkerRead: Sendable {
-    let markers: [ActivityResetSnapshot]
+    let observation: CloudActivityHistoryObservation
     let commit: @MainActor @Sendable () -> Void
 
-    init(markers: [ActivityResetSnapshot], commit: @escaping @MainActor @Sendable () -> Void = {}) {
-        self.markers = markers
+    var markers: [ActivityResetSnapshot] { observation.markers }
+
+    init(markers: [ActivityResetSnapshot], holdsUserRecords: Bool = false,
+         commit: @escaping @MainActor @Sendable () -> Void = {}) {
+        self.observation = CloudActivityHistoryObservation(markers: markers, holdsUserRecords: holdsUserRecords)
         self.commit = commit
     }
 }
@@ -104,6 +134,16 @@ struct CloudActivityHistoryClient: Sendable {
     }
 
     /// A reader with nothing to remember, for tests that script each step.
+    init(verifyAccount: @escaping @MainActor @Sendable (ActiveAccountLocalBinding) async throws -> Void,
+         readHistory: @escaping @Sendable () async throws -> CloudActivityHistoryObservation) {
+        self.init(verifyAccount: verifyAccount, readHistory: { _ in
+            let observation = try await readHistory()
+            return CloudActivityHistoryMarkerRead(markers: observation.markers,
+                                                  holdsUserRecords: observation.holdsUserRecords)
+        })
+    }
+
+    /// A marker-only reader observes no user rows.
     init(verifyAccount: @escaping @MainActor @Sendable (ActiveAccountLocalBinding) async throws -> Void,
          readMarkers: @escaping @Sendable () async throws -> [ActivityResetSnapshot]) {
         self.init(verifyAccount: verifyAccount, readHistory: { _ in
@@ -133,7 +173,7 @@ struct CloudActivityHistoryClient: Sendable {
             let key = CloudActivityHistoryMarkerCache.Key.current(binding: binding)
             let cached = key.flatMap { store?.load(matching: $0) }
             let read = try await CloudActivityHistoryReader.readMarkers(key: key, cached: cached)
-            return CloudActivityHistoryMarkerRead(markers: read.markers, commit: {
+            return CloudActivityHistoryMarkerRead(markers: read.markers, holdsUserRecords: read.holdsUserRecords, commit: {
                 if let next = read.cache { store?.save(next) } else { store?.clear() }
             })
         })
@@ -180,10 +220,11 @@ struct CloudActivityHistoryPreflight {
         self.pollInterval = pollInterval.isFinite ? min(max(0.01, pollInterval), 1) : 0.25
     }
 
+    @discardableResult
     func run(context: ModelContext, expectedBinding: ActiveAccountLocalBinding,
-             validateMount: () throws -> Void) async throws {
+             validateMount: () throws -> Void) async throws -> CloudActivityHistoryObservation {
         let container = context.container
-        try await run(expectedBinding: expectedBinding, validateMount: validateMount) {
+        return try await run(expectedBinding: expectedBinding, validateMount: validateMount) {
             // A long-lived main context can retain a stale registered object.
             // A fresh reader sees imports committed by the mirroring stack.
             let reader = ModelContext(container)
@@ -269,9 +310,10 @@ struct CloudActivityHistoryPreflight {
 
     /// The closure form also exercises the real asynchronous admission flow in
     /// tests without inventing a cloud-backed ModelContainer or local fixture.
+    @discardableResult
     func run(expectedBinding: ActiveAccountLocalBinding,
              validateMount: () throws -> Void,
-             localMarker: () throws -> ActivityResetSnapshot?) async throws {
+             localMarker: () throws -> ActivityResetSnapshot?) async throws -> CloudActivityHistoryObservation {
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
         func validate() throws {
             try Task.checkCancellation()
@@ -306,6 +348,7 @@ struct CloudActivityHistoryPreflight {
         // before publication. This callback checks its generation/selection on
         // both sides of every suspension, including the final import wait.
         try validate()
+        return read.observation
     }
 }
 
@@ -346,9 +389,24 @@ enum CloudActivityHistoryRecordParser {
 /// (`seed`) and applies exactly the changes and deletions since its token.
 struct CloudActivityHistoryAccumulator {
     static let maximumMarkers = 10_000
+    /// launch-06. The mirrored rows that exist only because somebody set up
+    /// or used a jar on this account: finishing onboarding always creates a
+    /// theme. Prefs is deliberately not one of them — every launch's bounded
+    /// preparation creates this device's settings row before onboarding, so
+    /// a new user who quit during the tutorial would find their own row on
+    /// the next launch. Reset markers, timers and device claims are
+    /// bookkeeping and say nothing about an earlier jar either.
+    static let userRecordTypes: Set<CKRecord.RecordType> = [
+        "CD_Subject", "CD_StudySession", "CD_AchievementStone"
+    ]
     private var markers: [CKRecord.ID: ActivityResetSnapshot]
     private var failure: Error?
     private var finishedAllPages = false
+    /// A flag, not a count: a full traversal with no change token reports
+    /// current rows once, and the only consumer asks whether any exist. A
+    /// delta read reports only rows changed since its token; the reader adds
+    /// what the zone's cache entry remembered.
+    private(set) var sawUserRecord = false
     /// The unsanitized zone error, kept only to recognise the few server
     /// answers that ask for a full traversal instead (`changeTokenExpired`,
     /// `zoneNotFound`, `userDeletedZone`). Never presented or persisted.
@@ -367,7 +425,10 @@ struct CloudActivityHistoryAccumulator {
                     throw CloudActivityHistoryPreflightError.historyLimit
                 }
                 markers[id] = marker
-            } else { markers[id] = nil }
+            } else {
+                markers[id] = nil
+                if Self.userRecordTypes.contains(record.recordType) { sawUserRecord = true }
+            }
         } catch { failure = CloudActivityHistoryPreflightError.sanitized(error) }
     }
 
@@ -382,7 +443,14 @@ struct CloudActivityHistoryAccumulator {
     }
 
     func result(operation: Result<Void, Error>) throws -> [ActivityResetSnapshot] {
-        Array(try markerMap(operation: operation).values)
+        try observation(operation: operation).markers
+    }
+
+    /// The zone's result only once every page arrived: an incomplete zone is
+    /// never evidence of anything, including of user rows.
+    func observation(operation: Result<Void, Error>) throws -> CloudActivityHistoryObservation {
+        CloudActivityHistoryObservation(markers: Array(try markerMap(operation: operation).values),
+                                        holdsUserRecords: sawUserRecord)
     }
 
     func markerMap(operation: Result<Void, Error>) throws -> [CKRecord.ID: ActivityResetSnapshot] {
@@ -404,6 +472,9 @@ struct CloudActivityHistoryZone: Hashable, Sendable {
 struct CloudActivityHistoryZoneRead: Sendable {
     let markers: [CKRecord.ID: ActivityResetSnapshot]
     let changeToken: Data?
+    /// Whether this request passed a user row (launch-06). For a delta read,
+    /// only rows changed since the token.
+    let holdsUserRecords: Bool
 }
 
 /// The two CloudKit requests the reader makes. The live source adds real
@@ -429,6 +500,9 @@ struct CloudActivityHistoryRead: Sendable {
     }
 
     let markers: [ActivityResetSnapshot]
+    /// launch-06: a full traversal's answer, or for a delta read what each
+    /// zone's cache entry remembered plus what the delta passed.
+    let holdsUserRecords: Bool
     /// Present only when every zone reported a token under a known key. The
     /// caller writes it only after the identity bracket accepted this read.
     let cache: CloudActivityHistoryMarkerCache?
@@ -474,16 +548,22 @@ enum CloudActivityHistoryReader {
                                  from cache: CloudActivityHistoryMarkerCache?,
                                  mode: CloudActivityHistoryRead.Mode) async throws -> CloudActivityHistoryRead {
         var markers: [ActivityResetSnapshot] = []
+        var holdsUserRecords = false
         var cachedZones: [CloudActivityHistoryMarkerCache.Zone] = []
         var everyZoneHasToken = true
         for zone in zones {
             try Task.checkCancellation()
             var token: Data?
+            // launch-06. A delta only reports rows changed since the token,
+            // so a zone keeps what its last full traversal saw while the key
+            // matches; a full traversal recomputes it from nothing.
+            var zoneHeldUserRecords = false
             if let cache {
                 guard let stored = cache.zones.first(where: { $0.zoneID == zone.zoneID }) else {
                     throw DeltaRefused(underlying: CloudActivityHistoryPreflightError.incompleteHistory)
                 }
                 token = stored.changeToken
+                zoneHeldUserRecords = stored.holdsUserRecords
             }
             let read: CloudActivityHistoryZoneRead
             do {
@@ -494,6 +574,8 @@ enum CloudActivityHistoryReader {
                 throw CloudActivityHistoryPreflightError.sanitized(underlying)
             }
             markers.append(contentsOf: read.markers.values)
+            let zoneHoldsUserRecords = zoneHeldUserRecords || read.holdsUserRecords
+            holdsUserRecords = holdsUserRecords || zoneHoldsUserRecords
             guard markers.count <= CloudActivityHistoryAccumulator.maximumMarkers else {
                 throw CloudActivityHistoryPreflightError.historyLimit
             }
@@ -501,14 +583,16 @@ enum CloudActivityHistoryReader {
                 cachedZones.append(.init(zoneName: zone.zoneID.zoneName, ownerName: zone.zoneID.ownerName,
                     changeToken: changeToken,
                     markers: read.markers.map { .init(recordName: $0.key.recordName, snapshot: $0.value) }
-                        .sorted { $0.recordName < $1.recordName }))
+                        .sorted { $0.recordName < $1.recordName },
+                    holdsUserRecords: zoneHoldsUserRecords))
             } else {
                 everyZoneHasToken = false
             }
         }
         try Task.checkCancellation()
         let nextCache = key.flatMap { everyZoneHasToken ? CloudActivityHistoryMarkerCache(key: $0, zones: cachedZones) : nil }
-        return CloudActivityHistoryRead(markers: markers, cache: nextCache, mode: mode)
+        return CloudActivityHistoryRead(markers: markers, holdsUserRecords: holdsUserRecords,
+                                        cache: nextCache, mode: mode)
     }
 
     /// The server answers after which a delta read starts over from nil. Any
@@ -631,7 +715,8 @@ extension CloudActivityHistoryZoneSource {
                         let archived = value.token.flatMap {
                             try? NSKeyedArchiver.archivedData(withRootObject: $0, requiringSecureCoding: true)
                         }
-                        finish(.success(CloudActivityHistoryZoneRead(markers: markers, changeToken: archived)))
+                        finish(.success(CloudActivityHistoryZoneRead(markers: markers, changeToken: archived,
+                            holdsUserRecords: value.accumulator.sawUserRecord)))
                     } catch {
                         finish(.failure(error))
                     }

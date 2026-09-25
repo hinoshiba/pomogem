@@ -59,6 +59,25 @@ struct CloudActivityHistoryMarkerCache: Codable, Equatable, Sendable {
         /// `NSKeyedArchiver` data of the zone's `CKServerChangeToken`.
         let changeToken: Data
         let markers: [Marker]
+        /// launch-06. Whether a traversal of this zone under this key has
+        /// passed a theme, focus record or achievement stone. A delta read
+        /// only reports rows changed since the token, so without this a
+        /// steady-state launch would forget that the account holds an earlier
+        /// jar and show the new-user tutorial instead of the restore screen.
+        /// Sticky while the key matches (a false positive only costs the
+        /// restore screen, which offers 「新しく始める」); every full
+        /// traversal recomputes it. A file written without it does not decode
+        /// and falls back to a full traversal.
+        let holdsUserRecords: Bool
+
+        init(zoneName: String, ownerName: String, changeToken: Data, markers: [Marker],
+             holdsUserRecords: Bool) {
+            self.zoneName = zoneName
+            self.ownerName = ownerName
+            self.changeToken = changeToken
+            self.markers = markers
+            self.holdsUserRecords = holdsUserRecords
+        }
 
         var zoneID: CKRecordZone.ID { CKRecordZone.ID(zoneName: zoneName, ownerName: ownerName) }
     }

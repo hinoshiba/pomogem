@@ -6,6 +6,8 @@ enum AccumulationTimelineQueryPolicy {
     static let representativeRecordLimit = 96
     static let maximumBrowsableYearSpan = 200
     static let stabilityAttemptCount = 2
+    /// 記録 shows this month and the eleven before it.
+    static let recentMonthCount = 12
 
     static func latestResetMarkerDescriptor(
         now: Date = .now
@@ -178,6 +180,16 @@ struct AccumulationTimelineMonthSummary: Identifiable, Equatable, Sendable {
     var id: Date { monthStart }
 }
 
+/// One month of 記録's 「月ごとの瓶」: exact logical session count and focus
+/// time for the months that have any record.
+struct AccumulationRecentMonthSummary: Identifiable, Equatable, Sendable {
+    let monthStart: Date
+    let sessionCount: Int
+    let seconds: Int
+
+    var id: Date { monthStart }
+}
+
 struct AccumulationTimelineYearSummary: Equatable, Sendable {
     let year: AccumulationTimelineYear
     let months: [AccumulationTimelineMonthSummary]
@@ -186,9 +198,167 @@ struct AccumulationTimelineYearSummary: Equatable, Sendable {
     let coverage: AccumulationTimelineCoverage
 }
 
+/// One theme's part of a month or a day.
+struct AccumulationTimelineThemeSummary: Identifiable, Equatable, Sendable {
+    let id: String
+    let name: String
+    let colorHex: String
+    let sessionCount: Int
+    let seconds: Int
+    let grams: Int64
+}
+
+/// A day with records inside a month.
+struct AccumulationTimelineDaySummary: Identifiable, Equatable, Sendable {
+    let dayStart: Date
+    let sessionCount: Int
+    let seconds: Int
+    let grams: Int64
+    /// Up to three theme colors, the most time first.
+    let colorHexes: [String]
+
+    var id: Date { dayStart }
+}
+
+/// One record as a history row shows it. A value copy, so views never hold
+/// SwiftData objects that were read on the repository's actor.
+struct HistorySessionSummary: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let startAt: Date
+    let endAt: Date
+    let seconds: Int
+    let grams: Int
+    let subjectName: String
+    let colorHex: String
+    let source: SessionSource
+    let pebbleKind: PebbleKind
+    let rareRewardCounts: RareRewardCounts
+
+    init(_ session: StudySession) {
+        id = session.id
+        startAt = session.startAt
+        endAt = session.endAt
+        seconds = NonnegativeIntPolicy.clamped(session.seconds)
+        grams = NonnegativeIntPolicy.clamped(session.grams)
+        subjectName = session.displaySubjectName
+        colorHex = session.displaySubjectColorHex
+        source = session.effectiveSource
+        pebbleKind = session.pebbleKind
+        rareRewardCounts = session.rareRewardCounts
+    }
+}
+
+/// Every record of one day, newest first.
+struct AccumulationTimelineDayDetail: Equatable, Sendable {
+    let dayStart: Date
+    let sessions: [HistorySessionSummary]
+    let themes: [AccumulationTimelineThemeSummary]
+    let totalSeconds: Int
+    let totalGrams: Int64
+    let coverage: AccumulationTimelineCoverage
+}
+
+/// Per-theme and per-day totals, computed from records that are already
+/// exact and deduplicated. No streak-like counts: days are listed for
+/// looking back, never tallied against the month.
+enum AccumulationTimelineBreakdownPolicy {
+    struct Entry: Sendable {
+        let themeKey: String
+        let themeName: String
+        let colorHex: String
+        let endAt: Date
+        let seconds: Int
+        let grams: Int64
+
+        init(
+            themeKey: String,
+            themeName: String,
+            colorHex: String,
+            endAt: Date,
+            seconds: Int,
+            grams: Int64
+        ) {
+            self.themeKey = themeKey
+            self.themeName = themeName
+            self.colorHex = colorHex
+            self.endAt = endAt
+            self.seconds = NonnegativeIntPolicy.clamped(seconds)
+            self.grams = max(0, grams)
+        }
+
+        /// A renamed theme stays one row: records group by the theme's ID,
+        /// and the newest record names it. Records without an ID group by
+        /// their stored name and color.
+        init(session: StudySession) {
+            let name = session.displaySubjectName
+            let color = session.displaySubjectColorHex
+            self.init(
+                themeKey: session.subjectIDSnapshot?.uuidString
+                    ?? "snapshot|\(name)|\(color.uppercased())",
+                themeName: name,
+                colorHex: color,
+                endAt: session.endAt,
+                seconds: session.seconds,
+                grams: Int64(NonnegativeIntPolicy.clamped(session.grams))
+            )
+        }
+    }
+
+    /// Most time first; ties by mass, then name.
+    static func themes(_ entries: [Entry]) -> [AccumulationTimelineThemeSummary] {
+        Dictionary(grouping: entries, by: \.themeKey).compactMap { key, values in
+            guard let newest = values.max(by: { $0.endAt < $1.endAt }) else { return nil }
+            return AccumulationTimelineThemeSummary(
+                id: key,
+                name: newest.themeName,
+                colorHex: newest.colorHex,
+                sessionCount: values.count,
+                seconds: NonnegativeIntPolicy.sum(values.map(\.seconds)),
+                grams: NonnegativeIntPolicy.sum(values.map(\.grams))
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.seconds != rhs.seconds { return lhs.seconds > rhs.seconds }
+            if lhs.grams != rhs.grams { return lhs.grams > rhs.grams }
+            if lhs.name != rhs.name {
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
+    /// Days by the calendar's local midnight (DST-safe), newest first.
+    static func days(
+        _ entries: [Entry],
+        calendar: Calendar
+    ) -> [AccumulationTimelineDaySummary] {
+        Dictionary(grouping: entries) { calendar.startOfDay(for: $0.endAt) }
+            .map { dayStart, values in
+                let colors = themes(values)
+                    .map { $0.colorHex.uppercased() }
+                    .reduce(into: [String]()) { result, hex in
+                        if !result.contains(hex) { result.append(hex) }
+                    }
+                return AccumulationTimelineDaySummary(
+                    dayStart: dayStart,
+                    sessionCount: values.count,
+                    seconds: NonnegativeIntPolicy.sum(values.map(\.seconds)),
+                    grams: NonnegativeIntPolicy.sum(values.map(\.grams)),
+                    colorHexes: Array(colors.prefix(3))
+                )
+            }
+            .sorted { $0.dayStart > $1.dayStart }
+    }
+}
+
 struct AccumulationTimelineMonthDetail: Equatable, Sendable {
     let summary: AccumulationTimelineMonthSummary
     let representativeRecords: [AccumulationRecord]
+    /// Every day of the month that has a record, newest first (at most 31).
+    let days: [AccumulationTimelineDaySummary]
+    /// Every theme of the month, the most time first.
+    let themes: [AccumulationTimelineThemeSummary]
+    let totalSeconds: Int
     let coverage: AccumulationTimelineCoverage
 
     var previewIsRepresentative: Bool {
@@ -210,6 +380,36 @@ enum AccumulationTimelineRepositoryError: Error, LocalizedError, Equatable {
     }
 }
 
+/// The only way views read AccumulationTimelineRepository.
+///
+/// A `@ModelActor` does not get a thread of its own: SwiftData's default
+/// model executor runs each call on the thread that awaits it. Awaited from
+/// a SwiftUI `.task`, which is main-actor code, the whole bounded read ran on
+/// the main thread and froze 記録, 年月 and the day sheet for as long as it
+/// took (measured on iOS 26.5; the repository's tests pin it). This creates
+/// the actor and awaits it from a detached task, so the read runs on the
+/// cooperative pool, and forwards cancellation, so a view that disappears or
+/// changes its key still stops the read at its next cancellation check.
+/// The task is detached on purpose: a plain nonisolated async hop would stop
+/// leaving the main actor under Swift 6.2's `nonisolated(nonsending)` default.
+enum AccumulationTimelineLoader {
+    static func read<Value: Sendable>(
+        from modelContainer: ModelContainer,
+        _ body: @escaping @Sendable (AccumulationTimelineRepository) async throws -> Value
+    ) async throws -> Value {
+        let work = Task.detached(priority: .userInitiated) {
+            try await body(AccumulationTimelineRepository(modelContainer: modelContainer))
+        }
+        return try await withTaskCancellationHandler {
+            try await work.value
+        } onCancel: {
+            work.cancel()
+        }
+    }
+}
+
+/// Views never create this actor directly; they go through
+/// `AccumulationTimelineLoader` so its reads stay off the main thread.
 @ModelActor
 actor AccumulationTimelineRepository {
     func extent(currentEpochID: UUID?) throws -> AccumulationTimelineExtent {
@@ -274,6 +474,9 @@ actor AccumulationTimelineRepository {
                 interval: interval
             )
             let preview = representativeRecords(from: metrics)
+            // The month is already exact and in memory: its days and themes
+            // are one more pass over it, with no further query.
+            let entries = metrics.values.map(\.breakdownEntry)
             let after = try snapshotStamp(currentEpochID: currentEpochID)
             let coverage = AccumulationTimelineStabilityPolicy.coverage(
                 before: before,
@@ -288,6 +491,9 @@ actor AccumulationTimelineRepository {
             let detail = AccumulationTimelineMonthDetail(
                 summary: summary,
                 representativeRecords: preview,
+                days: AccumulationTimelineBreakdownPolicy.days(entries, calendar: calendar),
+                themes: AccumulationTimelineBreakdownPolicy.themes(entries),
+                totalSeconds: NonnegativeIntPolicy.sum(entries.map(\.seconds)),
                 coverage: coverage
             )
             if coverage.isLocallyStable { return detail }
@@ -299,12 +505,114 @@ actor AccumulationTimelineRepository {
         return lastResult
     }
 
+    /// One day, read as one bounded interval: the answer to 「あの日、何を
+    /// した？」 without paging the lifetime list.
+    func dayDetail(
+        dayStart: Date,
+        currentEpochID: UUID?,
+        calendar: Calendar
+    ) throws -> AccumulationTimelineDayDetail {
+        let start = calendar.startOfDay(for: dayStart)
+        guard let end = calendar.date(byAdding: .day, value: 1, to: start), end > start else {
+            throw AccumulationTimelineRepositoryError.invalidCalendarInterval
+        }
+        let interval = DateInterval(start: start, end: end)
+
+        var lastResult: AccumulationTimelineDayDetail?
+        for _ in 0 ..< AccumulationTimelineQueryPolicy.stabilityAttemptCount {
+            try checkCancellation()
+            let before = try snapshotStamp(currentEpochID: currentEpochID)
+            let metrics = try canonicalMetrics(
+                currentEpochID: currentEpochID,
+                interval: interval
+            )
+            let newestFirst = metrics.values.sorted { lhs, rhs in
+                if lhs.endAt == rhs.endAt {
+                    return lhs.id.uuidString > rhs.id.uuidString
+                }
+                return lhs.endAt > rhs.endAt
+            }
+            let entries = newestFirst.map(\.breakdownEntry)
+            let sessions = newestFirst.map { HistorySessionSummary($0.session) }
+            let after = try snapshotStamp(currentEpochID: currentEpochID)
+            let coverage = AccumulationTimelineStabilityPolicy.coverage(
+                before: before,
+                after: after,
+                capturedAt: .now
+            )
+            let detail = AccumulationTimelineDayDetail(
+                dayStart: start,
+                sessions: sessions,
+                themes: AccumulationTimelineBreakdownPolicy.themes(entries),
+                totalSeconds: NonnegativeIntPolicy.sum(entries.map(\.seconds)),
+                totalGrams: NonnegativeIntPolicy.sum(entries.map(\.grams)),
+                coverage: coverage
+            )
+            if coverage.isLocallyStable { return detail }
+            lastResult = detail
+        }
+        guard let lastResult else {
+            throw AccumulationTimelineRepositoryError.invalidCalendarInterval
+        }
+        return lastResult
+    }
+
+    /// 記録's 「月ごとの瓶」 for this month and the eleven before it. One
+    /// bounded interval read (at most 366 days, inside the finite-interval
+    /// guard) replaces the twelve month pages 記録 used to read on the main
+    /// thread on every open, 今週／今月 toggle and foreground; 記録 calls it
+    /// through AccumulationTimelineLoader so it stays off the main thread.
+    /// Counts are exact logical sessions; months with no record are omitted.
+    func recentMonthSummaries(
+        endingAt now: Date,
+        currentEpochID: UUID?,
+        calendar: Calendar
+    ) throws -> [AccumulationRecentMonthSummary] {
+        guard let currentMonth = calendar.dateInterval(of: .month, for: now),
+              let firstMonthStart = calendar.date(
+                byAdding: .month,
+                value: -(AccumulationTimelineQueryPolicy.recentMonthCount - 1),
+                to: currentMonth.start
+              )
+        else { throw AccumulationTimelineRepositoryError.invalidCalendarInterval }
+
+        let sessions = try BoundedHistoryPolicy.resolvedSessionsInFiniteInterval(
+            context: modelContext,
+            epochID: currentEpochID,
+            interval: DateInterval(start: firstMonthStart, end: currentMonth.end),
+            maximumPhysicalRows: BoundedHistoryPolicy.finiteIntervalSessionRowLimit
+        )
+        var grouped: [Date: (count: Int, seconds: Int)] = [:]
+        for session in sessions {
+            try checkCancellation()
+            guard let monthStart = calendar.dateInterval(of: .month, for: session.endAt)?.start else {
+                throw AccumulationTimelineRepositoryError.invalidCalendarInterval
+            }
+            let current = grouped[monthStart] ?? (0, 0)
+            grouped[monthStart] = (
+                NonnegativeIntPolicy.adding(current.count, 1),
+                NonnegativeIntPolicy.adding(current.seconds, NonnegativeIntPolicy.clamped(session.seconds))
+            )
+        }
+        return grouped.map { monthStart, value in
+            AccumulationRecentMonthSummary(
+                monthStart: monthStart,
+                sessionCount: value.count,
+                seconds: value.seconds
+            )
+        }
+        .sorted { $0.monthStart > $1.monthStart }
+    }
+
     private struct CanonicalMetric {
         let session: StudySession
 
         var id: UUID { session.id }
         var endAt: Date { session.endAt }
         var grams: Int64 { Int64(max(0, session.grams)) }
+        var breakdownEntry: AccumulationTimelineBreakdownPolicy.Entry {
+            AccumulationTimelineBreakdownPolicy.Entry(session: session)
+        }
         var record: AccumulationRecord {
             AccumulationRecord(
                 id: session.id,
@@ -313,6 +621,7 @@ actor AccumulationTimelineRepository {
                 colorHex: session.displaySubjectColorHex,
                 grams: max(0, session.grams),
                 isMeasured: session.effectiveSource.isMeasured,
+                isTimerCompletion: session.effectiveSource.isTimerCompletion,
                 // Timeline records are raw activity. A caller that also
                 // presents local aggregates resolves membership separately.
                 isRepresentedByLocalAggregate: false

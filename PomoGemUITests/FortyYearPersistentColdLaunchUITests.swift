@@ -253,7 +253,112 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         attachment.name = "40-year persistent cold launch"
         attachment.lifetime = .keepAlways
         add(attachment)
+
+        // 記録 over 350,640 sessions. The twelve month summaries and 年月 are
+        // read off the main thread, and a 今週／今月 toggle reads only the
+        // period page, so the page answers while those reads are running.
+        // XCUI waits for the app to be idle before each step, so a blocked
+        // main thread shows up in these timings.
+        secondColdLaunch.navigationBars["設定"].buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(secondColdLaunch.buttons["メニュー"].waitForExistence(timeout: 5))
+        secondColdLaunch.buttons["メニュー"].tap()
+        let log = secondColdLaunch.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "記録")
+        ).firstMatch
+        XCTAssertTrue(scrollUntilHittable(log, in: secondColdLaunch))
+        let logStartedAt = ProcessInfo.processInfo.systemUptime
+        log.tap()
+        XCTAssertTrue(secondColdLaunch.navigationBars["記録"].waitForExistence(timeout: 10))
+        let period = secondColdLaunch.segmentedControls.firstMatch
+        XCTAssertTrue(period.waitForExistence(timeout: 10))
+        let week = period.buttons["今週"]
+        let month = period.buttons["今月"]
+        XCTAssertTrue(month.waitForExistence(timeout: 5))
+        let logElapsed = ProcessInfo.processInfo.systemUptime - logStartedAt
+        // Straight away, while the month summaries may still be loading.
+        let toggleElapsed = measureSelection(of: month, after: { month.tap() })
+        let roundTripElapsed = measureSelection(of: week, after: { week.tap() })
+
+        // Background, then back: 記録 reads again and still answers.
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(
+            secondColdLaunch.wait(for: .runningBackground, timeout: 10)
+                || secondColdLaunch.wait(for: .runningBackgroundSuspended, timeout: 10)
+        )
+        let foregroundStartedAt = ProcessInfo.processInfo.systemUptime
+        secondColdLaunch.activate()
+        XCTAssertTrue(secondColdLaunch.wait(for: .runningForeground, timeout: 10))
+        XCTAssertTrue(week.isSelected, "Returning must keep the chosen period")
+        month.tap()
+        XCTAssertTrue(waitForSelection(month, timeout: 10))
+        let foregroundElapsed = ProcessInfo.processInfo.systemUptime - foregroundStartedAt
+        week.tap()
+        XCTAssertTrue(waitForSelection(week, timeout: 10))
+
+        // Years of history never read as an empty list, before or after the
+        // return from the background.
+        // The newest thirty sit below up to 80 aggregate rows (37 fast
+        // swipes on an iPhone 17 Pro simulator): allow about twice that.
+        let pastHistory = secondColdLaunch.buttons["log.past-history"]
+        for _ in 0 ..< 80 where !isSafelyHittable(pastHistory, in: secondColdLaunch) {
+            secondColdLaunch.swipeUp(velocity: .fast)
+        }
+        XCTAssertTrue(isSafelyHittable(pastHistory, in: secondColdLaunch))
+        XCTAssertFalse(secondColdLaunch.staticTexts["一粒積むと、ここに記録が残ります。"].exists)
+        XCTAssertTrue(
+            secondColdLaunch.descendants(matching: .any).matching(
+                NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "プラス", "グラム")
+            ).firstMatch.exists,
+            "The newest records must be listed"
+        )
+        let logAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        logAttachment.name = "40-year persistent Log"
+        logAttachment.lifetime = .keepAlways
+        add(logAttachment)
+
+        // 過去の記録 counts the newest year off the main thread, so the sheet
+        // opens and closes without waiting for that count.
+        let pastStartedAt = ProcessInfo.processInfo.systemUptime
+        pastHistory.tap()
+        XCTAssertTrue(secondColdLaunch.navigationBars["過去の記録"].waitForExistence(timeout: 10))
+        let pastClose = secondColdLaunch.buttons["log.past-history.close"]
+        XCTAssertTrue(pastClose.waitForExistence(timeout: 5))
+        pastClose.tap()
+        XCTAssertTrue(secondColdLaunch.navigationBars["過去の記録"].waitForNonExistence(timeout: 10))
+        let pastElapsed = ProcessInfo.processInfo.systemUptime - pastStartedAt
+
+        XCTContext.runActivity(named: String(
+            format: "40-year Log open: %.3fs, 今月 at once: %.3fs, back to 今週: %.3fs, foreground to 今月: %.3fs, 過去の記録 open and close: %.3fs",
+            logElapsed,
+            toggleElapsed,
+            roundTripElapsed,
+            foregroundElapsed,
+            pastElapsed
+        )) { _ in }
+        XCTAssertLessThan(logElapsed, 10, "記録 must open within ten seconds over forty years")
+        XCTAssertLessThan(toggleElapsed, 4, "今月 must answer within four seconds while the month list loads")
+        XCTAssertLessThan(roundTripElapsed, 4, "今週 must answer within four seconds")
+        XCTAssertLessThan(foregroundElapsed, 8, "記録 must answer within eight seconds of returning to the foreground")
+        XCTAssertLessThan(pastElapsed, 8, "過去の記録 must open and close while its year is still being counted")
         secondColdLaunch.terminate()
+    }
+
+    /// Seconds from `action` until `element` reads as selected.
+    private func measureSelection(of element: XCUIElement, after action: () -> Void) -> TimeInterval {
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        action()
+        XCTAssertTrue(waitForSelection(element, timeout: 10))
+        return ProcessInfo.processInfo.systemUptime - startedAt
+    }
+
+    private func waitForSelection(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        element.isSelected || XCTWaiter.wait(
+            for: [XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "selected == true"),
+                object: element
+            )],
+            timeout: timeout
+        ) == .completed
     }
 
     func testNamedPersistentStoreCanChangeAndRestoreKeepAwake() {

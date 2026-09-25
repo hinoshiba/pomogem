@@ -90,6 +90,11 @@ enum StorageTransferSettingsUITestFixture {
         /// iCloud replacement raises when the one post-commit comparison finds
         /// user records the committed payload did not hold.
         case lateArrival
+        /// launch-03 / launch-04. The first screen of a new install: the
+        /// shipping `.choosingStorage` launch view with a recorder in place of
+        /// the host, so both confirmations can be read and cancelled without
+        /// selecting a storage mode.
+        case firstRunStorageChoice
 
         var mirroringEvents: [CloudKitMirroringEventSummary]? {
             let now = Date.now
@@ -216,6 +221,8 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
             CloudLaunchTimeoutUITestFixtureView(wall: .offline, showsRunningFocus: true)
         } else if scenario == .cloudBackgroundReturnWithFocus {
             CloudLaunchTimeoutUITestFixtureView(wall: .backgroundReturn, showsRunningFocus: true)
+        } else if scenario == .firstRunStorageChoice {
+            FirstRunStorageChoiceUITestFixtureView()
         } else if scenario == .cloudResetGuidance {
             NavigationStack {
                 List {

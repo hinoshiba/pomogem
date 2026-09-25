@@ -541,6 +541,8 @@ struct FortyYearPersistentFixtureLaunchView: View {
 
 struct FortyYearOverviewFixtureLaunchView: View {
     @Environment(\.modelContext) private var modelContext
+    /// 年月 can open a month's Wrapped and its card, which read the router.
+    @State private var router = AppRouter()
     @State private var timelineFixtureIsReady = false
     @State private var timelineFixtureError: String?
 
@@ -577,6 +579,7 @@ struct FortyYearOverviewFixtureLaunchView: View {
                     .accessibilityIdentifier("fixture.40y.timeline-error")
             }
         }
+        .environment(router)
         .preferredColorScheme(.dark)
         .tint(PomoGemTheme.amber)
         .task { prepareTimelineFixtureIfNeeded() }

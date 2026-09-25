@@ -383,6 +383,9 @@ private final class PomoGemPersistenceSession: Identifiable {
     let persistentFixtureActionRawValue: String?
     let accountNamespace: AccountDataNamespace?
     let isCloudOffline: Bool
+    /// launch-06. What this mount's history preflight saw on the server;
+    /// presentation evidence for the first-run gate only.
+    let cloudHoldsUserRecords: Bool
 
     init(
         container: ModelContainer,
@@ -391,7 +394,8 @@ private final class PomoGemPersistenceSession: Identifiable {
         safetyNotice: String? = nil,
         persistentFixtureActionRawValue: String? = nil,
         accountNamespace: AccountDataNamespace? = nil,
-        isCloudOffline: Bool = false
+        isCloudOffline: Bool = false,
+        cloudHoldsUserRecords: Bool = false
     ) {
         self.container = container
         self.viewLifetime = PersistenceViewContainerLifetime(container: container)
@@ -401,6 +405,7 @@ private final class PomoGemPersistenceSession: Identifiable {
         self.persistentFixtureActionRawValue = persistentFixtureActionRawValue
         self.accountNamespace = accountNamespace
         self.isCloudOffline = isCloudOffline
+        self.cloudHoldsUserRecords = cloudHoldsUserRecords
     }
 }
 
@@ -1043,7 +1048,8 @@ private struct PomoGemPersistenceLaunchHost: View {
             },
             unmountForStorageTransfer: {
                 unmountForStorageTransfer(sessionID: sessionID)
-            }
+            },
+            cloudHoldsUserRecords: session.cloudHoldsUserRecords
         )
     }
 
@@ -1833,12 +1839,14 @@ private struct PomoGemPersistenceLaunchHost: View {
         // under an obsolete reset epoch. Keep Root, bootstrap, and all app
         // writers unmounted until the local winner covers the server history.
         launchState = .preparing("iCloudの記録の履歴を確認しています")
-        try await StorageTransferHostCloudPublicationGate.verify(
+        let history = try await StorageTransferHostCloudPublicationGate.verify(
             prepareCandidate: {
                 // The history check reads the identity on both sides of its
                 // marker read, compared with this binding
-                // (`CloudActivityHistoryClient.live`).
-                try await CloudActivityHistoryPreflight().run(
+                // (`CloudActivityHistoryClient.live`). launch-06: the same
+                // read also tells the first-run gate whether this account
+                // already holds an earlier jar.
+                let history = try await CloudActivityHistoryPreflight().run(
                     context: container.mainContext,
                     expectedBinding: binding,
                     validateMount: {
@@ -1862,6 +1870,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                     attempt: attempt,
                     checkpoint: "after-history-identity"
                 )
+                return history
             },
             verifyLatestDataset: {
                 // Another device may begin or finish replacing the dataset
@@ -1910,7 +1919,8 @@ private struct PomoGemPersistenceLaunchHost: View {
             container: container,
             mode: .cloudKit,
             safetyNotice: safetyNotice,
-            accountNamespace: binding.namespace
+            accountNamespace: binding.namespace,
+            cloudHoldsUserRecords: history.holdsUserRecords
         )
         try PersistenceDeploymentState.recordSuccessfulMount(selection)
         guard let admission = try StorageTransferRuntime.live().localDatasetAdmission(binding: binding) else {
@@ -3741,6 +3751,7 @@ private struct PersistenceLaunchStatusView: View {
     /// actually chose, so the current size is read here and re-applied below.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var storageConfirmation: StorageConfirmation?
+    @State private var storageChoiceViewportHeight: CGFloat = 0
     @State private var confirmsTransferCancellation = false
     @State private var understandsRefreshDataLoss = false
     /// The two directions must never share a consent. This one lives on the
@@ -3761,20 +3772,21 @@ private struct PersistenceLaunchStatusView: View {
             NightBackground()
             ScrollView {
                 VStack(spacing: 18) {
-                    Image(systemName: symbol)
-                        .font(.system(size: 44, weight: .light))
-                        .foregroundStyle(PomoGemTheme.amber)
-                        .accessibilityHidden(true)
+                    if isChoosingStorage {
+                        storageChoiceHeader
+                    } else {
+                        Image(systemName: symbol)
+                            .font(.system(size: 44, weight: .light))
+                            .foregroundStyle(PomoGemTheme.amber)
+                            .accessibilityHidden(true)
+                    }
                     Text(title)
                         .font(PomoGemTheme.brand(24))
                         .multilineTextAlignment(.center)
-                    Text(message)
-                        .foregroundStyle(PomoGemTheme.muted)
-                        .multilineTextAlignment(.center)
-                        // review-2-5. The screen's message names a control on
-                        // some states, so a test must be able to read it and
-                        // check it against what this build actually publishes.
-                        .accessibilityIdentifier("storage-launch-message")
+                        .accessibilityAddTraits(isChoosingStorage ? .isHeader : [])
+                    if !showsStorageChoiceMessageBelowOptions {
+                        launchMessage
+                    }
 
                     if let timerStatus {
                         LaunchTimerStatusCard(status: timerStatus)
@@ -3804,33 +3816,48 @@ private struct PersistenceLaunchStatusView: View {
                             }
                         }
                     } else if isChoosingStorage {
-                        storageChoiceDisclosure(
+                        // launch-03 / product-01. Two equal cards, one plain
+                        // line each (configuration.yml
+                        // `equal_neither_recommended`): same shape, same
+                        // style, no default. Each card is only the choice;
+                        // its full caveats are in its own confirmation alert
+                        // below, which stays the step that commits it. The
+                        // card title stays the button's exact accessibility
+                        // label because the real-device tests and the review
+                        // notes name these buttons by it.
+                        storageChoiceButton(
                             symbol: "icloud.fill",
-                            title: "iCloudに保存して同期",
-                            detail: "テーマ名、成果メモ、集中記録、設定、進行中タイマーを、Apple AccountのプライベートiCloudへ送信します。保存済みの端末データがあればオフラインでも利用できます。初回の取得や同期の再開・保存先の切り替えには通信が必要です。"
-                        )
-                        Button("iCloudに保存して同期") {
+                            title: String(localized: "iCloudに保存して同期", table: "Launch",
+                                          comment: "First-run storage choice: iCloud option (button label)"),
+                            detail: String(localized: "同じApple AccountのiPhone間で、記録を同期します。", table: "Launch",
+                                           comment: "First-run storage choice: the iCloud option's one line"),
+                            identifier: "storage-choice.cloud"
+                        ) {
                             storageConfirmation = .cloud
                         }
-                        .buttonStyle(PomoGemPrimaryButtonStyle())
-
-                        storageChoiceDisclosure(
+                        storageChoiceButton(
                             symbol: "iphone",
-                            title: "このiPhoneだけに保存",
-                            detail: "iCloudへ送信せず、このiPhoneに保存します。後で設定から保存先を切り替えられます。アプリを削除すると端末内の記録は失われます。"
-                        )
-                        Button("このiPhoneだけに保存") {
+                            title: String(localized: "このiPhoneだけに保存", table: "Launch",
+                                          comment: "First-run storage choice: local-only option (button label)"),
+                            detail: String(localized: "記録はこのiPhoneだけに保存し、iCloudへは送信しません。", table: "Launch",
+                                           comment: "First-run storage choice: the local-only option's one line"),
+                            identifier: "storage-choice.local"
+                        ) {
                             storageConfirmation = .localOnly
                         }
-                        .buttonStyle(PomoGemSecondaryButtonStyle())
+                        if showsStorageChoiceMessageBelowOptions {
+                            launchMessage
+                        }
 
                         Link(destination: AppLinks.privacyPolicy) {
                             Label(
                                 "プライバシーポリシー",
                                 systemImage: "hand.raised"
                             )
+                            .font(.footnote.weight(.semibold))
+                            .frame(minHeight: 44)
                         }
-                        .buttonStyle(PomoGemSecondaryButtonStyle())
+                        .foregroundStyle(PomoGemTheme.amber)
                     } else if case .datasetRefresh = state {
                         datasetRefreshDoors
                     } else if case .cloudLineageUnavailable = state {
@@ -3950,23 +3977,54 @@ private struct PersistenceLaunchStatusView: View {
                 }
                 .frame(maxWidth: 520)
                 .padding(24)
+                // launch-03. The first-run choice sits in the middle of the
+                // screen when it fits, instead of hanging from the top of
+                // an otherwise empty first frame. Taller content (AX sizes)
+                // scrolls exactly as before; every other state is unchanged.
+                .frame(minHeight: isChoosingStorage ? storageChoiceViewportHeight : nil)
+            }
+            .background {
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { storageChoiceViewportHeight = proxy.size.height }
+                        .onChange(of: proxy.size.height) { _, height in
+                            storageChoiceViewportHeight = height
+                        }
+                }
             }
         }
         .alert(item: $storageConfirmation) { confirmation in
             switch confirmation {
             case .cloud:
+                // launch-03. The card above is one line; this alert is the
+                // step that commits iCloud, so it carries every caveat the
+                // old card did — including when a connection is needed and
+                // what still works offline (AppStore/app-privacy.md checks
+                // that this is shown before the choice is confirmed).
                 Alert(
                     title: Text("iCloudに保存して同期しますか？"),
-                    message: Text("テーマ名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。"),
+                    message: Text("テーマ名、成果メモ、集中記録、設定、進行中タイマーをApple AccountのプライベートiCloudへ送信します。オンラインでApple Accountを確認した後に保存方式を確定します。このiPhoneに保存済みの記録があれば、オフラインでも使えます。初回の取得や同期の再開には通信が必要です。後で同期を止めるときは、iCloudの記録をこのiPhoneへコピーし、iCloudの記録も残します。",
+                                  tableName: "Launch",
+                                  comment: "First-run storage choice: iCloud confirmation message (full caveats)"),
                     primaryButton: .cancel(Text("キャンセル")),
                     secondaryButton: .default(Text("確認して続ける")) {
                         onChooseCloud()
                     }
                 )
             case .localOnly:
+                // launch-04. This alert is the step that commits local-only,
+                // so it states the consequences plainly and in the order a
+                // person meets them. Switching to iCloud later is possible,
+                // but it REPLACES this iPhone's records with the iCloud
+                // ones: `StorageTransferReleasePolicy.standard` keeps every
+                // device -> iCloud path closed, so nothing here merges or
+                // uploads. The old copy said 「後で…切り替えられます」 first
+                // and the loss last, in engineering terms.
                 Alert(
                     title: Text("このiPhoneだけに保存しますか？"),
-                    message: Text("記録をiCloudへ送信せず、このiPhoneに保存します。アプリを削除すると端末内の記録は失われます。後で設定からiCloudの記録を取り込み、端末の記録を置き換えて同期を始められます。端末の記録でiCloudを置き換える操作は現在利用できず、二つの記録も統合されません。"),
+                    message: Text("記録はこのiPhoneだけに保存し、iCloudへは送信しません。アプリを削除すると、記録は失われます。あとでiCloud同期に切り替えると、このiPhoneの記録はiCloudの記録に置き換わります。このiPhoneの記録をiCloudへ移すことは、現在できません。",
+                                  tableName: "Launch",
+                                  comment: "First-run storage choice: local-only confirmation message (full caveats)"),
                     primaryButton: .cancel(Text("キャンセル")),
                     secondaryButton: .default(Text("このiPhoneだけで始める")) {
                         onChooseLocalOnly?()
@@ -4506,29 +4564,99 @@ private struct PersistenceLaunchStatusView: View {
         return "置き換えが始まる前なので、この端末の切り替えを取り消して元の保存先へ戻れます。取り消した後はアプリを終了して開き直してください。"
     }
 
-    private func storageChoiceDisclosure(
+    private var launchMessage: some View {
+        Text(message)
+            .foregroundStyle(PomoGemTheme.muted)
+            .multilineTextAlignment(.center)
+            // review-2-5. The screen's message names a control on
+            // some states, so a test must be able to read it and
+            // check it against what this build actually publishes.
+            .accessibilityIdentifier("storage-launch-message")
+    }
+
+    /// launch-03. At accessibility sizes the one-sentence reassurance under
+    /// the storage question took five lines of an SE's first screen and
+    /// pushed both options below it, so there it follows the options. It
+    /// keeps the user's text size; only its place changes.
+    private var showsStorageChoiceMessageBelowOptions: Bool {
+        isChoosingStorage && dynamicTypeSize.isAccessibilitySize
+    }
+
+    /// launch-03 / product-01. The first frame of every new install used to be
+    /// this generic status layout with a drive symbol, which read like a
+    /// system error. The brand and one sentence of what the app does come
+    /// first; the storage question follows.
+    private var storageChoiceHeader: some View {
+        VStack(spacing: 12) {
+            // Branding, not content: capped so AX5 does not wrap the name.
+            PomoGemLogo()
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            Text("集中した時間が、粒になって瓶にたまっていきます。", tableName: "Launch",
+                 comment: "First-run storage choice: the app's one-line promise under the logo")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PomoGemTheme.amber)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                // Branding too: uncapped, it took four lines of an SE's first
+                // screen at AX5 and pushed both options a screen further down.
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                .accessibilityIdentifier("storage-choice.value")
+        }
+    }
+
+    /// One storage option. Both options are drawn by this one function so
+    /// they cannot drift apart in weight: neither is filled, neither is first
+    /// by style, and each carries exactly one line.
+    private func storageChoiceButton(
         symbol: String,
         title: String,
-        detail: String
+        detail: String,
+        identifier: String,
+        action: @escaping () -> Void
     ) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: symbol)
-                .foregroundStyle(PomoGemTheme.amber)
-                .frame(width: 24)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.headline)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(PomoGemTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+        // At accessibility sizes the text needs the card's whole width: the
+        // symbol and chevron are decoration, and beside AX5 text they left a
+        // column a few characters wide.
+        let isAccessibilitySize = dynamicTypeSize.isAccessibilitySize
+        return Button(action: action) {
+            HStack(alignment: .center, spacing: 14) {
+                if !isAccessibilitySize {
+                    Image(systemName: symbol)
+                        .font(.title3)
+                        .foregroundStyle(PomoGemTheme.amber)
+                        .frame(width: 28)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(.headline, design: .rounded, weight: .bold))
+                        .foregroundStyle(PomoGemTheme.text)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(PomoGemTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if !isAccessibilitySize {
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(PomoGemTheme.muted)
+                }
             }
-            Spacer(minLength: 0)
+            .padding(16)
+            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+            .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(PomoGemTheme.glassEdge.opacity(0.22), lineWidth: 1)
+            }
         }
-        .padding(14)
-        .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 14))
-        .accessibilityElement(children: .combine)
+        .buttonStyle(PomoGemRowButtonStyle(cornerRadius: 16))
+        // The exact label is the one the real-device tests and the review
+        // notes name; the line under it is what choosing it does.
+        .accessibilityLabel(title)
+        .accessibilityHint(detail)
+        .accessibilityIdentifier(identifier)
     }
 
     private var isPreparing: Bool {
@@ -4552,7 +4680,10 @@ private struct PersistenceLaunchStatusView: View {
     private var title: String {
         switch state {
         case .choosingStorage:
-            "iCloud同期を有効にしますか？"
+            // A neutral question: 「iCloudを有効にしますか？」 framed the
+            // local-only option as the "no" answer to a default.
+            String(localized: "記録の保存先を選んでください", table: "Launch",
+                   comment: "First-run storage choice: screen title")
         case .preparing:
             "準備中"
         case .blocked:
@@ -4587,7 +4718,8 @@ private struct PersistenceLaunchStatusView: View {
     private var message: String {
         switch state {
         case .choosingStorage:
-            "有効にすると、同じApple AccountのiPhone間で記録を同期します。利用しない場合は、このiPhoneだけに保存でき、記録はiCloudへ送信されません。"
+            String(localized: "どちらを選んでも、タイマーと瓶は同じように使えます。", table: "Launch",
+                   comment: "First-run storage choice: one-sentence message under the title")
         case let .preparing(message), let .blocked(message, _), let .failed(message),
              let .relaunchRequired(message), let .offlineRelaunchRequired(message),
              let .cloudVerificationTimedOut(message),
@@ -4668,6 +4800,40 @@ struct CloudLaunchTimeoutUITestFixtureView: View {
                         .accessibilityIdentifier("cloud-launch-timeout.fixture-state")
                 }
                 .font(.caption)
+            }
+    }
+}
+#endif
+
+#if DEBUG && targetEnvironment(simulator)
+/// launch-03 / launch-04. The shipping first-run storage choice with a call
+/// recorder in place of the host: no selection is recorded, no account is
+/// resolved and no container exists, so a test can open and cancel both
+/// confirmations and read what each one commits to.
+struct FirstRunStorageChoiceUITestFixtureView: View {
+    @State private var cloudCalls = 0
+    @State private var localCalls = 0
+
+    var body: some View {
+        PersistenceLaunchStatusView(
+            state: .choosingStorage,
+            onRetry: {}, onRetryOnline: {}, canRetryOnline: false,
+            onChooseCloud: { cloudCalls += 1 },
+            onChooseLocalOnly: { localCalls += 1 },
+            onRecoverTransfer: {}, onCancelTransfer: {}, onRefreshDataset: {},
+            onCancelLocalTransfer: nil, retainsTransferCopyOnCancellation: false,
+            onContinueOffline: nil)
+            .safeAreaInset(edge: .bottom) {
+                VStack {
+                    Text(verbatim: "calls=0;choice=none;starting=false")
+                        .accessibilityIdentifier("storage-switch.fixture-state")
+                    Text(verbatim: "cloud=\(cloudCalls);local=\(localCalls)")
+                        .accessibilityIdentifier("storage-choice.fixture-state")
+                }
+                .font(.caption)
+                // Test plumbing, not the screen under test: keep it from
+                // covering the AX5 layout being measured.
+                .dynamicTypeSize(.large)
             }
     }
 }
