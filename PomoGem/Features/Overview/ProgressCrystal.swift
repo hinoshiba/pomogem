@@ -2374,14 +2374,74 @@ struct JarLifetimeCoreBackdrop: View {
 /// instead, as the core itself is buried. Placed by the same
 /// `JarLifetimeCoreLayout` as the core: directly under the orbit column,
 /// never inside it.
+/// Measured label block of the time core (`JarLifetimeCoreLabels`).
+struct JarLifetimeCoreLabelMetrics: Equatable {
+    /// The whole block, second line included.
+    var size: CGSize
+    /// Height the progress card's second line adds (with its spacing).
+    var secondLine: CGFloat
+
+    static let estimated = JarLifetimeCoreLabelMetrics(
+        size: CGSize(width: 220, height: JarLifetimeCoreBackdrop.estimatedLabelHeight),
+        secondLine: 12
+    )
+}
+
+/// How much of the time core's label block Home draws in front of the
+/// scene. The block never sits behind the gem bed or the settled gems, on
+/// the full stage or on one the completion card has shortened: all of it
+/// when it fits above them; without the progress card's second line
+/// (「核まであと…」) when only that line would reach the pile; and nothing
+/// when even the name plate and the first line would be buried (the core
+/// is then behind the pile, and VoiceOver still reads the jar as a whole).
+enum JarLifetimeCoreLabelFit: Equatable {
+    case full
+    case withoutSecondLine
+    case hidden
+
+    init(showsSecondLine: Bool) {
+        self = showsSecondLine ? .full : .withoutSecondLine
+    }
+
+    /// - Parameters:
+    ///   - fullHeight: the block with its second line.
+    ///   - secondLineHeight: what that line adds (0 without one).
+    ///   - abovePileLimit: lowest y the block may reach (above the bed and
+    ///     the settled gems under it).
+    ///   - layout: the shared core layout for a block of a given height.
+    static func resolve(
+        fullHeight: CGFloat,
+        secondLineHeight: CGFloat,
+        abovePileLimit: CGFloat,
+        layout: (CGFloat) -> JarLifetimeCoreLayout
+    ) -> JarLifetimeCoreLabelFit {
+        func fits(_ height: CGFloat) -> Bool {
+            let resolved = layout(height)
+            return !resolved.overflows && resolved.labelTop + height <= abovePileLimit + 0.5
+        }
+        if fits(fullHeight) { return .full }
+        if secondLineHeight > 0, fits(max(0, fullHeight - secondLineHeight)) { return .withoutSecondLine }
+        return .hidden
+    }
+
+    /// Height of the block as drawn with this fit.
+    func labelHeight(full: CGFloat, secondLine: CGFloat) -> CGFloat {
+        self == .withoutSecondLine ? max(0, full - max(0, secondLine)) : full
+    }
+}
+
 struct JarLifetimeCoreLabels: View {
     let state: JarLifetimeCoreState
     var topClearance: CGFloat?
     var bottomLimit: CGFloat?
     var labelBottomLimit: CGFloat?
-    /// Measured size of the block (the height feeds the layout, the width
-    /// tells the owner which part of the pile could cover it).
-    @Binding var measuredSize: CGSize
+    /// False drops the progress card's second line (`JarLifetimeCoreLabelFit`).
+    var showsSecondLine = true
+    /// Measured size of the whole block with its second line (the height
+    /// feeds the layout, the width tells the owner which part of the pile
+    /// could cover it) and the height that line adds. Reported the same
+    /// whether or not the line shows, so the fit never flips back and forth.
+    @Binding var metrics: JarLifetimeCoreLabelMetrics
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -2420,18 +2480,27 @@ struct JarLifetimeCoreLabels: View {
                 topClearance: topClearance,
                 bottomLimit: bottomLimit,
                 labelBottomLimit: labelBottomLimit,
-                labelHeight: measuredSize.height
+                labelHeight: shownHeight
             )
             labels
                 .onGeometryChange(for: CGSize.self) { geometry in
                     geometry.size
                 } action: { size in
-                    measuredSize = size
+                    let hidden = showsSecondLine || state.nextFusionLabel == nil ? 0 : metrics.secondLine
+                    metrics.size = CGSize(width: size.width, height: size.height + hidden)
                 }
-                .position(x: proxy.size.width / 2, y: layout.labelTop + measuredSize.height / 2)
+                .position(x: proxy.size.width / 2, y: layout.labelTop + shownHeight / 2)
         }
         .accessibilityHidden(true)
         .allowsHitTesting(false)
+    }
+
+    /// Height of the block as drawn now.
+    private var shownHeight: CGFloat {
+        JarLifetimeCoreLabelFit(showsSecondLine: showsSecondLine).labelHeight(
+            full: metrics.size.height,
+            secondLine: state.nextFusionLabel == nil ? 0 : metrics.secondLine
+        )
     }
 
     private var labels: some View {
@@ -2460,10 +2529,16 @@ struct JarLifetimeCoreLabels: View {
                 Text(state.progressLabel)
                     .font(.system(size: 9.5 * textScale, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                if let nextFusionLabel = state.nextFusionLabel {
+                if let nextFusionLabel = state.nextFusionLabel, showsSecondLine {
                     Text(nextFusionLabel)
                         .font(.system(size: 8.5 * textScale, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.66))
+                        .onGeometryChange(for: CGFloat.self) { geometry in
+                            geometry.size.height
+                        } action: { height in
+                            // The line plus the stack's 1 pt spacing.
+                            metrics.secondLine = height + 1
+                        }
                 }
             }
             .lineLimit(1)

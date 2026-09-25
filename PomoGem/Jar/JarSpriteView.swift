@@ -146,7 +146,7 @@ struct JarSpriteView: View {
     /// Measured size of the time core's label block (shared by the core
     /// behind the scene and its labels in front, so both use one layout;
     /// the width tells which columns of the pile lie under the labels).
-    @State private var coreLabelSize = CGSize(width: 220, height: JarLifetimeCoreBackdrop.estimatedLabelHeight)
+    @State private var coreLabelMetrics = JarLifetimeCoreLabelMetrics.estimated
 #if targetEnvironment(macCatalyst)
     @State private var catalystGestureOwnership = JarDragGestureOwnership()
 #endif
@@ -251,24 +251,34 @@ struct JarSpriteView: View {
                     floorY: JarScene.interiorRect(sceneSize: proxy.size).minY,
                     bedTop: bedTop,
                     pileTop: scene.settledPileTop(
-                        minX: (proxy.size.width - coreLabelSize.width) / 2,
-                        maxX: (proxy.size.width + coreLabelSize.width) / 2
+                        minX: (proxy.size.width - coreLabelMetrics.size.width) / 2,
+                        maxX: (proxy.size.width + coreLabelMetrics.size.width) / 2
                     )
                 )
                 let floorLabelLimit = limits.floor
                 let abovePileLimit = limits.abovePile
-                let coreLabelsBuried = lifetimeCoreState.map { state -> Bool in
-                    let layout = JarLifetimeCoreLabels.layout(
-                        stageSize: proxy.size,
-                        state: state,
-                        topClearance: coreTopClearance,
-                        bottomLimit: coreBottomLimit,
-                        labelBottomLimit: abovePileLimit,
-                        labelHeight: coreLabelSize.height
-                    )
-                    return layout.overflows
-                        || layout.labelTop + coreLabelSize.height > abovePileLimit + 0.5
-                } ?? false
+                // The same above-the-pile rule on every stage height (the
+                // completion card shortens the jar): the second line gives
+                // way first, then the whole block.
+                let coreSecondLine = lifetimeCoreState?.nextFusionLabel == nil ? 0 : coreLabelMetrics.secondLine
+                let coreLabelFit = lifetimeCoreState.map { state in
+                    JarLifetimeCoreLabelFit.resolve(
+                        fullHeight: coreLabelMetrics.size.height,
+                        secondLineHeight: coreSecondLine,
+                        abovePileLimit: abovePileLimit
+                    ) { height in
+                        JarLifetimeCoreLabels.layout(
+                            stageSize: proxy.size,
+                            state: state,
+                            topClearance: coreTopClearance,
+                            bottomLimit: coreBottomLimit,
+                            labelBottomLimit: abovePileLimit,
+                            labelHeight: height
+                        )
+                    }
+                } ?? .full
+                let coreLabelsBuried = coreLabelFit == .hidden
+                let coreLabelHeight = coreLabelFit.labelHeight(full: coreLabelMetrics.size.height, secondLine: coreSecondLine)
                 let coreLabelBottomLimit = coreLabelsBuried ? floorLabelLimit : abovePileLimit
                 let shareCore = Self.shareCore(
                     stageSize: proxy.size,
@@ -287,7 +297,7 @@ struct JarSpriteView: View {
                         topClearance: coreTopClearance,
                         bottomLimit: coreBottomLimit,
                         labelBottomLimit: coreLabelBottomLimit,
-                        labelHeight: coreLabelSize.height
+                        labelHeight: coreLabelHeight
                     )
                     if coreLabelsBuried {
                         // Buried under the pile, the labels stay laid out
@@ -300,7 +310,7 @@ struct JarSpriteView: View {
                             topClearance: coreTopClearance,
                             bottomLimit: coreBottomLimit,
                             labelBottomLimit: coreLabelBottomLimit,
-                            measuredSize: $coreLabelSize
+                            metrics: $coreLabelMetrics
                         )
                         .opacity(0)
                     }
@@ -382,7 +392,8 @@ struct JarSpriteView: View {
                         topClearance: coreTopClearance,
                         bottomLimit: coreBottomLimit,
                         labelBottomLimit: coreLabelBottomLimit,
-                        measuredSize: $coreLabelSize
+                        showsSecondLine: coreLabelFit != .withoutSecondLine,
+                        metrics: $coreLabelMetrics
                     )
                 }
             }

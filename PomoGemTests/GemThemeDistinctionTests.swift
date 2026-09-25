@@ -371,6 +371,70 @@ final class GemThemeDistinctionTests: XCTestCase {
         XCTAssertTrue(FusionOrbitStage.sourceHexes(shares: [], count: 10).isEmpty)
     }
 
+    // MARK: Core labels on a shortened stage
+
+    /// Whatever the stage height, the label block never reaches the pile:
+    /// the second line gives way first, then the whole block.
+    func testCoreLabelsGiveWayOnAShortenedStage() throws {
+        let state = try XCTUnwrap(JarLifetimeCorePresentation.state(
+            totalPebbleCount: 15,
+            totalGrams: 3_750,
+            projectionIsLowerBound: false,
+            effortSnapshot: JarAccumulationPresencePresentation.effortSnapshot(totalGrams: 3_750)
+        ))
+        XCTAssertNotNil(state.nextFusionLabel)
+        let width: CGFloat = 390
+        func layout(stage: CGFloat, limit: CGFloat) -> (CGFloat) -> JarLifetimeCoreLayout {
+            { height in
+                JarLifetimeCoreLabels.layout(
+                    stageSize: CGSize(width: width, height: stage),
+                    state: state,
+                    topClearance: 90,
+                    bottomLimit: stage - 60,
+                    labelBottomLimit: limit,
+                    labelHeight: height
+                )
+            }
+        }
+        let full: CGFloat = 56
+        let second: CGFloat = 12
+        // A tall stage with a low pile: everything shows.
+        XCTAssertEqual(
+            JarLifetimeCoreLabelFit.resolve(fullHeight: full, secondLineHeight: second, abovePileLimit: 400, layout: layout(stage: 470, limit: 400)),
+            .full
+        )
+        // Shortened by the completion card: scan the pile top upward and
+        // check that whatever shows stays above it.
+        let stage: CGFloat = 360
+        var sawCompact = false
+        var sawHidden = false
+        for limit in stride(from: CGFloat(300), through: 120, by: -2) {
+            let fit = JarLifetimeCoreLabelFit.resolve(
+                fullHeight: full,
+                secondLineHeight: second,
+                abovePileLimit: limit,
+                layout: layout(stage: stage, limit: limit)
+            )
+            switch fit {
+            case .full, .withoutSecondLine:
+                let height = fit.labelHeight(full: full, secondLine: second)
+                let resolved = layout(stage: stage, limit: limit)(height)
+                XCTAssertLessThanOrEqual(resolved.labelTop + height, limit + 0.5, "limit \(limit)")
+                XCTAssertFalse(resolved.overflows)
+                if fit == .withoutSecondLine { sawCompact = true }
+            case .hidden:
+                sawHidden = true
+            }
+        }
+        XCTAssertTrue(sawCompact, "The second line gives way before the block hides")
+        XCTAssertTrue(sawHidden)
+        // Without a second line there is nothing to drop.
+        XCTAssertNotEqual(
+            JarLifetimeCoreLabelFit.resolve(fullHeight: full, secondLineHeight: 0, abovePileLimit: 150, layout: layout(stage: stage, limit: 150)),
+            .withoutSecondLine
+        )
+    }
+
     // MARK: Pixel helpers
 
     private struct Pixels {
