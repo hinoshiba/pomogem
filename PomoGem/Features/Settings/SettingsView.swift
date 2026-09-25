@@ -217,6 +217,7 @@ struct SettingsView: View {
                     }
                     showDataExportShareSheet = false
                 }
+                .systemShareSheetPresentation()
             }
         }
         .sheet(isPresented: $showCompleteDeletionConfirmation) {
@@ -979,7 +980,15 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("データを書き出す")
                             .font(.headline)
-                        Text(isExportingData ? "JSONファイルを作成中" : "全記録をJSONで保存・共有")
+                        Text(isExportingData
+                             ? "JSONファイルを作成中"
+                             // settings-09: says it is not a backup that
+                             // can be read back in, where people look.
+                             : String(
+                                 localized: "記録をJSONファイルに書き出す（読み込みには非対応）",
+                                 table: "Settings",
+                                 comment: "Settings export row subtitle: the file cannot be imported back"
+                             ))
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                     }
@@ -2834,6 +2843,17 @@ private struct SubjectEditorView: View {
                 Text(saveError ?? "")
             }
         }
+    }
+}
+
+extension View {
+    /// settings-09. A UIActivityViewController wrapped in a SwiftUI `.sheet`
+    /// takes the sheet's default full-height detent, so the share options sat
+    /// in the top quarter of an otherwise empty screen. The system share
+    /// sheet opens at half height and can be pulled up; so does this. Apply
+    /// it to the representable inside the sheet's content.
+    func systemShareSheetPresentation() -> some View {
+        presentationDetents([.medium, .large])
     }
 }
 

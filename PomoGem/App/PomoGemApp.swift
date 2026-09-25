@@ -712,6 +712,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                     PomoGemDataExportShareSheet(fileURL: deviceDataExportURL) { _ in
                         discardDeviceDataExport()
                     }
+                    .systemShareSheetPresentation()
                 }
             }
             .alert("書き出せませんでした", isPresented: Binding(
