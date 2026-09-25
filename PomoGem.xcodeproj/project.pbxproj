@@ -59,6 +59,7 @@
 		35F5FDBBEA7CB304A1DC55E5 /* PomoGemScreenTimeMonitor.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CFE4A3382A047BAEE9EF09C9 /* PomoGemScreenTimeMonitor.appex */; platformFilters = (ios, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		36203279B916057EAD7B7723 /* UsagePurposeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CB634DC37D02EBA2DDFCBA8 /* UsagePurposeTests.swift */; };
 		36692E1841949143EDE1393D /* TimerOrientationContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A1EC5E455F08FF0861D2A12 /* TimerOrientationContainer.swift */; };
+		36AA10A001C16516D144085D /* JarMotionSampling.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAF4BDCD98457018A4B83E53 /* JarMotionSampling.swift */; };
 		36C1AA1DA487981524206086 /* InitialCloudHydrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C5593DA547691E54AD22F76 /* InitialCloudHydrationTests.swift */; };
 		36CC27EB182B1083236A8FD2 /* Products.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 99F924237133573619ABB027 /* Products.storekit */; };
 		3700A10D28B01B55AFCD2B3F /* ScreenTimeImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59BAE67DFFB9F4641C8314D6 /* ScreenTimeImportTests.swift */; };
@@ -606,6 +607,7 @@
 		F8018C65F844DB234D0AAC3E /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		F876E41FCE0D77EC75DBC1DF /* FocusCloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusCloudSync.swift; sourceTree = "<group>"; };
 		F8B8DB83E9BABEEE2F3EF597 /* StorageTransferNilLineageDatasetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferNilLineageDatasetTests.swift; sourceTree = "<group>"; };
+		FAF4BDCD98457018A4B83E53 /* JarMotionSampling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarMotionSampling.swift; sourceTree = "<group>"; };
 		FB130FAA896BC2C5EC57C722 /* StorageTransferControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferControllerTests.swift; sourceTree = "<group>"; };
 		FB33553E11FE75154EDC5E34 /* StrataMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataMath.swift; sourceTree = "<group>"; };
 		FC92C18D8E0837F496656397 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
@@ -1074,6 +1076,7 @@
 			children = (
 				E025DEF0FDEB7B11EF0763BC /* GemArtwork.swift */,
 				255FD4B5A9B4B647ED209984 /* GemTextureAtlas.swift */,
+				FAF4BDCD98457018A4B83E53 /* JarMotionSampling.swift */,
 				ECD32D06418B1E26D368ACEB /* JarScene.swift */,
 				FD95D870B04E5DBD5913A66D /* JarSnapshotter.swift */,
 				4C8318D569F3634174B05480 /* JarSpriteView.swift */,
@@ -1406,6 +1409,7 @@
 				C94D41C8F2E3F291CB6BE07C /* HomeView.swift in Sources */,
 				7ED2EF2BEFDE44798E640A27 /* IntegrationConstants.swift in Sources */,
 				78F28B907BD71D887F0CDF95 /* JarFrameProbe.swift in Sources */,
+				36AA10A001C16516D144085D /* JarMotionSampling.swift in Sources */,
 				D327FF3F60F21C8E4756BA30 /* JarScene.swift in Sources */,
 				FBFEB564B7AB9E0735D7855D /* JarSnapshotter.swift in Sources */,
 				1142A86A589A4BA6F25EC137 /* JarSpriteView.swift in Sources */,

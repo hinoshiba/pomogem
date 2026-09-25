@@ -300,14 +300,21 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// its `isPaused` argument only when it creates the view (measured:
     /// later changes of the argument never reach the SKView).
     private(set) var isRenderLoopPaused = false
+    /// Whether the jar wants device motion at the full rate (§7.13) — its
+    /// physics is awake, or a tilt (or the first peak of a shake) keeps it
+    /// listening closely for a moment. The motion observer follows it and
+    /// drops to its idle rate when it turns false.
+    let fullRateMotionDemand = CurrentValueSubject<Bool, Never>(true)
+    var wantsFullRateMotion: Bool { fullRateMotionDemand.value }
     /// A light-only redraw of the resting jar keeps the render loop running
     /// this long (several frames at 60 or 30 fps).
     static let redrawHold: TimeInterval = 0.25
-    /// A tilt that moved the light keeps the render loop this long after
-    /// its last step, so a slow, deliberate tilt does not stop and restart
-    /// it between steps.
+    /// A tilt that moved the light keeps full-rate motion and the render
+    /// loop this long after its last step, so a slow, deliberate tilt does
+    /// not switch rates between steps.
     static let motionWakeHold: TimeInterval = 0.75
     private var redrawUntil: TimeInterval = -.greatestFiniteMagnitude
+    private var motionWakeUntil: TimeInterval = -.greatestFiniteMagnitude
     private var isRenderLoopCheckScheduled = false
     private(set) var isBakeInProgress = false
     private(set) var isCapacityReliefActive = false
@@ -389,6 +396,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var sensorySequence: UInt64 = 0
     private(set) var opticalTiltFraction: CGFloat = 0
     private var lastPublishedPhysicalPebbleCount = 0
+    private var lastPublishedHasStudyGems = false
     private var earlyEffortSpotlightIDs = Set<UUID>()
     private var nextStackingIndex = 0
 
@@ -494,6 +502,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
     private var studyPhysicalBodyCount: Int {
         livePebbles.filter { !$0.descriptor.isScreenTimeObstacle }.count
+    }
+    /// The gems device motion is for — study gems (and the tutorial's
+    /// stand-in). Black stones or milestone stones alone never keep the
+    /// sensor on.
+    var hasStudyGems: Bool {
+        livePebbles.contains {
+            !$0.descriptor.isScreenTimeObstacle && !$0.descriptor.isAchievement
+        }
     }
     var physicalAggregateCount: Int { livePebbles.filter { $0.descriptor.isAggregate }.count }
     var representedPebbleCount: Int {
@@ -1930,19 +1946,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         smoothing: Bool = true,
         wakesSimulation: Bool = false
     ) {
-        guard proposed.dx.isFinite, proposed.dy.isFinite else { return }
-        let magnitude = hypot(proposed.dx, proposed.dy)
-        let maximum = max(Constants.Jar.maximumExternalGravityMagnitude, 0.1)
-        let scale = magnitude > maximum ? maximum / magnitude : 1
-        let clamped = CGVector(dx: proposed.dx * scale, dy: proposed.dy * scale)
+        guard let clamped = JarTiltMath.clamped(proposed) else { return }
         let next: CGVector
         if smoothing {
-            let fraction = min(max(Constants.Jar.gravitySmoothingFactor, 0), 1)
-            next = CGVector(
-                dx: appliedGravityVector.dx
-                    + (clamped.dx - appliedGravityVector.dx) * fraction,
-                dy: appliedGravityVector.dy
-                    + (clamped.dy - appliedGravityVector.dy) * fraction
+            next = JarTiltMath.smoothed(
+                from: appliedGravityVector,
+                toward: clamped,
+                fraction: Constants.Jar.gravitySmoothingFactor
             )
         } else {
             next = clamped
@@ -1985,13 +1995,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// idle the light follows the phone in steps larger than
     /// `idleTiltRenderThreshold`, at most `idleTiltFramesPerSecond` times a
     /// second: a deliberate tilt still sparkles at once (the step restarts
-    /// the render loop for `motionWakeHold`), while the sensor noise of a
-    /// phone held still draws nothing. An awake jar follows every sample,
-    /// as before.
-    static let idleTiltRenderThreshold: CGFloat = 0.015
+    /// the render loop and full-rate motion for `motionWakeHold`), while
+    /// the sensor noise of a phone held still draws nothing. An awake jar
+    /// follows every sample, as before.
+    static let idleTiltRenderThreshold: CGFloat = JarTiltMath.idleLightThreshold
     static let idleTiltFramesPerSecond: Double = 30
-    /// Clock of the idle tilt gate and of the render loop's redraw holds
-    /// (tests inject one).
+    /// Clock of the idle tilt gate and of the render loop's redraw and
+    /// motion holds (tests inject one).
     var tiltClock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     private var lastIdleTiltUptime: TimeInterval = -.greatestFiniteMagnitude
     /// Light changes made while idle — each one is a frame SpriteKit draws
@@ -2013,9 +2023,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             lastIdleTiltUptime = uptime
             let drawn = opticalTiltFraction
             updateOpticalTilt(horizontal: horizontal)
-            // A tilt that moved the light keeps the jar drawing for a moment.
+            // A tilt that moved the light keeps the jar drawing and
+            // listening closely for a moment.
             if opticalTiltFraction != drawn {
                 requestRedraw(for: Self.motionWakeHold)
+                holdFullRateMotion()
             }
             return
         }
@@ -2023,9 +2035,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     private func opticalFraction(horizontal: CGFloat) -> CGFloat {
-        reduceMotion
-            ? CGFloat.zero
-            : min(max(horizontal / Constants.Jar.tiltGravityHorizontalScale, -1), 1)
+        reduceMotion ? CGFloat.zero : JarTiltMath.lightFraction(horizontal: horizontal)
     }
 
     /// Reflections move a few points opposite the sensed gravity, producing a
@@ -2056,12 +2066,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             updateOpticalTilt(horizontal: appliedGravityVector.dx)
         }
         resetIdleObservation()
-        // Landing, fusion, tap, shake, content changes: the render loop
-        // comes back in this same turn.
+        // Landing, fusion, tap, shake, content changes: the render loop and
+        // full-rate motion come back in this same turn.
         updateRenderLoop(now: tiltClock())
     }
 
-    // MARK: Render loop (jar-01, §7.13)
+    // MARK: Render loop and motion demand (jar-01, §7.13)
 
     /// Draws the resting jar again for `hold` seconds without waking its
     /// physics: a light-only change (tilt, a setting, a new gem bed), a view
@@ -2073,14 +2083,29 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         updateRenderLoop(now: now)
     }
 
-    /// Resolves the render loop from the idle pause and the open redraw
-    /// hold, applies it, and schedules the check that ends the hold (a
-    /// paused scene gets no `update(_:)` to do it).
+    /// Keeps device motion at the full rate for `hold` seconds while the jar
+    /// rests: after a tilt that moved the light, or the first peak of a
+    /// shake (its reversal must not fall between idle samples).
+    func holdFullRateMotion(for hold: TimeInterval = JarScene.motionWakeHold) {
+        let now = tiltClock()
+        motionWakeUntil = max(motionWakeUntil, now + max(0, hold))
+        updateRenderLoop(now: now)
+    }
+
+    /// Resolves the render loop and the motion demand from the idle pause
+    /// and the open holds, applies them, and schedules the check that ends
+    /// the holds (a paused scene gets no `update(_:)` to do it).
     private func updateRenderLoop(now: TimeInterval) {
-        isRenderLoopPaused = isIdlePaused && now >= redrawUntil
+        let paused = isIdlePaused && now >= redrawUntil
+        let fullRate = !isIdlePaused || now < motionWakeUntil
+        isRenderLoopPaused = paused
         applyRenderLoopState()
-        if isIdlePaused, now < redrawUntil {
-            scheduleRenderLoopCheck(after: redrawUntil - now)
+        if fullRateMotionDemand.value != fullRate {
+            fullRateMotionDemand.send(fullRate)
+        }
+        let deadline = max(redrawUntil, motionWakeUntil)
+        if isIdlePaused, now < deadline {
+            scheduleRenderLoopCheck(after: deadline - now)
         }
     }
 
@@ -2109,8 +2134,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
 #if DEBUG
-    /// Deterministic seam: re-resolves the render loop at the injected
-    /// `tiltClock`, as the scheduled check would.
+    /// Deterministic seam: re-resolves the render loop and the motion demand
+    /// at the injected `tiltClock`, as the scheduled check would.
     func evaluateRenderLoopForTesting() {
         updateRenderLoop(now: tiltClock())
     }
@@ -4396,7 +4421,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             onIdlePauseChanged?(true)
         }
         isPaused = true
-        // The settled frame is drawn, then the render loop stops (jar-01).
+        // The settled frame is drawn, then the render loop stops (jar-01)
+        // and device motion drops to its idle rate.
         requestRedraw()
     }
 
@@ -4445,13 +4471,20 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     /// Invalidates SwiftUI only when the live physics chamber transitions to a
-    /// different body count. `physicalPebbleCount` itself remains computed from
-    /// `livePebbles`, avoiding a second, potentially stale emptiness source.
+    /// different body count, or gains or loses its study gems (they decide
+    /// whether device motion runs). `physicalPebbleCount` itself remains
+    /// computed from `livePebbles`, avoiding a second, potentially stale
+    /// emptiness source.
     private func publishPhysicalContentChangeIfNeeded(force: Bool = false) {
         refreshEarlyEffortSpotlightsIfNeeded()
         let count = physicalPebbleCount
-        guard force || count != lastPublishedPhysicalPebbleCount else { return }
+        let hasStudyGems = self.hasStudyGems
+        guard force
+            || count != lastPublishedPhysicalPebbleCount
+            || hasStudyGems != lastPublishedHasStudyGems
+        else { return }
         lastPublishedPhysicalPebbleCount = count
+        lastPublishedHasStudyGems = hasStudyGems
         physicalContentRevision &+= 1
     }
 
@@ -4917,19 +4950,41 @@ struct JarShakeDetector {
     }
 }
 
+/// Samples device motion for one jar (Docs/GemExperienceDesign.md §7.13).
+/// While the jar is awake it runs at the full rate on the main queue and
+/// applies every sample, as before. When the jar comes to rest it drops
+/// to `JarMotionRate.idleUpdatesPerSecond` on a background queue, where
+/// `JarIdleTiltMonitor` keeps the smoothed tilt; only a tilt that would move
+/// the drawn light (or a shake peak) hops to main, which restores the full
+/// rate and the render loop. Stopped whenever the jar's owner says so (Home
+/// hidden or covered, the app not active, no study gem).
 @MainActor
 final class JarMotionObserver: ObservableObject {
     private static weak var activeOwner: JarMotionObserver?
 
-    private let manager = CMMotionManager()
+    private let source: JarMotionSource
     private weak var scene: JarScene?
     private var updateGate = JarMotionUpdateGate()
     private var shakeDetector = JarShakeDetector()
     private var appliesGravity = true
     private var hapticPlaybackObserver: NSObjectProtocol?
+    private let idleMonitor = JarIdleTiltMonitor()
+    /// The idle rate is delivered here, off the main thread.
+    private let idleQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "PomoGem.JarMotion.idle"
+        queue.maxConcurrentOperationCount = 1
+        queue.qualityOfService = .utility
+        return queue
+    }()
+    private var demandSubscription: AnyCancellable?
+    private var isStarted = false
+    /// The rate the sensor runs at now (tests and the Debug frame probe).
+    private(set) var rate: JarMotionRate = .stopped
 
-    init(scene: JarScene? = nil) {
+    init(scene: JarScene? = nil, source: JarMotionSource? = nil) {
         self.scene = scene
+        self.source = source ?? Self.makeDefaultSource()
         hapticPlaybackObserver = NotificationCenter.default.addObserver(
             forName: HapticPlaybackNotification.willPlay,
             object: nil,
@@ -4954,70 +5009,169 @@ final class JarMotionObserver: ObservableObject {
         }
     }
 
+    private static func makeDefaultSource() -> JarMotionSource {
+        CoreMotionJarMotionSource()
+    }
+
     func start(scene: JarScene? = nil, appliesGravity: Bool = true) {
-        if let scene { self.scene = scene }
+        if let scene, scene !== self.scene {
+            if isStarted { stop() }
+            self.scene = scene
+        }
         self.appliesGravity = appliesGravity
-        guard self.scene != nil,
-              manager.isDeviceMotionAvailable
+        guard let scene = self.scene,
+              source.isAvailable
         else { return }
         if let previousOwner = Self.activeOwner, previousOwner !== self {
             previousOwner.stop()
         }
         Self.activeOwner = self
-        guard !manager.isDeviceMotionActive else { return }
-        let generation = updateGate.begin()
-        shakeDetector.reset()
-        manager.deviceMotionUpdateInterval = 1 / TimeInterval(Constants.Jar.tiltUpdatesPerSecond)
-        manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
-            guard let motion else { return }
-            let gravity = motion.gravity
-            let acceleration = motion.userAcceleration
-            let timestamp = motion.timestamp
-            let horizontal = CGFloat(gravity.x) * Constants.Jar.tiltGravityHorizontalScale
-            let sensedVertical = CGFloat(gravity.y) * abs(Constants.Jar.gravity)
-            let vertical = min(-Constants.Jar.tiltGravityMinimumDownward, sensedVertical)
-            // OperationQueue.main is the delivery contract. Consume each sample
-            // synchronously so 30 Hz input cannot accumulate as unordered,
-            // stale unstructured tasks behind a busy SpriteKit frame.
-            MainActor.assumeIsolated { [weak self] in
-                guard let self,
-                      let scene = self.scene,
-                      self.updateGate.accepts(generation)
-                else { return }
-                if self.appliesGravity,
-                   self.updateGate.acceptsGravity(
-                    generation,
-                    reduceMotion: scene.reduceMotion
-                ) {
-                    scene.setGravityVector(
-                        CGVector(dx: horizontal, dy: vertical)
-                    )
-                }
-                if let shake = self.shakeDetector.ingest(
-                    x: acceleration.x,
-                    y: acceleration.y,
-                    z: acceleration.z,
-                    uptime: timestamp
-                ) {
-                    _ = scene.shakePebbles(
-                        strength: CGFloat(shake.strength),
-                        horizontal: CGFloat(shake.horizontalDirection)
-                    )
-                }
+        isStarted = true
+        // Reduce Motion may have changed since the idle check was armed.
+        idleMonitor.setFollowsTilt(!scene.reduceMotion)
+        guard demandSubscription == nil else { return }
+        // The subject hands over the current demand at once, then every
+        // change, synchronously on the main actor.
+        demandSubscription = scene.fullRateMotionDemand
+            .removeDuplicates()
+            .sink { [weak self] wantsFullRate in
+                self?.follow(jarWantsFullRate: wantsFullRate)
             }
-        }
     }
 
     func stop() {
         // Invalidate before stopping/resetting so a delivery already queued by
         // Core Motion cannot overwrite the stable downward gravity afterward.
         updateGate.invalidate()
+        idleMonitor.disarm()
+        demandSubscription = nil
+        isStarted = false
         appliesGravity = false
-        manager.stopDeviceMotionUpdates()
+        source.stop()
+        rate = .stopped
         shakeDetector.reset()
         scene?.resetGravity()
         if Self.activeOwner === self {
             Self.activeOwner = nil
         }
     }
+
+    private func follow(jarWantsFullRate: Bool) {
+        guard isStarted else { return }
+        switch JarMotionRate.resolve(sampling: .tiltAndShake, jarWantsFullRate: jarWantsFullRate) {
+        case .full where rate != .full:
+            runFullRate()
+        case .idle where rate != .idle:
+            runIdleRate()
+        default:
+            break
+        }
+    }
+
+    /// The awake jar: every sample, on the main queue.
+    private func runFullRate() {
+        // Set first: the gravity catch-up below can itself raise the jar's
+        // demand, which must find the full rate already running.
+        rate = .full
+        let latestIdleGravity = idleMonitor.disarm()
+        let generation = updateGate.begin()
+        shakeDetector.reset()
+        source.start(
+            updatesPerSecond: JarMotionRate.fullUpdatesPerSecond,
+            queue: .main
+        ) { [weak self] sample in
+            // OperationQueue.main is the delivery contract. Consume each sample
+            // synchronously so 30 Hz input cannot accumulate as unordered,
+            // stale unstructured tasks behind a busy SpriteKit frame.
+            MainActor.assumeIsolated {
+                self?.ingestFullRate(sample, generation: generation)
+            }
+        }
+        // What the idle check saw last becomes the gravity now, so a jar
+        // woken by a tap never starts from a stale tilt, and a tilt that
+        // woke it moves the light at once.
+        if appliesGravity, let latestIdleGravity {
+            scene?.setGravityVector(latestIdleGravity, smoothing: false)
+        }
+    }
+
+    /// The resting jar: a few samples a second, checked off the main thread.
+    private func runIdleRate() {
+        guard let scene else { return }
+        rate = .idle
+        let generation = updateGate.begin()
+        idleMonitor.arm(
+            JarIdleTiltFilter(
+                gravity: scene.appliedGravityVector,
+                drawnLight: scene.opticalTiltFraction,
+                followsTilt: !scene.reduceMotion
+            ),
+            generation: generation
+        )
+        let monitor = idleMonitor
+        source.start(
+            updatesPerSecond: JarMotionRate.idleUpdatesPerSecond,
+            queue: idleQueue
+        ) { [weak self] sample in
+            // Core Motion's background queue: only the monitor is touched.
+            guard let wake = monitor.ingest(sample, generation: generation) else { return }
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    self?.handleIdleWake(wake, generation: generation)
+                }
+            }
+        }
+    }
+
+    private func handleIdleWake(_ wake: JarIdleWake, generation: UInt64) {
+        guard rate == .idle,
+              updateGate.accepts(generation),
+              let scene
+        else { return }
+        // The sample that woke the jar starts a gesture: full rate at once.
+        // Its smoothed gravity is applied there; a tilt that moves the light
+        // restarts the render loop and holds the full rate (JarScene).
+        runFullRate()
+        if wake.reason == .shake {
+            // The reversal of a shake follows within 0.42 s.
+            scene.holdFullRateMotion()
+            ingestShake(wake.sample)
+        }
+        // Nothing to draw after all (the light already follows this tilt):
+        // rest again, re-armed around the light on screen.
+        if !scene.wantsFullRateMotion {
+            runIdleRate()
+        }
+    }
+
+    private func ingestFullRate(_ sample: JarMotionSample, generation: UInt64) {
+        guard let scene,
+              updateGate.accepts(generation)
+        else { return }
+        if appliesGravity,
+           updateGate.acceptsGravity(generation, reduceMotion: scene.reduceMotion) {
+            scene.setGravityVector(sample.proposedGravity)
+        }
+        ingestShake(sample)
+    }
+
+    private func ingestShake(_ sample: JarMotionSample) {
+        guard let scene,
+              let shake = shakeDetector.ingest(
+                x: sample.accelerationX,
+                y: sample.accelerationY,
+                z: sample.accelerationZ,
+                uptime: sample.timestamp
+              )
+        else { return }
+        _ = scene.shakePebbles(
+            strength: CGFloat(shake.strength),
+            horizontal: CGFloat(shake.horizontalDirection)
+        )
+    }
+
+#if DEBUG
+    /// Test seam: whether the idle tilt check is armed.
+    var isIdleCheckArmedForTesting: Bool { idleMonitor.isArmed }
+#endif
 }

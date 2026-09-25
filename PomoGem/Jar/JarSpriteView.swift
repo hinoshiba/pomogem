@@ -20,27 +20,27 @@ enum JarMotionActivationPolicy {
         isMotionEnabled: Bool,
         reduceMotion: Bool,
         sceneIsActive: Bool,
-        hasPhysicalContent: Bool
+        hasStudyGems: Bool
     ) -> Bool {
         mode(
             isMotionEnabled: isMotionEnabled,
             reduceMotion: reduceMotion,
             sceneIsActive: sceneIsActive,
-            hasPhysicalContent: hasPhysicalContent
+            hasStudyGems: hasStudyGems
         ) != .stopped
     }
 
+    /// The sensor runs only for a visible, active jar (Home in front:
+    /// no covering sheet, not the Focus screen) that holds a study gem.
+    /// Whether it runs at the full or the idle rate is the jar's own
+    /// demand (`JarMotionRate`).
     static func mode(
         isMotionEnabled: Bool,
         reduceMotion: Bool,
         sceneIsActive: Bool,
-        hasPhysicalContent: Bool
+        hasStudyGems: Bool
     ) -> JarMotionSamplingMode {
-        guard shouldCaptureShake(
-            isMotionEnabled: isMotionEnabled,
-            sceneIsActive: sceneIsActive,
-            hasPhysicalContent: hasPhysicalContent
-        ) else { return .stopped }
+        guard isMotionEnabled, sceneIsActive, hasStudyGems else { return .stopped }
         // Reduce Motion changes decorative effects in the scene. The jar's
         // physical response to direct interaction remains the same.
         return .tiltAndShake
@@ -581,7 +581,7 @@ struct JarSpriteView: View {
             isMotionEnabled: isMotionEnabled,
             reduceMotion: reduceMotion,
             sceneIsActive: scenePhase == .active,
-            hasPhysicalContent: hasPhysicalContent
+            hasStudyGems: scene.hasStudyGems
         )
         switch samplingMode {
         case .stopped:
@@ -591,6 +591,8 @@ struct JarSpriteView: View {
             // longer needs the sensor while a prior tilt is still applied.
             motionObserver.stop()
         case .tiltAndShake:
+            // Full rate while the jar is awake, the idle rate while it rests
+            // (the observer follows `scene.fullRateMotionDemand`).
             motionObserver.start(scene: scene, appliesGravity: true)
         }
 #endif

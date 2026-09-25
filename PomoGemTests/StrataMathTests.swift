@@ -1725,48 +1725,48 @@ final class StrataMathTests: XCTestCase {
         XCTAssertTrue(gate.acceptsGravity(secondGeneration, reduceMotion: false))
     }
 
-    func testJarMotionActivationRequiresOneVisibleActivePhysicalJar() {
+    func testJarMotionActivationRequiresOneVisibleActiveJarWithStudyGems() {
         XCTAssertTrue(JarMotionActivationPolicy.shouldRun(
             isMotionEnabled: true,
             reduceMotion: false,
             sceneIsActive: true,
-            hasPhysicalContent: true
+            hasStudyGems: true
         ))
         XCTAssertFalse(JarMotionActivationPolicy.shouldRun(
             isMotionEnabled: false,
             reduceMotion: false,
             sceneIsActive: true,
-            hasPhysicalContent: true
+            hasStudyGems: true
         ))
         XCTAssertTrue(JarMotionActivationPolicy.shouldRun(
             isMotionEnabled: true,
             reduceMotion: true,
             sceneIsActive: true,
-            hasPhysicalContent: true
+            hasStudyGems: true
         ))
         XCTAssertEqual(JarMotionActivationPolicy.mode(
             isMotionEnabled: true,
             reduceMotion: true,
             sceneIsActive: true,
-            hasPhysicalContent: true
+            hasStudyGems: true
         ), .tiltAndShake)
         XCTAssertEqual(JarMotionActivationPolicy.mode(
             isMotionEnabled: true,
             reduceMotion: false,
             sceneIsActive: true,
-            hasPhysicalContent: true
+            hasStudyGems: true
         ), .tiltAndShake)
         XCTAssertFalse(JarMotionActivationPolicy.shouldRun(
             isMotionEnabled: true,
             reduceMotion: false,
             sceneIsActive: false,
-            hasPhysicalContent: true
+            hasStudyGems: true
         ))
         XCTAssertFalse(JarMotionActivationPolicy.shouldRun(
             isMotionEnabled: true,
             reduceMotion: false,
             sceneIsActive: true,
-            hasPhysicalContent: false
+            hasStudyGems: false
         ))
         XCTAssertTrue(JarMotionActivationPolicy.shouldCaptureShake(
             isMotionEnabled: true,
