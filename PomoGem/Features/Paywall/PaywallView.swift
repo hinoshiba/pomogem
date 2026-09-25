@@ -427,10 +427,7 @@ struct PaywallView: View {
             let outcome = try await purchase.purchase(product)
             switch outcome {
             case .purchased:
-                alert = PaywallAlert(
-                    title: Constants.UIStrings.paywallTitle,
-                    message: String(localized: "ポモジェムProを利用できます。", table: "Paywall", comment: "Paywall alert after a completed purchase")
-                )
+                alert = .purchased(context: context)
             case .pending:
                 alert = .approvalRequested
             case .cancelled:

@@ -92,4 +92,15 @@ final class PaywallErrorCopyTests: XCTestCase {
         XCTAssertNotEqual(PaywallAlert.nothingToRestore.title, Constants.UIStrings.paywallTitle)
         XCTAssertEqual(PaywallAlert.restored.title, Constants.UIStrings.paywallTitle)
     }
+
+    /// settings-08. The thank-you says what the person came for now does,
+    /// and the custom-duration one says the editor opens next.
+    func testPurchaseSuccessNamesTheFeatureThePersonCameFor() {
+        XCTAssertTrue(PaywallAlert.purchased(context: .customTimer).message.contains("集中時間を選ぶ画面が開きます"))
+        XCTAssertTrue(PaywallAlert.purchased(context: .screenTimeApps).message.contains("勉強アプリ"))
+        XCTAssertTrue(PaywallAlert.purchased(context: .aggregateLabels).message.contains("作った月"))
+        for context in [PaywallContext.settings, .customTimer, .screenTimeApps, .aggregateLabels] {
+            XCTAssertEqual(PaywallAlert.purchased(context: context).title, Constants.UIStrings.paywallTitle)
+        }
+    }
 }

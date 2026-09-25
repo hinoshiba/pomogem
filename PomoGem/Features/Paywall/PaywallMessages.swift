@@ -48,6 +48,39 @@ struct PaywallAlert: Equatable {
         return PaywallAlert(title: title, message: message)
     }
 
+    /// settings-08. After a purchase, say what just opened up for the thing
+    /// the person came for, and what closing the sheet leads to.
+    static func purchased(context: PaywallContext) -> PaywallAlert {
+        let message = switch context {
+        case .customTimer:
+            // Home and Settings both reopen their duration editor.
+            String(
+                localized: "ポモジェムProが使えるようになりました。閉じると、集中時間を選ぶ画面が開きます。",
+                table: "Paywall",
+                comment: "Paywall alert after buying from the custom duration control; the editor opens next"
+            )
+        case .screenTimeApps:
+            String(
+                localized: "ポモジェムProが使えるようになりました。勉強アプリを数の制限なく選べます。",
+                table: "Paywall",
+                comment: "Paywall alert after buying from Screen Time's study-app limit"
+            )
+        case .aggregateLabels:
+            String(
+                localized: "ポモジェムProが使えるようになりました。結晶に、作った月が表示されます。",
+                table: "Paywall",
+                comment: "Paywall alert after buying from the crystal month-label hint"
+            )
+        case .settings:
+            String(
+                localized: "ポモジェムProが使えるようになりました。",
+                table: "Paywall",
+                comment: "Paywall alert after a completed purchase"
+            )
+        }
+        return PaywallAlert(title: Constants.UIStrings.paywallTitle, message: message)
+    }
+
     static let restored = PaywallAlert(
         title: Constants.UIStrings.paywallTitle,
         message: String(localized: "購入を復元しました。Proの機能を使えます。", table: "Paywall", comment: "Paywall alert: restore found the Pro purchase")

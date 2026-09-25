@@ -333,6 +333,13 @@ struct SettingsView: View {
         .onChange(of: completionPreviewConfiguration) { _, _ in
             completionPreview.cancel()
         }
+        .onChange(of: router.settingsCustomDurationResumeRequested) { _, requested in
+            // Set from the paywall sheet's onDismiss, so presenting the
+            // editor here never collides with the closing paywall.
+            guard requested, router.consumeSettingsCustomDurationResumeRequest(),
+                  purchase.isPro else { return }
+            showCustomDuration = true
+        }
         .onDisappear {
             viewTasks.cancelAll()
             completionPreview.cancel()
@@ -571,7 +578,12 @@ struct SettingsView: View {
                         if purchase.isPro {
                             showCustomDuration = true
                         } else {
-                            router.presentPaywall(from: .customTimer)
+                            // settings-08. Buying reopens this editor, as
+                            // it does from Home.
+                            router.presentPaywall(
+                                from: .customTimer,
+                                pendingIntent: .settingsCustomDuration
+                            )
                         }
                     }
                 )

@@ -831,11 +831,61 @@ final class PaywallContinuationTests: XCTestCase {
     func testSettingsCustomTimerDoesNotResumeHomeEvenWhenPro() {
         let router = AppRouter()
 
-        router.presentPaywall(from: .customTimer)
+        router.presentPaywall(from: .customTimer, pendingIntent: .settingsCustomDuration)
         router.resolvePaywallDismissal(isPro: true)
 
         XCTAssertNil(router.pendingPaywallIntent)
         XCTAssertFalse(router.consumeHomeCustomDurationResumeRequest())
+    }
+
+    /// settings-08. Buying from Settings' 「カスタム」 tile reopens Settings'
+    /// own editor, exactly once, the way Home's purchase path does.
+    @MainActor
+    func testSettingsCustomDurationResumesExactlyOnceAfterProPurchase() {
+        let router = AppRouter()
+
+        router.presentPaywall(from: .customTimer, pendingIntent: .settingsCustomDuration)
+        XCTAssertEqual(router.pendingPaywallIntent, .settingsCustomDuration)
+        router.resolvePaywallDismissal(isPro: true)
+
+        XCTAssertNil(router.pendingPaywallIntent)
+        XCTAssertTrue(router.consumeSettingsCustomDurationResumeRequest())
+        XCTAssertFalse(router.consumeSettingsCustomDurationResumeRequest())
+    }
+
+    @MainActor
+    func testSettingsCustomDurationCancellationDiscardsPendingIntent() {
+        let router = AppRouter()
+
+        router.presentPaywall(from: .customTimer, pendingIntent: .settingsCustomDuration)
+        router.resolvePaywallDismissal(isPro: false)
+
+        XCTAssertNil(router.pendingPaywallIntent)
+        XCTAssertFalse(router.consumeSettingsCustomDurationResumeRequest())
+    }
+
+    @MainActor
+    func testHomeCustomDurationNeverReopensSettingsEditor() {
+        let router = AppRouter()
+
+        router.presentPaywall(from: .customTimer, pendingIntent: .homeCustomDuration)
+        router.resolvePaywallDismissal(isPro: true)
+
+        XCTAssertFalse(router.consumeSettingsCustomDurationResumeRequest())
+        XCTAssertTrue(router.consumeHomeCustomDurationResumeRequest())
+    }
+
+    /// An upsell with nothing to resume (Settings' Pro row, Screen Time's
+    /// 「Proで勉強アプリを無制限に」) leaves both editors alone.
+    @MainActor
+    func testPaywallWithoutIntentResumesNothing() {
+        let router = AppRouter()
+
+        router.presentPaywall(from: .screenTimeApps)
+        router.resolvePaywallDismissal(isPro: true)
+
+        XCTAssertFalse(router.consumeHomeCustomDurationResumeRequest())
+        XCTAssertFalse(router.consumeSettingsCustomDurationResumeRequest())
     }
 }
 
