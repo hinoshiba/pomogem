@@ -124,7 +124,7 @@ final class GIFShareLifecycleUITests: XCTestCase {
 
         let copyCaption = app.buttons["share.copy-caption"]
         XCTAssertTrue(
-            scrollUntilHittable(copyCaption),
+            scrollUntilHittable(copyCaption, avoiding: primaryShare),
             "The copy CTA must remain independently discoverable and hittable"
         )
         XCTAssertTrue(copyCaption.isHittable)
@@ -593,13 +593,16 @@ final class GIFShareLifecycleUITests: XCTestCase {
         // A fast fling can carry the element past the top, where XCTest still
         // reports it hittable under the translucent navigation bar and a tap
         // lands on the bar instead. Require it below the bar, and come back
-        // down slowly when it has gone past.
+        // down slowly when it has gone past. The obstruction is the share CTA
+        // pinned to the bottom: its material bar covers everything from about
+        // 10 pt above the button to the screen edge, so an element below the
+        // button is just as covered as one overlapping it.
         let navigationBar = app.navigationBars.firstMatch
         func isClear() -> Bool {
             element.exists
                 && obstruction.exists
                 && element.isHittable
-                && !element.frame.intersects(obstruction.frame)
+                && element.frame.maxY <= obstruction.frame.minY - 12
                 && (!navigationBar.exists || element.frame.minY >= navigationBar.frame.maxY)
         }
         for _ in 0..<attempts {
