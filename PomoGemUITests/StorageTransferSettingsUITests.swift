@@ -863,12 +863,15 @@ final class StorageTransferSettingsUITests: XCTestCase {
         attach("icloud-settings-quota")
 
         launch("cloudExportFailing")
-        let failing = app.descendants(matching: .any)["settings.icloud.export-failing"]
-        XCTAssertTrue(failing.waitForExistence(timeout: 8))
-        XCTAssertTrue(failing.label.contains("自動で再試行しています"))
-        let checked = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "iCloudに接続できます"),
-                                                object: app.descendants(matching: .any)["settings.icloud.status"])
-        XCTAssertEqual(XCTWaiter.wait(for: [checked], timeout: 8), .completed)
+        let failingStatus = app.descendants(matching: .any)["settings.icloud.status"]
+        XCTAssertTrue(failingStatus.waitForExistence(timeout: 8))
+        let failing = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "iCloudへの送信がうまくいっていません"),
+            object: failingStatus)
+        XCTAssertEqual(XCTWaiter.wait(for: [failing], timeout: 8), .completed, failingStatus.label)
+        XCTAssertTrue(failingStatus.label.contains("自動で再試行しています"), failingStatus.label)
+        XCTAssertFalse(failingStatus.label.contains("iCloudに接続できます"),
+                       "No 「接続できます」 checkmark above a sending problem")
         attach("icloud-settings-export-failing")
         assertNoOperation()
     }

@@ -764,6 +764,23 @@ struct CloudSyncSettingsSection: View {
     }
 
     private var showsQuotaIssue: Bool { mirroringState?.issue == .quotaExceeded }
+    private var showsExportFailure: Bool { mirroringState?.issue == .persistentExportFailure }
+
+    private var statusTitle: String {
+        if showsQuotaIssue { return CloudKitMirroringCopy.quotaTitle }
+        if showsExportFailure { return CloudKitMirroringCopy.persistentFailureTitle }
+        return monitor.availability.title
+    }
+
+    private var statusDetail: String {
+        if showsQuotaIssue { return CloudKitMirroringCopy.quotaDetail }
+        if showsExportFailure { return CloudKitMirroringCopy.persistentFailureDetail }
+        return monitor.failure?.errorDescription ?? monitor.availability.detail
+    }
+
+    /// The status icon's column plus its spacing: rows under the status start
+    /// where its text does.
+    private static let statusTextInset: CGFloat = 28 + 13
 
     @ViewBuilder
     var body: some View {
@@ -830,7 +847,8 @@ struct CloudSyncSettingsSection: View {
                     if monitor.availability == .checking {
                         ProgressView()
                             .tint(PomoGemTheme.amber)
-                    } else if showsQuotaIssue {
+                    } else if showsQuotaIssue || showsExportFailure {
+                        // sync-04. Not the checkmark beside a sending problem.
                         Image(systemName: "exclamationmark.icloud.fill")
                             .foregroundStyle(Color.orange)
                     } else {
@@ -846,11 +864,9 @@ struct CloudSyncSettingsSection: View {
                 .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(showsQuotaIssue ? CloudKitMirroringCopy.quotaTitle : monitor.availability.title)
+                    Text(statusTitle)
                         .font(.headline)
-                    Text(showsQuotaIssue
-                         ? CloudKitMirroringCopy.quotaDetail
-                         : monitor.failure?.errorDescription ?? monitor.availability.detail)
+                    Text(statusDetail)
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -949,18 +965,12 @@ struct CloudSyncSettingsSection: View {
                 .font(.caption)
                 .foregroundStyle(PomoGemTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.leading, Self.statusTextInset)
                 .accessibilityIdentifier("settings.icloud.quota.hint")
         case .persistentExportFailure:
-            Label {
-                Text(CloudKitMirroringCopy.persistentFailure)
-                    .font(.caption)
-                    .fixedSize(horizontal: false, vertical: true)
-            } icon: {
-                Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
-                    .foregroundStyle(Color.orange)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("settings.icloud.export-failing")
+            // The status above carries the title, the retry and where the
+            // records are; nothing more to add on a line of its own.
+            EmptyView()
         case nil:
             if let lastExport = state.lastExportSuccess {
                 // Only the relative time ticks; the row stays one Label.

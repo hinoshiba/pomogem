@@ -186,20 +186,34 @@ enum CloudKitMirroringCopy {
     static var quotaDetail: String {
         String(localized: "最近の記録をiCloudへ送信できていません。記録はこのiPhoneに保存されています。iCloudに空きができると、自動で送信を再開します。", table: "Launch")
     }
+    /// The same path CloudDataDeletionGuidanceView describes. The button
+    /// below opens PomoGem's own page inside Settings (no public link opens
+    /// iCloud storage), so the hint also says how to get back from there.
     static var quotaSettingsHint: String {
-        String(localized: "空き容量は「設定」アプリの一番上の名前 ＞「iCloud」で確認できます。", table: "Launch")
+        String(localized: "iPhoneの「設定」で、いちばん上の自分の名前から「iCloud」に進むと、空き容量を確認できます。下のボタンでポモジェムの画面が開いたときは、左上の「設定」で戻ってください。", table: "Launch")
     }
     static var openSettings: String {
         String(localized: "「設定」アプリを開く", table: "Launch")
     }
-    static var persistentFailure: String {
-        String(localized: "iCloudへの送信がうまくいっていません。自動で再試行しています。記録はこのiPhoneに保存されています。", table: "Launch")
+    /// The status title while exports keep failing: it replaces
+    /// 「iCloudに接続できます」 so the section does not say both at once.
+    static var persistentFailureTitle: String {
+        String(localized: "iCloudへの送信がうまくいっていません", table: "Launch")
+    }
+    static var persistentFailureDetail: String {
+        String(localized: "自動で再試行しています。記録はこのiPhoneに保存されています。", table: "Launch")
     }
     static func lastExport(_ relative: String) -> String {
         String(localized: "iCloudへの最終送信：\(relative)", table: "Launch",
                comment: "Settings: when this iPhone last sent records to iCloud, e.g. 3分前")
     }
-    static var unsentWarning: String {
-        String(localized: "このiPhoneには、まだiCloudへ送信できていない記録がある可能性があります。続ける前に「データを書き出す」で保存しておくと安心です。", table: "Launch")
+    /// Names the export button that is on this same screen, or none when the
+    /// screen has no export button.
+    static func unsentWarning(exportButtonTitle: String?) -> String {
+        guard let exportButtonTitle else {
+            return String(localized: "このiPhoneには、まだiCloudへ送信できていない記録がある可能性があります。", table: "Launch")
+        }
+        return String(localized: "このiPhoneには、まだiCloudへ送信できていない記録がある可能性があります。続ける前に、下の「\(exportButtonTitle)」で控えを保存しておくと安心です。", table: "Launch",
+                      comment: "Refresh-from-iCloud confirmation when recent exports failed; the argument is the export button's title below")
     }
 }

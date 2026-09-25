@@ -514,7 +514,9 @@ struct StorageTransferDatasetConfirmationView: View {
                         if mirroringActivity?.state.mayHaveUnsentChanges == true {
                             // sync-04. This direction deletes this iPhone's
                             // side, and its recent exports did not succeed.
-                            paragraph(CloudKitMirroringCopy.unsentWarning, suffix: "unsent")
+                            paragraph(CloudKitMirroringCopy.unsentWarning(
+                                exportButtonTitle: export == nil ? nil : StorageTransferOverwriteCopy.exportTitle
+                            ), suffix: "unsent")
                         }
                         // review-1-2 / review-2-4. 「iCloudのデータは残ります」
                         // says nothing about how much there is. W6 opened this

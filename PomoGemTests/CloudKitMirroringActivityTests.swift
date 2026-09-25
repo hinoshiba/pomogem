@@ -131,7 +131,15 @@ final class CloudKitMirroringActivityTests: XCTestCase {
 
     func testTheCopyIsHonestAboutWhereTheRecordsAre() {
         XCTAssertTrue(CloudKitMirroringCopy.quotaDetail.contains("このiPhoneに保存されています"))
-        XCTAssertTrue(CloudKitMirroringCopy.persistentFailure.contains("このiPhoneに保存されています"))
+        XCTAssertTrue(CloudKitMirroringCopy.persistentFailureDetail.contains("このiPhoneに保存されています"))
+        XCTAssertTrue(CloudKitMirroringCopy.persistentFailureDetail.contains("自動で再試行しています"))
+        XCTAssertTrue(CloudKitMirroringCopy.unsentWarning(exportButtonTitle: StorageTransferOverwriteCopy.exportTitle)
+            .contains("「\(StorageTransferOverwriteCopy.exportTitle)」"),
+            "The warning names the export button on the same screen")
+        XCTAssertFalse(CloudKitMirroringCopy.unsentWarning(exportButtonTitle: nil).contains("書き出す"),
+                       "No button is named when the screen has none")
+        XCTAssertTrue(CloudKitMirroringCopy.quotaSettingsHint.contains("いちばん上の自分の名前から「iCloud」"),
+                      "The same path CloudDataDeletionGuidanceView describes")
         XCTAssertEqual(CloudKitMirroringCopy.lastExport("3分前"), "iCloudへの最終送信：3分前")
         XCTAssertFalse(CloudKitMirroringCopy.lastExport("3分前").contains("完了"),
                        "A send is not a claim that every record is synchronized")
