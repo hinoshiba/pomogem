@@ -448,6 +448,30 @@ class StringsdataTests(unittest.TestCase):
         finally:
             fixture.close()
 
+    def test_freshness_follows_the_newest_compile_output(self):
+        fixture = FixtureRepo()
+        try:
+            files = {target: {f"{target}/A.swift": {}} for target in ("PomoGem", "PomoGemWidgets", "PomoGemScreenTimeMonitor")}
+            derived = self.build(fixture, files)
+            source = fixture.root / "PomoGem/A.swift"
+            objects = Path(derived) / "Build/Intermediates.noindex/PomoGem.build/Debug-iphonesimulator/PomoGem.build/Objects-normal/arm64"
+            compiled = source.stat().st_mtime + 5
+            # Touched after the build, as a checkout or merge that writes the same text does.
+            os.utime(source, (compiled + 60, compiled + 60))
+            code, output = fixture.run("check", "--derived-data", derived)
+            self.assertEqual(code, 1)
+            self.assertIn("PomoGem/A.swift changed after it was compiled", output)
+            # The next build recompiles it, but the compiler keeps a .stringsdata and
+            # an object file whose content did not change; only the .d is rewritten.
+            for suffix, when in ((".o", compiled), (".d", compiled + 120)):
+                (objects / f"A{suffix}").write_text("", encoding="utf-8")
+                os.utime(objects / f"A{suffix}", (when, when))
+            code, output = fixture.run("check", "--derived-data", derived)
+            self.assertNotIn("changed after it was compiled", output)
+            self.assertEqual(code, 0, output)
+        finally:
+            fixture.close()
+
     def test_output_from_another_checkout_is_rejected(self):
         fixture = FixtureRepo()
         try:
