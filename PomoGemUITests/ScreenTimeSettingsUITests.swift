@@ -537,7 +537,7 @@ final class ScreenTimeSettingsUITests: XCTestCase {
                 let top = app.navigationBars.allElementsBoundByIndex
                     .filter(\.isHittable).map(\.frame.maxY).max() ?? 0
                 let bottom = app.windows.firstMatch.frame.maxY - 36
-                let frame = element.frame
+                let frame = settledFrame(of: element)
                 if frame.height > 0 && frame.width > 0 {
                     if frame.minY >= top && frame.maxY <= bottom {
                         // Disabled controls still need to be visibly explained;
@@ -570,6 +570,20 @@ final class ScreenTimeSettingsUITests: XCTestCase {
             }
         }
         return element.exists && element.isHittable
+    }
+
+    /// A `.fast` swipe can leave the list coasting after XCUITest's idle wait
+    /// gives up, so one frame read may pass the viewport check while the row
+    /// is still sliding: `isHittable` then fails the test outright with
+    /// "Activation point invalid". Two equal reads mean the list has stopped.
+    private func settledFrame(of element: XCUIElement) -> CGRect {
+        var frame = element.frame
+        for _ in 0..<10 {
+            let next = element.frame
+            if next == frame { return next }
+            frame = next
+        }
+        return frame
     }
 
     private func attach(_ name: String) {
