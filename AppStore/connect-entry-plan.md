@@ -221,8 +221,10 @@ closed focus active tailだけです。`AggregatePebble`、`Stratum`、`Bedrock`
 
 ただしlocal projectionを正本または常に正確なcacheとして扱いません。既存aggregateは
 `projectionValidationVersion`と全memberのexact／second-pass検証に合格した場合だけ会計へ使います。
-cloud modeの起動直後、remote change検出後、またはmaintenance pending中は旧rootを抑止し、Home／Overview／
-Shareで「再集計中」と表示します。初回60秒後、真正なforeground復帰、active継続15分ごとのrolling
+cloud modeの起動直後、remote change検出後、またはmaintenance pending中は旧rootを抑止します。Homeは
+この端末が責任を持てる質量（全記録を覆う端末の合計、または同じdataの直前の検証済み合計に新しい記録を足した
+値）だけを「iCloudを確認中」付きで表示し、それ以外は「再集計中」とします。Overview／Shareは確認が済むまで
+集計を表示しません。初回60秒後、真正なforeground復帰、active継続15分ごとのrolling
 verificationを行い、署名済み2台で実CloudKit notificationと古い日時の後着recordを確認するまで
 TestFlight外部配布／Review提出のbuildを選びません。
 

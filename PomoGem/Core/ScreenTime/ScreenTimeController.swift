@@ -915,8 +915,9 @@ enum ScreenTimeOwnerBoundaryPolicy {
         /// An accepted storage transfer: the user is told to quit and reopen,
         /// so no session mounts again in this process.
         case storageTransferRelaunch
-        /// PomoGemApp drops the cloud session on `.background`, which removes
-        /// RootView for an owner that has not changed.
+        /// PomoGemApp drops the cloud session once its short background grace
+        /// ends (or at once when iOS grants no background time), which
+        /// removes RootView for an owner that has not changed.
         case backgroundedSession
         /// The same owner remounting on the next foreground.
         case sessionRemount

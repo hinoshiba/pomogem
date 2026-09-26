@@ -145,11 +145,17 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
     func testRelaunchInstructionsUseApplesNameForTheAppSwitcher() {
         let texts = [StorageTransferOverwriteCopy.requestAccepted, StorageTransferRefreshCopy.requestAccepted,
                      StorageTransferLineageCopy.requestAccepted,
-                     CloudOfflineSessionError.relaunchRequired.localizedDescription]
+                     CloudLaunchReconnectWall.offlineRelaunchRequired.relaunchExplanation,
+                     CloudLaunchReconnectWall.cloudVerificationTimedOut.relaunchExplanation]
         for text in texts {
             XCTAssertTrue(text.contains("Appスイッチャー"), text)
             XCTAssertFalse(text.contains("アプリスイッチャー"), text)
         }
+        // quality-01. The offline wall's message leads with the automatic
+        // check; the relaunch is said once, in the line under the retry.
+        let offlineMessage = CloudOfflineSessionError.relaunchRequired.localizedDescription
+        XCTAssertFalse(offlineMessage.contains("Appスイッチャー"), offlineMessage)
+        XCTAssertFalse(offlineMessage.contains("削除しないでください"), offlineMessage)
     }
 
     /// Copy that sends the user into iOS — the App Switcher card, the Home
@@ -162,7 +168,8 @@ final class StorageTransferOverwriteCopyTests: XCTestCase {
                      StorageTransferRuntimeError.relaunchRequired.localizedDescription,
                      StorageTransferRuntimeError.cloudCopyStillArriving.localizedDescription,
                      StorageTransferRuntimeError.cloudCopyStillPending.localizedDescription,
-                     CloudOfflineSessionError.relaunchRequired.localizedDescription]
+                     CloudLaunchReconnectWall.offlineRelaunchRequired.relaunchExplanation,
+                     CloudLaunchReconnectWall.cloudVerificationTimedOut.relaunchExplanation]
         for text in texts {
             XCTAssertTrue(text.contains("ポモジェム"), text)
             XCTAssertFalse(text.contains("PomoGem"), text)

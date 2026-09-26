@@ -346,22 +346,62 @@ extension EnvironmentValues {
 
 enum AggregateProjectionPresentationPolicy {
     static let cloudPendingNotice =
-        "iCloudの集計を再確認中です。この端末で確認できた記録だけを表示しています。"
+        "iCloudを確認中です。この端末で確認できた記録だけを表示しています。"
 
-    static func homeMassValue(
-        verifiedValue: String,
-        context: AggregateProjectionPresentationContext
-    ) -> String {
-        context.isCloudVerificationPending ? "再集計中" : verifiedValue
+    /// sync-03 (owner-approved, 2026-09-24; narrowed after review of PR #40).
+    /// While iCloud verification is pending, the headline mass is a value this
+    /// device can stand behind — Home's own sum when it covers every session,
+    /// or the last verified total plus newer sessions on this device
+    /// (`PendingMassPresentationPolicy`) — with this caption. Otherwise it
+    /// stays 「再集計中」, as before: pending hides every aggregate and all but
+    /// the newest sessions, so a bare device sum would read as a lost total.
+    /// Nothing is written, exported or shared from these values (sharing and
+    /// exports still require `allowsAggregateSummaries`), and the verified
+    /// value replaces them as soon as verification completes.
+    static func verificationCaption(
+        context: AggregateProjectionPresentationContext,
+        isCloudOfflineSession: Bool
+    ) -> String? {
+        guard context.isCloudVerificationPending else { return nil }
+        return isCloudOfflineSession
+            ? String(localized: "このiPhoneの集計を確認中", table: "Storage")
+            : String(localized: "iCloudを確認中", table: "Storage",
+                     comment: "Caption under the jar's mass while iCloud records are being checked")
     }
 
+    /// The value in place of a mass while pending when this device has none
+    /// it can stand behind.
+    static var hiddenPendingMassValue: String {
+        String(localized: "再集計中", table: "Storage",
+               comment: "Jar mass while iCloud is checked and this device cannot show a lifetime total")
+    }
+
+    /// `deviceValue` is nil only while pending with nothing to show.
+    static func homeMassValue(
+        deviceValue: String?,
+        context: AggregateProjectionPresentationContext
+    ) -> String {
+        deviceValue ?? hiddenPendingMassValue
+    }
+
+    /// The caller decides the lower bound: the local projection's while
+    /// verified, the pending headline's (`PendingMassPresentationPolicy`)
+    /// while iCloud is checked — a last verified 「以上」 stays 「以上」.
     static func homeMassUnit(
         verifiedUnit: String,
         hasLocalLowerBound: Bool,
         context: AggregateProjectionPresentationContext
     ) -> String {
-        if context.isCloudVerificationPending { return "" }
-        return hasLocalLowerBound ? "\(verifiedUnit)以上" : verifiedUnit
+        hasLocalLowerBound ? "\(verifiedUnit)以上" : verifiedUnit
+    }
+
+    /// The menu's mass metric: the same value as the headline, captioned by
+    /// the strip below it while pending; 「再集計中」 when there is none.
+    static func menuMassValue(
+        formattedMass: String?,
+        context: AggregateProjectionPresentationContext
+    ) -> String {
+        formattedMass ?? hiddenPendingMassValue
     }
 
     static func homeCountSummary(
@@ -382,7 +422,7 @@ enum AggregateProjectionPresentationPolicy {
         isLocalLowerBound: Bool,
         context: AggregateProjectionPresentationContext
     ) -> String {
-        if context.isCloudVerificationPending { return "再集計中" }
+        if context.isCloudVerificationPending { return verifiedValue }
         return verifiedValue + (isLocalLowerBound ? "以上" : "")
     }
 }

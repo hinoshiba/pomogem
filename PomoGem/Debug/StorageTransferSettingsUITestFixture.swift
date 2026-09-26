@@ -1,4 +1,5 @@
 #if DEBUG && targetEnvironment(simulator)
+import CloudKit
 import SwiftUI
 
 /// Exercises the shipping choice and confirmation views without installing a
@@ -8,6 +9,14 @@ enum StorageTransferSettingsUITestFixture {
 
     enum Scenario: String {
         case offlineNavigation, offlineNavigationRecovered, offlineBreakNavigation, local, cloud, offline, offlineRecovery, offlineHistory, cloudNetworkWaiting, cloudLaunchTimedOut, activeTimer, exporting, deleting, unavailable
+        /// quality-01. The iCloud waiting screens with a running focus of the
+        /// closed session behind them, shown as the account-neutral card.
+        case cloudLaunchTimedOutWithFocus, cloudOfflineWallWithFocus, cloudBackgroundReturnWithFocus
+        /// sync-04. The iCloud section of Settings beside a mounted session
+        /// whose mirroring reported a recent send, full iCloud storage, or
+        /// repeated export failures. Recorded summaries only; no CloudKit.
+        case cloudExportHealthy, cloudExportQuota, cloudExportFailing
+
         /// Cloud mode with the Settings dataset doors PUBLISHED, so their
         /// consent flow can be exercised. `cloud` is the shipping screen, where
         /// the same doors render disabled with their reason.
@@ -87,6 +96,22 @@ enum StorageTransferSettingsUITestFixture {
         /// selecting a storage mode.
         case firstRunStorageChoice
 
+        var mirroringEvents: [CloudKitMirroringEventSummary]? {
+            let now = Date.now
+            switch self {
+            case .cloudExportHealthy:
+                return [.init(kind: .exporting, succeeded: true, endDate: now.addingTimeInterval(-180), errorClass: nil)]
+            case .cloudExportQuota:
+                return [.init(kind: .exporting, succeeded: true, endDate: now.addingTimeInterval(-86_400), errorClass: nil),
+                        .init(kind: .exporting, succeeded: false, endDate: now.addingTimeInterval(-60), errorClass: .quota)]
+            case .cloudExportFailing:
+                return [.init(kind: .exporting, succeeded: false, endDate: now.addingTimeInterval(-120), errorClass: .persistent),
+                        .init(kind: .exporting, succeeded: false, endDate: now.addingTimeInterval(-30), errorClass: .persistent)]
+            default:
+                return nil
+            }
+        }
+
         var overwriteLaunch: StorageTransferOverwriteLaunchUITestScenario? {
             switch self {
             case .datasetRefreshChoice: .choice
@@ -126,6 +151,7 @@ enum StorageTransferSettingsUITestFixture {
                 || self == .cloudDatasetDoorsEmptyCloud || self == .cloudRefreshBookkeepingOnly
                 || self == .cloudScreenTime
                 || self == .lateArrival || isOffline
+                || mirroringEvents != nil
                 || self == .cloudNetworkWaiting ? .cloudKit : .localOnly
         }
 
@@ -169,6 +195,7 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
     @State private var isCheckingOfflineConnection = false
     @State private var fixtureSessionID = UUID()
     @State private var guidanceExportCalls = 0
+    @State private var mirroringActivity = CloudKitMirroringActivity()
 
     var body: some View {
         if let scenario = StorageTransferSettingsUITestFixture.scenario {
@@ -188,6 +215,12 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                 startsRecoveredBreak: scenario == .offlineBreakNavigation)
         } else if scenario == .cloudLaunchTimedOut {
             CloudLaunchTimeoutUITestFixtureView()
+        } else if scenario == .cloudLaunchTimedOutWithFocus {
+            CloudLaunchTimeoutUITestFixtureView(wall: .timedOut, showsRunningFocus: true)
+        } else if scenario == .cloudOfflineWallWithFocus {
+            CloudLaunchTimeoutUITestFixtureView(wall: .offline, showsRunningFocus: true)
+        } else if scenario == .cloudBackgroundReturnWithFocus {
+            CloudLaunchTimeoutUITestFixtureView(wall: .backgroundReturn, showsRunningFocus: true)
         } else if scenario == .firstRunStorageChoice {
             FirstRunStorageChoiceUITestFixtureView()
         } else if scenario == .cloudResetGuidance {
@@ -246,6 +279,13 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
                     if scenario.isOffline {
                         CloudSyncSettingsSection(persistenceMode: .cloudKit)
                     }
+                    if scenario.mirroringEvents != nil {
+                        CloudSyncSettingsSection(persistenceMode: .cloudKit,
+                            monitor: CloudSyncMonitor(client: CloudAccountVerificationClient(
+                                accountStatus: { .available },
+                                userRecordID: { CKRecord.ID(recordName: "export-status-fixture") },
+                                probePrivateDatabase: {})))
+                    }
                     StorageTransferSettingsSection(
                         persistenceMode: scenario.mode,
                         controller: controller,
@@ -258,9 +298,11 @@ struct StorageTransferSettingsUITestFixtureLaunchView: View {
             }
         }
         .environment(\.isCloudOfflineSession, scenario.isOffline)
+        .environment(\.cloudKitMirroringActivity, scenario.mirroringEvents == nil ? nil : mirroringActivity)
         .environment(\.cloudConnectionPresentation, presentation(scenario))
         .environment(\.storageTransferLateArrival, lateArrival(scenario))
         .task {
+            scenario.mirroringEvents?.forEach { mirroringActivity.record($0) }
             guard scenario != .unavailable else { return }
             controller.install({ choice in
                 calls += 1

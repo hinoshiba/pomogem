@@ -165,7 +165,7 @@ struct AccumulationOverviewLoader: View {
                 )
             } else if lifetimeIsCloudUnverified {
                 ContentUnavailableView(
-                    "iCloudを再集計中",
+                    "iCloudを確認中",
                     systemImage: "icloud.and.arrow.down",
                     description: Text(
                         "更新前の履歴ページは再利用せず、確認後に読み込み直します。"

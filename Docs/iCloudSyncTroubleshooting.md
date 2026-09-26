@@ -156,9 +156,16 @@ WAL、CloudKit補助データを一組の既存保存領域として保持し、
 読み取り専用のfresh `ModelContext`で反映を確認し、通信失敗、不完全な応答、キャンセル、期限切れでは
 画面を公開しません。履歴preflight自体の上限は90秒で、その他の起動時アカウント検証とは別の期限です。
 
-全記録のdownload完了を待つ仕組みではありません。query indexへ依存せず全zone変更を読むため、
-記憶量はマーカー中心に制限しても、読み取り時間は記録数に応じて増えます。変更tokenの永続cacheは
-導入していません。この確認だけで、まだサーバーへ届いていない別端末の変更や、既に誤った世代へ
+全記録のdownload完了を待つ仕組みではありません。query indexへ依存せず全zone変更を読みます。
+2026-09-25（device-02）から、アカウント確認を通過した直前の読み取りが残した変更tokenとマーカーを
+`Application Support/CloudOffline/history-markers-v1.json`に保存し、次回はその後の差分だけを
+サーバーから読みます（毎回サーバーへの新しい要求は行います）。保存先のnamespace・アカウント・
+CloudKit環境・container・端末の保存先世代が一致しない、zoneの組が変わった、ファイルが読めない、
+サーバーが`changeTokenExpired`・`zoneNotFound`・`userDeletedZone`を返した、のいずれでも
+従来どおり全zoneを最初から読みます。それ以外の失敗は従来どおり画面を公開しません。このcacheは
+読み取りの前後の識別確認が通った後にだけ書き、アカウント状態の変化、失効、保存先の切り替え、
+完全削除で消します。iCloudへは送信せず、利用者の記録内容は含みません。
+この確認だけで、まだサーバーへ届いていない別端末の変更や、既に誤った世代へ
 保存された記録の復元まで保証することはできません。
 ([Apple: Reading CloudKit Records for Core Data](https://developer.apple.com/documentation/coredata/reading-cloudkit-records-for-core-data)、
 [Apple: CKFetchRecordZoneChangesOperation](https://developer.apple.com/documentation/cloudkit/ckfetchrecordzonechangesoperation))
@@ -236,7 +243,7 @@ CloudKit・端末内通知・連続稼働時間APIの範囲で、SDK、送信先
 
 | 確認した問題 | 修正 |
 |---|---|
-| 通知許可ダイアログやControl Centerの一時的な`inactive`でも、公開済みのiCloud保存領域を閉じる | 公開済み領域は一時的な非アクティブ化で維持し、backgroundまたはアカウント変更時に閉じる。準備中の領域は従来どおり非アクティブ化で認可を失う |
+| 通知許可ダイアログやControl Centerの一時的な`inactive`でも、公開済みのiCloud保存領域を閉じる | 公開済み領域は一時的な非アクティブ化で維持し、backgroundでは約15秒の猶予（background taskで保持し、iOSが残り時間を数えはじめたらその5秒前に閉じる。期限の通知が先に来た場合だけ、解放の完了前にsuspendされ得る）の後、またはアカウント変更時に閉じる。準備中の領域は従来どおり非アクティブ化で認可を失う |
 | 任意のqueueから届く`CKAccountChanged`でSwiftUIの状態を変更する | 通知をmain run loopへ配送してからアカウント境界を更新する |
 | 消えたRoot／設定画面が通知許可やStoreKitの応答待ちで古い`ModelContext`を保持し、解放待ちtimeoutや遅延書き込みを起こす | 画面に属するTaskを終了時に取り消し、システム応答待ちから即座に離脱する。受付済みの通知更新は管理側で直列実行し、次の更新との順序を保持する |
 | 上限まで取得した所有権の候補が別の解放履歴によって除外されると、未取得の有効な所有者がいるのに新しいclaimを書き込む | 最初のページが不完全である可能性を最後まで保持し、所有者不在を証明できない場合は更新を拒否する |
@@ -245,6 +252,8 @@ CloudKit・端末内通知・連続稼働時間APIの範囲で、SDK、送信先
 
 Appleは`CKAccountChanged`の通知queueを保証せず、一時的な`inactive`とbackgroundを別の状態として
 定義しています。保存領域の公開前後の認可検証とbackground時のアカウント再確認は維持します。
+backgroundの猶予中はprocessがsuspendされないため、`CKAccountChanged`は配送され、その時点で猶予を
+打ち切って閉じます。猶予内に戻った場合も、識別をbackgroundで1回再確認します。
 ([Apple: CKAccountChanged](https://developer.apple.com/documentation/cloudkit/ckaccountchangednotification)、
 [Apple: ScenePhase.inactive](https://developer.apple.com/documentation/swiftui/scenephase/inactive))
 
@@ -282,6 +291,9 @@ Privacy Manifest、`AppStore/app-privacy.md`を再監査し、既存のUserDefau
 
 `quotaExceeded`はデータの保存時にユーザーのiCloud容量を超えるエラーです。
 今回のオンライン確認はzoneの読み取りなので、「保存領域」という見出しを容量不足の証拠にしません。
+送信（export）側の`quotaExceeded`は、2026-09-25（sync-04）から同期用保存領域の送信結果を観測して
+設定の「iCloudとデバイス」に「iCloudの空き容量が不足しています」と表示します。詳細は
+[複数端末の安全性](MultiDeviceCloudSafety.md)の「送信の結果」を参照してください。
 ([Apple: quotaExceeded](https://developer.apple.com/documentation/cloudkit/ckerror/quotaexceeded))
 
 ## 配布設定・スキーマのレビュー結果

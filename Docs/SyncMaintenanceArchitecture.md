@@ -198,7 +198,10 @@ private custom zoneの全ページからリセット履歴の必要fieldだけ�
 winner以上の順序を持つ履歴が端末へ届くまでfresh `ModelContext`で待ちます。順序はsequence／writer／
 epoch／idの全tupleで、`resetAt`は含めません。mountの世代・保存先とアカウントをawait前後で再確認し、
 不完全な応答、cancel、90秒の履歴確認期限ではRootを公開しません。全同期元データのhydrationや
-projection再構築をこのgateの完了条件にはしません。token cacheはなく、全zone走査の時間は記録数に依存します。
+projection再構築をこのgateの完了条件にはしません。読み取りの前後のidentity確認は独自のzone一覧取得を
+行わず（間の読み取りが通信の確認）、account statusと識別を保存先と照合します。直前の確認済み読み取りが残したbinding単位の変更token cache
+（`CloudActivityHistoryMarkerCache`）から差分だけを読み、cacheの欠落・破損・key不一致・zone構成の変化・
+token失効・zone消失では全zoneを最初から読み直します。
 
 通信不可、account identity不明、保存済みfingerprintと異なるaccountでは旧storeへfallbackせず、記録領域を
 開かないfail-closed画面に留まります。Bへ自動switchせず、元のAへ戻ってonline確認できた場合だけ同じA
@@ -212,8 +215,26 @@ store fileを作る前にprocessが終了した境界だけは、fileが0件で�
 
 `.CKAccountChanged`を受けたときは、Rootと既知のtimer side effectを
 退役させ、旧`ModelContainer`が解放されてからidentityを再解決します。
-通常backgroundでもstoreをunmountし、foregroundで再検証するため、processがaccount change通知を受ける
-前にsuspendされた場合の旧store再利用を避けます。このboundaryはCloudKit import完了を意味しません。
+通常backgroundでもsuspend前にstoreをunmountし、foregroundで再検証するため、processがaccount change通知を
+受ける前にsuspendされた場合の旧store再利用を避けます。このboundaryはCloudKit import完了を意味しません。
+
+2026-09-24の所有者承認により、unmountは`.background`の瞬間ではなく約15秒の猶予後に行います
+（`CloudBackgroundGraceController`）。猶予中は`UIApplication` background taskを保持するのでprocessは
+suspendされず、account change通知も配送されます。猶予はiOSの残りbackground時間から5秒を引いた値で頭打ちに
+し、taskを得られない・時間が足りない場合は即座にunmountします。`.background`の時点ではiOSが残り時間を
+まだ数えていない（無制限と報告する）ことが多いため、猶予中は1秒ごとに残り時間を読み直し、数えはじめたら
+その5秒前に退役させます。task期限の通知、`CKAccountChanged`、
+storage transfer、complete deletionでは猶予を打ち切って即座にunmountし、taskは退役したcontainerの解放を
+確認してから終了します（上限10秒）。例外はiOSが期限の通知を先に送った場合で、通知の中で同期的にsessionを
+外してtaskを終了するしかなく、SwiftUIがcontainerを解放し終える前にsuspendされ得ます（解放を確認できない
+ときはfaultを記録）。猶予の判定には`@Environment(\.scenePhase)`の値ではなく、scene phaseの変化ごとに
+更新する`LiveScenePhase`を読みます（`.background`の処理で作ったclosureが読むenvironment値は、その時点の
+snapshotのままになるため）。猶予が切れた時点でsceneが前面（inactive）に戻っていれば退役させず、次の
+`.active`で識別を再確認し、再び`.background`になれば新しい猶予を始めます。猶予内にsceneが
+activeへ戻った場合はRoot・sheet・瓶を維持し、background中に識別を1回再確認します。再確認で
+`accountMismatch`・`noAccount`・`restricted`・registryの`blocked`が出た場合だけ`CKAccountChanged`と同じ
+quiescenceへ進み、通信・期限の失敗ではsessionを維持します。猶予後の再マウントでは、同じnamespaceの
+場合に限り直前のtab（瓶・記録・設定）を復元し、account changeやtransferで記憶を破棄します。
 
 ### 3.3 起動時の読み取りは意図的に小さい
 
@@ -622,9 +643,30 @@ sessionから所属aggregateを逆引きするindexed relationshipは現行schem
 
 `projectionValidationVersion`未達のaggregateが一つでも存在する間は、Home／Overview／Share等の全consumerで
 aggregate rootを表示会計から除外します。cloud modeでは、起動後または新しいverification generationが
-pendingの間も同様に、生涯の正確値、`+`、`以上`を表示しません。代わりに「再集計中」と、その時点で
-端末上の同期元から確認できた範囲だけである旨を表示します。local-onlyにはremote blind spotがないため、
-localな書込み完了後の値をexactとして扱えます。
+pendingの間も同様に、aggregate由来の値を生涯の正確値として表示しません。2026-09-24の所有者承認（sync-03）と
+PR #40のreviewにより、その間のHomeの見出し・メニュー・瓶のVoiceOverの生涯値は、この端末が責任を持てる値
+だけを「iCloudを確認中」の注記付きで表示します（`PendingMassPresentationPolicy`）。
+
+1. 端末の合計が現在の全sessionを覆う場合（完全なpageがHomeの上限128件に収まる）は、その合計（exact）
+2. そうでなければ、同じdataについてHomeが最後に検証済みとして表示した合計に、その合計が数えた最新の
+   sessionより新しいこの端末の記録を足した値（端末の合計の方が大きければそちら）。最後の検証済み値は
+   account単位で端末内（`UserDefaults`）に保持し、同じreset epochで、その最新sessionが今も端末にある
+   場合だけ使います（記録のリセット、完全削除、dataの置き換え、別accountでは使いません）。検証済み値が
+   「以上」だった場合は「以上」を残します
+3. どちらもなければ、従来どおり「再集計中」
+
+pendingの間Homeはaggregateを受け入れず、新しい128件のsessionしか持たないため、端末の合計をそのまま
+出すと、長く使っている人の生涯値（例: 250 kg）が毎回の復帰で32 kg以下に見えていました。これらの値から
+保存・書き出し・共有は行わず（共有・書き出しは従来どおり`allowsAggregateSummaries`を要求）、verification
+完了で検証済みの値に置き換えます。Overviewはpendingの間、集計を表示しない「iCloudを確認中」の画面に
+なります（loaderが検証済みstampのpageしか使わないため）。
+
+完走直後の報酬カードは、完走時に凍結した今週の値と、上の規則で表示できる生涯値から求めた時間の核の
+進みを「iCloudを確認中」付きで表示します。上の規則で「再集計中」になる場合は凍結値が下限なので、進みの
+割合を推定せず「今回の +250g は保存済みです。これまでの合計は確認が済むと表示します。」と表示し、
+「時間の核を整理中」とspinnerを「iCloudを確認中」と並べることはしません。完走後にverificationが完了した
+場合は、検証済みprojectionから進みと今週の値の両方を作り直します（再stamp）。local-onlyにはremote
+blind spotがないため、localな書込み完了後の値をexactとして扱えます。
 
 ### Phase 6: subjectsとrelationship
 
@@ -707,6 +749,21 @@ worker自身のsaveがHistoryへ戻って無限loopしないよう、iOS 18以�
 `historyTokenExpired` の場合は、古いtokenを捨て、全modelのbounded verification sweepを要求します。新tokenはverification完了後に確定します。
 
 History transactionのsort APIにはOS世代差があります。アプリのdeployment targetはiOS 17なので、iOS 26でしか使えない`sortBy` initializerへ依存しません。
+
+実装済みの範囲（2026-09-25、sync-03／PR 19）: exact source URLの`NSPersistentStoreRemoteChange`を
+`invalidateSessionDependents`へ昇格する前に、iOS 18以降では`HistoryDescriptor<DefaultHistoryTransaction>`で
+process内cursor以後のtransactionを読みます（`SyncRemoteChangeHistoryReader`）。authorが`uiAuthor`／
+`maintenanceAuthor`以外のtransactionがCloudKit同期元の7 modelのどれかを変更した場合だけ従来どおり昇格し、
+それ以外（自分の一時停止・再開、設定の切り替え、claim、worker自身の保存）は無視します。authorなしの
+transaction（副contextやCloudKit import）は外部とみなします。cursorは最初のframe時刻から始まり（それ以前は
+起動時verificationが扱う）、tokenを得た後はtoken順で進めます。History tokenはstore単位なので、cursorは
+同期元storeのtransactionだけから進め、local projection store（`AggregatePebble`等）のtransactionは判定にも
+cursorにも使いません（projectionのtokenへ進んだcursorは、以後の同期元transactionをすべて見落とします）。
+同期元modelを変更したstoreが2つ以上ある、または追っているstoreと異なる場合は疑わしいとして昇格します。
+History取得の失敗、token失効、tokenを得る前に同期元storeのtransactionがない結果、1回500件以上の結果、
+iOS 17では従来どおり昇格します。main contextの`didSave`による
+`StudySession`／`ActivityResetMarker`の即時invalidationは変更しません。上記のreason分類・upper-bound token・
+「last fully repaired」の永続化は未実装で、`lastFullyRepairedHistoryToken`は引き続き使いません。
 
 ### 10.2 iOS 17
 
