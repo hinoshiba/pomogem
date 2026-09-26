@@ -388,8 +388,9 @@ final class JarOrientationGravityTests: XCTestCase {
 #if DEBUG && targetEnvironment(simulator)
     func testANewGemThatCannotClearTheCapPileJoinsItAfterTheTimeoutContained() throws {
         // A crowded jar held upside down leaves less room under its pile
-        // than a gem is wide: the entering gem falls to the floor still
-        // inside the pile and joins it there after `clearingTimeout`.
+        // than the entering body is wide (a ×10万 crystal, as restore
+        // overflow can drop): it falls to the floor still inside the pile
+        // and joins it there after `clearingTimeout`.
         let scene = makeCrowdedJar()
         let driver = try Driver(scene: scene)
         defer { driver.finish() }
@@ -405,14 +406,12 @@ final class JarOrientationGravityTests: XCTestCase {
         )
         scene.interiorDropHorizontalUnitForTesting = (lowest.position.x - interior.midX) / xRange
         let gap = lowest.position.y - lowest.radius - interior.minY
-        XCTAssertLessThan(gap, 38, "Less room under the pile than the gem is wide")
-        var landings: [UUID] = []
-        scene.onLanding = { landings.append($0.pebble.id) }
-        let drop = loose(911, minutes: 120)
+        XCTAssertLessThan(gap, 48, "Less room under the pile than the crystal is wide")
+        let drop = crystal(911, level: 5)
         scene.drop(drop)
         driver.step(frames: 1) { scene.setGravityReading(Pose.upsideDown.reading) }
         let gem = try node(scene, drop.id)
-        print(String(format: "F3 crowded cap: room under the pile %.1f pt, entering gem %.1f pt wide", gap, gem.radius * 2))
+        print(String(format: "F3 crowded cap: room under the pile %.1f pt, entering crystal %.1f pt wide", gap, gem.radius * 2))
         XCTAssertEqual(scene.entryPhaseNameForTesting(drop.id), "clearingPile")
         var joinedAfter: Int?
         var frames = 1
@@ -424,25 +423,33 @@ final class JarOrientationGravityTests: XCTestCase {
         }
         XCTAssertEqual(scene.entryClearingTimeoutCount, 1, "It could not clear the pile: the timeout joined it")
         XCTAssertEqual(Double(joinedAfter ?? 0) / 60, 1.5, accuracy: 0.05)
-        XCTAssertEqual(landings, [drop.id])
+        XCTAssertTrue(scene.hasLandedPebble(withID: drop.id), "Landed (a crystal reports no landing to Home)")
         assertContainedWithRadius(scene, "crowded cap, settled")
     }
 
     func testUnderDownwardGravityAGemEnteringIntoThePileJoinsItAtOnceAsBeforeF3() throws {
         // The pass-through is for a pile the gravity presses against the
         // cap only: under the jar's own down (and held sideways) a new gem
-        // that spawns into a pile reaching the mouth joins it at once.
+        // that spawns into a pile reaching the mouth joins it at once. A
+        // supported jar keeps more room under the mouth than a gem is wide
+        // (the §7.5 headroom), so the pile's highest body is held right
+        // under the mouth, where the gem enters, to stand for such a pile.
         for pose in [Pose.portrait, .landscapeLeft] {
             let scene = makeCrowdedJar()
-            scene.interiorDropHorizontalUnitForTesting = 0
             let driver = try Driver(scene: scene)
             defer { driver.finish() }
             settle(scene, driver, holding: pose.reading)
+            let interior = JarScene.interiorRect(sceneSize: scene.size)
+            let highest = try XCTUnwrap(pebbles(scene).max { $0.position.y + $0.radius < $1.position.y + $1.radius })
+            highest.physicsBody?.isDynamic = false
+            highest.position = CGPoint(x: interior.midX, y: interior.maxY - highest.radius - 2)
+            scene.interiorDropHorizontalUnitForTesting = 0
             var landings: [UUID] = []
             scene.onLanding = { landings.append($0.pebble.id) }
             let drop = loose(912, minutes: 120)
             scene.drop(drop)
             driver.step(frames: 1) { scene.setGravityReading(pose.reading) }
+            XCTAssertEqual(scene.queuedDropCount, 0, "\(pose): spawned into the held body")
             XCTAssertNil(scene.entryPhaseNameForTesting(drop.id), "\(pose)")
             driver.step(frames: 240) {
                 scene.setGravityReading(pose.reading)
@@ -452,7 +459,6 @@ final class JarOrientationGravityTests: XCTestCase {
             XCTAssertEqual(scene.entryClearingTimeoutCount, 0, "\(pose)")
         }
     }
-
 #endif
 
     func testTurningUprightWhileANewGemPassesTheCapPileJoinsItAtOnce() throws {
@@ -1114,6 +1120,26 @@ final class JarOrientationGravityTests: XCTestCase {
         XCTAssertTrue(ShareJarSnapshotPolicy.pileRestsOnTheFloor(in: SKScene(size: CGSize(width: 10, height: 10))))
     }
 
+    func testThePileComingToRestTellsItsOwnerWhetherItRestsOnTheFloor() throws {
+        // Home skips the widget's snapshot while the pile rests off the
+        // floor and publishes it from `onIdlePauseChanged` once the pile
+        // rests on the floor again: the callback must fire for that rest,
+        // with the floor rule already reading the new pose.
+        let scene = makeScene()
+        scene.restore(pebbles: looseSeries(6))
+        let driver = try Driver(scene: scene)
+        defer { driver.finish() }
+        var rests: [Bool] = []
+        scene.onIdlePauseChanged = { [unowned scene] resting in
+            if resting { rests.append(scene.pileRestsOnTheFloor) }
+        }
+        settle(scene, driver, holding: Pose.landscapeLeft.reading)
+        XCTAssertEqual(rests, [false], "At rest against the wall: the widget waits")
+        settle(scene, driver, holding: Pose.portrait.reading)
+        XCTAssertEqual(rests, [false, true], "Back on the floor: the waiting snapshot is published")
+        scene.onIdlePauseChanged = nil
+    }
+
     func testATiltedPileNeverStepsTheJarScaleOrLowersItsCap() throws {
         // The core's and the HUD's clearances measure an upright pile's
         // height per screen column. A young jar's pile settles under the
@@ -1660,6 +1686,34 @@ final class JarOrientationGravityTests: XCTestCase {
             grams: minutes * Constants.Mass.gramsPerMinute,
             createdAt: Date(timeIntervalSince1970: TimeInterval(1_000 + index)),
             isTutorial: isTutorial
+        )
+    }
+
+    /// A crystal of `level` (×10^level gems), as a fusion leaves it.
+    private func crystal(_ index: Int, level: Int) -> PebbleDescriptor {
+        let count = Int(pow(10, Double(level)))
+        return PebbleDescriptor(
+            id: UUID(uuidString: String(format: "F3000000-0000-4000-9000-%012X", index))!,
+            subjectName: "英語",
+            colorHex: Constants.Color.english,
+            source: .timer,
+            kind: .normal,
+            aggregate: AggregateMetadata(
+                level: level,
+                pebbleCount: count,
+                childAggregateCount: 10,
+                colorMix: [StratumColorFraction(hex: Constants.Color.english, fraction: 1)],
+                subjectMix: [AggregateSubjectFraction(name: "英語", colorHex: Constants.Color.english, pebbleCount: count)],
+                periodStart: Date(timeIntervalSince1970: 0),
+                periodEnd: Date(timeIntervalSince1970: 1_000),
+                sessionIDs: [],
+                measuredPebbleCount: count,
+                manualPebbleCount: 0,
+                goldPebbleCount: 0,
+                prismPebbleCount: 0
+            ),
+            grams: count * Constants.Mass.measuredPebbleGrams,
+            createdAt: Date(timeIntervalSince1970: 2_000)
         )
     }
 
