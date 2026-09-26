@@ -9,8 +9,10 @@ import UIKit
 struct FocusMusicSheet: View {
     let controller: FocusMusicController
     /// False while a focus is on screen (D4.1: no link-outs during a focus).
-    /// Leaving PomoGem mid-focus can pause the timer, so the Settings button
-    /// is replaced by a line saying where to change the permission later.
+    /// Leaving PomoGem mid-focus pauses the timer while the leave pause is on
+    /// (F1, Docs/FocusLeavePause.md), so the Settings button is replaced by a
+    /// line saying where to change the permission after the focus. Breaks
+    /// and Settings run no focus, so they keep the button.
     let allowsLeavingApp: Bool
 
     @Environment(\.dismiss) private var dismiss

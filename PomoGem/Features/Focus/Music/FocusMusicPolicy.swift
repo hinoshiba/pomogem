@@ -313,8 +313,9 @@ enum FocusMusicCatalogRoutePolicy {
 /// A gentle, factual line under the controls. Never urgent, never blaming.
 enum FocusMusicHint: Equatable, Sendable {
     /// iOS 26.4-era Music updates can block third-party playback until the
-    /// Music app is opened once. Leaving PomoGem mid-focus may pause the
-    /// timer, so the copy suggests a break.
+    /// Music app is opened once. Leaving PomoGem mid-focus pauses the timer
+    /// while the leave pause is on (F1), and a break is never paused, so the
+    /// copy suggests a break.
     case openMusicOnce
     case noSourceAvailable
     case signIn
