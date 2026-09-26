@@ -560,7 +560,11 @@ final class NotificationManager {
         let environment = ProcessInfo.processInfo.environment
         if LocalPreviewLaunchPolicy.isUITestMode(environment: environment, isDebugBuild: true),
            environment[LocalPreviewLaunchPolicy.unaskedNotificationPermissionUITestEnvironmentKey] == "1" {
-            return uiTestManagerWithUnaskedPermission()
+            return uiTestManagerWithUnaskedPermission(
+                answer: UITestPermissionAnswer(
+                    rawValue: environment[LocalPreviewLaunchPolicy.notificationPermissionAnswerUITestEnvironmentKey] ?? ""
+                )
+            )
         }
 #endif
         return NotificationManager()
@@ -571,21 +575,37 @@ final class NotificationManager {
         var hasAsked = false
     }
 
-    /// Reports "not asked" until this process asks, then iOS's real answer,
-    /// so Settings shows what a new or reinstalled iPhone shows.
-    private static func uiTestManagerWithUnaskedPermission() -> NotificationManager {
+    /// A fixed answer to this process's own request. Without one, iOS answers.
+    private enum UITestPermissionAnswer: String {
+        case granted
+        case refused
+
+        var status: UNAuthorizationStatus {
+            self == .granted ? .authorized : .denied
+        }
+    }
+
+    /// Reports "not asked" until this process asks, then iOS's real answer
+    /// (or the fixed `answer`, which never shows iOS's prompt), so Settings
+    /// shows what a new or reinstalled iPhone shows.
+    private static func uiTestManagerWithUnaskedPermission(
+        answer: UITestPermissionAnswer?
+    ) -> NotificationManager {
         let center = UNUserNotificationCenter.current()
         let system = FocusReturnReminderNotificationClient.system(center: center)
         let prompt = UITestPermissionPrompt()
         var client = system
         client.authorizationStatus = {
-            prompt.hasAsked ? await system.authorizationStatus() : .notDetermined
+            guard prompt.hasAsked else { return .notDetermined }
+            if let answer { return answer.status }
+            return await system.authorizationStatus()
         }
         return NotificationManager(
             center: center,
             focusReturnReminderClient: client,
             authorizationRequest: {
                 prompt.hasAsked = true
+                if let answer { return answer == .granted }
                 return try await center.requestAuthorization(options: [.alert, .sound])
             }
         )

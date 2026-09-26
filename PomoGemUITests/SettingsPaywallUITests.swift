@@ -265,9 +265,17 @@ final class SettingsPaywallUITests: XCTestCase {
                               "The 集中 card ends with 集中用の音楽; the leave pause card follows it")
         }
 
+        // The leave pause sits with the timer, above the Live Activity. Its
+        // card's last footer paragraph and the Live Activity row are
+        // compared while both are on screen, at every text size.
         let liveActivity = app.switches["settings.live-activity"]
+        let resumeFooter = element("settings.focus-leave-footer.resume")
         XCTAssertTrue(reveal(liveActivity))
-        if leavePause.exists, leavePause.isHittable {
+        XCTAssertTrue(resumeFooter.exists, "The leave-pause card ends right above the Live Activity card")
+        XCTAssertLessThanOrEqual(resumeFooter.frame.maxY, liveActivity.frame.minY + 1,
+                                 "The leave pause sits with the timer, above the Live Activity")
+        if !accessibility5 {
+            XCTAssertTrue(leavePause.exists)
             XCTAssertLessThan(leavePause.frame.minY, liveActivity.frame.minY,
                               "The leave pause sits with the timer, above the Live Activity")
         }
@@ -283,6 +291,15 @@ final class SettingsPaywallUITests: XCTestCase {
         XCTAssertTrue(pro.label.contains("自由な集中時間"), pro.label)
         XCTAssertTrue(reveal(text(containing: "Proは1回だけの買い切りです")))
         attach("\(prefix) — Pro beside the timer")
+
+        // Only this card's switches are off by default: the leave-pause
+        // series in the Focus card is on by default.
+        let notificationsFooter = element("settings.notifications-footer")
+        XCTAssertTrue(reveal(notificationsFooter))
+        XCTAssertTrue(notificationsFooter.label.contains("「毎日のリマインダー」と「先月の瓶のお知らせ」は既定でオフです"),
+                      notificationsFooter.label)
+        XCTAssertFalse(notificationsFooter.label.hasPrefix("既定はオフ。"), notificationsFooter.label)
+        attach("\(prefix) — notifications footer")
 
         let export = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "データを書き出す")).firstMatch
         XCTAssertTrue(reveal(export))

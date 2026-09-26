@@ -195,6 +195,10 @@ enum LocalPreviewLaunchPolicy {
     /// app asks in this process, as on a new or reinstalled iPhone. A
     /// simulator keeps its answer across UI tests and one cannot reset it.
     static let unaskedNotificationPermissionUITestEnvironmentKey = "POMOGEM_UI_TEST_NOTIFICATIONS_UNASKED"
+    /// With the unasked fixture only: answers this process's permission
+    /// request itself ("granted" or "refused") without showing iOS's prompt,
+    /// so a test can pin either branch whatever the simulator answered before.
+    static let notificationPermissionAnswerUITestEnvironmentKey = "POMOGEM_UI_TEST_NOTIFICATIONS_ANSWER"
     /// Seeds a second theme with this colour, as 1.0.x's HSB suggestion
     /// saved it: a colour that is not a palette swatch (a11y-04).
     static let legacyThemeColorUITestEnvironmentKey = "POMOGEM_UI_TEST_LEGACY_THEME_COLOR"
@@ -211,6 +215,7 @@ enum LocalPreviewLaunchPolicy {
     static let deletedThemeHistoryUITestEnvironmentKey = ""
     static let syncedReminderIntentUITestEnvironmentKey = ""
     static let unaskedNotificationPermissionUITestEnvironmentKey = ""
+    static let notificationPermissionAnswerUITestEnvironmentKey = ""
     static let legacyThemeColorUITestEnvironmentKey = ""
 #endif
 
