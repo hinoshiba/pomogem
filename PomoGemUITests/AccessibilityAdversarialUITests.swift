@@ -757,10 +757,14 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             let contentMovesUp = frame.maxY > viewport.maxY
             let startY = contentMovesUp ? 0.72 : 0.38
             let endY = contentMovesUp ? 0.50 : 0.60
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startY))
+            // Drag inside the scroll view. On Home at accessibility sizes the
+            // lower part of the window is the pinned start button, which
+            // does not scroll.
+            let surface: XCUIElement = scrollView.exists ? scrollView : app
+            surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startY))
                 .press(
                     forDuration: 0.05,
-                    thenDragTo: app.coordinate(
+                    thenDragTo: surface.coordinate(
                         withNormalizedOffset: CGVector(dx: 0.5, dy: endY)
                     )
                 )
