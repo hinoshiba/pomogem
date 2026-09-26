@@ -1091,7 +1091,11 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(customTime.waitForExistence(timeout: 4))
         customTime.tap()
         XCTAssertTrue(app.staticTexts["ポモジェムPro"].waitForExistence(timeout: 6))
-        XCTAssertTrue(app.staticTexts["1〜360分"].exists)
+        // settings-04: the timer row is one combined element that names the
+        // free presets beside the Pro range.
+        let timerRow = app.descendants(matching: .any)["paywall.feature.customDuration"].firstMatch
+        XCTAssertTrue(timerRow.exists)
+        XCTAssertTrue(timerRow.label.contains("1〜360分"), timerRow.label)
         app.buttons["閉じる"].tap()
         let launcher = app.buttons["home.focus-launcher"]
         XCTAssertTrue(waitForHittable(launcher, timeout: 5))
