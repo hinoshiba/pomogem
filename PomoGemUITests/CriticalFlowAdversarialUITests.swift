@@ -117,6 +117,24 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         // close button instead.
         let customTimer = app.buttons["settings.custom-timer"]
         XCTAssertTrue(scrollUntilHittable(customTimer, swiping: .down))
+        // A tile tucked almost entirely under the navigation bar still
+        // reports hittable, and the tap then lands on the bar (a full run
+        // tapped it there and no paywall opened). Bring it below the bar.
+        let settingsBarBottom = app.navigationBars["設定"].frame.maxY
+        for _ in 0..<4 where customTimer.frame.minY < settingsBarBottom {
+            let start = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            start.press(
+                forDuration: 0.05,
+                thenDragTo: start.withOffset(CGVector(
+                    dx: 0,
+                    dy: min(300, settingsBarBottom - customTimer.frame.minY + 24)
+                )),
+                withVelocity: .slow,
+                thenHoldForDuration: 0.2
+            )
+            _ = waitUntilFrameSettles(customTimer, timeout: 3)
+        }
+        XCTAssertGreaterThanOrEqual(customTimer.frame.minY, settingsBarBottom)
         customTimer.tap()
         let paywallClose = app.buttons["paywall.close"]
         XCTAssertTrue(paywallClose.waitForExistence(timeout: 6), "Paywall must always expose an exit")
@@ -838,6 +856,8 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         case down
     }
 
+    /// Judged only once the list has stopped: a swipe leaves it coasting,
+    /// and a tap on a still-moving list only stops it.
     @discardableResult
     private func scrollUntilHittable(
         _ element: XCUIElement,
@@ -845,6 +865,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         attempts: Int = 8
     ) -> Bool {
         for _ in 0..<attempts {
+            if element.exists { _ = waitUntilFrameSettles(element, timeout: 3) }
             if element.exists, element.isHittable { return true }
             switch direction {
             case .up:
@@ -853,6 +874,7 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
                 app.swipeDown()
             }
         }
+        if element.exists { _ = waitUntilFrameSettles(element, timeout: 3) }
         return element.exists && element.isHittable
     }
 
