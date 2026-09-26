@@ -28,6 +28,9 @@
     "iOS：%@" : {
       "comment" : "Support mail line; the argument is the iOS version, e.g. 26.5"
     },
+    "「集中に戻るお知らせ」は既定でオフです。オンにすると、集中タイマー中にホーム画面や別のアプリへ移ったとき、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。" : {
+      "comment" : "Settings caption under the return-to-focus reminder switch"
+    },
     "このiPhoneのみ" : {
       "comment" : "Support mail: records are kept only on this iPhone"
     },
@@ -109,13 +112,10 @@
     "承認待ち・承認されると自動で使えます" : {
       "comment" : "Settings Pro row subtitle while a purchase request awaits approval"
     },
-    "既定はオフ。集中タイマー中にホーム画面や別のアプリへ移ると、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。" : {
-      "comment" : "Settings caption under the return-to-focus reminder switch"
-    },
-    "書き出すファイル（JSON）には、テーマ名・成果メモ・設定・すべての記録（リセット前の記録を含む）と、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。保存先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。" : {
+    "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。" : {
       "comment" : "Settings export footer in iCloud mode"
     },
-    "書き出すファイル（JSON）には、テーマ名・成果メモ・設定・すべての記録（リセット前の記録を含む）と、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。保存先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。" : {
+    "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。" : {
       "comment" : "Settings export footer on a local-only iPhone"
     },
     "未購入" : {

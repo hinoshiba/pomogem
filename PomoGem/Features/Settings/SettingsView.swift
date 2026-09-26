@@ -596,7 +596,7 @@ struct SettingsView: View {
                     comment: "Settings footer: the Live Activity switch"
                 )
                 Text(
-                    "既定はオフ。集中タイマー中にホーム画面や別のアプリへ移ると、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。",
+                    "「集中に戻るお知らせ」は既定でオフです。オンにすると、集中タイマー中にホーム画面や別のアプリへ移ったとき、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。",
                     tableName: "Settings",
                     comment: "Settings caption under the return-to-focus reminder switch"
                 )
@@ -1215,18 +1215,21 @@ struct SettingsView: View {
     /// settings-06. The export footer said 「全11種類の出荷対象保存データ」,
     /// 「タイマー整合用のランダムな端末識別子」 and 「以前リセットした旧世代」:
     /// review-notes wording. The privacy facts stay, in plain words: theme
-    /// names, memos, settings, every record including those from before a
-    /// reset, and a random device ID for timer sync.
+    /// names, memos, settings, every record this iPhone has (in iCloud mode,
+    /// what has reached it; PRIVACY.md's 「端末で利用可能な」) including those
+    /// from before a reset, and a random device ID for timer sync. It says
+    /// 置き場所 rather than 保存先, which on this screen names where the app
+    /// keeps its records (iCloud or this iPhone).
     private var dataStorageDisclosure: String {
         if persistenceMode == .localOnly {
             return String(
-                localized: "書き出すファイル（JSON）には、テーマ名・成果メモ・設定・すべての記録（リセット前の記録を含む）と、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。保存先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。",
+                localized: "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。",
                 table: "Settings",
                 comment: "Settings export footer on a local-only iPhone"
             )
         }
         return String(
-            localized: "書き出すファイル（JSON）には、テーマ名・成果メモ・設定・すべての記録（リセット前の記録を含む）と、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。保存先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。",
+            localized: "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。",
             table: "Settings",
             comment: "Settings export footer in iCloud mode"
         )
