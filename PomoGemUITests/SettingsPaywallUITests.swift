@@ -248,11 +248,33 @@ final class SettingsPaywallUITests: XCTestCase {
             checkFocusMusicSheetAtAccessibilitySize(from: music)
         }
 
+        // F1. UI-test processes start with the leave pause off (shared
+        // Simulators background many focuses); FocusLeaveSettingsUITests
+        // covers the product default, on.
+        let leavePause = app.switches["settings.focus-leave-pause"]
+        XCTAssertTrue(reveal(leavePause))
+        XCTAssertTrue(leavePause.label.contains("アプリを離れたら一時停止"), leavePause.label)
+        XCTAssertEqual(leavePause.value as? String, "0")
+        XCTAssertFalse(app.switches["settings.focus-leave-nudges"].exists,
+                       "The series exists only while the leave pause is on")
+        XCTAssertTrue(reveal(text(containing: "パスコードがないiPhoneでは、ロックとアプリの切り替えを区別できないため")))
+        XCTAssertTrue(reveal(text(containing: "オフのときは、アプリを離れてもタイマーは止まりません")))
+        attach("\(prefix) — leave pause and its footer")
+        if music.exists, music.isHittable, leavePause.isHittable {
+            XCTAssertLessThan(music.frame.minY, leavePause.frame.minY,
+                              "The 集中 card ends with 集中用の音楽; the leave pause card follows it")
+        }
+
         let liveActivity = app.switches["settings.live-activity"]
         XCTAssertTrue(reveal(liveActivity))
+        if leavePause.exists, leavePause.isHittable {
+            XCTAssertLessThan(leavePause.frame.minY, liveActivity.frame.minY,
+                              "The leave pause sits with the timer, above the Live Activity")
+        }
         let returnReminder = app.switches["settings.focus-return-reminder"]
-        XCTAssertTrue(reveal(returnReminder))
-        XCTAssertTrue(reveal(text(containing: "タイマーはバックグラウンドでも止まりません")))
+        XCTAssertTrue(reveal(returnReminder), "With the leave pause off the return reminder is offered as before")
+        XCTAssertTrue(reveal(text(containing: "「アプリを離れたら一時停止」の設定に従います")))
+        XCTAssertFalse(text(containing: "タイマーはバックグラウンドでも止まりません").exists)
         attach("\(prefix) — timer notices and their footer")
 
         let pro = app.buttons["settings.pro"]
