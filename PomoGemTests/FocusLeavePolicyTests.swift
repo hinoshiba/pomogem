@@ -43,6 +43,32 @@ final class FocusLeavePolicyTests: XCTestCase {
         XCTAssertFalse(FocusLeavePolicy.nudgesAreEnabled(defaults: defaults, defaultValue: false))
     }
 
+    /// `-focus.leave-pause.enabled NO` on the command line reaches the
+    /// argument domain as the string "NO", not a Bool. It is still an
+    /// explicit choice (RealDeviceCoreLoopUITests relies on it).
+    func testAStringValueFromALaunchArgumentIsAnExplicitSwitch() throws {
+        let suite = "FocusLeavePolicy.arguments.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: FocusReturnReminderPolicy.enabledDefaultsKey)
+
+        for off in ["NO", "no", "false", "0"] {
+            defaults.set(off, forKey: FocusLeavePolicy.enabledDefaultsKey)
+            defaults.set(off, forKey: FocusLeavePolicy.nudgesEnabledDefaultsKey)
+            XCTAssertFalse(FocusLeavePolicy.isEnabled(defaults: defaults), off)
+            XCTAssertFalse(
+                FocusLeavePolicy.nudgesAreEnabled(defaults: defaults),
+                "An explicit \(off) wins over the default and the reminder migration"
+            )
+        }
+        for on in ["YES", "true", "1"] {
+            defaults.set(on, forKey: FocusLeavePolicy.enabledDefaultsKey)
+            defaults.set(on, forKey: FocusLeavePolicy.nudgesEnabledDefaultsKey)
+            XCTAssertTrue(FocusLeavePolicy.isEnabled(defaults: defaults, defaultValue: false), on)
+            XCTAssertTrue(FocusLeavePolicy.nudgesAreEnabled(defaults: defaults, defaultValue: false), on)
+        }
+    }
+
     @MainActor
     func testCompleteDataDeletionRemovesBothSwitches() throws {
         let suite = "FocusLeavePolicy.deletion.\(UUID().uuidString)"

@@ -26,7 +26,7 @@ enum FocusLeavePolicy {
         defaults: UserDefaults = .standard,
         defaultValue: Bool = enabledByDefault
     ) -> Bool {
-        (defaults.object(forKey: enabledDefaultsKey) as? Bool) ?? defaultValue
+        explicitSwitch(enabledDefaultsKey, in: defaults) ?? defaultValue
     }
 
     /// Someone who opted into the older 集中に戻るお知らせ asked to be told
@@ -35,10 +35,18 @@ enum FocusLeavePolicy {
         defaults: UserDefaults = .standard,
         defaultValue: Bool = enabledByDefault
     ) -> Bool {
-        if let explicit = defaults.object(forKey: nudgesEnabledDefaultsKey) as? Bool {
+        if let explicit = explicitSwitch(nudgesEnabledDefaultsKey, in: defaults) {
             return explicit
         }
         return defaultValue || FocusReturnReminderPolicy.isEnabled(defaults: defaults)
+    }
+
+    /// Any value stored for `key` is an explicit choice. A launch argument
+    /// (`-focus.leave-pause.enabled NO`) reaches the argument domain as the
+    /// string "NO", which `as? Bool` does not read; `bool(forKey:)` reads
+    /// a Bool, a number and the strings YES/NO/true/false/1/0 alike.
+    private static func explicitSwitch(_ key: String, in defaults: UserDefaults) -> Bool? {
+        defaults.object(forKey: key) == nil ? nil : defaults.bool(forKey: key)
     }
 
     // MARK: Timing
