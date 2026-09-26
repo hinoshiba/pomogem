@@ -285,12 +285,14 @@ final class FocusLeaveSettingsUITests: XCTestCase {
         try auditLeavePauseRows(named: "AX5 Settings — permission notice")
 
         assertAbove(permissionAction, behavior, "The notice stays inside the leave-pause card")
+        // Read while it is on screen: at AX5 each paragraph is taller than the
+        // screen and the list drops one from the hierarchy once it scrolls away.
+        XCTAssertTrue(behavior.label.contains("通常はタイマーが進みます"), behavior.label)
         for (name, footer) in [("behavior", behavior), ("resume", resume), ("series", nudgesFooter)] {
             XCTAssertTrue(reveal(footer), "AX5 footer \(name) must be reachable")
             retainScreenshot(named: "AX5 Settings — footer \(name)")
             try auditLeavePauseRows(named: "AX5 Settings — footer \(name)")
         }
-        XCTAssertTrue(behavior.label.contains("通常はタイマーが進みます"), behavior.label)
         assertAbove(nudgesFooter, liveActivity, "The Live Activity card follows the leave-pause card")
     }
 
