@@ -438,6 +438,63 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
     }
 
+    /// D4.4(a) (Docs/FocusMusic.md): the focus music button in the running
+    /// timer's header keeps a full 44 pt target beside the rotation control,
+    /// stays inside the AX5 viewport, and passes Apple's hit-region and
+    /// text-clipping audits together with the rest of that header.
+    func testAX5TimerHeaderMusicButtonPassesHitRegionAndClippingAudits() throws {
+        let durationPicker = app.buttons["home.duration-picker"]
+        XCTAssertTrue(scrollUntilFullyVisibleInContent(durationPicker, attempts: 12))
+        durationPicker.tap()
+        let twentyFive = app.buttons["25分"].firstMatch
+        XCTAssertTrue(twentyFive.waitForExistence(timeout: 4))
+        XCTAssertTrue(scrollUntilHittable(twentyFive))
+        twentyFive.tap()
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(scrollUntilFullyVisibleInContent(launcher, attempts: 12))
+        launcher.tap()
+        let rareChoice = app.descendants(matching: .any)["focus.rare-reward-choice"]
+        if rareChoice.waitForExistence(timeout: 1) {
+            app.buttons["rare-reward.choice.off"].tap()
+            app.buttons["focus.rare-reward-choice.confirm"].tap()
+        }
+
+        let music = app.buttons["timer.music"]
+        // Home can hold the launcher disabled for a while on a loaded
+        // machine before the timer opens; the header is what this audits.
+        XCTAssertTrue(music.waitForExistence(timeout: 30))
+        XCTAssertTrue(music.isHittable)
+        let viewport = app.windows.firstMatch.frame
+        let frame = music.frame
+        XCTAssertTrue(viewport.contains(frame), "music button \(frame) outside \(viewport)")
+        // XCTest may bridge a 44pt SwiftUI frame as 43.99999999999994.
+        XCTAssertGreaterThanOrEqual(frame.width, 43.5)
+        XCTAssertGreaterThanOrEqual(frame.height, 43.5)
+        let rotate = app.buttons["timer.rotate"]
+        if rotate.exists {
+            XCTAssertLessThanOrEqual(frame.maxX, rotate.frame.minX + 0.5, "the two header buttons must not overlap")
+        }
+        let subject = app.staticTexts["focus.subject"]
+        if subject.exists {
+            XCTAssertLessThanOrEqual(subject.frame.maxX, frame.minX + 0.5, "the subject name must not run under the button")
+        }
+        let header = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        header.name = "AX5 running focus — header with the music button"
+        header.lifetime = .keepAlways
+        add(header)
+
+        try app.performAccessibilityAudit(for: .hitRegion)
+        try app.performAccessibilityAudit(for: .textClipped)
+
+        let giveUp = app.buttons["今日はここまで"]
+        XCTAssertTrue(giveUp.waitForExistence(timeout: 4))
+        giveUp.tap()
+        let confirmation = app.alerts["今日はここまで"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
+        confirmation.buttons["今日はここまで"].tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+    }
+
     private func waitForEnabled(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
         let enabled = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == true AND enabled == true"),
