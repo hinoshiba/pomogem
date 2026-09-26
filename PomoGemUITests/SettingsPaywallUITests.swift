@@ -69,7 +69,9 @@ final class SettingsPaywallUITests: XCTestCase {
     }
 
     func testThePaywallFromSettingsAtAccessibilitySize() {
-        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        // The system text size itself: the paywall is a root sheet, and a
+        // sheet does not inherit the POMOGEM_UI_TEST_AX5 size set below it.
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         launchAndOpenSettings()
         let pro = app.buttons["settings.pro"]
         XCTAssertTrue(reveal(pro))
@@ -80,8 +82,14 @@ final class SettingsPaywallUITests: XCTestCase {
         attach("Paywall AX5 — top")
         app.swipeUp()
         attach("Paywall AX5 — features")
-        app.swipeUp()
+        let purchase = app.buttons["paywall.purchase"]
+        if purchase.exists {
+            XCTAssertTrue(reveal(purchase), "The price and the buy button stay reachable at AX5")
+        }
         attach("Paywall AX5 — price")
+        let restore = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "購入を復元")).firstMatch
+        XCTAssertTrue(reveal(restore))
+        attach("Paywall AX5 — restore and legal links")
     }
 
     /// settings-05. An open Ask to Buy request (seeded through the argument
