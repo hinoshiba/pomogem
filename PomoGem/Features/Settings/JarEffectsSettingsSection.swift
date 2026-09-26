@@ -8,40 +8,30 @@ import SwiftUI
 struct JarEffectsSettingsSection: View {
     @AppStorage(JarEffectsIntensity.defaultsKey)
     private var intensity: JarEffectsIntensity = .standard
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var reduceMotion: Bool {
+        reduceMotionOverride ?? systemReduceMotion
+    }
 
     var body: some View {
         Section {
             VStack(alignment: .leading, spacing: 12) {
-                Label {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("演出の強さ", tableName: "Settings", comment: "Settings row: how much light and motion the jar's rewards use (Effect intensity)")
-                            .foregroundStyle(PomoGemTheme.text)
-                        Text(detail)
-                            .font(.caption)
-                            .foregroundStyle(PomoGemTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                } icon: {
-                    Image(systemName: "sparkles")
-                        .foregroundStyle(PomoGemTheme.amber)
-                        .frame(width: 26)
-                }
-                .accessibilityElement(children: .combine)
+                // The same header row as the rest of Settings.
+                SettingLabel(title: title, subtitle: detail, symbol: "sparkles")
 
-                Picker(selection: $intensity) {
-                    Text("標準", tableName: "Settings", comment: "Effect intensity option: every light and motion effect (Standard)")
-                        .tag(JarEffectsIntensity.standard)
-                        .accessibilityIdentifier("settings.effects-intensity.standard")
-                    Text("控えめ", tableName: "Settings", comment: "Effect intensity option: calmer light and shorter effects (Subtle)")
-                        .tag(JarEffectsIntensity.subtle)
-                        .accessibilityIdentifier("settings.effects-intensity.subtle")
-                } label: {
-                    Text("演出の強さ", tableName: "Settings", comment: "Settings row: how much light and motion the jar's rewards use (Effect intensity)")
+                // Round 14: at accessibility text sizes the two options are
+                // a menu, whose labels grow with Dynamic Type (a segmented
+                // control keeps caption-sized text).
+                if dynamicTypeSize.isAccessibilitySize {
+                    picker
+                        .pickerStyle(.menu)
+                } else {
+                    picker
+                        .pickerStyle(.segmented)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .accessibilityIdentifier("settings.effects-intensity")
             }
             .padding(.vertical, 2)
 
@@ -56,6 +46,25 @@ struct JarEffectsSettingsSection: View {
         } footer: {
             Text("控えめにしても、粒の重さや数、融合、カットは変わりません。「視差効果を減らす」がオンのときは、常に控えめで表示します。この設定はこのiPhoneだけに保存され、iCloudでは同期しません。", tableName: "Settings", comment: "Settings footer explaining Effect intensity")
         }
+    }
+
+    private var picker: some View {
+        Picker(selection: $intensity) {
+            Text("標準", tableName: "Settings", comment: "Effect intensity option: every light and motion effect (Standard)")
+                .tag(JarEffectsIntensity.standard)
+                .accessibilityIdentifier("settings.effects-intensity.standard")
+            Text("控えめ", tableName: "Settings", comment: "Effect intensity option: calmer light and shorter effects (Subtle)")
+                .tag(JarEffectsIntensity.subtle)
+                .accessibilityIdentifier("settings.effects-intensity.subtle")
+        } label: {
+            Text(title)
+        }
+        .labelsHidden()
+        .accessibilityIdentifier("settings.effects-intensity")
+    }
+
+    private var title: String {
+        String(localized: "演出の強さ", table: "Settings", comment: "Settings row: how much light and motion the jar's rewards use (Effect intensity)")
     }
 
     private var detail: String {
