@@ -78,8 +78,9 @@ struct AlarmForegroundPlan: Equatable, Sendable {
 enum AlarmChannelPolicy {
     /// Today's repeat interval for the short cue.
     static let gentleRepeatInterval: TimeInterval = 1.3
-    /// When the app is active this close to the end, the in-app alarm takes
-    /// over and the AlarmKit alarm is cancelled, so only one channel rings.
+    /// When the app is active this close before the end, the in-app alarm
+    /// takes over and the AlarmKit alarm is cancelled, so only one channel
+    /// rings.
     static let foregroundHandoffLead: TimeInterval = 1.5
     /// An end sooner than this is not booked with AlarmKit: the person is
     /// looking at the timer they just started or resumed.
@@ -133,8 +134,17 @@ enum AlarmChannelPolicy {
     // MARK: The end
 
     /// True when the in-app alarm should take over from a booked AlarmKit
-    /// alarm: the app is active and the end is at most
-    /// `foregroundHandoffLead` away (or has just passed).
+    /// alarm (`FocusEndAlarmScheduler.handOffToForeground`): the app is
+    /// active and the end is still ahead, at most `foregroundHandoffLead`
+    /// away.
+    ///
+    /// Never at or after the end. By then the system alarm may be ringing
+    /// or may have rung, so the completion is resolved instead: read
+    /// `FocusEndAlarmScheduler.deliveryWitnessFireDate` for the cue, and
+    /// `acknowledge` stops a ringing alarm as Stop. A return shortly before
+    /// the end does hand off, exactly like staying on screen: the person is
+    /// looking at the timer when it ends, so the in-app alarm repeats
+    /// (`TimerCompletionForegroundFeedbackPolicy.Cue.repeating`).
     static func shouldHandOffToForeground(
         applicationIsActive: Bool,
         endDate: Date,
@@ -142,19 +152,49 @@ enum AlarmChannelPolicy {
     ) -> Bool {
         guard applicationIsActive else { return false }
         let remaining = endDate.timeIntervalSince(now)
-        return remaining.isFinite && remaining <= foregroundHandoffLead
+        return remaining.isFinite && remaining > 0 && remaining <= foregroundHandoffLead
+    }
+
+    /// After a hand-off the app alone announces the end. If the scene stops
+    /// being active before that end (locked, app switcher, Control Center),
+    /// nothing would ring, so the caller books this channel at once. AlarmKit
+    /// is not booked again: the lead is under `minimumSystemAlarmLead`, so
+    /// the Time Sensitive notification is the fallback. Nil once the end has
+    /// passed: the in-app alarm has started, and leaving it counts as Stop.
+    static func channelAfterLeavingDuringHandoff(
+        endDate: Date,
+        now: Date,
+        strength: AlarmStrength,
+        soundEnabled: Bool,
+        notificationsAuthorized: Bool
+    ) -> AlarmBackgroundChannel? {
+        let remaining = endDate.timeIntervalSince(now)
+        guard remaining.isFinite, remaining > 0 else { return nil }
+        return notificationChannel(
+            strength: strength,
+            soundEnabled: soundEnabled,
+            notificationsAuthorized: notificationsAuthorized
+        )
     }
 
     /// A booked AlarmKit alarm is a delivery witness, like an accepted
     /// notification: once its fire date has passed, the end was announced,
-    /// so a later return plays no cue.
+    /// so a later return plays no cue. Like the notification witness it
+    /// counts only while the permission stands: alarms turned off in
+    /// Settings remove the alarm, and then nothing announced the end.
+    /// `systemAlarmFireDate` comes from
+    /// `FocusEndAlarmScheduler.deliveryWitnessFireDate`, which also refuses
+    /// a booking AlarmKit never confirmed.
     static func externalAlertMayHaveFired(
         notificationAuthorized: Bool,
         notificationDeliveryDate: Date?,
+        systemAlarmAuthorized: Bool,
         systemAlarmFireDate: Date?,
         now: Date
     ) -> Bool {
-        if let systemAlarmFireDate, systemAlarmFireDate <= now {
+        if systemAlarmAuthorized,
+           let systemAlarmFireDate,
+           systemAlarmFireDate <= now {
             return true
         }
         return TimerCompletionForegroundFeedbackPolicy.notificationMayHaveDelivered(

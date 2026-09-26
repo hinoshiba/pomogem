@@ -79,12 +79,45 @@ final class AlarmChannelPolicyTests: XCTestCase {
 
     // MARK: The end
 
-    func testTheInAppAlarmTakesOverOnlyWhenActiveAtTheEnd() {
+    func testTheInAppAlarmTakesOverOnlyWhenActiveJustBeforeTheEnd() {
         let end = Date(timeIntervalSinceReferenceDate: 2_000)
-        XCTAssertTrue(AlarmChannelPolicy.shouldHandOffToForeground(applicationIsActive: true, endDate: end, now: end.addingTimeInterval(-1.5)))
-        XCTAssertTrue(AlarmChannelPolicy.shouldHandOffToForeground(applicationIsActive: true, endDate: end, now: end.addingTimeInterval(0.5)))
-        XCTAssertFalse(AlarmChannelPolicy.shouldHandOffToForeground(applicationIsActive: true, endDate: end, now: end.addingTimeInterval(-2)))
-        XCTAssertFalse(AlarmChannelPolicy.shouldHandOffToForeground(applicationIsActive: false, endDate: end, now: end))
+        func handsOff(_ offset: TimeInterval, active: Bool = true) -> Bool {
+            AlarmChannelPolicy.shouldHandOffToForeground(applicationIsActive: active, endDate: end, now: end.addingTimeInterval(offset))
+        }
+        XCTAssertTrue(handsOff(-1.5))
+        XCTAssertTrue(handsOff(-0.1))
+        XCTAssertFalse(handsOff(-2), "too early: the person may still leave")
+        XCTAssertFalse(handsOff(-1, active: false))
+        // At or after the end the system alarm may be ringing or may have
+        // rung: that is resolved through the witness and Stop, never by a
+        // cancel that would erase the witness.
+        for offset: TimeInterval in [0, 0.5, 2, 30, 60, 600] {
+            XCTAssertFalse(handsOff(offset), "+\(offset) s")
+        }
+    }
+
+    func testLeavingAfterAHandOffBooksTheNotificationBeforeTheEnd() {
+        let end = Date(timeIntervalSinceReferenceDate: 2_000)
+        XCTAssertEqual(
+            AlarmChannelPolicy.channelAfterLeavingDuringHandoff(endDate: end, now: end.addingTimeInterval(-1), strength: .maximum, soundEnabled: true, notificationsAuthorized: true),
+            .timeSensitiveNotification(.ringtone),
+            "AlarmKit cannot be rebooked this close to the end"
+        )
+        XCTAssertEqual(
+            AlarmChannelPolicy.channelAfterLeavingDuringHandoff(endDate: end, now: end.addingTimeInterval(-1), strength: .maximum, soundEnabled: false, notificationsAuthorized: true),
+            .timeSensitiveNotification(.silent)
+        )
+        XCTAssertEqual(
+            AlarmChannelPolicy.channelAfterLeavingDuringHandoff(endDate: end, now: end.addingTimeInterval(-1), strength: .maximum, soundEnabled: true, notificationsAuthorized: false),
+            AlarmBackgroundChannel.none
+        )
+        XCTAssertNil(
+            AlarmChannelPolicy.channelAfterLeavingDuringHandoff(endDate: end, now: end, strength: .maximum, soundEnabled: true, notificationsAuthorized: true),
+            "the in-app alarm has started; leaving it counts as Stop"
+        )
+        XCTAssertNil(
+            AlarmChannelPolicy.channelAfterLeavingDuringHandoff(endDate: end, now: end.addingTimeInterval(5), strength: .maximum, soundEnabled: true, notificationsAuthorized: true)
+        )
     }
 
     func testABookedSystemAlarmIsADeliveryWitness() {
@@ -92,27 +125,60 @@ final class AlarmChannelPolicyTests: XCTestCase {
         XCTAssertTrue(AlarmChannelPolicy.externalAlertMayHaveFired(
             notificationAuthorized: false,
             notificationDeliveryDate: nil,
+            systemAlarmAuthorized: true,
             systemAlarmFireDate: now.addingTimeInterval(-1),
             now: now
         ))
         XCTAssertFalse(AlarmChannelPolicy.externalAlertMayHaveFired(
             notificationAuthorized: false,
             notificationDeliveryDate: nil,
+            systemAlarmAuthorized: true,
             systemAlarmFireDate: now.addingTimeInterval(1),
             now: now
         ))
+        XCTAssertFalse(AlarmChannelPolicy.externalAlertMayHaveFired(
+            notificationAuthorized: false,
+            notificationDeliveryDate: nil,
+            systemAlarmAuthorized: false,
+            systemAlarmFireDate: now.addingTimeInterval(-1),
+            now: now
+        ), "alarms turned off in Settings: the alarm was removed and nothing rang")
         XCTAssertTrue(AlarmChannelPolicy.externalAlertMayHaveFired(
             notificationAuthorized: true,
             notificationDeliveryDate: now.addingTimeInterval(-1),
+            systemAlarmAuthorized: false,
             systemAlarmFireDate: nil,
             now: now
         ), "the notification witness is unchanged")
         XCTAssertFalse(AlarmChannelPolicy.externalAlertMayHaveFired(
             notificationAuthorized: false,
             notificationDeliveryDate: now.addingTimeInterval(-1),
+            systemAlarmAuthorized: true,
             systemAlarmFireDate: nil,
             now: now
         ))
+    }
+
+    func testARevokedAlarmPermissionStillMarksAReturnWithinAMinute() {
+        let end = Date(timeIntervalSinceReferenceDate: 4_000)
+        let now = end.addingTimeInterval(30)
+        let delivered = AlarmChannelPolicy.externalAlertMayHaveFired(
+            notificationAuthorized: true,
+            notificationDeliveryDate: nil,
+            systemAlarmAuthorized: false,
+            systemAlarmFireDate: end,
+            now: now
+        )
+        XCTAssertEqual(
+            TimerCompletionForegroundFeedbackPolicy.cue(
+                recoveredAfterExpiration: false,
+                returnedFromBackground: true,
+                notificationMayHaveDelivered: delivered,
+                endedAt: end,
+                now: now
+            ),
+            .single
+        )
     }
 
     func testGentleForegroundAlarmIsTodaysRepeatingCue() {
