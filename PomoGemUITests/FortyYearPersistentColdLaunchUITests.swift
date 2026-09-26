@@ -676,6 +676,12 @@ final class FortyYearPlanningUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "0"
         PomoGemUITestLanguage.configureJapanese(app)
+        // Without the UI-test flag nothing skips first-run onboarding, so on
+        // a fresh Simulator this launch stops there; it only reached Home when
+        // an earlier test had happened to finish onboarding. Mark onboarding
+        // done for this launch only (argument domain, unscoped local key) so
+        // the test always checks the Home and menu it is about.
+        app.launchArguments += ["-onboarding.completed", "YES"]
         app.launch()
         defer { app.terminate() }
 
