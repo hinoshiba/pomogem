@@ -18,7 +18,9 @@ enum ScreenTimeImportCoordinator {
         var errorDescription: String? {
             switch self {
             case .contextChanged: "記録の保存先が変わりました。もう一度開いてください。"
-            case .invalidReceipt: "Screen Timeの記録を確認できませんでした。"
+            case .invalidReceipt:
+                String(localized: "スクリーンタイムの記録を確認できませんでした。", table: "ScreenTime",
+                       comment: "Import error: a Screen Time record failed its checks")
             case .conflictingRecord: "同じ記録の内容が一致しないため、追加を保留しています。"
             }
         }
@@ -80,7 +82,9 @@ enum ScreenTimeImportCoordinator {
                 seconds: SessionSource.screenTimeSeconds, source: .screenTime,
                 grams: SessionSource.screenTimeGrams,
                 deviceDayKey: FairnessPolicy.deviceDayKey(for: receipt.endedAt),
-                subjectNameSnapshot: subject?.safeDisplayName ?? "Screen Timeの学習",
+                // Stored with the row, so it stays a plain literal: rows
+                // already written keep the name they were written with.
+                subjectNameSnapshot: subject?.safeDisplayName ?? "スクリーンタイムの勉強",
                 subjectIDSnapshot: receipt.themeID,
                 rareRewardRuleVersion: Constants.Gacha.creditRuleVersion,
                 rareRewardParticipated: false, rareRewardCreditedGrams: 0,

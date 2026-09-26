@@ -1,0 +1,71 @@
+{
+  "sourceLanguage" : "ja",
+  "strings" : {
+    "%lld件" : {
+      "comment" : "Restore waiting screen: a received count"
+    },
+    "iCloudから記録を復元しています" : {
+      "comment" : "Restore waiting screen: title while an earlier jar arrives from iCloud"
+    },
+    "iCloudの記録は、届きしだいこのiPhoneにも表示されます。" : {
+      "comment" : "Onboarding page 1 after choosing to start fresh over an iCloud restore"
+    },
+    "このApple Accountの以前の瓶を、iCloudから受け取っています。記録が届きはじめると自動で瓶がひらき、残りの記録もそのあと順に届きます。" : {
+      "comment" : "Restore waiting screen: what is happening and what happens next"
+    },
+    "この画面を開いたままお待ちください。" : {
+      "comment" : "Restore waiting screen: keep the app open while records arrive"
+    },
+    "しばらく新しい記録が届いていません。通信状態を確認するか、待たずに「新しく始める」を選べます。" : {
+      "comment" : "Restore waiting screen: shown when nothing new has arrived for a while"
+    },
+    "テーマ" : {
+      "comment" : "Restore waiting screen: count label for themes"
+    },
+    "テーマと時間を選んで、集中をはじめる。\n完走すると、その時間が一粒になって瓶に残ります。" : {
+      "comment" : "Onboarding page 1: how a focus becomes a gem in the jar"
+    },
+    "一粒、着地しました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます" : {
+      "comment" : "VoiceOver announcement when the onboarding trial gem lands"
+    },
+    "届いた記録" : {
+      "comment" : "Restore waiting screen: heading above the received counts"
+    },
+    "届いた記録：テーマ%lld件。経過時間%lld分%lld秒" : {
+      "comment" : "VoiceOver summary of the restore progress: theme count, elapsed minutes and seconds",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "届いた記録：テーマ%1$lld件。経過時間%2$lld分%3$lld秒"
+          }
+        }
+      }
+    },
+    "待つ" : {
+      "comment" : "Restore waiting screen: keep waiting for iCloud (cancel)"
+    },
+    "新しく始めますか？" : {
+      "comment" : "Restore waiting screen: confirmation title for starting without waiting"
+    },
+    "新しく始める" : {
+      "comment" : "Restore waiting screen: confirm starting without waiting\nRestore waiting screen: start onboarding without waiting for iCloud"
+    },
+    "本番では、25分の集中でこの大きさの一粒（250g）が瓶に残ります。" : {
+      "comment" : "Onboarding trial drop: shown after the trial gem lands"
+    },
+    "演出を省略して一粒を積みました。本番では、25分の集中でこの大きさの一粒（250グラム）が瓶に残ります。次へ進めます" : {
+      "comment" : "VoiceOver announcement when the onboarding trial gem is placed without animation"
+    },
+    "経過 %@" : {
+      "comment" : "Restore waiting screen: elapsed time, e.g. 経過 1:05"
+    },
+    "記録の到着を待たずに、最初のテーマ選びへ進みます" : {
+      "comment" : "VoiceOver hint for 新しく始める on the restore waiting screen"
+    },
+    "記録の到着を待たずに、最初のテーマ選びへ進みます。iCloudの記録は、届きしだいこのiPhoneにも表示されます。" : {
+      "comment" : "Restore waiting screen: what starting without waiting means"
+    }
+  },
+  "version" : "1.0"
+}

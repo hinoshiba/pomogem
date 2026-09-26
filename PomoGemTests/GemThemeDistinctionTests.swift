@@ -382,6 +382,7 @@ final class GemThemeDistinctionTests: XCTestCase {
                 colorHex: hex,
                 grams: grams,
                 isMeasured: measured,
+                isTimerCompletion: measured,
                 isRepresentedByLocalAggregate: false
             )
         }

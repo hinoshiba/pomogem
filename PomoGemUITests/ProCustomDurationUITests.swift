@@ -31,7 +31,7 @@ final class ProCustomDurationUITests: XCTestCase {
         app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
-        app.launchArguments = ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
     }
 
     override func tearDownWithError() throws {
@@ -175,6 +175,39 @@ final class ProCustomDurationUITests: XCTestCase {
         XCTAssertTrue(app.buttons["home.duration-picker"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["home.duration-picker"].label.contains("25分"))
         XCTAssertFalse(app.buttons["home.duration-picker"].label.contains("30秒"))
+    }
+
+    func testRecentCustomDurationStaysOneTapAwayAfterAPreset() async throws {
+        try await launchWithPro()
+        try openEditor()
+        try replaceInput("minutes", with: "50")
+        try replaceInput("seconds", with: "0")
+        try finishKeyboard()
+        try confirmEditor()
+        let picker = app.buttons["home.duration-picker"]
+        XCTAssertTrue(picker.label.contains("50分"))
+
+        picker.tap()
+        XCTAssertTrue(app.staticTexts["定番の時間"].waitForExistence(timeout: 4)
+            || app.buttons["25分"].waitForExistence(timeout: 1))
+        app.buttons["25分"].firstMatch.tap()
+        XCTAssertTrue(picker.waitForExistence(timeout: 4))
+        XCTAssertTrue(picker.label.contains("25分"))
+
+        picker.tap()
+        let recent = app.buttons["50分"].firstMatch
+        XCTAssertTrue(recent.waitForExistence(timeout: 4), "The last custom time is listed after a preset")
+        screenshot("Pro duration — recent custom time in the Home menu")
+        recent.tap()
+        XCTAssertTrue(picker.waitForExistence(timeout: 4))
+        XCTAssertTrue(picker.label.contains("50分"), "One tap restores the custom time")
+
+        picker.tap()
+        app.buttons["25分"].firstMatch.tap()
+        try openEditor()
+        XCTAssertEqual(app.textFields["custom-timer.minutes-input"].value as? String, "50",
+                       "The editor opens at the most recent custom time, not at the preset")
+        app.buttons["custom-timer.close"].tap()
     }
 
     private func launchWithPro() async throws {

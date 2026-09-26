@@ -18,9 +18,8 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launchArguments += [
-            "-AppleLanguages", "(ja)",
-            "-AppleLocale", "ja_JP",
             // Ten completions intentionally cross the review threshold. Keep
             // the App Store review controller outside this aggregation test.
             "-review.requested-version", "1.0"
@@ -95,15 +94,15 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         let scopedShareCard = app.descendants(matching: .any).matching(
             NSPredicate(
                 format: "label CONTAINS %@ AND label CONTAINS %@ AND label CONTAINS %@ AND label CONTAINS %@",
-                "2,500グラム",
+                "2,500グラム、4時間10分",
                 "10粒",
-                "実測10回",
+                "うち実測10粒",
                 "まとまり粒1個"
             )
         ).firstMatch
         XCTAssertTrue(
             scopedShareCard.waitForExistence(timeout: 12),
-            "The celebration share route must preserve the aggregate's exact mass and source counts"
+            "The celebration share route must preserve the aggregate's exact mass, its focus time and source counts"
         )
         XCTAssertFalse(
             app.descendants(matching: .any)["share.partial-coverage-notice"].exists,
@@ -143,10 +142,15 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             "The next reachable crystal must remain explicit beside the long horizon: \(jarValue)"
         )
 
-        let jar = app.buttons["瓶"]
-        jar.coordinate(withNormalizedOffset: CGVector(
-            dx: CGFloat(fused.targetX),
-            dy: CGFloat(fused.targetY)
+        // Tap the crystal where it is on screen. The jar's accessibility frame
+        // is wider than the SpriteKit view, so a normalized offset in it lands
+        // up to ~25 pt right of the gem, enough to miss depending on where
+        // the new crystal came to rest.
+        let resting = try presentationSample(from: presentationProbe)
+        XCTAssertGreaterThanOrEqual(resting.targetWindowX, 0, "The probe must report the crystal's window position")
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+            dx: resting.targetWindowX,
+            dy: resting.targetWindowY
         )).tap()
         let inspectAggregate = app.buttons["jar.aggregate.inspect"]
         XCTAssertTrue(
@@ -378,7 +382,9 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             rawRecords: rawRecords,
             recordEntries: entries,
             targetX: targetX,
-            targetY: targetY
+            targetY: targetY,
+            targetWindowX: fields["targetWindowX"].flatMap(Double.init) ?? -1,
+            targetWindowY: fields["targetWindowY"].flatMap(Double.init) ?? -1
         )
     }
 }
@@ -389,6 +395,8 @@ private struct PresentationSample {
     let recordEntries: [RecordEntry]
     let targetX: Double
     let targetY: Double
+    let targetWindowX: Double
+    let targetWindowY: Double
 }
 
 private struct RecordEntry: Hashable {

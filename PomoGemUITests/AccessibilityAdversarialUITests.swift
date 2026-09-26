@@ -15,9 +15,8 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launchArguments += [
-            "-AppleLanguages", "(ja)",
-            "-AppleLocale", "ja_JP",
             "-share.prompt.\(studyDayKey())", "false"
         ]
         app.launch()
@@ -835,7 +834,7 @@ final class DynamicTypeSystemAuditUITests: XCTestCase {
         app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 10))
     }
@@ -912,7 +911,7 @@ final class DynamicTypeSystemAuditUITests: XCTestCase {
             "THIS WEEK", "CRYSTAL HIERARCHY",
             // Decorative text inside the accessibility-hidden empty weekly
             // crystal. The parent card announces the same value semantically.
-            "0.0標準単位"
+            "0分"
         ]
         try app.performAccessibilityAudit(for: [.dynamicType]) { issue in
             guard let label = issue.element?.label else { return false }

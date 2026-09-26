@@ -10,9 +10,8 @@ final class EngagementOverviewUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launchArguments += [
-            "-AppleLanguages", "(ja)",
-            "-AppleLocale", "ja_JP",
             // Exercise the widest completion action row deterministically.
             // Argument-domain defaults override a prompt receipt that another
             // Simulator run may have left in the shared UserDefaults domain.
@@ -216,7 +215,7 @@ final class EngagementOverviewUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_FORTY_YEAR_OVERVIEW"] = "1"
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
 
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
@@ -272,6 +271,174 @@ final class EngagementOverviewUITests: XCTestCase {
 
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = "40-year timeline — oldest month exact and representative"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    /// A month from 1985, far older than 記録's twelve months, opens its
+    /// themes and days, one day opens every record, and the month opens as
+    /// its own monthly jar with a card.
+    func testOldMonthOpensItsDaysAndItsMonthlyJar() {
+        exerciseOldMonthDrillDown(accessibility5: false)
+    }
+
+    func testOldMonthDrillDownAtAccessibility5() {
+        exerciseOldMonthDrillDown(accessibility5: true)
+    }
+
+    private func exerciseOldMonthDrillDown(accessibility5: Bool) {
+        let app = XCUIApplication()
+        app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_FORTY_YEAR_OVERVIEW"] = "1"
+        if accessibility5 {
+            app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        }
+        PomoGemUITestLanguage.configureJapanese(app)
+        app.launch()
+        let suffix = accessibility5 ? " — AX5" : ""
+
+        XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            app.staticTexts["fixture.40y.timeline-ready"].waitForExistence(timeout: 8),
+            app.staticTexts["fixture.40y.timeline-error"].label
+        )
+        if accessibility5 {
+            let lensMenu = app.buttons["overview.lens"]
+            XCTAssertTrue(scrollUntilVisible(lensMenu, in: app))
+            lensMenu.tap()
+            let timeline = app.buttons.matching(
+                NSPredicate(format: "label == %@ AND identifier != %@", "年月", "overview.lens")
+            ).firstMatch
+            XCTAssertTrue(timeline.waitForExistence(timeout: 4))
+            timeline.tap()
+        } else {
+            let lenses = app.segmentedControls["overview.lens"]
+            XCTAssertTrue(lenses.waitForExistence(timeout: 4))
+            lenses.buttons["年月"].tap()
+        }
+
+        let yearList = app.descendants(matching: .any)["overview.timeline.year-list"]
+        XCTAssertTrue(scrollUntilVisible(yearList, in: app))
+        let oldestYear = app.buttons["overview.timeline.year.1985"]
+        for _ in 0 ..< 16 where !(oldestYear.exists && oldestYear.isHittable) {
+            yearList.swipeLeft()
+        }
+        XCTAssertTrue(oldestYear.exists && oldestYear.isHittable)
+        oldestYear.tap()
+        let january = app.buttons["overview.timeline.month.1985-01"]
+        XCTAssertTrue(scrollUntilVisible(january, in: app))
+        january.tap()
+
+        let monthSummary = app.descendants(matching: .any)["overview.timeline.month.summary"]
+        XCTAssertTrue(
+            waitForLabel(of: monthSummary, containing: ["110粒", "27,500グラム", "45時間50分"], timeout: 10),
+            monthSummary.label
+        )
+        let themes = app.descendants(matching: .any)["overview.timeline.month.themes"]
+        XCTAssertTrue(scrollUntilVisible(themes, in: app))
+        XCTAssertTrue(
+            app.descendants(matching: .any).matching(
+                NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "40年の集中", "100パーセント")
+            ).firstMatch.exists,
+            "The theme row must read as one element with its share"
+        )
+        let monthAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        monthAttachment.name = "1985年1月 — themes\(suffix)"
+        monthAttachment.lifetime = .keepAlways
+        add(monthAttachment)
+
+        let day = app.buttons["history.day.1985-01-15"]
+        XCTAssertTrue(scrollUntilVisible(day, in: app))
+        XCTAssertTrue(day.label.contains("45時間50分"), day.label)
+        XCTAssertTrue(day.label.contains("110粒"), day.label)
+        let dayListAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        dayListAttachment.name = "1985年1月 — days\(suffix)"
+        dayListAttachment.lifetime = .keepAlways
+        add(dayListAttachment)
+        day.tap()
+
+        let daySummary = app.descendants(matching: .any)["history.day.summary"]
+        XCTAssertTrue(
+            waitForLabel(of: daySummary, containing: ["110粒", "27,500グラム"], timeout: 10),
+            daySummary.label
+        )
+        let firstRecord = app.descendants(matching: .any)["history.day.session"].firstMatch
+        XCTAssertTrue(firstRecord.waitForExistence(timeout: 4))
+        XCTAssertTrue(firstRecord.label.contains("40年の集中"), firstRecord.label)
+        XCTAssertTrue(firstRecord.label.contains("実測"), firstRecord.label)
+        let dayAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        dayAttachment.name = "1985年1月15日 — every record\(suffix)"
+        dayAttachment.lifetime = .keepAlways
+        add(dayAttachment)
+        app.buttons["history.day.close"].tap()
+        XCTAssertTrue(monthSummary.waitForExistence(timeout: 4))
+
+        let wrapped = app.buttons["overview.timeline.month.wrapped"]
+        for _ in 0 ..< 12 where !(wrapped.exists && wrapped.isHittable) {
+            app.swipeDown()
+        }
+        XCTAssertTrue(wrapped.exists && wrapped.isHittable)
+        XCTAssertTrue(wrapped.label.contains("この月を振り返る"), wrapped.label)
+        wrapped.tap()
+        XCTAssertTrue(app.staticTexts["1985年1月の瓶"].waitForExistence(timeout: 8))
+        let themeTimes = app.descendants(matching: .any)["wrapped.theme-times"]
+        XCTAssertTrue(scrollUntilVisible(themeTimes, in: app))
+        let share = app.buttons["wrapped.share"]
+        XCTAssertTrue(scrollUntilVisible(share, in: app))
+        // Over a month sheet, dismissing returns to the month, not to a jar.
+        XCTAssertTrue(app.buttons["月の記録へ戻る"].exists)
+        XCTAssertFalse(app.buttons["瓶へ戻る"].exists)
+        let wrappedAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        wrappedAttachment.name = "1985年1月 — monthly jar from 年月\(suffix)"
+        wrappedAttachment.lifetime = .keepAlways
+        add(wrappedAttachment)
+        share.tap()
+        XCTAssertTrue(
+            app.navigationBars["カードにする"].waitForExistence(timeout: 10),
+            "The card must open over Wrapped when it was opened from 年月"
+        )
+        let shareAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shareAttachment.name = "1985年1月 — card\(suffix)"
+        shareAttachment.lifetime = .keepAlways
+        add(shareAttachment)
+    }
+
+    /// With 設定 > 一般 > 言語と地域 > 暦法 set to 和暦, the current calendar
+    /// calls 2024 「6年」. The year chips must stay 西暦 like every other
+    /// month label in the app.
+    func testTimelineYearsStayGregorianWithTheJapaneseCalendar() {
+        let app = XCUIApplication()
+        app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_FORTY_YEAR_OVERVIEW"] = "1"
+        PomoGemUITestLanguage.configureJapaneseWithJapaneseCalendar(app)
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            app.staticTexts["fixture.40y.timeline-ready"].waitForExistence(timeout: 8),
+            app.staticTexts["fixture.40y.timeline-error"].label
+        )
+        let lenses = app.segmentedControls["overview.lens"]
+        XCTAssertTrue(lenses.waitForExistence(timeout: 4))
+        lenses.buttons["年月"].tap()
+
+        let newestYear = app.buttons["overview.timeline.year.2024"]
+        XCTAssertTrue(scrollUntilVisible(newestYear, in: app))
+        XCTAssertEqual(newestYear.label, "2024年")
+        XCTAssertFalse(app.buttons["overview.timeline.year.6"].exists)
+        let yearSummary = app.descendants(matching: .any)["overview.timeline.year.summary"]
+        XCTAssertTrue(
+            waitForLabel(of: yearSummary, containing: ["2024年", "2粒"], timeout: 10),
+            yearSummary.label
+        )
+        let december = app.buttons["overview.timeline.month.2024-12"]
+        XCTAssertTrue(scrollUntilVisible(december, in: app))
+        XCTAssertTrue(december.label.contains("2024年12月"), december.label)
+
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "年月 with the Japanese calendar — Gregorian years"
         attachment.lifetime = .keepAlways
         add(attachment)
     }
@@ -386,7 +553,7 @@ final class EngagementOverviewUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_FORTY_YEAR_OVERVIEW"] = "1"
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
 
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
@@ -433,7 +600,7 @@ final class EngagementOverviewUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_FORTY_YEAR_OVERVIEW"] = "1"
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
 
         XCTAssertTrue(app.navigationBars["積み上がり"].waitForExistence(timeout: 8))
@@ -572,7 +739,7 @@ final class EngagementOverviewUITests: XCTestCase {
         if let action {
             app.launchEnvironment["POMOGEM_UI_TEST_PERSISTENT_ACTION"] = action
         }
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         return app
     }
 

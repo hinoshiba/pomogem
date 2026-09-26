@@ -176,7 +176,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
     private func addAuditManualRecord() throws {
         let app = app!
         try openMenuAction("時間を手動で積む")
-        try require(app.staticTexts[themeName].waitForExistence(timeout: 5),
+        try require(waitForLabel(app.buttons["manual.subject-picker"], containing: themeName, timeout: 5),
                     "The manual record must belong to the unique audit theme.")
         try tap(app.buttons["30分、300グラム加算"])
         let confirm = app.buttons["manual.confirm"]
@@ -222,7 +222,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try returnHome(from: "設定")
         try openLog()
         let recordTimeout = try remainingHydrationTime(until: hydrationDeadline)
-        try require(summary(value: "30m", title: "積んだ時間").waitForExistence(
+        try require(summary(value: "30分", tile: "log.summary.time").waitForExistence(
             timeout: recordTimeout),
                     "The original manual record did not hydrate from iCloud within the restore budget.")
         try assertAuditRecordAndTotals()
@@ -782,7 +782,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try returnHome(from: "設定")
         try openLog()
         let recordTimeout = try hydrationDeadline.map { try remainingHydrationTime(until: $0) } ?? 10
-        try require(summary(value: "30m", title: "積んだ時間").waitForExistence(timeout: recordTimeout),
+        try require(summary(value: "30分", tile: "log.summary.time").waitForExistence(timeout: recordTimeout),
                     "The original 1,800-second manual record must remain after theme deletion.")
         try assertAuditRecordAndTotals()
         try returnHome(from: "記録")
@@ -817,7 +817,7 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         let application = XCUIApplication()
         application.terminate()
         application.launchEnvironment = [:]
-        application.launchArguments = ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(application)
         app = application
         didLaunch = true
         application.launch()
@@ -1019,9 +1019,24 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try requireHome()
     }
 
+    /// Opens 記録 on 今月. Its default 今週 is the calendar week, and the
+    /// phases of one audit can run days apart: a week boundary between the
+    /// phase that saved the record and the one checking it would read 0g.
+    /// The phases of one audit must stay inside one calendar month.
     private func openLog() throws {
         try openMenuAction("記録を見る")
         try require(app!.navigationBars["記録"].waitForExistence(timeout: 10), "Record history must open.")
+        let month = app!.segmentedControls.firstMatch.buttons["今月"]
+        try require(month.waitForExistence(timeout: 10), "記録 must offer the 今月 period.")
+        try tap(month)
+        try require(waitForSelection(month), "記録 must switch to 今月 before totals are read.")
+    }
+
+    private func waitForSelection(_ element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+        XCTWaiter.wait(
+            for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: element)],
+            timeout: timeout
+        ) == .completed
     }
 
     private var auditHistoryRow: XCUIElement {
@@ -1031,26 +1046,27 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         )).firstMatch
     }
 
-    private func summary(value: String, title: String) -> XCUIElement {
-        // Token boundaries prevent 30m/300g from satisfying the zero checks.
+    /// A 記録 summary tile, by its stable identifier, showing `value`.
+    private func summary(value: String, tile identifier: String) -> XCUIElement {
+        // Token boundaries prevent 30分/300g from satisfying the zero checks.
         let pattern = "(?:.*[\\s,、])?" + NSRegularExpression.escapedPattern(for: value)
-            + "[\\s,、]+" + NSRegularExpression.escapedPattern(for: title)
+            + "(?:[\\s,、].*)?"
         return app!.descendants(matching: .any).matching(
-            NSPredicate(format: "label MATCHES %@", pattern)
+            NSPredicate(format: "identifier == %@ AND label MATCHES %@", identifier, pattern)
         ).firstMatch
     }
 
     private func assertAuditRecordAndTotals() throws {
-        try scrollTo(summary(value: "30m", title: "積んだ時間"), direction: .down)
-        try require(summary(value: "300g", title: "今期の質量").exists,
+        try scrollTo(summary(value: "30分", tile: "log.summary.time"), direction: .down)
+        try require(summary(value: "300g", tile: "log.summary.mass").exists,
                     "The unique 30-minute record must contribute exactly 300g.")
         try scrollTo(auditHistoryRow, attempts: 24)
         try require(auditHistoryRow.exists, "The actual saved audit record is missing from history.")
     }
 
     private func assertEmptyRecordState() throws {
-        try scrollTo(summary(value: "0m", title: "積んだ時間"), direction: .down)
-        try require(summary(value: "0g", title: "今期の質量").exists, "Record mass must be zero.")
+        try scrollTo(summary(value: "0分", tile: "log.summary.time"), direction: .down)
+        try require(summary(value: "0g", tile: "log.summary.mass").exists, "Record mass must be zero.")
         try scrollTo(app!.staticTexts["一粒積むと、ここに記録が残ります。"], attempts: 24)
         try require(!auditHistoryRow.exists, "The reset audit record must not remain in history.")
     }

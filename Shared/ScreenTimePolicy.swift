@@ -23,9 +23,15 @@ enum ScreenTimeError: LocalizedError {
         case .unauthorized: return "スクリーンタイムへのアクセスを許可してください。"
         case .unboundContext: return "データの準備が完了してから、もう一度お試しください。"
         case .applicationsOnly: return "カテゴリやWebサイトではなく、個別のアプリを選んでください。"
-        case .overlappingApplications: return "同じアプリを学習用と黒い石用の両方には登録できません。"
-        case .freeApplicationLimit: return "無料で登録できる学習アプリは5つまでです。5つ以下にするか、Proをご利用ください。"
-        case .missingTheme: return "学習時間を記録するテーマを選んでください。"
+        case .overlappingApplications:
+            return String(localized: "同じアプリを勉強アプリと控えたいアプリの両方には登録できません。",
+                          table: "ScreenTime", comment: "Error: an app is in both Screen Time lanes")
+        case .freeApplicationLimit:
+            return String(localized: "無料で登録できる勉強アプリは5つまでです。5つ以下にするか、Proをご利用ください。",
+                          table: "ScreenTime", comment: "Error: more study apps than the free plan records")
+        case .missingTheme:
+            return String(localized: "勉強時間を記録するテーマを選んでください。",
+                          table: "ScreenTime", comment: "Error: study apps are chosen but no destination theme")
         case .corruptedState: return "スクリーンタイムの記録を読み込めませんでした。記録の上書きは行っていません。"
         }
     }
@@ -47,6 +53,10 @@ enum ScreenTimePolicy {
     static let maximumDailyThreshold = 144
     static let batchesPerLane = 8
     static let maximumActivities = batchesPerLane * 2 + 1
+    /// DeviceActivity refuses a schedule shorter than this
+    /// (`MonitoringError.intervalTooShort`). A learning run pre-armed to start
+    /// when the timer ends needs at least this much of its day left.
+    static let minimumMonitoringInterval: TimeInterval = 15 * 60
 
     static func validate(_ configuration: ScreenTimeConfiguration, isPro: Bool) throws {
         guard configuration.enabled else { return }
@@ -69,8 +79,35 @@ enum ScreenTimePolicy {
         if !isPro, count > freeLearningApplicationLimit { throw ScreenTimeError.freeApplicationLimit }
     }
 
+    /// The learning lane's subscription gate. `isPro == nil` means StoreKit
+    /// has not answered yet: the gate the ledger already holds is kept (or
+    /// relaxed when the selection fits the free plan anyway), never tightened,
+    /// because retiring a run cannot be undone — its unfinished 10 minutes are
+    /// gone. Only a real answer may close it.
+    static func learningAllowedBySubscription(
+        isPro: Bool?,
+        learningApplicationCount: Int,
+        previouslyAllowed: Bool
+    ) -> Bool {
+        let fitsFreePlan = learningApplicationCount <= freeLearningApplicationLimit
+        guard let isPro else { return previouslyAllowed || fitsFreePlan }
+        return isPro || fitsFreePlan
+    }
+
     static func thresholds(batch: Int) -> ClosedRange<Int> {
         (batch * eventsPerActivity + 1)...min((batch + 1) * eventsPerActivity, maximumDailyThreshold)
+    }
+
+    /// When a learning run can be registered ahead of time so that it starts
+    /// counting the moment the timer's hold ends, even if PomoGem is closed by
+    /// then. nil when the hold has no end, has already ended, or ends too
+    /// close to the day's last second for a DeviceActivity interval — the
+    /// next day's scheduler pass registers the lane instead.
+    static func preArmedLearningStart(pausedUntil: Date?, now: Date, dayEnd: Date) -> Date? {
+        guard let pausedUntil, pausedUntil > now else { return nil }
+        let intervalEnd = dayEnd.addingTimeInterval(-1)
+        guard intervalEnd.timeIntervalSince(pausedUntil) >= minimumMonitoringInterval else { return nil }
+        return pausedUntil
     }
 
     static func receiptID(epoch: UUID, runID: UUID, threshold: Int) -> UUID {
@@ -79,6 +116,26 @@ enum ScreenTimePolicy {
         return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5],
                            bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11],
                            bytes[12], bytes[13], bytes[14], bytes[15]))
+    }
+}
+
+/// How long the focus timer holds the learning lane. The lane pauses while a
+/// timer phase runs so study-app time is not counted twice, and the hold has to
+/// end by itself: the app may be closed when the phase ends, and the monitor
+/// extension must be able to tell from the ledger alone that it is over.
+enum ScreenTimeLearningPause: Equatable {
+    /// No timer phase is running (or the completion screen is showing).
+    case none
+    /// A focus or in-timer break runs until this date.
+    case until(Date)
+    /// The user paused the timer; it has no end until they resume or stop it.
+    case indefinite
+
+    /// A phase whose end has passed no longer holds anything, even if the app
+    /// has not advanced its timer yet.
+    func normalized(at now: Date) -> Self {
+        if case let .until(end) = self, end <= now { return .none }
+        return self
     }
 }
 
@@ -143,7 +200,16 @@ struct ScreenTimeState: Codable {
     var configuration = ScreenTimeConfiguration()
     var runs: [ScreenTimeRun] = []
     var negativeGemCount = 0
+    /// Read through `isLearningPaused(at:)`, never on its own: with
+    /// `learningPausedUntil` set, the hold ends at that date without anyone
+    /// writing the ledger. A plain Bool with no end kept the learning lane off
+    /// for days whenever a focus ended while PomoGem was in the background.
     var learningPausedByTimer = false
+    /// When the timer's hold on the learning lane ends; nil while the user has
+    /// paused the timer (no end yet). Optional for the same reason as
+    /// `callbackCounters`: ledgers written before it must still decode, and
+    /// they decode as the old open-ended hold.
+    var learningPausedUntil: Date?
     var learningAllowedBySubscription = true
     var monitoringError: String?
     /// When the monitor extension last ran a repair pass that the framework
@@ -215,6 +281,52 @@ struct ScreenTimeState: Codable {
         return counters
     }
 
+    func isLearningPaused(at date: Date) -> Bool {
+        learningPausedByTimer && (learningPausedUntil.map { date < $0 } ?? true)
+    }
+
+    /// A learning run registered while the lane was held, to start counting at
+    /// the hold's end. It belongs to that one hold: a changed hold retires it.
+    func isPreArmedLearningRun(_ run: ScreenTimeRun) -> Bool {
+        run.lane == .learning && learningPausedByTimer
+            && learningPausedUntil.map { run.startedAt == $0 } == true
+    }
+
+    /// Records the timer's hold and retires every learning run that would
+    /// count timer time. Only a run pre-armed for exactly this hold survives,
+    /// so a repeated identical call changes nothing, and a hold that ended
+    /// early retires the run still waiting for the old end: it would otherwise
+    /// skip the minutes between the early end and the planned one.
+    mutating func applyTimerPause(_ pause: ScreenTimeLearningPause, now: Date) {
+        let previousUntil = learningPausedByTimer ? learningPausedUntil : nil
+        let pause = pause.normalized(at: now)
+        switch pause {
+        case .none:
+            learningPausedByTimer = false
+            learningPausedUntil = nil
+        case let .until(end):
+            learningPausedByTimer = true
+            learningPausedUntil = end
+        case .indefinite:
+            learningPausedByTimer = true
+            learningPausedUntil = nil
+        }
+        for index in runs.indices where runs[index].lane == .learning && runs[index].active {
+            let startedAt = runs[index].startedAt
+            let keeps: Bool
+            switch pause {
+            case .none:
+                keeps = !(previousUntil.map { startedAt == $0 && $0 > now } ?? false)
+            case let .until(end):
+                keeps = startedAt == end
+            case .indefinite:
+                keeps = false
+            }
+            if !keeps { runs[index].active = false }
+        }
+        pruneConsumedRuns()
+    }
+
     mutating func record(runID: UUID, threshold: Int, now: Date) {
         guard (1...ScreenTimePolicy.maximumDailyThreshold).contains(threshold),
               let index = runs.firstIndex(where: { $0.id == runID && $0.active }),
@@ -226,7 +338,7 @@ struct ScreenTimeState: Codable {
               now < run.dayEnd,
               now.timeIntervalSince(run.startedAt) >= Double(threshold * 600),
               threshold > run.highestThreshold else { return }
-        if run.lane == .learning, learningPausedByTimer || !learningAllowedBySubscription { return }
+        if run.lane == .learning, isLearningPaused(at: now) || !learningAllowedBySubscription { return }
         let delta = threshold - run.highestThreshold
         if run.lane == .distraction {
             let (total, overflow) = negativeGemCount.addingReportingOverflow(delta)
@@ -294,6 +406,7 @@ struct ScreenTimeState: Codable {
     var isValid: Bool {
         guard version == 1, negativeGemCount >= 0,
               lastRepairAttemptAt?.timeIntervalSince1970.isFinite != false,
+              learningPausedUntil?.timeIntervalSince1970.isFinite != false,
               callbackCounters?.isValid != false,
               Set(runs.map(\.id)).count == runs.count,
               runs.filter(\.active).count <= ScreenTimeLane.allCases.count else { return false }

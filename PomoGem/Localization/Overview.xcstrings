@@ -1,0 +1,132 @@
+{
+  "sourceLanguage" : "ja",
+  "strings" : {
+    "%@、%@、%lld粒" : {
+      "comment" : "VoiceOver day row: date with weekday, focus time, gem count",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@、%2$@、%3$lld粒"
+          }
+        }
+      }
+    },
+    "%@、この端末に届いている%lld粒、%@" : {
+      "comment" : "VoiceOver month card: month, gem count on this iPhone, spoken mass",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@、この端末に届いている%2$lld粒、%3$@"
+          }
+        }
+      }
+    },
+    "%@・%lld粒" : {
+      "comment" : "Day row: focus time, then gem count",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@・%2$lld粒"
+          }
+        }
+      }
+    },
+    "このほか自己申告 %@" : {
+      "comment" : "Weekly card: self-reported mass outside the measured tiles; the argument is a mass"
+    },
+    "この日の記録を開きます" : {
+
+    },
+    "この月の記録を、ひとつの瓶とカードで振り返ります" : {
+
+    },
+    "この月を振り返る" : {
+      "comment" : "Opens the month's monthly wrap-up (Wrapped), which can become a share card"
+    },
+    "この端末に届いている%lld粒、%@、%@" : {
+      "comment" : "VoiceOver month summary: gem count on this iPhone, spoken mass, focus time",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "この端末に届いている%1$lld粒、%2$@、%3$@"
+          }
+        }
+      }
+    },
+    "ひと月の瓶とテーマ別の時間を見て、カードにして残せます。" : {
+      "comment" : "Caption under 「この月を振り返る」"
+    },
+    "タイマーの完走はまだありません。自己申告の%@も、瓶とこれまでの記録に入っています。" : {
+      "comment" : "Weekly card caption when the week has only self-reported mass; the argument is a mass"
+    },
+    "テーマ別" : {
+      "comment" : "Heading of the per-theme time breakdown of a month"
+    },
+    "テーマ別・日ごとの記録と、この月の代表瓶を開きます" : {
+
+    },
+    "今週の実測" : {
+      "comment" : "Weekly card tile: measured mass this week"
+    },
+    "今週の時間が積み上がっている。" : {
+
+    },
+    "今週の積み上げ、%@、実測%@、タイマー完走%lld回。このほか自己申告%@。回数は戻った文脈で、時間価値とは別です" : {
+      "comment" : "VoiceOver weekly card: focus time, measured mass, timer completions, self-reported mass",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "今週の積み上げ、%1$@、実測%2$@、タイマー完走%3$lld回。このほか自己申告%4$@。回数は戻った文脈で、時間価値とは別です"
+          }
+        }
+      }
+    },
+    "今週の積み上げ、%@、実測%@、タイマー完走%lld回。回数は戻った文脈で、時間価値とは別です" : {
+      "comment" : "VoiceOver weekly card: focus time, measured mass, timer completions",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "今週の積み上げ、%1$@、実測%2$@、タイマー完走%3$lld回。回数は戻った文脈で、時間価値とは別です"
+          }
+        }
+      }
+    },
+    "今週の積み上げ。タイマーの完走はまだありません。自己申告の%@は、瓶とこれまでの記録に入っています" : {
+      "comment" : "VoiceOver weekly card when the week has only self-reported mass"
+    },
+    "今週の積み上げ。今週のタイマー完走はまだありません。休んでも、以前の記録は減りません" : {
+      "comment" : "VoiceOver weekly card for an empty week"
+    },
+    "今週は、まだ透明。" : {
+
+    },
+    "今週は、自己申告で積んでいる。" : {
+
+    },
+    "価値は集中時間で加算。完走回数は、戻ってきた文脈として別に残します。" : {
+
+    },
+    "日ごとの記録" : {
+      "comment" : "Heading of a month's list of days"
+    },
+    "日付を選ぶと、その日の記録を一件ずつ見られます。" : {
+
+    },
+    "時間" : {
+      "comment" : "This week's focus time stat title"
+    },
+    "次の完走から時間と質量を加えます。休んでも、これまでの瓶は減りません。" : {
+
+    },
+    "集中した時間" : {
+      "comment" : "Month summary tile: total focus time"
+    }
+  },
+  "version" : "1.0"
+}

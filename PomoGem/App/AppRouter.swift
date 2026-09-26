@@ -6,6 +6,9 @@ enum AppTab: Hashable {
     case jar
     case log
     case settings
+    /// The Screen Time settings pushed straight from Home's menu, the same
+    /// page Settings links to.
+    case screenTime
 }
 
 enum PaywallPendingIntent: Equatable {
@@ -17,7 +20,8 @@ enum ShareScope: Equatable {
     case month(Date)
     case aggregate(id: UUID, monthLabel: String)
 
-    func contains(_ date: Date, calendar: Calendar = .autoupdatingCurrent) -> Bool {
+    /// Months are Gregorian, as `periodLabel` names them.
+    func contains(_ date: Date, calendar: Calendar = PomoGemCalendar.gregorian) -> Bool {
         switch self {
         case .all:
             return true
@@ -32,7 +36,14 @@ enum ShareScope: Equatable {
     var periodLabel: String {
         switch self {
         case .all:
-            return Date.now.formatted(.dateTime.year().month().day())
+            // The lifetime card covers everything so far, not one day. A bare
+            // date here made a saved or reposted card read as that day's
+            // result (history-08).
+            return String(
+                localized: "これまで",
+                table: "Share",
+                comment: "Share card period label for the whole history"
+            )
         case let .month(monthStart):
             return StrataMath.monthLabel(for: monthStart)
         case let .aggregate(_, monthLabel):
@@ -111,21 +122,13 @@ final class AppRouter {
     }
 #endif
 
-    /// - Parameter bottomInset: distance above the bottom safe area; Home's
-    ///   landing toast passes `ToastMessage.homeLaunchClearance` so it sits
-    ///   above the theme row and the launch button instead of over them.
-    func showToast(
-        _ text: String,
-        symbol: String? = nil,
-        duration: Duration = .seconds(3),
-        bottomInset: CGFloat = ToastMessage.defaultBottomInset
-    ) {
+    func showToast(_ text: String, symbol: String? = nil, duration: Duration = .seconds(3)) {
         toastTask?.cancel()
         let appearsAnimation: Animation? = UIAccessibility.isReduceMotionEnabled
             ? nil
             : .spring(response: 0.36, dampingFraction: 0.84)
         withAnimation(appearsAnimation) {
-            toast = ToastMessage(text: text, symbol: symbol, bottomInset: bottomInset)
+            toast = ToastMessage(text: text, symbol: symbol)
         }
         toastTask = Task { [weak self] in
             try? await Task.sleep(for: duration)
@@ -188,11 +191,6 @@ struct ToastMessage: Identifiable, Equatable {
     let id = UUID()
     let text: String
     let symbol: String?
-    var bottomInset: CGFloat = ToastMessage.defaultBottomInset
-
-    static let defaultBottomInset: CGFloat = 86
-    /// Clears Home's theme/duration row and the launch button.
-    static let homeLaunchClearance: CGFloat = 190
 }
 
 struct ToastOverlay: View {
@@ -216,6 +214,7 @@ struct ToastOverlay: View {
         .shadow(color: .black.opacity(0.32), radius: 24, y: 12)
         .padding(.horizontal, 16)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("app.toast")
         .onAppear {
             guard UIAccessibility.isVoiceOverRunning else { return }
             UIAccessibility.post(notification: .announcement, argument: message.text)

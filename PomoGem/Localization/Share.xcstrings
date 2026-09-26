@@ -1,0 +1,84 @@
+{
+  "sourceLanguage" : "ja",
+  "strings" : {
+    "%@の集中" : {
+      "comment" : "Share card: focus time under the mass, e.g. 4時間10分の集中"
+    },
+    "%@を %@（%@）積みました%@。" : {
+      "comment" : "Share caption. Arguments: what was stacked, mass, focus time, optional disclosure in parentheses",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@を %2$@（%3$@）積みました%4$@。"
+          }
+        }
+      }
+    },
+    "%@・記念石は自己申告" : {
+      "comment" : "Share settings summary: focus scope, then the note that stones are self-reported"
+    },
+    "これまで" : {
+      "comment" : "Share card period label for the whole history"
+    },
+    "写真に保存しています" : {
+
+    },
+    "写真用のGIFを作っています…" : {
+      "comment" : "Share composer: status while the two GIFs for Photos are rendered"
+    },
+    "写真用の画像を作っています…" : {
+      "comment" : "Share composer: status while the two still images for Photos are rendered"
+    },
+    "動くGIFをフィード用とストーリー用で写真に保存しました。" : {
+      "comment" : "Share composer: both animated GIF sizes were saved to Photos"
+    },
+    "含める" : {
+
+    },
+    "実測 %lld粒" : {
+      "comment" : "Share card: measured gems (timer or Screen Time)"
+    },
+    "瓶に積んだ集中 %@（%@）" : {
+      "comment" : "Share sheet title for the GIF. Arguments: mass, focus time",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "瓶に積んだ集中 %1$@（%2$@）"
+          }
+        }
+      }
+    },
+    "端末の中だけで生成" : {
+
+    },
+    "自己申告として明記したうえで、この記録をカードに含めます" : {
+
+    },
+    "自己申告の%@は、カードに含めていません。" : {
+      "comment" : "Share composer: amount of self-reported focus left out of the card, e.g. 1時間30分"
+    },
+    "自己申告の集中は、カードに含めていません。" : {
+      "comment" : "Share composer: self-reported focus is left out of the card"
+    },
+    "自己申告を含めました。カードは%@、%@です。" : {
+      "comment" : "VoiceOver after including self-reported focus. Arguments: spoken mass (300グラム), focus time (30分)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "自己申告を含めました。カードは%1$@、%2$@です。"
+          }
+        }
+      }
+    },
+    "自己申告を含めました。カードは%@です。" : {
+      "comment" : "VoiceOver after including self-reported focus when the card holds under a minute. Argument: spoken mass"
+    },
+    "自己申告を含める" : {
+
+    }
+  },
+  "version" : "1.0"
+}

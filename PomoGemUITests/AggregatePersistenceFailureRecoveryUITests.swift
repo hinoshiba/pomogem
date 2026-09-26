@@ -206,9 +206,8 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         if injectsAggregateSaveFailure {
             app.launchEnvironment["POMOGEM_UI_TEST_FAULT_AGGREGATE_SAVE_ONCE"] = "1"
         }
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launchArguments += [
-            "-AppleLanguages", "(ja)",
-            "-AppleLocale", "ja_JP",
             "-review.requested-version", "1.0"
         ]
         return app

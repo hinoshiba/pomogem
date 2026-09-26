@@ -2,6 +2,7 @@ import Photos
 import SwiftData
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct ShareComposerView: View {
     let scope: ShareScope
@@ -30,6 +31,7 @@ struct ShareComposerView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityPlayAnimatedImages) private var playAnimatedImages
     @Environment(AppRouter.self) private var router
     @Environment(\.aggregateProjectionPresentation)
@@ -73,6 +75,10 @@ struct ShareComposerView: View {
     @State private var allSessionRowCount = 0
     @State private var dataLoadError: String?
     @State private var isLoadingData = true
+    /// Bumped whenever the loaded records or their page flags change, which
+    /// is the only time the cached selection must be rebuilt for them.
+    @State private var shareRecordsGeneration = 0
+    @State private var selectionCache = ShareSelectionCache()
 #if DEBUG
     @State private var debugGIFShareLifecycle = DebugGIFShareLifecycle()
 #endif
@@ -95,255 +101,69 @@ struct ShareComposerView: View {
     private var resolvedSharePreference: Bool {
         resolvedPreferences?.shareIncludesManual ?? false
     }
-    private var sessions: [StudySession] {
-        storedSessions.filter {
-            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetSnapshots)
-                && StudySessionIntegrityPolicy.isSupported($0)
+    /// The card's content, resolved once per change of its inputs rather
+    /// than on every body pass (history-10). Keystrokes, chips, format and
+    /// media changes reuse the cached value.
+    private var selection: ShareSelectionModel {
+        selectionCache.model(for: selectionKey) {
+            ShareSelectionModel.make(selectionInput)
         }
-    }
-    private var achievementStones: [AchievementStone] {
-        storedAchievementStones.filter {
-            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetSnapshots)
-        }
-    }
-    private var aggregatePebbles: [AggregatePebble] {
-        guard aggregateProjectionPresentation
-            .acceptsVerifiedAggregateCache(aggregateProjectionCacheStamp)
-        else { return [] }
-        return storedAggregatePebbles.filter {
-            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetSnapshots)
-        }
-    }
-    private var strata: [Stratum] {
-        guard aggregateProjectionPresentation
-            .acceptsVerifiedAggregateCache(aggregateProjectionCacheStamp)
-        else { return [] }
-        return storedStrata.filter {
-            ActivityResetPolicy.isCurrent($0.dataEpochID, markers: resetSnapshots)
-        }
-    }
-    private var uniqueSessions: [StudySession] {
-        StudySessionSyncPolicy.canonicalSessions(from: sessions)
-        .sorted { $0.endAt < $1.endAt }
-    }
-    private var uniqueLooseSessions: [StudySession] {
-        StudySessionSyncPolicy.canonicalSessions(from: looseSessions)
-        .sorted { $0.endAt < $1.endAt }
-    }
-    private var compactLooseSessions: [StudySession] {
-        uniqueLooseSessions.filter { !localRepresentedSessionIDs.contains($0.id) }
-    }
-    private var uniqueAggregates: [AggregatePebble] {
-        Dictionary(grouping: aggregatePebbles, by: \.id).values.compactMap { duplicates in
-            duplicates.max { lhs, rhs in
-                if lhs.level == rhs.level { return lhs.createdAt < rhs.createdAt }
-                return lhs.level < rhs.level
-            }
-        }
-        .sorted { $0.createdAt < $1.createdAt }
-    }
-    private var uniqueAchievements: [AchievementStone] {
-        AchievementStonePolicy.canonicalStones(from: achievementStones)
-        .filter { $0.deletedAt == nil }
-        .sorted { $0.achievedAt < $1.achievedAt }
-    }
-    private var uniqueStrata: [Stratum] {
-        Dictionary(grouping: strata, by: \.id).values.compactMap { duplicates in
-            duplicates.min { lhs, rhs in lhs.bakedAt < rhs.bakedAt }
-        }
-        .sorted { $0.bakedAt < $1.bakedAt }
-    }
-    private var scopedSessions: [StudySession] {
-        switch scope {
-        case .all:
-            return uniqueSessions
-        case .month:
-            return uniqueSessions.filter { scope.contains($0.endAt) }
-        case let .aggregate(id, _):
-            guard aggregateProjectionPresentation.allowsAggregateSummaries else {
-                return []
-            }
-            if let aggregate = uniqueAggregates.first(where: { $0.id == id }) {
-                let membership = Set(AggregatePebblePolicy.descendantSessionIDs(
-                    of: aggregate,
-                    in: uniqueAggregates
-                ))
-                return uniqueSessions.filter { membership.contains($0.id) }
-            }
-            guard let layer = uniqueStrata.first(where: { $0.id == id }) else { return [] }
-            let membership = Set(layer.sessionIDs)
-            return uniqueSessions.filter { membership.contains($0.id) }
-        }
-    }
-    private var scopedAggregates: [AggregatePebble] {
-        guard aggregateProjectionPresentation.allowsAggregateSummaries else {
-            return []
-        }
-        switch scope {
-        case .all:
-            let trusted = uniqueAggregates.filter {
-                acceptedAggregateRootIDs.contains($0.id)
-            }
-            return AggregatePebblePolicy.disjointRootSummaries(from: trusted)
-        case .month:
-            let scopedIDs = Set(scopedSessions.map(\.id))
-            return AggregatePebblePolicy.activeRoots(from: uniqueAggregates).filter {
-                let membership = AggregatePebblePolicy.descendantSessionIDs(
-                    of: $0,
-                    in: uniqueAggregates
-                )
-                return !membership.isEmpty && !scopedIDs.isDisjoint(with: membership)
-            }
-        case let .aggregate(id, _):
-            return uniqueAggregates.filter { $0.id == id }
-        }
-    }
-    private var scopedAchievements: [AchievementStone] {
-        switch scope {
-        case .all:
-            return uniqueAchievements
-        case .month:
-            return uniqueAchievements.filter { scope.contains($0.achievedAt) }
-        case .aggregate:
-            return []
-        }
-    }
-    private var selectedSessions: [StudySession] {
-        var selected: [StudySession]
-        if scopedAggregateProjection == .authoritativeSummary {
-            // A scoped aggregate summary already owns the exact mass/counts.
-            // Passing its descendants as loose rows would count every reward
-            // twice in the preview, export, caption, and accessibility value.
-            selected = []
-        } else if usesCompactRootProjection {
-            // Compact roots are local projections. Only exact local leaf or
-            // legacy membership can remove a synchronized session candidate.
-            selected = compactLooseSessions
-        } else {
-            selected = includeManual ? scopedSessions : scopedSessions.filter { $0.effectiveSource.isMeasured }
-        }
-        return selected
-    }
-    private var scopedAggregateProjection: ScopedAggregateShareProjection? {
-        guard case .aggregate = scope,
-              let aggregate = scopedAggregates.first
-        else { return nil }
-        return .mode(
-            for: aggregate,
-            includesSelfReportedFocus: includeManual
-        )
-    }
-    private var selectedAggregates: [ShareAggregateVisual] {
-        if usesCompactRootProjection {
-            let modern = scopedAggregates.map(ShareAggregateVisual.init(aggregateSummary:))
-            let modernIDs = Set(uniqueAggregates.map(\.id))
-            let legacy = scopedLegacyStrata
-                .filter { !modernIDs.contains($0.id) }
-                .map(ShareAggregateVisual.init(legacySummary:))
-            return (modern + legacy).sorted { $0.createdAt < $1.createdAt }
-        }
-
-        if scopedAggregateProjection == .authoritativeSummary,
-           let aggregate = scopedAggregates.first {
-            return [ShareAggregateVisual(aggregateSummary: aggregate)]
-        }
-
-        let modern = scopedAggregates.compactMap { aggregate -> ShareAggregateVisual? in
-            let resolvedMembership = AggregatePebblePolicy.descendantSessionIDs(
-                of: aggregate,
-                in: uniqueAggregates
-            )
-            let membership = Set(resolvedMembership)
-            if membership.isEmpty {
-                // A compact parent arriving before its children is not a
-                // membership-less legacy summary. Omitting that transient
-                // visual prevents its full mass being added on top of sessions.
-                guard AggregatePebblePolicy.isUnattributedCompatibility(aggregate) else {
-                    return nil
-                }
-                let isExplicitlyAllMeasured = aggregate.manualPebbleCount == 0
-                    && aggregate.measuredPebbleCount == aggregate.pebbleCount
-                    && aggregate.pebbleCount > 0
-                return includeManual || isExplicitlyAllMeasured
-                    ? ShareAggregateVisual(aggregate: aggregate)
-                    : nil
-            }
-            return ShareAggregateVisual(
-                reconstructing: aggregate,
-                resolvedSessionIDs: resolvedMembership,
-                allMemberSessions: uniqueSessions.filter { membership.contains($0.id) },
-                includedMemberSessions: selectedSessions.filter { membership.contains($0.id) }
-            )
-        }
-
-        let modernIDs = Set(uniqueAggregates.map(\.id))
-        let legacy = scopedLegacyStrata
-            .filter { !modernIDs.contains($0.id) }
-            .compactMap { layer -> ShareAggregateVisual? in
-                let membership = Set(layer.sessionIDs)
-                if membership.isEmpty {
-                    return includeManual ? ShareAggregateVisual(legacy: layer) : nil
-                }
-                return ShareAggregateVisual(
-                    reconstructing: layer,
-                    allMemberSessions: uniqueSessions.filter { membership.contains($0.id) },
-                    includedMemberSessions: selectedSessions.filter { membership.contains($0.id) }
-                )
-            }
-        return (modern + legacy).sorted { $0.createdAt < $1.createdAt }
     }
 
-    /// Aggregate visuals index the sessions they contain, so only compatibility
-    /// aggregates without membership contribute additional mass.
-    private var selectedTotalGrams: Int {
-        NonnegativeIntPolicy.sum(
-            selectedSessions.map(\.grams)
-                + selectedAggregates
-                    .filter(\.contributesStandaloneTotals)
-                    .map(\.grams)
+    private var selectionKey: ShareSelectionInput.Key {
+        ShareSelectionInput.Key(
+            recordsGeneration: shareRecordsGeneration,
+            scope: scope,
+            includeManual: includeManual,
+            resetSnapshots: resetSnapshots,
+            allowsAggregateSummaries: aggregateProjectionPresentation.allowsAggregateSummaries,
+            acceptsVerifiedAggregateCache: aggregateProjectionPresentation
+                .acceptsVerifiedAggregateCache(aggregateProjectionCacheStamp)
         )
     }
 
-    /// Disclose what is actually present in the selected card, rather than the
-    /// state of the toggle itself. Membership-less compatibility aggregates are
-    /// conservative: they are only included when self-reporting is enabled, so
-    /// their unknown composition is disclosed as self-reported.
-    private var selectedIncludesSelfReportedFocus: Bool {
-        selectedSessions.contains { $0.effectiveSource.isSelfReported }
-            || selectedAggregates.contains { $0.manualPebbleCount > 0 }
-            || selectedHasUnknownSelfReportComposition
-    }
-
-    private var selectedHasUnknownSelfReportComposition: Bool {
-        guard includeManual else { return false }
-        let unknownModernIDs = Set(scopedAggregates
-            .filter(AggregatePebblePolicy.isUnattributedCompatibility)
-            .map(\.id))
-        let modernIDs = Set(scopedAggregates.map(\.id))
-        let unknownLegacyIDs = Set(scopedLegacyStrata
-            .filter { !modernIDs.contains($0.id) && $0.sessionIDs.isEmpty }
-            .map(\.id))
-        let unknownIDs = unknownModernIDs.union(unknownLegacyIDs)
-        return selectedAggregates.contains { unknownIDs.contains($0.id) }
+    private var selectionInput: ShareSelectionInput {
+        ShareSelectionInput(
+            scope: scope,
+            includeManual: includeManual,
+            resetSnapshots: resetSnapshots,
+            allowsAggregateSummaries: aggregateProjectionPresentation.allowsAggregateSummaries,
+            acceptsVerifiedAggregateCache: aggregateProjectionPresentation
+                .acceptsVerifiedAggregateCache(aggregateProjectionCacheStamp),
+            storedSessions: storedSessions,
+            looseSessions: looseSessions,
+            storedAchievementStones: storedAchievementStones,
+            storedAggregatePebbles: storedAggregatePebbles,
+            storedStrata: storedStrata,
+            acceptedAggregateRootIDs: acceptedAggregateRootIDs,
+            localRepresentedSessionIDs: localRepresentedSessionIDs,
+            historyPageIsPartial: historyPageIsPartial,
+            loosePageIsPartial: loosePageIsPartial,
+            aggregatePageIsPartial: aggregatePageIsPartial,
+            aggregateValidationIsIncomplete: aggregateValidationIsIncomplete,
+            allSessionRowCount: allSessionRowCount
+        )
     }
 
     private var shareCaption: String {
+        let selection = selection
         let semantics = shareRewardSemantics(
-            sessions: selectedSessions.map(ShareSessionVisual.init),
-            aggregates: selectedAggregates,
-            achievements: scopedAchievements.map(ShareAchievementVisual.init)
+            sessions: selection.sessions,
+            aggregates: selection.aggregates,
+            achievements: selection.achievements
         )
         let hiddenContent = shareHiddenContent(
-            sessions: selectedSessions.map(ShareSessionVisual.init),
-            aggregates: selectedAggregates,
-            achievements: scopedAchievements.map(ShareAchievementVisual.init),
+            sessions: selection.sessions,
+            aggregates: selection.aggregates,
+            achievements: selection.achievements,
             format: format
         )
         return ShareCopy.caption(
             subject: shareCaptionSubject,
-            grams: ShareMassFormatter.visual(selectedTotalGrams),
-            includesSelfReportedFocus: selectedIncludesSelfReportedFocus,
-            achievementCount: scopedAchievements.count,
+            grams: ShareMassFormatter.visual(selection.totalGrams),
+            focusTime: ShareMassFormatter.focusTime(selection.totalGrams),
+            includesSelfReportedFocus: selection.includesSelfReportedFocus,
+            achievementCount: selection.achievements.count,
             rewardDetail: semantics.captionDetail,
             visualDisclosure: hiddenContent.captionDisclosure,
             hashtags: activeHashtags
@@ -351,7 +171,7 @@ struct ShareComposerView: View {
     }
 
     private var activeHashtags: [String] {
-        var values = ShareCopy.hashtags.filter(selectedHashtags.contains)
+        var values = ShareCopy.hashtagChoices.filter(selectedHashtags.contains)
         if let custom = ShareHashtagPolicy.normalized(customHashtagInput),
            !values.contains(where: {
                $0.compare(custom, options: [.caseInsensitive, .widthInsensitive]) == .orderedSame
@@ -369,12 +189,13 @@ struct ShareComposerView: View {
         }
         switch scope {
         case .all:
-            if historyPageIsPartial && !usesCompactRootProjection {
+            let selection = selection
+            if historyPageIsPartial && !selection.usesCompactRootProjection {
                 return includeManual
                     ? "最近の記録から選んだ集中"
                     : "最近の記録から選んだ実測集中"
             }
-            if compactProjectionIsIncomplete {
+            if selection.compactProjectionIsIncomplete {
                 return "読み込めた結晶と最新層の集中"
             }
             return achievementPageIsPartial
@@ -392,12 +213,13 @@ struct ShareComposerView: View {
         if aggregateProjectionPresentation.isCloudVerificationPending {
             return "この端末で確認済み・iCloud再集計中"
         }
+        let selection = selection
         switch scope {
-        case .all where historyPageIsPartial && !includeManual && !usesCompactRootProjection:
+        case .all where historyPageIsPartial && !includeManual && !selection.usesCompactRootProjection:
             return "最近の実測・最新\(BoundedHistoryPolicy.periodSessionLimit)件の記録内"
-        case .all where historyPageIsPartial && !usesCompactRootProjection:
+        case .all where historyPageIsPartial && !selection.usesCompactRootProjection:
             return "最近の記録・最新\(BoundedHistoryPolicy.periodSessionLimit)件"
-        case .all where compactProjectionIsIncomplete:
+        case .all where selection.compactProjectionIsIncomplete:
             return "これまで・読み込み分"
         case .month where historyPageIsPartial:
             return "\(scope.periodLabel)・表示分"
@@ -406,102 +228,32 @@ struct ShareComposerView: View {
         }
     }
 
-    private var usesCompactRootProjection: Bool {
-        guard aggregateProjectionPresentation.allowsAggregateSummaries else {
-            return false
-        }
-        guard scope == .all, historyPageIsPartial else { return false }
-        let modernIDs = Set(uniqueAggregates.map(\.id))
-        let hasDistinctLegacySummaries = scopedLegacyStrata.contains {
-            !modernIDs.contains($0.id)
-        }
-        guard !scopedAggregates.isEmpty || hasDistinctLegacySummaries else {
-            return false
-        }
-        return CompactShareProjectionPolicy.canUseLifetimeRoots(
-            includesSelfReportedFocus: includeManual,
-            modernSummaryComposition: scopedAggregates.map {
-                .init(
-                    pebbleCount: $0.pebbleCount,
-                    measuredPebbleCount: $0.measuredPebbleCount,
-                    manualPebbleCount: $0.manualPebbleCount
-                )
-            },
-            hasLegacySummaries: hasDistinctLegacySummaries,
-            looseSources: compactLooseSessions.map(\.effectiveSource)
-        )
-    }
-
-    private var compactProjectionIsIncomplete: Bool {
-        guard usesCompactRootProjection else { return false }
-        if aggregatePageIsPartial
-            || aggregateValidationIsIncomplete
-            || loosePageIsPartial {
-            return true
-        }
-        let modernIDs = Set(scopedAggregates.map(\.id))
-        let represented = NonnegativeIntPolicy.sum(
-            scopedAggregates.map(\.pebbleCount)
-                + scopedLegacyStrata
-                    .filter { !modernIDs.contains($0.id) }
-                    .map(\.pebbleCount)
-                + [compactLooseSessions.count]
-        )
-        // Logical CloudKit duplicates make this conservative ("読み込み分")
-        // rather than allowing a partial compact projection to claim lifetime.
-        return represented != allSessionRowCount
-    }
-
-    private var hasShareableContent: Bool {
-        !selectedSessions.isEmpty
-            || !selectedAggregates.isEmpty
-            || !scopedAchievements.isEmpty
-            || selectedTotalGrams > 0
-    }
-
-    private var hasExcludedSelfReportedContent: Bool {
-        guard !includeManual else { return false }
-        if scopedSessions.contains(where: { $0.effectiveSource.isSelfReported }) {
-            return true
-        }
-        return scopedAggregates.contains {
-            $0.manualPebbleCount > 0 || AggregatePebblePolicy.isUnattributedCompatibility($0)
-        }
-            || scopedLegacyStrata.contains { $0.sessionIDs.isEmpty }
-    }
-
     private var settingsSummary: String {
+        let selection = selection
         let medium = mediaKind == .animatedGIF ? "GIF" : "静止画"
         let shape = format == .feed ? "4:5" : "9:16"
-        let scopeLabel: String
-        if selectedIncludesSelfReportedFocus || !scopedAchievements.isEmpty {
-            scopeLabel = "自己申告あり"
-        } else if hasExcludedSelfReportedContent {
-            scopeLabel = "実測のみ（自己申告は除外）"
+        // Describe the focus on the card first, then any 記念石 separately.
+        // A stone used to turn the whole label into 「自己申告あり」 even while
+        // self-reported focus was left out (walk-std-04).
+        let focusLabel: String
+        if selection.includesSelfReportedFocus {
+            focusLabel = "自己申告あり"
+        } else if selection.hasExcludedSelfReportedContent {
+            focusLabel = "実測のみ（自己申告は除外）"
         } else {
-            scopeLabel = "実測のみ"
+            focusLabel = "実測のみ"
         }
+        let scopeLabel = selection.achievements.isEmpty
+            ? focusLabel
+            : String(
+                localized: "\(focusLabel)・記念石は自己申告",
+                table: "Share",
+                comment: "Share settings summary: focus scope, then the note that stones are self-reported"
+            )
         let hashtagLabel = activeHashtags.isEmpty
             ? "タグなし"
             : "タグ\(activeHashtags.count)個"
         return "\(medium)・\(shape)・\(scopeLabel)・\(hashtagLabel)"
-    }
-
-    private var scopedLegacyStrata: [Stratum] {
-        guard aggregateProjectionPresentation.allowsAggregateSummaries else {
-            return []
-        }
-        switch scope {
-        case .all:
-            return uniqueStrata
-        case .month:
-            let scopedIDs = Set(scopedSessions.map(\.id))
-            return uniqueStrata.filter {
-                !$0.sessionIDs.isEmpty && !scopedIDs.isDisjoint(with: $0.sessionIDs)
-            }
-        case let .aggregate(id, _):
-            return uniqueStrata.filter { $0.id == id }
-        }
     }
 
     var body: some View {
@@ -532,12 +284,12 @@ struct ShareComposerView: View {
                     if isLoadingData {
                         ProgressView("カードの記録を読み込み中")
                             .frame(maxWidth: .infinity, minHeight: 280)
-                    } else if hasShareableContent {
+                    } else if selection.hasShareableContent {
                         AnimatedShareCardPreview(
-                            sessions: selectedSessions.map(ShareSessionVisual.init),
-                            aggregates: selectedAggregates,
-                            achievements: scopedAchievements.map(ShareAchievementVisual.init),
-                            includesSelfReportedFocus: selectedIncludesSelfReportedFocus,
+                            sessions: selection.sessions,
+                            aggregates: selection.aggregates,
+                            achievements: selection.achievements,
+                            includesSelfReportedFocus: selection.includesSelfReportedFocus,
                             format: format,
                             jarSnapshot: jarSnapshot,
                             periodLabel: effectivePeriodLabel,
@@ -567,6 +319,10 @@ struct ShareComposerView: View {
                         emptyShareState
                     }
 
+                    if showsExcludedSelfReportedNotice {
+                        excludedSelfReportedNotice
+                    }
+
                     shareSettingsSummary
                     shareAdjustments
 
@@ -589,6 +345,20 @@ struct ShareComposerView: View {
                             .accessibilityLabel("GIF share lifecycle probe")
                             .accessibilityValue(Text(verbatim: debugGIFShareLifecycle.accessibilityValue))
                             .allowsHitTesting(false)
+                            // How often this process resolved the card
+                            // selection versus reused it; typing a tag must
+                            // only reuse it. An overlay, so the probe adds no
+                            // height the UI tests' scrolling would notice.
+                            .overlay {
+                                Text("Share selection probe")
+                                    .font(.system(size: 1))
+                                    .foregroundStyle(Color.clear)
+                                    .frame(width: 1, height: 1)
+                                    .accessibilityIdentifier("share.debug.selection")
+                                    .accessibilityLabel("Share selection probe")
+                                    .accessibilityValue(Text(verbatim: "builds=\(ShareSelectionCache.debugBuildCount);lookups=\(ShareSelectionCache.debugLookupCount)"))
+                                    .allowsHitTesting(false)
+                            }
                     }
 #endif
 
@@ -608,7 +378,12 @@ struct ShareComposerView: View {
                         shareLaunchLabel
                     }
                     .buttonStyle(PomoGemPrimaryButtonStyle())
-                    .disabled(isRendering || !hasShareableContent)
+                    // Keep the pinned bar well under half of a 667 pt screen
+                    // at AX5, as the timer's pinned controls do.
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+                    // One render at a time: a photo save renders the same
+                    // cards on the main actor.
+                    .disabled(isRendering || isSaving || !selection.hasShareableContent)
                     .accessibilityIdentifier("share.primary-action")
                     .accessibilityHint(
                         mediaKind == .animatedGIF
@@ -736,7 +511,9 @@ struct ShareComposerView: View {
                 Text("積み重ねを、動く一枚に")
                     .font(PomoGemTheme.brand(22))
                     .foregroundStyle(PomoGemTheme.text)
-                Text("約2秒・端末の中だけで生成")
+                // No duration: 720-pixel GIFs take several seconds on a
+                // small iPhone, and a photo save renders two of them.
+                Text("端末の中だけで生成", tableName: "Share")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
             }
@@ -746,7 +523,13 @@ struct ShareComposerView: View {
     }
 
     private var mediaKindPicker: some View {
-        HStack(spacing: 8) {
+        // At accessibility sizes the two tiles stack and drop their icon and
+        // NEW badge; side by side they broke into 「動/く/GIF」 and 「静止/画」.
+        let isAccessibilitySize = dynamicTypeSize.isAccessibilitySize
+        let layout = isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
+        return layout {
             ForEach(MediaKind.allCases) { kind in
                 Button {
                     mediaKind = kind
@@ -754,11 +537,13 @@ struct ShareComposerView: View {
                     statusMessage = nil
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: kind.symbol)
-                            .font(.system(size: 14, weight: .bold))
+                        if !isAccessibilitySize {
+                            Image(systemName: kind.symbol)
+                                .font(.system(size: 14, weight: .bold))
+                        }
                         Text(kind.rawValue)
                             .font(.system(.subheadline, design: .rounded, weight: .bold))
-                        if kind == .animatedGIF {
+                        if kind == .animatedGIF, !isAccessibilitySize {
                             Text("NEW")
                                 .font(.system(size: 8, weight: .black, design: .rounded))
                                 .padding(.horizontal, 5)
@@ -800,10 +585,11 @@ struct ShareComposerView: View {
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(PomoGemTheme.amber)
                 .accessibilityHidden(true)
+            // No line cap: the scope can now name both the excluded focus and
+            // the stones, which needs more lines at accessibility sizes.
             Text(settingsSummary)
                 .font(.system(.caption, design: .rounded, weight: .bold))
                 .foregroundStyle(PomoGemTheme.text)
-                .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
@@ -847,6 +633,8 @@ struct ShareComposerView: View {
                     Image(systemName: "lock.shield.fill")
                         .foregroundStyle(PomoGemTheme.amber)
                 }
+                // The sentence gets the full width at accessibility sizes.
+                .labelStyle(AccessibilitySizeTitleOnlyLabelStyle())
                 .padding(14)
                 .background(PomoGemTheme.raised, in: RoundedRectangle(cornerRadius: 14))
                 .accessibilityElement(children: .combine)
@@ -898,26 +686,35 @@ struct ShareComposerView: View {
             renderAndSave()
         } label: {
             if isSaving {
-                ProgressView().tint(PomoGemTheme.text)
+                ProgressView()
+                    .tint(PomoGemTheme.text)
+                    .accessibilityLabel(Text("写真に保存しています", tableName: "Share"))
             } else {
                 Label("写真に2サイズ保存", systemImage: "photo.badge.arrow.down")
             }
         }
         .buttonStyle(PomoGemSecondaryButtonStyle())
-        .disabled(isRendering || isSaving || !hasShareableContent)
+        .disabled(isRendering || isSaving || !selection.hasShareableContent)
     }
 
     private var shareHashtagStrip: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 7) {
-                Image(systemName: "number")
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(PomoGemTheme.amber)
-                    .accessibilityHidden(true)
+        // At accessibility sizes the heading and the copy button stack, so
+        // neither is squeezed into a one-character column.
+        let headerLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(spacing: 7))
+        return VStack(alignment: .leading, spacing: 9) {
+            headerLayout {
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Image(systemName: "number")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(PomoGemTheme.amber)
+                        .accessibilityHidden(true)
+                }
                 Text("一緒に渡すハッシュタグ")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(PomoGemTheme.muted)
-                Spacer()
+                Spacer(minLength: 0)
                 Button {
                     UIPasteboard.general.string = shareCaption
                     updateStatus(
@@ -944,50 +741,51 @@ struct ShareComposerView: View {
                         : "瓶の質量、固定の公式サイトURL、選択中のハッシュタグをコピーします"
                 )
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(ShareCopy.hashtags, id: \.self) { hashtag in
-                        Button {
-                            if selectedHashtags.contains(hashtag) {
-                                selectedHashtags.remove(hashtag)
-                            } else {
-                                selectedHashtags.insert(hashtag)
-                            }
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: selectedHashtags.contains(hashtag) ? "checkmark" : "plus")
-                                    .font(.system(size: 9, weight: .black))
-                                Text(hashtag)
-                            }
-                            .font(.system(.caption, design: .rounded, weight: .bold))
-                            .foregroundStyle(
-                                selectedHashtags.contains(hashtag)
-                                    ? PomoGemTheme.background
-                                    : PomoGemTheme.text
-                            )
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 8)
-                            .frame(minHeight: 44)
-                            .background(
-                                selectedHashtags.contains(hashtag)
-                                    ? AnyShapeStyle(PomoGemTheme.amber)
-                                    : AnyShapeStyle(
-                                        LinearGradient(
-                                            colors: [.white.opacity(0.09), PomoGemTheme.amber.opacity(0.08)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    ),
-                                in: Capsule()
-                            )
-                            .overlay { Capsule().stroke(.white.opacity(0.10), lineWidth: 1) }
+            // Wrapping, not a sideways scroll: the study tags used to start
+            // off-screen on a 375 pt iPhone, and at AX5 only the first chip
+            // was visible (product-06).
+            ShareFlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                ForEach(ShareCopy.hashtagChoices, id: \.self) { hashtag in
+                    Button {
+                        if selectedHashtags.contains(hashtag) {
+                            selectedHashtags.remove(hashtag)
+                        } else {
+                            selectedHashtags.insert(hashtag)
                         }
-                        .buttonStyle(PomoGemBareButtonStyle())
-                        .disabled(isRendering || isSaving)
-                        .accessibilityAddTraits(
-                            selectedHashtags.contains(hashtag) ? .isSelected : []
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: selectedHashtags.contains(hashtag) ? "checkmark" : "plus")
+                                .font(.system(size: 9, weight: .black))
+                            Text(hashtag)
+                        }
+                        .font(.system(.caption, design: .rounded, weight: .bold))
+                        .foregroundStyle(
+                            selectedHashtags.contains(hashtag)
+                                ? PomoGemTheme.background
+                                : PomoGemTheme.text
                         )
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 8)
+                        .frame(minHeight: 44)
+                        .background(
+                            selectedHashtags.contains(hashtag)
+                                ? AnyShapeStyle(PomoGemTheme.amber)
+                                : AnyShapeStyle(
+                                    LinearGradient(
+                                        colors: [.white.opacity(0.09), PomoGemTheme.amber.opacity(0.08)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                ),
+                            in: Capsule()
+                        )
+                        .overlay { Capsule().stroke(.white.opacity(0.10), lineWidth: 1) }
                     }
+                    .buttonStyle(PomoGemBareButtonStyle())
+                    .disabled(isRendering || isSaving)
+                    .accessibilityAddTraits(
+                        selectedHashtags.contains(hashtag) ? .isSelected : []
+                    )
                 }
             }
 
@@ -1036,13 +834,19 @@ struct ShareComposerView: View {
 
     @ViewBuilder
     private var shareLaunchLabel: some View {
+        // At accessibility sizes the pinned bar keeps only the action: the
+        // icons and the one-line description (also in the hint) used to grow
+        // it over half of the screen, above the card it shares.
+        let isCompact = dynamicTypeSize.isAccessibilitySize
         HStack(spacing: 13) {
-            ZStack {
-                Circle().fill(.white.opacity(0.18))
-                Image(systemName: mediaKind == .animatedGIF ? "play.fill" : "photo.fill")
-                    .font(.system(size: 15, weight: .black))
+            if !isCompact {
+                ZStack {
+                    Circle().fill(.white.opacity(0.18))
+                    Image(systemName: mediaKind == .animatedGIF ? "play.fill" : "photo.fill")
+                        .font(.system(size: 15, weight: .black))
+                }
+                .frame(width: 38, height: 38)
             }
-            .frame(width: 38, height: 38)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(
@@ -1051,14 +855,16 @@ struct ShareComposerView: View {
                         : (mediaKind == .animatedGIF ? "GIF + ハッシュタグをシェア" : "画像 + ハッシュタグをシェア")
                 )
                 .font(.system(.body, design: .rounded, weight: .black))
-                Text(mediaKind == .animatedGIF ? "粒がきらめく短いループ" : "高解像度の一枚")
-                    .font(.caption.weight(.semibold))
-                    .opacity(0.72)
+                if !isCompact {
+                    Text(mediaKind == .animatedGIF ? "粒がきらめく短いループ" : "高解像度の一枚")
+                        .font(.caption.weight(.semibold))
+                        .opacity(0.72)
+                }
             }
             Spacer(minLength: 4)
             if isRendering {
                 ProgressView().tint(.white)
-            } else {
+            } else if !isCompact {
                 Image(systemName: "arrow.up.right")
                     .font(.system(size: 15, weight: .black))
                     .padding(9)
@@ -1120,7 +926,7 @@ struct ShareComposerView: View {
                     Text(
                         aggregateProjectionPresentation.isCloudVerificationPending
                             ? "iCloudを再集計中"
-                            : hasExcludedSelfReportedContent
+                            : selection.hasExcludedSelfReportedContent
                             ? "自己申告の粒があります"
                             : "カードにする粒が、まだありません"
                     )
@@ -1136,9 +942,9 @@ struct ShareComposerView: View {
                     ProgressView()
                         .tint(PomoGemTheme.amber)
                         .accessibilityLabel("iCloudの集計を確認中")
-                } else if hasExcludedSelfReportedContent {
+                } else if selection.hasExcludedSelfReportedContent {
                     Button("自己申告を含めてカードにする") {
-                        includeManual = true
+                        includeSelfReportedFocusHere()
                     }
                     .buttonStyle(PomoGemSecondaryButtonStyle())
                     .accessibilityIdentifier("share.include-self-reported-direct")
@@ -1156,23 +962,171 @@ struct ShareComposerView: View {
         }
     }
 
+    /// A card is on screen but self-reported focus is left out of it. Without
+    /// this, a month of manual records plus one 記念石 read as an unexplained
+    /// 0g, and the only way to include the focus sat in the collapsed 調整
+    /// (walk-std-04). Tapping includes it the same way the toggle does; the
+    /// saved preference only changes because the person asked here.
+    private var showsExcludedSelfReportedNotice: Bool {
+        !isLoadingData
+            && !aggregateProjectionPresentation.isCloudVerificationPending
+            && selection.hasShareableContent
+            && selection.hasExcludedSelfReportedContent
+    }
+
+    private var excludedSelfReportedMessage: String {
+        if let grams = selection.excludedSelfReportedGrams,
+           DurationPresentation.focusMinutes(grams: grams) > 0 {
+            return String(
+                localized: "自己申告の\(DurationPresentation.focusLabel(grams: grams))は、カードに含めていません。",
+                table: "Share",
+                comment: "Share composer: amount of self-reported focus left out of the card, e.g. 1時間30分"
+            )
+        }
+        return String(
+            localized: "自己申告の集中は、カードに含めていません。",
+            table: "Share",
+            comment: "Share composer: self-reported focus is left out of the card"
+        )
+    }
+
+    /// Includes self-reported focus from the notice or the empty state, the
+    /// same way the toggle does. The notice and the button that had focus
+    /// leave the screen, so VoiceOver is told what the card now holds.
+    @MainActor
+    private func includeSelfReportedFocusHere() {
+        includeManual = true
+        guard UIAccessibility.isVoiceOverRunning else { return }
+        Task { @MainActor in
+            // Read the card after the selection has been resolved for the
+            // new toggle, and after the removed button's focus change.
+            try? await Task.sleep(for: .milliseconds(350))
+            let grams = selection.totalGrams
+            let message: String
+            if let time = ShareMassFormatter.focusTime(grams) {
+                message = String(
+                    localized: "自己申告を含めました。カードは\(ShareMassFormatter.spoken(grams))、\(time)です。",
+                    table: "Share",
+                    comment: "VoiceOver after including self-reported focus. Arguments: spoken mass (300グラム), focus time (30分)"
+                )
+            } else {
+                message = String(
+                    localized: "自己申告を含めました。カードは\(ShareMassFormatter.spoken(grams))です。",
+                    table: "Share",
+                    comment: "VoiceOver after including self-reported focus when the card holds under a minute. Argument: spoken mass"
+                )
+            }
+            UIAccessibility.post(notification: .announcement, argument: message)
+        }
+    }
+
+    /// The boxed notice with its large button is for a card that would
+    /// otherwise read as an unexplained 0g (walk-std-04). When measured
+    /// focus is already on the card, leaving self-reported time out may be
+    /// the saved choice (既定は実測のみ), so the fact stays as one quiet line
+    /// with an inline 含める rather than a box on every share.
+    @ViewBuilder
+    private var excludedSelfReportedNotice: some View {
+        if selection.totalGrams == 0 {
+            prominentExcludedSelfReportedNotice
+        } else {
+            compactExcludedSelfReportedNote
+        }
+    }
+
+    private var compactExcludedSelfReportedNote: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 8))
+        return layout {
+            Text(excludedSelfReportedMessage)
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("share.excluded-self-reported")
+            Button {
+                includeSelfReportedFocusHere()
+            } label: {
+                Text("含める", tableName: "Share")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(PomoGemTheme.amber)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .buttonStyle(PomoGemBareButtonStyle())
+            .disabled(isRendering || isSaving)
+            .accessibilityIdentifier("share.include-self-reported-inline")
+            .accessibilityLabel(Text("自己申告を含める", tableName: "Share"))
+            .accessibilityHint(Text("自己申告として明記したうえで、この記録をカードに含めます", tableName: "Share"))
+        }
+        .padding(.horizontal, 14)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var prominentExcludedSelfReportedNotice: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label {
+                Text(excludedSelfReportedMessage)
+                    .font(.subheadline)
+                    .foregroundStyle(PomoGemTheme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "info.circle.fill")
+                    .foregroundStyle(PomoGemTheme.amber)
+            }
+            // The sentence gets the full width at accessibility sizes.
+            .labelStyle(AccessibilitySizeTitleOnlyLabelStyle())
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("share.excluded-self-reported")
+
+            Button {
+                includeSelfReportedFocusHere()
+            } label: {
+                Text("自己申告を含める", tableName: "Share")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(PomoGemSecondaryButtonStyle())
+            .disabled(isRendering || isSaving)
+            .accessibilityIdentifier("share.include-self-reported-inline")
+            .accessibilityHint(Text("自己申告として明記したうえで、この記録をカードに含めます", tableName: "Share"))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(PomoGemTheme.card.opacity(0.88), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .contain)
+    }
+
     private var shareBrandingNotice: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "signature")
-                .foregroundStyle(PomoGemTheme.amber)
-                .frame(width: 26)
+        // At accessibility sizes the fixed-width icon overlapped the text and
+        // the trailing 「常に表示」 squeezed the title into one word a line;
+        // the icon goes and 「常に表示」 moves under the text there.
+        let isAccessibilitySize = dynamicTypeSize.isAccessibilitySize
+        let layout = isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
+            if !isAccessibilitySize {
+                Image(systemName: "signature")
+                    .foregroundStyle(PomoGemTheme.amber)
+                    .frame(width: 26)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text("ポモジェムロゴと公式サイト")
                     .font(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
                 Text("すべてのカードと共有本文に表示します")
                     .font(.caption)
                     .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
+            if !isAccessibilitySize {
+                Spacer()
+            }
             Text("常に表示")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(PomoGemTheme.amber)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .frame(minHeight: 58)
         .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 16))
@@ -1189,10 +1143,10 @@ struct ShareComposerView: View {
         }
         if case .aggregate = scope,
            !includeManual,
-           scopedAggregates.contains(where: { $0.manualPebbleCount > 0 }) {
+           selection.scopedAggregateHasSelfReportedPebbles {
             return "この結晶には自己申告が含まれます。「自己申告を含める」をオンにすると、結晶全体の正確な質量をカードにできます。"
         }
-        if !includeManual, scopedSessions.contains(where: { $0.effectiveSource.isSelfReported }) {
+        if !includeManual, selection.scopeHasSelfReportedSessions {
             return "自己申告を含めると、この期間の瓶をカードにできます。"
         }
         return "集中を完走すると、瓶の画像とグラム数を一緒に残せます。"
@@ -1204,8 +1158,8 @@ struct ShareComposerView: View {
         }
         if historyPageIsPartial {
             switch scope {
-            case .all where usesCompactRootProjection:
-                if compactProjectionIsIncomplete {
+            case .all where selection.usesCompactRootProjection:
+                if selection.compactProjectionIsIncomplete {
                     return "全履歴を一括展開せず、取得できた結晶集計と最新層だけで構成しています。カードは「読み込み分」と明記されます。"
                 }
                 if achievementPageIsPartial {
@@ -1334,7 +1288,8 @@ struct ShareComposerView: View {
                 }
 
             case let .month(monthStart):
-                let calendar = Calendar.autoupdatingCurrent
+                // Gregorian, like the card's 「1985年1月」 label and Wrapped.
+                let calendar = PomoGemCalendar.gregorian
                 guard let interval = calendar.dateInterval(of: .month, for: monthStart) else {
                     throw BoundedShareLoadError.invalidMonth
                 }
@@ -1398,18 +1353,21 @@ struct ShareComposerView: View {
             }
             // Publish the aggregate page lease only after every bounded fetch
             // and structural validation above succeeded. This assignment is
-            // needed for `scopedAggregates` in the membership projection and
-            // is revoked again by the catch path below.
+            // needed for the scoped aggregates in the membership projection
+            // and is revoked again by the catch path below.
             if let verifiedProjectionStamp,
                aggregateProjectionPresentation.acceptsVerifiedAggregateCache(
                    verifiedProjectionStamp
                ) {
                 aggregateProjectionCacheStamp = verifiedProjectionStamp
             }
+            // Resolved directly, not through the cache: the page is still
+            // being assembled and its generation has not been published.
+            let loadedSelection = ShareSelectionModel.make(selectionInput)
             let membership = try HomeProjectionPolicy.localMembershipProjection(
                 for: looseSessions,
-                representedAggregateRoots: scopedAggregates,
-                legacyStrata: scopedLegacyStrata,
+                representedAggregateRoots: loadedSelection.scopedAggregates,
+                legacyStrata: loadedSelection.scopedLegacyStrata,
                 context: modelContext,
                 resetMarkers: resetSnapshots
             )
@@ -1418,10 +1376,12 @@ struct ShareComposerView: View {
             acceptedAggregateRootIDs.subtract(membership.conflictedRootIDs)
             aggregateValidationIsIncomplete = aggregateValidationIsIncomplete
                 || !localMembershipProjectionIsComplete
+            shareRecordsGeneration &+= 1
             isLoadingData = false
             refreshJarSnapshot()
         } catch {
             aggregateProjectionCacheStamp = nil
+            shareRecordsGeneration &+= 1
             isLoadingData = false
             dataLoadError = "記録を安全な範囲で読み込めませんでした。もう一度この画面を開いてください。"
         }
@@ -1443,6 +1403,7 @@ struct ShareComposerView: View {
         storedAchievementStones = []
         storedAggregatePebbles = []
         storedStrata = []
+        shareRecordsGeneration &+= 1
     }
 
     private func persistSharePreference(from oldValue: Bool, to value: Bool) {
@@ -1475,9 +1436,6 @@ struct ShareComposerView: View {
 
     @MainActor
     private func renderCards(snapshot: ShareExportSnapshot) -> [UIImage] {
-        isRendering = true
-        defer { isRendering = false }
-
         let feed = render(
             snapshot: snapshot,
             format: .feed,
@@ -1523,7 +1481,12 @@ struct ShareComposerView: View {
 
     @MainActor
     private func refreshJarSnapshot() {
-        let capture = capturedJarSnapshot(includesSelfReportedFocus: includeManual)
+        // The same inclusion the export uses: whether the card actually
+        // carries self-reported focus, not the toggle. They used to differ,
+        // so the preview could show stones the exported image then hid.
+        let capture = capturedJarSnapshot(
+            includesSelfReportedFocus: selection.includesSelfReportedFocus
+        )
         jarSnapshot = capture?.image
         jarMotion = capture?.motion
     }
@@ -1538,22 +1501,29 @@ struct ShareComposerView: View {
               let scene = router.jarScene else {
             return nil
         }
-        guard let image = try? JarSnapshotter.shared.image(
-            of: scene,
-            options: .share(includesSelfReported: includesSelfReportedFocus)
-        ) else { return nil }
+        let options = JarSnapshotOptions.share(includesSelfReported: includesSelfReportedFocus)
+        // Hiding a pebble another gem rests on would leave that gem floating
+        // over a hole. The card then draws its own bottle from the shared
+        // records instead (jar-04, screentime-11).
+        guard !ShareJarSnapshotPolicy.hidingLeavesUnsupportedBody(in: scene, options: options) else {
+            return nil
+        }
+        guard let image = try? JarSnapshotter.shared.image(of: scene, options: options) else {
+            return nil
+        }
         return (image, JarSnapshotter.shared.shareMotion(of: scene))
     }
 
     @MainActor
     private func captureExportSnapshot() -> ShareExportSnapshot {
-        let capturedSessions = selectedSessions.map(ShareSessionVisual.init)
-        let capturedAchievements = scopedAchievements.map(ShareAchievementVisual.init)
-        let capturedAggregates = selectedAggregates
-        let capturedGrams = selectedTotalGrams
-        let capturedIncludesSelfReportedFocus = capturedSessions.contains { $0.source.isSelfReported }
-            || capturedAggregates.contains { $0.manualPebbleCount > 0 }
-            || selectedHasUnknownSelfReportComposition
+        // The same resolved selection the preview shows, so the exported card,
+        // its caption, and the on-screen card cannot disagree.
+        let selection = selection
+        let capturedSessions = selection.sessions
+        let capturedAchievements = selection.achievements
+        let capturedAggregates = selection.aggregates
+        let capturedGrams = selection.totalGrams
+        let capturedIncludesSelfReportedFocus = selection.includesSelfReportedFocus
         let capturedPeriod = effectivePeriodLabel
         let capturedHashtags = activeHashtags
         let capturedRewardSemantics = shareRewardSemantics(
@@ -1570,6 +1540,7 @@ struct ShareComposerView: View {
         let caption = ShareCopy.caption(
             subject: shareCaptionSubject,
             grams: ShareMassFormatter.visual(capturedGrams),
+            focusTime: ShareMassFormatter.focusTime(capturedGrams),
             includesSelfReportedFocus: capturedIncludesSelfReportedFocus,
             achievementCount: capturedAchievements.count,
             rewardDetail: capturedRewardSemantics.captionDetail,
@@ -1600,7 +1571,7 @@ struct ShareComposerView: View {
 
     @MainActor
     private func startShareExport() {
-        guard hasShareableContent else {
+        guard selection.hasShareableContent else {
             updateStatus("最初の一粒を積むと、カードにできます。")
             return
         }
@@ -1660,7 +1631,13 @@ struct ShareComposerView: View {
                 let source = AnimatedGIFActivityItemSource(
                     url: export.url,
                     previewImage: export.cover,
-                    title: "瓶に積んだ集中 \(ShareMassFormatter.visual(snapshot.totalGrams))"
+                    title: ShareMassFormatter.focusTime(snapshot.totalGrams).map {
+                        String(
+                            localized: "瓶に積んだ集中 \(ShareMassFormatter.visual(snapshot.totalGrams))（\($0)）",
+                            table: "Share",
+                            comment: "Share sheet title for the GIF. Arguments: mass, focus time"
+                        )
+                    } ?? "瓶に積んだ集中 \(ShareMassFormatter.visual(snapshot.totalGrams))"
                 )
                 preparedItems = [source, snapshot.caption]
                 status = snapshot.hashtags.isEmpty
@@ -1714,6 +1691,7 @@ struct ShareComposerView: View {
     @MainActor
     private func renderAnimatedGIF(
         snapshot: ShareExportSnapshot,
+        format: Format? = nil,
         logicalSize: CGSize
     ) async throws -> (url: URL, cover: UIImage) {
         var ownedURL: URL?
@@ -1722,40 +1700,31 @@ struct ShareComposerView: View {
             if !returned, let ownedURL { try? FileManager.default.removeItem(at: ownedURL) }
         }
 
-        let preferred = try await writeAnimatedGIF(
-            snapshot: snapshot,
-            logicalSize: logicalSize,
-            scale: 1.25
-        )
-        ownedURL = preferred.url
-        try Task.checkCancellation()
-        guard AnimatedShareExporter.fileSize(at: preferred.url) > AnimatedShareExporter.maximumShareBytes else {
-            returned = true
-            return preferred
-        }
-
-        try? FileManager.default.removeItem(at: preferred.url)
-        ownedURL = nil
-        try Task.checkCancellation()
-        let compact = try await writeAnimatedGIF(
-            snapshot: snapshot,
-            logicalSize: logicalSize,
-            scale: 1
-        )
-        ownedURL = compact.url
-        try Task.checkCancellation()
-        guard AnimatedShareExporter.fileSize(at: compact.url) <= AnimatedShareExporter.maximumShareBytes else {
-            try? FileManager.default.removeItem(at: compact.url)
+        // Sharpest first; step down only when a file exceeds the share cap.
+        for scale in AnimatedShareExporter.renderScaleLadder {
+            try Task.checkCancellation()
+            let candidate = try await writeAnimatedGIF(
+                snapshot: snapshot,
+                format: format,
+                logicalSize: logicalSize,
+                scale: scale
+            )
+            ownedURL = candidate.url
+            try Task.checkCancellation()
+            if AnimatedShareExporter.fileSize(at: candidate.url) <= AnimatedShareExporter.maximumShareBytes {
+                returned = true
+                return candidate
+            }
+            try? FileManager.default.removeItem(at: candidate.url)
             ownedURL = nil
-            throw AnimatedShareExportError.fileTooLarge
         }
-        returned = true
-        return compact
+        throw AnimatedShareExportError.fileTooLarge
     }
 
     @MainActor
     private func writeAnimatedGIF(
         snapshot: ShareExportSnapshot,
+        format: Format? = nil,
         logicalSize: CGSize,
         scale: CGFloat
     ) async throws -> (url: URL, cover: UIImage) {
@@ -1776,6 +1745,7 @@ struct ShareComposerView: View {
             let rendered: (image: UIImage, cgImage: CGImage)? = autoreleasepool {
                 guard let image = render(
                     snapshot: snapshot,
+                    format: format,
                     logicalSize: logicalSize,
                     scale: scale,
                     animationPhase: phase
@@ -1859,21 +1829,19 @@ struct ShareComposerView: View {
 
     @MainActor
     private func renderAndSave() {
-        guard hasShareableContent else {
+        guard selection.hasShareableContent else {
             updateStatus("最初の一粒を積むと、カードにできます。")
             return
         }
         guard photoSaveTask == nil else { return }
         let snapshot = captureExportSnapshot()
-        let images = renderCards(snapshot: snapshot)
-        guard images.count == 2 else {
-            updateStatus("カードを生成できませんでした。")
-            return
-        }
+        // Show progress before any rendering: the cards used to render on the
+        // main actor first, so the button froze and only then showed its
+        // spinner (history-07).
         isSaving = true
         activePhotoSaveID = snapshot.id
         photoSaveTask = Task { @MainActor in
-            await saveToPhotoLibrary(images, snapshot: snapshot)
+            await renderAndSaveToPhotoLibrary(snapshot: snapshot)
         }
     }
 
@@ -1885,28 +1853,87 @@ struct ShareComposerView: View {
         isSaving = false
     }
 
+    /// What the photo save writes: two stills, or, when 動くGIF is chosen,
+    /// the two GIF files themselves so Photos keeps them animated.
+    private enum PhotoSaveMedia {
+        case stills([UIImage])
+        case animatedGIFs([URL])
+    }
+
     @MainActor
-    private func saveToPhotoLibrary(
-        _ images: [UIImage],
-        snapshot: ShareExportSnapshot
-    ) async {
+    private func renderAndSaveToPhotoLibrary(snapshot: ShareExportSnapshot) async {
+        var temporaryGIFs: [URL] = []
+        let progressMessage = snapshot.mediaKind == .animatedGIF
+            ? String(
+                localized: "写真用のGIFを作っています…",
+                table: "Share",
+                comment: "Share composer: status while the two GIFs for Photos are rendered"
+            )
+            : String(
+                localized: "写真用の画像を作っています…",
+                table: "Share",
+                comment: "Share composer: status while the two still images for Photos are rendered"
+            )
         defer {
+            temporaryGIFs.forEach { try? FileManager.default.removeItem(at: $0) }
+            // A save that stops without a result must not leave the
+            // progress line behind.
+            if statusMessage == progressMessage {
+                statusMessage = nil
+            }
             if activePhotoSaveID == snapshot.id {
                 activePhotoSaveID = nil
                 photoSaveTask = nil
                 isSaving = false
             }
         }
+
+        // Ask for Photos access before rendering: two 720-pixel GIFs take
+        // several seconds, and a first-time person used to wait through them,
+        // then see the permission prompt, and lose the render on a denial.
         let authorization = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
         guard activePhotoSaveID == snapshot.id, !Task.isCancelled else { return }
         guard authorization == .authorized || authorization == .limited else {
             updateStatus("写真への追加が許可されていません。端末の設定から変更できます。")
             return
         }
-        // The authorization prompt can outlive aggregate trust. Revalidate at
-        // the last MainActor instruction before starting the Photos mutation;
-        // a snapshot captured while already pending contains only explicitly
-        // labelled, device-confirmed individual records.
+
+        updateStatus(progressMessage)
+        // Let the spinner and the progress line commit before main-actor
+        // rendering starts.
+        try? await Task.sleep(for: .milliseconds(50))
+        guard activePhotoSaveID == snapshot.id, !Task.isCancelled else { return }
+
+        let media: PhotoSaveMedia
+        do {
+            switch snapshot.mediaKind {
+            case .stillImage:
+                let images = renderCards(snapshot: snapshot)
+                guard images.count == 2 else { throw AnimatedShareExportError.noFrames }
+                media = .stills(images)
+            case .animatedGIF:
+                for format in Format.allCases {
+                    let export = try await renderAnimatedGIF(
+                        snapshot: snapshot,
+                        format: format,
+                        logicalSize: ShareCardLayoutPolicy.canvasSize(for: format)
+                    )
+                    temporaryGIFs.append(export.url)
+                }
+                media = .animatedGIFs(temporaryGIFs)
+            }
+        } catch {
+            guard activePhotoSaveID == snapshot.id, !Task.isCancelled,
+                  !(error is CancellationError) else { return }
+            updateStatus("カードを生成できませんでした。")
+            return
+        }
+        guard activePhotoSaveID == snapshot.id, !Task.isCancelled else { return }
+
+        // The authorization prompt and the render can outlive aggregate trust.
+        // Revalidate at the last MainActor instruction before starting the
+        // Photos mutation; a snapshot captured while already pending contains
+        // only explicitly labelled, device-confirmed individual records.
         guard snapshot.projectionWasCloudUnverified
                 || aggregateProjectionPresentation
                     .acceptsVerifiedAggregateCache(
@@ -1916,12 +1943,35 @@ struct ShareComposerView: View {
 
         do {
             try await PHPhotoLibrary.shared().performChanges {
-                images.forEach { PHAssetChangeRequest.creationRequestForAsset(from: $0) }
+                switch media {
+                case let .stills(images):
+                    images.forEach { PHAssetChangeRequest.creationRequestForAsset(from: $0) }
+                case let .animatedGIFs(urls):
+                    // A GIF added as the photo resource stays animated in
+                    // Photos; `creationRequestForAsset(from: UIImage)` would
+                    // flatten it to one frame.
+                    for url in urls {
+                        let options = PHAssetResourceCreationOptions()
+                        options.shouldMoveFile = false
+                        options.uniformTypeIdentifier = UTType.gif.identifier
+                        PHAssetCreationRequest.forAsset()
+                            .addResource(with: .photo, fileURL: url, options: options)
+                    }
+                }
             }
             guard activePhotoSaveID == snapshot.id, !Task.isCancelled else {
                 return
             }
-            updateStatus("フィード用とストーリー用を写真に保存しました。")
+            switch media {
+            case .stills:
+                updateStatus("フィード用とストーリー用を写真に保存しました。")
+            case .animatedGIFs:
+                updateStatus(String(
+                    localized: "動くGIFをフィード用とストーリー用で写真に保存しました。",
+                    table: "Share",
+                    comment: "Share composer: both animated GIF sizes were saved to Photos"
+                ))
+            }
             Analytics.shared.track(.shareCreated)
         } catch is CancellationError {
             return
@@ -2510,6 +2560,8 @@ struct ShareCardView: View {
             RareRewardCounts.saturatedSum(unlinkedAggregates.map(\.grams))
         ])
     }
+    /// Measured gems (timer or Screen Time). Counted in 粒, not 回: one hour
+    /// of Screen Time is six ten-minute gems, not six timer completions.
     private var measuredCount: Int {
         NonnegativeIntPolicy.sum(
             [sessions.filter { $0.source.isMeasured }.count]
@@ -2645,7 +2697,7 @@ struct ShareCardView: View {
                             .font(.system(size: story ? 13 : 10, weight: .heavy, design: .rounded))
                             .foregroundStyle(PomoGemTheme.text)
                         HStack(spacing: 6) {
-                            Text("実測 \(measuredCount)回")
+                            Text("実測 \(measuredCount)粒", tableName: "Share", comment: "Share card: measured gems (timer or Screen Time)")
                             Text("・")
                             Text("まとまり \(aggregates.count)")
                             if goldCount > 0 {
@@ -2684,16 +2736,7 @@ struct ShareCardView: View {
 
                     Spacer(minLength: 0)
                     if !hashtags.isEmpty {
-                        HStack(spacing: story ? 10 : 7) {
-                            ForEach(hashtags, id: \.self) { hashtag in
-                                Text(hashtag)
-                            }
-                        }
-                        .font(.system(size: story ? 11 : 8, weight: .bold, design: .rounded))
-                        .tracking(story ? 0.7 : 0.25)
-                        .foregroundStyle(PomoGemTheme.amber)
-                        .minimumScaleFactor(0.72)
-                        .lineLimit(1)
+                        ShareCardHashtagRow(hashtags: hashtags, story: story)
                     }
                 }
                 .padding(ShareCardLayoutPolicy.contentInsets(for: format))
@@ -2722,9 +2765,36 @@ struct ShareCardView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "ポモジェムシェアカード。\(periodLabel)。瓶に積んだ集中、\(ShareMassFormatter.spoken(totalGrams))。\(pebbleCount)粒、実測\(measuredCount)回、まとまり粒\(aggregates.count)個、記念石\(achievements.count)個。\(rewardSemantics.accessibilityDetail)。\(hiddenContent.captionDisclosure ?? "すべての石を表示")。\(disclosure.accessibilityDisclosure)。公式サイト、\(ShareCopy.websiteDisplayName)。\(hashtags.isEmpty ? "ハッシュタグなし" : "ハッシュタグ、\(hashtags.joined(separator: "、"))")"
+            "ポモジェムシェアカード。\(periodLabel)。瓶に積んだ集中、\(ShareMassFormatter.spoken(totalGrams))\(ShareMassFormatter.focusTime(totalGrams).map { "、\($0)" } ?? "")。\(pebbleCount)粒、うち実測\(measuredCount)粒、まとまり粒\(aggregates.count)個、記念石\(achievements.count)個。\(rewardSemantics.accessibilityDetail)。\(hiddenContent.captionDisclosure ?? "すべての石を表示")。\(disclosure.accessibilityDisclosure)。公式サイト、\(ShareCopy.websiteDisplayName)。\(hashtags.isEmpty ? "ハッシュタグなし" : "ハッシュタグ、\(hashtags.joined(separator: "、"))")"
         )
         .accessibilityIdentifier("share.card")
+    }
+}
+
+/// The card's hashtags. They wrap instead of scaling one line: four chips
+/// and a 30-character custom tag were cut with 「…」 in the image while the
+/// caption kept them. A single tag wider than the card still shrinks to fit
+/// its own line.
+struct ShareCardHashtagRow: View {
+    let hashtags: [String]
+    let story: Bool
+
+    var body: some View {
+        ShareFlowLayout(
+            horizontalSpacing: story ? 10 : 7,
+            verticalSpacing: story ? 4 : 3,
+            alignment: .center
+        ) {
+            ForEach(hashtags, id: \.self) { hashtag in
+                Text(hashtag)
+            }
+        }
+        .font(.system(size: story ? 11 : 8, weight: .bold, design: .rounded))
+        .tracking(story ? 0.7 : 0.25)
+        .foregroundStyle(PomoGemTheme.amber)
+        .minimumScaleFactor(0.72)
+        .lineLimit(1)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -2857,6 +2927,16 @@ private struct ShareMassBadge: View {
                     )
                 )
                 .shadow(color: PomoGemTheme.auroraBlue.opacity(0.24), radius: 5, y: 2)
+            // Grams stay the headline (EngagementArchitecture §5); the time
+            // underneath is what a follower can actually read (history-08).
+            if let focusTime = ShareMassFormatter.focusTime(grams) {
+                Text("\(focusTime)の集中", tableName: "Share", comment: "Share card: focus time under the mass, e.g. 4時間10分の集中")
+                    .font(.system(size: story ? 12 : 10, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(PomoGemTheme.text.opacity(0.88))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
         .padding(.horizontal, story ? 22 : 17)
         .padding(.vertical, story ? 7 : 5)
@@ -2914,6 +2994,14 @@ private enum ShareMassFormatter {
     static func spoken(_ grams: Int) -> String {
         "\(max(0, grams).formatted(.number.grouping(.automatic)))グラム"
     }
+
+    /// The focus time a card's mass stands for, or nil when it holds less
+    /// than a minute (a stones-only card): 「0分」 would read as nothing done.
+    static func focusTime(_ grams: Int) -> String? {
+        DurationPresentation.focusMinutes(grams: grams) > 0
+            ? DurationPresentation.focusLabel(grams: grams)
+            : nil
+    }
 }
 
 private struct ShareJarGraphic: View {
@@ -2960,13 +3048,17 @@ private struct ShareJarGraphic: View {
             compactSessionSize * 1.34
         )
         let sessionSize = visibleSessions.count <= 3 ? expandedSessionSize : compactSessionSize
-        let sessionRows = visibleSessions.isEmpty
-            ? 0
-            : Int(ceil(Double(visibleSessions.count) / Double(sessionColumnCount)))
-        let sessionBandHeight = CGFloat(sessionRows) * sessionSize * 0.78
         let highlightsSingleAggregate = visibleAggregates.count == 1
             && visibleSessions.isEmpty
             && visibleAchievements.isEmpty
+        let stoneSize: CGFloat = min(size.width / 7.2, 34)
+        let stoneBottoms = achievementBottoms(
+            availableWidth: size.width,
+            stoneSize: stoneSize,
+            sessionColumnCount: sessionColumnCount,
+            sessionSize: sessionSize,
+            story: story
+        )
 
         return ZStack(alignment: .bottom) {
             bottleBackground(size: size)
@@ -2981,10 +3073,7 @@ private struct ShareJarGraphic: View {
                 story: story
             )
             sessionLayer(columnCount: sessionColumnCount, sessionSize: sessionSize)
-            achievementLayer(
-                availableWidth: size.width,
-                sessionBandHeight: sessionBandHeight
-            )
+            achievementLayer(stoneSize: stoneSize, bottoms: stoneBottoms)
             leadingGlassHighlight(size: size)
             trailingGlassHighlight(size: size)
             movingGlassHighlight(size: size)
@@ -3145,19 +3234,14 @@ private struct ShareJarGraphic: View {
         availableWidth: CGFloat,
         story: Bool
     ) -> some View {
-        let columnCount = 4
         let pebbleSize = aggregateSize(
             for: aggregate,
             availableWidth: availableWidth,
             highlightsSingleAggregate: false,
             story: story
         )
-        let column = index % columnCount
-        let row = index / columnCount
-        let xStep = availableWidth / CGFloat(columnCount + 1)
-        let rowAdjustment: CGFloat = row.isMultiple(of: 2) ? -2 : 3
-        let x = CGFloat(column + 1) * xStep - availableWidth / 2 + rowAdjustment
-        let y = -CGFloat(row) * 39 - 12
+        let x = aggregateCenterX(index: index, availableWidth: availableWidth)
+        let y = -aggregateBottom(index: index)
         let wave = sin(animationPhase * .pi * 2 + Double(index) * 1.19)
 
         return ShareAggregatePebble(aggregate: aggregate)
@@ -3179,11 +3263,8 @@ private struct ShareJarGraphic: View {
         columnCount: Int,
         size: CGFloat
     ) -> some View {
-        let column = index % columnCount
-        let row = index / columnCount
-        let rowAdjustment: CGFloat = row.isMultiple(of: 2) ? 0 : size * 0.42
-        let x = (CGFloat(column) - CGFloat(columnCount - 1) / 2) * size * 0.92 + rowAdjustment
-        let y = -CGFloat(row) * size * 0.78 - aggregateBandHeight
+        let x = sessionCenterX(index: index, columnCount: columnCount, size: size)
+        let y = -sessionBottom(index: index, columnCount: columnCount, size: size)
         let wave = sin(animationPhase * .pi * 2 + Double(index) * 0.91)
 
         return ShareSessionGem(
@@ -3197,13 +3278,13 @@ private struct ShareJarGraphic: View {
     }
 
     @ViewBuilder
-    private func achievementLayer(availableWidth: CGFloat, sessionBandHeight: CGFloat) -> some View {
+    private func achievementLayer(stoneSize: CGFloat, bottoms: [CGFloat]) -> some View {
         ForEach(Array(visibleAchievements.enumerated()), id: \.element.id) { index, stone in
             achievementView(
                 stone,
                 index: index,
-                availableWidth: availableWidth,
-                sessionBandHeight: sessionBandHeight
+                stoneSize: stoneSize,
+                bottom: index < bottoms.count ? bottoms[index] : aggregateBandHeight
             )
         }
     }
@@ -3211,17 +3292,9 @@ private struct ShareJarGraphic: View {
     private func achievementView(
         _ stone: ShareAchievementVisual,
         index: Int,
-        availableWidth: CGFloat,
-        sessionBandHeight: CGFloat
+        stoneSize: CGFloat,
+        bottom: CGFloat
     ) -> some View {
-        let columnCount = 4
-        let stoneSize: CGFloat = min(availableWidth / 7.2, 34)
-        let column = index % columnCount
-        let row = index / columnCount
-        let centeredColumn = CGFloat(column) - CGFloat(columnCount - 1) * 0.5
-        let rowOffset: CGFloat = row.isMultiple(of: 2) ? 0 : stoneSize * 0.4
-        let x = centeredColumn * stoneSize * 1.05 + rowOffset
-        let y = -CGFloat(row) * stoneSize * 0.74 - aggregateBandHeight - sessionBandHeight - 7
         let glowPhase = animationPhase * .pi * 2 + Double(index) * 0.74
         let glow = (sin(glowPhase) + 1) / 2
 
@@ -3231,7 +3304,89 @@ private struct ShareJarGraphic: View {
             glow: glow
         )
         .frame(width: stoneSize, height: stoneSize)
-        .offset(x: x, y: y)
+        .offset(x: achievementCenterX(index: index, stoneSize: stoneSize), y: -bottom)
+    }
+
+    /// Where each 記念石 rests: on the gems, crystals or earlier stones under
+    /// its middle, or on the floor. A fixed shelf above the highest gem row
+    /// left stones hovering over empty glass beside a few gems.
+    private func achievementBottoms(
+        availableWidth: CGFloat,
+        stoneSize: CGFloat,
+        sessionColumnCount: Int,
+        sessionSize: CGFloat,
+        story: Bool
+    ) -> [CGFloat] {
+        guard !visibleAchievements.isEmpty else { return [] }
+        let crystals = visibleAggregates.indices.map { index in
+            let pebbleSize = aggregateSize(
+                for: visibleAggregates[index],
+                availableWidth: availableWidth,
+                highlightsSingleAggregate: false,
+                story: story
+            )
+            let x = aggregateCenterX(index: index, availableWidth: availableWidth)
+            return ShareJarPileLayout.Footprint(
+                minX: x - pebbleSize / 2,
+                maxX: x + pebbleSize / 2,
+                top: aggregateBottom(index: index) + pebbleSize * 0.85
+            )
+        }
+        let gems = visibleSessions.indices.map { index in
+            let x = sessionCenterX(index: index, columnCount: sessionColumnCount, size: sessionSize)
+            return ShareJarPileLayout.Footprint(
+                minX: x - sessionSize * 0.46,
+                maxX: x + sessionSize * 0.46,
+                top: sessionBottom(index: index, columnCount: sessionColumnCount, size: sessionSize)
+                    + sessionSize * 0.78
+            )
+        }
+        return ShareJarPileLayout.stoneBottoms(
+            centerXs: visibleAchievements.indices.map {
+                achievementCenterX(index: $0, stoneSize: stoneSize)
+            },
+            stoneSize: stoneSize,
+            stackingHeight: stoneSize * 0.74,
+            floor: Self.floorHeight,
+            footprints: crystals + gems
+        )
+    }
+
+    /// The bottle's inner floor, where the first gem row rests when there
+    /// are no crystals.
+    private static let floorHeight: CGFloat = 7
+
+    private func achievementCenterX(index: Int, stoneSize: CGFloat) -> CGFloat {
+        let columnCount = 4
+        let column = index % columnCount
+        let row = index / columnCount
+        let centeredColumn = CGFloat(column) - CGFloat(columnCount - 1) * 0.5
+        let rowOffset: CGFloat = row.isMultiple(of: 2) ? 0 : stoneSize * 0.4
+        return centeredColumn * stoneSize * 1.05 + rowOffset
+    }
+
+    private func sessionCenterX(index: Int, columnCount: Int, size: CGFloat) -> CGFloat {
+        let column = index % columnCount
+        let row = index / columnCount
+        let rowAdjustment: CGFloat = row.isMultiple(of: 2) ? 0 : size * 0.42
+        return (CGFloat(column) - CGFloat(columnCount - 1) / 2) * size * 0.92 + rowAdjustment
+    }
+
+    private func sessionBottom(index: Int, columnCount: Int, size: CGFloat) -> CGFloat {
+        CGFloat(index / columnCount) * size * 0.78 + aggregateBandHeight
+    }
+
+    private func aggregateCenterX(index: Int, availableWidth: CGFloat) -> CGFloat {
+        let columnCount = 4
+        let column = index % columnCount
+        let row = index / columnCount
+        let xStep = availableWidth / CGFloat(columnCount + 1)
+        let rowAdjustment: CGFloat = row.isMultiple(of: 2) ? -2 : 3
+        return CGFloat(column + 1) * xStep - availableWidth / 2 + rowAdjustment
+    }
+
+    private func aggregateBottom(index: Int) -> CGFloat {
+        CGFloat(index / 4) * 39 + 12
     }
 
     private func leadingGlassHighlight(size: CGSize) -> some View {
@@ -3322,7 +3477,7 @@ private struct ShareJarGraphic: View {
     }
 
     private var aggregateBandHeight: CGFloat {
-        guard !visibleAggregates.isEmpty else { return 7 }
+        guard !visibleAggregates.isEmpty else { return Self.floorHeight }
         let rows = Int(ceil(Double(visibleAggregates.count) / 4.0))
         return CGFloat(rows) * 39 + 12
     }

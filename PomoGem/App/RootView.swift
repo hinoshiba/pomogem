@@ -74,6 +74,49 @@ enum PrefsConsumerPolicy {
         )
     }
 
+    /// launch-06. The synced settings that finishing onboarding writes. On a
+    /// second iPhone or after a reinstall, the other devices' settings rows
+    /// can still be on their way, and this device's first stamps would tie
+    /// theirs at revision 1 — where reminder-off wins the tie. So only what
+    /// the user actually chose here is stamped: the daily reminder only when
+    /// they asked for it and iOS granted permission. Leaving the switch off,
+    /// or a denied permission, leaves both reminder groups unstamped, so a
+    /// reminder set up on another device still resolves as it was.
+    @MainActor
+    @discardableResult
+    static func recordOnboardingCompletion(
+        context: ModelContext,
+        markers: [ActivityResetSnapshot],
+        remindersGranted: Bool,
+        rareRewardMode: RareRewardMode,
+        changedAt: Date = .now
+    ) throws -> Prefs {
+        if remindersGranted {
+            try mutate(.reminderEnabled, context: context, markers: markers) {
+                $0.reminderEnabled = true
+            }
+            try mutate(.reminderTime, context: context, markers: markers) {
+                $0.reminderHour = Constants.Notification.defaultReminderHour
+                $0.reminderMinute = Constants.Notification.defaultReminderMinute
+            }
+        }
+        try mutate(.usagePurpose, context: context, markers: markers) {
+            // Kept only for backward-compatible CloudKit and JSON fields.
+            // Runtime UI no longer divides themes into study/work modes.
+            $0.usagePurposeRawValue = UsagePurpose.study.rawValue
+            $0.usagePurposeUpdatedAt = changedAt
+        }
+        // This timestamp is the synchronized evidence of informed choice.
+        // Without it, reward resolution stays off even when a legacy raw
+        // value happens to say `standard`.
+        let writer = try mutate(.rareReward, context: context, markers: markers) {
+            $0.rareRewardModeRawValue = rareRewardMode.rawValue
+            $0.rareRewardModeUpdatedAt = changedAt
+        }
+        writer.hasCompletedOnboarding = true
+        return writer
+    }
+
     @MainActor
     @discardableResult
     static func setPreferredFocusSeconds(
@@ -344,6 +387,10 @@ struct RootView: View {
     let previewStorageTransferDataset:
         (@MainActor @Sendable () async throws -> StorageTransferDatasetPreviewSummary)?
     let unmountForStorageTransfer: (@MainActor @Sendable () -> Void)?
+    /// launch-06. The launch preflight's traversal of this account's iCloud
+    /// zones passed rows only a device that used PomoGem writes. Presentation
+    /// evidence for the first-run gate only; see `CloudRestoreWaitingPolicy`.
+    let cloudHoldsUserRecords: Bool
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
@@ -361,9 +408,19 @@ struct RootView: View {
     @State private var isBootstrapped = false
     @State private var viewTasks = ViewTaskScope()
     @State private var isFinishingOnboarding = false
+    /// launch-06. The user chose 「新しく始める」 on the restore screen, or has
+    /// answered the tutorial. From then on the tutorial stays, whatever
+    /// arrives, until the ordinary auto-exit opens the jar. Kept per account
+    /// namespace, not per view: an iCloud session retires every time the app
+    /// leaves the foreground, and the remounted RootView must not ask again.
+    /// It only matters before onboarding completes; complete data deletion
+    /// clears it with the rest of the defaults.
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: "onboarding.starts-fresh"))
+    private var startsFreshFirstRun = false
     @State private var bootstrapError: String?
     @State private var bootstrapAttempt = 0
     @State private var lastPassiveNotificationErrorFingerprint: String?
+    @State private var lastPassiveReminderActivity: PassiveReminderActivity?
     @State private var dismissedCloudFocusOfferID: UUID?
     @State private var didReportCloudFocusIntegrityIssue = false
     @State private var isReconcilingActivityData = false
@@ -427,7 +484,8 @@ struct RootView: View {
             (@MainActor @Sendable (StorageTransferDatasetRequestDirection) async throws -> Void)? = nil,
         previewStorageTransferDataset:
             (@MainActor @Sendable () async throws -> StorageTransferDatasetPreviewSummary)? = nil,
-        unmountForStorageTransfer: (@MainActor @Sendable () -> Void)? = nil
+        unmountForStorageTransfer: (@MainActor @Sendable () -> Void)? = nil,
+        cloudHoldsUserRecords: Bool = false
     ) {
         self.persistenceStartupError = persistenceStartupError
         self.persistenceMode = persistenceMode
@@ -437,6 +495,7 @@ struct RootView: View {
         self.requestStorageTransferDataset = requestStorageTransferDataset
         self.previewStorageTransferDataset = previewStorageTransferDataset
         self.unmountForStorageTransfer = unmountForStorageTransfer
+        self.cloudHoldsUserRecords = cloudHoldsUserRecords
         _activePersistenceSafetyNotice = State(initialValue: persistenceSafetyNotice)
         _aggregateProjectionPresentation = State(
             initialValue: .initial(for: persistenceMode)
@@ -573,11 +632,17 @@ struct RootView: View {
             || launchHasSyncedUsageEvidence
     }
 
+    private var showsPersistenceSafetyNotice: Bool {
+        activePersistenceSafetyNotice != nil
+            && isBootstrapped
+            && !completeDeletion.hasStarted
+    }
+
     private var shouldShowMain: Bool {
         if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess,
            ProcessInfo.processInfo.environment[
                LocalPreviewLaunchPolicy.rareRewardOnboardingUITestEnvironmentKey
-           ] == "1",
+           ] == "1" || isCloudRestoreUITest,
            !(resolvedPreferences?.hasCompletedOnboarding ?? false) {
             return false
         }
@@ -647,7 +712,15 @@ struct RootView: View {
                     .accessibilityIdentifier("root.first-frame.ready")
                     .task { await markFirstFramePresented() }
             } else {
-                OnboardingView(persistenceMode: persistenceMode) { selectedSubjectNames, wantsNotifications, rareRewardMode in
+                FirstRunView(
+                    persistenceMode: persistenceMode,
+                    restoresFromCloud: persistenceMode == .cloudKit || isCloudRestoreUITest,
+                    cloudHoldsUserRecords: cloudHoldsUserRecords || isCloudRestoreUITest,
+                    startsFresh: $startsFreshFirstRun
+                ) { selectedSubjectNames, wantsNotifications, rareRewardMode in
+                    // The user's own answers: nothing that arrives later may
+                    // swap the tutorial for the restore screen under them.
+                    startsFreshFirstRun = true
                     viewTasks.start {
                         await finishOnboarding(
                             selectedSubjectNames: selectedSubjectNames,
@@ -663,34 +736,36 @@ struct RootView: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("root.first-frame.ready")
                 .task { await markFirstFramePresented() }
+                .task { await deliverCloudRestoreUITestArrivalIfNeeded() }
             }
 
-            if let toast = router.toast {
-                VStack {
-                    Spacer()
-                    ToastOverlay(message: toast)
-                        .padding(.bottom, toast.bottomInset)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+            // Transient messages share the top edge with the persistence
+            // notice. At the bottom, a toast sat on Home's start button (the
+            // primary action right after every drop) and took its taps.
+            if router.toast != nil || showsPersistenceSafetyNotice {
+                VStack(spacing: 8) {
+                    if let activePersistenceSafetyNotice, showsPersistenceSafetyNotice {
+                        Label(activePersistenceSafetyNotice, systemImage: "icloud.slash")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(PomoGemTheme.text)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .accessibilityIdentifier("root.persistence-safety-notice")
+                            .padding(.horizontal, 16)
+                            .allowsHitTesting(false)
+                    }
+                    if let toast = router.toast {
+                        ToastOverlay(message: toast)
+                            // Clear the navigation bar (Home's メニュー) unless
+                            // the notice above already pushes it down.
+                            .padding(.top, showsPersistenceSafetyNotice ? 0 : 44)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .allowsHitTesting(false)
+                    }
+                    Spacer(minLength: 0)
                 }
-                .zIndex(20)
-            }
-
-            if let activePersistenceSafetyNotice,
-               isBootstrapped,
-               !completeDeletion.hasStarted {
-                VStack {
-                    Label(activePersistenceSafetyNotice, systemImage: "icloud.slash")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(PomoGemTheme.text)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .accessibilityIdentifier("root.persistence-safety-notice")
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
                 .padding(.top, 8)
-                .allowsHitTesting(false)
                 .zIndex(30)
             }
 
@@ -790,6 +865,23 @@ struct RootView: View {
             // sorts the full lifetime table merely to detect a change.
             enqueueSessionDependentVerification()
             viewTasks.start { await reconcileIncomingActivityData() }
+            // A completion or a hand-added gem answers today's reminder.
+            refreshPassiveNotificationsIfActivityChanged()
+        }
+        .onChange(of: router.focusPresentationIsActive) { _, isActive in
+            // Home records a new focus before it opens one. A recovered focus
+            // answers today only if it began today: one that finished
+            // overnight and is committed this morning belongs to last night.
+            if isActive, let recovered = router.recoveredFocus {
+                PassiveReminderActivityReader.recordRecoveredFocus(
+                    engine: recovered.engine,
+                    pendingCompletion: recovered.pendingCompletion
+                )
+            }
+            // Opening re-reads the day the focus answers, so the reminder
+            // cannot ring over it on the lock screen; closing re-reads
+            // whether a record was saved.
+            refreshPassiveNotificationsIfActivityChanged()
         }
         .onChange(of: activityAuxiliaryFingerprint) { _, _ in
             guard isFirstFramePresented, !isDataDeletionQuiesced else { return }
@@ -998,6 +1090,11 @@ struct RootView: View {
                     didCompleteOnboarding = false
                 }
             }
+            if isCloudRestoreUITest {
+                // Same reason: the restore fixture is a first use too.
+                didCompleteOnboarding = false
+                startsFreshFirstRun = false
+            }
             let localEnvelope = FocusPersistence.load()
             let preparation = try BoundedLaunchPreparation.prepare(
                 context: modelContext,
@@ -1036,6 +1133,29 @@ struct RootView: View {
         }
     }
 
+    /// launch-06. The explicit Debug-only restore fixture; always false in
+    /// Release, where the fixture does not exist.
+    private var isCloudRestoreUITest: Bool {
+#if DEBUG
+        CloudRestoreUITestFixture.scenario != nil
+#else
+        false
+#endif
+    }
+
+    /// Stands in for an import delivering another device's finished
+    /// onboarding, so a UI test can watch the restore screen hand over to the
+    /// jar through the shipping auto-exit.
+    @MainActor
+    private func deliverCloudRestoreUITestArrivalIfNeeded() async {
+#if DEBUG
+        guard CloudRestoreUITestFixture.scenario == .arrives else { return }
+        try? await Task.sleep(for: CloudRestoreUITestFixture.arrivalDelay)
+        guard !Task.isCancelled else { return }
+        try? CloudRestoreUITestFixture.deliverOtherDevicesOnboarding(context: modelContext)
+#endif
+    }
+
     /// UI tests intentionally bypass onboarding and use a fresh in-memory
     /// store. Since production cold launch no longer runs the full preset
     /// bootstrap, give that explicitly opted-in fixture one deterministic
@@ -1067,6 +1187,21 @@ struct RootView: View {
                 $0.rareRewardModeUpdatedAt = changedAt
             }
         }
+
+#if DEBUG
+        if ProcessInfo.processInfo.environment[
+            LocalPreviewLaunchPolicy.syncedReminderIntentUITestEnvironmentKey
+        ] == "1",
+           resolvedPreferences?.reminderEnabled != true {
+            try PrefsConsumerPolicy.mutate(
+                .reminderEnabled,
+                context: modelContext,
+                markers: resetSnapshots
+            ) {
+                $0.reminderEnabled = true
+            }
+        }
+#endif
 
         var descriptor = FetchDescriptor<Subject>(
             sortBy: [SortDescriptor(\Subject.sortOrder)]
@@ -1968,6 +2103,21 @@ struct RootView: View {
         isFinishingOnboarding = true
         defer { isFinishingOnboarding = false }
 
+        // Ask for the reminder permission before anything is written, then
+        // save the themes and the onboarding answers together. With the
+        // themes saved first and the answers after the prompt, a process
+        // that ended while iOS was asking (or a cancelled view task) left a
+        // theme this device created without the row that says onboarding
+        // finished. In iCloud mode that theme then reads as one that arrived
+        // from another device, and the next launch showed the restore screen
+        // over a first-time user (launch-06). One save has no such window:
+        // either nothing was written and the tutorial runs again, or all of
+        // it was.
+        let granted = wantsNotifications
+            ? await NotificationManager.shared.requestAuthorization()
+            : false
+        guard !Task.isCancelled else { return }
+
         do {
             let presetIDs = Set(SeedData.subjects.map(\.id))
             let presetNameKeys = Set(SeedData.subjects.map {
@@ -1987,26 +2137,33 @@ struct RootView: View {
                 let isSelected = selectedNameKeys.contains(
                     SubjectNamePolicy.comparisonKey(subject.name)
                 )
-                let logicalCopies = storedSubjects.filter { $0.id == subject.id }
-                let hasRelationshipHistory = logicalCopies.contains {
-                    !($0.studySessions?.isEmpty ?? true)
-                        || !($0.achievementStones?.isEmpty ?? true)
-                }
-                let targetSubjectID = subject.id
-                var snapshotHistoryDescriptor = FetchDescriptor<StudySession>(
-                    predicate: #Predicate {
-                        $0.subjectIDSnapshot == targetSubjectID
-                    }
-                )
-                snapshotHistoryDescriptor.fetchLimit = 1
-                let hasSnapshotHistory = try modelContext.fetch(
-                    snapshotHistoryDescriptor
-                ).isEmpty == false
-                let hasHistory = hasRelationshipHistory || hasSnapshotHistory
-                if OnboardingThemePolicy.shouldRetireBuiltInPreset(
+                // launch-06: in iCloud mode an existing preset arrived from
+                // the user's other devices, possibly ahead of its sessions,
+                // so an unselected one is left exactly as it arrived.
+                let change = try OnboardingThemePolicy.builtInPresetChange(
                     isSelected: isSelected,
-                    hasHistory: hasHistory
+                    isArchived: subject.isArchived,
+                    storesInCloud: persistenceMode == .cloudKit
                 ) {
+                    let logicalCopies = storedSubjects.filter { $0.id == subject.id }
+                    let hasRelationshipHistory = logicalCopies.contains {
+                        !($0.studySessions?.isEmpty ?? true)
+                            || !($0.achievementStones?.isEmpty ?? true)
+                    }
+                    let targetSubjectID = subject.id
+                    var snapshotHistoryDescriptor = FetchDescriptor<StudySession>(
+                        predicate: #Predicate {
+                            $0.subjectIDSnapshot == targetSubjectID
+                        }
+                    )
+                    snapshotHistoryDescriptor.fetchLimit = 1
+                    let hasSnapshotHistory = try modelContext.fetch(
+                        snapshotHistoryDescriptor
+                    ).isEmpty == false
+                    return hasRelationshipHistory || hasSnapshotHistory
+                }
+                switch change {
+                case .retire:
                     removedSubjectIDs.insert(subject.id)
                     subject.isArchived = true
                     subject.deletedAt = .now
@@ -2014,15 +2171,14 @@ struct RootView: View {
                         from: subject,
                         among: storedSubjects
                     )
-                } else {
-                    let archived = !isSelected
-                    if subject.isArchived != archived {
-                        subject.isArchived = archived
-                        try SubjectSyncPolicy.recordUserMutation(
-                            from: subject,
-                            among: storedSubjects
-                        )
-                    }
+                case .archive, .unarchive:
+                    subject.isArchived = change == .archive
+                    try SubjectSyncPolicy.recordUserMutation(
+                        from: subject,
+                        among: storedSubjects
+                    )
+                case .keep:
+                    break
                 }
             }
 
@@ -2109,64 +2265,17 @@ struct RootView: View {
                 nextSortOrder = NonnegativeIntPolicy.next(after: nextSortOrder)
                 remainingNewSubjectSlots -= 1
             }
-            try modelContext.save()
-        } catch {
-            modelContext.rollback()
-            router.showToast("初期設定を保存できませんでした。もう一度お試しください", symbol: "exclamationmark.triangle")
-            return
-        }
-
-        let granted = wantsNotifications
-            ? await NotificationManager.shared.requestAuthorization()
-            : false
-        guard !Task.isCancelled else { return }
-        do {
-            let changedAt = Date.now
-            try PrefsConsumerPolicy.mutate(
-                .reminderEnabled,
+            try PrefsConsumerPolicy.recordOnboardingCompletion(
                 context: modelContext,
-                markers: resetSnapshots
-            ) {
-                $0.reminderEnabled = granted
-            }
-            try PrefsConsumerPolicy.mutate(
-                .reminderTime,
-                context: modelContext,
-                markers: resetSnapshots
-            ) {
-                $0.reminderHour = Constants.Notification.defaultReminderHour
-                $0.reminderMinute = Constants.Notification.defaultReminderMinute
-            }
-            try PrefsConsumerPolicy.mutate(
-                .usagePurpose,
-                context: modelContext,
-                markers: resetSnapshots
-            ) {
-                // Kept only for backward-compatible CloudKit and JSON fields.
-                // Runtime UI no longer divides themes into study/work modes.
-                $0.usagePurposeRawValue = UsagePurpose.study.rawValue
-                $0.usagePurposeUpdatedAt = changedAt
-            }
-            // This timestamp is the synchronized evidence of informed choice.
-            // Without it, reward resolution stays off even when a legacy raw
-            // value happens to say `standard`.
-            let writer = try PrefsConsumerPolicy.mutate(
-                .rareReward,
-                context: modelContext,
-                markers: resetSnapshots
-            ) {
-                $0.rareRewardModeRawValue = rareRewardMode.rawValue
-                $0.rareRewardModeUpdatedAt = changedAt
-            }
-            writer.hasCompletedOnboarding = true
+                markers: resetSnapshots,
+                remindersGranted: granted,
+                rareRewardMode: rareRewardMode
+            )
             try modelContext.save()
             usagePurposeRawValue = UsagePurpose.study.rawValue
         } catch {
             modelContext.rollback()
-            router.showToast(
-                "初期設定をこのiPhoneへ保存できませんでした。もう一度お試しください",
-                symbol: "exclamationmark.triangle"
-            )
+            router.showToast("初期設定を保存できませんでした。もう一度お試しください", symbol: "exclamationmark.triangle")
             return
         }
 
@@ -2175,11 +2284,14 @@ struct RootView: View {
         wrappedNotifications = false
         if granted {
             do {
+                let activity = currentPassiveReminderActivity()
+                lastPassiveReminderActivity = activity
                 try await NotificationManager.shared.synchronizePassiveNotifications(
                     dailyReminderEnabled: true,
                     wrappedEnabled: false,
                     hour: Constants.Notification.defaultReminderHour,
-                    minute: Constants.Notification.defaultReminderMinute
+                    minute: Constants.Notification.defaultReminderMinute,
+                    activity: activity
                 )
                 guard !Task.isCancelled else { return }
                 lastPassiveNotificationErrorFingerprint = nil
@@ -2733,6 +2845,24 @@ struct RootView: View {
         router.recoveredBreak = recovery
     }
 
+    /// Opening or closing a focus, or a new record, can answer today's
+    /// reminder or give last month its jar. Re-book only when that changes;
+    /// launch and foreground returns always refresh.
+    @MainActor
+    private func refreshPassiveNotificationsIfActivityChanged() {
+        guard isFirstFramePresented, !isDataDeletionQuiesced else { return }
+        guard currentPassiveReminderActivity() != lastPassiveReminderActivity else { return }
+        viewTasks.start { await refreshPassiveNotifications() }
+    }
+
+    @MainActor
+    private func currentPassiveReminderActivity() -> PassiveReminderActivity {
+        PassiveReminderActivityReader.read(
+            context: modelContext,
+            markers: resetSnapshots
+        )
+    }
+
     @MainActor
     private func refreshPassiveNotifications() async {
         guard !Task.isCancelled else { return }
@@ -2745,13 +2875,19 @@ struct RootView: View {
                     from: resetSnapshots
                 )
             )
+            let activity = currentPassiveReminderActivity()
+            lastPassiveReminderActivity = activity
             schedulingStarted = true
+            // The synced switch is passed as the person's intent. The manager
+            // books nothing while this iPhone lacks notification permission,
+            // and nothing here rewrites the intent for the other devices.
             try await NotificationManager.shared.synchronizePassiveNotifications(
                 dailyReminderEnabled: prefs.reminderEnabled,
                 wrappedEnabled: wrappedNotifications,
                 hour: prefs.reminderHour,
                 minute: prefs.reminderMinute,
-                playsSound: prefs.soundOn
+                playsSound: prefs.soundOn,
+                activity: activity
             )
             guard !Task.isCancelled else { return }
             lastPassiveNotificationErrorFingerprint = nil
@@ -2949,6 +3085,8 @@ struct MainNavigationView: View {
                         LogView()
                     case .settings:
                         SettingsView(persistenceMode: persistenceMode)
+                    case .screenTime:
+                        ScreenTimeSettingsView()
                     }
                 }
         }
@@ -2971,7 +3109,10 @@ struct MainNavigationView: View {
             PaywallView(context: router.paywallContext)
         }
         .sheet(isPresented: $router.sharePresented) {
+            // Like the covers below: a sheet does not inherit a Dynamic Type
+            // size set above it, so pass the resolved one through.
             ShareComposerView(scope: router.shareScope)
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .fullScreenCover(item: $router.recoveredFocus, onDismiss: {
             router.completeFocusPresentation()

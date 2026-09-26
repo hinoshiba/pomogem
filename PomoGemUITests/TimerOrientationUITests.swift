@@ -15,8 +15,8 @@ final class TimerOrientationUITests: XCTestCase {
         app = XCUIApplication()
         app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launchArguments += [
-            "-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP",
             "-focus.rest-cadence.v2", "timer-orientation-ui-test-reset",
             "-timer.default-orientation", "automatic"
         ]

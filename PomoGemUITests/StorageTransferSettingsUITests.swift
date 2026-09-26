@@ -136,7 +136,7 @@ final class StorageTransferSettingsUITests: XCTestCase {
         let enable = app.staticTexts["storage-switch.screen-time"]
         XCTAssertTrue(reveal(enable))
         XCTAssertTrue(enable.label.contains("選び直してください"), "saw: \(enable.label)")
-        XCTAssertTrue(enable.label.contains("保存済みの勉強時間と通常gemは引き継ぎます"))
+        XCTAssertTrue(enable.label.contains("保存済みの勉強時間と粒は引き継ぎます"))
         app.navigationBars["最後の確認"].buttons["戻る"].tap()
         XCTAssertTrue(app.navigationBars["iCloudを有効にする"].waitForExistence(timeout: 4))
         app.navigationBars["iCloudを有効にする"].buttons["キャンセル"].tap()
@@ -1038,7 +1038,7 @@ final class StorageTransferSettingsUITests: XCTestCase {
         app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
         app.launchEnvironment["POMOGEM_UI_TEST_STORAGE_TRANSFER"] = scenario
         app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = accessibility5 ? "1" : "0"
-        app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
         if expectsSettingsFixture {
             XCTAssertTrue(state.waitForExistence(timeout: 12), "The explicit Debug-only fixture must be selected")
