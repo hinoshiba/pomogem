@@ -342,6 +342,14 @@ struct JarSpriteView: View {
                     options: [.allowsTransparency, .ignoresSiblingOrder, .shouldCullNonVisibleNodes],
                     debugOptions: Self.spriteDebugOptions
                 )
+                // The scene's light (gem halos, the first gems' bloom, the
+                // floor and pile light) reaches past the bottle; it fades
+                // out before the SKView's edge instead of being cut there
+                // in a visible rectangle (round 12).
+                .mask {
+                    Image(uiImage: JarLightBounds.image(stageSize: proxy.size))
+                        .resizable()
+                }
 #if targetEnvironment(macCatalyst)
                 // One zero-distance gesture owns both click and drag on Mac.
                 // Once travel reaches 3 pt it can only be a tilt drag, so the
@@ -825,6 +833,108 @@ private struct JarDirectionalAccessibilityModifier: ViewModifier {
             .accessibilityAction(named: "瓶の粒を右へ動かす") {
                 scene.nudge(horizontal: 1)
             }
+    }
+}
+
+/// Where the scene's light may show (round 12): the whole bottle, and past
+/// it a band that fades to nothing at the SKView's edge (smoothstep; the
+/// 16 pt margins beside the bottle, the few points above and below it). A
+/// halo or a bloom that runs past the bottle then fades out instead of
+/// being cut by the view's rectangle. Below the bottle the band starts at
+/// the glass base itself, so the base is never dimmed. Baked once per stage
+/// size (1 px per point: the mask is smooth), used as the SpriteView's
+/// mask.
+enum JarLightBounds {
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 4
+        return cache
+    }()
+
+    /// Light stays whole this far outside the bottle's sides and top.
+    static let clearance: CGFloat = 3
+
+    /// The mask's coverage (0…1) at `x` along a stage `length` long that
+    /// keeps `lower...upper` whole and fades to 0 at both ends (columns
+    /// and rows use the same shape).
+    static func coverage(at x: CGFloat, length: CGFloat, keepFrom lower: CGFloat, to upper: CGFloat) -> CGFloat {
+        func smooth(_ t: CGFloat) -> CGFloat {
+            let u = min(max(t, 0), 1)
+            return u * u * (3 - 2 * u)
+        }
+        if x < lower {
+            let band = max(lower - 0.5, 0.001)
+            return smooth((x - 0.5) / band)
+        }
+        if x > upper {
+            let band = max(length - 0.5 - upper, 0.001)
+            return smooth((length - 0.5 - x) / band)
+        }
+        return 1
+    }
+
+    static func image(stageSize: CGSize) -> UIImage {
+        let width = max(1, Int(stageSize.width.rounded()))
+        let height = max(1, Int(stageSize.height.rounded()))
+        let key = NSString(string: "\(width)x\(height)")
+        if let cached = cache.object(forKey: key) { return cached }
+        let size = CGSize(width: CGFloat(width), height: CGFloat(height))
+        let outer = JarScene.outerJarRect(sceneSize: size)
+        // y down: the bottle's top and base.
+        let top = size.height - outer.maxY
+        let base = size.height - outer.minY
+        let columns = (0 ..< width).map { column in
+            coverage(
+                at: CGFloat(column) + 0.5,
+                length: size.width,
+                keepFrom: outer.minX - clearance,
+                to: outer.maxX + clearance
+            )
+        }
+        let rows = (0 ..< height).map { row in
+            coverage(
+                at: CGFloat(row) + 0.5,
+                length: size.height,
+                keepFrom: top - clearance,
+                to: base
+            )
+        }
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        for row in 0 ..< height {
+            for column in 0 ..< width {
+                let value = UInt8((columns[column] * rows[row] * 255).rounded())
+                let index = (row * width + column) * 4
+                // Premultiplied white.
+                pixels[index] = value
+                pixels[index + 1] = value
+                pixels[index + 2] = value
+                pixels[index + 3] = value
+            }
+        }
+        let image: UIImage
+        if let provider = CGDataProvider(data: Data(pixels) as CFData),
+           let cgImage = CGImage(
+               width: width,
+               height: height,
+               bitsPerComponent: 8,
+               bitsPerPixel: 32,
+               bytesPerRow: width * 4,
+               space: CGColorSpaceCreateDeviceRGB(),
+               bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+               provider: provider,
+               decode: nil,
+               shouldInterpolate: true,
+               intent: .defaultIntent
+           ) {
+            image = UIImage(cgImage: cgImage, scale: 1, orientation: .up)
+        } else {
+            image = UIGraphicsImageRenderer(size: size).image { context in
+                UIColor.white.setFill()
+                context.fill(CGRect(origin: .zero, size: size))
+            }
+        }
+        cache.setObject(image, forKey: key)
+        return image
     }
 }
 

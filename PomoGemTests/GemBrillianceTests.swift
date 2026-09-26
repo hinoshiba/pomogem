@@ -1531,3 +1531,40 @@ final class GemBrillianceTests: XCTestCase {
         )
     }
 }
+
+// MARK: - Round 12 (the round-3 review's fixes)
+
+extension GemBrillianceTests {
+    /// The scene's light fades out before the SKView's edge (no visible
+    /// rectangle) and the bottle itself is never dimmed.
+    func testTheLightBoundsFadeBeforeTheViewEdge() throws {
+        let stage = CGSize(width: 402, height: 460)
+        let outer = JarScene.outerJarRect(sceneSize: stage)
+        let base = stage.height - outer.minY
+        let top = stage.height - outer.maxY
+        func column(_ x: CGFloat) -> CGFloat {
+            JarLightBounds.coverage(at: x, length: stage.width, keepFrom: outer.minX - JarLightBounds.clearance, to: outer.maxX + JarLightBounds.clearance)
+        }
+        func row(_ y: CGFloat) -> CGFloat {
+            JarLightBounds.coverage(at: y, length: stage.height, keepFrom: top - JarLightBounds.clearance, to: base)
+        }
+        XCTAssertEqual(column(0.5), 0, accuracy: 0.001)
+        XCTAssertEqual(column(stage.width - 0.5), 0, accuracy: 0.001)
+        XCTAssertEqual(row(stage.height - 0.5), 0, accuracy: 0.001)
+        XCTAssertEqual(column(outer.minX), 1)
+        XCTAssertEqual(column(stage.width / 2), 1)
+        XCTAssertEqual(row(base - 0.5), 1, "The glass base keeps its light")
+        XCTAssertEqual(row(top), 1)
+        // A smooth ramp: no step larger than a few percent per point.
+        var previous = column(0.5)
+        for x in stride(from: CGFloat(1.5), through: outer.minX, by: 1) {
+            let value = column(x)
+            XCTAssertGreaterThanOrEqual(value, previous)
+            XCTAssertLessThan(value - previous, 0.2)
+            previous = value
+        }
+        let image = JarLightBounds.image(stageSize: stage)
+        XCTAssertEqual(image.size, CGSize(width: 402, height: 460))
+        XCTAssertTrue(JarLightBounds.image(stageSize: stage) === image, "Baked once per stage size")
+    }
+}
