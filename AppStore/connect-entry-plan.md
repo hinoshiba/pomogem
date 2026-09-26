@@ -126,7 +126,7 @@ statusは公開前と各更新時に再監査します。新しいstorefrontの�
 | Review screenshot | `captured_live_price`。2026-09-22に1.1.0 (10)の実StoreKit価格$0.99を撮影・検証し、Connectへ登録・再読込確認済み。storefront国は未確認。正本は `AppStore/screenshots/iap-review/01-pomogem-pro-live-price.png` |
 | Review notes | `AppStore/iap-review-notes-connect.txt` |
 
-Unlockは無料preset以外の任意の1分00秒〜360分00秒、まとまり粒の月刻印、スクリーンタイムの勉強アプリ数無制限（無料5つ）です。黒い石用アプリ数は無料でも無制限です。分・秒の数字入力とホイールに対応します。share cardは無料／Proともロゴと公式サイトを常設します。subscription、trial、
+Unlockは無料preset以外の任意の1分00秒〜360分00秒、結晶の月刻印、スクリーンタイムの勉強アプリ数無制限（無料5つ）です。黒い石用アプリ数は無料でも無制限です。分・秒の数字入力とホイールに対応します。share cardは無料／Proともロゴと公式サイトを常設します。subscription、trial、
 external purchase、独自serverはありません。purchase、pending、cancel、restore、revocationと、
 entitlement反映後にtransactionをfinishすることをSandboxで検証します。初回IAPのversion 1.0提出は履歴です。1.1.0でも既存商品を維持し、購入済み利用者にも追加機能を提供します。
 

@@ -1241,7 +1241,8 @@ struct AccumulationOverviewView: View {
 
     private var fusionHierarchyHeading: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("瓶の整理階層")
+            // Not 「瓶の整理階層」: the section counts the crystal's steps.
+            Text("結晶の段", tableName: "Overview", comment: "Overview section title: the ×10, ×100 … crystal steps")
                 .pomogemSectionTitle(size: 22)
             Text("10粒をひとつの結晶にまとめます。価値の段階ではなく、記録と質量をそのまま残して瓶に余白をつくる仕組みです。", tableName: "Overview")
                 .font(.caption)
