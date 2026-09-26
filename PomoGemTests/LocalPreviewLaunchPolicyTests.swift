@@ -367,7 +367,7 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
         }
     }
 
-    func testInactivePublishedSessionStillRetiresWhenItEntersBackground() {
+    func testInactivePublishedSessionIsHeldForTheGraceWhenItEntersBackground() {
         func action(_ phase: ScenePhase) -> PersistenceSceneTransitionAction {
             PersistenceLaunchScenePolicy.action(
                 phase: phase,
@@ -380,9 +380,11 @@ final class LocalPreviewLaunchPolicyTests: XCTestCase {
         }
 
         XCTAssertEqual(action(.inactive), .none)
-        // Moving from a system panel to another app must still close the
-        // CloudKit store before a later foreground account verification.
-        XCTAssertEqual(action(.background), .retireCloudSession)
+        // quality-01 (owner-approved, 2026-09-24). Moving from a system panel
+        // to another app still closes the CloudKit store before the process
+        // can be suspended, but through the background grace: the controller
+        // retires it after the grace, on expiry, or on any account event.
+        XCTAssertEqual(action(.background), .deferCloudRetirement)
     }
 
     func testUnpublishedCloudMountStillRetiresOnAnyDeactivation() {

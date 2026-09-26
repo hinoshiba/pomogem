@@ -1,7 +1,31 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
-
+    "%@。この端末で確認済みの集中時間の質量：%@" : {
+      "comment" : "VoiceOver, jar while iCloud is checked: status, the lifetime mass",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@。この端末で確認済みの集中時間の質量：%2$@"
+          }
+        }
+      }
+    },
+    "%@。この端末で確認済みの集中時間の質量：%@以上" : {
+      "comment" : "VoiceOver, jar while iCloud is checked: status, a lower bound of the lifetime mass",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@。この端末で確認済みの集中時間の質量：%2$@以上"
+          }
+        }
+      }
+    },
+    "%@。これまでの合計は確認が済むと表示します" : {
+      "comment" : "VoiceOver, jar while iCloud is checked and no lifetime total can be shown: status"
+    }
   },
   "version" : "1.0"
 }
