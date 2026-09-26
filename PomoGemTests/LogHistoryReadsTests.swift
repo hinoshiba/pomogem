@@ -321,10 +321,86 @@ final class LogHistoryReadsTests: XCTestCase {
             .milliseconds(300)
         )
 
-        let recent = LogRecentContent.empty(epochID: epochID)
+        let recent = LogRecentContent(epochID: epochID, records: [], aggregates: .empty)
         XCTAssertNotNil(LogHistoryLoadPolicy.shownRecentContent(recent, currentEpochID: epochID))
         XCTAssertNil(LogHistoryLoadPolicy.shownRecentContent(recent, currentEpochID: UUID()))
         XCTAssertNil(LogHistoryLoadPolicy.shownRecentContent(nil, currentEpochID: epochID))
+    }
+
+    /// A failed read always ends in a final state. Most people never reset
+    /// their data, so the epoch is nil; with nothing read yet, the old
+    /// check compared nil with nil and left 最近の記録 loading forever.
+    func testFailedReadsEndInAFinalStateAlsoWithoutAReset() {
+        let calendar = japaneseCalendar
+        for epochID in [nil, UUID()] as [UUID?] {
+            let recent = LogHistoryLoadPolicy.recentContentAfterFailedRead(nil, currentEpochID: epochID)
+            XCTAssertTrue(recent.isUnavailable, "\(String(describing: epochID))")
+            XCTAssertEqual(recent.epochID, epochID)
+            XCTAssertNotNil(
+                LogHistoryLoadPolicy.shownRecentContent(recent, currentEpochID: epochID),
+                "The section shows the failure instead of loading"
+            )
+
+            // A refresh that failed keeps what this epoch already shows.
+            let loaded = LogRecentContent(epochID: epochID, records: [], aggregates: .empty)
+            XCTAssertEqual(
+                LogHistoryLoadPolicy.recentContentAfterFailedRead(loaded, currentEpochID: epochID),
+                loaded
+            )
+            // Another epoch's content never stays.
+            let otherEpoch = LogRecentContent(epochID: UUID(), records: [], aggregates: .empty)
+            XCTAssertTrue(
+                LogHistoryLoadPolicy.recentContentAfterFailedRead(otherEpoch, currentEpochID: epochID)
+                    .isUnavailable
+            )
+
+            // The period page: a failed first read ends on this period's
+            // name over no figures; a failed refresh keeps its page.
+            let week = LogPeriodPolicy.interval(for: .week, now: date(2026, 9, 24), calendar: calendar)
+            let empty = LogHistoryLoadPolicy.periodContentAfterFailedRead(
+                nil,
+                period: .week,
+                currentEpochID: epochID,
+                interval: week,
+                calendar: calendar
+            )
+            XCTAssertEqual(empty.period, .week)
+            XCTAssertEqual(empty.epochID, epochID)
+            XCTAssertTrue(empty.records.isEmpty)
+            XCTAssertNotNil(LogHistoryLoadPolicy.shownPeriodContent(
+                empty,
+                selected: .week,
+                currentEpochID: epochID,
+                reloadIsSlow: true
+            ))
+            let monthPage = LogPeriodContent.empty(
+                period: .month,
+                epochID: epochID,
+                interval: nil,
+                calendar: calendar
+            )
+            XCTAssertEqual(
+                LogHistoryLoadPolicy.periodContentAfterFailedRead(
+                    monthPage,
+                    period: .month,
+                    currentEpochID: epochID,
+                    interval: week,
+                    calendar: calendar
+                ),
+                monthPage
+            )
+            XCTAssertEqual(
+                LogHistoryLoadPolicy.periodContentAfterFailedRead(
+                    monthPage,
+                    period: .week,
+                    currentEpochID: epochID,
+                    interval: week,
+                    calendar: calendar
+                ).period,
+                .week,
+                "Never the other period's page under this period's name"
+            )
+        }
     }
 
     /// Lifetime-sized reads block the main thread. 記録 itself may read only

@@ -273,9 +273,30 @@ struct LogRecentContent: Equatable, Sendable {
     /// The newest thirty records, newest first.
     let records: [LogSessionRecord]
     let aggregates: LogAggregateArchive
+    /// The read failed before any of this epoch's records were read: 最近の記録
+    /// says it could not read them, instead of loading forever or saying
+    /// there is nothing to show.
+    let isUnavailable: Bool
 
-    static func empty(epochID: UUID?) -> LogRecentContent {
-        LogRecentContent(epochID: epochID, records: [], aggregates: .empty)
+    init(
+        epochID: UUID?,
+        records: [LogSessionRecord],
+        aggregates: LogAggregateArchive,
+        isUnavailable: Bool = false
+    ) {
+        self.epochID = epochID
+        self.records = records
+        self.aggregates = aggregates
+        self.isUnavailable = isUnavailable
+    }
+
+    static func unavailable(epochID: UUID?) -> LogRecentContent {
+        LogRecentContent(
+            epochID: epochID,
+            records: [],
+            aggregates: .empty,
+            isUnavailable: true
+        )
     }
 }
 

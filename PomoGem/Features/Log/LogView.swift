@@ -1020,6 +1020,40 @@ enum LogHistoryLoadPolicy {
         return content
     }
 
+    /// What stays after the period page failed to read: a page of this
+    /// period and epoch (a refresh that failed); otherwise this period's
+    /// name over no figures, never another period's or a pre-reset page.
+    static func periodContentAfterFailedRead(
+        _ content: LogPeriodContent?,
+        period: LogView.Period,
+        currentEpochID: UUID?,
+        interval: DateInterval?,
+        calendar: Calendar
+    ) -> LogPeriodContent {
+        if let content, content.period == period, content.epochID == currentEpochID {
+            return content
+        }
+        return .empty(
+            period: period,
+            epochID: currentEpochID,
+            interval: interval,
+            calendar: calendar
+        )
+    }
+
+    /// What stays after the newest records failed to read: this epoch's
+    /// records (a refresh that failed); otherwise 最近の記録 says it could
+    /// not read them. No content at all counts as nothing of this epoch,
+    /// also when the epoch is nil (no reset ever), so the section always
+    /// ends in a final state instead of loading forever.
+    static func recentContentAfterFailedRead(
+        _ content: LogRecentContent?,
+        currentEpochID: UUID?
+    ) -> LogRecentContent {
+        if let content, content.epochID == currentEpochID { return content }
+        return .unavailable(epochID: currentEpochID)
+    }
+
     static func periodKey(
         epochID: UUID?,
         period: LogView.Period,
@@ -1801,11 +1835,21 @@ struct LogView: View {
                 Spacer()
                 Text("最新30件").font(.caption).foregroundStyle(PomoGemTheme.muted)
             }
-            if let recent = shownRecentContent?.records {
-                if recent.isEmpty {
+            if let recent = shownRecentContent {
+                if recent.isUnavailable {
+                    // Not 「一粒積むと…」: the records may be years deep.
+                    PomoGemCard {
+                        EmptyChartMessage(text: String(
+                            localized: "最近の記録を読み込めませんでした。",
+                            table: "Log",
+                            comment: "Log: shown under 最近の記録 when the newest records could not be read"
+                        ))
+                        .accessibilityIdentifier("log.recent.unavailable")
+                    }
+                } else if recent.records.isEmpty {
                     PomoGemCard { EmptyChartMessage(text: "一粒積むと、ここに記録が残ります。") }
                 } else {
-                    recentRows(Array(recent.prefix(BoundedHistoryPolicy.recentSessionLimit)))
+                    recentRows(Array(recent.records.prefix(BoundedHistoryPolicy.recentSessionLimit)))
                 }
             } else {
                 PomoGemCard { HistoryLoadingPlaceholder() }
@@ -1911,16 +1955,13 @@ struct LogView: View {
         } catch {
             guard key == loadKey else { return }
             periodLoadFailed = true
-            // Keep a page of this period (a refresh that failed); never show
-            // the other period's or a pre-reset page under this name.
-            if periodContent?.period != period || periodContent?.epochID != epochID {
-                periodContent = .empty(
-                    period: period,
-                    epochID: epochID,
-                    interval: interval,
-                    calendar: calendar
-                )
-            }
+            periodContent = LogHistoryLoadPolicy.periodContentAfterFailedRead(
+                periodContent,
+                period: period,
+                currentEpochID: epochID,
+                interval: interval,
+                calendar: calendar
+            )
         }
         completeLoadAudit(.period)
     }
@@ -1953,9 +1994,10 @@ struct LogView: View {
         } catch {
             guard key == recentHistoryKey else { return }
             recentHistoryLoadFailed = true
-            if recentContent?.epochID != epochID {
-                recentContent = .empty(epochID: epochID)
-            }
+            recentContent = LogHistoryLoadPolicy.recentContentAfterFailedRead(
+                recentContent,
+                currentEpochID: epochID
+            )
         }
         completeLoadAudit(.recent)
     }
