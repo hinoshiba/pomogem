@@ -84,9 +84,16 @@ enum AlarmSoundSynthesis {
     }
 
     /// One seamless cycle for foreground looping (`AVAudioPlayerNode` with
-    /// `.loops`): the tail of each cycle is folded into the start of the
-    /// next, so the loop point needs no fade and never clicks.
+    /// `.loops`): `fold`, mastered as one period of a loop, so the loop
+    /// point needs no fade and never clicks.
     static func loop(_ source: AlarmSoundSource) -> [Float] {
+        master(fold(source), driveDecibels: source.limiterDrive, circular: true)
+    }
+
+    /// One period of the pattern in its steady state, unmastered: the tail
+    /// of each cycle is folded into the start of the next, exactly as when
+    /// the cycles are laid end to end.
+    static func fold(_ source: AlarmSoundSource) -> [Float] {
         let length = max(frames(source.period), 1)
         var folded = [Float](repeating: 0, count: length)
         var start = 0
@@ -94,7 +101,7 @@ enum AlarmSoundSynthesis {
             mix(Array(source.oneShot[start..<min(start + length, source.oneShot.count)]), into: &folded, at: 0)
             start += length
         }
-        return master(folded, driveDecibels: source.limiterDrive, circular: true)
+        return folded
     }
 
     /// The long sound for Library/Sounds (notifications and AlarmKit): the

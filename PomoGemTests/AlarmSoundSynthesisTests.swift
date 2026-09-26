@@ -81,20 +81,61 @@ final class AlarmSoundSynthesisTests: XCTestCase {
 
     // MARK: Structure
 
-    func testLoopsAreOnePeriodLongAndSeamless() {
+    func testLoopsAreOnePeriodLong() {
         for choice in AlarmSoundChoice.allCases {
             let rendered = rendering(choice)
             XCTAssertEqual(rendered.loop.count, AlarmSoundSynthesis.frames(rendered.source.period), choice.rawValue)
             XCTAssertGreaterThanOrEqual(rendered.source.period, 1.5, choice.rawValue)
             XCTAssertLessThanOrEqual(rendered.source.period, 4, choice.rawValue)
-            // The wrap from the last sample to the first is no bigger than any
-            // step inside the loop: no click at the loop point.
-            var largestStep: Float = 0
-            for index in 1..<rendered.loop.count {
-                largestStep = max(largestStep, abs(rendered.loop[index] - rendered.loop[index - 1]))
+        }
+    }
+
+    /// No click at the loop point, checked against what a seamless loop is:
+    /// the cycles laid end to end with every tail ringing into the next.
+    /// Cutting the tail off instead of folding it changes the period by 5–42%
+    /// of its peak for every sound whose tail outlasts the period.
+    func testTheFoldedPeriodIsTheSteadyStateOfTheCyclesLaidEndToEnd() {
+        for choice in AlarmSoundChoice.allCases {
+            let source = rendering(choice).source
+            let period = AlarmSoundSynthesis.frames(source.period)
+            let settled = (source.oneShot.count + period - 1) / period
+            var laidOut = [Float](repeating: 0, count: (settled + 1) * period)
+            for cycle in 0...settled {
+                let start = cycle * period
+                for index in source.oneShot.indices where start + index < laidOut.count {
+                    laidOut[start + index] += source.oneShot[index]
+                }
             }
-            let wrap = abs(rendered.loop[0] - rendered.loop[rendered.loop.count - 1])
-            XCTAssertLessThanOrEqual(wrap, largestStep + 1e-6, choice.rawValue)
+            let reference = Array(laidOut[(settled * period)..<((settled + 1) * period)])
+            let folded = AlarmSoundSynthesis.fold(source)
+            XCTAssertEqual(folded.count, period, choice.rawValue)
+            let peak = AlarmSoundSynthesis.peak(of: reference)
+            var worst: Float = 0
+            for index in 0..<min(folded.count, reference.count) {
+                worst = max(worst, abs(folded[index] - reference[index]))
+            }
+            XCTAssertLessThan(worst, peak * 1e-5, choice.rawValue)
+        }
+    }
+
+    /// The mastering treats the loop point like any other sample: mastering
+    /// the folded period rotated by half a period gives the loop rotated by
+    /// half a period. A limiter that restarted at the loop point would give
+    /// a different gain on both sides of it (a step of up to 0.06 here).
+    func testTheLoopIsMasteredAsACircleWithoutASeam() {
+        for choice in AlarmSoundChoice.allCases {
+            let rendered = rendering(choice)
+            let folded = AlarmSoundSynthesis.fold(rendered.source)
+            for shift in [0, folded.count / 2] {
+                let rotatedFold = Array(folded[shift...] + folded[..<shift])
+                let expected = Array(rendered.loop[shift...] + rendered.loop[..<shift])
+                let mastered = AlarmSoundSynthesis.master(rotatedFold, driveDecibels: rendered.source.limiterDrive, circular: true)
+                var worst: Float = 0
+                for index in 0..<min(mastered.count, expected.count) {
+                    worst = max(worst, abs(mastered[index] - expected[index]))
+                }
+                XCTAssertLessThan(worst, 1e-5, "\(choice.rawValue) shifted by \(shift)")
+            }
         }
     }
 
@@ -159,27 +200,46 @@ final class AlarmSoundSynthesisTests: XCTestCase {
 
     /// Changing the synthesis must change `AlarmSoundLibrary.fileVersion`:
     /// an existing Library/Sounds file with the current name is reused, so a
-    /// silent change would leave old sounds on devices. Update these values
-    /// together with the version.
+    /// silent change would leave the old sound on the lock screen and in the
+    /// system alarm while the app plays the new one. The pins are hashes of
+    /// the 16-bit ringtone as it is written to disk, so a retune (even
+    /// 2,048 → 2,000 Hz, which peak normalisation hides from any loudness
+    /// figure) fails here. This covers the three original chimes too, whose
+    /// synthesis lives in SoundSynth.swift. When it fails: bump the version,
+    /// then paste the new hashes from the failure messages. (A toolchain whose
+    /// maths library rounds differently can also move them; bumping is then
+    /// merely a harmless re-render on devices.)
     func testRenderingFingerprintMatchesTheFileVersion() {
         XCTAssertEqual(AlarmSoundLibrary.fileVersion, 1)
-        let pinned: [AlarmSoundChoice: (frames: Int, rms: Double)] = [
-            .standard: (1_210_545, -16.12),
-            .soft: (1_156_302, -13.69),
-            .bright: (1_230_390, -15.30),
-            .bell: (1_212_750, -10.15),
-            .digital: (1_212_750, -8.20),
-            .marimba: (1_210_545, -10.55),
-            .schoolChime: (1_223_775, -10.93),
-            .alarmClock: (1_212_750, -10.97)
+        let pinned: [AlarmSoundChoice: String] = [
+            .standard: "7aa1ec5ddd2418e",
+            .soft: "e46ed513e65fc39b",
+            .bright: "cbfcd1180018e83",
+            .bell: "841af180b6517f20",
+            .digital: "14f3bbc54820941b",
+            .marimba: "7a3c079005c96ddd",
+            .schoolChime: "c3642732e60783",
+            .alarmClock: "7abdbe65138e0696"
         ]
         for choice in AlarmSoundChoice.allCases {
-            let ringtone = rendering(choice).ringtone
-            let rms = SoundMeasurement(ringtone).rmsDecibels
-            guard let expected = pinned[choice] else { return XCTFail(choice.rawValue) }
-            XCTAssertEqual(ringtone.count, expected.frames, "\(choice.rawValue): bump AlarmSoundLibrary.fileVersion")
-            XCTAssertEqual(rms, expected.rms, accuracy: 0.05, "\(choice.rawValue): bump AlarmSoundLibrary.fileVersion")
+            let fingerprint = SoundMeasurement.pcm16Fingerprint(rendering(choice).ringtone)
+            XCTAssertEqual(
+                fingerprint,
+                pinned[choice],
+                "\(choice.rawValue): the ringtone changed; bump AlarmSoundLibrary.fileVersion and pin \(fingerprint)"
+            )
         }
+    }
+
+    func testTheFingerprintSeesARetuneThatLoudnessCannot() {
+        let tone: (Double) -> [Float] = { frequency in
+            (0..<44_100).map { Float(0.9 * sin(2 * Double.pi * frequency * Double($0) / 44_100)) }
+        }
+        let original = tone(2_048)
+        let retuned = tone(2_000)
+        XCTAssertEqual(SoundMeasurement(original).rmsDecibels, SoundMeasurement(retuned).rmsDecibels, accuracy: 0.05)
+        XCTAssertNotEqual(SoundMeasurement.pcm16Fingerprint(original), SoundMeasurement.pcm16Fingerprint(retuned))
+        XCTAssertEqual(SoundMeasurement.pcm16Fingerprint(original), SoundMeasurement.pcm16Fingerprint(tone(2_048)))
     }
 
     // MARK: Listening copies
@@ -238,6 +298,20 @@ struct SoundMeasurement {
 
     init(_ samples: [Float]) {
         self.samples = samples
+    }
+
+    /// FNV-1a (64-bit) over the samples quantised to 16-bit little-endian
+    /// PCM, the resolution of the CAF files.
+    static func pcm16Fingerprint(_ samples: [Float]) -> String {
+        let prime: UInt64 = 0x0000_0100_0000_01b3
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for sample in samples {
+            let clamped = max(-1, min(1, sample))
+            let value = UInt16(bitPattern: Int16((clamped * 32_767).rounded()))
+            hash = (hash ^ UInt64(value & 0xff)) &* prime
+            hash = (hash ^ UInt64(value >> 8)) &* prime
+        }
+        return String(hash, radix: 16)
     }
 
     var peak: Float { AlarmSoundSynthesis.peak(of: samples) }
