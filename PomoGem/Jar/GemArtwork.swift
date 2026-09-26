@@ -3375,21 +3375,31 @@ extension GemArtwork {
         let radius: CGFloat
     }
 
+    /// Glyph radius of a single-theme gem's mark on its table.
+    static let tableThemeMarkRadius: CGFloat = 0.40
+    /// A multi-theme crystal's sector marks: centre distance and glyph
+    /// radius (round 14: pulled in from 0.58 R and 0.23 R, so the ×N tag
+    /// fits below the ring they turn in, `countTagDrop`).
+    static let sectorThemeMarkDistance: CGFloat = 0.46
+    static let sectorThemeMarkRadius: CGFloat = 0.19
+
     /// A single-theme gem carries one mark on its table (0.40 R, a 20 pt
     /// gem shows an 8 pt glyph); a crystal of several themes carries one
-    /// smaller mark (0.23 R) in the middle of each theme's sector, 0.58 R
-    /// out (clear of the ×N tag below the table most of the time), in the
-    /// same sectors `SectorTones` paints (clockwise from 12 o'clock). A
-    /// crystal too small for those to reach `minimumGlyphSize` (`radius`
-    /// in points) shows its largest theme's mark on the table instead.
+    /// smaller mark (0.19 R) in the middle of each theme's sector, 0.46 R
+    /// out, in the same sectors `SectorTones` paints (clockwise from 12
+    /// o'clock). A crystal too small for those to reach `minimumGlyphSize`
+    /// (`radius` in points) shows its largest theme's mark on the table
+    /// instead.
     static func themeMarkPlacements(for colors: [GemColorShare], radius: CGFloat? = nil) -> [ThemeMarkPlacement] {
         // The same three largest themes the body's sectors show (round 12);
         // the breakdown lists the rest.
         let shares = CoreColorField.fieldShares(colors.filter { $0.fraction > 0 }, fourthShare: nil)
-        let sectorMarksFit = radius.map { $0 * 0.23 * 2 >= minimumThemeMarkGlyphSize } ?? true
+        let sectorMarksFit = radius.map { $0 * sectorThemeMarkRadius * 2 >= minimumThemeMarkGlyphSize } ?? true
         guard shares.count > 1, sectorMarksFit else {
             let largest = shares.max { $0.fraction < $1.fraction }
-            return largest.map { [ThemeMarkPlacement(mark: GemThemeMark(hex: $0.hex), center: .zero, radius: 0.40)] } ?? []
+            return largest.map {
+                [ThemeMarkPlacement(mark: GemThemeMark(hex: $0.hex), center: .zero, radius: tableThemeMarkRadius)]
+            } ?? []
         }
         let total = shares.reduce(0) { $0 + $1.fraction }
         var cursor: CGFloat = 0
@@ -3397,8 +3407,58 @@ extension GemArtwork {
             let span = CGFloat(share.fraction / max(total, 0.000_1))
             defer { cursor += span }
             let angle = .pi / 2 - (cursor + span / 2) * .pi * 2
-            return ThemeMarkPlacement(mark: GemThemeMark(hex: share.hex), center: polar(angle, 0.58), radius: 0.23)
+            return ThemeMarkPlacement(
+                mark: GemThemeMark(hex: share.hex),
+                center: polar(angle, sectorThemeMarkDistance),
+                radius: sectorThemeMarkRadius
+            )
         }
+    }
+
+    /// How far any theme mark of `colors` reaches from the centre (a share
+    /// of the gem radius) on a stone baked at `radius` points; 0 without
+    /// marks.
+    static func themeMarkExtent(for colors: [GemColorShare], radius: CGFloat?) -> CGFloat {
+        themeMarkPlacements(for: colors, radius: radius)
+            .map { hypot($0.center.x, $0.center.y) + $0.radius }
+            .max() ?? 0
+    }
+
+    /// Where the ×N tag rests below the table (D26), as a share of the gem
+    /// radius.
+    static let countTagRestingDrop: CGFloat = 0.40
+    /// Gap between the tag's top edge and the theme marks above it.
+    static let countTagMarkClearance: CGFloat = 0.05
+
+    /// How far below the centre the ×N tag's count line sits (a share of
+    /// the gem radius). Without theme marks it rests at 0.40 R. With them
+    /// (Differentiate Without Color, §7.12, round 14) it drops until its top
+    /// edge clears every mark by `countTagMarkClearance`, whichever way the
+    /// stone has rolled: the marks turn with the body inside the disc of
+    /// radius `themeMarkExtent`, the tag stays upright below the centre, so
+    /// the nearest point of the tag is its top edge straight below.
+    /// `tagHalfHeight` is half the count line's height, as a share of the
+    /// gem radius.
+    static func countTagDrop(themeMarkExtent: CGFloat?, tagHalfHeight: CGFloat) -> CGFloat {
+        guard let extent = themeMarkExtent, extent.isFinite, extent > 0 else { return countTagRestingDrop }
+        let half = tagHalfHeight.isFinite ? max(0, tagHalfHeight) : 0
+        return max(countTagRestingDrop, extent + countTagMarkClearance + half)
+    }
+
+    /// `countTagDrop` for a stone drawn `radius` points across its radius
+    /// (SwiftUI cards: the Overview and share cards), whose count line is
+    /// `countLineHeight` points tall.
+    static func countTagDrop(
+        colors: [GemColorShare],
+        radius: CGFloat,
+        countLineHeight: CGFloat,
+        showsThemeMarks: Bool
+    ) -> CGFloat {
+        guard showsThemeMarks, radius.isFinite, radius > 0 else { return countTagRestingDrop }
+        return countTagDrop(
+            themeMarkExtent: themeMarkExtent(for: colors, radius: sizeBucket(radius: radius)),
+            tagHalfHeight: countLineHeight / 2 / radius
+        )
     }
 
     /// Marks on the time core: one per theme arc of its colour field, on

@@ -2986,6 +2986,7 @@ struct ProgressCrystalGlyph: View {
     var isAchievement = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Environment(\.displayScale) private var displayScale
     @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
     @State private var breath = false
@@ -3024,10 +3025,17 @@ struct ProgressCrystalGlyph: View {
                     let text = AggregatePresentation.countLabel(completionCount)
                     let fontSize = GemArtwork.countTagFontSize(sceneRadius: side * 0.40)
                     let tag = GemArtwork.countEngravingSize(text: text, fontSize: fontSize, style: .copperTag)
+                    // Below the theme marks when they show (round 14).
+                    let drop = GemArtwork.countTagDrop(
+                        colors: spec.colors,
+                        radius: side * 0.40,
+                        countLineHeight: tag.height,
+                        showsThemeMarks: !isAchievement && GemThemeMark.isEnabled(environment: differentiateWithoutColor)
+                    )
                     Image(uiImage: GemArtwork.countEngravingImage(text: text, fontSize: fontSize, style: .copperTag, scale: displayScale))
                         .resizable()
                         .frame(width: tag.width, height: tag.height)
-                        .offset(y: side * 0.40 * PebbleNode.aggregatePlateDrop)
+                        .offset(y: side * 0.40 * drop)
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)

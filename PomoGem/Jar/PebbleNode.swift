@@ -569,6 +569,13 @@ final class PebbleNode: SKShapeNode {
     private var earlyEffortPoolNode: SKSpriteNode?
     /// D26 (b): the ×N count as a small engraved copper tag (one sprite).
     private var aggregateTagNode: SKSpriteNode?
+    /// How far below the centre the tag sits, as a share of the radius:
+    /// `aggregatePlateDrop`, or lower so it clears the theme marks
+    /// (Differentiate Without Color, round 14).
+    private(set) var aggregateTagDrop: CGFloat = PebbleNode.aggregatePlateDrop
+    /// How far the body's theme marks reach from its centre (a share of the
+    /// radius), or nil when it shows none.
+    private(set) var themeMarkExtent: CGFloat?
     /// 1, or `quietTagScale` while another crystal is emphasised.
     private(set) var aggregateTagEmphasis: CGFloat = 1
     /// The tag's text, exactly the former plate's (`AggregatePresentation`).
@@ -776,6 +783,35 @@ final class PebbleNode: SKShapeNode {
         let inverse = 1 / max(jarScale, 0.01)
         aggregateTagNode?.setScale(inverse * aggregateTagEmphasis)
         obstacleCountNode?.setScale(inverse)
+        updateAggregateTagDrop()
+    }
+
+    /// Re-reads how far the tag sits below the centre (its on-screen size
+    /// and the theme marks it must clear, `GemArtwork.countTagDrop`) and
+    /// places it there.
+    private func updateAggregateTagDrop() {
+        guard aggregateTagNode != nil else { return }
+        let fontSize = GemArtwork.countTagFontSize(sceneRadius: localRadius * textureJarScale)
+        let countLine = GemArtwork.countEngravingCountLineHeight(fontSize: fontSize)
+        // The tag is counter-scaled: in the body's own units its count line
+        // is `countLine × emphasis / jarScale` tall.
+        let halfHeight = countLine / 2 * aggregateTagEmphasis / max(jarScale, 0.01) / max(localRadius, 0.01)
+        aggregateTagDrop = GemArtwork.countTagDrop(themeMarkExtent: themeMarkExtent, tagHalfHeight: halfHeight)
+        placeAggregateTag()
+    }
+
+    /// The tag upright, `aggregateTagDrop` below the centre in screen space
+    /// however the stone has rolled.
+    private func placeAggregateTag() {
+        guard let tag = aggregateTagNode else { return }
+        let cosine = cos(zRotation)
+        let sine = sin(zRotation)
+        let offset = CGPoint(x: 0, y: -localRadius * aggregateTagDrop)
+        tag.zRotation = -zRotation
+        tag.position = CGPoint(
+            x: cosine * offset.x + sine * offset.y,
+            y: -sine * offset.x + cosine * offset.y
+        )
     }
 
     /// SpriteKit shaders keep animating independently of SKActions. Updating
@@ -1020,14 +1056,7 @@ final class PebbleNode: SKShapeNode {
         // a user tilts or taps the physical stone. The aggregate plate sits
         // below the table (screen-fixed offset) so the brightest facets stay
         // visible.
-        if let tag = aggregateTagNode {
-            let offset = CGPoint(x: 0, y: -localRadius * Self.aggregatePlateDrop)
-            tag.zRotation = -zRotation
-            tag.position = CGPoint(
-                x: cosine * offset.x + sine * offset.y,
-                y: -sine * offset.x + cosine * offset.y
-            )
-        }
+        placeAggregateTag()
         achievementMarkNode?.zRotation = -zRotation
         if let count = obstacleCountNode {
             // Engraved on the rock's lower face, upright in screen space.
@@ -1145,8 +1174,9 @@ final class PebbleNode: SKShapeNode {
     /// per gem instead of flares and tilt glints: the former Reduce Motion
     /// star (α0.6) at the 控えめ light scale (× 0.7, D17).
     static let reducedMotionStarAlpha: CGFloat = 0.42
-    /// The ×N plate sits below the table, as a fraction of the radius.
-    static let aggregatePlateDrop: CGFloat = 0.40
+    /// The ×N plate rests below the table, as a fraction of the radius
+    /// (with theme marks it drops below them: `aggregateTagDrop`).
+    static let aggregatePlateDrop: CGFloat = GemArtwork.countTagRestingDrop
 
     // MARK: Body specs (shared by the node and the texture pre-bake)
 
@@ -1513,6 +1543,12 @@ final class PebbleNode: SKShapeNode {
         let jarScale = max(textureJarScale, 0.01)
         let bakedRadius = localRadius * jarScale
         let bodyScale = artworkScale
+        // The marks the bake engraves (the same bucketed radius picks sector
+        // or table marks), which the ×N tag keeps clear of.
+        themeMarkExtent = spec.showsThemeMarks && aggregateTagNode != nil
+            ? GemArtwork.themeMarkExtent(for: spec.colors, radius: GemArtwork.sizeBucket(radius: bakedRadius))
+            : nil
+        updateAggregateTagDrop()
         let baked = GemArtwork.bodySpriteSize(radius: bakedRadius)
         body.setUnscaledSize(CGSize(width: baked.width / jarScale, height: baked.height / jarScale))
         GemTextureAtlas.shared.show(
@@ -2003,6 +2039,14 @@ final class PebbleNode: SKShapeNode {
         aggregateTagText = AggregatePresentation.countLabel(aggregate.pebbleCount)
         aggregateTagMonth = Self.monthEngraving(for: descriptor, enabled: showsMonthEngraving)
         showAggregateTag()
+        // The body was baked before the tag existed: read its marks now.
+        if let spec = gemBodySpec, spec.showsThemeMarks {
+            themeMarkExtent = GemArtwork.themeMarkExtent(
+                for: spec.colors,
+                radius: GemArtwork.sizeBucket(radius: localRadius * max(textureJarScale, 0.01))
+            )
+        }
+        updateAggregateTagDrop()
     }
 
     /// Glow follows recorded grams, never the number of completions, so

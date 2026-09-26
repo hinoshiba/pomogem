@@ -255,7 +255,9 @@ final class GemThemeDistinctionTests: XCTestCase {
         let small = GemArtwork.themeMarkPlacements(for: mix, radius: 10)
         XCTAssertEqual(small.map(\.mark), [GemThemeMark(hex: palette[0])])
         XCTAssertGreaterThanOrEqual(small[0].radius * 10 * 2, 8)
-        for radius: CGFloat in [16, 24, 40] {
+        // Sector marks from the radius at which their glyph reaches 7 pt.
+        let smallest = GemArtwork.minimumThemeMarkGlyphSize / (2 * GemArtwork.sectorThemeMarkRadius)
+        for radius: CGFloat in [smallest.rounded(.up), 24, 40] {
             let placements = GemArtwork.themeMarkPlacements(for: mix, radius: radius)
             XCTAssertEqual(placements.count, 3)
             XCTAssertTrue(placements.allSatisfy { $0.radius * radius * 2 >= GemArtwork.minimumThemeMarkGlyphSize })
@@ -388,6 +390,128 @@ final class GemThemeDistinctionTests: XCTestCase {
             isTutorial: true
         )
         XCTAssertEqual(PebbleNode.bodySpec(for: tutorial, themeMarks: true)?.showsThemeMarks, false)
+    }
+
+    /// a11y-05 (round 14): with Differentiate Without Color on, the ×N tag
+    /// drops below the crystal's theme marks. The marks turn with the body
+    /// and the tag stays upright below the centre, so the tag must clear
+    /// them at every rotation, at every jar-scale rung, quiet or emphasised,
+    /// with and without Pro's month line, for one theme or several.
+    @MainActor
+    func testTheCountTagNeverCoversAThemeMark() throws {
+        let mixes: [[StratumColorFraction]] = [
+            [StratumColorFraction(hex: palette[0], fraction: 1)],
+            [
+                StratumColorFraction(hex: palette[0], fraction: 0.5),
+                StratumColorFraction(hex: palette[1 % palette.count], fraction: 0.3),
+                StratumColorFraction(hex: palette[2 % palette.count], fraction: 0.2)
+            ],
+            (0 ..< 4).map { StratumColorFraction(hex: palette[$0 % palette.count], fraction: 0.25) }
+        ]
+        let ratio = JarScalePolicy.rungRatio
+        let scales = [1, pow(ratio, 5), pow(ratio, 11), pow(ratio, 17), JarScalePolicy.maximumScale]
+        var checked = 0
+        for level in [1, 2, 4] {
+            for (mixIndex, mix) in mixes.enumerated() {
+                for month in [false, true] {
+                    let descriptor = markedCrystal(level: level, mix: mix, suffix: level * 10 + mixIndex)
+                    let pebble = PebbleNode(descriptor: descriptor, reduceMotion: true, showsMonthEngraving: month)
+                    pebble.setThemeMarks(true)
+                    let tag = try XCTUnwrap(pebble.childNode(withName: "aggregate.tag") as? SKSpriteNode)
+                    for scale in scales {
+                        pebble.transitionJarScale(to: scale, duration: 0)
+                        for emphasized in [true, false] {
+                            pebble.setPileEmphasis(emphasized)
+                            let spec = try XCTUnwrap(pebble.displayedBodySpec)
+                            XCTAssertTrue(spec.showsThemeMarks)
+                            let local = pebble.sensoryRadius
+                            let bake = GemArtwork.sizeBucket(radius: local * pebble.textureJarScale)
+                            let placements = GemArtwork.themeMarkPlacements(for: spec.colors, radius: bake)
+                            XCTAssertFalse(placements.isEmpty)
+                            XCTAssertGreaterThan(pebble.aggregateTagDrop, PebbleNode.aggregatePlateDrop - 0.000_1)
+                            for step in 0 ..< 24 {
+                                let angle = CGFloat(step) / 24 * .pi * 2
+                                pebble.zRotation = angle
+                                pebble.updatePresentationLighting(horizontal: 0)
+                                // Everything in the body's units, turned
+                                // upright (screen-aligned) about its centre.
+                                func upright(_ point: CGPoint) -> CGPoint {
+                                    CGPoint(
+                                        x: cos(angle) * point.x - sin(angle) * point.y,
+                                        y: sin(angle) * point.x + cos(angle) * point.y
+                                    )
+                                }
+                                let anchor = upright(tag.position)
+                                let rect = CGRect(
+                                    x: anchor.x - tag.size.width * tag.anchorPoint.x,
+                                    y: anchor.y - tag.size.height * tag.anchorPoint.y,
+                                    width: tag.size.width,
+                                    height: tag.size.height
+                                )
+                                XCTAssertEqual(anchor.x, 0, accuracy: 0.01, "Upright below the centre")
+                                for placement in placements {
+                                    let center = upright(CGPoint(x: placement.center.x * local, y: placement.center.y * local))
+                                    let nearest = CGPoint(
+                                        x: min(max(center.x, rect.minX), rect.maxX),
+                                        y: min(max(center.y, rect.minY), rect.maxY)
+                                    )
+                                    let gap = hypot(center.x - nearest.x, center.y - nearest.y) - placement.radius * local
+                                    XCTAssertGreaterThan(
+                                        gap,
+                                        0,
+                                        "×\(descriptor.aggregate?.pebbleCount ?? 0) \(mix.count) themes s=\(scale) month=\(month) quiet=\(!emphasized) at \(step * 15)°"
+                                    )
+                                    checked += 1
+                                }
+                            }
+                        }
+                    }
+                    // Marks off: the tag goes back to its resting place.
+                    pebble.setThemeMarks(false)
+                    XCTAssertEqual(pebble.aggregateTagDrop, PebbleNode.aggregatePlateDrop, accuracy: 0.000_1)
+                }
+            }
+        }
+        XCTAssertGreaterThan(checked, 1_000)
+
+        // The SwiftUI cards (Overview, share) read the same rule.
+        let shares = mixes[1].map { GemColorShare(hex: $0.hex, fraction: $0.fraction) }
+        XCTAssertEqual(
+            GemArtwork.countTagDrop(colors: shares, radius: 60, countLineHeight: 14, showsThemeMarks: false),
+            GemArtwork.countTagRestingDrop
+        )
+        let drop = GemArtwork.countTagDrop(colors: shares, radius: 60, countLineHeight: 14, showsThemeMarks: true)
+        let extent = GemArtwork.themeMarkExtent(for: shares, radius: GemArtwork.sizeBucket(radius: 60))
+        XCTAssertGreaterThanOrEqual(drop - 14 / 2 / 60, extent + GemArtwork.countTagMarkClearance - 0.000_1)
+        // A share card's 120 pt crystal keeps its count line on the stone.
+        XCTAssertLessThan(drop + 14 / 2 / 60, 1)
+    }
+
+    private func markedCrystal(level: Int, mix: [StratumColorFraction], suffix: Int) -> PebbleDescriptor {
+        let pebbleCount = Int(pow(10, Double(level)))
+        return PebbleDescriptor(
+            id: UUID(uuidString: String(format: "D0C10000-0000-4000-8000-%012X", suffix))!,
+            subjectName: "英語",
+            colorHex: mix[0].hex,
+            source: .timer,
+            kind: .normal,
+            aggregate: AggregateMetadata(
+                level: level,
+                pebbleCount: pebbleCount,
+                childAggregateCount: level == 1 ? 0 : 10,
+                colorMix: mix,
+                subjectMix: [],
+                periodStart: Date(timeIntervalSince1970: 100),
+                periodEnd: Date(timeIntervalSince1970: 200),
+                sessionIDs: [],
+                measuredPebbleCount: pebbleCount,
+                manualPebbleCount: 0,
+                goldPebbleCount: 0,
+                prismPebbleCount: 0
+            ),
+            grams: pebbleCount * Constants.Mass.measuredPebbleGrams,
+            createdAt: Date(timeIntervalSince1970: 1_790_000_000)
+        )
     }
 
     // MARK: One object, one colour set (Home, Overview, share)

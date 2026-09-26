@@ -3779,6 +3779,7 @@ private struct ShareAggregatePebble: View {
     let aggregate: ShareAggregateVisual
 
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
     private var colors: [Color] {
         let values = aggregate.colorMix.prefix(5).map {
@@ -3856,10 +3857,17 @@ private struct ShareAggregatePebble: View {
         let text = AggregatePresentation.countLabel(aggregate.pebbleCount)
         let fontSize = GemArtwork.countTagFontSize(sceneRadius: size / 2)
         let tagSize = GemArtwork.countEngravingSize(text: text, fontSize: fontSize, style: .copperTag)
+        // Below the theme marks when they show (round 14), as in the jar.
+        let drop = GemArtwork.countTagDrop(
+            colors: artworkSpec(variant: 0).colors,
+            radius: size / 2,
+            countLineHeight: tagSize.height,
+            showsThemeMarks: GemThemeMark.isEnabled(environment: differentiateWithoutColor)
+        )
         return Image(uiImage: GemArtwork.countEngravingImage(text: text, fontSize: fontSize, style: .copperTag, scale: displayScale))
             .resizable()
             .frame(width: tagSize.width, height: tagSize.height)
-            .offset(y: size / 2 * PebbleNode.aggregatePlateDrop)
+            .offset(y: size / 2 * drop)
     }
 
     /// Same rung (by contained grams) and colour shares as the jar.
