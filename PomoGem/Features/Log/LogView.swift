@@ -2555,7 +2555,12 @@ private struct AchievementEditDraft {
     let achievedAt: Date
 }
 
+/// 「成果を編集」. Like 「成果を積む」 on Home, 「変更を保存」 is pinned above
+/// the home indicator, and above the keyboard while the memo is being typed:
+/// on an iPhone SE the keyboard used to cover it at the bottom of the form.
 private struct AchievementEditorSheet: View {
+    private static let noteFieldScrollID = "achievement.editor.note-field"
+
     let selection: AchievementEditSelection
     let subjects: [Subject]
     let onSave: (AchievementEditDraft) -> String?
@@ -2575,6 +2580,7 @@ private struct AchievementEditorSheet: View {
     @State private var errorMessage: String?
     @State private var confirmsDeletion = false
     @State private var isCommitting = false
+    @State private var noteIsFocused = false
 
     init(
         selection: AchievementEditSelection,
@@ -2638,12 +2644,14 @@ private struct AchievementEditorSheet: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { scrollProxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     editorHeader
                     typeEditor
                     subjectEditor
                     noteEditor
+                        .id(Self.noteFieldScrollID)
                     dateEditor
 
                     Label(
@@ -2654,30 +2662,8 @@ private struct AchievementEditorSheet: View {
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                    if let errorMessage {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption)
-                            .foregroundStyle(Color.red.opacity(0.9))
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("achievement.editor.error")
-                    }
-
-                    // Right above the button it disables, as in 「成果を積む」.
-                    AchievementNoteLimitMessage(text: note)
-
-                    Button {
-                        save()
-                    } label: {
-                        if isCommitting {
-                            ProgressView().tint(PomoGemTheme.background)
-                        } else {
-                            Label("変更を保存", systemImage: "checkmark.circle.fill")
-                        }
-                    }
-                    .buttonStyle(PomoGemPrimaryButtonStyle())
-                    .disabled(selectedSubjectID == nil || isCommitting || AchievementNotePolicy.isTooLong(note))
-                    .accessibilityIdentifier("achievement.editor.save")
-
+                    // Deleting stays at the end of the form, away from the
+                    // pinned 変更を保存.
                     Button(role: .destructive) {
                         confirmsDeletion = true
                     } label: {
@@ -2691,6 +2677,22 @@ private struct AchievementEditorSheet: View {
             }
             .scrollDismissesKeyboard(.immediately)
             .scrollBounceBehavior(.basedOnSize)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                saveBar
+            }
+            // With the keyboard up on a small phone only a sliver is left
+            // above the pinned bar, and the system counts a field half under
+            // the bar as visible. Bring the whole memo field above the bar,
+            // and again when the bar grows to explain an over-long memo.
+            .onChange(of: noteIsFocused) { _, focused in
+                guard focused else { return }
+                revealNoteField(scrollProxy, after: .milliseconds(350))
+            }
+            .onChange(of: AchievementNotePolicy.isTooLong(note)) { _, _ in
+                guard noteIsFocused else { return }
+                revealNoteField(scrollProxy, after: .milliseconds(50))
+            }
+            }
             .background(NightBackground())
             .navigationTitle("成果を編集")
             .navigationBarTitleDisplayMode(.inline)
@@ -2833,8 +2835,56 @@ private struct AchievementEditorSheet: View {
             title: "成果メモ（任意）",
             placeholder: kind.notePlaceholder,
             text: $note,
-            accessibilityIdentifier: "achievement.editor.note"
+            accessibilityIdentifier: "achievement.editor.note",
+            onFocusChange: { noteIsFocused = $0 }
         )
+    }
+
+    /// The pinned bar. Why 変更を保存 is unavailable, or why saving failed,
+    /// sits right above it, as in 「成果を積む」.
+    private var saveBar: some View {
+        VStack(spacing: 8) {
+            AchievementNoteLimitMessage(text: note)
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.red.opacity(0.9))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("achievement.editor.error")
+            }
+            Button {
+                save()
+            } label: {
+                if isCommitting {
+                    ProgressView().tint(PomoGemTheme.background)
+                } else {
+                    Label("変更を保存", systemImage: "checkmark.circle.fill")
+                }
+            }
+            .buttonStyle(PomoGemPrimaryButtonStyle())
+            .disabled(selectedSubjectID == nil || isCommitting || AchievementNotePolicy.isTooLong(note))
+            .accessibilityIdentifier("achievement.editor.save")
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+            Divider().overlay(PomoGemTheme.glassEdge.opacity(0.16))
+        }
+    }
+
+    private func revealNoteField(_ scrollProxy: ScrollViewProxy, after delay: Duration) {
+        Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            guard noteIsFocused else { return }
+            withAnimation(.easeOut(duration: 0.2)) {
+                // nil: the least scroll that shows the whole field, so
+                // nothing moves on a phone where it is already clear.
+                scrollProxy.scrollTo(Self.noteFieldScrollID, anchor: nil)
+            }
+        }
     }
 
     private var dateEditor: some View {

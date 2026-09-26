@@ -268,6 +268,19 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         XCTAssertTrue(note.exists)
         note.tap()
         note.typeText("更新")
+        // 「変更を保存」 stays above the keyboard without scrolling, even on
+        // an iPhone SE, where the keyboard used to cover it.
+        let save = app.buttons["achievement.editor.save"]
+        XCTAssertTrue(save.isHittable, "The keyboard must not cover 変更を保存")
+        let keyboard = app.keyboards.firstMatch
+        if keyboard.exists {
+            XCTAssertLessThanOrEqual(save.frame.maxY, keyboard.frame.minY + 0.5)
+        }
+        XCTAssertTrue(note.isHittable, "The memo being typed stays in view")
+        let typing = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        typing.name = "成果を編集 — the memo being typed, with 変更を保存 above the keyboard"
+        typing.lifetime = .keepAlways
+        add(typing)
 
         app.buttons["achievement.editor.kind"].tap()
         let perfectScore = app.buttons.matching(
@@ -275,7 +288,6 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(perfectScore.waitForExistence(timeout: 4))
         perfectScore.tap()
-        let save = app.buttons["achievement.editor.save"]
         XCTAssertTrue(scrollUntilHittable(save, swiping: .up))
         save.tap()
 
