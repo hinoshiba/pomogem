@@ -251,19 +251,6 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 6))
     }
 
-    @discardableResult
-    private func stopCompletionAlertIfPresented(
-        in app: XCUIApplication,
-        timeout: TimeInterval = 25
-    ) -> Bool {
-        let stop = app.buttons["focus.completion-alert.stop"]
-        guard stop.waitForExistence(timeout: timeout) else { return false }
-        XCTAssertEqual(stop.label, "終了アラートを止める")
-        XCTAssertTrue(stop.isHittable)
-        stop.tap()
-        return true
-    }
-
     /// The app drops the reward receipts an earlier test's store left in
     /// UserDefaults whenever it opens a new or cleaned store
     /// (`UITestLocalStateIsolation`). Draining them here used to acknowledge

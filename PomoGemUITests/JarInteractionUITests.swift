@@ -136,19 +136,6 @@ final class JarInteractionUITests: XCTestCase {
         XCTAssertTrue((jar.value as? String)?.contains("250グラム") == true)
     }
 
-    @discardableResult
-    private func stopCompletionAlertIfPresented(
-        in app: XCUIApplication,
-        timeout: TimeInterval = 25
-    ) -> Bool {
-        let stop = app.buttons["focus.completion-alert.stop"]
-        guard stop.waitForExistence(timeout: timeout) else { return false }
-        XCTAssertEqual(stop.label, "終了アラートを止める")
-        XCTAssertTrue(stop.isHittable)
-        stop.tap()
-        return true
-    }
-
     /// The app drops the reward receipts an earlier test's store left in
     /// UserDefaults whenever it opens a new or cleaned store
     /// (`UITestLocalStateIsolation`). Draining them here used to acknowledge

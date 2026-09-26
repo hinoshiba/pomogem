@@ -701,19 +701,6 @@ final class EngagementOverviewUITests: XCTestCase {
         add(lower)
     }
 
-    @discardableResult
-    private func stopCompletionAlertIfPresented(
-        in app: XCUIApplication,
-        timeout: TimeInterval = 25
-    ) -> Bool {
-        let stop = app.buttons["focus.completion-alert.stop"]
-        guard stop.waitForExistence(timeout: timeout) else { return false }
-        XCTAssertEqual(stop.label, "終了アラートを止める")
-        XCTAssertTrue(stop.isHittable)
-        stop.tap()
-        return true
-    }
-
     private func scrollUntilVisible(
         _ element: XCUIElement,
         in app: XCUIApplication,

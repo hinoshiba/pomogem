@@ -264,19 +264,6 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         XCTAssertTrue(demoLauncher.waitForExistence(timeout: 5))
     }
 
-    @discardableResult
-    private func stopCompletionAlertIfPresented(
-        in app: XCUIApplication,
-        timeout: TimeInterval = 25
-    ) -> Bool {
-        let stop = app.buttons["focus.completion-alert.stop"]
-        guard stop.waitForExistence(timeout: timeout) else { return false }
-        XCTAssertEqual(stop.label, "終了アラートを止める")
-        XCTAssertTrue(stop.isHittable)
-        stop.tap()
-        return true
-    }
-
     private func dismissBreakOfferIfPresent() {
         let dismissBreak = app.buttons["休憩の提案を閉じる"]
         guard dismissBreak.waitForExistence(timeout: 3) else { return }

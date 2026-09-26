@@ -806,19 +806,6 @@ final class AccessibilityAdversarialUITests: XCTestCase {
             components.day ?? 0
         )
     }
-
-    @discardableResult
-    private func stopCompletionAlertIfPresented(
-        in app: XCUIApplication,
-        timeout: TimeInterval = 25
-    ) -> Bool {
-        let stop = app.buttons["focus.completion-alert.stop"]
-        guard stop.waitForExistence(timeout: timeout) else { return false }
-        XCTAssertEqual(stop.label, "終了アラートを止める")
-        XCTAssertTrue(stop.isHittable)
-        stop.tap()
-        return true
-    }
 }
 
 /// Keeps Dynamic Type unfixed so XCTest can actively resize the interface.
