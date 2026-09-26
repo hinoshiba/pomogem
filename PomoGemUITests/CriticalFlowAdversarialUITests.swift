@@ -570,7 +570,16 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         note.tap()
         note.typeText("合格")
         let save = app.buttons["achievement.editor.save"]
-        XCTAssertTrue(scrollUntilHittable(save, swiping: .up))
+        // Pinned like 「成果を積む」: reachable with the keyboard still up, on
+        // every iPhone size, without scrolling.
+        XCTAssertTrue(save.waitForExistence(timeout: 4))
+        XCTAssertTrue(waitUntilFrameSettles(save))
+        XCTAssertTrue(save.isHittable, "変更を保存 must stay above the keyboard while the memo is typed")
+        XCTAssertTrue(app.keyboards.firstMatch.exists, "The premise: the memo keyboard is still up")
+        let typing = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        typing.name = "Milestone editor — 変更を保存 above the keyboard"
+        typing.lifetime = .keepAlways
+        add(typing)
         save.tap()
 
         XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 4))
