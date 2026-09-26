@@ -13,6 +13,9 @@ import SpriteKit
 /// (`ShareJarGraphic`) instead, which is built from exactly the shared
 /// records. Hidden pebbles that hold nothing up, such as black stones packed
 /// on top of the pile after a relaunch, still allow the real jar.
+///
+/// F3: a pile resting off the jar's floor is a separate reason for the
+/// drawn bottle (`pileRestsOnTheFloor(in:)`); the composer asks both.
 enum ShareJarSnapshotPolicy {
     struct Body: Equatable {
         let center: CGPoint
@@ -56,6 +59,13 @@ enum ShareJarSnapshotPolicy {
     /// Whether the live jar's bodies rest on its floor (F3,
     /// `JarScene.pileRestsOnTheFloor`: within 30° of the jar's own down).
     /// Any other scene counts as resting on its floor.
+    ///
+    /// A pile resting against a wall or the invisible cap (the phone held
+    /// sideways or upside down when it settled) would hang on the side or
+    /// at the mouth of the card's upright bottle, so the composer draws the
+    /// card's own bottle when this is false, whatever a share hides. It
+    /// reads the pose the pile settled in, not the live gravity a sheet
+    /// resets (`JarScene.pileGravityVector`).
     @MainActor
     static func pileRestsOnTheFloor(in scene: SKScene) -> Bool {
         (scene as? JarScene)?.pileRestsOnTheFloor ?? true
@@ -65,19 +75,14 @@ enum ShareJarSnapshotPolicy {
     /// checks them against the gravity the bodies rest under: for the jar,
     /// the gravity its resting pile settled under (F3: the motion observer
     /// resets the live gravity while a sheet covers Home, without moving
-    /// the frozen pile), otherwise the scene's current gravity.
-    ///
-    /// F3: a pile resting against a wall or the invisible cap (the phone
-    /// held sideways or upside down when it settled) is unsupported on the
-    /// card as a whole: its upright bottle would show the gems hanging on
-    /// its side or at its mouth. The answer is then true too, so the
-    /// composer draws the card's own bottle.
+    /// the frozen pile), otherwise the scene's current gravity. It answers
+    /// only for the hidden bodies: whether the pile rests on the floor at
+    /// all is `pileRestsOnTheFloor(in:)`'s question.
     @MainActor
     static func hidingLeavesUnsupportedBody(
         in scene: SKScene,
         options: JarSnapshotOptions
     ) -> Bool {
-        guard pileRestsOnTheFloor(in: scene) else { return true }
         var hidden: [Body] = []
         var visible: [Body] = []
         scene.enumerateChildNodes(withName: "//*") { node, _ in

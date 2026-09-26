@@ -1498,9 +1498,10 @@ final class JarOrientationGravityTests: XCTestCase {
     func testShareUsesTheDrawnBottleForAPileRestingOffTheFloor() throws {
         // A pile rests on the floor while its gravity is within 30° of the
         // jar's own down; further over it leans on a wall or lies at the
-        // cap, and the share card draws its own bottle
-        // (`hidingLeavesUnsupportedBody` answers true then, so the composer
-        // needs no check of its own).
+        // cap, and the share card draws its own bottle (the composer asks
+        // `ShareJarSnapshotPolicy.pileRestsOnTheFloor(in:)`;
+        // `hidingLeavesUnsupportedBody` answers only for hidden bodies, and
+        // nothing is hidden here).
         let scene = makeScene()
         scene.restore(pebbles: looseSeries(4))
         let options = JarSnapshotOptions.share(includesSelfReported: true)
@@ -1510,10 +1511,9 @@ final class JarOrientationGravityTests: XCTestCase {
             scene.setGravityReading(rolled(degrees), smoothing: false)
             XCTAssertEqual(scene.pileRestsOnTheFloor, onTheFloor, "\(degrees)°")
             XCTAssertEqual(ShareJarSnapshotPolicy.pileRestsOnTheFloor(in: scene), onTheFloor, "\(degrees)°")
-            XCTAssertEqual(
+            XCTAssertFalse(
                 ShareJarSnapshotPolicy.hidingLeavesUnsupportedBody(in: scene, options: options),
-                !onTheFloor,
-                "\(degrees)°: the drawn bottle"
+                "\(degrees)°: nothing is hidden, so only the floor decides"
             )
         }
         XCTAssertTrue(ShareJarSnapshotPolicy.pileRestsOnTheFloor(in: SKScene(size: CGSize(width: 10, height: 10))))
