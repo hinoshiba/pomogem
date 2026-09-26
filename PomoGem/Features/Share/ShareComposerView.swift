@@ -3447,33 +3447,40 @@ private struct ShareJarGraphic: View {
             )
     }
 
-    /// The copper neck collar of the Home jar (rose-gold band with a white
-    /// specular line), sitting on the bottle's mouth.
+    /// The copper neck collar of the Home jar, sitting on the bottle's
+    /// mouth: the same band as Home since round 12 (polished rose gold lit
+    /// again at its lower edge, no brown band, two white specular lines),
+    /// not a thin rod.
     private func bottleRim(size: CGSize) -> some View {
         let height = min(size.height, size.width * 0.95)
         let mouth = size.width - JarScene.neckInset(jarWidth: size.width) * 2
+        let band = max(9, size.width * 0.05)
         return RoundedRectangle(cornerRadius: 3, style: .continuous)
             .fill(
                 LinearGradient(
-                    colors: [
-                        Color(hex: "#FFE3CF"),
-                        Color(hex: "#D9967A"),
-                        Color(hex: "#B8735A"),
-                        Color(hex: "#8A4E3A")
+                    stops: [
+                        .init(color: Color(hex: "#FFE3CF"), location: 0),
+                        .init(color: Color(hex: "#D9967A"), location: 0.30),
+                        .init(color: Color(hex: "#C98468"), location: 0.52),
+                        .init(color: Color(hex: "#D9967A"), location: 0.78),
+                        .init(color: Color(hex: "#FFE3CF"), location: 1)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
             )
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(.white.opacity(0.85))
-                    .frame(height: 1)
-                    .padding(.top, 2.5)
-                    .padding(.horizontal, 3)
+            .overlay {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0).frame(height: band * 0.24)
+                    Rectangle().fill(.white.opacity(0.92)).frame(height: max(1, band * 0.12))
+                    Spacer(minLength: 0).frame(height: band * 0.20)
+                    Rectangle().fill(.white.opacity(0.92)).frame(height: max(1, band * 0.12))
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 3)
             }
-            .frame(width: mouth + 6, height: max(6, size.width * 0.034))
-            .padding(.top, size.height - height - 2)
+            .frame(width: mouth + 6, height: band)
+            .padding(.top, size.height - height - band * 0.5)
     }
 
     private var aggregateBandHeight: CGFloat {

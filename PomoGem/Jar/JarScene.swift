@@ -2902,29 +2902,32 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             innerRim(context, colors: [warm, peach], alpha: 1, depth: 15, fromLeft: true)
             innerRim(context, colors: [cool, blue], alpha: 0.95, depth: 15, fromLeft: false)
 
-            // Wall specular lines: a 1.5 pt white line down each wall, from
-            // the shoulder to 70 % of the height, fading at both ends.
+            // Wall specular lines (round 12): down each wall, from the
+            // shoulder to 75 % of the height, fading at both ends, a 1.5 pt
+            // white core (α0.92 left, 0.8 right) in a 5 pt glow (α0.25).
             context.saveGState()
-            for (x, alpha) in [(CGFloat(5.5), CGFloat(0.70)), (width - 5.5, CGFloat(0.56))] {
+            for (x, alpha) in [(CGFloat(5.5), CGFloat(0.92)), (width - 5.5, CGFloat(0.80))] {
                 let top = shoulderY + 8
-                let bottom = height * 0.70
-                context.saveGState()
-                context.clip(to: CGRect(x: x - 0.75, y: top, width: 1.5, height: bottom - top))
-                let line = [
-                    UIColor.white.withAlphaComponent(0).cgColor,
-                    UIColor.white.withAlphaComponent(alpha).cgColor,
-                    UIColor.white.withAlphaComponent(alpha * 0.8).cgColor,
-                    UIColor.white.withAlphaComponent(0).cgColor
-                ] as CFArray
-                if let gradient = CGGradient(colorsSpace: space, colors: line, locations: [0, 0.18, 0.7, 1]) {
-                    context.drawLinearGradient(
-                        gradient,
-                        start: CGPoint(x: x, y: top),
-                        end: CGPoint(x: x, y: bottom),
-                        options: []
-                    )
+                let bottom = height * 0.75
+                for (lineWidth, lineAlpha) in [(CGFloat(5), CGFloat(0.25)), (CGFloat(1.5), alpha)] {
+                    context.saveGState()
+                    context.clip(to: CGRect(x: x - lineWidth / 2, y: top, width: lineWidth, height: bottom - top))
+                    let line = [
+                        UIColor.white.withAlphaComponent(0).cgColor,
+                        UIColor.white.withAlphaComponent(lineAlpha).cgColor,
+                        UIColor.white.withAlphaComponent(lineAlpha * 0.85).cgColor,
+                        UIColor.white.withAlphaComponent(0).cgColor
+                    ] as CFArray
+                    if let gradient = CGGradient(colorsSpace: space, colors: line, locations: [0, 0.16, 0.72, 1]) {
+                        context.drawLinearGradient(
+                            gradient,
+                            start: CGPoint(x: x, y: top),
+                            end: CGPoint(x: x, y: bottom),
+                            options: []
+                        )
+                    }
+                    context.restoreGState()
                 }
-                context.restoreGState()
             }
             context.restoreGState()
 
@@ -2979,8 +2982,37 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 )
                 context.restoreGState()
             }
-            // Shoulder light (α0.7) on the right shoulder, a warmer one left.
-            for (fromLeft, color, alpha) in [(false, GemColor(cool).mixed(with: .white, amount: 0.5).withAlpha(1), CGFloat(0.7)), (true, peach, CGFloat(0.42))] {
+            // Specular streaks on the glass (round 12): the window light
+            // seen in the front wall, 18 % in from the left and 10 % in
+            // from the right, from the shoulder to 75 % of the height: a
+            // 1.5 pt white core (α0.8) in a 5 pt glow (α0.25), tapered at
+            // both ends. Additive, so they ride the tilt with the bands.
+            for (center, alpha) in [(width * 0.18, CGFloat(0.8)), (width * 0.90, CGFloat(0.66))] {
+                let top = shoulderY + 12
+                let bottom = height * 0.75
+                for (lineWidth, lineAlpha) in [(CGFloat(5), CGFloat(0.25)), (CGFloat(1.5), alpha)] {
+                    context.saveGState()
+                    context.clip(to: CGRect(x: center - lineWidth / 2, y: top, width: lineWidth, height: bottom - top))
+                    let streak = [
+                        UIColor.white.withAlphaComponent(0).cgColor,
+                        UIColor.white.withAlphaComponent(lineAlpha).cgColor,
+                        UIColor.white.withAlphaComponent(lineAlpha * 0.7).cgColor,
+                        UIColor.white.withAlphaComponent(0).cgColor
+                    ] as CFArray
+                    if let gradient = CGGradient(colorsSpace: space, colors: streak, locations: [0, 0.2, 0.62, 1]) {
+                        context.drawLinearGradient(
+                            gradient,
+                            start: CGPoint(x: center, y: top),
+                            end: CGPoint(x: center, y: bottom),
+                            options: []
+                        )
+                    }
+                    context.restoreGState()
+                }
+            }
+            // Shoulder light on the right shoulder, a warmer one left, each
+            // with a white specular core along the curve (round 12).
+            for (fromLeft, color, alpha) in [(false, GemColor(cool).mixed(with: .white, amount: 0.7).withAlpha(1), CGFloat(0.9)), (true, GemColor(peach).mixed(with: .white, amount: 0.55).withAlpha(1), CGFloat(0.72))] {
                 let x0 = fromLeft ? neckInset * 0.55 : width - neckInset * 0.55
                 let arc = CGMutablePath()
                 arc.move(to: CGPoint(x: fromLeft ? neckInset - 2 : width - neckInset + 2, y: neckHeight + 4))
@@ -3012,9 +3044,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private static let collarTextureCache = NSCache<NSString, SKTexture>()
 
     /// Rose-gold band around the neck: base #B8735A, highlight #F2C4A8,
-    /// shade #5A2E22, vertical anisotropic highlight bands whose position
-    /// follows the tilt state, and up to six engraved milestone marks on the
-    /// lower edge. The mouth stays open.
+    /// shade #5A2E22 (engravings only), two white specular bands, vertical
+    /// anisotropic highlight bands whose position follows the tilt state,
+    /// and up to six engraved milestone marks on the lower edge. The mouth
+    /// stays open.
     private static func collarTexture(width: CGFloat, tilt: Int, marks: Int) -> SKTexture {
         let key = NSString(string: "\(Int(width.rounded()))-\(tilt)-\(marks)")
         if let cached = collarTextureCache.object(forKey: key) { return cached }
@@ -3039,16 +3072,17 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             context.saveGState()
             context.addPath(band)
             context.clip()
-            // Polished rose gold: pale lip #FFE3CF, #D9967A body, and only
-            // the lowest fifth turning to #8A4E3A (no muddy brown band).
+            // Polished rose gold (round 12): pale lip #FFE3CF, #D9967A
+            // body, a slightly deeper waist, and the lower edge lit again
+            // (#D9967A → #FFE3CF) instead of a brown band.
             let vertical = [
                 JarPalette.color(hex: "#FFE3CF").cgColor,
                 JarPalette.color(hex: "#D9967A").cgColor,
-                base.cgColor,
-                JarPalette.color(hex: "#8A4E3A").cgColor,
-                shade.cgColor
+                JarPalette.color(hex: "#C98468").cgColor,
+                JarPalette.color(hex: "#D9967A").cgColor,
+                JarPalette.color(hex: "#FFE3CF").cgColor
             ] as CFArray
-            if let gradient = CGGradient(colorsSpace: space, colors: vertical, locations: [0, 0.34, 0.62, 0.82, 1]) {
+            if let gradient = CGGradient(colorsSpace: space, colors: vertical, locations: [0, 0.30, 0.52, 0.78, 1]) {
                 context.drawLinearGradient(
                     gradient,
                     start: CGPoint(x: 0, y: 0),
@@ -3056,27 +3090,32 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                     options: []
                 )
             }
-            // A white specular band at 30 % of the height (α0.9).
-            let bandY = height * 0.30
+            // White specular bands: at 30 % of the height (under the mouth's
+            // rim on screen) and a second one at 62 %, below the rim where
+            // it shows; each a 2 pt white core (α0.95) with soft edges.
             let bandColors = [
                 UIColor.white.withAlphaComponent(0).cgColor,
-                UIColor.white.withAlphaComponent(0.9).cgColor,
+                UIColor.white.withAlphaComponent(0.95).cgColor,
+                UIColor.white.withAlphaComponent(0.95).cgColor,
                 UIColor.white.withAlphaComponent(0).cgColor
             ] as CFArray
-            if let gradient = CGGradient(colorsSpace: space, colors: bandColors, locations: [0, 0.5, 1]) {
-                context.drawLinearGradient(
-                    gradient,
-                    start: CGPoint(x: 0, y: bandY - 1.4),
-                    end: CGPoint(x: 0, y: bandY + 1.4),
-                    options: []
-                )
+            if let gradient = CGGradient(colorsSpace: space, colors: bandColors, locations: [0, 0.3, 0.7, 1]) {
+                for bandY in [height * 0.30, height * 0.62] {
+                    context.drawLinearGradient(
+                        gradient,
+                        start: CGPoint(x: 0, y: bandY - 1.7),
+                        end: CGPoint(x: 0, y: bandY + 1.7),
+                        options: []
+                    )
+                }
             }
-            // Horizontal shading: the band turns away at both ends.
+            // Horizontal shading: the band turns away at both ends (a
+            // rose shade, never brown).
             let ends = [
-                shade.withAlphaComponent(0.45).cgColor,
+                base.withAlphaComponent(0.55).cgColor,
                 UIColor.clear.cgColor,
                 UIColor.clear.cgColor,
-                shade.withAlphaComponent(0.55).cgColor
+                base.withAlphaComponent(0.65).cgColor
             ] as CFArray
             if let gradient = CGGradient(colorsSpace: space, colors: ends, locations: [0, 0.16, 0.84, 1]) {
                 context.drawLinearGradient(
@@ -3132,7 +3171,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             context.move(to: CGPoint(x: 1.5, y: 1.9))
             context.addQuadCurve(to: CGPoint(x: width - 1.5, y: 1.9), control: CGPoint(x: width / 2, y: 3.6))
             context.strokePath()
-            context.setStrokeColor(shade.withAlphaComponent(0.9).cgColor)
+            context.setStrokeColor(base.withAlphaComponent(0.7).cgColor)
             context.move(to: CGPoint(x: 1.5, y: height - 1))
             context.addQuadCurve(to: CGPoint(x: width - 1.5, y: height - 1), control: CGPoint(x: width / 2, y: height + 2.2))
             context.strokePath()
