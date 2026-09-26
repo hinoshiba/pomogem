@@ -277,11 +277,16 @@ final class FocusShieldController: ObservableObject {
     /// An owner boundary (account change, storage relaunch, a reset of the
     /// Screen Time owner) or a revoked authorization: lift whatever is up.
     /// Reads the record first so a repeated call costs nothing.
-    func retire(reason: FocusShieldClearReason, now: Date = .now) {
+    ///
+    /// `unconditional` (switching the setting off) also empties the named
+    /// store and stops the failsafe when no record says a shield is up, so
+    /// turning the setting off always works as the way out, whatever state
+    /// an interrupted run left behind.
+    func retire(reason: FocusShieldClearReason, now: Date = .now, unconditional: Bool = false) {
         lastRequest = nil
-        guard currentRecord()?.active == true else { return }
+        guard unconditional || currentRecord()?.active == true else { return }
         isShielding = false
-        submit { try $0.clear(reason: reason, now: now) }
+        submit { try $0.clear(reason: reason, now: now, unconditional: unconditional) }
     }
 
     /// Complete data deletion: the store, the failsafe interval and the

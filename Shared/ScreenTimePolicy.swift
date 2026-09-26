@@ -430,7 +430,9 @@ struct ScreenTimeState: Codable {
         let hadSelection = !learning.applicationTokens.isEmpty || !learning.categoryTokens.isEmpty ||
             !learning.webDomainTokens.isEmpty || !distraction.applicationTokens.isEmpty ||
             !distraction.categoryTokens.isEmpty || !distraction.webDomainTokens.isEmpty
-        guard configuration.enabled || hadSelection || runs.contains(where: \.active) else { return false }
+        // The focus shield's opt-in goes with the voided tokens too (F2).
+        guard configuration.enabled || configuration.shieldsDistractionDuringFocusEnabled
+            || hadSelection || runs.contains(where: \.active) else { return false }
         let themeID = configuration.themeID
         configuration = ScreenTimeConfiguration()
         configuration.themeID = themeID

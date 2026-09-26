@@ -335,6 +335,41 @@ final class FocusShieldControllerTests: XCTestCase {
         XCTAssertFalse(controller.configuration.shieldsDistractionDuringFocusEnabled)
     }
 
+    func testSwitchingTheShieldOffAlwaysEmptiesTheNamedStoreAndStopsTheFailsafe() async throws {
+        let fixture = makeController()
+        let (controller, _) = try await boundScreenTimeController(shield: fixture.controller)
+        // What an interrupted run can leave behind: a failsafe and a store
+        // with no record saying a shield is up.
+        fixture.center.installed = [FocusShieldPolicy.activityName.rawValue]
+        XCTAssertFalse(fixture.engine.records.exists)
+
+        var configuration = controller.configuration
+        configuration.distractionSelection = try selection(count: 4, seed: 0x73)
+        try await controller.save(configuration: configuration, isPro: false)
+        try await controller.waitForPendingOperations()
+        XCTAssertEqual(fixture.settings.clearCount, 0, "A save that keeps the shield on clears nothing")
+
+        configuration.shieldsDistractionDuringFocusEnabled = false
+        try await controller.save(configuration: configuration, isPro: false)
+        try await controller.waitForPendingOperations()
+        XCTAssertEqual(fixture.settings.clearCount, 1, "Switching it off is the way out that always works")
+        XCTAssertEqual(fixture.center.stopped, [[FocusShieldPolicy.activityName.rawValue]])
+        XCTAssertFalse(fixture.engine.records.exists, "Nothing is recorded for a shield that was not up")
+
+        try await controller.save(configuration: configuration, isPro: false)
+        try await controller.waitForPendingOperations()
+        XCTAssertEqual(fixture.settings.clearCount, 1, "Saving it off again does not touch the store")
+    }
+
+    func testARevocationAlsoWipesAShieldOnlyOptInWithoutApps() {
+        var state = ScreenTimeState()
+        state.configuration.shieldsDistractionDuringFocusEnabled = true
+        XCTAssertTrue(state.invalidateAuthorization())
+        XCTAssertFalse(state.configuration.shieldsDistractionDuringFocusEnabled)
+        var empty = ScreenTimeState()
+        XCTAssertFalse(empty.invalidateAuthorization(), "An empty setup has nothing to invalidate")
+    }
+
     func testCompleteDeletionErasesTheShieldRecordAndStore() async throws {
         let fixture = makeController()
         let (controller, _) = try await boundScreenTimeController(shield: fixture.controller)

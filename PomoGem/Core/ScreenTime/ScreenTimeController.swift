@@ -254,9 +254,12 @@ final class ScreenTimeController: ObservableObject {
         }
         // Only the short receipt lock is taken here. Mark changed runs inactive
         // before yielding so callbacks cannot award against superseded settings.
+        var switchesShieldOff = false
         try store.update { state in
             try validate(state, lease: lease)
             let old = state.configuration
+            switchesShieldOff = old.shieldsDistractionDuringFocusEnabled
+                && !newConfiguration.shieldsDistractionDuringFocusEnabled
             for index in state.runs.indices {
                 let lane = state.runs[index].lane
                 let changed = lane == .learning
@@ -270,6 +273,9 @@ final class ScreenTimeController: ObservableObject {
             state.pruneConsumedRuns()
         }
         reload()
+        // Switching the focus shield off is the way out that always works:
+        // it empties the named store even when no record says a shield is up.
+        if switchesShieldOff { focusShield.retire(reason: .featureOff, unconditional: true) }
         do { try await synchronize(lease) }
         catch {
             if self.lease === lease { reload() }
