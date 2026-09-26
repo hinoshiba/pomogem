@@ -227,15 +227,29 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         app.buttons["home.duration-picker"].tap()
         let demoDuration = app.buttons["12秒、DEMO"]
         XCTAssertTrue(demoDuration.waitForExistence(timeout: 4))
+        // A tap while the menu is still animating in can be dropped.
+        XCTAssertTrue(waitForHittable(demoDuration, timeout: 3))
         demoDuration.tap()
     }
 
-    private func startDemoFocus(in app: XCUIApplication) {
-        let launcher = app.buttons.matching(
+    private func demoLauncher(in app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "12秒集中する")
         ).firstMatch
+    }
+
+    private func startDemoFocus(in app: XCUIApplication) {
+        let launcher = demoLauncher(in: app)
+        if !launcher.waitForExistence(timeout: 2) {
+            // 12秒、DEMO is Debug-only and never saved as the preferred
+            // duration. Home restores the saved duration when it reappears or
+            // its preferences change, which the first completion can do, so
+            // pick the demo again (as DecimalFusionEndToEndUITests does). The
+            // test is about aggregate persistence, not the demo choice.
+            selectDemoDuration(in: app)
+        }
         XCTAssertTrue(launcher.waitForExistence(timeout: 6))
-        XCTAssertTrue(launcher.isHittable)
+        XCTAssertTrue(waitForHittable(launcher, timeout: 3))
         launcher.tap()
     }
 
