@@ -1269,6 +1269,9 @@ struct LogView: View {
                     deleteAchievement(selection: selection)
                 }
             )
+            // Like the other sheets here: a sheet does not inherit a Dynamic
+            // Type size set above it.
+            .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .alert(
             "記念石を変更できません",

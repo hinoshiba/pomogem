@@ -318,6 +318,75 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         XCTAssertFalse(app.buttons["achievement.undo-delete"].exists)
     }
 
+    /// At the largest text size the pinned 「変更を保存」 still stays above the
+    /// keyboard, and the memo being typed stays in view above it.
+    func testMilestoneEditorKeepsSaveAboveTheKeyboardAtAccessibility5() {
+        app.terminate()
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+        openMenuAction(containing: "成果を積む")
+        XCTAssertTrue(app.navigationBars["成果を選ぶ"].waitForExistence(timeout: 4))
+        let examPass = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "試験合格")
+        ).firstMatch
+        XCTAssertTrue(examPass.waitForExistence(timeout: 4))
+        XCTAssertTrue(scrollUntilHittable(examPass, swiping: .up))
+        examPass.tap()
+        XCTAssertTrue(app.navigationBars["記念石にする"].waitForExistence(timeout: 4))
+        let addSave = app.buttons["achievement.create.save"]
+        XCTAssertTrue(addSave.waitForExistence(timeout: 4))
+        addSave.tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
+
+        openMenuAction(containing: "記録を見る")
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 5))
+        let row = app.buttons["achievement.history.row"].firstMatch
+        XCTAssertTrue(scrollUntilHittable(row, swiping: .up))
+        waitForUISettle()
+        row.tap()
+        let editor = app.navigationBars["成果を編集"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 4))
+        let note = app.textFields["achievement.editor.note"]
+        let save = app.buttons["achievement.editor.save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 4))
+        // At this size the memo starts below the fold, and a full swipe
+        // carries it past the navigation bar. Drag a little at a time until
+        // it sits between the bar at the top and the pinned 変更を保存.
+        func noteIsClear() -> Bool {
+            note.exists
+                && note.frame.minY >= editor.frame.maxY
+                && note.frame.maxY <= save.frame.minY
+        }
+        for _ in 0 ..< 12 where !noteIsClear() {
+            let start = app.scrollViews.firstMatch.coordinate(
+                withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
+            )
+            let distance: CGFloat = note.frame.minY < editor.frame.maxY ? 100 : -100
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)))
+            waitForUISettle(0.3)
+        }
+        XCTAssertTrue(noteIsClear(), "The memo must be reachable at the largest text size")
+        note.tap()
+        note.typeText("二次")
+        waitForUISettle()
+
+        XCTAssertTrue(save.isHittable, "The keyboard must not cover 変更を保存")
+        let keyboard = app.keyboards.firstMatch
+        if keyboard.exists {
+            XCTAssertLessThanOrEqual(save.frame.maxY, keyboard.frame.minY + 0.5)
+        }
+        XCTAssertTrue(note.isHittable, "The memo being typed stays in view")
+        XCTAssertLessThanOrEqual(note.frame.maxY, save.frame.minY + 0.5, "The memo sits above the pinned bar")
+        let typing = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        typing.name = "成果を編集 at AX5 — the memo being typed, with 変更を保存 above the keyboard"
+        typing.lifetime = .keepAlways
+        add(typing)
+
+        save.tap()
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 4))
+    }
+
     /// 記録 says which days 「今週」 covers and what is inside its total, a day
     /// in the chart opens every record of that day, and older history is
     /// one step away instead of ending at the newest thirty records.
