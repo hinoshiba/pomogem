@@ -21,54 +21,77 @@ final class FocusShieldEngineTests: XCTestCase {
 
     // MARK: - schedule math
 
-    func testAShortFocusGetsAnIntervalThatStartedInThePastAndEndsAtTheDeadline() throws {
+    func testEveryFocusGetsAnIntervalThatStartsAtItsPlannedEndRoundedUp() throws {
         let calendar = tokyo
+        // A 4-minute focus whose planned end carries a fraction of a second.
         let deadline = now.addingTimeInterval(5 * 60 + 0.7)
-        let bounds = FocusShieldSchedule.intervalBounds(deadline: deadline, now: now)
-        XCTAssertEqual(bounds.end, FocusShieldSchedule.truncated(deadline))
+        let plannedEnd = FocusShieldPolicy.plannedEnd(forDeadline: deadline)
+        let bounds = FocusShieldSchedule.intervalBounds(deadline: deadline)
+        XCTAssertEqual(bounds.start, now.addingTimeInterval(4 * 60 + 1),
+                       "Whole seconds, rounded UP: the start never comes before the planned end it stands for")
+        XCTAssertGreaterThanOrEqual(bounds.start, plannedEnd)
+        XCTAssertLessThan(bounds.start.timeIntervalSince(plannedEnd), 1)
         XCTAssertEqual(bounds.end.timeIntervalSince(bounds.start), FocusShieldPolicy.minimumInterval,
-                       "A focus shorter than 15 minutes must still satisfy DeviceActivity's minimum")
-        XCTAssertLessThan(bounds.start, now)
+                       "Exactly DeviceActivity's minimum, however short the focus")
 
         let plans = FocusShieldSchedule.plans(deadline: deadline, now: now, calendar: calendar)
-        XCTAssertEqual(plans.map(\.form), [.timeOfDay, .localDate, .utcDate])
-        let timeOfDay = try XCTUnwrap(plans.first)
-        XCTAssertFalse(timeOfDay.schedule.repeats)
+        XCTAssertEqual(plans.map(\.form), [.localDate, .utcDate, .timeOfDay],
+                       "The dated local form the gem lanes use (and the device saw start) comes first")
+        let local = try XCTUnwrap(plans.first)
+        XCTAssertFalse(local.schedule.repeats)
+        XCTAssertEqual(Set(componentKeys(local.schedule.intervalStart)),
+                       ["year", "month", "day", "hour", "minute", "second"])
+        XCTAssertEqual(local.schedule.intervalStart.timeZone, calendar.timeZone)
+        let timeOfDay = try XCTUnwrap(plans.last)
         XCTAssertEqual(Set(componentKeys(timeOfDay.schedule.intervalStart)), ["hour", "minute", "second"])
-        XCTAssertEqual(Set(componentKeys(timeOfDay.schedule.intervalEnd)), ["hour", "minute", "second"],
-                       "Both ends carry hour/minute/second only")
-        let end = calendar.dateComponents([.hour, .minute, .second], from: bounds.end)
-        XCTAssertEqual(timeOfDay.schedule.intervalEnd.hour, end.hour)
-        XCTAssertEqual(timeOfDay.schedule.intervalEnd.minute, end.minute)
-        XCTAssertEqual(timeOfDay.schedule.intervalEnd.second, end.second)
+        XCTAssertEqual(Set(componentKeys(timeOfDay.schedule.intervalEnd)), ["hour", "minute", "second"])
+        for plan in plans {
+            let resolved = try XCTUnwrap(Self.resolve(plan.schedule, now: now, calendar: calendar))
+            XCTAssertEqual(resolved.start, bounds.start, "\(plan.form) must start at the planned end")
+            XCTAssertEqual(resolved.end, bounds.end, "\(plan.form) must end 15 minutes later")
+        }
     }
 
-    func testALongFocusStartsItsIntervalNow() {
-        let deadline = now.addingTimeInterval(50 * 60)
-        let bounds = FocusShieldSchedule.intervalBounds(deadline: deadline, now: now)
-        XCTAssertEqual(bounds.start, now)
-        XCTAssertEqual(bounds.end, deadline)
-        let longest = now.addingTimeInterval(TimeInterval(Constants.Timer.customMaximumMinutes * 60)
-                                             + FocusShieldPolicy.deadlineGrace)
-        XCTAssertEqual(FocusShieldSchedule.plans(deadline: longest, now: now, calendar: tokyo).count, 3,
-                       "The longest focus stays far below DeviceActivity's one-week maximum")
+    func testTheLongestFocusStillStartsItsIntervalAtItsPlannedEnd() {
+        let plannedEnd = now.addingTimeInterval(TimeInterval(Constants.Timer.customMaximumMinutes * 60))
+        let deadline = FocusShieldPolicy.deadline(forPlannedEnd: plannedEnd)
+        XCTAssertEqual(FocusShieldSchedule.intervalBounds(deadline: deadline).start, plannedEnd)
+        XCTAssertEqual(FocusShieldSchedule.plans(deadline: deadline, now: now, calendar: tokyo).count, 3,
+                       "Six hours ahead is still within one day for the time-of-day form")
     }
 
-    func testAFocusAcrossMidnightNamesTheNextDaysEndTime() throws {
-        var calendar = tokyo
-        calendar.timeZone = TimeZone(identifier: "Asia/Tokyo")!
+    func testNothingIsRegisteredOnceThePlannedEndIsNotAhead() {
+        for (offset, expected) in [(30.0, false), (60.0, false), (60.5, true), (61.0, true)] {
+            let deadline = now.addingTimeInterval(offset)
+            XCTAssertEqual(FocusShieldSchedule.canRegister(deadline: deadline, now: now), expected, "\(offset)")
+            XCTAssertEqual(FocusShieldSchedule.plans(deadline: deadline, now: now, calendar: tokyo).isEmpty, !expected,
+                           "An interval that starts at once would clear at once: \(offset)")
+        }
+    }
+
+    func testAnIntervalAcrossMidnightNamesTheNextDay() throws {
+        let calendar = tokyo
         let midnight = calendar.startOfDay(for: now.addingTimeInterval(86_400))
-        let start = midnight.addingTimeInterval(-10 * 60)
-        let deadline = midnight.addingTimeInterval(16 * 60)
-        let plans = FocusShieldSchedule.plans(deadline: deadline, now: start, calendar: calendar)
+        // Starts before midnight, ends after it.
+        let straddling = FocusShieldPolicy.deadline(forPlannedEnd: midnight.addingTimeInterval(-5 * 60))
+        let plans = FocusShieldSchedule.plans(deadline: straddling, now: midnight.addingTimeInterval(-30 * 60),
+                                              calendar: calendar)
+        XCTAssertEqual(plans.count, 3)
         let timeOfDay = try XCTUnwrap(plans.first { $0.form == .timeOfDay })
         XCTAssertEqual(timeOfDay.schedule.intervalStart.hour, 23)
         XCTAssertEqual(timeOfDay.schedule.intervalEnd.hour, 0)
-        XCTAssertEqual(timeOfDay.end, deadline)
-        XCTAssertEqual(timeOfDay.start, start)
         let local = try XCTUnwrap(plans.first { $0.form == .localDate })
-        XCTAssertEqual(local.schedule.intervalEnd.day, calendar.component(.day, from: deadline),
-                       "The dated fallback names the next day explicitly")
+        XCTAssertEqual(local.schedule.intervalEnd.day, calendar.component(.day, from: midnight),
+                       "The dated form names the next day explicitly")
+
+        // Wholly after midnight while the focus runs before it.
+        let tomorrow = FocusShieldPolicy.deadline(forPlannedEnd: midnight.addingTimeInterval(10 * 60))
+        let focusNow = midnight.addingTimeInterval(-10 * 60)
+        for plan in FocusShieldSchedule.plans(deadline: tomorrow, now: focusNow, calendar: calendar) {
+            let resolved = try XCTUnwrap(Self.resolve(plan.schedule, now: focusNow, calendar: calendar))
+            XCTAssertEqual(resolved.start, midnight.addingTimeInterval(10 * 60),
+                           "\(plan.form) must mean tonight's 00:10, not today's")
+        }
     }
 
     func testARepeatedDaylightSavingHourNeverNamesTheWrongOccurrence() throws {
@@ -78,21 +101,15 @@ final class FocusShieldEngineTests: XCTestCase {
         let first = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-10-25T00:35:00Z")) // 02:35 CEST
         let second = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-10-25T01:35:00Z")) // 02:35 CET
         var withoutLocalDate = 0
-        for deadline in [first, second] {
-            let plans = FocusShieldSchedule.plans(deadline: deadline, now: deadline.addingTimeInterval(-20 * 60),
-                                                  calendar: calendar)
-            let utc = try XCTUnwrap(plans.last)
-            XCTAssertEqual(utc.form, .utcDate, "The unambiguous form is always available")
-            XCTAssertEqual(utc.schedule.intervalEnd.timeZone, TimeZone(identifier: "UTC"))
-            for plan in plans where plan.form != .timeOfDay {
-                var zoned = Calendar(identifier: .gregorian)
-                zoned.timeZone = try XCTUnwrap(plan.schedule.intervalEnd.timeZone)
-                XCTAssertEqual(zoned.date(from: plan.schedule.intervalEnd), deadline,
-                               "\(plan.form) must name this occurrence of 02:35, not the other")
-            }
-            for plan in plans where plan.form == .timeOfDay {
-                XCTAssertEqual(calendar.nextDate(after: plan.start, matching: plan.schedule.intervalEnd,
-                                                 matchingPolicy: .strict, repeatedTimePolicy: .first), deadline)
+        for plannedEnd in [first, second] {
+            let focusNow = plannedEnd.addingTimeInterval(-20 * 60)
+            let plans = FocusShieldSchedule.plans(deadline: FocusShieldPolicy.deadline(forPlannedEnd: plannedEnd),
+                                                  now: focusNow, calendar: calendar)
+            XCTAssertTrue(plans.contains { $0.form == .utcDate }, "The unambiguous form is always available")
+            for plan in plans {
+                let resolved = try XCTUnwrap(Self.resolve(plan.schedule, now: focusNow, calendar: calendar))
+                XCTAssertEqual(resolved.start, plannedEnd, "\(plan.form) must name this occurrence of 02:35")
+                XCTAssertEqual(resolved.end, plannedEnd.addingTimeInterval(FocusShieldPolicy.minimumInterval))
             }
             if !plans.contains(where: { $0.form == .localDate }) { withoutLocalDate += 1 }
         }
@@ -100,22 +117,44 @@ final class FocusShieldEngineTests: XCTestCase {
                        "One local 02:35 cannot name both occurrences; the other falls back")
     }
 
-    func testASkippedDaylightSavingHourNeverReachesTheFramework() throws {
+    func testASkippedDaylightSavingHourIsCrossedByRealTimeNotWallClockTime() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/New_York")!
-        // 2026-03-08: 02:00 EST jumps to 03:00 EDT.
-        let jump = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-03-08T07:00:00Z"))
-        let deadline = jump.addingTimeInterval(5 * 60) // 03:05 EDT
-        let focusNow = jump.addingTimeInterval(-2 * 60) // 01:58 EST
+        // 2026-03-08: 02:00 EST jumps to 03:00 EDT. Planned end 01:55 EST, so
+        // the interval's 15 minutes end at 03:10 EDT on the wall clock.
+        let plannedEnd = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-03-08T06:55:00Z"))
+        let deadline = FocusShieldPolicy.deadline(forPlannedEnd: plannedEnd)
+        let focusNow = plannedEnd.addingTimeInterval(-25 * 60)
         let plans = FocusShieldSchedule.plans(deadline: deadline, now: focusNow, calendar: calendar)
-        XCTAssertFalse(plans.isEmpty)
+        XCTAssertEqual(plans.map(\.form), [.localDate, .utcDate, .timeOfDay])
         for plan in plans {
-            XCTAssertEqual(plan.end, deadline, "\(plan.form) must denote the real deadline")
-            XCTAssertEqual(plan.end.timeIntervalSince(plan.start), FocusShieldPolicy.minimumInterval, accuracy: 0.5)
+            let resolved = try XCTUnwrap(Self.resolve(plan.schedule, now: focusNow, calendar: calendar))
+            XCTAssertEqual(resolved.start, plannedEnd, "\(plan.form)")
+            XCTAssertEqual(resolved.end.timeIntervalSince(resolved.start), FocusShieldPolicy.minimumInterval,
+                           "\(plan.form) must last 15 real minutes across the jump")
         }
+        let timeOfDay = try XCTUnwrap(plans.last)
+        XCTAssertEqual(timeOfDay.schedule.intervalStart.hour, 1)
+        XCTAssertEqual(timeOfDay.schedule.intervalEnd.hour, 3)
+        XCTAssertEqual(timeOfDay.schedule.intervalEnd.minute, 10)
+
+        // A framework that reads 01:55–03:10 as 75 real minutes is refused, and
+        // with the dated forms refused too, nothing at all is registered.
+        let naive = DateInterval(start: plannedEnd, end: plannedEnd.addingTimeInterval(75 * 60))
+        XCTAssertFalse(FocusShieldSchedule.accepts(naive, plan: timeOfDay, now: focusNow))
+        let center = ShieldFakeCenter()
+        XCTAssertThrowsError(try FocusShieldSchedule.register(
+            center: center, deadline: deadline, now: focusNow, calendar: calendar,
+            resolveInterval: { $0.intervalStart.year == nil ? naive : nil }))
+        XCTAssertTrue(center.started.isEmpty)
+        XCTAssertEqual(try FocusShieldSchedule.register(
+            center: center, deadline: deadline, now: focusNow, calendar: calendar,
+            resolveInterval: { schedule in
+                schedule.intervalStart.year == nil ? Self.resolve(schedule, now: focusNow, calendar: calendar) : nil
+            }), .timeOfDay, "A framework that resolves the jump correctly gets the time-of-day form")
     }
 
-    func testTheFrameworksIntervalMustContainNowAndEndAtTheDeadline() throws {
+    func testTheFrameworksIntervalMustStartAtThePlannedEnd() throws {
         let deadline = now.addingTimeInterval(20 * 60)
         let plan = try XCTUnwrap(FocusShieldSchedule.plans(deadline: deadline, now: now, calendar: tokyo).first)
         XCTAssertTrue(FocusShieldSchedule.accepts(DateInterval(start: plan.start, end: plan.end), plan: plan, now: now))
@@ -123,11 +162,13 @@ final class FocusShieldEngineTests: XCTestCase {
         XCTAssertFalse(FocusShieldSchedule.accepts(
             DateInterval(start: plan.start.addingTimeInterval(86_400), end: plan.end.addingTimeInterval(86_400)),
             plan: plan, now: now), "Tomorrow's interval leaves the shield up all night")
+        XCTAssertFalse(FocusShieldSchedule.accepts(DateInterval(start: now, end: plan.end), plan: plan, now: now),
+                       "An interval already running starts — and clears — at once")
         XCTAssertFalse(FocusShieldSchedule.accepts(
-            DateInterval(start: plan.start, end: plan.end.addingTimeInterval(3_600)), plan: plan, now: now),
-            "An interval ending an hour late is a stuck shield")
+            DateInterval(start: plan.start, end: plan.end.addingTimeInterval(3_600)), plan: plan, now: now))
         XCTAssertTrue(FocusShieldSchedule.accepts(
-            DateInterval(start: plan.start, end: plan.end.addingTimeInterval(1)), plan: plan, now: now))
+            DateInterval(start: plan.start.addingTimeInterval(1), end: plan.end.addingTimeInterval(1)),
+            plan: plan, now: now))
     }
 
     func testRegistrationFallsBackFormByFormAndRefusesWhenNoneIsConfirmed() throws {
@@ -140,11 +181,11 @@ final class FocusShieldEngineTests: XCTestCase {
                 let plan = FocusShieldSchedule.plans(deadline: deadline, now: self.now, calendar: self.tokyo)
                     .first { $0.schedule == schedule }!
                 asked.append(plan.form)
-                // The framework misreads the time-only form.
-                return plan.form == .timeOfDay ? nil : DateInterval(start: plan.start, end: plan.end)
+                // The framework misreads the local dated form.
+                return plan.form == .localDate ? nil : DateInterval(start: plan.start, end: plan.end)
             })
-        XCTAssertEqual(form, .localDate)
-        XCTAssertEqual(asked, [.timeOfDay, .localDate])
+        XCTAssertEqual(form, .utcDate)
+        XCTAssertEqual(asked, [.localDate, .utcDate])
         XCTAssertEqual(center.started.map(\.name), [FocusShieldPolicy.activityName.rawValue])
 
         let refused = ShieldFakeCenter()
@@ -156,21 +197,34 @@ final class FocusShieldEngineTests: XCTestCase {
         throwing.failuresBeforeSuccess = 1
         XCTAssertEqual(try FocusShieldSchedule.register(
             center: throwing, deadline: deadline, now: now, calendar: tokyo,
-            resolveInterval: exactResolver(deadline: deadline)), .localDate,
+            resolveInterval: exactResolver(deadline: deadline)), .utcDate,
             "A form the framework refuses falls through to the next one")
+
+        let late = ShieldFakeCenter()
+        XCTAssertThrowsError(try FocusShieldSchedule.register(
+            center: late, deadline: now.addingTimeInterval(59), now: now, calendar: tokyo,
+            resolveInterval: { _ in
+                XCTFail("Nothing is even offered to the framework")
+                return nil
+            }))
+        XCTAssertTrue(late.started.isEmpty, "A planned end already behind registers nothing")
     }
 
     /// The real `DeviceActivitySchedule.nextInterval`, as the Simulator
-    /// computes it. Evidence for the past-start form only; the device check
+    /// computes it. Evidence for the future-start form only; the device check
     /// is listed in Docs/ScreenTimeGems.md.
-    func testTheFrameworksNextIntervalConfirmsAnOngoingPastStartedInterval() throws {
+    func testTheFrameworksNextIntervalConfirmsAnIntervalStartingAtThePlannedEnd() throws {
         let realNow = Date()
-        let deadline = realNow.addingTimeInterval(5 * 60)
-        let plans = FocusShieldSchedule.plans(deadline: deadline, now: realNow, calendar: .current)
-        let confirmed = plans.filter { FocusShieldSchedule.accepts($0.schedule.nextInterval, plan: $0, now: realNow) }
-        XCTAssertFalse(confirmed.isEmpty, "At least one form must resolve to the interval we meant: "
-                       + plans.map { "\($0.form.rawValue)=\(String(describing: $0.schedule.nextInterval))" }
-                        .joined(separator: " "))
+        for focus: TimeInterval in [4 * 60, 25 * 60] {
+            let deadline = FocusShieldPolicy.deadline(forPlannedEnd: realNow.addingTimeInterval(focus))
+            let plans = FocusShieldSchedule.plans(deadline: deadline, now: realNow, calendar: .current)
+            let confirmed = plans.filter {
+                FocusShieldSchedule.accepts($0.schedule.nextInterval, plan: $0, now: realNow)
+            }
+            XCTAssertFalse(confirmed.isEmpty, "At least one form must resolve to the interval we meant: "
+                           + plans.map { "\($0.form.rawValue)=\(String(describing: $0.schedule.nextInterval))" }
+                            .joined(separator: " "))
+        }
     }
 
     // MARK: - record transitions
@@ -292,6 +346,25 @@ final class FocusShieldEngineTests: XCTestCase {
         XCTAssertEqual(try fixture.engine.records.load()?.clearedBy, FocusShieldClearReason.failsafeUnavailable.rawValue)
     }
 
+    func testNoShieldIsStartedOrReArmedPastItsPlannedEnd() throws {
+        let fixture = makeEngine()
+        // Inside the 60 s grace: the focus is over, only not advanced yet.
+        XCTAssertEqual(try fixture.engine.apply(sessionID: UUID(), deadline: now.addingTimeInterval(30),
+                                                applications: try tokens(1), now: now), .cleared)
+        XCTAssertTrue(fixture.settings.shielded.isEmpty)
+        XCTAssertTrue(fixture.center.started.isEmpty)
+        XCTAssertEqual(try fixture.engine.records.load()?.clearedBy, FocusShieldClearReason.deadlinePassed.rawValue)
+
+        // A paused focus whose failsafe went missing after its planned end.
+        let paused = makeEngine()
+        let deadline = now.addingTimeInterval(1_560)
+        _ = try paused.engine.apply(sessionID: UUID(), deadline: deadline, applications: try tokens(1), now: now)
+        paused.center.installed.removeAll()
+        XCTAssertEqual(try paused.engine.keep(applications: try tokens(1), now: deadline.addingTimeInterval(-30)),
+                       .cleared)
+        XCTAssertEqual(paused.center.started.count, 1)
+    }
+
     func testLiftingKeepsThatSessionUnshieldedButTheNextFocusIsShieldedAgain() throws {
         let fixture = makeEngine()
         let session = UUID()
@@ -364,18 +437,27 @@ final class FocusShieldEngineTests: XCTestCase {
         let plannedEnd = now.addingTimeInterval(1_500)
         let deadline = FocusShieldPolicy.deadline(forPlannedEnd: plannedEnd)
         _ = try fixture.engine.apply(sessionID: UUID(), deadline: deadline, applications: try tokens(2), now: now)
+        XCTAssertEqual(FocusShieldSchedule.intervalBounds(deadline: deadline).start, plannedEnd,
+                       "intervalDidStart is due exactly at the planned end")
 
-        // intervalDidStart fires as soon as a past-started interval is registered.
+        // A stale or early callback while the focus runs keeps the shield.
         XCTAssertFalse(fixture.engine.handleExtensionInterval(phase: .start, now: now.addingTimeInterval(1)))
+        XCTAssertFalse(fixture.engine.handleExtensionInterval(phase: .start, now: plannedEnd.addingTimeInterval(-0.001)))
         XCTAssertEqual(fixture.settings.clearCount, 0)
-        XCTAssertFalse(fixture.engine.handleExtensionInterval(phase: .end, now: plannedEnd.addingTimeInterval(-1)))
 
-        XCTAssertTrue(fixture.engine.handleExtensionInterval(phase: .end, now: deadline))
+        XCTAssertTrue(fixture.engine.handleExtensionInterval(phase: .start, now: plannedEnd))
         XCTAssertEqual(fixture.settings.clearCount, 1)
         let record = try XCTUnwrap(try fixture.engine.records.load())
         XCTAssertFalse(record.active)
-        XCTAssertEqual(record.clearedBy, FocusShieldClearReason.extensionEnd.rawValue)
+        XCTAssertEqual(record.clearedBy, FocusShieldClearReason.extensionStart.rawValue)
         XCTAssertTrue(fixture.center.stopped.isEmpty, "The extension never stops monitoring")
+
+        // intervalDidEnd, 15 minutes later, is the second chance.
+        let second = makeEngine()
+        _ = try second.engine.apply(sessionID: UUID(), deadline: deadline, applications: try tokens(2), now: now)
+        let end = FocusShieldSchedule.intervalBounds(deadline: deadline).end
+        XCTAssertTrue(second.engine.handleExtensionInterval(phase: .end, now: end))
+        XCTAssertEqual(try second.engine.records.load()?.clearedBy, FocusShieldClearReason.extensionEnd.rawValue)
     }
 
     func testTheExtensionRuleIsThePlannedEndExactly() {
@@ -401,6 +483,22 @@ final class FocusShieldEngineTests: XCTestCase {
         XCTAssertTrue(FocusShieldPolicy.extensionShouldClear(resumed, now: deadline.addingTimeInterval(-60)))
     }
 
+    func testAFractionalDeadlineClearsOnTheCallbacksItsOwnIntervalProduces() throws {
+        let deadline = now.addingTimeInterval(1_560.7)
+        let bounds = FocusShieldSchedule.intervalBounds(deadline: deadline)
+        XCTAssertEqual(bounds.start, now.addingTimeInterval(1_501))
+
+        let starting = makeEngine()
+        _ = try starting.engine.apply(sessionID: UUID(), deadline: deadline, applications: try tokens(1), now: now)
+        XCTAssertFalse(starting.engine.handleExtensionInterval(phase: .start, now: bounds.start.addingTimeInterval(-1)))
+        XCTAssertTrue(starting.engine.handleExtensionInterval(phase: .start, now: bounds.start),
+                      "A start rounded down would arrive before the planned end and keep the shield")
+
+        let ending = makeEngine()
+        _ = try ending.engine.apply(sessionID: UUID(), deadline: deadline, applications: try tokens(1), now: now)
+        XCTAssertTrue(ending.engine.handleExtensionInterval(phase: .end, now: bounds.end))
+    }
+
     func testTheExtensionClearsForAnInactiveMissingOrUnreadableRecord() throws {
         let inactive = makeEngine()
         _ = try inactive.engine.apply(sessionID: UUID(), deadline: now.addingTimeInterval(1_560),
@@ -422,28 +520,28 @@ final class FocusShieldEngineTests: XCTestCase {
 
     func testTheExtensionDecidesFromAnUnlockedReadWhenTheAppHoldsTheLock() throws {
         let fixture = makeEngine()
-        let deadline = now.addingTimeInterval(1_560)
+        let deadline = now.addingTimeInterval(1_560.4)
         _ = try fixture.engine.apply(sessionID: UUID(), deadline: deadline, applications: try tokens(1), now: now)
-        let path = fixture.directory.appendingPathComponent("focus-shield.lock").path
-        let descriptor = open(path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
-        XCTAssertGreaterThanOrEqual(descriptor, 0)
-        defer { close(descriptor) }
-        XCTAssertEqual(flock(descriptor, LOCK_EX), 0)
-        defer { flock(descriptor, LOCK_UN) }
+        let descriptor = try holdLock(in: fixture.directory)
+        defer {
+            flock(descriptor, LOCK_UN)
+            close(descriptor)
+        }
 
         // Another process (the app registering this very interval) holds it.
         let blocked = expectation(description: "extension returns")
         let results = ShieldResultBox()
         let engine = fixture.engine
         let early = now.addingTimeInterval(1)
+        let start = FocusShieldSchedule.intervalBounds(deadline: deadline).start
         DispatchQueue.global().async {
             results.early = engine.handleExtensionInterval(phase: .start, now: early)
-            results.late = engine.handleExtensionInterval(phase: .end, now: deadline)
+            results.late = engine.handleExtensionInterval(phase: .start, now: start)
             blocked.fulfill()
         }
         wait(for: [blocked], timeout: 2 * FocusShieldPolicy.extensionLockTimeout + 5)
         XCTAssertEqual(results.early, false, "A running focus keeps its shield even without the lock")
-        XCTAssertEqual(results.late, true)
+        XCTAssertEqual(results.late, true, "and the planned end clears it without the lock too")
         XCTAssertEqual(fixture.settings.clearCount, 1)
     }
 

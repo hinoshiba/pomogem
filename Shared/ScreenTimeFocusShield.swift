@@ -12,8 +12,9 @@ import ManagedSettings
 // Three independent removal paths, none of which trusts the others:
 // 1. the app clears it when the focus ends (ScreenTimeIntegrationModifier,
 //    through `FocusShieldController`);
-// 2. a DeviceActivity interval ending at the record's deadline, whose
-//    callbacks in PomoGemScreenTimeMonitor clear it
+// 2. a DeviceActivity interval that STARTS at the planned end, whose
+//    `intervalDidStart` in PomoGemScreenTimeMonitor clears it, with
+//    `intervalDidEnd` 15 minutes later as a second chance
 //    (`FocusShieldEngine.handleExtensionInterval`);
 // 3. a sweep at every launch and activation that clears an expired record
 //    without waiting for persistence (`FocusShieldLaunchSweep`).
@@ -41,14 +42,13 @@ enum FocusShieldPolicy {
     static let deadlineGrace: TimeInterval = 60
     /// The extension clears when the record's planned end has passed:
     /// `deadline - extensionClearMargin` is the planned end at the last
-    /// running state.
+    /// running state, which is also where the failsafe interval starts.
     static let extensionClearMargin: TimeInterval = 60
-    /// DeviceActivity refuses a shorter interval (`intervalTooShort`).
+    /// DeviceActivity refuses a shorter interval (`intervalTooShort`), so
+    /// the failsafe is exactly this long.
     static let minimumInterval = ScreenTimePolicy.minimumMonitoringInterval
-    /// DeviceActivity refuses a longer one (`intervalTooLong`).
-    static let maximumInterval: TimeInterval = 7 * 24 * 60 * 60
     /// How far the interval the framework resolves may sit from the one we
-    /// meant. Components carry whole seconds, so the planned end is truncated.
+    /// meant. Components carry whole seconds, so the start is rounded up.
     static let intervalTolerance: TimeInterval = 2
     /// The app gives up on the record lock after this and retries on its
     /// next pass instead of blocking.
@@ -64,8 +64,8 @@ enum FocusShieldPolicy {
         plannedEnd.addingTimeInterval(deadlineGrace)
     }
 
-    /// The instant the extension clears from: the planned end at the last
-    /// running state.
+    /// The instant the extension clears from, and where the failsafe interval
+    /// starts: the planned end at the last running state.
     static func plannedEnd(forDeadline deadline: Date) -> Date {
         deadline.addingTimeInterval(-extensionClearMargin)
     }
@@ -266,26 +266,40 @@ final class ManagedSettingsFocusShield: FocusShieldSettingsDriving {
 // MARK: - Failsafe schedule
 
 /// The kill-proof removal: one non-repeating DeviceActivity interval that
-/// ends at the record's deadline. Its callbacks reach the monitor extension
-/// even if PomoGem is never opened again.
+/// STARTS at the planned end (`deadline - extensionClearMargin`) and ends
+/// DeviceActivity's 15-minute minimum later. Its `intervalDidStart` reaches
+/// the monitor extension at the planned end even if PomoGem is never opened
+/// again, and `intervalDidEnd` is a second chance.
 ///
-/// DeviceActivity refuses intervals shorter than 15 minutes, so the start is
-/// `min(now, deadline - 15 min)`: a short focus gets an interval that started
-/// in the past and still ends exactly at its deadline. The framework's own
-/// `nextInterval` must confirm the interval contains now and ends at the
-/// deadline before anything is registered; a form it resolves differently
-/// (midnight, a daylight-saving change) falls through to the next form.
+/// An interval that contained "now" would start at registration, while the
+/// focus is still running, so its start could never clear anything and only
+/// `intervalDidEnd` — never yet observed on the target iPhone — would be
+/// left. A start in the future is the callback apps schedule shields with.
+/// This departs from design D2.5 (end = deadline, start = min(now, end − 15
+/// min)); the planner approved it on 2026-09-26, and Docs/ScreenTimeGems.md
+/// records why.
+///
+/// The start is rounded UP to a whole second, so the callback can never
+/// arrive before the planned end it stands for. Once the planned end is not
+/// in the future there is nothing left to register: the engine lifts the
+/// shield itself instead of arming an interval that would start at once.
+///
+/// The framework's own `nextInterval` must confirm the interval starts at the
+/// planned end and ends 15 minutes later before anything is registered; a
+/// form it resolves differently (midnight, a daylight-saving change) falls
+/// through to the next form.
 enum FocusShieldSchedule {
+    /// In the order they are tried.
     enum Form: String, CaseIterable {
-        /// Hour/minute/second on both ends, as the design asks: community
-        /// reports say mixing date and time-only components suppresses
-        /// callbacks, and time-only ones are what most apps register.
-        case timeOfDay = "time-of-day"
-        /// Full local date components with the time zone, the form the gem
-        /// lanes register and the device audit saw start.
+        /// Full local date components with the time zone: the form the gem
+        /// lanes register (their pre-armed runs start in the future too) and
+        /// the device audit saw start.
         case localDate = "local-date"
         /// Full UTC date components: unambiguous in a repeated DST hour.
         case utcDate = "utc-date"
+        /// Hour/minute/second on both ends: a last resort without device
+        /// evidence, for a framework that refuses both dated forms.
+        case timeOfDay = "time-of-day"
     }
 
     struct Plan {
@@ -302,37 +316,45 @@ enum FocusShieldSchedule {
         case noAcceptableInterval
     }
 
-    /// Whole seconds, because the components carry nothing finer.
-    static func truncated(_ date: Date) -> Date {
-        Date(timeIntervalSinceReferenceDate: date.timeIntervalSinceReferenceDate.rounded(.down))
+    /// Whole seconds, because the components carry nothing finer. Rounded UP,
+    /// so `intervalDidStart` can never arrive before the planned end it
+    /// stands for (the extension would then keep the shield).
+    static func roundedUpToWholeSecond(_ date: Date) -> Date {
+        Date(timeIntervalSinceReferenceDate: date.timeIntervalSinceReferenceDate.rounded(.up))
     }
 
-    static func intervalBounds(deadline: Date, now: Date) -> (start: Date, end: Date) {
-        let end = truncated(deadline)
-        let start = truncated(min(now, end.addingTimeInterval(-FocusShieldPolicy.minimumInterval)))
-        return (start, end)
+    static func intervalBounds(deadline: Date) -> (start: Date, end: Date) {
+        let start = roundedUpToWholeSecond(FocusShieldPolicy.plannedEnd(forDeadline: deadline))
+        return (start, start.addingTimeInterval(FocusShieldPolicy.minimumInterval))
+    }
+
+    /// Whether a failsafe can still be registered for `deadline`: its planned
+    /// end has not been reached yet.
+    static func canRegister(deadline: Date, now: Date) -> Bool {
+        intervalBounds(deadline: deadline).start > now
     }
 
     /// Every candidate, in the order they are tried, each already checked to
     /// denote exactly `start...end` in `calendar` (so a nonexistent or
-    /// repeated local time never reaches the framework).
+    /// repeated local time never reaches the framework). Empty once the
+    /// planned end is not in the future: an interval starting in the past
+    /// would clear at once, so the engine lifts the shield itself instead.
     static func plans(deadline: Date, now: Date, calendar: Calendar) -> [Plan] {
-        let (start, end) = intervalBounds(deadline: deadline, now: now)
-        guard end > now, end.timeIntervalSince(start) >= FocusShieldPolicy.minimumInterval,
-              end.timeIntervalSince(start) <= FocusShieldPolicy.maximumInterval else { return [] }
-        return Form.allCases.compactMap { plan(form: $0, start: start, end: end, calendar: calendar) }
+        let (start, end) = intervalBounds(deadline: deadline)
+        guard start > now else { return [] }
+        return Form.allCases.compactMap { plan(form: $0, start: start, end: end, now: now, calendar: calendar) }
     }
 
-    static func plan(form: Form, start: Date, end: Date, calendar: Calendar) -> Plan? {
+    static func plan(form: Form, start: Date, end: Date, now: Date, calendar: Calendar) -> Plan? {
         switch form {
         case .timeOfDay:
             let units: Set<Calendar.Component> = [.hour, .minute, .second]
             let startComponents = calendar.dateComponents(units, from: start)
             let endComponents = calendar.dateComponents(units, from: end)
-            // The time of day must name `start` itself and then, as its next
-            // occurrence, `end` — never a repeated or skipped DST hour, and
-            // never a day later.
-            guard calendar.nextDate(after: start.addingTimeInterval(-1), matching: startComponents,
+            // A time of day means its next occurrence: `start` must be the
+            // next one after now and `end` the next one after `start` — never
+            // the other copy of a repeated DST hour, and never a day later.
+            guard calendar.nextDate(after: now, matching: startComponents,
                                     matchingPolicy: .strict, repeatedTimePolicy: .first) == start,
                   calendar.nextDate(after: start, matching: endComponents,
                                     matchingPolicy: .strict, repeatedTimePolicy: .first) == end
@@ -357,14 +379,14 @@ enum FocusShieldSchedule {
     }
 
     /// Whether the interval the framework resolved is the one we meant: it
-    /// contains now and ends at the deadline.
+    /// starts at the planned end (not tomorrow, not already) and ends 15
+    /// minutes later.
     static func accepts(_ interval: DateInterval?, plan: Plan, now: Date) -> Bool {
         guard let interval else { return false }
         let tolerance = FocusShieldPolicy.intervalTolerance
-        return interval.start <= now.addingTimeInterval(tolerance)
-            && interval.end > now
-            && abs(interval.end.timeIntervalSince(plan.end)) <= tolerance
+        return interval.end > now
             && abs(interval.start.timeIntervalSince(plan.start)) <= tolerance
+            && abs(interval.end.timeIntervalSince(plan.end)) <= tolerance
     }
 
     /// Registers the failsafe under its one fixed name (`startMonitoring`
@@ -493,6 +515,11 @@ final class FocusShieldEngine: @unchecked Sendable {
             && previous?.failsafeDeadline == deadline
         var registered = false
         if !armed || !center.activities.contains(FocusShieldPolicy.activityName) {
+            // Past the planned end there is no interval left to arm, and the
+            // focus is over: lift rather than shield without a failsafe.
+            guard FocusShieldSchedule.canRegister(deadline: deadline, now: now) else {
+                return try clear(reason: .deadlinePassed, now: now)
+            }
             do {
                 let form = try FocusShieldSchedule.register(
                     center: center, deadline: deadline, now: now,
@@ -537,6 +564,9 @@ final class FocusShieldEngine: @unchecked Sendable {
             return try clear(reason: refusal, now: now)
         }
         if record.failsafeDeadline != record.deadline || !center.activities.contains(FocusShieldPolicy.activityName) {
+            guard FocusShieldSchedule.canRegister(deadline: record.deadline, now: now) else {
+                return try clear(reason: .deadlinePassed, now: now)
+            }
             do {
                 try FocusShieldSchedule.register(center: center, deadline: record.deadline, now: now,
                                                  calendar: calendar(), resolveInterval: resolveInterval)

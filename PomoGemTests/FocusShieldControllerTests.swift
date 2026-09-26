@@ -58,13 +58,22 @@ final class FocusShieldControllerTests: XCTestCase {
     func testARunningFocusShieldsUntilItsPlannedEndPlusOneMinute() {
         let session = UUID()
         let end = now.addingTimeInterval(1_500)
-        XCTAssertEqual(decide(focus: .running(sessionID: session, plannedEnd: end)),
+        let running = FocusShieldFocusState.running(sessionID: session, plannedEnd: end)
+        XCTAssertEqual(decide(focus: running), .apply(sessionID: session, deadline: end.addingTimeInterval(60)))
+        XCTAssertEqual(decide(focus: running, at: end.addingTimeInterval(-1)),
                        .apply(sessionID: session, deadline: end.addingTimeInterval(60)))
-        XCTAssertEqual(decide(focus: .running(sessionID: session, plannedEnd: end), at: end.addingTimeInterval(30)),
-                       .apply(sessionID: session, deadline: end.addingTimeInterval(60)),
-                       "Not advanced yet but inside the grace: still shielded")
-        XCTAssertEqual(decide(focus: .running(sessionID: session, plannedEnd: end), at: end.addingTimeInterval(60)),
-                       .idle)
+        // Past the planned end, not advanced yet: the failsafe lifts the shield
+        // at that very moment, so one that is up is kept for the grace and
+        // none is started or put back.
+        let own = active(session, deadline: end.addingTimeInterval(60))
+        XCTAssertEqual(decide(focus: running, record: own, at: end), .keep)
+        XCTAssertEqual(decide(focus: running, record: own, at: end.addingTimeInterval(30)), .keep)
+        XCTAssertEqual(decide(focus: running, at: end.addingTimeInterval(30)), .idle,
+                       "Never re-armed after the extension lifted it at the planned end")
+        XCTAssertEqual(decide(focus: running, record: active(UUID(), deadline: end.addingTimeInterval(60)),
+                              at: end.addingTimeInterval(30)), .clear(.deadlinePassed))
+        XCTAssertEqual(decide(focus: running, record: own, at: end.addingTimeInterval(60)), .clear(.deadlinePassed))
+        XCTAssertEqual(decide(focus: running, at: end.addingTimeInterval(60)), .idle)
     }
 
     func testPausesKeepTheShieldUntilTheDeadlineOfTheLastRunningState() {
@@ -767,13 +776,8 @@ final class FocusShieldIntegrationTests: XCTestCase {
         let engine = FocusShieldEngine(
             records: FocusShieldRecordStore(directory: store.directoryURL), settings: settings, center: center,
             resolveInterval: { schedule in
-                // What `nextInterval` answers for the time-of-day form.
-                let calendar = Calendar.current
-                guard let start = calendar.nextDate(after: Date().addingTimeInterval(-3_600),
-                                                    matching: schedule.intervalStart, matchingPolicy: .strict),
-                      let end = calendar.nextDate(after: start, matching: schedule.intervalEnd,
-                                                  matchingPolicy: .strict) else { return nil }
-                return DateInterval(start: start, end: end)
+                // What `nextInterval` answers for a form it reads correctly.
+                FocusShieldEngineTests.resolve(schedule, now: Date(), calendar: .current)
             },
             lockTimeout: 1)
         let shield = FocusShieldController(engine: engine, queue: DispatchQueue(label: "test.shield.host"))

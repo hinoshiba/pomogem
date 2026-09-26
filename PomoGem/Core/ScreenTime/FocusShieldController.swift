@@ -114,10 +114,13 @@ enum FocusShieldReconcilePolicy {
             if let record, record.sessionID == sessionID, record.liftedAt != nil {
                 return lift(.liftedByUser)
             }
-            guard authorization == .approved else {
-                if let active, active.sessionID == sessionID { return .keep }
-                return lift(.focusEnded)
-            }
+            let ownsShield = active?.sessionID == sessionID
+            // Past the planned end the focus is over, only not advanced yet:
+            // the failsafe lifts the shield at that very moment, so a shield
+            // that is up is kept for the grace and none is started or re-armed
+            // (which would put it back up after the extension lifted it).
+            guard now < plannedEnd else { return ownsShield ? .keep : lift(.deadlinePassed) }
+            guard authorization == .approved else { return ownsShield ? .keep : lift(.focusEnded) }
             return .apply(sessionID: sessionID, deadline: deadline)
         }
     }
