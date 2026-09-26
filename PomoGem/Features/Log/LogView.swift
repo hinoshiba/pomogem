@@ -1288,7 +1288,7 @@ struct LogView: View {
                 }
 
                 summaryGrid
-                    .redacted(reason: shownPeriodContent == nil ? .placeholder : [])
+                    .modifier(LoadingSummaryTiles(isLoading: shownPeriodContent == nil))
                 // A chosen, real-world milestone is stronger evidence of
                 // progress than charts or a random visual variant. Keep it
                 // near the top of the log so a qualification or completed
@@ -2633,6 +2633,30 @@ private struct HistoryLoadingPlaceholder: View {
             .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
             .accessibilityLabel(Text("記録を読み込み中", tableName: "Log", comment: "VoiceOver: Log is loading"))
             .accessibilityIdentifier("log.loading")
+    }
+}
+
+/// The period tiles while their page is on its way: placeholder shapes,
+/// hidden from VoiceOver, under one element that says 記録 is loading. The
+/// placeholder figures are no period's: 「0分、積んだ時間」 read aloud
+/// would claim an empty period over years of history.
+private struct LoadingSummaryTiles: ViewModifier {
+    let isLoading: Bool
+
+    func body(content: Content) -> some View {
+        if isLoading {
+            content
+                .redacted(reason: .placeholder)
+                .accessibilityHidden(true)
+                .overlay {
+                    Color.clear
+                        .accessibilityElement()
+                        .accessibilityLabel(Text("記録を読み込み中", tableName: "Log", comment: "VoiceOver: Log is loading"))
+                        .accessibilityIdentifier("log.summary.loading")
+                }
+        } else {
+            content
+        }
     }
 }
 
