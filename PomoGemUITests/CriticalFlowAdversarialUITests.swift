@@ -820,7 +820,10 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
                     app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
         }
         XCTAssertTrue(isFullyVisible(action), "Missing menu action: \(title)")
-        action.tap()
+        // Every row closes the menu first. On a loaded iPhone SE a tap on a
+        // row at rest was lost once, and the menu stayed open with nothing
+        // highlighted, so a row still there 3 s later is tapped once more.
+        tapUntilGone(action, "The menu must close for \(title)")
     }
 
     private func isFullyVisible(_ element: XCUIElement) -> Bool {
