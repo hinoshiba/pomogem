@@ -194,6 +194,52 @@ final class FocusLeaveNudgeSchedulingTests: XCTestCase {
         XCTAssertTrue(fixture.pending.isEmpty)
     }
 
+    /// The host treats the registered running focus as proof that this
+    /// device owns the timer it may pause, so the registration must end
+    /// with the running state: a second background while leave-paused is
+    /// not a new absence.
+    func testTheRegisteredRunningFocusIsTheLeaveCandidateOnlyWhileItRuns() {
+        let sessionID = UUID()
+        let endDate = Date.now.addingTimeInterval(600)
+        XCTAssertNil(fixture.manager.registeredRunningFocus)
+        fixture.manager.registerFocusReturnReminder(
+            sessionID: sessionID,
+            endDate: endDate,
+            playsSound: false,
+            completionSound: .soft
+        )
+        XCTAssertEqual(
+            fixture.manager.registeredRunningFocus,
+            FocusLeaveCandidate(
+                sessionID: sessionID,
+                endDate: endDate,
+                playsSound: false,
+                completionSound: .soft
+            )
+        )
+
+        // Another session's end leaves it alone.
+        fixture.manager.cancelFocusCompletion(sessionID: UUID())
+        XCTAssertEqual(fixture.manager.registeredRunningFocus?.sessionID, sessionID)
+
+        // The leave pause keeps its series but ends the running timer.
+        fixture.manager.cancelFocusCompletion(sessionID: sessionID, withdrawingLeaveNudges: false)
+        XCTAssertNil(fixture.manager.registeredRunningFocus)
+
+        // An account boundary forgets it and refuses new registrations
+        // until the next account's container has mounted.
+        fixture.manager.registerFocusReturnReminder(
+            sessionID: sessionID, endDate: endDate, playsSound: true
+        )
+        fixture.manager.suspendTimerSchedulingForAccountBoundary()
+        XCTAssertNil(fixture.manager.registeredRunningFocus)
+        fixture.manager.registerFocusReturnReminder(
+            sessionID: sessionID, endDate: endDate, playsSound: true
+        )
+        XCTAssertNil(fixture.manager.registeredRunningFocus)
+        fixture.manager.resumeTimerSchedulingAfterAccountBoundary()
+    }
+
     func testALateAddCannotOutliveAWithdrawal() async throws {
         let held = fixture.holdNextAdd()
         let schedule = Task {
