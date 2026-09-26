@@ -110,11 +110,18 @@ final class RawStoneWidgetTests: XCTestCase {
         XCTAssertFalse(StartFocusLink.matches(URL(string: "https://pomogem.hinoshiba.com/start")!))
 
         let router = AppRouter()
+        XCTAssertTrue(router.openStartLink(StartFocusLink.url))
+        XCTAssertEqual(router.selectedTab, .jar, "A launch opens on Home, where the focus button is")
         router.selectedTab = .settings
         XCTAssertFalse(router.openStartLink(URL(string: "pomogem://other")!))
         XCTAssertEqual(router.selectedTab, .settings)
-        XCTAssertTrue(router.openStartLink(StartFocusLink.url))
-        XCTAssertEqual(router.selectedTab, .jar, "Home, where the focus button is")
+        // A page the person left open is never popped (its sheets, unsaved
+        // edits or an export in flight would be lost).
+        for page in [AppTab.settings, .log, .screenTime] {
+            router.selectedTab = page
+            XCTAssertTrue(router.openStartLink(StartFocusLink.url))
+            XCTAssertEqual(router.selectedTab, page, "\(page) stays open")
+        }
         XCTAssertFalse(router.focusPresentationIsActive, "Nothing starts")
         XCTAssertFalse(router.sharePresented)
         XCTAssertFalse(router.paywallPresented)
