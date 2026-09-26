@@ -199,7 +199,7 @@ Widgetにrequired-reason API宣言がないことをarchive内で照合します
 - iCloudの通常resetは一時的に利用不可とし理由を表示。local-only通常resetは維持する
 - app削除はlocal-onlyの記録とcloudへ未送信の変更を失わせる。JSON再import・このfileによる復元や移行は未対応
 - Widgetはaccount-neutralな起動導線だけを表示し、App Group、iCloud、記録、質量、テーマ名、瓶画像を読まない
-- Live Activityはアプリ名、選択時間、残り時間、実行状態だけを表示。秒単位の指定時間も分・秒で示し、
+- Live Activityはアプリ名、選択時間、残り時間、実行状態（完走後に選んだ休憩を含む）だけを表示。秒単位の指定時間も分・秒で示し、
   payloadへtheme名、memo、質量、Apple Account、CloudKit dataを含めない。端末内更新で設定とOS許可を尊重する
 - OSへ予約済みのlocal notificationはprocess停止中のaccount変更を再検証できないため、
   終了通知へテーマ名を含めない。旧timerの共通文面が一度届く可能性は既知の制約として扱う

@@ -52,9 +52,10 @@ Apple teamの実際のaccess、mail運用を照合して最終回答します。
   選択した保存・共有先へ渡す。JSON再importはなく、このファイルによる復元・移行には対応しない。
   設定の保存先切り替えもJSONを読み込む処理ではない
 - StoreKit transactionは端末上でApple署名をverifyし、developer serverへ送らない
-- Live Activityは明示的に開始した集中のランダムなsession UUID、秒数、終了日時／残り時間、状態だけを
-  ActivityKitへ渡して端末内更新する。theme名、memo、質量、Apple Account／CloudKit dataを含めず、
-  ActivityKit pushやdeveloper serverを使わないため、この機能自体によるdeveloperのdata collectionはない
+- Live Activityは明示的に開始した集中、または完走後に本人が選んだ休憩のランダムなsession UUID（休憩は
+  休憩ごとのUUID）、秒数、終了日時／残り時間、状態だけをActivityKitへ渡して端末内更新する。theme名、memo、
+  質量、Apple Account／CloudKit dataを含めず、ActivityKit pushやdeveloper serverを使わないため、この機能
+  自体によるdeveloperのdata collectionはない
 - third-party SDKがない
 - version 1.0ではrare rewardのUI／writer／runtime repository pathと、二つ目のoperations CloudKit
   containerに接続するentitlement／capabilityを無効化している。将来検討用sourceと公開identifierは

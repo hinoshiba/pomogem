@@ -165,7 +165,7 @@ configuration間のrelationshipは作りません。maintenanceは同期元recor
 `CompleteDataDeletionReleasePolicy.isEnabled == false`とし、direct CloudKit一括削除UIとlaunch gateを
 このworkerの契約に含めません。Version 1.0のWidgetはaccount-neutralな起動導線だけを表示し、
 SwiftData、CloudKit、App Group、snapshotを一切読みません。Live Activityはアプリ名、選択時間、残り時間、
-実行状態だけを表示し、属性をランダムなsession UUIDと秒数に限定します。process終了中のApple Account
+実行状態（完走後に選んだ休憩を含む）だけを表示し、属性をランダムなsession UUIDと秒数に限定します。process終了中のApple Account
 切替ではOSの描画cacheを同期失効できないため、system surfaceへ最初からaccount由来dataを置かないことを
 境界にします。local-onlyから後でiCloudを始める場合は、必要に応じて
 閲覧用JSONを書き出した後にappを削除・再installして選び直します。app削除でlocal記録は失われ、JSONは
@@ -803,7 +803,7 @@ maintenanceの未完了は、現在世代を安全に表示できる限りblocki
 | profile／store pairの欠落・破損 | fresh choiceへ戻さずrecovery gate。既存artifactを上書き／削除しない |
 | account change／background | 旧Rootを外しcontainer解放後にだけ次accountを解決 |
 | Widget単独起動 | account状態にかかわらず非個人化した同じ起動導線だけを返す |
-| Live Activity | account-neutralな時間／状態だけ。theme、memo、質量、account／CloudKit dataを渡さず、local toggle OFF、account退役、resetで終了 |
+| Live Activity | account-neutralな時間／状態だけ（集中と、完走後に選んだ休憩）。theme、memo、質量、account／CloudKit dataを渡さず、local toggle OFF、account退役、resetで終了 |
 | process停止中の旧timer通知 | account-neutralな共通文面だけが届き得る。subject nameをpayloadへ含めない |
 
 pure registry／URL／key／external-surface policyのunit testに加え、通知到着順とprocess suspensionを含む

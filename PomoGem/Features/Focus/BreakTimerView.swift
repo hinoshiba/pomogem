@@ -415,11 +415,14 @@ struct BreakTimerView: View {
         guard let durationSeconds = BreakRecoveryPolicy.durationSeconds(
             minutes: minutes
         ) else {
-            FocusPersistence.clearBreak()
-            isBreakActive = false
-            dismiss()
+            retireInvalidBreak()
             return
         }
+        // Only a break this view creates is new. Home's rest and every
+        // recovery arrive with their persisted end date; Home started their
+        // Live Activity at the tap (RewardBreakNotificationHandoff), and a
+        // recovery must never recreate a surface the person dismissed.
+        let isNewBreak = endDate == nil
         let startedAt = Date.now
         let startedUptime = ContinuousUptime.now()
         let resolvedEndDate = endDate
@@ -443,9 +446,7 @@ struct BreakTimerView: View {
             originatingFocusSessionID: originatingFocusSessionID
         )
         guard BreakRecoveryPolicy.isValid(recovery, at: startedAt) else {
-            FocusPersistence.clearBreak()
-            isBreakActive = false
-            dismiss()
+            retireInvalidBreak()
             return
         }
         endDate = resolvedEndDate
@@ -453,6 +454,9 @@ struct BreakTimerView: View {
         now = startedAt
         updateIdleTimer()
         FocusPersistence.saveBreak(recovery, at: startedAt)
+        if isNewBreak {
+            BreakLiveActivity.start(for: recovery)
+        }
         guard !Task.isCancelled, isBreakActive else { return }
         await notifications.refreshAuthorizationStatus()
         guard !Task.isCancelled, isBreakActive else { return }
@@ -514,6 +518,15 @@ struct BreakTimerView: View {
         UIApplication.shared.isIdleTimerDisabled = false
         FocusPersistence.clearBreak()
         stopNotificationScheduling(state: .idle)
+        BreakLiveActivity.end(breakID: sessionID)
+        dismiss()
+    }
+
+    @MainActor
+    private func retireInvalidBreak() {
+        FocusPersistence.clearBreak()
+        BreakLiveActivity.end(breakID: sessionID)
+        isBreakActive = false
         dismiss()
     }
 
@@ -852,9 +865,49 @@ struct BreakTimerView: View {
     }
 }
 
+/// The break's Lock Screen and Dynamic Island countdown (notify-06). It
+/// carries only the break's random UUID, its length and its end date, the same
+/// time-and-state payload as a focus. Skip, 「瓶へ戻る」, the next focus, the
+/// Live Activity setting, a reset and an account boundary all end it; a break
+/// that ends while the app is suspended shows 「休憩終了」 until one of them runs.
+@MainActor
+enum BreakLiveActivity {
+    static func start(for recovery: BreakRecoveryEnvelope) {
+        guard recovery.endDate > .now,
+              let durationSeconds = BreakRecoveryPolicy.durationSeconds(
+                  minutes: recovery.minutes
+              ) else { return }
+        Task { @MainActor in
+            await startNow(for: recovery, durationSeconds: durationSeconds)
+        }
+    }
+
+    fileprivate static func startNow(
+        for recovery: BreakRecoveryEnvelope,
+        durationSeconds: Int
+    ) async {
+        // A failure (Live Activities off in iOS Settings, the system limit)
+        // leaves the break itself untouched: its clock and notification
+        // never depend on this optional surface.
+        _ = try? await FocusActivityManager.shared.startBreak(
+            breakID: recovery.id,
+            durationSeconds: durationSeconds,
+            endDate: recovery.endDate
+        )
+    }
+
+    static func end(breakID: UUID) {
+        Task { @MainActor in
+            await FocusActivityManager.shared.cancel(sessionID: breakID)
+        }
+    }
+}
+
 /// Registers the already-persisted rest independently of Home's animation and
-/// CloudKit view lifetime. This owns only the short Notification Center add;
-/// the operating system owns the actual break deadline.
+/// CloudKit view lifetime. This owns only the short Notification Center add
+/// and the break's Live Activity request, both made while the app is still in
+/// the foreground at the 「N分休憩」 tap; the operating system owns the actual
+/// break deadline.
 @MainActor
 enum RewardBreakNotificationHandoff {
     private struct Operation {
@@ -898,18 +951,33 @@ enum RewardBreakNotificationHandoff {
                     playsSound: playsSound,
                     completionSound: completionSound
                 )
-                guard !Task.isCancelled,
-                      case let .accepted(deliveryDate) = result,
-                      key == FocusPersistence.breakKey,
-                      var saved = FocusPersistence.loadBreak(),
-                      saved.id == recovery.id, saved.endDate == recovery.endDate
-                else { return }
-                saved.scheduledCompletionNotificationDeliveryDate = deliveryDate
-                FocusPersistence.saveBreak(saved)
+                if !Task.isCancelled,
+                   case let .accepted(deliveryDate) = result,
+                   key == FocusPersistence.breakKey,
+                   var saved = FocusPersistence.loadBreak(),
+                   saved.id == recovery.id, saved.endDate == recovery.endDate {
+                    saved.scheduledCompletionNotificationDeliveryDate = deliveryDate
+                    FocusPersistence.saveBreak(saved)
+                }
             } catch {
                 // BreakTimerView provides the existing permission/retry UI.
                 // The saved clock remains valid even if registration fails.
             }
+            // Inside this task so BreakTimerView, which waits for it, can
+            // never race the request with its own Skip. Re-read the envelope:
+            // a Skip or reset during the notification add must win.
+            guard !Task.isCancelled,
+                  key == FocusPersistence.breakKey,
+                  let current = FocusPersistence.loadBreak(),
+                  current.id == recovery.id, current.endDate == recovery.endDate,
+                  current.endDate > .now,
+                  let durationSeconds = BreakRecoveryPolicy.durationSeconds(
+                      minutes: current.minutes
+                  ) else { return }
+            await BreakLiveActivity.startNow(
+                for: current,
+                durationSeconds: durationSeconds
+            )
         }
         operations[recovery.id] = Operation(
             token: token, task: task, backgroundTask: backgroundTask

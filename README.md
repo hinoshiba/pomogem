@@ -25,7 +25,7 @@ PomoGemは[App Store](https://apps.apple.com/app/id6809139517)で配信中です
 - 初回に同格のiCloud同期／このiPhoneのみから保存先を明示選択。このiPhoneのみならApple Account／networkなしで全基本機能を利用
 - iCloudを選び確認した場合、private CloudKitでtheme名、成果memo、記録、設定、進行中timerを同じApple Accountの対応iPhone間で同期。瓶用の集約は各端末で再構築
 - テーマ名を含めないローカル通知と、利用者データを表示せずアプリを開くホーム／ロック画面ウィジェット
-- 集中時間と状態だけを表示し、テーマ名・メモ・アカウント情報を含めないロック画面Live Activity
+- 集中・休憩の時間と状態だけを表示し、テーマ名・メモ・アカウント情報を含めないロック画面／Dynamic IslandのLive Activity
 - 瓶と累計質量を静止画または短いGIFとして共有
 - 端末で利用可能な全11種類の出荷対象保存データをversioned JSONとして手動で書き出し。ただしVersion 1.0は再import／保存先migrationに非対応
 - 広告、追跡、解析SDK、自前の収集サーバーなし
@@ -54,9 +54,9 @@ open PomoGem.xcodeproj
 CloudKitへ接続せず、専用のローカル永続ストアを使います。iCloud、通知、
 モーション、StoreKit、Live Activityの最終確認は実機で行ってください。Version 1.0のWidgetは
 account-neutralな起動導線だけを表示します。Live Activityもaccount-neutralとし、明示的に集中を
-始めたときだけ、アプリ名、選択時間、残り時間、実行状態を表示します。テーマ名、メモ、質量、
-Apple Account、CloudKit由来の内容は渡しません。設定から端末ごとに無効化でき、更新に独自serverや
-ActivityKit pushを使いません。
+始めたとき、または完走後に休憩を選んだときだけ、アプリ名、選択時間、残り時間、実行状態を表示します。
+テーマ名、メモ、質量、Apple Account、CloudKit由来の内容は渡しません。設定から端末ごとに無効化でき、
+更新に独自serverやActivityKit pushを使いません。
 
 `project.yml`がXcodeプロジェクト設定の正本です。変更後は`xcodegen generate`を実行し、
 生成された`PomoGem.xcodeproj`も同じ変更としてコミットします。

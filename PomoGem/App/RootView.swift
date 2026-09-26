@@ -2024,7 +2024,10 @@ struct RootView: View {
         let notificationCleanup = NotificationManager.shared
             .prepareTimerNotificationCleanup(preserving: sessionID, preservingBreak: breakID)
         let activityCleanup = FocusActivityManager.shared
-            .prepareCurrentActivityRetirement(preserving: sessionID)
+            .prepareCurrentActivityRetirement(
+                preserving: sessionID,
+                preservingBreak: breakID
+            )
         let deliveredStateCleanup = NotificationManager.shared.prepareDeliveredStateCleanup()
         acceptedResetCleanupTask = AcceptedActivityResetCleanup.start(
             after: acceptedResetCleanupTask,
@@ -2389,15 +2392,15 @@ struct RootView: View {
         preparation: BoundedLaunchPreparation.Result
     ) async {
         guard let envelope else {
-            await FocusActivityManager.shared.reconcileWithDurableSession(nil)
+            await reconcileLiveActivities(focusSessionID: nil)
             return
         }
         switch preparation.localFocusDisposition {
         case .present:
             await presentLocalRecovery(envelope)
             let durableEnvelope = FocusPersistence.load()
-            await FocusActivityManager.shared.reconcileWithDurableSession(
-                durableEnvelope?.pendingCompletion?.sessionID
+            await reconcileLiveActivities(
+                focusSessionID: durableEnvelope?.pendingCompletion?.sessionID
                     ?? durableEnvelope?.engine.currentSessionID
             )
         case let .retireMaterialized(sessionID):
@@ -2411,8 +2414,8 @@ struct RootView: View {
             ) else {
                 await presentLocalRecovery(envelope)
                 let durableEnvelope = FocusPersistence.load()
-                await FocusActivityManager.shared.reconcileWithDurableSession(
-                    durableEnvelope?.pendingCompletion?.sessionID
+                await reconcileLiveActivities(
+                    focusSessionID: durableEnvelope?.pendingCompletion?.sessionID
                         ?? durableEnvelope?.engine.currentSessionID
                 )
                 return
@@ -2426,13 +2429,25 @@ struct RootView: View {
                 forKey: FocusPersistence.localCompletionIDKey
             )
             await FocusActivityManager.shared.cancel(sessionID: sessionID)
-            await FocusActivityManager.shared.reconcileWithDurableSession(nil)
+            await reconcileLiveActivities(focusSessionID: nil)
         case .retireStale, .quarantineAwaitingMarker, .none:
             // A known-stale envelope was already retired by the reset gate.
             // Unknown generations keep their bytes but never retain an OS
             // surface until their reset marker proves they are current.
-            await FocusActivityManager.shared.reconcileWithDurableSession(nil)
+            await reconcileLiveActivities(focusSessionID: nil)
         }
+    }
+
+    /// The launch reconciliation of OS surfaces with durable state: the
+    /// validated focus, plus a rest that is still valid (notify-06). A reset
+    /// applied earlier in this launch has already cleared a retired break, so
+    /// its surface ends here; the fail-closed error paths keep ending all.
+    @MainActor
+    private func reconcileLiveActivities(focusSessionID: UUID?) async {
+        await FocusActivityManager.shared.reconcileWithDurableSession(
+            focusSessionID,
+            breakID: FocusPersistence.validBreakID()
+        )
     }
 
     @MainActor
@@ -2832,6 +2847,7 @@ struct RootView: View {
         if router.recoveredFocus != nil {
             FocusPersistence.clearBreak()
             NotificationManager.shared.cancelBreakCompletion(id: recovery.id)
+            await FocusActivityManager.shared.cancel(sessionID: recovery.id)
             return
         }
         // Let BreakTimerView resolve an elapsed recovery. It alone has the

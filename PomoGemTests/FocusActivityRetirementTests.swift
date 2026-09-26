@@ -64,6 +64,34 @@ final class FocusActivityRetirementTests: XCTestCase {
         XCTAssertEqual(client.currentActivityID, "preserved")
     }
 
+    /// notify-06. A reset retry that keeps a rest started after the reset
+    /// keeps that rest's Live Activity, and only that one.
+    func testPreservedBreakSurvivesAlongsideThePreservedFocus() async {
+        let client = FakeRetiringFocusActivities()
+        let focus = UUID()
+        let rest = UUID()
+        client.start(id: "old", sessionID: UUID())
+        client.start(id: "focus", sessionID: focus)
+        client.start(id: "rest", sessionID: rest)
+
+        let retirement = client.prepare(preserving: focus, preservingBreak: rest)
+        await retirement.end()
+
+        XCTAssertEqual(Set(client.activities.keys), ["focus", "rest"])
+        XCTAssertEqual(client.ended, ["old"])
+    }
+
+    func testAcceptanceKeepsAPendingBreakStartValid() {
+        var lifecycle = FocusActivityLifecycleState()
+        let rest = UUID()
+        let restGeneration = lifecycle.begin(sessionID: rest)
+        lifecycle.acceptRetirement(preserving: nil, preservingBreak: rest)
+        XCTAssertEqual(lifecycle.generation, restGeneration)
+
+        lifecycle.acceptRetirement(preserving: nil, preservingBreak: UUID())
+        XCTAssertNotEqual(lifecycle.generation, restGeneration)
+    }
+
     func testAcceptanceInvalidatesOldPendingStartsAndPreservesOnlyExactSession() {
         var lifecycle = FocusActivityLifecycleState()
         let oldSession = UUID()
@@ -96,8 +124,11 @@ private final class FakeRetiringFocusActivities {
         currentActivityID = id
     }
 
-    func prepare(preserving sessionID: UUID? = nil) -> FocusActivityRetirement {
-        lifecycle.acceptRetirement(preserving: sessionID)
+    func prepare(
+        preserving sessionID: UUID? = nil,
+        preservingBreak breakID: UUID? = nil
+    ) -> FocusActivityRetirement {
+        lifecycle.acceptRetirement(preserving: sessionID, preservingBreak: breakID)
         let targets = activities.sorted { $0.key < $1.key }.map { id, sessionID in
             FocusActivityRetirement.Target(id: id, sessionID: sessionID) {
                 await self.endGate?.wait()
@@ -105,7 +136,11 @@ private final class FakeRetiringFocusActivities {
                 self.ended.append(id)
             }
         }
-        return FocusActivityRetirement(targets: targets, preserving: sessionID) { id in
+        return FocusActivityRetirement(
+            targets: targets,
+            preserving: sessionID,
+            preservingBreak: breakID
+        ) { id in
             guard self.currentActivityID == id else { return }
             self.currentActivityID = nil
         }

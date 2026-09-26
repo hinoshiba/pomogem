@@ -1061,6 +1061,27 @@ enum FocusPersistence {
         return value
     }
 
+    /// The ID of the still-valid durable break, read without `loadBreak`'s
+    /// repairs (it neither removes an invalid envelope nor advances a reward
+    /// receipt). Launch uses it to keep that break's Live Activity while it
+    /// reconciles OS surfaces, before break recovery runs in its usual order.
+    static func validBreakID(
+        defaults: UserDefaults = .standard,
+        at now: Date = .now
+    ) -> UUID? {
+        let key = AccountScopedLocalState.defaultsKey(
+            base: baseBreakKey,
+            defaults: defaults
+        )
+        guard let data = defaults.data(forKey: key),
+              let value = try? JSONDecoder().decode(
+                  BreakRecoveryEnvelope.self,
+                  from: data
+              ),
+              BreakRecoveryPolicy.isValid(value, at: now) else { return nil }
+        return value.id
+    }
+
     /// Commits the user's rest choice before Home can disappear. The existing
     /// break envelope is the sole durable timer; the gem receipt never owns a
     /// second timer that could restart after Skip, completion, reset or delete.

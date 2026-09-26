@@ -267,7 +267,8 @@ unit test、主要UI test、static analyzerを実行します。40年soakはrele
   iCloud通常resetの一時停止とlocal-only通常resetの継続
 - Home／Lock Screen Widgetが利用者dataを表示せずアプリを開くこと
 - Live Activityの開始、pause、resume、期限到達、cancel、完了後dismiss、手動dismiss後に再生成しないこと、
-  SettingsでOFFにすると即終了すること。全状態でtheme名、memo、質量、account情報を表示しないこと
+  SettingsでOFFにすると即終了すること。完走後に選んだ休憩の「休憩中」「休憩終了」表示と、休憩の
+  skip／「瓶へ戻る」での終了。全状態でtheme名、memo、質量、account情報を表示しないこと
 - 「タイマー中は画面をロックしない」のON/OFF。ONでは集中、集中直後の短い／長い休憩、Homeからの
   単独休憩が前面で残時間のある間だけ点灯を維持し、pause、期限到達、skip／close、backgroundで
   即座に通常の自動ロックへ戻ること

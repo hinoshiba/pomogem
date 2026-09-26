@@ -39,7 +39,7 @@ STORAGE AND PRIVACY
 - 端末dataでiCloud全体を置き換える操作と、その復旧再開は無効です。再取得の受付は同じaccount・保存領域・CloudKit環境に限定し、別環境へ持ち越しません。起動時に管理情報が無い状態を他端末の置き換えと決めつけません。
 - 切り替えには通信とapp終了・再起動が必要です。app自体を削除しないでください。削除すると端末記録・未送信変更は失われます。JSONは再importできません。
 - iCloud中の「表示中の記録をリセット」と直接CloudKit一括削除は提供せず、AppleのiCloudストレージ管理を案内します。
-- Widgetは起動導線だけです。Live Activityは時間・状態だけでテーマやaccountを含みません。Motionは瓶の動きだけに使い保存／送信せず、Photos add-onlyは保存を選んだ場合だけ要求します。広告、tracking、analytics SDK、developer serverはありません。
+- Widgetは起動導線だけです。Live Activityは集中・休憩の時間・状態だけでテーマやaccountを含みません。Motionは瓶の動きだけに使い保存／送信せず、Photos add-onlyは保存を選んだ場合だけ要求します。広告、tracking、analytics SDK、developer serverはありません。
 
 Jar sound, haptics, and motion test
 

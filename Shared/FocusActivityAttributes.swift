@@ -24,12 +24,21 @@ enum FocusActivityConstants {
 /// Live Activity after the app process exits. Only an opaque session ID and
 /// numerical duration cross the extension boundary; category names, account
 /// identifiers, notes, and CloudKit state never do.
+///
+/// A break the person chose after a focus uses the same attributes: its
+/// session ID is the break's own random UUID and its duration is the break
+/// length, so the rest adds no new kind of data to the surface.
 struct FocusActivityAttributes: ActivityAttributes, Sendable {
     struct ContentState: Codable, Hashable, Sendable {
+        /// ActivityKit state only. It is never persisted or synced, and the app
+        /// and the extension ship together, so a new case cannot reach an
+        /// older reader.
         enum Phase: String, Codable, Hashable, Sendable {
             case running
             case paused
             case completed
+            /// The chosen break is counting down (notify-06).
+            case breakRunning
         }
 
         let phase: Phase
@@ -69,6 +78,18 @@ struct FocusActivityAttributes: ActivityAttributes, Sendable {
                 pausedRemainingSeconds: nil
             )
         }
+
+        /// Breaks cannot be paused, so the end date is the whole state. The
+        /// system renders the countdown and marks it stale at `endDate`.
+        static func breakRunning(until endDate: Date) -> Self {
+            Self(
+                phase: .breakRunning,
+                endDate: endDate,
+                pausedRemainingSeconds: nil
+            )
+        }
+
+        var isBreak: Bool { phase == .breakRunning }
     }
 
     let sessionID: UUID
