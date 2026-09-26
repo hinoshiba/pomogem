@@ -12,6 +12,17 @@
         }
       }
     },
+    "%@、%@の記念石、%@" : {
+      "comment" : "VoiceOver, one achievement stone card: theme, kind, date",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@、%2$@の記念石、%3$@"
+          }
+        }
+      }
+    },
     "%@、この端末に届いている%lld粒、%@" : {
       "comment" : "VoiceOver month card: month, gem count on this iPhone, spoken mass",
       "localizations" : {
@@ -19,6 +30,31 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@、この端末に届いている%2$lld粒、%3$@"
+          }
+        }
+      }
+    },
+    "%@、集中%@。%@、%lld粒分" : {
+      "comment" : "VoiceOver, one crystal on the star map: mass, focus time, crystal name such as 結晶, gems it holds",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@、集中%2$@。%3$@、%4$lld粒分"
+          }
+        }
+      }
+    },
+    "%@の結晶" : {
+      "comment" : "Crystal card title; the argument is a scale such as ×10"
+    },
+    "%@の結晶、%lld粒、%@" : {
+      "comment" : "VoiceOver, crystal card: scale such as ×10, gems inside, mass",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@の結晶、%2$lld粒、%3$@"
           }
         }
       }
@@ -33,6 +69,18 @@
           }
         }
       }
+    },
+    "%lld回" : {
+      "comment" : "Weekly card tile value: a count of times"
+    },
+    "%lld粒" : {
+      "comment" : "VoiceOver, time core: gems stacked so far"
+    },
+    "%lld粒以上" : {
+      "comment" : "VoiceOver, time core: at least this many gems (still being checked)"
+    },
+    "10粒をひとつの結晶にまとめます。価値の段階ではなく、記録と質量をそのまま残して瓶に余白をつくる仕組みです。" : {
+
     },
     "このほか自己申告 %@" : {
       "comment" : "Weekly card: self-reported mass outside the measured tiles; the argument is a mass"
@@ -75,27 +123,33 @@
     "今週の時間が積み上がっている。" : {
 
     },
-    "今週の積み上げ、%@、実測%@、タイマー完走%lld回。このほか自己申告%@。回数は戻った文脈で、時間価値とは別です" : {
+    "今週の積み上げ、%@、実測%@、完走した回数%lld回。このほか自己申告%@。回数は時間の価値とは別に数えています" : {
       "comment" : "VoiceOver weekly card: focus time, measured mass, timer completions, self-reported mass",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "今週の積み上げ、%1$@、実測%2$@、タイマー完走%3$lld回。このほか自己申告%4$@。回数は戻った文脈で、時間価値とは別です"
+            "value" : "今週の積み上げ、%1$@、実測%2$@、完走した回数%3$lld回。このほか自己申告%4$@。回数は時間の価値とは別に数えています"
           }
         }
       }
     },
-    "今週の積み上げ、%@、実測%@、タイマー完走%lld回。回数は戻った文脈で、時間価値とは別です" : {
+    "今週の積み上げ、%@、実測%@、完走した回数%lld回。回数は時間の価値とは別に数えています" : {
       "comment" : "VoiceOver weekly card: focus time, measured mass, timer completions",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "今週の積み上げ、%1$@、実測%2$@、タイマー完走%3$lld回。回数は戻った文脈で、時間価値とは別です"
+            "value" : "今週の積み上げ、%1$@、実測%2$@、完走した回数%3$lld回。回数は時間の価値とは別に数えています"
           }
         }
       }
+    },
+    "今週の積み上げ、瓶で動く結晶、年月の棚。距離を変えても、一回ごとの集中と質量はそのまま残ります。" : {
+
+    },
+    "今週の積み上げ、瓶で動く結晶、直近の年月。古い一回ごとの記録も消えず、必要な範囲だけ読み込みます。" : {
+
     },
     "今週の積み上げ。タイマーの完走はまだありません。自己申告の%@は、瓶とこれまでの記録に入っています" : {
       "comment" : "VoiceOver weekly card when the week has only self-reported mass"
@@ -109,7 +163,13 @@
     "今週は、自己申告で積んでいる。" : {
 
     },
-    "価値は集中時間で加算。完走回数は、戻ってきた文脈として別に残します。" : {
+    "以前の形式で保存された結晶です。" : {
+
+    },
+    "完走した回数" : {
+      "comment" : "Weekly card tile: timers that ran to their end this week"
+    },
+    "完走するたびに粒がひとつ増えます。10粒がひとつの結晶になるのは瓶を整理するためで、時間の価値は変わりません。結晶をタップすると内訳を確認できます。" : {
 
     },
     "日ごとの記録" : {
@@ -121,11 +181,100 @@
     "時間" : {
       "comment" : "This week's focus time stat title"
     },
+    "時間の核は集中した時間で進みます。10分で100グラム、25分で250グラム、60分で600グラムです" : {
+
+    },
     "次の完走から時間と質量を加えます。休んでも、これまでの瓶は減りません。" : {
 
     },
+    "段は瓶を整理するための形です。10個そろうと次の段にまとまりますが、時間の核は集中した時間だけで進みます。" : {
+
+    },
+    "瓶の中は、粒%lld個・表示中の結晶%lld個・記念石%lld個の代表表示です。" : {
+      "comment" : "Lifetime bottle disclosure: gems, crystals and achievement stones drawn as representatives",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "瓶の中は、粒%1$lld個・表示中の結晶%2$lld個・記念石%3$lld個の代表表示です。"
+          }
+        }
+      }
+    },
+    "生涯の時間と、瓶を整理する結晶を見ます。" : {
+
+    },
+    "確認が終わるまで古い結晶は表示しません。" : {
+
+    },
+    "積み上がるのは集中した時間です。完走した回数は、時間とは別に数えています。" : {
+
+    },
+    "積んだ粒" : {
+      "comment" : "Lifetime stat title: gems stacked so far"
+    },
+    "結晶" : {
+      "comment" : "Overview section title: the jar's crystals (10 gems -> 1)"
+    },
+    "結晶になっても元の記録は削除しません。この粒には元記録への参照と、確認できる色・粒数・質量を保存しています。合計が一致しない内訳は表示していません。記念石は別の石として残します。" : {
+
+    },
+    "結晶になっても元の記録は削除せず、この粒にも色・テーマ・質量の内訳と元記録への参照を保存します。記念石は結晶に含めず、別の石として残します。" : {
+
+    },
+    "結晶になっても情報は削除されません" : {
+
+    },
+    "結晶の内訳" : {
+      "comment" : "Navigation title of one crystal's detail"
+    },
+    "結晶の段" : {
+      "comment" : "Overview section title: the ×10, ×100 … crystal steps"
+    },
+    "結晶は、表示中の%lld個のうち代表%lld個を配置しています。" : {
+      "comment" : "Star map disclosure: crystals shown, how many are drawn",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "結晶は、表示中の%1$lld個のうち代表%2$lld個を配置しています。"
+          }
+        }
+      }
+    },
+    "表示中の結晶" : {
+      "comment" : "Lifetime stat title: crystals on this page"
+    },
+    "表示中の結晶%lld個のうち代表%lld個を配置" : {
+      "comment" : "VoiceOver, time core: crystals on the page, how many are drawn",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "表示中の結晶%1$lld個のうち代表%2$lld個を配置"
+          }
+        }
+      }
+    },
+    "記念石" : {
+      "comment" : "Overview section title: achievement stones"
+    },
+    "集中%@。最初の結晶まで、あと%lld粒です" : {
+      "comment" : "VoiceOver, empty time-core vessel: focus time so far, gems left until the first crystal",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "集中%1$@。最初の結晶まで、あと%2$lld粒です"
+          }
+        }
+      }
+    },
     "集中した時間" : {
       "comment" : "Month summary tile: total focus time"
+    },
+    "集中時間" : {
+      "comment" : "Lifetime stat title: total focus time"
     }
   },
   "version" : "1.0"

@@ -1,7 +1,15 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "ポモジェムPro" : {
+      "comment" : "Paywall: title of the card shown once Pro is owned"
+    },
+    "結晶に、積み上げた月を刻めます。" : {
 
+    },
+    "結晶の月刻印" : {
+      "comment" : "Paywall feature: month engraved on each crystal"
+    }
   },
   "version" : "1.0"
 }

@@ -1,7 +1,35 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を%lldgとして計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は%lld体以内です。" : {
+      "comment" : "Plan: calculation assumptions; the arguments are grams per minute and the physics body limit",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "1年を平均365.25日として週回数を換算し、1回の完走を1粒、集中1分を%1$lldgとして計算します。2.50kgごとの瓶の満杯、長期の質量段階、瓶の光は実画面と同じ計算です。10個ずつまとめるため、長期間でも描画する可動体は%2$lld体以内です。"
+          }
+        }
+      }
+    },
+    "あと%@ · 瓶1杯は集中250分相当" : {
+      "comment" : "Plan preview: mass left until the jar fills; the argument is a mass"
+    },
+    "星図と瓶は見え方の予測です。粒と結晶は予定した完走リズムを、上の時間・質量は集中時間の累計を表します。記念石・実際の休止日は含めません。" : {
 
+    },
+    "満杯を確認 · 累計はそのまま次の1杯へ" : {
+
+    },
+    "瓶%lld杯目が満ちた" : {
+      "comment" : "Plan preview: the jar filled for the Nth time"
+    },
+    "瓶1杯 2.50kg · 集中250分相当" : {
+
+    },
+    "瓶は2.50kg（集中250分相当）ごとに必ず満ち、満杯の光を見届けてから次の1杯へ進みます。累計は消えず、2.50kg → 25kg → 250kg…の長期段階として別に残ります。回数ではなく、集中1分＝%lldgで両方が進みます。" : {
+      "comment" : "Plan: how the jar fills; the argument is grams per minute"
+    }
   },
   "version" : "1.0"
 }

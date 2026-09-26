@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "「抽選しない」を選択として保存" : {
+
+    },
     "その日に集中を始めたり、時間を手動で積んだりした日は、毎日のリマインダーは届きません。7日間アプリを開かなかったときは、次に開くまでお休みします。" : {
       "comment" : "Settings caption: when the daily reminder is skipped"
     },
@@ -36,6 +39,12 @@
     },
     "毎月1日に一度だけ" : {
       "comment" : "Settings switch subtitle: the monthly notification is sent on the 1st"
+    },
+    "結晶" : {
+      "comment" : "Export progress: the collection being written (crystals)"
+    },
+    "記念石" : {
+      "comment" : "Export progress: the collection being written (achievement stones)"
     },
     "設定を開く" : {
       "comment" : "Alert button: open this app's notification settings in iOS\nButton: open this app's notification settings in iOS"
