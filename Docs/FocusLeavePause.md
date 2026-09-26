@@ -4,6 +4,11 @@
 設定画面の行はPhase B（設定画面の再編の後）で追加します。既定はオン（オーナー承認、2026-09-26）で、
 `FocusLeavePolicy.enabledByDefault`の1か所だけで切り替えます。
 
+**統合・提出の条件**: Phase Aだけではmainへ統合せず、提出もしません。既定オンなのに止める設定がなく、
+設定画面の「タイマーはバックグラウンドでも止まりません」と「集中に戻るお知らせ」の説明が事実と食い違うためです。
+Phase Bの設定の2行と、それらの文言の書き換えが同じ変更かその前に入ってから統合します
+（`AppStore/submission-checklist.md`のF1の条件）。
+
 > 依頼（原文）: アプリをバックグラウンドにしたら、タイマーを停止して、集中が切れているという通知を定期的に出すようにしよう
 
 ## 決まり
@@ -23,6 +28,9 @@
   どちらも「離れた」として一時停止します（タイマー画面の文言がそう伝えます。設定の説明はPhase Bで追加）。
 - 戻っても自動では再開しません。タイマー画面は通常の一時停止表示に
   「アプリを離れていたので一時停止しました」を1行添え、いつもの「再開」で続きから始めます。
+- タイマー画面の「終了通知は端末の設定から」（通知が許可されていないとき）で設定アプリを開いた場合は、
+  アプリが案内した操作なので離れたとみなしません。ボタンを押してから5秒以内の`.background`だけが対象で、
+  1回使えば消えます（`FocusLeaveAppInitiatedDeparture`）。
 - 画面の明るさを読む方法や、SpringBoardの非公開通知キーは使いません（審査ガイドライン2.5.1）。
   使うのは公開APIだけです: `scenePhase`、`UIApplication.isProtectedDataAvailable`、
   `protectedDataWillBecomeUnavailableNotification`、`beginBackgroundTask`、
@@ -55,7 +63,9 @@
 
 どちらも`UserDefaults.standard`だけに保存し、同期・書き出し・Prefsのstampに含めません。
 完全削除はUserDefaultsのドメインごと消します。UIテストは、共有Simulatorで多数の集中を背景に回すため、
-`POMOGEM_UI_TEST_FOCUS_LEAVE_PAUSE=1`で明示したテストだけが既定オンになります（明示した設定値は常に優先）。
+`POMOGEM_UI_TEST_FOCUS_LEAVE_PAUSE=1`で明示したテストだけが既定オンになります。明示した設定値は常に優先し、
+起動引数（`-focus.leave-pause.enabled NO`）で渡る文字列の`NO`・`YES`・`0`・`1`もその値として読みます
+（`RealDeviceCoreLoopUITests`はこれでF1をオフにします）。
 
 ## 仕組み
 
@@ -68,10 +78,16 @@
 - `.background`で**同期的に**、保存したタイマーへ端末内の記録`leaveExcursion {sessionID, leftAt}`を書きます。
   ロックなら記録を消し、離れたなら`engine.pause(at: leftAt)`と`leavePause {sessionID, pausedAt, plannedEndDate}`を書き、
   終了通知だけを取り消し（「集中が切れています」は残す。critic D7）、Live Activityを一時停止表示にします。
+  判定までのバックグラウンド時間は、Live Activityの更新が終わるまで持ち続けて返します。更新の途中でiOSが
+  時間を打ち切った場合も、期限切れの処理がその時間を必ず返します（返さないとアプリが終了させられます）。
 - **判定より先に適用する規則（critic A3）**: 記録が残ったまま20秒を過ぎていれば「離れた」とみなし、
   `leftAt`で一時停止してから次へ進みます。`FocusPersistence.load`、`preparedForLocalRelaunch`、
   `relaunchAction`、起動画面の状態表示（`peekTimerEnvelopes`、書き込みなし）、タイマー画面の復帰・再表示が
   すべてこれを通るため、プロセスが判定中に終了しても、終了予定を過ぎた集中を完了として保存・加算しません。
+- 判定中にプロセスが終了し、本人が20秒以内に戻った場合は、ちょっと見ただけです。iCloudモードでは保存したタイマーを
+  読めるのがアカウントの確認後なので、最初に読む時点では20秒を過ぎていることがあります。そのため、この
+  プロセスで最初にUIKitが`.active`を確かめた時刻（`FocusLeaveReturnWitness`）を読む側へ渡し、離れてから
+  20秒以内の復帰なら記録を消すだけにします。離れる前の起動時刻は、その離脱の証拠になりません。
 - タイマー画面は、ホストの一時停止の通知（`FocusLeaveMonitor.didAutoPause`）を同じターンで受けて
   保存済みの一時停止に合わせます。古い実行中の状態で書いても、離れる前の終了予定と同じ実行中の状態は
   保存時に無視されます（`FocusPersistence.mergingLeaveMarkers`）。本当の再開は必ず終了予定より後に終わります。
@@ -125,11 +141,16 @@ Simulatorはデータ保護がなく、ロック後の`protectedDataWillBecomeUn
 
 ## テスト
 
-- `FocusLeavePolicyTests`: 既定値と移行、閾値と予約の時刻、分類、復帰の判定、文言の選択、
-  保存したタイマーの変化、判定中のプロセス終了からの再起動、保存時の記録の引き継ぎ、Codableの互換、
-  CloudKitに含めないこと、スクリーンタイムの休止、完全削除。
+- `FocusLeavePolicyTests`: 既定値と移行（起動引数の文字列を含む）、閾値と予約の時刻、分類、復帰の判定、
+  文言の選択、保存したタイマーの変化、判定中のプロセス終了からの再起動（20秒以内に戻った後で読む場合を含む）、
+  `FocusPersistence.save`経由の記録の引き継ぎ、Codableの互換、CloudKitに含めないこと、スクリーンタイムの休止、完全削除。
 - `FocusLeaveMonitorTests`: 時計・保護データ・パスコード・バックグラウンド時間・通知・Live Activityを
-  偽物にしたホストの状態遷移（ロック、見落としたロック、パスコードなし、期限切れ、20秒以内の復帰、
-  停止されたプロセスからの復帰、再起動後の復帰、iOS 26の誤ったactive、古い離脱の残り、アカウント境界）。
+  偽物にしたホストの状態遷移（ロック、見落としたロック、パスコードなし、期限切れ、Live Activityの更新中の期限切れ、
+  20秒以内の復帰、停止されたプロセスからの復帰、再起動後の復帰、読む側が先に一時停止した場合、
+  一時停止するものがない場合、iOS 26の誤ったactive、古い離脱の残り、アカウント境界、アプリが開いた設定、
+  復帰の記録）と、本物の`NotificationManager`をつないだ`Dependencies.live`（終了通知だけを消し5件を残す）。
 - `FocusLeaveNudgeSchedulingTests`: 5件・`.active`・同じthread・1回きり、音、許可と切り替え、遅れた予約、
   取り消しの各経路、遅れて届いた追加が取り消し後に残らないこと。
+- `FocusLeavePauseUITests`（`POMOGEM_UI_TEST_FOCUS_LEAVE_PAUSE=1`、AX5）: 既定オンの構成で、実行中の行の文言、
+  ホーム画面へ移って20秒後の一時停止と1行の表示、`再開する`を、hit regionと文字の欠けの監査にかけます。
+  Simulatorはパスコードがないため、パスコードありの文言と判定は実機の表で確認します。
