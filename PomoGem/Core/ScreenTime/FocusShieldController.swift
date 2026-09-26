@@ -1,3 +1,4 @@
+import DeviceActivity
 import FamilyControls
 import Foundation
 import ManagedSettings
@@ -226,7 +227,8 @@ final class FocusShieldController: ObservableObject {
     /// retired, or a later attempt for the same focus succeeds.
     @Published private(set) var failsafeUnavailable = false
 
-    private let engine: FocusShieldEngine
+    /// Internal so tests can tell which drivers a default-built controller got.
+    let engine: FocusShieldEngine
     private let queue: DispatchQueue
     private let clock: () -> Date
     private var lastRequest: Request?
@@ -454,6 +456,47 @@ final class FocusShieldController: ObservableObject {
     private func publishShielding(_ record: FocusShieldRecord?, now: Date) {
         let shielding = record.map { $0.active && now < $0.deadline } ?? false
         if isShielding != shielding { isShielding = shielding }
+    }
+}
+
+// MARK: - Engine for a ledger
+
+/// Stands in for ManagedSettings when the controller's ledger is not the App
+/// Group's: touches nothing.
+final class DetachedFocusShieldSettings: FocusShieldSettingsDriving {
+    func shield(applications: Set<ApplicationToken>) {}
+    func clear() {}
+}
+
+/// Stands in for DeviceActivityCenter when the controller's ledger is not the
+/// App Group's: lists nothing, stops nothing, and refuses to register, so a
+/// switched-on shield there records `failsafe-unavailable` and shields nothing.
+final class DetachedFocusShieldCenter: ScreenTimeActivityCenterDriving {
+    var activities: [DeviceActivityName] { [] }
+    func stopMonitoring(_ activities: [DeviceActivityName]) {}
+    func startMonitoring(
+        _ activity: DeviceActivityName,
+        during schedule: DeviceActivitySchedule,
+        events: [DeviceActivityEvent.Name: DeviceActivityEvent]
+    ) throws {
+        throw ScreenTimeError.unavailable
+    }
+}
+
+extension FocusShieldEngine {
+    /// `ScreenTimeController`'s default. The named ManagedSettings store and
+    /// the DeviceActivity center are process-wide, so only a controller on
+    /// the App Group's own ledger drives them. Any other directory — every
+    /// unit test's temporary store, hosted in the real app — keeps its record
+    /// next to its ledger and gets detached drivers, so erasing or retiring
+    /// it can never lift the host app's real shield or stop its failsafe.
+    static func forLedger(directory: URL?) -> FocusShieldEngine {
+        guard directory?.standardizedFileURL == FocusShieldRecordStore.appGroupDirectory()?.standardizedFileURL
+        else {
+            return FocusShieldEngine(records: FocusShieldRecordStore(directory: directory),
+                                     settings: DetachedFocusShieldSettings(), center: DetachedFocusShieldCenter())
+        }
+        return .live(directory: directory)
     }
 }
 

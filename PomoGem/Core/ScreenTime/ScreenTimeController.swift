@@ -111,10 +111,12 @@ final class ScreenTimeController: ObservableObject {
         focusShield: FocusShieldController? = nil
     ) {
         self.store = store
-        // The record sits next to THIS store's ledger, so a controller built
-        // on a temporary directory never reads or writes the real App Group.
+        // The record sits next to THIS store's ledger, and only the App
+        // Group's own ledger drives the process-wide ManagedSettings store and
+        // DeviceActivity center: a controller built on a temporary directory
+        // (every unit test, hosted in the real app) touches no real state.
         self.focusShield = focusShield
-            ?? FocusShieldController(engine: .live(directory: store.directoryURL))
+            ?? FocusShieldController(engine: .forLedger(directory: store.directoryURL))
         self.noticeDefaults = noticeDefaults
         self.currentContextKey = currentContextKey
         self.authorization = authorization
@@ -985,6 +987,12 @@ enum ScreenTimeOwnerBoundaryPolicy {
         on controller: ScreenTimeController = .shared
     ) {
         guard retiresLease(for: transition) else { return }
+        // The focus shield's record is deliberately not owner-bound, and
+        // `suspendForContextRetirement` does nothing without a bound lease
+        // (a cold launch that never admitted persistence, a change before
+        // the modifier bound). The focus it belongs to is gone with the
+        // owner either way, so lift it here, lease or not.
+        controller.focusShield.retire(reason: .ownerRetired)
         controller.suspendForContextRetirement()
     }
 }

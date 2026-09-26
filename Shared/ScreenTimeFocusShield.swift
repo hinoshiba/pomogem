@@ -163,10 +163,11 @@ final class FocusShieldRecordStore {
         self.directory = directory
     }
 
+    /// The App Group ledger's own folder, derived from `ScreenTimeStore` so
+    /// the extension, the launch sweep and `ScreenTimeController.shared` can
+    /// never look in different places.
     static func appGroupDirectory() -> URL? {
-        FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: ScreenTimeStore.appGroupID)?
-            .appendingPathComponent("ScreenTime", isDirectory: true)
+        ScreenTimeStore().directoryURL
     }
 
     private var recordURL: URL? { directory?.appendingPathComponent("focus-shield.json") }
@@ -425,8 +426,10 @@ final class FocusShieldEngine: @unchecked Sendable {
     }
 
     let records: FocusShieldRecordStore
-    private let settings: FocusShieldSettingsDriving
-    private let center: ScreenTimeActivityCenterDriving
+    /// Internal (not private) only so tests can tell which drivers a
+    /// default-built controller received.
+    let settings: FocusShieldSettingsDriving
+    let center: ScreenTimeActivityCenterDriving
     private let calendar: () -> Calendar
     private let resolveInterval: (DeviceActivitySchedule) -> DateInterval?
     private let lockTimeout: TimeInterval?

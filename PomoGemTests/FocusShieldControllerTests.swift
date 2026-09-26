@@ -499,6 +499,31 @@ final class FocusShieldControllerTests: XCTestCase {
         XCTAssertFalse(empty.invalidateAuthorization(), "An empty setup has nothing to invalidate")
     }
 
+    func testAnAccountChangeLiftsTheShieldEvenWithNoBoundOwner() async throws {
+        let fixture = makeController()
+        let controller = ScreenTimeController(
+            store: ScreenTimeStore(directory: makeDirectory()), currentContextKey: { "owner" },
+            monitoring: NoopMonitoring(), authorization: { .approved },
+            diagnosticsMirror: ScreenTimeDiagnosticsMirror(directory: makeDirectory()),
+            noticeDefaults: UserDefaults(suiteName: UUID().uuidString)!,
+            focusShield: fixture.controller)
+        // A shield from before the change; this process never bound an owner
+        // (a cold launch whose persistence was never admitted).
+        _ = try fixture.engine.apply(sessionID: UUID(), deadline: now.addingTimeInterval(1_560),
+                                     applications: try selection(count: 2, seed: 0x74).applicationTokens, now: now)
+        XCTAssertFalse(controller.isBound(contextKey: "owner", dataEpochID: nil))
+
+        ScreenTimeOwnerBoundaryPolicy.retire(for: .backgroundedSession, on: controller)
+        await fixture.controller.waitForPendingOperations()
+        XCTAssertEqual(try fixture.engine.records.load()?.active, true, "An ordinary backgrounding keeps it")
+
+        ScreenTimeOwnerBoundaryPolicy.retire(for: .accountIdentityChange, on: controller)
+        await fixture.controller.waitForPendingOperations()
+        let record = try XCTUnwrap(try fixture.engine.records.load())
+        XCTAssertFalse(record.active)
+        XCTAssertEqual(record.clearedBy, FocusShieldClearReason.ownerRetired.rawValue)
+    }
+
     func testCompleteDeletionErasesTheShieldRecordAndStore() async throws {
         let fixture = makeController()
         let (controller, _) = try await boundScreenTimeController(shield: fixture.controller)
@@ -515,15 +540,43 @@ final class FocusShieldControllerTests: XCTestCase {
         XCTAssertFalse(fixture.controller.isShielding)
     }
 
-    func testTheDefaultShieldRecordLivesNextToTheControllersOwnLedger() throws {
-        let directory = makeDirectory()
-        let store = ScreenTimeStore(directory: directory)
+    func testTheDefaultShieldRecordLivesNextToTheControllersOwnLedgerAndTouchesNoRealState() async throws {
+        let store = ScreenTimeStore(directory: makeDirectory())
+        let distraction = try selection(count: 2, seed: 0x75)
+        try store.update { state in
+            state.contextKey = "owner"
+            state.contextIsActive = true
+            state.configuration.distractionSelection = distraction
+            state.configuration.shieldsDistractionDuringFocusEnabled = true
+        }
         let controller = ScreenTimeController(store: store, currentContextKey: { "owner" },
                                               monitoring: NoopMonitoring(), authorization: { .approved },
-                                              diagnosticsMirror: ScreenTimeDiagnosticsMirror(directory: makeDirectory()))
-        XCTAssertEqual(store.directoryURL, directory.appendingPathComponent("ScreenTime", isDirectory: true))
-        XCTAssertFalse(controller.focusShield.isShielding)
+                                              diagnosticsMirror: ScreenTimeDiagnosticsMirror(directory: makeDirectory()),
+                                              noticeDefaults: UserDefaults(suiteName: UUID().uuidString)!)
+        // A temporary ledger never drives the process-wide store or center.
+        XCTAssertTrue(controller.focusShield.engine.settings is DetachedFocusShieldSettings)
+        XCTAssertTrue(controller.focusShield.engine.center is DetachedFocusShieldCenter)
+
+        try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
+        controller.reconcileFocusShield(
+            contextKey: "owner", dataEpochID: nil,
+            focus: .running(sessionID: UUID(), plannedEnd: Date().addingTimeInterval(1_500)))
+        try await controller.waitForPendingOperations()
+        let record = try XCTUnwrap(try FocusShieldRecordStore(directory: store.directoryURL).load(),
+                                   "The default controller writes its record next to its own ledger")
+        XCTAssertFalse(record.active, "The detached center registers nothing, so nothing is shielded")
+        XCTAssertEqual(record.clearedBy, FocusShieldClearReason.failsafeUnavailable.rawValue)
+        XCTAssertTrue(controller.focusShield.failsafeUnavailable)
+
+        try await controller.eraseAllData()
         XCTAssertFalse(FocusShieldRecordStore(directory: store.directoryURL).exists)
+
+        // The App Group's ledger, and only it, gets the real drivers, and the
+        // extension and the launch sweep look in that same folder.
+        XCTAssertEqual(FocusShieldRecordStore.appGroupDirectory(), ScreenTimeStore().directoryURL)
+        let live = FocusShieldEngine.forLedger(directory: ScreenTimeStore().directoryURL)
+        XCTAssertTrue(live.settings is ManagedSettingsFocusShield)
+        XCTAssertTrue(live.center is DeviceActivityCenter)
     }
 
     // MARK: - helpers
