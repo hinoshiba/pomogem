@@ -172,8 +172,8 @@
     "標準" : {
       "comment" : "Alarm strength option (default): rings until stopped. Suggested English: Standard"
     },
-    "標準に加えて、サイレントスイッチがオンでも音を鳴らします。iOS 26以降は、アプリを開いていないときもアラームで知らせます。" : {
-      "comment" : "Alarm strength description. Suggested English: Everything in Standard, and the sound plays even with the silent switch on. On iOS 26 or later, an alarm rings even when the app is not open."
+    "標準に加えて、アプリを開いているときはサイレントスイッチがオンでも音を鳴らします。iOS 26以降でアラームを許可すると、アプリを開いていないときもアラームで知らせます。" : {
+      "comment" : "Alarm strength description. Suggested English: Everything in Standard, and while the app is open the sound plays even with the silent switch on. On iOS 26 or later, once you allow alarms, an alarm also rings when the app is not open."
     },
     "次の曲" : {
       "comment" : "Skip to the next track in the Music app"

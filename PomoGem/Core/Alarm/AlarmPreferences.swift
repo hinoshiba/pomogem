@@ -112,7 +112,10 @@ enum AlarmStrength: String, CaseIterable, Identifiable, Sendable {
     case standard
     /// Standard, plus the in-app alarm plays with the silent switch on, and
     /// on iOS 26 or later a system alarm (AlarmKit) rings when the app is not
-    /// open at the end, once the person has allowed alarms.
+    /// open at the end, once the person has allowed alarms and while the
+    /// app's sound is on (`AlarmChannelPolicy.backgroundChannel`). Otherwise
+    /// the end away from the app is the Time Sensitive notification, which
+    /// follows the silent switch.
     case maximum
 
     static let defaultValue: AlarmStrength = .standard
@@ -137,7 +140,7 @@ enum AlarmStrength: String, CaseIterable, Identifiable, Sendable {
         case .standard:
             String(localized: "止めるまで音と強い振動をくり返します。鳴っている間は画面をつけたままにし、\(Self.automaticStopText)で自動的に止まります。サイレントスイッチに従います。", table: "Focus", comment: "Alarm strength description; %@ is a duration such as 3分 (3 min). Suggested English: Repeats the sound and a strong vibration until you stop it. The screen stays on while it rings, and it stops by itself after %@. Follows the silent switch.")
         case .maximum:
-            String(localized: "標準に加えて、サイレントスイッチがオンでも音を鳴らします。iOS 26以降は、アプリを開いていないときもアラームで知らせます。", table: "Focus", comment: "Alarm strength description. Suggested English: Everything in Standard, and the sound plays even with the silent switch on. On iOS 26 or later, an alarm rings even when the app is not open.")
+            String(localized: "標準に加えて、アプリを開いているときはサイレントスイッチがオンでも音を鳴らします。iOS 26以降でアラームを許可すると、アプリを開いていないときもアラームで知らせます。", table: "Focus", comment: "Alarm strength description. Suggested English: Everything in Standard, and while the app is open the sound plays even with the silent switch on. On iOS 26 or later, once you allow alarms, an alarm also rings when the app is not open.")
         }
     }
 

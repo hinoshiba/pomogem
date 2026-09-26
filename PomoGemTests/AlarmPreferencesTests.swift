@@ -150,6 +150,11 @@ final class AlarmPreferencesTests: XCTestCase {
             XCTAssertFalse(strength.detail.isEmpty)
         }
         XCTAssertTrue(AlarmStrength.standard.detail.contains("3分で自動的に止まります"), AlarmStrength.standard.detail)
+        // The system alarm needs the person's permission, and the silent
+        // switch override applies only in the app: the copy must not promise
+        // more to someone who declined alarms.
+        XCTAssertTrue(maximum.detail.contains("アプリを開いているときはサイレントスイッチがオンでも"), maximum.detail)
+        XCTAssertTrue(maximum.detail.contains("アラームを許可すると"), maximum.detail)
     }
 
     // MARK: Storage hygiene
