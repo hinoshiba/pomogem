@@ -971,9 +971,9 @@ struct LogPeriodSummary: Equatable, Sendable {
 /// - the twelve month summaries change only with the month.
 /// The period page, the newest thirty with the aggregates, and the months
 /// are read off the main thread through AccumulationTimelineLoader
-/// (LogHistoryReads.swift); their cost grows with lifetime history. Only
-/// the milestones stay on the main context: a few dozen rows that an edit
-/// in this screen must refresh at once.
+/// (LogHistoryReads.swift), one at a time (LogReadQueue); their cost grows
+/// with lifetime history. Only the milestones stay on the main context: a
+/// few dozen rows that an edit in this screen must refresh at once.
 /// None reloads for an inactive flip (closing Control Center or the
 /// notification shade); coming back from the background reloads all three.
 enum LogHistoryLoadPolicy {
@@ -1098,6 +1098,8 @@ struct LogView: View {
     @State private var achievementLoadFailed = false
     /// The `recentHistoryKey` the milestones were last read for.
     @State private var achievementLoadKey: String?
+    /// 記録's reads of the lifetime history take turns (see LogReadQueue).
+    @State private var readQueue = LogReadQueue()
     @State private var mutationError: String?
     @State private var selectedAchievement: AchievementEditSelection?
     @State private var selectedDay: HistoryDaySelection?
@@ -1879,15 +1881,16 @@ struct LogView: View {
             calendar: calendar
         )
         do {
-            let content = try await AccumulationTimelineLoader.read(
-                from: modelContext.container
-            ) { repository in
-                try await repository.logPeriodContent(
-                    period: period,
-                    interval: interval,
-                    calendar: calendar,
-                    currentEpochID: epochID
-                )
+            let container = modelContext.container
+            let content = try await readQueue.run(first: true) {
+                try await AccumulationTimelineLoader.read(from: container) { repository in
+                    try await repository.logPeriodContent(
+                        period: period,
+                        interval: interval,
+                        calendar: calendar,
+                        currentEpochID: epochID
+                    )
+                }
             }
             try Task.checkCancellation()
             guard key == loadKey else { return }
@@ -1922,13 +1925,14 @@ struct LogView: View {
         let epochID = currentEpochID
         let includesAggregates = aggregateProjectionPresentation.allowsAggregateSummaries
         do {
-            let content = try await AccumulationTimelineLoader.read(
-                from: modelContext.container
-            ) { repository in
-                try await repository.logRecentContent(
-                    currentEpochID: epochID,
-                    includesAggregates: includesAggregates
-                )
+            let container = modelContext.container
+            let content = try await readQueue.run {
+                try await AccumulationTimelineLoader.read(from: container) { repository in
+                    try await repository.logRecentContent(
+                        currentEpochID: epochID,
+                        includesAggregates: includesAggregates
+                    )
+                }
             }
             try Task.checkCancellation()
             guard key == recentHistoryKey else { return }
@@ -1999,14 +2003,15 @@ struct LogView: View {
         let calendar = PomoGemCalendar.gregorian
         let now = Date.now
         do {
-            let summaries = try await AccumulationTimelineLoader.read(
-                from: modelContext.container
-            ) { repository in
-                try await repository.recentMonthSummaries(
-                    endingAt: now,
-                    currentEpochID: epochID,
-                    calendar: calendar
-                )
+            let container = modelContext.container
+            let summaries = try await readQueue.run {
+                try await AccumulationTimelineLoader.read(from: container) { repository in
+                    try await repository.recentMonthSummaries(
+                        endingAt: now,
+                        currentEpochID: epochID,
+                        calendar: calendar
+                    )
+                }
             }
             try Task.checkCancellation()
             guard key == monthSummaryKey else { return }

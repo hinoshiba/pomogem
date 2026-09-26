@@ -278,3 +278,72 @@ struct LogRecentContent: Equatable, Sendable {
         LogRecentContent(epochID: epochID, records: [], aggregates: .empty)
     }
 }
+
+/// Runs 記録's reads one at a time.
+///
+/// Core Data runs every request for a store on one serial SQL queue, so
+/// three reads started together take no less time than three in a row. They
+/// only fill that queue: a main-context fetch from elsewhere in the app
+/// (Home's queries, the reminder check on a return from the background)
+/// then waits for all of them, and the screen stops meanwhile. One read at a
+/// time, it waits for one at most.
+///
+/// The 今週／今月 page goes ahead of reads still waiting: it is what the
+/// person just asked for, and it heads the screen.
+actor LogReadQueue {
+    private struct Waiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Void, Error>
+    }
+
+    private var isReading = false
+    private var waiters: [Waiter] = []
+
+    /// Reads waiting for their turn.
+    var waitingReadCount: Int { waiters.count }
+
+    func run<Value: Sendable>(
+        first: Bool = false,
+        _ read: @Sendable () async throws -> Value
+    ) async throws -> Value {
+        try await acquire(first: first)
+        defer { release() }
+        return try await read()
+    }
+
+    private func acquire(first: Bool) async throws {
+        try Task.checkCancellation()
+        guard isReading else {
+            isReading = true
+            return
+        }
+        let id = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let waiter = Waiter(id: id, continuation: continuation)
+                if first {
+                    waiters.insert(waiter, at: 0)
+                } else {
+                    waiters.append(waiter)
+                }
+            }
+        } onCancel: {
+            Task { await self.cancelWaiter(id) }
+        }
+    }
+
+    /// A read whose screen moved on leaves the line without reading.
+    private func cancelWaiter(_ id: UUID) {
+        guard let index = waiters.firstIndex(where: { $0.id == id }) else { return }
+        waiters.remove(at: index).continuation.resume(throwing: CancellationError())
+    }
+
+    /// Hands the turn to the next read, if any.
+    private func release() {
+        guard !waiters.isEmpty else {
+            isReading = false
+            return
+        }
+        waiters.removeFirst().continuation.resume()
+    }
+}

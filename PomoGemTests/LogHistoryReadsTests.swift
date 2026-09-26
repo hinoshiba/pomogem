@@ -380,6 +380,88 @@ final class LogHistoryReadsTests: XCTestCase {
         )
     }
 
+    /// 記録's reads take turns, so a main-context fetch elsewhere in the app
+    /// waits for one of them at most; the 今週／今月 page goes first.
+    func testReadQueueReadsOneAtATimeWithThePeriodPageFirst() async throws {
+        let queue = LogReadQueue()
+        let recorder = ReadRecorder()
+        let firstRead = Gate()
+
+        let running = Task {
+            try await queue.run {
+                await recorder.enter("recent")
+                await firstRead.wait()
+                await recorder.leave()
+            }
+        }
+        try await waitUntil { await recorder.entered == ["recent"] }
+        let months = Task {
+            try await queue.run {
+                await recorder.enter("months")
+                await recorder.leave()
+            }
+        }
+        try await waitUntil { await queue.waitingReadCount == 1 }
+        let period = Task {
+            try await queue.run(first: true) {
+                await recorder.enter("period")
+                await recorder.leave()
+            }
+        }
+        try await waitUntil { await queue.waitingReadCount == 2 }
+
+        await firstRead.open()
+        try await running.value
+        try await months.value
+        try await period.value
+
+        let entered = await recorder.entered
+        let mostAtOnce = await recorder.mostAtOnce
+        XCTAssertEqual(entered, ["recent", "period", "months"], "The period page skips the line")
+        XCTAssertEqual(mostAtOnce, 1, "One read at a time")
+    }
+
+    /// A read whose screen moved on (a toggle, leaving 記録) leaves the line
+    /// without reading and without holding up the reads behind it.
+    func testCancelledWaitingReadLeavesTheLine() async throws {
+        let queue = LogReadQueue()
+        let recorder = ReadRecorder()
+        let firstRead = Gate()
+
+        let running = Task {
+            try await queue.run {
+                await recorder.enter("first")
+                await firstRead.wait()
+                await recorder.leave()
+            }
+        }
+        try await waitUntil { await recorder.entered == ["first"] }
+        let abandoned = Task {
+            try await queue.run {
+                await recorder.enter("abandoned")
+                await recorder.leave()
+            }
+        }
+        try await waitUntil { await queue.waitingReadCount == 1 }
+        abandoned.cancel()
+        do {
+            try await abandoned.value
+            XCTFail("A cancelled read must not run")
+        } catch is CancellationError {
+        }
+        let waitingAfterCancel = await queue.waitingReadCount
+        XCTAssertEqual(waitingAfterCancel, 0)
+
+        await firstRead.open()
+        try await running.value
+        try await queue.run {
+            await recorder.enter("next")
+            await recorder.leave()
+        }
+        let entered = await recorder.entered
+        XCTAssertEqual(entered, ["first", "next"])
+    }
+
     // MARK: - The view's former computations, kept as the reference
 
     /// 「質量の推移」 as LogView computed it from the main-context page.
@@ -436,6 +518,53 @@ final class LogHistoryReadsTests: XCTestCase {
     }
 
     // MARK: - Fixtures
+
+    private actor ReadRecorder {
+        private(set) var entered: [String] = []
+        private(set) var mostAtOnce = 0
+        private var active = 0
+
+        func enter(_ name: String) {
+            entered.append(name)
+            active += 1
+            mostAtOnce = max(mostAtOnce, active)
+        }
+
+        func leave() {
+            active -= 1
+        }
+    }
+
+    /// Holds a read until the test opens it.
+    private actor Gate {
+        private var isOpen = false
+        private var waiting: [CheckedContinuation<Void, Never>] = []
+
+        func wait() async {
+            guard !isOpen else { return }
+            await withCheckedContinuation { waiting.append($0) }
+        }
+
+        func open() {
+            isOpen = true
+            waiting.forEach { $0.resume() }
+            waiting = []
+        }
+    }
+
+    private func waitUntil(
+        timeout: Duration = .seconds(5),
+        _ condition: @escaping () async -> Bool
+    ) async throws {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while !(await condition()) {
+            guard ContinuousClock.now < deadline else {
+                XCTFail("Timed out waiting for the read queue")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+    }
 
     private var japaneseCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
