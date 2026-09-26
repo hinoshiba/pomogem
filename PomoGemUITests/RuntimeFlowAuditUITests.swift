@@ -1310,7 +1310,15 @@ final class RuntimeFlowAuditUITests: XCTestCase {
     /// reproducible, then verify against signed Release on a physical device.
     /// Naturally scroll the storage screen to its privacy explanation so
     /// Simulator-only diagnostics are outside the captured viewport.
-    func testAppStoreScreenshotSetJapaneseReleaseCandidate() {
+    func testAppStoreScreenshotSetJapaneseReleaseCandidate() throws {
+        // The product page uses screenshots from large iPhones. On a 4.7-inch
+        // screen the completion card covers the duration picker this fixture
+        // has to reach, and nothing captured there would be used.
+        let windowHeight = app.windows.firstMatch.frame.height
+        try XCTSkipIf(
+            windowHeight < 700,
+            "App Store screenshots come from a large iPhone; this window is \(Int(windowHeight)) pt tall"
+        )
         // Relaunch the disposable store. Release 1.0 has no rare-reward draw or
         // opt-in surface, keeping this product-page set deterministic.
         app.terminate()
