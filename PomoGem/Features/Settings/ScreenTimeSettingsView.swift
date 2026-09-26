@@ -84,7 +84,7 @@ struct ScreenTimeSettingsView: View {
     private var validationMessage: String? {
         // Revoked permission, a removed theme, or a changed Pro entitlement must
         // never prevent the user from switching this feature off.
-        guard draft.enabled else { return nil }
+        guard draft.enabled else { return focusShieldOnlyValidationMessage }
         guard controller.authorizationGranted else {
             return "スクリーンタイムへのアクセスを許可してください。"
         }
@@ -113,6 +113,12 @@ struct ScreenTimeSettingsView: View {
         return nil
     }
 
+    private var focusShieldOnlyValidationMessage: String? {
+        ScreenTimeDraftPolicy.focusShieldOnlyValidationMessage(
+            for: draft, authorized: controller.authorizationGranted
+        )
+    }
+
     /// Edits the user made that 保存 has not applied. The back button asks
     /// before it throws them away; the picker's selections in particular can
     /// only be rebuilt one app at a time in Apple's picker. Never true while a
@@ -135,6 +141,7 @@ struct ScreenTimeSettingsView: View {
             recordingSection
             learningSection
             distractionSection
+            focusShieldSection
             detailsSection
             resetSection
         }
@@ -524,6 +531,25 @@ struct ScreenTimeSettingsView: View {
         }
     }
 
+    /// F2, right under the apps it uses. The switch is part of the draft and
+    /// is applied by 保存 like everything else on this page (switching it on
+    /// needs access; switching it off always lifts the shield). The escape
+    /// hatch acts at once, without 保存. The focus screen is a full-screen
+    /// cover, so while a focus is on screen its own 今日はここまで is the way
+    /// out; this page's hatch covers a shield that outlived the focus UI.
+    private var focusShieldSection: some View {
+        FocusShieldSettingsSection(
+            shield: controller.focusShield,
+            isOn: editedBinding(\.shieldsDistractionDuringFocusEnabled),
+            availability: FocusShieldAvailability(
+                configuration: draft, authorizationGranted: controller.authorizationGranted
+            ),
+            isToggleDisabled: controller.isSaving || controller.isResetting
+                || (!controller.authorizationGranted && !draft.shieldsDistractionDuringFocusEnabled),
+            lift: liftFocusShield
+        )
+    }
+
     private var detailsSection: some View {
         Section {
             Text("勉強アプリと控えたいアプリは別々に合計します。同じアプリを両方には登録できません。",
@@ -707,6 +733,11 @@ struct ScreenTimeSettingsView: View {
         }
     }
 
+    private func liftFocusShield() {
+        controller.focusShield.liftForCurrentFocus()
+        router.showToast(FocusShieldCopy.liftedToast, symbol: "lock.open")
+    }
+
     private func clearBlackStones() {
         do {
             try controller.clearBlackStones()
@@ -799,6 +830,24 @@ enum ScreenTimeDraftPolicy {
     /// the same on either plan.
     static func waitsForPurchaseStatus(draftEnabled: Bool, learningCount: Int, entitlementsResolved: Bool) -> Bool {
         draftEnabled && !entitlementsResolved && learningCount > ScreenTimePolicy.freeLearningApplicationLimit
+    }
+
+    /// Recording off with the focus shield on: only the distraction apps are
+    /// used, so only their rules apply, as in `ScreenTimePolicy.validate`,
+    /// and switching the shield on needs access, as `ScreenTimeController.save`
+    /// requires. No apps at all is not refused; the shield's own section says
+    /// it does nothing yet. Switching the shield off is never blocked.
+    static func focusShieldOnlyValidationMessage(
+        for draft: ScreenTimeConfiguration, authorized: Bool
+    ) -> String? {
+        guard !draft.enabled, draft.shieldsDistractionDuringFocusEnabled else { return nil }
+        guard authorized else {
+            return String(localized: "スクリーンタイムへのアクセスを許可してください。", table: "ScreenTime",
+                          comment: "Validation: the focus shield is switched on without Screen Time access")
+        }
+        return ScreenTimeSelectionValidation.blockingMessage(
+            selection: draft.distractionSelection, otherSelection: draft.learningSelection
+        )
     }
 
     /// What the footer says while the context is unbound. It must describe the
@@ -918,6 +967,75 @@ private enum ScreenTimeSelectionValidation {
     static func exceedsFreeLimit(selection: FamilyActivitySelection, lane: ScreenTimeSelectionLane, isPro: Bool) -> Bool {
         lane == .learning && !isPro
             && selection.applicationTokens.count > ScreenTimePolicy.freeLearningApplicationLimit
+    }
+}
+
+/// F2's rows. A view of its own so it observes `FocusShieldController`
+/// directly: the page observes `ScreenTimeController`, which does not
+/// republish the shield's state.
+private struct FocusShieldSettingsSection: View {
+    @ObservedObject var shield: FocusShieldController
+    @Binding var isOn: Bool
+    let availability: FocusShieldAvailability
+    let isToggleDisabled: Bool
+    let lift: () -> Void
+
+    var body: some View {
+        Section {
+            Toggle(isOn: $isOn) {
+                Text(FocusShieldCopy.toggleTitle)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(minHeight: 44)
+            .disabled(isToggleDisabled)
+            .accessibilityIdentifier("screen-time.focus-shield")
+
+            // What the switch, as drafted, cannot do yet: no access, no apps,
+            // or more apps than a shield can hold.
+            if let message = availability.message {
+                notice(message, identifier: "screen-time.focus-shield-availability")
+            }
+            if shield.failsafeUnavailable {
+                notice(FocusShieldCopy.failsafeUnavailable, identifier: "screen-time.focus-shield-failsafe")
+            }
+            // The way out, whatever the switch says: shown for as long as a
+            // shield this iPhone wrote is up.
+            if shield.isShielding {
+                Button(action: lift) {
+                    Label(FocusShieldCopy.liftButton, systemImage: "lock.open")
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(minHeight: 44)
+                }
+                .listRowSeparator(.hidden, edges: .bottom)
+                .accessibilityHint(FocusShieldCopy.liftFooter)
+                .accessibilityIdentifier("screen-time.focus-shield-lift")
+                Text(FocusShieldCopy.liftFooter)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .listRowSeparator(.hidden, edges: .top)
+                    .accessibilityIdentifier("screen-time.focus-shield-lift-footer")
+            }
+        } header: {
+            Text(FocusShieldCopy.sectionHeader)
+        } footer: {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(FocusShieldCopy.toggleFooter)
+                Text(FocusShieldCopy.musicNote)
+                Text(FocusShieldCopy.blackStoneNote)
+            }
+        }
+    }
+
+    private func notice(_ message: String, identifier: String) -> some View {
+        Label(message, systemImage: "exclamationmark.triangle")
+            .font(.subheadline)
+            .foregroundStyle(PomoGemTheme.amber)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(message)
+            .accessibilityAddTraits(.isStaticText)
+            .accessibilityIdentifier(identifier)
     }
 }
 

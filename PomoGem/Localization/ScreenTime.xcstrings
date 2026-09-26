@@ -13,6 +13,9 @@
     "SNSなど、控えたいアプリを選べます。合計10分使うごとに、瓶の中で場所をとる黒い石が1つ増えます。" : {
       "comment" : "Footer: what the black-stone lane does"
     },
+    "「ミュージック」や「Apple Music Classical」を控えたいアプリに選ぶと、集中中は音楽も再生できなくなります。" : {
+      "comment" : "Footer under the focus shield toggle: picking Apple's Music or Apple Music Classical app as an app to cut down also blocks focus music. Use the apps' names as shown on the Home Screen in that language."
+    },
     "このiPhoneでは、ほかのアプリがすでに保護者による管理（ペアレンタルコントロール）を行っているため、許可できませんでした。そのアプリを管理している人（保護者など）に相談してください。" : {
       "comment" : "Screen Time access failed: another parental-control app holds the authorization"
     },
@@ -57,6 +60,9 @@
     },
     "スクリーンタイムへのアクセスを確認できませんでした。少し時間をおいて、もう一度お試しください。" : {
       "comment" : "Screen Time access failed for another reason"
+    },
+    "スクリーンタイムへのアクセスを許可してください。" : {
+      "comment" : "Validation: the focus shield is switched on without Screen Time access"
     },
     "スクリーンタイムへのアクセスを許可すると使えます。" : {
       "comment" : "Focus shield footer: the shield needs Screen Time access"
@@ -140,8 +146,14 @@
     "保存しました。自動記録中です" : {
       "comment" : "Toast after saving Screen Time settings with recording on"
     },
+    "制限しているあいだは控えたいアプリを開けないため、その時間は黒い石になりません。" : {
+      "comment" : "Footer under the focus shield toggle: blocked time adds no black stones"
+    },
     "制限を自動で解除する準備ができなかったため、今回の集中では制限していません。" : {
       "comment" : "Notice: the failsafe that lifts the shield could not be registered, so nothing was shielded"
+    },
+    "制限を解除しました" : {
+      "comment" : "Toast after 今すぐ制限を解除: the apps to cut down can be opened again for this focus"
     },
     "勉強アプリ" : {
       "comment" : "Picker title: study apps"
@@ -259,6 +271,9 @@
     },
     "開くのはポモジェムの設定ページです。左上の「<」で設定の最初の画面まで戻ってください。" : {
       "comment" : "Caption under the button that opens the Settings app: how to reach the page the message names"
+    },
+    "集中中のアプリ制限" : {
+      "comment" : "Section header on the Screen Time page: blocking the apps to cut down while a PomoGem focus runs"
     },
     "集中中は気が散るアプリを開けないようにする" : {
       "comment" : "Toggle: shield the apps to cut down while a PomoGem focus runs"

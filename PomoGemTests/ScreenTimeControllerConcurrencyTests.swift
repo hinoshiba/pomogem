@@ -1238,6 +1238,34 @@ final class ScreenTimeSettingsDraftTests: XCTestCase {
                        "exclamationmark.circle", "Apps chosen but recording off is worth a second look")
     }
 
+    /// F2: with recording off, only a switched-on focus shield is checked,
+    /// the way `ScreenTimeController.save` checks it, so 保存 is off instead
+    /// of failing with an alert; switching it off is never blocked.
+    func testAShieldOnlyDraftNeedsAccessAndOnlyTheDistractionRules() {
+        var draft = ScreenTimeConfiguration()
+        XCTAssertNil(ScreenTimeDraftPolicy.focusShieldOnlyValidationMessage(for: draft, authorized: false),
+                     "Everything off: nothing to check, even without access")
+        draft.shieldsDistractionDuringFocusEnabled = true
+        XCTAssertEqual(ScreenTimeDraftPolicy.focusShieldOnlyValidationMessage(for: draft, authorized: false),
+                       "スクリーンタイムへのアクセスを許可してください。")
+        XCTAssertNil(ScreenTimeDraftPolicy.focusShieldOnlyValidationMessage(for: draft, authorized: true),
+                     "No apps yet is not refused; the shield's own section explains it")
+        draft.distractionSelection = selection(count: 2, seed: 0x64)
+        XCTAssertNil(ScreenTimeDraftPolicy.focusShieldOnlyValidationMessage(for: draft, authorized: true))
+        draft.learningSelection = selection(count: 1, seed: 0x64)
+        XCTAssertNotNil(ScreenTimeDraftPolicy.focusShieldOnlyValidationMessage(for: draft, authorized: true),
+                        "An app in both lanes is refused as it is with recording on")
+        XCTAssertThrowsError(try ScreenTimePolicy.validate(draft, isPro: false),
+                             "The page and the controller must agree")
+        draft.shieldsDistractionDuringFocusEnabled = false
+        XCTAssertNil(ScreenTimeDraftPolicy.focusShieldOnlyValidationMessage(for: draft, authorized: false),
+                     "Switching the shield off is never blocked")
+        draft.shieldsDistractionDuringFocusEnabled = true
+        draft.enabled = true
+        XCTAssertNil(ScreenTimeDraftPolicy.focusShieldOnlyValidationMessage(for: draft, authorized: false),
+                     "With recording on the page's full validation applies instead")
+    }
+
     private func selection(count: Int, seed: UInt8) -> FamilyActivitySelection {
         var selection = FamilyActivitySelection(includeEntireCategory: false)
         selection.applicationTokens = Set((0..<count).compactMap { index in

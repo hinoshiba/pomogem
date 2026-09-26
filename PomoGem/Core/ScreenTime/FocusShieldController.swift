@@ -173,6 +173,11 @@ enum FocusShieldAvailability: Equatable {
 /// Copy for the Phase B UI (ScreenTimeSettingsView, FocusView). Kept here so
 /// the words are reviewed with the behaviour they describe.
 enum FocusShieldCopy {
+    static var sectionHeader: String {
+        String(localized: "集中中のアプリ制限", table: "ScreenTime",
+               comment: "Section header on the Screen Time page: blocking the apps to cut down while a PomoGem focus runs")
+    }
+
     static var toggleTitle: String {
         String(localized: "集中中は気が散るアプリを開けないようにする", table: "ScreenTime",
                comment: "Toggle: shield the apps to cut down while a PomoGem focus runs")
@@ -181,6 +186,27 @@ enum FocusShieldCopy {
     static var toggleFooter: String {
         String(localized: "ポモジェムで集中しているあいだ、控えたいアプリを開けなくします。休憩になるか集中が終わると解除します。一時停止中は、予定の終了時刻の1分後まで続きます。",
                table: "ScreenTime", comment: "Footer under the focus shield toggle: when apps are blocked and when they are released")
+    }
+
+    /// The Music app and Apple Music Classical are ordinary apps to the
+    /// shield: picked as apps to cut down, they are blocked during a focus
+    /// like any other, focus music included.
+    static var musicNote: String {
+        String(localized: "「ミュージック」や「Apple Music Classical」を控えたいアプリに選ぶと、集中中は音楽も再生できなくなります。",
+               table: "ScreenTime",
+               comment: "Footer under the focus shield toggle: picking Apple's Music or Apple Music Classical app as an app to cut down also blocks focus music. Use the apps' names as shown on the Home Screen in that language.")
+    }
+
+    /// Blocked apps cannot be used, so the black-stone lane has nothing to
+    /// count while the shield is up.
+    static var blackStoneNote: String {
+        String(localized: "制限しているあいだは控えたいアプリを開けないため、その時間は黒い石になりません。",
+               table: "ScreenTime", comment: "Footer under the focus shield toggle: blocked time adds no black stones")
+    }
+
+    static var liftedToast: String {
+        String(localized: "制限を解除しました", table: "ScreenTime",
+               comment: "Toast after 今すぐ制限を解除: the apps to cut down can be opened again for this focus")
     }
 
     static var liftButton: String {

@@ -199,6 +199,19 @@ final class FocusShieldControllerTests: XCTestCase {
         XCTAssertEqual(FocusShieldCopy.focusNotice, "気が散るアプリを制限中")
     }
 
+    /// Planner decision 2026-09-26: the settings footer warns that picking
+    /// the Music apps blocks focus music too, and that blocked time earns no
+    /// black stones.
+    func testTheSettingsFooterWarnsAboutMusicAppsAndBlackStones() {
+        XCTAssertTrue(FocusShieldCopy.musicNote.contains("「ミュージック」"), FocusShieldCopy.musicNote)
+        XCTAssertTrue(FocusShieldCopy.musicNote.contains("Apple Music Classical"), FocusShieldCopy.musicNote)
+        XCTAssertTrue(FocusShieldCopy.musicNote.contains("音楽も再生できなくなります"), FocusShieldCopy.musicNote)
+        XCTAssertTrue(FocusShieldCopy.blackStoneNote.contains("黒い石になりません"), FocusShieldCopy.blackStoneNote)
+        XCTAssertTrue(FocusShieldCopy.toggleFooter.contains("予定の終了時刻の1分後まで"), FocusShieldCopy.toggleFooter)
+        XCTAssertEqual(FocusShieldCopy.sectionHeader, "集中中のアプリ制限")
+        XCTAssertEqual(FocusShieldCopy.liftedToast, "制限を解除しました")
+    }
+
     // MARK: - controller
 
     func testTheControllerAppliesKeepsAndClearsAcrossAFocusWithoutRepeatingWork() async throws {
