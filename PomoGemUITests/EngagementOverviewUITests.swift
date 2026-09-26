@@ -599,6 +599,45 @@ final class EngagementOverviewUITests: XCTestCase {
         app.terminate()
     }
 
+    /// A running timer survives the test's own relaunch, which relaunch tests
+    /// rely on, but the next test must open on Home. Launching again with a
+    /// new `PomoGemUITestScenario` identifier stands in for that next test.
+    func testATimerLeftRunningReachesItsOwnRelaunchButNotTheNextTest() {
+        let app = XCUIApplication()
+        app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        PomoGemUITestLanguage.configureJapanese(app)
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 12))
+
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 5))
+        XCTAssertTrue(launcher.label.contains("25分集中する"), launcher.label)
+        launcher.tap()
+        let timer = app.descendants(matching: .any)["focus.timer-display"].firstMatch
+        XCTAssertTrue(timer.waitForExistence(timeout: 8), "The premise: a 25-minute focus is running")
+
+        // The same test relaunches: the running focus comes back.
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(
+            timer.waitForExistence(timeout: 12),
+            "A relaunch inside one test must still recover its running focus"
+        )
+
+        // The next test's first launch: Home, with nothing left running.
+        app.terminate()
+        app.launchEnvironment[PomoGemUITestScenario.environmentKey] = UUID().uuidString
+        app.launch()
+        XCTAssertTrue(
+            app.buttons["メニュー"].waitForExistence(timeout: 12),
+            "A new test must open on Home, not on the earlier test's timer"
+        )
+        XCTAssertFalse(timer.exists)
+        XCTAssertTrue(app.buttons["home.focus-launcher"].isHittable)
+        app.terminate()
+    }
+
     func testAggregateDetailMakesRetainedColorThemeAndAchievementSeparationExplicit() {
         let app = XCUIApplication()
         app.terminate()

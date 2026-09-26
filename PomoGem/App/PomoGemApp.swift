@@ -328,6 +328,13 @@ struct PomoGemApp: App {
         case .inMemoryPreview, .persistentSimulator, .localOnly:
             AccountScopedLocalState.useUnscopedLocalMode()
         }
+#if DEBUG && targetEnvironment(simulator)
+        // The first launch of a UI test forgets the timer and the queues the
+        // previous test left behind; the test's own relaunches keep them.
+        // Simulator only: on a real iPhone the device tests run against the
+        // owner's own store and timer, which must never be cleared.
+        UITestLocalStateIsolation.beginScenarioIfNeeded()
+#endif
 
         // StoreKit delivery must begin before persistence preparation or the
         // first view asks for Pro state. The singleton installs its updates
