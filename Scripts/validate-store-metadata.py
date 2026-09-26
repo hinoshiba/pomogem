@@ -390,6 +390,20 @@ for role, expected in (
 app_groups = yaml_block(configuration_entries, 0, "app_groups", "app_groups")
 if app_groups != [(2, "shared_screen_time: group.com.hinoshiba.pomogem")]:
     fail("configuration.yml must declare only the exact shared Screen Time App Group")
+# Permission prompts are part of the reviewed shipping surface. AlarmKit is
+# authorized by NSAlarmKitUsageDescription alone (no entitlement exists), so
+# its prompt is pinned here instead of in the capability allowlist.
+usage_descriptions = yaml_list(configuration_entries, 0, "app_usage_descriptions", "app_usage_descriptions")
+try:
+    with (ROOT / "PomoGem/Info.plist").open("rb") as handle:
+        app_info = plistlib.load(handle)
+except (OSError, ValueError, plistlib.InvalidFileException):
+    fail("PomoGem/Info.plist is missing or malformed")
+declared_usage = {key for key in app_info if key.startswith("NS") and key.endswith("UsageDescription")}
+if len(usage_descriptions) != len(set(usage_descriptions)) or set(usage_descriptions) != declared_usage:
+    fail("configuration.yml app_usage_descriptions differ from the permission prompts in PomoGem/Info.plist")
+if any(not isinstance(app_info[key], str) or not app_info[key].strip() for key in declared_usage):
+    fail("every permission prompt in PomoGem/Info.plist needs a purpose string")
 expected_source_entitlements = {
     "PomoGem/PomoGem.entitlements": {
         "aps-environment": "$(APS_ENVIRONMENT)",
@@ -412,6 +426,8 @@ for relative, expected in expected_source_entitlements.items():
             observed = plistlib.load(handle)
     except (OSError, ValueError, plistlib.InvalidFileException):
         fail("shipping source entitlements are missing or malformed")
+    if any("alarmkit" in key.lower() for key in observed):
+        fail(f"{relative} declares an AlarmKit entitlement; AlarmKit needs only NSAlarmKitUsageDescription")
     if observed != expected or any(
         key in expected and observed.get(key) is not True
         for key in ("com.apple.developer.family-controls",

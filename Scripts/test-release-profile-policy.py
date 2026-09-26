@@ -284,6 +284,16 @@ class ScreenTimeCapabilityTests(unittest.TestCase):
             with self.subTest(role="widget", profile=profile), self.assertRaises(ValueError):
                 self.check({self.time_sensitive: True}, "widget", profile=profile)
 
+    def test_alarmkit_needs_no_entitlement_and_a_fabricated_one_is_rejected(self):
+        for role in ("app", "widget", "monitor"):
+            for profile in (False, True):
+                base = self.role_capabilities(role) if role != "widget" else {}
+                for key in ("com.apple.developer.alarmkit", "com.apple.developer.AlarmKit",
+                            "com.apple.developer.usernotifications.alarmkit"):
+                    with self.subTest(role=role, profile=profile, key=key), \
+                            self.assertRaisesRegex(ValueError, "AlarmKit has no entitlement"):
+                        self.check(base | {key: True}, role, profile=profile)
+
     def test_monitor_group_must_be_exact_without_wildcards_or_extra_groups(self):
         for profile in (False, True):
             for value in (None, [], "group.example.app", ["group.*"], ["group.other"],
@@ -413,6 +423,8 @@ class ArchiveMetadataTopologyTests(unittest.TestCase):
             "ITSAppUsesNonExemptEncryption": False, "NSSupportsLiveActivities": True,
             "NSAppleMusicUsageDescription": "タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。",
             "UIBackgroundModes": ["remote-notification"],
+            "NSMotionUsageDescription": "fixture", "NSPhotoLibraryAddUsageDescription": "fixture",
+            "NSAlarmKitUsageDescription": "fixture",
         }
         widget_info = info("widget", "PomoGemWidgets", "XPC!") | {
             "NSExtension": {"NSExtensionPointIdentifier": "com.apple.widgetkit-extension"}}
@@ -464,6 +476,10 @@ class ArchiveMetadataTopologyTests(unittest.TestCase):
             lambda values, app, monitor: values[monitor / "PrivacyInfo.xcprivacy"].update(
                 NSPrivacyCollectedDataTypes=[{"NSPrivacyCollectedDataType": "unexpected"}]),
             lambda values, app, monitor: (app / "PlugIns/Unexpected.appex").mkdir(),
+            lambda values, app, monitor: values[app / "Info.plist"].pop("NSAlarmKitUsageDescription"),
+            lambda values, app, monitor: values[app / "Info.plist"].update(NSAlarmKitUsageDescription=" "),
+            lambda values, app, monitor: values[app / "Info.plist"].update(NSMicrophoneUsageDescription="fixture"),
+            lambda values, app, monitor: values[monitor / "Info.plist"].update(NSAlarmKitUsageDescription="fixture"),
         ]
         for mutation in mutations:
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
@@ -499,6 +515,10 @@ class StoreShippingCapabilityTests(unittest.TestCase):
 build_number: "10"
 app_groups:
   shared_screen_time: group.com.hinoshiba.pomogem
+app_usage_descriptions:
+  - NSMotionUsageDescription
+  - NSPhotoLibraryAddUsageDescription
+  - NSAlarmKitUsageDescription
 target_capabilities:
   app:
     - icloud_cloudkit
@@ -522,7 +542,8 @@ target_capabilities:
             root = Path(directory)
             (root / "project.yml").write_text('settings:\n  base:\n    MARKETING_VERSION: "1.1.0"\n    CURRENT_PROJECT_VERSION: "10"\n')
             for relative in ("PomoGem/PomoGem.entitlements", "PomoGemWidgets/PomoGemWidgets.entitlements",
-                             "PomoGemScreenTimeMonitor/PomoGemScreenTimeMonitor.entitlements"):
+                             "PomoGemScreenTimeMonitor/PomoGemScreenTimeMonitor.entitlements",
+                             "PomoGem/Info.plist"):
                 destination = root / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 destination.write_bytes((repository / relative).read_bytes())
@@ -546,6 +567,43 @@ target_capabilities:
         for mutation in mutations:
             with self.subTest(mutation=mutation), self.assertRaises(ValueError):
                 self.check_metadata(config_mutation=mutation)
+
+    def test_permission_prompts_must_match_the_reviewed_usage_descriptions(self):
+        def edit_info(change):
+            def mutate(root):
+                path = root / "PomoGem/Info.plist"
+                info = plistlib.loads(path.read_bytes())
+                change(info)
+                path.write_bytes(plistlib.dumps(info))
+            return mutate
+        source_mutations = [
+            edit_info(lambda info: info.pop("NSAlarmKitUsageDescription")),
+            edit_info(lambda info: info.update(NSAlarmKitUsageDescription="")),
+            edit_info(lambda info: info.update(NSMicrophoneUsageDescription="unreviewed")),
+        ]
+        for mutation in source_mutations:
+            with self.subTest(mutation=mutation), \
+                    self.assertRaisesRegex(ValueError, "permission prompt"):
+                self.check_metadata(source_mutation=mutation)
+        config_mutations = [
+            lambda text: text.replace("  - NSAlarmKitUsageDescription\n", ""),
+            lambda text: text.replace("  - NSAlarmKitUsageDescription\n",
+                                      "  - NSAlarmKitUsageDescription\n  - NSAlarmKitUsageDescription\n"),
+            lambda text: text.replace("app_usage_descriptions:", "usage_descriptions:"),
+        ]
+        for mutation in config_mutations:
+            with self.subTest(mutation=mutation), \
+                    self.assertRaisesRegex(ValueError, "app_usage_descriptions"):
+                self.check_metadata(config_mutation=mutation)
+
+    def test_a_fabricated_alarmkit_entitlement_is_rejected_in_source(self):
+        def mutate(root):
+            path = root / "PomoGem/PomoGem.entitlements"
+            entitlements = plistlib.loads(path.read_bytes())
+            entitlements["com.apple.developer.alarmkit"] = True
+            path.write_bytes(plistlib.dumps(entitlements))
+        with self.assertRaisesRegex(ValueError, "AlarmKit"):
+            self.check_metadata(source_mutation=mutate)
 
     def test_source_monitor_missing_family_controls_and_widget_group_are_rejected(self):
         def mutate(role, key, value):

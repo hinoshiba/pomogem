@@ -55,6 +55,9 @@ targets:
         # Focus music (Docs/FocusMusic.md): MusicKit authorization to control
         # the Music app from the timer. No audio background mode is added.
         NSAppleMusicUsageDescription: タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。
+        # AlarmKit (iOS 26+) needs only this usage description: there is no
+        # AlarmKit entitlement or portal capability (Scripts/release_profile_policy.py).
+        NSAlarmKitUsageDescription: 集中や休憩の終わりを、マナーモードや集中モード中でもアラームでお知らせするために使います。
         ITSAppUsesNonExemptEncryption: false
         # The CloudKit container environment, expanded from the SAME build
         # setting that fills the icloud-container-environment entitlement, so

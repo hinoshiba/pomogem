@@ -83,6 +83,15 @@ target_capabilities:
   screen_time_monitor:
     - family_controls
     - app_groups
+# Permission prompts in the app's Info.plist. AlarmKit (iOS 26+, the optional
+# system alarm at the end of a focus or break) is authorized by its usage
+# description alone: it has no entitlement or portal capability, so it is
+# pinned here rather than under target_capabilities.
+app_usage_descriptions:
+  - NSMotionUsageDescription
+  - NSPhotoLibraryAddUsageDescription
+  - NSAlarmKitUsageDescription
+  - NSAppleMusicUsageDescription
 screen_time:
   enabled_by_default: false
   authorization: family_controls_individual

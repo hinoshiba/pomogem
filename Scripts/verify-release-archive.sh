@@ -403,6 +403,28 @@ if (
     fail("app must not request frequent Live Activity updates")
 if "NSSupportsLiveActivities" in widget_plist and widget_plist.get("NSSupportsLiveActivities") is not False:
     fail("Widget must not independently enable Live Activities")
+# Permission prompts are reviewed like capabilities. AlarmKit (the optional
+# iOS 26 end-of-timer alarm) is authorized by its usage description alone and
+# has no entitlement, so its prompt is pinned here. Extensions ask for nothing.
+REVIEWED_APP_USAGE_DESCRIPTIONS = {
+    "NSMotionUsageDescription",
+    "NSPhotoLibraryAddUsageDescription",
+    "NSAlarmKitUsageDescription",
+    "NSAppleMusicUsageDescription",
+}
+
+
+def usage_description_keys(plist: dict) -> set:
+    return {key for key in plist if key.startswith("NS") and key.endswith("UsageDescription")}
+
+
+if usage_description_keys(app_plist) != REVIEWED_APP_USAGE_DESCRIPTIONS:
+    fail("app permission prompts differ from the reviewed usage descriptions")
+if any(not isinstance(app_plist[key], str) or not app_plist[key].strip()
+       for key in REVIEWED_APP_USAGE_DESCRIPTIONS):
+    fail("app permission prompt is missing its purpose string")
+if usage_description_keys(widget_plist) or usage_description_keys(monitor_plist):
+    fail("extensions must not declare permission prompts")
 extension = widget_plist.get("NSExtension")
 if not isinstance(extension, dict) or extension.get("NSExtensionPointIdentifier") != "com.apple.widgetkit-extension":
     fail("embedded extension is not a WidgetKit extension")

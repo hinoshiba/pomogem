@@ -53,6 +53,7 @@ def validate_bundle_capability_allowlist(
     Time Sensitive notifications are exclusive to, and required by, the app:
     only its timer-end alerts use that interruption level, and without the
     entitlement iOS silently downgrades them under Focus/Do Not Disturb.
+    AlarmKit needs no entitlement in any bundle (only a usage description).
     CloudKit/APNs values are additionally checked by the archive verifier;
     profile authorizations may be broader than signed CloudKit claims.
     """
@@ -83,6 +84,12 @@ def validate_bundle_capability_allowlist(
         if is_profile:
             allowed |= {"com.apple.developer.ubiquity-container-identifiers",
                         "com.apple.developer.ubiquity-kvstore-identifier"}
+    # AlarmKit (the optional iOS 26 end-of-timer alarm) is authorized by the
+    # NSAlarmKitUsageDescription Info.plist key alone. There is no AlarmKit
+    # entitlement; a made-up one such as com.apple.developer.alarmkit breaks
+    # provisioning, so name it explicitly instead of a generic mismatch.
+    if any("alarmkit" in str(key).lower() for key in entitlements):
+        raise ValueError("AlarmKit has no entitlement; remove the AlarmKit key and keep only NSAlarmKitUsageDescription")
     if set(entitlements) - allowed:
         raise ValueError("entitlement keys differ from the reviewed bundle capability allowlist")
     if "keychain-access-groups" in entitlements:

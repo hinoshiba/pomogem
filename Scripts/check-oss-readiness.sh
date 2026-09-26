@@ -205,6 +205,9 @@ require(
 require(
     "audio" not in info.get("UIBackgroundModes", []),
     "focus music drives the Music app; the app must not declare background audio",
+    info.get("NSAlarmKitUsageDescription")
+    == "集中や休憩の終わりを、マナーモードや集中モード中でもアラームでお知らせするために使います。",
+    "AlarmKit purpose string differs from the reviewed end-of-timer alarm",
 )
 
 widget_info = load("PomoGemWidgets/Info.plist")
@@ -230,6 +233,10 @@ require(app_entitlements.get("com.apple.developer.family-controls") is True, "Sc
 require(
     app_entitlements.get("com.apple.developer.usernotifications.time-sensitive") is True,
     "timer-end alerts require the Time Sensitive notification entitlement",
+)
+require(
+    not any("alarmkit" in key.lower() for key in app_entitlements),
+    "AlarmKit has no entitlement; it needs only NSAlarmKitUsageDescription",
 )
 monitor_entitlements = load("PomoGemScreenTimeMonitor/PomoGemScreenTimeMonitor.entitlements")
 require(monitor_entitlements == {
