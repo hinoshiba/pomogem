@@ -150,6 +150,14 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
   次の曲のbuttonの代わりにAppleの`musicSubscriptionOffer`（登録・お試しの画面）を表示し、一覧のtapも同じ画面を
   開く。無料機能でPro・広告・affiliateとは無関係。自動再生は既定offの「集中を始めたら再生する」をオンにした
   場合だけで、ほかのappの音声が再生中なら入れ替えない。選んだ音楽のIDなどは端末内UserDefaultsだけに保存し、送信しない
+- AlarmKit（iOS 26以降、1.1.0候補）: 終了アラームの強さを「最大」（既定は「標準」）にしたときだけ
+  `NSAlarmKitUsageDescription`で目的を示して許可を求める。許可後は本人が開始した集中・休憩の終わりに
+  alert-onlyのアラームを1件だけ予約し（countdown表示や追加のLive Activityなし）、同じ終わりにTime
+  Sensitive通知を重ねない。終了直前にアプリが前面にあれば取り消してアプリ内のアラームで知らせ、戻った
+  ときに鳴っていれば止める。一時停止・中断・他端末への引き継ぎ・account変更・全データ削除で取り消す。
+  拒否時とiOS 25以前は従来の通知のまま。予約IDなどは端末内UserDefaultsだけに保存し送信しない。
+  設定の導線と`review-notes-connect.txt`への記載は、タイマーと設定へ組み込むときに追加する
+  （`configuration.yml`のrelease blocker）
 - Photos add-only: 利用者が静止画の保存を選んだ場合だけrequest
 - StoreKit 2: productとverified entitlementの確認。独自purchase serverなし
 
