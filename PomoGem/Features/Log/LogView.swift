@@ -1096,6 +1096,8 @@ struct LogView: View {
     @State private var periodLoadFailed = false
     @State private var recentHistoryLoadFailed = false
     @State private var achievementLoadFailed = false
+    /// The `recentHistoryKey` the milestones were last read for.
+    @State private var achievementLoadKey: String?
     @State private var mutationError: String?
     @State private var selectedAchievement: AchievementEditSelection?
     @State private var selectedDay: HistoryDaySelection?
@@ -1281,11 +1283,16 @@ struct LogView: View {
             periodReloadIsSlow = true
         }
         .task(id: recentHistoryKey) {
-            loadAchievements()
             await loadRecentHistory(for: recentHistoryKey)
         }
         .task(id: monthSummaryKey) {
             await loadMonthSummaries(for: monthSummaryKey)
+        }
+        .onChange(of: LogHistoryLoadPolicy.isVisible(scenePhase)) { _, isVisible in
+            guard !isVisible else { return }
+            // Coming back from the background reads the milestones again,
+            // like everything else on this screen.
+            achievementLoadKey = nil
         }
 #if DEBUG
         .onChange(of: period) { _, _ in
@@ -1862,6 +1869,7 @@ struct LogView: View {
     @MainActor
     private func loadPeriodPage(for key: String) async {
         guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
+        loadAchievementsBeforeLifetimeReads()
         let epochID = currentEpochID
         let period = self.period
         let calendar = Calendar.autoupdatingCurrent
@@ -1910,6 +1918,7 @@ struct LogView: View {
     @MainActor
     private func loadRecentHistory(for key: String) async {
         guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
+        loadAchievementsBeforeLifetimeReads()
         let epochID = currentEpochID
         let includesAggregates = aggregateProjectionPresentation.allowsAggregateSummaries
         do {
@@ -1935,6 +1944,23 @@ struct LogView: View {
             }
         }
         completeLoadAudit(.recent)
+    }
+
+    /// Reads the milestones once per `recentHistoryKey`, before any of that
+    /// key's reads starts off the main thread. Each load calls it first, so
+    /// whichever runs first reads them while the store is idle.
+    ///
+    /// The contexts of one container take turns at the store (Core Data runs
+    /// every request for a store on one serial SQL queue): a main-context
+    /// fetch that arrives while a lifetime-sized read is running off the
+    /// main thread waits for it, and the screen freezes just as if the main
+    /// thread ran that read.
+    @MainActor
+    private func loadAchievementsBeforeLifetimeReads() {
+        let key = recentHistoryKey
+        guard achievementLoadKey != key else { return }
+        achievementLoadKey = key
+        loadAchievements()
     }
 
     /// Milestones stay on the main context: at most `achievementLimit`
@@ -1966,6 +1992,7 @@ struct LogView: View {
     @MainActor
     private func loadMonthSummaries(for key: String) async {
         guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
+        loadAchievementsBeforeLifetimeReads()
         let epochID = currentEpochID
         // Gregorian like the month titles, 年月, Wrapped and the card, so a
         // row opens the same month it is labelled with on any calendar.

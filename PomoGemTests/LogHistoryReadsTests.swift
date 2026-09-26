@@ -352,6 +352,34 @@ final class LogHistoryReadsTests: XCTestCase {
         )
     }
 
+    /// The milestones are 記録's one read on the main context. A main-context
+    /// fetch that arrives while a lifetime-sized read runs off the main
+    /// thread waits for it, so every load reads the milestones before it
+    /// starts its own read (the first one to run does the work).
+    func testEveryLoadReadsTheMilestonesBeforeItsLifetimeRead() throws {
+        let source = try String(contentsOf: sourceURL("PomoGem/Features/Log/LogView.swift"), encoding: .utf8)
+        for function in [
+            "private func loadPeriodPage(for key: String) async {",
+            "private func loadRecentHistory(for key: String) async {",
+            "private func loadMonthSummaries(for key: String) async {"
+        ] {
+            let start = try XCTUnwrap(source.range(of: function), function)
+            let body = source[start.upperBound...]
+            let gate = try XCTUnwrap(body.range(of: "loadAchievementsBeforeLifetimeReads()"), function)
+            let read = try XCTUnwrap(body.range(of: "AccumulationTimelineLoader.read("), function)
+            XCTAssertLessThan(gate.lowerBound, read.lowerBound, "\(function) must read the milestones first")
+        }
+        // Nothing else reads the milestones on the way in.
+        let view = try XCTUnwrap(source.range(of: "var body: some View {"))
+        let tasks = source[view.upperBound...]
+        let firstTask = try XCTUnwrap(tasks.range(of: ".task(id: loadKey)"))
+        let lastTask = try XCTUnwrap(tasks.range(of: "await loadMonthSummaries(for: monthSummaryKey)"))
+        XCTAssertFalse(
+            tasks[firstTask.lowerBound ..< lastTask.upperBound].contains("loadAchievements()"),
+            "A task that read the milestones on its own could queue behind another task's read"
+        )
+    }
+
     // MARK: - The view's former computations, kept as the reference
 
     /// 「質量の推移」 as LogView computed it from the main-context page.
