@@ -472,7 +472,17 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         try tap(app!.buttons["一時停止"])
         try requireFocus(paused: true, timeout: 10)
         let paused = try timerRemainingSeconds()
+        // quality-01. A return within the background grace keeps the same
+        // mounted session: the paused timer is still on screen, no wall.
         XCUIDevice.shared.press(.home)
+        app!.activate()
+        try requireFocus(paused: true, timeout: 5)
+        try require(!app!.buttons["cloud-offline-online-retry"].exists,
+                    "A return within the background grace must not remount the iCloud session.")
+        // Stay away past the ~15 s grace so the session is retired before
+        // suspension and the foreground return runs the full launch again.
+        XCUIDevice.shared.press(.home)
+        try await Task.sleep(for: .seconds(25))
         app!.activate()
         let onlineRetry = app!.buttons["cloud-offline-online-retry"]
         try require(onlineRetry.waitForExistence(timeout: 30) && onlineRetry.isEnabled,
@@ -485,7 +495,8 @@ final class RealDeviceICloudLifecycleUITests: XCTestCase {
         retainEvidence(failure: false)
         NSLog("POMOGEM_REAL_NETWORK_RESTORE_READY")
         try await Task.sleep(for: .seconds(45))
-        try tap(onlineRetry)
+        // A restored network path retries by itself; tap only if it has not.
+        if onlineRetry.exists { try tap(onlineRetry) }
         try requireFocus(paused: true, timeout: 30)
         let afterRecovery = try timerRemainingSeconds()
         try require(afterRecovery == paused,

@@ -63,6 +63,7 @@ enum JarAccessibilityPresentation {
         fusionProgressDescription: String?,
         projectionIsLowerBound: Bool,
         projectionIsUnverified: Bool = false,
+        pendingMass: PendingMass? = nil,
         isCloudOfflineSession: Bool = false
     ) -> String {
         let totalGrams = max(0, rawTotalGrams)
@@ -93,15 +94,34 @@ enum JarAccessibilityPresentation {
         let rareSuffix = rare.isEmpty ? "" : "、\(rare)"
         let massDescription: String
         if projectionIsUnverified {
-            massDescription = isCloudOfflineSession
-                ? "このiPhoneの集計を確認中。確認できた粒を表示"
-                : "iCloudの集計を再確認中。この端末で確認できた粒を表示"
+            // sync-03 (icloud-life batch): say what the visible headline says
+            // while iCloud is checked — the mass Home can stand behind, or
+            // that the total follows once checked (`pendingMass` nil).
+            let status = isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを確認中"
+            if let pendingMass {
+                let mass = formattedMass(max(0, pendingMass.grams))
+                massDescription = pendingMass.isLowerBound
+                    ? String(localized: "\(status)。この端末で確認済みの集中時間の質量：\(mass)以上", table: "Jar",
+                             comment: "VoiceOver, jar while iCloud is checked: status, a lower bound of the lifetime mass")
+                    : String(localized: "\(status)。この端末で確認済みの集中時間の質量：\(mass)", table: "Jar",
+                             comment: "VoiceOver, jar while iCloud is checked: status, the lifetime mass")
+            } else {
+                massDescription = String(localized: "\(status)。これまでの合計は確認が済むと表示します", table: "Jar",
+                                         comment: "VoiceOver, jar while iCloud is checked and no lifetime total can be shown: status")
+            }
         } else if projectionIsLowerBound {
             massDescription = "現在確認できた集中時間の質量：\(formattedMass(totalGrams))以上、集計整理中"
         } else {
             massDescription = "記録した集中時間の質量：\(formattedMass(totalGrams))"
         }
         return "\(massDescription)。瓶の整理：\(pebbleCount)粒\(aggregate)\(legacyAggregate)\(rareSuffix)\(fusion)。記念石\(achievementCount)個"
+    }
+
+    /// sync-03: the lifetime mass Home's headline shows while iCloud is
+    /// checked (`PendingMassPresentationPolicy`).
+    struct PendingMass: Equatable {
+        let grams: Int
+        let isLowerBound: Bool
     }
 
     private static func formattedMass(_ grams: Int) -> String {
@@ -125,6 +145,8 @@ struct JarSpriteView: View {
     let lifetimeCoreColorHex: String
     let projectionIsLowerBound: Bool
     let projectionIsUnverified: Bool
+    /// sync-03 (icloud-life): VoiceOver only; the jar's visuals are unchanged.
+    let pendingMass: JarAccessibilityPresentation.PendingMass?
     let fusionProgressDescription: String?
     let isMotionEnabled: Bool
     let inspectableAggregateID: UUID?
@@ -159,6 +181,7 @@ struct JarSpriteView: View {
         lifetimeCoreColorHex: String? = nil,
         projectionIsLowerBound: Bool = false,
         projectionIsUnverified: Bool = false,
+        pendingMass: JarAccessibilityPresentation.PendingMass? = nil,
         fusionProgressDescription: String? = nil,
         isMotionEnabled: Bool = true,
         inspectableAggregateID: UUID? = nil,
@@ -183,6 +206,7 @@ struct JarSpriteView: View {
         self.lifetimeCoreColorHex = lifetimeCoreColorHex ?? accentHex
         self.projectionIsLowerBound = projectionIsLowerBound
         self.projectionIsUnverified = projectionIsUnverified
+        self.pendingMass = pendingMass
         self.fusionProgressDescription = fusionProgressDescription
         self.isMotionEnabled = isMotionEnabled
         self.inspectableAggregateID = inspectableAggregateID
@@ -331,6 +355,7 @@ struct JarSpriteView: View {
             fusionProgressDescription: fusionProgressDescription,
             projectionIsLowerBound: projectionIsLowerBound,
             projectionIsUnverified: projectionIsUnverified,
+            pendingMass: pendingMass,
             isCloudOfflineSession: isCloudOfflineSession
         )
         guard let obstacles = scene.screenTimeObstacleAccessibilityDescription else {
