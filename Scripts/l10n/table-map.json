@@ -381,6 +381,9 @@
     "Storage": "PomoGem/Localization/Storage.xcstrings",
     "Widgets": "PomoGemWidgets/Localization/Widgets.xcstrings"
   },
+  "system_tables": {
+    "AppShortcuts": "App Shortcut phrases (PomoGemShortcuts). The App Intents metadata processor writes them to ExtractedAppShortcutsMetadata.stringsdata; Apple reads their translations only from PomoGem/Localization/AppShortcuts.xcstrings, which is created when English is enabled (Docs/Localization.md). sync and check skip this table."
+  },
   "catalog_bundles": {
     "PomoGem.app": [
       "Common",
