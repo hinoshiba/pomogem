@@ -239,6 +239,21 @@ final class FocusEndAlarmSchedulerTests: XCTestCase {
         let fired = FocusEndAlarmBooking(alarmID: alarmID, sessionID: session, phase: .focus, fireDate: now.addingTimeInterval(-30))
         XCTAssertEqual(decide(fired, [], nil), FocusEndAlarmReconciliation(), "a dismissed alarm stays as the delivery witness")
         XCTAssertEqual(
+            decide(fired, [], FocusEndAlarmOwner(sessionID: session, phase: .focus, endDate: fired.fireDate)),
+            FocusEndAlarmReconciliation(),
+            "the same, still unresolved session keeps its witness"
+        )
+        XCTAssertEqual(
+            decide(fired, [], FocusEndAlarmOwner(sessionID: UUID(), phase: .breakTime, endDate: now.addingTimeInterval(300))),
+            FocusEndAlarmReconciliation(cancelIDs: [], clearsBooking: true, ownerNeedsBooking: true),
+            "a witness for a replaced session is never read again"
+        )
+        XCTAssertEqual(
+            decide(fired, [], FocusEndAlarmOwner(sessionID: UUID(), phase: .focus, endDate: nil)),
+            FocusEndAlarmReconciliation(cancelIDs: [], clearsBooking: true, ownerNeedsBooking: false),
+            "a paused newer session needs no alarm"
+        )
+        XCTAssertEqual(
             decide(booking, [], running),
             FocusEndAlarmReconciliation(cancelIDs: [], clearsBooking: true, ownerNeedsBooking: true),
             "vanished before its time (permission revoked)"

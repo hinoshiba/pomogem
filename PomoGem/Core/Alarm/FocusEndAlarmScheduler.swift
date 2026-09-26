@@ -142,13 +142,19 @@ enum FocusEndAlarmReconcilePolicy {
         }
         let hasFired = booking.fireDate <= now
         if snapshot == nil {
-            // Already rang and was dismissed (keep it: it is the delivery
-            // witness until the completion flow acknowledges it), or
-            // disappeared before its time (permission revoked).
             if !hasFired {
+                // Disappeared before its time (permission revoked).
+                result.clearsBooking = true
+                result.ownerNeedsBooking = ownerIsRunning
+            } else if let owner, owner.sessionID != booking.sessionID {
+                // Rang for a session that has since been replaced: its
+                // completion was resolved, so the witness is no longer read.
                 result.clearsBooking = true
                 result.ownerNeedsBooking = ownerIsRunning
             }
+            // Otherwise it already rang and was dismissed: keep it, because
+            // it is the delivery witness until the completion flow
+            // acknowledges it.
             return result
         }
 
