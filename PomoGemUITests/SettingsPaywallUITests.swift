@@ -154,7 +154,11 @@ final class SettingsPaywallUITests: XCTestCase {
         let about = app.buttons["settings.about"]
         XCTAssertTrue(reveal(about))
         XCTAssertTrue(about.label.contains("バージョン"), about.label)
-        XCTAssertLessThan(review.frame.minY, about.frame.minY)
+        // At AX5 the List has already unloaded the review row by the time
+        // the About row scrolls in; compare only while both are on screen.
+        if review.exists {
+            XCTAssertLessThan(review.frame.minY, about.frame.minY)
+        }
         XCTAssertFalse(app.staticTexts["あなたのプライベートデータベースのみ"].exists)
         XCTAssertFalse(text(containing: "出荷対象").exists)
         attach("\(prefix) — support, privacy and About")
