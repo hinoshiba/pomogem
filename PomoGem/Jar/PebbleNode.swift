@@ -226,9 +226,11 @@ enum JarScalePolicy {
     }
 
     /// Highest ladder rung at or below `scale` (1, 1.04, 1.04², … and
-    /// `maximumScale` itself as the top rung).
+    /// `maximumScale` itself as the top rung). An unbounded target (+∞, an
+    /// empty jar's `uncappedTargetScale`) is the top rung; NaN and −∞ are
+    /// the floor.
     static func rung(atOrBelow scale: CGFloat) -> CGFloat {
-        guard scale.isFinite else { return minimumScale }
+        guard !scale.isNaN else { return minimumScale }
         let clamped = min(max(scale, minimumScale), maximumScale)
         if clamped >= maximumScale { return maximumScale }
         let steps = (log(clamped / minimumScale) / log(rungRatio) + 1e-6).rounded(.down)

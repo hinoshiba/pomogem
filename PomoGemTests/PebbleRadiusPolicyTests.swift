@@ -280,6 +280,33 @@ final class PebbleRadiusPolicyTests: XCTestCase {
         XCTAssertEqual(JarScalePolicy.resolvedScale(current: settled, target: target), settled)
     }
 
+    /// Round 14: an unbounded target (+∞: an empty jar's uncapped target)
+    /// is the top rung, never the floor, so an empty jar resolves to the
+    /// top as it did before round 13; NaN and −∞ stay at the floor.
+    func testAnUnboundedTargetIsTheTopRung() {
+        let top = JarScalePolicy.maximumScale
+        XCTAssertEqual(JarScalePolicy.rung(atOrBelow: .infinity), top)
+        XCTAssertEqual(JarScalePolicy.rung(atOrBelow: .nan), 1)
+        XCTAssertEqual(JarScalePolicy.rung(atOrBelow: -.infinity), 1)
+        let interior: CGFloat = 306 * 398
+        for current in [1, pow(JarScalePolicy.rungRatio, 9), top] {
+            XCTAssertEqual(JarScalePolicy.resolvedScale(current: current, baseArea: 0, interiorArea: interior), top)
+            XCTAssertEqual(JarScalePolicy.resolvedScale(current: current, target: .infinity), top)
+        }
+        // The first drop's own area brings an empty jar straight down.
+        let loose = timerDescriptor(minutes: 25).radius
+        let first = JarScalePolicy.resolvedScale(
+            current: top,
+            baseArea: JarScalePolicy.baseArea(radii: [loose]),
+            interiorArea: interior
+        )
+        XCTAssertLessThanOrEqual(first, top)
+        XCTAssertLessThanOrEqual(
+            JarScalePolicy.baseArea(radii: [loose * first]),
+            interior * JarScalePolicy.interiorAreaBudgetFraction + 0.5
+        )
+    }
+
     /// Round 13: the top rung keeps the same hysteresis as every other rung.
     /// A load whose budget hovers around 1.04²³ (a gem added and taken away
     /// again and again) steps off the top once and then holds one rung
