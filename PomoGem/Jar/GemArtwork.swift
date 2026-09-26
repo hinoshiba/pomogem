@@ -560,7 +560,7 @@ enum GemArtwork {
     static func bedTextureKey(width rawWidth: CGFloat, height rawHeight: CGFloat, slotHexes: [String], scale rawScale: CGFloat) -> String {
         let width = max(8, rawWidth.rounded())
         let height = max(2, rawHeight.rounded())
-        return "bed3|w\(Int(width))|h\(Int(height))|\(slotHexes.joined(separator: ","))|x\(bedRenderScale(rawScale))"
+        return "bed4|w\(Int(width))|h\(Int(height))|\(slotHexes.joined(separator: ","))|x\(bedRenderScale(rawScale))"
     }
 
     /// The bed bakes at half the display scale (at least 1×): the sediment
@@ -594,8 +594,9 @@ enum GemArtwork {
     static let bedColumnPitch: CGFloat = 5.2
     /// Largest chip (points).
     static let bedMaximumChipSize: CGFloat = 6.5
-    /// One chip in this many keeps a tiny static glint.
-    static let bedSparkleInterval: UInt64 = 48
+    /// One chip in this many keeps a tiny static glint (round 12: 1 in 14,
+    /// so the darker bed still twinkles).
+    static let bedSparkleInterval: UInt64 = 14
 
     fileprivate struct BedChip {
         var center: CGPoint
@@ -646,17 +647,18 @@ enum GemArtwork {
         return chips
     }
 
-    /// Chip colour of the bed for a theme tone: the theme's hue, soft
-    /// saturation (0.22–0.34) and a luminous value (never below 0.66) that
-    /// barely changes from facet to facet (±4 %), so the bed reads as a
-    /// layer of light rather than gravel, and stays paler and flatter than
-    /// every real gem.
+    /// Chip colour of the bed for a theme tone: the theme's hue, a middle
+    /// saturation (0.35–0.45) and a value around 0.66 that barely changes
+    /// from facet to facet (±4 %). Round 12: the bed sits a clear step
+    /// darker than the gems resting on it (luminance about 0.46–0.52
+    /// against their 0.63–0.73), so they stand out from it instead of
+    /// melting into a pale sugar floor; it is still light, never gravel.
     static func bedChipColor(tone: GemTone, facet: CGFloat, lift: CGFloat) -> GemColor {
         let neutral = tone.saturation < 0.08
-        let saturation = neutral ? tone.saturation : min(0.34, max(0.22, tone.saturation * 0.42))
+        let saturation = neutral ? tone.saturation : min(0.45, max(0.35, tone.saturation * 0.55))
         // `lift` (0…1) is the warm light that rises from the floor.
-        let value = min(1, max(0.66, 0.78 + 0.04 * facet + 0.08 * lift))
-        return GemColor(hue: tone.hue, saturation: saturation * (1 - 0.25 * lift), brightness: value)
+        let value = min(0.8, max(0.56, 0.64 + 0.04 * facet + 0.06 * lift))
+        return GemColor(hue: tone.hue, saturation: saturation * (1 - 0.15 * lift), brightness: value)
     }
 
     static func bedImage(width: CGFloat, height: CGFloat, slotHexes rawHexes: [String], scale: CGFloat) -> UIImage {
@@ -702,12 +704,12 @@ enum GemArtwork {
             if let ground = CGGradient(
                 colorsSpace: CGColorSpaceCreateDeviceRGB(),
                 colors: [
-                    warm.mixed(with: calm, amount: 0.35).withAlpha(0.66).cgColor,
-                    calm.withAlpha(0.50).cgColor,
-                    calm.withAlpha(0.24).cgColor,
+                    warm.mixed(with: calm, amount: 0.35).withAlpha(0.52).cgColor,
+                    calm.withAlpha(0.38).cgColor,
+                    calm.withAlpha(0.16).cgColor,
                     calm.withAlpha(0).cgColor
                 ] as CFArray,
-                locations: [0, 0.35, 0.72, 1]
+                locations: [0, 0.35, 0.75, 1]
             ) {
                 context.drawLinearGradient(
                     ground,
@@ -727,7 +729,7 @@ enum GemArtwork {
                 guard depth > chip.size * 0.15 else { continue }
                 // Soft top edge: chips fade in over the top 25 % of the bed.
                 let fade = min(1, depth / max(height * 0.25, 4))
-                let alpha = pow(fade, 0.9) * 0.78
+                let alpha = pow(fade, 0.9) * 0.9
                 let heightUnit = min(max(chip.center.y / max(height, 1), 0), 1)
                 // The bottom 30 % catches the warm light pooled on the floor.
                 let lift = max(0, 1 - heightUnit / 0.30)
@@ -777,9 +779,9 @@ enum GemArtwork {
             if let wash = CGGradient(
                 colorsSpace: CGColorSpaceCreateDeviceRGB(),
                 colors: [
-                    veil.withAlpha(0.22).cgColor,
-                    veil.withAlpha(0.14).cgColor,
-                    veil.withAlpha(0.06).cgColor
+                    veil.withAlpha(0.10).cgColor,
+                    veil.withAlpha(0.06).cgColor,
+                    veil.withAlpha(0.02).cgColor
                 ] as CFArray,
                 locations: [0, 0.6, 1]
             ) {
@@ -801,8 +803,8 @@ enum GemArtwork {
                 colorsSpace: CGColorSpaceCreateDeviceRGB(),
                 colors: [
                     glow.withAlpha(0).cgColor,
-                    glow.withAlpha(0.08).cgColor,
-                    glow.withAlpha(0.26).cgColor,
+                    glow.withAlpha(0.05).cgColor,
+                    glow.withAlpha(0.14).cgColor,
                     glow.withAlpha(0).cgColor
                 ] as CFArray,
                 locations: [0, 0.45, 0.80, 1]
