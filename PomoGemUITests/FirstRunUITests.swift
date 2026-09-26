@@ -138,10 +138,18 @@ final class FirstRunUITests: XCTestCase {
 
         let english = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "英語")).firstMatch
         XCTAssertTrue(english.waitForExistence(timeout: 4))
-        english.tap()
         let summary = app.descendants(matching: .any)["onboarding.selection-summary"]
+        // The page has just slid in. A tap right after it arrived had no
+        // effect once (recording: the page at rest, nothing selected). A
+        // second tap would unselect the chip, so tap again only while it
+        // still reads 未選択.
+        XCTAssertTrue(waitUntilFrameSettles(english))
+        english.tap()
+        if !waitForLabel(summary, containing: "英語"), english.value as? String == "未選択" {
+            english.tap()
+        }
         XCTAssertTrue(summary.waitForExistence(timeout: 4))
-        XCTAssertTrue(summary.label.contains("英語"))
+        XCTAssertTrue(waitForLabel(summary, containing: "英語"), summary.label)
 
         let field = app.textFields.firstMatch
         XCTAssertTrue(scrollUntilHittable(field))
