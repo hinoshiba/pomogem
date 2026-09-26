@@ -121,6 +121,19 @@
       "package": "l10n-02-focus-system"
     },
     {
+      "glob": "PomoGem/App/Intents/**",
+      "table": "Focus",
+      "package": "l10n-02-focus-system",
+      "note": "App Intents and App Shortcuts (plan pr-49). Intent titles use LocalizedStringResource(table: \"Focus\"); the Japanese App Shortcut phrases move to AppShortcuts.xcstrings with English (Docs/Localization.md)"
+    },
+    {
+      "glob": "Shared/AppEntryLink.swift",
+      "table": "Widgets",
+      "package": "l10n-02-focus-system",
+      "bundle": "app+widgets",
+      "note": "constant pomogem:// routes behind widget taps; holds no catalog keys"
+    },
+    {
       "glob": "PomoGem/Core/ScreenTime/**",
       "table": "ScreenTime",
       "package": "l10n-02-focus-system"
@@ -373,6 +386,9 @@
     "Launch": "PomoGem/Localization/Launch.xcstrings",
     "Storage": "PomoGem/Localization/Storage.xcstrings",
     "Widgets": "PomoGemWidgets/Localization/Widgets.xcstrings"
+  },
+  "system_tables": {
+    "AppShortcuts": "App Shortcut phrases (PomoGemShortcuts). The App Intents metadata processor writes them to ExtractedAppShortcutsMetadata.stringsdata; Apple reads their translations only from PomoGem/Localization/AppShortcuts.xcstrings, which is created when English is enabled (Docs/Localization.md). sync and check skip this table."
   },
   "catalog_bundles": {
     "PomoGem.app": [

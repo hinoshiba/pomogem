@@ -1,7 +1,36 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
-
+    "%@集中する" : {
+      "comment" : "VoiceOver: a medium-widget button that starts a focus; the argument is its length, e.g. 25分"
+    },
+    "タップして休憩へ戻る" : {
+      "comment" : "Live Activity guidance while a break counts down; like 「タップして集中へ戻る」 for a focus"
+    },
+    "タップして瓶へ戻る" : {
+      "comment" : "Live Activity guidance after a break ended; the app's break screen offers 「瓶へ戻る」"
+    },
+    "ポモジェムのタイマー" : {
+      "comment" : "VoiceOver: the Dynamic Island mark during a focus"
+    },
+    "ポモジェムの休憩" : {
+      "comment" : "VoiceOver: the Dynamic Island mark during a break"
+    },
+    "休憩の残り時間" : {
+      "comment" : "VoiceOver: label of an unknown break countdown"
+    },
+    "休憩の残り時間、%@" : {
+      "comment" : "VoiceOver: the break countdown; the argument is the remaining time"
+    },
+    "休憩中" : {
+      "comment" : "Live Activity title while a break counts down"
+    },
+    "休憩終了" : {
+      "comment" : "Live Activity: a break past its end time (title and VoiceOver)"
+    },
+    "終了" : {
+      "comment" : "Live Activity countdown after its end time"
+    }
   },
   "version" : "1.0"
 }

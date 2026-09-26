@@ -163,6 +163,8 @@ struct HomeView: View {
     @State private var purchase = PurchaseManager.shared
     @State private var announcedPostDropOfferID: UUID?
     @State private var announcedPostDropShareOfferID: UUID?
+    /// The short settle before an outside focus start (FocusStartEntryPolicy).
+    @State private var focusStartEntryTask: Task<Void, Never>?
 
     init() {
         _storedSubjects = Query(SubjectSyncPolicy.liveRowsDescriptor(sortBy: [
@@ -589,7 +591,7 @@ struct HomeView: View {
 #if DEBUG
         let _ = HomeRenderDiagnostics.recordBodyEvaluation()
 #endif
-        observedContent
+        focusStartEntryContent
     }
 
     private var mainContent: some View {
@@ -992,6 +994,17 @@ struct HomeView: View {
                 presentNextStratumCelebrationIfNeeded()
             }
         }
+    }
+
+    /// Starts asked for from widgets, links and App Shortcuts
+    /// (FocusStartEntryPolicy). A separate layer keeps `observedContent`'s
+    /// long modifier chain within the type checker's time limit.
+    private var focusStartEntryContent: some View {
+        observedContent
+            .onChange(of: focusStartEntrySnapshot, initial: true) { _, _ in
+                handlePendingFocusStart()
+            }
+            .onDisappear { cancelFocusStartEntrySettle() }
     }
 
     private func stratumCelebrationSheet(_ request: PendingStratumCelebration) -> some View {
@@ -3339,6 +3352,100 @@ struct HomeView: View {
             duration: duration,
             dataEpochID: currentActivityEpochID
         )
+    }
+
+    // MARK: Focus starts from widgets, links and App Shortcuts
+
+    private var focusStartEntrySnapshot: FocusStartEntryPolicy.Snapshot? {
+        guard let request = router.pendingFocusStart else { return nil }
+        return FocusStartEntryPolicy.Snapshot(
+            requestID: request.id,
+            isFresh: AppEntryInbox.isFresh(
+                request.receivedAtUptime,
+                at: ContinuousUptime.now()
+            ),
+            homeIsVisible: homeIsVisible && router.selectedTab == .jar,
+            timerIsPresented: focusConfiguration != nil
+                || breakConfiguration != nil
+                || router.recoveredFocus != nil
+                || router.recoveredBreak != nil
+                || router.focusPresentationIsActive,
+            focusRecoveryIsPending: router.deferredFocusRecovery != nil
+                || router.cloudFocusRecoveryOffer != nil,
+            rewardChoiceIsPending: breakOffer != nil
+                || breakOfferTask != nil
+                || hasPendingRewardReceipt
+                || rewardDropDestination != nil
+                || rewardDropRevealIsPending,
+            closableSurfaceIsPresented: showHomeMenu
+                || showAccumulationOverview
+                || selectedAggregateDetail != nil
+                || showManualEntry
+                || showAchievementEntry
+                || showCustomDuration
+                || showAccumulationPlan,
+            celebrationIsPresented: completedStratum != nil,
+            hasTheme: selectedSubject != nil
+        )
+    }
+
+    private func handlePendingFocusStart() {
+        guard let snapshot = focusStartEntrySnapshot else {
+            cancelFocusStartEntrySettle()
+            return
+        }
+        switch FocusStartEntryPolicy.decide(snapshot) {
+        case .wait:
+            cancelFocusStartEntrySettle()
+        case .closeSurfaces:
+            cancelFocusStartEntrySettle()
+            showHomeMenu = false
+            showAccumulationOverview = false
+            selectedAggregateDetail = nil
+            showManualEntry = false
+            showAchievementEntry = false
+            showCustomDuration = false
+            showAccumulationPlan = false
+        case let .decline(reason):
+            cancelFocusStartEntrySettle()
+            router.pendingFocusStart = nil
+            if let message = FocusStartEntryPolicy.message(for: reason) {
+                router.showToast(message, symbol: "timer")
+            }
+        case .start:
+            guard focusStartEntryTask == nil else { return }
+            let requestID = snapshot.requestID
+            focusStartEntryTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled else { return }
+                focusStartEntryTask = nil
+                // Someone who left again before the start is not surprised
+                // by a timer on their return.
+                guard UIApplication.shared.applicationState != .background else {
+                    router.pendingFocusStart = nil
+                    return
+                }
+                guard let current = focusStartEntrySnapshot,
+                      current.requestID == requestID,
+                      FocusStartEntryPolicy.decide(current) == .start,
+                      let request = router.pendingFocusStart else {
+                    handlePendingFocusStart()
+                    return
+                }
+                router.pendingFocusStart = nil
+                // Exactly the start button: the selected theme, and the
+                // selected length unless a free preset was asked for.
+                let preset = request.preset.flatMap { preset in
+                    PomodoroDuration.freePresets.first { $0.seconds == preset.seconds }
+                }
+                startFocus(duration: preset ?? selectedDuration)
+            }
+        }
+    }
+
+    private func cancelFocusStartEntrySettle() {
+        focusStartEntryTask?.cancel()
+        focusStartEntryTask = nil
     }
 
     private func persistPreferredFocusSeconds(

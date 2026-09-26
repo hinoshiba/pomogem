@@ -130,6 +130,9 @@ targets:
       # PomoGemLocale and DurationText, so the Live Activity and widgets format
       # durations like the app (Docs/Localization.md).
       - path: Shared/LocalizedDuration.swift
+      # The constant pomogem:// routes behind widget taps (notify-03). Routes
+      # only: no data, no App Group, no store.
+      - path: Shared/AppEntryLink.swift
       - path: PomoGemWidgets/PrivacyInfo.xcprivacy
         buildPhase: resources
     settings:

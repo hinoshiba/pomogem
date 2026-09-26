@@ -26,8 +26,17 @@
     "アプリの時間を積む" : {
       "comment" : "Home menu row: open the Screen Time settings"
     },
+    "テーマを選ぶと、集中を始められます" : {
+      "comment" : "Toast: a widget, link or Siri asked to start a focus before any theme exists"
+    },
+    "休憩の選択を終えると、集中を始められます" : {
+      "comment" : "Toast: a widget, link or Siri asked to start a focus while the reward card waits for the rest choice"
+    },
     "勉強アプリ10分ごとに1粒" : {
       "comment" : "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble"
+    },
+    "進行中の集中があるため、新しい集中は始めませんでした" : {
+      "comment" : "Toast: a widget, link or Siri asked to start a focus while another one still needs attention"
     }
   },
   "version" : "1.0"

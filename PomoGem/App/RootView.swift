@@ -972,6 +972,9 @@ struct RootView: View {
             // router. Navigation only: nothing here reads, writes or transfers.
             router.selectedTab = .settings
         }
+        .onChange(of: appEntryRoutingState, initial: true) { _, _ in
+            routeAppEntryIfPossible()
+        }
         .onChange(of: router.selectedTab) { _, selectedTab in
             remountNavigation?.record(selectedTab)
             guard isFirstFramePresented else { return }
@@ -2073,7 +2076,10 @@ struct RootView: View {
         let notificationCleanup = NotificationManager.shared
             .prepareTimerNotificationCleanup(preserving: sessionID, preservingBreak: breakID)
         let activityCleanup = FocusActivityManager.shared
-            .prepareCurrentActivityRetirement(preserving: sessionID)
+            .prepareCurrentActivityRetirement(
+                preserving: sessionID,
+                preservingBreak: breakID
+            )
         let deliveredStateCleanup = NotificationManager.shared.prepareDeliveredStateCleanup()
         acceptedResetCleanupTask = AcceptedActivityResetCleanup.start(
             after: acceptedResetCleanupTask,
@@ -2438,15 +2444,15 @@ struct RootView: View {
         preparation: BoundedLaunchPreparation.Result
     ) async {
         guard let envelope else {
-            await FocusActivityManager.shared.reconcileWithDurableSession(nil)
+            await reconcileLiveActivities(focusSessionID: nil)
             return
         }
         switch preparation.localFocusDisposition {
         case .present:
             await presentLocalRecovery(envelope)
             let durableEnvelope = FocusPersistence.load()
-            await FocusActivityManager.shared.reconcileWithDurableSession(
-                durableEnvelope?.pendingCompletion?.sessionID
+            await reconcileLiveActivities(
+                focusSessionID: durableEnvelope?.pendingCompletion?.sessionID
                     ?? durableEnvelope?.engine.currentSessionID
             )
         case let .retireMaterialized(sessionID):
@@ -2460,8 +2466,8 @@ struct RootView: View {
             ) else {
                 await presentLocalRecovery(envelope)
                 let durableEnvelope = FocusPersistence.load()
-                await FocusActivityManager.shared.reconcileWithDurableSession(
-                    durableEnvelope?.pendingCompletion?.sessionID
+                await reconcileLiveActivities(
+                    focusSessionID: durableEnvelope?.pendingCompletion?.sessionID
                         ?? durableEnvelope?.engine.currentSessionID
                 )
                 return
@@ -2475,13 +2481,25 @@ struct RootView: View {
                 forKey: FocusPersistence.localCompletionIDKey
             )
             await FocusActivityManager.shared.cancel(sessionID: sessionID)
-            await FocusActivityManager.shared.reconcileWithDurableSession(nil)
+            await reconcileLiveActivities(focusSessionID: nil)
         case .retireStale, .quarantineAwaitingMarker, .none:
             // A known-stale envelope was already retired by the reset gate.
             // Unknown generations keep their bytes but never retain an OS
             // surface until their reset marker proves they are current.
-            await FocusActivityManager.shared.reconcileWithDurableSession(nil)
+            await reconcileLiveActivities(focusSessionID: nil)
         }
+    }
+
+    /// The launch reconciliation of OS surfaces with durable state: the
+    /// validated focus, plus a rest that is still valid (notify-06). A reset
+    /// applied earlier in this launch has already cleared a retired break, so
+    /// its surface ends here; the fail-closed error paths keep ending all.
+    @MainActor
+    private func reconcileLiveActivities(focusSessionID: UUID?) async {
+        await FocusActivityManager.shared.reconcileWithDurableSession(
+            focusSessionID,
+            breakID: FocusPersistence.validBreakID()
+        )
     }
 
     @MainActor
@@ -2874,6 +2892,48 @@ struct RootView: View {
         )
     }
 
+    /// Everything that decides whether a widget, link or App Shortcut request
+    /// may be taken now, so a change to any of it re-runs the routing.
+    private var appEntryRoutingState: AppEntryRoutingState {
+        AppEntryRoutingState(
+            requestID: AppEntryInbox.shared.pending?.id,
+            isBootstrapped: isBootstrapped,
+            showsMain: shouldShowMain,
+            isBlocked: blockingError != nil || completeDeletion.hasStarted,
+            isSwitchingStorage: storageTransfer.isStarting
+        )
+    }
+
+    /// notify-03 / product-04. Navigation only: this reads and writes no
+    /// record. Root takes a request only when it shows the jar; a startup
+    /// error, a data deletion or first-run setup drops it instead, because
+    /// the person is busy with something the request knew nothing about.
+    @MainActor
+    private func routeAppEntryIfPossible() {
+        let inbox = AppEntryInbox.shared
+        guard inbox.pending != nil else { return }
+        if blockingError != nil || completeDeletion.hasStarted {
+            inbox.discard()
+            return
+        }
+        guard isBootstrapped, !storageTransfer.isStarting else { return }
+        guard shouldShowMain else {
+            inbox.discard()
+            return
+        }
+        guard let request = inbox.take() else { return }
+        router.paywallPresented = false
+        router.sharePresented = false
+        router.selectedTab = .jar
+        if case let .startFocus(preset) = request.route {
+            router.pendingFocusStart = PendingFocusStart(
+                id: request.id,
+                preset: preset,
+                receivedAtUptime: request.receivedAtUptime
+            )
+        }
+    }
+
     @MainActor
     private func recoverBreakTimerIfNeeded() async {
         guard !Task.isCancelled else { return }
@@ -2881,6 +2941,7 @@ struct RootView: View {
         if router.recoveredFocus != nil {
             FocusPersistence.clearBreak()
             NotificationManager.shared.cancelBreakCompletion(id: recovery.id)
+            await FocusActivityManager.shared.cancel(sessionID: recovery.id)
             return
         }
         // Let BreakTimerView resolve an elapsed recovery. It alone has the
@@ -3110,6 +3171,14 @@ private struct StartupErrorView: View {
         }
         .scrollBounceBehavior(.basedOnSize)
     }
+}
+
+private struct AppEntryRoutingState: Equatable {
+    let requestID: UUID?
+    let isBootstrapped: Bool
+    let showsMain: Bool
+    let isBlocked: Bool
+    let isSwitchingStorage: Bool
 }
 
 struct MainNavigationView: View {

@@ -26,12 +26,17 @@ struct FocusActivityRetirement {
     private let targets: [Target]
     private let didEndTarget: @MainActor (String) -> Void
 
+    /// `breakID` keeps the surface of a rest that survives the same cleanup
+    /// (its durable envelope was preserved), exactly like `sessionID` keeps
+    /// the current-generation focus.
     init(
         targets: [Target],
         preserving sessionID: UUID? = nil,
+        preservingBreak breakID: UUID? = nil,
         didEndTarget: @escaping @MainActor (String) -> Void = { _ in }
     ) {
-        self.targets = targets.filter { $0.sessionID != sessionID }
+        let preserved = Set([sessionID, breakID].compactMap { $0 })
+        self.targets = targets.filter { !preserved.contains($0.sessionID) }
         self.didEndTarget = didEndTarget
     }
 
@@ -53,11 +58,16 @@ struct FocusActivityLifecycleState {
         return generation
     }
 
-    mutating func acceptRetirement(preserving sessionID: UUID?) {
-        // A preserved local/unknown-epoch focus may itself be awaiting an
-        // ActivityKit callback. Keep that work valid while cancelling any
-        // pre-reset lifecycle operation belonging to another session.
-        if let sessionID, self.sessionID == sessionID { return }
+    mutating func acceptRetirement(
+        preserving sessionID: UUID?,
+        preservingBreak breakID: UUID? = nil
+    ) {
+        // A preserved local/unknown-epoch focus (or its preserved rest) may
+        // itself be awaiting an ActivityKit callback. Keep that work valid
+        // while cancelling any pre-reset lifecycle operation belonging to
+        // another session.
+        if let current = self.sessionID,
+           current == sessionID || current == breakID { return }
         _ = begin()
     }
 }
@@ -105,6 +115,15 @@ final class FocusActivityManager {
         endDate: Date
     ) async {}
 
+    @discardableResult
+    func startBreak(
+        breakID: UUID,
+        durationSeconds: Int,
+        endDate: Date
+    ) async throws -> String? {
+        nil
+    }
+
     func pause(sessionID: UUID, remainingSeconds: Int) async {}
 
     func resume(sessionID: UUID, endDate: Date) async {}
@@ -119,12 +138,16 @@ final class FocusActivityManager {
     func endAll() async {}
 
     func prepareCurrentActivityRetirement(
-        preserving sessionID: UUID? = nil
+        preserving sessionID: UUID? = nil,
+        preservingBreak breakID: UUID? = nil
     ) -> FocusActivityRetirement {
         FocusActivityRetirement(targets: [], preserving: sessionID)
     }
 
-    func reconcileWithDurableSession(_ sessionID: UUID?) async {}
+    func reconcileWithDurableSession(
+        _ sessionID: UUID?,
+        breakID: UUID? = nil
+    ) async {}
 
     func restoreCurrentActivity(for sessionID: UUID? = nil) {}
 }
@@ -190,6 +213,27 @@ final class FocusActivityManager {
             sessionID: sessionID,
             durationSeconds: durationSeconds,
             content: ActivityContent(state: state, staleDate: nil)
+        )
+    }
+
+    /// Starts the Lock Screen / Dynamic Island countdown for a break the
+    /// person just chose (notify-06). Called only at that explicit, foreground
+    /// choice; recovery never recreates a break surface they dismissed. Like
+    /// any start it ends every other activity, which replaces the lingering
+    /// 「集中完了」 card of the focus that earned the break.
+    @discardableResult
+    func startBreak(
+        breakID: UUID,
+        durationSeconds: Int,
+        endDate: Date
+    ) async throws -> String? {
+        let state = FocusActivityAttributes.ContentState.breakRunning(
+            until: endDate
+        )
+        return try await startActivity(
+            sessionID: breakID,
+            durationSeconds: durationSeconds,
+            content: ActivityContent(state: state, staleDate: endDate)
         )
     }
 
@@ -341,9 +385,13 @@ final class FocusActivityManager {
     /// task or awaiting notification cleanup. The resulting plan cannot end a
     /// later activity or invalidate its newer lifecycle generation.
     func prepareCurrentActivityRetirement(
-        preserving sessionID: UUID? = nil
+        preserving sessionID: UUID? = nil,
+        preservingBreak breakID: UUID? = nil
     ) -> FocusActivityRetirement {
-        lifecycleState.acceptRetirement(preserving: sessionID)
+        lifecycleState.acceptRetirement(
+            preserving: sessionID,
+            preservingBreak: breakID
+        )
         let targets = Activity<FocusActivityAttributes>.activities.map { activity in
             FocusActivityRetirement.Target(
                 id: activity.id,
@@ -354,6 +402,7 @@ final class FocusActivityManager {
         return FocusActivityRetirement(
             targets: targets,
             preserving: sessionID,
+            preservingBreak: breakID,
             didEndTarget: { [weak self] id in
                 self?.clearCurrentIfMatching(id: id)
             }
@@ -364,27 +413,38 @@ final class FocusActivityManager {
     /// durable local focus envelope. This removes an orphan left by a process
     /// termination between clearing persistence and awaiting ActivityKit,
     /// while deliberately not recreating an activity dismissed by the user.
-    func reconcileWithDurableSession(_ sessionID: UUID?) async {
+    ///
+    /// `breakID` is the still-valid durable rest, if any. A cold launch or an
+    /// iCloud remount in the middle of a break keeps that break's surface; a
+    /// break that was closed, expired or reset has no envelope and loses it.
+    func reconcileWithDurableSession(
+        _ sessionID: UUID?,
+        breakID: UUID? = nil
+    ) async {
+        let retainedSessionIDs = [sessionID, breakID].compactMap { $0 }
         guard Self.releaseAndLocalPolicyAllowsActivities,
-              let sessionID else {
+              let primarySessionID = retainedSessionIDs.first else {
             await endAll(dismissalPolicy: .immediate)
             return
         }
 
-        let generation = beginLifecycleMutation(sessionID: sessionID)
+        let generation = beginLifecycleMutation(sessionID: primarySessionID)
         let activities = Activity<FocusActivityAttributes>.activities
-        var retained: Activity<FocusActivityAttributes>?
+        var retained: [UUID: Activity<FocusActivityAttributes>] = [:]
         for activity in activities {
-            if activity.attributes.sessionID == sessionID, retained == nil {
-                retained = activity
+            let activitySessionID = activity.attributes.sessionID
+            if retainedSessionIDs.contains(activitySessionID),
+               retained[activitySessionID] == nil {
+                retained[activitySessionID] = activity
             } else {
                 await activity.end(nil, dismissalPolicy: .immediate)
                 guard lifecycleGeneration == generation else { return }
             }
         }
 
-        currentActivityID = retained?.id
-        currentSessionID = retained?.attributes.sessionID
+        let current = retainedSessionIDs.lazy.compactMap { retained[$0] }.first
+        currentActivityID = current?.id
+        currentSessionID = current?.attributes.sessionID
     }
 
     /// Reconnects UI state to a Live Activity after process recreation.

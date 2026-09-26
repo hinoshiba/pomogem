@@ -16,7 +16,7 @@ struct FocusLiveActivityWidget: Widget {
                     Label {
                         Text("ポモジェム")
                     } icon: {
-                        Image(systemName: "timer")
+                        Image(systemName: phaseSymbol(state: context.state))
                     }
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .foregroundStyle(LivePalette.amber)
@@ -40,6 +40,8 @@ struct FocusLiveActivityWidget: Widget {
                                 .font(.system(size: 11, weight: .bold, design: .rounded))
                                 .foregroundStyle(LivePalette.mutedText)
                             Spacer()
+                            // The length the person chose: the focus or,
+                            // during a rest, the break's 5 or 15 minutes.
                             if context.state.phase != .completed,
                                !context.isStale {
                                 Text(FocusActivityConstants.durationLabel(
@@ -68,9 +70,7 @@ struct FocusLiveActivityWidget: Widget {
                     ))
                 }
             } compactLeading: {
-                Image(systemName: "timer")
-                    .foregroundStyle(LivePalette.amber)
-                    .accessibilityLabel("ポモジェムのタイマー")
+                PhaseSymbol(state: context.state)
             } compactTrailing: {
                 FocusStateText(
                     state: context.state,
@@ -84,9 +84,7 @@ struct FocusLiveActivityWidget: Widget {
                     isStale: context.isStale
                 ))
             } minimal: {
-                Image(systemName: "timer")
-                    .foregroundStyle(LivePalette.amber)
-                    .accessibilityLabel("ポモジェムのタイマー")
+                PhaseSymbol(state: context.state)
                     .accessibilityHint(focusReturnGuidance(
                         state: context.state,
                         isStale: context.isStale
@@ -107,9 +105,10 @@ private struct FocusLockScreenView: View {
                     Circle()
                         .fill(LivePalette.amber.opacity(0.18))
                         .frame(width: 42, height: 42)
-                    Image(systemName: "timer")
+                    Image(systemName: phaseSymbol(state: context.state))
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(LivePalette.amber)
+                        .accessibilityHidden(true)
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -156,6 +155,30 @@ private struct FocusLockScreenView: View {
     }
 }
 
+/// The compact and minimal Dynamic Island mark: a timer while focusing, a cup
+/// while resting, the same symbols the app's own screens use.
+private struct PhaseSymbol: View {
+    let state: FocusActivityAttributes.ContentState
+
+    var body: some View {
+        Image(systemName: phaseSymbol(state: state))
+            .foregroundStyle(LivePalette.amber)
+            .accessibilityLabel(
+                state.isBreak
+                    ? String(
+                        localized: "ポモジェムの休憩",
+                        table: "Widgets",
+                        comment: "VoiceOver: the Dynamic Island mark during a break"
+                    )
+                    : String(
+                        localized: "ポモジェムのタイマー",
+                        table: "Widgets",
+                        comment: "VoiceOver: the Dynamic Island mark during a focus"
+                    )
+            )
+    }
+}
+
 /// Tapping the Live Activity already opens its containing app. This is a
 /// description of that system action, not a separate button or a timer command.
 private struct FocusReturnGuidance: View {
@@ -189,7 +212,7 @@ private struct FocusTimeProgress: View {
                 ProgressView(value: 0, total: 1)
             } else {
                 switch state.phase {
-                case .running:
+                case .running, .breakRunning:
                     if let endDate = state.endDate {
                         ProgressView(
                             timerInterval: startDate(for: endDate)...endDate,
@@ -237,7 +260,12 @@ private struct FocusStateText: View {
 
     var body: some View {
         Group {
-            if isStale, state.phase == .running {
+            if isStale, state.phase == .breakRunning {
+                Text("終了", tableName: "Widgets", comment: "Live Activity countdown after its end time")
+                    .accessibilityLabel(
+                        Text("休憩終了", tableName: "Widgets", comment: "Live Activity: a break past its end time (title and VoiceOver)")
+                    )
+            } else if isStale, state.phase == .running {
                 Text("終了")
                     .accessibilityLabel("集中完了")
             } else {
@@ -266,6 +294,34 @@ private struct FocusStateText: View {
                     } else {
                         Text("00:00")
                             .accessibilityLabel("残り時間")
+                            .accessibilityValue("00:00")
+                    }
+                case .breakRunning:
+                    if let endDate = state.endDate {
+                        let startDate = min(Date.now, endDate)
+                        let countdown = Text(
+                            timerInterval: startDate...endDate,
+                            pauseTime: nil,
+                            countsDown: true,
+                            showsHours: false
+                        )
+                        countdown
+                            .accessibilityLabel(
+                                Text(
+                                    "休憩の残り時間、\(countdown)",
+                                    tableName: "Widgets",
+                                    comment: "VoiceOver: the break countdown; the argument is the remaining time"
+                                )
+                            )
+                    } else {
+                        Text("00:00")
+                            .accessibilityLabel(
+                                Text(
+                                    "休憩の残り時間",
+                                    tableName: "Widgets",
+                                    comment: "VoiceOver: label of an unknown break countdown"
+                                )
+                            )
                             .accessibilityValue("00:00")
                     }
                 case .paused:
@@ -303,10 +359,21 @@ private enum LivePalette {
     static let mutedText = Color(red: 139 / 255, green: 147 / 255, blue: 172 / 255)
 }
 
+private func phaseSymbol(state: FocusActivityAttributes.ContentState) -> String {
+    state.isBreak ? "cup.and.saucer.fill" : "timer"
+}
+
 private func focusStatusTitle(
     state: FocusActivityAttributes.ContentState,
     isStale: Bool
 ) -> String {
+    if state.isBreak {
+        // A break ended while the app was suspended stays on the Lock Screen
+        // until the app runs again; say so plainly instead of 「集中完了」.
+        return isStale
+            ? String(localized: "休憩終了", table: "Widgets", comment: "Live Activity: a break past its end time (title and VoiceOver)")
+            : String(localized: "休憩中", table: "Widgets", comment: "Live Activity title while a break counts down")
+    }
     if isStale || state.phase == .completed {
         return "集中完了"
     }
@@ -320,6 +387,11 @@ private func focusReturnGuidance(
     state: FocusActivityAttributes.ContentState,
     isStale: Bool
 ) -> String {
+    if state.isBreak {
+        return isStale
+            ? String(localized: "タップして瓶へ戻る", table: "Widgets", comment: "Live Activity guidance after a break ended; the app's break screen offers 「瓶へ戻る」")
+            : String(localized: "タップして休憩へ戻る", table: "Widgets", comment: "Live Activity guidance while a break counts down; like 「タップして集中へ戻る」 for a focus")
+    }
     if isStale || state.phase == .completed {
         return "タップして完了を確認"
     }

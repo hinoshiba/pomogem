@@ -95,14 +95,23 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
   通知本文は常にaccount-neutralで、テーマ名を含まない。
   timer終了通知の許可は、利用者が初めて明示的に集中を開始したときに一度だけ尋ね、復元・iCloud引き継ぎ
   では尋ねない（毎日のリマインダーとは別）
-- Widget: Home／Lock Screenともaccount-neutralな起動導線だけを表示し、記録、質量、テーマ、画像を
-  App Groupから読まない
+- Widget: Home／Lock Screenともaccount-neutralな集中開始の導線だけを表示し、記録、質量、テーマ、画像を
+  App Groupから読まない。tapすると固定URL（`pomogem://focus/start`、medium widgetの時間buttonは
+  `?minutes=25|45|60|90`）でアプリを開き、Homeの開始buttonと同じ条件で、選択中のテーマと時間
+  （または押した時間）の集中を始める。進行中・復元待ちのtimerがあれば二つ目を始めず、完走後の休憩の
+  選択待ちやテーマ未選択ではtoastで理由を示すだけにする。要求は60秒で失効し、起動時のiCloud停止画面や
+  初回設定をまたいで持ち越さない
+- Siri／Spotlight／ショートカット／アクションボタン: App Shortcut「集中を始める」（例: 「ポモジェムで集中を
+  始める」「ポモジェムで25分集中する」）。アプリを開いてWidgetと同じ要求をHomeへ渡すだけで、
+  記録やテーマ名を返さず、background実行もしない。時間は任意で25／45／60／90分だけ指定できる
 - Live Activity: Homeで任意のtimerを開始してiPhoneをロックすると、ロック画面へアプリ名、選択時間、
-  残り時間、実行／一時停止／完了状態だけを表示。テーマ名、メモ、質量、Apple Account、CloudKit dataは
-  extensionへ渡さない。更新は端末内のみでActivityKit pushなし。通知権限とは独立し、Settings → 集中 →
-  「画面を閉じてもタイマーを表示」で端末ごとに停止可能。Dynamic Islandにも残り時間を表示し、
-  展開表示とロック画面に帰還案内を出す。タップするとアプリを開き、既存の集中画面・復元処理へ戻る。
-  pause／resume／cancelはアプリの集中画面から確認可能
+  残り時間、実行／一時停止／完了状態だけを表示。完走後に「5分休憩」などを選ぶと、同じpayloadで
+  「休憩中」の残り時間に切り替わり（休憩ごとのランダムUUIDと秒数だけ）、終了後は「休憩終了」と表示する。
+  休憩のスキップ／「瓶へ戻る」、次の集中の開始で終了する。テーマ名、メモ、質量、Apple Account、
+  CloudKit dataはextensionへ渡さない。更新は端末内のみでActivityKit pushなし。通知権限とは独立し、
+  Settings → 集中 → 「画面を閉じてもタイマーを表示」で端末ごとに停止可能。Dynamic Islandにも残り時間を
+  表示し、展開表示とロック画面に帰還案内を出す。タップするとアプリを開き、既存の集中・休憩画面・復元処理へ
+  戻る。pause／resume／cancelはアプリの集中画面から確認可能
 - Core Motion: Home表示中、端末の傾きで瓶の重力を計算し、軽い往復shakeで粒を動かす。
   `NSMotionUsageDescription`で目的を表示し、許可しなくても瓶のtapと他の集中機能を利用可能。値は
   端末内で即時処理するだけで保存・送信せず、inactive／backgroundでは更新を停止
