@@ -383,11 +383,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     var wantsFullRateMotion: Bool { fullRateMotionDemand.value }
     /// A light-only redraw of the resting jar keeps the render loop running
     /// this long (several frames at 60 or 30 fps).
-    static let redrawHold: TimeInterval = 0.25
+    nonisolated static let redrawHold: TimeInterval = 0.25
     /// A tilt that moved the light keeps full-rate motion and the render
     /// loop this long after its last step, so a slow, deliberate tilt does
     /// not switch rates between steps.
-    static let motionWakeHold: TimeInterval = 0.75
+    nonisolated static let motionWakeHold: TimeInterval = 0.75
     private var redrawUntil: TimeInterval = -.greatestFiniteMagnitude
     private var motionWakeUntil: TimeInterval = -.greatestFiniteMagnitude
     private var isRenderLoopCheckScheduled = false
