@@ -30,7 +30,11 @@ App Store Connectでは1.0.2 (9)がReady for Distributionです。1.1.0のdraft�
   「タイマーはバックグラウンドでも止まりません」を、どちらの状態でも正しい文へ書き換え、（3）一時停止がオンの間は
   「集中に戻るお知らせ」の行と説明を表示しない、（4）パスコードがないとロックでも一時停止することと、
   「再開する」でしか再開しないことを設定の説明に書く、（5）`review-notes.md`・`review-notes-connect.txt`・
-  `PRIVACY.md`に設定の場所を追記。`FocusLeaveSettingsUITests`と`SettingsPaywallUITests`で確認
+  `PRIVACY.md`に設定の場所を追記。`FocusLeaveSettingsUITests`と`SettingsPaywallUITests`で確認。
+  2026-09-27のレビュー対応: （6）既存の利用者にも既定オンで挙動が変わるため、What's New（ja/en）の先頭に
+  一時停止・最大5回のお知らせ・ロックの扱い・止め方を1行で書く、（7）サイトのFAQは公開中の1.0.2の文を残し、
+  一時停止は「1.1.0候補では」と明記する（mainへのpushで公開されるため）、（8）ロックで進むことは
+  「通常は」と書き、ロック解除の直後などの限界と矛盾させない
 - [ ] アプリを離れたときの一時停止と「集中が切れています」（F1、オーナーの依頼2026-09-26）を実機
   （iPhone 12 mini、iOS 26.3.x）で、パスコードあり・なしの両方について`Docs/FocusLeavePause.md`の表どおりに確認する。
   特に（1）パスコードありのロックで進み続け通知が出ない、（2）ホーム画面へ移って1分で戻ると離れた時点で
