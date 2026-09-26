@@ -5,11 +5,15 @@ import os
 
 /// One device-motion sample, copied off `CMDeviceMotion` so it can cross
 /// from Core Motion's queue to the main actor. Gravity is in g (the phone's
-/// axes), user acceleration in g with gravity removed, and the timestamp is
-/// Core Motion's (seconds of system uptime).
+/// axes: +x toward the right edge, +y toward the top edge of a portrait
+/// phone, +z out of the screen), user acceleration in g with gravity
+/// removed, and the timestamp is Core Motion's (seconds of system uptime).
 struct JarMotionSample: Equatable, Sendable {
     var gravityX: Double
     var gravityY: Double
+    /// Out of the screen: −1 for a phone lying face up. It tells a phone
+    /// lying flat (whose in-screen gravity is only noise) from one held up.
+    var gravityZ: Double = 0
     var accelerationX: Double = 0
     var accelerationY: Double = 0
     var accelerationZ: Double = 0
@@ -18,6 +22,7 @@ struct JarMotionSample: Equatable, Sendable {
     init(
         gravityX: Double,
         gravityY: Double,
+        gravityZ: Double = 0,
         accelerationX: Double = 0,
         accelerationY: Double = 0,
         accelerationZ: Double = 0,
@@ -25,6 +30,7 @@ struct JarMotionSample: Equatable, Sendable {
     ) {
         self.gravityX = gravityX
         self.gravityY = gravityY
+        self.gravityZ = gravityZ
         self.accelerationX = accelerationX
         self.accelerationY = accelerationY
         self.accelerationZ = accelerationZ
@@ -35,6 +41,7 @@ struct JarMotionSample: Equatable, Sendable {
         self.init(
             gravityX: motion.gravity.x,
             gravityY: motion.gravity.y,
+            gravityZ: motion.gravity.z,
             accelerationX: motion.userAcceleration.x,
             accelerationY: motion.userAcceleration.y,
             accelerationZ: motion.userAcceleration.z,
@@ -42,9 +49,22 @@ struct JarMotionSample: Equatable, Sendable {
         )
     }
 
-    /// The gravity this sample asks of the jar (before smoothing).
-    var proposedGravity: CGVector {
-        JarTiltMath.proposedGravity(gravityX: gravityX, gravityY: gravityY)
+    /// The sensed gravity in the jar's interface, or nil when the sample is
+    /// not finite (it is ignored). Home and the jar are portrait-only
+    /// (`PomoGemAppDelegate`), so the phone's axes are the jar's.
+    var gravityReading: JarGravityMapping.Reading? {
+        JarGravityMapping.Reading(
+            deviceGravityX: gravityX,
+            deviceGravityY: gravityY,
+            deviceGravityZ: gravityZ,
+            interfaceOrientation: .portrait
+        )
+    }
+
+    /// The gravity this sample asks of the jar (before smoothing), or nil
+    /// when the sample is not finite.
+    var proposedGravity: CGVector? {
+        JarTiltMath.proposedGravity(gravityX: gravityX, gravityY: gravityY, gravityZ: gravityZ)
     }
 
     var accelerationMagnitude: Double {
@@ -67,13 +87,37 @@ enum JarTiltMath {
     /// still (about ±0.012) stays below it.
     static let idleLightThreshold: CGFloat = 0.015
 
-    /// Sideways tilt pushes the gems sideways; some downward pull always
-    /// remains, however flat the phone lies.
-    static func proposedGravity(gravityX: Double, gravityY: Double) -> CGVector {
-        let horizontal = CGFloat(gravityX) * Constants.Jar.tiltGravityHorizontalScale
-        let sensedVertical = CGFloat(gravityY) * abs(Constants.Jar.gravity)
-        let vertical = min(-Constants.Jar.tiltGravityMinimumDownward, sensedVertical)
-        return CGVector(dx: horizontal, dy: vertical)
+    /// F3: how far the phone must turn from the pose the resting pile
+    /// settled under (`JarGravityMapping.wakeDelta`, in g) before the pile
+    /// re-settles under the new gravity (`JarGravityMapping.needsResettle`).
+    /// About 6°: well above the tremor of a phone held still (±0.012 g) and
+    /// the few degrees a hand drifts while reading, so a held phone does
+    /// not keep waking the physics, while any deliberate turn toward
+    /// sideways or upside down passes it within an idle sample or two.
+    /// Smaller tilts move only the light, as before.
+    static let reorientationWakeThreshold: CGFloat = 0.1
+
+    /// F3: the smallest change of the jar's gravity direction (radians, 3°)
+    /// that re-settles a resting pile. A change of strength alone (putting
+    /// the phone down, leaning it back) leaves the pile where it is.
+    static let reorientationMinimumTurn: CGFloat = 3 * .pi / 180
+
+    /// The jar's gravity for one Core Motion gravity reading (F3,
+    /// `JarGravityMapping`): toward the physically lowest screen edge,
+    /// sideways and upward included, blended to the default downward
+    /// gravity for a phone lying flat. Nil when the reading is not finite
+    /// (the sample is ignored).
+    static func proposedGravity(
+        gravityX: Double,
+        gravityY: Double,
+        gravityZ: Double
+    ) -> CGVector? {
+        JarGravityMapping.acceptedGravity(
+            deviceGravityX: gravityX,
+            deviceGravityY: gravityY,
+            deviceGravityZ: gravityZ,
+            interfaceOrientation: .portrait
+        )
     }
 
     /// `proposed` limited to the jar's strongest gravity; nil when it is
@@ -109,10 +153,12 @@ enum JarTiltMath {
         return 1 - CGFloat(pow(Double(1 - base), steps))
     }
 
-    /// Where the jar's light sits for a horizontal gravity (−1…1).
+    /// Where the jar's light sits for a light horizontal (−1…1): the
+    /// sensed sideways reading (`JarGravityMapping.lightHorizontal`), or a
+    /// directly set gravity's dx.
     static func lightFraction(horizontal: CGFloat) -> CGFloat {
         guard horizontal.isFinite else { return 0 }
-        return min(max(horizontal / Constants.Jar.tiltGravityHorizontalScale, -1), 1)
+        return min(max(horizontal / Constants.Jar.tiltLightHorizontalScale, -1), 1)
     }
 }
 
@@ -126,7 +172,8 @@ enum JarMotionRate: Equatable, Sendable {
     /// the main queue, applied to gravity, light and the shake detector.
     case full
     /// The resting jar: a few samples a second on a background queue. Only
-    /// a tilt that would move the light, or a shake peak, reaches main.
+    /// a tilt that would move the light, a turn the pile must re-settle for
+    /// (F3), or a shake peak reaches main.
     case idle
 
     static let idleUpdatesPerSecond: Double = 5
@@ -150,47 +197,77 @@ enum JarMotionRate: Equatable, Sendable {
 }
 
 /// The resting jar's tilt check. It runs on Core Motion's background queue
-/// at the idle rate, keeps the smoothed gravity the scene would keep (its
+/// at the idle rate, keeps the smoothed reading the scene would keep (its
 /// smoothing rescaled to the idle rate) and asks the main actor to wake the
-/// jar only when that smoothed tilt would move the drawn light by more than
-/// `JarTiltMath.idleLightThreshold`, or when a shake peak arrives. A phone
-/// on a desk or held still never reaches main.
+/// jar only when
+/// - the phone turned from the pose the pile settled under and the jar's
+///   gravity turned with it (`JarGravityMapping.needsResettle`; F3: the
+///   pile re-settles under the new gravity; not gated by `followsTilt`, so
+///   Reduce Motion keeps the same physics), or
+/// - the smoothed tilt would move the drawn light by more than
+///   `JarTiltMath.idleLightThreshold` (only while the light follows tilt),
+///   or
+/// - a shake peak arrives.
+/// A phone on a desk or held still never reaches main.
 struct JarIdleTiltFilter: Equatable, Sendable {
     enum Wake: Equatable, Sendable {
+        /// The light would move: redraw it, the physics keeps resting.
         case tilt
         case shake
+        /// The phone turned from the pose the pile settled under: the pile
+        /// re-settles (a bounded interaction window).
+        case reorient
     }
 
-    /// Smoothed gravity (scene units), as the scene would hold it.
-    private(set) var gravity: CGVector
+    /// The smoothed sensed reading, as the scene would hold it; nil until
+    /// the first finite sample when the scene had none (motion just started
+    /// on a reset jar), which then stands as it is: smoothing from "flat"
+    /// toward an upright phone would pass through the blend band and fake
+    /// a turn.
+    private(set) var reading: JarGravityMapping.Reading?
+    /// The reading the resting pile settled under (`.flat` for the jar's
+    /// default gravity).
+    let settledReading: JarGravityMapping.Reading
     /// The light on screen (−1…1).
     var drawnLight: CGFloat
-    /// Reduce Motion keeps the light still, so only a shake peak wakes the
-    /// jar then (its gravity is still tracked for the next wake).
+    /// Reduce Motion keeps the light still, so no light wake then (the
+    /// reading is still tracked, and a turn still re-settles the pile).
     var followsTilt: Bool
     let smoothing: CGFloat
 
+    /// The jar's gravity for the smoothed reading (its default gravity
+    /// before any reading).
+    var gravity: CGVector {
+        reading.map(JarGravityMapping.gravity(for:)) ?? JarGravityMapping.defaultGravity
+    }
+
     init(
-        gravity: CGVector,
+        reading: JarGravityMapping.Reading?,
+        settledReading: JarGravityMapping.Reading = .flat,
         drawnLight: CGFloat,
         followsTilt: Bool,
         updatesPerSecond: Double = JarMotionRate.idleUpdatesPerSecond
     ) {
-        self.gravity = JarTiltMath.clamped(gravity) ?? Constants.Jar.gravityVector
+        self.reading = reading
+        self.settledReading = settledReading
         self.drawnLight = drawnLight.isFinite ? drawnLight : 0
         self.followsTilt = followsTilt
         smoothing = JarTiltMath.smoothingFraction(updatesPerSecond: updatesPerSecond)
     }
 
     mutating func ingest(_ sample: JarMotionSample) -> Wake? {
-        if let target = JarTiltMath.clamped(sample.proposedGravity) {
-            gravity = JarTiltMath.smoothed(from: gravity, toward: target, fraction: smoothing)
+        if let sensed = sample.gravityReading {
+            reading = reading.map { $0.smoothed(toward: sensed, fraction: smoothing) } ?? sensed
         }
         if sample.accelerationMagnitude >= Constants.Jar.deviceShakeThreshold {
             return .shake
         }
+        guard let reading else { return nil }
+        if JarGravityMapping.needsResettle(from: settledReading, to: reading) {
+            return .reorient
+        }
         guard followsTilt else { return nil }
-        let light = JarTiltMath.lightFraction(horizontal: gravity.dx)
+        let light = JarTiltMath.lightFraction(horizontal: JarGravityMapping.lightHorizontal(for: reading))
         return abs(light - drawnLight) > JarTiltMath.idleLightThreshold ? .tilt : nil
     }
 }
@@ -198,8 +275,8 @@ struct JarIdleTiltFilter: Equatable, Sendable {
 /// What the idle tilt check hands to the main actor.
 struct JarIdleWake: Equatable, Sendable {
     let reason: JarIdleTiltFilter.Wake
-    /// The smoothed gravity when the wake was decided.
-    let gravity: CGVector
+    /// The smoothed reading when the wake was decided.
+    let reading: JarGravityMapping.Reading?
     let sample: JarMotionSample
 }
 
@@ -221,13 +298,13 @@ final class JarIdleTiltMonitor: Sendable {
         state.withLock { $0 = State(generation: generation, filter: filter) }
     }
 
-    /// Ends the run and returns its latest smoothed gravity, if it had one.
+    /// Ends the run and returns its latest smoothed reading, if it had one.
     @discardableResult
-    func disarm() -> CGVector? {
+    func disarm() -> JarGravityMapping.Reading? {
         state.withLock { state in
-            let gravity = state.filter?.gravity
+            let reading = state.filter?.reading
             state = State()
-            return gravity
+            return reading
         }
     }
 
@@ -248,7 +325,7 @@ final class JarIdleTiltMonitor: Sendable {
             state.filter = filter
             guard let reason, !state.isWakePending else { return nil }
             state.isWakePending = true
-            return JarIdleWake(reason: reason, gravity: filter.gravity, sample: sample)
+            return JarIdleWake(reason: reason, reading: filter.reading, sample: sample)
         }
     }
 }

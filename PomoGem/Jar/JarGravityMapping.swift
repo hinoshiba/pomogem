@@ -16,7 +16,7 @@ import UIKit
 ///    `.portrait`; the other orientations keep a rotating jar correct later.
 /// 2. It is scaled by the jar's gravity strength (|`Constants.Jar.gravity`|,
 ///    7.2), in every direction. Unlike the retired "some downward pull always
-///    remains" clamp (`Constants.Jar.tiltGravityMinimumDownward`), sideways
+///    remains" clamp (`tiltGravityMinimumDownward`, removed), sideways
 ///    and upward gravity are allowed: an upside-down phone pulls the gems
 ///    toward the mouth, which must then act as closed (`isUpward(_:)`).
 /// 3. A phone lying flat has almost no in-screen gravity, and its direction is
@@ -28,17 +28,21 @@ import UIKit
 ///
 /// The blend makes the jar's gravity move up to about 7 times faster than
 /// the reading inside its band, so nothing that must ignore sensor noise
-/// reads the blended gravity. How the scene wires this in (after the gem
-/// session's base commit):
-/// - Smooth the sensed `Reading` (`Reading.smoothed`), not the mapped
-///   gravity, and map the smoothed reading with `gravity(for:)`.
-/// - Draw the light (`applyOpticalTilt`, and the resting jar's light check)
-///   from `lightHorizontal(for:)`, never from the gravity's dx: a phone on a
-///   desk keeps exactly the default gravity, but its glints still follow it.
-/// - Wake a resting jar for a turn when `wakeDelta(from:to:)` between the
-///   reading the pile settled under and the smoothed reading exceeds
-///   `JarTiltMath.idleLightThreshold`.
-/// - Throw taps and shakes along `launchDirection(for:)` of the applied
+/// reads the blended gravity. How the scene uses this:
+/// - `JarScene.setGravityReading` smooths the sensed `Reading`
+///   (`Reading.smoothed`), not the mapped gravity, and maps the smoothed
+///   reading with `gravity(for:)`.
+/// - The light (`applyOpticalTilt`, and the resting jar's light check in
+///   `JarIdleTiltFilter`) is drawn from `lightHorizontal(for:)`, never from
+///   the gravity's dx: a phone on a desk keeps exactly the default gravity,
+///   but its glints still follow it.
+/// - A resting jar wakes for a turn when `needsResettle(from:to:)` between
+///   the reading the pile settled under and the smoothed reading: the
+///   phone turned by more than `JarTiltMath.reorientationWakeThreshold`
+///   (`wakeDelta`, about 6°, well above the light's `idleLightThreshold`)
+///   and the jar's gravity changed direction, through the bounded
+///   interaction window.
+/// - Taps and shakes throw along `launchDirection(for:)` of the applied
 ///   gravity.
 ///
 /// Everything here is pure and nonisolated: the resting jar's tilt check runs
@@ -263,11 +267,12 @@ enum JarGravityMapping {
 
     /// The horizontal the jar's light follows (scene units, for
     /// `JarTiltMath.lightFraction`): the sensed sideways gravity, never
-    /// blended. In portrait it is today's `gx × tiltGravityHorizontalScale`,
-    /// so a phone lying on a desk still moves its glints when tilted
-    /// although its gravity stays exactly `defaultGravity`.
+    /// blended. In portrait it is the former `gx × 7.2`
+    /// (`Constants.Jar.tiltLightHorizontalScale`), so a phone lying on a
+    /// desk still moves its glints when tilted although its gravity stays
+    /// exactly `defaultGravity`.
     static func lightHorizontal(for reading: Reading) -> CGFloat {
-        reading.x * Constants.Jar.tiltGravityHorizontalScale
+        reading.x * Constants.Jar.tiltLightHorizontalScale
     }
 
     /// `lightHorizontal(for:)` of one reading, or nil when the reading is
@@ -311,6 +316,33 @@ enum JarGravityMapping {
         let magnitude = hypot(gravity.dx, gravity.dy)
         guard magnitude >= weakGravityMagnitude else { return up }
         return CGVector(dx: -gravity.dx / magnitude, dy: -gravity.dy / magnitude)
+    }
+
+    /// F3: whether a resting pile that settled under the reading `settled`
+    /// must re-settle for `current` (the smoothed reading). Both must hold:
+    /// - the phone turned: `wakeDelta` exceeds
+    ///   `JarTiltMath.reorientationWakeThreshold` (measured on the sensor,
+    ///   so a phone held still never passes it, at any pose);
+    /// - the jar's gravity turned, not only grew or weakened: its direction
+    ///   moved by more than `JarTiltMath.reorientationMinimumTurn`. Putting
+    ///   the phone down, picking it up or leaning it back moves the gravity
+    ///   through the flat-phone blend without turning it, and the pile has
+    ///   nothing to redo.
+    /// A current gravity too weak to have a direction
+    /// (`weakGravityMagnitude`) waits; a pile that settled in such a weak
+    /// gravity re-settles for any real one.
+    static func needsResettle(from settled: Reading, to current: Reading) -> Bool {
+        guard wakeDelta(from: settled, to: current) > JarTiltMath.reorientationWakeThreshold else {
+            return false
+        }
+        let old = gravity(for: settled)
+        let new = gravity(for: current)
+        let newMagnitude = hypot(new.dx, new.dy)
+        guard newMagnitude >= weakGravityMagnitude else { return false }
+        let oldMagnitude = hypot(old.dx, old.dy)
+        guard oldMagnitude >= weakGravityMagnitude else { return true }
+        let cosine = (old.dx * new.dx + old.dy * new.dy) / (oldMagnitude * newMagnitude)
+        return cosine < cos(JarTiltMath.reorientationMinimumTurn)
     }
 
     /// How far the phone turned from `old` to `new`, for the resting jar's

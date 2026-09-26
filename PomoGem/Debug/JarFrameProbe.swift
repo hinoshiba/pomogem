@@ -35,6 +35,15 @@ import SpriteKit
 /// held still). With `POMOGEM_UI_TEST_MOTION=synthetic` the same tilt is
 /// played through `SyntheticJarMotionSource` instead, i.e. through the jar's
 /// motion observer and its rates.
+///
+/// F3: `POMOGEM_UI_TEST_GRAVITY=<pose>[,<pose>@<seconds>…]`
+/// (`JarGravitySchedule`: portrait, landscape-left, landscape-right,
+/// upside-down, flat, face-down) holds the phone in fixed poses. Without
+/// the synthetic source the probe feeds the scene's gravity reading at
+/// 30 Hz (`JarScene.setGravityReading`, so a turn re-settles a resting
+/// pile); each line then also shows the applied gravity (`g=dx,dy`) and
+/// whether the pile rests on the floor (`floor=1`; the settle probe's
+/// headroom means the space under the mouth only then).
 @MainActor
 final class JarFrameProbe {
     static let shared: JarFrameProbe? = {
@@ -79,6 +88,8 @@ final class JarFrameProbe {
     private var settleMinimum = CGFloat.greatestFiniteMagnitude
     private var settleWaitStarted: CFTimeInterval?
     private var settleFinished = false
+    /// The pose `POMOGEM_UI_TEST_GRAVITY` holds now (logged when it changes).
+    private var lastGravityPose: JarGravityPose?
 
     private init() {
         try? FileManager.default.removeItem(at: url)
@@ -141,13 +152,14 @@ final class JarFrameProbe {
         settleMinimum = min(settleMinimum, headroom)
         let interior = JarScene.interiorRect(sceneSize: scene.size)
         append(String(
-            format: "settle i=%d headroom=%.3f scale=%.3f bodies=%d interior=%.0fx%.0f%@\n",
+            format: "settle i=%d headroom=%.3f scale=%.3f bodies=%d interior=%.0fx%.0f floor=%d%@\n",
             settleIndex,
             headroom,
             scene.jarScale,
             scene.physicalPebbleCount,
             interior.width,
             interior.height,
+            scene.pileRestsOnTheFloor ? 1 : 0,
             timedOut ? " timeout" : ""
         ))
         guard settleIndex < total else {
@@ -174,14 +186,18 @@ final class JarFrameProbe {
         case .full: "full"
         case .idle: "idle"
         }
+        let gravity = scene?.appliedGravityVector ?? Constants.Jar.gravityVector
         let line = String(
-            format: "t=%.0f frames=%d tilt=%d idle=%d loop=%@ motion=%@ medMs=%.2f p95Ms=%.2f atlas=g%d/%d names/%.1fMB kept/%.0fx%.0f page/%d loose/%.1fMB resident/%d live\n",
+            format: "t=%.0f frames=%d tilt=%d idle=%d loop=%@ motion=%@ g=%.1f,%.1f floor=%d medMs=%.2f p95Ms=%.2f atlas=g%d/%d names/%.1fMB kept/%.0fx%.0f page/%d loose/%.1fMB resident/%d live\n",
             now - launch,
             updates,
             (scene?.idleTiltFrameCount ?? 0) - lastTiltSteps,
             (scene?.isIdlePaused ?? false) ? 1 : 0,
             (scene?.view?.isPaused ?? false) ? "paused" : "running",
             motion,
+            gravity.dx,
+            gravity.dy,
+            (scene?.pileRestsOnTheFloor ?? true) ? 1 : 0,
             percentile(0.5),
             percentile(0.95),
             atlas.generation,
@@ -201,9 +217,12 @@ final class JarFrameProbe {
 
     private func startTiltSweepIfRequested(for scene: JarScene) {
         // The synthetic motion source plays the sweep through the observer.
-        guard SyntheticJarMotionSource.isRequested == false,
-              let sweep = JarTiltSweep.forCurrentProcess
-        else { return }
+        guard SyntheticJarMotionSource.isRequested == false else { return }
+        if let poses = JarGravitySchedule.forCurrentProcess {
+            startGravityPoses(poses, for: scene)
+            return
+        }
+        guard let sweep = JarTiltSweep.forCurrentProcess else { return }
         let appeared = CACurrentMediaTime()
         let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak scene] timer in
             MainActor.assumeIsolated {
@@ -214,10 +233,38 @@ final class JarFrameProbe {
                     return
                 }
                 guard let gravityX = sweep.gravityX(elapsed: elapsed) else { return }
+                // A direct gravity: the light-only idle tilt measurement.
                 scene.setGravityVector(CGVector(
-                    dx: CGFloat(gravityX) * Constants.Jar.tiltGravityHorizontalScale,
+                    dx: CGFloat(gravityX) * JarGravityMapping.strength,
                     dy: Constants.Jar.gravity
                 ))
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    /// F3: holds the phone in `poses` by feeding the scene's gravity
+    /// reading at 30 Hz, as the motion observer would at its full rate.
+    private func startGravityPoses(_ poses: JarGravitySchedule, for scene: JarScene) {
+        let appeared = CACurrentMediaTime()
+        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak scene] timer in
+            MainActor.assumeIsolated {
+                guard let scene else {
+                    timer.invalidate()
+                    return
+                }
+                let pose = poses.pose(elapsed: CACurrentMediaTime() - appeared)
+                if let probe = JarFrameProbe.shared, probe.lastGravityPose != pose {
+                    probe.lastGravityPose = pose
+                    probe.note("pose \(pose.rawValue)")
+                }
+                let gravity = pose.gravity
+                guard let reading = JarGravityMapping.Reading(
+                    deviceGravityX: gravity.x,
+                    deviceGravityY: gravity.y,
+                    deviceGravityZ: gravity.z
+                ) else { return }
+                scene.setGravityReading(reading)
             }
         }
         RunLoop.main.add(timer, forMode: .common)

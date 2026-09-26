@@ -200,6 +200,29 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // JarPhysicsCategory occupies bits 0...2. The mouth's containment
         // edge accepts ordinary pebbles only, allowing this body to enter.
         static let category: UInt32 = 1 << 3
+        /// The entry gravity field's category (fields have their own bit
+        /// space, matched against each body's `fieldBitMask`).
+        static let fieldCategory: UInt32 = 1 << 0
+        /// A gem that crossed the collar into gems resting there (a pile
+        /// against the cap or a wall) passes them for at most this long
+        /// before it joins ordinary collisions anyway.
+        static let clearingTimeout: TimeInterval = 1.5
+        /// Two bodies closer than the sum of their radii minus this overlap.
+        static let overlapTolerance: CGFloat = 0.5
+    }
+
+    /// F3 entry ritual (Docs/JarOrientationGravity.md): a new gem always
+    /// enters through the mouth under the jar's own downward gravity (the
+    /// entry field), whatever the phone's pose, and only then follows the
+    /// phone's gravity. Above the collar a completion drop ignores walls
+    /// and gems and is held in the neck, so a sideways or upward gravity can
+    /// neither carry it past the neck nor lift it back out.
+    private enum EntryPhase: Equatable {
+        /// Above the copper collar (a completion drop from the scene top).
+        case throughMouth
+        /// Inside the walls but still overlapping gems at rest there: it
+        /// passes them under the entry gravity until it is clear.
+        case clearingPile(since: TimeInterval)
     }
 
     private struct QueuedDrop {
@@ -293,6 +316,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private struct ActiveTapMotion {
         let sequence: UInt64
         let pebbleID: UUID
+        /// The launch's "up" (against gravity when the tap landed); its
+        /// return pushes back along it.
+        let up: CGVector
     }
 
     private let soundSynth: SoundSynth
@@ -397,6 +423,57 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private(set) var isBakeInProgress = false
     private(set) var isCapacityReliefActive = false
     private(set) var appliedGravityVector = Constants.Jar.gravityVector
+    /// F3: the smoothed sensed reading the gravity is mapped from
+    /// (`setGravityReading`); nil when the gravity was set directly
+    /// (`setGravityVector`) or reset, which reads as the default gravity.
+    private(set) var appliedReading: JarGravityMapping.Reading?
+    /// What the light follows (scene units, `JarTiltMath.lightFraction`):
+    /// the sensed sideways reading, or a directly set gravity's dx.
+    private var appliedLightHorizontal: CGFloat = 0
+    /// The reading the resting pile settled under (`.flat` stands for the
+    /// jar's default gravity). A resting jar re-settles when the phone
+    /// turns away from it (`JarGravityMapping.needsResettle`).
+    private(set) var settledReading: JarGravityMapping.Reading = .flat
+    /// The gravity the resting pile settled under.
+    private var settledGravityVector = Constants.Jar.gravityVector
+    /// The gravity the bodies rest under: the settled one while the jar
+    /// rests (a stopped motion observer resets the live gravity without
+    /// moving the frozen pile), the live one while it is awake. Share
+    /// snapshots judge support by it.
+    var pileGravityVector: CGVector {
+        isIdlePaused ? settledGravityVector : appliedGravityVector
+    }
+    /// Whether the bodies rest on the floor, not against a wall or the cap
+    /// (`JarGravityMapping.isUpward` of `pileGravityVector`).
+    var pileRestsOnTheFloor: Bool {
+        !JarGravityMapping.isUpward(pileGravityVector)
+    }
+    /// Gems still in their entry ritual, by phase (F3).
+    private var enteringPhases: [UUID: EntryPhase] = [:]
+    /// The jar's own gravity for gems entering through the mouth: a linear
+    /// gravity field (the same units and integration as the physics
+    /// world's gravity) acting only on bodies whose `fieldBitMask` carries
+    /// `CompletionEntryPhysics.fieldCategory`.
+    private let entryGravityField: SKFieldNode = {
+        let field = SKFieldNode.linearGravityField(withVector: vector_float3(
+            Float(Constants.Jar.gravityVector.dx),
+            Float(Constants.Jar.gravityVector.dy),
+            0
+        ))
+        field.name = "jar.entry.gravity"
+        field.categoryBitMask = CompletionEntryPhysics.fieldCategory
+        return field
+    }()
+    /// The scene time of the latest `update(_:)` (the landing fallback and
+    /// the entry ritual's timeout use it; a paused scene does not advance).
+    private var lastSceneUpdateTime: TimeInterval = 0
+    /// When each new, not yet landed gem was first seen slow (F3 landing
+    /// fallback).
+    private var slowNewGemSince: [UUID: TimeInterval] = [:]
+    /// A new gem slower than this (pt/s) for `restingLandingDelay` of scene
+    /// time has come to rest and lands, contact or not.
+    static let restingLandingSpeed: CGFloat = 12
+    static let restingLandingDelay: TimeInterval = 0.2
     /// Height profile of the settled pile: the top (scene y, 4 pt steps; 0
     /// when empty) of the resting bodies over each of `pileProfileBinCount`
     /// equal columns of the scene width. Refreshed with the pile light
@@ -643,6 +720,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             acceptedPebbleIDs.subtract(removedIDs)
             mutedLandingIDs.subtract(removedIDs)
             aboveEntryPebbleIDs.subtract(removedIDs)
+            forgetEntryState(for: removedIDs)
         }
 
         if !animated || screenTimeObstacleUnitCount < previousTotal {
@@ -752,7 +830,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
         node.setScale(0.4 * node.jarScale)
         node.alpha = 0.25
-        node.physicsBody?.velocity = CGVector(dx: 0, dy: 32)
+        let up = gestureFrame.up
+        node.physicsBody?.velocity = CGVector(dx: up.dx * 32, dy: up.dy * 32)
         node.run(.scale(to: node.jarScale, duration: 0.28), withKey: PebbleNode.birthActionKey)
         node.run(.fadeIn(withDuration: 0.28))
         acceptedPebbleIDs.insert(destination.id)
@@ -919,6 +998,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     @discardableResult
     private func enforcePileClearances(fromRestoreRows: Bool = false) -> Bool {
         guard !pileClearances.isEmpty, !isBakeInProgress, !livePebbles.isEmpty else { return false }
+        // F3: a pile resting against a wall or the cap (held sideways or
+        // upside down) has no height over the floor to keep below the core;
+        // it neither steps the scale down nor lifts the cap. It is checked
+        // again when it settles on the floor.
+        guard pileRestsOnTheFloor else { return false }
         let floor = currentFloorY
         var stepped: CGFloat?
         for clearance in pileClearances where !(fromRestoreRows && clearance.isOptional) {
@@ -1267,6 +1351,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         tapPresentationMaximumDisplacement = 0
         tapPresentationMovedSecondaryCount = 0
         aboveEntryPebbleIDs.removeAll()
+        enteringPhases.removeAll()
+        slowNewGemSince.removeAll()
         completionDropTracking = nil
         cancelActiveBakeForRestore()
         dropQueue.removeAll()
@@ -1544,6 +1630,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         node.zPosition = JarZPosition.pebble(stackingIndex: nextStackingIndex)
         nextStackingIndex += 1
+        // Only a gem in its entry ritual feels the entry gravity field.
+        node.physicsBody?.fieldBitMask = 0
         worldNode.addChild(node)
     }
 
@@ -1613,6 +1701,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         mutedLandingIDs.subtract(ids)
         acceptedPebbleIDs.subtract(ids)
         aboveEntryPebbleIDs.subtract(ids)
+        forgetEntryState(for: ids)
         if let tracking = completionDropTracking, ids.contains(tracking.pebbleID) {
             completionDropTracking = nil
         }
@@ -1665,7 +1754,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     ) {
         guard direction.isFinite else { return }
         let safeDirection = min(max(direction, -1), 1)
-        let pebbles = livePebbles
+        let pebbles = gesturePebbles
         guard abs(safeDirection) > 0.01,
               !pebbles.isEmpty,
               nudgeRateLimiter.accepts(
@@ -1674,13 +1763,17 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
               )
         else { return }
         beginInteractionMotionWindow(uptime: uptime)
+        // VoiceOver's "left" and "right" stay the screen's; the small lift
+        // is against gravity (F3), straight up for an upright phone.
+        let up = gestureFrame.up
         for pebble in pebbles {
             // SpriteKit's mass grows with the jar scale; the impulse grows
             // with it, so a nudge moves every jar the same.
             let massScale = pebble.xScale * pebble.xScale
+            let lift = Constants.Jar.shakeVerticalImpulseMin * 0.25 * massScale
             pebble.physicsBody?.applyImpulse(CGVector(
-                dx: safeDirection * Constants.Jar.shakeHorizontalImpulse * massScale,
-                dy: Constants.Jar.shakeVerticalImpulseMin * 0.25 * massScale
+                dx: safeDirection * Constants.Jar.shakeHorizontalImpulse * massScale + up.dx * lift,
+                dy: up.dy * lift
             ))
         }
         playSensoryFeedback(
@@ -1700,7 +1793,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     func shakePebbles(strength proposedStrength: CGFloat, horizontal direction: CGFloat) -> Bool {
         guard proposedStrength.isFinite, direction.isFinite else { return false }
         let strength = min(max(proposedStrength, 0), 1)
-        let pebbles = livePebbles
+        let pebbles = gesturePebbles
         guard strength > 0, !isBakeInProgress, !pebbles.isEmpty else { return false }
 
         let now = ProcessInfo.processInfo.systemUptime
@@ -1723,7 +1816,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 sqrt(TapResponse.fullEnergyBodyCount / CGFloat(pebbles.count))
             )
         )
-        let safeDirection = min(max(direction, -1), 1)
+        // F3: the throw is up against gravity and sideways across it (the
+        // screen's axes for an upright phone). The shake's screen-sideways
+        // direction is taken along the across axis; held sideways, where
+        // it runs along gravity instead, each gem picks its own side.
+        let frame = gestureFrame
+        let safeDirection = min(max(direction * frame.across.dx, -1), 1)
         let horizontalImpulse = Constants.Jar.shakeHorizontalImpulse
             * (0.78 + strength * 0.72) * crowdScale
         let verticalImpulse = (
@@ -1748,8 +1846,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             body.isResting = false
             body.linearDamping = Constants.Jar.linearDamping
             body.usesPreciseCollisionDetection = !pebble.hasLanded
-            body.velocity = JarShakeVelocityPolicy.velocity(
-                current: body.velocity,
+            // The policy's sideways and vertical ceilings apply in the
+            // gravity frame (across, up), then turn back to the scene.
+            let frameVelocity = JarShakeVelocityPolicy.velocity(
+                current: frame.components(of: body.velocity),
                 impulse: CGVector(
                     dx: localDirection * horizontalImpulse,
                     dy: verticalImpulse * (0.86 + abs(variation) * 0.14)
@@ -1758,6 +1858,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 // the shipping jar (D4 is presentation only).
                 mass: pebble.presentationMass
             )
+            body.velocity = frame.vector(from: frameVelocity)
         }
         playTapCaustic(at: centroid, expands: !reduceMotion)
         playSensoryFeedback(
@@ -1782,7 +1883,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     func bouncePebbles(at proposedPoint: CGPoint? = nil) -> Bool {
         lastAcceptedTapSelection = nil
         let now = ProcessInfo.processInfo.systemUptime
-        let pebbles = livePebbles
+        let pebbles = gesturePebbles
         guard !isBakeInProgress, !pebbles.isEmpty else { return false }
 
         // VoiceOver and keyboard activation do not provide a touch point. Use
@@ -1880,10 +1981,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             inspectableAggregateID: inspectableAggregateID
         )
 
+        // F3: launched up against gravity, sideways across it (the
+        // screen's axes for an upright phone).
+        let frame = gestureFrame
         let horizontalDirection = tapLaunchHorizontalDirection(
             for: primaryPebble,
             origin: origin,
-            pileCentroid: centroid
+            pileCentroid: centroid,
+            frame: frame
         )
 
         beginInteractionMotionWindow(uptime: now)
@@ -1897,9 +2002,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             return false
         }
 
-        let upwardRoom = max(
-            0,
-            interiorRect.maxY - primaryPebble.radius - primaryPebble.position.y
+        let upwardRoom = containmentRoom(
+            from: primaryPebble.position,
+            radius: primaryPebble.radius,
+            along: frame.up
         )
         let launchPlan = JarTapLaunchPolicy.plan(
             radius: primaryPebble.radius,
@@ -1910,7 +2016,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             for: primaryPebble.descriptor.id,
             salt: 1
         )
-        let desiredVelocity = CGVector(
+        let desiredVelocity = frame.vector(from: CGVector(
             dx: min(
                 TapResponse.maximumHorizontalVelocity,
                 max(
@@ -1922,7 +2028,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 TapResponse.maximumVerticalVelocity,
                 launchPlan.verticalVelocity
             )
-        )
+        ))
         let desiredAngularVelocity = min(
             TapResponse.maximumAngularVelocity,
             max(
@@ -1939,7 +2045,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             TapResponse.maximumLaunchClearance,
             primaryPebble.radius * TapResponse.launchClearanceRadiusFraction
         )
-        primaryPebble.position.y += launchClearance
+        primaryPebble.position.x += frame.up.dx * launchClearance
+        primaryPebble.position.y += frame.up.dy * launchClearance
         primaryBody.isDynamic = true
         primaryBody.isResting = false
         primaryBody.linearDamping = TapResponse.flightDamping
@@ -1948,7 +2055,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         primaryBody.angularVelocity = desiredAngularVelocity
         activeTapMotion = ActiveTapMotion(
             sequence: activeTapSequence,
-            pebbleID: primaryPebble.descriptor.id
+            pebbleID: primaryPebble.descriptor.id,
+            up: frame.up
         )
 
         let tapKicks = [
@@ -1965,6 +2073,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             for: primaryPebble,
             sequence: activeTapSequence,
             returnSpeed: launchPlan.returnVelocity,
+            up: frame.up,
             delay: TapResponse.returnDelay,
             remainingFrameDeferrals: TapResponse.maximumReturnFrameDeferrals
         )
@@ -2012,12 +2121,15 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             body.linearDamping = Constants.Jar.linearDamping
             body.usesPreciseCollisionDetection = !pebble.hasLanded
             if forceReturn {
+                // Back along gravity (F3): the launch's up, reversed.
+                let up = activeTapMotion.up
+                let rising = body.velocity.dx * up.dx + body.velocity.dy * up.dy
                 let returnSpeed = min(
                     TapResponse.maximumVerticalVelocity,
-                    max(abs(body.velocity.dy), 130)
+                    max(abs(rising), 130)
                 )
-                if body.velocity.dy > -returnSpeed {
-                    body.velocity.dy = -returnSpeed
+                if rising > -returnSpeed {
+                    body.velocity = Self.velocity(body.velocity, withComponent: -returnSpeed, along: up)
                 }
                 body.isResting = false
             }
@@ -2055,9 +2167,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             guard let start = tapPresentationStartPositions[pebble.descriptor.id]
             else { continue }
             if pebble.descriptor.id == primaryID {
+                // The rise is along the launch's up (F3; screen up for an
+                // upright phone).
+                let up = activeTapMotion?.up ?? CGVector(dx: 0, dy: 1)
                 tapPresentationMaximumRise = max(
                     tapPresentationMaximumRise,
-                    pebble.position.y - primaryStart.y
+                    (pebble.position.x - primaryStart.x) * up.dx
+                        + (pebble.position.y - primaryStart.y) * up.dy
                 )
                 tapPresentationMaximumDisplacement = max(
                     tapPresentationMaximumDisplacement,
@@ -2086,10 +2202,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private func tapLaunchHorizontalDirection(
         for pebble: PebbleNode,
         origin: CGPoint,
-        pileCentroid: CGPoint
+        pileCentroid: CGPoint,
+        frame: JarGestureFrame
     ) -> CGFloat {
-        let touchOffset = pebble.position.x - origin.x
-        let pileOffset = pileCentroid.x - pebble.position.x
+        // Offsets and room are measured across gravity (F3): the screen's x
+        // for an upright phone.
+        let across = frame.across
+        let touchOffset = (pebble.position.x - origin.x) * across.dx
+            + (pebble.position.y - origin.y) * across.dy
+        let pileOffset = (pileCentroid.x - pebble.position.x) * across.dx
+            + (pileCentroid.y - pebble.position.y) * across.dy
         let meaningfulOffset = max(pebble.radius * 0.18, 2)
         var direction: CGFloat
         if abs(touchOffset) >= meaningfulOffset {
@@ -2103,14 +2225,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             ) >= 0 ? 1 : -1
         }
 
-        let horizontalRange = allowedHorizontalRange(
-            at: pebble.position.y,
-            radius: pebble.radius
+        let forwardRoom = containmentRoom(from: pebble.position, radius: pebble.radius, along: across)
+        let backwardRoom = containmentRoom(
+            from: pebble.position,
+            radius: pebble.radius,
+            along: CGVector(dx: -across.dx, dy: -across.dy)
         )
-        let leftRoom = max(0, pebble.position.x - horizontalRange.lowerBound)
-        let rightRoom = max(0, horizontalRange.upperBound - pebble.position.x)
-        let preferredRoom = direction > 0 ? rightRoom : leftRoom
-        let oppositeRoom = direction > 0 ? leftRoom : rightRoom
+        let preferredRoom = direction > 0 ? forwardRoom : backwardRoom
+        let oppositeRoom = direction > 0 ? backwardRoom : forwardRoom
         if preferredRoom < min(pebble.radius * 2, oppositeRoom * 0.45) {
             direction *= -1
         }
@@ -2125,6 +2247,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         for pebble: PebbleNode,
         sequence: UInt64,
         returnSpeed: CGFloat,
+        up: CGVector,
         delay: TimeInterval,
         remainingFrameDeferrals: Int
     ) {
@@ -2148,6 +2271,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                     for: pebble,
                     sequence: sequence,
                     returnSpeed: returnSpeed,
+                    up: up,
                     delay: TapResponse.returnFrameRetryDelay,
                     remainingFrameDeferrals: remainingFrameDeferrals - 1
                 )
@@ -2157,11 +2281,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             if self.pendingTapKick?.sequence == sequence {
                 self.pendingTapKick = nil
             }
+            // Back along gravity (F3): straight down for an upright phone.
             let desiredReturnVelocity = -returnSpeed
-            if body.velocity.dy > desiredReturnVelocity {
+            let rising = body.velocity.dx * up.dx + body.velocity.dy * up.dy
+            if rising > desiredReturnVelocity {
                 body.isResting = false
                 body.linearDamping = TapResponse.settlingDamping
-                body.velocity.dy = desiredReturnVelocity
+                body.velocity = Self.velocity(body.velocity, withComponent: desiredReturnVelocity, along: up)
             }
 
             DispatchQueue.main.asyncAfter(
@@ -2233,8 +2359,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         )
     }
 
-    /// Applies a safe gravity vector supplied by Core Motion. Invalid values
-    /// are ignored and extreme inputs are clamped before reaching SpriteKit.
+    /// Applies a safe gravity vector set directly (Catalyst's drag, tests,
+    /// the Debug frame probe). Invalid values are ignored and extreme
+    /// inputs are clamped before reaching SpriteKit; the light follows its
+    /// dx. Core Motion's samples go through `setGravityReading` (F3).
     func setGravityVector(
         _ proposed: CGVector,
         smoothing: Bool = true,
@@ -2255,14 +2383,68 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             next.dx - appliedGravityVector.dx,
             next.dy - appliedGravityVector.dy
         ) > 0.01 else { return }
+        appliedReading = nil
+        applyGravity(next, lightHorizontal: next.dx, wakesSimulation: wakesSimulation)
+    }
+
+    /// F3 (Docs/JarOrientationGravity.md): applies one Core Motion gravity
+    /// reading. The reading is smoothed — not the mapped gravity, which the
+    /// flat-phone blend moves up to about 7 times faster than the sensor —
+    /// and mapped to the jar's gravity (`JarGravityMapping`: toward the
+    /// physically lowest screen edge, sideways and upward included; the
+    /// mouth stays physically closed). The light follows the sensed
+    /// sideways part, so a phone on a desk keeps the default gravity while
+    /// its glints still follow a tilt. The first reading after a reset (or
+    /// a directly set gravity) stands as it is.
+    ///
+    /// A resting jar whose phone turned from the pose its pile settled
+    /// under, turning the jar's gravity with it
+    /// (`JarGravityMapping.needsResettle`), wakes through one bounded
+    /// interaction window (settle 3 s, hard stop 5 s), so the pile
+    /// re-settles under the new gravity. The wake does not depend on Reduce
+    /// Motion: the gems keep the same physics either way.
+    func setGravityReading(
+        _ sensed: JarGravityMapping.Reading,
+        smoothing: Bool = true
+    ) {
+        let next: JarGravityMapping.Reading
+        if smoothing, let current = appliedReading {
+            next = current.smoothed(toward: sensed, fraction: Constants.Jar.gravitySmoothingFactor)
+        } else {
+            next = sensed
+        }
+        appliedReading = next
+        let gravity = JarGravityMapping.gravity(for: next)
+        let light = JarGravityMapping.lightHorizontal(for: next)
+        if hypot(
+            gravity.dx - appliedGravityVector.dx,
+            gravity.dy - appliedGravityVector.dy
+        ) > 0.01 {
+            applyGravity(gravity, lightHorizontal: light, wakesSimulation: false)
+        } else if light != appliedLightHorizontal {
+            appliedLightHorizontal = light
+            applyOpticalTilt(horizontal: light, uptime: tiltClock())
+        }
+        if isIdlePaused, JarGravityMapping.needsResettle(from: settledReading, to: next) {
+            beginInteractionMotionWindow(uptime: ProcessInfo.processInfo.systemUptime)
+        }
+    }
+
+    private func applyGravity(
+        _ next: CGVector,
+        lightHorizontal: CGFloat,
+        wakesSimulation: Bool
+    ) {
         appliedGravityVector = next
         physicsWorld.gravity = next
-        applyOpticalTilt(horizontal: next.dx, uptime: tiltClock())
+        appliedLightHorizontal = lightHorizontal
+        applyOpticalTilt(horizontal: lightHorizontal, uptime: tiltClock())
         // Core Motion delivers up to 30 updates per second. Treating every
         // sample as a new interaction used to reset both the three-second
         // settling observation and the tapped gem's low damping, so a held
         // phone could keep the jar alive forever. Sensor gravity now affects
-        // only an already-open interaction window. Catalyst's explicit drag
+        // only an already-open interaction window (and, F3, a resting pile
+        // whose phone turned, which opens one). Catalyst's explicit drag
         // opts into waking below.
         if wakesSimulation {
             continueInteractionMotionWindow(
@@ -2277,10 +2459,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         setGravityVector(Constants.Jar.gravityVector, smoothing: false)
         // Below the 0.01 sample step the call above keeps the old vector;
         // a reset is exact whatever the last sample was.
+        appliedReading = nil
+        appliedLightHorizontal = 0
         appliedGravityVector = Constants.Jar.gravityVector
         physicsWorld.gravity = Constants.Jar.gravityVector
         // A resting jar returns its light exactly to the level position.
-        updateOpticalTilt(horizontal: appliedGravityVector.dx)
+        updateOpticalTilt(horizontal: appliedLightHorizontal)
     }
 
     /// Idle tilt (Docs/GemExperienceDesign.md §7.13). While the jar rests,
@@ -2357,7 +2541,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             isIdlePaused = false
             onIdlePauseChanged?(false)
             // Samples the idle gate held back are caught up at once.
-            updateOpticalTilt(horizontal: appliedGravityVector.dx)
+            updateOpticalTilt(horizontal: appliedLightHorizontal)
         }
         resetIdleObservation()
         // Landing, fusion, tap, shake, content changes: the render loop and
@@ -2474,6 +2658,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         JarFrameProbe.shared?.sceneUpdated()
 #endif
         refreshLightEdgeFade()
+        lastSceneUpdateTime = currentTime
         let capacity = StrataMath.capacityUnits(pebbleRadii: bakeEligibleRadii)
         if capacity >= Constants.Jar.aggregateCapacityUnits {
             isCapacityReliefActive = true
@@ -2505,11 +2690,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     override func didSimulatePhysics() {
         super.didSimulatePhysics()
         updateTapPresentationTrackingIfNeeded()
-        for pebble in livePebbles where aboveEntryPebbleIDs.contains(pebble.descriptor.id) {
-            if pebble.position.y + pebble.radius <= interiorRect.maxY {
-                finishCompletionEntryPhysics(for: pebble)
-            }
-        }
+        advanceEntryRituals()
+        landRestingNewGemsIfNeeded()
         updateCompletionDropTrackingIfNeeded()
         advancePendingTapLaunchIfNeeded()
         livePebbles.forEach {
@@ -2574,33 +2756,25 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
         var deliveredLanding = false
         for pebble in candidates where !pebble.hasLanded {
+            // A gem in its entry ritual never lands: its first resting
+            // contact comes after the collar (F3).
+            guard enteringPhases[pebble.descriptor.id] == nil else { continue }
             let otherBody = contact.bodyA.node === pebble ? contact.bodyB : contact.bodyA
             let isFloor = otherBody.categoryBitMask & JarPhysicsCategory.floor != .zero
             let otherPebble = otherBody.node as? PebbleNode
             let isSettledPebble = otherPebble?.hasLanded == true
-            guard isFloor || isSettledPebble else { continue }
+            // F3: held sideways or upside down, the gems come to rest
+            // against a wall or the invisible cap across the mouth.
+            let restsOnWall = otherBody.categoryBitMask & JarPhysicsCategory.wall != .zero
+                && gravityPresses(pebble, toward: contact.contactPoint)
+            guard isFloor || isSettledPebble || restsOnWall else { continue }
 
-            let velocity = abs(pebble.physicsBody?.velocity.dy ?? .zero)
+            let downward = gravityDirection
+            let velocity = pebble.physicsBody.map {
+                abs($0.velocity.dx * downward.dx + $0.velocity.dy * downward.dy)
+            } ?? .zero
             let impulseSpeed = contact.collisionImpulse / max(pebble.physicsBody?.mass ?? 1, 1)
-            let impactSpeed = max(velocity, impulseSpeed)
-            pebble.markLanded()
-            if scheduledJarScale != nil {
-                // Rescaling inside the contact callback would resize bodies
-                // mid-step; the next update applies it.
-                appliesScheduledJarScale = true
-            }
-            finishCompletionEntryPhysics(for: pebble)
-            aboveEntryPebbleIDs.remove(pebble.descriptor.id)
-            updateCompletionDropTrackingIfNeeded()
-            if mutedLandingIDs.remove(pebble.descriptor.id) != nil {
-                deliveredLanding = true
-                continue
-            }
-            deliverLandingFeedback(
-                for: pebble,
-                speed: max(impactSpeed, Constants.Jar.minimumLandingSpeed),
-                point: contact.contactPoint
-            )
+            land(pebble, impactSpeed: max(velocity, impulseSpeed), at: contact.contactPoint)
             deliveredLanding = true
         }
 
@@ -2646,6 +2820,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         worldNode.addChild(mouthDepthNode)
         worldNode.addChild(wallNode)
         worldNode.addChild(floorNode)
+        worldNode.addChild(entryGravityField)
         worldNode.addChild(glassNode)
         worldNode.addChild(glassHighlightNode)
         worldNode.addChild(reducedMotionHighlightNode)
@@ -3661,6 +3836,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         let node = makePebbleNode(descriptor, studyScale: arrivalScale)
         let xRange = interiorRect.width * Constants.Jar.dropHorizontalRangeFraction
+        // F3: every new gem enters through the mouth — a completion drop
+        // from the scene top down the neck, any other just under the mouth —
+        // never from a side wall or the floor, whatever the phone's pose.
+        let entryPhase: EntryPhase?
         if origin == .sceneTop {
             let entryRange = allowedHorizontalRange(at: size.height, radius: node.radius)
             node.position = CGPoint(
@@ -3674,11 +3853,17 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             node.physicsBody?.categoryBitMask = CompletionEntryPhysics.category
             node.physicsBody?.collisionBitMask &= ~JarPhysicsCategory.wall
             node.physicsBody?.contactTestBitMask &= ~JarPhysicsCategory.wall
+            entryPhase = .throughMouth
         } else {
             node.position = CGPoint(
                 x: interiorRect.midX + min(max(horizontalUnit, -1), 1) * xRange,
                 y: interiorRect.maxY - node.radius
             )
+            // Just under the mouth. Gems resting there (held upside down)
+            // are passed first, like a completion drop past the collar.
+            entryPhase = overlapsRestingBody(node)
+                ? .clearingPile(since: lastSceneUpdateTime)
+                : nil
         }
         node.physicsBody?.velocity = CGVector(
             dx: origin == .sceneTop ? 0 : CGFloat.random(
@@ -3690,6 +3875,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             in: -Constants.Jar.dropHorizontalSpeed ... Constants.Jar.dropHorizontalSpeed
         )
         insertPebble(node)
+        if let entryPhase {
+            beginEntryRitual(for: node, phase: entryPhase)
+        }
         if origin == .sceneTop {
             completionDropSequence &+= 1
             completionDropMaximumFall = 0
@@ -3719,13 +3907,244 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
     }
 
-    private func finishCompletionEntryPhysics(for pebble: PebbleNode) {
-        guard let body = pebble.physicsBody,
-              body.categoryBitMask == CompletionEntryPhysics.category
+    // MARK: Entry ritual and landing (F3)
+
+    /// Starts (or moves on) a new gem's entry ritual: the jar's own
+    /// downward gravity (the entry field, not the phone's), no contacts
+    /// reported, and collisions per phase — none above the collar (walls
+    /// are passed at the mouth, gems ignored), walls and floor only inside
+    /// (contained, passing resting gems).
+    private func beginEntryRitual(for pebble: PebbleNode, phase: EntryPhase) {
+        guard let body = pebble.physicsBody else { return }
+        enteringPhases[pebble.descriptor.id] = phase
+        slowNewGemSince[pebble.descriptor.id] = nil
+        body.affectedByGravity = false
+        body.fieldBitMask = CompletionEntryPhysics.fieldCategory
+        body.categoryBitMask = CompletionEntryPhysics.category
+        body.contactTestBitMask = 0
+        switch phase {
+        case .throughMouth:
+            body.collisionBitMask = 0
+        case .clearingPile:
+            body.collisionBitMask = JarPhysicsCategory.wall | JarPhysicsCategory.floor
+        }
+    }
+
+    /// Ends the ritual: an ordinary gem under the phone's gravity, keeping
+    /// its momentum (held sideways it drifts to that wall; upside down it
+    /// is pulled back to the invisible cap). Nothing for a gem not in it.
+    private func finishEntryRitual(for pebble: PebbleNode) {
+        guard enteringPhases.removeValue(forKey: pebble.descriptor.id) != nil,
+              let body = pebble.physicsBody
         else { return }
+        body.affectedByGravity = true
+        body.fieldBitMask = 0
         body.categoryBitMask = JarPhysicsCategory.pebble
-        body.collisionBitMask |= JarPhysicsCategory.wall
-        body.contactTestBitMask |= JarPhysicsCategory.wall
+        let contained = JarPhysicsCategory.pebble | JarPhysicsCategory.wall | JarPhysicsCategory.floor
+        body.collisionBitMask = contained
+        body.contactTestBitMask = contained
+    }
+
+    /// Advances every ritual after a physics step. Above the collar the gem
+    /// is held in the neck (walls are off there, so nothing may carry it
+    /// sideways past them); once its whole body is under the collar it is
+    /// inside the walls, and it joins the jar as soon as it overlaps no
+    /// other gem (or after `clearingTimeout`).
+    private func advanceEntryRituals() {
+        guard !enteringPhases.isEmpty else { return }
+        let now = lastSceneUpdateTime
+        let entering = livePebbles.filter { enteringPhases[$0.descriptor.id] != nil }
+        if entering.count < enteringPhases.count {
+            // A body removed mid-ritual (restore, rotation, a fusion).
+            let live = Set(entering.map(\.descriptor.id))
+            enteringPhases = enteringPhases.filter { live.contains($0.key) }
+        }
+        for pebble in entering {
+            guard let phase = enteringPhases[pebble.descriptor.id],
+                  let body = pebble.physicsBody
+            else { continue }
+            switch phase {
+            case .throughMouth:
+                let neck = allowedHorizontalRange(at: pebble.position.y, radius: pebble.radius)
+                if !neck.contains(pebble.position.x) {
+                    pebble.position.x = min(max(pebble.position.x, neck.lowerBound), neck.upperBound)
+                }
+                if body.velocity.dx != 0 { body.velocity.dx = 0 }
+                guard pebble.position.y + pebble.radius <= interiorRect.maxY else { continue }
+                if overlapsRestingBody(pebble) {
+                    beginEntryRitual(for: pebble, phase: .clearingPile(since: now))
+                } else {
+                    finishEntryRitual(for: pebble)
+                }
+            case let .clearingPile(since):
+                if !overlapsRestingBody(pebble)
+                    || now - since >= CompletionEntryPhysics.clearingTimeout
+                    || now < since {
+                    finishEntryRitual(for: pebble)
+                }
+            }
+        }
+    }
+
+    /// Whether `pebble` overlaps another live body already in the jar
+    /// (bodies still above the collar do not count).
+    private func overlapsRestingBody(_ pebble: PebbleNode) -> Bool {
+        let id = pebble.descriptor.id
+        return livePebbles.contains { other in
+            guard other.descriptor.id != id,
+                  other.physicsBody != nil,
+                  enteringPhases[other.descriptor.id] != .throughMouth
+            else { return false }
+            let reach = pebble.radius + other.radius - CompletionEntryPhysics.overlapTolerance
+            return hypot(other.position.x - pebble.position.x, other.position.y - pebble.position.y) < reach
+        }
+    }
+
+    private func forgetEntryState(for ids: Set<UUID>) {
+        for id in ids {
+            enteringPhases[id] = nil
+            slowNewGemSince[id] = nil
+        }
+    }
+
+    /// The applied gravity's direction, or the jar's own down while it is
+    /// too weak to have one (`JarGravityMapping.weakGravityMagnitude`).
+    private var gravityDirection: CGVector {
+        let gravity = appliedGravityVector
+        let magnitude = hypot(gravity.dx, gravity.dy)
+        guard magnitude.isFinite, magnitude >= JarGravityMapping.weakGravityMagnitude else {
+            return CGVector(dx: 0, dy: -1)
+        }
+        return CGVector(dx: gravity.dx / magnitude, dy: gravity.dy / magnitude)
+    }
+
+    /// Whether gravity presses `pebble` against a contact at `point`: the
+    /// point lies within 60° of straight down (along the applied gravity)
+    /// from its center. Under the default gravity only a floor corner
+    /// qualifies, so wall contacts land nothing new there.
+    private func gravityPresses(_ pebble: PebbleNode, toward point: CGPoint) -> Bool {
+        let gravity = appliedGravityVector
+        let magnitude = hypot(gravity.dx, gravity.dy)
+        guard magnitude.isFinite, magnitude >= JarGravityMapping.weakGravityMagnitude else { return false }
+        let dx = point.x - pebble.position.x
+        let dy = point.y - pebble.position.y
+        let distance = hypot(dx, dy)
+        guard distance > 0.001, distance.isFinite else { return false }
+        return (dx * gravity.dx + dy * gravity.dy) / (distance * magnitude) >= 0.5
+    }
+
+    /// Marks `pebble` landed and delivers its landing (sound, haptics,
+    /// light and Home's landing callback), unless its landing is muted.
+    private func land(_ pebble: PebbleNode, impactSpeed: CGFloat, at point: CGPoint) {
+        pebble.markLanded()
+        if scheduledJarScale != nil {
+            // Rescaling inside the contact callback would resize bodies
+            // mid-step; the next update applies it.
+            appliesScheduledJarScale = true
+        }
+        finishEntryRitual(for: pebble)
+        aboveEntryPebbleIDs.remove(pebble.descriptor.id)
+        slowNewGemSince[pebble.descriptor.id] = nil
+        updateCompletionDropTrackingIfNeeded()
+        if mutedLandingIDs.remove(pebble.descriptor.id) != nil { return }
+        deliverLandingFeedback(
+            for: pebble,
+            speed: max(impactSpeed, Constants.Jar.minimumLandingSpeed),
+            point: point
+        )
+    }
+
+    /// F3 landing fallback: a new gem that has come to rest without a
+    /// landing contact lands once it has stayed slower than
+    /// `restingLandingSpeed` for `restingLandingDelay` of scene time. Held
+    /// sideways or upside down it may come to rest against a wall or the
+    /// cap it already touched, on a gem that had not landed yet, or float
+    /// while the flat-phone blend passes through zero gravity; Home's
+    /// receipts, the onboarding trial and the completion-drop guard all
+    /// wait for this landing, so it must never starve. Under the default
+    /// gravity a new gem is slow only once a landing contact has landed it.
+    private func landRestingNewGemsIfNeeded() {
+        let now = lastSceneUpdateTime
+        for pebble in livePebbles where !pebble.hasLanded {
+            let id = pebble.descriptor.id
+            guard enteringPhases[id] == nil, let body = pebble.physicsBody else {
+                slowNewGemSince[id] = nil
+                continue
+            }
+            let speed = hypot(body.velocity.dx, body.velocity.dy)
+            guard speed.isFinite, speed <= Self.restingLandingSpeed else {
+                slowNewGemSince[id] = nil
+                continue
+            }
+            guard let since = slowNewGemSince[id], since <= now else {
+                slowNewGemSince[id] = now
+                continue
+            }
+            guard now - since >= Self.restingLandingDelay else { continue }
+            let down = gravityDirection
+            land(
+                pebble,
+                impactSpeed: speed,
+                at: CGPoint(
+                    x: pebble.position.x + down.dx * pebble.radius,
+                    y: pebble.position.y + down.dy * pebble.radius
+                )
+            )
+        }
+    }
+
+    // MARK: Gestures in the gravity frame (F3)
+
+    /// The axes taps, shakes and nudges throw along: up against the applied
+    /// gravity, across it (the screen's axes for an upright phone).
+    private var gestureFrame: JarGestureFrame {
+        JarGestureFrame(gravity: appliedGravityVector)
+    }
+
+    /// The gems a gesture may move: never one still in its entry ritual.
+    private var gesturePebbles: [PebbleNode] {
+        guard !enteringPhases.isEmpty else { return livePebbles }
+        return livePebbles.filter { enteringPhases[$0.descriptor.id] == nil }
+    }
+
+    /// How far a body of `radius` at `point` can travel along the unit
+    /// `direction` before it meets the containment (the walls with their
+    /// shoulders at its height, the floor, the mouth). Straight up this is
+    /// the former upward room, `interior.maxY − r − y`; sideways the room
+    /// to that wall.
+    private func containmentRoom(
+        from point: CGPoint,
+        radius: CGFloat,
+        along direction: CGVector
+    ) -> CGFloat {
+        let horizontal = allowedHorizontalRange(at: point.y, radius: radius)
+        let epsilon: CGFloat = 1e-9
+        var room = CGFloat.greatestFiniteMagnitude
+        if direction.dx > epsilon {
+            room = min(room, (horizontal.upperBound - point.x) / direction.dx)
+        } else if direction.dx < -epsilon {
+            room = min(room, (point.x - horizontal.lowerBound) / -direction.dx)
+        }
+        if direction.dy > epsilon {
+            room = min(room, (interiorRect.maxY - radius - point.y) / direction.dy)
+        } else if direction.dy < -epsilon {
+            room = min(room, (point.y - currentFloorY - radius) / -direction.dy)
+        }
+        guard room.isFinite, room < .greatestFiniteMagnitude else { return 0 }
+        return max(0, room)
+    }
+
+    /// `velocity` with its component along the unit `axis` set to
+    /// `component` and the rest kept: exactly `(dx, component)` along the
+    /// upright axis.
+    nonisolated static func velocity(
+        _ velocity: CGVector,
+        withComponent component: CGFloat,
+        along axis: CGVector
+    ) -> CGVector {
+        let current = velocity.dx * axis.dx + velocity.dy * axis.dy
+        let rest = CGVector(dx: velocity.dx - axis.dx * current, dy: velocity.dy - axis.dy * current)
+        return CGVector(dx: rest.dx + axis.dx * component, dy: rest.dy + axis.dy * component)
     }
 
     @discardableResult
@@ -3915,9 +4334,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             )
             aggregateNode.setScale(0.38 * aggregateNode.jarScale)
             aggregateNode.alpha = 0.25
+            // A small lift against gravity (F3; straight up when upright).
+            let up = gestureFrame.up
             aggregateNode.physicsBody?.velocity = CGVector(
-                dx: 0,
-                dy: Constants.Jar.aggregateBirthImpulse
+                dx: up.dx * Constants.Jar.aggregateBirthImpulse,
+                dy: up.dy * Constants.Jar.aggregateBirthImpulse
             )
             insertPebble(aggregateNode)
             presentFusionFinale(for: aggregateNode)
@@ -4429,7 +4850,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             bodies: CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY),
             jar: outerJarRect,
             interior: interiorRect,
-            bedTop: currentFloorY + (gemBed.map { $0.height(interiorHeight: interiorRect.height) } ?? 0)
+            bedTop: currentFloorY + (gemBed.map { $0.height(interiorHeight: interiorRect.height) } ?? 0),
+            seatedOnFloor: pileRestsOnTheFloor
         )
         // The lit interior (JarStageArtwork) already glows toward the
         // floor, so the pile adds a softer light than before.
@@ -4473,12 +4895,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// 1.3 × their width (at least 96 pt, at most 0.9 × the jar width),
     /// 1.8 × their height (at least 64 pt, at most 0.45 of the interior and
     /// 0.75 of its own width), seated on the floor with its centre no higher
-    /// than the gem bed's top + 40 pt.
+    /// than the gem bed's top + 40 pt. F3: a pile resting against a wall or
+    /// the cap (`seatedOnFloor` false: held sideways or upside down) keeps
+    /// the light on its bodies instead, inside the interior; the gem bed
+    /// itself stays on the floor.
     nonisolated static func pileLightFrame(
         bodies: CGRect,
         jar: CGRect,
         interior: CGRect,
-        bedTop: CGFloat
+        bedTop: CGFloat,
+        seatedOnFloor: Bool = true
     ) -> CGRect {
         let width = min(max(96, bodies.width * 1.3), jar.width * 0.9)
         let height = min(
@@ -4487,11 +4913,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             interior.height * 0.45
         )
         let floorY = interior.minY
-        let centerY = min(
-            max(bodies.midY, floorY + height * 0.22),
-            max(bedTop, floorY) + 40,
-            floorY + height * 0.5
-        )
+        let centerY = seatedOnFloor
+            ? min(
+                max(bodies.midY, floorY + height * 0.22),
+                max(bedTop, floorY) + 40,
+                floorY + height * 0.5
+            )
+            : min(max(bodies.midY, floorY + height * 0.5), interior.maxY - height * 0.5)
         let centerX = min(max(bodies.midX, jar.minX + width / 2), jar.maxX - width / 2)
         return CGRect(x: centerX - width / 2, y: centerY - height / 2, width: width, height: height)
     }
@@ -4946,9 +5374,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             body.usesPreciseCollisionDetection = false
             body.isResting = true
         }
-        // The light enters the idle state exactly where gravity is, so the
+        // The light enters the idle state exactly where the tilt is, so the
         // idle gate's small residual can only come from later samples.
-        updateOpticalTilt(horizontal: appliedGravityVector.dx)
+        updateOpticalTilt(horizontal: appliedLightHorizontal)
         // Never freeze a half-lit flare: settle every star to its resting
         // (or tilt-lit) value before the frame stops.
         livePebbles.forEach {
@@ -4960,6 +5388,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // A settled pile over the core or the HUD steps down first: the jar
         // stays awake for the 0.5 s transition and settles anew after it.
         if enforcePileClearances() { return }
+        // F3: the pose this pile settled under. A turn away from it wakes
+        // the jar again (`setGravityReading`, `JarIdleTiltFilter`).
+        settledReading = appliedReading ?? .flat
+        settledGravityVector = appliedGravityVector
         if !isIdlePaused {
             isIdlePaused = true
             onIdlePauseChanged?(true)
@@ -5069,7 +5501,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 horizontalRange.upperBound
             )
             let previousY = pebble.position.y
-            let upperY = aboveEntryPebbleIDs.contains(pebble.descriptor.id) && !pebble.hasLanded
+            let upperY = enteringPhases[pebble.descriptor.id] == .throughMouth
                 ? size.height
                 : interiorRect.maxY - pebble.radius
             pebble.position.y = min(pebble.position.y, upperY)
@@ -5228,9 +5660,42 @@ enum JarTapLaunchPolicy {
     }
 }
 
+/// F3: the axes a jar gesture throws along. `up` points straight against
+/// the applied gravity (`JarGravityMapping.launchDirection`), `across` a
+/// quarter turn clockwise from it. Components are (across, up): for an
+/// upright phone exactly the screen's (x, y), so taps and shakes are
+/// unchanged there; held sideways or upside down they turn with gravity.
+struct JarGestureFrame: Equatable {
+    let up: CGVector
+    let across: CGVector
+
+    init(gravity: CGVector) {
+        up = JarGravityMapping.launchDirection(for: gravity)
+        across = CGVector(dx: up.dy, dy: -up.dx)
+    }
+
+    /// `vector`'s components along (across, up).
+    func components(of vector: CGVector) -> CGVector {
+        CGVector(
+            dx: vector.dx * across.dx + vector.dy * across.dy,
+            dy: vector.dx * up.dx + vector.dy * up.dy
+        )
+    }
+
+    /// The scene vector with `components` along (across, up).
+    func vector(from components: CGVector) -> CGVector {
+        CGVector(
+            dx: across.dx * components.dx + up.dx * components.dy,
+            dy: across.dy * components.dx + up.dy * components.dy
+        )
+    }
+}
+
 /// Converts the same physical impulse to a mass-aware velocity change, then
 /// applies an explicit component-wise ceiling. This keeps tiny bodies stable
-/// without flattening the slower response of a larger aggregate.
+/// without flattening the slower response of a larger aggregate. The scene
+/// applies it in the gravity frame (`JarGestureFrame`): the horizontal
+/// ceiling across gravity, the vertical one along it.
 enum JarShakeVelocityPolicy {
     static func velocity(
         current: CGVector,
@@ -5504,9 +5969,11 @@ struct JarShakeDetector {
 /// applies every sample, as before. When the jar comes to rest it drops
 /// to `JarMotionRate.idleUpdatesPerSecond` on a background queue, where
 /// `JarIdleTiltMonitor` keeps the smoothed tilt; only a tilt that would move
-/// the drawn light (or a shake peak) hops to main, which restores the full
-/// rate and the render loop. Stopped whenever the jar's owner says so (Home
-/// hidden or covered, the app not active, no study gem).
+/// the drawn light, a turn the resting pile must re-settle for (F3), or a
+/// shake peak hops to main, which restores the full rate and the render
+/// loop (and, for a turn, the physics through its bounded interaction
+/// window). Stopped whenever the jar's owner says so (Home hidden or
+/// covered, the app not active, no study gem).
 @MainActor
 final class JarMotionObserver: ObservableObject {
     private static weak var activeOwner: JarMotionObserver?
@@ -5633,7 +6100,7 @@ final class JarMotionObserver: ObservableObject {
         // Set first: the gravity catch-up below can itself raise the jar's
         // demand, which must find the full rate already running.
         rate = .full
-        let latestIdleGravity = idleMonitor.disarm()
+        let latestIdleReading = idleMonitor.disarm()
         let generation = updateGate.begin()
         shakeDetector.reset()
         source.start(
@@ -5648,10 +6115,11 @@ final class JarMotionObserver: ObservableObject {
             }
         }
         // What the idle check saw last becomes the gravity now, so a jar
-        // woken by a tap never starts from a stale tilt, and a tilt that
-        // woke it moves the light at once.
-        if appliesGravity, let latestIdleGravity {
-            scene?.setGravityVector(latestIdleGravity, smoothing: false)
+        // woken by a tap never starts from a stale tilt, a tilt that woke
+        // it moves the light at once, and a turn that woke it re-settles
+        // the pile (F3; the scene makes the same check).
+        if appliesGravity, let latestIdleReading {
+            scene?.setGravityReading(latestIdleReading, smoothing: false)
         }
     }
 
@@ -5662,7 +6130,8 @@ final class JarMotionObserver: ObservableObject {
         let generation = updateGate.begin()
         idleMonitor.arm(
             JarIdleTiltFilter(
-                gravity: scene.appliedGravityVector,
+                reading: scene.appliedReading,
+                settledReading: scene.settledReading,
                 drawnLight: scene.opticalTiltFraction,
                 followsTilt: !scene.reduceMotion
             ),
@@ -5689,8 +6158,9 @@ final class JarMotionObserver: ObservableObject {
               let scene
         else { return }
         // The sample that woke the jar starts a gesture: full rate at once.
-        // Its smoothed gravity is applied there; a tilt that moves the light
-        // restarts the render loop and holds the full rate (JarScene).
+        // Its smoothed reading is applied there; a tilt that moves the light
+        // restarts the render loop and holds the full rate, and a turn from
+        // the settled pose wakes the physics (JarScene).
         runFullRate()
         if wake.reason == .shake {
             // The reversal of a shake follows within 0.42 s.
@@ -5709,8 +6179,9 @@ final class JarMotionObserver: ObservableObject {
               updateGate.accepts(generation)
         else { return }
         if appliesGravity,
-           updateGate.acceptsGravity(generation, reduceMotion: scene.reduceMotion) {
-            scene.setGravityVector(sample.proposedGravity)
+           updateGate.acceptsGravity(generation, reduceMotion: scene.reduceMotion),
+           let reading = sample.gravityReading {
+            scene.setGravityReading(reading)
         }
         ingestShake(sample)
     }

@@ -84,8 +84,14 @@ enum Constants {
 
         static let gravity: CGFloat = -7.2
         static let gravityVector = CGVector(dx: 0, dy: gravity)
-        static let tiltGravityHorizontalScale: CGFloat = 7.2
-        static let tiltGravityMinimumDownward: CGFloat = 2.2
+        /// The light's full tilt (scene units per g of sideways reading):
+        /// the glints and the glass highlight reach their end stops when the
+        /// phone reads 1 g sideways. The gems' gravity itself follows
+        /// `JarGravityMapping` (F3: sideways and upward too). Formerly
+        /// `tiltGravityHorizontalScale`, which also scaled the gravity; the
+        /// "some downward pull always remains" clamp that came with it
+        /// (`tiltGravityMinimumDownward`) is retired.
+        static let tiltLightHorizontalScale: CGFloat = 7.2
         static let maximumExternalGravityMagnitude: CGFloat = 9.4
         static let gravitySmoothingFactor: CGFloat = 0.16
         static let restitution: CGFloat = 0.06

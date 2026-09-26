@@ -128,7 +128,7 @@ final class JarIdleEnergyTests: XCTestCase {
         scene.reduceMotion = false
         scene.restore(pebbles: [loose(1)])
         rest(scene, clock: clock)
-        let scale = Constants.Jar.tiltGravityHorizontalScale
+        let scale = Constants.Jar.tiltLightHorizontalScale
 
         // Sensor noise of a phone held still: nothing is drawn.
         scene.setGravityVector(CGVector(dx: 0.012 * scale, dy: Constants.Jar.gravity), smoothing: false)
@@ -156,7 +156,7 @@ final class JarIdleEnergyTests: XCTestCase {
         scene.reduceMotion = true
         scene.restore(pebbles: [loose(1)])
         rest(scene, clock: clock)
-        let scale = Constants.Jar.tiltGravityHorizontalScale
+        let scale = Constants.Jar.tiltLightHorizontalScale
 
         scene.setGravityVector(CGVector(dx: 0.4 * scale, dy: Constants.Jar.gravity), smoothing: false)
         XCTAssertEqual(scene.opticalTiltFraction, 0)
@@ -233,7 +233,8 @@ final class JarIdleEnergyTests: XCTestCase {
 
     func testIdleTiltFilterIgnoresAPhoneHeldStillAndWakesOnADeliberateTilt() {
         var filter = JarIdleTiltFilter(
-            gravity: Constants.Jar.gravityVector,
+            reading: reading(0),
+            settledReading: reading(0),
             drawnLight: 0,
             followsTilt: true
         )
@@ -247,41 +248,58 @@ final class JarIdleEnergyTests: XCTestCase {
             let noise = index.isMultiple(of: 2) ? 0.012 : -0.012
             XCTAssertNil(filter.ingest(sample(noise)), "Tremor below the light step")
         }
-        XCTAssertEqual(filter.ingest(sample(0.2)), .tilt)
+        // A small deliberate tilt (below the pile's re-settle turn) moves
+        // the light only.
+        XCTAssertEqual(filter.ingest(sample(0.06)), .tilt)
         XCTAssertEqual(
-            JarTiltMath.lightFraction(horizontal: filter.gravity.dx),
-            0.2 * filter.smoothing,
-            accuracy: 0.01
+            JarTiltMath.lightFraction(horizontal: JarGravityMapping.lightHorizontal(for: filter.reading ?? .flat)),
+            0.06 * filter.smoothing,
+            accuracy: 0.005
         )
 
         // Levelling back to the drawn light wakes nothing once it is there.
         var levelled = JarIdleTiltFilter(
-            gravity: CGVector(dx: 0.2 * Constants.Jar.tiltGravityHorizontalScale, dy: Constants.Jar.gravity),
-            drawnLight: 0.2,
+            reading: reading(0.06),
+            settledReading: reading(0.06),
+            drawnLight: 0.06,
             followsTilt: true
         )
-        XCTAssertNil(levelled.ingest(sample(0.205)))
+        XCTAssertNil(levelled.ingest(sample(0.065)))
         XCTAssertEqual(levelled.ingest(sample(0.0)), .tilt)
     }
 
-    func testIdleTiltFilterUnderReduceMotionWakesOnlyForAShakePeak() {
+    func testIdleTiltFilterUnderReduceMotionWakesOnlyForATurnOrAShakePeak() {
         var filter = JarIdleTiltFilter(
-            gravity: Constants.Jar.gravityVector,
+            reading: reading(0),
+            settledReading: reading(0),
             drawnLight: 0,
             followsTilt: false
         )
-        XCTAssertNil(filter.ingest(sample(0.6)))
-        XCTAssertNil(filter.ingest(sample(0.6)))
-        XCTAssertGreaterThan(filter.gravity.dx, 0.5 * Constants.Jar.tiltGravityHorizontalScale, "Gravity is still tracked")
-        var peak = sample(0.6)
+        // A tilt that would move the light: nothing, the light stays still.
+        XCTAssertNil(filter.ingest(sample(0.08)))
+        XCTAssertNil(filter.ingest(sample(0.08)))
+        XCTAssertGreaterThan(filter.gravity.dx, 0.06 * JarGravityMapping.strength, "Gravity is still tracked")
+        var peak = sample(0.08)
         peak.accelerationX = 1.1
         XCTAssertEqual(filter.ingest(peak), .shake)
+
+        // F3: a turn the pile must re-settle for wakes the jar with or
+        // without Reduce Motion (the gems keep the same physics).
+        for followsTilt in [false, true] {
+            var turned = JarIdleTiltFilter(
+                reading: reading(0),
+                settledReading: reading(0),
+                drawnLight: 0,
+                followsTilt: followsTilt
+            )
+            XCTAssertEqual(turned.ingest(sample(0.6)), .reorient, "followsTilt \(followsTilt)")
+        }
     }
 
     func testIdleTiltMonitorWakesMainAtMostOncePerRunFromAnyThread() {
         let monitor = JarIdleTiltMonitor()
         monitor.arm(
-            JarIdleTiltFilter(gravity: Constants.Jar.gravityVector, drawnLight: 0, followsTilt: true),
+            JarIdleTiltFilter(reading: nil, drawnLight: 0, followsTilt: true),
             generation: 7
         )
         XCTAssertNil(monitor.ingest(sample(0.5), generation: 6), "A superseded run changes nothing")
@@ -295,7 +313,7 @@ final class JarIdleEnergyTests: XCTestCase {
         XCTAssertEqual(wakes.count, 1)
         let latest = monitor.disarm()
         XCTAssertNotNil(latest)
-        XCTAssertGreaterThan(latest?.dx ?? 0, 0.49 * Constants.Jar.tiltGravityHorizontalScale)
+        XCTAssertGreaterThan(latest?.x ?? 0, 0.49)
         XCTAssertFalse(monitor.isArmed)
         XCTAssertNil(monitor.ingest(sample(0.9), generation: 7), "Disarmed")
     }
@@ -329,23 +347,25 @@ final class JarIdleEnergyTests: XCTestCase {
         XCTAssertTrue(scene.isRenderLoopPaused)
         XCTAssertEqual(scene.opticalTiltFraction, 0)
 
-        // A deliberate tilt hops to main: full rate, the light moves and the
-        // render loop runs, while the physics keeps resting.
+        // A deliberate tilt (below the pile's re-settle turn, F3) hops to
+        // main: full rate, the light moves and the render loop runs, while
+        // the physics keeps resting.
         let runsBefore = source.runs.count
-        source.deliver(sample(0.3))
+        source.deliver(sample(0.1))
         drainMainQueue()
         XCTAssertEqual(observer.rate, .full)
         XCTAssertEqual(source.runs.count, runsBefore + 1)
         XCTAssertEqual(source.currentRun?.isMainQueue, true)
         XCTAssertFalse(scene.isRenderLoopPaused)
         XCTAssertTrue(scene.isIdlePaused)
-        XCTAssertGreaterThan(scene.opticalTiltFraction, 0.15)
+        XCTAssertGreaterThan(scene.opticalTiltFraction, 0.05)
 
         // At the full rate the light keeps following the phone.
         let light = scene.opticalTiltFraction
         clock.advance(by: 0.05)
-        source.deliver(sample(0.6))
+        source.deliver(sample(0.2))
         XCTAssertGreaterThan(scene.opticalTiltFraction, light)
+        XCTAssertTrue(scene.isIdlePaused, "Still below the re-settle turn")
 
         // Held still: the hold runs out, the loop stops, the rate drops.
         clock.advance(by: JarScene.motionWakeHold)
@@ -372,8 +392,9 @@ final class JarIdleEnergyTests: XCTestCase {
         rest(scene, clock: clock)
         XCTAssertEqual(observer.rate, .idle)
 
-        // Reduce Motion: a tilt never reaches main while the jar rests...
-        for _ in 0 ..< 6 { source.deliver(sample(0.5)) }
+        // Reduce Motion: a tilt (below the pile's re-settle turn, F3) never
+        // reaches main while the jar rests...
+        for _ in 0 ..< 6 { source.deliver(sample(0.08)) }
         drainMainQueue()
         XCTAssertEqual(observer.rate, .idle)
         XCTAssertEqual(scene.appliedGravityVector.dx, 0)
@@ -383,7 +404,7 @@ final class JarIdleEnergyTests: XCTestCase {
         XCTAssertEqual(observer.rate, .full)
         XCTAssertEqual(
             scene.appliedGravityVector.dx,
-            0.5 * Constants.Jar.tiltGravityHorizontalScale,
+            0.08 * JarGravityMapping.strength,
             accuracy: 0.05
         )
     }
@@ -557,6 +578,11 @@ final class JarIdleEnergyTests: XCTestCase {
             gravityY: -(1 - gravityX * gravityX).squareRoot(),
             timestamp: timestamp
         )
+    }
+
+    /// The sensed reading of an upright phone tilted `gravityX` sideways.
+    private func reading(_ gravityX: Double) -> JarGravityMapping.Reading {
+        sample(gravityX).gravityReading ?? .flat
     }
 
     private func loose(_ index: Int, isTutorial: Bool = false) -> PebbleDescriptor {

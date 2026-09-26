@@ -488,7 +488,7 @@ final class JarGravityMappingTests: XCTestCase {
     }
 
     func testPortraitLightIsTodaysSidewaysGravityAndTurnsWithTheInterface() {
-        let scale = Constants.Jar.tiltGravityHorizontalScale
+        let scale = Constants.Jar.tiltLightHorizontalScale
         var random = SplitMix64(seed: 0x11)
         for _ in 0 ..< 500 {
             // Unit readings, as Core Motion reports them.
@@ -618,17 +618,19 @@ final class JarGravityMappingTests: XCTestCase {
     }
 
     func testADeliberateTurnWakesTheRestingJarWithinAFewSamples() {
-        // A 2° turn (tremor of ±0.012 g is about ±0.7°) that moves the jar's
-        // gravity visibly wakes the resting jar within three idle samples,
-        // in the blend band as upright. Leaned back near s = 0.45 the blend
-        // and the lean cancel: the jar's gravity barely moves, and the jar
-        // has nothing to redo.
+        // Phase B: the resting pile re-settles past
+        // `JarTiltMath.reorientationWakeThreshold` (about 6°; tremor of
+        // ±0.012 g is about ±0.7°). A deliberate 10° turn that moves the
+        // jar's gravity visibly wakes the resting jar within three idle
+        // samples, in the blend band as upright. Leaned back near s = 0.45
+        // the blend and the lean cancel: the jar's gravity barely moves, and
+        // the jar has nothing to redo.
         let smoothing = JarTiltMath.smoothingFraction(updatesPerSecond: JarMotionRate.idleUpdatesPerSecond)
-        let threshold = JarTiltMath.idleLightThreshold
+        let threshold = JarTiltMath.reorientationWakeThreshold
         var checked = 0
         for pose in HeldPose.allCases {
             for s in [0.25, 0.35, 0.45, 0.7] {
-                for turn in [2.0, -2.0] {
+                for turn in [10.0, -10.0] {
                     let angle = asin(s)
                     let from = pose.gravity(tiltedFromFlat: angle)
                     let to = pose.gravity(tiltedFromFlat: angle + turn * .pi / 180)
@@ -647,11 +649,28 @@ final class JarGravityMappingTests: XCTestCase {
                 }
             }
         }
-        XCTAssertGreaterThanOrEqual(checked, 20)
-        // Upright, a 2° turn in the screen's plane wakes at the first sample.
-        let turn = 2.0 * .pi / 180
+        XCTAssertGreaterThanOrEqual(checked, 12)
+        // Upright, a 10° turn in the screen's plane wakes at the first sample,
+        // and a 4° one (hand drift while reading) never does.
+        let turn = 10.0 * .pi / 180
         XCTAssertTrue(
             wakes(from: reading(0, -1, 0), toward: reading(sin(turn), -cos(turn), 0), smoothing: smoothing, within: 1)
+        )
+        let drift = 4.0 * .pi / 180
+        XCTAssertFalse(
+            wakes(from: reading(0, -1, 0), toward: reading(sin(drift), -cos(drift), 0), smoothing: smoothing, within: 60)
+        )
+        // A 2° turn still resolves above the light's step, so it moves the
+        // light (JarIdleTiltFilter's `.tilt`) without re-settling the pile.
+        let small = 2.0 * .pi / 180
+        XCTAssertTrue(
+            wakes(
+                from: reading(0, -1, 0),
+                toward: reading(sin(small), -cos(small), 0),
+                smoothing: smoothing,
+                within: 1,
+                threshold: JarTiltMath.idleLightThreshold
+            )
         )
     }
 
@@ -703,17 +722,18 @@ final class JarGravityMappingTests: XCTestCase {
     }
 
     /// Whether smoothing from `settled` toward `target` at the idle rate
-    /// wakes the resting jar within `samples` samples.
+    /// wakes the resting jar (passes `threshold`) within `samples` samples.
     private func wakes(
         from settled: JarGravityMapping.Reading,
         toward target: JarGravityMapping.Reading,
         smoothing: CGFloat,
-        within samples: Int
+        within samples: Int,
+        threshold: CGFloat = JarTiltMath.reorientationWakeThreshold
     ) -> Bool {
         var smoothed = settled
         for _ in 0 ..< samples {
             smoothed = smoothed.smoothed(toward: target, fraction: smoothing)
-            if JarGravityMapping.wakeDelta(from: settled, to: smoothed) > JarTiltMath.idleLightThreshold {
+            if JarGravityMapping.wakeDelta(from: settled, to: smoothed) > threshold {
                 return true
             }
         }

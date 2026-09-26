@@ -843,7 +843,7 @@ struct JarSpriteView: View {
                 )
                 scene.setGravityVector(
                     CGVector(
-                        dx: horizontalFraction * Constants.Jar.tiltGravityHorizontalScale,
+                        dx: horizontalFraction * JarGravityMapping.strength,
                         dy: Constants.Jar.gravity
                     ),
                     smoothing: false,
