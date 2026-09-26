@@ -1291,6 +1291,41 @@ final class GemBrillianceTests: XCTestCase {
         XCTAssertEqual(request.grams, 10 * Constants.Mass.measuredPebbleGrams)
     }
 
+    /// Round 13: the scene's own content changes (a history or Screen Time
+    /// sync restoring one gem more, then one fewer, again and again) around
+    /// the top rung step the jar off the top once and then hold it there.
+    @MainActor
+    func testContentChurnAroundTheTopRungStepsOffOnceAndHolds() {
+        let scene = scaleScene()
+        let top = JarScalePolicy.maximumScale
+        let interior = JarScene.interiorRect(sceneSize: scene.size)
+        let area = interior.width * interior.height
+        let radius = looseSeries(1)[0].radius
+        func target(_ count: Int) -> CGFloat {
+            JarScalePolicy.uncappedTargetScale(
+                baseArea: JarScalePolicy.baseArea(radii: Array(repeating: radius, count: count)),
+                interiorArea: area
+            )
+        }
+        var count = 1
+        while target(count + 1) >= top { count += 1 }
+        let fewer = looseSeries(count)
+        let more = looseSeries(count + 1)
+        scene.restore(pebbles: fewer)
+        XCTAssertEqual(scene.jarScale, top)
+        let changes = scene.jarScaleChangeCount
+        var scales: [CGFloat] = []
+        for round in 0 ..< 12 {
+            scene.restore(pebbles: round.isMultiple(of: 2) ? more : fewer)
+            scales.append(scene.jarScale)
+        }
+        XCTAssertEqual(scene.jarScaleChangeCount, changes + 1, "One step off the top: \(scales)")
+        XCTAssertEqual(scene.jarScale, top / JarScalePolicy.rungRatio, accuracy: 0.000_1)
+        for pebble in scenePebbles(scene) {
+            XCTAssertEqual(pebble.jarScale, scene.jarScale, accuracy: 0.000_1)
+        }
+    }
+
     /// Ten bodies becoming one lowers A0: the crystal is born at the new
     /// scale and every other body grows toward it (fusion adds, it never
     /// empties the jar).

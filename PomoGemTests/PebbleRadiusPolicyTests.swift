@@ -280,6 +280,82 @@ final class PebbleRadiusPolicyTests: XCTestCase {
         XCTAssertEqual(JarScalePolicy.resolvedScale(current: settled, target: target), settled)
     }
 
+    /// Round 13: the top rung keeps the same hysteresis as every other rung.
+    /// A load whose budget hovers around 1.04²³ (a gem added and taken away
+    /// again and again) steps off the top once and then holds one rung
+    /// below; it climbs back only once the budget clears that rung by two
+    /// rungs (1.04²⁴), as after a fusion. With the clamped target the jar
+    /// flipped 2.37 ↔ 2.465 on every change.
+    func testTopRungHoldsThroughAddAndRemoveChurn() {
+        let ratio = JarScalePolicy.rungRatio
+        let top = JarScalePolicy.maximumScale
+        let below = JarScalePolicy.rung(atOrBelow: top / ratio * 1.001)
+        XCTAssertEqual(below * ratio, top, accuracy: 0.000_1, "The top is a rung of the ladder")
+        XCTAssertEqual(JarScalePolicy.targetScale(baseArea: 1, interiorArea: 100_000), top, "The shown target stays clamped")
+        XCTAssertGreaterThan(JarScalePolicy.uncappedTargetScale(baseArea: 1, interiorArea: 100_000), top)
+        XCTAssertEqual(JarScalePolicy.uncappedTargetScale(baseArea: 0, interiorArea: 100_000), .infinity)
+        XCTAssertEqual(JarScalePolicy.uncappedTargetScale(baseArea: 1_000, interiorArea: 0), 1)
+
+        // The review's reproduction: targets just under and just over the top.
+        var scale = top
+        for target in [top * 0.995, top * 1.005, top * 0.995, top * 1.005, top * ratio * 0.999] {
+            scale = JarScalePolicy.resolvedScale(current: scale, target: target)
+            XCTAssertEqual(scale, below, accuracy: 0.000_1, "Held one rung under the top at \(target)")
+        }
+        XCTAssertEqual(JarScalePolicy.resolvedScale(current: below, target: top * ratio * 1.001), top)
+
+        // The same with bodies: n loose gems keep the budget at or above the
+        // top rung, one more takes it under; that gem comes and goes.
+        let loose = timerDescriptor(minutes: 25).radius
+        for interior in interiors {
+            let area = interior.width * interior.height
+            func target(_ count: Int) -> CGFloat {
+                JarScalePolicy.uncappedTargetScale(
+                    baseArea: JarScalePolicy.baseArea(radii: Array(repeating: loose, count: count)),
+                    interiorArea: area
+                )
+            }
+            var count = 1
+            while target(count + 1) >= top { count += 1 }
+            XCTAssertGreaterThanOrEqual(target(count), top, interior.name)
+            XCTAssertLessThan(target(count + 1), top, interior.name)
+            XCTAssertLessThan(target(count), top * ratio, "\(interior.name): the churn stays inside the band")
+
+            var scale = JarScalePolicy.resolvedScale(
+                current: 1,
+                baseArea: JarScalePolicy.baseArea(radii: Array(repeating: loose, count: count)),
+                interiorArea: area
+            )
+            XCTAssertEqual(scale, top, interior.name)
+            var changes = 0
+            for step in 0 ..< 40 {
+                let bodies = Array(repeating: loose, count: step.isMultiple(of: 2) ? count + 1 : count)
+                let next = JarScalePolicy.resolvedScale(
+                    current: scale,
+                    baseArea: JarScalePolicy.baseArea(radii: bodies),
+                    interiorArea: area
+                )
+                XCTAssertLessThanOrEqual(next, target(bodies.count) + 0.000_1, "\(interior.name): never above the budget")
+                if abs(next - scale) > 0.000_1 { changes += 1 }
+                scale = next
+            }
+            XCTAssertEqual(changes, 1, "\(interior.name): one step off the top, then it holds")
+            XCTAssertEqual(scale, below, accuracy: 0.000_1, interior.name)
+            // A fusion-sized drop in load lifts the jar back to the top.
+            let lighter = max(1, count * 3 / 4)
+            XCTAssertGreaterThanOrEqual(target(lighter), top * ratio, interior.name)
+            XCTAssertEqual(
+                JarScalePolicy.resolvedScale(
+                    current: scale,
+                    baseArea: JarScalePolicy.baseArea(radii: Array(repeating: loose, count: lighter)),
+                    interiorArea: area
+                ),
+                top,
+                interior.name
+            )
+        }
+    }
+
     /// Screen Time stones grow with their own cap: never beyond the study
     /// scale, and once they grow at all, never larger than a study gem of
     /// the same time in the same jar.

@@ -862,10 +862,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         min(
             JarScalePolicy.resolvedScale(
                 current: jarScale,
-                target: JarScalePolicy.targetScale(
-                    baseArea: jarBaseArea(adding: extra),
-                    interiorArea: interiorArea
-                )
+                baseArea: jarBaseArea(adding: extra),
+                interiorArea: interiorArea
             ),
             pileHeightCap
         )
@@ -1214,10 +1212,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let restoredScale = min(
             JarScalePolicy.resolvedScale(
                 current: jarScale,
-                target: JarScalePolicy.targetScale(
-                    baseArea: JarScalePolicy.baseArea(radii: uniqueDescriptors.map(\.radius)),
-                    interiorArea: interiorArea
-                )
+                baseArea: JarScalePolicy.baseArea(radii: uniqueDescriptors.map(\.radius)),
+                interiorArea: interiorArea
             ),
             pileHeightCap
         )

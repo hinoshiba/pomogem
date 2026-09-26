@@ -178,8 +178,9 @@ enum JarScalePolicy {
     /// A 25-minute gem is about 57 pt across at this scale: 0.19 of the
     /// iPhone 17 Pro Home interior (306 pt) and 0.20 of the 12 mini's
     /// (279 pt); the reference image shows 0.15–0.20. The top is a rung of
-    /// the ladder itself (1.04²³ ≈ 2.46, round 12; it was 2.4, one 1.3 %
-    /// step above 1.04²²), so the top keeps the two-rung hysteresis too.
+    /// the ladder itself (1.04²³ ≈ 2.465, round 12; it was 2.4, one 1.3 %
+    /// step above 1.04²²). Its two-rung hysteresis reads the uncapped
+    /// target (`uncappedTargetScale`, round 13).
     static let maximumScale: CGFloat = pow(rungRatio, 23)
     static let minimumScale: CGFloat = 1
     /// Scales move on a geometric ladder of 4 % rungs, so a landing that
@@ -207,10 +208,21 @@ enum JarScalePolicy {
     /// The continuous target scale for bodies covering `baseArea` in an
     /// interior of `interiorArea`, clamped to 1…`maximumScale`.
     static func targetScale(baseArea: CGFloat, interiorArea: CGFloat) -> CGFloat {
+        min(uncappedTargetScale(baseArea: baseArea, interiorArea: interiorArea), maximumScale)
+    }
+
+    /// The same target without the top clamp (never below 1): how large the
+    /// budget would let the bodies grow. The hysteresis reads this one
+    /// (round 13). With the clamped target, a jar one rung under the top
+    /// climbed back as soon as the budget touched 1.04²³, so a load
+    /// hovering there flipped 2.37 ↔ 2.465 on every body added or removed;
+    /// now the top rung, like every other, waits for a target two rungs
+    /// above the rung the jar shows (1.04²⁴).
+    static func uncappedTargetScale(baseArea: CGFloat, interiorArea: CGFloat) -> CGFloat {
         guard interiorArea.isFinite, interiorArea > 0 else { return minimumScale }
-        guard baseArea.isFinite, baseArea > 0 else { return maximumScale }
+        guard baseArea.isFinite, baseArea > 0 else { return .infinity }
         let raw = (interiorArea * interiorAreaBudgetFraction / baseArea).squareRoot()
-        return min(max(raw, minimumScale), maximumScale)
+        return raw.isNaN ? minimumScale : max(raw, minimumScale)
     }
 
     /// Highest ladder rung at or below `scale` (1, 1.04, 1.04², … and
@@ -225,14 +237,28 @@ enum JarScalePolicy {
 
     /// The scale a jar at `current` moves to for `target`: down to the rung
     /// below the target at once (the pile never outgrows its budget), up
-    /// only past the hysteresis band, otherwise unchanged.
+    /// only once the target clears the current rung by two rungs, otherwise
+    /// unchanged. The growth test reads `target` itself, never clamped, so
+    /// pass the uncapped target (or use
+    /// `resolvedScale(current:baseArea:interiorArea:)`, as the scene does):
+    /// a target clamped at `maximumScale` never lifts a jar off the rung
+    /// below the top.
     static func resolvedScale(current rawCurrent: CGFloat, target: CGFloat) -> CGFloat {
         let current = rawCurrent.isFinite ? min(max(rawCurrent, minimumScale), maximumScale) : minimumScale
         let candidate = rung(atOrBelow: target)
         if candidate < current - 1e-6 { return candidate }
-        let growthThreshold = min(maximumScale, current * pow(rungRatio, CGFloat(growthRungs)))
-        if candidate >= growthThreshold - 1e-6 { return candidate }
+        let growthThreshold = current * pow(rungRatio, CGFloat(growthRungs))
+        if target >= growthThreshold - 1e-6 { return candidate }
         return current
+    }
+
+    /// `resolvedScale(current:target:)` for bodies covering `baseArea`
+    /// (at their own radii) in an interior of `interiorArea`.
+    static func resolvedScale(current: CGFloat, baseArea: CGFloat, interiorArea: CGFloat) -> CGFloat {
+        resolvedScale(
+            current: current,
+            target: uncappedTargetScale(baseArea: baseArea, interiorArea: interiorArea)
+        )
     }
 
     /// The scale of Screen Time stones in a jar whose study gems use
