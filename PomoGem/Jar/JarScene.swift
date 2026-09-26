@@ -768,10 +768,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// only.
     var shareCore: JarShareCore?
 
-    /// Whether any live body (study gem or obstacle) overlaps `rect` (scene
+    /// Whether any live body the capture shows overlaps `rect` (scene
     /// coordinates): a share animation must never draw the core over them.
-    func hasBody(intersecting rect: CGRect) -> Bool {
+    /// Bodies `hides` leaves out of the image (Screen Time stones, a
+    /// self-reported gem left out of the share) do not count.
+    func hasBody(intersecting rect: CGRect, hides: (PebbleDescriptor) -> Bool = { _ in false }) -> Bool {
         livePebbles.contains { pebble in
+            guard !hides(pebble.descriptor) else { return false }
             let r = pebble.radius
             return CGRect(x: pebble.position.x - r, y: pebble.position.y - r, width: r * 2, height: r * 2)
                 .intersects(rect)
@@ -779,11 +782,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     /// Up to `count` points where a glint may catch light in a share
-    /// animation: the upper-left facet of the highest resting study gems,
-    /// in scene coordinates.
-    func shareGlintAnchors(count: Int = 4) -> [CGPoint] {
+    /// animation: the upper-left facet of the highest resting study gems
+    /// the capture shows (never a Screen Time stone, and never a gem
+    /// `hides` leaves out, whose place is a hole in the image), in scene
+    /// coordinates.
+    func shareGlintAnchors(count: Int = 4, hides: (PebbleDescriptor) -> Bool = { _ in false }) -> [CGPoint] {
         livePebbles
-            .filter { !$0.descriptor.isScreenTimeObstacle && $0.hasLanded && $0.position.x.isFinite && $0.position.y.isFinite }
+            .filter { !$0.descriptor.isScreenTimeObstacle && !hides($0.descriptor) && $0.hasLanded && $0.position.x.isFinite && $0.position.y.isFinite }
             .sorted { ($0.position.y + $0.radius, $0.descriptor.id.uuidString) > ($1.position.y + $1.radius, $1.descriptor.id.uuidString) }
             .prefix(max(0, count))
             .map { CGPoint(x: $0.position.x - $0.radius * 0.32, y: $0.position.y + $0.radius * 0.42) }

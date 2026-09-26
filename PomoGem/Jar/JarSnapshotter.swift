@@ -156,16 +156,16 @@ final class JarSnapshotter {
     }
 
     /// The motion a share GIF lays over the snapshot `image(of:options:)`
-    /// returns for `.share` (normalised to it): the centrepiece's stone and
-    /// glints on the highest resting gems.
-    func shareMotion(of scene: JarScene) -> ShareJarMotion? {
+    /// returns for the same `options` (normalised to it): the centrepiece's
+    /// stone and glints on the highest resting gems the image shows.
+    func shareMotion(of scene: JarScene, options: JarSnapshotOptions) -> ShareJarMotion? {
         let crop = scene.snapshotRect
         guard crop.width > 0, crop.height > 0 else { return nil }
         let stageTop = scene.size.height - crop.maxY
         func normalized(stage point: CGPoint) -> CGPoint {
             CGPoint(x: (point.x - crop.minX) / crop.width, y: (point.y - stageTop) / crop.height)
         }
-        let glints = scene.shareGlintAnchors().map { point in
+        let glints = scene.shareGlintAnchors(hides: options.hides).map { point in
             normalized(stage: CGPoint(x: point.x, y: scene.size.height - point.y))
         }
         guard let core = scene.shareCore else {
@@ -182,7 +182,7 @@ final class JarSnapshotter {
         // A pile that reaches the core keeps it behind the gems: then only
         // its glow breathes, never the stone drawn over a body.
         let sceneRect = CGRect(x: rect.minX, y: scene.size.height - rect.maxY, width: rect.width, height: rect.height)
-        let stoneIsClear = !scene.hasBody(intersecting: sceneRect)
+        let stoneIsClear = !scene.hasBody(intersecting: sceneRect, hides: options.hides)
         return ShareJarMotion(
             stone: stoneIsClear ? JarShareCoreArtwork.stoneImage(for: core, scale: 3) : nil,
             stoneRect: CGRect(x: origin.x, y: origin.y, width: rect.width / crop.width, height: rect.height / crop.height),

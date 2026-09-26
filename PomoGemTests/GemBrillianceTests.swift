@@ -1642,6 +1642,32 @@ extension GemBrillianceTests {
         XCTAssertEqual(field.arcs.last!.end - field.arcs.first!.start, 1, accuracy: 0.000_1)
     }
 
+    /// A share GIF never lays a glint over a gem the image leaves out (a
+    /// self-reported gem hidden by the share's choice).
+    @MainActor
+    func testShareGlintsSkipGemsTheImageLeavesOut() throws {
+        let scene = scaleScene()
+        let measured = looseDescriptor(id: UUID(uuidString: "C0000000-0000-4000-8000-0000000000A1")!)
+        let reported = looseDescriptor(id: UUID(uuidString: "C0000000-0000-4000-8000-0000000000A2")!, source: .manual)
+        scene.restore(pebbles: [measured, reported])
+        let nodes = scenePebbles(scene)
+        let low = try XCTUnwrap(nodes.first { $0.descriptor.id == measured.id })
+        let high = try XCTUnwrap(nodes.first { $0.descriptor.id == reported.id })
+        low.position = CGPoint(x: 150, y: 80)
+        high.position = CGPoint(x: 220, y: 180)
+        [low, high].forEach { $0.markLanded() }
+        let options = JarSnapshotOptions.share(includesSelfReported: false)
+        XCTAssertTrue(options.hides(reported))
+        let highAnchor = CGPoint(x: high.position.x - high.radius * 0.32, y: high.position.y + high.radius * 0.42)
+        XCTAssertTrue(scene.shareGlintAnchors().contains(highAnchor), "Shown when the share includes it")
+        let anchors = scene.shareGlintAnchors(hides: options.hides)
+        XCTAssertFalse(anchors.contains(highAnchor), "No glint over the hole it leaves")
+        XCTAssertEqual(anchors.count, 1)
+        let overHigh = CGRect(x: high.position.x - 5, y: high.position.y - 5, width: 10, height: 10)
+        XCTAssertTrue(scene.hasBody(intersecting: overHigh))
+        XCTAssertFalse(scene.hasBody(intersecting: overHigh, hides: options.hides), "A hidden gem never stills the core")
+    }
+
     /// The scene's light fades out before the SKView's edge (no visible
     /// rectangle) and the bottle itself is never dimmed.
     func testTheLightBoundsFadeBeforeTheViewEdge() throws {
@@ -1673,6 +1699,48 @@ extension GemBrillianceTests {
         let image = JarLightBounds.image(stageSize: stage)
         XCTAssertEqual(image.size, CGSize(width: 402, height: 460))
         XCTAssertTrue(JarLightBounds.image(stageSize: stage) === image, "Baked once per stage size")
+    }
+
+    /// Each GIF frame carries its own colour table (a single global one
+    /// left the gems matte).
+    func testEveryGIFFrameHasItsOwnColourTable() throws {
+        let url = AnimatedShareExporter.makeTemporaryURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let writer = try AnimatedShareExporter.Writer(url: url, frameCount: 2)
+        for hue: CGFloat in [0.02, 0.6] {
+            let image = UIGraphicsImageRenderer(size: CGSize(width: 16, height: 16)).image { context in
+                UIColor(hue: hue, saturation: 0.7, brightness: 0.9, alpha: 1).setFill()
+                context.fill(CGRect(x: 0, y: 0, width: 16, height: 16))
+            }
+            try writer.add(try XCTUnwrap(image.cgImage))
+        }
+        try writer.finalize()
+        let bytes = [UInt8](try Data(contentsOf: url))
+        var index = 13 + ((bytes[10] & 0x80) != 0 ? 3 * (1 << (Int(bytes[10] & 7) + 1)) : 0)
+        var localTables: [Bool] = []
+        while index < bytes.count {
+            switch bytes[index] {
+            case 0x21:
+                index += 2
+                while bytes[index] != 0 { index += Int(bytes[index]) + 1 }
+                index += 1
+            case 0x2C:
+                let packed = bytes[index + 9]
+                localTables.append(packed & 0x80 != 0)
+                index += 10
+                if packed & 0x80 != 0 { index += 3 * (1 << (Int(packed & 7) + 1)) }
+                index += 1
+                while bytes[index] != 0 { index += Int(bytes[index]) + 1 }
+                index += 1
+            default:
+                index = bytes.count
+            }
+        }
+        // The first frame's table is the file's global one; every later
+        // frame brings its own.
+        XCTAssertEqual(localTables.count, 2)
+        XCTAssertTrue(localTables.dropFirst().allSatisfy { $0 })
+        XCTAssertTrue(localTables[0] || bytes[10] & 0x80 != 0)
     }
 
     /// The fusion sheet and the Overview lens lay the ten in a loose bowl

@@ -1511,7 +1511,7 @@ struct ShareComposerView: View {
         guard let image = try? JarSnapshotter.shared.image(of: scene, options: options) else {
             return nil
         }
-        return (image, JarSnapshotter.shared.shareMotion(of: scene))
+        return (image, JarSnapshotter.shared.shareMotion(of: scene, options: options))
     }
 
     @MainActor
