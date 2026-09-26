@@ -543,21 +543,32 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var lastShakeUptime = -Double.greatestFiniteMagnitude
     private var interactionMotionWindow: JarInteractionMotionWindow? {
         didSet {
-            // A calm re-settle lives only as long as its window.
-            if interactionMotionWindow == nil { endCalmResettle() }
+            // A calm re-settle lives only as long as its window, and so
+            // does a shake's claim on the pile.
+            if interactionMotionWindow == nil {
+                endCalmResettle()
+                isShakenPileSettling = false
+            }
         }
     }
     /// F3, Reduce Motion (Docs/JarOrientationGravity.md, owner ruling
     /// 2026-09-27): the open window is a turn's calm re-settle. The physics
     /// is kept — a sideways phone still piles sideways — but the resting
-    /// pile carries `Constants.Jar.calmResettleLinearDamping` and
-    /// `calmResettleAngularDamping` for the window, so nothing bounces or
-    /// tumbles, and the re-settle adds no light or effect. It ends when the
-    /// window does (rest, hard stop, restore, a covered Home), when a tap,
-    /// shake, VoiceOver action or drag opens a window of its own, or when
-    /// Reduce Motion turns off; the pile then gets its ordinary damping
-    /// back (the resting damping once it rests).
+    /// pile carries `Constants.Jar.calmResettleLinearDamping`,
+    /// `calmResettleAngularDamping` and `calmResettleFriction` for the
+    /// window, so nothing bounces or tumbles, and the re-settle adds no
+    /// light or effect. It ends when the window does (rest, hard stop,
+    /// restore, a covered Home), when a tap, shake, VoiceOver action or
+    /// drag opens a window of its own, or when Reduce Motion turns off; the
+    /// pile then gets its ordinary damping and friction back (the resting
+    /// damping once it rests).
     private(set) var isCalmResettleActive = false
+    /// F3, Reduce Motion: a shake threw the pile in the open window. Until
+    /// that pile rests (the window ends), a turn — a shaking wrist turns the
+    /// phone too — re-settles it with the ordinary damping and never starts
+    /// a calm re-settle, so the shake behaves as it always has. Cleared with
+    /// the window.
+    private var isShakenPileSettling = false
     private var pendingTapKick: PendingTapKick?
     private var activeTapMotion: ActiveTapMotion?
     private var tapPresentationStartPositions: [UUID: CGPoint] = [:]
@@ -1660,6 +1671,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             body.angularVelocity = oldBody.angularVelocity
             body.linearDamping = oldBody.linearDamping
             body.angularDamping = oldBody.angularDamping
+            // A calm re-settle (Reduce Motion) carries its friction too.
+            body.friction = oldBody.friction
             body.usesPreciseCollisionDetection = oldBody.usesPreciseCollisionDetection
             body.isDynamic = oldBody.isDynamic
             body.isResting = oldBody.isResting
@@ -1861,6 +1874,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 / CGFloat(pebbles.count)
         )
         beginInteractionMotionWindow(uptime: now)
+        // F3: the shaken pile keeps the ordinary damping through a turn
+        // until it rests (`isShakenPileSettling`).
+        isShakenPileSettling = true
         finishActiveTapMotion(forceReturn: false)
         transientMotionGate.invalidate()
         let crowdScale = min(
@@ -2460,8 +2476,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// from that moment (`followTurn`), so a turn late in a window never
     /// freezes the pile in mid-flight. The wake does not depend on Reduce
     /// Motion: the gems follow the phone either way. Under Reduce Motion the
-    /// re-settle runs calm — raised damping for its window, no bounce or
-    /// tumble, no light or effect (`isCalmResettleActive`).
+    /// re-settle runs calm — raised damping and no friction for its window,
+    /// no bounce or tumble, no light or effect (`isCalmResettleActive`) —
+    /// unless a shaken pile is still settling.
     func setGravityReading(
         _ sensed: JarGravityMapping.Reading,
         smoothing: Bool = true
@@ -2509,40 +2526,71 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     /// F3, Reduce Motion: the re-settle a turn just opened (or reopened)
     /// runs calm (`isCalmResettleActive`). Without Reduce Motion nothing
-    /// changes.
+    /// changes, and neither does it while a shaken pile is still settling
+    /// (`isShakenPileSettling`): the shake keeps its ordinary damping.
     private func beginCalmResettleUnderReduceMotion() {
-        guard reduceMotion else { return }
+        guard reduceMotion, !isShakenPileSettling else { return }
         isCalmResettleActive = true
-        for pebble in livePebbles where takesCalmResettleDamping(pebble) {
-            applyCalmResettleDamping(to: pebble)
+        for pebble in livePebbles where takesCalmResettle(pebble) {
+            applyCalmResettle(to: pebble)
         }
     }
 
     /// Ends a calm re-settle: the pile's bodies get their ordinary awake
-    /// damping back (a pile coming to rest then takes the resting damping).
+    /// damping and their friction back (a pile coming to rest then takes
+    /// the resting damping).
     private func endCalmResettle() {
         guard isCalmResettleActive else { return }
-        let calmBodies = livePebbles.filter(takesCalmResettleDamping)
+        let calmBodies = livePebbles.filter(takesCalmResettle)
         isCalmResettleActive = false
         for pebble in calmBodies {
             pebble.physicsBody?.linearDamping = Constants.Jar.linearDamping
             pebble.physicsBody?.angularDamping = Constants.Jar.angularDamping
         }
+        // Every body, not only the ones that are calm now: a gem that was
+        // calm may since have been tapped.
+        for pebble in livePebbles {
+            if let body = pebble.physicsBody {
+                setFriction(Constants.Jar.friction, of: body)
+            }
+        }
     }
 
-    /// Whether a body takes the calm re-settle's damping: a gem of the
-    /// resting pile. A gem still entering or falling keeps the ordinary
-    /// damping (its drop behaves as before), and so does a tapped gem in
-    /// flight (the tap owns its damping).
-    private func takesCalmResettleDamping(_ pebble: PebbleNode) -> Bool {
+    /// Whether a body takes the calm re-settle: a gem of the resting pile.
+    /// A gem still entering or falling keeps the ordinary damping (its drop
+    /// behaves as before), and so does a tapped gem in flight (the tap owns
+    /// its damping and spin).
+    private func takesCalmResettle(_ pebble: PebbleNode) -> Bool {
         isCalmResettleActive
             && pebble.hasLanded
             && pebble.descriptor.id != activeTapMotion?.pebbleID
     }
 
-    private func applyCalmResettleDamping(to pebble: PebbleNode) {
-        pebble.physicsBody?.linearDamping = Constants.Jar.calmResettleLinearDamping
-        pebble.physicsBody?.angularDamping = Constants.Jar.calmResettleAngularDamping
+    /// The calm re-settle's body: raised damping (no bounce) and no
+    /// friction (no tumble: a round gem turns only through friction, so it
+    /// slides into place without turning; `Constants.Jar.calmResettleFriction`).
+    private func applyCalmResettle(to pebble: PebbleNode) {
+        guard let body = pebble.physicsBody else { return }
+        body.linearDamping = Constants.Jar.calmResettleLinearDamping
+        body.angularDamping = Constants.Jar.calmResettleAngularDamping
+        setFriction(Constants.Jar.calmResettleFriction, of: body)
+    }
+
+    /// Gives a body a new friction at once. A contact keeps the friction
+    /// its bodies had when it began, so a resting pile's contacts would
+    /// keep rolling its gems: the body's contacts are dropped by switching
+    /// it static and back (they are made again, with the new friction, on
+    /// the next step), and its motion is kept.
+    private func setFriction(_ friction: CGFloat, of body: SKPhysicsBody) {
+        guard body.friction != friction else { return }
+        body.friction = friction
+        guard body.isDynamic else { return }
+        let velocity = body.velocity
+        let angularVelocity = body.angularVelocity
+        body.isDynamic = false
+        body.isDynamic = true
+        body.velocity = velocity
+        body.angularVelocity = angularVelocity
     }
 
     private func applyGravity(
@@ -5496,8 +5544,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             livePebbles.forEach { pebble in
                 pebble.rememberObservedPosition()
                 // A calm re-settle (Reduce Motion) keeps its pile calm.
-                if takesCalmResettleDamping(pebble) {
-                    applyCalmResettleDamping(to: pebble)
+                if takesCalmResettle(pebble) {
+                    applyCalmResettle(to: pebble)
                     return
                 }
                 pebble.physicsBody?.linearDamping = isSettlingInteraction
@@ -5636,8 +5684,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         livePebbles.forEach {
             // A calm re-settle (Reduce Motion) keeps its pile calm through
             // a landing or a content change inside its window.
-            if takesCalmResettleDamping($0) {
-                applyCalmResettleDamping(to: $0)
+            if takesCalmResettle($0) {
+                applyCalmResettle(to: $0)
             } else {
                 $0.physicsBody?.linearDamping = Constants.Jar.linearDamping
                 $0.physicsBody?.angularDamping = Constants.Jar.angularDamping

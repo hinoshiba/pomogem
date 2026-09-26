@@ -189,10 +189,19 @@ enum Constants {
         /// upside-down turn still crosses the jar in about 1.5 s, well
         /// inside the window's 5 s hard stop (the ordinary damping slams
         /// the pile into the cap after about 0.9 s and bounces it back up to
-        /// 20 pt). The angular damping keeps a gem from spinning up as it
-        /// slides along the glass.
+        /// 20 pt). The angular damping stills a gem that was already
+        /// spinning.
         static let calmResettleLinearDamping: CGFloat = 5
         static let calmResettleAngularDamping: CGFloat = 20
+        /// F3, Reduce Motion: the friction of the calm re-settle's pile. A
+        /// gem sliding on the glass or on its neighbours is rolled by its
+        /// friction: with the ordinary 0.5 the raised angular damping still
+        /// let the calm pile turn about 4 rad/s. The gems of a round body
+        /// turn only through friction, so without it they slide into place
+        /// without turning. Holding their rotation instead is no substitute:
+        /// gems that can neither roll nor slip freely jam, and a sideways
+        /// pile then hangs across the jar instead of piling at the wall.
+        static let calmResettleFriction: CGFloat = 0
 
         static let completionDropDelay: TimeInterval = 0.350
         static let dropSpawnDelay = completionDropDelay
