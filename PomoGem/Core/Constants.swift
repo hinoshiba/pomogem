@@ -181,6 +181,18 @@ enum Constants {
         static let idleMovementThreshold: CGFloat = 0.5
         static let interactionSettlingDamping: CGFloat = 0.72
         static let restingDamping: CGFloat = 0.997
+        /// F3, Reduce Motion (Docs/JarOrientationGravity.md): the damping a
+        /// turn's calm re-settle gives the resting pile for its window, so
+        /// the gems slide to the new wall or the cap without a bounce or a
+        /// tumble. SpriteKit damps like Box2D (not clamped to 1): at 5 the
+        /// jar's gravity (7.2 m/s², 150 pt/m) tops out near 216 pt/s, so an
+        /// upside-down turn still crosses the jar in about 1.5 s, well
+        /// inside the window's 5 s hard stop (the ordinary damping slams
+        /// the pile into the cap after about 0.9 s and bounces it back up to
+        /// 20 pt). The angular damping keeps a gem from spinning up as it
+        /// slides along the glass.
+        static let calmResettleLinearDamping: CGFloat = 5
+        static let calmResettleAngularDamping: CGFloat = 20
 
         static let completionDropDelay: TimeInterval = 0.350
         static let dropSpawnDelay = completionDropDelay

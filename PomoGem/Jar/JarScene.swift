@@ -126,12 +126,16 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 
     /// Reduces decorative effects while preserving the jar's physical gem
-    /// interactions, including drops, taps, shakes, and device tilt.
+    /// interactions, including drops, taps, shakes, and device tilt. One
+    /// physical difference (F3, owner ruling 2026-09-27): the re-settle a
+    /// turn of the phone wakes runs calm (`isCalmResettleActive`).
     var reduceMotion: Bool = UIAccessibility.isReduceMotionEnabled {
         didSet {
             guard reduceMotion != oldValue else { return }
             requestRedraw()
             allPebbleNodes.forEach { $0.setReduceMotion(reduceMotion) }
+            // F3: a calm re-settle belongs to Reduce Motion only.
+            if !reduceMotion { endCalmResettle() }
             if reduceMotion {
                 // Aggregation source nodes leave `livePebbles` before their
                 // decorative move/fade starts. Complete that transaction once
@@ -501,6 +505,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     static let pileProfileBinCount = 12
     /// Bodies slower than this (pt/s) count as resting for the profile.
     static let pileProfileRestingSpeed: CGFloat = 24
+    /// F3 (owner ruling 2026-09-27): the bounds of the same resting bodies
+    /// as the profile (scene points, y up, rounded out to 4 pt), or nil when
+    /// none rests. A pile held upside down rests against the cap, where the
+    /// profile's column tops cannot tell it from a tall upright one; Home
+    /// strengthens its HUD's ink scrim while these bounds meet the HUD
+    /// (`JarHUDScrimPolicy`).
+    @Published private(set) var settledPileBounds: CGRect?
 
     /// Highest settled body over the horizontal span `minX...maxX` (scene
     /// coordinates), or 0 when that span is clear.
@@ -530,7 +541,23 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var lastTapBounceUptime = -Double.greatestFiniteMagnitude
     private(set) var lastAcceptedTapSelection: JarAcceptedTapSelection?
     private var lastShakeUptime = -Double.greatestFiniteMagnitude
-    private var interactionMotionWindow: JarInteractionMotionWindow?
+    private var interactionMotionWindow: JarInteractionMotionWindow? {
+        didSet {
+            // A calm re-settle lives only as long as its window.
+            if interactionMotionWindow == nil { endCalmResettle() }
+        }
+    }
+    /// F3, Reduce Motion (Docs/JarOrientationGravity.md, owner ruling
+    /// 2026-09-27): the open window is a turn's calm re-settle. The physics
+    /// is kept — a sideways phone still piles sideways — but the resting
+    /// pile carries `Constants.Jar.calmResettleLinearDamping` and
+    /// `calmResettleAngularDamping` for the window, so nothing bounces or
+    /// tumbles, and the re-settle adds no light or effect. It ends when the
+    /// window does (rest, hard stop, restore, a covered Home), when a tap,
+    /// shake, VoiceOver action or drag opens a window of its own, or when
+    /// Reduce Motion turns off; the pile then gets its ordinary damping
+    /// back (the resting damping once it rests).
+    private(set) var isCalmResettleActive = false
     private var pendingTapKick: PendingTapKick?
     private var activeTapMotion: ActiveTapMotion?
     private var tapPresentationStartPositions: [UUID: CGPoint] = [:]
@@ -2432,7 +2459,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// from the pose its pile has been following opens the window again
     /// from that moment (`followTurn`), so a turn late in a window never
     /// freezes the pile in mid-flight. The wake does not depend on Reduce
-    /// Motion: the gems keep the same physics either way.
+    /// Motion: the gems follow the phone either way. Under Reduce Motion the
+    /// re-settle runs calm — raised damping for its window, no bounce or
+    /// tumble, no light or effect (`isCalmResettleActive`).
     func setGravityReading(
         _ sensed: JarGravityMapping.Reading,
         smoothing: Bool = true
@@ -2468,12 +2497,52 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             guard JarGravityMapping.needsResettle(from: settledReading, to: reading) else { return }
             beginInteractionMotionWindow(uptime: interactionClock())
             followedReading = reading
+            beginCalmResettleUnderReduceMotion()
         } else if JarGravityMapping.needsResettle(from: followedReading, to: reading) {
             followedReading = reading
             // Only the deadlines move: the tapped gem's flight damping and
             // the idle observation stay as they are.
             interactionMotionWindow = JarInteractionMotionWindow(openedAt: interactionClock())
+            beginCalmResettleUnderReduceMotion()
         }
+    }
+
+    /// F3, Reduce Motion: the re-settle a turn just opened (or reopened)
+    /// runs calm (`isCalmResettleActive`). Without Reduce Motion nothing
+    /// changes.
+    private func beginCalmResettleUnderReduceMotion() {
+        guard reduceMotion else { return }
+        isCalmResettleActive = true
+        for pebble in livePebbles where takesCalmResettleDamping(pebble) {
+            applyCalmResettleDamping(to: pebble)
+        }
+    }
+
+    /// Ends a calm re-settle: the pile's bodies get their ordinary awake
+    /// damping back (a pile coming to rest then takes the resting damping).
+    private func endCalmResettle() {
+        guard isCalmResettleActive else { return }
+        let calmBodies = livePebbles.filter(takesCalmResettleDamping)
+        isCalmResettleActive = false
+        for pebble in calmBodies {
+            pebble.physicsBody?.linearDamping = Constants.Jar.linearDamping
+            pebble.physicsBody?.angularDamping = Constants.Jar.angularDamping
+        }
+    }
+
+    /// Whether a body takes the calm re-settle's damping: a gem of the
+    /// resting pile. A gem still entering or falling keeps the ordinary
+    /// damping (its drop behaves as before), and so does a tapped gem in
+    /// flight (the tap owns its damping).
+    private func takesCalmResettleDamping(_ pebble: PebbleNode) -> Bool {
+        isCalmResettleActive
+            && pebble.hasLanded
+            && pebble.descriptor.id != activeTapMotion?.pebbleID
+    }
+
+    private func applyCalmResettleDamping(to pebble: PebbleNode) {
+        pebble.physicsBody?.linearDamping = Constants.Jar.calmResettleLinearDamping
+        pebble.physicsBody?.angularDamping = Constants.Jar.calmResettleAngularDamping
     }
 
     private func applyGravity(
@@ -2693,6 +2762,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 #endif
 
     private func beginInteractionMotionWindow(uptime: TimeInterval) {
+        // A tap, shake or VoiceOver action takes the jar over from a calm
+        // re-settle and behaves as it always has (a turn from rest begins
+        // its calm re-settle again after this).
+        endCalmResettle()
         interactionMotionWindow = JarInteractionMotionWindow(openedAt: uptime)
         resumeSimulation()
     }
@@ -2701,6 +2774,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// sample on every event. A new drag still opens a complete window and can
     /// wake a previously settled Catalyst scene.
     private func continueInteractionMotionWindow(uptime: TimeInterval) {
+        endCalmResettle()
         let wasActive = interactionMotionWindow != nil
         interactionMotionWindow = JarInteractionMotionWindow(openedAt: uptime)
         if isPaused || isIdlePaused {
@@ -5017,6 +5091,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         guard size.width > 0 else { return }
         let binWidth = size.width / CGFloat(count)
         var profile = [CGFloat](repeating: 0, count: count)
+        var bounds = CGRect.null
         for pebble in livePebbles where !pebble.isRemovedForBake {
             if let velocity = pebble.physicsBody?.velocity,
                hypot(velocity.dx, velocity.dy) > Self.pileProfileRestingSpeed {
@@ -5026,8 +5101,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             // never trap the Int conversion below.
             guard pebble.position.x.isFinite, pebble.position.y.isFinite else { continue }
             let top = min(max(0, pebble.position.y + pebble.radius), size.height)
+            let bottom = min(max(0, pebble.position.y - pebble.radius), size.height)
             let left = min(max(pebble.position.x - pebble.radius, 0), size.width)
             let right = min(max(pebble.position.x + pebble.radius, 0), size.width)
+            bounds = bounds.union(CGRect(x: left, y: bottom, width: right - left, height: top - bottom))
             let first = max(0, Int(left / binWidth))
             let last = min(count - 1, Int(right / binWidth))
             guard first <= last else { continue }
@@ -5036,6 +5113,15 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             }
         }
         if profile != settledPileProfile { settledPileProfile = profile }
+        var settledBounds: CGRect?
+        if !bounds.isNull {
+            let minX = (bounds.minX / 4).rounded(.down) * 4
+            let minY = (bounds.minY / 4).rounded(.down) * 4
+            let maxX = (bounds.maxX / 4).rounded(.up) * 4
+            let maxY = (bounds.maxY / 4).rounded(.up) * 4
+            settledBounds = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        }
+        if settledBounds != settledPileBounds { settledPileBounds = settledBounds }
     }
 
     /// Bakes gem bed textures off the main thread (tests may bake inline).
@@ -5408,13 +5494,18 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         } else {
             let isSettlingInteraction = interactionMotionWindow != nil
             livePebbles.forEach { pebble in
+                pebble.rememberObservedPosition()
+                // A calm re-settle (Reduce Motion) keeps its pile calm.
+                if takesCalmResettleDamping(pebble) {
+                    applyCalmResettleDamping(to: pebble)
+                    return
+                }
                 pebble.physicsBody?.linearDamping = isSettlingInteraction
                     ? Constants.Jar.interactionSettlingDamping
                     : Constants.Jar.linearDamping
                 pebble.physicsBody?.angularDamping = isSettlingInteraction
                     ? Constants.Jar.interactionSettlingDamping
                     : Constants.Jar.angularDamping
-                pebble.rememberObservedPosition()
             }
             idleSampleStartedAt = currentTime
         }
@@ -5543,8 +5634,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private func resetIdleObservation() {
         idleSampleStartedAt = nil
         livePebbles.forEach {
-            $0.physicsBody?.linearDamping = Constants.Jar.linearDamping
-            $0.physicsBody?.angularDamping = Constants.Jar.angularDamping
+            // A calm re-settle (Reduce Motion) keeps its pile calm through
+            // a landing or a content change inside its window.
+            if takesCalmResettleDamping($0) {
+                applyCalmResettleDamping(to: $0)
+            } else {
+                $0.physicsBody?.linearDamping = Constants.Jar.linearDamping
+                $0.physicsBody?.angularDamping = Constants.Jar.angularDamping
+            }
             $0.rememberObservedPosition()
         }
     }

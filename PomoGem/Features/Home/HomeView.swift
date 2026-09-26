@@ -101,10 +101,11 @@ struct HomeView: View {
     /// state change (formerly the three-second Screen Time pass) re-renders.
     @State private var pendingRewardReceiptRevision = 0
     @State private var sceneInitialized = false
-    /// Measured HUD bottom and jar stage top in the jar card's coordinate
-    /// space; the time core's orbit is laid out below the HUD.
+    /// Measured HUD bottom and jar stage frame in the jar card's coordinate
+    /// space; the time core's orbit is laid out below the HUD, and the HUD's
+    /// scrim maps the jar's settled pile into this space (F3).
     @State private var measuredJarHUDBottom: CGFloat?
-    @State private var measuredJarStageTop: CGFloat = 0
+    @State private var measuredJarStageFrame: CGRect = .zero
     @State private var homeIsVisible = false
     @State private var rewardDropRevealIsPending = false
     @State private var rewardDropRevealRequestID: UUID?
@@ -1142,10 +1143,10 @@ struct HomeView: View {
                 onAggregateTapped: revealAggregateInspection,
                 onAggregateAccessibilityAction: presentAggregateDetail
             )
-                .onGeometryChange(for: CGFloat.self) { geometry in
-                    geometry.frame(in: .named(Self.jarCardCoordinateSpace)).minY
-                } action: { top in
-                    measuredJarStageTop = top
+                .onGeometryChange(for: CGRect.self) { geometry in
+                    geometry.frame(in: .named(Self.jarCardCoordinateSpace))
+                } action: { frame in
+                    measuredJarStageFrame = frame
                 }
                 .padding(.horizontal, 4)
                 .padding(.top, Self.previewsHUDAboveJar ? Self.hudAboveJarHeight : 0)
@@ -1310,7 +1311,7 @@ struct HomeView: View {
     /// layout pass it falls back to the HUD's nominal rows.
     private var jarMetricHUDClearance: CGFloat {
         if let measuredJarHUDBottom {
-            return max(0, measuredJarHUDBottom - measuredJarStageTop)
+            return max(0, measuredJarHUDBottom - measuredJarStageFrame.minY)
         }
         let valueRow: CGFloat = dynamicTypeSize.isAccessibilitySize ? 36 : 47
         let rail: CGFloat = showsPreFusionRail ? 34 : 0
@@ -1437,18 +1438,17 @@ struct HomeView: View {
         // A soft ink scrim keeps the value legible over the brighter core,
         // orbit markers and glowing gems behind the glass. The text shadow
         // is applied first, so the blurred scrim is not shadowed again.
+        // F3: a settled pile behind the HUD (held upside down, it rests
+        // against the cap) gets the same scrim in a stronger ink; the HUD
+        // neither moves nor shrinks, and the gems do not fade. The scrim
+        // follows the pile itself, so a moving pile never re-renders Home.
         .background {
-            Ellipse()
-                .fill(
-                    RadialGradient(
-                        colors: [Color.black.opacity(0.34), Color.black.opacity(0.14), .clear],
-                        center: .center,
-                        startRadius: 4,
-                        endRadius: 120
-                    )
-                )
-                .frame(width: 250, height: 150)
-                .blur(radius: 8)
+            JarHUDInkScrim(
+                scene: scene,
+                stageFrame: measuredJarStageFrame,
+                coordinateSpace: Self.jarCardCoordinateSpace,
+                followsPile: !Self.previewsHUDAboveJar
+            )
         }
         .accessibilityHidden(true)
     }

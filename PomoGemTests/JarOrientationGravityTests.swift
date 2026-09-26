@@ -842,6 +842,265 @@ final class JarOrientationGravityTests: XCTestCase {
         }
     }
 
+    // MARK: Reduce Motion: the calm re-settle (owner ruling 2026-09-27)
+
+    func testUnderReduceMotionATurnReSettlesCalmlyWithoutBounceTumbleOrLight() throws {
+        // Owner ruling: a deliberate turn re-settles the pile with or
+        // without Reduce Motion. Under Reduce Motion the physics is kept —
+        // the pile still goes to the new wall or the cap — but the
+        // re-settle is calm: the resting pile's damping is raised for its
+        // window (no bounce, no tumble) and it adds no light or effect.
+        // Without Reduce Motion the same turn keeps the ordinary damping,
+        // as before. After the window the pile rests with the resting
+        // damping, and the next wake (a tap) has the ordinary damping.
+        //
+        // Bounce and tumble are measured over 0.1 s (six frames), so a
+        // single frame's contact impulse does not count: a bounce is a gem
+        // moving back against the new gravity, a tumble a gem turning
+        // about itself. A calm pile may still slide slowly along the
+        // glass as it finds its place (under the cap, up to about 35 pt/s
+        // back along a shoulder); a gem sliding on the glass still rolls
+        // a little, since the pile's friction is unchanged.
+        struct Motion {
+            var bounce: CGFloat = 0
+            var tumble: CGFloat = 0
+        }
+        let window = 6
+        for turn in [Pose.upsideDown, .landscapeRight, .landscapeLeft] {
+            var motions: [Bool: Motion] = [:]
+            for reduceMotion in [false, true] {
+                let context = "\(turn), Reduce Motion \(reduceMotion)"
+                let scene = makeScene()
+                scene.reduceMotion = reduceMotion
+                scene.restore(pebbles: looseSeries(9))
+                let driver = try Driver(scene: scene)
+                defer { driver.finish() }
+                settle(scene, driver, holding: Pose.portrait.reading)
+                XCTAssertTrue(scene.isIdlePaused, context)
+                XCTAssertFalse(scene.isCalmResettleActive, context)
+                let before = centroid(scene)
+                let light = lightState(scene)
+                let finalGravity = JarGravityMapping.gravity(for: turn.reading)
+                let finalLength = max(hypot(finalGravity.dx, finalGravity.dy), 1e-9)
+                let down = CGVector(dx: finalGravity.dx / finalLength, dy: finalGravity.dy / finalLength)
+                // Per body: its depth along the new gravity and how far it
+                // has turned, frame by frame, once the gravity has turned.
+                var depths: [ObjectIdentifier: [CGFloat]] = [:]
+                var turns: [ObjectIdentifier: [CGFloat]] = [:]
+                var sawWindow = false
+                let took = settle(scene, driver, holding: turn.reading) {
+                    guard !scene.isIdlePaused else { return }
+                    sawWindow = true
+                    self.assertContained(scene, context)
+                    XCTAssertEqual(scene.isCalmResettleActive, reduceMotion, context)
+                    let gravity = scene.physicsWorld.gravity
+                    let turned = (gravity.dx * down.dx + gravity.dy * down.dy)
+                        / max(hypot(gravity.dx, gravity.dy), 1e-9) > cos(5 * .pi / 180)
+                    for pebble in self.pebbles(scene) where pebble.hasLanded {
+                        guard let body = pebble.physicsBody else { continue }
+                        if reduceMotion {
+                            XCTAssertEqual(body.linearDamping, Constants.Jar.calmResettleLinearDamping, accuracy: 1e-6, context)
+                            XCTAssertEqual(body.angularDamping, Constants.Jar.calmResettleAngularDamping, accuracy: 1e-6, context)
+                        } else {
+                            XCTAssertLessThanOrEqual(body.linearDamping, Constants.Jar.interactionSettlingDamping + 1e-6, context)
+                            XCTAssertLessThanOrEqual(body.angularDamping, Constants.Jar.interactionSettlingDamping + 1e-6, context)
+                        }
+                        guard turned else { continue }
+                        let id = ObjectIdentifier(pebble)
+                        depths[id, default: []].append(pebble.position.x * down.dx + pebble.position.y * down.dy)
+                        turns[id, default: []].append((turns[id]?.last ?? 0) + abs(body.angularVelocity) / 60)
+                    }
+                    if reduceMotion {
+                        // No light and no effect: the light rig, the glints
+                        // and the pile light's swell stay as they were, and
+                        // no dust, spark, landing light or twinkle appears.
+                        XCTAssertEqual(self.lightState(scene), light, context)
+                        XCTAssertEqual(self.effectNodeCount(scene), 0, context)
+                        XCTAssertFalse(self.pebbles(scene).contains(where: \.isGemTwinkling), context)
+                    }
+                }
+                XCTAssertTrue(sawWindow, "\(context): the turn woke the pile")
+                XCTAssertTrue(scene.isIdlePaused, "\(context): rests again")
+                XCTAssertLessThanOrEqual(took, Constants.Jar.interactionHardStopDelay + 1, context)
+                XCTAssertFalse(scene.isCalmResettleActive, context)
+                let after = centroid(scene)
+                switch turn {
+                case .landscapeRight: XCTAssertGreaterThan(after.x, before.x + 30, "\(context): toward the right wall")
+                case .landscapeLeft: XCTAssertLessThan(after.x, before.x - 30, "\(context): toward the left wall")
+                default: XCTAssertGreaterThan(after.y, before.y + 60, "\(context): toward the cap")
+                }
+                assertContainedWithRadius(scene, "\(context), settled")
+                for pebble in pebbles(scene) {
+                    XCTAssertEqual(pebble.physicsBody?.linearDamping ?? -1, Constants.Jar.restingDamping, accuracy: 1e-6, context)
+                    XCTAssertEqual(pebble.physicsBody?.angularDamping ?? -1, Constants.Jar.restingDamping, accuracy: 1e-6, context)
+                }
+                var motion = Motion()
+                for series in depths.values where series.count > window {
+                    for index in window ..< series.count {
+                        motion.bounce = max(motion.bounce, series[index - window] - series[index])
+                    }
+                }
+                for series in turns.values where series.count > window {
+                    for index in window ..< series.count {
+                        motion.tumble = max(motion.tumble, series[index] - series[index - window])
+                    }
+                }
+                motions[reduceMotion] = motion
+                print("F3 re-settle \(context): bounce \(motion.bounce) pt and tumble \(motion.tumble) rad per 0.1 s, rested after \(took) s")
+
+                // The next wake is an ordinary one: a tap under Reduce
+                // Motion behaves as it always has.
+                let tapped = try XCTUnwrap(pebbles(scene).first)
+                XCTAssertTrue(scene.bouncePebbles(at: tapped.position), context)
+                XCTAssertFalse(scene.isCalmResettleActive, context)
+                for pebble in pebbles(scene) where pebble !== tapped {
+                    XCTAssertEqual(pebble.physicsBody?.linearDamping ?? -1, Constants.Jar.linearDamping, accuracy: 1e-6, context)
+                    XCTAssertEqual(pebble.physicsBody?.angularDamping ?? -1, Constants.Jar.angularDamping, accuracy: 1e-6, context)
+                }
+                scene.cancelInteractionPresentation()
+            }
+            let calm = try XCTUnwrap(motions[true])
+            let ordinary = try XCTUnwrap(motions[false])
+            // Measured (iPhone 17 Pro Simulator): calm 0.4–3.7 pt and
+            // 0.35–0.43 rad per 0.1 s; ordinary 4.2–16 pt (the upside-down
+            // pile slams into the cap and springs back) and 0.8–1.5 rad.
+            XCTAssertLessThan(calm.bounce, 5, "\(turn): no bounce")
+            XCTAssertLessThan(calm.bounce, ordinary.bounce, "\(turn)")
+            XCTAssertLessThan(calm.tumble, 0.6, "\(turn): no tumble")
+            XCTAssertLessThan(calm.tumble, ordinary.tumble, "\(turn)")
+        }
+    }
+
+    func testTheCalmReSettleEndsWhenATapTakesOverOrReduceMotionTurnsOff() throws {
+        let scene = makeScene()
+        scene.reduceMotion = true
+        scene.restore(pebbles: looseSeries(9))
+        let driver = try Driver(scene: scene)
+        defer { driver.finish() }
+        settle(scene, driver, holding: Pose.portrait.reading)
+        XCTAssertTrue(scene.isIdlePaused)
+
+        // Reduce Motion turned off mid-window: the pile keeps following the
+        // turn with its ordinary damping.
+        for _ in 0 ..< 12 {
+            driver.step(frames: 2) { scene.setGravityReading(Pose.landscapeLeft.reading) }
+        }
+        XCTAssertFalse(scene.isIdlePaused)
+        XCTAssertTrue(scene.isCalmResettleActive)
+        XCTAssertTrue(pebbles(scene).allSatisfy {
+            $0.physicsBody?.linearDamping == Constants.Jar.calmResettleLinearDamping
+        })
+        scene.reduceMotion = false
+        XCTAssertFalse(scene.isCalmResettleActive)
+        XCTAssertTrue(scene.isInteractionMotionActive, "The re-settle itself goes on")
+        for pebble in pebbles(scene) {
+            XCTAssertEqual(pebble.physicsBody?.linearDamping ?? -1, Constants.Jar.linearDamping, accuracy: 1e-6)
+            XCTAssertEqual(pebble.physicsBody?.angularDamping ?? -1, Constants.Jar.angularDamping, accuracy: 1e-6)
+        }
+        settle(scene, driver, holding: Pose.landscapeLeft.reading)
+        XCTAssertTrue(scene.isIdlePaused)
+
+        // A tap mid-window takes the jar over: its gem flies with the tap's
+        // damping and the rest of the pile gets the ordinary damping back.
+        scene.reduceMotion = true
+        for _ in 0 ..< 12 {
+            driver.step(frames: 2) { scene.setGravityReading(Pose.portrait.reading) }
+        }
+        XCTAssertTrue(scene.isCalmResettleActive)
+        let tapped = try XCTUnwrap(pebbles(scene).min { $0.position.y < $1.position.y })
+        XCTAssertTrue(scene.bouncePebbles(at: tapped.position))
+        XCTAssertFalse(scene.isCalmResettleActive)
+        let flying = pebbles(scene).filter { ($0.physicsBody?.linearDamping ?? 1) < Constants.Jar.linearDamping - 1e-6 }
+        XCTAssertEqual(flying.count, 1, "Only the tapped gem flies with the tap's damping")
+        for pebble in pebbles(scene) where !flying.contains(where: { $0 === pebble }) {
+            XCTAssertEqual(pebble.physicsBody?.linearDamping ?? -1, Constants.Jar.linearDamping, accuracy: 1e-6)
+            XCTAssertEqual(pebble.physicsBody?.angularDamping ?? -1, Constants.Jar.angularDamping, accuracy: 1e-6)
+        }
+
+        // A turn while the tapped gem flies re-settles the rest calmly and
+        // leaves the tap's own damping alone.
+        let flyingDamping = try XCTUnwrap(flying.first?.physicsBody?.linearDamping)
+        driver.step(frames: 2) { scene.setGravityReading(Pose.landscapeRight.reading, smoothing: false) }
+        XCTAssertTrue(scene.isCalmResettleActive)
+        XCTAssertEqual(flying.first?.physicsBody?.linearDamping ?? -1, flyingDamping, accuracy: 1e-6)
+        XCTAssertTrue(pebbles(scene).filter { pebble in
+            pebble.hasLanded && !flying.contains { $0 === pebble }
+        }.allSatisfy {
+            $0.physicsBody?.linearDamping == Constants.Jar.calmResettleLinearDamping
+        })
+        settle(scene, driver, holding: Pose.landscapeRight.reading) {
+            self.assertContained(scene, "tap, then turn")
+        }
+        XCTAssertTrue(scene.isIdlePaused)
+        XCTAssertFalse(scene.isCalmResettleActive)
+        for pebble in pebbles(scene) {
+            XCTAssertEqual(pebble.physicsBody?.linearDamping ?? -1, Constants.Jar.restingDamping, accuracy: 1e-6)
+        }
+    }
+
+    // MARK: The HUD over an upside-down pile (owner ruling 2026-09-27)
+
+    func testTheSettledPileBoundsMeetTheHUDOnlyWhenThePileRestsAtTheCap() throws {
+        // Home keeps its metric HUD on top and strengthens its ink scrim
+        // while the settled pile's bounds meet the HUD's measured frame
+        // (`JarHUDScrimPolicy`). Upright the pile rests on the floor, clear
+        // of the HUD; held upside down it rests against the cap, behind it.
+        let scene = makeScene()
+        scene.restore(pebbles: looseSeries(9))
+        let driver = try Driver(scene: scene)
+        defer { driver.finish() }
+        // Home's stage (the jar card inset 4 pt) and its readout below the
+        // mouth (`HomeView.jarMetricHUDTopInset`; the laid-out readout is
+        // about 100 pt tall and 170 pt wide at the default text size).
+        let stage = CGRect(x: 4, y: 0, width: scene.size.width, height: scene.size.height)
+        let outer = JarScene.outerJarRect(sceneSize: scene.size)
+        let hudTop = 88 + max(0, scene.size.height - outer.maxY)
+        let hud = CGRect(x: stage.midX - 85, y: hudTop, width: 170, height: 100)
+
+        settle(scene, driver, holding: Pose.portrait.reading)
+        XCTAssertTrue(scene.isIdlePaused)
+        let upright = try XCTUnwrap(scene.settledPileBounds)
+        XCTAssertEqual(upright.minY, JarScene.interiorRect(sceneSize: scene.size).minY, accuracy: 8, "On the floor")
+        XCTAssertEqual(
+            JarHUDScrimPolicy.strength(
+                pileBounds: JarHUDScrimPolicy.stageRect(ofScene: upright, stageFrame: stage),
+                hudFrame: hud
+            ),
+            .standard
+        )
+
+        settle(scene, driver, holding: Pose.upsideDown.reading)
+        XCTAssertTrue(scene.isIdlePaused)
+        let capped = try XCTUnwrap(scene.settledPileBounds)
+        XCTAssertEqual(capped.maxY, JarScene.interiorRect(sceneSize: scene.size).maxY, accuracy: 8, "Against the cap")
+        for pebble in pebbles(scene) {
+            let body = CGRect(
+                x: pebble.position.x - pebble.radius,
+                y: pebble.position.y - pebble.radius,
+                width: pebble.radius * 2,
+                height: pebble.radius * 2
+            )
+            XCTAssertTrue(capped.insetBy(dx: -1, dy: -1).contains(body), "Bounds hold every resting body")
+        }
+        XCTAssertEqual(
+            JarHUDScrimPolicy.strength(
+                pileBounds: JarHUDScrimPolicy.stageRect(ofScene: capped, stageFrame: stage),
+                hudFrame: hud
+            ),
+            .strengthened
+        )
+
+        settle(scene, driver, holding: Pose.portrait.reading)
+        XCTAssertEqual(
+            JarHUDScrimPolicy.strength(
+                pileBounds: JarHUDScrimPolicy.stageRect(ofScene: scene.settledPileBounds, stageFrame: stage),
+                hudFrame: hud
+            ),
+            .standard,
+            "Back on the floor, the standard scrim"
+        )
+    }
+
     // MARK: Reduce Motion and 控えめ parity
 
     func testReduceMotionAndSubtleEffectsKeepTheSamePhysicsThroughTurnsAndDrops() throws {
@@ -849,7 +1108,11 @@ final class JarOrientationGravityTests: XCTestCase {
         // two scenes (its solver order is not fixed), so parity is checked
         // on what the jar feeds the physics — the gravity every frame, each
         // body's physical setup — and on the outcome: contained, resting on
-        // the gravity's side, the completion drop landed.
+        // the gravity's side, the completion drop landed. The one physical
+        // difference, the calm re-settle's damping under Reduce Motion
+        // (owner ruling 2026-09-27), is pinned by
+        // `testUnderReduceMotionATurnReSettlesCalmlyWithoutBounceTumbleOrLight`;
+        // the setups compared here leave damping out.
         struct Run {
             var gravities: [CGVector] = []
             var setups: [String] = []
@@ -1627,6 +1890,46 @@ final class JarOrientationGravityTests: XCTestCase {
     private final class TestClock {
         var now: TimeInterval = ProcessInfo.processInfo.systemUptime + 1
         func advance(by seconds: TimeInterval) { now += seconds }
+    }
+
+    /// What the jar's light shows: the tilt, the light rig's nodes, the
+    /// tap light, the pile light's swell and the camera. A calm re-settle
+    /// under Reduce Motion changes none of it (the pile light itself still
+    /// follows the resting bodies, as in every setting).
+    private struct LightState: Equatable {
+        var tilt: CGFloat
+        var nodes: [String]
+    }
+
+    private func lightState(_ scene: JarScene) -> LightState {
+        var nodes: [String] = []
+        for name in [
+            "jar.glass.highlights", "jar.glass.back", "jar.mouth.depth", "jar.glass.innerRim",
+            "jar.collar.center", "jar.collar.left", "jar.collar.right",
+            "jar.tap.caustic", "jar.reducedMotion.highlight"
+        ] {
+            guard let node = scene.childNode(withName: "//\(name)") else {
+                nodes.append("\(name) missing")
+                continue
+            }
+            nodes.append("\(name) \(node.position.x),\(node.position.y) alpha \(node.alpha) hidden \(node.isHidden)")
+        }
+        if let glow = scene.childNode(withName: "//jar.pileGlow") {
+            nodes.append("pile light swell \(glow.action(forKey: "jar.pileGlow.pulse") != nil)")
+        }
+        if let camera = scene.camera {
+            nodes.append("camera \(camera.position.x),\(camera.position.y)")
+        }
+        return LightState(tilt: scene.opticalTiltFraction, nodes: nodes)
+    }
+
+    /// Dust, sparks, landing lights, anticipation and twinkles in the jar.
+    private func effectNodeCount(_ scene: JarScene) -> Int {
+        var count = 0
+        for name in ["drop.dust", "drop.spark", "drop.light", "drop.anticipation", "drop.anticipation.rare", "ambient.twinkle"] {
+            scene.enumerateChildNodes(withName: "//\(name)") { _, _ in count += 1 }
+        }
+        return count
     }
 
     private func makeClockScene() -> (scene: JarScene, clock: TestClock) {
