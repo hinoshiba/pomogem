@@ -31,14 +31,14 @@
     "アプリで過ごした時間も、瓶に。" : {
       "comment" : "Screen Time settings: headline"
     },
-    "アプリの選択、まだ取り込んでいない利用記録、黒い石をこのiPhoneから削除し、自動記録を停止します。取り消せません。保存済みの勉強時間と粒は残ります。" : {
-      "comment" : "Screen Time reset confirmation"
+    "アプリの選択、まだ取り込んでいない利用記録、黒い石をこのiPhoneから削除し、自動記録を停止して、集中中のアプリ制限もオフにします。取り消せません。保存済みの勉強時間と粒は残ります。" : {
+      "comment" : "Screen Time reset confirmation. The reset also switches the focus shield (集中中のアプリ制限) off."
     },
     "アプリの選択、未取り込みの利用記録、黒い石は、このiPhoneだけに保存します。JSON書き出しや保存先の切り替えでは引き継ぎません。" : {
       "comment" : "About recording: device-local data"
     },
-    "アプリの選択・未取り込みの利用記録・黒い石を削除し、自動記録を停止します。保存済みの勉強時間と粒は残ります。" : {
-      "comment" : "Footer under the full Screen Time reset"
+    "アプリの選択・未取り込みの利用記録・黒い石を削除し、自動記録を停止して、集中中のアプリ制限もオフにします。保存済みの勉強時間と粒は残ります。" : {
+      "comment" : "Footer under the full Screen Time reset. The reset also switches the focus shield (集中中のアプリ制限) off."
     },
     "アプリ数は無制限です" : {
       "comment" : "VoiceOver hint: no app limit"
@@ -128,7 +128,7 @@
     "タイマーの計測中は勉強アプリの自動記録を休止し、終了後に自動で再開します。" : {
 
     },
-    "ポモジェムで集中しているあいだ、控えたいアプリを開けなくします。休憩になるか集中が終わると解除します。一時停止中は、予定の終了時刻の1分後まで続きます。" : {
+    "ポモジェムで集中しているあいだ、控えたいアプリを開けなくします。休憩になるか集中が終わると解除します。一時停止中も、予定の終了時刻まで続きます。" : {
       "comment" : "Footer under the focus shield toggle: when apps are blocked and when they are released"
     },
     "今すぐ制限を解除" : {
@@ -146,6 +146,15 @@
     "保存しました。自動記録中です" : {
       "comment" : "Toast after saving Screen Time settings with recording on"
     },
+    "保存しました。集中中のアプリ制限はオフです" : {
+      "comment" : "Toast after a save that only switched the focus shield off"
+    },
+    "保存しました。集中中のアプリ制限はオンです" : {
+      "comment" : "Toast after saving the Screen Time settings with the focus shield switched on"
+    },
+    "保存すると反映されます" : {
+      "comment" : "VoiceOver hint on the focus shield toggle: it takes effect after 保存"
+    },
     "制限しているあいだは控えたいアプリを開けないため、その時間は黒い石になりません。" : {
       "comment" : "Footer under the focus shield toggle: blocked time adds no black stones"
     },
@@ -154,6 +163,12 @@
     },
     "制限を解除しました" : {
       "comment" : "Toast after 今すぐ制限を解除: the apps to cut down can be opened again for this focus"
+    },
+    "制限を解除できませんでした。もう一度お試しください。" : {
+      "comment" : "Alert: 今すぐ制限を解除 did not lift the shield; the button stays so the user can retry"
+    },
+    "前回の集中では、制限を自動で解除する準備ができなかったため、制限しませんでした。次の集中でもう一度試します。" : {
+      "comment" : "Notice after a focus: its failsafe could not be registered, so it ran unshielded; the next focus tries again"
     },
     "勉強アプリ" : {
       "comment" : "Picker title: study apps"

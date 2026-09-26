@@ -1222,20 +1222,109 @@ final class ScreenTimeSettingsDraftTests: XCTestCase {
                                                       authorized: true, onlyThemeID: theme).themeID, other)
     }
 
+    /// F2: with the focus shield on, apps to cut down already do something
+    /// without recording, so a first pick of them must not opt a shield-only
+    /// user into black stones. Study apps only count with recording, so a
+    /// first study pick still switches it on.
+    func testAFirstPickForTheShieldAloneLeavesRecordingOff() {
+        let two = selection(count: 2, seed: 0x65)
+        var shieldOnly = ScreenTimeConfiguration()
+        shieldOnly.shieldsDistractionDuringFocusEnabled = true
+        let distraction = ScreenTimeDraftPolicy.applying(two, toLearningLane: false, in: shieldOnly,
+                                                         authorized: true, onlyThemeID: nil)
+        XCTAssertFalse(distraction.enabled, "Apps to cut down for the shield alone need no recording")
+        XCTAssertEqual(distraction.distractionSelection, two)
+        XCTAssertTrue(distraction.shieldsDistractionDuringFocusEnabled)
+        XCTAssertTrue(ScreenTimeDraftPolicy.applying(two, toLearningLane: true, in: shieldOnly,
+                                                     authorized: true, onlyThemeID: nil).enabled,
+                      "Study apps record nothing without it")
+    }
+
+    /// F2: 保存 skips every recording check only when switching the shield
+    /// off is the whole change.
+    func testOnlyASaveThatJustSwitchesTheShieldOffSkipsTheRecordingChecks() {
+        var saved = ScreenTimeConfiguration()
+        saved.enabled = true
+        saved.learningSelection = selection(count: 6, seed: 0x66)
+        saved.shieldsDistractionDuringFocusEnabled = true
+        var draft = saved
+        XCTAssertFalse(ScreenTimeDraftPolicy.onlySwitchesFocusShieldOff(draft: draft, saved: saved),
+                       "Nothing changed")
+        draft.shieldsDistractionDuringFocusEnabled = false
+        XCTAssertTrue(ScreenTimeDraftPolicy.onlySwitchesFocusShieldOff(draft: draft, saved: saved))
+        var alsoRecording = draft
+        alsoRecording.enabled = false
+        XCTAssertFalse(ScreenTimeDraftPolicy.onlySwitchesFocusShieldOff(draft: alsoRecording, saved: saved),
+                       "Anything else changed goes through the full checks")
+        var alsoApps = draft
+        alsoApps.distractionSelection = selection(count: 1, seed: 0x67)
+        XCTAssertFalse(ScreenTimeDraftPolicy.onlySwitchesFocusShieldOff(draft: alsoApps, saved: saved))
+        XCTAssertFalse(ScreenTimeDraftPolicy.onlySwitchesFocusShieldOff(draft: saved, saved: draft),
+                       "Switching it on is never exempt")
+    }
+
     func testTheSaveToastStatesWhetherRecordingIsOn() {
+        let previous = ScreenTimeConfiguration()
         var configuration = ScreenTimeConfiguration()
         configuration.enabled = true
-        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, isMonitoring: true).text,
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, previous: previous, isMonitoring: true).text,
                        "保存しました。自動記録中です")
-        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, isMonitoring: false).text,
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, previous: previous, isMonitoring: false).text,
                        "保存しました", "Switched on is not yet recording; do not claim it")
         configuration.enabled = false
-        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, isMonitoring: false).text,
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, previous: previous, isMonitoring: false).text,
                        "保存しました。自動記録はオフです")
-        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, isMonitoring: false).symbol, "checkmark")
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, previous: previous, isMonitoring: false).symbol,
+                       "checkmark")
         configuration.learningSelection = selection(count: 1, seed: 0x63)
-        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, isMonitoring: false).symbol,
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: configuration, previous: previous, isMonitoring: false).symbol,
                        "exclamationmark.circle", "Apps chosen but recording off is worth a second look")
+    }
+
+    /// F2: a shield-only setup is deliberate and gets a confirmation, not the
+    /// recording-off warning, and a save that changed only the shield says
+    /// what the shield is now.
+    func testTheSaveToastConfirmsTheFocusShield() {
+        var shieldOnly = ScreenTimeConfiguration()
+        shieldOnly.distractionSelection = selection(count: 2, seed: 0x68)
+        let before = shieldOnly
+        shieldOnly.shieldsDistractionDuringFocusEnabled = true
+        var toast = ScreenTimeDraftPolicy.savedToast(for: shieldOnly, previous: ScreenTimeConfiguration(),
+                                                     isMonitoring: false)
+        XCTAssertEqual(toast.text, "保存しました。集中中のアプリ制限はオンです")
+        XCTAssertEqual(toast.symbol, "checkmark")
+
+        // Only the shield changed: say what it is now, whatever recording is.
+        toast = ScreenTimeDraftPolicy.savedToast(for: shieldOnly, previous: before, isMonitoring: false)
+        XCTAssertEqual(toast.text, "保存しました。集中中のアプリ制限はオンです")
+        toast = ScreenTimeDraftPolicy.savedToast(for: before, previous: shieldOnly, isMonitoring: false)
+        XCTAssertEqual(toast.text, "保存しました。集中中のアプリ制限はオフです")
+        XCTAssertEqual(toast.symbol, "checkmark")
+        var recording = shieldOnly
+        recording.enabled = true
+        var recordingOff = recording
+        recordingOff.shieldsDistractionDuringFocusEnabled = false
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: recording, previous: recordingOff, isMonitoring: true).text,
+                       "保存しました。集中中のアプリ制限はオンです")
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: recordingOff, previous: recording, isMonitoring: true).text,
+                       "保存しました。集中中のアプリ制限はオフです")
+        XCTAssertEqual(ScreenTimeDraftPolicy.savedToast(for: recording, previous: ScreenTimeConfiguration(),
+                                                        isMonitoring: true).text,
+                       "保存しました。自動記録中です", "With more than the shield changed, recording speaks first")
+
+        // A switched-on shield with nothing it can shield is worth a look.
+        var empty = ScreenTimeConfiguration()
+        empty.shieldsDistractionDuringFocusEnabled = true
+        toast = ScreenTimeDraftPolicy.savedToast(for: empty, previous: ScreenTimeConfiguration(), isMonitoring: false)
+        XCTAssertEqual(toast.text, "保存しました。集中中のアプリ制限はオンです")
+        XCTAssertEqual(toast.symbol, "exclamationmark.circle")
+
+        // Study apps record nothing with recording off, shield or not.
+        var withStudy = shieldOnly
+        withStudy.learningSelection = selection(count: 1, seed: 0x69)
+        toast = ScreenTimeDraftPolicy.savedToast(for: withStudy, previous: ScreenTimeConfiguration(), isMonitoring: false)
+        XCTAssertEqual(toast.text, "保存しました。自動記録はオフです")
+        XCTAssertEqual(toast.symbol, "exclamationmark.circle")
     }
 
     /// F2: with recording off, only a switched-on focus shield is checked,

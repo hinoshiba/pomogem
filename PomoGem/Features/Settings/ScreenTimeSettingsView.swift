@@ -71,11 +71,26 @@ struct ScreenTimeSettingsView: View {
     }
 
     private var waitsForPurchaseStatus: Bool {
-        ScreenTimeDraftPolicy.waitsForPurchaseStatus(
+        !onlySwitchesFocusShieldOff && ScreenTimeDraftPolicy.waitsForPurchaseStatus(
             draftEnabled: draft.enabled, learningCount: learningCount,
             entitlementsResolved: purchase.hasResolvedEntitlements
         )
     }
+
+    /// The draft differs from the saved setup only by the focus shield being
+    /// switched off. That save is the way out that always works, so nothing
+    /// about recording may hold it back (see `ScreenTimeController.switchFocusShieldOff`).
+    private var onlySwitchesFocusShieldOff: Bool {
+        ScreenTimeDraftPolicy.onlySwitchesFocusShieldOff(draft: draft, saved: controller.configuration)
+    }
+
+    /// Nothing on the page can be edited until the ledger admits this owner.
+    /// Until then the controller publishes an empty configuration, every save
+    /// is refused, and an edit made to that placeholder draft would stop the
+    /// late binding from seeding the stored setup — a later 保存 would then
+    /// write the placeholder over opaque selections only Apple's picker can
+    /// rebuild.
+    private var editsLocked: Bool { !controller.isBoundToContext }
 
     private var selectedThemeExists: Bool {
         subjects.contains { $0.id == draft.themeID }
@@ -83,7 +98,9 @@ struct ScreenTimeSettingsView: View {
 
     private var validationMessage: String? {
         // Revoked permission, a removed theme, or a changed Pro entitlement must
-        // never prevent the user from switching this feature off.
+        // never prevent the user from switching this feature off, nor the
+        // focus shield: switching only the shield off skips every check.
+        if onlySwitchesFocusShieldOff { return nil }
         guard draft.enabled else { return focusShieldOnlyValidationMessage }
         guard controller.authorizationGranted else {
             return "スクリーンタイムへのアクセスを許可してください。"
@@ -249,8 +266,8 @@ struct ScreenTimeSettingsView: View {
             Button("キャンセル", role: .cancel) {}
             Button("リセット", role: .destructive, action: reset)
         } message: {
-            Text("アプリの選択、まだ取り込んでいない利用記録、黒い石をこのiPhoneから削除し、自動記録を停止します。取り消せません。保存済みの勉強時間と粒は残ります。",
-                 tableName: "ScreenTime", comment: "Screen Time reset confirmation")
+            Text("アプリの選択、まだ取り込んでいない利用記録、黒い石をこのiPhoneから削除し、自動記録を停止して、集中中のアプリ制限もオフにします。取り消せません。保存済みの勉強時間と粒は残ります。",
+                 tableName: "ScreenTime", comment: "Screen Time reset confirmation. The reset also switches the focus shield (集中中のアプリ制限) off.")
         }
         .task {
             controller.reload()
@@ -385,7 +402,8 @@ struct ScreenTimeSettingsView: View {
     private var recordingSection: some View {
         Section {
             Toggle("アプリの利用時間を記録", isOn: editedBinding(\.enabled))
-                .disabled(controller.isSaving || controller.isResetting || (!controller.authorizationGranted && !draft.enabled))
+                .disabled(editsLocked || controller.isSaving || controller.isResetting
+                          || (!controller.authorizationGranted && !draft.enabled))
                 .accessibilityHint("アプリとテーマを選び、保存すると反映されます")
                 .accessibilityIdentifier("screen-time.enabled")
 
@@ -450,7 +468,7 @@ struct ScreenTimeSettingsView: View {
                     Text(subject.safeDisplayName).tag(Optional(subject.id))
                 }
             }
-            .disabled(controller.isSaving || controller.isResetting)
+            .disabled(editsLocked || controller.isSaving || controller.isResetting)
             .accessibilityIdentifier("screen-time.theme")
 
             if isKnownFree {
@@ -533,10 +551,11 @@ struct ScreenTimeSettingsView: View {
 
     /// F2, right under the apps it uses. The switch is part of the draft and
     /// is applied by 保存 like everything else on this page (switching it on
-    /// needs access; switching it off always lifts the shield). The escape
-    /// hatch acts at once, without 保存. The focus screen is a full-screen
-    /// cover, so while a focus is on screen its own 今日はここまで is the way
-    /// out; this page's hatch covers a shield that outlived the focus UI.
+    /// needs access; switching only it off is saved whatever else fails and
+    /// always lifts the shield). The escape hatch acts at once, without 保存.
+    /// The focus screen is a full-screen cover, so while a focus is on screen
+    /// its own 今日はここまで is the way out; this page's hatch covers a
+    /// shield that outlived the focus UI.
     private var focusShieldSection: some View {
         FocusShieldSettingsSection(
             shield: controller.focusShield,
@@ -544,7 +563,8 @@ struct ScreenTimeSettingsView: View {
             availability: FocusShieldAvailability(
                 configuration: draft, authorizationGranted: controller.authorizationGranted
             ),
-            isToggleDisabled: controller.isSaving || controller.isResetting
+            isSavedOn: controller.configuration.shieldsDistractionDuringFocusEnabled,
+            isToggleDisabled: editsLocked || controller.isSaving || controller.isResetting
                 || (!controller.authorizationGranted && !draft.shieldsDistractionDuringFocusEnabled),
             lift: liftFocusShield
         )
@@ -577,8 +597,8 @@ struct ScreenTimeSettingsView: View {
             .accessibilityIdentifier("screen-time.reset")
         } footer: {
             VStack(alignment: .leading, spacing: 5) {
-                Text("アプリの選択・未取り込みの利用記録・黒い石を削除し、自動記録を停止します。保存済みの勉強時間と粒は残ります。",
-                     tableName: "ScreenTime", comment: "Footer under the full Screen Time reset")
+                Text("アプリの選択・未取り込みの利用記録・黒い石を削除し、自動記録を停止して、集中中のアプリ制限もオフにします。保存済みの勉強時間と粒は残ります。",
+                     tableName: "ScreenTime", comment: "Footer under the full Screen Time reset. The reset also switches the focus shield (集中中のアプリ制限) off.")
                 if controller.negativeGemCount > 0 {
                     Text("黒い石だけを片付けるときは、上の「黒い石を片付ける」を使います。アプリの選択はそのまま残ります。",
                          tableName: "ScreenTime", comment: "Footer: point to the lighter black-stone clear")
@@ -632,7 +652,8 @@ struct ScreenTimeSettingsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PomoGemBareButtonStyle())
-        .disabled(!controller.authorizationGranted || isRequestingAuthorization || controller.isSaving || controller.isResetting)
+        .disabled(editsLocked || !controller.authorizationGranted || isRequestingAuthorization
+                  || controller.isSaving || controller.isResetting)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(lane.chooseAppsLabel)
         .accessibilityValue("\(count)アプリ選択中")
@@ -703,6 +724,11 @@ struct ScreenTimeSettingsView: View {
             return
         }
         let configuration = draft
+        let previous = controller.configuration
+        if ScreenTimeDraftPolicy.onlySwitchesFocusShieldOff(draft: configuration, saved: previous) {
+            switchFocusShieldOff(configuration, previous: previous)
+            return
+        }
         let isPro = purchase.isPro
         Task {
             do {
@@ -716,7 +742,7 @@ struct ScreenTimeSettingsView: View {
                     // left recording off used to read 「保存しました」 and then
                     // never recorded anything.
                     let toast = ScreenTimeDraftPolicy.savedToast(
-                        for: configuration, isMonitoring: controller.isMonitoring
+                        for: configuration, previous: previous, isMonitoring: controller.isMonitoring
                     )
                     router.showToast(toast.text, symbol: toast.symbol)
                     if leavesAfterSave, isVisible { dismiss() }
@@ -733,9 +759,37 @@ struct ScreenTimeSettingsView: View {
         }
     }
 
+    /// Only the recording checks are skipped, never the owner: an unbound
+    /// ledger still refuses with its reason.
+    private func switchFocusShieldOff(_ configuration: ScreenTimeConfiguration, previous: ScreenTimeConfiguration) {
+        do {
+            try controller.switchFocusShieldOff()
+            draft = controller.configuration
+            hasUserEdits = false
+            let toast = ScreenTimeDraftPolicy.savedToast(
+                for: configuration, previous: previous, isMonitoring: controller.isMonitoring
+            )
+            router.showToast(toast.text, symbol: toast.symbol)
+            if leavesAfterSave, isVisible { dismiss() }
+        } catch {
+            saveError = ScreenTimeFailureMessage.text(for: error, recordedMonitoringError: nil, action: .save)
+        }
+        leavesAfterSave = false
+    }
+
+    /// Confirms only a lift that ran: a record lock the monitor extension
+    /// holds leaves the shield up, and the button stays for a retry.
     private func liftFocusShield() {
-        controller.focusShield.liftForCurrentFocus()
-        router.showToast(FocusShieldCopy.liftedToast, symbol: "lock.open")
+        Task {
+            switch await controller.focusShield.liftForCurrentFocus() {
+            case .lifted:
+                router.showToast(FocusShieldCopy.liftedToast, symbol: "lock.open")
+            case .nothingToLift:
+                break
+            case .failed:
+                saveError = FocusShieldCopy.liftFailed
+            }
+        }
     }
 
     private func clearBlackStones() {
@@ -832,6 +886,20 @@ enum ScreenTimeDraftPolicy {
         draftEnabled && !entitlementsResolved && learningCount > ScreenTimePolicy.freeLearningApplicationLimit
     }
 
+    /// Whether the only change from the saved setup is the focus shield
+    /// switched off. Such a save skips every recording check (the free
+    /// plan's limit after a refund, StoreKit not answered, access not
+    /// settled) and goes through `ScreenTimeController.switchFocusShieldOff`:
+    /// switching the shield off is the way out that always works.
+    static func onlySwitchesFocusShieldOff(draft: ScreenTimeConfiguration, saved: ScreenTimeConfiguration) -> Bool {
+        guard saved.shieldsDistractionDuringFocusEnabled, !draft.shieldsDistractionDuringFocusEnabled else {
+            return false
+        }
+        var switchedOff = saved
+        switchedOff.shieldsDistractionDuringFocusEnabled = false
+        return draft == switchedOff
+    }
+
     /// Recording off with the focus shield on: only the distraction apps are
     /// used, so only their rules apply, as in `ScreenTimePolicy.validate`,
     /// and switching the shield on needs access, as `ScreenTimeController.save`
@@ -859,9 +927,13 @@ enum ScreenTimeDraftPolicy {
     /// The draft after the picker's 反映. On a first setup — nothing chosen in
     /// either lane yet — picking apps also switches recording on: the switch
     /// is off by default, and a first save that kept it off stored everything
-    /// and recorded nothing. A user who already has apps chosen keeps
-    /// whatever they set the switch to. With exactly one theme, a learning
-    /// selection also gets that theme as its destination.
+    /// and recorded nothing. Not for apps to cut down while the focus shield
+    /// is on: they already do something without recording, and switching
+    /// recording on would opt a shield-only user into black stones. Study
+    /// apps only ever count with recording, so a first study pick still
+    /// switches it on. A user who already has apps chosen keeps whatever they
+    /// set the switch to. With exactly one theme, a learning selection also
+    /// gets that theme as its destination.
     static func applying(
         _ selection: FamilyActivitySelection,
         toLearningLane isLearning: Bool,
@@ -878,7 +950,8 @@ enum ScreenTimeDraftPolicy {
             result.distractionSelection = selection
         }
         let picked = !selection.applicationTokens.isEmpty
-        if !result.enabled, wasEmpty, picked, authorized {
+        let forShieldOnly = !isLearning && draft.shieldsDistractionDuringFocusEnabled
+        if !result.enabled, wasEmpty, picked, authorized, !forShieldOnly {
             result.enabled = true
         }
         if isLearning, picked, result.themeID == nil, let onlyThemeID {
@@ -889,10 +962,25 @@ enum ScreenTimeDraftPolicy {
 
     /// The toast after a save, stating the resulting status: 自動記録中 only
     /// when the save left monitoring registered, not merely switched on.
+    /// A save that changed only the focus shield says what the shield is
+    /// now, and so does a shield-only setup (recording off, shield on, no
+    /// study apps), which is deliberate and not worth a second look.
     static func savedToast(
         for configuration: ScreenTimeConfiguration,
+        previous: ScreenTimeConfiguration,
         isMonitoring: Bool
     ) -> (text: String, symbol: String) {
+        let shieldOn = configuration.shieldsDistractionDuringFocusEnabled
+        // A switched-on shield with no apps, or more than 50, shields nothing
+        // and is worth a second look. Access is known: `save` refuses to
+        // switch the shield on without it.
+        let shieldSymbol = FocusShieldAvailability(configuration: configuration, authorizationGranted: true) == .ready
+            ? "checkmark" : "exclamationmark.circle"
+        var shieldUnchanged = configuration
+        shieldUnchanged.shieldsDistractionDuringFocusEnabled = previous.shieldsDistractionDuringFocusEnabled
+        if shieldOn != previous.shieldsDistractionDuringFocusEnabled, shieldUnchanged == previous {
+            return shieldOn ? (FocusShieldCopy.savedOnToast, shieldSymbol) : (FocusShieldCopy.savedOffToast, "checkmark")
+        }
         if configuration.enabled {
             guard isMonitoring else {
                 return (String(localized: "保存しました", table: "ScreenTime",
@@ -903,8 +991,14 @@ enum ScreenTimeDraftPolicy {
                            comment: "Toast after saving Screen Time settings with recording on"),
                     "checkmark")
         }
-        let hasApps = !configuration.learningSelection.applicationTokens.isEmpty
-            || !configuration.distractionSelection.applicationTokens.isEmpty
+        let hasLearningApps = !configuration.learningSelection.applicationTokens.isEmpty
+        // Recording off with the shield on is a shield-only setup, unless
+        // study apps are chosen: those record nothing with recording off,
+        // which the warning below is for, shield or not.
+        if shieldOn, !hasLearningApps {
+            return (FocusShieldCopy.savedOnToast, shieldSymbol)
+        }
+        let hasApps = hasLearningApps || !configuration.distractionSelection.applicationTokens.isEmpty
         return (String(localized: "保存しました。自動記録はオフです", table: "ScreenTime",
                        comment: "Toast after saving Screen Time settings with recording off"),
                 hasApps ? "exclamationmark.circle" : "checkmark")
@@ -977,6 +1071,9 @@ private struct FocusShieldSettingsSection: View {
     @ObservedObject var shield: FocusShieldController
     @Binding var isOn: Bool
     let availability: FocusShieldAvailability
+    /// The saved setting, not the draft: the after-the-focus notice is about
+    /// the shield that was tried.
+    let isSavedOn: Bool
     let isToggleDisabled: Bool
     let lift: () -> Void
 
@@ -988,6 +1085,8 @@ private struct FocusShieldSettingsSection: View {
             }
             .frame(minHeight: 44)
             .disabled(isToggleDisabled)
+            // A draft field, like the recording switch, which says so too.
+            .accessibilityHint(FocusShieldCopy.toggleHint)
             .accessibilityIdentifier("screen-time.focus-shield")
 
             // What the switch, as drafted, cannot do yet: no access, no apps,
@@ -995,8 +1094,18 @@ private struct FocusShieldSettingsSection: View {
             if let message = availability.message {
                 notice(message, identifier: "screen-time.focus-shield-availability")
             }
+            // The present-tense notice is only true during the focus it is
+            // about, when this page cannot be open in the shipping app (the
+            // focus screen is a full-screen cover); only the UI-test fixture
+            // shows it here. The focus screen will carry it after F1. Once
+            // that focus is over, the record still says why it ran
+            // unshielded, and that is what a user who found the apps open
+            // can read here.
             if shield.failsafeUnavailable {
                 notice(FocusShieldCopy.failsafeUnavailable, identifier: "screen-time.focus-shield-failsafe")
+            } else if isSavedOn, shield.lastFocusWentUnshielded {
+                notice(FocusShieldCopy.lastFocusFailsafeUnavailable,
+                       identifier: "screen-time.focus-shield-last-failsafe")
             }
             // The way out, whatever the switch says: shown for as long as a
             // shield this iPhone wrote is up.
@@ -1007,7 +1116,8 @@ private struct FocusShieldSettingsSection: View {
                         .frame(minHeight: 44)
                 }
                 .listRowSeparator(.hidden, edges: .bottom)
-                .accessibilityHint(FocusShieldCopy.liftFooter)
+                // No hint: the caption right below says it, as under
+                // 設定アプリを開く, and VoiceOver would read it twice.
                 .accessibilityIdentifier("screen-time.focus-shield-lift")
                 Text(FocusShieldCopy.liftFooter)
                     .font(.caption)

@@ -208,8 +208,13 @@ private final class ScreenTimeSettingsUITestFixtureDriver: ScreenTimeMonitoringD
 }
 
 @MainActor
-final class ScreenTimeSettingsUITestFixtureModel {
+final class ScreenTimeSettingsUITestFixtureModel: ObservableObject {
     let controller: ScreenTimeController
+    /// Focus starts and ends whose shield work has fully run. The ledger row
+    /// prints it, so a test can wait for a pass to finish before it reads
+    /// the record: a pass that changes nothing publishes nothing on either
+    /// controller, and the row would otherwise still show the old ledger.
+    @Published private(set) var focusPasses = 0
     let themeID = UUID()
     private let store: ScreenTimeStore
     private let directory: URL
@@ -295,12 +300,22 @@ final class ScreenTimeSettingsUITestFixtureModel {
     /// 25 minutes. A new session each time, so a lifted one does not stay
     /// lifted.
     func startFocus() {
+        reconcileFocus(.running(sessionID: UUID(), plannedEnd: Date().addingTimeInterval(25 * 60)))
+    }
+
+    /// What the host does when the focus completes or is abandoned.
+    func endFocus() {
+        reconcileFocus(.none)
+    }
+
+    private func reconcileFocus(_ focus: FocusShieldFocusState) {
         controller.focusShield.reconcile(
-            configuration: controller.configuration,
-            authorization: .approved,
-            focus: .running(sessionID: UUID(), plannedEnd: Date().addingTimeInterval(25 * 60)),
-            force: true
+            configuration: controller.configuration, authorization: .approved, focus: focus, force: true
         )
+        Task {
+            await controller.focusShield.waitForPendingOperations()
+            focusPasses += 1
+        }
     }
 
     func refuseFailsafeRegistration() {
@@ -410,7 +425,7 @@ struct ScreenTimeSettingsUITestFixtureLaunchView: View {
 }
 
 private struct ScreenTimeSettingsUITestFixtureBar: View {
-    let model: ScreenTimeSettingsUITestFixtureModel
+    @ObservedObject var model: ScreenTimeSettingsUITestFixtureModel
     /// Observed so the row re-reads the ledger whenever the controller
     /// publishes — a bind, a save, or a refused save.
     @ObservedObject var controller: ScreenTimeController
@@ -428,6 +443,8 @@ private struct ScreenTimeSettingsUITestFixtureBar: View {
                 if ScreenTimeSettingsUITestFixture.drivesFocusShield {
                     Button("fixture-start-focus") { model.startFocus() }
                         .accessibilityIdentifier("screen-time.fixture-start-focus")
+                    Button("fixture-end-focus") { model.endFocus() }
+                        .accessibilityIdentifier("screen-time.fixture-end-focus")
                     Button("fixture-refuse-failsafe") { model.refuseFailsafeRegistration() }
                         .accessibilityIdentifier("screen-time.fixture-refuse-failsafe")
                 }
@@ -446,9 +463,11 @@ private struct ScreenTimeSettingsUITestFixtureBar: View {
 /// controller: a shield operation publishes only on `FocusShieldController`,
 /// and only when `isShielding` or `failsafeUnavailable` changes, which for a
 /// lift happens before the queued operation has written the record. So the
-/// row also re-reads once the shield's queue has drained after each change.
+/// row also re-reads once the shield's queue has drained after each change,
+/// and after every fixture focus start or end (`focusPasses`), which may
+/// change nothing that is published at all.
 private struct FixtureLedgerRow: View {
-    let model: ScreenTimeSettingsUITestFixtureModel
+    @ObservedObject var model: ScreenTimeSettingsUITestFixtureModel
     @ObservedObject var controller: ScreenTimeController
     @ObservedObject var shield: FocusShieldController
     let bindState: String
@@ -457,7 +476,9 @@ private struct FixtureLedgerRow: View {
     var body: some View {
         Text(verbatim: "bind=\(bindState);boundToContext=\(controller.isBoundToContext);"
              + "\(model.ledgerSummary);isShielding=\(shield.isShielding ? 1 : 0);"
-             + "failsafeUnavailable=\(shield.failsafeUnavailable ? 1 : 0);drained=\(drainedPasses)")
+             + "failsafeUnavailable=\(shield.failsafeUnavailable ? 1 : 0);"
+             + "lastFocusUnshielded=\(shield.lastFocusWentUnshielded ? 1 : 0);"
+             + "focusPasses=\(model.focusPasses);drained=\(drainedPasses)")
             .font(.caption2)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityIdentifier("screen-time.fixture-ledger")

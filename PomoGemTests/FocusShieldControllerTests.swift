@@ -207,7 +207,11 @@ final class FocusShieldControllerTests: XCTestCase {
         XCTAssertTrue(FocusShieldCopy.musicNote.contains("Apple Music Classical"), FocusShieldCopy.musicNote)
         XCTAssertTrue(FocusShieldCopy.musicNote.contains("音楽も再生できなくなります"), FocusShieldCopy.musicNote)
         XCTAssertTrue(FocusShieldCopy.blackStoneNote.contains("黒い石になりません"), FocusShieldCopy.blackStoneNote)
-        XCTAssertTrue(FocusShieldCopy.toggleFooter.contains("予定の終了時刻の1分後まで"), FocusShieldCopy.toggleFooter)
+        // The failsafe starts at the planned end and lifts the shield there,
+        // so the footer promises the planned end and nothing past it.
+        XCTAssertTrue(FocusShieldCopy.toggleFooter.contains("一時停止中も、予定の終了時刻まで続きます"),
+                      FocusShieldCopy.toggleFooter)
+        XCTAssertFalse(FocusShieldCopy.toggleFooter.contains("1分後"), FocusShieldCopy.toggleFooter)
         XCTAssertEqual(FocusShieldCopy.sectionHeader, "集中中のアプリ制限")
         XCTAssertEqual(FocusShieldCopy.liftedToast, "制限を解除しました")
     }
@@ -274,14 +278,43 @@ final class FocusShieldControllerTests: XCTestCase {
         await fixture.controller.waitForPendingOperations()
         XCTAssertTrue(fixture.controller.isShielding)
 
-        fixture.controller.liftForCurrentFocus(now: now.addingTimeInterval(60))
-        await fixture.controller.waitForPendingOperations()
+        let lifted = await fixture.controller.liftForCurrentFocus(now: now.addingTimeInterval(60))
+        XCTAssertEqual(lifted, .lifted)
         XCTAssertFalse(fixture.controller.isShielding)
         fixture.controller.reconcile(configuration: configuration, authorization: .approved, focus: running,
                                      now: now.addingTimeInterval(63), force: true)
         await fixture.controller.waitForPendingOperations()
         XCTAssertFalse(fixture.controller.isShielding, "The forced activation pass must not re-apply it")
         XCTAssertEqual(fixture.settings.shielded.count, 1)
+    }
+
+    /// The page confirms 制限を解除しました only for a lift that ran. With the
+    /// record lock held (the monitor extension mid-callback) the shield stays
+    /// up, the button comes back, and a retry then lifts it.
+    func testTheEscapeHatchReportsWhetherTheLiftRan() async throws {
+        let fixture = makeController()
+        let configuration = try shieldConfiguration()
+        let nothing = await fixture.controller.liftForCurrentFocus(now: now)
+        XCTAssertEqual(nothing, .nothingToLift)
+
+        let running = FocusShieldFocusState.running(sessionID: UUID(), plannedEnd: now.addingTimeInterval(1_500))
+        fixture.controller.reconcile(configuration: configuration, authorization: .approved, focus: running, now: now)
+        await fixture.controller.waitForPendingOperations()
+        XCTAssertTrue(fixture.controller.isShielding)
+
+        let descriptor = try holdLock(in: fixture.directory)
+        let failed = await fixture.controller.liftForCurrentFocus(now: now.addingTimeInterval(60))
+        flock(descriptor, LOCK_UN)
+        close(descriptor)
+        XCTAssertEqual(failed, .failed)
+        XCTAssertTrue(fixture.controller.isShielding, "Still up, so the button comes back for a retry")
+        XCTAssertEqual(fixture.settings.clearCount, 0)
+        XCTAssertEqual(try fixture.engine.records.load()?.active, true)
+
+        let retried = await fixture.controller.liftForCurrentFocus(now: now.addingTimeInterval(61))
+        XCTAssertEqual(retried, .lifted)
+        XCTAssertFalse(fixture.controller.isShielding)
+        XCTAssertNotNil(try fixture.engine.records.load()?.liftedAt)
     }
 
     func testAFailsafeThatCannotBeArmedIsReportedAndNotRetriedEveryPass() async throws {
@@ -421,7 +454,96 @@ final class FocusShieldControllerTests: XCTestCase {
         XCTAssertFalse(fixture.controller.failsafeUnavailable)
     }
 
+    /// The settings page cannot be open during a focus (the focus screen is
+    /// a full-screen cover), so `failsafeUnavailable` never reaches it. The
+    /// record keeps why the latest focus ran unshielded, and the controller
+    /// publishes that after the focus too, until a focus is shielded again
+    /// or everything is erased.
+    func testTheLastFocusThatRanUnshieldedIsStillKnownAfterItEnds() async throws {
+        let resolvable = ShieldTestFlag()
+        let testNow = now
+        let fixture = makeController(resolve: { schedule in
+            resolvable.value ? FocusShieldEngineTests.resolve(schedule, now: testNow, calendar: .current) : nil
+        })
+        let configuration = try shieldConfiguration()
+        func reconcile(_ focus: FocusShieldFocusState, at offset: TimeInterval) async {
+            fixture.controller.reconcile(configuration: configuration, authorization: .approved, focus: focus,
+                                         now: now.addingTimeInterval(offset), force: true)
+            await fixture.controller.waitForPendingOperations()
+        }
+        XCTAssertFalse(fixture.controller.lastFocusWentUnshielded)
+
+        await reconcile(.running(sessionID: UUID(), plannedEnd: now.addingTimeInterval(1_500)), at: 0)
+        XCTAssertTrue(fixture.controller.failsafeUnavailable)
+        XCTAssertTrue(fixture.controller.lastFocusWentUnshielded)
+        await reconcile(.none, at: 60)
+        XCTAssertFalse(fixture.controller.failsafeUnavailable, "The present-tense notice ends with its focus")
+        XCTAssertTrue(fixture.controller.lastFocusWentUnshielded, "The record still says why it ran unshielded")
+
+        // A later focus that is shielded replaces it, and so does its end.
+        resolvable.value = true
+        await reconcile(.running(sessionID: UUID(), plannedEnd: now.addingTimeInterval(3_000)), at: 120)
+        XCTAssertTrue(fixture.controller.isShielding)
+        XCTAssertFalse(fixture.controller.lastFocusWentUnshielded)
+        await reconcile(.none, at: 180)
+        XCTAssertFalse(fixture.controller.lastFocusWentUnshielded)
+
+        // Complete deletion forgets it with the record.
+        resolvable.value = false
+        await reconcile(.running(sessionID: UUID(), plannedEnd: now.addingTimeInterval(4_500)), at: 240)
+        XCTAssertTrue(fixture.controller.lastFocusWentUnshielded)
+        try await fixture.controller.eraseAllData()
+        XCTAssertFalse(fixture.controller.lastFocusWentUnshielded)
+    }
+
     // MARK: - ScreenTimeController paths that must lift a shield
+
+    /// Switching the shield off is the way out that always works, even when
+    /// the rest of the setup would fail a save today: recording on with six
+    /// study apps on the free plan after a refund, and access not settled.
+    /// `save` refuses that configuration; `switchFocusShieldOff` changes the
+    /// one field and lifts the shield.
+    func testSwitchingOnlyTheShieldOffSkipsEveryRecordingCheck() async throws {
+        let fixture = makeController()
+        var status = AuthorizationStatus.approved
+        let (controller, store) = try await boundScreenTimeController(shield: fixture.controller,
+                                                                      authorization: { status })
+        let learning = try selection(count: 6, seed: 0x76)
+        try store.update { state in
+            state.configuration.enabled = true
+            state.configuration.learningSelection = learning
+            state.learningAllowedBySubscription = false
+        }
+        controller.reload()
+        controller.reconcileFocusShield(
+            contextKey: "owner", dataEpochID: nil,
+            focus: .running(sessionID: UUID(), plannedEnd: now.addingTimeInterval(1_500)), now: now)
+        await fixture.controller.waitForPendingOperations()
+        XCTAssertTrue(fixture.controller.isShielding)
+
+        status = .notDetermined
+        let saved = controller.configuration
+        var off = saved
+        off.shieldsDistractionDuringFocusEnabled = false
+        XCTAssertTrue(ScreenTimeDraftPolicy.onlySwitchesFocusShieldOff(draft: off, saved: saved))
+        do {
+            try await controller.save(configuration: off, isPro: false)
+            XCTFail("An ordinary save still holds recording to today's rules")
+        } catch {}
+        XCTAssertTrue(controller.configuration.shieldsDistractionDuringFocusEnabled)
+
+        let before = try store.snapshot()
+        try controller.switchFocusShieldOff()
+        try await controller.waitForPendingOperations()
+        let after = try store.snapshot()
+        XCTAssertEqual(after.configuration, off, "Only the shield's switch changes")
+        XCTAssertEqual(after.runs, before.runs, "No lane run is retired or registered")
+        XCTAssertEqual(after.learningAllowedBySubscription, before.learningAllowedBySubscription)
+        XCTAssertFalse(controller.configuration.shieldsDistractionDuringFocusEnabled)
+        XCTAssertFalse(fixture.controller.isShielding)
+        XCTAssertEqual(try fixture.engine.records.load()?.clearedBy, FocusShieldClearReason.featureOff.rawValue)
+        XCTAssertEqual(fixture.center.stopped.last, [FocusShieldPolicy.activityName.rawValue])
+    }
 
     func testTheShieldFollowsTheBoundOwnerOnlyAndLeavesWithIt() async throws {
         let fixture = makeController()
@@ -672,6 +794,8 @@ final class FocusShieldControllerTests: XCTestCase {
         let settings: ShieldFakeSettings
         let center: ShieldFakeCenter
         let clock: ShieldTestClock
+        /// The ScreenTime folder the record and its lock live in.
+        let directory: URL
     }
 
     /// Without an explicit resolver the framework is trusted to resolve each
@@ -692,7 +816,18 @@ final class FocusShieldControllerTests: XCTestCase {
         let clock = ShieldTestClock(now)
         let controller = FocusShieldController(engine: engine, queue: DispatchQueue(label: "test.shield"),
                                                clock: { clock.now })
-        return Fixture(controller: controller, engine: engine, settings: settings, center: center, clock: clock)
+        return Fixture(controller: controller, engine: engine, settings: settings, center: center, clock: clock,
+                       directory: directory)
+    }
+
+    /// What the monitor extension does while it handles a callback.
+    private func holdLock(in directory: URL) throws -> Int32 {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let descriptor = open(directory.appendingPathComponent("focus-shield.lock").path, O_CREAT | O_RDWR,
+                              S_IRUSR | S_IWUSR)
+        XCTAssertGreaterThanOrEqual(descriptor, 0)
+        XCTAssertEqual(flock(descriptor, LOCK_EX), 0)
+        return descriptor
     }
 
     private func boundScreenTimeController(
@@ -724,6 +859,11 @@ final class FocusShieldControllerTests: XCTestCase {
 final class ShieldTestClock: @unchecked Sendable {
     var now: Date
     init(_ now: Date) { self.now = now }
+}
+
+/// A switch a test flips between operations the shield queue runs later.
+final class ShieldTestFlag: @unchecked Sendable {
+    var value = false
 }
 
 private final class NoopMonitoring: ScreenTimeMonitoringDriving {

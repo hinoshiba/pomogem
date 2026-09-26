@@ -285,6 +285,25 @@ final class ScreenTimeController: ObservableObject {
         }
     }
 
+    /// F2's way out that always works: switches only the focus shield off
+    /// and lifts whatever it left up, without the checks the rest of the
+    /// setup has to pass today — recording over the free plan's limit after
+    /// a refund, a purchase status StoreKit has not answered, access that
+    /// has not settled. `save` would refuse those; the settings page uses
+    /// this instead when switching the shield off is its only change.
+    /// Nothing else in the ledger changes, so no lane run is retired and
+    /// nothing is registered again.
+    func switchFocusShieldOff() throws {
+        guard !isSaving, !isResetting, !isErasing else { throw OperationError.busy }
+        let lease = try boundLease()
+        try store.update { state in
+            try validate(state, lease: lease)
+            state.configuration.shieldsDistractionDuringFocusEnabled = false
+        }
+        reload()
+        focusShield.retire(reason: .featureOff, unconditional: true)
+    }
+
     /// `isPro` is nil while StoreKit has not answered yet
     /// (`PurchaseManager.hasResolvedEntitlements`). An unknown entitlement may
     /// keep or relax the learning gate the ledger already holds, but never

@@ -183,9 +183,19 @@ enum FocusShieldCopy {
                comment: "Toggle: shield the apps to cut down while a PomoGem focus runs")
     }
 
+    /// The pause rule as the user meets it. The record keeps the shield
+    /// until the planned end + 60 s, but the failsafe interval starts at the
+    /// planned end itself and lifts it there, so the footer names the planned
+    /// end and promises nothing past it.
     static var toggleFooter: String {
-        String(localized: "ポモジェムで集中しているあいだ、控えたいアプリを開けなくします。休憩になるか集中が終わると解除します。一時停止中は、予定の終了時刻の1分後まで続きます。",
+        String(localized: "ポモジェムで集中しているあいだ、控えたいアプリを開けなくします。休憩になるか集中が終わると解除します。一時停止中も、予定の終了時刻まで続きます。",
                table: "ScreenTime", comment: "Footer under the focus shield toggle: when apps are blocked and when they are released")
+    }
+
+    /// The switch is part of the page's draft, like the recording switch.
+    static var toggleHint: String {
+        String(localized: "保存すると反映されます", table: "ScreenTime",
+               comment: "VoiceOver hint on the focus shield toggle: it takes effect after 保存")
     }
 
     /// The Music app and Apple Music Classical are ordinary apps to the
@@ -209,6 +219,25 @@ enum FocusShieldCopy {
                comment: "Toast after 今すぐ制限を解除: the apps to cut down can be opened again for this focus")
     }
 
+    /// 今すぐ制限を解除 ran and the shield is still up (usually the monitor
+    /// extension holding the record lock). The button stays for a retry.
+    static var liftFailed: String {
+        String(localized: "制限を解除できませんでした。もう一度お試しください。", table: "ScreenTime",
+               comment: "Alert: 今すぐ制限を解除 did not lift the shield; the button stays so the user can retry")
+    }
+
+    /// The save toast when the shield is what the save changed, or the only
+    /// thing switched on.
+    static var savedOnToast: String {
+        String(localized: "保存しました。集中中のアプリ制限はオンです", table: "ScreenTime",
+               comment: "Toast after saving the Screen Time settings with the focus shield switched on")
+    }
+
+    static var savedOffToast: String {
+        String(localized: "保存しました。集中中のアプリ制限はオフです", table: "ScreenTime",
+               comment: "Toast after a save that only switched the focus shield off")
+    }
+
     static var liftButton: String {
         String(localized: "今すぐ制限を解除", table: "ScreenTime",
                comment: "Button: lift the focus shield now (escape hatch)")
@@ -225,11 +254,24 @@ enum FocusShieldCopy {
     }
 
     /// Shown while `FocusShieldController.failsafeUnavailable` is true, which
-    /// is only during the focus whose failsafe could not be registered.
+    /// is only during the focus whose failsafe could not be registered. The
+    /// settings page cannot be opened during a focus (the focus screen is a
+    /// full-screen cover), so in the shipping app only the focus screen can
+    /// show it: part of the post-F1 focus screen follow-up. The settings page
+    /// shows `lastFocusFailsafeUnavailable` after that focus instead.
     static var failsafeUnavailable: String {
         String(localized: "制限を自動で解除する準備ができなかったため、今回の集中では制限していません。",
                table: "ScreenTime",
                comment: "Notice: the failsafe that lifts the shield could not be registered, so nothing was shielded")
+    }
+
+    /// Shown on the settings page while `FocusShieldController.lastFocusWentUnshielded`
+    /// is true and the shield is switched on: the explanation a user who
+    /// found the apps open during a focus can still reach afterwards.
+    static var lastFocusFailsafeUnavailable: String {
+        String(localized: "前回の集中では、制限を自動で解除する準備ができなかったため、制限しませんでした。次の集中でもう一度試します。",
+               table: "ScreenTime",
+               comment: "Notice after a focus: its failsafe could not be registered, so it ran unshielded; the next focus tries again")
     }
 }
 
@@ -255,6 +297,13 @@ final class FocusShieldController: ObservableObject {
     /// longer wanted (switched off, no apps, too many, denied), the owner is
     /// retired, or a later attempt for the same focus succeeds.
     @Published private(set) var failsafeUnavailable = false
+    /// The latest focus the shield was tried for ran unshielded because its
+    /// failsafe could not be registered, as the record on disk says: it keeps
+    /// `failsafe-unavailable` as its clear reason until a later focus is
+    /// shielded or everything is erased. Unlike `failsafeUnavailable` it
+    /// outlives that focus, so the settings page, which cannot be opened
+    /// during one, can still say why the apps were not blocked.
+    @Published private(set) var lastFocusWentUnshielded = false
 
     /// Internal so tests can tell which drivers a default-built controller got.
     let engine: FocusShieldEngine
@@ -279,6 +328,18 @@ final class FocusShieldController: ObservableObject {
     private struct Request: Equatable {
         let decision: FocusShieldDecision
         let applications: Set<ApplicationToken>
+    }
+
+    /// How 「今すぐ制限を解除」 ended, once the lift has actually run.
+    enum LiftResult: Equatable {
+        /// The shield is down for this focus.
+        case lifted
+        /// No shield of this iPhone was up by the time it ran.
+        case nothingToLift
+        /// The shield is still up: the record lock was not available (the
+        /// monitor extension mid-callback), or another focus's shield
+        /// replaced it. The button stays for a retry.
+        case failed
     }
 
     /// `clock` stands for "now" wherever no caller passed one, including
@@ -348,13 +409,23 @@ final class FocusShieldController: ObservableObject {
 
     /// 「今すぐ制限を解除」: lifts the shield for the focus it belongs to. The
     /// same session is not shielded again, even after a pause and resume.
-    func liftForCurrentFocus(now: Date? = nil) {
-        guard let record = currentRecord(), record.active else { return }
+    /// Returns once the lift has run, behind everything queued before it,
+    /// so the page confirms only a shield that is actually down.
+    @discardableResult
+    func liftForCurrentFocus(now: Date? = nil) async -> LiftResult {
+        guard let record = currentRecord(), record.active else { return .nothingToLift }
         let now = now ?? clock()
         lastRequest = nil
         isShielding = false
         let sessionID = record.sessionID
-        submit(session: nil) { try $0.lift(sessionID: sessionID, now: now) }
+        switch await run({ try $0.lift(sessionID: sessionID, now: now) }) {
+        case .success(.cleared):
+            return .lifted
+        case .success:
+            return currentRecord()?.active == true ? .failed : .nothingToLift
+        case .failure:
+            return .failed
+        }
     }
 
     /// An owner boundary (account change, storage relaunch, a reset of the
@@ -384,6 +455,7 @@ final class FocusShieldController: ObservableObject {
         currentFocusSession = nil
         unarmedSession = nil
         isShielding = false
+        lastFocusWentUnshielded = false
         let result = await run {
             try $0.eraseAll()
             return .cleared
@@ -485,6 +557,10 @@ final class FocusShieldController: ObservableObject {
     private func publishShielding(_ record: FocusShieldRecord?, now: Date) {
         let shielding = record.map { $0.active && now < $0.deadline } ?? false
         if isShielding != shielding { isShielding = shielding }
+        let unshielded = record.map {
+            !$0.active && $0.clearedBy == FocusShieldClearReason.failsafeUnavailable.rawValue
+        } ?? false
+        if lastFocusWentUnshielded != unshielded { lastFocusWentUnshielded = unshielded }
     }
 }
 
