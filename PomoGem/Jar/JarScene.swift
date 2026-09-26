@@ -470,6 +470,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var reduceMotionObserver: NSObjectProtocol?
     private var reduceTransparencyObserver: NSObjectProtocol?
     private var differentiateWithoutColorObserver: NSObjectProtocol?
+    private var increasedContrastObserver: NSObjectProtocol?
     private var transientMotionGate = JarTransientMotionGate()
     private var sensorySequence: UInt64 = 0
     private(set) var opticalTiltFraction: CGFloat = 0
@@ -1121,6 +1122,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         if let differentiateWithoutColorObserver {
             NotificationCenter.default.removeObserver(differentiateWithoutColorObserver)
+        }
+        if let increasedContrastObserver {
+            NotificationCenter.default.removeObserver(increasedContrastObserver)
         }
     }
 
@@ -2685,6 +2689,23 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 self?.setThemeMarks(GemThemeMark.isSystemEnabled)
             }
         }
+        increasedContrastObserver = NotificationCenter.default.addObserver(
+            forName: UIAccessibility.darkerSystemColorsStatusDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.setIncreasedContrast(UIAccessibility.isDarkerSystemColorsEnabled)
+            }
+        }
+    }
+
+    /// Increase Contrast (round 14): every gem re-bakes its facet edges and
+    /// every 記念石 its engraving at once, instead of at the next restore
+    /// (§7.12). A resting jar draws one more settled frame.
+    func setIncreasedContrast(_ enabled: Bool) {
+        allPebbleNodes.forEach { $0.setIncreasedContrast(enabled) }
+        requestRedraw()
     }
 
     /// Differentiate Without Color: every study gem and crystal re-bakes

@@ -829,9 +829,11 @@ final class GachaTests: XCTestCase {
         XCTAssertNil(pebble.childNode(withName: "pebble.earlyEffortAura"))
     }
 
-    /// Round 13: the mark is engraved in the moonstone (a subtle intaglio,
-    /// still at least 3:1 against the crown, 4.5:1 with Increase Contrast),
-    /// upright however the stone rolls, and VoiceOver keeps the kind.
+    /// Round 13: the mark is engraved in the moonstone, upright however the
+    /// stone rolls, and VoiceOver keeps the kind. Round 14: the groove is at
+    /// least 4.5:1 against the crown (WCAG AA for the small 「100」 and
+    /// 「W」), 7:1 with Increase Contrast (main's former floor), for every
+    /// kind and for any hue a stone could take.
     @MainActor
     func testEveryAchievementMarkHasHighContrastUprightTreatment() {
         for kind in AchievementKind.allCases {
@@ -857,7 +859,7 @@ final class GachaTests: XCTestCase {
                 let colors = GemArtwork.achievementEngravingColors(hex: kind.gemBaseHex, increasedContrast: increased)
                 XCTAssertGreaterThanOrEqual(
                     contrastRatio(colors.groove.withAlpha(1), colors.surface.withAlpha(1)),
-                    increased ? 4.5 : 3,
+                    increased ? 7 : 4.5,
                     "\(kind) stays readable in the moonstone"
                 )
             }
@@ -874,6 +876,65 @@ final class GachaTests: XCTestCase {
             XCTAssertEqual(pebble.descriptor.grams, 0)
             XCTAssertFalse(pebble.descriptor.participatesInAggregation)
         }
+    }
+
+    /// The Overview's achievement card engraves in the milestone's own
+    /// colour, so the floors hold for every hue, not only the three kinds.
+    func testAchievementEngravingKeepsItsContrastFloorForEveryHue() {
+        for step in 0 ..< 72 {
+            let hex = GemColor(hue: CGFloat(step) / 72, saturation: 0.7, brightness: 0.8).hexString
+            for increased in [false, true] {
+                let colors = GemArtwork.achievementEngravingColors(hex: hex, increasedContrast: increased)
+                XCTAssertGreaterThanOrEqual(
+                    contrastRatio(colors.groove.withAlpha(1), colors.surface.withAlpha(1)),
+                    increased ? 7 : 4.5,
+                    hex
+                )
+            }
+        }
+    }
+
+    /// Round 14: turning Increase Contrast on while the jar is shown re-bakes
+    /// the engraving (and the facet edges) at once; turning it off returns
+    /// to the default bake.
+    @MainActor
+    func testIncreaseContrastReachesLiveStonesWithoutARestore() throws {
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        scene.reduceMotion = true
+        scene.bakesGemBedInBackground = false
+        let stone = PebbleDescriptor(
+            id: UUID(uuidString: "D0C20000-0000-4000-8000-000000000001")!,
+            subjectName: "記念",
+            colorHex: Constants.Color.english,
+            source: .manual,
+            kind: .normal,
+            achievementKind: .perfectScore,
+            grams: 0
+        )
+        let gem = PebbleDescriptor(
+            id: UUID(uuidString: "D0C20000-0000-4000-8000-000000000002")!,
+            subjectName: "英語",
+            colorHex: Constants.Color.english,
+            source: .timer,
+            kind: .normal,
+            grams: Constants.Mass.measuredPebbleGrams
+        )
+        scene.restore(pebbles: [stone, gem])
+        let pebbles = scene.children.flatMap(\.children).compactMap { $0 as? PebbleNode }
+        let achievement = try XCTUnwrap(pebbles.first { $0.descriptor.isAchievement })
+        let loose = try XCTUnwrap(pebbles.first { !$0.descriptor.isAchievement })
+        let mark = try XCTUnwrap(achievement.childNode(withName: "achievement.mark") as? SKSpriteNode)
+
+        scene.setIncreasedContrast(true)
+        XCTAssertEqual(GemTextureAtlas.shared.textureName(of: mark)?.hasSuffix("|c"), true, "The deeper groove")
+        XCTAssertEqual(loose.displayedBodySpec?.edgeBoost, 0.2, "Brighter facet edges")
+        XCTAssertEqual(achievement.displayedBodySpec?.edgeBoost, 0.2)
+
+        scene.setIncreasedContrast(false)
+        XCTAssertEqual(GemTextureAtlas.shared.textureName(of: mark)?.hasSuffix("|c"), false)
+        XCTAssertEqual(loose.displayedBodySpec?.edgeBoost, 0)
     }
 
     private func contrastRatio(_ first: UIColor, _ second: UIColor) -> CGFloat {

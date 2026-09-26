@@ -3614,9 +3614,11 @@ extension GemArtwork {
         let body: GemColor
         let edge: GemColor
         let sheen: GemColor
-        /// The engraving: a few shades deeper than the crown (≥ 3:1).
+        /// The engraving: several shades deeper than the crown (≥ 4.5:1,
+        /// WCAG AA for the small 「100」 and 「W」; round 14, was ≥ 3:1).
         let groove: GemColor
-        /// The engraving with Increase Contrast (≥ 4.5:1).
+        /// The engraving with Increase Contrast (≥ 7:1, the floor the
+        /// former badge had on main).
         let deepGroove: GemColor
         /// The shaded upper wall of the cut.
         let slate: GemColor
@@ -3629,8 +3631,10 @@ extension GemArtwork {
             edge = GemColor(hex: "#8E97B6").mixed(with: tint, amount: 0.28)
             sheen = GemColor(hex: "#9DBEFF").mixed(with: tint, amount: 0.55)
             slate = GemColor(hex: "#2B3048").mixed(with: tint.darker(0.6), amount: 0.25)
-            groove = crown.mixed(with: slate, amount: 0.58)
-            deepGroove = crown.mixed(with: slate, amount: 0.82)
+            // Worst hue 4.87:1 and 7.72:1 (`GachaTests` checks every kind
+            // and every hue).
+            groove = crown.mixed(with: slate, amount: 0.74)
+            deepGroove = crown.mixed(with: slate, amount: 0.90)
         }
     }
 
@@ -3731,8 +3735,8 @@ extension GemArtwork {
     // MARK: The engraved mark
 
     /// The crown the mark is cut into and the groove's colour: at least
-    /// 3:1 (a subtle intaglio that still reads), 4.5:1 or more with
-    /// Increase Contrast.
+    /// 4.5:1 (an intaglio that reads at 7 pt), 7:1 or more with Increase
+    /// Contrast.
     static func achievementEngravingColors(hex: String, increasedContrast: Bool) -> (surface: GemColor, groove: GemColor) {
         let palette = CabochonPalette(hex: hex)
         return (palette.crown, increasedContrast ? palette.deepGroove : palette.groove)

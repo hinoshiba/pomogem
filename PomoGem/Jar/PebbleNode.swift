@@ -1412,7 +1412,11 @@ final class PebbleNode: SKShapeNode {
 
     /// Increase Contrast brightens facet edges.
     private static var edgeBoost: CGFloat {
-        UIAccessibility.isDarkerSystemColorsEnabled ? 0.2 : 0
+        edgeBoost(increasedContrast: UIAccessibility.isDarkerSystemColorsEnabled)
+    }
+
+    private static func edgeBoost(increasedContrast: Bool) -> CGFloat {
+        increasedContrast ? 0.2 : 0
     }
 
     private func installGemSkin(
@@ -1610,6 +1614,22 @@ final class PebbleNode: SKShapeNode {
         if let body = gemBodyNode {
             showGemBody(updated, on: body)
         }
+    }
+
+    /// Increase Contrast turned on or off while the jar is shown (round
+    /// 14): the facet edges re-bake with (or without) their boost and a
+    /// 記念石's engraving with its deeper groove, so nothing waits for the
+    /// next restore. Obstacles have no gem body and no engraving.
+    func setIncreasedContrast(_ enabled: Bool) {
+        let boost = Self.edgeBoost(increasedContrast: enabled)
+        if var spec = gemBodySpec, spec.edgeBoost != boost {
+            spec.edgeBoost = boost
+            gemBodySpec = spec
+            if let body = gemBodyNode {
+                showGemBody(spec, on: body)
+            }
+        }
+        showAchievementEngraving(increasedContrast: enabled)
     }
 
     /// The count tag sized for the crystal's scene radius at the bake scale.
@@ -2154,13 +2174,13 @@ final class PebbleNode: SKShapeNode {
 
     /// Bakes (or reuses) the engraving for `localRadius × textureJarScale`
     /// and sizes it back to local points, like the body.
-    private func showAchievementEngraving() {
+    private func showAchievementEngraving(increasedContrast override: Bool? = nil) {
         guard let mark = achievementMarkNode, let kind = descriptor.achievementKind else { return }
+        let increasedContrast = override ?? UIAccessibility.isDarkerSystemColorsEnabled
         let jarScale = max(textureJarScale, 0.01)
         let text = kind.shortMark
         let hex = kind.gemBaseHex
         let fontSize = GemArtwork.achievementEngravingFontSize(mark: text, sceneRadius: localRadius * jarScale)
-        let increasedContrast = UIAccessibility.isDarkerSystemColorsEnabled
         let size = GemArtwork.achievementEngravingSize(mark: text, fontSize: fontSize)
         mark.setUnscaledSize(CGSize(width: size.width / jarScale, height: size.height / jarScale))
         let scale = artworkScale
