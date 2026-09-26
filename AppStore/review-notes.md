@@ -126,10 +126,11 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
 - Apple Music（1.1.0候補、[FocusMusic.md](../Docs/FocusMusic.md)）: 集中・休憩タイマーの見出しの音符
   button（長押しでも可）→「集中用の音楽」。MusicKitの許可は画面内の「Apple Musicへのアクセスを許可」か
   一覧のtapでだけ求め、`NSAppleMusicUsageDescription`で目的を表示する。`SystemMusicPlayer`で「ミュージック」
-  appに再生させ、PomoGemは前面のまま（独自audio session・background audioなし）。再生にはApple Musicの
-  登録が必要で、未登録のreviewerにはAppleの`musicSubscriptionOffer`（登録・お試しの画面）を表示し、
-  再生buttonは出さない。無料機能でPro・広告・affiliateとは無関係。自動再生は既定offの「集中を始めたら
-  再生する」をオンにした場合だけ。選んだ音楽のIDなどは端末内UserDefaultsだけに保存し、送信しない
+  appに再生させ、PomoGemは前面のまま（音楽用のaudio session・background audioなし。効果音の`.ambient`は
+  ミュージックの再生を止めない）。再生にはApple Musicの登録が必要で、未登録のreviewerには再生・一時停止・
+  次の曲のbuttonの代わりにAppleの`musicSubscriptionOffer`（登録・お試しの画面）を表示し、一覧のtapも同じ画面を
+  開く。無料機能でPro・広告・affiliateとは無関係。自動再生は既定offの「集中を始めたら再生する」をオンにした
+  場合だけで、ほかのappの音声が再生中なら入れ替えない。選んだ音楽のIDなどは端末内UserDefaultsだけに保存し、送信しない
 - Photos add-only: 利用者が静止画の保存を選んだ場合だけrequest
 - StoreKit 2: productとverified entitlementの確認。独自purchase serverなし
 

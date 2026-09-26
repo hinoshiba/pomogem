@@ -96,7 +96,9 @@ dataを含めません。Live Activityは端末内で更新し、独自serverや
   Apple Musicのカタログにある固定のプレイリスト／ステーションの取得、登録状況の確認はAppleが処理し、
   登録の案内はAppleの画面を使う。選んだ音楽のIDと「集中を始めたら再生する」の設定、最後に自動再生した
   集中のIDだけをこのiPhoneのUserDefaultsに保存し、同期・送信・JSON書き出しはしない。曲名や再生状態、
-  ライブラリ、再生履歴を保存・送信せず、運営者へ何も送らない。独自のaudio sessionやbackground audioは使わない
+  ライブラリ、再生履歴を保存・送信せず、運営者へ何も送らない。音楽を自分のaudio sessionで鳴らさず、
+  background audioも使わない（効果音用の`.ambient`は従来どおり）。自動再生の前にほかのアプリの音声が
+  再生中かどうか（`AVAudioSession`の`isOtherAudioPlaying`）をその場で読むだけで、保存・送信しない
 - AVFoundation／Core Haptics: 瓶の粒に対する操作を音と触覚で返すため端末内だけで利用する。
   録音、音声取得、操作履歴の保存・送信は行わず、音と触覚は設定から個別に停止可能
 - System share sheet / pasteboard: 利用者の明示操作時だけ共有物または定型本文を渡す
