@@ -596,8 +596,14 @@ struct GemShowcaseFixtureLaunchView: View {
     private static func writeFrame(of scene: JarScene, name: String) {
         guard let view = scene.view else { return }
         let previous = scene.backgroundColor
+        let fadeWasSuspended = scene.lightEdgeFade.isSuspended
         scene.backgroundColor = UIColor(red: 0.05, green: 0.06, blue: 0.13, alpha: 1)
-        defer { scene.backgroundColor = previous }
+        // The texture is the bottle's rectangle: no view-edge fade.
+        scene.lightEdgeFade.isSuspended = true
+        defer {
+            scene.backgroundColor = previous
+            scene.lightEdgeFade.isSuspended = fadeWasSuspended
+        }
         guard let texture = view.texture(from: scene, crop: scene.snapshotRect) else { return }
         let image = UIImage(cgImage: texture.cgImage())
         try? image.pngData()?.write(to: FileManager.default.temporaryDirectory

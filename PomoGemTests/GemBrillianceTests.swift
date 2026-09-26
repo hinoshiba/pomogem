@@ -1704,36 +1704,140 @@ extension GemBrillianceTests {
     }
 
     /// The scene's light fades out before the SKView's edge (no visible
-    /// rectangle) and the bottle itself is never dimmed.
+    /// rectangle) and the bottle itself is never dimmed. Round 13: the fade
+    /// is the scene's own shader (`JarLightEdgeFade`), not a SwiftUI mask.
     func testTheLightBoundsFadeBeforeTheViewEdge() throws {
         let stage = CGSize(width: 402, height: 460)
         let outer = JarScene.outerJarRect(sceneSize: stage)
-        let base = stage.height - outer.minY
-        let top = stage.height - outer.maxY
-        func column(_ x: CGFloat) -> CGFloat {
-            JarLightBounds.coverage(at: x, length: stage.width, keepFrom: outer.minX - JarLightBounds.clearance, to: outer.maxX + JarLightBounds.clearance)
+        let clearance = JarLightEdgeFade.clearance
+        func coverage(_ x: CGFloat, _ y: CGFloat) -> CGFloat {
+            JarLightEdgeFade.coverage(at: CGPoint(x: x, y: y), stageSize: stage)
         }
-        func row(_ y: CGFloat) -> CGFloat {
-            JarLightBounds.coverage(at: y, length: stage.height, keepFrom: top - JarLightBounds.clearance, to: base)
+        XCTAssertEqual(coverage(0, stage.height / 2), 0, accuracy: 0.001)
+        XCTAssertEqual(coverage(stage.width, stage.height / 2), 0, accuracy: 0.001)
+        XCTAssertEqual(coverage(stage.width / 2, 0), 0, accuracy: 0.001)
+        XCTAssertEqual(coverage(stage.width / 2, stage.height), 0, accuracy: 0.001)
+        // The whole bottle, and a clearance around it, is untouched.
+        for x in stride(from: outer.minX - clearance, through: outer.maxX + clearance, by: 7) {
+            for y in stride(from: outer.minY - clearance, through: outer.maxY + clearance, by: 7) {
+                XCTAssertEqual(coverage(x, y), 1, "(\(x), \(y))")
+            }
         }
-        XCTAssertEqual(column(0.5), 0, accuracy: 0.001)
-        XCTAssertEqual(column(stage.width - 0.5), 0, accuracy: 0.001)
-        XCTAssertEqual(row(stage.height - 0.5), 0, accuracy: 0.001)
-        XCTAssertEqual(column(outer.minX), 1)
-        XCTAssertEqual(column(stage.width / 2), 1)
-        XCTAssertEqual(row(base - 0.5), 1, "The glass base keeps its light")
-        XCTAssertEqual(row(top), 1)
+        XCTAssertEqual(coverage(outer.midX, outer.minY), 1, "The glass base keeps its light")
         // A smooth ramp: no step larger than a few percent per point.
-        var previous = column(0.5)
+        var previous = coverage(0.5, stage.height / 2)
         for x in stride(from: CGFloat(1.5), through: outer.minX, by: 1) {
-            let value = column(x)
+            let value = coverage(x, stage.height / 2)
             XCTAssertGreaterThanOrEqual(value, previous)
             XCTAssertLessThan(value - previous, 0.2)
             previous = value
         }
-        let image = JarLightBounds.image(stageSize: stage)
-        XCTAssertEqual(image.size, CGSize(width: 402, height: 460))
-        XCTAssertTrue(JarLightBounds.image(stageSize: stage) === image, "Baked once per stage size")
+        let band = JarLightEdgeFade.band(stageSize: stage)
+        XCTAssertEqual(band.width, outer.minX - clearance)
+        XCTAssertEqual(band.height, outer.minY - clearance)
+        // A stage no taller than the bottle has no vertical band.
+        XCTAssertEqual(JarLightEdgeFade.band(stageSize: CGSize(width: 402, height: 300)).height, 0)
+        XCTAssertEqual(JarLightEdgeFade.coverage(at: CGPoint(x: 201, y: 0.5), stageSize: CGSize(width: 402, height: 300)), 1)
+    }
+
+    /// Round 13: the fade is drawn by the scene. The light that runs past
+    /// the bottle (a ×1万's halo, the first gem's bloom, the floor light)
+    /// reaches the view's edge without it and is gone there with it, and
+    /// nothing inside the bottle changes. A capture suspends it.
+    @MainActor
+    func testTheSceneFadesItsLightBeforeTheViewEdgeWithoutAMask() throws {
+        let stage = CGSize(width: 402, height: 460)
+        let outer = JarScene.outerJarRect(sceneSize: stage)
+        let scene = JarScene(size: stage)
+        scene.soundEnabled = false
+        scene.hapticsEnabled = false
+        scene.bakesGemBedInBackground = false
+        let view = SKView(frame: CGRect(origin: .zero, size: stage))
+        view.allowsTransparency = true
+        view.presentScene(scene)
+        defer { view.presentScene(nil) }
+        scene.restore(pebbles: [aggregateDescriptor(level: 4, idSuffix: 0xE104)] + looseSeries(1))
+
+        // Every node that can reach past the bottle carries the shader.
+        let fade = scene.lightEdgeFade
+        for name in ["jar.floorGlow", "jar.pileGlow", "jar.glass.highlights"] {
+            let node = try XCTUnwrap(scene.childNode(withName: "//\(name)") as? SKSpriteNode, name)
+            XCTAssertTrue(node.shader === fade.shader, name)
+        }
+        let shadow = try XCTUnwrap(scene.childNode(withName: "//jar.shadow") as? SKShapeNode)
+        XCTAssertTrue(shadow.fillShader === fade.shader)
+        for pebble in scenePebbles(scene) {
+            let body = try XCTUnwrap(pebble.childNode(withName: "gem.body") as? SKSpriteNode)
+            XCTAssertTrue(body.shader === fade.shader)
+            let halo = try XCTUnwrap(pebble.childNode(withName: "//gem.halo") as? SKSpriteNode)
+            XCTAssertTrue(halo.shader === fade.shader)
+        }
+
+        func render() throws -> (width: Int, height: Int, bytes: [UInt8]) {
+            let texture = try XCTUnwrap(view.texture(from: scene, crop: CGRect(origin: .zero, size: stage)))
+            let image = texture.cgImage()
+            var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+            bytes.withUnsafeMutableBytes { buffer in
+                let context = CGContext(
+                    data: buffer.baseAddress,
+                    width: image.width,
+                    height: image.height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: image.width * 4,
+                    space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                )
+                context?.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+            }
+            return (image.width, image.height, bytes)
+        }
+        func edgeAlpha(_ pixels: (width: Int, height: Int, bytes: [UInt8])) -> Int {
+            var maximum = 0
+            for row in 0 ..< pixels.height {
+                for column in [0, pixels.width - 1] {
+                    maximum = max(maximum, Int(pixels.bytes[(row * pixels.width + column) * 4 + 3]))
+                }
+            }
+            for column in 0 ..< pixels.width {
+                for row in [0, pixels.height - 1] {
+                    maximum = max(maximum, Int(pixels.bytes[(row * pixels.width + column) * 4 + 3]))
+                }
+            }
+            return maximum
+        }
+
+        // The drawable's scale for this offscreen texture.
+        fade.isSuspended = true
+        let unfaded = try render()
+        let pixelScale = CGFloat(unfaded.width) / stage.width
+        XCTAssertTrue(fade.update(stageSize: stage, pixelScale: pixelScale) || fade.pixelScale == pixelScale)
+        XCTAssertGreaterThanOrEqual(edgeAlpha(unfaded), 12, "Without the fade the light is cut at the view's edge")
+
+        fade.isSuspended = false
+        let faded = try render()
+        XCTAssertLessThanOrEqual(edgeAlpha(faded), 1, "The light is gone at the view's edge")
+        // Inside the bottle nothing changes.
+        let inside = outer.insetBy(dx: -JarLightEdgeFade.clearance + 1, dy: -JarLightEdgeFade.clearance + 1)
+        var largest = 0
+        for row in 0 ..< faded.height {
+            let y = stage.height - (CGFloat(row) + 0.5) / pixelScale
+            guard y > inside.minY, y < inside.maxY else { continue }
+            for column in 0 ..< faded.width {
+                let x = (CGFloat(column) + 0.5) / pixelScale
+                guard x > inside.minX, x < inside.maxX else { continue }
+                let index = (row * faded.width + column) * 4
+                for channel in 0 ..< 4 {
+                    largest = max(largest, abs(Int(faded.bytes[index + channel]) - Int(unfaded.bytes[index + channel])))
+                }
+            }
+        }
+        XCTAssertLessThanOrEqual(largest, 1, "The bottle is never dimmed")
+
+        // A capture renders the bottle's rectangle: the fade steps aside.
+        let restore = scene.prepareForSnapshot()
+        XCTAssertTrue(fade.isSuspended)
+        restore()
+        XCTAssertFalse(fade.isSuspended)
     }
 
     /// Each GIF frame carries its own colour table (a single global one

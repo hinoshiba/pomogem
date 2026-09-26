@@ -386,14 +386,9 @@ struct JarSpriteView: View {
                     options: [.allowsTransparency, .ignoresSiblingOrder, .shouldCullNonVisibleNodes],
                     debugOptions: Self.spriteDebugOptions
                 )
-                // The scene's light (gem halos, the first gems' bloom, the
-                // floor and pile light) reaches past the bottle; it fades
-                // out before the SKView's edge instead of being cut there
-                // in a visible rectangle (round 12).
-                .mask {
-                    Image(uiImage: JarLightBounds.image(stageSize: proxy.size))
-                        .resizable()
-                }
+                // The scene's light fades out before the SKView's edge in
+                // the scene itself (`JarLightEdgeFade`, round 13): no SwiftUI
+                // mask, so no offscreen pass on awake frames.
 #if targetEnvironment(macCatalyst)
                 // One zero-distance gesture owns both click and drag on Mac.
                 // Once travel reaches 3 pt it can only be a tilt drag, so the
@@ -1003,105 +998,105 @@ private struct JarDirectionalAccessibilityModifier: ViewModifier {
     }
 }
 
-/// Where the scene's light may show (round 12): the whole bottle, and past
-/// it a band that fades to nothing at the SKView's edge (smoothstep; the
-/// 16 pt margins beside the bottle, the few points above and below it). A
-/// halo or a bloom that runs past the bottle then fades out instead of
-/// being cut by the view's rectangle. Below the bottle the band starts at
-/// the glass base itself, so the base is never dimmed. Baked once per stage
-/// size (1 px per point: the mask is smooth), used as the SpriteView's
-/// mask.
-enum JarLightBounds {
-    private static let cache: NSCache<NSString, UIImage> = {
-        let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 4
-        return cache
-    }()
-
-    /// Light stays whole this far outside the bottle's sides and top.
+/// Where the scene's light may show: the whole bottle, and past it a band
+/// that fades to nothing at the SKView's edge (smoothstep over the margins
+/// beside, above and below the bottle, less a 3 pt clearance). A halo, a
+/// bloom, a stage light or a gem entering from the top then fades out
+/// instead of being cut by the view's rectangle.
+///
+/// Round 13: the fade lives in the scene. Round 12 masked the whole
+/// SpriteView in SwiftUI, which composited the SKView's layer offscreen on
+/// every awake frame; now one fragment shader per scene, shared by every
+/// node that can reach past the bottle (gem bodies and halos, the first
+/// gems' light, the floor, pile and glass light, the contact shadow and the
+/// landing and fusion light), multiplies their colour by the band at the
+/// fragment's place in the drawable (`gl_FragCoord`). Nothing is drawn
+/// twice and nothing leaves the drawable; nodes that share the shader still
+/// batch. The bottle is centred in its stage, so the band is the same at
+/// both ends of each axis and the drawable's y direction does not matter.
+/// A capture (`JarScene.prepareForSnapshot`) suspends the fade: its texture
+/// is the bottle's own rectangle, not the view.
+final class JarLightEdgeFade {
+    /// Light stays whole this far outside the bottle's sides, top and base.
     static let clearance: CGFloat = 3
 
-    /// The mask's coverage (0…1) at `x` along a stage `length` long that
-    /// keeps `lower...upper` whole and fades to 0 at both ends (columns
-    /// and rows use the same shape).
-    static func coverage(at x: CGFloat, length: CGFloat, keepFrom lower: CGFloat, to upper: CGFloat) -> CGFloat {
-        func smooth(_ t: CGFloat) -> CGFloat {
-            let u = min(max(t, 0), 1)
-            return u * u * (3 - 2 * u)
-        }
-        if x < lower {
-            let band = max(lower - 0.5, 0.001)
-            return smooth((x - 0.5) / band)
-        }
-        if x > upper {
-            let band = max(length - 0.5 - upper, 0.001)
-            return smooth((length - 0.5 - x) / band)
-        }
-        return 1
+    static let shaderSource = """
+    void main() {
+        vec4 color = SKDefaultShading();
+        vec2 p = gl_FragCoord.xy;
+        vec2 band = max(u_edge_band, vec2(0.001, 0.001));
+        float fx = smoothstep(0.0, band.x, p.x) * smoothstep(0.0, band.x, u_edge_size.x - p.x);
+        float fy = smoothstep(0.0, band.y, p.y) * smoothstep(0.0, band.y, u_edge_size.y - p.y);
+        gl_FragColor = color * mix(1.0, fx * fy, u_edge_on);
+    }
+    """
+
+    let shader: SKShader
+    private let bandUniform = SKUniform(name: "u_edge_band", vectorFloat2: vector_float2(0, 0))
+    private let sizeUniform = SKUniform(name: "u_edge_size", vectorFloat2: vector_float2(0, 0))
+    private let enabledUniform = SKUniform(name: "u_edge_on", float: 0)
+    private(set) var stageSize: CGSize = .zero
+    private(set) var pixelScale: CGFloat = 0
+    /// Off while a capture renders the bottle's rectangle into a texture.
+    var isSuspended = false {
+        didSet { if isSuspended != oldValue { applyEnabled() } }
     }
 
-    static func image(stageSize: CGSize) -> UIImage {
-        let width = max(1, Int(stageSize.width.rounded()))
-        let height = max(1, Int(stageSize.height.rounded()))
-        let key = NSString(string: "\(width)x\(height)")
-        if let cached = cache.object(forKey: key) { return cached }
-        let size = CGSize(width: CGFloat(width), height: CGFloat(height))
-        let outer = JarScene.outerJarRect(sceneSize: size)
-        // y down: the bottle's top and base.
-        let top = size.height - outer.maxY
-        let base = size.height - outer.minY
-        let columns = (0 ..< width).map { column in
-            coverage(
-                at: CGFloat(column) + 0.5,
-                length: size.width,
-                keepFrom: outer.minX - clearance,
-                to: outer.maxX + clearance
-            )
+    init() {
+        shader = SKShader(source: Self.shaderSource, uniforms: [bandUniform, sizeUniform, enabledUniform])
+    }
+
+    /// The band on each axis, in points: from the view's edge to where the
+    /// light is whole (outside the bottle by `clearance`).
+    static func band(stageSize: CGSize) -> CGSize {
+        let outer = JarScene.outerJarRect(sceneSize: stageSize)
+        return CGSize(
+            width: max(0, outer.minX - clearance),
+            height: max(0, outer.minY - clearance)
+        )
+    }
+
+    /// The shader's coverage (0…1) at `point` of a stage of `stageSize`
+    /// (points, either y direction).
+    static func coverage(at point: CGPoint, stageSize: CGSize) -> CGFloat {
+        let band = band(stageSize: stageSize)
+        func smooth(_ value: CGFloat, _ width: CGFloat) -> CGFloat {
+            let t = min(max(value / max(width, 0.001), 0), 1)
+            return t * t * (3 - 2 * t)
         }
-        let rows = (0 ..< height).map { row in
-            coverage(
-                at: CGFloat(row) + 0.5,
-                length: size.height,
-                keepFrom: top - clearance,
-                to: base
-            )
+        return smooth(point.x, band.width) * smooth(stageSize.width - point.x, band.width)
+            * smooth(point.y, band.height) * smooth(stageSize.height - point.y, band.height)
+    }
+
+    /// Points the fade at a drawable showing a stage of `stageSize` at
+    /// `pixelScale` pixels per point; returns whether anything changed.
+    @discardableResult
+    func update(stageSize: CGSize, pixelScale: CGFloat) -> Bool {
+        guard stageSize.width > 0, stageSize.height > 0, pixelScale.isFinite, pixelScale > 0 else { return false }
+        guard stageSize != self.stageSize || abs(pixelScale - self.pixelScale) > 0.0001 else { return false }
+        self.stageSize = stageSize
+        self.pixelScale = pixelScale
+        let band = Self.band(stageSize: stageSize)
+        bandUniform.vectorFloat2Value = vector_float2(Float(band.width * pixelScale), Float(band.height * pixelScale))
+        sizeUniform.vectorFloat2Value = vector_float2(Float(stageSize.width * pixelScale), Float(stageSize.height * pixelScale))
+        applyEnabled()
+        return true
+    }
+
+    /// Fades `node` (a sprite's colour, or a shape's fill) at the view's edge.
+    func apply(to node: SKNode?) {
+        switch node {
+        case let sprite as SKSpriteNode:
+            sprite.shader = shader
+        case let shape as SKShapeNode:
+            shape.fillShader = shader
+        default:
+            break
         }
-        var pixels = [UInt8](repeating: 0, count: width * height * 4)
-        for row in 0 ..< height {
-            for column in 0 ..< width {
-                let value = UInt8((columns[column] * rows[row] * 255).rounded())
-                let index = (row * width + column) * 4
-                // Premultiplied white.
-                pixels[index] = value
-                pixels[index + 1] = value
-                pixels[index + 2] = value
-                pixels[index + 3] = value
-            }
-        }
-        let image: UIImage
-        if let provider = CGDataProvider(data: Data(pixels) as CFData),
-           let cgImage = CGImage(
-               width: width,
-               height: height,
-               bitsPerComponent: 8,
-               bitsPerPixel: 32,
-               bytesPerRow: width * 4,
-               space: CGColorSpaceCreateDeviceRGB(),
-               bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-               provider: provider,
-               decode: nil,
-               shouldInterpolate: true,
-               intent: .defaultIntent
-           ) {
-            image = UIImage(cgImage: cgImage, scale: 1, orientation: .up)
-        } else {
-            image = UIGraphicsImageRenderer(size: size).image { context in
-                UIColor.white.setFill()
-                context.fill(CGRect(origin: .zero, size: size))
-            }
-        }
-        cache.setObject(image, forKey: key)
-        return image
+    }
+
+    private func applyEnabled() {
+        enabledUniform.floatValue = (!isSuspended && pixelScale > 0) ? 1 : 0
     }
 }
 

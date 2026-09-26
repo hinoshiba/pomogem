@@ -329,6 +329,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// One sprite of light that the whole pile casts into the lower jar
     /// (weighted pile colour mixed 50:50 with #FF9E6B, additive).
     private let pileGlowNode = SKSpriteNode(texture: GemArtwork.poolTexture)
+    /// The light's fade before the SKView's edge (round 13): one shader for
+    /// every node of this scene that can reach past the bottle.
+    let lightEdgeFade = JarLightEdgeFade()
     private var pileGlowBaseAlpha: CGFloat = 0
     /// 「積み上がりの光」 as a gem bed: one baked sprite behind the physics
     /// bodies, set from lifetime grams and the lifetime theme mix only.
@@ -935,7 +938,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// Every body of the scene is created here, at its share of the jar
     /// scale (`studyScale`, the current scale by default).
     private func makePebbleNode(_ descriptor: PebbleDescriptor, studyScale: CGFloat? = nil) -> PebbleNode {
-        PebbleNode(
+        let node = PebbleNode(
             descriptor: descriptor,
             reduceMotion: reduceMotion,
             rareRewardMode: rareRewardMode,
@@ -944,6 +947,19 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             effectsIntensity: effectsIntensity,
             showsMonthEngraving: showsMonthLabels
         )
+        node.lightEdgeFade = lightEdgeFade
+        return node
+    }
+
+    /// Points the edge fade at this view's drawable (round 13). Cheap when
+    /// nothing changed, so it also runs on every awake frame: a view that
+    /// joins its window or changes size is corrected on its next frame.
+    /// Before the view has a window, its drawable follows the display
+    /// scale the SwiftUI owner set (`artworkScale`).
+    private func refreshLightEdgeFade() {
+        guard let view, view.bounds.width > 0, view.bounds.height > 0 else { return }
+        let pixelScale = view.window != nil ? view.contentScaleFactor : artworkScale
+        lightEdgeFade.update(stageSize: size, pixelScale: pixelScale)
     }
 
     /// Moves every live body to `newScale`. Animated changes last
@@ -1075,6 +1091,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         soundSynth.prepare()
         haptics.prepare()
         rebuildGeometry()
+        refreshLightEdgeFade()
         // A new SKView (Home shown again) presents a resting jar: draw its
         // frame once, then let the render loop stop again (jar-01).
         requestRedraw()
@@ -1083,6 +1100,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     override func didChangeSize(_ oldSize: CGSize) {
         super.didChangeSize(oldSize)
         rebuildGeometry()
+        refreshLightEdgeFade()
         // A smaller jar may shrink the pile at once (its budget is part of
         // the interior); a larger one waits for the next landing or fusion.
         if !isBakeInProgress, !livePebbles.isEmpty {
@@ -2379,6 +2397,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 #if DEBUG && targetEnvironment(simulator)
         JarFrameProbe.shared?.sceneUpdated()
 #endif
+        refreshLightEdgeFade()
         let capacity = StrataMath.capacityUnits(pebbleRadii: bakeEligibleRadii)
         if capacity >= Constants.Jar.aggregateCapacityUnits {
             isCapacityReliefActive = true
@@ -2540,6 +2559,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         collarCenterNode.name = "jar.collar.center"
         collarLeftNode.name = "jar.collar.left"
         collarRightNode.name = "jar.collar.right"
+        // The light that reaches past the bottle fades before the view's
+        // edge (`JarLightEdgeFade`): the contact shadow and the stage light.
+        [jarShadowNode, floorGlowNode, pileGlowNode, glassHighlightNode].forEach(lightEdgeFade.apply(to:))
         // Glass v2 is three pre-rendered layers (back, front, moving
         // highlights) plus the mouth rim; the former thin stroke nodes
         // (specular, warm reflection, lens shade, base arcs) are gone.
@@ -3719,6 +3741,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         halo.color = tint
         halo.colorBlendFactor = 1
         halo.blendMode = .add
+        lightEdgeFade.apply(to: halo)
         halo.alpha = 0
         halo.zPosition = 2
         pebble.addChild(halo)
@@ -3739,6 +3762,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         trail.color = tint
         trail.colorBlendFactor = 1
         trail.blendMode = .add
+        lightEdgeFade.apply(to: trail)
         trail.alpha = 0
         trail.zPosition = 1.5
         pebble.addChild(trail)
@@ -4479,6 +4503,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             spark.color = tint
             spark.colorBlendFactor = 1
             spark.blendMode = .add
+            lightEdgeFade.apply(to: spark)
             spark.position = CGPoint(x: point.x, y: point.y + pebble.radius * 0.2)
             spark.zPosition = JarZPosition.effect
             worldNode.addChild(spark)
@@ -4550,6 +4575,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         flash.color = .white
         flash.colorBlendFactor = 1
         flash.blendMode = .add
+        lightEdgeFade.apply(to: flash)
         flash.alpha = beat.flashAlpha
         flash.position = point
         flash.zPosition = JarZPosition.effect
@@ -4570,6 +4596,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             shard.color = tint
             shard.colorBlendFactor = 1
             shard.blendMode = .add
+            lightEdgeFade.apply(to: shard)
             shard.position = point
             shard.zPosition = JarZPosition.effect
             worldNode.addChild(shard)
@@ -4599,6 +4626,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         glow.color = tint
         glow.colorBlendFactor = 1
         glow.blendMode = .add
+        lightEdgeFade.apply(to: glow)
         glow.alpha = 0
         glow.zPosition = 2
         node.addChild(glow)
@@ -4619,6 +4647,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             glint.color = .white
             glint.colorBlendFactor = 1
             glint.blendMode = .add
+            lightEdgeFade.apply(to: glint)
             glint.position = CGPoint(x: spot.x * radius, y: spot.y * radius)
             glint.zPosition = 3
             glint.setScale(0)
@@ -4646,6 +4675,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         ring.color = JarPalette.color(hex: "#FFE3B0")
         ring.colorBlendFactor = 1
         ring.blendMode = .add
+        lightEdgeFade.apply(to: ring)
         ring.position = point
         ring.zPosition = JarZPosition.effect
         worldNode.addChild(ring)
@@ -4853,7 +4883,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         sceneLights.forEach { $0.0.blendMode = .alpha }
         floorGlowNode.alpha *= 0.5
         pileGlowNode.alpha *= 0.45
+        // The capture's texture is the bottle's rectangle, not the view:
+        // the edge fade would dim the bottle's own edge there.
+        let fadeWasSuspended = lightEdgeFade.isSuspended
+        lightEdgeFade.isSuspended = true
         return { [weak self] in
+            self?.lightEdgeFade.isSuspended = fadeWasSuspended
             pebbles.forEach {
                 $0.setSnapshotBlending(false)
                 $0.updatePresentationLighting(horizontal: self?.opticalTiltFraction ?? 0)

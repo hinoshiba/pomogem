@@ -588,6 +588,13 @@ final class PebbleNode: SKShapeNode {
     /// The baked rock of a Screen Time stone.
     private var obstacleBodyNode: SKSpriteNode?
     private var gemHaloNode: SKSpriteNode?
+    /// The jar's fade before the SKView's edge (round 13), set by the
+    /// scene: the body, the halo and the first gems' light use its shader,
+    /// so a gem entering from the top or a halo past the bottle fades out
+    /// instead of being cut by the view's rectangle.
+    var lightEdgeFade: JarLightEdgeFade? {
+        didSet { applyLightEdgeFade() }
+    }
     /// Light inside the jewel (shared additive sprite, tinted pale).
     private var gemInnerGlowNode: SKSpriteNode?
     private var gemInnerGlowBaseAlpha: CGFloat = 0
@@ -887,9 +894,16 @@ final class PebbleNode: SKShapeNode {
                 rig.addChild(pool)
                 earlyEffortPoolNode = pool
             }
+            applyLightEdgeFade()
             applyEarlyEffortAlpha()
         }
         configureEarlyEffortAuraMotion()
+    }
+
+    private func applyLightEdgeFade() {
+        guard let lightEdgeFade else { return }
+        [gemBodyNode, obstacleBodyNode, gemHaloNode, earlyEffortBloomNode, earlyEffortAuraNode, earlyEffortPoolNode]
+            .forEach(lightEdgeFade.apply(to:))
     }
 
     private func removeEarlyEffortLight() {
@@ -1360,6 +1374,7 @@ final class PebbleNode: SKShapeNode {
         (haloParent ?? self).addChild(halo)
         gemHaloNode = halo
         applyHaloAlpha()
+        applyLightEdgeFade()
 
         let rig = SKNode()
         rig.name = "gem.lightRig"
