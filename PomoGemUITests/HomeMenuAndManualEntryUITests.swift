@@ -414,6 +414,30 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertEqual(remaining.label, "この端末で本日あと2回")
     }
 
+    // MARK: - VoiceOver semantics (walk-edge-06)
+
+    /// A decorative checkmark symbol used to hand its 「選択済み」 trait to
+    /// the whole control.
+    func testDecorativeCheckmarksDoNotReadAsSelected() {
+        launch()
+        openMenuRow("成果を積む")
+        let examPass = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "試験合格")
+        ).firstMatch
+        XCTAssertTrue(examPass.waitForExistence(timeout: 5))
+        XCTAssertFalse(examPass.isSelected, "Nothing is chosen yet: 試験合格 must not read as selected")
+        let close = app.buttons["achievement.create.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 3))
+        close.tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 5))
+
+        openMenuRow("記録を見る")
+        XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 6))
+        let completions = app.descendants(matching: .any)["log.summary.completions"]
+        XCTAssertTrue(completions.waitForExistence(timeout: 5))
+        XCTAssertFalse(completions.isSelected, "The 完走 tile is not a selection")
+    }
+
     // MARK: - Large text (home-03, home-04)
 
     /// At AX5 the start button is on screen without scrolling, on the
