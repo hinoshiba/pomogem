@@ -171,6 +171,9 @@ struct JarSpriteView: View {
     /// behind the scene and its labels in front, so both use one layout;
     /// the width tells which columns of the pile lie under the labels).
     @State private var coreLabelMetrics = JarLifetimeCoreLabelMetrics.estimated
+    /// Low Power Mode and the thermal state, followed live (round 14), so
+    /// an awake jar drops to 30 fps the moment either changes.
+    @State private var allowsAmbientSparkle = JarScene.allowsAmbientSparkle
 #if targetEnvironment(macCatalyst)
     @State private var catalystGestureOwnership = JarDragGestureOwnership()
 #endif
@@ -399,7 +402,7 @@ struct JarSpriteView: View {
                 // jar-01: the scene stops this SKView's render loop itself
                 // while it rests (`JarScene.isRenderLoopPaused`), because
                 // SpriteView applies `isPaused` only when it creates the view.
-                let framesPerSecond = JarScene.allowsAmbientSparkle
+                let framesPerSecond = allowsAmbientSparkle
                     ? Constants.Jar.targetFramesPerSecond
                     : min(30, Constants.Jar.targetFramesPerSecond)
                 SpriteView(
@@ -474,6 +477,18 @@ struct JarSpriteView: View {
                 // scene set it (after SwiftUI's update, hence the hop).
                 .onChange(of: framesPerSecond) { _, _ in
                     DispatchQueue.main.async { scene.reassertRenderLoopState() }
+                }
+                .onReceive(
+                    NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)
+                        .receive(on: RunLoop.main)
+                ) { _ in
+                    allowsAmbientSparkle = JarScene.allowsAmbientSparkle
+                }
+                .onReceive(
+                    NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)
+                        .receive(on: RunLoop.main)
+                ) { _ in
+                    allowsAmbientSparkle = JarScene.allowsAmbientSparkle
                 }
 
                 if coreInFront {
