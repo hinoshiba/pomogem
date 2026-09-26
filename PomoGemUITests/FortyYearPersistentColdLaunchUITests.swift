@@ -584,14 +584,20 @@ final class FortyYearPersistentColdLaunchUITests: XCTestCase {
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
+    /// Short drags, judged only once the list has stopped. On an iPhone SE
+    /// a fling carried the Home menu past 設定 between two checks, and the
+    /// row was never safely on screen.
     private func scrollUntilHittable(
         _ element: XCUIElement,
         in app: XCUIApplication,
         attempts: Int = 8
     ) -> Bool {
         for _ in 0..<attempts {
+            if element.exists { _ = waitUntilFrameSettles(element, timeout: 3) }
             if isSafelyHittable(element, in: app) { return true }
-            app.swipeUp()
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+                .press(forDuration: 0.05, thenDragTo:
+                    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)))
         }
         return isSafelyHittable(element, in: app)
     }
