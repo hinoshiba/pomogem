@@ -1915,10 +1915,11 @@ extension GemBrillianceTests {
         XCTAssertEqual(tag.alpha, 1, accuracy: 0.000_1)
     }
 
-    /// A scale transition's new rung bakes off the main thread, and the
-    /// completion runs once the images are in.
+    /// A new jar-scale rung bakes off the main thread (round 12). Round 13:
+    /// the scene itself keeps each body's former texture while the
+    /// transition runs and adopts the new rung's once the bake is in.
     @MainActor
-    func testTheAtlasBakesATransitionInTheBackground() {
+    func testTheAtlasBakesATransitionInTheBackground() throws {
         let name = "test.background.\(UUID().uuidString)"
         let request = GemTextureAtlas.BakeRequest(name: name) {
             UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).image { _ in }
@@ -1935,6 +1936,131 @@ extension GemBrillianceTests {
         GemTextureAtlas.shared.bakeInBackground([]) { ranAtOnce.fulfill() }
         // Nothing missing: the completion already ran, before any wait.
         wait(for: [ranAtOnce], timeout: 0)
+
+        let rig = try rungChangeRig()
+        let change = try XCTUnwrap(rig.scene.pendingScaleBakeChange, "The new rung bakes in the background")
+        XCTAssertEqual(change, rig.scene.jarScaleChangeCount)
+        XCTAssertEqual(bodyTextureNames(rig.scene), rig.before, "The former textures carry the transition")
+        XCTAssertNotEqual(rig.before, rig.after, "A different rung shows different textures")
+        let scene = rig.scene
+        let adopted = expectation(for: NSPredicate { _, _ in
+            MainActor.assumeIsolated { scene.pendingScaleBakeChange == nil }
+        }, evaluatedWith: nil)
+        wait(for: [adopted], timeout: 30)
+        XCTAssertEqual(bodyTextureNames(rig.scene), rig.after, "Every body shows the rung it moved to")
+        rig.view.presentScene(nil)
+    }
+
+    /// Round 13: a rung bake still out at `scaleBakeDeadline` is finished in
+    /// place for the visible bodies; a hidden body waits for the background
+    /// bake and adopts it when it lands.
+    @MainActor
+    func testASlowRungBakeFinishesInPlaceForTheVisibleBodies() throws {
+        XCTAssertLessThanOrEqual(JarScene.scaleBakeDeadline, 0.5)
+        let rig = try rungChangeRig(hidingOne: true)
+        let change = try XCTUnwrap(rig.scene.pendingScaleBakeChange)
+        XCTAssertEqual(bodyTextureNames(rig.scene), rig.before)
+        // Stand in for the deadline before the background bake can land
+        // (its completion needs this run loop).
+        rig.scene.finishScaleBakeAtDeadline(of: change)
+        XCTAssertNil(rig.scene.pendingScaleBakeChange)
+        XCTAssertEqual(rig.scene.scaleBakeFallbackCount, 1)
+        let names = bodyTextureNames(rig.scene)
+        for (id, name) in names where id != rig.hiddenID {
+            XCTAssertEqual(name, rig.after[id], "A visible body shows its new rung at once")
+        }
+        let hidden = try XCTUnwrap(rig.hiddenID)
+        XCTAssertEqual(names[hidden], rig.before[hidden], "A hidden body waits for the background bake")
+        // A second deadline for the same change does nothing.
+        rig.scene.finishScaleBakeAtDeadline(of: change)
+        XCTAssertEqual(rig.scene.scaleBakeFallbackCount, 1)
+        let scene = rig.scene
+        let expected = rig.after[hidden]
+        let landed = expectation(for: NSPredicate { _, _ in
+            MainActor.assumeIsolated { self.bodyTextureNames(scene)[hidden] == expected }
+        }, evaluatedWith: nil)
+        wait(for: [landed], timeout: 30)
+        rig.view.presentScene(nil)
+    }
+
+    /// A presented, drawn jar whose area budget sets its scale (in colours
+    /// no other test bakes), shrunk by a narrower stage: an animated rung
+    /// change. The new rung's images are dropped first, so they are misses.
+    @MainActor
+    private func rungChangeRig(hidingOne: Bool = false) throws -> (
+        scene: JarScene,
+        view: SKView,
+        before: [UUID: String],
+        after: [UUID: String],
+        hiddenID: UUID?
+    ) {
+        let hexes = ["#3D7A8C", "#8C3D6A", "#6A8C3D", "#5B4E9C", "#9C7A4E"]
+        let tag = Int.random(in: 0 ..< 0xFFFF)
+        let loose = (0 ..< 9).map { index in
+            PebbleDescriptor(
+                id: UUID(uuidString: String(format: "D4B00000-%04X-4000-8000-%012X", tag, index + 1))!,
+                subjectName: "英語",
+                colorHex: hexes[index % hexes.count],
+                source: .timer,
+                kind: .normal,
+                grams: (25 + index) * Constants.Mass.gramsPerMinute
+            )
+        }
+        let roots = [2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1].enumerated().map { index, level in
+            aggregateDescriptor(level: level, idSuffix: 0xD600 + tag * 16 + index)
+        }
+        let descriptors = roots + loose
+        let scene = scaleScene()
+        let view = SKView(frame: CGRect(origin: .zero, size: scene.size))
+        view.presentScene(scene)
+        scene.restore(pebbles: descriptors)
+        scene.update(0)
+        let before = scene.jarScale
+        XCTAssertLessThan(before, JarScalePolicy.maximumScale, "The budget sets this jar's scale")
+        var hiddenID: UUID?
+        if hidingOne, let pebble = scenePebbles(scene).last {
+            pebble.isHidden = true
+            hiddenID = pebble.descriptor.id
+        }
+        let narrower = CGSize(width: scene.size.width - 60, height: scene.size.height)
+        let interior = JarScene.interiorRect(sceneSize: narrower)
+        let newScale = JarScalePolicy.resolvedScale(
+            current: before,
+            baseArea: JarScalePolicy.baseArea(radii: descriptors.map(\.radius)),
+            interiorArea: interior.width * interior.height
+        )
+        XCTAssertLessThan(newScale, before)
+        let requests = descriptors.compactMap {
+            PebbleNode.bakeRequest(
+                for: $0,
+                scale: scene.artworkScale,
+                jarScale: JarScalePolicy.bodyScale(for: $0, studyScale: newScale)
+            )
+        }
+        GemTextureAtlas.shared.removeImages(named: requests.map(\.name))
+        let names = bodyTextureNames(scene)
+        scene.size = narrower
+        XCTAssertEqual(scene.jarScale, newScale, accuracy: 0.000_1)
+        var after: [UUID: String] = [:]
+        for descriptor in descriptors {
+            after[descriptor.id] = PebbleNode.bakeRequest(
+                for: descriptor,
+                scale: scene.artworkScale,
+                jarScale: JarScalePolicy.bodyScale(for: descriptor, studyScale: newScale)
+            )?.name
+        }
+        return (scene, view, names, after, hiddenID)
+    }
+
+    @MainActor
+    private func bodyTextureNames(_ scene: JarScene) -> [UUID: String] {
+        var names: [UUID: String] = [:]
+        for pebble in scenePebbles(scene) {
+            guard let body = pebble.childNode(withName: "gem.body") as? SKSpriteNode,
+                  let name = GemTextureAtlas.shared.textureName(of: body) else { continue }
+            names[pebble.descriptor.id] = name
+        }
+        return names
     }
 
     /// Ten gems meeting stay solid and light up, and the core's labels
