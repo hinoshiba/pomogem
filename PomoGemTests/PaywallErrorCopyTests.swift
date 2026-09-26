@@ -47,6 +47,26 @@ final class PaywallErrorCopyTests: XCTestCase {
         XCTAssertTrue(unavailable.contains("現在購入できません"), unavailable)
     }
 
+    /// `PurchaseManager` throws its own `.productUnavailable` after StoreKit
+    /// has answered (an unknown product, or one that is not the Pro
+    /// non-consumable), so the connection is not to blame.
+    func testTheManagersUnavailableProductNeverBlamesTheConnection() throws {
+        let error = PurchaseManagerError.productUnavailable(IntegrationConstants.proProductID)
+        let unavailable = "この商品は現在購入できません。時間をおいて、もう一度お試しください。"
+        for action in [PaywallAction.purchase, .restore] {
+            let message = try XCTUnwrap(PaywallErrorCopy.message(for: error, action: action))
+            XCTAssertEqual(message, unavailable, "\(action)")
+            XCTAssertFalse(message.contains("通信"), message)
+            XCTAssertFalse(message.contains("商品情報"), message)
+        }
+        XCTAssertEqual(
+            PaywallErrorCopy.message(for: Product.PurchaseError.productUnavailable, action: .purchase),
+            unavailable
+        )
+        let reload = try XCTUnwrap(PaywallErrorCopy.message(for: error, action: .loadProduct))
+        XCTAssertFalse(reload.contains("通信"), reload)
+    }
+
     func testVerificationFailureKeepsTheCuratedSentence() {
         XCTAssertEqual(
             PaywallErrorCopy.message(for: PurchaseManagerError.failedVerification, action: .restore),

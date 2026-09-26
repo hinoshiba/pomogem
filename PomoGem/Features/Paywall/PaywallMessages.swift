@@ -141,11 +141,7 @@ enum PaywallErrorCopy {
                     comment: "Paywall error: In-App Purchases are turned off in Screen Time (Content & Privacy Restrictions)"
                 )
             case .productUnavailable:
-                return String(
-                    localized: "この商品は現在購入できません。時間をおいて、もう一度お試しください。",
-                    table: "Paywall",
-                    comment: "Paywall error: the App Store reports the product as unavailable"
-                )
+                return productUnavailableNow
             default:
                 return fallback(for: action)
             }
@@ -159,9 +155,10 @@ enum PaywallErrorCopy {
                     comment: "Paywall error: the signed App Store transaction did not verify"
                 )
             case .productUnavailable:
-                // The App Store answered without this product; nothing says
-                // the connection is at fault.
-                return action == .loadProduct ? fallback(for: action) : managerError.errorDescription
+                // The App Store answered, but without this product (or with
+                // one that is not the Pro non-consumable): nothing says the
+                // connection is at fault.
+                return action == .loadProduct ? fallback(for: action) : productUnavailableNow
             case .restoreInProgress:
                 return managerError.errorDescription
             }
@@ -171,6 +168,14 @@ enum PaywallErrorCopy {
             return action == .loadProduct ? networkReload : network
         }
         return fallback(for: action)
+    }
+
+    private static var productUnavailableNow: String {
+        String(
+            localized: "この商品は現在購入できません。時間をおいて、もう一度お試しください。",
+            table: "Paywall",
+            comment: "Paywall error: the App Store reports the product as unavailable"
+        )
     }
 
     private static var network: String {
