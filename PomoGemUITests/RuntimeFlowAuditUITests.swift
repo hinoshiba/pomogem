@@ -131,7 +131,7 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertFalse(liveActivity.label.contains("Dynamic Island"))
         let returnCaption = app.staticTexts.containing(NSPredicate(
             format: "label CONTAINS %@",
-            "集中タイマー中にホーム画面や別のアプリへ移ると、30秒後に一度通知し"
+            "集中タイマー中にホーム画面や別のアプリへ移ったとき、30秒後に一度通知し"
         )).firstMatch
         XCTAssertTrue(scrollUntilHittable(returnCaption, attempts: 4),
                       "Going to the Home Screen also rings; the caption must say so")
