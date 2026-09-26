@@ -432,6 +432,7 @@
 		FD5E7022FA135DA440D649AA /* HomeProjectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B78F394CAE07C13C1BE00957 /* HomeProjectionTests.swift */; };
 		FD783984890C951E5D635B2F /* ScreenTimePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 809FB50FE322FC2270FD6F55 /* ScreenTimePolicy.swift */; };
 		FE40660D68D9C64F984F687E /* PreferredFocusPrecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACE82135E33F876E5620F28 /* PreferredFocusPrecisionTests.swift */; };
+		FF49FC8A49CDE774F4A00066 /* JarGravityMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F9617419DC238399EEAFC8E /* JarGravityMapping.swift */; };
 		FF6C1EA1FF2B82541BEE93D7 /* CloudBackgroundGrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E812B2A7399F94A851843CA /* CloudBackgroundGrace.swift */; };
 		FF9F1E17BF1459420BFA5156 /* FocusMusicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C09A614A2D0EF6E336E84A43 /* FocusMusicTests.swift */; };
 /* End PBXBuildFile section */
@@ -685,6 +686,7 @@
 		7E0B444504AFC6C0DB686F4F /* StorageTransferManagedZoneDeletionAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferManagedZoneDeletionAdapters.swift; sourceTree = "<group>"; };
 		7ED28A2A15E272D05A7284E5 /* StartFocusIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartFocusIntent.swift; sourceTree = "<group>"; };
 		7EFB20CEF01CE01A6FC6CBB9 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
+		7F9617419DC238399EEAFC8E /* JarGravityMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarGravityMapping.swift; sourceTree = "<group>"; };
 		7FB3F01D57F09524E40FC6B2 /* RecentCustomFocusDurationsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentCustomFocusDurationsTests.swift; sourceTree = "<group>"; };
 		802AFB78CDAD28FB3854309E /* ShareComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareComposerView.swift; sourceTree = "<group>"; };
 		809FB50FE322FC2270FD6F55 /* ScreenTimePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimePolicy.swift; sourceTree = "<group>"; };
@@ -1549,6 +1551,7 @@
 				E025DEF0FDEB7B11EF0763BC /* GemArtwork.swift */,
 				255FD4B5A9B4B647ED209984 /* GemTextureAtlas.swift */,
 				375A78476770D59A204DD71F /* JarEffectsIntensity.swift */,
+				7F9617419DC238399EEAFC8E /* JarGravityMapping.swift */,
 				FAF4BDCD98457018A4B83E53 /* JarMotionSampling.swift */,
 				ECD32D06418B1E26D368ACEB /* JarScene.swift */,
 				FD95D870B04E5DBD5913A66D /* JarSnapshotter.swift */,
@@ -1952,6 +1955,7 @@
 				6A82D2A14A9934A7A2CC4657 /* JarEffectsIntensity.swift in Sources */,
 				66B170DEFE46493591A238B7 /* JarEffectsSettingsSection.swift in Sources */,
 				78F28B907BD71D887F0CDF95 /* JarFrameProbe.swift in Sources */,
+				FF49FC8A49CDE774F4A00066 /* JarGravityMapping.swift in Sources */,
 				36AA10A001C16516D144085D /* JarMotionSampling.swift in Sources */,
 				D327FF3F60F21C8E4756BA30 /* JarScene.swift in Sources */,
 				FBFEB564B7AB9E0735D7855D /* JarSnapshotter.swift in Sources */,
