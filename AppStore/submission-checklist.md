@@ -22,18 +22,15 @@ App Store Connectでは1.0.2 (9)がReady for Distributionです。1.1.0のdraft�
   3回繰り返しても通知が出ず、その後ホーム画面へ移ればまた約30秒で届く。パスコードなしの端末ではロックでも
   届き得ることを設定の説明文と照合する。Simulatorはロック後のprotected-data通知を再現できないため、
   単体テスト（`FocusReturnReminderLockWindowTests`）の合格だけでは閉じない。
-  アプリを離れたときの一時停止（F1）がオンの間はこのお知らせを使わないため、F1をオフにした状態で確認する
-  （設定の行はPhase Bで入る。それまでは開発ビルドの起動引数`-focus.leave-pause.enabled NO`でだけオフにできる）
-- [ ] F1の統合・提出の条件（Phase A単体では統合も提出もしない）: F1は既定オンで、Phase Aには止める手段がない。
-  次がそろった同じ変更またはその後でだけ、F1をmainへ統合し、そのbuildを提出する。
-  （1）設定の2行（アプリを離れたら一時停止する`focus.leave-pause.enabled`、「集中が切れています」を送る
-  `focus.leave-pause.nudges.enabled`。`FocusLeavePreferences.setLeavePauseEnabled`／`setNudgesEnabled`経由）、
-  （2）設定の「タイマーはバックグラウンドでも止まりません」（SettingsView）の書き換え、
-  （3）「集中に戻るお知らせ」の行と説明（「30秒後に一度通知し…」）をF1オンの間は効かないことが分かる形に直す、
-  （4）パスコードがないとロックでも一時停止することを設定の説明に書く、
-  （5）`review-notes.md`・`review-notes-connect.txt`・`PRIVACY.md`へ設定の場所を追記する。
-  それまでに統合・提出すると、設定の文言が事実と食い違い、「集中に戻るお知らせ」の切り替えは効かず、
-  利用者も審査もF1を止められない
+  アプリを離れたときの一時停止（F1）がオンの間はこのお知らせを使わず、設定にも表示しないため、
+  設定 → 「アプリを離れたら一時停止」をオフにしてから確認する
+- [x] F1の統合・提出の条件（2026-09-26、Phase Bで満たした）: （1）設定 → 集中の下の2行
+  「アプリを離れたら一時停止」（`focus.leave-pause.enabled`）と「集中が切れたらお知らせ」
+  （`focus.leave-pause.nudges.enabled`。一時停止がオンのときだけ表示）、（2）ライブアクティビティの説明の
+  「タイマーはバックグラウンドでも止まりません」を、どちらの状態でも正しい文へ書き換え、（3）一時停止がオンの間は
+  「集中に戻るお知らせ」の行と説明を表示しない、（4）パスコードがないとロックでも一時停止することと、
+  「再開する」でしか再開しないことを設定の説明に書く、（5）`review-notes.md`・`review-notes-connect.txt`・
+  `PRIVACY.md`に設定の場所を追記。`FocusLeaveSettingsUITests`と`SettingsPaywallUITests`で確認
 - [ ] アプリを離れたときの一時停止と「集中が切れています」（F1、オーナーの依頼2026-09-26）を実機
   （iPhone 12 mini、iOS 26.3.x）で、パスコードあり・なしの両方について`Docs/FocusLeavePause.md`の表どおりに確認する。
   特に（1）パスコードありのロックで進み続け通知が出ない、（2）ホーム画面へ移って1分で戻ると離れた時点で
