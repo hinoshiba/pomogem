@@ -2142,6 +2142,24 @@ extension GemBrillianceTests {
         XCTAssertNil(GemTextureAtlas.shared.bakeInBackground([]) {}, "Nothing missing: no run")
     }
 
+    /// Round 14: back-to-back fusions share the spotlight; the first one's
+    /// timer never turns it off while the second is still converging.
+    @MainActor
+    func testBackToBackFusionsKeepTheSpotlightUntilTheLastOneEnds() {
+        let scene = scaleScene()
+        scene.holdFusionSpotlight(for: 0.1)
+        scene.holdFusionSpotlight(for: 0.6)
+        XCTAssertTrue(scene.isFusionSpotlightActive)
+        let firstTimerPassed = expectation(description: "first timer")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { firstTimerPassed.fulfill() }
+        wait(for: [firstTimerPassed], timeout: 5)
+        XCTAssertTrue(scene.isFusionSpotlightActive, "Still on for the second fusion")
+        let ended = expectation(for: NSPredicate { _, _ in
+            MainActor.assumeIsolated { !scene.isFusionSpotlightActive }
+        }, evaluatedWith: nil)
+        wait(for: [ended], timeout: 10)
+    }
+
     /// A presented, drawn jar whose area budget sets its scale (in colours
     /// no other test bakes), shrunk by a narrower stage: an animated rung
     /// change. The new rung's images are dropped first, so they are misses.

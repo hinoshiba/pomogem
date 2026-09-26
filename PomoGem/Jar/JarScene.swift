@@ -854,6 +854,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// True from the moment ten gems start to converge until their crystal
     /// has flashed (about 0.9 s): the core's labels step aside meanwhile.
     @Published private(set) var isFusionSpotlightActive = false
+    /// The newest fusion's spotlight: an earlier fusion's timer clears the
+    /// flag only while it is still the newest (round 14; back-to-back
+    /// roll-ups after a restore, or a ×10 cascading into a ×100).
+    private var fusionSpotlightToken: UInt64 = 0
     /// The scene has drawn at least one frame. Before that (a restore or
     /// the first layout of a new Home) scale changes apply at once, so a jar
     /// never visibly resizes while it appears.
@@ -3777,7 +3781,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             let formation = effects.fusion.formation
             // Round 12: the core's labels step aside while the ten meet
             // and their crystal flashes (formation + about 0.4 s).
-            isFusionSpotlightActive = true
+            holdFusionSpotlight(for: formation + Self.fusionSpotlightTail)
             selected.forEach { pebble in
                 // The ten stay solid and brighten as they meet (additive
                 // light and a short trail); only the last 28 % fades, as
@@ -3802,17 +3806,26 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             ) { [weak self] in
                 self?.completeActiveBake(token: bakeToken)
             }
-            DispatchQueue.main.asyncAfter(
-                deadline: .now() + formation + Self.fusionSpotlightTail
-            ) { [weak self] in
-                self?.isFusionSpotlightActive = false
-            }
         }
         return true
     }
 
     /// How long the core's labels stay aside after the ten have met.
     static let fusionSpotlightTail: TimeInterval = 0.4
+
+    /// Lights the fusion spotlight for `duration`. A later fusion takes it
+    /// over: only the newest hold's timer turns it off.
+    func holdFusionSpotlight(for duration: TimeInterval) {
+        fusionSpotlightToken &+= 1
+        let token = fusionSpotlightToken
+        isFusionSpotlightActive = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.fusionSpotlightToken == token else { return }
+                self.isFusionSpotlightActive = false
+            }
+        }
+    }
 
     /// A converging gem's own light (round 12): an additive halo in its
     /// glint colour that swells over the first 60 % of the formation
