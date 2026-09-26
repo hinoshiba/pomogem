@@ -131,7 +131,7 @@
 
     },
     "休憩が終わりました" : {
-      "comment" : "Title of the system alarm when a break ends"
+      "comment" : "Title of the system alarm when a break ends. Suggested English: Break is over"
     },
     "休憩のときなどに「ミュージック」アプリでApple Musicにサインインすると、再生できるようになります。" : {
 
@@ -239,7 +239,7 @@
       "comment" : "Shortcuts: the focus length parameter"
     },
     "集中時間が終わりました" : {
-      "comment" : "Title of the system alarm when a focus ends"
+      "comment" : "Title of the system alarm when a focus ends. Suggested English: Focus time is over"
     },
     "集中用の音楽" : {
 

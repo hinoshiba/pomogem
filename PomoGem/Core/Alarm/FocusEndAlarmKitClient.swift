@@ -119,9 +119,9 @@ final class AlarmKitFocusEndAlarmClient: FocusEndAlarmClient {
     private static func alert(for phase: FocusEndAlarmPhase) -> AlarmPresentation.Alert {
         let title: LocalizedStringResource = switch phase {
         case .focus:
-            LocalizedStringResource("集中時間が終わりました", table: "Focus", comment: "Title of the system alarm when a focus ends")
+            LocalizedStringResource("集中時間が終わりました", table: "Focus", comment: "Title of the system alarm when a focus ends. Suggested English: Focus time is over")
         case .breakTime:
-            LocalizedStringResource("休憩が終わりました", table: "Focus", comment: "Title of the system alarm when a break ends")
+            LocalizedStringResource("休憩が終わりました", table: "Focus", comment: "Title of the system alarm when a break ends. Suggested English: Break is over")
         }
         let openApp = AlarmButton(
             text: LocalizedStringResource("アプリを開く", table: "Focus", comment: "Button on the system alarm at the end of a focus or break; opens PomoGem. Suggested English: Open App"),
