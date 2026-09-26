@@ -189,4 +189,128 @@ final class ProTransactionDeliveryTests: XCTestCase {
         hint.save(to: defaults)
         XCTAssertNil(defaults.object(forKey: ProApprovalWaitHint.defaultsKey))
     }
+
+    // MARK: settings-05 — who announces an approval, and when it is seen
+
+    /// Only a grant nothing on screen asked for is announced: the paywall's
+    /// own purchase and restore alerts already say Pro is on.
+    func testOnlyGrantsNobodyAskedForOnScreenAnnounceAnApproval() {
+        let announcing = ProGrantPath.allCases.filter(\.announcesAnsweredWait)
+        XCTAssertEqual(announcing, [.transactionUpdate, .launchReconciliation, .entitlementRefresh])
+        XCTAssertFalse(ProGrantPath.purchase.announcesAnsweredWait)
+        XCTAssertFalse(ProGrantPath.restore.announcesAnsweredWait)
+    }
+
+    func testAPendingAnswerOpensAWaitThatNeverReadsAsPro() {
+        var state = ProApprovalWaitState()
+        XCTAssertFalse(state.isAwaitingApproval(isPro: false, at: requested))
+
+        state.recordPendingRequest(at: requested)
+        XCTAssertTrue(state.isAwaitingApproval(isPro: false, at: requested.addingTimeInterval(60)))
+        XCTAssertFalse(
+            state.isAwaitingApproval(isPro: true, at: requested.addingTimeInterval(60)),
+            "Once Pro is on, nothing reads as waiting"
+        )
+        XCTAssertFalse(
+            state.isAwaitingApproval(isPro: false, at: requested.addingTimeInterval(ProApprovalWaitHint.lifetime + 1)),
+            "The hint lapses by itself; it is never evidence of a purchase"
+        )
+        XCTAssertFalse(state.hasGrantNotice, "A request alone owes no notice")
+    }
+
+    /// The Ask to Buy approval arrives through `Transaction.updates`: the
+    /// person hears about it exactly once.
+    func testAnApprovalFromTransactionUpdatesIsAnnouncedExactlyOnce() {
+        var state = ProApprovalWaitState()
+        state.recordPendingRequest(at: requested)
+
+        state.proGranted(via: .transactionUpdate, at: requested.addingTimeInterval(3_600))
+        XCTAssertNil(state.hint.requestedAt, "The wait ends with the grant")
+        XCTAssertTrue(state.hasGrantNotice)
+        XCTAssertTrue(state.consumeGrantNotice(whenVisible: true))
+        XCTAssertFalse(state.consumeGrantNotice(whenVisible: true), "Said once")
+
+        // The same approval seen again by the next entitlement pass.
+        state.proGranted(via: .entitlementRefresh, at: requested.addingTimeInterval(3_700))
+        XCTAssertFalse(state.hasGrantNotice, "A second sighting of the grant is not a second approval")
+    }
+
+    func testTheSheetsOwnPurchaseAndRestoreEndTheWaitWithoutANotice() {
+        for path in [ProGrantPath.purchase, .restore] {
+            var state = ProApprovalWaitState()
+            state.recordPendingRequest(at: requested)
+            state.proGranted(via: path, at: requested.addingTimeInterval(600))
+            XCTAssertNil(state.hint.requestedAt, "\(path)")
+            XCTAssertFalse(state.hasGrantNotice, "\(path): the paywall's own alert already said so")
+            XCTAssertFalse(state.isAwaitingApproval(isPro: false, at: requested.addingTimeInterval(601)))
+
+            // The listener then sees the same grant: the wait is already over.
+            state.proGranted(via: .transactionUpdate, at: requested.addingTimeInterval(602))
+            XCTAssertFalse(state.hasGrantNotice, "\(path) then updates must not double the message")
+        }
+    }
+
+    func testAGrantWithNoOpenWaitIsNeverAnnouncedAsAnApproval() {
+        for path in ProGrantPath.allCases {
+            var fresh = ProApprovalWaitState()
+            fresh.proGranted(via: path, at: requested)
+            XCTAssertFalse(fresh.hasGrantNotice, "\(path): an ordinary purchase or restore on another device")
+
+            var lapsed = ProApprovalWaitState()
+            lapsed.recordPendingRequest(at: requested)
+            lapsed.proGranted(via: path, at: requested.addingTimeInterval(ProApprovalWaitHint.lifetime + 1))
+            XCTAssertFalse(lapsed.hasGrantNotice, "\(path): the wait had lapsed")
+        }
+    }
+
+    /// The toast is drawn beneath every sheet and cover. An approval that
+    /// lands during a focus stays owed until the timer has closed.
+    func testTheNoticeSurvivesWhileTheFocusTimerCoversTheToast() {
+        var state = ProApprovalWaitState()
+        state.recordPendingRequest(at: requested)
+        state.proGranted(via: .transactionUpdate, at: requested.addingTimeInterval(900))
+
+        let underTimer = ProApprovalNoticeVisibility.quietHome.with { $0.focusPresentationIsActive = true; $0.rootPresentsModal = true }
+        for _ in 0..<3 {
+            XCTAssertFalse(state.consumeGrantNotice(whenVisible: underTimer.toastIsVisible))
+        }
+        XCTAssertTrue(state.hasGrantNotice, "Still owed once the timer closes")
+
+        XCTAssertTrue(state.consumeGrantNotice(whenVisible: ProApprovalNoticeVisibility.quietHome.toastIsVisible))
+        XCTAssertFalse(state.hasGrantNotice)
+    }
+
+    func testEveryCoverSheetAlertOrOtherToastHoldsTheNotice() {
+        XCTAssertTrue(ProApprovalNoticeVisibility.quietHome.toastIsVisible)
+        let blockers: [(String, (inout ProApprovalNoticeVisibility) -> Void)] = [
+            ("app in the background", { $0.appIsActive = false }),
+            ("any sheet, cover or alert over the root", { $0.rootPresentsModal = true }),
+            ("focus timer requested", { $0.focusPresentationIsActive = true }),
+            ("paywall", { $0.paywallPresented = true }),
+            ("share composer", { $0.sharePresented = true }),
+            ("recovered focus or break", { $0.recoveryCoverPresented = true }),
+            ("another toast", { $0.anotherToastIsShowing = true })
+        ]
+        for (name, block) in blockers {
+            XCTAssertFalse(ProApprovalNoticeVisibility.quietHome.with(block).toastIsVisible, name)
+        }
+    }
+}
+
+private extension ProApprovalNoticeVisibility {
+    static let quietHome = ProApprovalNoticeVisibility(
+        appIsActive: true,
+        rootPresentsModal: false,
+        focusPresentationIsActive: false,
+        paywallPresented: false,
+        sharePresented: false,
+        recoveryCoverPresented: false,
+        anotherToastIsShowing: false
+    )
+
+    func with(_ change: (inout ProApprovalNoticeVisibility) -> Void) -> ProApprovalNoticeVisibility {
+        var copy = self
+        change(&copy)
+        return copy
+    }
 }

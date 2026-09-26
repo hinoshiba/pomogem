@@ -121,7 +121,55 @@ final class SettingsPaywallUITests: XCTestCase {
         attach("Paywall — approval pending")
     }
 
+    /// settings-05. An approval that lands while the focus timer covers the
+    /// root is told once the timer has closed, not spent beneath it (the
+    /// toast is drawn under every cover). StoreKit cannot approve anything
+    /// here, so a Debug-only fixture records what `Transaction.updates` would
+    /// two seconds into the focus. It grants no entitlement.
+    func testAnApprovalThatLandsDuringAFocusIsToldAfterTheTimerCloses() {
+        app.launchEnvironment["POMOGEM_UI_TEST_APPROVAL_ARRIVES_DURING_FOCUS"] = "1"
+        app.launch()
+        let menu = app.buttons["メニュー"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 12))
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 6))
+        launcher.tap()
+        let giveUp = app.buttons["今日はここまで"].firstMatch
+        XCTAssertTrue(giveUp.waitForExistence(timeout: 8))
+
+        let notice = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "app.toast", "ポモジェムProが使えるようになりました")
+        ).firstMatch
+        // Well past the arrival and past a 3-second toast: had the notice been
+        // spent under the timer, it would be gone by the time the timer closes.
+        sleep(7)
+        XCTAssertTrue(giveUp.exists, "The focus timer is still up")
+        attach("Approval notice — owed while the focus timer is up")
+
+        XCTAssertTrue(reveal(giveUp))
+        giveUp.tap()
+        let confirmation = app.alerts["今日はここまで"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 4))
+        confirmation.buttons["今日はここまで"].tap()
+        XCTAssertTrue(menu.waitForExistence(timeout: 8))
+        XCTAssertTrue(notice.waitForExistence(timeout: 15), "The notice is told once Home can be seen")
+        attach("Approval notice — told on Home after the timer closed")
+        XCTAssertTrue(app.buttons["home.focus-launcher"].exists)
+        XCTAssertTrue(waitForAbsence(notice, timeout: 8))
+        sleep(3)
+        XCTAssertFalse(notice.exists, "Told once")
+    }
+
     // MARK: - Helpers
+
+    private func waitForAbsence(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if !element.exists { return true }
+            usleep(250_000)
+        }
+        return !element.exists
+    }
 
     private func checkSettingsLayout(accessibility5: Bool) {
         if accessibility5 { app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1" }

@@ -1,6 +1,7 @@
 import Foundation
 import StoreKit
 import SwiftUI
+import UIKit
 
 /// What the paywall was doing when StoreKit answered with an error. The same
 /// failure reads differently after a purchase, a restore or a catalog load.
@@ -10,24 +11,90 @@ enum PaywallAction: Equatable, Sendable {
     case loadProduct
 }
 
-/// settings-05. Shown wherever the person is when a purchase that waited for
-/// approval (Ask to Buy) is granted. Without it Pro turned on silently,
+/// settings-05. Tells the person once that a purchase which waited for
+/// approval (Ask to Buy) has been granted. Without it Pro turned on silently,
 /// possibly hours after the request.
+///
+/// The toast is drawn in RootView's own layer, beneath every sheet,
+/// full-screen cover and alert. An approval often lands while the focus timer
+/// is up, so the notice stays owed until it can be seen: nothing is presented
+/// over the root, no other toast is showing, and that has held for one look
+/// (the timer closing is often followed straight away by Home's next sheet).
+/// The loop runs only while a notice is owed, which is once per approval.
 struct ProApprovalNoticeModifier: ViewModifier {
+    private static let visibilityCheckInterval: Duration = .seconds(1)
+
     let router: AppRouter
     @State private var purchase = PurchaseManager.shared
 
     func body(content: Content) -> some View {
         content
-            .onAppear(perform: announceIfNeeded)
-            .onChange(of: purchase.hasApprovalGrantNotice) { _, _ in announceIfNeeded() }
+            .task(id: purchase.hasApprovalGrantNotice) { await announceWhenVisible() }
+#if DEBUG && targetEnvironment(simulator)
+            .onChange(of: router.focusPresentationIsActive) { _, isActive in
+                ApprovalArrivalUITestFixture.focusPresentationChanged(isActive: isActive, purchase: purchase)
+            }
+#endif
     }
 
-    private func announceIfNeeded() {
-        guard purchase.consumeApprovalGrantNotice() else { return }
-        router.showToast(
-            String(localized: "ポモジェムProが使えるようになりました", table: "Paywall", comment: "Toast: an approved (Ask to Buy) Pro purchase arrived"),
-            symbol: "checkmark.seal.fill"
+    private func announceWhenVisible() async {
+        var wasVisible = false
+        while purchase.hasApprovalGrantNotice, !Task.isCancelled {
+            let isVisible = ProApprovalNoticeVisibility.current(router: router).toastIsVisible
+            if purchase.consumeApprovalGrantNotice(whenVisible: isVisible && wasVisible) {
+                router.showToast(
+                    String(localized: "ポモジェムProが使えるようになりました", table: "Paywall", comment: "Toast: an approved (Ask to Buy) Pro purchase arrived"),
+                    symbol: "checkmark.seal.fill"
+                )
+                return
+            }
+            wasVisible = isVisible
+            try? await Task.sleep(for: Self.visibilityCheckInterval)
+        }
+    }
+}
+
+/// settings-05. Whether a toast RootView draws right now would be seen.
+struct ProApprovalNoticeVisibility: Equatable {
+    var appIsActive: Bool
+    /// UIKit presents every SwiftUI sheet, full-screen cover and alert from
+    /// the window's root controller, so this also covers Home's own sheets,
+    /// the break timer, the crystal sheet and Settings' share sheet.
+    var rootPresentsModal: Bool
+    /// The router's own presentations, which count from the moment they are
+    /// requested, before UIKit has started presenting them.
+    var focusPresentationIsActive: Bool
+    var paywallPresented: Bool
+    var sharePresented: Bool
+    var recoveryCoverPresented: Bool
+    /// Another toast (a landing message, say) would be replaced mid-read.
+    var anotherToastIsShowing: Bool
+
+    var toastIsVisible: Bool {
+        appIsActive
+            && !rootPresentsModal
+            && !focusPresentationIsActive
+            && !paywallPresented
+            && !sharePresented
+            && !recoveryCoverPresented
+            && !anotherToastIsShowing
+    }
+
+    @MainActor
+    static func current(router: AppRouter) -> ProApprovalNoticeVisibility {
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        // No key window means nothing is known to be on screen: keep waiting.
+        let root = scene?.keyWindow?.rootViewController
+        return ProApprovalNoticeVisibility(
+            appIsActive: scene != nil,
+            rootPresentsModal: root == nil || root?.presentedViewController != nil,
+            focusPresentationIsActive: router.focusPresentationIsActive,
+            paywallPresented: router.paywallPresented,
+            sharePresented: router.sharePresented,
+            recoveryCoverPresented: router.recoveredFocus != nil || router.recoveredBreak != nil,
+            anotherToastIsShowing: router.toast != nil
         )
     }
 }
