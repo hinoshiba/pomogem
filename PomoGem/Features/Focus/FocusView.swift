@@ -1151,7 +1151,11 @@ struct FocusView: View {
             // F1: the one line that explains a pause the person did not tap;
             // 再開 below continues from the moment they left.
             Label {
-                Text("アプリを離れていたので一時停止しました", tableName: "Focus")
+                Text(
+                    "アプリを離れていたので一時停止しました",
+                    tableName: "Focus",
+                    comment: "Paused timer notice after the person left the app during a focus. Suggested English: Paused because you left the app"
+                )
             } icon: {
                 Image(systemName: "pause.circle")
             }
@@ -1236,13 +1240,21 @@ struct FocusView: View {
             Label("画面を閉じてもタイマーは進み、終了時に通知します", systemImage: "bell.badge.fill")
         case .pausesWhenLeavingButNotWhenLocked:
             Label {
-                Text("画面ロック中は進みます。ほかのアプリに移ると一時停止します。", tableName: "Focus")
+                Text(
+                    "画面ロック中は進みます。ほかのアプリに移ると一時停止します。",
+                    tableName: "Focus",
+                    comment: "Running focus with a passcode: locking keeps the timer running, switching apps pauses it. Suggested English: Keeps running while locked. Switching apps pauses it."
+                )
             } icon: {
                 Image(systemName: "bell.badge.fill")
             }
         case .pausesWhenLeavingOrLocking:
             Label {
-                Text("画面を消したり、ほかのアプリに移ると一時停止します。", tableName: "Focus")
+                Text(
+                    "画面を消したり、ほかのアプリに移ると一時停止します。",
+                    tableName: "Focus",
+                    comment: "Running focus on an iPhone without a passcode: locking or switching apps pauses the timer. Suggested English: Locking the screen or switching apps pauses the timer."
+                )
             } icon: {
                 Image(systemName: "bell.badge.fill")
             }
@@ -1256,13 +1268,21 @@ struct FocusView: View {
             Label("画面を閉じても進みます。終了通知は端末の設定から", systemImage: "bell.slash")
         case .pausesWhenLeavingButNotWhenLocked:
             Label {
-                Text("画面ロック中も進みます。終了通知は端末の設定から", tableName: "Focus")
+                Text(
+                    "画面ロック中も進みます。終了通知は端末の設定から",
+                    tableName: "Focus",
+                    comment: "Button opening iOS Settings when end notifications are denied; the timer keeps running while locked. Suggested English: Keeps running while locked. Turn on end alerts in Settings"
+                )
             } icon: {
                 Image(systemName: "bell.slash")
             }
         case .pausesWhenLeavingOrLocking:
             Label {
-                Text("終了通知は端末の設定から", tableName: "Focus")
+                Text(
+                    "終了通知は端末の設定から",
+                    tableName: "Focus",
+                    comment: "Button opening iOS Settings when end notifications are denied (no passcode, so no promise about locking). Suggested English: Turn on end alerts in Settings"
+                )
             } icon: {
                 Image(systemName: "bell.slash")
             }
@@ -1276,13 +1296,21 @@ struct FocusView: View {
             Label("画面を閉じても進みます。終了通知を許可", systemImage: "bell")
         case .pausesWhenLeavingButNotWhenLocked:
             Label {
-                Text("画面ロック中も進みます。終了通知を許可", tableName: "Focus")
+                Text(
+                    "画面ロック中も進みます。終了通知を許可",
+                    tableName: "Focus",
+                    comment: "Button asking for notification permission; the timer keeps running while locked. Suggested English: Keeps running while locked. Allow end alerts"
+                )
             } icon: {
                 Image(systemName: "bell")
             }
         case .pausesWhenLeavingOrLocking:
             Label {
-                Text("終了通知を許可", tableName: "Focus")
+                Text(
+                    "終了通知を許可",
+                    tableName: "Focus",
+                    comment: "Button asking for notification permission (no passcode, so no promise about locking). Suggested English: Allow end alerts"
+                )
             } icon: {
                 Image(systemName: "bell")
             }
