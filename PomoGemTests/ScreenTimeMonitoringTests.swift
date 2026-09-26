@@ -21,6 +21,8 @@ final class ScreenTimeMonitoringTests: XCTestCase {
 
     func testTenMinutePlanStaysBelowActivityLimitAndCoversEachThresholdOnce() {
         XCTAssertLessThanOrEqual(ScreenTimePolicy.maximumActivities, 20)
+        // The focus shield's failsafe shares the same 20 (F2).
+        XCTAssertLessThanOrEqual(ScreenTimePolicy.maximumActivitiesIncludingFocusShield, 20)
         let thresholds = (0..<ScreenTimePolicy.batchesPerLane).flatMap { Array(ScreenTimePolicy.thresholds(batch: $0)) }
         XCTAssertEqual(thresholds, Array(1...144))
         XCTAssertEqual(ScreenTimePolicy.minutesPerGem, 10)

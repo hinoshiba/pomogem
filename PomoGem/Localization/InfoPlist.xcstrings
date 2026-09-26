@@ -13,6 +13,18 @@
         }
       }
     },
+    "NSAppleMusicUsageDescription" : {
+      "comment" : "Apple Music permission prompt: why the timer controls the Music app (focus background music)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。"
+          }
+        }
+      }
+    },
     "NSMotionUsageDescription" : {
       "comment" : "Motion permission prompt: why the jar reacts to tilting and shaking",
       "extractionState" : "manual",

@@ -356,6 +356,7 @@ release_blockers:
   - owner must accept the fail-closed interactive recovery ceiling when more than 256 corrupt active logical timer sessions precede a valid session, or ship a versioned reversible quarantine design
   - Japan paid-IAP operator disclosure and pre-purchase legal presentation require owner or qualified legal determination
   - complete StoreKit Sandbox, signed-device, TestFlight, App Store metadata, and distribution-signing verification
+  - enable the MusicKit App Service on App ID com.hinoshiba.pomogem and verify focus music on a signed device with and without an Apple Music subscription (Docs/FocusMusic.md)
 
 release_verification_2026_09_06:
   app_store_record_created: true
