@@ -718,9 +718,6 @@ final class GachaTests: XCTestCase {
         let originalFill = pebble.fillColor
         let originalStroke = pebble.strokeColor
         let originalMark = try XCTUnwrap(pebble.childNode(withName: "achievement.mark"))
-        let originalBackdrop = try XCTUnwrap(
-            pebble.childNode(withName: "achievement.markBackdrop")
-        )
         let loose = PebbleNode(
             descriptor: PebbleDescriptor(
                 subjectName: "資格",
@@ -746,9 +743,6 @@ final class GachaTests: XCTestCase {
         XCTAssertTrue(
             originalMark === pebble.childNode(withName: "achievement.mark"),
             "A rare-reward preference must not rebuild or dim an achievement mark"
-        )
-        XCTAssertTrue(
-            originalBackdrop === pebble.childNode(withName: "achievement.markBackdrop")
         )
     }
 
@@ -835,6 +829,9 @@ final class GachaTests: XCTestCase {
         XCTAssertNil(pebble.childNode(withName: "pebble.earlyEffortAura"))
     }
 
+    /// Round 13: the mark is engraved in the moonstone (a subtle intaglio,
+    /// still at least 3:1 against the crown, 4.5:1 with Increase Contrast),
+    /// upright however the stone rolls, and VoiceOver keeps the kind.
     @MainActor
     func testEveryAchievementMarkHasHighContrastUprightTreatment() {
         for kind in AchievementKind.allCases {
@@ -850,33 +847,27 @@ final class GachaTests: XCTestCase {
             let originalRadius = pebble.radius
             let originalMass = pebble.physicsBody?.mass
 
-            guard let backdrop = pebble.childNode(
-                withName: "achievement.markBackdrop"
-            ) as? SKShapeNode,
-            let mark = pebble.childNode(withName: "achievement.mark") as? SKLabelNode else {
-                XCTFail("\(kind) needs a mark and a contrast backdrop")
+            guard let mark = pebble.childNode(withName: "achievement.mark") as? SKSpriteNode else {
+                XCTFail("\(kind) needs its engraved mark")
                 continue
             }
-            guard let fontColor = mark.fontColor else {
-                XCTFail("\(kind) needs an explicit high-contrast mark color")
-                continue
+            XCTAssertNil(pebble.childNode(withName: "achievement.markBackdrop"), "No badge plate behind the mark")
+            XCTAssertNotNil(mark.texture)
+            for increased in [false, true] {
+                let colors = GemArtwork.achievementEngravingColors(hex: kind.gemBaseHex, increasedContrast: increased)
+                XCTAssertGreaterThanOrEqual(
+                    contrastRatio(colors.groove.withAlpha(1), colors.surface.withAlpha(1)),
+                    increased ? 4.5 : 3,
+                    "\(kind) stays readable in the moonstone"
+                )
             }
-
-            XCTAssertGreaterThanOrEqual(
-                contrastRatio(fontColor, backdrop.fillColor),
-                7,
-                "\(kind) should remain readable over every jewel material"
-            )
             XCTAssertEqual(mark.accessibilityLabel, kind.title)
             XCTAssertEqual(mark.blendMode, .alpha)
-            XCTAssertEqual(backdrop.blendMode, .alpha)
             XCTAssertFalse(mark.hasActions())
-            XCTAssertFalse(backdrop.hasActions())
 
             pebble.zRotation = .pi / 3
             pebble.updatePresentationLighting(horizontal: 0)
             XCTAssertEqual(mark.zRotation, -pebble.zRotation, accuracy: 0.001)
-            XCTAssertEqual(backdrop.zRotation, -pebble.zRotation, accuracy: 0.001)
 
             XCTAssertEqual(pebble.radius, originalRadius)
             XCTAssertEqual(pebble.physicsBody?.mass, originalMass)

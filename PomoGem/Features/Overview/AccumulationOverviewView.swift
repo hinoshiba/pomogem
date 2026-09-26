@@ -1907,6 +1907,7 @@ private struct MilestoneSummaryCard: View {
     let milestone: AccumulationMilestoneSummary
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     var body: some View {
         Group {
@@ -1939,6 +1940,13 @@ private struct MilestoneSummaryCard: View {
         )
     }
 
+    private var engraving: (surface: GemColor, groove: GemColor) {
+        GemArtwork.achievementEngravingColors(
+            hex: milestone.colorHex,
+            increasedContrast: colorSchemeContrast == .increased
+        )
+    }
+
     private var cardContents: some View {
         VStack(alignment: .leading, spacing: 11) {
             ZStack {
@@ -1948,10 +1956,12 @@ private struct MilestoneSummaryCard: View {
                     level: 4,
                     isAchievement: true
                 )
+                // Round 13: engraved in the moonstone, as in the jar (a
+                // pale lip under a groove), not white type on a badge.
                 Text(milestone.mark)
-                    .font(.system(size: 18, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.56), radius: 2, y: 1)
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color(uiColor: engraving.groove.withAlpha(1)))
+                    .shadow(color: .white.opacity(0.62), radius: 0, x: 0.3, y: 0.8)
             }
             .frame(width: 72, height: 72)
 

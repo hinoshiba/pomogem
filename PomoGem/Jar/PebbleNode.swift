@@ -577,8 +577,12 @@ final class PebbleNode: SKShapeNode {
     private(set) var aggregateTagMonth: String?
     /// Pro shows every crystal's month on its tag (D21).
     private(set) var showsMonthEngraving: Bool
-    private var achievementMarkBackdropNode: SKShapeNode?
-    private var achievementMarkNode: SKLabelNode?
+    /// 記念石 (round 13): the mark engraved in the dome, kept upright.
+    private var achievementMarkNode: SKSpriteNode?
+    /// 記念石: the floating sheen (adularescence) and the soft highlight on
+    /// the dome, screen-fixed in the light rig; tilting slides them.
+    private var cabochonSheenNode: SKSpriteNode?
+    private var cabochonHighlightNode: SKSpriteNode?
     /// Faceted gem skin (loose normal gems, aggregates and achievement
     /// stones). The circular physics body, radius and mass are untouched by
     /// any of these nodes.
@@ -982,6 +986,16 @@ final class PebbleNode: SKShapeNode {
             // like turning a real stone under a lamp.
             gemLightRigNode.zRotation = -zRotation
             dimensionalLightNode?.position = CGPoint(x: horizontal * localRadius * 0.07, y: 0)
+            // A moonstone's sheen floats against the tilt; its highlight
+            // follows the light like the key sheen.
+            if let cabochonSheenNode {
+                let rest = Self.cabochonSheenRest(radius: localRadius)
+                cabochonSheenNode.position = CGPoint(x: rest.x - horizontal * localRadius * 0.24, y: rest.y)
+            }
+            if let cabochonHighlightNode {
+                let rest = Self.cabochonHighlightRest(radius: localRadius)
+                cabochonHighlightNode.position = CGPoint(x: rest.x + horizontal * localRadius * 0.07, y: rest.y)
+            }
             for index in gemGlintNodes.indices {
                 let glint = gemGlintNodes[index]
                 // Each glint owns a narrow window (0.12 wide) in the smoothed
@@ -1014,7 +1028,6 @@ final class PebbleNode: SKShapeNode {
                 y: -sine * offset.x + cosine * offset.y
             )
         }
-        achievementMarkBackdropNode?.zRotation = -zRotation
         achievementMarkNode?.zRotation = -zRotation
         if let count = obstacleCountNode {
             // Engraved on the rock's lower face, upright in screen space.
@@ -1086,7 +1099,7 @@ final class PebbleNode: SKShapeNode {
         }
 
         if let achievementKind = descriptor.achievementKind {
-            configureFacetedAchievementAppearance(achievementKind)
+            configureAchievementCabochon(achievementKind)
             return
         }
 
@@ -1239,25 +1252,23 @@ final class PebbleNode: SKShapeNode {
         )
     }
 
+    /// 記念石 (round 13): a moonstone of its kind's hue
+    /// (`AchievementKind.gemBaseHex`), one of the four variants by its id;
+    /// the Overview shows the same stone (`ProgressCrystalGlyph`).
     private static func achievementArtwork(
         for descriptor: PebbleDescriptor,
         kind achievementKind: AchievementKind
-    ) -> (spec: GemArtworkSpec, fill: UIColor) {
-        let material = JarPalette.achievementMaterial(for: achievementKind)
-        let fill = material.base.mixed(
-            with: JarPalette.color(hex: descriptor.colorHex)
-                .vivid(saturationFloor: 0.78, brightnessFloor: 0.84),
-            amount: 0.18
-        )
+    ) -> (spec: GemArtworkSpec, palette: GemArtwork.CabochonPalette) {
+        let hex = "#" + achievementKind.gemBaseHex
         let spec = GemArtworkSpec(
             rung: cutLadder.achievement,
-            colors: [GemColorShare(hex: GemColor(fill).hexString, fraction: 1)],
-            variant: 0,
+            colors: [GemColorShare(hex: hex, fraction: 1)],
+            variant: GemArtworkSpec.variant(for: descriptor.id),
             isMuted: false,
             showsDashedRing: false,
             edgeBoost: edgeBoost
         )
-        return (spec, fill)
+        return (spec, GemArtwork.CabochonPalette(hex: hex))
     }
 
     private static func aggregateSpec(
@@ -1299,11 +1310,15 @@ final class PebbleNode: SKShapeNode {
         )
     }
 
-    /// Achievement stones: an octagonal step cut in a four-prong copper
-    /// setting. The semantic mark and its ink backdrop are unchanged.
-    private func configureFacetedAchievementAppearance(_ achievementKind: AchievementKind) {
+    /// 記念石 (round 13, final design): a smooth domed moonstone cabochon —
+    /// milky and pearly, a soft sheen of its kind's hue floating inside —
+    /// with its mark (✓, W, 100) engraved in the dome. No facets, no
+    /// setting, no rim, no ring and no star glints, so it never reads as a
+    /// chip or a token, and it stays apart from the faceted study gems and
+    /// the dark black stones. The physics circle and mass are unchanged.
+    private func configureAchievementCabochon(_ achievementKind: AchievementKind) {
         let rung = Self.cutLadder.achievement
-        let (spec, fill) = Self.achievementArtwork(for: descriptor, kind: achievementKind)
+        let (spec, palette) = Self.achievementArtwork(for: descriptor, kind: achievementKind)
         path = GemArtwork.outlinePath(for: spec, radius: localRadius)
         fillColor = .clear
         strokeColor = .clear
@@ -1312,12 +1327,57 @@ final class PebbleNode: SKShapeNode {
         installGemSkin(
             rung: rung,
             spec: spec,
-            tone: GemTone(hex: GemColor(fill).hexString, muted: false, glass: false),
+            tone: GemTone(hex: palette.body.hexString, muted: false, glass: false),
             haloStrength: 1,
-            haloColorOverride: JarPalette.color(hex: "#D9967A"),
-            innerGlowAlpha: 0.22
+            haloColorOverride: palette.sheen.lighter(0.35).withAlpha(1),
+            innerGlowAlpha: 0
         )
+        addCabochonLight(palette)
         addAchievementMark(achievementKind)
+    }
+
+    /// The dome's light, in the screen-fixed rig and on the shared halo
+    /// texture (one additive batch with the halos): the sheen of the
+    /// kind's hue floating under the surface, and a soft oval highlight at
+    /// the upper left where the key light meets the dome.
+    private func addCabochonLight(_ palette: GemArtwork.CabochonPalette) {
+        guard let rig = gemLightRigNode else { return }
+        let sheen = Self.sharedLightSprite(
+            GemTextureAtlas.SharedName.halo,
+            size: CGSize(width: localRadius * 1.6, height: localRadius * 1.05)
+        )
+        sheen.name = "achievement.sheen"
+        sheen.color = palette.sheen.withAlpha(1)
+        sheen.colorBlendFactor = 1
+        sheen.blendMode = .add
+        sheen.alpha = 0.65
+        sheen.position = Self.cabochonSheenRest(radius: localRadius)
+        sheen.zPosition = JarZPosition.pebbleDetail - 0.40
+        rig.addChild(sheen)
+        cabochonSheenNode = sheen
+
+        let highlight = Self.sharedLightSprite(
+            GemTextureAtlas.SharedName.halo,
+            size: CGSize(width: localRadius * 0.50, height: localRadius * 0.22)
+        )
+        highlight.name = "achievement.highlight"
+        highlight.color = .white
+        highlight.colorBlendFactor = 1
+        highlight.blendMode = .add
+        highlight.alpha = 1
+        highlight.zRotation = .pi / 4
+        highlight.position = Self.cabochonHighlightRest(radius: localRadius)
+        highlight.zPosition = JarZPosition.pebbleDetail - 0.20
+        rig.addChild(highlight)
+        cabochonHighlightNode = highlight
+    }
+
+    private static func cabochonSheenRest(radius: CGFloat) -> CGPoint {
+        CGPoint(x: radius * 0.04, y: radius * 0.18)
+    }
+
+    private static func cabochonHighlightRest(radius: CGFloat) -> CGPoint {
+        CGPoint(x: -radius * 0.34, y: radius * 0.40)
     }
 
     /// Increase Contrast brightens facet edges.
@@ -1493,6 +1553,7 @@ final class PebbleNode: SKShapeNode {
             }
         }
         showAggregateTag()
+        showAchievementEngraving()
     }
 
     /// The bake spec the body shows now (nil for obstacles and the legacy
@@ -1699,7 +1760,7 @@ final class PebbleNode: SKShapeNode {
     /// Additive light composites incorrectly into a transparent snapshot
     /// texture; while capturing, bake it as ordinary alpha-blended light.
     func setSnapshotBlending(_ capturing: Bool) {
-        let additive: [SKSpriteNode?] = [gemHaloNode, gemInnerGlowNode, dimensionalLightNode, earlyEffortAuraNode, earlyEffortBloomNode, earlyEffortPoolNode]
+        let additive: [SKSpriteNode?] = [gemHaloNode, gemInnerGlowNode, dimensionalLightNode, earlyEffortAuraNode, earlyEffortBloomNode, earlyEffortPoolNode, cabochonSheenNode, cabochonHighlightNode]
         for node in additive.compactMap({ $0 }) + gemGlintNodes {
             node.blendMode = capturing ? .alpha : .add
         }
@@ -2032,56 +2093,51 @@ final class PebbleNode: SKShapeNode {
         context.fillPath()
     }
 
+    /// The mark (✓, W, 100) engraved in the dome (round 13): one upright
+    /// sprite baked for the size the stone shows, under the rig's light so
+    /// the shade and the highlight fall over it as over the dome. VoiceOver
+    /// keeps the kind's title.
     private func addAchievementMark(_ achievementKind: AchievementKind) {
-        let material = JarPalette.achievementMaterial(for: achievementKind)
-        let fontScale: CGFloat
-        switch achievementKind {
-        case .perfectScore:
-            fontScale = 0.54
-        case .examPass:
-            fontScale = 0.80
-        case .workMilestone:
-            fontScale = 0.70
-        }
-
-        // Round 12 (casino review): the mark is engraved in the stone's
-        // table — a pale octagon matching the step cut, the mark cut into it
-        // in deep ink — not a black disc with white numerals, which read as
-        // a poker chip. The contrast stays above 7:1 on every material, and
-        // the kind-specific edge keeps the material's identity.
-        let tableRadius = localRadius * 0.62
-        let table = CGMutablePath()
-        for index in 0 ..< 8 {
-            let angle = CGFloat.pi / 8 + CGFloat(index) * .pi / 4
-            let point = CGPoint(x: cos(angle) * tableRadius, y: sin(angle) * tableRadius)
-            if index == 0 { table.move(to: point) } else { table.addLine(to: point) }
-        }
-        table.closeSubpath()
-        let backdrop = SKShapeNode(path: table)
-        backdrop.name = "achievement.markBackdrop"
-        // The table's own light: the material lifted most of the way to
-        // white (luminance ≥ 0.8 for every kind), never a white sticker.
-        backdrop.fillColor = material.base.mixed(with: .white, amount: 0.80)
-        backdrop.strokeColor = material.edge.mixed(with: .white, amount: 0.30).withAlphaComponent(0.7)
-        backdrop.lineWidth = max(0.8, localRadius * 0.05)
-        backdrop.glowWidth = 0
-        backdrop.zPosition = JarZPosition.pebbleDetail + 0.55
-        backdrop.blendMode = .alpha
-        addChild(backdrop)
-        achievementMarkBackdropNode = backdrop
-
-        let mark = SKLabelNode(fontNamed: "AvenirNext-Bold")
+        let mark = SKSpriteNode(texture: nil, size: CGSize(width: 1, height: 1))
         mark.name = "achievement.mark"
-        mark.text = achievementKind.shortMark
-        mark.fontSize = localRadius * fontScale
-        mark.fontColor = UIColor(red: 0.04, green: 0.07, blue: 0.14, alpha: 1)
-        mark.verticalAlignmentMode = .center
-        mark.horizontalAlignmentMode = .center
-        mark.zPosition = JarZPosition.pebbleDetail + 0.65
+        mark.zPosition = JarZPosition.pebbleDetail - 0.35
         mark.blendMode = .alpha
         mark.accessibilityLabel = achievementKind.title
         addChild(mark)
         achievementMarkNode = mark
+        showAchievementEngraving()
+    }
+
+    /// Bakes (or reuses) the engraving for `localRadius × textureJarScale`
+    /// and sizes it back to local points, like the body.
+    private func showAchievementEngraving() {
+        guard let mark = achievementMarkNode, let kind = descriptor.achievementKind else { return }
+        let jarScale = max(textureJarScale, 0.01)
+        let text = kind.shortMark
+        let hex = kind.gemBaseHex
+        let fontSize = GemArtwork.achievementEngravingFontSize(mark: text, sceneRadius: localRadius * jarScale)
+        let increasedContrast = UIAccessibility.isDarkerSystemColorsEnabled
+        let size = GemArtwork.achievementEngravingSize(mark: text, fontSize: fontSize)
+        mark.setUnscaledSize(CGSize(width: size.width / jarScale, height: size.height / jarScale))
+        let scale = artworkScale
+        GemTextureAtlas.shared.show(
+            GemArtwork.achievementEngravingTextureName(
+                mark: text,
+                hex: hex,
+                fontSize: fontSize,
+                scale: scale,
+                increasedContrast: increasedContrast
+            ),
+            on: mark
+        ) {
+            GemArtwork.achievementEngravingImage(
+                mark: text,
+                hex: hex,
+                fontSize: fontSize,
+                scale: scale,
+                increasedContrast: increasedContrast
+            )
+        }
     }
 
     private func addCachedDetailTexture() {

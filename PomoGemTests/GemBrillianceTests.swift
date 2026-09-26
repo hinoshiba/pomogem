@@ -449,25 +449,145 @@ final class GemBrillianceTests: XCTestCase {
         XCTAssertGreaterThan(shadow.zPosition, -0.6)
     }
 
+    /// Round 13 (final design): 記念石 are smooth moonstone cabochons — no
+    /// facets, no setting, no rim, no star glints — lit by a floating sheen
+    /// and one soft highlight, with the mark engraved in the dome.
     @MainActor
-    func testAchievementStonesAreSetInCopperAndOutshineLooseGems() throws {
-        let descriptor = PebbleDescriptor(
-            subjectName: "資格",
-            colorHex: Constants.Color.science,
+    func testAchievementStonesAreMoonstoneCabochonsAndOutshineLooseGems() throws {
+        let descriptor = achievementDescriptor(.examPass)
+        let pebble = PebbleNode(descriptor: descriptor, reduceMotion: true)
+        XCTAssertEqual(pebble.gemRung?.cut, .cabochon)
+        XCTAssertEqual(pebble.displayedBodySpec?.cut, .cabochon)
+        for variant in 0 ..< GemArtworkSpec.variantCount {
+            XCTAssertEqual(GemArtwork.facetCount(cut: .cabochon, symmetry: 12, variant: variant), 0, "A smooth dome")
+        }
+        XCTAssertEqual(pebble.gemRung?.glintCount, 0)
+        XCTAssertNil(pebble.childNode(withName: "//gem.glint"), "No star glints")
+        XCTAssertNil(pebble.childNode(withName: "gem.innerGlow"), "No bright inner ring")
+        XCTAssertNil(pebble.childNode(withName: "achievement.markBackdrop"), "No badge plate")
+        XCTAssertNotNil(pebble.childNode(withName: "achievement.mark"))
+        XCTAssertEqual(pebble.glowWidth, 0)
+
+        // The dome's light is screen-fixed on the shared halo texture (one
+        // additive batch with the halos); tilting slides the sheen.
+        let atlas = GemTextureAtlas.shared
+        let sheen = try XCTUnwrap(pebble.childNode(withName: "//achievement.sheen") as? SKSpriteNode)
+        let highlight = try XCTUnwrap(pebble.childNode(withName: "//achievement.highlight") as? SKSpriteNode)
+        for light in [sheen, highlight] {
+            XCTAssertEqual(atlas.textureName(of: light), GemTextureAtlas.SharedName.halo)
+            XCTAssertEqual(light.blendMode, .add)
+            XCTAssertEqual(light.parent?.name, "gem.lightRig")
+        }
+        pebble.zRotation = 1.1
+        pebble.updatePresentationLighting(horizontal: 0)
+        XCTAssertEqual(sheen.parent?.zRotation ?? 0, -1.1, accuracy: 0.001)
+        let rest = sheen.position
+        pebble.updatePresentationLighting(horizontal: 0.5)
+        XCTAssertNotEqual(sheen.position.x, rest.x, accuracy: 0.01)
+        // A capture draws the light as ordinary alpha, like every gem light.
+        pebble.setSnapshotBlending(true)
+        XCTAssertEqual(sheen.blendMode, .alpha)
+        XCTAssertEqual(highlight.blendMode, .alpha)
+        pebble.setSnapshotBlending(false)
+
+        let loose = PebbleNode(descriptor: looseDescriptor(), reduceMotion: true)
+        XCTAssertGreaterThan(pebble.gemHaloAlpha, loose.gemHaloAlpha)
+        XCTAssertEqual(pebble.radius, descriptor.radius, "Physics radius unchanged")
+        // Each kind is its own moonstone (its hue), and every stone of a
+        // kind bakes the same few textures whatever its theme.
+        let hexes = AchievementKind.allCases.compactMap { PebbleNode.bodySpec(for: achievementDescriptor($0))?.colors.first?.hex }
+        XCTAssertEqual(Set(hexes).count, AchievementKind.allCases.count)
+        var otherTheme = achievementDescriptor(.examPass)
+        otherTheme = PebbleDescriptor(
+            id: otherTheme.id,
+            subjectName: "数学",
+            colorHex: Constants.Color.mathematics,
             source: .manual,
             kind: .normal,
             achievementKind: .examPass,
             grams: 0
         )
-        let pebble = PebbleNode(descriptor: descriptor, reduceMotion: true)
-        XCTAssertEqual(pebble.gemRung?.cut, .step)
-        XCTAssertEqual(pebble.gemRung?.hasProngs, true)
-        XCTAssertNotNil(pebble.childNode(withName: "achievement.mark"))
-        XCTAssertNotNil(pebble.childNode(withName: "achievement.markBackdrop"))
-        XCTAssertEqual(pebble.glowWidth, 0)
-        let loose = PebbleNode(descriptor: looseDescriptor(), reduceMotion: true)
-        XCTAssertGreaterThan(pebble.gemHaloAlpha, loose.gemHaloAlpha)
-        XCTAssertEqual(pebble.radius, descriptor.radius, "Physics radius unchanged")
+        XCTAssertEqual(PebbleNode.bodySpec(for: otherTheme), PebbleNode.bodySpec(for: descriptor))
+    }
+
+    /// The moonstone stays apart from the study gems and the black stones
+    /// at a glance: pale and nearly neutral where a study gem is saturated,
+    /// bright where a black stone is dark.
+    @MainActor
+    func testMoonstonesStayApartFromStudyGemsAndBlackStones() throws {
+        func stats(_ image: UIImage) throws -> (lightness: CGFloat, saturation: CGFloat) {
+            let cgImage = try XCTUnwrap(image.cgImage)
+            let width = cgImage.width
+            let height = cgImage.height
+            var bytes = [UInt8](repeating: 0, count: width * height * 4)
+            bytes.withUnsafeMutableBytes { buffer in
+                let context = CGContext(
+                    data: buffer.baseAddress,
+                    width: width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: width * 4,
+                    space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                )
+                context?.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+            }
+            var lightness: CGFloat = 0
+            var saturation: CGFloat = 0
+            var count: CGFloat = 0
+            for pixel in 0 ..< width * height {
+                let alpha = CGFloat(bytes[pixel * 4 + 3]) / 255
+                guard alpha > 0.9 else { continue }
+                let color = GemColor(
+                    red: CGFloat(bytes[pixel * 4]) / 255 / alpha,
+                    green: CGFloat(bytes[pixel * 4 + 1]) / 255 / alpha,
+                    blue: CGFloat(bytes[pixel * 4 + 2]) / 255 / alpha
+                )
+                lightness += color.oklabLightness
+                saturation += color.hsb.saturation
+                count += 1
+            }
+            XCTAssertGreaterThan(count, 100)
+            return (lightness / max(count, 1), saturation / max(count, 1))
+        }
+        let radius: CGFloat = 24
+        let scale: CGFloat = 2
+        var stones: [(lightness: CGFloat, saturation: CGFloat)] = []
+        for kind in AchievementKind.allCases {
+            let spec = try XCTUnwrap(PebbleNode.bodySpec(for: achievementDescriptor(kind)))
+            let moon = try stats(GemArtwork.renderBodyImage(for: spec, radius: radius, scale: scale))
+            XCTAssertGreaterThan(moon.lightness, 0.80, "\(kind): milky and pale")
+            XCTAssertLessThan(moon.saturation, 0.20, "\(kind): nearly neutral")
+            stones.append(moon)
+        }
+        let brightestStone = stones.map(\.lightness).min() ?? 0
+        let calmestStone = stones.map(\.saturation).max() ?? 1
+        for hex in [Constants.Color.english, Constants.Color.mathematics, Constants.Color.science] {
+            let gem = PebbleDescriptor(subjectName: "英語", colorHex: hex, source: .timer, kind: .normal, grams: Constants.Mass.measuredPebbleGrams)
+            let spec = try XCTUnwrap(PebbleNode.bodySpec(for: gem, themeMarks: false))
+            let study = try stats(GemArtwork.renderBodyImage(for: spec, radius: radius, scale: scale))
+            XCTAssertGreaterThan(study.saturation, calmestStone + 0.2, "\(hex): a study gem is coloured")
+            XCTAssertLessThan(study.lightness, brightestStone - 0.05, "\(hex): and deeper")
+        }
+        let blackStone = ScreenTimeObstacleProjection.decimalRoots(totalUnits: 1)[0]
+        let rock = try stats(ScreenTimeObstacleAppearance.image(
+            variations: ScreenTimeObstacleAppearance.variations(descriptor: blackStone),
+            radius: radius,
+            scale: scale
+        ))
+        XCTAssertLessThan(rock.lightness, brightestStone - 0.4, "A black stone is dark")
+    }
+
+    private func achievementDescriptor(_ kind: AchievementKind) -> PebbleDescriptor {
+        PebbleDescriptor(
+            id: UUID(uuidString: "A5000000-0000-4000-8000-00000000000\(AchievementKind.allCases.firstIndex(of: kind) ?? 0)")!,
+            subjectName: "資格",
+            colorHex: Constants.Color.science,
+            source: .manual,
+            kind: .normal,
+            achievementKind: kind,
+            grams: 0
+        )
     }
 
     @MainActor

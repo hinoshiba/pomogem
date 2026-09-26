@@ -44,11 +44,12 @@ final class JarRenderingPerformanceTests: XCTestCase {
         "gem.body",
         "obstacle.count",
         "gem.innerGlow",
+        "achievement.sheen",
+        "achievement.mark",
         "gem.rig.shade",
         "pebble.dimensionalLight",
+        "achievement.highlight",
         "gem.glint",
-        "achievement.markBackdrop",
-        "achievement.mark",
         "aggregate.tag"
     ]
 

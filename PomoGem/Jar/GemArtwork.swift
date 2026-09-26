@@ -14,7 +14,7 @@ enum GemCut: String, CaseIterable, Sendable {
     case rough
     /// Zero-mass tutorial gem: colourless glass.
     case glass
-    /// 2.5–25 kg aggregate (and the achievement setting): octagonal step cut.
+    /// 2.5–25 kg aggregate: octagonal step cut.
     case step
     /// 25–250 kg aggregate: round brilliant (table, star, kite, girdle).
     case brilliant
@@ -22,6 +22,9 @@ enum GemCut: String, CaseIterable, Sendable {
     case radiant
     /// The lifetime "time core": a decagonal brilliant drawn in SwiftUI.
     case hero
+    /// 記念石 (round 13): a smooth domed moonstone cabochon. No facets, no
+    /// setting and no rim, so it never reads as a chip or a token.
+    case cabochon
 }
 
 /// Light budget for one rung. Every value is deterministic; brilliance grows
@@ -46,8 +49,6 @@ struct GemCutRung: Equatable, Sendable {
     var hasWhiteCore = false
     /// A4: a ring of crown sparkles around the table.
     var hasCrown = false
-    /// Achievement setting: four copper prongs.
-    var hasProngs = false
 }
 
 /// The single table that maps recorded effort to cuts.
@@ -76,10 +77,12 @@ struct GemCutLadder: Sendable {
             cut: .glass, symmetry: 12, haloScale: 1.8, haloAlpha: 0.08,
             glintCount: 0, glintScale: 0, sparkleCount: 1, facetContrast: 0.35
         ),
+        // 記念石 (round 13): a moonstone cabochon. Its light is the milky
+        // body, a floating sheen and one soft highlight (the pebble's light
+        // rig), never a star glint.
         achievement: GemCutRung(
-            cut: .step, symmetry: 8, haloScale: 2.3, haloAlpha: 0.62,
-            glintCount: 1, glintScale: 0.9, sparkleCount: 1, facetContrast: 0.80,
-            hasProngs: true
+            cut: .cabochon, symmetry: 12, haloScale: 2.1, haloAlpha: 0.60,
+            glintCount: 0, glintScale: 0, sparkleCount: 0, facetContrast: 0
         ),
         aggregates: [
             // A0 (< 2.5 kg): the same rung as a loose gem, plus its
@@ -172,7 +175,6 @@ struct GemArtworkSpec: Hashable, Sendable {
     let showsDashedRing: Bool
     var hasWhiteCore = false
     var hasCrown = false
-    var hasProngs = false
     /// Increase Contrast: brighter facet edges (+0.2 alpha).
     var edgeBoost: CGFloat = 0
     /// Differentiate Without Color: each theme's engraved mark
@@ -192,7 +194,6 @@ struct GemArtworkSpec: Hashable, Sendable {
         showsDashedRing: Bool,
         hasWhiteCore: Bool = false,
         hasCrown: Bool = false,
-        hasProngs: Bool = false,
         edgeBoost: CGFloat = 0,
         showsThemeMarks: Bool = false
     ) {
@@ -206,7 +207,6 @@ struct GemArtworkSpec: Hashable, Sendable {
         self.showsDashedRing = showsDashedRing
         self.hasWhiteCore = hasWhiteCore
         self.hasCrown = hasCrown
-        self.hasProngs = hasProngs
         self.edgeBoost = edgeBoost
         self.showsThemeMarks = showsThemeMarks
     }
@@ -233,7 +233,6 @@ struct GemArtworkSpec: Hashable, Sendable {
             showsDashedRing: showsDashedRing,
             hasWhiteCore: rung.hasWhiteCore,
             hasCrown: rung.hasCrown,
-            hasProngs: rung.hasProngs,
             edgeBoost: edgeBoost,
             showsThemeMarks: showsThemeMarks
         )
@@ -287,7 +286,6 @@ struct GemArtworkSpec: Hashable, Sendable {
             showsDashedRing ? "d" : "-",
             hasWhiteCore ? "w" : "-",
             hasCrown ? "k" : "-",
-            hasProngs ? "p" : "-",
             "e\(Int((edgeBoost * 10).rounded()))"
         ].joined(separator: "|") + (showsThemeMarks ? "|t" : "")
     }
@@ -1252,6 +1250,9 @@ enum GemArtwork {
             raw = brilliantLayout(symmetry: symmetry)
         case .hero:
             raw = heroLayout()
+        case .cabochon:
+            // A smooth dome: a round silhouette and no facets at all.
+            raw = Layout(outer: ring(count: 64, radius: 1, offset: 0), facets: [])
         }
         let normalized = normalize(raw)
         layoutLock.lock()
@@ -1576,7 +1577,11 @@ enum GemArtwork {
             func map(_ point: CGPoint) -> CGPoint {
                 CGPoint(x: center.x + point.x * radius, y: center.y - point.y * radius)
             }
-            drawGem(spec: spec, context: renderer.cgContext, radius: radius, map: map)
+            if spec.cut == .cabochon {
+                drawCabochon(spec: spec, context: renderer.cgContext, radius: radius, map: map)
+            } else {
+                drawGem(spec: spec, context: renderer.cgContext, radius: radius, map: map)
+            }
         }
     }
 
@@ -1799,12 +1804,7 @@ enum GemArtwork {
         context.setLineWidth(min(max(radius * 0.06, 0.6), 1.0))
         context.strokePath()
 
-        // 8. Achievement setting: four copper prongs (4-fold symmetric).
-        if spec.hasProngs {
-            drawProngs(context: context, radius: radius, map: map)
-        }
-
-        // 9. Self-reported fairness ring (existing semantic marker).
+        // 8. Self-reported fairness ring (existing semantic marker).
         if spec.showsDashedRing {
             let ringRadius = radius * 0.80
             let dashCount = max(Constants.Jar.manualDashCount, 1)
@@ -1822,48 +1822,6 @@ enum GemArtwork {
                 height: ringRadius * 2
             ))
             context.restoreGState()
-        }
-    }
-
-    /// Four slim prongs (round 12: 0.14 R wide in soft rose gold, no dark
-    /// outline, so the setting no longer reads as a token's clips).
-    private static func drawProngs(context: CGContext, radius: CGFloat, map: (CGPoint) -> CGPoint) {
-        let base = GemColor(hex: "#D9967A")
-        let highlight = GemColor(hex: "#F2C4A8")
-        let shade = GemColor(hex: "#B8735A")
-        let width = radius * 0.14
-        for index in 0 ..< 4 {
-            let angle = CGFloat.pi / 4 + CGFloat(index) * .pi / 2
-            let inner = polar(angle, 0.80)
-            let outer = polar(angle, 1.04)
-            let side = CGPoint(x: -sin(angle) * width / radius / 2, y: cos(angle) * width / radius / 2)
-            let path = CGMutablePath()
-            path.move(to: map(CGPoint(x: inner.x - side.x * 0.6, y: inner.y - side.y * 0.6)))
-            path.addLine(to: map(CGPoint(x: outer.x - side.x, y: outer.y - side.y)))
-            path.addLine(to: map(CGPoint(x: outer.x + side.x, y: outer.y + side.y)))
-            path.addLine(to: map(CGPoint(x: inner.x + side.x * 0.6, y: inner.y + side.y * 0.6)))
-            path.closeSubpath()
-            context.saveGState()
-            context.addPath(path)
-            context.clip()
-            let colors = [highlight.cgColor, base.cgColor, shade.cgColor] as CFArray
-            if let gradient = CGGradient(
-                colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                colors: colors,
-                locations: [0, 0.45, 1]
-            ) {
-                context.drawLinearGradient(
-                    gradient,
-                    start: map(CGPoint(x: outer.x - side.x, y: outer.y - side.y)),
-                    end: map(CGPoint(x: outer.x + side.x, y: outer.y + side.y)),
-                    options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
-                )
-            }
-            context.restoreGState()
-            context.addPath(path)
-            context.setStrokeColor(shade.withAlpha(0.35).cgColor)
-            context.setLineWidth(max(0.3, radius * 0.012))
-            context.strokePath()
         }
     }
 
@@ -3451,6 +3409,234 @@ extension GemArtwork {
             tip.addLine(to: CGPoint(x: -0.535, y: -0.06))
             tip.closeSubpath()
             return circle(0, 0.26, 0.62).union(tip)
+        }
+    }
+}
+
+// MARK: - 記念石 cabochons (round 13)
+
+extension GemArtwork {
+    /// A 記念石's moonstone colours, from its kind's hue
+    /// (`AchievementKind.gemBaseHex`): a milky, nearly white crown, a
+    /// translucent and cooler edge, the floating sheen (adularescence) in
+    /// the kind's hue, and the engraving's groove.
+    struct CabochonPalette: Sendable {
+        let crown: GemColor
+        let body: GemColor
+        let edge: GemColor
+        let sheen: GemColor
+        /// The engraving: a few shades deeper than the crown (≥ 3:1).
+        let groove: GemColor
+        /// The engraving with Increase Contrast (≥ 4.5:1).
+        let deepGroove: GemColor
+        /// The shaded upper wall of the cut.
+        let slate: GemColor
+
+        init(hex: String) {
+            let hue = GemColor(hex: hex).hsb.hue
+            let tint = GemColor(hue: hue, saturation: 0.55, brightness: 1)
+            crown = GemColor(hex: "#FBFAF8").mixed(with: tint, amount: 0.06)
+            body = GemColor(hex: "#E2E3EC").mixed(with: tint, amount: 0.12)
+            edge = GemColor(hex: "#8E97B6").mixed(with: tint, amount: 0.28)
+            sheen = GemColor(hex: "#9DBEFF").mixed(with: tint, amount: 0.55)
+            slate = GemColor(hex: "#2B3048").mixed(with: tint.darker(0.6), amount: 0.25)
+            groove = crown.mixed(with: slate, amount: 0.58)
+            deepGroove = crown.mixed(with: slate, amount: 0.82)
+        }
+    }
+
+    /// 記念石: a smooth domed moonstone cabochon. Milky and nearly white at
+    /// the crown, translucent and cooler toward the edge, with soft milky
+    /// veils and a pearly play of pastel colour inside. No facets, no
+    /// setting, no rim. Only light that does not depend on direction is
+    /// baked (the body rolls with physics, §7.3); the floating sheen and the
+    /// highlight are screen-fixed sprites in the pebble's light rig.
+    fileprivate static func drawCabochon(
+        spec: GemArtworkSpec,
+        context: CGContext,
+        radius: CGFloat,
+        map: (CGPoint) -> CGPoint
+    ) {
+        let space = CGColorSpaceCreateDeviceRGB()
+        let palette = CabochonPalette(hex: spec.colors.first?.hex ?? "#6D50EA")
+        let outer = layout(cut: .cabochon, symmetry: spec.symmetry, variant: spec.variant).outer
+        let unit = outer.map { hypot($0.x, $0.y) }.max() ?? 0.96
+        let visible = unit * radius
+        let center = map(.zero)
+        let disc = CGRect(x: center.x - visible, y: center.y - visible, width: visible * 2, height: visible * 2)
+        func radial(_ colors: [UIColor], _ locations: [CGFloat], at point: CGPoint, radius: CGFloat) {
+            guard let gradient = CGGradient(
+                colorsSpace: space,
+                colors: colors.map(\.cgColor) as CFArray,
+                locations: locations
+            ) else { return }
+            context.drawRadialGradient(
+                gradient,
+                startCenter: point, startRadius: 0,
+                endCenter: point, endRadius: radius,
+                options: []
+            )
+        }
+
+        context.saveGState()
+        context.addEllipse(in: disc)
+        context.clip()
+        // 1. The milky dome: brightest at the crown, deeper and more
+        // translucent toward the edge. Symmetric, so it never shows the roll.
+        radial(
+            [
+                palette.crown.withAlpha(1),
+                palette.body.withAlpha(1),
+                palette.body.mixed(with: palette.edge, amount: 0.55).withAlpha(1),
+                palette.edge.withAlpha(1)
+            ],
+            [0, 0.40, 0.78, 1],
+            at: center,
+            radius: visible
+        )
+        // 2. Milky veils inside. They roll with the stone, like any
+        // inclusion; the four variants place them differently.
+        var random = GemRandom(seed: 0xCAB0_C40D &+ UInt64(spec.variant) &* 977)
+        for _ in 0 ..< 3 {
+            let angle = random.unit() * 2 * .pi
+            let distance = (0.18 + random.unit() * 0.34) * unit
+            let spot = map(CGPoint(x: cos(angle) * distance, y: sin(angle) * distance))
+            radial(
+                [UIColor(white: 1, alpha: 0.22 + random.unit() * 0.08), UIColor(white: 1, alpha: 0)],
+                [0, 1],
+                at: spot,
+                radius: visible * (0.34 + random.unit() * 0.22)
+            )
+        }
+        // 3. The pearly play of colour: faint pastel clouds near the edge,
+        // and deep inside a soft glow of the kind's hue (adularescence).
+        context.setBlendMode(.screen)
+        let pearls = ["#FFD2E4", "#CFF3E4", "#D9D3FF", "#FFE9C4"]
+        for (index, hex) in pearls.enumerated() {
+            let angle = (CGFloat(index) / CGFloat(pearls.count) + CGFloat(spec.variant) * 0.11) * 2 * .pi
+            let spot = map(CGPoint(x: cos(angle) * 0.58 * unit, y: sin(angle) * 0.58 * unit))
+            radial(
+                [GemColor(hex: hex).withAlpha(0.28), GemColor(hex: hex).withAlpha(0)],
+                [0, 1],
+                at: spot,
+                radius: visible * 0.52
+            )
+        }
+        radial(
+            [palette.sheen.withAlpha(0.42), palette.sheen.withAlpha(0.14), palette.sheen.withAlpha(0)],
+            [0, 0.5, 1],
+            at: center,
+            radius: visible * 0.72
+        )
+        context.setBlendMode(.normal)
+        context.restoreGState()
+
+        // 4. Where the dome meets the dark jar, a translucent stone's edge
+        // reads a little deeper: a hairline, never a bright coin rim.
+        context.addEllipse(in: disc.insetBy(dx: 0.25, dy: 0.25))
+        context.setStrokeColor(palette.edge.darker(0.45).withAlpha(min(1, 0.30 + spec.edgeBoost)).cgColor)
+        context.setLineWidth(min(max(radius * 0.035, 0.5), 0.8))
+        context.strokePath()
+    }
+
+    // MARK: The engraved mark
+
+    /// The crown the mark is cut into and the groove's colour: at least
+    /// 3:1 (a subtle intaglio that still reads), 4.5:1 or more with
+    /// Increase Contrast.
+    static func achievementEngravingColors(hex: String, increasedContrast: Bool) -> (surface: GemColor, groove: GemColor) {
+        let palette = CabochonPalette(hex: hex)
+        return (palette.crown, increasedContrast ? palette.deepGroove : palette.groove)
+    }
+
+    /// Type size in scene points for a stone of `sceneRadius`: a figure
+    /// ("100") smaller than a single glyph (✓, W).
+    static func achievementEngravingFontSize(mark: String, sceneRadius: CGFloat) -> CGFloat {
+        let radius = sceneRadius.isFinite ? max(sceneRadius, 2) : 11.5
+        let share: CGFloat
+        switch mark.count {
+        case ...1: share = mark == "✓" ? 0.66 : 0.60
+        case 2: share = 0.54
+        default: share = 0.46
+        }
+        return radius * share
+    }
+
+    private static func achievementEngravingFont(fontSize: CGFloat) -> UIFont {
+        let base = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
+        guard let rounded = base.fontDescriptor.withDesign(.rounded) else { return base }
+        return UIFont(descriptor: rounded, size: fontSize)
+    }
+
+    private static func achievementEngravingText(_ mark: String, fontSize: CGFloat, color: UIColor = .black) -> NSAttributedString {
+        NSAttributedString(string: mark, attributes: [
+            .font: achievementEngravingFont(fontSize: fontSize),
+            .kern: fontSize * 0.02,
+            .foregroundColor: color
+        ])
+    }
+
+    /// Scene-point size of an engraving (the text plus its lip).
+    static func achievementEngravingSize(mark: String, fontSize rawFontSize: CGFloat) -> CGSize {
+        let fontSize = max(3, rawFontSize.isFinite ? rawFontSize : 7)
+        let measured = achievementEngravingText(mark, fontSize: fontSize).size()
+        return CGSize(width: (measured.width + 2).rounded(.up), height: (measured.height + 1.5).rounded(.up))
+    }
+
+    /// Atlas name of an engraving (ASCII: the mark is spelled as its
+    /// Unicode scalar values, like the count engravings).
+    static func achievementEngravingTextureName(
+        mark: String,
+        hex: String,
+        fontSize: CGFloat,
+        scale: CGFloat,
+        increasedContrast: Bool
+    ) -> String {
+        let spelled = mark.unicodeScalars.map { String($0.value, radix: 16) }.joined(separator: ".")
+        let clean = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted).uppercased()
+        return "gem.intaglio|\(spelled)|\(clean)|f\((fontSize * 4).rounded() / 4)|x\(renderScale(scale))"
+            + (increasedContrast ? "|c" : "")
+    }
+
+    /// The mark cut into the dome: a pale lip below it where the cut
+    /// catches the light, then the groove, a few shades deeper than the
+    /// crown. It reads as engraved, never as printed ink or a badge.
+    static func achievementEngravingImage(
+        mark: String,
+        hex: String,
+        fontSize rawFontSize: CGFloat,
+        scale: CGFloat,
+        increasedContrast: Bool
+    ) -> UIImage {
+        let fontSize = max(3, rawFontSize.isFinite ? rawFontSize : 7)
+        let size = achievementEngravingSize(mark: mark, fontSize: fontSize)
+        let colors = achievementEngravingColors(hex: hex, increasedContrast: increasedContrast)
+        let palette = CabochonPalette(hex: hex)
+        // The groove's upper wall is in shade, its floor lighter toward the
+        // lower wall that faces the light: deeper at the top, the groove
+        // colour (the contrast floor) at the bottom.
+        let wall = colors.groove.mixed(with: palette.slate, amount: 0.35)
+        let fill = UIGraphicsImageRenderer(size: size, format: rendererFormat(scale: scale)).image { renderer in
+            guard let gradient = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: [wall.cgColor, colors.groove.cgColor] as CFArray,
+                locations: [0.2, 0.8]
+            ) else { return }
+            renderer.cgContext.drawLinearGradient(
+                gradient,
+                start: .zero,
+                end: CGPoint(x: 0, y: size.height),
+                options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+            )
+        }
+        return UIGraphicsImageRenderer(size: size, format: rendererFormat(scale: scale)).image { _ in
+            let textSize = achievementEngravingText(mark, fontSize: fontSize).size()
+            let origin = CGPoint(x: (size.width - textSize.width) / 2, y: (size.height - textSize.height) / 2)
+            let lip = max(0.5, fontSize * 0.06)
+            achievementEngravingText(mark, fontSize: fontSize, color: UIColor(white: 1, alpha: 0.80))
+                .draw(at: CGPoint(x: origin.x + lip * 0.4, y: origin.y + lip))
+            achievementEngravingText(mark, fontSize: fontSize, color: UIColor(patternImage: fill))
+                .draw(at: origin)
         }
     }
 }
