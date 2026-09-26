@@ -49,6 +49,7 @@ struct HomeView: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.isCloudOfflineSession) private var isCloudOfflineSession
     @Environment(\.aggregateProjectionPresentation)
     private var aggregateProjectionPresentation
@@ -130,6 +131,9 @@ struct HomeView: View {
     @State private var selectedAggregateDetail: AccumulationClusterSummary?
     @State private var aggregateInspectionTask: Task<Void, Never>?
     @State private var showManualEntry = false
+    /// history-02. Confirmed but not yet written; see `PendingManualEntry`.
+    @State private var pendingManualEntry: PendingManualEntry?
+    @State private var pendingManualCommitTask: Task<Void, Never>?
     @State private var screenTimeArrivals = ScreenTimeArrivalAnnouncer()
     @State private var showAchievementEntry = false
     @State private var showCustomDuration = false
@@ -634,6 +638,22 @@ struct HomeView: View {
             reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.86),
             value: breakOffer?.id
         )
+        .overlay(alignment: .top) {
+            if let pendingManualEntry {
+                manualUndoBanner(pendingManualEntry)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .move(edge: .top).combined(with: .opacity)
+                    )
+            }
+        }
+        .animation(
+            reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.88),
+            value: pendingManualEntry?.id
+        )
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 homeMenu
@@ -797,6 +817,7 @@ struct HomeView: View {
         }
         .onDisappear {
             homeIsVisible = false
+            commitPendingManualEntry()
             widgetRefreshTask?.cancel()
             celebrationRecoveryTask?.cancel()
             capacityCelebrationTask?.cancel()
@@ -816,15 +837,29 @@ struct HomeView: View {
             capacityRemaining = nil
             clearSceneCallbacks()
         }
+        .onChange(of: scenePhase) { _, phase in
+            // Never keep an unsaved entry in memory while iOS may suspend or
+            // end the app.
+            if phase != .active { commitPendingManualEntry() }
+        }
         .onChange(of: router.focusPresentationIsActive) { _, isActive in
-            guard !isActive else { return }
+            guard !isActive else {
+                commitPendingManualEntry()
+                return
+            }
             configureScene()
             syncScene()
             continueRewardDropIfPossible()
             recoverPendingRewardReceipt()
         }
         .onChange(of: rewardDropSurfaceIsObscured) { _, isObscured in
-            guard !isObscured else { return }
+            guard !isObscured else {
+                // Another screen or sheet (the menu, 記録, a second manual
+                // add, share) must see the entry as saved, and 元に戻す is only
+                // offered here on Home.
+                commitPendingManualEntry()
+                return
+            }
             syncScene()
             continueRewardDropIfPossible()
             recoverPendingRewardReceipt()
@@ -3141,6 +3176,7 @@ struct HomeView: View {
     }
 
     private func startFocus(duration: PomodoroDuration) {
+        commitPendingManualEntry()
         guard let subject = selectedSubject else {
             router.selectedTab = .settings
             return
@@ -3344,12 +3380,16 @@ struct HomeView: View {
         }
     }
 
-    /// Saves to the theme chosen in the sheet. Home's own selection is left
-    /// alone: back-filling time for another theme must not change what the
-    /// next timer starts with. Returns nil once saved, otherwise the reason,
-    /// which the still-open sheet shows beside its button (a toast would sit
-    /// behind the full-height sheet).
+    /// Accepts the entry chosen in the sheet (history-02). Home's own
+    /// selection is left alone: back-filling time for another theme must not
+    /// change what the next timer starts with. Nothing is written yet: the
+    /// entry waits a few seconds (`ManualEntryUndoPolicy`) under a 「元に戻す」
+    /// banner and is then saved by `commitPendingManualEntry`. Returns nil
+    /// once accepted, otherwise the reason, which the still-open sheet shows
+    /// beside its button (a toast would sit behind the full-height sheet).
     private func addManualEntry(_ subject: Subject, _ duration: ManualDuration) -> String? {
+        // A second add never stacks two unsaved entries.
+        commitPendingManualEntry()
         guard let resolvedPreferences else {
             return "設定情報を読み込めませんでした。もう一度お試しください。"
         }
@@ -3376,8 +3416,94 @@ struct HomeView: View {
             return "\(Constants.UIStrings.manualCapToast)です。"
         }
 
-        // Apply the quota and session in the same SwiftData transaction. Merely
-        // selecting a duration in the confirmation sheet never mutates Prefs.
+        let pending = PendingManualEntry(
+            subjectID: subject.id,
+            subjectName: subject.safeDisplayName,
+            colorHex: subject.colorHex,
+            duration: duration,
+            confirmedAt: now,
+            dataEpochID: currentActivityEpochID
+        )
+        pendingManualEntry = pending
+        showManualEntry = false
+        schedulePendingManualCommit(pending)
+        if UIAccessibility.isVoiceOverRunning {
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: String(
+                    localized: "\(pending.subjectName)に\(DurationText.spoken(minutes: duration.minutes))、\(MassText.spoken(grams: duration.grams))を積みます。取り消すときは「元に戻す」を押してください",
+                    table: "Home",
+                    comment: "VoiceOver, right after a manual entry is confirmed: theme, duration, grams"
+                )
+            )
+        }
+        return nil
+    }
+
+    private func schedulePendingManualCommit(_ pending: PendingManualEntry) {
+        pendingManualCommitTask?.cancel()
+        let window = ManualEntryUndoPolicy.window(
+            assistiveTechnologyIsRunning: UIAccessibility.isVoiceOverRunning
+                || UIAccessibility.isSwitchControlRunning
+        )
+        pendingManualCommitTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: window)
+            } catch {
+                return
+            }
+            guard pendingManualEntry?.id == pending.id else { return }
+            commitPendingManualEntry()
+        }
+    }
+
+    /// 「元に戻す」: nothing was written, so nothing is deleted.
+    private func undoPendingManualEntry() {
+        guard pendingManualEntry != nil else { return }
+        pendingManualCommitTask?.cancel()
+        pendingManualCommitTask = nil
+        pendingManualEntry = nil
+        router.showToast(
+            String(localized: "取り消しました。瓶には積んでいません", table: "Home", comment: "Toast after undoing a manual entry"),
+            symbol: "arrow.uturn.backward"
+        )
+    }
+
+    /// Writes the pending entry: the allowance and the session in one
+    /// SwiftData transaction, exactly as a direct save did before. Called when
+    /// the window ends, and at once when Home stops being the frontmost,
+    /// undisturbed surface (another sheet or screen, a timer, the app leaving
+    /// the foreground, a second add).
+    private func commitPendingManualEntry() {
+        guard let pending = pendingManualEntry else { return }
+        pendingManualCommitTask?.cancel()
+        pendingManualCommitTask = nil
+        pendingManualEntry = nil
+
+        let failure = String(
+            localized: "\(pending.subjectName)の自己申告を保存できませんでした。もう一度積んでください",
+            table: "Home",
+            comment: "Toast when a confirmed manual entry could not be saved; the argument is the theme"
+        )
+        // A reset or a removed theme in the few seconds since confirming
+        // leaves nothing to attach the entry to.
+        guard pending.dataEpochID == currentActivityEpochID,
+              let subject = activeSubjects.first(where: { $0.id == pending.subjectID }),
+              let resolvedPreferences else {
+            router.showToast(failure, symbol: "exclamationmark.triangle")
+            return
+        }
+        let decision = FairnessPolicy.consumeManualEntry(
+            state: ManualCounterState(
+                dayKey: resolvedPreferences.manualDayKey,
+                usedToday: resolvedPreferences.manualUsedToday
+            ),
+            at: pending.confirmedAt
+        )
+        guard decision.isAllowed else {
+            router.showToast(Constants.UIStrings.manualCapToast, symbol: "clock.badge.xmark")
+            return
+        }
         let writer: Prefs
         do {
             writer = try PrefsSyncPolicy.ensureWriterRow(
@@ -3386,33 +3512,76 @@ struct HomeView: View {
             )
         } catch {
             modelContext.rollback()
-            return "設定情報を安全に保存できませんでした。もう一度お試しください。"
+            router.showToast(failure, symbol: "exclamationmark.triangle")
+            return
         }
         writer.manualDayKey = decision.state.dayKey
         writer.manualUsedToday = decision.state.usedToday
         let session = StudySession(
             subject: subject,
-            startAt: now.addingTimeInterval(-TimeInterval(duration.seconds)),
-            endAt: now,
-            seconds: duration.seconds,
+            startAt: pending.confirmedAt.addingTimeInterval(-TimeInterval(pending.duration.seconds)),
+            endAt: pending.confirmedAt,
+            seconds: pending.duration.seconds,
             source: .manual,
-            grams: duration.grams,
-            deviceDayKey: FairnessPolicy.deviceDayKey(for: now),
+            grams: pending.duration.grams,
+            deviceDayKey: FairnessPolicy.deviceDayKey(for: pending.confirmedAt),
             dataEpochID: currentActivityEpochID
         )
         modelContext.insert(session)
         do {
             try modelContext.save()
-            showManualEntry = false
-            router.showToast(
-                Constants.UIStrings.manualToast(subject: subject.safeDisplayName, grams: duration.grams),
-                symbol: "plus.circle.fill"
-            )
-            return nil
         } catch {
             modelContext.rollback()
-            return "保存できませんでした。もう一度お試しください。"
+            router.showToast(failure, symbol: "exclamationmark.triangle")
         }
+    }
+
+    private func manualUndoBanner(_ pending: PendingManualEntry) -> some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(Color(hex: pending.colorHex))
+                .frame(width: 12, height: 12)
+                .overlay { Circle().stroke(.white.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [2, 2])) }
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                // Time first, like every other record; the grams follow.
+                Text(
+                    "\(pending.subjectName)に\(DurationText.short(minutes: pending.duration.minutes))を積みます",
+                    tableName: "Home",
+                    comment: "Undo banner after a manual entry: theme, then the self-reported time about to be added"
+                )
+                    .font(.subheadline.weight(.bold))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "+\(MassText.grams(pending.duration.grams.formatted())) ・ まもなく瓶に入ります",
+                    tableName: "Home",
+                    comment: "Undo banner subtitle: the mass, and that the entry is saved shortly"
+                )
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 4)
+            Button(String(localized: "元に戻す", table: "Home", comment: "Undo button for a manual entry that is not saved yet")) {
+                undoPendingManualEntry()
+            }
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(PomoGemTheme.amber)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
+            .buttonStyle(PomoGemRowButtonStyle())
+            .accessibilityIdentifier("manual.undo")
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
+        .padding(.vertical, 8)
+        .background(PomoGemTheme.raised.opacity(0.97), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(PomoGemTheme.amber.opacity(0.34), lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("manual.pending")
     }
 
     /// Returns nil once saved, otherwise the reason for the open sheet.

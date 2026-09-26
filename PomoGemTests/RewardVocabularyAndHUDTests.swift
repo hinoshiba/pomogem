@@ -101,4 +101,17 @@ final class RewardVocabularyAndHUDTests: XCTestCase {
             "A receipt whose session is not a loose gem changes nothing"
         )
     }
+
+    // MARK: history-02
+
+    func testManualEntryWaitsLongerForAssistiveTechnology() {
+        XCTAssertEqual(
+            ManualEntryUndoPolicy.window(assistiveTechnologyIsRunning: false),
+            .seconds(5)
+        )
+        XCTAssertEqual(
+            ManualEntryUndoPolicy.window(assistiveTechnologyIsRunning: true),
+            .seconds(15)
+        )
+    }
 }

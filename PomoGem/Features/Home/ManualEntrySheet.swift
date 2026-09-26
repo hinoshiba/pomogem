@@ -242,6 +242,11 @@ struct ManualEntrySheet: View {
                 "\(selectedSubject?.safeDisplayName ?? "テーマ")に\(durationTitle(duration))、\(duration.grams)グラムを積みます"
             )
             .accessibilityIdentifier("manual.confirm")
+            Text("積んだ直後は、ホームで数秒のあいだ取り消せます。", tableName: "Home", comment: "Manual entry: under the confirm button; the entry can be undone briefly on Home")
+                .font(.caption2)
+                .foregroundStyle(PomoGemTheme.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 20)
         .padding(.top, 10)
@@ -316,6 +321,40 @@ struct ManualEntrySheet: View {
                 isEnabled: isEnabled
             ) { selectedDuration = duration }
         }
+    }
+}
+
+/// A self-reported entry confirmed with 「確認して積む」 but not written yet
+/// (history-02). Nothing is saved for a short window while Home offers
+/// 「元に戻す」, so undoing never deletes a row. A synced `StudySession` is
+/// append-only: a physically deleted row invalidates the models that other
+/// screens and devices (including 1.0.2) still hold. Until it is committed
+/// the entry exists only in Home's memory: no total, jar body, export, share
+/// card or iCloud record sees it.
+struct PendingManualEntry: Identifiable, Equatable {
+    let id = UUID()
+    let subjectID: UUID
+    let subjectName: String
+    let colorHex: String
+    let duration: ManualDuration
+    /// When 「確認して積む」 was pressed: the saved session ends here and the
+    /// daily allowance is counted for this moment's day.
+    let confirmedAt: Date
+    /// The reset epoch the entry was confirmed in; a reset in between drops it.
+    let dataEpochID: UUID?
+}
+
+/// When a pending self-reported entry is written (history-02). The window is
+/// the only thing that waits: leaving the foreground, starting a timer,
+/// opening another screen or adding again all commit it at once.
+enum ManualEntryUndoPolicy {
+    static let window: Duration = .seconds(5)
+    /// VoiceOver and Switch Control users need time to reach the button after
+    /// the announcement.
+    static let assistiveWindow: Duration = .seconds(15)
+
+    static func window(assistiveTechnologyIsRunning: Bool) -> Duration {
+        assistiveTechnologyIsRunning ? assistiveWindow : window
     }
 }
 

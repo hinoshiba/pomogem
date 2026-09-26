@@ -56,7 +56,12 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         manualConfirm.tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
         XCTAssertTrue(
-            app.buttons["瓶"].waitForExistence(timeout: 4),
+            app.buttons["manual.undo"].waitForExistence(timeout: 4),
+            "A confirmed self-reported entry can be undone for a few seconds"
+        )
+        // Saved when the Undo window ends (history-02).
+        XCTAssertTrue(
+            app.buttons["瓶"].waitForExistence(timeout: 20),
             "A saved self-reported session must become a visible pebble"
         )
 

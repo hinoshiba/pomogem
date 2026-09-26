@@ -419,10 +419,6 @@ enum Constants {
                 : "❖ 虹の粒！！ +\(grams)g"
         }
 
-        static func manualToast(subject: String, grams: Int) -> String {
-            "自己申告 \(subject) +\(grams)g"
-        }
-
         static func strataToast(pebbleCount: Int) -> String {
             "\(pebbleCount)粒が、ひとつの結晶になった"
         }
