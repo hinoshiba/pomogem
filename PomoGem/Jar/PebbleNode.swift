@@ -538,6 +538,8 @@ final class PebbleNode: SKShapeNode {
     private var earlyEffortBloomNode: SKSpriteNode?
     /// D26 (b): the ×N count as a small engraved copper tag (one sprite).
     private var aggregateTagNode: SKSpriteNode?
+    /// 1, or `quietTagScale` while another crystal is emphasised.
+    private(set) var aggregateTagEmphasis: CGFloat = 1
     /// The tag's text, exactly the former plate's (`AggregatePresentation`).
     private(set) var aggregateTagText: String?
     /// D21: Pro's month engraving under the count ("2026.9"), or nil.
@@ -721,7 +723,7 @@ final class PebbleNode: SKShapeNode {
     /// the jar scale never turns them into large numbers.
     private func updateSemanticLabelScale() {
         let inverse = 1 / max(jarScale, 0.01)
-        aggregateTagNode?.setScale(inverse)
+        aggregateTagNode?.setScale(inverse * aggregateTagEmphasis)
         obstacleCountNode?.setScale(inverse)
     }
 
@@ -1512,11 +1514,26 @@ final class PebbleNode: SKShapeNode {
 
     /// The aggregate holding the most grams in the pile glows 10 % more.
     func setPileEmphasis(_ emphasized: Bool) {
+        // Round 12 (casino review): only the emphasised crystal's copper tag
+        // shows at full size; the others step back to 70 % and α0.75, so a
+        // pile of crystals never reads as a row of chip values. The text
+        // and the D21 month line stay (the tag is only smaller).
+        let tagEmphasis: CGFloat = emphasized ? 1 : Self.quietTagScale
+        if aggregateTagEmphasis != tagEmphasis {
+            aggregateTagEmphasis = tagEmphasis
+            aggregateTagNode?.alpha = emphasized ? 1 : Self.quietTagAlpha
+            updateSemanticLabelScale()
+        }
         let value: CGFloat = emphasized ? 1.1 : 1
         guard gemHaloEmphasis != value else { return }
         gemHaloEmphasis = value
         applyHaloAlpha()
     }
+
+    /// A crystal's copper tag when another crystal in the pile is the
+    /// emphasised one (`setPileEmphasis`).
+    static let quietTagScale: CGFloat = 0.7
+    static let quietTagAlpha: CGFloat = 0.75
 
     private static let gemTwinkleKey = "gem.glint.twinkle"
 
@@ -1939,37 +1956,37 @@ final class PebbleNode: SKShapeNode {
 
     private func addAchievementMark(_ achievementKind: AchievementKind) {
         let material = JarPalette.achievementMaterial(for: achievementKind)
-        let badgeSize: CGSize
         let fontScale: CGFloat
         switch achievementKind {
         case .perfectScore:
-            badgeSize = CGSize(width: localRadius * 1.64, height: localRadius * 0.98)
-            fontScale = 0.68
+            fontScale = 0.54
         case .examPass:
-            badgeSize = CGSize(width: localRadius * 1.10, height: localRadius * 1.10)
-            fontScale = 0.88
+            fontScale = 0.80
         case .workMilestone:
-            badgeSize = CGSize(width: localRadius * 1.14, height: localRadius * 1.08)
-            fontScale = 0.76
+            fontScale = 0.70
         }
 
-        // The jewel gradients deliberately run bright and saturated. A fixed,
-        // opaque ink plate keeps every semantic mark readable independently of
-        // hue, while the kind-specific rim preserves the vivid material identity.
-        let backdrop = SKShapeNode(
-            rectOf: badgeSize,
-            cornerRadius: badgeSize.height / 2
-        )
+        // Round 12 (casino review): the mark is engraved in the stone's
+        // table — a pale octagon matching the step cut, the mark cut into it
+        // in deep ink — not a black disc with white numerals, which read as
+        // a poker chip. The contrast stays above 7:1 on every material, and
+        // the kind-specific edge keeps the material's identity.
+        let tableRadius = localRadius * 0.62
+        let table = CGMutablePath()
+        for index in 0 ..< 8 {
+            let angle = CGFloat.pi / 8 + CGFloat(index) * .pi / 4
+            let point = CGPoint(x: cos(angle) * tableRadius, y: sin(angle) * tableRadius)
+            if index == 0 { table.move(to: point) } else { table.addLine(to: point) }
+        }
+        table.closeSubpath()
+        let backdrop = SKShapeNode(path: table)
         backdrop.name = "achievement.markBackdrop"
-        backdrop.fillColor = UIColor(
-            red: 0.018,
-            green: 0.039,
-            blue: 0.075,
-            alpha: 1
-        )
-        backdrop.strokeColor = material.edge.mixed(with: .white, amount: 0.22)
-        backdrop.lineWidth = max(1.1, localRadius * 0.085)
-        backdrop.glowWidth = localRadius * 0.12
+        // The table's own light: the material lifted most of the way to
+        // white (luminance ≥ 0.8 for every kind), never a white sticker.
+        backdrop.fillColor = material.base.mixed(with: .white, amount: 0.80)
+        backdrop.strokeColor = material.edge.mixed(with: .white, amount: 0.30).withAlphaComponent(0.7)
+        backdrop.lineWidth = max(0.8, localRadius * 0.05)
+        backdrop.glowWidth = 0
         backdrop.zPosition = JarZPosition.pebbleDetail + 0.55
         backdrop.blendMode = .alpha
         addChild(backdrop)
@@ -1979,7 +1996,7 @@ final class PebbleNode: SKShapeNode {
         mark.name = "achievement.mark"
         mark.text = achievementKind.shortMark
         mark.fontSize = localRadius * fontScale
-        mark.fontColor = .white
+        mark.fontColor = UIColor(red: 0.04, green: 0.07, blue: 0.14, alpha: 1)
         mark.verticalAlignmentMode = .center
         mark.horizontalAlignmentMode = .center
         mark.zPosition = JarZPosition.pebbleDetail + 0.65

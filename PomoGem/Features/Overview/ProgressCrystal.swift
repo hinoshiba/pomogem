@@ -562,7 +562,8 @@ enum FusionOrbitStageScale: Sendable {
 }
 
 /// A single, finite success beat: the newest source appears, and a completed
-/// set briefly converges before returning to a readable 10-around-1 diagram.
+/// set briefly converges before returning to a readable ten-under-one
+/// diagram.
 /// There is no idle roulette, near miss, or endless chase animation. Reduce
 /// Motion renders the same final meaning without interpolation.
 struct FusionOrbitStage: View {
@@ -606,6 +607,20 @@ struct FusionOrbitStage: View {
 
     private var sourceHexes: [String] {
         Self.sourceHexes(shares: destinationShares, count: state.slotCount)
+    }
+
+    /// Where source `index` of `count` rests (round 12): a loose bowl from
+    /// the left, under the crystal, to the right (y down, degrees; 192° is
+    /// a little above 9 o'clock, −12° a little above 3 o'clock), each gem a
+    /// few degrees and a few percent off the even curve, so the set reads
+    /// as a handful of gems, never as a wheel.
+    static func sourceSlot(index: Int, count: Int) -> (degrees: Double, reach: CGFloat) {
+        let angleJitter: [Double] = [2, -3, 1.5, -2, 3, -1.5, 2.5, -3, 1, -2]
+        let reachJitter: [CGFloat] = [1.0, 0.93, 0.98, 0.91, 0.97, 0.92, 0.99, 0.9, 0.96, 1.0]
+        let slots = max(1, count)
+        let step = slots > 1 ? 204 / Double(slots - 1) : 0
+        let degrees = 192 - Double(index) * step + angleJitter[index % angleJitter.count]
+        return (degrees, reachJitter[index % reachJitter.count])
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -657,29 +672,14 @@ struct FusionOrbitStage: View {
                     .frame(width: dimension * 1.12, height: dimension * 1.12)
                     .blur(radius: reduceTransparency ? 1 : 8)
 
-                Circle()
-                    .stroke(
-                        Color(hex: colorHex).opacity(colorSchemeContrast == .increased ? 0.56 : 0.24),
-                        style: StrokeStyle(lineWidth: 0.9, dash: [2.5, 5.5])
-                    )
-                    .frame(width: baseRadius * 2, height: baseRadius * 2)
-
-                // A quiet progress arc (α ≤ 0.3): no spokes and no bright
-                // wheel, so ten gems around one never read as a roulette
+                // Round 12 (casino review): no ring line and no progress arc
+                // (the lit gems carry the progress), and the ten rest in a
+                // loose bowl under the crystal, like the jar's pile under the
+                // core, instead of a wheel of ten evenly spaced around it
                 // (Docs/GemExperienceDesign.md §7.14).
-                Circle()
-                    .trim(from: 0, to: CGFloat(state.progressFraction ?? 0))
-                    .stroke(
-                        Color.white.opacity(colorSchemeContrast == .increased ? 0.62 : 0.30),
-                        style: StrokeStyle(lineWidth: max(1, dimension * 0.008), lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .frame(width: baseRadius * 2, height: baseRadius * 2)
-
                 ForEach(0 ..< state.slotCount, id: \.self) { index in
-                    let angle = Angle.degrees(
-                        -90 + Double(index) * 360 / Double(max(1, state.slotCount))
-                    )
+                    let slot = Self.sourceSlot(index: index, count: state.slotCount)
+                    let angle = Angle.degrees(slot.degrees)
                     let isLit = state.litSlotCount.map { index < $0 } ?? false
                     let isLatest = state.emphasizesLatestSource
                         && index == state.latestLitSlotIndex
@@ -703,8 +703,8 @@ struct FusionOrbitStage: View {
                             : (isLit ? 1 : (state.litSlotCount == nil ? 0.28 : 0.46))
                     )
                     .offset(
-                        x: CGFloat(cos(angle.radians)) * orbitRadius,
-                        y: CGFloat(sin(angle.radians)) * orbitRadius
+                        x: CGFloat(cos(angle.radians)) * orbitRadius * slot.reach,
+                        y: CGFloat(sin(angle.radians)) * orbitRadius * slot.reach
                     )
                 }
 
@@ -750,6 +750,9 @@ struct FusionOrbitStage: View {
                 )
             }
             .frame(width: dimension, height: dimension)
+            // The bowl hangs below the crystal: lift the pair so the set,
+            // not the crystal alone, sits in the middle of the stage.
+            .offset(y: -dimension * 0.1)
             .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
         }
         .accessibilityHidden(true)

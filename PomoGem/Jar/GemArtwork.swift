@@ -1825,11 +1825,13 @@ enum GemArtwork {
         }
     }
 
+    /// Four slim prongs (round 12: 0.14 R wide in soft rose gold, no dark
+    /// outline, so the setting no longer reads as a token's clips).
     private static func drawProngs(context: CGContext, radius: CGFloat, map: (CGPoint) -> CGPoint) {
-        let base = GemColor(hex: "#B8735A")
+        let base = GemColor(hex: "#D9967A")
         let highlight = GemColor(hex: "#F2C4A8")
-        let shade = GemColor(hex: "#5A2E22")
-        let width = radius * 0.24
+        let shade = GemColor(hex: "#B8735A")
+        let width = radius * 0.14
         for index in 0 ..< 4 {
             let angle = CGFloat.pi / 4 + CGFloat(index) * .pi / 2
             let inner = polar(angle, 0.80)
@@ -1859,8 +1861,8 @@ enum GemArtwork {
             }
             context.restoreGState()
             context.addPath(path)
-            context.setStrokeColor(shade.withAlpha(0.8).cgColor)
-            context.setLineWidth(max(0.4, radius * 0.02))
+            context.setStrokeColor(shade.withAlpha(0.35).cgColor)
+            context.setLineWidth(max(0.3, radius * 0.012))
             context.strokePath()
         }
     }

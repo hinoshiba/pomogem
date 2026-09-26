@@ -4569,35 +4569,39 @@ private struct StratumCelebrationView: View {
                                     .stroke(Color(hex: colorHex).opacity(0.30), lineWidth: 1)
                             }
 
-                        FusionOrbitStage(
-                            state: orbitState,
-                            colorHex: colorHex,
-                            scale: .hero,
-                            destinationGrams: request.grams,
-                            colorShares: colorShares
-                        )
-                        .frame(width: 218, height: 218)
+                        // The pill sits under the stage (round 12), never
+                        // over the lowest of the ten gems.
+                        VStack(spacing: 6) {
+                            FusionOrbitStage(
+                                state: orbitState,
+                                colorHex: colorHex,
+                                scale: .hero,
+                                destinationGrams: request.grams,
+                                colorShares: colorShares
+                            )
+                            .frame(width: 206, height: 206)
 
-                        HStack(spacing: 8) {
-                            Text("瓶の整理")
-                                .foregroundStyle(PomoGemTheme.muted)
-                            Text("10")
-                            Image(systemName: "arrow.right")
-                                .accessibilityHidden(true)
-                            Text("1")
-                            Text("・ 記録 100% 保持")
-                                .foregroundStyle(PomoGemTheme.muted)
+                            HStack(spacing: 8) {
+                                Text("瓶の整理")
+                                    .foregroundStyle(PomoGemTheme.muted)
+                                Text("10")
+                                Image(systemName: "arrow.right")
+                                    .accessibilityHidden(true)
+                                Text("1")
+                                Text("・ 記録 100% 保持")
+                                    .foregroundStyle(PomoGemTheme.muted)
+                            }
+                            .font(.system(.caption, design: .rounded, weight: .black))
+                            .monospacedDigit()
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(PomoGemTheme.card.opacity(0.92), in: Capsule())
+                            .overlay(Capsule().stroke(.white.opacity(0.16), lineWidth: 0.7))
                         }
-                        .font(.system(.caption, design: .rounded, weight: .black))
-                        .monospacedDigit()
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(PomoGemTheme.card.opacity(0.92), in: Capsule())
-                        .overlay(Capsule().stroke(.white.opacity(0.16), lineWidth: 0.7))
                         .padding(.bottom, 10)
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 244)
+                    .frame(height: 256)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(
                         "瓶の整理として、10個の記録を1個の\(AggregatePresentation.title(level: level))へ圧縮。記録と質量は100パーセント保持。時間の価値は変わりません"
@@ -4655,7 +4659,9 @@ private struct StratumCelebrationView: View {
             value: showsMonthLabel ? request.monthLabel : "\(request.pebbleCount)粒"
         )
         StatPill(title: "積んだ質量", value: formattedMass(request.grams))
-        StatPill(title: "結晶", value: AggregatePresentation.title(level: level))
+        // The tile names the crystal's size (×10, ×100…): its title already
+        // says 結晶 (round 12; the value repeated it).
+        StatPill(title: "結晶", value: AggregatePresentation.countLabel(request.pebbleCount))
     }
 
     private func formattedMass(_ grams: Int) -> String {

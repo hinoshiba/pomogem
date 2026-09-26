@@ -1594,4 +1594,37 @@ extension GemBrillianceTests {
         XCTAssertEqual(image.size, CGSize(width: 402, height: 460))
         XCTAssertTrue(JarLightBounds.image(stageSize: stage) === image, "Baked once per stage size")
     }
+
+    /// The fusion sheet and the Overview lens lay the ten in a loose bowl
+    /// under the crystal, never an even wheel around it.
+    func testTheTenSourcesRestInABowlNotAWheel() {
+        let slots = (0 ..< 10).map { FusionOrbitStage.sourceSlot(index: $0, count: 10) }
+        for slot in slots {
+            // y down: from a little above 9 o'clock, under, to a little
+            // above 3 o'clock; nothing over the crystal.
+            XCTAssertGreaterThanOrEqual(slot.degrees, -16)
+            XCTAssertLessThanOrEqual(slot.degrees, 196)
+            XCTAssertLessThanOrEqual(slot.reach, 1)
+            XCTAssertGreaterThanOrEqual(slot.reach, 0.85)
+        }
+        let gaps = zip(slots, slots.dropFirst()).map { $0.degrees - $1.degrees }
+        XCTAssertTrue(gaps.allSatisfy { $0 > 10 }, "In order, left to right")
+        XCTAssertGreaterThan(Set(gaps.map { ($0 * 10).rounded() }).count, 1, "Not evenly spaced")
+        XCTAssertGreaterThan(Set(slots.map(\.reach)).count, 1, "Not one radius")
+    }
+
+    /// Only the emphasised crystal's copper tag shows at full size.
+    @MainActor
+    func testOnlyTheEmphasisedCrystalShowsAFullSizeTag() throws {
+        let pebble = PebbleNode(descriptor: aggregateDescriptor(level: 1), reduceMotion: true, jarScale: 2)
+        let tag = try XCTUnwrap(pebble.childNode(withName: "aggregate.tag") as? SKSpriteNode)
+        XCTAssertEqual(tag.xScale, 0.5, accuracy: 0.000_1)
+        pebble.setPileEmphasis(false)
+        XCTAssertEqual(tag.xScale, 0.5 * PebbleNode.quietTagScale, accuracy: 0.000_1)
+        XCTAssertEqual(tag.alpha, PebbleNode.quietTagAlpha, accuracy: 0.000_1)
+        XCTAssertEqual(pebble.aggregateTagText, "×10", "The text never changes")
+        pebble.setPileEmphasis(true)
+        XCTAssertEqual(tag.xScale, 0.5, accuracy: 0.000_1)
+        XCTAssertEqual(tag.alpha, 1, accuracy: 0.000_1)
+    }
 }
