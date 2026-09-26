@@ -123,6 +123,39 @@ enum FocusReturnReminderPolicy {
     }
 }
 
+/// Copy of the 「集中が切れています」 series (F1, owner-requested 2026-09-26).
+/// Account-neutral like every notification here: no theme name and no
+/// promise of a gem. It states facts only — the timer is paused and waits —
+/// with no guilt, streak or loss framing.
+enum FocusLeaveNudgeCopy {
+    static var title: String {
+        String(
+            localized: "集中が切れています",
+            table: "Notifications",
+            comment: "Notification title after the person left the app during a focus; the timer is now paused. Suggested English: Focus interrupted"
+        )
+    }
+
+    /// The first request says what happened; later ones state, factually,
+    /// how long the timer has been paused.
+    static func body(forNudgeAt index: Int) -> String {
+        let offsets = FocusLeavePolicy.nudgeOffsets
+        guard index > 0, offsets.indices.contains(index) else {
+            return String(
+                localized: "タイマーを一時停止しました。ポモジェムに戻ると続きから再開できます。",
+                table: "Notifications",
+                comment: "First notification after leaving the app during a focus. Suggested English: Your timer is paused. Come back to PomoGem to pick up where you left off."
+            )
+        }
+        let pausedFor = DurationText.short(minutes: Int(offsets[index] / 60))
+        return String(
+            localized: "一時停止して\(pausedFor)たちました。戻れば続きから再開できます。",
+            table: "Notifications",
+            comment: "Later notification after leaving the app during a focus. %@ is how long the timer has been paused, e.g. 5分. Suggested English: Paused for %@. Come back any time to pick up where you left off."
+        )
+    }
+}
+
 /// A narrow notification-center boundary for exercising reminder races
 /// without scheduling notifications on a developer's device.
 @MainActor
@@ -448,6 +481,9 @@ final class NotificationManager {
     private var focusReturnReminderSessionID: UUID?
     private var focusReturnReminderOperation: NotificationScheduleOperation?
     private var registeredFocusReturnReminder: FocusReturnReminderCandidate?
+    private var focusLeaveNudgeGeneration: UInt64 = 0
+    private var focusLeaveNudgeSessionID: UUID?
+    private var focusLeaveNudgeOperation: FocusLeaveNudgeOperation?
     private var breakNotificationGeneration: UInt64 = 0
     private var breakNotificationIntents: [UUID: UInt64] = [:]
     private var breakNotificationOperations: [UUID: NotificationScheduleOperation] = [:]
@@ -465,10 +501,16 @@ final class NotificationManager {
         let task: Task<TimerCompletionNotificationScheduleResult, Error>
     }
 
+    private struct FocusLeaveNudgeOperation {
+        let generation: UInt64
+        let task: Task<Int, Error>
+    }
+
     private struct FocusReturnReminderCandidate: Equatable {
         let sessionID: UUID
         let endDate: Date
         let playsSound: Bool
+        let completionSound: TimerCompletionSound
     }
 
     private enum Identifier {
@@ -680,16 +722,46 @@ final class NotificationManager {
         }
     }
 
-    func cancelFocusCompletion(sessionID: UUID) {
-        focusNotificationIntents.removeValue(forKey: sessionID)
-        requestClient.removePending(
-            [Identifier.completion(sessionID: sessionID)]
-        )
+    /// Stops everything this session's running timer booked: the end alert,
+    /// the registered return reminder and, unless the caller is the leave
+    /// pause itself, the 「集中が切れています」 series (critic D7: pausing
+    /// because the person left must keep the series that tells them so).
+    func cancelFocusCompletion(
+        sessionID: UUID,
+        withdrawingLeaveNudges: Bool = true
+    ) {
+        cancelFocusCompletionRequest(sessionID: sessionID)
         if registeredFocusReturnReminder?.sessionID == sessionID {
             registeredFocusReturnReminder = nil
         }
         if focusReturnReminderSessionID == sessionID {
             cancelFocusReturnReminder()
+        }
+        if withdrawingLeaveNudges, focusLeaveNudgeSessionID == sessionID {
+            cancelFocusLeaveNudges()
+        }
+    }
+
+    /// Removes only the end alert of `sessionID` and invalidates an add still
+    /// in flight for it.
+    func cancelFocusCompletionRequest(sessionID: UUID) {
+        focusNotificationIntents.removeValue(forKey: sessionID)
+        requestClient.removePending(
+            [Identifier.completion(sessionID: sessionID)]
+        )
+    }
+
+    /// The running focus this device owns, as its screen last registered it.
+    /// Only the owner registers, so the leave monitor treats this as proof
+    /// that the saved timer is this device's to pause.
+    var registeredRunningFocus: FocusLeaveCandidate? {
+        registeredFocusReturnReminder.map {
+            FocusLeaveCandidate(
+                sessionID: $0.sessionID,
+                endDate: $0.endDate,
+                playsSound: $0.playsSound,
+                completionSound: $0.completionSound
+            )
         }
     }
 
@@ -699,13 +771,15 @@ final class NotificationManager {
     func registerFocusReturnReminder(
         sessionID: UUID,
         endDate: Date,
-        playsSound: Bool
+        playsSound: Bool,
+        completionSound: TimerCompletionSound = .standard
     ) {
         guard !timerSchedulingIsSuspendedForAccountBoundary else { return }
         let candidate = FocusReturnReminderCandidate(
             sessionID: sessionID,
             endDate: endDate,
-            playsSound: playsSound
+            playsSound: playsSound,
+            completionSound: completionSound
         )
         guard registeredFocusReturnReminder != candidate else { return }
         cancelFocusReturnReminder()
@@ -842,6 +916,135 @@ final class NotificationManager {
         focusReturnReminderClient.removeDelivered([Identifier.focusReturnReminder])
     }
 
+    /// Books the bounded 「集中が切れています」 series for one absence (F1),
+    /// provisionally at `.background`: the process is usually suspended long
+    /// before the later requests are due. A detected lock, a return, the end
+    /// of the focus or an account boundary withdraws it. Booked only while
+    /// both device switches are on and this device may deliver notifications;
+    /// returns how many requests Notification Center accepted.
+    @discardableResult
+    func scheduleFocusLeaveNudges(
+        sessionID: UUID,
+        leftAt: Date,
+        playsSound: Bool,
+        completionSound: TimerCompletionSound = .standard
+    ) async throws -> Int {
+        guard !Task.isCancelled else { return 0 }
+        guard !timerSchedulingIsSuspendedForAccountBoundary,
+              focusLeaveNudgesArePreferred else {
+            cancelFocusLeaveNudges()
+            return 0
+        }
+        focusLeaveNudgeGeneration &+= 1
+        let generation = focusLeaveNudgeGeneration
+        focusLeaveNudgeSessionID = sessionID
+        removeFocusLeaveNudgeRequests()
+        let previousTask = focusLeaveNudgeOperation?.task
+        let operationTask = Task<Int, Error> { @MainActor [self] in
+            defer {
+                if focusLeaveNudgeOperation?.generation == generation {
+                    focusLeaveNudgeOperation = nil
+                }
+            }
+            if let previousTask {
+                _ = try? await previousTask.value
+            }
+            guard focusLeaveNudgeIntentIsCurrent(generation, sessionID: sessionID) else {
+                return 0
+            }
+            await refreshAuthorizationStatus()
+            guard focusLeaveNudgeIntentIsCurrent(generation, sessionID: sessionID) else {
+                return 0
+            }
+            guard isAuthorized, focusLeaveNudgesArePreferred else {
+                removeFocusLeaveNudgeRequests()
+                return 0
+            }
+            var accepted = 0
+            for (index, offset) in FocusLeavePolicy.nudgeOffsets.enumerated() {
+                let dueAt = leftAt.addingTimeInterval(offset)
+                // A slow add must not turn the series into a burst: a request
+                // whose moment has already passed is skipped, not sent now.
+                guard dueAt.timeIntervalSinceNow
+                        >= IntegrationConstants.notificationMinimumDelay else { continue }
+                let request = UNNotificationRequest(
+                    identifier: FocusLeavePolicy.nudgeIdentifiers[index],
+                    content: notificationContent(
+                        title: FocusLeaveNudgeCopy.title,
+                        body: FocusLeaveNudgeCopy.body(forNudgeAt: index),
+                        playsSound: playsSound,
+                        timerCompletionSound: completionSound,
+                        interruptionLevel: .active,
+                        threadIdentifier: FocusLeavePolicy.nudgeThreadIdentifier
+                    ),
+                    trigger: UNTimeIntervalNotificationTrigger(
+                        timeInterval: TimerCompletionNotificationTiming.deliveryDelay(
+                            endDate: dueAt,
+                            requestCreatedAt: .now
+                        ),
+                        repeats: false
+                    )
+                )
+                do {
+                    try await focusReturnReminderClient.add(request)
+                } catch {
+                    removeFocusLeaveNudgeRequests()
+                    guard focusLeaveNudgeIntentIsCurrent(generation, sessionID: sessionID) else {
+                        return 0
+                    }
+                    lastErrorDescription = error.localizedDescription
+                    throw error
+                }
+                guard focusLeaveNudgeIntentIsCurrent(generation, sessionID: sessionID) else {
+                    // Withdrawn while this add was in flight: remove what
+                    // this operation booked before the next one starts.
+                    removeFocusLeaveNudgeRequests()
+                    return 0
+                }
+                accepted += 1
+            }
+            lastErrorDescription = nil
+            return accepted
+        }
+        focusLeaveNudgeOperation = FocusLeaveNudgeOperation(
+            generation: generation,
+            task: operationTask
+        )
+        return try await CancellationResponsiveTaskWaiter.value {
+            try await operationTask.value
+        }
+    }
+
+    /// Removes every pending and delivered request of the series. Called on
+    /// return (before any permission check), a detected lock, abort,
+    /// completion, ownership loss, account change, complete deletion and
+    /// when either switch is turned off.
+    func cancelFocusLeaveNudges() {
+        focusLeaveNudgeGeneration &+= 1
+        focusLeaveNudgeSessionID = nil
+        removeFocusLeaveNudgeRequests()
+    }
+
+    private var focusLeaveNudgesArePreferred: Bool {
+        FocusLeavePreferences.isEnabled(defaults: focusReturnReminderDefaults)
+            && FocusLeavePreferences.nudgesAreEnabled(defaults: focusReturnReminderDefaults)
+    }
+
+    private func focusLeaveNudgeIntentIsCurrent(
+        _ generation: UInt64,
+        sessionID: UUID
+    ) -> Bool {
+        !timerSchedulingIsSuspendedForAccountBoundary
+            && focusLeaveNudgeGeneration == generation
+            && focusLeaveNudgeSessionID == sessionID
+    }
+
+    private func removeFocusLeaveNudgeRequests() {
+        let identifiers = FocusLeavePolicy.nudgeIdentifiers
+        focusReturnReminderClient.removePending(identifiers)
+        focusReturnReminderClient.removeDelivered(identifiers)
+    }
+
     func scheduleBreakCompletion(
         id: UUID,
         endDate: Date,
@@ -906,6 +1109,7 @@ final class NotificationManager {
         timerSchedulingIsSuspendedForAccountBoundary = true
         registeredFocusReturnReminder = nil
         cancelFocusReturnReminder()
+        cancelFocusLeaveNudges()
         focusNotificationIntents.removeAll()
         focusNotificationGeneration &+= 1
         breakNotificationIntents.removeAll()
@@ -937,6 +1141,9 @@ final class NotificationManager {
         }
         if sessionID == nil || focusReturnReminderSessionID != sessionID {
             cancelFocusReturnReminder()
+        }
+        if sessionID == nil || focusLeaveNudgeSessionID != sessionID {
+            cancelFocusLeaveNudges()
         }
         focusNotificationIntents = focusNotificationIntents.filter { $0.key == sessionID }
         focusNotificationGeneration &+= 1
@@ -1169,14 +1376,19 @@ final class NotificationManager {
     /// return reminder are nudges and stay `.active`. People can still turn
     /// Time Sensitive off per app or per Focus in iOS Settings.
     private func notificationContent(
+        title: String = "ポモジェム",
         body: String,
         playsSound: Bool,
         timerCompletionSound: TimerCompletionSound? = nil,
-        interruptionLevel: UNNotificationInterruptionLevel = .active
+        interruptionLevel: UNNotificationInterruptionLevel = .active,
+        threadIdentifier: String? = nil
     ) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
-        content.title = "ポモジェム"
+        content.title = title
         content.body = body
+        if let threadIdentifier {
+            content.threadIdentifier = threadIdentifier
+        }
         content.interruptionLevel = interruptionLevel
         if playsSound {
             content.sound = timerCompletionSound.map {
