@@ -67,6 +67,12 @@ Apple teamの実際のaccess、mail運用を照合して最終回答します。
 SDKやappからの自動送信ではありませんが、公開プライバシーポリシーとsupport mailのoptional
 disclosure判断には含めます。
 
+1.1.0の設定「メールで問い合わせる」は、利用者のメールアプリにsupport宛ての下書きを開くだけで、
+app自身は何も送信しません。下書きにはapp version／build、iOS version、機種識別子、保存先、Proの
+利用状況だけを記入し、theme名・memo・集中記録・account識別子・Screen Time診断は入れません。利用者が
+内容を確認・編集して自分で送るため、上記の任意のサポートメールと同じ扱いで判断します
+（Diagnosticsのうち送られるのは利用者が送信を選んだメール本文の範囲だけです）。
+
 サポートメールがoptional disclosureの条件を満たさないと判断される場合は、少なくとも
 Email AddressをApp Functionality（customer support）目的、linked to user、trackingなしとして申告します。
 通常のメールは送信元と内容を結び付けられるため、匿名化していない限り「linked to user」として

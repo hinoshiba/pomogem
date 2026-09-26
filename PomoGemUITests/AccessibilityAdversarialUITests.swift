@@ -57,8 +57,10 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         app.navigationBars["タイマーの表示"].buttons.element(boundBy: 0).tap()
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 5))
 
+        // The default duration leads the 集中 card (settings-06), so the
+        // presets sit above the display row the page came back to.
         let firstPreset = app.buttons["settings.focus-preset.25"]
-        XCTAssertTrue(scrollUntilHittable(firstPreset, attempts: 20))
+        XCTAssertTrue(scrollUntilHittable(firstPreset, attempts: 20, swipingDown: true))
         let presetColumnX = firstPreset.frame.minX
         for minutes in [25, 45, 60, 90] {
             let preset = app.buttons["settings.focus-preset.\(minutes)"]

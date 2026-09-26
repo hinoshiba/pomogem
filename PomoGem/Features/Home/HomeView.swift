@@ -82,6 +82,15 @@ struct HomeView: View {
     private var homeAtmosphereRawValue = HomeAtmosphere.aurora.rawValue
     @AppStorage(AccountScopedLocalState.defaultsKey(base: RecentCustomFocusDurations.storageKey))
     private var recentCustomFocusSecondsRawValue = ""
+    /// settings-04. The fusion sheet's one quiet 「Proなら…」 link is offered
+    /// once, ever, on this device (see `MonthLabelHintPolicy`).
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: MonthLabelHintPolicy.offeredStorageKey))
+    private var didOfferMonthLabelHint = false
+    /// The celebration that showed the link keeps it while it is open.
+    @State private var monthLabelHintCelebrationID: UUID?
+    /// Tapped: the paywall opens only once the fusion sheet has closed, since
+    /// a root sheet cannot present over Home's sheet.
+    @State private var opensMonthLabelPaywallAfterCelebration = false
     @State private var scene = JarScene()
     /// Bumped whenever PendingRewardReceiptStore writes. The receipts live in
     /// UserDefaults, which SwiftUI does not observe, so clearing the last one
@@ -764,7 +773,11 @@ struct HomeView: View {
             AccumulationPlanView()
                 .presentationDragIndicator(.visible)
         }
-        .sheet(item: $completedStratum, onDismiss: finishPresentedStratumCelebration) { request in
+        .sheet(item: $completedStratum, onDismiss: {
+            // First, so the open paywall blocks the next queued celebration.
+            presentMonthLabelPaywallIfRequested()
+            finishPresentedStratumCelebration()
+        }) { request in
             stratumCelebrationSheet(request)
         }
     }
@@ -1000,7 +1013,23 @@ struct HomeView: View {
             showsMonthLabel: purchase.isPro,
             onExplore: exploreCompletedStratum,
             onShare: { shareCompletedStratum(request) },
-            onContinue: dismissCompletedStratum
+            onContinue: dismissCompletedStratum,
+            monthLabelHint: MonthLabelHintPolicy.offersHint(
+                isPro: purchase.isPro,
+                entitlementsResolved: purchase.hasResolvedEntitlements,
+                alreadyOffered: didOfferMonthLabelHint,
+                hintCelebrationID: monthLabelHintCelebrationID,
+                celebrationID: request.id
+            ) ? MonthLabelHint(
+                onShown: {
+                    monthLabelHintCelebrationID = request.id
+                    didOfferMonthLabelHint = true
+                },
+                onOpen: {
+                    opensMonthLabelPaywallAfterCelebration = true
+                    dismissCompletedStratum()
+                }
+            ) : nil
         )
         // A decimal carry is secondary, lossless storage maintenance. Open it
         // at full height so the organization result and mass-preservation
@@ -3306,6 +3335,13 @@ struct HomeView: View {
         completedStratum = nil
     }
 
+    private func presentMonthLabelPaywallIfRequested() {
+        guard opensMonthLabelPaywallAfterCelebration else { return }
+        opensMonthLabelPaywallAfterCelebration = false
+        guard !purchase.isPro else { return }
+        router.presentPaywall(from: .aggregateLabels)
+    }
+
     private func selectDuration(_ duration: PomodoroDuration) {
         selectedDuration = duration
 #if DEBUG
@@ -4723,12 +4759,20 @@ private struct BreakOffer: Identifiable {
     }
 }
 
+/// settings-04. The fusion sheet's quiet link to Pro's month label, for a
+/// free user who has just made the kind of crystal it applies to.
+struct MonthLabelHint {
+    let onShown: () -> Void
+    let onOpen: () -> Void
+}
+
 private struct StratumCelebrationView: View {
     let request: PendingStratumCelebration
     let showsMonthLabel: Bool
     let onExplore: () -> Void
     let onShare: () -> Void
     let onContinue: () -> Void
+    var monthLabelHint: MonthLabelHint?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -4838,6 +4882,12 @@ private struct StratumCelebrationView: View {
                         .foregroundStyle(PomoGemTheme.muted)
                         .frame(minHeight: 44)
                         .buttonStyle(PomoGemBareButtonStyle())
+                    // settings-04: last, small and muted, below every
+                    // celebration action. Layout owned by the gem session;
+                    // this adds one row and restyles nothing above it.
+                    if let monthLabelHint {
+                        monthLabelHintLink(monthLabelHint)
+                    }
                 }
                 .padding(24)
             }
@@ -4852,6 +4902,30 @@ private struct StratumCelebrationView: View {
                 }
             }
         }
+    }
+
+    private func monthLabelHintLink(_ hint: MonthLabelHint) -> some View {
+        Button(action: hint.onOpen) {
+            HStack(spacing: 4) {
+                Text(
+                    "Proなら、この\(AggregatePresentation.title(level: level))に「\(DateText.yearMonth(request.createdAt))」と刻めます",
+                    tableName: "Home",
+                    comment: "Fusion sheet link for free users; arguments: the crystal's name (結晶…), the month it was made (2026年9月)"
+                )
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .accessibilityHidden(true)
+            }
+            .font(.footnote)
+            .foregroundStyle(PomoGemTheme.muted)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PomoGemBareButtonStyle())
+        .accessibilityHint(Text("ポモジェムProの説明を開きます", tableName: "Home", comment: "VoiceOver hint on the fusion sheet's Pro month-label link"))
+        .accessibilityIdentifier("fusion.celebration.month-label-hint")
+        .onAppear(perform: hint.onShown)
     }
 
     @ViewBuilder
