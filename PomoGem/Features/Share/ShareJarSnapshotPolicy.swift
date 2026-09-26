@@ -53,11 +53,9 @@ enum ShareJarSnapshotPolicy {
         return false
     }
 
-    /// Whether the live jar's bodies rest on its floor (F3). A pile resting
-    /// against a wall or the invisible cap (the phone held sideways or
-    /// upside down when it settled) would show gems stuck to the side or
-    /// the mouth of the upright bottle on the card, so the card draws its
-    /// own bottle then. Any other scene counts as resting on its floor.
+    /// Whether the live jar's bodies rest on its floor (F3,
+    /// `JarScene.pileRestsOnTheFloor`: within 30° of the jar's own down).
+    /// Any other scene counts as resting on its floor.
     @MainActor
     static func pileRestsOnTheFloor(in scene: SKScene) -> Bool {
         (scene as? JarScene)?.pileRestsOnTheFloor ?? true
@@ -68,11 +66,18 @@ enum ShareJarSnapshotPolicy {
     /// the gravity its resting pile settled under (F3: the motion observer
     /// resets the live gravity while a sheet covers Home, without moving
     /// the frozen pile), otherwise the scene's current gravity.
+    ///
+    /// F3: a pile resting against a wall or the invisible cap (the phone
+    /// held sideways or upside down when it settled) is unsupported on the
+    /// card as a whole: its upright bottle would show the gems hanging on
+    /// its side or at its mouth. The answer is then true too, so the
+    /// composer draws the card's own bottle.
     @MainActor
     static func hidingLeavesUnsupportedBody(
         in scene: SKScene,
         options: JarSnapshotOptions
     ) -> Bool {
+        guard pileRestsOnTheFloor(in: scene) else { return true }
         var hidden: [Body] = []
         var visible: [Body] = []
         scene.enumerateChildNodes(withName: "//*") { node, _ in

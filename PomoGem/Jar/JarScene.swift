@@ -450,10 +450,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     var pileGravityVector: CGVector {
         isIdlePaused ? settledGravityVector : appliedGravityVector
     }
-    /// Whether the bodies rest on the floor, not against a wall or the cap
-    /// (`JarGravityMapping.isUpward` of `pileGravityVector`).
+    /// Whether the bodies rest on the floor (heaped toward the lower side
+    /// at most), not against a wall or the cap:
+    /// `JarGravityMapping.restsOnTheFloor` of `pileGravityVector`, within
+    /// 30° of the jar's own down. The share card, the widget and the pile
+    /// light go by it.
     var pileRestsOnTheFloor: Bool {
-        !JarGravityMapping.isUpward(pileGravityVector)
+        JarGravityMapping.restsOnTheFloor(pileGravityVector)
     }
     /// Gems still in their entry ritual, by phase (F3).
     private var enteringPhases: [UUID: EntryPhase] = [:]
@@ -1005,11 +1008,14 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     @discardableResult
     private func enforcePileClearances(fromRestoreRows: Bool = false) -> Bool {
         guard !pileClearances.isEmpty, !isBakeInProgress, !livePebbles.isEmpty else { return false }
-        // F3: a pile resting against a wall or the cap (held sideways or
-        // upside down) has no height over the floor to keep below the core;
-        // it neither steps the scale down nor lifts the cap. It is checked
-        // again when it settles on the floor.
-        guard pileRestsOnTheFloor else { return false }
+        // F3: the bands measure an upright pile's height over the floor per
+        // screen column. A pile that settled more than 15° off the jar's
+        // own down (held tilted, sideways or upside down) heaps against the
+        // lower wall or lies at the cap, so it neither steps the scale down
+        // nor lifts the cap: the phone's pose never changes the scale. It is
+        // judged again when it settles upright. Restore rows are judged by
+        // the gravity they will settle under (`restore` sets it first).
+        guard JarGravityMapping.standsUpright(pileGravityVector) else { return false }
         let floor = currentFloorY
         var stepped: CGFloat?
         for clearance in pileClearances where !(fromRestoreRows && clearance.isOptional) {
@@ -1465,6 +1471,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         publishPhysicalContentChangeIfNeeded()
         resetIdleObservation()
+        // F3: the rows replace the pile and settle under the live gravity,
+        // not under the pose the removed pile rested in (a sheet may have
+        // reset the gravity since, or the phone turned while Home was
+        // covered). The clearances below and the next wake judge by it.
+        settledReading = appliedReading ?? .flat
+        settledGravityVector = appliedGravityVector
+        followedReading = settledReading
         // The rows just laid out already tell roughly whether the pile
         // clears the core and the HUD: step down now, before the jar is
         // first drawn (the settled pile corrects it when it rests).

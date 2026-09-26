@@ -186,6 +186,23 @@ enum JarGravityMapping {
     /// taps and shakes throw toward the jar's own up (`launchDirection`).
     static var weakGravityMagnitude: CGFloat { 0.1 * strength }
 
+    /// A pile that settled under gravity within this angle (30°) of the
+    /// jar's own down rests on its floor: heaped toward the lower side,
+    /// but on the floor (`restsOnTheFloor`). Further over it leans on a
+    /// wall or lies against the cap, which the upright bottle of a share
+    /// card or the widget cannot show.
+    static let floorRestMaximumAngle: CGFloat = 30 * .pi / 180
+
+    /// A pile that settled under gravity within this angle (15°) of the
+    /// jar's own down stands upright enough for its per-column top to be
+    /// its height over the floor (`standsUpright`), which the core's and
+    /// the HUD's clearances measure (`JarPileClearance`). Tilted further, a
+    /// heap against the lower wall reads taller than the same pile upright
+    /// (about tan θ × the half-width higher at the wall), so the clearances
+    /// wait for an upright settle: the phone's pose never steps the jar's
+    /// scale.
+    static let uprightPileMaximumAngle: CGFloat = 15 * .pi / 180
+
     /// The jar's strongest gravity, as `JarTiltMath.clamped` keeps it.
     static var maximumMagnitude: CGFloat {
         max(Constants.Jar.maximumExternalGravityMagnitude, 0.1)
@@ -300,6 +317,41 @@ enum JarGravityMapping {
         let magnitude = hypot(gravity.dx, gravity.dy)
         guard magnitude >= weakGravityMagnitude else { return true }
         return gravity.dy > -upwardMargin * magnitude
+    }
+
+    /// Whether `gravity` pulls the gems toward the mouth: strong enough to
+    /// have a direction, and more than `upwardMargin` above horizontal. The
+    /// pile then lies against the cap, right under the mouth, and a new gem
+    /// entering there passes it before it joins the jar (JarScene's entry
+    /// ritual). Stricter than `isUpward`, which also closes the mouth for a
+    /// sideways or weak gravity.
+    static func pullsTowardTheMouth(_ gravity: CGVector) -> Bool {
+        guard gravity.dx.isFinite, gravity.dy.isFinite else { return false }
+        let magnitude = hypot(gravity.dx, gravity.dy)
+        guard magnitude >= weakGravityMagnitude else { return false }
+        return gravity.dy > upwardMargin * magnitude
+    }
+
+    /// Whether a pile resting under `gravity` rests on the jar's floor: the
+    /// gravity is strong enough to have a direction and within
+    /// `floorRestMaximumAngle` of the jar's own down. The share card and
+    /// the widget show the live jar only then, and the pile light keeps to
+    /// the floor band.
+    static func restsOnTheFloor(_ gravity: CGVector) -> Bool {
+        isWithin(floorRestMaximumAngle, ofTheJarsDown: gravity)
+    }
+
+    /// Whether a pile resting under `gravity` stands upright enough for the
+    /// core's and the HUD's clearances to judge it (`uprightPileMaximumAngle`).
+    static func standsUpright(_ gravity: CGVector) -> Bool {
+        isWithin(uprightPileMaximumAngle, ofTheJarsDown: gravity)
+    }
+
+    private static func isWithin(_ angle: CGFloat, ofTheJarsDown gravity: CGVector) -> Bool {
+        guard gravity.dx.isFinite, gravity.dy.isFinite else { return false }
+        let magnitude = hypot(gravity.dx, gravity.dy)
+        guard magnitude >= weakGravityMagnitude else { return false }
+        return -gravity.dy >= cos(angle) * magnitude
     }
 
     /// The unit direction a tap or shake throws the gems: straight against

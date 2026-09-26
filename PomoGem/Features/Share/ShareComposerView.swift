@@ -1507,12 +1507,9 @@ struct ShareComposerView: View {
         }
         let options = JarSnapshotOptions.share(includesSelfReported: includesSelfReportedFocus)
         // Hiding a pebble another gem rests on would leave that gem floating
-        // over a hole, and a pile resting against a wall or the cap (F3)
-        // would stick to the upright bottle's side or mouth. The card then
-        // draws its own bottle from the shared records instead (jar-04,
-        // screentime-11).
-        guard ShareJarSnapshotPolicy.pileRestsOnTheFloor(in: scene),
-              !ShareJarSnapshotPolicy.hidingLeavesUnsupportedBody(in: scene, options: options) else {
+        // over a hole. The card then draws its own bottle from the shared
+        // records instead (jar-04, screentime-11).
+        guard !ShareJarSnapshotPolicy.hidingLeavesUnsupportedBody(in: scene, options: options) else {
             return nil
         }
         guard let image = try? JarSnapshotter.shared.image(of: scene, options: options) else {
