@@ -18,6 +18,54 @@ struct JarAcceptedTapSelection: Equatable, Sendable {
     let inspectableAggregateID: UUID?
 }
 
+/// A band of the stage the settled pile must stay below (round 12, D4):
+/// its top over `minX...maxX` (scene x) may reach `ceiling` (scene y, up)
+/// at most. The pile scale steps down for it, never below `minimumScale`.
+struct JarPileClearance: Equatable {
+    let minX: CGFloat
+    let maxX: CGFloat
+    let ceiling: CGFloat
+    let minimumScale: CGFloat
+    /// An optional band (the core's name plate) is worth a smaller pile
+    /// only when `minimumScale` would really clear it: a pile out of its
+    /// reach keeps its size, and the band gives way instead (its label
+    /// hides). A required band (the core, the HUD) steps as far as it may.
+    var isOptional = false
+
+    /// The core's clearance never takes the gems of a young jar below this
+    /// scale (a pile the scale cannot keep down meets the core drawn in
+    /// front of it instead).
+    static let coreMinimumScale: CGFloat = 2.0
+    /// Half the Home HUD's value row, about 200 pt across.
+    static let hudHalfWidth: CGFloat = 100
+    /// A settled top this far over its ceiling still counts as clear
+    /// (the profile rounds to 4 pt).
+    static let tolerance: CGFloat = 2
+
+    /// The rung the pile at `scale` should step to so a settled top at
+    /// `top` over a floor at `floor` comes under `ceiling` (the pile's
+    /// height above the floor follows the scale), never below
+    /// `minimumScale`; `nil` when the pile already fits or cannot shrink.
+    func steppedScale(current scale: CGFloat, top: CGFloat, floor: CGFloat) -> CGFloat? {
+        guard top > ceiling + Self.tolerance, scale > minimumScale + 0.0001 else { return nil }
+        let ratio = max(0, ceiling - floor) / max(1, top - floor)
+        if isOptional, scale * ratio < minimumScale - 0.0001 { return nil }
+        // At least one rung, so a stubborn heap still converges.
+        let target = min(scale * ratio, scale / JarScalePolicy.rungRatio)
+        return max(minimumScale, JarScalePolicy.rung(atOrBelow: target))
+    }
+
+    /// The name plate keeps a young jar's gems at most two rungs (8 %)
+    /// smaller than the largest scale.
+    static let namePlateMinimumScale: CGFloat = JarScalePolicy.maximumScale / (JarScalePolicy.rungRatio * JarScalePolicy.rungRatio)
+
+    /// Whether the pile would still fit at `grown` (the next rungs up).
+    func fits(top: CGFloat, floor: CGFloat, current scale: CGFloat, grown: CGFloat) -> Bool {
+        guard top > floor else { return true }
+        return floor + (top - floor) * grown / max(scale, 0.0001) <= ceiling
+    }
+}
+
 enum JarCapacityEvent {
     case approachingBake(
         physicalCount: Int,
@@ -764,6 +812,24 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private var appliesScheduledJarScale = false
     /// Every scale change so far (Debug reviews and tests).
     private(set) var jarScaleChangeCount = 0
+    /// Bands the settled pile stays below (the time core, the Home HUD),
+    /// set by the SwiftUI owner (round 12). Empty keeps the area rule only.
+    var pileClearances: [JarPileClearance] = [] {
+        didSet {
+            guard pileClearances != oldValue else { return }
+            // A higher ceiling (the completion card closed, the core moved
+            // up) lets the next landing or fusion grow the pile again.
+            let rose = pileClearances.count != oldValue.count
+                || zip(pileClearances, oldValue).contains { $0.ceiling > $1.ceiling + 8 }
+            if rose { pileHeightCap = JarScalePolicy.maximumScale }
+            // A resting jar under a lower ceiling (the card shortened it)
+            // steps down now; an awake one does when it settles.
+            if isIdlePaused { enforcePileClearances() }
+        }
+    }
+    /// The largest scale the settled pile may take under `pileClearances`
+    /// (learned when it settles; the area rule still applies below it).
+    private(set) var pileHeightCap: CGFloat = JarScalePolicy.maximumScale
     /// The scene has drawn at least one frame. Before that (a restore or
     /// the first layout of a new Home) scale changes apply at once, so a jar
     /// never visibly resizes while it appears.
@@ -785,13 +851,79 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// The scale the jar resolves to for its current content (plus `extra`),
     /// with the policy's hysteresis against the scale it shows now.
     private func resolvedJarScale(adding extra: [PebbleDescriptor] = []) -> CGFloat {
-        JarScalePolicy.resolvedScale(
-            current: jarScale,
-            target: JarScalePolicy.targetScale(
-                baseArea: jarBaseArea(adding: extra),
-                interiorArea: interiorArea
-            )
+        min(
+            JarScalePolicy.resolvedScale(
+                current: jarScale,
+                target: JarScalePolicy.targetScale(
+                    baseArea: jarBaseArea(adding: extra),
+                    interiorArea: interiorArea
+                )
+            ),
+            pileHeightCap
         )
+    }
+
+    /// Resting gems stack about this much of a restore row's height.
+    static let restoreRowNesting: CGFloat = 0.75
+
+    /// Highest resting body over `minX...maxX` (scene coordinates), from
+    /// the bodies themselves (landed, not leaving for a fusion).
+    private func restingPileTop(minX: CGFloat, maxX: CGFloat) -> CGFloat {
+        livePebbles.reduce(CGFloat.zero) { top, pebble in
+            guard !pebble.isRemovedForBake, pebble.hasLanded,
+                  pebble.position.x.isFinite, pebble.position.y.isFinite
+            else { return top }
+            let radius = pebble.radius
+            guard pebble.position.x + radius >= minX, pebble.position.x - radius <= maxX else { return top }
+            return max(top, pebble.position.y + radius)
+        }
+    }
+
+    /// Round 12 (D4): the area rule sizes the gems, and the settled pile
+    /// keeps below the core and the HUD. When the pile rests over one of
+    /// `pileClearances`, the whole jar steps down (0.5 s) to the rung whose
+    /// pile fits, never below that band's floor, and remembers it as a cap
+    /// for later landings; a pile with room for two more rungs lifts the cap
+    /// again (it grows at the next landing or fusion, never by itself).
+    ///
+    /// `fromRestoreRows`: the pile is the restore's rows, not yet settled.
+    /// Rows stack a whole diameter each where resting gems nest, so their
+    /// height is taken at `restoreRowNesting`, and optional bands wait for
+    /// the settled pile (an over-tall estimate never costs the gems size).
+    @discardableResult
+    private func enforcePileClearances(fromRestoreRows: Bool = false) -> Bool {
+        guard !pileClearances.isEmpty, !isBakeInProgress, !livePebbles.isEmpty else { return false }
+        let floor = currentFloorY
+        var stepped: CGFloat?
+        for clearance in pileClearances where !(fromRestoreRows && clearance.isOptional) {
+            var top = restingPileTop(minX: clearance.minX, maxX: clearance.maxX)
+            if fromRestoreRows, top > floor {
+                top = floor + (top - floor) * Self.restoreRowNesting
+            }
+            if let scale = clearance.steppedScale(current: jarScale, top: top, floor: floor) {
+                stepped = min(stepped ?? scale, scale)
+            }
+        }
+        if let stepped, stepped < jarScale - 0.0001 {
+            pileHeightCap = stepped
+            applyJarScale(stepped, animated: true)
+            return true
+        }
+        guard pileHeightCap < JarScalePolicy.maximumScale - 0.0001 else { return false }
+        let grown = min(
+            JarScalePolicy.maximumScale,
+            jarScale * pow(JarScalePolicy.rungRatio, CGFloat(JarScalePolicy.growthRungs))
+        )
+        let roomy = pileClearances.allSatisfy { clearance in
+            clearance.fits(
+                top: restingPileTop(minX: clearance.minX, maxX: clearance.maxX),
+                floor: floor,
+                current: jarScale,
+                grown: grown
+            )
+        }
+        if roomy { pileHeightCap = max(pileHeightCap, grown) }
+        return false
     }
 
     /// Every body of the scene is created here, at its share of the jar
@@ -1057,12 +1189,15 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // before any body exists, so nothing rescales after the layout.
         scheduledJarScale = nil
         appliesScheduledJarScale = false
-        let restoredScale = JarScalePolicy.resolvedScale(
-            current: jarScale,
-            target: JarScalePolicy.targetScale(
-                baseArea: JarScalePolicy.baseArea(radii: uniqueDescriptors.map(\.radius)),
-                interiorArea: interiorArea
-            )
+        let restoredScale = min(
+            JarScalePolicy.resolvedScale(
+                current: jarScale,
+                target: JarScalePolicy.targetScale(
+                    baseArea: JarScalePolicy.baseArea(radii: uniqueDescriptors.map(\.radius)),
+                    interiorArea: interiorArea
+                )
+            ),
+            pileHeightCap
         )
         if abs(restoredScale - jarScale) > 0.0001 {
             jarScale = restoredScale
@@ -1125,6 +1260,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         publishPhysicalContentChangeIfNeeded()
         resetIdleObservation()
+        // The rows just laid out already tell roughly whether the pile
+        // clears the core and the HUD: step down now, before the jar is
+        // first drawn (the settled pile corrects it when it rests).
+        enforcePileClearances(fromRestoreRows: true)
         resumeSimulation()
     }
 
@@ -4424,6 +4563,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
         if let interactionMotionWindow,
            interactionMotionWindow.mustStop(at: uptime) {
+            // A scale transition in flight (at most 0.5 s) finishes first:
+            // freezing it would snap growing neighbours to full size while
+            // they still overlap.
+            if isJarScaleTransitionInFlight { return }
             if livePebbles.allSatisfy(\.hasLanded) {
                 pauseSettledSimulation()
                 return
@@ -4455,7 +4598,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 pebble.position.y - pebble.lastObservedPosition.y
             ))
         }
-        if movement < Constants.Jar.idleMovementThreshold {
+        if movement < Constants.Jar.idleMovementThreshold, !isJarScaleTransitionInFlight {
             pauseSettledSimulation()
         } else {
             let isSettlingInteraction = interactionMotionWindow != nil
@@ -4483,11 +4626,24 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
 #endif
 
+    /// Whether any live body is still easing to a new jar scale.
+    private var isJarScaleTransitionInFlight: Bool {
+        livePebbles.contains(where: \.isTransitioningJarScale)
+    }
+
     /// Freezes only presentation physics. Study records, aggregate membership,
     /// mass, and cloud state live outside SpriteKit and are never touched.
     private func pauseSettledSimulation() {
-        // A frozen jar never keeps a half-scaled body.
+        // A frozen jar never keeps a half-scaled body. The idle and hard
+        // stops wait for a transition, so one is cut short only by an
+        // explicit pause; its bodies are then put back inside the walls at
+        // once (the scheduled rescue would not run until the next wake).
+        let cutShort = isJarScaleTransitionInFlight
         livePebbles.forEach { $0.finishJarScaleTransition() }
+        if cutShort {
+            removeAction(forKey: "jar.scale.rescue")
+            rescuePebblesInsideWalls()
+        }
         finishActiveTapMotion(forceReturn: false)
         transientMotionGate.invalidate()
         interactionMotionWindow = nil
@@ -4512,6 +4668,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         refreshPileLight(animated: false)
         publishSettledPileTop()
+        // A settled pile over the core or the HUD steps down first: the jar
+        // stays awake for the 0.5 s transition and settles anew after it.
+        if enforcePileClearances() { return }
         if !isIdlePaused {
             isIdlePaused = true
             onIdlePauseChanged?(true)

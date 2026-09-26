@@ -405,7 +405,8 @@ final class GemThemeDistinctionTests: XCTestCase {
     // MARK: Core labels on a shortened stage
 
     /// Whatever the stage height, the label block never reaches the pile:
-    /// the second line gives way first, then the whole block.
+    /// the second line gives way first, then the progress card (the name
+    /// plate stays), then the whole block.
     func testCoreLabelsGiveWayOnAShortenedStage() throws {
         let state = try XCTUnwrap(JarLifetimeCorePresentation.state(
             totalPebbleCount: 15,
@@ -429,6 +430,7 @@ final class GemThemeDistinctionTests: XCTestCase {
         }
         let full: CGFloat = 56
         let second: CGFloat = 12
+        let name: CGFloat = 20
         // A tall stage with a low pile: everything shows.
         XCTAssertEqual(
             JarLifetimeCoreLabelFit.resolve(fullHeight: full, secondLineHeight: second, abovePileLimit: 400, layout: layout(stage: 470, limit: 400)),
@@ -438,26 +440,38 @@ final class GemThemeDistinctionTests: XCTestCase {
         // check that whatever shows stays above it.
         let stage: CGFloat = 360
         var sawCompact = false
+        var sawNameOnly = false
         var sawHidden = false
+        var previous = JarLifetimeCoreLabelFit.full
+        let order: [JarLifetimeCoreLabelFit] = [.full, .withoutSecondLine, .nameOnly, .hidden]
         for limit in stride(from: CGFloat(300), through: 120, by: -2) {
             let fit = JarLifetimeCoreLabelFit.resolve(
                 fullHeight: full,
                 secondLineHeight: second,
+                nameHeight: name,
                 abovePileLimit: limit,
                 layout: layout(stage: stage, limit: limit)
             )
+            // A rising pile only ever takes more of the block away.
+            XCTAssertGreaterThanOrEqual(order.firstIndex(of: fit)!, order.firstIndex(of: previous)!, "limit \(limit)")
+            previous = fit
             switch fit {
-            case .full, .withoutSecondLine:
-                let height = fit.labelHeight(full: full, secondLine: second)
+            case .full, .withoutSecondLine, .nameOnly:
+                let height = fit.labelHeight(full: full, secondLine: second, name: name)
                 let resolved = layout(stage: stage, limit: limit)(height)
                 XCTAssertLessThanOrEqual(resolved.labelTop + height, limit + 0.5, "limit \(limit)")
                 XCTAssertFalse(resolved.overflows)
                 if fit == .withoutSecondLine { sawCompact = true }
+                if fit == .nameOnly {
+                    sawNameOnly = true
+                    XCTAssertEqual(height, name)
+                }
             case .hidden:
                 sawHidden = true
             }
         }
         XCTAssertTrue(sawCompact, "The second line gives way before the block hides")
+        XCTAssertTrue(sawNameOnly, "The name plate stays after the progress card gives way")
         XCTAssertTrue(sawHidden)
         // Without a second line there is nothing to drop.
         XCTAssertNotEqual(

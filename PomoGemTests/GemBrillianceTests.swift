@@ -975,11 +975,12 @@ final class GemBrillianceTests: XCTestCase {
 
     // MARK: Orbit and HUD
 
-    /// The orbit column never crosses the measured HUD or the core's own
-    /// labels, at every stage height and HUD size (default, xxxL, AX sizes
-    /// with the rail). The column stays above the gem bed (it is drawn behind
-    /// the scene); the labels, drawn in front, stay above the floor row.
-    /// Short bands tighten the orbit, then hide markers, then the orbit.
+    /// The orbit column never crosses the measured HUD, at every stage
+    /// height and HUD size (default, xxxL, AX sizes with the rail). The
+    /// column stays above the gem bed (it is drawn behind the scene); the
+    /// labels, drawn in front, hang right under the stone (over the orbit's
+    /// lower arc since round 12) and stay above the floor row. Short bands
+    /// tighten the orbit, then hide markers, then the orbit.
     func testOrbitPlacementClearsTheMeasuredHUDFrame() {
         let labelHeight = JarLifetimeCoreBackdrop.estimatedLabelHeight
         for stageHeight: CGFloat in [360, 420, 470, 520] {
@@ -1018,9 +1019,9 @@ final class GemBrillianceTests: XCTestCase {
                             XCTAssertLessThanOrEqual(layout.stoneScale, 1, context)
                             XCTAssertGreaterThanOrEqual(layout.columnTop, top - 0.5, context)
                             XCTAssertLessThanOrEqual(layout.columnBottom, columnBottom + 0.5, context)
-                            XCTAssertGreaterThanOrEqual(layout.labelTop, layout.columnBottom, context)
-                            XCTAssertLessThanOrEqual(layout.labelTop + labelHeight, labelBottom + 0.5, context)
                             let shownStone = stone * layout.stoneScale
+                            XCTAssertEqual(layout.labelTop, layout.centerY + shownStone + JarLifetimeCoreLayout.labelGap, accuracy: 0.01, context)
+                            XCTAssertLessThanOrEqual(layout.labelTop + labelHeight, labelBottom + 0.5, context)
                             if layout.showsMarkers {
                                 XCTAssertGreaterThanOrEqual(
                                     layout.orbitRadius - JarLifetimeCoreLayout.markerSize / 2,
@@ -1086,7 +1087,7 @@ final class GemBrillianceTests: XCTestCase {
     func testCoreLabelsStayAboveTheBedAndTheSettledGems() {
         let stage: CGFloat = 470
         let floorY: CGFloat = 30
-        let floorRow = stage - floorY - Constants.Jar.measuredRadius * 2 - 7
+        let floorRow = stage - floorY - JarLifetimeCoreLabelLimits.floorRowHeight - 7
         // A thin bed below the first gem row: the floor row decides.
         let thin = JarLifetimeCoreLabelLimits.resolve(stageHeight: stage, floorY: floorY, bedTop: stage - floorY - 10, pileTop: 0)
         XCTAssertEqual(thin.floor, floorRow, accuracy: 0.001)
@@ -1535,6 +1536,85 @@ final class GemBrillianceTests: XCTestCase {
 // MARK: - Round 12 (the round-3 review's fixes)
 
 extension GemBrillianceTests {
+    /// The pile steps down for a band it rests over, never below that
+    /// band's floor; an optional band (the name plate) is worth a smaller
+    /// pile only when its floor really clears it.
+    func testPileClearanceStepsDownOnlyAsFarAsItsFloor() {
+        let core = JarPileClearance(minX: 0, maxX: 100, ceiling: 200, minimumScale: 2)
+        XCTAssertNil(core.steppedScale(current: 2.4, top: 201, floor: 20), "Within the tolerance")
+        // 180 / 240 of the height would need 1.8: the floor holds at 2.0.
+        XCTAssertEqual(core.steppedScale(current: JarScalePolicy.maximumScale, top: 260, floor: 20), 2)
+        // At least one rung, even for a hair over the ceiling.
+        let hair = core.steppedScale(current: JarScalePolicy.maximumScale, top: 205, floor: 20)
+        XCTAssertEqual(hair ?? 0, JarScalePolicy.rung(atOrBelow: JarScalePolicy.maximumScale / JarScalePolicy.rungRatio), accuracy: 0.000_1)
+        XCTAssertNil(core.steppedScale(current: 2, top: 260, floor: 20), "Nothing below the floor")
+        XCTAssertTrue(core.fits(top: 150, floor: 20, current: 2, grown: 2.16))
+        XCTAssertFalse(core.fits(top: 190, floor: 20, current: 2, grown: 2.16))
+
+        let plate = JarPileClearance(
+            minX: 0, maxX: 100, ceiling: 200,
+            minimumScale: JarPileClearance.namePlateMinimumScale,
+            isOptional: true
+        )
+        XCTAssertEqual(
+            JarPileClearance.namePlateMinimumScale,
+            JarScalePolicy.maximumScale / pow(JarScalePolicy.rungRatio, 2),
+            accuracy: 0.000_1,
+            "At most two rungs smaller for the plate"
+        )
+        XCTAssertNil(plate.steppedScale(current: JarScalePolicy.maximumScale, top: 260, floor: 20), "Out of reach: the plate hides instead")
+        let reachable = plate.steppedScale(current: JarScalePolicy.maximumScale, top: 205, floor: 20)
+        XCTAssertNotNil(reachable)
+        XCTAssertGreaterThanOrEqual(reachable ?? 0, JarPileClearance.namePlateMinimumScale - 0.000_1)
+    }
+
+    /// Home keeps the pile under the core (down to 2.0), under the name
+    /// plate (optional) and under the HUD's value (down to 1.0).
+    func testPileClearancesCoverTheCoreThePlateAndTheHUD() {
+        let stage = CGSize(width: 402, height: 426)
+        let clearances = JarSpriteView.pileClearances(
+            stageSize: stage,
+            coreDisc: (center: CGPoint(x: 201, y: 150), radius: 36),
+            namePlate: (top: 192, height: 20, halfWidth: 42),
+            hudBottom: 100
+        )
+        XCTAssertEqual(clearances.count, 3)
+        let core = clearances[0]
+        XCTAssertEqual(core.ceiling, (426 - 150 - 36 * 0.45).rounded())
+        XCTAssertEqual(core.minimumScale, JarPileClearance.coreMinimumScale)
+        XCTAssertEqual(core.minX, 165)
+        XCTAssertEqual(core.maxX, 237)
+        XCTAssertFalse(core.isOptional)
+        let plate = clearances[1]
+        XCTAssertEqual(plate.ceiling, 426 - 192 - 20 - JarLifetimeCoreLabelLimits.clearance)
+        XCTAssertTrue(plate.isOptional)
+        let hud = clearances[2]
+        XCTAssertEqual(hud.ceiling, 426 - 100 - 8)
+        XCTAssertEqual(hud.minimumScale, JarScalePolicy.minimumScale)
+        XCTAssertTrue(JarSpriteView.pileClearances(stageSize: .zero, coreDisc: nil, hudBottom: 100).isEmpty)
+    }
+
+    /// The core is the jar's protagonist: never smaller than 1.25 loose
+    /// gems at the largest scale or 0.21 of the jar, never above 0.24.
+    func testTheCoreStoneStaysLargerThanTheLooseGems() {
+        let looseGem = Constants.Jar.measuredRadius * 2 * JarScalePolicy.maximumScale
+        for width: CGFloat in [343, 358, 370] {
+            let minimum = JarLifetimeCoreBackdrop.minimumStoneDiameter(jarWidth: width)
+            XCTAssertGreaterThanOrEqual(minimum, min(width * 0.24, looseGem * 1.25) - 0.01)
+            XCTAssertGreaterThanOrEqual(minimum, width * 0.21 - 0.01)
+            XCTAssertLessThanOrEqual(minimum, width * 0.24 + 0.01)
+            // The layout never shows the stone below that size.
+            let core = JarLifetimeCoreBackdrop.coreDiameter(jarWidth: width, level: 1)
+            let layout = JarLifetimeCoreLayout.resolve(
+                stageHeight: 426, core: core, orbitCount: 1, topClearance: 150,
+                bottomLimit: 330, labelHeight: JarLifetimeCoreBackdrop.estimatedLabelHeight,
+                minimumStoneDiameter: minimum
+            )
+            let shown = core * JarLifetimeCoreLayout.stoneRadiusFactor * 2 * layout.stoneScale
+            XCTAssertGreaterThanOrEqual(shown, min(minimum, core * JarLifetimeCoreLayout.stoneRadiusFactor * 2) - 0.01)
+        }
+    }
+
     /// The core shows at most four colour fields: small themes widen the
     /// kept colour nearest in hue, and the spans still add up.
     func testTheCoreShowsAFewLargeColourFields() {

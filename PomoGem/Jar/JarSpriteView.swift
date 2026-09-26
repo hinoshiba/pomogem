@@ -257,29 +257,70 @@ struct JarSpriteView: View {
                 )
                 let floorLabelLimit = limits.floor
                 let abovePileLimit = limits.abovePile
-                // The same above-the-pile rule on every stage height (the
-                // completion card shortens the jar): the second line gives
-                // way first, then the whole block.
+                // Round 12: the column is placed from the HUD, the bed and
+                // the floor row only, so the core never moves or shrinks
+                // with the pile (the pile scale keeps the pile below it,
+                // `JarScene.pileClearances`). The labels then show whole,
+                // without the second line, or not at all, whichever fits
+                // above the settled gems (the completion card shortens the
+                // jar the same way).
                 let coreSecondLine = lifetimeCoreState?.nextFusionLabel == nil ? 0 : coreLabelMetrics.secondLine
-                let coreLabelFit = lifetimeCoreState.map { state in
+                let coreLabelHeight = coreLabelMetrics.size.height
+                let coreLabelBottomLimit = floorLabelLimit
+                let coreLayout = lifetimeCoreState.map { state in
+                    JarLifetimeCoreLabels.layout(
+                        stageSize: proxy.size,
+                        state: state,
+                        topClearance: coreTopClearance,
+                        bottomLimit: coreBottomLimit,
+                        labelBottomLimit: coreLabelBottomLimit,
+                        labelHeight: coreLabelHeight
+                    )
+                }
+                let namePlateHalfWidth = coreLabelMetrics.namePlateWidth / 2 + JarLifetimeCoreLabelLimits.clearance
+                let nameAbovePileLimit = JarLifetimeCoreLabelLimits.resolve(
+                    stageHeight: proxy.size.height,
+                    floorY: JarScene.interiorRect(sceneSize: proxy.size).minY,
+                    bedTop: bedTop,
+                    pileTop: scene.settledPileTop(
+                        minX: proxy.size.width / 2 - namePlateHalfWidth,
+                        maxX: proxy.size.width / 2 + namePlateHalfWidth
+                    )
+                ).abovePile
+                let coreLabelFit = coreLayout.map { layout in
                     JarLifetimeCoreLabelFit.resolve(
                         fullHeight: coreLabelMetrics.size.height,
                         secondLineHeight: coreSecondLine,
-                        abovePileLimit: abovePileLimit
-                    ) { height in
-                        JarLifetimeCoreLabels.layout(
-                            stageSize: proxy.size,
-                            state: state,
-                            topClearance: coreTopClearance,
-                            bottomLimit: coreBottomLimit,
-                            labelBottomLimit: abovePileLimit,
-                            labelHeight: height
-                        )
-                    }
+                        nameHeight: coreLabelMetrics.namePlate,
+                        abovePileLimit: abovePileLimit,
+                        nameAbovePileLimit: nameAbovePileLimit
+                    ) { _ in layout }
                 } ?? .full
                 let coreLabelsBuried = coreLabelFit == .hidden
-                let coreLabelHeight = coreLabelFit.labelHeight(full: coreLabelMetrics.size.height, secondLine: coreSecondLine)
-                let coreLabelBottomLimit = coreLabelsBuried ? floorLabelLimit : abovePileLimit
+                let coreDisc = Self.coreDisc(
+                    stageSize: proxy.size,
+                    coreState: lifetimeCoreState,
+                    coreLayout: coreLayout,
+                    totalGrams: totalGrams,
+                    topClearance: coreTopClearance,
+                    bottomLimit: coreBottomLimit,
+                    labelBottomLimit: coreLabelBottomLimit
+                )
+                // A pile the scale could not keep down (a heavy jar at
+                // 1.0, or a young one at the 2.0 floor) never buries the
+                // core: it steps in front of the settled gems instead.
+                let coreInFront = coreDisc.map { disc in
+                    scene.settledPileTop(minX: disc.center.x - disc.radius, maxX: disc.center.x + disc.radius)
+                        > proxy.size.height - disc.center.y - disc.radius * 0.8
+                } ?? false
+                let pileClearances = Self.pileClearances(
+                    stageSize: proxy.size,
+                    coreDisc: coreDisc,
+                    namePlate: coreLayout.map { layout in
+                        (top: layout.labelTop, height: coreLabelMetrics.namePlate, halfWidth: namePlateHalfWidth)
+                    },
+                    hudBottom: coreTopClearance
+                )
                 let effects = JarEffectsIntensity.resolved(preference: effectsIntensity, reduceMotion: reduceMotion)
                 let shareCore = Self.shareCore(
                     stageSize: proxy.size,
@@ -292,6 +333,8 @@ struct JarSpriteView: View {
                     effects: effects
                 )
                 if let coreState = lifetimeCoreState {
+                    // Behind the scene: all of it, or (when the pile reaches
+                    // the core) its bloom and orbit, the stone in front.
                     JarLifetimeCoreBackdrop(
                         state: coreState,
                         colorHex: lifetimeCoreColorHex,
@@ -300,24 +343,24 @@ struct JarSpriteView: View {
                         bottomLimit: coreBottomLimit,
                         labelBottomLimit: coreLabelBottomLimit,
                         labelHeight: coreLabelHeight,
-                        effectsInEffect: effects
+                        effectsInEffect: effects,
+                        parts: coreInFront ? .behindThePile : .whole
                     )
-                    if coreLabelsBuried {
-                        // Buried under the pile, the labels stay laid out
-                        // (their measured size keeps the layout stable) but
-                        // are not drawn: behind the large gems of a young
-                        // jar (D4) only fragments of text would show through
-                        // the gaps. VoiceOver reads the jar as one element.
-                        JarLifetimeCoreLabels(
-                            state: coreState,
-                            topClearance: coreTopClearance,
-                            bottomLimit: coreBottomLimit,
-                            labelBottomLimit: coreLabelBottomLimit,
-                            metrics: $coreLabelMetrics
-                        )
-                        .opacity(0)
-                    }
-                } else if totalGrams > 0, totalGrams < GemCutLadder.firstCrystalTierGrams {
+                    // The whole block, laid out but never drawn, measures
+                    // the labels (their measured size keeps the layout
+                    // stable whatever shows). Labels the pile would reach
+                    // are not drawn at all: behind the large gems of a young
+                    // jar (D4) only fragments of text would show through
+                    // the gaps. VoiceOver reads the jar as one element.
+                    JarLifetimeCoreLabels(
+                        state: coreState,
+                        topClearance: coreTopClearance,
+                        bottomLimit: coreBottomLimit,
+                        labelBottomLimit: coreLabelBottomLimit,
+                        metrics: $coreLabelMetrics
+                    )
+                    .opacity(0)
+                } else if totalGrams > 0, totalGrams < GemCutLadder.firstCrystalTierGrams, !coreInFront {
                     // Where the core will be born: a colourless vessel whose
                     // facets light up one per 250 g.
                     JarLifetimeCoreVessel(
@@ -400,8 +443,35 @@ struct JarSpriteView: View {
                 .onChange(of: shareCore, initial: true) { _, core in
                     scene.shareCore = core
                 }
+                .onChange(of: pileClearances, initial: true) { _, clearances in
+                    scene.pileClearances = clearances
+                }
                 .onChange(of: proxy.size) { _, newSize in
                     scene.size = newSize
+                }
+
+                if coreInFront {
+                    if let coreState = lifetimeCoreState {
+                        JarLifetimeCoreBackdrop(
+                            state: coreState,
+                            colorHex: lifetimeCoreColorHex,
+                            colorShares: lifetimeCoreColorShares,
+                            topClearance: coreTopClearance,
+                            bottomLimit: coreBottomLimit,
+                            labelBottomLimit: coreLabelBottomLimit,
+                            labelHeight: coreLabelHeight,
+                            effectsInEffect: effects,
+                            parts: .inFrontOfThePile
+                        )
+                    } else {
+                        JarLifetimeCoreVessel(
+                            totalGrams: totalGrams,
+                            topClearance: coreTopClearance,
+                            bottomLimit: coreBottomLimit,
+                            labelBottomLimit: coreLabelBottomLimit,
+                            effectsInEffect: effects
+                        )
+                    }
                 }
 
                 // The core's name plate and progress card sit in front of
@@ -413,7 +483,8 @@ struct JarSpriteView: View {
                         topClearance: coreTopClearance,
                         bottomLimit: coreBottomLimit,
                         labelBottomLimit: coreLabelBottomLimit,
-                        showsSecondLine: coreLabelFit != .withoutSecondLine,
+                        fit: coreLabelFit,
+                        measures: false,
                         metrics: $coreLabelMetrics
                     )
                 }
@@ -492,6 +563,92 @@ struct JarSpriteView: View {
             shown: scene.gemBed,
             isProvisional: projectionIsLowerBound || projectionIsUnverified
         )
+    }
+
+    /// Where the time core (or, before 2.5 kg, its vessel) is drawn: its
+    /// centre in stage coordinates (y down) and the drawn stone's radius.
+    private static func coreDisc(
+        stageSize: CGSize,
+        coreState: JarLifetimeCoreState?,
+        coreLayout: JarLifetimeCoreLayout?,
+        totalGrams: Int,
+        topClearance: CGFloat?,
+        bottomLimit: CGFloat,
+        labelBottomLimit: CGFloat
+    ) -> (center: CGPoint, radius: CGFloat)? {
+        let jarWidth = max(1, stageSize.width - Constants.Jar.horizontalMargin * 2)
+        if let coreState, let coreLayout {
+            let core = JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: coreState.coreLevel)
+            return (
+                CGPoint(x: stageSize.width / 2, y: coreLayout.centerY),
+                core * coreLayout.stoneScale * JarLifetimeCoreLayout.stoneRadiusFactor
+            )
+        }
+        guard totalGrams > 0, totalGrams < GemCutLadder.firstCrystalTierGrams else { return nil }
+        let core = JarLifetimeCoreBackdrop.coreDiameter(jarWidth: jarWidth, level: 1)
+        let layout = JarLifetimeCoreLayout.resolve(
+            stageHeight: stageSize.height,
+            core: core,
+            orbitCount: 1,
+            topClearance: topClearance,
+            bottomLimit: bottomLimit,
+            labelBottomLimit: labelBottomLimit,
+            labelHeight: JarLifetimeCoreBackdrop.estimatedLabelHeight,
+            minimumStoneDiameter: JarLifetimeCoreBackdrop.minimumStoneDiameter(jarWidth: jarWidth)
+        )
+        // The vessel is drawn at 0.92 of the core frame.
+        return (
+            CGPoint(x: stageSize.width / 2, y: layout.centerY),
+            core * 0.92 * JarLifetimeCoreLayout.stoneRadiusFactor
+        )
+    }
+
+    /// Where the settled pile must stay below (scene coordinates, y up),
+    /// for the pile scale (`JarScene.pileClearances`, round 12):
+    /// - under the core, no higher than 0.45 of its radius below its
+    ///   centre, so at least about 85 % of the stone shows; the scale never
+    ///   gives way below 2.0 for it;
+    /// - under the core's name plate (its width and 6 pt), 6 pt below it,
+    ///   so a young jar keeps 「時間の核」 readable, but only when two rungs
+    ///   smaller gems clear it (large gems come first; out of reach, the
+    ///   plate hides instead);
+    /// - under the Home HUD's value (its central 200 pt), 8 pt below its
+    ///   measured bottom, down to scale 1.0 (the completion card shortens
+    ///   the jar under a HUD that stays put).
+    static func pileClearances(
+        stageSize: CGSize,
+        coreDisc: (center: CGPoint, radius: CGFloat)?,
+        namePlate: (top: CGFloat, height: CGFloat, halfWidth: CGFloat)? = nil,
+        hudBottom: CGFloat?
+    ) -> [JarPileClearance] {
+        guard stageSize.width > 0, stageSize.height > 0 else { return [] }
+        var clearances: [JarPileClearance] = []
+        if let disc = coreDisc, disc.radius > 0 {
+            clearances.append(JarPileClearance(
+                minX: disc.center.x - disc.radius,
+                maxX: disc.center.x + disc.radius,
+                ceiling: (stageSize.height - disc.center.y - disc.radius * 0.45).rounded(),
+                minimumScale: JarPileClearance.coreMinimumScale
+            ))
+        }
+        if let plate = namePlate, plate.height > 0, plate.halfWidth > 0 {
+            clearances.append(JarPileClearance(
+                minX: stageSize.width / 2 - plate.halfWidth,
+                maxX: stageSize.width / 2 + plate.halfWidth,
+                ceiling: (stageSize.height - plate.top - plate.height - JarLifetimeCoreLabelLimits.clearance).rounded(),
+                minimumScale: JarPileClearance.namePlateMinimumScale,
+                isOptional: true
+            ))
+        }
+        if let hudBottom, hudBottom > 0 {
+            clearances.append(JarPileClearance(
+                minX: stageSize.width / 2 - JarPileClearance.hudHalfWidth,
+                maxX: stageSize.width / 2 + JarPileClearance.hudHalfWidth,
+                ceiling: (stageSize.height - hudBottom - 8).rounded(),
+                minimumScale: JarScalePolicy.minimumScale
+            ))
+        }
+        return clearances
     }
 
     /// The centrepiece a share snapshot redraws behind the bottle.

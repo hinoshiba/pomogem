@@ -1967,15 +1967,21 @@ enum JarLifetimeCorePresentation {
 /// Pure geometry (stage coordinates, y down). The Home HUD's measured bottom
 /// edge bounds the top. The orbit column (stone, rings, markers) is drawn
 /// behind the scene, so it stays above the gem bed's top edge; the label
-/// block below it is drawn in front of the scene, so it has to stay above
-/// the gem bed and the resting gems under it. Neither the orbit nor its
-/// diamond markers can cross the HUD or the core's own labels. When the
+/// block is drawn in front of the scene, so it has to stay above the gem
+/// bed and the resting gems under it. Round 12 (as in the reference image):
+/// the labels hang right under the stone, in front of the orbit's lower
+/// arc, so a wide orbit never pushes them down into the pile. Neither the
+/// orbit nor its diamond markers can cross the HUD or the stone. When the
 /// band is short (large text, a short stage, a tall bed) the extra orbits
 /// close up first, then the orbit tightens toward the stone, then the stone
-/// gives way a little (to 0.72) so the markers stay, then the markers hide
-/// (the stone may give way again so the ring stays), and last the orbit
-/// itself; a band too short for even the bare stone shrinks it to 0.65, and
-/// below that the core is buried.
+/// gives way a little so the markers stay, then the markers hide (the stone
+/// may give way again so the ring stays), and last the orbit itself; a band
+/// too short for even the bare stone shrinks it, and below that the core is
+/// buried. With `minimumStoneDiameter` (Home, round 12) the stone never
+/// gives way below that size: the core is the jar's protagonist, so its
+/// markers and orbit yield first. The column sits at most
+/// `maximumTopSlack` below the HUD (10 pt under the count pill), so a
+/// growing pile meets empty glass before it meets the core.
 struct JarLifetimeCoreLayout: Equatable {
     let centerY: CGFloat
     let orbitRadius: CGFloat
@@ -1996,8 +2002,11 @@ struct JarLifetimeCoreLayout: Equatable {
 
     /// Double-diamond orbit slot (outer square side).
     static let markerSize: CGFloat = 12
-    static let hudGap: CGFloat = 8
+    static let hudGap: CGFloat = 10
     static let labelGap: CGFloat = 6
+    /// Spare band height above the column, at most (the rest stays below
+    /// the labels, between them and the gems).
+    static let maximumTopSlack: CGFloat = 12
     /// Stone radius as a share of the core frame (the bake keeps a margin).
     static let stoneRadiusFactor: CGFloat = 0.46
     /// Without an overlaid HUD the column starts below the neck and 巡 pill.
@@ -2011,6 +2020,8 @@ struct JarLifetimeCoreLayout: Equatable {
     ///   - bottomLimit: lowest y of the orbit column (the gem bed's top).
     ///   - labelBottomLimit: lowest y of the label block; `nil` keeps the
     ///     labels above `bottomLimit` as well.
+    ///   - minimumStoneDiameter: the drawn stone's smallest diameter; `nil`
+    ///     keeps the former floors (0.72 for the orbit, 0.65 bare).
     static func resolve(
         stageHeight: CGFloat,
         core: CGFloat,
@@ -2018,16 +2029,25 @@ struct JarLifetimeCoreLayout: Equatable {
         topClearance: CGFloat?,
         bottomLimit: CGFloat?,
         labelBottomLimit: CGFloat? = nil,
-        labelHeight: CGFloat
+        labelHeight: CGFloat,
+        minimumStoneDiameter: CGFloat? = nil
     ) -> JarLifetimeCoreLayout {
         let top = topClearance.map { $0 + hudGap } ?? stageHeight * topFractionWithoutHUD
         let bottom = min(bottomLimit ?? stageHeight - 16, stageHeight)
         let labelBottom = min(labelBottomLimit ?? bottom, stageHeight)
-        let columnBudget = min(
-            bottom - top,
-            labelBottom - top - labelGap - max(0, labelHeight)
-        )
         let stone = core * stoneRadiusFactor
+        // Round 12 (as in the reference): the labels hang right under the
+        // stone, in front of the orbit's lower arc, instead of under the
+        // whole orbit. From the column's top to the labels' end there must
+        // be room for the upper half of the orbit, the stone's lower half
+        // and the labels; the whole orbit only has to clear the bed.
+        let labelReach = labelBottom - top - labelGap - max(0, labelHeight)
+        // The stone's own floor, as a share of its nominal size.
+        let stoneFloor = minimumStoneDiameter.map {
+            min(1, max(minimumStoneScale, $0 / max(stone * 2, 1)))
+        }
+        let orbitFloor = stoneFloor ?? orbitStoneScale
+        let bareFloor = stoneFloor ?? minimumStoneScale
         let rings = CGFloat(max(1, orbitCount) - 1)
         let markerHalf = markerSize / 2
         let nominalRadius = core * 1.075
@@ -2037,51 +2057,97 @@ struct JarLifetimeCoreLayout: Equatable {
             radius + rings * spacing + (markers ? markerHalf : 1)
         }
 
-        var radius = nominalRadius
-        var spacing = nominalSpacing
-        var markers = true
-        var orbit = true
-        var stoneScale: CGFloat = 1
-        if 2 * halfHeight(radius: radius, spacing: spacing, markers: true) > columnBudget {
-            // 1. Close up the extra orbits, 2. tighten the main orbit while
-            // its markers stay clear of the stone.
-            spacing = min(nominalSpacing, 5)
-            radius = min(nominalRadius, columnBudget / 2 - markerHalf - rings * spacing)
-            if radius < stone + markerHalf + 3 {
-                // 2b. The stone gives way a little (down to
-                // `orbitStoneScale`) so the progress markers stay.
-                let fitting = (radius - markerHalf - 3) / max(stone, 1)
-                if fitting >= orbitStoneScale {
-                    stoneScale = fitting
-                } else {
-                    // 3. Hide the markers at the same radius (the ring and
-                    // its lit arc remain), so the orbit never jumps outward.
-                    markers = false
-                    let ringFitting = (radius - 3) / max(stone, 1)
-                    if ringFitting >= 1 {
-                        stoneScale = 1
-                    } else if ringFitting >= orbitStoneScale {
-                        stoneScale = ringFitting
+        struct Fit {
+            var radius: CGFloat
+            var spacing: CGFloat
+            var markers: Bool
+            var orbit: Bool
+            var stoneScale: CGFloat
+            var overflows: Bool
+        }
+
+        /// The orbit and stone for a column of `columnBudget` (the orbit's
+        /// full height).
+        func fit(columnBudget: CGFloat) -> Fit {
+            var radius = nominalRadius
+            var spacing = nominalSpacing
+            var markers = true
+            var orbit = true
+            var stoneScale: CGFloat = 1
+            if 2 * halfHeight(radius: radius, spacing: spacing, markers: true) > columnBudget {
+                // 1. Close up the extra orbits, 2. tighten the main orbit
+                // while its markers stay clear of the stone.
+                spacing = min(nominalSpacing, 5)
+                radius = min(nominalRadius, columnBudget / 2 - markerHalf - rings * spacing)
+                if radius < stone + markerHalf + 3 {
+                    // 2b. The stone gives way a little (down to its floor)
+                    // so the progress markers stay.
+                    let fitting = (radius - markerHalf - 3) / max(stone, 1)
+                    if fitting >= orbitFloor {
+                        stoneScale = min(1, fitting)
                     } else {
-                        // 4. No room for any orbit: the stone alone.
-                        orbit = false
-                        stoneScale = 1
+                        // 3. Hide the markers at the same radius (the ring
+                        // and its lit arc remain), so the orbit never jumps
+                        // outward.
+                        markers = false
+                        let ringFitting = (radius - 3) / max(stone, 1)
+                        if ringFitting >= 1 {
+                            stoneScale = 1
+                        } else if ringFitting >= orbitFloor {
+                            stoneScale = ringFitting
+                        } else {
+                            // 4. No room for any orbit: the stone alone.
+                            orbit = false
+                            stoneScale = 1
+                        }
                     }
                 }
             }
+            // 5. Not even the bare stone fits: it shrinks to the band (never
+            // below its floor); below that the core is buried.
+            let bareBudget = min(bottom - top, labelReach)
+            var overflows = false
+            if !orbit, 2 * stone > bareBudget {
+                let fitting = bareBudget / max(2 * stone, 1)
+                stoneScale = max(bareFloor, fitting)
+                overflows = fitting < bareFloor
+            }
+            return Fit(radius: radius, spacing: spacing, markers: markers, orbit: orbit, stoneScale: stoneScale, overflows: overflows)
         }
-        // 5. Not even the bare stone fits: it shrinks to the band (never
-        // below `minimumStoneScale`); below that the core is buried.
-        var overflows = false
-        if !orbit, 2 * stone > columnBudget {
-            let fitting = columnBudget / max(2 * stone, 1)
-            stoneScale = max(minimumStoneScale, fitting)
-            overflows = fitting < minimumStoneScale
+
+        func half(of fit: Fit) -> CGFloat {
+            fit.orbit ? halfHeight(radius: fit.radius, spacing: fit.spacing, markers: fit.markers) : stone * fit.stoneScale
         }
-        let half = orbit ? halfHeight(radius: radius, spacing: spacing, markers: markers) : stone * stoneScale
-        let slack = max(0, columnBudget - 2 * half)
-        let columnTop = top + slack / 2
-        let centerY = columnTop + half
+
+        // The orbit must clear the bed; its upper half, the stone's lower
+        // half and the labels must fit above the labels' limit. A stone that
+        // gave way leaves the orbit a little more room: one more pass with
+        // it, kept only when it still fits.
+        var chosen = fit(columnBudget: min(bottom - top, 2 * (labelReach - stone)))
+        if chosen.stoneScale < 1 {
+            let retry = fit(columnBudget: min(bottom - top, 2 * (labelReach - stone * chosen.stoneScale)))
+            let retryHalf = half(of: retry)
+            if !retry.overflows,
+               retryHalf + stone * retry.stoneScale <= labelReach + 0.01,
+               2 * retryHalf <= bottom - top + 0.01,
+               retry.orbit || !chosen.orbit {
+                chosen = retry
+            }
+        }
+        let radius = chosen.radius
+        let spacing = chosen.spacing
+        let markers = chosen.markers
+        let orbit = chosen.orbit
+        let stoneScale = chosen.stoneScale
+        let overflows = chosen.overflows
+        let shownStone = stone * stoneScale
+        let columnHalf = half(of: chosen)
+        let effectiveBudget = orbit
+            ? min(bottom - top, 2 * (labelReach - shownStone))
+            : min(bottom - top, labelReach)
+        let slack = max(0, effectiveBudget - 2 * columnHalf)
+        let columnTop = top + min(slack / 2, maximumTopSlack)
+        let centerY = columnTop + columnHalf
         return JarLifetimeCoreLayout(
             centerY: centerY,
             orbitRadius: orbit ? radius : 0,
@@ -2089,8 +2155,8 @@ struct JarLifetimeCoreLayout: Equatable {
             showsOrbit: orbit,
             showsMarkers: orbit && markers,
             columnTop: columnTop,
-            columnBottom: centerY + half,
-            labelTop: centerY + half + labelGap,
+            columnBottom: centerY + columnHalf,
+            labelTop: centerY + shownStone + labelGap,
             stoneScale: stoneScale,
             overflows: overflows
         )
@@ -2101,8 +2167,10 @@ struct JarLifetimeCoreLayout: Equatable {
 /// is drawn in front of the scene. The block never covers the gem bed (its
 /// chips would show through the card and dim 11 pt text) nor the resting
 /// gems under it:
-/// - `floor`: one floor row of gems above the floor, and 6 pt above the
-///   bed's top edge, whichever is higher on screen;
+/// - `floor`: one floor row of gems above the floor (25-minute gems at the
+///   jar's largest scale, so a young jar's first row fits under the
+///   labels), and 6 pt above the bed's top edge, whichever is higher on
+///   screen;
 /// - `abovePile`: also 6 pt above the highest settled body under the
 ///   labels (`JarScene.settledPileTop`, 0 when that span is clear).
 struct JarLifetimeCoreLabelLimits: Equatable {
@@ -2110,6 +2178,8 @@ struct JarLifetimeCoreLabelLimits: Equatable {
     let abovePile: CGFloat
 
     static let clearance: CGFloat = 6
+    /// One row of 25-minute gems at the largest jar scale (D4).
+    static let floorRowHeight: CGFloat = Constants.Jar.measuredRadius * 2 * JarScalePolicy.maximumScale
 
     static func resolve(
         stageHeight: CGFloat,
@@ -2117,7 +2187,7 @@ struct JarLifetimeCoreLabelLimits: Equatable {
         bedTop: CGFloat,
         pileTop: CGFloat
     ) -> JarLifetimeCoreLabelLimits {
-        let floorRow = stageHeight - floorY - Constants.Jar.measuredRadius * 2 - 7
+        let floorRow = stageHeight - floorY - floorRowHeight - 7
         let floor = min(floorRow, bedTop - clearance)
         let pile = pileTop > 0 ? stageHeight - pileTop - clearance : floor
         return JarLifetimeCoreLabelLimits(floor: floor, abovePile: min(floor, pile))
@@ -2154,6 +2224,19 @@ struct JarLifetimeCoreBackdrop: View {
     /// 演出の強さ as the jar resolved it (its Reduce Motion includes the
     /// test override); nil resolves it here.
     var effectsInEffect: JarEffectsIntensity?
+    /// Which part this copy draws. A pile that reaches the core (round 12)
+    /// splits it: the broad bloom and the orbit stay behind the gems, the
+    /// stone and its own light step in front of them.
+    var parts: Parts = .whole
+
+    enum Parts {
+        case whole
+        case behindThePile
+        case inFrontOfThePile
+
+        var drawsOrbit: Bool { self != .inFrontOfThePile }
+        var drawsStone: Bool { self != .behindThePile }
+    }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -2186,6 +2269,17 @@ struct JarLifetimeCoreBackdrop: View {
         return min(96, max(1, jarWidth) * factor)
     }
 
+    /// The drawn stone's smallest diameter on Home (round 12): 1.25 × a
+    /// 25-minute gem at the jar's largest scale or 0.21 of the jar width,
+    /// whichever is larger, never above 0.24 of the jar width. About 70 pt
+    /// on an iPhone 17 Pro and 69 pt on a 12 mini, so the core always reads
+    /// larger than the loose gems around it.
+    static func minimumStoneDiameter(jarWidth: CGFloat) -> CGFloat {
+        let width = max(1, jarWidth)
+        let looseGem = Constants.Jar.measuredRadius * 2 * JarScalePolicy.maximumScale
+        return min(width * 0.24, max(looseGem * 1.25, width * 0.21))
+    }
+
     /// Orbits drawn around the core: one at birth, two from 250 kg (level
     /// 3), three from 25 t (level 5).
     static func orbitCount(level: Int) -> Int {
@@ -2204,7 +2298,8 @@ struct JarLifetimeCoreBackdrop: View {
                 topClearance: topClearance,
                 bottomLimit: bottomLimit,
                 labelBottomLimit: labelBottomLimit,
-                labelHeight: labelHeight
+                labelHeight: labelHeight,
+                minimumStoneDiameter: Self.minimumStoneDiameter(jarWidth: jarWidth)
             )
             let orbitDiameter = layout.orbitRadius * 2
             // The stone (and its light) shrinks only when even the bare
@@ -2220,80 +2315,84 @@ struct JarLifetimeCoreBackdrop: View {
 
             ZStack {
                 // Broad, soft bloom that seats the core in the jar's light.
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                haloColor.opacity((reduceTransparency ? 0.10 : 0.24) * halo),
-                                PomoGemTheme.auroraViolet.opacity((reduceTransparency ? 0.02 : 0.05) * halo),
-                                .clear
-                            ],
-                            center: .center,
-                            startRadius: 3,
-                            endRadius: stone * 1.25
-                        )
-                    )
-                    .frame(width: stone * 2.5, height: stone * 2.5)
-
-                if layout.showsOrbit {
-                    ForEach(1 ..< orbitCount, id: \.self) { index in
-                        let diameter = orbitDiameter + CGFloat(index) * layout.extraOrbitSpacing * 2
-                        Circle()
-                            .stroke(
-                                Self.orbitCopper.opacity(colorSchemeContrast == .increased ? 0.62 : 0.30),
-                                style: StrokeStyle(lineWidth: 0.8, dash: [2, 6])
-                            )
-                            .frame(width: diameter, height: diameter)
-                    }
-
-                    orbit(diameter: orbitDiameter, shares: quantized, showsMarkers: layout.showsMarkers)
-                }
-
-                // Halo in two lobes: the left half's colour leaves the left
-                // side, the right half's the right (10 % aurora violet),
-                // α0.45 out to about 1.35R — light, not a neon ring.
-                ForEach(Array([(lobes.left, CGFloat(-1)), (lobes.right, CGFloat(1))].enumerated()), id: \.offset) { _, lobe in
-                    Ellipse()
+                if parts.drawsOrbit {
+                    Circle()
                         .fill(
                             RadialGradient(
                                 colors: [
-                                    Color(uiColor: lobe.0).opacity((reduceTransparency ? 0.20 : 0.45) * halo),
-                                    Color(uiColor: lobe.0).opacity((reduceTransparency ? 0.08 : 0.20) * halo),
+                                    haloColor.opacity((reduceTransparency ? 0.10 : 0.24) * halo),
+                                    PomoGemTheme.auroraViolet.opacity((reduceTransparency ? 0.02 : 0.05) * halo),
                                     .clear
                                 ],
                                 center: .center,
-                                startRadius: stone * 0.30,
-                                endRadius: stone * 0.70
+                                startRadius: 3,
+                                endRadius: stone * 1.25
                             )
                         )
-                        .frame(width: stone * 1.15, height: stone * 1.40)
-                        .offset(x: lobe.1 * stone * 0.16)
+                        .frame(width: stone * 2.5, height: stone * 2.5)
+
+                    if layout.showsOrbit {
+                        ForEach(1 ..< orbitCount, id: \.self) { index in
+                            let diameter = orbitDiameter + CGFloat(index) * layout.extraOrbitSpacing * 2
+                            Circle()
+                                .stroke(
+                                    Self.orbitCopper.opacity(colorSchemeContrast == .increased ? 0.62 : 0.30),
+                                    style: StrokeStyle(lineWidth: 0.8, dash: [2, 6])
+                                )
+                                .frame(width: diameter, height: diameter)
+                        }
+
+                        orbit(diameter: orbitDiameter, shares: quantized, showsMarkers: layout.showsMarkers)
+                    }
                 }
 
-                // Girdle bloom: pale light hugging the stone's edge.
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                rimColor.opacity((reduceTransparency ? 0.34 : 0.95) * halo),
-                                rimColor.opacity((reduceTransparency ? 0.12 : 0.34) * halo),
-                                .clear
-                            ],
-                            center: .center,
-                            startRadius: stone * 0.44,
-                            endRadius: stone * 0.62
-                        )
-                    )
-                    .frame(width: stone * 1.24, height: stone * 1.24)
+                if parts.drawsStone {
+                    // Halo in two lobes: the left half's colour leaves the left
+                    // side, the right half's the right (10 % aurora violet),
+                    // α0.45 out to about 1.35R — light, not a neon ring.
+                    ForEach(Array([(lobes.left, CGFloat(-1)), (lobes.right, CGFloat(1))].enumerated()), id: \.offset) { _, lobe in
+                        Ellipse()
+                            .fill(
+                                RadialGradient(
+                                    colors: [
+                                        Color(uiColor: lobe.0).opacity((reduceTransparency ? 0.20 : 0.45) * halo),
+                                        Color(uiColor: lobe.0).opacity((reduceTransparency ? 0.08 : 0.20) * halo),
+                                        .clear
+                                    ],
+                                    center: .center,
+                                    startRadius: stone * 0.30,
+                                    endRadius: stone * 0.70
+                                )
+                            )
+                            .frame(width: stone * 1.15, height: stone * 1.40)
+                            .offset(x: lobe.1 * stone * 0.16)
+                    }
 
-                // The unquantised fan: the core's marks (Differentiate
-                // Without Color) tell theme arcs from the mixed その他.
-                LifetimeCorePrism(
-                    colorShares: colorShares.isEmpty ? [GemColorShare(hex: colorHex, fraction: 1)] : colorShares,
-                    level: state.coreLevel
-                )
-                    .frame(width: stone, height: stone)
-                    .scaleEffect(breathing ? 1.02 : 1)
+                    // Girdle bloom: pale light hugging the stone's edge.
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    rimColor.opacity((reduceTransparency ? 0.34 : 0.95) * halo),
+                                    rimColor.opacity((reduceTransparency ? 0.12 : 0.34) * halo),
+                                    .clear
+                                ],
+                                center: .center,
+                                startRadius: stone * 0.44,
+                                endRadius: stone * 0.62
+                            )
+                        )
+                        .frame(width: stone * 1.24, height: stone * 1.24)
+
+                    // The unquantised fan: the core's marks (Differentiate
+                    // Without Color) tell theme arcs from the mixed その他.
+                    LifetimeCorePrism(
+                        colorShares: colorShares.isEmpty ? [GemColorShare(hex: colorHex, fraction: 1)] : colorShares,
+                        level: state.coreLevel
+                    )
+                        .frame(width: stone, height: stone)
+                        .scaleEffect(breathing ? 1.02 : 1)
+                }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .position(x: proxy.size.width / 2, y: layout.centerY)
@@ -2412,10 +2511,17 @@ struct JarLifetimeCoreLabelMetrics: Equatable {
     var size: CGSize
     /// Height the progress card's second line adds (with its spacing).
     var secondLine: CGFloat
+    /// Size of the name plate alone (「時間の核」): what shows when the pile
+    /// leaves room for the plate but not for the progress card
+    /// (`JarLifetimeCoreLabelFit`, round 12).
+    var namePlate: CGFloat = 20
+    var namePlateWidth: CGFloat = 72
 
     static let estimated = JarLifetimeCoreLabelMetrics(
         size: CGSize(width: 220, height: JarLifetimeCoreBackdrop.estimatedLabelHeight),
-        secondLine: 12
+        secondLine: 12,
+        namePlate: 20,
+        namePlateWidth: 72
     )
 }
 
@@ -2423,42 +2529,53 @@ struct JarLifetimeCoreLabelMetrics: Equatable {
 /// scene. The block never sits behind the gem bed or the settled gems, on
 /// the full stage or on one the completion card has shortened: all of it
 /// when it fits above them; without the progress card's second line
-/// (「核まであと…」) when only that line would reach the pile; and nothing
-/// when even the name plate and the first line would be buried (the core
-/// is then behind the pile, and VoiceOver still reads the jar as a whole).
+/// (「核まであと…」) when only that line would reach the pile; the name
+/// plate alone (round 12: the core is never buried now, so it keeps its
+/// name) when only the plate fits; and nothing when even the plate would
+/// reach the pile (VoiceOver still reads the jar as a whole).
 enum JarLifetimeCoreLabelFit: Equatable {
     case full
     case withoutSecondLine
+    case nameOnly
     case hidden
-
-    init(showsSecondLine: Bool) {
-        self = showsSecondLine ? .full : .withoutSecondLine
-    }
 
     /// - Parameters:
     ///   - fullHeight: the block with its second line.
     ///   - secondLineHeight: what that line adds (0 without one).
+    ///   - nameHeight: the name plate alone (0 skips the name-only step).
     ///   - abovePileLimit: lowest y the block may reach (above the bed and
     ///     the settled gems under it).
+    ///   - nameAbovePileLimit: the same for the narrower name plate (the
+    ///     gems under it alone); nil uses `abovePileLimit`.
     ///   - layout: the shared core layout for a block of a given height.
     static func resolve(
         fullHeight: CGFloat,
         secondLineHeight: CGFloat,
+        nameHeight: CGFloat = 0,
         abovePileLimit: CGFloat,
+        nameAbovePileLimit: CGFloat? = nil,
         layout: (CGFloat) -> JarLifetimeCoreLayout
     ) -> JarLifetimeCoreLabelFit {
-        func fits(_ height: CGFloat) -> Bool {
+        func fits(_ height: CGFloat, limit: CGFloat = abovePileLimit) -> Bool {
             let resolved = layout(height)
-            return !resolved.overflows && resolved.labelTop + height <= abovePileLimit + 0.5
+            return !resolved.overflows && resolved.labelTop + height <= limit + 0.5
         }
         if fits(fullHeight) { return .full }
         if secondLineHeight > 0, fits(max(0, fullHeight - secondLineHeight)) { return .withoutSecondLine }
+        if nameHeight > 0, nameHeight < fullHeight,
+           fits(nameHeight, limit: max(abovePileLimit, nameAbovePileLimit ?? abovePileLimit)) {
+            return .nameOnly
+        }
         return .hidden
     }
 
     /// Height of the block as drawn with this fit.
-    func labelHeight(full: CGFloat, secondLine: CGFloat) -> CGFloat {
-        self == .withoutSecondLine ? max(0, full - max(0, secondLine)) : full
+    func labelHeight(full: CGFloat, secondLine: CGFloat, name: CGFloat = 0) -> CGFloat {
+        switch self {
+        case .full, .hidden: full
+        case .withoutSecondLine: max(0, full - max(0, secondLine))
+        case .nameOnly: max(0, name)
+        }
     }
 }
 
@@ -2467,12 +2584,17 @@ struct JarLifetimeCoreLabels: View {
     var topClearance: CGFloat?
     var bottomLimit: CGFloat?
     var labelBottomLimit: CGFloat?
-    /// False drops the progress card's second line (`JarLifetimeCoreLabelFit`).
-    var showsSecondLine = true
+    /// How much of the block shows (`JarLifetimeCoreLabelFit`; `.hidden`
+    /// lays out like `.full`).
+    var fit: JarLifetimeCoreLabelFit = .full
+    /// Whether this copy reports `metrics`. The owner keeps one whole copy
+    /// at opacity 0 that measures, so a shorter fit never changes them.
+    var measures = true
     /// Measured size of the whole block with its second line (the height
     /// feeds the layout, the width tells the owner which part of the pile
-    /// could cover it) and the height that line adds. Reported the same
-    /// whether or not the line shows, so the fit never flips back and forth.
+    /// could cover it), the height that line adds and the name plate's.
+    /// Reported the same whatever shows, so the fit never flips back and
+    /// forth.
     @Binding var metrics: JarLifetimeCoreLabelMetrics
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -2500,26 +2622,29 @@ struct JarLifetimeCoreLabels: View {
             topClearance: topClearance,
             bottomLimit: bottomLimit,
             labelBottomLimit: labelBottomLimit,
-            labelHeight: labelHeight
+            labelHeight: labelHeight,
+            minimumStoneDiameter: JarLifetimeCoreBackdrop.minimumStoneDiameter(jarWidth: jarWidth)
         )
     }
 
     var body: some View {
         GeometryReader { proxy in
+            // The whole block's height places the column (the core behind
+            // uses the same), so whatever of the block shows never moves it.
             let layout = Self.layout(
                 stageSize: proxy.size,
                 state: state,
                 topClearance: topClearance,
                 bottomLimit: bottomLimit,
                 labelBottomLimit: labelBottomLimit,
-                labelHeight: shownHeight
+                labelHeight: metrics.size.height
             )
             labels
                 .onGeometryChange(for: CGSize.self) { geometry in
                     geometry.size
                 } action: { size in
-                    let hidden = showsSecondLine || state.nextFusionLabel == nil ? 0 : metrics.secondLine
-                    metrics.size = CGSize(width: size.width, height: size.height + hidden)
+                    guard measures, fit == .full || fit == .hidden else { return }
+                    metrics.size = size
                 }
                 .position(x: proxy.size.width / 2, y: layout.labelTop + shownHeight / 2)
         }
@@ -2529,11 +2654,15 @@ struct JarLifetimeCoreLabels: View {
 
     /// Height of the block as drawn now.
     private var shownHeight: CGFloat {
-        JarLifetimeCoreLabelFit(showsSecondLine: showsSecondLine).labelHeight(
+        fit.labelHeight(
             full: metrics.size.height,
-            secondLine: state.nextFusionLabel == nil ? 0 : metrics.secondLine
+            secondLine: state.nextFusionLabel == nil ? 0 : metrics.secondLine,
+            name: metrics.namePlate
         )
     }
+
+    private var showsProgress: Bool { fit != .nameOnly }
+    private var showsSecondLine: Bool { fit == .full || fit == .hidden }
 
     private var labels: some View {
         VStack(spacing: 4) {
@@ -2556,31 +2685,40 @@ struct JarLifetimeCoreLabels: View {
                             lineWidth: colorSchemeContrast == .increased ? 1.2 : 0.7
                         )
                 }
-
-            VStack(spacing: 1) {
-                Text(state.progressLabel)
-                    .font(.system(size: 9.5 * textScale, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                if let nextFusionLabel = state.nextFusionLabel, showsSecondLine {
-                    Text(nextFusionLabel)
-                        .font(.system(size: 8.5 * textScale, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.66))
-                        .onGeometryChange(for: CGFloat.self) { geometry in
-                            geometry.size.height
-                        } action: { height in
-                            // The line plus the stack's 1 pt spacing.
-                            metrics.secondLine = height + 1
-                        }
+                .onGeometryChange(for: CGSize.self) { geometry in
+                    geometry.size
+                } action: { size in
+                    guard measures else { return }
+                    metrics.namePlate = size.height
+                    metrics.namePlateWidth = size.width
                 }
+
+            if showsProgress {
+                VStack(spacing: 1) {
+                    Text(state.progressLabel)
+                        .font(.system(size: 9.5 * textScale, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                    if let nextFusionLabel = state.nextFusionLabel, showsSecondLine {
+                        Text(nextFusionLabel)
+                            .font(.system(size: 8.5 * textScale, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.66))
+                            .onGeometryChange(for: CGFloat.self) { geometry in
+                                geometry.size.height
+                            } action: { height in
+                                // The line plus the stack's 1 pt spacing.
+                                if measures { metrics.secondLine = height + 1 }
+                            }
+                    }
+                }
+                .lineLimit(1)
+                .foregroundStyle(.white.opacity(0.80))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    PomoGemTheme.raised.opacity(reduceTransparency || colorSchemeContrast == .increased ? 0.98 : 0.94),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                )
             }
-            .lineLimit(1)
-            .foregroundStyle(.white.opacity(0.80))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                PomoGemTheme.raised.opacity(reduceTransparency || colorSchemeContrast == .increased ? 0.98 : 0.94),
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
         }
         .fixedSize()
     }
@@ -2705,7 +2843,8 @@ struct JarLifetimeCoreVessel: View {
                     topClearance: topClearance,
                     bottomLimit: bottomLimit,
                     labelBottomLimit: labelBottomLimit,
-                    labelHeight: JarLifetimeCoreBackdrop.estimatedLabelHeight
+                    labelHeight: JarLifetimeCoreBackdrop.estimatedLabelHeight,
+                    minimumStoneDiameter: JarLifetimeCoreBackdrop.minimumStoneDiameter(jarWidth: jarWidth)
                 ).centerY
             )
         }
