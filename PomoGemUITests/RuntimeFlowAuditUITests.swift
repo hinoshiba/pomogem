@@ -1119,6 +1119,10 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         XCTAssertTrue(nameField.waitForExistence(timeout: 4))
         nameField.tap()
         nameField.typeText(originalName)
+        // Close the keyboard with 完了 first, as the edit step below does. On
+        // a 4.7-inch iPhone the color choices sit behind the keyboard and the
+        // form does not scroll them above it.
+        dismissKeyboard(from: nameField)
         let color = app.buttons["色候補2、瑠璃"]
         XCTAssertTrue(scrollUntilHittable(color))
         color.tap()
