@@ -1707,4 +1707,24 @@ extension GemBrillianceTests {
         XCTAssertEqual(tag.xScale, 0.5, accuracy: 0.000_1)
         XCTAssertEqual(tag.alpha, 1, accuracy: 0.000_1)
     }
+
+    /// Ten gems meeting stay solid and light up, and the core's labels
+    /// step aside until the crystal has flashed.
+    @MainActor
+    func testConvergingGemsLightUpAndTheLabelsStepAside() throws {
+        let scene = scaleScene()
+        scene.reduceMotion = false
+        scene.onAggregateRequested = { _ in }
+        scene.restore(pebbles: looseSeries(10))
+        XCTAssertFalse(scene.isFusionSpotlightActive)
+        scene.update(0)
+        guard JarScene.allowsAmbientSparkle else { return }
+        XCTAssertTrue(scene.isFusionSpotlightActive)
+        let converging = scenePebbles(scene).filter(\.isRemovedForBake)
+        XCTAssertEqual(converging.count, 10)
+        for pebble in converging {
+            XCTAssertNotNil(pebble.childNode(withName: "drop.fusionConverge"))
+            XCTAssertEqual(pebble.alpha, 1, "Solid while they meet")
+        }
+    }
 }

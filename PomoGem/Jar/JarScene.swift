@@ -830,6 +830,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// The largest scale the settled pile may take under `pileClearances`
     /// (learned when it settles; the area rule still applies below it).
     private(set) var pileHeightCap: CGFloat = JarScalePolicy.maximumScale
+    /// True from the moment ten gems start to converge until their crystal
+    /// has flashed (about 0.9 s): the core's labels step aside meanwhile.
+    @Published private(set) var isFusionSpotlightActive = false
     /// The scene has drawn at least one frame. Before that (a restore or
     /// the first layout of a new Home) scale changes apply at once, so a jar
     /// never visibly resizes while it appears.
@@ -3624,10 +3627,19 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         } else {
             // 標準 0.52 s; 控えめ converges in 0.32 s (D17).
             let formation = effects.fusion.formation
+            // Round 12: the core's labels step aside while the ten meet
+            // and their crystal flashes (formation + about 0.4 s).
+            isFusionSpotlightActive = true
             selected.forEach { pebble in
+                // The ten stay solid and brighten as they meet (additive
+                // light and a short trail); only the last 28 % fades, as
+                // the crystal takes their place.
                 pebble.run(
                     .group([
-                        .fadeOut(withDuration: formation),
+                        .sequence([
+                            .wait(forDuration: formation * 0.72),
+                            .fadeOut(withDuration: formation * 0.28)
+                        ]),
                         .move(to: formationPoint, duration: formation),
                         .scale(
                             to: Constants.Jar.bakePebbleFinalScale * pebble.xScale,
@@ -3635,14 +3647,63 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                         )
                     ])
                 )
+                addConvergenceLight(to: pebble, toward: formationPoint, duration: formation)
             }
             DispatchQueue.main.asyncAfter(
                 deadline: .now() + formation
             ) { [weak self] in
                 self?.completeActiveBake(token: bakeToken)
             }
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + formation + Self.fusionSpotlightTail
+            ) { [weak self] in
+                self?.isFusionSpotlightActive = false
+            }
         }
         return true
+    }
+
+    /// How long the core's labels stay aside after the ten have met.
+    static let fusionSpotlightTail: TimeInterval = 0.4
+
+    /// A converging gem's own light (round 12): an additive halo in its
+    /// glint colour that swells over the first 60 % of the formation
+    /// (+0.15 L or so on the gem), and a trail about 0.12 s of travel long
+    /// behind it. Children of the gem, so they leave with it.
+    private func addConvergenceLight(to pebble: PebbleNode, toward point: CGPoint, duration: TimeInterval) {
+        guard Self.allowsAmbientSparkle, duration > 0 else { return }
+        let tint = GemTone(hex: pebble.descriptor.colorHex, muted: !pebble.descriptor.isMeasured, glass: false)
+            .glintUIColor
+        let radius = pebble.localRadius
+        let halo = SKSpriteNode(texture: GemArtwork.haloTexture, size: CGSize(width: radius * 2.8, height: radius * 2.8))
+        halo.name = "drop.fusionConverge"
+        halo.color = tint
+        halo.colorBlendFactor = 1
+        halo.blendMode = .add
+        halo.alpha = 0
+        halo.zPosition = 2
+        pebble.addChild(halo)
+        halo.run(.fadeAlpha(to: 0.62 * effects.haloScale, duration: duration * 0.6))
+
+        let dx = point.x - pebble.position.x
+        let dy = point.y - pebble.position.y
+        let distance = hypot(dx, dy)
+        guard distance > radius else { return }
+        // In the gem's own (scaled, rotated) frame.
+        let scale = max(pebble.xScale, 0.0001)
+        let length = min(distance / scale * 0.12 / duration, radius * 3)
+        let trail = SKSpriteNode(texture: GemArtwork.haloTexture, size: CGSize(width: length + radius, height: radius * 0.9))
+        trail.name = "drop.fusionTrail"
+        trail.anchorPoint = CGPoint(x: 1, y: 0.5)
+        trail.position = .zero
+        trail.zRotation = atan2(dy, dx) - pebble.zRotation
+        trail.color = tint
+        trail.colorBlendFactor = 1
+        trail.blendMode = .add
+        trail.alpha = 0
+        trail.zPosition = 1.5
+        pebble.addChild(trail)
+        trail.run(.fadeAlpha(to: 0.5 * effects.haloScale, duration: 0.12))
     }
 
     /// Commits exactly the aggregation transaction captured before source nodes
@@ -4460,6 +4521,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let expand = SKAction.scale(to: beat.ringScale, duration: beat.ringDuration)
         expand.timingMode = .easeOut
         ring.run(.sequence([.group([expand, .fadeOut(withDuration: beat.ringDuration)]), .removeFromParent()]))
+        presentFusionAfterglow(on: node)
 
         guard tier >= 2, beat.shardCount > 0 else { return }
         let tint = GemTone(hex: node.descriptor.colorHex, muted: false, glass: false).glintUIColor
@@ -4480,6 +4542,57 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             shard.run(.sequence([
                 .group([move, .fadeOut(withDuration: beat.shardLifetime)]),
                 .run { [weak self] in self?.eventLightCount -= 1 },
+                .removeFromParent()
+            ]))
+        }
+    }
+
+    /// After the flash (round 12): the new crystal keeps a warm afterglow
+    /// for 1.2 s and three glints open and close on its crown one after
+    /// another (two at 控えめ), so ten gems becoming one reads as a gain,
+    /// not as a jar that emptied. Children of the crystal: they ride its
+    /// birth bounce and leave with it.
+    private func presentFusionAfterglow(on node: PebbleNode) {
+        let radius = node.localRadius
+        let tint = GemTone(hex: node.descriptor.colorHex, muted: false, glass: false).glintUIColor
+        let glow = SKSpriteNode(texture: GemArtwork.haloTexture, size: CGSize(width: radius * 3.4, height: radius * 3.4))
+        glow.name = "drop.fusionAfterglow"
+        glow.color = tint
+        glow.colorBlendFactor = 1
+        glow.blendMode = .add
+        glow.alpha = 0
+        glow.zPosition = 2
+        node.addChild(glow)
+        let peak = 0.55 * effects.haloScale
+        glow.run(.sequence([
+            .fadeAlpha(to: peak, duration: 0.15),
+            .wait(forDuration: 0.5),
+            .fadeOut(withDuration: 0.55),
+            .removeFromParent()
+        ]))
+        let spots: [CGPoint] = [
+            CGPoint(x: -0.38, y: 0.42), CGPoint(x: 0.44, y: 0.12), CGPoint(x: -0.06, y: -0.36)
+        ]
+        let count = effects == .subtle ? 2 : 3
+        for (index, spot) in spots.prefix(count).enumerated() {
+            let glint = SKSpriteNode(texture: GemArtwork.glintTexture, size: CGSize(width: radius * 0.7, height: radius * 0.7))
+            glint.name = "drop.fusionGlint"
+            glint.color = .white
+            glint.colorBlendFactor = 1
+            glint.blendMode = .add
+            glint.position = CGPoint(x: spot.x * radius, y: spot.y * radius)
+            glint.zPosition = 3
+            glint.setScale(0)
+            node.addChild(glint)
+            let open = SKAction.scale(to: 1, duration: 0.16)
+            open.timingMode = .easeOut
+            let close = SKAction.scale(to: 0, duration: 0.3)
+            close.timingMode = .easeIn
+            glint.run(.sequence([
+                .wait(forDuration: 0.12 + Double(index) * 0.26),
+                open,
+                .wait(forDuration: 0.12),
+                close,
                 .removeFromParent()
             ]))
         }

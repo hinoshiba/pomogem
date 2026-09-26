@@ -476,7 +476,8 @@ struct JarSpriteView: View {
 
                 // The core's name plate and progress card sit in front of
                 // the scene (like the HUD): the bed can never hide them, and
-                // they may overlap its soft top edge.
+                // they may overlap its soft top edge. While ten gems fuse
+                // under them they step aside (0.9 s), so the flash is seen.
                 if let coreState = lifetimeCoreState, !coreLabelsBuried {
                     JarLifetimeCoreLabels(
                         state: coreState,
@@ -487,6 +488,8 @@ struct JarSpriteView: View {
                         measures: false,
                         metrics: $coreLabelMetrics
                     )
+                    .opacity(scene.isFusionSpotlightActive ? 0 : 1)
+                    .animation(.easeInOut(duration: 0.18), value: scene.isFusionSpotlightActive)
                 }
             }
         }

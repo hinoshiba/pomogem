@@ -1005,24 +1005,29 @@ struct HomeView: View {
             }
 
             if let remaining = capacityRemaining, remaining <= 15 {
-                VStack {
-                    HStack(spacing: 7) {
-                        Image(systemName: "circle.grid.2x2.fill")
-                        Text(remaining == 0 ? "まとまり粒をつくっています" : "あと\(remaining)%で、下の粒がひとつにまとまる")
-                    }
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PomoGemTheme.text)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay { Capsule().stroke(PomoGemTheme.amber.opacity(0.28), lineWidth: 1) }
-                    .padding(.top, 188)
-                    Spacer()
+                // Right under the bottle (round 12), never over the HUD or
+                // the time core: the fusion happens in the jar, and the chip
+                // only names it. It takes the place of the quiet 内訳 hint
+                // below the jar while it shows, and fades in place (sliding
+                // from the top edge crossed the value and settled on the
+                // core).
+                HStack(spacing: 7) {
+                    Image(systemName: "circle.grid.2x2.fill")
+                    Text(remaining == 0 ? "まとまり粒をつくっています" : "あと\(remaining)%で、下の粒がひとつにまとまる")
                 }
+                .font(.caption.weight(.bold))
+                .foregroundStyle(PomoGemTheme.text)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay { Capsule().stroke(PomoGemTheme.amber.opacity(0.28), lineWidth: 1) }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // Placed by offset, so the card's layout never changes.
+                .offset(y: Self.capacityChipTopInset(stageHeight: height))
                 .transition(
                     reduceMotion
                         ? .opacity
-                        : .move(edge: .top).combined(with: .opacity)
+                        : .opacity.combined(with: .offset(y: 6))
                 )
                 .allowsHitTesting(false)
             }
@@ -1085,6 +1090,19 @@ struct HomeView: View {
         }
         .frame(height: height)
         .coordinateSpace(.named(Self.jarCardCoordinateSpace))
+    }
+
+    /// The capacity chip hangs 6 pt under the bottle's base (the bottle is
+    /// centred in the stage and at most `Constants.Jar.height` tall), over
+    /// the 内訳 hint's row when the stage has no room below the bottle.
+    private static func capacityChipTopInset(stageHeight: CGFloat) -> CGFloat {
+        let outer = JarScene.outerJarRect(sceneSize: CGSize(width: 1, height: stageHeight))
+        return stageHeight - outer.minY + 6
+    }
+
+    /// The chip above is showing (the 内訳 hint under the jar steps aside).
+    private var showsCapacityChip: Bool {
+        capacityRemaining.map { $0 <= 15 } ?? false
     }
 
     /// SwiftUI keeps presenting views mounted behind sheets. The jar owns the
@@ -4172,7 +4190,8 @@ struct HomeView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(PomoGemTheme.muted)
                 .multilineTextAlignment(.center)
-                .opacity(isPresented ? 0 : 1)
+                // The capacity chip takes this row while a fusion nears.
+                .opacity(isPresented || showsCapacityChip ? 0 : 1)
                 .accessibilityHidden(true)
                 .allowsHitTesting(false)
             }
