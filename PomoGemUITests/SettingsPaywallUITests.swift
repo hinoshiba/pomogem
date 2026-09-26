@@ -180,6 +180,11 @@ final class SettingsPaywallUITests: XCTestCase {
         if orientation.exists {
             XCTAssertLessThan(orientation.frame.minY, row.frame.minY)
         }
+        // The leave-pause card (F1) follows the 集中 card, above the Live Activity.
+        let leavePause = app.switches["settings.focus-leave-pause"]
+        if leavePause.exists {
+            XCTAssertLessThan(row.frame.maxY, leavePause.frame.minY)
+        }
         let liveActivity = app.switches["settings.live-activity"]
         if liveActivity.exists {
             XCTAssertLessThan(row.frame.maxY, liveActivity.frame.minY)

@@ -60,6 +60,11 @@ final class FocusLeaveSettingsUITests: XCTestCase {
         let behavior = element("settings.focus-leave-footer.behavior")
         let resume = element("settings.focus-leave-footer.resume")
         let nudgesFooter = element("settings.focus-leave-footer.nudges")
+        let music = app.buttons["settings.focus-music"]
+
+        // The 集中 card ends with 集中用の音楽 (F4); the leave-pause card
+        // follows it.
+        assertAbove(music, leavePause, "The leave-pause card follows the 集中 card's music row")
 
         // Product default: both on, the older reminder superseded.
         XCTAssertTrue(scrollUntilHittable(leavePause, attempts: 12))
