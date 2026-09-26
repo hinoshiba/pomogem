@@ -110,20 +110,80 @@ final class GemThemeDistinctionTests: XCTestCase {
     func testEveryPaletteThemeHasItsOwnMark() {
         let marks = palette.map(GemThemeMark.init(hex:))
         XCTAssertEqual(Set(marks).count, marks.count, "One distinct mark per swatch")
-        for (index, mark) in marks.enumerated() where index < GemThemeMark.Glyph.allCases.count {
-            XCTAssertFalse(mark.isFramed, "A palette theme wears a plain glyph")
-            XCTAssertEqual(mark.glyph, GemThemeMark.Glyph.allCases[index], "Keyed by palette index")
+        XCTAssertTrue(marks.allSatisfy { !$0.isFramed }, "A palette theme wears a plain glyph")
+        for hex in palette {
+            XCTAssertNotNil(
+                GemThemeMark.paletteGlyphs[SubjectPalette.normalized(hex)],
+                "\(hex) has its own entry in the fixed table"
+            )
         }
         // Colours outside the palette are framed, so they never pass for a
-        // palette theme; the legacy hue-rotation colours spread by hue.
+        // palette theme, and wear their nearest palette colour's glyph.
         let legacy = (0 ..< 12).map { step in
             GemColor(hue: CGFloat(step) / 12, saturation: 0.62, brightness: 0.82).hexString
         }.filter { SubjectPalette.index(of: $0) == nil }
-        let legacyMarks = legacy.map(GemThemeMark.init(hex:))
-        XCTAssertTrue(legacyMarks.allSatisfy(\.isFramed))
-        XCTAssertEqual(Set(legacyMarks).count, legacyMarks.count)
-        XCTAssertTrue(Set(legacyMarks).isDisjoint(with: Set(marks)))
+        XCTAssertFalse(legacy.isEmpty)
+        for hex in legacy {
+            let mark = GemThemeMark(hex: hex)
+            XCTAssertTrue(mark.isFramed, hex)
+            let nearest = GemThemeMark.nearestPaletteHex(to: hex, among: palette)
+            XCTAssertNotNil(nearest, hex)
+            XCTAssertEqual(mark, GemThemeMark(glyph: GemThemeMark(hex: nearest ?? "").glyph, isFramed: true), hex)
+        }
+        XCTAssertTrue(Set(legacy.map(GemThemeMark.init(hex:))).isDisjoint(with: Set(marks)))
         XCTAssertEqual(GemThemeMark(hex: "#8B93AC"), GemThemeMark(hex: "8b93ac"), "Stable per colour")
+        XCTAssertTrue(GemThemeMark(hex: "#8B93AC").isFramed, "A grey is framed too")
+        // A hair off 朱色 is still read as 朱色's neighbour.
+        XCTAssertEqual(GemThemeMark(hex: "#E95E4B"), GemThemeMark(glyph: .dot, isFramed: true))
+    }
+
+    /// a11y-05 (round 14): the marks are keyed by the colour itself, never
+    /// by where it sits in `SubjectPalette`, so a reordered palette (#41's
+    /// suggestion order) moves no mark. The table is pinned here.
+    func testMarksAreKeyedByHexAndSurviveAnyPaletteOrder() {
+        let pinned: [(hex: String, glyph: GemThemeMark.Glyph)] = [
+            ("#E85D4A", .dot), ("#4D7CDE", .triangle), ("#C25FA3", .square), ("#3FA57C", .star),
+            ("#8A6FD1", .asterisk), ("#D6863A", .plus), ("#36A7AE", .crescent), ("#D56B82", .sparkle),
+            ("#739B45", .bar), ("#5967C8", .twoDots), ("#A76A3F", .heart), ("#5688A8", .drop)
+        ]
+        XCTAssertEqual(GemThemeMark.paletteGlyphs.count, pinned.count)
+        XCTAssertEqual(Set(GemThemeMark.paletteGlyphs.values).count, GemThemeMark.Glyph.allCases.count)
+        for entry in pinned {
+            XCTAssertEqual(GemThemeMark(hex: entry.hex), GemThemeMark(glyph: entry.glyph), entry.hex)
+            XCTAssertEqual(GemThemeMark(hex: entry.hex.lowercased().replacingOccurrences(of: "#", with: "")).glyph, entry.glyph)
+        }
+        // The same palette in #41's order and in shuffled orders: every hex
+        // keeps its mark, and an off-palette colour keeps its neighbour.
+        let suggestionOrder = ["#E85D4A", "#4D7CDE", "#36A7AE", "#3FA57C", "#5688A8", "#5967C8",
+                               "#D6863A", "#C25FA3", "#A76A3F", "#8A6FD1", "#D56B82", "#739B45"]
+        XCTAssertEqual(Set(suggestionOrder.map(SubjectPalette.normalized)), Set(palette.map(SubjectPalette.normalized)))
+        var generator = SystemRandomNumberGenerator()
+        let orders = [palette, suggestionOrder, palette.reversed()] + (0 ..< 8).map { _ in palette.shuffled(using: &generator) }
+        let offPalette = ["#8B93AC", "#E95E4B", "#20B0C0", "#B03050", "#7F7F7F", "#A0C040"]
+        let expected = offPalette.map { GemThemeMark.nearestPaletteHex(to: $0, among: palette) }
+        for order in orders {
+            XCTAssertEqual(order.map(GemThemeMark.init(hex:)), order.map { hex in
+                GemThemeMark(glyph: pinned.first { SubjectPalette.normalized($0.hex) == SubjectPalette.normalized(hex) }!.glyph)
+            })
+            XCTAssertEqual(offPalette.map { GemThemeMark.nearestPaletteHex(to: $0, among: order) }, expected)
+        }
+    }
+
+    /// CIEDE2000 matches the published test data (Sharma, Wu and Dalal
+    /// 2005, pairs 1, 7, 17 and 25).
+    func testCIEDE2000MatchesTheReferenceData() {
+        let pairs: [((Double, Double, Double), (Double, Double, Double), Double)] = [
+            ((50.0000, 2.6772, -79.7751), (50.0000, 0.0000, -82.7485), 2.0425),
+            ((50.0000, 0.0000, 0.0000), (50.0000, -1.0000, 2.0000), 2.3669),
+            ((50.0000, 2.5000, 0.0000), (73.0000, 25.0000, -18.0000), 27.1492),
+            ((60.2574, -34.0099, 36.2677), (60.4626, -34.1751, 39.4387), 1.2644)
+        ]
+        for (first, second, expected) in pairs {
+            XCTAssertEqual(GemColor.ciede2000(first, second), expected, accuracy: 0.000_1)
+            XCTAssertEqual(GemColor.ciede2000(second, first), expected, accuracy: 0.000_1)
+        }
+        XCTAssertEqual(GemColor(hex: "#FFFFFF").cielab.L, 100, accuracy: 0.01)
+        XCTAssertEqual(GemColor(hex: "#000000").cielab.L, 0, accuracy: 0.01)
     }
 
     func testMarksAreOffByDefaultAndLeaveTheDefaultBakeUntouched() {

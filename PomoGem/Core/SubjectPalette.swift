@@ -1,10 +1,10 @@
 import Foundation
 
 /// The theme colour palette: the one ordered list of swatches that theme
-/// setup offers (onboarding and the theme editor). The jar reads the same
-/// list: a swatch's index keys its Differentiate Without Color mark
-/// (`GemThemeMark`), and the gem tone mapping is tested against every
-/// swatch, so curating this list retunes all of them at once.
+/// setup offers (onboarding and the theme editor). The gem tone mapping is
+/// tested against every swatch, so curating this list retunes all of them
+/// at once. The Differentiate Without Color marks (`GemThemeMark`) are keyed
+/// by hex, never by position here, so reordering the list moves no mark.
 ///
 /// Stored theme colours are never rewritten from here: a theme keeps the
 /// hex it was saved with, and a hex that is not (or no longer) in the list

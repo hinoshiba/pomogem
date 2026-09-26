@@ -2895,6 +2895,104 @@ struct GemColor: Equatable, Sendable {
 
     var oklabLightness: CGFloat { oklab.L }
 
+    /// CIELAB (D65 white) of the sRGB value: L 0…100.
+    var cielab: (L: Double, a: Double, b: Double) {
+        func linear(_ component: CGFloat) -> Double {
+            let c = Double(component)
+            return c <= 0.040_45 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+        }
+        let r: Double = linear(red)
+        let g: Double = linear(green)
+        let b: Double = linear(blue)
+        let x: Double = (0.412_456_4 * r + 0.357_576_1 * g + 0.180_437_5 * b) / 0.950_47
+        let y: Double = 0.212_672_9 * r + 0.715_152_2 * g + 0.072_175_0 * b
+        let z: Double = (0.019_333_9 * r + 0.119_192_0 * g + 0.950_304_1 * b) / 1.088_83
+        func f(_ value: Double) -> Double {
+            value > 216.0 / 24_389.0 ? cbrt(value) : (24_389.0 / 27.0 * value + 16) / 116
+        }
+        let fx: Double = f(x)
+        let fy: Double = f(y)
+        let fz: Double = f(z)
+        return (116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz))
+    }
+
+    /// CIEDE2000 colour difference to `other` (kL = kC = kH = 1).
+    func ciede2000(to other: GemColor) -> Double {
+        Self.ciede2000(cielab, other.cielab)
+    }
+
+    /// CIEDE2000 (Sharma, Wu and Dalal 2005) between two CIELAB values.
+    static func ciede2000(
+        _ first: (L: Double, a: Double, b: Double),
+        _ second: (L: Double, a: Double, b: Double)
+    ) -> Double {
+        let degreesToRadians: Double = .pi / 180
+        let twentyFiveTo7: Double = 6_103_515_625 // 25⁷
+        func seventh(_ value: Double) -> Double {
+            let square = value * value
+            return square * square * square * value
+        }
+        let chroma1: Double = (first.a * first.a + first.b * first.b).squareRoot()
+        let chroma2: Double = (second.a * second.a + second.b * second.b).squareRoot()
+        let meanChroma7: Double = seventh((chroma1 + chroma2) / 2)
+        let g: Double = 0.5 * (1 - (meanChroma7 / (meanChroma7 + twentyFiveTo7)).squareRoot())
+        let a1: Double = (1 + g) * first.a
+        let a2: Double = (1 + g) * second.a
+        let c1: Double = (a1 * a1 + first.b * first.b).squareRoot()
+        let c2: Double = (a2 * a2 + second.b * second.b).squareRoot()
+        func hueDegrees(_ b: Double, _ a: Double) -> Double {
+            guard b != 0 || a != 0 else { return 0 }
+            let degrees: Double = atan2(b, a) / degreesToRadians
+            return degrees < 0 ? degrees + 360 : degrees
+        }
+        let h1: Double = hueDegrees(first.b, a1)
+        let h2: Double = hueDegrees(second.b, a2)
+        let chromaProduct: Double = c1 * c2
+        let deltaL: Double = second.L - first.L
+        let deltaC: Double = c2 - c1
+        var deltaHue: Double = 0
+        if chromaProduct != 0 {
+            deltaHue = h2 - h1
+            if deltaHue > 180 {
+                deltaHue -= 360
+            } else if deltaHue < -180 {
+                deltaHue += 360
+            }
+        }
+        let deltaH: Double = 2 * chromaProduct.squareRoot() * sin(deltaHue / 2 * degreesToRadians)
+        let meanL: Double = (first.L + second.L) / 2
+        let meanC: Double = (c1 + c2) / 2
+        var meanHue: Double = h1 + h2
+        if chromaProduct != 0 {
+            if abs(h1 - h2) <= 180 {
+                meanHue = (h1 + h2) / 2
+            } else if h1 + h2 < 360 {
+                meanHue = (h1 + h2 + 360) / 2
+            } else {
+                meanHue = (h1 + h2 - 360) / 2
+            }
+        }
+        var t: Double = 1
+        t -= 0.17 * cos((meanHue - 30) * degreesToRadians)
+        t += 0.24 * cos(2 * meanHue * degreesToRadians)
+        t += 0.32 * cos((3 * meanHue + 6) * degreesToRadians)
+        t -= 0.20 * cos((4 * meanHue - 63) * degreesToRadians)
+        let hueOffset: Double = (meanHue - 275) / 25
+        let deltaTheta: Double = 30 * exp(-(hueOffset * hueOffset))
+        let meanC7: Double = seventh(meanC)
+        let rotationC: Double = 2 * (meanC7 / (meanC7 + twentyFiveTo7)).squareRoot()
+        let lightnessOffset: Double = (meanL - 50) * (meanL - 50)
+        let scaleL: Double = 1 + 0.015 * lightnessOffset / (20 + lightnessOffset).squareRoot()
+        let scaleC: Double = 1 + 0.045 * meanC
+        let scaleH: Double = 1 + 0.015 * meanC * t
+        let rotation: Double = -sin(2 * deltaTheta * degreesToRadians) * rotationC
+        let termL: Double = deltaL / scaleL
+        let termC: Double = deltaC / scaleC
+        let termH: Double = deltaH / scaleH
+        let sum: Double = termL * termL + termC * termC + termH * termH + rotation * termC * termH
+        return sum.squareRoot()
+    }
+
     var hsb: (hue: CGFloat, saturation: CGFloat, brightness: CGFloat) {
         let maximum = max(red, green, blue)
         let minimum = min(red, green, blue)
@@ -3182,10 +3280,13 @@ extension GemArtwork {
 
 /// Differentiate Without Color (Docs/GemExperienceDesign.md §7.12): a
 /// small engraved glyph that tells a theme's gems apart without its colour.
-/// Twelve simple glyphs are keyed by the theme's index in `SubjectPalette`;
-/// a colour outside the palette (older themes) shows the glyph of its hue
-/// slot inside a ring, so it never looks like a palette theme. Nothing is
-/// stored: the mark is derived from the colour each time a gem is baked.
+/// Twelve simple glyphs are keyed by the theme colour's normalized hex
+/// (`paletteGlyphs`, round 14), never by its position in `SubjectPalette`,
+/// so reordering or curating the palette never moves a mark. A colour
+/// outside the table (older themes) shows the glyph of its nearest palette
+/// colour (CIEDE2000) inside a ring, so it never looks like a palette
+/// theme. Nothing is stored: the mark is derived from the colour each time
+/// a gem is baked.
 ///
 /// The glyphs are told apart by their shape alone, whatever the angle (a
 /// loose gem rolls, and its engraving rolls with it): no square and
@@ -3199,29 +3300,57 @@ struct GemThemeMark: Hashable, Sendable {
     /// A colour outside the palette: the glyph sits in a ring.
     let isFramed: Bool
 
+    /// The palette colours' glyphs by normalized hex (`SubjectPalette.normalized`).
+    /// The assignment is the one rounds 7–13 made by palette position, so
+    /// nobody's marks change; colours that sit close together (琥珀 and
+    /// 赤銅, 菫 and 藍, 瑠璃 and 空色) have very different shapes.
+    static let paletteGlyphs: [String: Glyph] = [
+        "E85D4A": .dot, // 朱色
+        "4D7CDE": .triangle, // 瑠璃
+        "C25FA3": .square, // 紅藤
+        "3FA57C": .star, // 緑青
+        "8A6FD1": .asterisk, // 菫
+        "D6863A": .plus, // 琥珀
+        "36A7AE": .crescent, // 青緑
+        "D56B82": .sparkle, // 珊瑚
+        "739B45": .bar, // 若草
+        "5967C8": .twoDots, // 藍
+        "A76A3F": .heart, // 赤銅
+        "5688A8": .drop // 空色
+    ]
+
     init(glyph: Glyph, isFramed: Bool = false) {
         self.glyph = glyph
         self.isFramed = isFramed
     }
 
     init(hex: String) {
-        let count = Glyph.allCases.count
-        if let index = SubjectPalette.index(of: hex) {
-            glyph = Glyph.allCases[index % count]
-            // A palette longer than the glyph set frames its second dozen.
-            isFramed = index >= count
+        if let glyph = Self.paletteGlyphs[SubjectPalette.normalized(hex)] {
+            self.glyph = glyph
+            isFramed = false
             return
         }
-        let hsb = GemColor(hex: hex).hsb
-        let slot: Int
-        if hsb.saturation < 0.08 {
-            // Greys have no hue: a stable slot from the hex itself.
-            slot = Int(SubjectPalette.normalized(hex).unicodeScalars.reduce(UInt32(7)) { $0 &* 31 &+ $1.value } % UInt32(count))
-        } else {
-            slot = Int((hsb.hue * CGFloat(count)).rounded()) % count
-        }
-        glyph = Glyph.allCases[slot]
+        let nearest = Self.nearestPaletteHex(to: hex, among: Array(Self.paletteGlyphs.keys))
+        glyph = nearest.flatMap { Self.paletteGlyphs[SubjectPalette.normalized($0)] } ?? .dot
         isFramed = true
+    }
+
+    /// The candidate closest to `hex` by CIEDE2000; a tie goes to the
+    /// smaller normalized hex, so the answer never depends on the order of
+    /// `candidates`.
+    static func nearestPaletteHex(to hex: String, among candidates: [String]) -> String? {
+        let target = GemColor(hex: hex).cielab
+        var best: (hex: String, key: String, distance: Double)?
+        for candidate in candidates {
+            let key = SubjectPalette.normalized(candidate)
+            let distance = GemColor.ciede2000(target, GemColor(hex: candidate).cielab)
+            if let current = best {
+                let closer = distance < current.distance || (distance == current.distance && key < current.key)
+                guard closer else { continue }
+            }
+            best = (candidate, key, distance)
+        }
+        return best?.hex
     }
 
     /// The system setting (Settings › Accessibility › Display & Text Size).
