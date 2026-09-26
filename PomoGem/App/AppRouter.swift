@@ -79,6 +79,10 @@ final class AppRouter {
     var deferredFocusRecovery: RecoveredFocusRequest?
     var recoveredBreak: BreakRecoveryEnvelope?
     var cloudFocusRecoveryOffer: CloudFocusRecoveryOffer?
+    /// A start asked for from a widget, a link or an App Shortcut. Root sets
+    /// it only after it has brought the jar forward; Home consumes it once,
+    /// under its start button's rules (FocusStartEntryPolicy).
+    var pendingFocusStart: PendingFocusStart?
 
     /// The currently rendered bottle is retained so share cards can capture the exact
     /// SpriteKit composition instead of approximating it with a second layout engine.

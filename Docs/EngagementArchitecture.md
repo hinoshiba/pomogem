@@ -637,6 +637,7 @@ CとDの差は視覚的レアだけに限定し、Dでも本人はいつでも`q
 - 350,640セッション・38,958集約・120成果の実SwiftData soakで、30 descriptor（18 roots + 成果12）・0 loose/queue・cold projection 0.165秒・クラッシュ/OOMなしを確認
 - 40年の高速Overview fixtureで、350,640セッション・87,660,000g・18 roots・成果12個・物理体30個と全階層ラベルを実画面検証
 - Releaseにも表示する「積み上がり計画」。1〜40年、週1〜21回、10／25／60分と経過月を変更し、時間・質量・節目・瓶・星図を予測する。永続化やCloudKitへ依存せず、実績、レア抽選、成果石、休憩、共有、音・触覚、ウィジェットへ書き込まない。閉じると入力を破棄し、常時「予測・保存なし」と表示する。開発者向けの検証画面はアプリ内に置かない
+- アプリの外の入口（ホーム／ロック画面ウィジェット、`pomogem://`リンク）は、本人がその入口で集中を始めると選んだときだけ、ホームの開始ボタンと同じテーマ・時間・条件で集中を始める（`FocusStartEntryPolicy`）。進行中・復元待ちのタイマーがあれば二つ目を始めず、完走カードの休憩の選択やテーマの選択を飛ばさない（理由をtoastで示す）。要求は60秒で失効し、起動時の停止画面や初回設定をまたいで持ち越さない。休憩の終わりや通知から次の集中を自動で始めることはない
 - 本人が選んだ休憩は、集中と同じ時間・状態だけのLive Activityでロック画面とDynamic Islandに残り時間を示し、終わると「休憩終了」とだけ表示する。次の集中を促す文言は置かない
 - 回帰件数と成否はrelease candidateごとのXCTest／Swift Testing result bundleを正本とし、この文書へ固定件数を置かない。直近のopt-in 40年soakでは350,640 session・38,958 aggregate・120 achievement（計389,723行）を実SQLiteへ保存し、cold projectionは30 descriptor・queue 0・0.165秒、peak 73,420,256 Bだった。最終候補ではsplit store、rare release gate、direct deletion無効化を含む全suiteとRelease Simulator buildを再実行する
 - 完走保存障害時、復元情報を保持してHomeへ退避し、常設カードから再試行。DEBUG限定の実save faultでrollback、raw 0→1行、再起動非重複を検証

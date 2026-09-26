@@ -121,6 +121,13 @@
       "package": "l10n-02-focus-system"
     },
     {
+      "glob": "Shared/AppEntryLink.swift",
+      "table": "Widgets",
+      "package": "l10n-02-focus-system",
+      "bundle": "app+widgets",
+      "note": "constant pomogem:// routes behind widget taps; holds no catalog keys"
+    },
+    {
       "glob": "PomoGem/Core/ScreenTime/**",
       "table": "ScreenTime",
       "package": "l10n-02-focus-system"

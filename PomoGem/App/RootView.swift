@@ -947,6 +947,9 @@ struct RootView: View {
             // router. Navigation only: nothing here reads, writes or transfers.
             router.selectedTab = .settings
         }
+        .onChange(of: appEntryRoutingState, initial: true) { _, _ in
+            routeAppEntryIfPossible()
+        }
         .onChange(of: router.selectedTab) { _, selectedTab in
             guard isFirstFramePresented else { return }
             guard SyncMaintenanceLaunchPolicy.permitsForegroundDrain(
@@ -2840,6 +2843,48 @@ struct RootView: View {
         )
     }
 
+    /// Everything that decides whether a widget, link or App Shortcut request
+    /// may be taken now, so a change to any of it re-runs the routing.
+    private var appEntryRoutingState: AppEntryRoutingState {
+        AppEntryRoutingState(
+            requestID: AppEntryInbox.shared.pending?.id,
+            isBootstrapped: isBootstrapped,
+            showsMain: shouldShowMain,
+            isBlocked: blockingError != nil || completeDeletion.hasStarted,
+            isSwitchingStorage: storageTransfer.isStarting
+        )
+    }
+
+    /// notify-03 / product-04. Navigation only: this reads and writes no
+    /// record. Root takes a request only when it shows the jar; a startup
+    /// error, a data deletion or first-run setup drops it instead, because
+    /// the person is busy with something the request knew nothing about.
+    @MainActor
+    private func routeAppEntryIfPossible() {
+        let inbox = AppEntryInbox.shared
+        guard inbox.pending != nil else { return }
+        if blockingError != nil || completeDeletion.hasStarted {
+            inbox.discard()
+            return
+        }
+        guard isBootstrapped, !storageTransfer.isStarting else { return }
+        guard shouldShowMain else {
+            inbox.discard()
+            return
+        }
+        guard let request = inbox.take() else { return }
+        router.paywallPresented = false
+        router.sharePresented = false
+        router.selectedTab = .jar
+        if case let .startFocus(preset) = request.route {
+            router.pendingFocusStart = PendingFocusStart(
+                id: request.id,
+                preset: preset,
+                receivedAtUptime: request.receivedAtUptime
+            )
+        }
+    }
+
     @MainActor
     private func recoverBreakTimerIfNeeded() async {
         guard !Task.isCancelled else { return }
@@ -3077,6 +3122,14 @@ private struct StartupErrorView: View {
         }
         .scrollBounceBehavior(.basedOnSize)
     }
+}
+
+private struct AppEntryRoutingState: Equatable {
+    let requestID: UUID?
+    let isBootstrapped: Bool
+    let showsMain: Bool
+    let isBlocked: Bool
+    let isSwitchingStorage: Bool
 }
 
 struct MainNavigationView: View {

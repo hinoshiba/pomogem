@@ -90,8 +90,12 @@ UIKitが届ける向きの通知に追従します。手動固定はすべての
   通知本文は常にaccount-neutralで、テーマ名を含まない。
   timer終了通知の許可は、利用者が初めて明示的に集中を開始したときに一度だけ尋ね、復元・iCloud引き継ぎ
   では尋ねない（毎日のリマインダーとは別）
-- Widget: Home／Lock Screenともaccount-neutralな起動導線だけを表示し、記録、質量、テーマ、画像を
-  App Groupから読まない
+- Widget: Home／Lock Screenともaccount-neutralな集中開始の導線だけを表示し、記録、質量、テーマ、画像を
+  App Groupから読まない。tapすると固定URL（`pomogem://focus/start`、medium widgetの時間buttonは
+  `?minutes=25|45|60|90`）でアプリを開き、Homeの開始buttonと同じ条件で、選択中のテーマと時間
+  （または押した時間）の集中を始める。進行中・復元待ちのtimerがあれば二つ目を始めず、完走後の休憩の
+  選択待ちやテーマ未選択ではtoastで理由を示すだけにする。要求は60秒で失効し、起動時のiCloud停止画面や
+  初回設定をまたいで持ち越さない
 - Live Activity: Homeで任意のtimerを開始してiPhoneをロックすると、ロック画面へアプリ名、選択時間、
   残り時間、実行／一時停止／完了状態だけを表示。完走後に「5分休憩」などを選ぶと、同じpayloadで
   「休憩中」の残り時間に切り替わり（休憩ごとのランダムUUIDと秒数だけ）、終了後は「休憩終了」と表示する。

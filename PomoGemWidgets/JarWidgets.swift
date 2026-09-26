@@ -51,17 +51,23 @@ struct JarHomeWidget: Widget {
     }
 }
 
+/// Every tap starts a focus in the app exactly as Home's start button does,
+/// with the theme and length chosen there (notify-03, product-04). The URLs
+/// are constants: the widget still reads and shows no user data.
 private struct JarHomeWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: JarWidgetEntry
 
     var body: some View {
-        switch family {
-        case .systemMedium:
-            mediumLayout
-        default:
-            smallLayout
+        Group {
+            switch family {
+            case .systemMedium:
+                mediumLayout
+            default:
+                smallLayout
+            }
         }
+        .widgetURL(AppEntryLink.focusStartURL())
     }
 
     private var smallLayout: some View {
@@ -79,30 +85,34 @@ private struct JarHomeWidgetView: View {
         .accessibilityLabel("ポモジェムで集中を始める")
     }
 
+    /// The jar and the heading on top, then one row of equal buttons across
+    /// the whole width, so all four free lengths fit even the narrowest
+    /// medium widget with a comfortable tap target each.
     private var mediumLayout: some View {
-        HStack(spacing: 16) {
-            NeutralJarArtwork()
-                .frame(width: 126)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                NeutralJarArtwork()
+                    .frame(width: 88)
 
-            VStack(alignment: .leading, spacing: 0) {
-                wordmark
-                Spacer(minLength: 8)
-                Text("今日のひと粒を積もう")
-                    .font(.system(size: 23, weight: .heavy, design: .rounded))
-                    .foregroundStyle(WidgetPalette.warmText)
-                    .minimumScaleFactor(0.72)
-                    .lineLimit(2)
-                Spacer(minLength: 8)
-                Label("タップしてアプリを開く", systemImage: "arrow.up.forward.app")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(WidgetPalette.mutedText)
+                VStack(alignment: .leading, spacing: 4) {
+                    wordmark
+                    Text("今日のひと粒を積もう")
+                        .font(.system(size: 21, weight: .heavy, design: .rounded))
+                        .foregroundStyle(WidgetPalette.warmText)
+                        .minimumScaleFactor(0.72)
+                        .lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("ポモジェムで今日の集中を始める")
             }
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxHeight: .infinity)
+
+            FocusPresetLinks()
         }
-        .padding(.horizontal, 14)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("ポモジェムで今日の集中を始める")
+        .padding(14)
+        // The heading and each length stay separate for VoiceOver.
+        .accessibilityElement(children: .contain)
     }
 
     private var wordmark: some View {
@@ -119,6 +129,34 @@ private struct JarHomeWidgetView: View {
         .accessibilityElement(children: .combine)
     }
 
+}
+
+/// One tap to a focus of a free length. The widget cannot know the length
+/// last used in the app, so the rest of the widget starts with that one and
+/// these offer the fixed lengths the Home picker offers everyone.
+private struct FocusPresetLinks: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(FocusStartPreset.allCases, id: \.self) { preset in
+                Link(destination: AppEntryLink.focusStartURL(preset)) {
+                    // Timer lengths, as Home's picker writes them: 「90分」.
+                    Text(verbatim: DurationText.short(seconds: preset.seconds, units: .minutesSeconds))
+                        .font(.system(size: 14, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .foregroundStyle(WidgetPalette.night)
+                        .frame(maxWidth: .infinity, minHeight: 32)
+                        .background(WidgetPalette.amber, in: Capsule())
+                }
+                .accessibilityLabel(String(
+                    localized: "\(DurationText.spoken(seconds: preset.seconds, units: .minutesSeconds))集中する",
+                    table: "Widgets",
+                    comment: "VoiceOver: a medium-widget button that starts a focus; the argument is its length, e.g. 25分"
+                ))
+            }
+        }
+    }
 }
 
 private struct NeutralJarArtwork: View {
@@ -165,6 +203,12 @@ private struct JarLockScreenView: View {
     let entry: JarWidgetEntry
 
     var body: some View {
+        content
+            .widgetURL(AppEntryLink.focusStartURL())
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch family {
         case .accessoryInline:
             Label(

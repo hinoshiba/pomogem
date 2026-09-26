@@ -356,6 +356,11 @@ struct PomoGemApp: App {
             PomoGemPersistenceLaunchHost()
                 .preferredColorScheme(.dark)
                 .tint(PomoGemTheme.amber)
+                // Widgets and links (notify-03). Only a constant route is
+                // kept; Root acts on it after the launch checks mount the jar.
+                .onOpenURL { url in
+                    AppEntryInbox.shared.receive(url: url)
+                }
         }
     }
 }
@@ -662,6 +667,13 @@ private struct PomoGemPersistenceLaunchHost: View {
         .onChange(of: scenePhase) { _, phase in
             handleScenePhaseChange(phase)
         }
+        .onChange(of: appEntryStopState, initial: true) { _, state in
+            // A widget, link or Shortcut request never waits behind a stop
+            // screen (account check failed, offline, storage choice…). Once
+            // the person has dealt with that screen, the jar opens as usual
+            // and nothing starts on its own.
+            if state.showsStopScreen { AppEntryInbox.shared.discard() }
+        }
         .onReceive(
             NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
                 .receive(on: RunLoop.main)
@@ -680,6 +692,26 @@ private struct PomoGemPersistenceLaunchHost: View {
             cancelLaunchActivationDeadline()
             handleScenePhaseChange(.active)
         }
+    }
+
+    private struct AppEntryStopState: Equatable {
+        let requestID: UUID?
+        let showsStopScreen: Bool
+    }
+
+    private var appEntryStopState: AppEntryStopState {
+        let showsStopScreen: Bool
+        if session != nil {
+            showsStopScreen = false
+        } else if case .preparing = launchState {
+            showsStopScreen = false
+        } else {
+            showsStopScreen = true
+        }
+        return AppEntryStopState(
+            requestID: AppEntryInbox.shared.pending?.id,
+            showsStopScreen: showsStopScreen
+        )
     }
 
     private var launchStatusContent: some View {

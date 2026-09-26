@@ -24,7 +24,7 @@ PomoGemは[App Store](https://apps.apple.com/app/id6809139517)で配信中です
 - スクリーンタイムで選択アプリの合計10分ごとに粒を追加。勉強アプリは無料5つ・Pro無制限、控えたいアプリの黒い石は無料でも無制限（下記の配布前確認が必要）
 - 初回に同格のiCloud同期／このiPhoneのみから保存先を明示選択。このiPhoneのみならApple Account／networkなしで全基本機能を利用
 - iCloudを選び確認した場合、private CloudKitでtheme名、成果memo、記録、設定、進行中timerを同じApple Accountの対応iPhone間で同期。瓶用の集約は各端末で再構築
-- テーマ名を含めないローカル通知と、利用者データを表示せずアプリを開くホーム／ロック画面ウィジェット
+- テーマ名を含めないローカル通知と、利用者データを表示せず、タップで集中を始めるホーム／ロック画面ウィジェット
 - 集中・休憩の時間と状態だけを表示し、テーマ名・メモ・アカウント情報を含めないロック画面／Dynamic IslandのLive Activity
 - 瓶と累計質量を静止画または短いGIFとして共有
 - 端末で利用可能な全11種類の出荷対象保存データをversioned JSONとして手動で書き出し。ただしVersion 1.0は再import／保存先migrationに非対応
@@ -53,7 +53,9 @@ open PomoGem.xcodeproj
 `PomoGem`スキームとiPhoneシミュレータを選び、Runします。署名なしSimulatorは
 CloudKitへ接続せず、専用のローカル永続ストアを使います。iCloud、通知、
 モーション、StoreKit、Live Activityの最終確認は実機で行ってください。Version 1.0のWidgetは
-account-neutralな起動導線だけを表示します。Live Activityもaccount-neutralとし、明示的に集中を
+account-neutralな集中開始の導線だけを表示し、タップすると固定の`pomogem://focus/start`
+（medium widgetの時間ボタンは`?minutes=25|45|60|90`）でアプリを開きます。アプリはホームの開始ボタンと
+同じ条件でだけ集中を始めます（`FocusStartEntryPolicy`）。Live Activityもaccount-neutralとし、明示的に集中を
 始めたとき、または完走後に休憩を選んだときだけ、アプリ名、選択時間、残り時間、実行状態を表示します。
 テーマ名、メモ、質量、Apple Account、CloudKit由来の内容は渡しません。設定から端末ごとに無効化でき、
 更新に独自serverやActivityKit pushを使いません。
