@@ -1511,9 +1511,7 @@ struct ShareComposerView: View {
         // records instead (jar-04, screentime-11).
         // It does the same for a pile resting against a wall or the cap
         // (F3): the upright bottle would show it hanging on its side or mouth.
-        let livePileNeedsDrawnBottle = !ShareJarSnapshotPolicy.pileRestsOnTheFloor(in: scene)
-            || ShareJarSnapshotPolicy.hidingLeavesUnsupportedBody(in: scene, options: options)
-        guard !livePileNeedsDrawnBottle else {
+        guard !ShareJarSnapshotPolicy.livePileNeedsDrawnBottle(in: scene, options: options) else {
             return nil
         }
         guard let image = try? JarSnapshotter.shared.image(of: scene, options: options) else {

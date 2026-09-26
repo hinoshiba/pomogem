@@ -15,7 +15,8 @@ import SpriteKit
 /// on top of the pile after a relaunch, still allow the real jar.
 ///
 /// F3: a pile resting off the jar's floor is a separate reason for the
-/// drawn bottle (`pileRestsOnTheFloor(in:)`); the composer asks both.
+/// drawn bottle (`pileRestsOnTheFloor(in:)`). The composer asks
+/// `livePileNeedsDrawnBottle(in:options:)`, which asks both.
 enum ShareJarSnapshotPolicy {
     struct Body: Equatable {
         let center: CGPoint
@@ -62,8 +63,8 @@ enum ShareJarSnapshotPolicy {
     ///
     /// A pile resting against a wall or the invisible cap (the phone held
     /// sideways or upside down when it settled) would hang on the side or
-    /// at the mouth of the card's upright bottle, so the composer draws the
-    /// card's own bottle when this is false, whatever a share hides. It
+    /// at the mouth of the card's upright bottle, so the card draws its own
+    /// bottle when this is false, whatever a share hides. It
     /// reads the pose the pile settled in, not the live gravity a sheet
     /// resets (`JarScene.pileGravityVector`).
     @MainActor
@@ -105,5 +106,17 @@ enum ShareJarSnapshotPolicy {
             visible: visible,
             up: CGVector(dx: -gravity.dx, dy: -gravity.dy)
         )
+    }
+
+    /// The composer's decision: the card draws its own bottle when the pile
+    /// rests off the floor (F3) or hiding leaves a visible gem unsupported,
+    /// and shows the live jar otherwise.
+    @MainActor
+    static func livePileNeedsDrawnBottle(
+        in scene: SKScene,
+        options: JarSnapshotOptions
+    ) -> Bool {
+        !pileRestsOnTheFloor(in: scene)
+            || hidingLeavesUnsupportedBody(in: scene, options: options)
     }
 }

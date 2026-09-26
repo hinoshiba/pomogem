@@ -104,7 +104,8 @@ final class ShareJarSnapshotPolicyTests: XCTestCase {
 
     // A pile resting off the jar's floor calls for the drawn bottle on its
     // own (`pileRestsOnTheFloor(in:)`); `hidingLeavesUnsupportedBody` still
-    // answers only for hidden bodies. The composer ORs the two.
+    // answers only for hidden bodies. `livePileNeedsDrawnBottle`, the
+    // composer's decision, ORs the two.
 
     func testAPileOffTheFloorWithNothingHiddenGetsTheDrawnBottle() {
         let jar = makeJar()
@@ -112,7 +113,10 @@ final class ShareJarSnapshotPolicyTests: XCTestCase {
         for options in [measuredOnly, withSelfReported] {
             XCTAssertFalse(pebbleNodes(jar).isEmpty)
             XCTAssertTrue(pebbleNodes(jar).allSatisfy { !options.hides($0.descriptor) }, "Nothing is hidden")
-            XCTAssertFalse(livePileNeedsDrawnBottle(jar, options), "Upright: the live snapshot")
+            XCTAssertFalse(
+                ShareJarSnapshotPolicy.livePileNeedsDrawnBottle(in: jar, options: options),
+                "Upright: the live snapshot"
+            )
         }
         for degrees in [35.0, -35, 90, -90, 180] {
             jar.setGravityReading(rolled(degrees), smoothing: false)
@@ -122,7 +126,10 @@ final class ShareJarSnapshotPolicyTests: XCTestCase {
                     ShareJarSnapshotPolicy.hidingLeavesUnsupportedBody(in: jar, options: options),
                     "\(degrees)°: nothing is hidden"
                 )
-                XCTAssertTrue(livePileNeedsDrawnBottle(jar, options), "\(degrees)°: the drawn bottle")
+                XCTAssertTrue(
+                    ShareJarSnapshotPolicy.livePileNeedsDrawnBottle(in: jar, options: options),
+                    "\(degrees)°: the drawn bottle"
+                )
             }
         }
     }
@@ -146,7 +153,10 @@ final class ShareJarSnapshotPolicyTests: XCTestCase {
 
         XCTAssertTrue(ShareJarSnapshotPolicy.pileRestsOnTheFloor(in: jar))
         XCTAssertFalse(ShareJarSnapshotPolicy.hidingLeavesUnsupportedBody(in: jar, options: measuredOnly))
-        XCTAssertFalse(livePileNeedsDrawnBottle(jar, measuredOnly), "The live snapshot")
+        XCTAssertFalse(
+            ShareJarSnapshotPolicy.livePileNeedsDrawnBottle(in: jar, options: measuredOnly),
+            "The live snapshot"
+        )
         XCTAssertTrue(
             ShareJarSnapshotPolicy.hidingLeavesUnsupportedBody(
                 hidden: [.init(center: hidden.position, radius: hidden.radius)],
@@ -162,7 +172,10 @@ final class ShareJarSnapshotPolicyTests: XCTestCase {
         assertLiveGravityIsTheDefault(jar)
         XCTAssertTrue(ShareJarSnapshotPolicy.pileRestsOnTheFloor(in: jar))
         XCTAssertFalse(ShareJarSnapshotPolicy.hidingLeavesUnsupportedBody(in: jar, options: measuredOnly))
-        XCTAssertFalse(livePileNeedsDrawnBottle(jar, measuredOnly), "Still the live snapshot")
+        XCTAssertFalse(
+            ShareJarSnapshotPolicy.livePileNeedsDrawnBottle(in: jar, options: measuredOnly),
+            "Still the live snapshot"
+        )
     }
 
     func testASheetResettingTheLiveGravityLeavesAPileSettledOffTheFloorOnTheDrawnBottle() {
@@ -186,7 +199,10 @@ final class ShareJarSnapshotPolicyTests: XCTestCase {
                 ShareJarSnapshotPolicy.hidingLeavesUnsupportedBody(in: jar, options: withSelfReported),
                 "\(degrees)°: nothing is hidden"
             )
-            XCTAssertTrue(livePileNeedsDrawnBottle(jar, withSelfReported), "\(degrees)°: still the drawn bottle")
+            XCTAssertTrue(
+                ShareJarSnapshotPolicy.livePileNeedsDrawnBottle(in: jar, options: withSelfReported),
+                "\(degrees)°: still the drawn bottle"
+            )
         }
     }
 
@@ -204,19 +220,14 @@ final class ShareJarSnapshotPolicyTests: XCTestCase {
             XCTAssertTrue(jar.isIdlePaused, "\(degrees)°: the pile stays frozen")
             XCTAssertEqual(jar.pileGravityVector, settled, "\(degrees)°: the pose the pile rests in")
             XCTAssertTrue(ShareJarSnapshotPolicy.pileRestsOnTheFloor(in: jar), "\(degrees)°")
-            XCTAssertFalse(livePileNeedsDrawnBottle(jar, withSelfReported), "\(degrees)°: the live snapshot")
+            XCTAssertFalse(
+                ShareJarSnapshotPolicy.livePileNeedsDrawnBottle(in: jar, options: withSelfReported),
+                "\(degrees)°: the live snapshot"
+            )
         }
     }
 
     // MARK: - Fixtures
-
-    /// The composer's decision (`ShareComposerView.capturedJarSnapshot`):
-    /// the card draws its own bottle when the pile rests off the floor or
-    /// hiding leaves a gem unsupported, and shows the live jar otherwise.
-    private func livePileNeedsDrawnBottle(_ scene: SKScene, _ options: JarSnapshotOptions) -> Bool {
-        !ShareJarSnapshotPolicy.pileRestsOnTheFloor(in: scene)
-            || ShareJarSnapshotPolicy.hidingLeavesUnsupportedBody(in: scene, options: options)
-    }
 
     private func makeJar() -> JarScene {
         let jar = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
@@ -255,8 +266,14 @@ final class ShareJarSnapshotPolicyTests: XCTestCase {
 
     private func assertLiveGravityIsTheDefault(_ jar: JarScene, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertEqual(jar.appliedGravityVector, Constants.Jar.gravityVector, file: file, line: line)
-        XCTAssertEqual(jar.physicsWorld.gravity.dx, Constants.Jar.gravityVector.dx, accuracy: 1e-6, file: file, line: line)
-        XCTAssertEqual(jar.physicsWorld.gravity.dy, Constants.Jar.gravityVector.dy, accuracy: 1e-6, file: file, line: line)
+        XCTAssertEqual(
+            jar.physicsWorld.gravity.dx, Constants.Jar.gravityVector.dx,
+            accuracy: 1e-6, file: file, line: line
+        )
+        XCTAssertEqual(
+            jar.physicsWorld.gravity.dy, Constants.Jar.gravityVector.dy,
+            accuracy: 1e-6, file: file, line: line
+        )
     }
 
     private func descriptor(
