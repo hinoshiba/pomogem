@@ -1,7 +1,30 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
-
+    "25分" : {
+      "comment" : "Shortcuts and Siri: a 25-minute focus"
+    },
+    "45分" : {
+      "comment" : "Shortcuts and Siri: a 45-minute focus"
+    },
+    "60分" : {
+      "comment" : "Shortcuts and Siri: a 60-minute focus"
+    },
+    "90分" : {
+      "comment" : "Shortcuts and Siri: a 90-minute focus"
+    },
+    "ポモジェムを開き、ホームで選んでいるテーマで集中を始めます。" : {
+      "comment" : "Shortcuts: what the start-focus action does"
+    },
+    "空欄なら、ホームで選んでいる時間で始めます。" : {
+      "comment" : "Shortcuts: what an empty focus length means"
+    },
+    "集中を始める" : {
+      "comment" : "Siri, Spotlight and Shortcuts: the start-focus action"
+    },
+    "集中時間" : {
+      "comment" : "Shortcuts: the focus length parameter"
+    }
   },
   "version" : "1.0"
 }
