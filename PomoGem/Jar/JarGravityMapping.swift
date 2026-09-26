@@ -26,6 +26,21 @@ import UIKit
 ///    `uprightInPlaneFraction`. A phone on a desk behaves like the jar with
 ///    motion off, and tilting it up follows real gravity continuously.
 ///
+/// The blend makes the jar's gravity move up to about 7 times faster than
+/// the reading inside its band, so nothing that must ignore sensor noise
+/// reads the blended gravity. How the scene wires this in (after the gem
+/// session's base commit):
+/// - Smooth the sensed `Reading` (`Reading.smoothed`), not the mapped
+///   gravity, and map the smoothed reading with `gravity(for:)`.
+/// - Draw the light (`applyOpticalTilt`, and the resting jar's light check)
+///   from `lightHorizontal(for:)`, never from the gravity's dx: a phone on a
+///   desk keeps exactly the default gravity, but its glints still follow it.
+/// - Wake a resting jar for a turn when `wakeDelta(from:to:)` between the
+///   reading the pile settled under and the smoothed reading exceeds
+///   `JarTiltMath.idleLightThreshold`.
+/// - Throw taps and shakes along `launchDirection(for:)` of the applied
+///   gravity.
+///
 /// Everything here is pure and nonisolated: the resting jar's tilt check runs
 /// it on Core Motion's background queue.
 enum JarGravityMapping {
@@ -65,6 +80,80 @@ enum JarGravityMapping {
         }
     }
 
+    /// The in-screen part of one finite Core Motion gravity reading, in g,
+    /// in the interface's axes, before any blending: what the sensor says.
+    /// A reading longer than 1 g is scaled back to unit length (Core
+    /// Motion's gravity is a unit vector; a synthetic source or rounding can
+    /// exceed it), so the jar never pulls harder than `strength`. A shorter
+    /// reading keeps its length: a missing z must not turn the noise of a
+    /// flat phone into full gravity. Only the length uses z, so the reading
+    /// keeps x and y, and |(x, y)| ≤ 1 always holds.
+    struct Reading: Equatable, Sendable {
+        /// Toward the interface's right edge.
+        let x: CGFloat
+        /// Toward the interface's top edge.
+        let y: CGFloat
+
+        /// A phone lying flat: no in-screen gravity. The jar keeps
+        /// `defaultGravity` and a level light, as with motion off.
+        static let flat = Reading(x: 0, y: 0)
+
+        /// Nil when the reading is not finite (the sample is ignored).
+        init?(
+            deviceGravityX: Double,
+            deviceGravityY: Double,
+            deviceGravityZ: Double,
+            interfaceOrientation: InterfaceOrientation = .portrait
+        ) {
+            guard deviceGravityX.isFinite, deviceGravityY.isFinite, deviceGravityZ.isFinite else {
+                return nil
+            }
+            // Scaled by the largest component first, so huge finite readings
+            // do not overflow.
+            let largest = max(abs(deviceGravityX), abs(deviceGravityY), abs(deviceGravityZ))
+            guard largest > 0 else {
+                self = .flat
+                return
+            }
+            let sx = deviceGravityX / largest
+            let sy = deviceGravityY / largest
+            let sz = deviceGravityZ / largest
+            let scaledLength = (sx * sx + sy * sy + sz * sz).squareRoot()
+            // `largest * scaledLength` may overflow to infinity; it is only
+            // compared, and the unit vector comes from the scaled parts.
+            let isLongerThanUnit = largest * scaledLength > 1
+            let unitX = isLongerThanUnit ? sx / scaledLength : deviceGravityX
+            let unitY = isLongerThanUnit ? sy / scaledLength : deviceGravityY
+            let inScreen = interfaceOrientation.interfaceVector(deviceX: CGFloat(unitX), deviceY: CGFloat(unitY))
+            self.init(x: inScreen.dx, y: inScreen.dy)
+        }
+
+        private init(x: CGFloat, y: CGFloat) {
+            self.x = x
+            self.y = y
+        }
+
+        /// The share of gravity lying in the screen's plane (0 flat … 1
+        /// upright).
+        var inPlaneFraction: CGFloat {
+            min(hypot(x, y), 1)
+        }
+
+        /// One smoothing step toward `target`, as `JarTiltMath.smoothed`
+        /// steps the scene's gravity. The step is a weighted mean of two
+        /// readings, so a smoothed reading that starts at a pose stays
+        /// within any per-axis distance of it that every sample keeps.
+        /// A fraction that is not finite keeps this reading.
+        func smoothed(toward target: Reading, fraction: CGFloat) -> Reading {
+            guard fraction.isFinite else { return self }
+            let step = min(max(fraction, 0), 1)
+            return Reading(
+                x: x * (1 - step) + target.x * step,
+                y: y * (1 - step) + target.y * step
+            )
+        }
+    }
+
     // MARK: Tuning
 
     /// The jar's gravity when the phone lies flat, and the gravity it keeps
@@ -87,13 +176,11 @@ enum JarGravityMapping {
     /// closed (sin 5°).
     static let upwardMargin: CGFloat = 0.087
 
-    /// Gravity weaker than this cannot be trusted to hold the gems down (10%
-    /// of `strength`), as while the flat-phone blend passes through zero on
-    /// a phone tipping top-down from flat; it counts as upward.
+    /// Gravity weaker than this (10% of `strength`) has no direction to
+    /// trust, as while the flat-phone blend passes through zero on a phone
+    /// tipping top-down from flat. It counts as upward (`isUpward(_:)`), and
+    /// taps and shakes throw toward the jar's own up (`launchDirection`).
     static var weakGravityMagnitude: CGFloat { 0.1 * strength }
-
-    /// Below this magnitude gravity has no usable direction.
-    static let directionlessMagnitude: CGFloat = 0.001
 
     /// The jar's strongest gravity, as `JarTiltMath.clamped` keeps it.
     static var maximumMagnitude: CGFloat {
@@ -122,36 +209,33 @@ enum JarGravityMapping {
     }
 
     /// The jar's gravity for one reading, or nil when the reading is not
-    /// finite (the sample is ignored). Never longer than `strength` for a
-    /// finite reading, and never longer than `maximumMagnitude`.
+    /// finite (the sample is ignored).
     static func acceptedGravity(
         deviceGravityX: Double,
         deviceGravityY: Double,
         deviceGravityZ: Double,
         interfaceOrientation: InterfaceOrientation = .portrait
     ) -> CGVector? {
-        guard let reading = UnitReading(x: deviceGravityX, y: deviceGravityY, z: deviceGravityZ) else {
-            return nil
-        }
+        Reading(
+            deviceGravityX: deviceGravityX,
+            deviceGravityY: deviceGravityY,
+            deviceGravityZ: deviceGravityZ,
+            interfaceOrientation: interfaceOrientation
+        ).map(gravity(for:))
+    }
+
+    /// The jar's gravity for a (possibly smoothed) reading: the sensed
+    /// gravity blended with `defaultGravity` by `followWeight`. Never longer
+    /// than `strength`, since both ends of the blend are at most that long.
+    static func gravity(for reading: Reading) -> CGVector {
         let weight = followWeight(inPlaneFraction: reading.inPlaneFraction)
         guard weight > 0 else { return defaultGravity }
-        let inScreen = interfaceOrientation.interfaceVector(deviceX: reading.x, deviceY: reading.y)
-        let sensed = CGVector(dx: inScreen.dx * strength, dy: inScreen.dy * strength)
+        let sensed = CGVector(dx: reading.x * strength, dy: reading.y * strength)
         let blended = CGVector(
             dx: weight * sensed.dx + (1 - weight) * defaultGravity.dx,
             dy: weight * sensed.dy + (1 - weight) * defaultGravity.dy
         )
         return capped(blended)
-    }
-
-    /// The share of gravity lying in the screen's plane (0 flat … 1
-    /// upright), or nil when the reading is not finite.
-    static func inPlaneFraction(
-        deviceGravityX: Double,
-        deviceGravityY: Double,
-        deviceGravityZ: Double
-    ) -> CGFloat? {
-        UnitReading(x: deviceGravityX, y: deviceGravityY, z: deviceGravityZ)?.inPlaneFraction
     }
 
     /// How much of the sensed gravity the jar follows for an in-screen
@@ -164,7 +248,43 @@ enum JarGravityMapping {
         return t * t * (3 - 2 * t)
     }
 
+    /// `vector` limited to `maximumMagnitude`, in the same direction; for
+    /// finite vectors. Defence in depth: with today's constants the blend
+    /// never exceeds `strength` (7.2 < 9.4), so this engages only if the
+    /// jar's gravity is ever tuned above the cap.
+    static func capped(_ vector: CGVector) -> CGVector {
+        let magnitude = hypot(vector.dx, vector.dy)
+        guard magnitude > maximumMagnitude else { return vector }
+        let scale = maximumMagnitude / magnitude
+        return CGVector(dx: vector.dx * scale, dy: vector.dy * scale)
+    }
+
     // MARK: Helpers for the scene (D3.3)
+
+    /// The horizontal the jar's light follows (scene units, for
+    /// `JarTiltMath.lightFraction`): the sensed sideways gravity, never
+    /// blended. In portrait it is today's `gx × tiltGravityHorizontalScale`,
+    /// so a phone lying on a desk still moves its glints when tilted
+    /// although its gravity stays exactly `defaultGravity`.
+    static func lightHorizontal(for reading: Reading) -> CGFloat {
+        reading.x * Constants.Jar.tiltGravityHorizontalScale
+    }
+
+    /// `lightHorizontal(for:)` of one reading, or nil when the reading is
+    /// not finite (the light keeps its place).
+    static func lightHorizontal(
+        deviceGravityX: Double,
+        deviceGravityY: Double,
+        deviceGravityZ: Double,
+        interfaceOrientation: InterfaceOrientation = .portrait
+    ) -> CGFloat? {
+        Reading(
+            deviceGravityX: deviceGravityX,
+            deviceGravityY: deviceGravityY,
+            deviceGravityZ: deviceGravityZ,
+            interfaceOrientation: interfaceOrientation
+        ).map(lightHorizontal(for:))
+    }
 
     /// Whether the mouth must act as closed under `gravity`: it points
     /// toward the mouth, or lies within `upwardMargin` of horizontal, or is
@@ -178,73 +298,43 @@ enum JarGravityMapping {
     }
 
     /// The unit direction a tap or shake throws the gems: straight against
-    /// gravity. The default gravity gives (0, 1), today's scene-up; gravity
-    /// without a usable direction also gives (0, 1).
+    /// gravity. Gravity too weak to trust (`weakGravityMagnitude`, the same
+    /// line `isUpward` draws) or undefined throws toward the jar's own up,
+    /// (0, 1), as the default gravity does: while the blend passes through
+    /// zero the gems still lie on the floor. On a phone tipping top-down
+    /// from flat the throw therefore reverses once, where gravity first
+    /// pulls toward the mouth at `weakGravityMagnitude`, not where it
+    /// crosses zero.
     static func launchDirection(for gravity: CGVector) -> CGVector {
         let up = CGVector(dx: 0, dy: 1)
         guard gravity.dx.isFinite, gravity.dy.isFinite else { return up }
         let magnitude = hypot(gravity.dx, gravity.dy)
-        guard magnitude >= directionlessMagnitude else { return up }
+        guard magnitude >= weakGravityMagnitude else { return up }
         return CGVector(dx: -gravity.dx / magnitude, dy: -gravity.dy / magnitude)
     }
 
-    /// How far gravity moved from `old` to `new`, for the resting jar's wake
-    /// check: the larger change of the two axes, as a fraction of `strength`.
-    /// A sideways change reads exactly like the light's change
-    /// (`JarTiltMath.lightFraction`), so `JarTiltMath.idleLightThreshold`
-    /// keeps its meaning, and a turn with no sideways part (an upside-down
-    /// flip) now counts too. Taking the larger axis, not the diagonal, keeps
-    /// the promise that tremor below the threshold on each axis never wakes
-    /// the jar. A non-finite vector is a rejected sample and moves nothing.
-    static func wakeDelta(from old: CGVector, to new: CGVector) -> CGFloat {
-        guard old.dx.isFinite, old.dy.isFinite, new.dx.isFinite, new.dy.isFinite else { return 0 }
-        let change = max(abs(new.dx - old.dx), abs(new.dy - old.dy))
-        return change / strength
-    }
-
-    // MARK: Private
-
-    /// `vector` limited to `maximumMagnitude`.
-    private static func capped(_ vector: CGVector) -> CGVector {
-        let magnitude = hypot(vector.dx, vector.dy)
-        guard magnitude > maximumMagnitude else { return vector }
-        let scale = maximumMagnitude / magnitude
-        return CGVector(dx: vector.dx * scale, dy: vector.dy * scale)
-    }
-
-    /// One finite gravity reading, scaled down to unit length when it is
-    /// longer (Core Motion's gravity is a unit vector; a synthetic source or
-    /// rounding can exceed it), so the jar never pulls harder than
-    /// `strength`. A shorter reading keeps its length: a missing z must not
-    /// turn the noise of a flat phone into full gravity.
-    private struct UnitReading {
-        let x: CGFloat
-        let y: CGFloat
-        let inPlaneFraction: CGFloat
-
-        init?(x rawX: Double, y rawY: Double, z rawZ: Double) {
-            guard rawX.isFinite, rawY.isFinite, rawZ.isFinite else { return nil }
-            // Scaled by the largest component first, so huge finite readings
-            // do not overflow.
-            let largest = max(abs(rawX), abs(rawY), abs(rawZ))
-            guard largest > 0 else {
-                x = 0
-                y = 0
-                inPlaneFraction = 0
-                return
-            }
-            let sx = rawX / largest
-            let sy = rawY / largest
-            let sz = rawZ / largest
-            let scaledLength = (sx * sx + sy * sy + sz * sz).squareRoot()
-            // `largest * scaledLength` may overflow to infinity; it is only
-            // compared, and the unit vector comes from the scaled parts.
-            let isLongerThanUnit = largest * scaledLength > 1
-            let unitX = isLongerThanUnit ? sx / scaledLength : rawX
-            let unitY = isLongerThanUnit ? sy / scaledLength : rawY
-            x = CGFloat(unitX)
-            y = CGFloat(unitY)
-            inPlaneFraction = CGFloat(min(hypot(unitX, unitY), 1))
-        }
+    /// How far the phone turned from `old` to `new`, for the resting jar's
+    /// wake check, on the light's scale so `JarTiltMath.idleLightThreshold`
+    /// keeps its meaning. It is the smaller of two changes:
+    /// - the sensed in-screen gravity's larger per-axis change, in g. For a
+    ///   sideways turn that is exactly the light's change. Measured on the
+    ///   sensor, not on the blended gravity (which moves up to about 7 times
+    ///   faster inside the blend band), so tremor that keeps every sample
+    ///   within the threshold of the settled reading on each axis never
+    ///   wakes the jar, at any pose;
+    /// - the jar's gravity's larger per-axis change, as a fraction of
+    ///   `strength`. A turn that leaves the jar's gravity alone (a phone
+    ///   tilting on a desk, below the blend) wakes nothing; its light has
+    ///   its own check (`lightHorizontal`).
+    /// Held upright both are equal. An upside-down flip reads 2.
+    static func wakeDelta(from old: Reading, to new: Reading) -> CGFloat {
+        let sensorChange = max(abs(new.x - old.x), abs(new.y - old.y))
+        let oldGravity = gravity(for: old)
+        let newGravity = gravity(for: new)
+        let gravityChange = max(
+            abs(newGravity.dx - oldGravity.dx),
+            abs(newGravity.dy - oldGravity.dy)
+        ) / strength
+        return min(sensorChange, gravityChange)
     }
 }
