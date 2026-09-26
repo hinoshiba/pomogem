@@ -1040,7 +1040,12 @@ monitor_linked_libraries="$audit_tmp/monitor-linked-libraries.txt"
 if ! /usr/bin/otool -L "$monitor_binary" > "$monitor_linked_libraries" 2>/dev/null; then
   fail 'Screen Time monitor linked-library audit failed'
 fi
-for required_framework in '/DeviceActivity.framework/DeviceActivity' '/FamilyControls.framework/FamilyControls'; do
+# ManagedSettings: the focus shield's kill-proof removal clears its named
+# store from this extension when the failsafe interval ends (F2).
+for required_framework in \
+  '/DeviceActivity.framework/DeviceActivity' \
+  '/FamilyControls.framework/FamilyControls' \
+  '/ManagedSettings.framework/ManagedSettings'; do
   if ! LC_ALL=C /usr/bin/grep -Fq "$required_framework" "$monitor_linked_libraries"; then
     fail 'Screen Time monitor is missing a reviewed Screen Time framework'
   fi

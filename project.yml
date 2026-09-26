@@ -162,6 +162,9 @@ targets:
       - path: Shared/ScreenTimeCallbackDiagnostics.swift
       - path: Shared/ScreenTimeStore.swift
       - path: Shared/ScreenTimeMonitoring.swift
+      # The focus shield's record and failsafe handler: the extension clears
+      # the shield when its DeviceActivity interval ends (F2).
+      - path: Shared/ScreenTimeFocusShield.swift
     entitlements:
       path: PomoGemScreenTimeMonitor/PomoGemScreenTimeMonitor.entitlements
       properties:

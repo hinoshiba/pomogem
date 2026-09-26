@@ -3636,6 +3636,11 @@ private struct PomoGemPersistenceLaunchHost: View {
         // the same timer remounts and restores it; otherwise its session never
         // comes back in the new account's namespace.
         TimerCompletionAlertController.shared.suspendForContainerRetirement()
+        // The focus shield goes with the timer's other surfaces: its record is
+        // not owner-bound, and at a cold launch that never admitted
+        // persistence no Screen Time lease exists to retire it. If the account
+        // turns out unchanged, the remounted timer shields again.
+        ScreenTimeController.shared.focusShield.retire(reason: .ownerRetired)
         if let namespace = suspendedAccountBinding?.namespace {
             FocusPersistence.clearScheduledCompletionNotificationWitness(
                 namespace: namespace

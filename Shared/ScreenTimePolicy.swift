@@ -11,6 +11,20 @@ struct ScreenTimeConfiguration: Codable, Equatable {
     var learningSelection = FamilyActivitySelection(includeEntireCategory: false)
     var distractionSelection = FamilyActivitySelection(includeEntireCategory: false)
     var themeID: UUID?
+    /// F2: shield the distraction apps while this iPhone runs a focus.
+    /// Opt-in and free; independent of `enabled` (recording). Optional so a
+    /// ledger written before it decodes (the synthesized decoder has no
+    /// default for a missing key), and never written as `false`, so turning
+    /// it off leaves the ledger exactly as an older build wrote it. Read and
+    /// write it through `shieldsDistractionDuringFocusEnabled`.
+    var shieldsDistractionDuringFocus: Bool?
+
+    /// Maps "off" to nil, so a draft toggled on and off again still equals
+    /// the saved configuration (the settings page compares the two).
+    var shieldsDistractionDuringFocusEnabled: Bool {
+        get { shieldsDistractionDuringFocus == true }
+        set { shieldsDistractionDuringFocus = newValue ? true : nil }
+    }
 }
 
 enum ScreenTimeError: LocalizedError {
@@ -46,20 +60,43 @@ enum ScreenTimePolicy {
     static let schedulerInfix = "scheduler."
     static let minutesPerGem = 10
     static let freeLearningApplicationLimit = 5
-    // Apple documents a maximum of 20 simultaneous activities. Keep each batch
-    // small (18 events), with eight batches per lane plus one daily scheduler.
+    // Apple documents a maximum of 20 simultaneous activities, shared by the
+    // app and its extension. Keep each batch small (18 events), with eight
+    // batches per lane plus one daily scheduler, and one more name for the
+    // focus shield's failsafe: 18 in all, leaving 2.
     // https://developer.apple.com/documentation/deviceactivity/deviceactivitycenter/monitoringerror/excessiveactivities
     static let eventsPerActivity = 18
     static let maximumDailyThreshold = 144
     static let batchesPerLane = 8
+    /// The gem lanes' share: eight batches per lane plus one daily scheduler.
     static let maximumActivities = batchesPerLane * 2 + 1
+    /// The focus shield's kill-proof failsafe (`FocusShieldPolicy.activityName`):
+    /// exactly one name, re-registered in place whenever its deadline moves.
+    static let focusShieldActivities = 1
+    /// Everything PomoGem and its extension can hold at once: 18 of Apple's 20.
+    static let maximumActivitiesIncludingFocusShield = maximumActivities + focusShieldActivities
     /// DeviceActivity refuses a schedule shorter than this
     /// (`MonitoringError.intervalTooShort`). A learning run pre-armed to start
     /// when the timer ends needs at least this much of its day left.
     static let minimumMonitoringInterval: TimeInterval = 15 * 60
 
     static func validate(_ configuration: ScreenTimeConfiguration, isPro: Bool) throws {
-        guard configuration.enabled else { return }
+        guard configuration.enabled else {
+            // Recording off but the focus shield on: only the distraction
+            // selection is used, so only its rules apply. The shield itself
+            // never refuses a save: more than 50 apps or none at all simply
+            // shields nothing (`FocusShieldAvailability` says why).
+            guard configuration.shieldsDistractionDuringFocusEnabled else { return }
+            let distraction = configuration.distractionSelection
+            guard distraction.categoryTokens.isEmpty, distraction.webDomainTokens.isEmpty else {
+                throw ScreenTimeError.applicationsOnly
+            }
+            guard configuration.learningSelection.applicationTokens
+                .isDisjoint(with: distraction.applicationTokens) else {
+                throw ScreenTimeError.overlappingApplications
+            }
+            return
+        }
         let learning = configuration.learningSelection
         let distraction = configuration.distractionSelection
         guard learning.categoryTokens.isEmpty, learning.webDomainTokens.isEmpty,
@@ -224,13 +261,17 @@ struct ScreenTimeState: Codable {
     var callbackCounters: ScreenTimeCallbackCounters?
 
     /// Evidence in the ledger that a Family Controls approval once existed.
-    /// `ScreenTimeController.save` refuses to write `enabled` while the status
-    /// is not approved, and FamilyActivityPicker cannot hand out an
-    /// application token without one — so either is proof enough to treat a
-    /// settled not-approved status as a revocation. Recording being switched
-    /// off does not make the stored opaque tokens any less voided by the OS.
+    /// `ScreenTimeController.save` refuses to write `enabled` or the focus
+    /// shield's opt-in while the status is not approved, and
+    /// FamilyActivityPicker cannot hand out an application token without one
+    /// — so any of them is proof enough to treat a settled not-approved
+    /// status as a revocation. Recording being switched off does not make the
+    /// stored opaque tokens any less voided by the OS, and a shield-only
+    /// opt-in with no apps left must not survive to switch shielding back on
+    /// the moment apps are picked again after a re-grant.
     var recordsAnApproval: Bool {
         configuration.enabled
+            || configuration.shieldsDistractionDuringFocusEnabled
             || !configuration.learningSelection.applicationTokens.isEmpty
             || !configuration.distractionSelection.applicationTokens.isEmpty
     }
@@ -393,7 +434,9 @@ struct ScreenTimeState: Codable {
         let hadSelection = !learning.applicationTokens.isEmpty || !learning.categoryTokens.isEmpty ||
             !learning.webDomainTokens.isEmpty || !distraction.applicationTokens.isEmpty ||
             !distraction.categoryTokens.isEmpty || !distraction.webDomainTokens.isEmpty
-        guard configuration.enabled || hadSelection || runs.contains(where: \.active) else { return false }
+        // The focus shield's opt-in goes with the voided tokens too (F2).
+        guard configuration.enabled || configuration.shieldsDistractionDuringFocusEnabled
+            || hadSelection || runs.contains(where: \.active) else { return false }
         let themeID = configuration.themeID
         configuration = ScreenTimeConfiguration()
         configuration.themeID = themeID
