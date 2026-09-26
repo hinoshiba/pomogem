@@ -2900,6 +2900,10 @@ struct HomeView: View {
             acknowledgeRewardOffer(offer, destination: .rest(recovery))
         }
         .buttonStyle(PomoGemCompactButtonStyle())
+        // One line: at xxxL on a 12 mini the third of the row is narrower
+        // than 「5分休憩」 and the word broke mid-way (round 14).
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
         .accessibilityLabel("\(offer.minutes)分休憩する")
     }
 
