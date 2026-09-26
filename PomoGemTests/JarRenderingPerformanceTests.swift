@@ -568,14 +568,7 @@ final class JarRenderingPerformanceTests: XCTestCase {
         var differing = 0
         for pixel in 0 ..< a.width * a.height {
             let offset = pixel * 4
-            // Explicit steps: the one-line map/max could exceed the type
-            // checker's time limit on a loaded build machine.
-            var difference = 0
-            for channel in 0 ..< 3 {
-                let first = Int(a.bytes[offset + channel])
-                let second = Int(b.bytes[offset + channel])
-                difference = max(difference, abs(first - second))
-            }
+            let difference = (0 ..< 3).map { abs(Int(a.bytes[offset + $0]) - Int(b.bytes[offset + $0])) }.max() ?? 0
             if difference > threshold { differing += 1 }
         }
         return Double(differing) / Double(max(a.width * a.height, 1))

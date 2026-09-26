@@ -618,16 +618,22 @@ final class JarGravityMappingTests: XCTestCase {
     }
 
     func testADeliberateTurnWakesTheRestingJarWithinAFewSamples() {
-        // Phase B: the resting pile re-settles past
-        // `JarTiltMath.reorientationWakeThreshold` (about 6°; tremor of
-        // ±0.012 g is about ±0.7°). A deliberate 10° turn that moves the
-        // jar's gravity visibly wakes the resting jar within three idle
-        // samples, in the blend band as upright. Leaned back near s = 0.45
-        // the blend and the lean cancel: the jar's gravity barely moves, and
-        // the jar has nothing to redo.
+        // Phase B: the resting pile re-settles when `needsResettle` holds —
+        // the phone turned past `JarTiltMath.reorientationWakeThreshold`
+        // (about 6°; tremor of ±0.012 g is about ±0.7°) and the jar's
+        // gravity changed direction by more than 3°. Swept over the blend
+        // band and above, for every 10° turn that moves the jar's gravity
+        // visibly (≥ 1.5 × the threshold):
+        // - rolled onto an edge, the gravity turns sideways: it wakes, within
+        //   three idle samples;
+        // - leaned back, the gravity only grows or weakens along the jar's
+        //   own down: it never wakes (the pile has nothing to redo);
+        // - tipped top-down, it wakes only where the gravity flips between
+        //   down and up (through the weak band, so a few samples later).
         let smoothing = JarTiltMath.smoothingFraction(updatesPerSecond: JarMotionRate.idleUpdatesPerSecond)
         let threshold = JarTiltMath.reorientationWakeThreshold
-        var checked = 0
+        var woke = [HeldPose: Int]()
+        var stayed = [HeldPose: Int]()
         for pose in HeldPose.allCases {
             for s in [0.25, 0.35, 0.45, 0.7] {
                 for turn in [10.0, -10.0] {
@@ -641,27 +647,46 @@ final class JarGravityMappingTests: XCTestCase {
                     guard max(abs(asked.dx - rested.dx), abs(asked.dy - rested.dy)) / strength >= 1.5 * threshold else {
                         continue
                     }
-                    checked += 1
-                    XCTAssertTrue(
-                        wakes(from: settled, toward: target, smoothing: smoothing, within: 3),
-                        "\(pose) at s = \(s), turned \(turn)°"
+                    let weak = JarGravityMapping.weakGravityMagnitude
+                    let flips = hypot(rested.dx, rested.dy) >= weak
+                        && hypot(asked.dx, asked.dy) >= weak
+                        && (rested.dy < 0) != (asked.dy < 0)
+                    let expected: Bool
+                    switch pose {
+                    case .rolled: expected = true
+                    case .leanedBack: expected = false
+                    case .tippedTopDown: expected = flips
+                    }
+                    let context = "\(pose) at s = \(s), turned \(turn)°"
+                    XCTAssertEqual(
+                        resettles(from: settled, toward: target, smoothing: smoothing, within: 20),
+                        expected,
+                        context
                     )
+                    if pose == .rolled {
+                        XCTAssertTrue(resettles(from: settled, toward: target, smoothing: smoothing, within: 3), context)
+                    }
+                    if expected { woke[pose, default: 0] += 1 } else { stayed[pose, default: 0] += 1 }
                 }
             }
         }
-        XCTAssertGreaterThanOrEqual(checked, 12)
-        // Upright, a 10° turn in the screen's plane wakes at the first sample,
-        // and a 4° one (hand drift while reading) never does.
+        XCTAssertGreaterThanOrEqual(woke[.rolled] ?? 0, 5, "Rolled in the blend band and above")
+        XCTAssertGreaterThanOrEqual(woke[.tippedTopDown] ?? 0, 2, "Tipped through the flip")
+        XCTAssertGreaterThanOrEqual(stayed[.leanedBack] ?? 0, 2, "Leaned back")
+        XCTAssertGreaterThanOrEqual(stayed[.tippedTopDown] ?? 0, 1, "Tipped without a flip")
+        // Upright, a 10° turn in the screen's plane re-settles at the first
+        // sample, and a 4° one (hand drift while reading) never does.
         let turn = 10.0 * .pi / 180
         XCTAssertTrue(
-            wakes(from: reading(0, -1, 0), toward: reading(sin(turn), -cos(turn), 0), smoothing: smoothing, within: 1)
+            resettles(from: reading(0, -1, 0), toward: reading(sin(turn), -cos(turn), 0), smoothing: smoothing, within: 1)
         )
         let drift = 4.0 * .pi / 180
         XCTAssertFalse(
-            wakes(from: reading(0, -1, 0), toward: reading(sin(drift), -cos(drift), 0), smoothing: smoothing, within: 60)
+            resettles(from: reading(0, -1, 0), toward: reading(sin(drift), -cos(drift), 0), smoothing: smoothing, within: 60)
         )
         // A 2° turn still resolves above the light's step, so it moves the
-        // light (JarIdleTiltFilter's `.tilt`) without re-settling the pile.
+        // light (JarIdleTiltFilter's `.tilt`, measured by `wakeDelta`)
+        // without re-settling the pile.
         let small = 2.0 * .pi / 180
         XCTAssertTrue(
             wakes(
@@ -672,6 +697,49 @@ final class JarGravityMappingTests: XCTestCase {
                 threshold: JarTiltMath.idleLightThreshold
             )
         )
+        XCTAssertFalse(
+            resettles(from: reading(0, -1, 0), toward: reading(sin(small), -cos(small), 0), smoothing: smoothing, within: 60)
+        )
+    }
+
+    func testThePileRestsOnTheFloorWithin30DegreesAndStandsUprightWithin15() {
+        func gravity(_ degrees: Double, _ magnitude: CGFloat = JarGravityMapping.strength) -> CGVector {
+            let angle = degrees * .pi / 180
+            return CGVector(dx: magnitude * CGFloat(sin(angle)), dy: -magnitude * CGFloat(cos(angle)))
+        }
+        for degrees in [0.0, 5, 14.9, -14.9] {
+            XCTAssertTrue(JarGravityMapping.standsUpright(gravity(degrees)), "\(degrees)°")
+            XCTAssertTrue(JarGravityMapping.restsOnTheFloor(gravity(degrees)), "\(degrees)°")
+        }
+        for degrees in [15.1, -20, 29.9, -29.9] {
+            XCTAssertFalse(JarGravityMapping.standsUpright(gravity(degrees)), "\(degrees)°")
+            XCTAssertTrue(JarGravityMapping.restsOnTheFloor(gravity(degrees)), "\(degrees)°")
+        }
+        for degrees in [30.1, -45, 60, 75, 85, -85, 90, 120, 180] {
+            XCTAssertFalse(JarGravityMapping.standsUpright(gravity(degrees)), "\(degrees)°")
+            XCTAssertFalse(JarGravityMapping.restsOnTheFloor(gravity(degrees)), "\(degrees)°")
+        }
+        // Too weak to have a direction, or not finite: neither.
+        let weak = JarGravityMapping.weakGravityMagnitude * 0.9
+        XCTAssertFalse(JarGravityMapping.restsOnTheFloor(gravity(0, weak)))
+        XCTAssertFalse(JarGravityMapping.standsUpright(gravity(0, weak)))
+        XCTAssertFalse(JarGravityMapping.restsOnTheFloor(CGVector(dx: .nan, dy: -7.2)))
+        // The default gravity rests on the floor and stands upright.
+        XCTAssertTrue(JarGravityMapping.standsUpright(JarGravityMapping.defaultGravity))
+    }
+
+    func testOnlyAGravityAboveHorizontalPullsTheGemsTowardTheMouth() {
+        XCTAssertTrue(JarGravityMapping.pullsTowardTheMouth(CGVector(dx: 0, dy: 7.2)))
+        XCTAssertTrue(JarGravityMapping.pullsTowardTheMouth(CGVector(dx: 7.2 * cos(0.2), dy: 7.2 * sin(0.2))))
+        // Within `upwardMargin` of horizontal, sideways, downward, weak or
+        // undefined: the mouth still counts as closed (`isUpward`), but no
+        // pile lies against the cap.
+        XCTAssertFalse(JarGravityMapping.pullsTowardTheMouth(CGVector(dx: 7.2, dy: 0.3)))
+        XCTAssertTrue(JarGravityMapping.isUpward(CGVector(dx: 7.2, dy: 0.3)))
+        XCTAssertFalse(JarGravityMapping.pullsTowardTheMouth(CGVector(dx: -7.2, dy: 0)))
+        XCTAssertFalse(JarGravityMapping.pullsTowardTheMouth(JarGravityMapping.defaultGravity))
+        XCTAssertFalse(JarGravityMapping.pullsTowardTheMouth(CGVector(dx: 0, dy: 0.5)))
+        XCTAssertFalse(JarGravityMapping.pullsTowardTheMouth(CGVector(dx: 0, dy: CGFloat.infinity)))
     }
 
     func testReadingsSmoothLikeTheScenesGravity() {
@@ -723,6 +791,22 @@ final class JarGravityMappingTests: XCTestCase {
 
     /// Whether smoothing from `settled` toward `target` at the idle rate
     /// wakes the resting jar (passes `threshold`) within `samples` samples.
+    /// Whether a pile settled under `settled` re-settles within `samples`
+    /// idle samples smoothing toward `target` (`needsResettle`).
+    private func resettles(
+        from settled: JarGravityMapping.Reading,
+        toward target: JarGravityMapping.Reading,
+        smoothing: CGFloat,
+        within samples: Int
+    ) -> Bool {
+        var smoothed = settled
+        for _ in 0 ..< samples {
+            smoothed = smoothed.smoothed(toward: target, fraction: smoothing)
+            if JarGravityMapping.needsResettle(from: settled, to: smoothed) { return true }
+        }
+        return false
+    }
+
     private func wakes(
         from settled: JarGravityMapping.Reading,
         toward target: JarGravityMapping.Reading,
