@@ -4,9 +4,11 @@ import XCTest
 /// land on the right screen from every in-app state, start a focus only where
 /// Home's start button could, and never start a second session.
 ///
-/// `XCUIApplication.open(_:)` delivers the URL through the system exactly as
-/// a widget tap does. App Shortcuts put the same request in the same inbox
-/// (StartFocusIntent), so these paths cover them too.
+/// `openLink` hands the URL to the system, which delivers it to the running
+/// app exactly as a widget tap does. (`XCUIApplication.open(_:)` would
+/// relaunch the app instead and lose the state under test.) App Shortcuts put
+/// the same request in the same inbox (StartFocusIntent), so these paths cover
+/// them too.
 @MainActor
 final class AppEntryUITests: XCTestCase {
     private var app: XCUIApplication!
@@ -41,7 +43,7 @@ final class AppEntryUITests: XCTestCase {
         openMenuAction(containing: "設定")
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
 
-        app.open(URL(string: "pomogem://focus/start?minutes=45")!)
+        openLink(URL(string: "pomogem://focus/start?minutes=45")!)
 
         let timer = focusTimerDisplay
         XCTAssertTrue(
@@ -58,7 +60,7 @@ final class AppEntryUITests: XCTestCase {
         openMenuAction(containing: "記録")
         XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 6))
 
-        app.open(URL(string: "pomogem://home")!)
+        openLink(URL(string: "pomogem://home")!)
 
         XCTAssertTrue(waitForHittable(app.buttons["home.focus-launcher"], timeout: 8))
         XCTAssertFalse(app.navigationBars["記録"].exists)
@@ -77,7 +79,7 @@ final class AppEntryUITests: XCTestCase {
         XCTAssertTrue(timer.waitForExistence(timeout: 8))
         let before = try timerRemainingSeconds(timer)
 
-        app.open(URL(string: "pomogem://focus/start?minutes=90")!)
+        openLink(URL(string: "pomogem://focus/start?minutes=90")!)
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 6))
         waitForUISettle(1_500_000)
 
@@ -96,7 +98,7 @@ final class AppEntryUITests: XCTestCase {
         let settingsAction = button(containing: "設定")
         XCTAssertTrue(settingsAction.waitForExistence(timeout: 5), "The menu sheet is open")
 
-        app.open(URL(string: "pomogem://focus/start?minutes=25")!)
+        openLink(URL(string: "pomogem://focus/start?minutes=25")!)
 
         XCTAssertTrue(
             focusTimerDisplay.waitForExistence(timeout: 10),
@@ -116,7 +118,7 @@ final class AppEntryUITests: XCTestCase {
         let dismissReward = app.buttons["休憩の提案を閉じる"]
         XCTAssertTrue(dismissReward.waitForExistence(timeout: 30))
 
-        app.open(URL(string: "pomogem://focus/start")!)
+        openLink(URL(string: "pomogem://focus/start")!)
 
         let toast = app.descendants(matching: .any)["app.toast"]
         XCTAssertTrue(toast.waitForExistence(timeout: 6))
@@ -129,9 +131,21 @@ final class AppEntryUITests: XCTestCase {
         XCTAssertTrue(dismissReward.exists, "The rest choice stays the person's")
         dismissReward.tap()
         XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 8))
+        // The receipt is removed only when the gem lands. Leaving earlier
+        // would keep it in UserDefaults for the next test's fresh in-memory
+        // store, where no row matches it and Home's start button stays off.
+        let launcher = app.buttons["home.focus-launcher"]
+        let enabled = expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: launcher)
+        wait(for: [enabled], timeout: 10)
     }
 
     // MARK: - Helpers
+
+    /// Opens a link in the running app, the way a widget tap does.
+    private func openLink(_ url: URL) {
+        XCUIDevice.shared.system.open(url)
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 6))
+    }
 
     private var focusTimerDisplay: XCUIElement {
         app.descendants(matching: .any)["focus.timer-display"].firstMatch
