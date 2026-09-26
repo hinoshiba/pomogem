@@ -7,11 +7,11 @@ import XCTest
 /// both device switches, and withdrawn by every path that ends the absence.
 @MainActor
 final class FocusLeaveNudgeSchedulingTests: XCTestCase {
-    private var fixture: NudgeFixture!
+    private var fixture: FocusLeaveNudgeFixture!
 
     override func setUp() async throws {
         try await super.setUp()
-        fixture = try NudgeFixture()
+        fixture = try FocusLeaveNudgeFixture()
     }
 
     override func tearDown() async throws {
@@ -257,8 +257,10 @@ final class FocusLeaveNudgeSchedulingTests: XCTestCase {
     }
 }
 
+/// A NotificationManager on in-memory clients with both F1 switches on.
+/// Shared with `FocusLeaveMonitorTests`' live-wiring test.
 @MainActor
-private final class NudgeFixture {
+final class FocusLeaveNudgeFixture {
     let suite = "FocusLeaveNudges.\(UUID().uuidString)"
     let defaults: UserDefaults
     var pending: [String: UNNotificationRequest] = [:]

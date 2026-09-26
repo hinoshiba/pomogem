@@ -1322,6 +1322,9 @@ struct FocusView: View {
         if notifications.authorizationStatus == .denied {
             Button {
                 guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                // F1: going where this running row sends the person is not
+                // leaving the focus, so the timer keeps the promise above.
+                FocusLeaveAppInitiatedDeparture.mark()
                 UIApplication.shared.open(url)
             } label: {
                 deniedNotificationLabel

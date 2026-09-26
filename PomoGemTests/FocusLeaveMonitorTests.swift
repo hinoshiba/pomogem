@@ -64,8 +64,100 @@ final class FocusLeaveMonitorTests: XCTestCase {
         XCTAssertEqual(harness.announcements, [harness.sessionID])
         XCTAssertEqual(harness.liveActivityPauses.map { $0.remaining }, [1_440])
         XCTAssertEqual(harness.withdrawals, 0, "The series says the timer is paused; it stays")
-        XCTAssertEqual(harness.ended, [task], "Background time ends after the Live Activity update")
+        XCTAssertEqual(
+            harness.events,
+            [.liveActivityPaused(1_440), .ended(task)],
+            "Background time ends after the Live Activity update"
+        )
         XCTAssertEqual(harness.observerCount, 0)
+    }
+
+    func testExpiryWhileTheLiveActivityUpdateRunsStillEndsTheTaskOnce() async throws {
+        harness.holdsLiveActivityUpdates = true
+        let leftAt = harness.now
+        monitor.handle(.background)
+        await harness.waitForSleep()
+        let task = try XCTUnwrap(harness.begun.last)
+
+        harness.now = leftAt.addingTimeInterval(20)
+        await harness.finishSleep()
+        XCTAssertEqual(harness.saved?.engine.phase, .paused)
+        XCTAssertTrue(harness.ended.isEmpty, "Held for the Live Activity update")
+
+        // ActivityKit stalls until iOS takes the background time back.
+        try XCTUnwrap(harness.expirations[task])()
+        XCTAssertEqual(harness.ended, [task], "An expiration handler must end its own task")
+
+        await harness.releaseLiveActivityUpdates()
+        XCTAssertEqual(harness.liveActivityPauses.map { $0.remaining }, [1_440])
+        XCTAssertEqual(harness.ended, [task], "Ended exactly once")
+        XCTAssertEqual(harness.saved?.leavePause?.pausedAt, leftAt)
+    }
+
+    func testAPauseAReaderAppliedFirstStillGetsItsSideEffects() async throws {
+        let leftAt = harness.now
+        monitor.handle(.background)
+        await harness.waitForSleep()
+        let task = try XCTUnwrap(harness.begun.last)
+
+        // A relaunch or remount path read the saved timer after the window
+        // and paused it before the host's deadline ran.
+        let away = try XCTUnwrap(harness.saved)
+        harness.saved = FocusLeaveTransition.pausedForLeaving(
+            away, decidedAt: leftAt.addingTimeInterval(21)
+        )
+        harness.now = leftAt.addingTimeInterval(21)
+        await harness.finishSleep()
+
+        XCTAssertEqual(harness.saved?.leavePause?.pausedAt, leftAt)
+        XCTAssertEqual(harness.cancelledCompletions, [harness.sessionID], "No end alert for a paused focus")
+        XCTAssertEqual(harness.announcements, [harness.sessionID])
+        XCTAssertEqual(harness.events, [.liveActivityPaused(1_440), .ended(task)])
+        XCTAssertEqual(harness.withdrawals, 0)
+    }
+
+    func testAReturnAfterAReaderPausedTheWatchedAbsenceAppliesItsSideEffects() async throws {
+        let leftAt = harness.now
+        monitor.handle(.background)
+        await harness.waitForSleep()
+        let task = try XCTUnwrap(harness.begun.last)
+
+        // Suspended before the deadline; a reader applied the pause.
+        let away = try XCTUnwrap(harness.saved)
+        harness.now = leftAt.addingTimeInterval(900)
+        harness.saved = FocusLeaveTransition.pausedForLeaving(away, decidedAt: harness.now)
+        monitor.handle(.active)
+
+        XCTAssertEqual(harness.saved?.engine.phase, .paused)
+        XCTAssertEqual(harness.cancelledCompletions, [harness.sessionID])
+        XCTAssertEqual(harness.announcements, [harness.sessionID])
+        XCTAssertEqual(harness.ended, [task])
+        await harness.settle()
+        XCTAssertEqual(harness.liveActivityPauses.map { $0.remaining }, [1_440])
+    }
+
+    func testAWindowEndingWithNothingToPauseWithdrawsTheSeries() async throws {
+        let replacements: [FocusRecoveryEnvelope?] = [nil, try otherSessionEnvelope()]
+        for replacement in replacements {
+            harness.releaseAll()
+            harness = try LeaveHarness()
+            monitor = FocusLeaveMonitor(dependencies: harness.dependencies)
+            monitor.handle(.background)
+            await harness.waitForSleep()
+            let task = try XCTUnwrap(harness.begun.last)
+
+            // Retired or replaced while the person was away.
+            harness.saved = replacement
+            harness.now = harness.now.addingTimeInterval(20)
+            await harness.finishSleep()
+
+            XCTAssertEqual(harness.withdrawals, 1, "「タイマーを一時停止しました」 would be false")
+            XCTAssertTrue(harness.announcements.isEmpty)
+            XCTAssertTrue(harness.cancelledCompletions.isEmpty)
+            XCTAssertTrue(harness.liveActivityPauses.isEmpty)
+            XCTAssertEqual(harness.ended, [task])
+            XCTAssertEqual(harness.saved, replacement)
+        }
     }
 
     func testALockInsideTheWindowKeepsTheTimerRunningAndWithdrawsTheSeries() async throws {
@@ -257,7 +349,49 @@ final class FocusLeaveMonitorTests: XCTestCase {
         XCTAssertEqual(harness.ended, [first, second])
     }
 
+    func testAConfirmedReturnIsRecordedForReadersOfAnEarlierAbsence() async throws {
+        harness.applicationIsActive = false
+        monitor.handle(.active)
+        XCTAssertTrue(harness.confirmedReturns.isEmpty, "UIKit has not confirmed this activation")
+
+        harness.applicationIsActive = true
+        monitor.handleApplicationDidBecomeActive()
+        XCTAssertEqual(harness.confirmedReturns, [harness.now])
+    }
+
     // MARK: - Eligibility
+
+    func testTheAppInitiatedMarkCoversOnlyTheTripItStarts() {
+        let tappedAt = Date(timeIntervalSince1970: 1_800_300_000)
+        FocusLeaveAppInitiatedDeparture.mark(at: tappedAt)
+        XCTAssertTrue(FocusLeaveAppInitiatedDeparture.consume(at: tappedAt.addingTimeInterval(1)))
+        XCTAssertFalse(
+            FocusLeaveAppInitiatedDeparture.consume(at: tappedAt.addingTimeInterval(1)),
+            "One mark covers one trip"
+        )
+        FocusLeaveAppInitiatedDeparture.mark(at: tappedAt)
+        XCTAssertFalse(
+            FocusLeaveAppInitiatedDeparture.consume(at: tappedAt.addingTimeInterval(6)),
+            "A later departure is the person's own"
+        )
+        XCTAssertFalse(FocusLeaveAppInitiatedDeparture.consume(at: tappedAt))
+    }
+
+    func testATripToSettingsTheAppStartedIsNotAnAbsence() async throws {
+        let running = try XCTUnwrap(harness.saved)
+        harness.appInitiatedDeparture = true
+        monitor.handle(.background)
+        XCTAssertEqual(harness.saved, running)
+        XCTAssertTrue(harness.begun.isEmpty)
+        XCTAssertTrue(harness.bookedSeries.isEmpty)
+        XCTAssertFalse(harness.appInitiatedDeparture, "The mark is used up by this trip")
+
+        monitor.handle(.active)
+        monitor.handle(.background)
+        XCTAssertEqual(harness.begun.count, 1, "The next trip away is an absence again")
+        XCTAssertNotNil(harness.saved?.leaveExcursion)
+        await harness.waitForSleep()
+    }
 
     func testOnlyAnOwnedRunningFocusWithMoreThanAMinuteLeftIsWatched() async throws {
         // Feature off: the older return reminder keeps its behaviour instead.
@@ -317,6 +451,63 @@ final class FocusLeaveMonitorTests: XCTestCase {
         XCTAssertEqual(harness.begun.count, 1)
         XCTAssertEqual(harness.saved?.leaveExcursion?.leftAt, leftAt)
     }
+
+    // MARK: - Live notification wiring (critic D7)
+
+    /// `Dependencies.live` against a real NotificationManager on fake
+    /// clients: the leave pause removes the end alert and keeps the series.
+    func testTheLiveWiringRemovesTheEndAlertButKeepsTheSeries() async throws {
+        let notifications = try FocusLeaveNudgeFixture()
+        defer { notifications.tearDown() }
+        let manager = notifications.manager!
+        let endDate = harness.start.addingTimeInterval(1_500)
+        _ = try await manager.scheduleFocusCompletion(sessionID: harness.sessionID, endDate: endDate)
+        manager.registerFocusReturnReminder(
+            sessionID: harness.sessionID, endDate: endDate, playsSound: true
+        )
+        monitor = FocusLeaveMonitor(
+            dependencies: harness.dependencies(notificationsFrom: .live(notifications: manager))
+        )
+        let completionIdentifiers = notifications.pending.keys.filter {
+            $0.hasPrefix("pomogem.focus.complete.")
+        }
+        XCTAssertEqual(completionIdentifiers.count, 1)
+
+        let leftAt = harness.now
+        monitor.handle(.background)
+        await harness.waitForSleep()
+        XCTAssertEqual(
+            Set(notifications.pending.keys),
+            Set(FocusLeavePolicy.nudgeIdentifiers + completionIdentifiers)
+        )
+
+        harness.now = leftAt.addingTimeInterval(20)
+        await harness.finishSleep()
+        XCTAssertEqual(harness.saved?.leavePause?.pausedAt, leftAt)
+        XCTAssertEqual(
+            Set(notifications.pending.keys),
+            Set(FocusLeavePolicy.nudgeIdentifiers),
+            "The end alert is gone; the series saying the timer paused stays"
+        )
+        XCTAssertNil(manager.registeredRunningFocus, "A paused focus is no longer a leave candidate")
+
+        // Coming back withdraws the series.
+        harness.now = leftAt.addingTimeInterval(90)
+        monitor.handle(.active)
+        XCTAssertTrue(notifications.pending.isEmpty)
+    }
+
+    private func otherSessionEnvelope() throws -> FocusRecoveryEnvelope {
+        var engine = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
+        try engine.startFocus(isPro: false, now: harness.start, sessionID: UUID())
+        return FocusRecoveryEnvelope(
+            engine: engine,
+            subject: FocusSubjectSnapshot(id: UUID(), name: "英語", colorHex: "#4C8CCF"),
+            clockAnchor: ClockAnchor(wallDate: harness.start, systemUptime: 5_000),
+            pendingCompletion: nil,
+            savedAt: harness.start
+        )
+    }
 }
 
 @MainActor
@@ -333,6 +524,15 @@ private final class LeaveHarness {
     var deviceHasPasscode = true
     var protectedDataIsAvailable = true
     var applicationIsActive = true
+    var appInitiatedDeparture = false
+    /// Makes the fake Live Activity update wait until released, like a slow
+    /// ActivityKit call.
+    var holdsLiveActivityUpdates = false
+
+    enum Event: Equatable {
+        case liveActivityPaused(Int)
+        case ended(UIBackgroundTaskIdentifier)
+    }
 
     private(set) var bookedSeries: [(sessionID: UUID, leftAt: Date)] = []
     private(set) var withdrawals = 0
@@ -343,6 +543,10 @@ private final class LeaveHarness {
     private(set) var ended: [UIBackgroundTaskIdentifier] = []
     private(set) var expirations: [UIBackgroundTaskIdentifier: @MainActor () -> Void] = [:]
     private(set) var observerCount = 0
+    private(set) var confirmedReturns: [Date] = []
+    /// Background-task ends and Live Activity updates in the order they ran.
+    private(set) var events: [Event] = []
+    private var heldLiveActivityUpdates: [CheckedContinuation<Void, Never>] = []
     private var nextBackgroundTask = 1
     private var sleeps: [(interval: TimeInterval, continuation: CheckedContinuation<Void, Never>)] = []
     private var sleepCalls = 0
@@ -397,7 +601,10 @@ private final class LeaveHarness {
                 expirations[identifier] = expiration
                 return identifier
             },
-            endBackgroundTask: { [self] in ended.append($0) },
+            endBackgroundTask: { [self] in
+                ended.append($0)
+                events.append(.ended($0))
+            },
             notificationCenter: LeaveCountingNotificationCenter(center: center) { [self] delta in
                 observerCount += delta
             },
@@ -407,10 +614,39 @@ private final class LeaveHarness {
             withdrawNudges: { [self] in withdrawals += 1 },
             cancelCompletionKeepingNudges: { [self] in cancelledCompletions.append($0) },
             pauseLiveActivity: { [self] sessionID, remaining in
+                if holdsLiveActivityUpdates {
+                    await withCheckedContinuation { heldLiveActivityUpdates.append($0) }
+                }
                 liveActivityPauses.append((sessionID, remaining))
+                events.append(.liveActivityPaused(remaining))
             },
-            announceAutoPause: { [self] in announcements.append($0) }
+            announceAutoPause: { [self] in announcements.append($0) },
+            recordConfirmedReturn: { [self] in confirmedReturns.append($0) },
+            consumeAppInitiatedDeparture: { [self] _ in
+                defer { appInitiatedDeparture = false }
+                return appInitiatedDeparture
+            }
         )
+    }
+
+    /// These fakes, except that the notification closures come from `live`.
+    func dependencies(
+        notificationsFrom live: FocusLeaveMonitor.Dependencies
+    ) -> FocusLeaveMonitor.Dependencies {
+        var result = dependencies
+        result.runningFocus = live.runningFocus
+        result.scheduleNudges = live.scheduleNudges
+        result.withdrawNudges = live.withdrawNudges
+        result.cancelCompletionKeepingNudges = live.cancelCompletionKeepingNudges
+        return result
+    }
+
+    func releaseLiveActivityUpdates() async {
+        holdsLiveActivityUpdates = false
+        while !heldLiveActivityUpdates.isEmpty {
+            heldLiveActivityUpdates.removeFirst().resume()
+        }
+        await settle()
     }
 
     /// Waits until the window has started waiting `calls` times in total.
@@ -444,6 +680,8 @@ private final class LeaveHarness {
 
     func releaseAll() {
         while !sleeps.isEmpty { sleeps.removeFirst().continuation.resume() }
+        holdsLiveActivityUpdates = false
+        while !heldLiveActivityUpdates.isEmpty { heldLiveActivityUpdates.removeFirst().resume() }
     }
 }
 

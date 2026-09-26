@@ -174,6 +174,35 @@ final class FocusLeavePolicyTests: XCTestCase {
         )
     }
 
+    func testOnlyAReturnInsideTheWindowSettlesAnEarlierProcessAbsence() {
+        XCTAssertTrue(FocusLeavePolicy.returnedWithinWindow(leftAt: start, returnedAt: start))
+        XCTAssertTrue(FocusLeavePolicy.returnedWithinWindow(
+            leftAt: start, returnedAt: start.addingTimeInterval(20)
+        ))
+        XCTAssertFalse(FocusLeavePolicy.returnedWithinWindow(
+            leftAt: start, returnedAt: start.addingTimeInterval(20.5)
+        ))
+        XCTAssertFalse(
+            FocusLeavePolicy.returnedWithinWindow(leftAt: start, returnedAt: start.addingTimeInterval(-1)),
+            "An activation before leaving says nothing about this absence"
+        )
+    }
+
+    func testOnlyTheTripTheAppStartedIsExempt() {
+        XCTAssertEqual(FocusLeavePolicy.appInitiatedDepartureWindow, 5)
+        XCTAssertFalse(FocusLeavePolicy.isAppInitiatedDeparture(markedAt: nil, now: start))
+        XCTAssertTrue(FocusLeavePolicy.isAppInitiatedDeparture(markedAt: start, now: start))
+        XCTAssertTrue(FocusLeavePolicy.isAppInitiatedDeparture(
+            markedAt: start, now: start.addingTimeInterval(5)
+        ))
+        XCTAssertFalse(FocusLeavePolicy.isAppInitiatedDeparture(
+            markedAt: start, now: start.addingTimeInterval(5.5)
+        ))
+        XCTAssertFalse(FocusLeavePolicy.isAppInitiatedDeparture(
+            markedAt: start, now: start.addingTimeInterval(-1)
+        ))
+    }
+
     func testRunningCopySelection() {
         XCTAssertEqual(
             FocusLeavePolicy.runningNotice(featureEnabled: false, deviceHasPasscode: true),
@@ -330,6 +359,58 @@ final class FocusLeavePolicyTests: XCTestCase {
         // The decision was written, so every later reader agrees.
         let stored = try XCTUnwrap(FocusPersistence.loadStored(key: FocusPersistence.key))
         XCTAssertEqual(stored.engine.phase, .paused)
+    }
+
+    /// The process died inside the window and the person came back within
+    /// it, but the first reader runs later (an iCloud launch reads the saved
+    /// timer only after the account's container mounted). The confirmed
+    /// return, not the reader's clock, decides: a quick glance.
+    func testAReturnInsideTheWindowSettlesAnAbsenceTheReaderSeesLater() throws {
+        let running = try runningEnvelope(minutes: 25)
+        let leftAt = start.addingTimeInterval(600)
+        let away = try XCTUnwrap(FocusLeaveTransition.beginningExcursion(
+            running, featureEnabled: true, at: leftAt
+        ))
+        let readAt = leftAt.addingTimeInterval(45)
+        let glance = leftAt.addingTimeInterval(12)
+
+        XCTAssertEqual(
+            FocusPersistence.relaunchAction(for: away, at: readAt, returnedAt: glance),
+            .resumeFocus(remainingSeconds: 1_500 - 645)
+        )
+        let prepared = FocusPersistence.preparedForLocalRelaunch(
+            away, at: readAt, uptime: 5_645, returnedAt: glance
+        )
+        XCTAssertEqual(prepared.engine.phase, .focusing)
+        XCTAssertNil(prepared.leaveExcursion)
+        XCTAssertNil(prepared.leavePause)
+
+        let suite = "FocusLeavePolicy.witness.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = "test.focus.persisted-engine"
+        FocusPersistence.replace(away, key: key, defaults: defaults)
+        let loaded = try XCTUnwrap(FocusPersistence.load(
+            key: key, defaults: defaults, at: readAt, returnedAt: glance
+        ))
+        XCTAssertEqual(loaded.engine, running.engine, "The timer ran on")
+        XCTAssertNil(loaded.leaveExcursion)
+        XCTAssertNil(FocusPersistence.loadStored(key: key, defaults: defaults)?.leaveExcursion)
+
+        // A return after the window, or an activation from before leaving
+        // (this process's own launch), is no quick glance.
+        for returnedAt in [leftAt.addingTimeInterval(30), start.addingTimeInterval(10), nil] {
+            XCTAssertEqual(
+                FocusPersistence.relaunchAction(for: away, at: readAt, returnedAt: returnedAt),
+                .resumeFocus(remainingSeconds: 900)
+            )
+            FocusPersistence.replace(away, key: key, defaults: defaults)
+            let paused = try XCTUnwrap(FocusPersistence.load(
+                key: key, defaults: defaults, at: readAt, returnedAt: returnedAt
+            ))
+            XCTAssertEqual(paused.engine.phase, .paused)
+            XCTAssertEqual(paused.leavePause?.pausedAt, leftAt)
+        }
     }
 
     func testAReaderInsideTheWindowLeavesTheAbsenceToTheHost() throws {

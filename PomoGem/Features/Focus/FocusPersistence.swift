@@ -869,10 +869,15 @@ enum FocusPersistence {
     static func load(
         key: String,
         defaults: UserDefaults = .standard,
-        at now: Date = .now
+        at now: Date = .now,
+        returnedAt: Date? = FocusLeaveReturnWitness.confirmedReturn
     ) -> FocusRecoveryEnvelope? {
         guard let envelope = loadStored(key: key, defaults: defaults) else { return nil }
-        let resolved = FocusLeaveTransition.resolvingStaleExcursion(envelope, at: now)
+        let resolved = FocusLeaveTransition.resolvingStaleExcursion(
+            envelope,
+            at: now,
+            returnedAt: returnedAt
+        )
         if resolved != envelope {
             store(resolved, key: key, defaults: defaults)
         }
@@ -970,14 +975,16 @@ enum FocusPersistence {
     static func preparedForLocalRelaunch(
         _ envelope: FocusRecoveryEnvelope,
         at now: Date,
-        uptime: TimeInterval
+        uptime: TimeInterval,
+        returnedAt: Date? = FocusLeaveReturnWitness.confirmedReturn
     ) -> FocusRecoveryEnvelope {
         // An absence that has certainly ended is applied before anything can
         // resume, finish or award the focus (critic A3).
         preparedActiveFocus(
             FocusLeaveTransition.resolvingStaleExcursion(
                 envelope.normalizingLeaveMarkers(),
-                at: now
+                at: now,
+                returnedAt: returnedAt
             ),
             at: now,
             uptime: uptime,
@@ -1079,13 +1086,15 @@ enum FocusPersistence {
     /// advance the exact same session into its idempotent completion commit.
     static func relaunchAction(
         for savedEnvelope: FocusRecoveryEnvelope,
-        at now: Date
+        at now: Date,
+        returnedAt: Date? = FocusLeaveReturnWitness.confirmedReturn
     ) -> FocusRelaunchAction {
         // A focus the person left while it ran is paused at the moment they
         // left, even if its planned end has passed since (critic A3).
         let envelope = FocusLeaveTransition.resolvingStaleExcursion(
             savedEnvelope.normalizingLeaveMarkers(),
-            at: now
+            at: now,
+            returnedAt: returnedAt
         )
         guard hasValidPersistedStructure(envelope),
               PomodoroEngine.isSafePersistedDate(now)
@@ -1180,7 +1189,8 @@ enum FocusPersistence {
     static func peekTimerEnvelopes(
         namespace: AccountDataNamespace,
         defaults: UserDefaults = .standard,
-        at now: Date = .now
+        at now: Date = .now,
+        returnedAt: Date? = FocusLeaveReturnWitness.confirmedReturn
     ) -> (focus: FocusRecoveryEnvelope?, rest: BreakRecoveryEnvelope?) {
         let focusKey = AccountScopedLocalState.defaultsKey(base: baseKey, namespace: namespace)
         let focus = defaults.data(forKey: focusKey)
@@ -1188,7 +1198,13 @@ enum FocusPersistence {
             .flatMap { hasValidPersistedStructure($0) ? $0 : nil }
             // In memory only: an absence that has certainly ended shows as
             // the paused focus it becomes, never as a finished one.
-            .map { FocusLeaveTransition.resolvingStaleExcursion($0.normalizingLeaveMarkers(), at: now) }
+            .map {
+                FocusLeaveTransition.resolvingStaleExcursion(
+                    $0.normalizingLeaveMarkers(),
+                    at: now,
+                    returnedAt: returnedAt
+                )
+            }
         let breakKey = AccountScopedLocalState.defaultsKey(base: baseBreakKey, namespace: namespace)
         let rest = defaults.data(forKey: breakKey)
             .flatMap { try? JSONDecoder().decode(BreakRecoveryEnvelope.self, from: $0) }

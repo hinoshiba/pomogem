@@ -71,6 +71,27 @@ enum FocusLeaveDeviceSecurity {
     }
 }
 
+/// Process-local mark of the app itself sending the person to iOS Settings
+/// while a focus runs (the focus screen's 「終了通知は端末の設定から」).
+/// Following the app's own call to action is not leaving the focus, so the
+/// `.background` that trip causes starts no absence.
+@MainActor
+enum FocusLeaveAppInitiatedDeparture {
+    private static var markedAt: Date?
+
+    /// Call right before `UIApplication.shared.open(_:)`.
+    static func mark(at date: Date = .now) {
+        markedAt = date
+    }
+
+    /// Whether this `.background` is that trip. Every `.background` uses up
+    /// the mark, so it never outlives the trip it was made for.
+    static func consume(at now: Date) -> Bool {
+        defer { markedAt = nil }
+        return FocusLeavePolicy.isAppInitiatedDeparture(markedAt: markedAt, now: now)
+    }
+}
+
 /// Owns an absence from a running focus (F1). It lives on the launch host,
 /// which survives the iCloud background grace retiring RootView and
 /// FocusView, so it acts on the saved timer, Notification Center and the Live
@@ -119,12 +140,28 @@ final class FocusLeaveMonitor {
         var cancelCompletionKeepingNudges: @MainActor (UUID) -> Void
         var pauseLiveActivity: @MainActor (UUID, Int) async -> Void
         var announceAutoPause: @MainActor (UUID) -> Void
+        /// Records a confirmed return for readers of an absence an earlier
+        /// process could not decide (`FocusLeaveReturnWitness`).
+        var recordConfirmedReturn: @MainActor (Date) -> Void
+        /// Whether this `.background` is a trip the app itself started
+        /// (`FocusLeaveAppInitiatedDeparture`); uses the mark up.
+        var consumeAppInitiatedDeparture: @MainActor (Date) -> Bool
 
+        @MainActor
         static var live: Self {
+            live(notifications: .shared)
+        }
+
+        /// The production wiring. `notifications` is injectable so a test can
+        /// drive the monitor against a real `NotificationManager` on fake
+        /// clients and pin that the leave pause removes only the end alert and
+        /// keeps the series (critic D7).
+        @MainActor
+        static func live(notifications: NotificationManager) -> Self {
             Self(
                 now: { .now },
                 isEnabled: { FocusLeavePreferences.isEnabled() },
-                runningFocus: { NotificationManager.shared.registeredRunningFocus },
+                runningFocus: { notifications.registeredRunningFocus },
                 persistenceKey: { FocusPersistence.key },
                 loadEnvelope: { FocusPersistence.loadStored(key: $0) },
                 replaceEnvelope: { FocusPersistence.replace($0, key: $1) },
@@ -142,16 +179,16 @@ final class FocusLeaveMonitor {
                 endBackgroundTask: { UIApplication.shared.endBackgroundTask($0) },
                 notificationCenter: .default,
                 scheduleNudges: { candidate, leftAt in
-                    _ = try? await NotificationManager.shared.scheduleFocusLeaveNudges(
+                    _ = try? await notifications.scheduleFocusLeaveNudges(
                         sessionID: candidate.sessionID,
                         leftAt: leftAt,
                         playsSound: candidate.playsSound,
                         completionSound: candidate.completionSound
                     )
                 },
-                withdrawNudges: { NotificationManager.shared.cancelFocusLeaveNudges() },
+                withdrawNudges: { notifications.cancelFocusLeaveNudges() },
                 cancelCompletionKeepingNudges: {
-                    NotificationManager.shared.cancelFocusCompletion(
+                    notifications.cancelFocusCompletion(
                         sessionID: $0,
                         withdrawingLeaveNudges: false
                     )
@@ -165,6 +202,12 @@ final class FocusLeaveMonitor {
                         object: nil,
                         userInfo: [FocusLeaveMonitor.sessionIDUserInfoKey: sessionID]
                     )
+                },
+                recordConfirmedReturn: {
+                    FocusLeaveReturnWitness.recordConfirmedActivation(at: $0)
+                },
+                consumeAppInitiatedDeparture: {
+                    FocusLeaveAppInitiatedDeparture.consume(at: $0)
                 }
             )
         }
@@ -193,6 +236,11 @@ final class FocusLeaveMonitor {
     private var window: Window?
     private var task: Task<Void, Never>?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+    /// Background time a decided window still holds for its Live Activity
+    /// update, by that window's generation. Whichever comes first — the
+    /// update finishing or iOS taking the time back — ends it, exactly once:
+    /// a task not ended in its expiration handler gets the app terminated.
+    private var handedOffTasks: [UInt64: UIBackgroundTaskIdentifier] = [:]
     private var lockObserver: NSObjectProtocol?
 
     init(dependencies: Dependencies) {
@@ -234,16 +282,22 @@ final class FocusLeaveMonitor {
     // MARK: - Leaving
 
     private func beginIfEligible() {
+        let now = dependencies.now()
+        // Used up by every `.background`, eligible or not.
+        let isAppInitiated = dependencies.consumeAppInitiatedDeparture(now)
         // A second `.background` without a confirmed return continues the
         // first absence; its start time stays the moment the person left.
         guard window == nil else { return }
+        if isAppInitiated {
+            Self.logger.info("The app opened Settings itself; this trip is not an absence")
+            return
+        }
         guard dependencies.isEnabled(),
               let key = dependencies.persistenceKey(),
               let candidate = dependencies.runningFocus(),
               var envelope = dependencies.loadEnvelope(key),
               envelope.engine.currentSessionID == candidate.sessionID
         else { return }
-        let now = dependencies.now()
 
         if let earlier = envelope.leaveExcursion {
             // An earlier absence nobody decided. One whose window has ended
@@ -255,8 +309,7 @@ final class FocusLeaveMonitor {
                         leftAt: earlier.leftAt,
                         key: key,
                         decidedAt: now
-                    ),
-                    thenEnd: .invalid
+                    )
                 )
                 return
             }
@@ -285,7 +338,7 @@ final class FocusLeaveMonitor {
         let generation = newWindow.generation
         window = newWindow
         backgroundTask = dependencies.beginBackgroundTask { [weak self] in
-            self?.decide(.backgroundTimeExpired, generation: generation)
+            self?.backgroundTimeExpired(generation: generation)
         }
         // Observe from the start: a lock during a slow add must also win.
         lockObserver = dependencies.notificationCenter.addObserver(
@@ -358,13 +411,30 @@ final class FocusLeaveMonitor {
             if signal == .backgroundTimeExpired {
                 // The expiration handler must end its task now.
                 endBackgroundTask(identifier)
-                updateLiveActivity(pause, thenEnd: .invalid)
+                updateLiveActivity(pause)
             } else {
                 // Keep the background time until the Live Activity shows the
-                // pause, then give it back.
-                updateLiveActivity(pause, thenEnd: identifier)
+                // pause, then give it back — or earlier, if iOS expires it
+                // while the update is still running.
+                if identifier != .invalid {
+                    handedOffTasks[window.generation] = identifier
+                }
+                updateLiveActivity(pause, thenEndTaskOf: window.generation)
             }
         }
+    }
+
+    /// iOS takes the background time back. An open window decides now; a
+    /// window that already decided gives back the time it still held for
+    /// its Live Activity update.
+    private func backgroundTimeExpired(generation: UInt64) {
+        decide(.backgroundTimeExpired, generation: generation)
+        endHandedOffTask(of: generation)
+    }
+
+    private func endHandedOffTask(of generation: UInt64) {
+        guard let identifier = handedOffTasks.removeValue(forKey: generation) else { return }
+        endBackgroundTask(identifier)
     }
 
     private struct AppliedPause {
@@ -374,15 +444,15 @@ final class FocusLeaveMonitor {
 
     private func updateLiveActivity(
         _ pause: AppliedPause?,
-        thenEnd identifier: UIBackgroundTaskIdentifier
+        thenEndTaskOf generation: UInt64? = nil
     ) {
         let dependencies = dependencies
-        Task { @MainActor in
+        Task { @MainActor [self] in
             if let pause {
                 await dependencies.pauseLiveActivity(pause.sessionID, pause.remainingSeconds)
             }
-            if identifier != .invalid {
-                dependencies.endBackgroundTask(identifier)
+            if let generation {
+                endHandedOffTask(of: generation)
             }
         }
     }
@@ -424,6 +494,7 @@ final class FocusLeaveMonitor {
         // Before any permission check: the person is looking at the app.
         dependencies.withdrawNudges()
         let now = dependencies.now()
+        dependencies.recordConfirmedReturn(now)
         if let window {
             let identifier = closeWindow()
             resolveOnReturn(
@@ -463,8 +534,7 @@ final class FocusLeaveMonitor {
                         leftAt: excursion.leftAt,
                         key: key,
                         decidedAt: now
-                    ),
-                    thenEnd: .invalid
+                    )
                 )
             }
         } else if let watchedLeftAt,
@@ -480,8 +550,7 @@ final class FocusLeaveMonitor {
                     leftAt: marker.pausedAt,
                     key: key,
                     decidedAt: now
-                ),
-                thenEnd: .invalid
+                )
             )
         }
     }

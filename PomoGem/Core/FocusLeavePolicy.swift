@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Owner-requested change 2026-09-26 (F1): leaving the app during a running
 /// focus pauses the timer, and a short, bounded series of 「集中が切れています」
@@ -145,6 +146,26 @@ enum FocusLeavePolicy {
         return away.isFinite && away > lockDetectionWindow
     }
 
+    /// Whether a confirmed return (UIKit `.active`) settled an absence as a
+    /// quick glance, however late a reader looks at it. A return from before
+    /// the person left is no evidence about this absence.
+    static func returnedWithinWindow(leftAt: Date, returnedAt: Date) -> Bool {
+        let away = returnedAt.timeIntervalSince(leftAt)
+        return away.isFinite && away >= 0 && away <= lockDetectionWindow
+    }
+
+    /// How soon after the app itself opened iOS Settings (the focus screen's
+    /// 「終了通知は端末の設定から」) a `.background` counts as that trip.
+    /// The person is following the app's own call to action, not leaving the
+    /// focus, so the trip starts no absence.
+    static let appInitiatedDepartureWindow: TimeInterval = 5
+
+    static func isAppInitiatedDeparture(markedAt: Date?, now: Date) -> Bool {
+        guard let markedAt else { return false }
+        let elapsed = now.timeIntervalSince(markedAt)
+        return elapsed.isFinite && elapsed >= 0 && elapsed <= appInitiatedDepartureWindow
+    }
+
     /// What the running timer promises about the background.
     enum RunningNotice: Equatable, Sendable {
         /// The feature is off: the timer runs with the screen closed.
@@ -163,6 +184,25 @@ enum FocusLeavePolicy {
         return deviceHasPasscode
             ? .pausesWhenLeavingButNotWhenLocked
             : .pausesWhenLeavingOrLocking
+    }
+}
+
+/// Process-local: the first time this process was confirmed on screen
+/// (UIKit `.active`, recorded by `FocusLeaveMonitor`). It is the return from
+/// an absence that an earlier process wrote and could not decide because it
+/// ended inside the window. An absence this process writes itself always
+/// starts later, so the witness never settles it (`returnedWithinWindow`).
+enum FocusLeaveReturnWitness {
+    private static let firstConfirmedActivation = OSAllocatedUnfairLock<Date?>(initialState: nil)
+
+    static var confirmedReturn: Date? {
+        firstConfirmedActivation.withLock { $0 }
+    }
+
+    static func recordConfirmedActivation(at date: Date) {
+        firstConfirmedActivation.withLock { stored in
+            if stored == nil { stored = date }
+        }
     }
 }
 
@@ -251,13 +291,24 @@ enum FocusLeaveTransition {
 
     /// Applies an absence whose window has certainly ended. Anything else is
     /// returned unchanged: a window still open belongs to the host.
+    ///
+    /// `returnedAt` is this process's confirmed return
+    /// (`FocusLeaveReturnWitness`). A process that ended inside the window
+    /// cannot decide its absence; if the person came back within the window,
+    /// that was a quick glance even when the first reader runs later (an
+    /// iCloud launch reads the saved timer only once the account's container
+    /// has mounted).
     static func resolvingStaleExcursion(
         _ envelope: FocusRecoveryEnvelope,
-        at now: Date
+        at now: Date,
+        returnedAt: Date? = nil
     ) -> FocusRecoveryEnvelope {
-        guard let excursion = envelope.leaveExcursion,
-              FocusLeavePolicy.isStale(leftAt: excursion.leftAt, now: now)
-        else { return envelope }
+        guard let excursion = envelope.leaveExcursion else { return envelope }
+        if let returnedAt,
+           FocusLeavePolicy.returnedWithinWindow(leftAt: excursion.leftAt, returnedAt: returnedAt) {
+            return removingExcursion(envelope)
+        }
+        guard FocusLeavePolicy.isStale(leftAt: excursion.leftAt, now: now) else { return envelope }
         return pausedForLeaving(envelope, decidedAt: now)
     }
 
