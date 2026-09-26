@@ -23,8 +23,13 @@ import Foundation
 /// UI-test launch therefore names its test (`POMOGEM_UI_TEST_SCENARIO`, set by
 /// `PomoGemUITestScenario` in the UI-test target). The first launch of a new
 /// test forgets the timer state and the queues; the test's own relaunches
-/// keep them. The app calls this only on the Simulator: device tests run
-/// against the owner's real store and timer.
+/// keep them.
+///
+/// The app calls this only in a Debug build on the Simulator, from three
+/// places in `PomoGemApp`: the first launch of a new test (init), a fixture
+/// store this launch creates or wipes, and a new in-memory preview store.
+/// Device tests run against the owner's real store and timer, which must
+/// never be cleared.
 ///
 /// Production never calls this, and Release does not contain it. Real stores
 /// persist, so these queues always describe rows that still exist, and a

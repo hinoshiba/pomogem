@@ -1126,9 +1126,10 @@ private struct PomoGemPersistenceLaunchHost: View {
             let mode = LocalPreviewLaunchPolicy.persistenceModeForCurrentProcess
             guard mode == .cloudKit else {
                 AccountScopedLocalState.useUnscopedLocalMode()
-#if DEBUG
+#if DEBUG && targetEnvironment(simulator)
                 // Every preview launch (UI test or not) opens a new, empty
-                // in-memory store.
+                // in-memory store. Simulator only, like the other two calls:
+                // a Debug build on a real iPhone keeps its queues untouched.
                 if mode == .inMemoryPreview {
                     UITestLocalStateIsolation.forgetStateDerivedFromPreviousStores()
                 }
