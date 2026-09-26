@@ -5,6 +5,57 @@ import XCTest
 /// manual save (walk-std-08, walk-std-09, dev-D7, history-02).
 @MainActor
 final class RewardVocabularyAndHUDTests: XCTestCase {
+    // MARK: One vocabulary
+
+    /// Retired nouns must not come back in user-facing text. Only string
+    /// literals are read, so comments may still explain the history.
+    func testShippingCopyUsesOneNounForEachThing() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let retired: [String: String] = [
+            "成果の星": "記念石",
+            "成果の石": "記念石",
+            "まとまり粒": "結晶",
+            "まとまり結晶": "結晶",
+            "つぶ": "粒",
+            "完走ポモ": "完走した回数",
+            "戻った回数": "完走した回数",
+            "物理履歴": "粒の数",
+            "巡目": "N杯目",
+            "成果名": "成果メモ"
+        ]
+        // PebbleNode's per-gem VoiceOver strings belong to the jar-art work
+        // and change there; debug-only fixtures never ship.
+        let exemptFiles: Set<String> = ["PebbleNode.swift"]
+        var scannedFileCount = 0
+        var findings: [String] = []
+        for directory in ["PomoGem", "PomoGemWidgets", "PomoGemScreenTimeMonitor", "Shared"] {
+            let url = projectRoot.appendingPathComponent(directory, isDirectory: true)
+            guard let enumerator = FileManager.default.enumerator(
+                at: url,
+                includingPropertiesForKeys: nil
+            ) else { continue }
+            for case let fileURL as URL in enumerator
+            where fileURL.pathExtension == "swift"
+                && !exemptFiles.contains(fileURL.lastPathComponent)
+                && !fileURL.path.contains("/PomoGem/Debug/") {
+                let source = try String(contentsOf: fileURL, encoding: .utf8)
+                scannedFileCount += 1
+                for literal in SwiftStringLiteralScanner.literals(in: source) {
+                    for (old, new) in retired where literal.text.contains(old) {
+                        findings.append(
+                            "\(fileURL.lastPathComponent):\(literal.line) 「\(old)」 → 「\(new)」"
+                        )
+                    }
+                }
+            }
+        }
+
+        XCTAssertGreaterThan(scannedFileCount, 100)
+        XCTAssertEqual(findings, [], "Use the one app-wide noun")
+    }
+
     // MARK: HUD (walk-std-09)
 
     func testTheCorePlateAlwaysHangsBelowThePrism() {
