@@ -121,6 +121,12 @@
       "package": "l10n-02-focus-system"
     },
     {
+      "glob": "PomoGem/App/Intents/**",
+      "table": "Focus",
+      "package": "l10n-02-focus-system",
+      "note": "App Intents and App Shortcuts (plan pr-49). Intent titles use LocalizedStringResource(table: \"Focus\"); the Japanese App Shortcut phrases move to AppShortcuts.xcstrings with English (Docs/Localization.md)"
+    },
+    {
       "glob": "Shared/AppEntryLink.swift",
       "table": "Widgets",
       "package": "l10n-02-focus-system",

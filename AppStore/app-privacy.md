@@ -56,8 +56,10 @@ Apple teamの実際のaccess、mail運用を照合して最終回答します。
   休憩ごとのUUID）、秒数、終了日時／残り時間、状態だけをActivityKitへ渡して端末内更新する。theme名、memo、
   質量、Apple Account／CloudKit dataを含めず、ActivityKit pushやdeveloper serverを使わないため、この機能
   自体によるdeveloperのdata collectionはない
-- Widgetのtapと`pomogem://`リンクは、固定の行き先（`focus/start`と任意の25／45／60／90分）だけを
-  アプリへ渡す。集中の開始はアプリ内でHomeの開始buttonと同じ条件で行い、backgroundで記録を変更しない
+- Widgetのtapと`pomogem://`リンク、App Shortcut「集中を始める」（Siri／Spotlight／ショートカット／
+  アクションボタン）は、固定の行き先（`focus/start`と任意の25／45／60／90分）だけをアプリへ渡す。
+  集中の開始はアプリ内でHomeの開始buttonと同じ条件で行い、intentは記録・theme名を返さず、background
+  で記録を変更しない。Siriへ渡るのはアプリが定義した固定のフレーズとaction名だけで、data typeの追加はない
 - third-party SDKがない
 - version 1.0ではrare rewardのUI／writer／runtime repository pathと、二つ目のoperations CloudKit
   containerに接続するentitlement／capabilityを無効化している。将来検討用sourceと公開identifierは

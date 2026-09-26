@@ -267,7 +267,7 @@ unit test、主要UI test、static analyzerを実行します。40年soakはrele
 - 既存CloudKit補助directoryを残した再起動、リセット履歴反映前の新規記録拒否と反映後の記録保持、
   iCloud通常resetの一時停止とlocal-only通常resetの継続
 - Home／Lock Screen Widgetが利用者dataを表示せずアプリを開き、Homeの開始buttonと同じ条件で集中を
-  始めること
+  始めること。Siri、Spotlight、ショートカットの「集中を始める」も同じ入口として動くこと
 - Live Activityの開始、pause、resume、期限到達、cancel、完了後dismiss、手動dismiss後に再生成しないこと、
   SettingsでOFFにすると即終了すること。完走後に選んだ休憩の「休憩中」「休憩終了」表示と、休憩の
   skip／「瓶へ戻る」での終了。全状態でtheme名、memo、質量、account情報を表示しないこと

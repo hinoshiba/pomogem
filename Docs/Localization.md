@@ -92,6 +92,15 @@
 - それ以外の日付は、これまでどおり利用者の暦で`Date.FormatStyle`を使います。
 - 書式の結果はテスト（`LocalizationFormattingTests`）で今の手書きの文字列と照合しています。
 
+## App IntentsとApp Shortcuts（Siri・Spotlight・ショートカット）
+
+- Intentの名前・説明・引数と`AppEnum`の表示名は`LocalizedStringResource("…", table: "Focus", comment: "…")`で
+  書きます（`PomoGem/App/Intents/**`は`Focus`テーブル）。App Intentsのメタデータはビルド時に取り出されるため、
+  引数には文字列リテラルだけを渡します。
+- App Shortcutのフレーズ（`PomoGemShortcuts`）だけは、Appleの決まりで専用のcatalog`AppShortcuts.xcstrings`に
+  訳を置きます。日本語だけの今はコードの日本語フレーズがそのまま使われるので、このcatalogはまだ作りません。
+  英語を有効にするときに作り、英語のフレーズにも必ず`${applicationName}`を入れます（「英語を有効にする手順」の4）。
+
 ## 意図的な例外: `// l10n-ignore:`
 
 保存済みデータとの比較や過去の値など、翻訳してはいけない日本語リテラルには理由を付けます。
@@ -195,6 +204,8 @@ catalogの同期は必ず全テーブルまとめて行います（一部だけ�
         `LocalizationEnvironmentTests.testJapaneseDevicesReadJapaneseFromEveryTable`は日本語の端末で全キーを引いて確かめます。
      4. 以後、日本語の文言を変えたら毎回`sync`する（Xcodeが自動で足したキーには日本語の値がなく、`check`が失敗します）。
 4. 各パッケージが自分のテーブルへ英語を入れる（`sync` → `set` → `check --tables`）。
+   App Shortcutのフレーズ（`PomoGemShortcuts`）は、このとき`PomoGem/Localization/AppShortcuts.xcstrings`を
+   作って英語のフレーズを入れる（どのフレーズにも`${applicationName}`を含める。「App IntentsとApp Shortcuts」）。
 5. 統合: CIを`check --strict`にし、英語のsmoke UI test（`PomoGemUITestLanguage`に英語の起動を追加）、
    英語のスクリーンショット、App Storeの英語資料、README・サイトの対応言語を更新する。
 
