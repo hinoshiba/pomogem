@@ -1,6 +1,12 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "「視差効果を減らす」がオンのため、いまは控えめで表示しています。" : {
+      "comment" : "Settings note under Effect intensity while the system Reduce Motion setting is on"
+    },
+    "きらめきと傾けたときの星を止め、光を弱め、着地と融合を短くします" : {
+      "comment" : "Effect intensity detail for Subtle"
+    },
     "その日に集中を始めたり、時間を手動で積んだりした日は、毎日のリマインダーは届きません。7日間アプリを開かなかったときは、次に開くまでお休みします。" : {
       "comment" : "Settings caption: when the daily reminder is skipped"
     },
@@ -25,8 +31,20 @@
     "先月の瓶のお知らせは、毎月1日のこの時刻に届きます。前の月に記録がなければ届きません。" : {
       "comment" : "Settings caption: when the monthly look-back notification is sent"
     },
+    "控えめ" : {
+      "comment" : "Effect intensity option: calmer light and shorter effects (Subtle)"
+    },
+    "控えめにしても、粒の重さや数、融合、カットは変わりません。「視差効果を減らす」がオンのときは、常に控えめで表示します。この設定はこのiPhoneだけに保存され、iCloudでは同期しません。" : {
+      "comment" : "Settings footer explaining Effect intensity"
+    },
     "既定はオフ。集中タイマー中にホーム画面や別のアプリへ移ると、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。" : {
       "comment" : "Settings caption under the return-to-focus reminder switch"
+    },
+    "朱色" : {
+      "comment" : "Theme colour swatch name (Vermilion)"
+    },
+    "標準" : {
+      "comment" : "Effect intensity option: every light and motion effect (Standard)"
     },
     "毎日のリマインダー" : {
       "comment" : "Settings switch title: the opt-in daily reminder"
@@ -37,14 +55,56 @@
     "毎月1日に一度だけ" : {
       "comment" : "Settings switch subtitle: the monthly notification is sent on the 1st"
     },
+    "演出の強さ" : {
+      "comment" : "Settings row: how much light and motion the jar's rewards use (Effect intensity)"
+    },
+    "珊瑚" : {
+      "comment" : "Theme colour swatch name (Coral)"
+    },
+    "琥珀" : {
+      "comment" : "Theme colour swatch name (Amber)"
+    },
+    "瑠璃" : {
+      "comment" : "Theme colour swatch name (Lapis lazuli)"
+    },
+    "瓶の表示" : {
+      "comment" : "Settings section header: how the jar is shown (Jar display)"
+    },
+    "空色" : {
+      "comment" : "Theme colour swatch name (Sky blue)"
+    },
+    "紅藤" : {
+      "comment" : "Theme colour swatch name (Pink wisteria)"
+    },
+    "緑青" : {
+      "comment" : "Theme colour swatch name (Verdigris)"
+    },
+    "自然なきらめきと傾けたときの星、光の広がりをすべて表示します" : {
+      "comment" : "Effect intensity detail for Standard"
+    },
+    "若草" : {
+      "comment" : "Theme colour swatch name (Young leaf green)"
+    },
+    "菫" : {
+      "comment" : "Theme colour swatch name (Violet)"
+    },
+    "藍" : {
+      "comment" : "Theme colour swatch name (Indigo)"
+    },
     "設定を開く" : {
       "comment" : "Alert button: open this app's notification settings in iOS\nButton: open this app's notification settings in iOS"
     },
     "許可する" : {
       "comment" : "Button: show the iOS notification permission prompt"
     },
+    "赤銅" : {
+      "comment" : "Theme colour swatch name (Copper)"
+    },
     "通知する時刻" : {
       "comment" : "Settings time picker label for reminders"
+    },
+    "青緑" : {
+      "comment" : "Theme colour swatch name (Teal)"
     }
   },
   "version" : "1.0"
