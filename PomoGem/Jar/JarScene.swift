@@ -203,9 +203,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         /// The entry gravity field's category (fields have their own bit
         /// space, matched against each body's `fieldBitMask`).
         static let fieldCategory: UInt32 = 1 << 0
-        /// A gem that crossed the collar into gems resting there (a pile
-        /// against the cap or a wall) passes them for at most this long
-        /// before it joins ordinary collisions anyway.
+        /// A gem that entered into gems pressed against the cap (the phone
+        /// upside down) passes them for at most this long before it joins
+        /// ordinary collisions anyway.
         static let clearingTimeout: TimeInterval = 1.5
         /// Two bodies closer than the sum of their radii minus this overlap.
         static let overlapTolerance: CGFloat = 0.5
@@ -220,8 +220,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private enum EntryPhase: Equatable {
         /// Above the copper collar (a completion drop from the scene top).
         case throughMouth
-        /// Inside the walls but still overlapping gems at rest there: it
-        /// passes them under the entry gravity until it is clear.
+        /// Inside the walls but overlapping gems that the gravity presses
+        /// against the cap (`JarGravityMapping.pullsTowardTheMouth`): it
+        /// passes them under the entry gravity until it is clear, the
+        /// gravity turns away from the mouth, or `clearingTimeout`. Under
+        /// any other gravity a new gem that overlaps the pile joins it at
+        /// once, as before F3.
         case clearingPile(since: TimeInterval)
     }
 
@@ -460,6 +464,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     }
     /// Gems still in their entry ritual, by phase (F3).
     private var enteringPhases: [UUID: EntryPhase] = [:]
+    /// Gems that joined the pile at the cap by `clearingTimeout`, still
+    /// overlapping it (Debug reviews and tests).
+    private(set) var entryClearingTimeoutCount = 0
     /// The jar's own gravity for gems entering through the mouth: a linear
     /// gravity field (the same units and integration as the physics
     /// world's gravity) acting only on bodies whose `fieldBitMask` carries
@@ -1462,7 +1469,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             dropQueue.append(
                 QueuedDrop(
                     descriptor: descriptor,
-                    horizontalUnit: CGFloat.random(in: -1 ... 1),
+                    horizontalUnit: interiorDropHorizontalUnit(),
                     origin: .interior,
                     readyUptime: now,
                     needsSpecialAnticipation: false
@@ -3798,7 +3805,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         dropQueue.append(
             QueuedDrop(
                 descriptor: descriptor,
-                horizontalUnit: origin == .sceneTop ? 0 : CGFloat.random(in: -1 ... 1),
+                horizontalUnit: origin == .sceneTop ? 0 : interiorDropHorizontalUnit(),
                 origin: origin,
                 readyUptime: interactionClock() + delay,
                 needsSpecialAnticipation: shouldShowSpecialAnticipation(for: descriptor)
@@ -3910,9 +3917,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 x: interiorRect.midX + min(max(horizontalUnit, -1), 1) * xRange,
                 y: interiorRect.maxY - node.radius
             )
-            // Just under the mouth. Gems resting there (held upside down)
-            // are passed first, like a completion drop past the collar.
-            entryPhase = overlapsRestingBody(node)
+            // Just under the mouth. Gems the gravity presses against the
+            // cap there (held upside down) are passed first, like a
+            // completion drop past the collar; under any other gravity an
+            // overlapping gem joins at once, as before F3.
+            entryPhase = JarGravityMapping.pullsTowardTheMouth(appliedGravityVector) && overlapsRestingBody(node)
                 ? .clearingPile(since: lastSceneUpdateTime)
                 : nil
         }
@@ -3999,8 +4008,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// Advances every ritual after a physics step. Above the collar the gem
     /// is held in the neck (walls are off there, so nothing may carry it
     /// sideways past them); once its whole body is under the collar it is
-    /// inside the walls, and it joins the jar as soon as it overlaps no
-    /// other gem (or after `clearingTimeout`).
+    /// inside the walls, and it joins the jar at once — or, into a pile the
+    /// gravity presses against the cap, as soon as it overlaps no other gem,
+    /// the gravity turns away from the mouth, or `clearingTimeout` passes.
     private func advanceEntryRituals() {
         guard !enteringPhases.isEmpty else { return }
         let now = lastSceneUpdateTime
@@ -4022,15 +4032,18 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 }
                 if body.velocity.dx != 0 { body.velocity.dx = 0 }
                 guard pebble.position.y + pebble.radius <= interiorRect.maxY else { continue }
-                if overlapsRestingBody(pebble) {
+                if JarGravityMapping.pullsTowardTheMouth(appliedGravityVector), overlapsRestingBody(pebble) {
                     beginEntryRitual(for: pebble, phase: .clearingPile(since: now))
                 } else {
                     finishEntryRitual(for: pebble)
                 }
             case let .clearingPile(since):
-                if !overlapsRestingBody(pebble)
-                    || now - since >= CompletionEntryPhysics.clearingTimeout
+                if !JarGravityMapping.pullsTowardTheMouth(appliedGravityVector)
+                    || !overlapsRestingBody(pebble)
                     || now < since {
+                    finishEntryRitual(for: pebble)
+                } else if now - since >= CompletionEntryPhysics.clearingTimeout {
+                    entryClearingTimeoutCount &+= 1
                     finishEntryRitual(for: pebble)
                 }
             }
@@ -4050,6 +4063,30 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             return hypot(other.position.x - pebble.position.x, other.position.y - pebble.position.y) < reach
         }
     }
+
+    /// Where across the mouth an interior drop enters (−1…1 of
+    /// `dropHorizontalRangeFraction`): random, or fixed by a test.
+    private func interiorDropHorizontalUnit() -> CGFloat {
+#if DEBUG
+        if let unit = interiorDropHorizontalUnitForTesting { return min(max(unit, -1), 1) }
+#endif
+        return CGFloat.random(in: -1 ... 1)
+    }
+
+#if DEBUG
+    /// Fixes where interior drops enter across the mouth (tests).
+    var interiorDropHorizontalUnitForTesting: CGFloat?
+
+    /// The entry-ritual phase of a gem (tests): "throughMouth",
+    /// "clearingPile", or nil for a gem not in its ritual.
+    func entryPhaseNameForTesting(_ id: UUID) -> String? {
+        switch enteringPhases[id] {
+        case .throughMouth: "throughMouth"
+        case .clearingPile: "clearingPile"
+        case nil: nil
+        }
+    }
+#endif
 
     private func forgetEntryState(for ids: Set<UUID>) {
         for id in ids {
