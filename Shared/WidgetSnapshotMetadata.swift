@@ -100,7 +100,10 @@ struct ActiveAccountLocalBinding: Codable, Equatable, Sendable {
 
 /// Account scope for local recovery state. A cloud launch sets the boundary
 /// before any ModelContainer exists. Optional secondary defaults remain only as
-/// an injection seam for migration tests; the version 1 app has no App Group.
+/// an injection seam for migration tests: the app never passes App Group
+/// defaults here. The host's `group.com.hinoshiba.pomogem` exists only for the
+/// Screen Time monitor's ledger, and the Widget carries no App Group at all
+/// (PRIVACY.md, Scripts/verify-release-archive.sh).
 enum AccountScopedLocalState {
     private static let cloudBoundaryRequiredKey =
         "account-boundary.cloud-scope-required.v1"
@@ -291,9 +294,10 @@ enum AccountScopedLocalState {
     }
 }
 
-/// Lightweight state persisted beside the rendered jar PNG in the App Group.
-/// WidgetKit deliberately does not read SwiftData, which keeps widget launches
-/// fast and makes a missing/iCloud-unavailable model container harmless.
+/// Lightweight state once designed to sit beside a rendered jar PNG in a
+/// shared container. Version 1 never writes or reads it (WidgetSnapshotStore is
+/// a no-op): the Widget is an account-neutral launcher with no App Group, and
+/// WidgetKit never reads SwiftData.
 struct WidgetSnapshotMetadata: Codable, Hashable, Sendable {
     static let currentVersion = 1
 
