@@ -125,6 +125,29 @@ Phase Aで置いていた統合・提出の条件（止める設定がなく、�
   保存時に無視されます（`FocusPersistence.mergingLeaveMarkers`）。本当の再開は必ず終了予定より後に終わります。
 - 端末内の記録2つはどちらもOptionalで、古い保存データはそのまま読めます。`FocusCloudPayload`には含めません。
 
+## 電力（バックグラウンド時間とタイマー）
+
+- バックグラウンドタスク（`beginBackgroundTask`）を始めるのは、対象の集中（この端末が所有する実行中の集中で、
+  残り60秒より多く、切り替えがオン）から`.background`へ移ったときの1つだけです。休憩、本人が押した一時停止、
+  終了間際、切り替えがオフ、アプリが案内した設定への移動、判定中の2回目の`.background`では増やしません。
+- 持つのは最長で判定の20秒（`lockDetectionWindow`）と、「離れた」と判定した後のLive Activityの更新の間だけです。
+  iOSが先に時間を打ち切った場合は、期限切れの処理がその場で返します（返さないとアプリが終了させられます）。
+- 返す経路と回数: 「離れた」（Live Activityの更新の後）、ロックの知らせ、20秒の時点で保護データが読めない、
+  `.background`の時点ですでにロック中、パスコードなし、20秒以内の復帰、判定が止まった後の復帰、判定中の期限切れ、
+  Live Activityの更新中の期限切れ、一時停止するものがなくなった場合、アカウントの境界。どの経路でも1回だけ返し、
+  二重には返しません。
+- 判定の待ちは`Task.sleep`の1回だけです。窓が閉じると（ロック、復帰、期限切れ、アカウントの境界）その待ちの
+  タスクを取り消すので、待ちはすぐに終わり、ロックの知らせの監視も同時に外します。判定の後に残るタイマー、
+  繰り返しの処理、`UIBackgroundModes`（音声・位置情報など）はありません。
+- その後の「集中が切れています」は、`.background`の時点で予約した最大5件のローカル通知をiOSが配信するもので、
+  アプリは起動しません。
+- 1回の離脱の費用: 最長約20秒の実行（ほとんどは待機）、保存したタイマーへの小さな書き込み2回（記録と判定）、
+  通知の予約と取り消し、Live Activityの更新1回です。
+- テスト: `FocusLeaveMonitorTests`の`testEveryWayAWindowClosesEndsItsBackgroundTaskOnceAndKeepsNoTimer`
+  （上の全経路で、タスクを1回だけ返す、監視を外す、待ちを残さない、待ちは20秒以内）、
+  `testTheLiveWaitEndsAsSoonAsItsWindowIsCancelled`（本番の待ちが取り消しですぐ終わる）、
+  `testBackgroundExpiryPausesAndEndsItsTaskAtOnce`、`testExpiryWhileTheLiveActivityUpdateRunsStillEndsTheTaskOnce`。
+
 ## iCloudと他の端末（D1.6）
 
 CloudKitのフィールドや同期する列挙値は増やしていません。一時停止の同期行は、この端末が次に前面へ戻って
@@ -180,7 +203,9 @@ Simulatorはデータ保護がなく、ロック後の`protectedDataWillBecomeUn
   偽物にしたホストの状態遷移（ロック、見落としたロック、パスコードなし、期限切れ、Live Activityの更新中の期限切れ、
   20秒以内の復帰、停止されたプロセスからの復帰、再起動後の復帰、読む側が先に一時停止した場合、
   一時停止するものがない場合、iOS 26の誤ったactive、古い離脱の残り、アカウント境界、アプリが開いた設定、
-  復帰の記録）と、本物の`NotificationManager`をつないだ`Dependencies.live`（終了通知だけを消し5件を残す）。
+  復帰の記録、上の「電力」の全経路）と、本物の`NotificationManager`をつないだ`Dependencies.live`
+  （終了通知だけを消し5件を残す。20秒以内の復帰では一時停止も記録も書かず、5件を予約中・表示済みの両方から消し、
+  終了通知は残す: `testAReturnInsideTheWindowWritesNoPauseAndLeavesNoNudge`）。
 - `FocusLeaveNudgeSchedulingTests`: 5件・`.active`・同じthread・1回きり、音、許可と切り替え、遅れた予約、
   取り消しの各経路、遅れて届いた追加が取り消し後に残らないこと。
 - `FocusLeavePauseUITests`（`POMOGEM_UI_TEST_FOCUS_LEAVE_PAUSE=1`、AX5）: 既定オンの構成で、実行中の行の文言、
