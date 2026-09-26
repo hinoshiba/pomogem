@@ -126,6 +126,14 @@ struct FocusRecoveryEnvelope: Codable, Equatable, Sendable {
     /// unrecognised value degrades to the neutral notice instead of failing
     /// to decode, and so discarding, the whole recovery.
     private var demotionReasonRawValue: String?
+    /// F1, device-local like the witness above and never part of
+    /// FocusCloudPayload: an absence (`.background`) this device has not
+    /// classified yet. Optional, so older envelopes decode without it.
+    var leaveExcursion: FocusLeaveExcursion?
+    /// F1, device-local: this device paused the focus because the person left
+    /// the app. Other devices see the ordinary paused row once this device
+    /// saves it in the foreground.
+    var leavePause: FocusLeavePauseMarker?
 
     var demotionReason: FocusDemotionNoticeReason? {
         get { demotionReasonRawValue.flatMap(FocusDemotionNoticeReason.init(rawValue:)) }
@@ -140,7 +148,9 @@ struct FocusRecoveryEnvelope: Codable, Equatable, Sendable {
         savedAt: Date,
         scheduledCompletionNotificationDeliveryDate: Date? = nil,
         dataEpochID: UUID? = nil,
-        demotionReason: FocusDemotionNoticeReason? = nil
+        demotionReason: FocusDemotionNoticeReason? = nil,
+        leaveExcursion: FocusLeaveExcursion? = nil,
+        leavePause: FocusLeavePauseMarker? = nil
     ) {
         self.engine = engine
         self.subject = subject
@@ -151,6 +161,39 @@ struct FocusRecoveryEnvelope: Codable, Equatable, Sendable {
             scheduledCompletionNotificationDeliveryDate
         self.dataEpochID = dataEpochID
         demotionReasonRawValue = demotionReason?.rawValue
+        self.leaveExcursion = leaveExcursion
+        self.leavePause = leavePause
+    }
+
+    /// The leave markers describe exactly one timer state: an unclassified
+    /// absence belongs to a running focus, a leave pause to a paused one, both
+    /// of the same session. Anything else is dropped rather than letting a
+    /// stale marker pause or annotate a different timer.
+    func normalizingLeaveMarkers() -> FocusRecoveryEnvelope {
+        var result = self
+        let sessionID = engine.currentSessionID
+        if let excursion = leaveExcursion,
+           !(pendingCompletion == nil
+             && engine.phase == .focusing
+             && excursion.sessionID == sessionID
+             && PomodoroEngine.isSafePersistedDate(excursion.leftAt)) {
+            result.leaveExcursion = nil
+        }
+        if let marker = leavePause,
+           !(pendingCompletion == nil
+             && engine.phase == .paused
+             && engine.containsRecoverableFocus
+             && marker.sessionID == sessionID
+             && PomodoroEngine.isSafePersistedDate(marker.pausedAt)
+             && PomodoroEngine.isSafePersistedDate(marker.plannedEndDate)) {
+            result.leavePause = nil
+        }
+        return result
+    }
+
+    /// The leave pause of this envelope's own paused focus, if any.
+    var currentLeavePause: FocusLeavePauseMarker? {
+        normalizingLeaveMarkers().leavePause
     }
 }
 
@@ -738,26 +781,133 @@ enum FocusPersistence {
         }
     }
 
+    /// Every ordinary writer (the focus screen, recovery, relaunch
+    /// preparation) goes through here. Those writers build their envelope
+    /// from their own state and know nothing about the host's device-local
+    /// leave markers, so the stored markers of the same session are carried
+    /// forward (`mergingLeaveMarkers`).
     static func save(_ envelope: FocusRecoveryEnvelope) {
+        save(envelope, key: key)
+    }
+
+    static func save(
+        _ envelope: FocusRecoveryEnvelope,
+        key: String,
+        defaults: UserDefaults = .standard
+    ) {
+        let merged = mergingLeaveMarkers(
+            into: envelope,
+            stored: decodedValidEnvelope(defaults.data(forKey: key))
+        )
+        store(merged, key: key, defaults: defaults)
+    }
+
+    /// Writes exactly `envelope`, including removing a marker: only the
+    /// transitions of an absence (`FocusLeaveTransition`) use this.
+    static func replace(
+        _ envelope: FocusRecoveryEnvelope,
+        key: String,
+        defaults: UserDefaults = .standard
+    ) {
+        store(envelope.normalizingLeaveMarkers(), key: key, defaults: defaults)
+    }
+
+    private static func store(
+        _ envelope: FocusRecoveryEnvelope,
+        key: String,
+        defaults: UserDefaults
+    ) {
         guard let data = try? JSONEncoder().encode(envelope) else { return }
-        UserDefaults.standard.set(data, forKey: key)
+        defaults.set(data, forKey: key)
         postDidChange()
     }
 
-    static func load() -> FocusRecoveryEnvelope? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
-        if let envelope = try? JSONDecoder().decode(FocusRecoveryEnvelope.self, from: data) {
-            guard hasValidPersistedStructure(envelope) else {
+    /// A view that has not caught up with the host writes the state it
+    /// knows. That must neither drop an absence the host is still watching
+    /// nor undo the pause the host applied when the person left.
+    static func mergingLeaveMarkers(
+        into envelope: FocusRecoveryEnvelope,
+        stored: FocusRecoveryEnvelope?
+    ) -> FocusRecoveryEnvelope {
+        var result = envelope
+        guard let stored = stored?.normalizingLeaveMarkers(),
+              envelope.pendingCompletion == nil,
+              let sessionID = envelope.engine.currentSessionID,
+              stored.pendingCompletion == nil,
+              stored.engine.currentSessionID == sessionID
+        else { return result.normalizingLeaveMarkers() }
+        // The exact running state from before the person left, written by a
+        // screen that has not adopted the leave pause yet. A real resume
+        // always ends later than the planned end, because it happens after
+        // leaving.
+        if let marker = stored.leavePause,
+           envelope.engine.phase == .focusing,
+           envelope.engine.endDate == marker.plannedEndDate {
+            return stored
+        }
+        if result.leaveExcursion == nil,
+           envelope.engine.phase == .focusing,
+           let excursion = stored.leaveExcursion {
+            result.leaveExcursion = excursion
+        }
+        if result.leavePause == nil,
+           envelope.engine.phase == .paused,
+           let marker = stored.leavePause {
+            result.leavePause = marker
+        }
+        return result.normalizingLeaveMarkers()
+    }
+
+    /// Loads the saved timer, first applying an absence whose lock window has
+    /// certainly ended (F1, critic A3): a relaunch, a remount or any reader
+    /// then sees the focus paused at the moment the person left, never an
+    /// elapsed focus that could be finished and awarded.
+    static func load(at now: Date = .now) -> FocusRecoveryEnvelope? {
+        load(key: key, at: now)
+    }
+
+    static func load(
+        key: String,
+        defaults: UserDefaults = .standard,
+        at now: Date = .now
+    ) -> FocusRecoveryEnvelope? {
+        guard let envelope = loadStored(key: key, defaults: defaults) else { return nil }
+        let resolved = FocusLeaveTransition.resolvingStaleExcursion(envelope, at: now)
+        if resolved != envelope {
+            store(resolved, key: key, defaults: defaults)
+        }
+        return resolved
+    }
+
+    /// The validated bytes as stored, with no absence applied. Clears bytes
+    /// that fail validation, exactly like `load()`.
+    static func loadStored(
+        key: String,
+        defaults: UserDefaults = .standard
+    ) -> FocusRecoveryEnvelope? {
+        guard let data = defaults.data(forKey: key) else { return nil }
+        guard let envelope = decodedValidEnvelope(data) else {
+            if key == self.key, defaults == .standard {
                 clear()
-                return nil
+            } else {
+                defaults.removeObject(forKey: key)
+                postDidChange()
             }
-            return envelope
+            return nil
+        }
+        return envelope
+    }
+
+    private static func decodedValidEnvelope(_ data: Data?) -> FocusRecoveryEnvelope? {
+        guard let data else { return nil }
+        if let envelope = try? JSONDecoder().decode(FocusRecoveryEnvelope.self, from: data) {
+            guard hasValidPersistedStructure(envelope) else { return nil }
+            return envelope.normalizingLeaveMarkers()
         }
         // Versions prior to the recovery envelope persisted only the state
         // machine. Keep that state detectable so the caller can retire it
         // safely instead of silently treating corrupt bytes as no session.
         guard let legacyEngine = try? JSONDecoder().decode(PomodoroEngine.self, from: data) else {
-            clear()
             return nil
         }
         let envelope = FocusRecoveryEnvelope(
@@ -768,10 +918,7 @@ enum FocusPersistence {
             savedAt: .distantPast,
             dataEpochID: nil
         )
-        guard hasValidPersistedStructure(envelope) else {
-            clear()
-            return nil
-        }
+        guard hasValidPersistedStructure(envelope) else { return nil }
         return envelope
     }
 
@@ -825,8 +972,13 @@ enum FocusPersistence {
         at now: Date,
         uptime: TimeInterval
     ) -> FocusRecoveryEnvelope {
+        // An absence that has certainly ended is applied before anything can
+        // resume, finish or award the focus (critic A3).
         preparedActiveFocus(
-            envelope,
+            FocusLeaveTransition.resolvingStaleExcursion(
+                envelope.normalizingLeaveMarkers(),
+                at: now
+            ),
             at: now,
             uptime: uptime,
             adoptionReason: nil
@@ -913,7 +1065,11 @@ enum FocusPersistence {
             scheduledCompletionNotificationDeliveryDate:
                 envelope.scheduledCompletionNotificationDeliveryDate,
             dataEpochID: envelope.dataEpochID,
-            demotionReason: demotionReason
+            demotionReason: demotionReason,
+            // Device-local: an adoption is another device's timer, so this
+            // device's absence says nothing about it.
+            leaveExcursion: adoptionReason == nil ? envelope.leaveExcursion : nil,
+            leavePause: adoptionReason == nil ? envelope.leavePause : nil
         )
     }
 
@@ -922,9 +1078,15 @@ enum FocusPersistence {
     /// `FocusView` can therefore either display the remaining interval or
     /// advance the exact same session into its idempotent completion commit.
     static func relaunchAction(
-        for envelope: FocusRecoveryEnvelope,
+        for savedEnvelope: FocusRecoveryEnvelope,
         at now: Date
     ) -> FocusRelaunchAction {
+        // A focus the person left while it ran is paused at the moment they
+        // left, even if its planned end has passed since (critic A3).
+        let envelope = FocusLeaveTransition.resolvingStaleExcursion(
+            savedEnvelope.normalizingLeaveMarkers(),
+            at: now
+        )
         guard hasValidPersistedStructure(envelope),
               PomodoroEngine.isSafePersistedDate(now)
         else { return .discard }
@@ -1024,6 +1186,9 @@ enum FocusPersistence {
         let focus = defaults.data(forKey: focusKey)
             .flatMap { try? JSONDecoder().decode(FocusRecoveryEnvelope.self, from: $0) }
             .flatMap { hasValidPersistedStructure($0) ? $0 : nil }
+            // In memory only: an absence that has certainly ended shows as
+            // the paused focus it becomes, never as a finished one.
+            .map { FocusLeaveTransition.resolvingStaleExcursion($0.normalizingLeaveMarkers(), at: now) }
         let breakKey = AccountScopedLocalState.defaultsKey(base: baseBreakKey, namespace: namespace)
         let rest = defaults.data(forKey: breakKey)
             .flatMap { try? JSONDecoder().decode(BreakRecoveryEnvelope.self, from: $0) }

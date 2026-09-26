@@ -285,7 +285,9 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
 /// Which timer state holds the Screen Time learning lane, and until when.
 ///
 /// A running focus or in-timer break holds it until the phase's end date; a
-/// paused timer holds it with no end; anything else — including the
+/// paused timer holds it with no end, except a focus paused because the
+/// person left the app (F1), which holds it until the end it had when they
+/// left; anything else — including the
 /// completion screen and a phase whose end has passed but that the app has
 /// not advanced yet — holds nothing. Breaks timed from Home (`BreakTimerView`)
 /// have their own persistence and never hold the lane, as before.
@@ -304,6 +306,13 @@ enum ScreenTimeTimerHold {
             guard let end = envelope.engine.endDate else { return .none }
             return ScreenTimeLearningPause.until(end).normalized(at: now)
         case .paused:
+            // F1: a focus this device paused because the person left the
+            // app holds the lane only until the end it had when they left.
+            // Study-app time after that counts again even if they never come
+            // back; a pause the person chose still holds it indefinitely.
+            if let leavePause = envelope.currentLeavePause {
+                return ScreenTimeLearningPause.until(leavePause.plannedEndDate).normalized(at: now)
+            }
             return .indefinite
         case .idle, .focusCompleted, .breakCompleted:
             return .none
