@@ -623,7 +623,10 @@ struct FusionOrbitStage: View {
         return (degrees, reachJitter[index % reachJitter.count])
     }
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    /// UI tests force Reduce Motion through this seam (as Home and the jar do).
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
@@ -1360,8 +1363,13 @@ struct JarAccumulationPresenceBackdrop: View {
     let colorHex: String
     let showsLifetimeCore: Bool
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    private var reduceMotion: Bool {
+        reduceMotionOverride ?? systemReduceMotion
+    }
     @State private var lastObservedTotalGrams: Int?
     @State private var highestObservedCompletedCycleCount: Int?
     @State private var highestObservedCompletedMilestoneGrams: Int?
@@ -2238,7 +2246,10 @@ struct JarLifetimeCoreBackdrop: View {
         var drawsStone: Bool { self != .behindThePile }
     }
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    /// UI tests force Reduce Motion through this seam (as Home and the jar do).
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
@@ -2797,7 +2808,10 @@ struct JarLifetimeCoreVessel: View {
     var effectsInEffect: JarEffectsIntensity?
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    /// UI tests force Reduce Motion through this seam (as Home and the jar do).
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
     @Environment(\.displayScale) private var displayScale
     @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard
 
@@ -2985,7 +2999,10 @@ struct ProgressCrystalGlyph: View {
     var colorShares: [GemColorShare]? = nil
     var isAchievement = false
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    /// UI tests force Reduce Motion through this seam (as Home and the jar do).
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Environment(\.displayScale) private var displayScale
     @AppStorage(JarEffectsIntensity.defaultsKey) private var effectsIntensity: JarEffectsIntensity = .standard

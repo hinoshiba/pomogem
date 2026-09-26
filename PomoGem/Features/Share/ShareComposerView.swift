@@ -30,7 +30,10 @@ struct ShareComposerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    /// UI tests force Reduce Motion through this seam (as Home and the jar do).
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityPlayAnimatedImages) private var playAnimatedImages
     @Environment(AppRouter.self) private var router
@@ -2807,7 +2810,10 @@ private struct ShareCardAtmosphere: View {
     let story: Bool
     let usesAnimatedArtwork: Bool
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    /// UI tests force Reduce Motion through this seam (as Home and the jar do).
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
 
     var body: some View {
         GeometryReader { proxy in
@@ -3014,7 +3020,10 @@ private struct ShareJarGraphic: View {
 
     /// The card's render scale (`ImageRenderer.scale` or the screen's).
     @Environment(\.displayScale) private var displayScale
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    /// UI tests force Reduce Motion through this seam (as Home and the jar do).
+    @Environment(\.pomogemReduceMotionOverride) private var reduceMotionOverride
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
 
     private var visibleSessions: [ShareSessionVisual] {
         Array(shareDrawableSessions(sessions: sessions, aggregates: aggregates).suffix(
