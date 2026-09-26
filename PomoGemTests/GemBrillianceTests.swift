@@ -1776,6 +1776,28 @@ extension GemBrillianceTests {
         XCTAssertEqual(tag.alpha, 1, accuracy: 0.000_1)
     }
 
+    /// A scale transition's new rung bakes off the main thread, and the
+    /// completion runs once the images are in.
+    @MainActor
+    func testTheAtlasBakesATransitionInTheBackground() {
+        let name = "test.background.\(UUID().uuidString)"
+        let request = GemTextureAtlas.BakeRequest(name: name) {
+            UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).image { _ in }
+        }
+        XCTAssertFalse(GemTextureAtlas.shared.hasImage(named: name))
+        let done = expectation(description: "baked")
+        GemTextureAtlas.shared.bakeInBackground([request]) {
+            XCTAssertTrue(GemTextureAtlas.shared.hasImage(named: name))
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 10)
+        GemTextureAtlas.shared.removeImages(named: [name])
+        let ranAtOnce = expectation(description: "at once")
+        GemTextureAtlas.shared.bakeInBackground([]) { ranAtOnce.fulfill() }
+        // Nothing missing: the completion already ran, before any wait.
+        wait(for: [ranAtOnce], timeout: 0)
+    }
+
     /// Ten gems meeting stay solid and light up, and the core's labels
     /// step aside until the crystal has flashed.
     @MainActor

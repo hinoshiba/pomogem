@@ -952,8 +952,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// `JarScalePolicy.transitionDuration` and move the visual and the
     /// physics radius together, a few percent a frame, so the solver
     /// separates growing neighbours gently; the pile is woken for them and
-    /// a wall rescue runs when they end. The misses of the new size are
-    /// baked first in one parallel pass.
+    /// a wall rescue runs when they end. The misses of the new size bake in
+    /// one parallel pass: off the main thread for an animated change (the
+    /// bodies keep their textures until it is in, round 12), at once for an
+    /// instant one (a restore, a jar not yet drawn).
     private func applyJarScale(_ rawScale: CGFloat, animated: Bool) {
         scheduledJarScale = nil
         appliesScheduledJarScale = false
@@ -966,12 +968,24 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         guard needsChange else { return }
         jarScale = newScale
         jarScaleChangeCount += 1
-        bakeBodies(for: bodies.map(\.descriptor))
         let duration = animated && view != nil && hasRenderedFrame ? JarScalePolicy.transitionDuration : 0
+        let bakesAhead = duration > 0 && Self.bakesScaleTransitionsInBackground
+        if bakesAhead {
+            let change = jarScaleChangeCount
+            GemTextureAtlas.shared.bakeInBackground(bakeRequests(for: bodies.map(\.descriptor))) { [weak self] in
+                // A newer change hands its own textures over.
+                guard let self, self.jarScaleChangeCount == change else { return }
+                self.livePebbles.forEach { $0.adoptJarScaleTexture() }
+                if self.isIdlePaused { self.requestRedraw() }
+            }
+        } else {
+            bakeBodies(for: bodies.map(\.descriptor))
+        }
         for pebble in bodies {
             pebble.transitionJarScale(
                 to: JarScalePolicy.bodyScale(for: pebble.descriptor, studyScale: newScale),
-                duration: duration
+                duration: duration,
+                refreshesTexture: !bakesAhead
             )
             pebble.physicsBody?.isResting = false
         }
@@ -1450,17 +1464,31 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 #if DEBUG && targetEnvironment(simulator)
         guard !JarFrameProbe.disablesPrebake else { return }
 #endif
+        GemTextureAtlas.shared.bakeMissing(bakeRequests(for: descriptors))
+    }
+
+    /// The body bakes `descriptors` need at the current jar scale.
+    private func bakeRequests(for descriptors: [PebbleDescriptor]) -> [GemTextureAtlas.BakeRequest] {
         let scale = artworkScale
         let studyScale = jarScale
-        GemTextureAtlas.shared.bakeMissing(
-            descriptors.compactMap {
-                PebbleNode.bakeRequest(
-                    for: $0,
-                    scale: scale,
-                    jarScale: JarScalePolicy.bodyScale(for: $0, studyScale: studyScale)
-                )
-            }
-        )
+        return descriptors.compactMap {
+            PebbleNode.bakeRequest(
+                for: $0,
+                scale: scale,
+                jarScale: JarScalePolicy.bodyScale(for: $0, studyScale: studyScale)
+            )
+        }
+    }
+
+    /// Whether an animated scale change bakes its new rung off the main
+    /// thread (the Debug frame probe can measure the former synchronous
+    /// bake by turning the pre-bake off).
+    private static var bakesScaleTransitionsInBackground: Bool {
+#if DEBUG && targetEnvironment(simulator)
+        !JarFrameProbe.disablesPrebake
+#else
+        true
+#endif
     }
 
     private func deterministicAngle(for id: UUID) -> CGFloat {

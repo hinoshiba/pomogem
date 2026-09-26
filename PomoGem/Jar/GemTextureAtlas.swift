@@ -256,6 +256,33 @@ final class GemTextureAtlas {
         }
     }
 
+    /// Bakes the missing images of `requests` off the main thread (user
+    /// initiated: a jar waits to show them) and keeps them; `completion`
+    /// runs on the main actor once they are in, at once when nothing is
+    /// missing. A jar-scale transition uses it (round 12), so the landing
+    /// or fusion beat never waits for a whole pile's re-bake: the bodies
+    /// keep their current textures meanwhile.
+    func bakeInBackground(
+        _ requests: [BakeRequest],
+        completion: @escaping @MainActor @Sendable () -> Void
+    ) {
+        var seen = Set<String>()
+        let missing = requests.filter { entries[$0.name] == nil && seen.insert($0.name).inserted }
+        guard !missing.isEmpty else {
+            completion()
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let images = Self.bake(missing)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    GemTextureAtlas.shared.insert(images)
+                    completion()
+                }
+            }
+        }
+    }
+
     /// Whether a launch pre-bake is still running (tests).
     var isPrewarming: Bool { activePrewarm != nil }
 

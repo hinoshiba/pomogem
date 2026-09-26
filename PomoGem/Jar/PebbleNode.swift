@@ -669,8 +669,11 @@ final class PebbleNode: SKShapeNode {
     /// (smoothstep; 0 = at once). Visual and physics radius move together
     /// (SpriteKit scales the body with the node), so a growing pile pushes
     /// its neighbours apart a little each frame instead of overlapping them
-    /// at once. The body texture is re-baked for the target size first.
-    func transitionJarScale(to rawTarget: CGFloat, duration: TimeInterval) {
+    /// at once. The body texture is re-baked for the target size first,
+    /// unless `refreshesTexture` is false: then the current texture carries
+    /// the transition (a few percent soft for at most half a second) until
+    /// the scene hands the new one over (`adoptJarScaleTexture`).
+    func transitionJarScale(to rawTarget: CGFloat, duration: TimeInterval, refreshesTexture: Bool = true) {
         let target = Self.sanitizedJarScale(rawTarget)
         // Already there, or already on its way (a birth pop included).
         guard abs(target - jarScaleTarget) > 0.0001 else { return }
@@ -678,7 +681,7 @@ final class PebbleNode: SKShapeNode {
         // A birth pop still in flight hands its current size over.
         removeAction(forKey: Self.birthActionKey)
         jarScaleTarget = target
-        refreshBodyTexture(forJarScale: target)
+        if refreshesTexture { refreshBodyTexture(forJarScale: target) }
         let startScale = jarScale
         let startVisual = xScale
         guard duration > 0, !isRemovedForBake,
@@ -704,6 +707,12 @@ final class PebbleNode: SKShapeNode {
     }
 
     var isTransitioningJarScale: Bool { action(forKey: Self.jarScaleActionKey) != nil }
+
+    /// Shows the body baked for the scale it is moving to (the scene calls
+    /// this once the transition's bake is in; nothing when it already is).
+    func adoptJarScaleTexture() {
+        refreshBodyTexture(forJarScale: jarScaleTarget)
+    }
 
     /// Ends a running transition at its target (the scene calls this before
     /// it freezes, so a paused jar never keeps a half-scaled body).
