@@ -120,11 +120,7 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         math.tap()
         XCTAssertTrue(waitForLabel(picker, containing: "数学"))
 
-        let thirtyMinutes = app.buttons["30分、300グラム加算"]
-        XCTAssertTrue(thirtyMinutes.waitForExistence(timeout: 4))
-        thirtyMinutes.tap()
-        let confirm = app.buttons["manual.confirm"]
-        XCTAssertTrue(confirm.waitForExistence(timeout: 4))
+        let confirm = chooseThirtyMinutes(scrolling: false)
         // No swipe: choosing a duration must put the commit button on screen.
         XCTAssertTrue(waitForHittable(confirm), "確認して積む must be reachable right after choosing a duration")
         let summary = app.descendants(matching: .any).matching(
@@ -152,10 +148,7 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
     func testManualEntryConfirmIsReachableAtAccessibilitySize() {
         launch(accessibility5: true)
         openMenuRow("時間を手動で積む")
-        let thirtyMinutes = app.buttons["30分、300グラム加算"]
-        XCTAssertTrue(scrollUntilHittable(thirtyMinutes))
-        thirtyMinutes.tap()
-        let confirm = app.buttons["manual.confirm"]
+        let confirm = chooseThirtyMinutes(scrolling: true)
         XCTAssertTrue(waitForHittable(confirm), "確認して積む must stay reachable at AX5")
         saveScreenshot("manual-confirm-ax5")
         app.buttons["閉じる"].firstMatch.tap()
@@ -438,13 +431,36 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
     /// lives three seconds, so callers look for it before anything else.
     private func addThirtyMinutesManually() {
         openMenuRow("時間を手動で積む")
-        let thirtyMinutes = app.buttons["30分、300グラム加算"]
-        XCTAssertTrue(thirtyMinutes.waitForExistence(timeout: 5))
-        XCTAssertTrue(scrollUntilHittable(thirtyMinutes))
-        thirtyMinutes.tap()
-        let confirm = app.buttons["manual.confirm"]
+        let confirm = chooseThirtyMinutes(scrolling: true)
         XCTAssertTrue(waitForHittable(confirm))
         confirm.tap()
+    }
+
+    /// Chooses 30分 in 手動で積む and returns its 確認して積む button.
+    ///
+    /// On a loaded Simulator the sheet can still be settling when the tile
+    /// first exists: asking whether it is hittable can then throw
+    /// ("Activation point invalid"), and a tap can be lost. A recording of a
+    /// failed run shows the sheet at rest with no duration chosen. So wait
+    /// for the tile to stop moving (`waitUntilFrameSettles`), and tap it again
+    /// if no confirmation came.
+    /// Choosing a duration only sets it, so a second tap changes nothing
+    /// else. Callers still check that the confirmation is on screen without
+    /// a swipe.
+    private func chooseThirtyMinutes(scrolling: Bool) -> XCUIElement {
+        let thirtyMinutes = app.buttons["30分、300グラム加算"]
+        XCTAssertTrue(thirtyMinutes.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitUntilFrameSettles(thirtyMinutes), "The 手動で積む sheet must come to rest")
+        if scrolling {
+            XCTAssertTrue(scrollUntilHittable(thirtyMinutes))
+        }
+        let confirm = app.buttons["manual.confirm"]
+        thirtyMinutes.tap()
+        if !confirm.waitForExistence(timeout: 3), thirtyMinutes.exists, thirtyMinutes.isHittable {
+            thirtyMinutes.tap()
+        }
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "Choosing 30分 must show 確認して積む")
+        return confirm
     }
 
     /// The UI-test store starts with one theme (英語); add a second one.

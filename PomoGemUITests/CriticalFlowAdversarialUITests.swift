@@ -177,6 +177,10 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
                     app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.62)))
         }
         XCTAssertTrue(customTimer.exists && customTimer.isHittable)
+        // Each drag leaves the list coasting for a moment. On a 4.7-inch
+        // iPhone the frames below were read mid-coast (a preset still under
+        // the navigation bar) although the list came to rest as intended.
+        XCTAssertTrue(waitUntilFrameSettles(customTimer))
         XCTAssertEqual(customTimer.value as? String, "未選択")
         let navigationBottom = app.navigationBars["設定"].frame.maxY
         for minutes in [25, 45, 60, 90] {
@@ -756,7 +760,16 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         note.tap()
         note.typeText("合格")
         let save = app.buttons["achievement.editor.save"]
-        XCTAssertTrue(scrollUntilHittable(save, swiping: .up))
+        // Pinned like 「成果を積む」: reachable with the keyboard still up, on
+        // every iPhone size, without scrolling.
+        XCTAssertTrue(save.waitForExistence(timeout: 4))
+        XCTAssertTrue(waitUntilFrameSettles(save))
+        XCTAssertTrue(save.isHittable, "変更を保存 must stay above the keyboard while the memo is typed")
+        XCTAssertTrue(app.keyboards.firstMatch.exists, "The premise: the memo keyboard is still up")
+        let typing = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        typing.name = "Milestone editor — 変更を保存 above the keyboard"
+        typing.lifetime = .keepAlways
+        add(typing)
         save.tap()
 
         XCTAssertTrue(app.navigationBars["記録"].waitForExistence(timeout: 4))
@@ -777,9 +790,16 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
         ).firstMatch
         // A row cut by the half-height sheet's bottom edge reports hittable,
         // but its visible sliver sits in the home-indicator area. Scroll
-        // until the whole row is on screen.
-        for _ in 0..<8 where !isFullyVisible(action) {
-            app.swipeUp()
+        // until the whole row is on screen. Short drags, and a check only
+        // once the list has stopped: at AX5 on a 4.7-inch iPhone a fling
+        // coasted past the row, and a tap on a still-moving list only stops
+        // it, so the menu stayed open.
+        for _ in 0..<8 {
+            if action.exists { _ = waitUntilFrameSettles(action, timeout: 3) }
+            if isFullyVisible(action) { break }
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+                .press(forDuration: 0.05, thenDragTo:
+                    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
         }
         XCTAssertTrue(isFullyVisible(action), "Missing menu action: \(title)")
         action.tap()

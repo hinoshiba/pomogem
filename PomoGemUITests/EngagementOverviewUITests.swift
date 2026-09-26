@@ -20,11 +20,7 @@ final class EngagementOverviewUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
-        let staleDismiss = app.buttons["reward.dismiss"]
-        if staleDismiss.waitForExistence(timeout: 2), staleDismiss.isHittable {
-            staleDismiss.tap()
-            XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
-        }
+        assertNoRewardCardFromAnEarlierTest(in: app)
         app.buttons["home.duration-picker"].tap()
 
         let demoDuration = app.buttons["12秒、DEMO"]
@@ -463,12 +459,9 @@ final class EngagementOverviewUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 12))
 
-        // UserDefaults outlives the dedicated SwiftData fixture. A receipt
-        // left by an interrupted earlier test must not contaminate this case.
-        let staleDismiss = app.buttons["休憩の提案を閉じる"]
-        if staleDismiss.waitForExistence(timeout: 1), staleDismiss.isHittable {
-            staleDismiss.tap()
-        }
+        // UserDefaults outlives the dedicated SwiftData fixture. The clean
+        // launch above dropped every receipt an earlier test left there.
+        assertNoRewardCardFromAnEarlierTest(in: app)
 
         app.buttons["home.duration-picker"].tap()
         let demoDuration = app.buttons["12秒、DEMO"]
@@ -500,23 +493,30 @@ final class EngagementOverviewUITests: XCTestCase {
         let recoveredProgress = app.descendants(matching: .any)["reward.fusion-progress"]
         XCTAssertTrue(recoveredProgress.waitForExistence(timeout: 3))
         XCTAssertTrue(recoveredProgress.label.contains("×10へ 1/10"), recoveredProgress.label)
+        // The saved gem waits above the jar while its card is up, and closing
+        // the card drops it (RuntimeFlowAuditUITests pins that order). A
+        // relaunch keeps the order: nothing in the jar yet, then one drop.
         XCTAssertTrue(
-            waitForProbeValue(
-                in: app,
-                containing: ["count=1", ":250"],
-                timeout: 8
-            ),
-            "Relaunch must retain exactly one persisted 250g pebble"
+            waitForProbeValue(in: app, containing: ["count=0;"], timeout: 8),
+            "The recovered card must still hold its gem back until it is closed"
         )
 
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        attachment.name = "Recovered Reward Receipt — one saved pebble"
+        attachment.name = "Recovered Reward Receipt — gem waiting for the card"
         attachment.lifetime = .keepAlways
         add(attachment)
 
         let dismiss = app.buttons["休憩の提案を閉じる"]
         XCTAssertTrue(dismiss.waitForExistence(timeout: 3))
         dismiss.tap()
+        XCTAssertTrue(
+            waitForProbeValue(
+                in: app,
+                containing: ["count=1;", ":250", "dropLanded=1"],
+                timeout: 10
+            ),
+            "Closing the recovered card must land exactly the one persisted 250g pebble"
+        )
         app.terminate()
         app.launch()
 
@@ -539,11 +539,102 @@ final class EngagementOverviewUITests: XCTestCase {
         XCTAssertTrue(
             waitForProbeValue(
                 in: app,
-                containing: ["count=1", ":250"],
+                containing: ["count=1;", ":250"],
                 timeout: 8
             ),
             "Acknowledging the receipt must not delete or duplicate the study record"
         )
+        app.terminate()
+    }
+
+    /// The other side of the test above. A local preview opens a new, empty
+    /// in-memory store on every launch, so the previous process's receipt
+    /// names a pebble this store never had. Shown again, its card would drop
+    /// a gem that can never land, and the start button would stay disabled
+    /// for every later test on the simulator.
+    func testAnInMemoryRelaunchDoesNotInheritTheEarlierStoresReceipt() {
+        let app = XCUIApplication()
+        app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        PomoGemUITestLanguage.configureJapanese(app)
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 12))
+        assertNoRewardCardFromAnEarlierTest(in: app)
+
+        app.buttons["home.duration-picker"].tap()
+        let demoDuration = app.buttons["12秒、DEMO"]
+        XCTAssertTrue(demoDuration.waitForExistence(timeout: 4))
+        demoDuration.tap()
+        let demoLauncher = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "12秒集中する")
+        ).firstMatch
+        XCTAssertTrue(demoLauncher.waitForExistence(timeout: 5))
+        demoLauncher.tap()
+        stopCompletionAlertIfPresented(in: app)
+        let bridge = app.descendants(matching: .any)["reward.bridge"]
+        XCTAssertTrue(
+            bridge.waitForExistence(timeout: 25),
+            "The premise: the completion is saved and its card is waiting"
+        )
+
+        // End the process with the card still up, as an interrupted test does.
+        app.terminate()
+        app.launch()
+
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 12))
+        XCTAssertFalse(
+            bridge.waitForExistence(timeout: 3),
+            "A new in-memory store must not show the replaced store's completion card"
+        )
+        XCTAssertTrue(
+            waitForProbeValue(in: app, containing: ["count=0;"], timeout: 5),
+            "The new store starts empty, so the jar has no gem to wait for"
+        )
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            launcher.isEnabled,
+            "No stale receipt may keep the start button disabled"
+        )
+        app.terminate()
+    }
+
+    /// A running timer survives the test's own relaunch, which relaunch tests
+    /// rely on, but the next test must open on Home. Launching again with a
+    /// new `PomoGemUITestScenario` identifier stands in for that next test.
+    func testATimerLeftRunningReachesItsOwnRelaunchButNotTheNextTest() {
+        let app = XCUIApplication()
+        app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        PomoGemUITestLanguage.configureJapanese(app)
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 12))
+
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 5))
+        XCTAssertTrue(launcher.label.contains("25分集中する"), launcher.label)
+        launcher.tap()
+        let timer = app.descendants(matching: .any)["focus.timer-display"].firstMatch
+        XCTAssertTrue(timer.waitForExistence(timeout: 8), "The premise: a 25-minute focus is running")
+
+        // The same test relaunches: the running focus comes back.
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(
+            timer.waitForExistence(timeout: 12),
+            "A relaunch inside one test must still recover its running focus"
+        )
+
+        // The next test's first launch: Home, with nothing left running.
+        app.terminate()
+        app.launchEnvironment[PomoGemUITestScenario.environmentKey] = UUID().uuidString
+        app.launch()
+        XCTAssertTrue(
+            app.buttons["メニュー"].waitForExistence(timeout: 12),
+            "A new test must open on Home, not on the earlier test's timer"
+        )
+        XCTAssertFalse(timer.exists)
+        XCTAssertTrue(app.buttons["home.focus-launcher"].isHittable)
         app.terminate()
     }
 
@@ -649,19 +740,6 @@ final class EngagementOverviewUITests: XCTestCase {
         add(lower)
     }
 
-    @discardableResult
-    private func stopCompletionAlertIfPresented(
-        in app: XCUIApplication,
-        timeout: TimeInterval = 25
-    ) -> Bool {
-        let stop = app.buttons["focus.completion-alert.stop"]
-        guard stop.waitForExistence(timeout: timeout) else { return false }
-        XCTAssertEqual(stop.label, "終了アラートを止める")
-        XCTAssertTrue(stop.isHittable)
-        stop.tap()
-        return true
-    }
-
     private func scrollUntilVisible(
         _ element: XCUIElement,
         in app: XCUIApplication,
@@ -727,6 +805,17 @@ final class EngagementOverviewUITests: XCTestCase {
         element.label
             .replacingOccurrences(of: ",", with: "")
             .replacingOccurrences(of: "，", with: "")
+    }
+
+    /// The app drops the reward receipts an earlier test's store left in
+    /// UserDefaults whenever it opens a new or cleaned store
+    /// (`UITestLocalStateIsolation`). Tapping such a card away used to leave
+    /// a gem that could never land, and the start button stayed disabled.
+    private func assertNoRewardCardFromAnEarlierTest(in app: XCUIApplication) {
+        XCTAssertFalse(
+            app.descendants(matching: .any)["reward.bridge"].waitForExistence(timeout: 1),
+            "A new store must not show another test's completion card"
+        )
     }
 
     private func rewardReceiptApp(
