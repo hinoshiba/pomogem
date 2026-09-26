@@ -1,6 +1,28 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@。累計%@、集中%lld粒、成果%@個" : {
+      "comment" : "VoiceOver, menu metrics while iCloud is checked: status, lifetime mass, focus count, achievement count",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@。累計%2$@、集中%3$lld粒、成果%4$@個"
+          }
+        }
+      }
+    },
+    "%@。累計は確認が済むと表示します。この端末で確認済みの集中%lld粒、成果%@個" : {
+      "comment" : "VoiceOver, menu metrics while iCloud is checked and no lifetime total can be shown: status, focus count, achievement count",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@。累計は確認が済むと表示します。この端末で確認済みの集中%2$lld粒、成果%3$@個"
+          }
+        }
+      }
+    },
     "アプリの時間を積む" : {
       "comment" : "Home menu row: open the Screen Time settings"
     },

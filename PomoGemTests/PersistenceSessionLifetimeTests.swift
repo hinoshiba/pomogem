@@ -718,7 +718,10 @@ private struct DeadlineLifecycleHost: View {
         case .preparePersistence:
             setStatus("preparing")
             launchAttempt += 1
-        case .retireCloudSession:
+        // quality-01. A published session is now held for the background
+        // grace first; this model starts where that grace has ended, which is
+        // the same retirement the tests below exercise.
+        case .retireCloudSession, .deferCloudRetirement:
             loaded = false
             setStatus("retiring")
             isQuiescing = true

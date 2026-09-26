@@ -931,40 +931,46 @@ final class BoundedLaunchPreparationTests: XCTestCase {
         XCTAssertFalse(presentation.isCloudVerificationPending)
     }
 
-    func testCloudPresentationStartsPendingAndNeverUsesLowerBoundCopy() {
+    func testCloudPresentationStartsPendingAndCaptionsWhatItShows() {
         let pending = AggregateProjectionPresentationContext.initial(
             for: .cloudKit
         )
         XCTAssertTrue(pending.isCloudVerificationPending)
-        XCTAssertFalse(pending.allowsAggregateSummaries)
+        XCTAssertFalse(pending.allowsAggregateSummaries,
+                       "Sharing and exports still wait for verification")
+        // sync-03 (owner-approved, 2026-09-24; narrowed after review): the
+        // headline shows a value this device can stand behind, captioned, and
+        // 「再集計中」 when it has none (`PendingMassPresentationPolicy`).
         XCTAssertEqual(
-            AggregateProjectionPresentationPolicy.homeMassValue(
-                verifiedValue: "12 kg",
-                context: pending
-            ),
+            AggregateProjectionPresentationPolicy.homeMassValue(deviceValue: "12", context: pending),
+            "12"
+        )
+        XCTAssertEqual(
+            AggregateProjectionPresentationPolicy.homeMassValue(deviceValue: nil, context: pending),
             "再集計中"
         )
-        let values = [
+        XCTAssertEqual(
             AggregateProjectionPresentationPolicy.homeMassUnit(
-                verifiedUnit: "kg",
-                hasLocalLowerBound: true,
-                context: pending
-            ),
-            AggregateProjectionPresentationPolicy.homeCountSummary(
-                count: 12,
-                milestoneSuffix: "",
-                hasLocalLowerBound: true,
-                context: pending
-            ),
-            AggregateProjectionPresentationPolicy.overviewLifetimeValue(
-                verifiedValue: "12 kg",
-                isLocalLowerBound: true,
-                context: pending
-            )
-        ]
-        XCTAssertTrue(values.joined().contains("確認済み"))
-        XCTAssertFalse(values.joined().contains("+"))
-        XCTAssertFalse(values.joined().contains("以上"))
+                verifiedUnit: "kg", hasLocalLowerBound: false, context: pending),
+            "kg", "A device total that covers every session is exact"
+        )
+        XCTAssertEqual(
+            AggregateProjectionPresentationPolicy.homeMassUnit(
+                verifiedUnit: "kg", hasLocalLowerBound: true, context: pending),
+            "kg以上", "A last verified 「以上」 stays 「以上」 while iCloud is checked"
+        )
+        XCTAssertEqual(AggregateProjectionPresentationPolicy.verificationCaption(
+            context: pending, isCloudOfflineSession: false), "iCloudを確認中")
+        XCTAssertEqual(AggregateProjectionPresentationPolicy.verificationCaption(
+            context: pending, isCloudOfflineSession: true), "このiPhoneの集計を確認中")
+        XCTAssertEqual(AggregateProjectionPresentationPolicy.menuMassValue(
+            formattedMass: "12 kg", context: pending), "12 kg",
+            "No 「確認済み」 prefix that reads as a verified total; the strip carries the caption")
+        XCTAssertEqual(AggregateProjectionPresentationPolicy.menuMassValue(
+            formattedMass: nil, context: pending), "再集計中")
+        XCTAssertEqual(AggregateProjectionPresentationPolicy.homeCountSummary(
+            count: 12, milestoneSuffix: "", hasLocalLowerBound: true, context: pending),
+            "この端末で確認済み 12粒")
 
         let pendingOverview = AccumulationOverviewPageScope(
             totalSessionCount: 0,
@@ -973,7 +979,9 @@ final class BoundedLaunchPreparationTests: XCTestCase {
             totalAchievementCount: 0,
             displayedAchievementCount: 0
         )
-        XCTAssertTrue(pendingOverview.emptyShelfMessage.contains("再集計中"))
+        XCTAssertTrue(pendingOverview.emptyShelfMessage.contains("iCloudを確認中"),
+                      "One phrasing for the pending state across Home and 積み上がり")
+        XCTAssertFalse(pendingOverview.emptyShelfMessage.contains("再集計中"))
         XCTAssertFalse(pendingOverview.emptyShelfMessage.contains("最初の一粒"))
 
         let local = AggregateProjectionPresentationContext.initial(
@@ -988,6 +996,17 @@ final class BoundedLaunchPreparationTests: XCTestCase {
             ),
             "kg以上"
         )
+        XCTAssertNil(AggregateProjectionPresentationPolicy.verificationCaption(
+            context: local, isCloudOfflineSession: false))
+        XCTAssertEqual(AggregateProjectionPresentationPolicy.menuMassValue(
+            formattedMass: "12 kg", context: local), "12 kg")
+        var verified = pending
+        verified.markVerified()
+        XCTAssertNil(AggregateProjectionPresentationPolicy.verificationCaption(
+            context: verified, isCloudOfflineSession: false),
+            "The caption disappears the moment verification completes")
+        XCTAssertEqual(AggregateProjectionPresentationPolicy.overviewLifetimeValue(
+            verifiedValue: "12 kg", isLocalLowerBound: true, context: verified), "12 kg以上")
     }
 
     func testMaintenanceLaunchResumeAndRecurringPolicyIsTabIndependent() {
