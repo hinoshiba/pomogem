@@ -28,6 +28,9 @@
     "既定はオフ。集中タイマー中にホーム画面や別のアプリへ移ると、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。" : {
       "comment" : "Settings caption under the return-to-focus reminder switch"
     },
+    "朱色" : {
+      "comment" : "Theme colour swatch (vermilion)"
+    },
     "毎日のリマインダー" : {
       "comment" : "Settings switch title: the opt-in daily reminder"
     },
@@ -37,14 +40,50 @@
     "毎月1日に一度だけ" : {
       "comment" : "Settings switch subtitle: the monthly notification is sent on the 1st"
     },
+    "珊瑚" : {
+      "comment" : "Theme colour swatch (coral)"
+    },
+    "現在の色" : {
+      "comment" : "A theme's saved colour that is not one of the palette swatches"
+    },
+    "琥珀" : {
+      "comment" : "Theme colour swatch (amber)"
+    },
+    "瑠璃" : {
+      "comment" : "Theme colour swatch (lapis blue)"
+    },
+    "空色" : {
+      "comment" : "Theme colour swatch (sky blue)"
+    },
+    "紅藤" : {
+      "comment" : "Theme colour swatch (orchid)"
+    },
+    "緑青" : {
+      "comment" : "Theme colour swatch (verdigris green)"
+    },
+    "若草" : {
+      "comment" : "Theme colour swatch (fresh green)"
+    },
+    "菫" : {
+      "comment" : "Theme colour swatch (violet)"
+    },
+    "藍" : {
+      "comment" : "Theme colour swatch (indigo)"
+    },
     "設定を開く" : {
       "comment" : "Alert button: open this app's notification settings in iOS\nButton: open this app's notification settings in iOS"
     },
     "許可する" : {
       "comment" : "Button: show the iOS notification permission prompt"
     },
+    "赤銅" : {
+      "comment" : "Theme colour swatch (copper)"
+    },
     "通知する時刻" : {
       "comment" : "Settings time picker label for reminders"
+    },
+    "青緑" : {
+      "comment" : "Theme colour swatch (teal)"
     }
   },
   "version" : "1.0"

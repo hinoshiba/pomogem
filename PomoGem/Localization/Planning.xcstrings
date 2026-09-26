@@ -1,7 +1,58 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%@以上" : {
+      "comment" : "Jar total when today's jar is a lower bound; the argument is a mass such as 3.68t"
+    },
+    "この計画で積む分" : {
+      "comment" : "Title of the card that previews only what the plan adds"
+    },
+    "その時点の瓶が満ちるまで" : {
+      "comment" : "VoiceOver: progress of the bottle cycle at the previewed month"
+    },
+    "スライダーを右へ動かすと、この計画で積む分が現れます" : {
 
+    },
+    "今日" : {
+      "comment" : "The start of the plan's timeline: today"
+    },
+    "今日の瓶 %@ ＋ この計画 %@" : {
+      "comment" : "Breakdown of the jar total: today's jar mass, then the mass the plan adds",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "今日の瓶 %1$@ ＋ この計画 %2$@"
+          }
+        }
+      }
+    },
+    "今日の瓶 %@以上 ＋ この計画 %@" : {
+      "comment" : "Breakdown when today's jar is a lower bound: today's jar mass, then the mass the plan adds",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "今日の瓶 %1$@以上 ＋ この計画 %2$@"
+          }
+        }
+      }
+    },
+    "今日の瓶の合計を確認しているあいだは、この計画で積む分だけを表示します。" : {
+      "comment" : "Shown while Home re-counts today's jar (iCloud or this iPhone)"
+    },
+    "増える質量" : {
+      "comment" : "Mass the plan adds, in the results grid"
+    },
+    "星図と瓶は、今日からこの計画で積む分の見え方の予測です。今日までの瓶は含めません。粒のまとまりは予定した完走リズムを、上の時間・質量は集中時間の累計を表します。成果石・実際の休止日は含めません。" : {
+
+    },
+    "瓶の合計" : {
+      "comment" : "Label: today's jar mass plus the mass the plan adds"
+    },
+    "確認中" : {
+      "comment" : "Jar total while Home re-counts today's jar"
+    }
   },
   "version" : "1.0"
 }

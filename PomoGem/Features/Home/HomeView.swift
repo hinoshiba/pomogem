@@ -761,7 +761,8 @@ struct HomeView: View {
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showAccumulationPlan) {
-            AccumulationPlanView()
+            AccumulationPlanView(start: accumulationPlanStart)
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
                 .presentationDragIndicator(.visible)
         }
         .sheet(item: $completedStratum, onDismiss: finishPresentedStratumCelebration) { request in
@@ -1322,6 +1323,19 @@ struct HomeView: View {
         AggregateProjectionPresentationPolicy.menuMassValue(
             formattedMass: presentedLifetimeMassLabel,
             context: aggregateProjectionPresentation
+        )
+    }
+
+    /// home-07: the planning sheet continues from the jar this screen
+    /// shows, qualified the same way (「+」 while older records are still
+    /// being folded in, no mass at all while the total is re-counted).
+    private var accumulationPlanStart: AccumulationPlanStart {
+        if aggregateProjectionPresentation.isCloudVerificationPending {
+            return AccumulationPlanStart(grams: 0, certainty: .recounting)
+        }
+        return AccumulationPlanStart(
+            grams: totalGrams,
+            certainty: localProjectionNeedsMaintenance ? .atLeast : .exact
         )
     }
 

@@ -1250,6 +1250,15 @@ struct RootView: View {
                     deletedAt: deletedAt.addingTimeInterval(TimeInterval(index))
                 ))
             }
+            if let legacyHex = ProcessInfo.processInfo.environment[
+                LocalPreviewLaunchPolicy.legacyThemeColorUITestEnvironmentKey
+            ], !legacyHex.isEmpty {
+                modelContext.insert(Subject(
+                    name: "旧色のテーマ",
+                    colorHex: legacyHex,
+                    sortOrder: 2_001
+                ))
+            }
 #endif
         }
         if modelContext.hasChanges { try modelContext.save() }
@@ -2273,6 +2282,9 @@ struct RootView: View {
             var nextSortOrder = NonnegativeIntPolicy.next(
                 after: retainedSubjects.map(\.sortOrder).max()
             )
+            // a11y-04: each new custom theme takes the first palette colour
+            // that no theme uses yet, archived ones included.
+            var usedColorHexes = retainedSubjects.map(\.colorHex)
             for name in customNames {
                 let normalized = SubjectNamePolicy.comparisonKey(name)
                 if let existing = retainedSubjects.first(where: {
@@ -2289,16 +2301,18 @@ struct RootView: View {
                 }
                 guard remainingNewSubjectSlots > 0 else { continue }
                 guard knownNames.insert(normalized).inserted else { continue }
+                let colorHex = onboardingSubjectColor(
+                    for: name,
+                    avoiding: usedColorHexes
+                )
                 modelContext.insert(
                     Subject(
                         name: name,
-                        colorHex: onboardingSubjectColor(
-                            for: name,
-                            at: nextSortOrder
-                        ),
+                        colorHex: colorHex,
                         sortOrder: nextSortOrder
                     )
                 )
+                usedColorHexes.append(colorHex)
                 nextSortOrder = NonnegativeIntPolicy.next(after: nextSortOrder)
                 remainingNewSubjectSlots -= 1
             }
@@ -2413,20 +2427,12 @@ struct RootView: View {
 
     private func onboardingSubjectColor(
         for name: String,
-        at index: Int
+        avoiding usedColorHexes: [String]
     ) -> String {
         if let preset = SubjectSuggestionCatalog.preset(named: name) {
             return preset.colorHex
         }
-        let palette = [
-            Constants.Color.english,
-            Constants.Color.mathematics,
-            Constants.Color.japanese,
-            Constants.Color.science,
-            Constants.Color.socialStudies,
-            "#D6863A", "#36A7AE", "#D56B82", "#739B45", "#5967C8", "#A76A3F", "#5688A8"
-        ]
-        return palette[index % palette.count]
+        return SubjectPalette.suggestedHex(existing: usedColorHexes)
     }
 
     /// Restores only the durable local timer during cold start. No global timer

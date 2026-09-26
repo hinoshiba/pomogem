@@ -728,7 +728,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 x: cursorX + node.radius,
                 y: min(cursorY + node.radius, interiorRect.maxY - node.radius)
             )
-            node.zRotation = CGFloat.random(in: -.pi ... .pi)
+            // jar-05: the same gem keeps the same angle on every restore, so
+            // the planning preview does not reshuffle when it is rebuilt.
+            node.zRotation = deterministicAngle(for: descriptor.id)
             node.markLanded()
             worldNode.addChild(node)
             cursorX += node.radius * 2
@@ -2278,6 +2280,11 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         origin: DropOrigin = .interior
     ) -> Bool {
         guard acceptedPebbleIDs.insert(descriptor.id).inserted else { return false }
+        // jar-03: every queued gem lands with a thud and a haptic. Start both
+        // engines now, without blocking, while the gem is still falling,
+        // instead of cold-starting them inside the landing's contact callback.
+        soundSynth.prewarm()
+        haptics.prewarm()
         dropQueue.append(
             QueuedDrop(
                 descriptor: descriptor,

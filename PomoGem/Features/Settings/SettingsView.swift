@@ -173,26 +173,29 @@ struct SettingsView: View {
         .sheet(isPresented: $isSubjectEditorPresented, onDismiss: {
             editingSubjectID = nil
         }) {
-            if let editingSubjectID,
-               let subject = subjects.first(where: { $0.id == editingSubjectID }) {
-                SubjectEditorView(
-                    subject: subject,
-                    suggestedColorHex: subject.colorHex
-                ) { name, color, isArchived in
-                    saveSubjectEdits(
+            Group {
+                if let editingSubjectID,
+                   let subject = subjects.first(where: { $0.id == editingSubjectID }) {
+                    SubjectEditorView(
                         subject: subject,
-                        name: name,
-                        color: color,
-                        isArchived: isArchived
+                        suggestedColorHex: subject.colorHex
+                    ) { name, color, isArchived in
+                        saveSubjectEdits(
+                            subject: subject,
+                            name: name,
+                            color: color,
+                            isArchived: isArchived
+                        )
+                    }
+                } else {
+                    SubjectEditorView(
+                        subject: nil,
+                        suggestedColorHex: nextSubjectColor,
+                        onSave: addSubject
                     )
                 }
-            } else {
-                SubjectEditorView(
-                    subject: nil,
-                    suggestedColorHex: nextSubjectColor,
-                    onSave: addSubject
-                )
             }
+            .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .sheet(isPresented: $showCustomDuration) {
             CustomDurationView(
@@ -1334,15 +1337,12 @@ struct SettingsView: View {
         )
     }
 
+    /// a11y-04: a new theme starts on the first palette swatch no theme uses
+    /// yet (archived themes count: their gems are still in the jar), so the
+    /// editor always opens with a swatch selected. It used to be an HSB hue
+    /// step that was never one of the swatches.
     private var nextSubjectColor: String {
-        let hue = Double(subjects.count % Constants.App.maximumSubjects)
-            / Double(Constants.App.maximumSubjects)
-        return UIColor(
-            hue: hue,
-            saturation: Constants.App.subjectColorSaturation,
-            brightness: Constants.App.subjectColorBrightness,
-            alpha: 1
-        ).hexString
+        SubjectPalette.suggestedHex(existing: subjects.map(\.colorHex))
     }
 
     private func addSubject(name: String, colorHex: String, isArchived _: Bool) -> String? {
@@ -2644,26 +2644,40 @@ private struct SubjectEditorView: View {
     let onSave: (String, String, Bool) -> String?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var name: String
     @State private var colorHex: String
     @State private var isArchived: Bool
     @State private var saveError: String?
     @FocusState private var isNameFocused: Bool
 
-    private let palette = [
-        SubjectColorChoice(hex: Constants.Color.english, name: "朱色"),
-        SubjectColorChoice(hex: Constants.Color.mathematics, name: "瑠璃"),
-        SubjectColorChoice(hex: Constants.Color.japanese, name: "紅藤"),
-        SubjectColorChoice(hex: Constants.Color.science, name: "緑青"),
-        SubjectColorChoice(hex: Constants.Color.socialStudies, name: "菫"),
-        SubjectColorChoice(hex: "#D6863A", name: "琥珀"),
-        SubjectColorChoice(hex: "#36A7AE", name: "青緑"),
-        SubjectColorChoice(hex: "#D56B82", name: "珊瑚"),
-        SubjectColorChoice(hex: "#739B45", name: "若草"),
-        SubjectColorChoice(hex: "#5967C8", name: "藍"),
-        SubjectColorChoice(hex: "#A76A3F", name: "赤銅"),
-        SubjectColorChoice(hex: "#5688A8", name: "空色")
-    ]
+    /// Four narrow columns cut every swatch name to its number at the
+    /// accessibility sizes (「2…」); two wider ones keep 「現在の色」 and the
+    /// names readable.
+    private var colorColumns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize
+            ? [GridItem(.adaptive(minimum: 140), spacing: 8)]
+            : [GridItem(.adaptive(minimum: 64, maximum: 92), spacing: 8)]
+    }
+
+    private let palette = SubjectPalette.swatches.map {
+        SubjectColorChoice(hex: $0.hex, name: $0.name)
+    }
+
+    /// A colour this theme was saved with that is not a palette swatch (the
+    /// 1.0.x HSB suggestion made such colours). It is offered as 「現在の色」
+    /// so the editor still shows what the theme looks like, and it is kept
+    /// unless the person picks a swatch.
+    private var currentOffPaletteHex: String? {
+        guard let stored = subject?.colorHex,
+              !SubjectPalette.contains(stored)
+        else { return nil }
+        return stored
+    }
+
+    private func isSelected(_ hex: String) -> Bool {
+        SubjectPalette.normalized(colorHex) == SubjectPalette.normalized(hex)
+    }
 
     private var nameValidationError: SubjectNamePolicy.ValidationError? {
         SubjectNamePolicy.validationError(for: name)
@@ -2729,10 +2743,33 @@ private struct SubjectEditorView: View {
                     }
                 }
                 Section("粒の色") {
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 64, maximum: 92), spacing: 8)],
-                        spacing: 12
-                    ) {
+                    LazyVGrid(columns: colorColumns, spacing: 12) {
+                        if let currentOffPaletteHex {
+                            Button {
+                                colorHex = currentOffPaletteHex
+                            } label: {
+                                VStack(spacing: 5) {
+                                    Circle()
+                                        .fill(Color(hex: currentOffPaletteHex))
+                                        .frame(width: 34, height: 34)
+                                        .overlay {
+                                            if isSelected(currentOffPaletteHex) {
+                                                Circle().stroke(.white, lineWidth: 3).padding(-4)
+                                            }
+                                        }
+                                    Text("現在の色", tableName: "Settings", comment: "A theme's saved colour that is not one of the palette swatches")
+                                        .font(.caption2)
+                                        .foregroundStyle(PomoGemTheme.text)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.75)
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 60)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(PomoGemBareButtonStyle())
+                            .accessibilityAddTraits(isSelected(currentOffPaletteHex) ? .isSelected : [])
+                            .accessibilityIdentifier("subject-editor.color.current")
+                        }
                         ForEach(Array(palette.enumerated()), id: \.element.id) { index, choice in
                             Button {
                                 colorHex = choice.hex
@@ -2742,7 +2779,7 @@ private struct SubjectEditorView: View {
                                         .fill(Color(hex: choice.hex))
                                         .frame(width: 34, height: 34)
                                         .overlay {
-                                            if colorHex == choice.hex {
+                                            if isSelected(choice.hex) {
                                                 Circle().stroke(.white, lineWidth: 3).padding(-4)
                                             }
                                         }
@@ -2757,7 +2794,7 @@ private struct SubjectEditorView: View {
                             }
                             .buttonStyle(PomoGemBareButtonStyle())
                             .accessibilityLabel("色候補\(index + 1)、\(choice.name)")
-                            .accessibilityAddTraits(colorHex == choice.hex ? .isSelected : [])
+                            .accessibilityAddTraits(isSelected(choice.hex) ? .isSelected : [])
                         }
                     }
                     .padding(.vertical, 8)
@@ -2842,14 +2879,4 @@ private struct SubjectColorChoice: Identifiable {
     let name: String
 
     var id: String { hex }
-}
-
-private extension UIColor {
-    var hexString: String {
-        guard let components = cgColor.components, components.count >= 3 else { return Constants.Color.textMute }
-        let red = Int(round(components[0] * 255))
-        let green = Int(round(components[1] * 255))
-        let blue = Int(round(components[2] * 255))
-        return String(format: "#%02X%02X%02X", red, green, blue)
-    }
 }

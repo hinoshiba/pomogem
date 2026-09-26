@@ -1,3 +1,4 @@
+import SpriteKit
 import XCTest
 @testable import PomoGem
 
@@ -206,5 +207,95 @@ final class AccumulationPlanProjectionTests: XCTestCase {
         XCTAssertEqual(projection.grams, 156_540)
         XCTAssertEqual(projection.representedGrams, projection.grams)
         XCTAssertTrue(projection.isInternallyConsistent)
+    }
+
+    // MARK: - Starting from today's jar (home-07)
+
+    func testThePlanContinuesFromTodaysJar() {
+        let projection = AccumulationPlanProjection.make(
+            plan: .suggested,
+            elapsedMonths: 12
+        )
+        // 200kg today: one year of the suggested plan (about 91kg) crosses
+        // the 250kg milestone only when today's jar is counted.
+        let start = AccumulationPlanStart(grams: 200_000, certainty: .exact)
+
+        XCTAssertEqual(start.jarGrams(adding: projection.grams), 200_000 + projection.grams)
+        // The bottle cycle and the long-term milestones run on the jar total,
+        // not on the plan alone.
+        let presence = JarAccumulationPresencePresentation.state(
+            totalGrams: start.jarGrams(adding: projection.grams)
+        )
+        XCTAssertEqual(presence.totalGrams, 200_000 + projection.grams)
+        XCTAssertGreaterThan(
+            presence.completedMajorMilestoneCount,
+            JarAccumulationPresencePresentation.state(
+                totalGrams: projection.grams
+            ).completedMajorMilestoneCount
+        )
+        // Month zero is today's jar, not an empty one.
+        let today = AccumulationPlanProjection.make(plan: .suggested, elapsedMonths: 0)
+        XCTAssertEqual(start.jarGrams(adding: today.grams), 200_000)
+        XCTAssertTrue(JarAccumulationPresencePresentation.state(
+            totalGrams: start.jarGrams(adding: today.grams)
+        ).isVisible)
+    }
+
+    func testARecountingJarStartsTheProjectionFromZero() {
+        let recounting = AccumulationPlanStart(grams: 30_000, certainty: .recounting)
+        XCTAssertEqual(recounting.grams, 0)
+        XCTAssertEqual(recounting.jarGrams(adding: 2_500), 2_500)
+
+        let atLeast = AccumulationPlanStart(grams: 30_000, certainty: .atLeast)
+        XCTAssertEqual(atLeast.jarGrams(adding: 2_500), 32_500)
+
+        XCTAssertEqual(AccumulationPlanStart(grams: -5, certainty: .exact).grams, 0)
+        XCTAssertEqual(AccumulationPlanStart.empty.jarGrams(adding: 250), 250)
+        XCTAssertEqual(
+            AccumulationPlanStart(grams: .max, certainty: .exact).jarGrams(adding: 1),
+            .max
+        )
+    }
+
+    func testThePlanOffersTheFreeTimerPresets() {
+        // AccumulationPlanView lists these as its duration choices.
+        XCTAssertEqual(
+            PomodoroDuration.freePresets.compactMap(\.minutes),
+            [25, 45, 60, 90]
+        )
+        XCTAssertTrue(PomodoroDuration.freePresets.compactMap(\.minutes).contains(
+            AccumulationPlanProjection.Plan.suggested.minutesPerSession
+        ))
+    }
+
+    // MARK: - Preview jar (jar-05)
+
+    /// The planning preview restores its jar again whenever the timeline
+    /// rests on a new month. The same gems keep the same angles, so the jar
+    /// does not visibly reshuffle.
+    @MainActor
+    func testRebuildingThePreviewJarKeepsEveryGemsAngle() {
+        let descriptors = AccumulationPlanProjection.make(
+            plan: .suggested,
+            elapsedMonths: 120
+        ).descriptors
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+
+        scene.restore(pebbles: descriptors)
+        let first = Self.angles(in: scene)
+        scene.restore(pebbles: descriptors)
+
+        XCTAssertFalse(first.isEmpty)
+        XCTAssertEqual(Self.angles(in: scene), first)
+    }
+
+    @MainActor
+    private static func angles(in scene: JarScene) -> [UUID: CGFloat] {
+        var angles: [UUID: CGFloat] = [:]
+        scene.enumerateChildNodes(withName: "//*") { node, _ in
+            guard let pebble = node as? PebbleNode else { return }
+            angles[pebble.descriptor.id] = pebble.zRotation
+        }
+        return angles
     }
 }

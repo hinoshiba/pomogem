@@ -24,7 +24,12 @@ final class Haptics {
     private let supportsCoreHaptics: Bool
     private var engine: CHHapticEngine?
     private var engineIsRunning = false
+    /// An asynchronous start is in flight. Its completion is fenced by
+    /// `engineStartGeneration`, which every stop advances.
+    private var isStartingEngine = false
+    private var engineStartGeneration: UInt64 = 0
     private var timerCompletionPlayer: CHHapticPatternPlayer?
+    private var didBecomeActiveObserver: NSObjectProtocol?
     private let lightFallback = UIImpactFeedbackGenerator(style: .light)
     private let mediumFallback = UIImpactFeedbackGenerator(style: .medium)
     private let heavyFallback = UIImpactFeedbackGenerator(style: .heavy)
@@ -32,6 +37,24 @@ final class Haptics {
     private init() {
         supportsCoreHaptics = CHHapticEngine.capabilitiesForHardware().supportsHaptics
         configureEngineIfSupported()
+        // Returning from the background finds the engine stopped by the
+        // system. Warm it before the first cue (a completion cue plays as
+        // the person comes back), so that cue is not the one that waits.
+        didBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { [weak self] in
+                self?.prewarm()
+            }
+        }
+    }
+
+    deinit {
+        if let didBecomeActiveObserver {
+            NotificationCenter.default.removeObserver(didBecomeActiveObserver)
+        }
     }
 
     func prepare() {
@@ -39,7 +62,32 @@ final class Haptics {
         lightFallback.prepare()
         mediumFallback.prepare()
         heavyFallback.prepare()
-        startEngine()
+        prewarm()
+    }
+
+    /// Starts the haptic engine without blocking the main thread, ahead of a
+    /// cue that is about to happen (a gem entering the jar, the app becoming
+    /// active). The synchronous `start()` in `play` stays as the fallback for
+    /// a cue that arrives first; it measured 46 ms for the first start in a
+    /// process on an iPhone 12 mini (jar-03).
+    func prewarm() {
+        guard isEnabled,
+              supportsCoreHaptics,
+              let engine,
+              !engineIsRunning,
+              !isStartingEngine
+        else { return }
+        isStartingEngine = true
+        let generation = engineStartGeneration
+        engine.start { [weak self] error in
+            Task { @MainActor [weak self] in
+                guard let self, self.engineStartGeneration == generation else { return }
+                self.isStartingEngine = false
+                if error == nil {
+                    self.engineIsRunning = true
+                }
+            }
+        }
     }
 
     func playLanding(impactSpeed: CGFloat) {
@@ -313,6 +361,8 @@ final class Haptics {
                     // A reset invalidates the prior running state. Retrying
                     // here can form a reset/start loop; the next play/prepare
                     // is the intentional, on-demand retry boundary.
+                    self?.engineStartGeneration &+= 1
+                    self?.isStartingEngine = false
                     self?.engineIsRunning = false
                     self?.timerCompletionPlayer = nil
                 }
@@ -321,7 +371,9 @@ final class Haptics {
                 Task { @MainActor [weak self] in
                     // In particular, do not defeat idle auto-shutdown or try
                     // to restart while suspended/interrupted. Every stopped
-                    // reason is safely retried by the next play/prepare call.
+                    // reason is safely retried by the next play/prewarm call.
+                    self?.engineStartGeneration &+= 1
+                    self?.isStartingEngine = false
                     self?.engineIsRunning = false
                     self?.timerCompletionPlayer = nil
                 }
@@ -337,6 +389,9 @@ final class Haptics {
         guard isEnabled, supportsCoreHaptics, let engine else { return false }
         if engineIsRunning { return true }
         do {
+            // Normally `prewarm` has already started the engine without
+            // blocking. A cue that arrives before that start has finished
+            // starts it here synchronously, as every cue used to.
             try engine.start()
             engineIsRunning = true
             return true
@@ -348,6 +403,8 @@ final class Haptics {
     }
 
     private func stopEngine() {
+        engineStartGeneration &+= 1
+        isStartingEngine = false
         engineIsRunning = false
         timerCompletionPlayer = nil
         engine?.stop(completionHandler: nil)

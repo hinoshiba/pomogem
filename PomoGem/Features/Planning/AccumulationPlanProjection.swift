@@ -372,3 +372,34 @@ struct AccumulationPlanProjection: Equatable, Sendable {
         return value ^ (value >> 31)
     }
 }
+
+/// Today's jar, the plan's starting point (home-07). Home passes the total it
+/// already shows; the plan only adds to it and never writes it anywhere.
+struct AccumulationPlanStart: Equatable, Sendable {
+    enum Certainty: Equatable, Sendable {
+        /// Home's total is complete.
+        case exact
+        /// Home is still folding older records into its totals, so the jar
+        /// holds at least `grams`. Home marks the same total with 「+」.
+        case atLeast
+        /// iCloud is re-counting the jar and Home shows 「再集計中」 instead
+        /// of a mass. The plan shows none either and starts from zero.
+        case recounting
+    }
+
+    let grams: Int
+    let certainty: Certainty
+
+    init(grams: Int, certainty: Certainty) {
+        self.grams = certainty == .recounting ? 0 : max(0, grams)
+        self.certainty = certainty
+    }
+
+    static let empty = AccumulationPlanStart(grams: 0, certainty: .exact)
+
+    /// Today's jar plus what the plan adds, saturating instead of trapping.
+    func jarGrams(adding planGrams: Int) -> Int {
+        let (sum, overflow) = grams.addingReportingOverflow(max(0, planGrams))
+        return overflow ? Int.max : sum
+    }
+}
