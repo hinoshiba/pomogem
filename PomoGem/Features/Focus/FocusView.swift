@@ -988,6 +988,13 @@ struct FocusView: View {
                     .foregroundStyle(PomoGemTheme.muted)
             }
             Spacer(minLength: 0)
+            // Focus music (Docs/FocusMusic.md): owns its own sheet and the
+            // opt-in autoplay for a focus that has just started here.
+            FocusMusicButton(focusStart: FocusMusicButton.FocusStart(
+                sessionID: engine.phase == .focusing ? engine.currentSessionID : nil,
+                startedAt: engine.phaseStartedAt,
+                isStartedOnThisIPhone: recoveryOrigin == .local
+            ))
             TimerRotationControls()
         }
         .padding(.horizontal, 24)

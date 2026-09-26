@@ -242,6 +242,7 @@ struct BreakTimerView: View {
     private var timerHeader: some View {
         HStack {
             TimerRotationControls()
+            FocusMusicButton()
             Spacer()
             Button { closeBreak() } label: {
                 Image(systemName: "xmark")

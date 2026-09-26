@@ -1,7 +1,150 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "Apple Musicについて見る" : {
 
+    },
+    "Apple Musicに登録すると、ここから再生できます。" : {
+
+    },
+    "Apple Musicの登録状況を確認できませんでした。通信を確認して、もう一度お試しください。" : {
+
+    },
+    "Apple Musicへのアクセスが許可されていません。「設定」アプリのポモジェムで「メディアとApple Music」をオンにすると使えます。" : {
+
+    },
+    "Apple Musicへのアクセスを許可" : {
+
+    },
+    "Apple Musicを確認しています" : {
+
+    },
+    "focus-music.source.concentration" : {
+      "comment" : "Apple Music Focus playlist title (US storefront: Concentration)",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "集中"
+          }
+        }
+      }
+    },
+    "「ミュージック」アプリでApple Musicにサインインすると再生できます。" : {
+
+    },
+    "「設定」アプリを開く" : {
+
+    },
+    "このiPhoneでは、Apple Musicの曲を再生できません。" : {
+
+    },
+    "このiPhoneでは、スクリーンタイムなどの制限でApple Musicを利用できません。" : {
+
+    },
+    "このiPhoneで集中を始めたときに、選んだ音楽を自動で再生します。ほかの音楽を再生中のときは入れ替えません。" : {
+
+    },
+    "この地域のApple Musicでは、用意した音楽を再生できませんでした。" : {
+
+    },
+    "もう一度確認する" : {
+
+    },
+    "クラシックステーション" : {
+      "comment" : "Apple Music station title (US storefront: Classical Station)"
+    },
+    "ステーション" : {
+      "comment" : "An Apple Music radio station"
+    },
+    "ピアノ・チル" : {
+      "comment" : "Apple Music Classical playlist title (US storefront: Piano Chill)"
+    },
+    "プレイリスト" : {
+
+    },
+    "ポモジェムから「ミュージック」アプリの再生を操作するには、Apple Musicへのアクセスを許可してください。" : {
+
+    },
+    "ミュージックアプリで再生します。Apple Musicの登録が必要です。" : {
+
+    },
+    "ミュージックアプリで再生する音楽を選びます" : {
+      "comment" : "VoiceOver hint: the timer music button opens the music list"
+    },
+    "一時停止" : {
+      "comment" : "Pause the Music app"
+    },
+    "一時停止中" : {
+      "comment" : "Paused line without a track title"
+    },
+    "一時停止中：%@" : {
+      "comment" : "Paused line; the argument is the Music app's current track title"
+    },
+    "下から音楽を選ぶと再生が始まります。" : {
+
+    },
+    "作業用BGM：クラシック" : {
+      "comment" : "Apple Music Classical playlist title (US storefront: Classical Concentration)"
+    },
+    "再生" : {
+      "comment" : "Play the chosen focus music"
+    },
+    "再生していません" : {
+
+    },
+    "再生すると、ミュージックアプリの再生中のリストが入れ替わります。タイマーが終わっても音楽は止まりません。" : {
+
+    },
+    "再生を始められませんでした。休憩のときなどに「ミュージック」アプリを一度開いてから、もう一度お試しください。" : {
+
+    },
+    "再生中" : {
+      "comment" : "Now playing line without a track title"
+    },
+    "再生中：%@" : {
+      "comment" : "Now playing line; the argument is the Music app's current track title"
+    },
+    "未選択" : {
+      "comment" : "VoiceOver value: this music is not chosen"
+    },
+    "次の曲" : {
+      "comment" : "Skip to the next track in the Music app"
+    },
+    "穏やかに集中するとき" : {
+      "comment" : "Apple Music Focus playlist title (US storefront: Peaceful Focus)"
+    },
+    "選んで再生します" : {
+      "comment" : "VoiceOver hint of a music row"
+    },
+    "選択中" : {
+      "comment" : "VoiceOver value: this music is the chosen one"
+    },
+    "長押しで音楽を選べます" : {
+      "comment" : "VoiceOver hint: long press the timer music button to choose music"
+    },
+    "集中を始めたら再生する" : {
+
+    },
+    "集中用の音楽" : {
+
+    },
+    "集中用の音楽を一時停止" : {
+      "comment" : "VoiceOver label: pause the Music app from the timer"
+    },
+    "集中用の音楽を再生" : {
+      "comment" : "VoiceOver label: play the chosen focus music from the timer"
+    },
+    "集中用の音楽を選ぶ" : {
+      "comment" : "VoiceOver label: open the focus music list from the timer"
+    },
+    "音楽の画面を閉じる" : {
+      "comment" : "VoiceOver label of the music sheet's close button"
+    },
+    "音楽を選ぶ" : {
+      "comment" : "Focus music list: its heading, and the timer button's VoiceOver action that opens it"
+    }
   },
   "version" : "1.0"
 }
