@@ -1054,15 +1054,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("データを書き出す")
                             .font(.headline)
-                        Text(isExportingData
-                             ? "JSONファイルを作成中"
-                             // settings-09: says it is not a backup that
-                             // can be read back in, where people look.
-                             : String(
-                                 localized: "記録をJSONファイルに書き出す（読み込みには非対応）",
-                                 table: "Settings",
-                                 comment: "Settings export row subtitle: the file cannot be imported back"
-                             ))
+                        Text(dataExportSubtitle)
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
                     }
@@ -1081,6 +1073,9 @@ struct SettingsView: View {
             .buttonStyle(PomoGemBareButtonStyle())
             .disabled(isExportingData)
             .accessibilityLabel("データを書き出す")
+            // The fixed label hides the subtitle from VoiceOver; say it as
+            // the value so the no-import fact is heard too (settings-09).
+            .accessibilityValue(dataExportSubtitle)
             .accessibilityHint("この端末で利用可能な記録、テーマ、設定をJSONファイルにして、保存先を選びます")
 
             if isExportingData, let dataExportProgress {
@@ -1174,6 +1169,18 @@ struct SettingsView: View {
         } footer: {
             Text(dataStorageDisclosure)
         }
+    }
+
+    /// settings-09: says it is not a backup that can be read back in, where
+    /// people look, instead of only in the local-only footer.
+    private var dataExportSubtitle: String {
+        isExportingData
+            ? "JSONファイルを作成中"
+            : String(
+                localized: "記録をJSONファイルに書き出す（読み込みには非対応）",
+                table: "Settings",
+                comment: "Settings export row subtitle: the file cannot be imported back"
+            )
     }
 
     /// settings-06. Plain words for what the reset does and what stays; the

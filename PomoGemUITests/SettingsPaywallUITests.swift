@@ -137,7 +137,8 @@ final class SettingsPaywallUITests: XCTestCase {
 
         let export = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "データを書き出す")).firstMatch
         XCTAssertTrue(reveal(export))
-        XCTAssertTrue(export.label.contains("読み込みには非対応"), export.label)
+        let exportValue = export.value as? String ?? ""
+        XCTAssertTrue(exportValue.contains("読み込みには非対応"), exportValue)
         XCTAssertTrue(reveal(text(containing: "タイマーの同期に使うランダムな端末ID")))
         attach("\(prefix) — records export and its footer")
 
