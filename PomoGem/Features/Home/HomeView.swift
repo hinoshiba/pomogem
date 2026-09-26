@@ -79,6 +79,11 @@ struct HomeView: View {
     private var didSeeTapHint = false
     @AppStorage(AccountScopedLocalState.defaultsKey(base: "jar.voiceover-tap-hint-seen"))
     private var didSeeVoiceOverTapHint = false
+    /// home-11. Set once a crystal's detail has been opened. Until then a
+    /// tip under the jar says crystals can be tapped; afterwards the tip and
+    /// its 72 pt row go away and the jar keeps its full height.
+    @AppStorage(AccountScopedLocalState.defaultsKey(base: "jar.aggregate-detail-seen"))
+    private var didSeeAggregateDetail = false
     @AppStorage(AccountScopedLocalState.defaultsKey(base: HomeAtmosphere.storageKey))
     private var homeAtmosphereRawValue = HomeAtmosphere.aurora.rawValue
     @AppStorage(AccountScopedLocalState.defaultsKey(base: RecentCustomFocusDurations.storageKey))
@@ -550,52 +555,61 @@ struct HomeView: View {
     }
 
     private var mainContent: some View {
-        GeometryReader { proxy in
-            ScrollViewReader { scrollProxy in
-            ScrollView {
-                VStack(spacing: 0) {
-                    jarCard(height: homeJarHeight(availableHeight: proxy.size.height))
-                        .id("home.jar")
-                    if latestInspectableAggregateID != nil {
-                        aggregateInspectionSlot
-                            .padding(.top, 8)
+        VStack(spacing: 0) {
+            GeometryReader { proxy in
+                ScrollViewReader { scrollProxy in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        jarCard(height: homeJarHeight(availableHeight: proxy.size.height))
+                            .id("home.jar")
+                        if showsAggregateInspectionSlot {
+                            aggregateInspectionSlot
+                                .padding(.top, 8)
+                        }
+                        if let state = largeTextFusionProgressState {
+                            Spacer(minLength: 12)
+                            largeTextFusionProgressCard(state)
+                        }
+                        Spacer(minLength: 14)
+                        if !activeSubjects.isEmpty {
+                            focusSelectionControls
+                                .padding(.bottom, 10)
+                        }
+                        if !pinsFocusLauncher {
+                            focusLauncher
+                        }
                     }
-                    if let state = largeTextFusionProgressState {
-                        Spacer(minLength: 12)
-                        largeTextFusionProgressCard(state)
-                    }
-                    Spacer(minLength: 14)
-                    if !activeSubjects.isEmpty {
-                        focusSelectionControls
-                            .padding(.bottom, 10)
-                    }
-                    focusLauncher
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 20)
-                .frame(
-                    maxWidth: homeContentMaxWidth,
-                    minHeight: dynamicTypeSize.isAccessibilitySize ? nil : proxy.size.height,
-                    alignment: .top
-                )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 20)
+                    .frame(
+                        maxWidth: homeContentMaxWidth,
+                        minHeight: dynamicTypeSize.isAccessibilitySize ? nil : proxy.size.height,
+                        alignment: .top
+                    )
 #if targetEnvironment(macCatalyst)
-                .frame(maxWidth: .infinity, alignment: .top)
+                    .frame(maxWidth: .infinity, alignment: .top)
 #endif
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .onChange(of: rewardDropRevealRequestID) { _, requestID in
-                guard requestID != nil else { return }
-                withAnimation(
-                    reduceMotion ? nil : .easeOut(duration: 0.3),
-                    completionCriteria: .removed
-                ) {
-                    scrollProxy.scrollTo("home.jar", anchor: .top)
-                } completion: {
-                    rewardDropRevealIsPending = false
-                    syncScene()
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .onChange(of: rewardDropRevealRequestID) { _, requestID in
+                    guard requestID != nil else { return }
+                    withAnimation(
+                        reduceMotion ? nil : .easeOut(duration: 0.3),
+                        completionCriteria: .removed
+                    ) {
+                        scrollProxy.scrollTo("home.jar", anchor: .top)
+                    } completion: {
+                        rewardDropRevealIsPending = false
+                        syncScene()
+                    }
+                }
                 }
             }
+            // home-03. Below the scroll view, not over it: content never
+            // slides under the button, and the jar is sized to what is left.
+            if pinsFocusLauncher {
+                pinnedFocusLauncher
             }
         }
         .background {
@@ -1076,6 +1090,20 @@ struct HomeView: View {
                 .transition(.opacity)
             }
 
+            // home-11. Once the tip under the jar has done its job, a tapped
+            // crystal's card appears over the upper jar, where the pile
+            // rarely reaches, instead of in a row that kept 72 pt of the jar
+            // for good. It still closes after six seconds.
+            if !showsAggregateInspectionSlot, let summary = aggregateInspectionSummary {
+                VStack {
+                    aggregateInspectionButton(summary)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 188)
+                    Spacer()
+                }
+                .transition(.opacity)
+            }
+
 #if DEBUG
             if LocalPreviewLaunchPolicy.isUITestModeForCurrentProcess {
                 JarUITestPresentationProbe(scene: scene)
@@ -1508,12 +1536,42 @@ struct HomeView: View {
 
     private func homeJarHeight(availableHeight: CGFloat) -> CGFloat {
         if dynamicTypeSize.isAccessibilitySize {
-            return 520
+            // home-03. The launcher sits below the scroll view
+            // (`pinnedFocusLauncher`), so this height already excludes it.
+            // Leave the top of the theme picker in view so the scrollable
+            // controls are discoverable; 300 pt still holds the HUD and the
+            // short empty message without overlap.
+            return min(520, max(300, availableHeight - 72))
         }
         // Reserve room for the visible theme/time controls and start button,
-        // including on compact iPhones. Larger text keeps a scrollable canvas.
-        let inspectionHeight: CGFloat = latestInspectableAggregateID == nil ? 0 : 72
+        // including on compact iPhones.
+        let inspectionHeight: CGFloat = showsAggregateInspectionSlot ? 72 : 0
         return min(520, max(320, availableHeight - 216 - inspectionHeight))
+    }
+
+    /// home-11. The row under the jar exists only while its tip is useful:
+    /// until the first crystal detail has been opened. After that the card
+    /// appears over the jar when a crystal is tapped (`jarCard`).
+    private var showsAggregateInspectionSlot: Bool {
+        latestInspectableAggregateID != nil && !didSeeAggregateDetail
+    }
+
+    /// home-03. At accessibility sizes the start button stays in the first
+    /// viewport on every iPhone instead of below a 520 pt jar and two
+    /// stacked pickers. The completion card takes this place while it is up
+    /// (the button is disabled then anyway).
+    private var pinsFocusLauncher: Bool {
+        dynamicTypeSize.isAccessibilitySize
+            && breakOffer == nil
+            && router.deferredFocusRecovery == nil
+    }
+
+    private var pinnedFocusLauncher: some View {
+        focusLauncher
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .frame(maxWidth: homeContentMaxWidth)
+            .frame(maxWidth: .infinity)
     }
 
     private var homeContentMaxWidth: CGFloat {
@@ -1647,17 +1705,22 @@ struct HomeView: View {
             }
         } label: {
             HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(.white.opacity(0.22))
-                    Circle()
-                        .stroke(.white.opacity(0.28), lineWidth: 1)
-                    Image(systemName: selectedSubject == nil ? "plus" : "play.fill")
-                        .font(.system(size: 18, weight: .black))
-                        .offset(x: selectedSubject == nil ? 0 : 1)
+                // At accessibility sizes the title and subtitle get the full
+                // width instead (home-03): with the 48 pt circle they wrapped
+                // to four lines and the pinned button grew to ~240 pt.
+                if !dynamicTypeSize.isAccessibilitySize {
+                    ZStack {
+                        Circle()
+                            .fill(.white.opacity(0.22))
+                        Circle()
+                            .stroke(.white.opacity(0.28), lineWidth: 1)
+                        Image(systemName: selectedSubject == nil ? "plus" : "play.fill")
+                            .font(.system(size: 18, weight: .black))
+                            .offset(x: selectedSubject == nil ? 0 : 1)
+                    }
+                    .frame(width: 48, height: 48)
+                    .accessibilityHidden(true)
                 }
-                .frame(width: 48, height: 48)
-                .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(selectedSubject == nil ? "テーマを選んではじめる" : "\(focusDurationLabel)、集中する")
@@ -4195,6 +4258,8 @@ struct HomeView: View {
     }
 
     private func presentAggregateDetail(_ summary: AccumulationClusterSummary) {
+        // Covers the card button and the jar's VoiceOver custom action.
+        didSeeAggregateDetail = true
         cancelTiltHintPresentation()
         aggregateInspectionTask?.cancel()
         aggregateInspectionTask = nil

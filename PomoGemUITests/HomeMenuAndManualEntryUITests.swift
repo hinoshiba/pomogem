@@ -414,6 +414,33 @@ final class HomeMenuAndManualEntryUITests: XCTestCase {
         XCTAssertEqual(remaining.label, "この端末で本日あと2回")
     }
 
+    // MARK: - Large text (home-03, home-04)
+
+    /// At AX5 the start button is on screen without scrolling, on the
+    /// smallest phone too, and the jar's progress has a readable card from
+    /// the first gem.
+    func testStartButtonAndProgressAreReadableAtAccessibilitySize() {
+        launch(accessibility5: true)
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 5))
+        let window = app.windows.firstMatch.frame
+        XCTAssertTrue(launcher.isHittable, "The start button must be in the first viewport at AX5")
+        XCTAssertLessThanOrEqual(launcher.frame.maxY, window.maxY)
+        XCTAssertFalse(app.descendants(matching: .any)["home.fusion-progress.large-text"].exists,
+                       "An empty jar has no progress card")
+        saveScreenshot("home-ax5-empty")
+
+        addThirtyMinutesManually()
+        waitForPendingManualEntryToSave()
+        let card = app.descendants(matching: .any)["home.fusion-progress.large-text"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8), "The first gem gets the large-text progress card")
+        XCTAssertTrue(card.label.contains("時間 30分 / 4時間10分"), card.label)
+        XCTAssertTrue(launcher.isHittable, "The start button stays in view with a gem in the jar")
+        XCTAssertLessThanOrEqual(launcher.frame.maxY, window.maxY)
+        pause(3.5)
+        saveScreenshot("home-ax5-first-gem")
+    }
+
     func testPickingABackgroundLowersTheMenuSoTheBackgroundShows() {
         launch()
         app.buttons["メニュー"].tap()

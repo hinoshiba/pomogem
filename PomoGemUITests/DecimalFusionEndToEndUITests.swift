@@ -157,6 +157,7 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
             inspectAggregate.waitForExistence(timeout: 3),
             "Tapping the physical aggregate must reveal its non-obstructing detail affordance"
         )
+        let jarHeightWithTip = app.buttons["瓶"].frame.height
         inspectAggregate.tap()
         XCTAssertTrue(app.navigationBars["結晶の内訳"].waitForExistence(timeout: 4))
         XCTAssertTrue(
@@ -166,6 +167,12 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["10粒分の積み重ね"].exists)
         app.buttons["overview.cluster.close"].tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
+        // home-11: once a crystal's detail has been opened, the tip row under
+        // the jar goes away and the jar gets its 72 pt back.
+        XCTAssertTrue(
+            waitForCondition(timeout: 4) { self.app.buttons["瓶"].frame.height > jarHeightWithTip + 40 },
+            "The jar must regain the tip row's height: before=\(jarHeightWithTip) after=\(app.buttons["瓶"].frame.height)"
+        )
 
         let afterDirectInspection = try waitForPresentationCount(
             1,
@@ -220,6 +227,15 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         overviewAttachment.name = "First ×10 crystal — reversible overview detail"
         overviewAttachment.lifetime = .keepAlways
         add(overviewAttachment)
+    }
+
+    private func waitForCondition(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if condition() { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        } while Date() < deadline
+        return condition()
     }
 
     private func selectDemoDuration() {

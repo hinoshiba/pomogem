@@ -731,6 +731,16 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         _ element: XCUIElement,
         attempts: Int
     ) -> Bool {
+        // At accessibility sizes Home pins its start button below the scroll
+        // view (home-03). It is on screen without scrolling and outside the
+        // scrolling content, so the content viewport does not apply to it.
+        let window = app.windows.firstMatch.frame
+        let scrollView = app.scrollViews.firstMatch
+        if element.exists, element.isHittable, scrollView.exists,
+           window.contains(element.frame),
+           element.frame.minY >= scrollView.frame.maxY - 1 {
+            return true
+        }
         for _ in 0 ..< attempts {
             guard element.exists else {
                 app.swipeUp()
