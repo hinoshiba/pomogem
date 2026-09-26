@@ -19,6 +19,11 @@ SCREEN TIME
 - アプリの不透明token、未取込台帳、黒い石は本体／Monitor拡張の端末内App Groupだけに保存し、backup・CloudKit・JSON export・保存先移行に含めません。取り込み済みの学習記録だけが通常の選択保存先へ入り、iCloud選択時はprivate CloudKitへ同期します。
 - 登録／通知の件数・結果・時間に限る端末内診断を保持します。token、アプリ名、黒い石の数をログへ出さず、運営者への自動送信はありません。
 
+APPLE MUSIC
+
+- 集中・休憩timerの見出しの音符button（長押しでも可）→「集中用の音楽」で、Apple Musicの固定のクラシック等のplaylist／stationを選びます。許可は画面内のtapでだけ求めます。
+- 再生はSystemMusicPlayerで「ミュージック」appが行い、PomoGemは前面のままです（background audioなし）。Apple Musicの登録が必要で、未登録ならAppleの登録画面（musicSubscriptionOffer）を表示します。無料機能で、Proとは無関係です。
+
 IN-APP PURCHASE
 
 - Product ID: com.hinoshiba.pomogem.pro.lifetime

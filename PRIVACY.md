@@ -91,6 +91,12 @@ dataを含めません。Live Activityは端末内で更新し、独自serverや
   一時的な手動選択は実行中のメモリだけに保持する。設定で選ぶ既定の向き（自動／上／右／下／左）だけを
   このiPhoneのUserDefaultsに保存し、同期・送信・JSON書き出しはしない。通常の記録リセットでは保持し、
   アプリ削除時には消去される。タイマー画面を閉じたときやinactive／backgroundでは向きの更新を停止
+- MusicKit／MediaPlayer（Apple Music、1.1.0候補）: 集中・休憩タイマーから「ミュージック」アプリの再生を
+  操作するため、利用者が音楽の画面で許可したときだけMusicKitの利用許可を求める。再生、一時停止、次の曲、
+  Apple Musicのカタログにある固定のプレイリスト／ステーションの取得、登録状況の確認はAppleが処理し、
+  登録の案内はAppleの画面を使う。選んだ音楽のIDと「集中を始めたら再生する」の設定、最後に自動再生した
+  集中のIDだけをこのiPhoneのUserDefaultsに保存し、同期・送信・JSON書き出しはしない。曲名や再生状態、
+  ライブラリ、再生履歴を保存・送信せず、運営者へ何も送らない。独自のaudio sessionやbackground audioは使わない
 - AVFoundation／Core Haptics: 瓶の粒に対する操作を音と触覚で返すため端末内だけで利用する。
   録音、音声取得、操作履歴の保存・送信は行わず、音と触覚は設定から個別に停止可能
 - System share sheet / pasteboard: 利用者の明示操作時だけ共有物または定型本文を渡す
