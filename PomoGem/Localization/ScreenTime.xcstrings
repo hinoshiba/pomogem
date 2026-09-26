@@ -40,11 +40,17 @@
     "アプリ数は無制限です" : {
       "comment" : "VoiceOver hint: no app limit"
     },
+    "スクリーンタイムの内容をリセットできませんでした。もう一度お試しください。" : {
+      "comment" : "Alert: resetting Screen Time failed for an unexpected reason"
+    },
     "スクリーンタイムの記録を保留しています" : {
       "comment" : "Alert title: imported Screen Time records are on hold"
     },
     "スクリーンタイムの記録を確認できませんでした。" : {
       "comment" : "Import error: a Screen Time record failed its checks"
+    },
+    "スクリーンタイムの設定を保存できませんでした。もう一度お試しください。" : {
+      "comment" : "Alert: saving the Screen Time settings failed for an unexpected reason"
     },
     "スクリーンタイムの許可には、iPhoneのパスコードが必要です。設定アプリの最初の画面にある「Face IDとパスコード」（または「Touch IDとパスコード」）でパスコードを設定してから、もう一度お試しください。" : {
       "comment" : "Screen Time access failed: no device passcode"
@@ -252,6 +258,9 @@
     },
     "黒い石を片付けますか？" : {
       "comment" : "Alert title: clear only the black stones"
+    },
+    "黒い石を片付けられませんでした。もう一度お試しください。" : {
+      "comment" : "Alert: clearing the black stones failed for an unexpected reason"
     },
     "黒い石を片付ける" : {
       "comment" : "Button: clear only the black stones"

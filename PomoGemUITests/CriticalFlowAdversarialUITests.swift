@@ -111,12 +111,17 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
             "A reversible settings audit must leave the preference unchanged"
         )
 
+        // The default duration leads the 集中 card and the Pro row sits
+        // just below it (settings-06), so the tile is above the switch and
+        // 「ポモジェムPro」 is already on screen: wait for the sheet's own
+        // close button instead.
         let customTimer = app.buttons["settings.custom-timer"]
-        XCTAssertTrue(scrollUntilHittable(customTimer, swiping: .up))
+        XCTAssertTrue(scrollUntilHittable(customTimer, swiping: .down))
         customTimer.tap()
-        XCTAssertTrue(app.staticTexts["ポモジェムPro"].waitForExistence(timeout: 6))
-        XCTAssertTrue(app.buttons["閉じる"].exists, "Paywall must always expose an exit")
-        app.buttons["閉じる"].tap()
+        let paywallClose = app.buttons["paywall.close"]
+        XCTAssertTrue(paywallClose.waitForExistence(timeout: 6), "Paywall must always expose an exit")
+        XCTAssertTrue(app.staticTexts["ポモジェムPro"].exists)
+        paywallClose.tap()
         XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 4))
         tapNavigationBack(from: "設定")
 
@@ -148,8 +153,9 @@ final class CriticalFlowAdversarialUITests: XCTestCase {
             "A second tap must restore the original setting"
         )
 
+        // The presets lead the 集中 card, above the screen-lock switch.
         let twentyFiveMinutes = app.buttons["settings.focus-preset.25"]
-        XCTAssertTrue(scrollUntilHittable(twentyFiveMinutes, swiping: .up))
+        XCTAssertTrue(scrollUntilHittable(twentyFiveMinutes, swiping: .down))
         let fortyFiveMinutes = app.buttons["settings.focus-preset.45"]
         XCTAssertTrue(scrollUntilHittable(fortyFiveMinutes, swiping: .up))
         fortyFiveMinutes.tap()

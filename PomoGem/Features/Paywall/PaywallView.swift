@@ -15,7 +15,7 @@ struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var purchase = PurchaseManager.shared
-    @State private var purchaseMessage: String?
+    @State private var alert: PaywallAlert?
     @State private var didPrepare = false
 
     private static let purchaseHistoryURL = URL(
@@ -25,7 +25,7 @@ struct PaywallView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 26) {
+                VStack(spacing: 22) {
                     hero
                     features
                     paywallContent
@@ -47,15 +47,15 @@ struct PaywallView: View {
             }
         }
         .task { await preparePaywall() }
-        .alert("ポモジェムPro", isPresented: Binding(
-            get: { purchaseMessage != nil },
-            set: { if !$0 { purchaseMessage = nil } }
-        )) {
+        .alert(alert?.title ?? "", isPresented: Binding(
+            get: { alert != nil },
+            set: { if !$0 { alert = nil } }
+        ), presenting: alert) { _ in
             Button("閉じる", role: .cancel) {
                 if purchase.isPro { dismiss() }
             }
-        } message: {
-            Text(purchaseMessage ?? "")
+        } message: { alert in
+            Text(alert.message)
         }
     }
 
@@ -72,16 +72,22 @@ struct PaywallView: View {
         }
     }
 
+    /// settings-04. Small enough that on a 5.4" iPhone the features and the
+    /// price start above the fold; at accessibility sizes the decorative
+    /// circle gives its room to the words.
     private var hero: some View {
-        VStack(spacing: 18) {
-            ZStack {
-                Circle()
-                    .fill(PomoGemTheme.amber.opacity(0.10))
-                    .frame(width: 112, height: 112)
-                Image(systemName: "sparkles")
-                    .font(.system(size: 44, weight: .medium))
-                    .foregroundStyle(PomoGemTheme.amber)
-                    .shadow(color: PomoGemTheme.amber.opacity(0.45), radius: 20)
+        VStack(spacing: 14) {
+            if !dynamicTypeSize.isAccessibilitySize {
+                ZStack {
+                    Circle()
+                        .fill(PomoGemTheme.amber.opacity(0.10))
+                        .frame(width: 72, height: 72)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 30, weight: .medium))
+                        .foregroundStyle(PomoGemTheme.amber)
+                        .shadow(color: PomoGemTheme.amber.opacity(0.45), radius: 14)
+                }
+                .accessibilityHidden(true)
             }
             VStack(spacing: 8) {
                 Text(Constants.UIStrings.paywallTitle)
@@ -96,15 +102,16 @@ struct PaywallView: View {
                     .multilineTextAlignment(.center)
             }
         }
-        .padding(.top, 24)
+        .padding(.top, 12)
     }
 
     private var contextCopy: String {
         switch context {
         case .customTimer:
-            "任意の集中時間を選べます。"
+            // The same noun as the first feature row and Settings' Pro row.
+            String(localized: "自由な集中時間を選べます。", table: "Paywall", comment: "Paywall subtitle when opened from the custom focus duration control")
         case .aggregateLabels:
-            "まとまり粒に、積み上げた月を刻めます。"
+            String(localized: "結晶に、作った月を刻めます。", table: "Paywall", comment: "Paywall subtitle when opened from the crystal month-label hint")
         case .screenTimeApps:
             "勉強時間を記録するアプリを、数の制限なく選べます。"
         case .settings:
@@ -112,27 +119,40 @@ struct PaywallView: View {
         }
     }
 
+    /// settings-04. The feature the person came for comes first and is
+    /// marked; each row says what stays free next to what Pro adds; and
+    /// one line says everything else is free. Nothing here is a timer, a
+    /// countdown or a comparison designed to make the free plan look bad.
     private var features: some View {
-        VStack(spacing: 0) {
-            PaywallFeature(
-                symbol: "timer",
-                title: "任意の集中時間",
-                detail: Constants.UIStrings.customDurationRange
-            )
-            Divider().overlay(PomoGemTheme.glassEdge.opacity(0.08))
-            PaywallFeature(
-                symbol: "circle.hexagongrid.fill",
-                title: "まとまり粒の月刻印",
-                detail: "積み重ねた月を残す"
-            )
-            Divider().overlay(PomoGemTheme.glassEdge.opacity(0.08))
-            PaywallFeature(
-                symbol: "apps.iphone",
-                title: "勉強アプリ数が無制限",
-                detail: "スクリーンタイム連携。無料は5つまで"
-            )
+        let kinds = PaywallFeatureKind.ordered(for: context)
+        return VStack(alignment: .leading, spacing: 10) {
+            VStack(spacing: 0) {
+                ForEach(Array(kinds.enumerated()), id: \.element) { index, kind in
+                    if index > 0 {
+                        Divider().overlay(PomoGemTheme.glassEdge.opacity(0.08))
+                    }
+                    PaywallFeature(
+                        kind: kind,
+                        isHighlighted: index == 0 && PaywallFeatureKind.highlights(context),
+                        monthLabelExample: DateText.yearMonth(.now)
+                    )
+                }
+            }
+            .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 18))
+
+            if !purchase.isPro {
+                Text(
+                    "記録・テーマ・iCloud同期・シェアなど、ほかの機能はすべて無料で使えます。",
+                    tableName: "Paywall",
+                    comment: "Paywall note under the Pro features: everything else stays free"
+                )
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 4)
+                .accessibilityIdentifier("paywall.free-note")
+            }
         }
-        .background(PomoGemTheme.card, in: RoundedRectangle(cornerRadius: 18))
     }
 
     private var currentEntitlementCard: some View {
@@ -203,25 +223,22 @@ struct PaywallView: View {
                     destination: AppLinks.commercialDisclosure
                 )
 
-                Button {
-                    Task { await buy(product) }
-                } label: {
-                    if purchase.isPurchasing {
-                        HStack(spacing: 8) {
-                            ProgressView().tint(PomoGemTheme.background)
-                            Text("購入処理中…")
-                        }
-                    } else {
+                if purchase.isAwaitingApproval() {
+                    approvalPendingNotice
+                    // settings-05. Never disabled: a declined or expired
+                    // request sends no signal, so asking again must stay
+                    // possible. It is the quieter button while a request is
+                    // out, so it does not read as "buy again".
+                    purchaseButton(product, spinnerTint: PomoGemTheme.text) {
+                        Text("もう一度リクエスト", tableName: "Paywall", comment: "Paywall button while a purchase awaits approval: ask again")
+                    }
+                    .buttonStyle(PomoGemSecondaryButtonStyle())
+                } else {
+                    purchaseButton(product, spinnerTint: PomoGemTheme.background) {
                         Text("\(product.displayPrice)でProを購入")
                     }
+                    .buttonStyle(PomoGemPrimaryButtonStyle())
                 }
-                .buttonStyle(PomoGemPrimaryButtonStyle())
-                .disabled(
-                    purchase.isPurchasing
-                        || purchase.isLoadingProducts
-                        || purchase.isRestoring
-                )
-                .accessibilityIdentifier("paywall.purchase")
 
                 Text("自動更新・無料トライアルはありません。")
                     .font(.caption)
@@ -229,6 +246,62 @@ struct PaywallView: View {
                     .multilineTextAlignment(.center)
             }
         }
+    }
+
+    /// `spinnerTint` follows the button's style: the dark background on the
+    /// amber primary button, the text colour on the dark secondary one.
+    private func purchaseButton<Label: View>(
+        _ product: Product,
+        spinnerTint: Color,
+        @ViewBuilder label: () -> Label
+    ) -> some View {
+        let idleLabel = label()
+        return Button {
+            Task { await buy(product) }
+        } label: {
+            if purchase.isPurchasing {
+                HStack(spacing: 8) {
+                    ProgressView().tint(spinnerTint)
+                    Text("購入処理中…")
+                }
+            } else {
+                idleLabel
+            }
+        }
+        .disabled(
+            purchase.isPurchasing
+                || purchase.isLoadingProducts
+                || purchase.isRestoring
+        )
+        .accessibilityIdentifier("paywall.purchase")
+    }
+
+    /// settings-05. What a pending purchase looks like after its alert is
+    /// gone: without it the paywall looked exactly as before the request.
+    private var approvalPendingNotice: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "hourglass")
+                .font(.title3)
+                .foregroundStyle(PomoGemTheme.amber)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("承認待ち", tableName: "Paywall", comment: "Paywall notice title: a purchase request awaits approval")
+                    .font(.subheadline.weight(.bold))
+                Text(
+                    "承認されると、自動でProが使えるようになります。届かないときは、もう一度リクエストできます。",
+                    tableName: "Paywall",
+                    comment: "Paywall notice under 承認待ち: what happens next"
+                )
+                .font(.caption)
+                .foregroundStyle(PomoGemTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(PomoGemTheme.amber.opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("paywall.approval-pending")
     }
 
     private var loadingCatalog: some View {
@@ -291,12 +364,18 @@ struct PaywallView: View {
         Button {
             Task {
                 do {
-                    let restored = try await purchase.restorePurchases()
-                    purchaseMessage = restored
-                        ? "購入を復元しました。"
-                        : "購入情報の同期は完了しました。現在このApple Accountで利用できるPro購入は確認できませんでした。"
+                    switch try await purchase.restorePurchases() {
+                    case .restored:
+                        alert = .restored
+                    case .nothingFound:
+                        alert = .nothingToRestore
+                    case .cancelled:
+                        break
+                    }
                 } catch {
-                    purchaseMessage = restoreFailureMessage(for: error)
+                    if let message = PaywallErrorCopy.message(for: error, action: .restore) {
+                        alert = .failure(.restore, message: message)
+                    }
                 }
             }
         } label: {
@@ -365,52 +444,158 @@ struct PaywallView: View {
         await purchase.loadProduct()
     }
 
-    private func restoreFailureMessage(for error: Error) -> String {
-        if let purchaseError = error as? PurchaseManagerError,
-           purchaseError == .failedVerification {
-            return "App Storeの購入情報を確認できませんでした。時間をおいて、もう一度お試しください。"
-        }
-        return "購入情報を復元できませんでした。通信状態を確認して、もう一度お試しください。\n\(error.localizedDescription)"
-    }
-
     @MainActor
     private func buy(_ product: Product) async {
         do {
             let outcome = try await purchase.purchase(product)
             switch outcome {
             case .purchased:
-                purchaseMessage = "ポモジェムProを利用できます。"
+                alert = .purchased(context: context)
             case .pending:
-                purchaseMessage = "購入の承認を待っています。"
+                alert = .approvalRequested
             case .cancelled:
                 break
             }
         } catch {
-            purchaseMessage = error.localizedDescription
+            if let message = PaywallErrorCopy.message(for: error, action: .purchase) {
+                alert = .failure(.purchase, message: message)
+            }
+        }
+    }
+}
+
+/// settings-04. The three things Pro adds, in one place so the paywall can
+/// put the one that matches its entry point first.
+enum PaywallFeatureKind: CaseIterable, Hashable {
+    case customDuration
+    case monthLabel
+    case studyApps
+
+    /// The entry point's feature first; the rest keep their usual order.
+    static func ordered(for context: PaywallContext) -> [PaywallFeatureKind] {
+        let first: PaywallFeatureKind? = switch context {
+        case .customTimer: .customDuration
+        case .aggregateLabels: .monthLabel
+        case .screenTimeApps: .studyApps
+        case .settings: nil
+        }
+        guard let first else { return allCases }
+        return [first] + allCases.filter { $0 != first }
+    }
+
+    /// Opened from a feature (not from Settings' general Pro row).
+    static func highlights(_ context: PaywallContext) -> Bool {
+        context != .settings
+    }
+
+    var symbol: String {
+        switch self {
+        case .customDuration: "timer"
+        case .monthLabel: "calendar"
+        case .studyApps: "apps.iphone"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .customDuration:
+            String(localized: "自由な集中時間", table: "Paywall", comment: "Paywall feature title: any focus length")
+        case .monthLabel:
+            String(localized: "結晶に月を刻む", table: "Paywall", comment: "Paywall feature title: crystals show the month they were made")
+        case .studyApps:
+            String(localized: "勉強アプリ数が無制限", table: "Paywall", comment: "Paywall feature title: unlimited Screen Time study apps")
+        }
+    }
+
+    /// What stays free is said next to what Pro adds, so nobody reads the
+    /// paywall as the free timers going away.
+    var detail: String {
+        switch self {
+        case .customDuration:
+            String(
+                localized: "無料の25・45・60・90分のほか、\(Constants.UIStrings.customDurationRange)を秒単位で選べます",
+                table: "Paywall",
+                comment: "Paywall feature detail; the argument is the Pro range, e.g. 1〜360分"
+            )
+        case .monthLabel:
+            String(
+                localized: "粒が10個集まってできる結晶に、作った月を刻みます",
+                table: "Paywall",
+                comment: "Paywall feature detail: what the month label is"
+            )
+        case .studyApps:
+            String(
+                localized: "スクリーンタイムで記録する勉強アプリ。無料は5つまで",
+                table: "Paywall",
+                comment: "Paywall feature detail: the free plan records up to five study apps"
+            )
         }
     }
 }
 
 private struct PaywallFeature: View {
-    let symbol: String
-    let title: String
-    let detail: String
+    let kind: PaywallFeatureKind
+    let isHighlighted: Bool
+    /// The current month, as a Pro crystal shows it (「2026年9月」).
+    let monthLabelExample: String
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: symbol)
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: kind.symbol)
                 .foregroundStyle(PomoGemTheme.amber)
                 .frame(width: 26)
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-            Spacer()
-            Text(detail)
-                .font(.caption)
-                .foregroundStyle(PomoGemTheme.muted)
-                .multilineTextAlignment(.trailing)
+                .padding(.top, 2)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(kind.title)
+                    .font(.subheadline.weight(.semibold))
+                Text(kind.detail)
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if kind == .monthLabel {
+                    monthLabelPreview
+                        .padding(.top, 4)
+                }
+            }
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .frame(minHeight: 58)
+        .background {
+            if isHighlighted {
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(PomoGemTheme.amber.opacity(0.08))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18)
+                            .stroke(PomoGemTheme.amber.opacity(0.45), lineWidth: 1)
+                    }
+            }
+        }
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("paywall.feature.\(kind)")
+    }
+
+    /// A static example of the month a crystal carries, not a rendering of
+    /// the jar: the gem art belongs to the jar itself.
+    private var monthLabelPreview: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "diamond.fill")
+                .font(.caption2)
+                .foregroundStyle(PomoGemTheme.amber)
+            Text(verbatim: monthLabelExample)
+                .font(.system(.caption, design: .rounded, weight: .bold))
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(PomoGemTheme.amber.opacity(0.10), in: Capsule())
+        .overlay(Capsule().stroke(PomoGemTheme.amber.opacity(0.35), lineWidth: 0.7))
+        .accessibilityLabel(Text(
+            "表示の例：\(monthLabelExample)",
+            tableName: "Paywall",
+            comment: "VoiceOver: an example month label; the argument is a month such as 2026年9月"
+        ))
     }
 }

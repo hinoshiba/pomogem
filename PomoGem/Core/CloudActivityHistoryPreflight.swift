@@ -93,6 +93,11 @@ struct CloudActivityHistoryObservation: Equatable, Sendable {
     /// onboarding, and never authorizes, blocks or delays a mount. A false
     /// positive costs a waiting screen that already offers 「新しく始める」;
     /// a false negative shows the tutorial, which is today's behaviour.
+    ///
+    /// A delta read (PR 15) only sees what changed since the cached tokens,
+    /// so each cached zone carries what its last full traversal saw and
+    /// stays true for as long as the cache key matches
+    /// (`CloudActivityHistoryMarkerCache.Zone.holdsUserRecords`).
     var holdsUserRecords: Bool
 
     init(markers: [ActivityResetSnapshot], holdsUserRecords: Bool = false) {
@@ -101,30 +106,102 @@ struct CloudActivityHistoryObservation: Equatable, Sendable {
     }
 }
 
+/// One read of the server's reset markers. `commit` remembers what the read
+/// saw for the next one (PR 15); the preflight calls it only after the
+/// identity check that follows the read, and after its own mount validation,
+/// have both passed. A read that is abandoned is never committed.
+struct CloudActivityHistoryMarkerRead: Sendable {
+    let observation: CloudActivityHistoryObservation
+    let commit: @MainActor @Sendable () -> Void
+
+    var markers: [ActivityResetSnapshot] { observation.markers }
+
+    init(markers: [ActivityResetSnapshot], holdsUserRecords: Bool = false,
+         commit: @escaping @MainActor @Sendable () -> Void = {}) {
+        self.observation = CloudActivityHistoryObservation(markers: markers, holdsUserRecords: holdsUserRecords)
+        self.commit = commit
+    }
+}
+
 struct CloudActivityHistoryClient: Sendable {
     var verifyAccount: @MainActor @Sendable (ActiveAccountLocalBinding) async throws -> Void
-    var readHistory: @Sendable () async throws -> CloudActivityHistoryObservation
+    var readHistory: @MainActor @Sendable (ActiveAccountLocalBinding) async throws -> CloudActivityHistoryMarkerRead
 
     init(verifyAccount: @escaping @MainActor @Sendable (ActiveAccountLocalBinding) async throws -> Void,
-         readHistory: @escaping @Sendable () async throws -> CloudActivityHistoryObservation) {
+         readHistory: @escaping @MainActor @Sendable (ActiveAccountLocalBinding) async throws -> CloudActivityHistoryMarkerRead) {
         self.verifyAccount = verifyAccount
         self.readHistory = readHistory
+    }
+
+    /// A reader with nothing to remember, for tests that script each step.
+    init(verifyAccount: @escaping @MainActor @Sendable (ActiveAccountLocalBinding) async throws -> Void,
+         readHistory: @escaping @Sendable () async throws -> CloudActivityHistoryObservation) {
+        self.init(verifyAccount: verifyAccount, readHistory: { _ in
+            let observation = try await readHistory()
+            return CloudActivityHistoryMarkerRead(markers: observation.markers,
+                                                  holdsUserRecords: observation.holdsUserRecords)
+        })
     }
 
     /// A marker-only reader observes no user rows.
     init(verifyAccount: @escaping @MainActor @Sendable (ActiveAccountLocalBinding) async throws -> Void,
          readMarkers: @escaping @Sendable () async throws -> [ActivityResetSnapshot]) {
-        self.init(verifyAccount: verifyAccount, readHistory: {
-            CloudActivityHistoryObservation(markers: try await readMarkers())
+        self.init(verifyAccount: verifyAccount, readHistory: { _ in
+            CloudActivityHistoryMarkerRead(markers: try await readMarkers())
         })
     }
 
+    /// device-02 / launch-02. The identity checks on either side of the marker
+    /// read no longer carry their own network probe (a zone-list fetch each,
+    /// four per launch): the marker read between them is itself a fresh
+    /// private-database request that fails without an account or a network,
+    /// the same reasoning Docs/OfflineCloudMode.md applies to the control
+    /// read. What is proved is unchanged — account status, then the identity
+    /// read twice and resolved to exactly this binding before the read, the
+    /// read, and the same again after it — and the preflight still validates
+    /// its mount between every step.
+    ///
+    /// device-02 (PR 15). The read starts from the per-binding change-token
+    /// cache when one is valid for exactly this binding, CloudKit environment,
+    /// container and local dataset generation, and falls back to a full
+    /// traversal on any doubt (`CloudActivityHistoryMarkerCache`).
     static var live: Self {
         Self(verifyAccount: { binding in
-            _ = try await AppleAccountBoundaryResolver().resolve(expectedBinding: binding)
-        }, readHistory: {
-            try await CloudActivityHistoryReader.readHistory()
+            try await CloudActivityHistoryIdentityCheck.verify(binding: binding)
+        }, readHistory: { binding in
+            let store = CloudActivityHistoryMarkerCacheStore.live()
+            let key = CloudActivityHistoryMarkerCache.Key.current(binding: binding)
+            let cached = key.flatMap { store?.load(matching: $0) }
+            let read = try await CloudActivityHistoryReader.readMarkers(key: key, cached: cached)
+            return CloudActivityHistoryMarkerRead(markers: read.markers, holdsUserRecords: read.holdsUserRecords, commit: {
+                if let next = read.cache { store?.save(next) } else { store?.clear() }
+            })
         })
+    }
+}
+
+/// The identity check around a marker read: `accountStatus → identity →
+/// identity`, then the fingerprint/registry resolution compared with the
+/// binding. It makes no network request of its own; the read it brackets is
+/// the network proof.
+@MainActor
+enum CloudActivityHistoryIdentityCheck {
+    static func verify(
+        binding: ActiveAccountLocalBinding,
+        accountClient: CloudAccountVerificationClient = .live(
+            containerIdentifier: CloudSyncConfiguration.synchronizedDataContainerIdentifier),
+        defaults: UserDefaults = .standard,
+        transferJournalStore: StorageTransferJournalStore? = nil,
+        retryDelay: TimeInterval = 0.5
+    ) async throws {
+        var client = accountClient
+        client.probePrivateDatabase = {}
+        let boundary = try await AppleAccountBoundaryResolver(defaults: defaults, client: client,
+            retryDelay: retryDelay, transferJournalStore: transferJournalStore)
+            .resolve(expectedBinding: binding)
+        guard boundary.binding == binding else {
+            throw AppleAccountBoundaryResolutionError.blocked(.accountMismatch)
+        }
     }
 }
 
@@ -195,14 +272,16 @@ struct CloudActivityHistoryPreflight {
             try await client.verifyAccount(expectedBinding)
         }
         try validate()
-        let markers = try await cloudHistoryWithDeadline(deadline) {
-            try await client.readHistory().markers
+        let read = try await cloudHistoryWithDeadline(deadline) {
+            try await client.readHistory(expectedBinding)
         }
         try validate()
         try await cloudHistoryWithDeadline(deadline) {
             try await client.verifyAccount(expectedBinding)
         }
         try validate()
+        read.commit()
+        let markers = read.markers
         let remote = ActivityResetPolicy.currentMarker(from: markers)
         if CloudActivityHistoryAdmissionPolicy.recordedBaselineMatches(recordedBaseline, remote: remote) { return }
         let local: ActivityResetSnapshot?
@@ -249,15 +328,16 @@ struct CloudActivityHistoryPreflight {
             try await client.verifyAccount(expectedBinding)
         }
         try validate()
-        let history = try await cloudHistoryWithDeadline(deadline) {
-            try await client.readHistory()
+        let read = try await cloudHistoryWithDeadline(deadline) {
+            try await client.readHistory(expectedBinding)
         }
         try validate()
-        let remote = ActivityResetPolicy.currentMarker(from: history.markers)
+        let remote = ActivityResetPolicy.currentMarker(from: read.markers)
         try await cloudHistoryWithDeadline(deadline) {
             try await client.verifyAccount(expectedBinding)
         }
         try validate()
+        read.commit()
         while !CloudActivityHistoryAdmissionPolicy.isReady(local: try localMarker(), remote: remote) {
             try validate()
             let remaining = deadline - ProcessInfo.processInfo.systemUptime
@@ -268,7 +348,7 @@ struct CloudActivityHistoryPreflight {
         // before publication. This callback checks its generation/selection on
         // both sides of every suspension, including the final import wait.
         try validate()
-        return history
+        return read.observation
     }
 }
 
@@ -305,6 +385,8 @@ enum CloudActivityHistoryRecordParser {
 
 /// Retain only marker rows, not the unrelated session history traversed by a
 /// zone fetch. Deletions and updates can lower a zone's observed live maximum.
+/// A delta read starts from the markers the cache recorded for that zone
+/// (`seed`) and applies exactly the changes and deletions since its token.
 struct CloudActivityHistoryAccumulator {
     static let maximumMarkers = 10_000
     /// launch-06. The mirrored rows that exist only because somebody set up
@@ -317,12 +399,22 @@ struct CloudActivityHistoryAccumulator {
     static let userRecordTypes: Set<CKRecord.RecordType> = [
         "CD_Subject", "CD_StudySession", "CD_AchievementStone"
     ]
-    private var markers: [CKRecord.ID: ActivityResetSnapshot] = [:]
+    private var markers: [CKRecord.ID: ActivityResetSnapshot]
     private var failure: Error?
     private var finishedAllPages = false
     /// A flag, not a count: a full traversal with no change token reports
-    /// current rows once, and the only consumer asks whether any exist.
+    /// current rows once, and the only consumer asks whether any exist. A
+    /// delta read reports only rows changed since its token; the reader adds
+    /// what the zone's cache entry remembered.
     private(set) var sawUserRecord = false
+    /// The unsanitized zone error, kept only to recognise the few server
+    /// answers that ask for a full traversal instead (`changeTokenExpired`,
+    /// `zoneNotFound`, `userDeletedZone`). Never presented or persisted.
+    private(set) var rawZoneError: Error?
+
+    init(seed: [CKRecord.ID: ActivityResetSnapshot] = [:]) {
+        markers = seed
+    }
 
     mutating func record(_ id: CKRecord.ID, result: Result<CKRecord, Error>) {
         guard failure == nil else { return }
@@ -344,7 +436,9 @@ struct CloudActivityHistoryAccumulator {
     mutating func page(_ result: Result<Bool, Error>) {
         switch result {
         case let .success(moreComing): finishedAllPages = !moreComing
-        case let .failure(error): failure = failure ?? CloudActivityHistoryPreflightError.sanitized(error)
+        case let .failure(error):
+            rawZoneError = rawZoneError ?? error
+            failure = failure ?? CloudActivityHistoryPreflightError.sanitized(error)
         }
     }
 
@@ -355,81 +449,283 @@ struct CloudActivityHistoryAccumulator {
     /// The zone's result only once every page arrived: an incomplete zone is
     /// never evidence of anything, including of user rows.
     func observation(operation: Result<Void, Error>) throws -> CloudActivityHistoryObservation {
+        CloudActivityHistoryObservation(markers: Array(try markerMap(operation: operation).values),
+                                        holdsUserRecords: sawUserRecord)
+    }
+
+    func markerMap(operation: Result<Void, Error>) throws -> [CKRecord.ID: ActivityResetSnapshot] {
         if let failure { throw failure }
         do { try operation.get() } catch { throw CloudActivityHistoryPreflightError.sanitized(error) }
         guard finishedAllPages else { throw CloudActivityHistoryPreflightError.incompleteHistory }
-        return CloudActivityHistoryObservation(markers: Array(markers.values),
-                                               holdsUserRecords: sawUserRecord)
+        return markers
     }
 }
 
-private enum CloudActivityHistoryReader {
-    static func readHistory() async throws -> CloudActivityHistoryObservation {
-        let database = CKContainer(identifier: CloudSyncConfiguration.synchronizedDataContainerIdentifier).privateCloudDatabase
-        let zones: [CKRecordZone] = try await cloudHistoryOperation { finish in
-            let operation = CKFetchRecordZonesOperation.fetchAllRecordZonesOperation()
-            configure(operation)
-            let state = CloudHistoryLocked((zones: [CKRecordZone](), failure: Optional<Error>.none))
-            operation.perRecordZoneResultBlock = { _, result in
-                state.withValue { state in
-                    switch result {
-                    case let .success(zone): state.zones.append(zone)
-                    case let .failure(error): state.failure = state.failure ?? error
-                    }
-                }
-            }
-            operation.fetchRecordZonesResultBlock = { result in
-                let value = state.withValue { $0 }
-                if let failure = value.failure { finish(.failure(failure)) }
-                else { finish(result.map { value.zones }) }
-            }
-            database.add(operation)
-            return operation
+/// One custom zone of the synchronized container, as the zone list reported it.
+struct CloudActivityHistoryZone: Hashable, Sendable {
+    let zoneID: CKRecordZone.ID
+    let supportsFetchChanges: Bool
+}
+
+/// What one zone-changes request returned: the finished accumulator and the
+/// archived server change token the zone reported with its last page.
+struct CloudActivityHistoryZoneRead: Sendable {
+    let markers: [CKRecord.ID: ActivityResetSnapshot]
+    let changeToken: Data?
+    /// Whether this request passed a user row (launch-06). For a delta read,
+    /// only rows changed since the token.
+    let holdsUserRecords: Bool
+}
+
+/// The two CloudKit requests the reader makes. The live source adds real
+/// operations to the private database; tests script them.
+struct CloudActivityHistoryZoneSource: Sendable {
+    var listZones: @Sendable () async throws -> [CloudActivityHistoryZone]
+    /// Every change in `zone` since `changeToken` (nil: since the beginning),
+    /// applied to an accumulator that starts from `seed`.
+    var fetchChanges: @Sendable (_ zone: CloudActivityHistoryZone, _ changeToken: Data?,
+                                 _ seed: [CKRecord.ID: ActivityResetSnapshot]) async throws -> CloudActivityHistoryZoneRead
+}
+
+/// The result of one reset-history read and the cache it may leave behind.
+struct CloudActivityHistoryRead: Sendable {
+    enum Mode: Equatable, Sendable {
+        /// Every page of every zone, from a nil token.
+        case full
+        /// Only the changes since the cached tokens.
+        case delta
+        /// A delta was refused by the server (expired token, missing zone)
+        /// and the read started over as a full traversal.
+        case fullAfterRefusedDelta
+    }
+
+    let markers: [ActivityResetSnapshot]
+    /// launch-06: a full traversal's answer, or for a delta read what each
+    /// zone's cache entry remembered plus what the delta passed.
+    let holdsUserRecords: Bool
+    /// Present only when every zone reported a token under a known key. The
+    /// caller writes it only after the identity bracket accepted this read.
+    let cache: CloudActivityHistoryMarkerCache?
+    let mode: Mode
+}
+
+enum CloudActivityHistoryReader {
+    static let maximumZones = 128
+
+    /// Reads with the live source, starting from the cache when it is valid.
+    static func readMarkers(key: CloudActivityHistoryMarkerCache.Key?,
+                            cached: CloudActivityHistoryMarkerCache?) async throws -> CloudActivityHistoryRead {
+        try await read(source: .live, key: key, cached: cached)
+    }
+
+    static func read(source: CloudActivityHistoryZoneSource,
+                     key: CloudActivityHistoryMarkerCache.Key?,
+                     cached: CloudActivityHistoryMarkerCache?) async throws -> CloudActivityHistoryRead {
+        let listed = try await source.listZones()
+        guard listed.count <= maximumZones else { throw CloudActivityHistoryPreflightError.historyLimit }
+        var zones: [CloudActivityHistoryZone] = []
+        for zone in listed where zone.zoneID != CKRecordZone.default().zoneID {
+            guard zone.supportsFetchChanges else { throw CloudActivityHistoryPreflightError.unsupportedZone }
+            zones.append(zone)
         }
-        guard zones.count <= 128 else { throw CloudActivityHistoryPreflightError.historyLimit }
+        if let key, let cache = cached?.validated(for: key),
+           Set(cache.zones.map(\.zoneID)) == Set(zones.map(\.zoneID)) {
+            do {
+                return try await traverse(zones, source: source, key: key, from: cache, mode: .delta)
+            } catch let error where requiresFullTraversal(after: error) {
+                return try await traverse(zones, source: source, key: key, from: nil, mode: .fullAfterRefusedDelta)
+            }
+        }
+        return try await traverse(zones, source: source, key: key, from: nil, mode: .full)
+    }
+
+    private struct DeltaRefused: Error {
+        let underlying: Error
+    }
+
+    private static func traverse(_ zones: [CloudActivityHistoryZone], source: CloudActivityHistoryZoneSource,
+                                 key: CloudActivityHistoryMarkerCache.Key?,
+                                 from cache: CloudActivityHistoryMarkerCache?,
+                                 mode: CloudActivityHistoryRead.Mode) async throws -> CloudActivityHistoryRead {
         var markers: [ActivityResetSnapshot] = []
         var holdsUserRecords = false
+        var cachedZones: [CloudActivityHistoryMarkerCache.Zone] = []
+        var everyZoneHasToken = true
         for zone in zones {
             try Task.checkCancellation()
-            if zone.zoneID == CKRecordZone.default().zoneID { continue }
-            guard zone.capabilities.contains(.fetchChanges) else {
-                throw CloudActivityHistoryPreflightError.unsupportedZone
-            }
-            let zoneHistory: CloudActivityHistoryObservation = try await cloudHistoryOperation { finish in
-                let configuration = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
-                configuration.previousServerChangeToken = nil
-                configuration.resultsLimit = 200
-                configuration.desiredKeys = CloudActivityHistoryRecordParser.desiredKeys
-                let operation = CKFetchRecordZoneChangesOperation(recordZoneIDs: [zone.zoneID], configurationsByRecordZoneID: [zone.zoneID: configuration])
-                configure(operation)
-                operation.fetchAllChanges = true
-                let state = CloudHistoryLocked(CloudActivityHistoryAccumulator())
-                operation.recordWasChangedBlock = { id, result in state.withValue { $0.record(id, result: result) } }
-                operation.recordWithIDWasDeletedBlock = { id, _ in state.withValue { $0.deleted(id) } }
-                operation.recordZoneFetchResultBlock = { _, result in state.withValue { $0.page(result.map { $0.moreComing }) } }
-                operation.fetchRecordZoneChangesResultBlock = { result in
-                    do { finish(.success(try state.withValue { try $0.observation(operation: result) })) }
-                    catch { finish(.failure(error)) }
+            var token: Data?
+            // launch-06. A delta only reports rows changed since the token,
+            // so a zone keeps what its last full traversal saw while the key
+            // matches; a full traversal recomputes it from nothing.
+            var zoneHeldUserRecords = false
+            if let cache {
+                guard let stored = cache.zones.first(where: { $0.zoneID == zone.zoneID }) else {
+                    throw DeltaRefused(underlying: CloudActivityHistoryPreflightError.incompleteHistory)
                 }
-                database.add(operation)
-                return operation
+                token = stored.changeToken
+                zoneHeldUserRecords = stored.holdsUserRecords
             }
-            markers.append(contentsOf: zoneHistory.markers)
-            holdsUserRecords = holdsUserRecords || zoneHistory.holdsUserRecords
+            let read: CloudActivityHistoryZoneRead
+            do {
+                read = try await source.fetchChanges(zone, token, cache?.seed(for: zone.zoneID) ?? [:])
+            } catch let CloudActivityHistoryReadRefused.server(underlying) where cache == nil {
+                // Nothing left to start over from: a full traversal that is
+                // refused is an ordinary, sanitized read failure.
+                throw CloudActivityHistoryPreflightError.sanitized(underlying)
+            }
+            markers.append(contentsOf: read.markers.values)
+            let zoneHoldsUserRecords = zoneHeldUserRecords || read.holdsUserRecords
+            holdsUserRecords = holdsUserRecords || zoneHoldsUserRecords
             guard markers.count <= CloudActivityHistoryAccumulator.maximumMarkers else {
                 throw CloudActivityHistoryPreflightError.historyLimit
             }
+            if let changeToken = read.changeToken, !changeToken.isEmpty {
+                cachedZones.append(.init(zoneName: zone.zoneID.zoneName, ownerName: zone.zoneID.ownerName,
+                    changeToken: changeToken,
+                    markers: read.markers.map { .init(recordName: $0.key.recordName, snapshot: $0.value) }
+                        .sorted { $0.recordName < $1.recordName },
+                    holdsUserRecords: zoneHoldsUserRecords))
+            } else {
+                everyZoneHasToken = false
+            }
         }
         try Task.checkCancellation()
-        return CloudActivityHistoryObservation(markers: markers, holdsUserRecords: holdsUserRecords)
+        let nextCache = key.flatMap { everyZoneHasToken ? CloudActivityHistoryMarkerCache(key: $0, zones: cachedZones) : nil }
+        return CloudActivityHistoryRead(markers: markers, holdsUserRecords: holdsUserRecords,
+                                        cache: nextCache, mode: mode)
     }
 
-    private static func configure(_ operation: CKOperation) {
+    /// The server answers after which a delta read starts over from nil. Any
+    /// other failure is a failure of the read and fails closed as before.
+    static func requiresFullTraversal(after error: Error) -> Bool {
+        if error is DeltaRefused { return true }
+        let refusals: Set<Int> = [CKError.Code.changeTokenExpired.rawValue,
+                                  CKError.Code.zoneNotFound.rawValue,
+                                  CKError.Code.userDeletedZone.rawValue]
+        func refused(_ error: Error) -> Bool {
+            let nsError = error as NSError
+            guard nsError.domain == CKErrorDomain else { return false }
+            if refusals.contains(nsError.code) { return true }
+            if nsError.code == CKError.Code.partialFailure.rawValue,
+               let partial = nsError.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error] {
+                return partial.values.contains(where: refused)
+            }
+            return false
+        }
+        if case let CloudActivityHistoryReadRefused.server(underlying) = error { return refused(underlying) }
+        if case let CloudActivityHistoryPreflightError.cloud(failure) = error,
+           let code = failure.cloudKitCode { return refusals.contains(code) }
+        return refused(error)
+    }
+
+    fileprivate static func configure(_ operation: CKOperation) {
         let configuration = CKOperation.Configuration()
         configuration.qualityOfService = .userInitiated
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 30
         operation.configuration = configuration
+    }
+}
+
+/// A zone-changes request the server refused in a way that asks for a full
+/// traversal. Carries the raw CloudKit error only as far as the reader, which
+/// never lets it escape: it either starts over or throws a sanitized error.
+enum CloudActivityHistoryReadRefused: Error {
+    case server(Error)
+}
+
+extension CloudActivityHistoryZoneSource {
+    static var live: Self {
+        let database = CKContainer(identifier: CloudSyncConfiguration.synchronizedDataContainerIdentifier).privateCloudDatabase
+        return Self(listZones: {
+            let zones: [CKRecordZone] = try await cloudHistoryOperation { finish in
+                let operation = CKFetchRecordZonesOperation.fetchAllRecordZonesOperation()
+                CloudActivityHistoryReader.configure(operation)
+                let state = CloudHistoryLocked((zones: [CKRecordZone](), failure: Optional<Error>.none))
+                operation.perRecordZoneResultBlock = { _, result in
+                    state.withValue { state in
+                        switch result {
+                        case let .success(zone): state.zones.append(zone)
+                        case let .failure(error): state.failure = state.failure ?? error
+                        }
+                    }
+                }
+                operation.fetchRecordZonesResultBlock = { result in
+                    let value = state.withValue { $0 }
+                    if let failure = value.failure { finish(.failure(failure)) }
+                    else { finish(result.map { value.zones }) }
+                }
+                CloudKitRoundTripLedger.record(.historyZoneList)
+                database.add(operation)
+                return operation
+            }
+            return zones.map { CloudActivityHistoryZone(zoneID: $0.zoneID,
+                                                        supportsFetchChanges: $0.capabilities.contains(.fetchChanges)) }
+        }, fetchChanges: { zone, changeToken, seed in
+            let previousToken: CKServerChangeToken?
+            if let changeToken {
+                guard let token = try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self,
+                                                                          from: changeToken) else {
+                    // An unreadable cached token is a doubt, never an error.
+                    throw CloudActivityHistoryReadRefused.server(CKError(.changeTokenExpired))
+                }
+                previousToken = token
+            } else {
+                previousToken = nil
+            }
+            return try await cloudHistoryOperation(sanitizing: { error in
+                // Keep the refusal recognisable; sanitize everything else.
+                CloudActivityHistoryReader.requiresFullTraversal(after: error)
+                    ? CloudActivityHistoryReadRefused.server(error)
+                    : CloudActivityHistoryPreflightError.sanitized(error)
+            }) { finish in
+                let configuration = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
+                configuration.previousServerChangeToken = previousToken
+                // device-02. The server picks its own (larger) batch size on
+                // a full traversal instead of the old fixed 200.
+                configuration.desiredKeys = CloudActivityHistoryRecordParser.desiredKeys
+                let operation = CKFetchRecordZoneChangesOperation(recordZoneIDs: [zone.zoneID],
+                    configurationsByRecordZoneID: [zone.zoneID: configuration])
+                CloudActivityHistoryReader.configure(operation)
+                operation.fetchAllChanges = true
+                let state = CloudHistoryLocked((accumulator: CloudActivityHistoryAccumulator(seed: seed),
+                                                token: Optional<CKServerChangeToken>.none))
+                operation.recordWasChangedBlock = { id, result in state.withValue { $0.accumulator.record(id, result: result) } }
+                operation.recordWithIDWasDeletedBlock = { id, _ in state.withValue { $0.accumulator.deleted(id) } }
+                operation.recordZoneFetchResultBlock = { _, result in
+                    state.withValue { value in
+                        if case let .success(page) = result { value.token = page.serverChangeToken }
+                        value.accumulator.page(result.map { $0.moreComing })
+                    }
+                }
+                operation.fetchRecordZoneChangesResultBlock = { result in
+                    let value = state.withValue { $0 }
+                    if let raw = value.accumulator.rawZoneError,
+                       CloudActivityHistoryReader.requiresFullTraversal(after: raw) {
+                        finish(.failure(raw))
+                        return
+                    }
+                    if case let .failure(raw) = result,
+                       CloudActivityHistoryReader.requiresFullTraversal(after: raw) {
+                        finish(.failure(raw))
+                        return
+                    }
+                    do {
+                        let markers = try value.accumulator.markerMap(operation: result)
+                        let archived = value.token.flatMap {
+                            try? NSKeyedArchiver.archivedData(withRootObject: $0, requiringSecureCoding: true)
+                        }
+                        finish(.success(CloudActivityHistoryZoneRead(markers: markers, changeToken: archived,
+                            holdsUserRecords: value.accumulator.sawUserRecord)))
+                    } catch {
+                        finish(.failure(error))
+                    }
+                }
+                CloudKitRoundTripLedger.record(.historyZoneChanges)
+                database.add(operation)
+                return operation
+            }
+        })
     }
 }
 
@@ -482,6 +778,7 @@ private final class CloudHistoryCompletion<Value>: @unchecked Sendable {
 }
 
 private func cloudHistoryOperation<Value>(
+    sanitizing: @escaping (Error) -> Error = CloudActivityHistoryPreflightError.sanitized,
     start: (@escaping (Result<Value, Error>) -> Void) -> CKOperation
 ) async throws -> Value {
     let completion = CloudHistoryCompletion<Value>()
@@ -490,7 +787,7 @@ private func cloudHistoryOperation<Value>(
         return try await withCheckedThrowingContinuation { continuation in
             completion.install(continuation)
             let operation = start { result in
-                completion.finish(result.mapError(CloudActivityHistoryPreflightError.sanitized))
+                completion.finish(result.mapError(sanitizing))
             }
             completion.installCancellation { operation.cancel() }
         }
