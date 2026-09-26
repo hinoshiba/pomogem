@@ -44,6 +44,10 @@ struct FocusMusicButton: View {
     @State private var music = FocusMusicController.shared
     @State private var isSheetPresented = false
     @State private var suppressesNextTap = false
+    /// `keepsSheetClosed` kept as state: a tap's task that awaited the
+    /// subscription past the end reads the current value here, not the view
+    /// value it started from.
+    @State private var isSheetLocked = false
     @AppStorage(FocusMusicPreferences.sourceKey) private var chosenSourceID = ""
 
     init(focusStart: FocusStart? = nil, keepsSheetClosed: Bool = false) {
@@ -81,7 +85,8 @@ struct FocusMusicButton: View {
             FocusMusicSheet(controller: music, allowsLeavingApp: focusStart == nil)
                 .modifier(FocusMusicSheetOrientation(isUpsideDown: isTimerUpsideDown))
         }
-        .onChange(of: keepsSheetClosed) { _, closes in
+        .onChange(of: keepsSheetClosed, initial: true) { _, closes in
+            isSheetLocked = closes
             guard closes, isSheetPresented else { return }
             // Without the dismissal animation, so nothing modal is left on
             // screen when the alarm starts and VoiceOver moves to its Stop.
@@ -101,7 +106,7 @@ struct FocusMusicButton: View {
     }
 
     private func presentSheet() {
-        guard !keepsSheetClosed else { return }
+        guard !keepsSheetClosed, !isSheetLocked else { return }
         isSheetPresented = true
     }
 
