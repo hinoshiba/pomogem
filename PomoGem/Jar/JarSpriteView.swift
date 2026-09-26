@@ -375,13 +375,14 @@ struct JarSpriteView: View {
                 // jar-01: the scene stops this SKView's render loop itself
                 // while it rests (`JarScene.isRenderLoopPaused`), because
                 // SpriteView applies `isPaused` only when it creates the view.
+                let framesPerSecond = JarScene.allowsAmbientSparkle
+                    ? Constants.Jar.targetFramesPerSecond
+                    : min(30, Constants.Jar.targetFramesPerSecond)
                 SpriteView(
                     scene: scene,
                     // Low Power Mode and a hot device drop to 30 fps (the
                     // flares and event sparks also pause there).
-                    preferredFramesPerSecond: JarScene.allowsAmbientSparkle
-                        ? Constants.Jar.targetFramesPerSecond
-                        : min(30, Constants.Jar.targetFramesPerSecond),
+                    preferredFramesPerSecond: framesPerSecond,
                     options: [.allowsTransparency, .ignoresSiblingOrder, .shouldCullNonVisibleNodes],
                     debugOptions: Self.spriteDebugOptions
                 )
@@ -448,6 +449,12 @@ struct JarSpriteView: View {
                 }
                 .onChange(of: proxy.size) { _, newSize in
                     scene.size = newSize
+                }
+                // A new frame rate updates the SKView: whatever SwiftUI
+                // re-applies there, the resting jar's loop stays as the
+                // scene set it (after SwiftUI's update, hence the hop).
+                .onChange(of: framesPerSecond) { _, _ in
+                    DispatchQueue.main.async { scene.reassertRenderLoopState() }
                 }
 
                 if coreInFront {

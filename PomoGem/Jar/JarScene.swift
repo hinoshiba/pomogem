@@ -2319,6 +2319,15 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
     }
 
+    /// Applies the render loop state to the SKView again. SwiftUI owns the
+    /// view and may re-create or update it (for example when its frame
+    /// rate changes with Low Power Mode); the owner calls this after such a
+    /// change so a resting jar's stopped loop never silently restarts
+    /// (jar-01).
+    func reassertRenderLoopState() {
+        applyRenderLoopState()
+    }
+
     /// The SKView un-pauses its scene together with itself (measured), so a
     /// light-only redraw re-freezes the resting physics in the same turn,
     /// before any frame can step it.
@@ -2617,7 +2626,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// pause draws one more settled frame so the change shows at once.
     func setThemeMarks(_ enabled: Bool) {
         allPebbleNodes.forEach { $0.setThemeMarks(enabled) }
-        if isIdlePaused { resumeSimulation() }
+        // A light-only change: draw it without waking the physics.
+        requestRedraw()
     }
 
     private func rebuildGeometry() {
