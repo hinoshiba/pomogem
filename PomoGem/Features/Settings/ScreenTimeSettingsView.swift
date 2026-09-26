@@ -700,7 +700,9 @@ struct ScreenTimeSettingsView: View {
                 leavesAfterSave = false
             } catch {
                 leavesAfterSave = false
-                saveError = error.localizedDescription
+                saveError = ScreenTimeFailureMessage.text(
+                    for: error, recordedMonitoringError: controller.monitoringError, action: .save
+                )
             }
         }
     }
@@ -712,7 +714,7 @@ struct ScreenTimeSettingsView: View {
                                     comment: "Toast: the black stones were cleared"),
                              symbol: "checkmark")
         } catch {
-            saveError = error.localizedDescription
+            saveError = ScreenTimeFailureMessage.text(for: error, recordedMonitoringError: nil, action: .clearBlackStones)
         }
     }
 
@@ -726,7 +728,43 @@ struct ScreenTimeSettingsView: View {
                 hasUserEdits = false
                 router.showToast("スクリーンタイムの内容をリセットしました", symbol: "checkmark")
             } catch {
-                saveError = error.localizedDescription
+                saveError = ScreenTimeFailureMessage.text(
+                    for: error, recordedMonitoringError: controller.monitoringError, action: .reset
+                )
+            }
+        }
+    }
+}
+
+/// a11y-07. What this page's alert says when saving, clearing or resetting
+/// throws. The app's own errors carry curated Japanese. A framework error —
+/// DeviceActivity's `MonitoringError`, rethrown by the registration pass —
+/// is not shown as is: that pass has already written the app's own
+/// explanation to the ledger (`monitoringError`), which the page shows
+/// instead; anything else gets a plain retry line.
+enum ScreenTimeFailureMessage {
+    enum Action {
+        case save
+        case clearBlackStones
+        case reset
+    }
+
+    static func text(for error: Error, recordedMonitoringError: String?, action: Action) -> String {
+        switch error {
+        case is ScreenTimeError, is ScreenTimeController.OperationError:
+            return error.localizedDescription
+        default:
+            if let recordedMonitoringError { return recordedMonitoringError }
+            return switch action {
+            case .save:
+                String(localized: "スクリーンタイムの設定を保存できませんでした。もう一度お試しください。",
+                       table: "ScreenTime", comment: "Alert: saving the Screen Time settings failed for an unexpected reason")
+            case .clearBlackStones:
+                String(localized: "黒い石を片付けられませんでした。もう一度お試しください。",
+                       table: "ScreenTime", comment: "Alert: clearing the black stones failed for an unexpected reason")
+            case .reset:
+                String(localized: "スクリーンタイムの内容をリセットできませんでした。もう一度お試しください。",
+                       table: "ScreenTime", comment: "Alert: resetting Screen Time failed for an unexpected reason")
             }
         }
     }

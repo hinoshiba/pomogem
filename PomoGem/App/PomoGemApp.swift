@@ -17,6 +17,10 @@ enum PersistenceSceneTransitionAction: Equatable {
     case resumeAfterContainerRetirement
     case revalidateOfflineSession
     case retireCloudSession
+    /// quality-01. Hold a published, verified online session for the short
+    /// background grace (`CloudBackgroundGraceController`) and retire it
+    /// before the process can be suspended.
+    case deferCloudRetirement
     case none
 }
 
@@ -126,6 +130,14 @@ enum PersistenceLaunchScenePolicy {
         // unpublished launch still loses authorization on any deactivation.
         if phase == .inactive, hasSession {
             return .none
+        }
+        // quality-01 (owner-approved, 2026-09-24). A published online session
+        // is held for the background grace instead of being torn down now. It
+        // still retires before the process can be suspended; the controller
+        // owns that guarantee. An unpublished launch has no session to keep
+        // and loses its authorization immediately, as before.
+        if phase == .background, hasSession, !isPreparing {
+            return .deferCloudRetirement
         }
         return .retireCloudSession
     }
@@ -521,6 +533,15 @@ private struct PomoGemPersistenceLaunchHost: View {
         /// is eligible, and the support link. Reached by the stop reasons whose
         /// honest remedy is outside this app.
         case datasetExplanation(DatasetExplanation, String)
+
+        /// The walls a restored connection clears without the user's help.
+        var reconnectWall: CloudLaunchReconnectWall? {
+            switch self {
+            case .offlineRelaunchRequired: .offlineRelaunchRequired
+            case .cloudVerificationTimedOut: .cloudVerificationTimedOut
+            default: nil
+            }
+        }
     }
 
     /// Which explanation-only screen. Each one carries its own title and its
@@ -566,6 +587,9 @@ private struct PomoGemPersistenceLaunchHost: View {
     @State private var retainsTransferCopyOnCancellation = false
     @State private var remoteRecoveryAction: RemoteRecoveryAction?
     @State private var cloudLaunchDeadline: CloudLaunchDeadline?
+    /// device-02. The os_signpost interval and round-trip count of the cloud
+    /// launch attempt that owns `cloudLaunchDeadline`. Diagnostic only.
+    @State private var cloudLaunchMeasurement: CloudLaunchMeasurement?
     @State private var launchActivationWatchdog = LaunchActivationWatchdog()
     @State private var offlineFallbackRequested = false
     /// device-01. The user chose 「端末のデータでオフライン利用」 on a
@@ -600,6 +624,17 @@ private struct PomoGemPersistenceLaunchHost: View {
     )
     @State private var containerLifetimes =
         PersistenceContainerLifetimeTracker<ModelContainer>()
+    /// quality-01. Holds a verified iCloud session through a short background
+    /// grace under a background task, and retires it before suspension.
+    @State private var backgroundGrace = CloudBackgroundGraceController()
+    /// The live scene phase for the grace's closures and the retirement task,
+    /// which outlive the view update that created them (`LiveScenePhase`).
+    @State private var liveScenePhase = LiveScenePhase()
+    @State private var retainedSessionRecheckTask: Task<Void, Never>?
+    /// quality-01. The tab a remount of the same account's data reopens.
+    @State private var remountNavigation = CloudRemountNavigationMemory()
+    /// sync-04. The mounted online session's mirroring outcomes, for Settings.
+    @State private var mirroringActivity = CloudKitMirroringActivity()
     @State private var suspendedAccountBinding = AccountScopedLocalState
         .pendingPreviousBinding()
 
@@ -658,6 +693,12 @@ private struct PomoGemPersistenceLaunchHost: View {
         .onChange(of: networkPath.isOffline) { previous, current in
             if previous == true, current == false, session?.isCloudOffline == true {
                 retryOfflineConnection()
+            } else if CloudOfflineHostPolicy.retriesOnlineAfterReconnect(
+                previousIsOffline: previous, currentIsOffline: current,
+                hasSession: session != nil, wall: launchState.reconnectWall) {
+                // quality-01. The same single-flight retry the button starts;
+                // it re-runs every launch gate and refuses while one is running.
+                requestOnlineCloudRetry()
             }
         }
         .onReceive(
@@ -709,7 +750,8 @@ private struct PomoGemPersistenceLaunchHost: View {
             relaunchCompletesTransfer: relaunchCompletesTransfer,
             onCancelLocalTransfer: localTransferCancellationAction,
             retainsTransferCopyOnCancellation: retainsTransferCopyOnCancellation,
-            onContinueOffline: offlineContinuationAction)
+            onContinueOffline: offlineContinuationAction,
+            timerStatus: launchTimerStatus)
             .task(id: datasetPreviewRequest) { await loadDatasetPreviews() }
             .sheet(isPresented: Binding(
                 get: { deviceDataExportURL != nil },
@@ -719,6 +761,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                     PomoGemDataExportShareSheet(fileURL: deviceDataExportURL) { _ in
                         discardDeviceDataExport()
                     }
+                    .systemShareSheetPresentation()
                 }
             }
             .alert("書き出せませんでした", isPresented: Binding(
@@ -729,6 +772,30 @@ private struct PomoGemPersistenceLaunchHost: View {
             } message: {
                 Text(deviceDataExportError ?? "")
             }
+    }
+
+    /// quality-01. The running or finished timer of the account whose session
+    /// was just closed, as a time and a phase only. Read from that binding's
+    /// namespace without writing anything; hidden as soon as an identity
+    /// verdict clears the suspended binding or an account-state movement is
+    /// outstanding, the same moments the Live Activity is retired.
+    private var launchTimerStatus: LaunchTimerStatus? {
+        let screen: LaunchTimerStatusPolicy.Screen
+        switch launchState {
+        case .preparing: screen = .preparing
+        case .offlineRelaunchRequired: screen = .offlineWall
+        case .cloudVerificationTimedOut: screen = .verificationTimedOut
+        default: screen = .other
+        }
+        guard session == nil,
+              LaunchTimerStatusPolicy.showsTimerStatus(on: screen,
+                  hasSuspendedAccountBinding: suspendedAccountBinding != nil,
+                  hasUnresolvedAccountStateMovement: hasUnresolvedAccountStateMovement,
+                  transferIsInProgress: transferInProgress != nil,
+                  requiresRelaunch: requiresStorageTransferRelaunch),
+              let namespace = suspendedAccountBinding?.namespace else { return nil }
+        let envelopes = FocusPersistence.peekTimerEnvelopes(namespace: namespace)
+        return LaunchTimerStatus.resolve(focus: envelopes.focus, rest: envelopes.rest, now: .now)
     }
 
     /// The rescue door `Docs/MultiDeviceCloudSafety.md` asks for on behalf of
@@ -799,6 +866,11 @@ private struct PomoGemPersistenceLaunchHost: View {
             .environment(\.cloudConnectionPresentation, connectionPresentation(for: current))
             .environment(\.storageTransferLateArrival,
                          lateArrivalNotice?.sessionID == current.id ? lateArrivalNotice : nil)
+            .environment(\.cloudRemountNavigation, current.mode == .cloudKit
+                ? CloudRemountNavigationHandle(memory: remountNavigation, namespace: current.accountNamespace)
+                : nil)
+            .environment(\.cloudKitMirroringActivity,
+                         current.mode == .cloudKit && !current.isCloudOffline ? mirroringActivity : nil)
             .task(id: scenePhase) {
                 if let cleanupID, let cleanupNamespace {
                     // The first settled cloud mount after a commit is also the
@@ -1002,10 +1074,20 @@ private struct PomoGemPersistenceLaunchHost: View {
         isPreparing = true
         canContinueOffline = false
         var ownedDeadline: CloudLaunchDeadline?
+        let preparationStarted = ContinuousClock.now
         defer {
             ownedDeadline?.cancel()
             if let ownedDeadline, cloudLaunchDeadline === ownedDeadline {
                 cloudLaunchDeadline = nil
+            }
+            // device-02. Ends the interval of an attempt that did not publish;
+            // a published one already finished it (`finishVerifiedCloudMount`).
+            if let measurement = cloudLaunchMeasurement, measurement.attempt == attempt {
+                measurement.finish(Task.isCancelled || launchAttempt != attempt ? .cancelled : .failed)
+                cloudLaunchMeasurement = nil
+            }
+            if session != nil, launchAttempt == attempt {
+                Self.logSessionPublished(since: preparationStarted)
             }
             if launchAttempt == attempt {
                 isPreparing = false
@@ -1311,6 +1393,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             } ?? false
             let deadline = beginCloudLaunchDeadline(attempt: attempt, hasExistingStore: hasExistingStore)
             ownedDeadline = deadline
+            cloudLaunchMeasurement = CloudLaunchMeasurement(attempt: attempt, existingStore: hasExistingStore)
 
             AccountScopedLocalState.beginCloudBoundary()
             launchState = .preparing("Apple Accountを安全に確認しています")
@@ -1378,6 +1461,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 session = try await makeCloudSessionWithinDeadline(
                     safetyNotice: accountSafetyNotice,
                     binding: resolvedBoundary.binding,
+                    launchBoundary: resolvedBoundary,
                     attempt: attempt
                 )
                 finishVerifiedCloudMount()
@@ -1414,6 +1498,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 session = try await makeCloudSessionWithinDeadline(
                     safetyNotice: accountSafetyNotice,
                     binding: resolvedBoundary.binding,
+                    launchBoundary: resolvedBoundary,
                     attempt: attempt
                 )
                 finishVerifiedCloudMount()
@@ -1422,6 +1507,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 session = try await makeCloudSessionWithinDeadline(
                     safetyNotice: "iCloudの削除世代を未確認です。次回オンライン時に再照合します（古い記録の再流入を完全には防げません）",
                     binding: resolvedBoundary.binding,
+                    launchBoundary: resolvedBoundary,
                     attempt: attempt
                 )
                 finishVerifiedCloudMount()
@@ -1438,6 +1524,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 session = try await makeCloudSessionWithinDeadline(
                     safetyNotice: accountSafetyNotice,
                     binding: resolvedBoundary.binding,
+                    launchBoundary: resolvedBoundary,
                     attempt: attempt
                 )
                 finishVerifiedCloudMount()
@@ -1463,6 +1550,7 @@ private struct PomoGemPersistenceLaunchHost: View {
                 session = try await makeCloudSessionWithinDeadline(
                     safetyNotice: accountSafetyNotice,
                     binding: resolvedBoundary.binding,
+                    launchBoundary: resolvedBoundary,
                     attempt: attempt
                 )
                 finishVerifiedCloudMount()
@@ -1548,12 +1636,8 @@ private struct PomoGemPersistenceLaunchHost: View {
             refreshLocalTransferCancellationTarget()
             requestedCloudSelection = false
             canChooseLocalOnly = canOfferLocalOnlySelection
-            if suspendedAccountBinding != nil {
-                await retireExternalTimerState(generation: attempt)
-                guard launchAttempt == attempt, !Task.isCancelled else { return }
-                suspendedAccountBinding = nil
-                AccountScopedLocalState.clearPendingPreviousBinding()
-            }
+            await retireExternalTimerStateAfterFailedLaunch(error, attempt: attempt)
+            guard launchAttempt == attempt, !Task.isCancelled else { return }
             AccountScopedLocalState.deactivate()
             launchState = .blocked(launchFailureMessage(for: error))
         } catch {
@@ -1566,12 +1650,8 @@ private struct PomoGemPersistenceLaunchHost: View {
             refreshLocalTransferCancellationTarget()
             requestedCloudSelection = false
             canChooseLocalOnly = canOfferLocalOnlySelection
-            if suspendedAccountBinding != nil {
-                await retireExternalTimerState(generation: attempt)
-                guard launchAttempt == attempt, !Task.isCancelled else { return }
-                suspendedAccountBinding = nil
-                AccountScopedLocalState.clearPendingPreviousBinding()
-            }
+            await retireExternalTimerStateAfterFailedLaunch(error, attempt: attempt)
+            guard launchAttempt == attempt, !Task.isCancelled else { return }
             launchState = error is PersistenceContainerRetirementError
                 ? .blocked(launchFailureMessage(for: error))
                 : .failed(launchFailureMessage(for: error))
@@ -1592,6 +1672,18 @@ private struct PomoGemPersistenceLaunchHost: View {
             hasUnresolvedAccountStateMovement: hasUnresolvedAccountStateMovement,
             offlineCopyWouldOtherwiseBeEligible: receiptPermitsOfflineUse(binding: binding)
         ) ?? error.localizedDescription
+    }
+
+    /// device-02. One public line per published session with the time since
+    /// this preparation started and since the process started, so the same
+    /// launch-to-Home figure can be read from a Simulator or device log.
+    private static func logSessionPublished(since preparationStarted: ContinuousClock.Instant) {
+        let elapsed = ContinuousClock.now - preparationStarted
+        let milliseconds = Int(elapsed.components.seconds * 1_000
+            + elapsed.components.attoseconds / 1_000_000_000_000_000)
+        persistenceLogger.info(
+            "Session published preparation=\(milliseconds, privacy: .public)ms sinceProcessStart=\(ProcessLaunchClock.millisecondsSinceProcessStart() ?? -1, privacy: .public)ms"
+        )
     }
 
     private func makeLocalSession(
@@ -1645,6 +1737,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     private func makeCloudSession(
         safetyNotice: String?,
         binding: ActiveAccountLocalBinding,
+        launchBoundary: ResolvedAppleAccountBoundary,
         attempt: Int
     ) async throws -> PomoGemPersistenceSession {
         let offlineState = try CloudOfflineAccessState()
@@ -1654,11 +1747,17 @@ private struct PomoGemPersistenceLaunchHost: View {
         // store. Even behind an error screen that fallback makes future UI
         // changes dangerously easy to lose. Let the launch host stay blocked
         // with an explicit retry action until durable storage can be opened.
-        // Resolve the identity again immediately before constructing the
-        // CloudKit stack. The first lookup authorized the immutable profile;
-        // this independent lookup authorizes this particular mount attempt.
-        let preMountBoundary = try await AppleAccountBoundaryResolver()
-            .resolve(expectedBinding: binding)
+        //
+        // device-02. This mount is authorized by the launch's own complete
+        // resolution (`preparePersistenceIfNeeded`), made in this same attempt
+        // with only local work since. A second resolve here repeated exactly
+        // that network proof: the account cannot change without leaving the
+        // foreground (which fails every authorization below), CKAccountChanged
+        // quiesces and supersedes this attempt, and the very next step — the
+        // control read — is itself a complete identity proof
+        // (accountStatus → identity → control fetch → identity) compared with
+        // this binding before anything is constructed.
+        let preMountBoundary = launchBoundary
         try requireCloudMountAuthorization(
             expectedBinding: binding,
             verifiedBinding: preMountBoundary.binding,
@@ -1691,6 +1790,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             attempt: attempt,
             checkpoint: "after-transfer-preflight"
         )
+        cloudLaunchMeasurement?.stage("control-preflight")
 
         let hasExistingCopy = CloudOfflineHostPolicy.hasEstablishedCloudStore(
             selection: PersistenceDeploymentState.load(), mountState: PersistenceDeploymentState.loadMountState(),
@@ -1716,12 +1816,14 @@ private struct PomoGemPersistenceLaunchHost: View {
                 }, validateMount: {
                     try requireActiveLaunchAttempt(attempt, checkpoint: "before-cached-history-export")
                 })
+            cloudLaunchMeasurement?.stage("history-before-mirror")
             guard await waitForContainerRetirement(generation: attempt) == .retired else {
                 throw PersistenceContainerRetirementError.previousContainerStillActive
             }
             try requireActiveLaunchAttempt(attempt, checkpoint: "after-cached-history")
             try await StorageTransferRuntime.live().preflightCloudMount(binding: binding,
                 validateAccess: { try requireActiveLaunchAttempt(attempt, checkpoint: "after-cached-history-dataset") })
+            cloudLaunchMeasurement?.stage("control-preflight-before-mirror")
         }
 
         // SwiftData does not expose a supported switch that pauses CloudKit
@@ -1736,6 +1838,7 @@ private struct PomoGemPersistenceLaunchHost: View {
             accountNamespace: binding.namespace
         )
         containerLifetimes.track(container)
+        cloudLaunchMeasurement?.stage("container")
         try requireCloudMountAuthorization(
             expectedBinding: binding,
             verifiedBinding: preMountBoundary.binding,
@@ -1754,15 +1857,19 @@ private struct PomoGemPersistenceLaunchHost: View {
             attempt: attempt,
             checkpoint: "after-container-identity"
         )
+        cloudLaunchMeasurement?.stage("identity-after-container")
 
         // A new or partially hydrated replica can otherwise create activity
         // under an obsolete reset epoch. Keep Root, bootstrap, and all app
         // writers unmounted until the local winner covers the server history.
         launchState = .preparing("iCloudの記録の履歴を確認しています")
-        let (historyBoundary, history) = try await StorageTransferHostCloudPublicationGate.verify(
+        let history = try await StorageTransferHostCloudPublicationGate.verify(
             prepareCandidate: {
-                // launch-06: the same traversal also tells the first-run
-                // gate whether this account already holds an earlier jar.
+                // The history check reads the identity on both sides of its
+                // marker read, compared with this binding
+                // (`CloudActivityHistoryClient.live`). launch-06: the same
+                // read also tells the first-run gate whether this account
+                // already holds an earlier jar.
                 let history = try await CloudActivityHistoryPreflight().run(
                     context: container.mainContext,
                     expectedBinding: binding,
@@ -1775,15 +1882,19 @@ private struct PomoGemPersistenceLaunchHost: View {
                         )
                     }
                 )
-                let boundary = try await AppleAccountBoundaryResolver()
-                    .resolve(expectedBinding: binding)
+                cloudLaunchMeasurement?.stage("history-after-mirror")
+                // device-02. A separate resolve used to run here, immediately
+                // followed by `verifyLatestDataset`, whose two control reads
+                // are each a complete identity proof compared with this
+                // binding. That final pair is the proof right before
+                // publication; this one only repeated it.
                 try requireCloudMountAuthorization(
                     expectedBinding: binding,
-                    verifiedBinding: boundary.binding,
+                    verifiedBinding: postMountBoundary.binding,
                     attempt: attempt,
                     checkpoint: "after-history-identity"
                 )
-                return (boundary, history)
+                return history
             },
             verifyLatestDataset: {
                 // Another device may begin or finish replacing the dataset
@@ -1817,9 +1928,14 @@ private struct PomoGemPersistenceLaunchHost: View {
         else {
             throw PersistenceStoreTopologyError.incompleteStorePairAfterMount
         }
+        cloudLaunchMeasurement?.stage("final-control-preflight")
+        // `verifyLatestDataset` returned only because both of its control
+        // reads resolved the live identity to exactly `binding`
+        // (StorageTransferCloudMountControlReader throws accountMismatch
+        // otherwise): that is the identity this publication is checked against.
         try requireCloudMountAuthorization(
             expectedBinding: binding,
-            verifiedBinding: historyBoundary.binding,
+            verifiedBinding: binding,
             attempt: attempt,
             checkpoint: "before-session-publication"
         )
@@ -1864,10 +1980,12 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     private func makeCloudSessionWithinDeadline(safetyNotice: String?, binding: ActiveAccountLocalBinding,
+                                               launchBoundary: ResolvedAppleAccountBoundary,
                                                attempt: Int) async throws -> PomoGemPersistenceSession {
         guard let deadline = cloudLaunchDeadline else { throw CloudLaunchDeadlineError.finished }
         let candidate = try await deadline.run {
-            try await makeCloudSession(safetyNotice: safetyNotice, binding: binding, attempt: attempt)
+            try await makeCloudSession(safetyNotice: safetyNotice, binding: binding,
+                                       launchBoundary: launchBoundary, attempt: attempt)
         }
         try requireActiveLaunchAttempt(attempt, checkpoint: "after-bounded-cloud-mount")
         try deadline.finish()
@@ -2252,6 +2370,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     private func revokeOfflineForAccountError(_ error: Error, binding: ActiveAccountLocalBinding) {
         guard let reason = CloudOfflineHostPolicy.revocationReason(for: error) else { return }
         canContinueOffline = false
+        CloudActivityHistoryMarkerCacheStore.clearLive()
         do { try CloudOfflineAccessState().revoke(binding: binding, reason: reason) }
         catch {
             offlineRevocationWriteFailed = true
@@ -2397,6 +2516,11 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     private func finishVerifiedCloudMount() {
+        cloudLaunchMeasurement?.stage("published")
+        cloudLaunchMeasurement?.finish(.published)
+        cloudLaunchMeasurement = nil
+        // sync-04. Listen for this session's own export/import outcomes.
+        mirroringActivity.start()
         offlineRevocationWriteFailed = false
         NotificationManager.shared
             .resumeTimerSchedulingAfterAccountBoundary()
@@ -2458,6 +2582,10 @@ private struct PomoGemPersistenceLaunchHost: View {
 
     private func rebuildAfterCompleteDeletion() async {
         pendingDestructionNamespace = session?.accountNamespace
+        backgroundGrace.sessionRetiredElsewhere()
+        remountNavigation.clear()
+        CloudActivityHistoryMarkerCacheStore.clearLive()
+        mirroringActivity.stop()
         session = nil
         launchState = .preparing("空の保存領域を準備しています")
         mustDestroyPersistentStores = true
@@ -2720,6 +2848,8 @@ private struct PomoGemPersistenceLaunchHost: View {
     ///   destination, and the next launch does not complete THAT transfer.
     private func requireStorageTransferRelaunch(message: String? = nil, afterCancellation: Bool = false) {
         requiresStorageTransferRelaunch = true
+        remountNavigation.clear()
+        CloudActivityHistoryMarkerCacheStore.clearLive()
         canChooseLocalOnly = false
         requestedCloudSelection = false
         remoteRecoveryAction = nil
@@ -3207,6 +3337,10 @@ private struct PomoGemPersistenceLaunchHost: View {
         }
         hasUnresolvedAccountStateMovement = true
         canContinueOffline = false
+        remountNavigation.clear()
+        // device-02. A possible account change is a doubt the reset-history
+        // cache must not survive; the next read traverses every zone again.
+        CloudActivityHistoryMarkerCacheStore.clearLive()
         cancelOfflineConnectionCheck()
         cloudLaunchDeadline?.cancel()
         cloudLaunchDeadline = nil
@@ -3267,6 +3401,7 @@ private struct PomoGemPersistenceLaunchHost: View {
     }
 
     private func handleScenePhaseChange(_ phase: ScenePhase) {
+        liveScenePhase.update(phase)
         if phase == .background {
             // Leaving while the completion alarm repeats counts as Stop.
             // Record it before any container retirement below, while the
@@ -3293,6 +3428,14 @@ private struct PomoGemPersistenceLaunchHost: View {
             return
         }
         focusReturnReminderWindow.handle(phase)
+        if phase == .active, backgroundGrace.sceneBecameActive() {
+            // quality-01. Back within the grace: the process was never
+            // suspended, so Root, its sheets and the jar simply stay. The
+            // account still gets a second, independent look in the background.
+            revalidateRetainedCloudSession()
+        } else if phase != .active {
+            cancelRetainedSessionRecheck()
+        }
         let action = PersistenceLaunchScenePolicy.action(
             phase: phase,
             hasSession: session != nil,
@@ -3333,15 +3476,39 @@ private struct PomoGemPersistenceLaunchHost: View {
                 // work as Root disappears; recovery reopens it after admission.
                 NotificationManager.shared.suspendTimerSchedulingForAccountBoundary()
             }
+        case .deferCloudRetirement:
+            guard let held = session else { break }
+            let heldID = held.id
+            backgroundGrace.begin(sessionID: heldID, retire: {
+                // A session replaced or retired meanwhile is not this hold's.
+                guard session?.id == heldID else { return }
+                Self.persistenceLogger.info("Background grace ended; retiring the iCloud session")
+                retireCloudSessionForBackground()
+            }, isReleased: {
+                !containerLifetimes.hasLiveContainers
+            }, isSceneInBackground: { [liveScenePhase] in
+                // Not `scenePhase`: this closure was created by the
+                // `.background` handler and would read that snapshot forever.
+                liveScenePhase.isBackground
+            })
+            return
         case .retireCloudSession:
             break
         }
+        retireCloudSessionForBackground()
+    }
 
-        // Do not leave a CloudKit store mounted while the process is suspended:
-        // an account can change before this process receives CKAccountChanged.
-        // Timer notifications/Live Activity remain intact for a normal
-        // background transition and are retired only on an actual identity
-        // notification above.
+    /// Do not leave a CloudKit store mounted while the process is suspended:
+    /// an account can change before this process receives CKAccountChanged.
+    /// Timer notifications/Live Activity remain intact for a normal
+    /// background transition and are retired only on an actual identity
+    /// notification or verdict.
+    ///
+    /// Reached directly for an unpublished launch, and through
+    /// `CloudBackgroundGraceController` for a published session once its
+    /// grace ends (or when iOS grants no background time). The controller
+    /// keeps the background task until the containers retired here are gone.
+    private func retireCloudSessionForBackground() {
         suspendedAccountBinding = suspendedAccountBinding
             ?? AccountScopedLocalState.activeBinding()
         beginContainerRetirement()
@@ -3358,7 +3525,10 @@ private struct PomoGemPersistenceLaunchHost: View {
             case .retired:
                 isPreparing = false
                 isQuiescingAccountChange = false
-                if scenePhase == .active {
+                // The live phase, not the `scenePhase` this task captured when
+                // the grace (or `.background`) started it: an `.active` that
+                // arrived meanwhile must restart the launch here.
+                if liveScenePhase.isActive {
                     launchAttempt += 1
                 }
             case .timedOut:
@@ -3394,7 +3564,53 @@ private struct PomoGemPersistenceLaunchHost: View {
         }
     }
 
+    /// quality-01. The session was kept because the person came back within
+    /// the background grace. The process was never suspended, so an account
+    /// change would have arrived as `.CKAccountChanged`; this is the second,
+    /// independent look. Root stays interactive while it runs: only an
+    /// identity verdict closes the session (through the same quiescence an
+    /// account notification uses), and a transport failure changes nothing,
+    /// as for any iCloud screen that loses its connection.
+    private func revalidateRetainedCloudSession() {
+        cancelRetainedSessionRecheck()
+        guard let current = session, current.mode == .cloudKit, !current.isCloudOffline,
+              current.startupError == nil, networkPath.isOffline != true,
+              !isQuiescingAccountChange, !requiresStorageTransferRelaunch,
+              case let .selected(.cloud(binding)) = PersistenceDeploymentState.load(),
+              current.accountNamespace == binding.namespace else { return }
+        let sessionID = current.id
+        retainedSessionRecheckTask = Task { @MainActor in
+            do {
+                let boundary = try await AppleAccountBoundaryResolver().resolve(expectedBinding: binding)
+                guard !Task.isCancelled, session?.id == sessionID else { return }
+                if boundary.binding != binding {
+                    quiesceForPossibleAccountChange()
+                }
+            } catch {
+                guard !Task.isCancelled, session?.id == sessionID else { return }
+                switch CloudBackgroundGracePolicy.retainedSessionRecheckReaction(after: error) {
+                case .keepSession:
+                    Self.persistenceLogger.info("Retained iCloud session recheck could not complete; keeping the session")
+                case .quiesce:
+                    Self.persistenceLogger.notice("Retained iCloud session recheck returned an identity verdict")
+                    revokeOfflineForAccountError(error, binding: binding)
+                    if session?.id == sessionID { quiesceForPossibleAccountChange() }
+                }
+            }
+        }
+    }
+
+    private func cancelRetainedSessionRecheck() {
+        retainedSessionRecheckTask?.cancel()
+        retainedSessionRecheckTask = nil
+    }
+
     private func beginContainerRetirement() {
+        // Any retirement ends an unexpired background grace at once; the
+        // controller keeps the background task until the containers are gone.
+        backgroundGrace.sessionRetiredElsewhere()
+        cancelRetainedSessionRecheck()
+        mirroringActivity.stop()
         didTimeOutContainerRetirement = false
         canContinueOffline = false
         // Cloud-backed RootView is absent while the account is revalidated,
@@ -3412,6 +3628,24 @@ private struct PomoGemPersistenceLaunchHost: View {
         // its container lifetime until Query and presented content disappear.
         // The weak tracker still blocks another mount until actual release.
         session = nil
+    }
+
+    /// A launch that follows a closed iCloud session failed. Before quality-01
+    /// every failure here cancelled the running focus's notifications and
+    /// ended its Live Activity, so a phone that simply came back without a
+    /// connection lost the alarm of the timer it was still running. Now only
+    /// an identity verdict does (`CloudOfflineHostPolicy.retiresExternalTimerState`).
+    /// Otherwise the suspended binding is kept on purpose: the next complete
+    /// resolution compares it (`preparePersistenceIfNeeded`) and retires the
+    /// same surfaces if the account turns out to have changed.
+    private func retireExternalTimerStateAfterFailedLaunch(_ error: Error, attempt: Int) async {
+        guard suspendedAccountBinding != nil,
+              CloudOfflineHostPolicy.retiresExternalTimerState(after: error,
+                  hasUnresolvedAccountStateMovement: hasUnresolvedAccountStateMovement) else { return }
+        await retireExternalTimerState(generation: attempt)
+        guard launchAttempt == attempt, !Task.isCancelled else { return }
+        suspendedAccountBinding = nil
+        AccountScopedLocalState.clearPendingPreviousBinding()
     }
 
     private func retireExternalTimerState(generation: Int) async {
@@ -3537,6 +3771,9 @@ private struct PersistenceLaunchStatusView: View {
     let onCancelLocalTransfer: (() -> Void)?
     let retainsTransferCopyOnCancellation: Bool
     let onContinueOffline: (() -> Void)?
+    /// quality-01. The account-neutral timer card (time and phase only). The
+    /// host passes it only on the waiting screens of an iCloud launch.
+    var timerStatus: LaunchTimerStatus? = nil
 
     /// A sheet is presented in its own hosting controller and does not inherit
     /// a `dynamicTypeSize` that an ancestor set explicitly. The last screen
@@ -3579,6 +3816,10 @@ private struct PersistenceLaunchStatusView: View {
                         .accessibilityAddTraits(isChoosingStorage ? .isHeader : [])
                     if !showsStorageChoiceMessageBelowOptions {
                         launchMessage
+                    }
+
+                    if let timerStatus {
+                        LaunchTimerStatusCard(status: timerStatus)
                     }
 
                     if isPreparing {
@@ -3684,22 +3925,26 @@ private struct PersistenceLaunchStatusView: View {
                             .accessibilityIdentifier("storage-transfer-recovery-retry")
                         supportLink
                     } else if case .cloudVerificationTimedOut = state {
-                        Button("オンラインで再試行", action: onRetryOnline)
+                        Button(String(localized: "オンラインで再試行", table: "Launch"), action: onRetryOnline)
                             .buttonStyle(PomoGemPrimaryButtonStyle())
                             .disabled(!canRetryOnline)
                             .accessibilityIdentifier("cloud-offline-online-retry")
-                        Text("端末の記録は保持しています。この画面からオンラインで確認し直せます。オフラインで端末のデータを使う場合は、アプリを終了して開き直してください。アプリ自体は削除しないでください。")
+                        // quality-01. A relaunch opens the phone's copy only
+                        // when there is no connection at all, so the hint
+                        // names that case instead of promising it always.
+                        Text(CloudLaunchReconnectWall.cloudVerificationTimedOut.relaunchExplanation)
                             .foregroundStyle(PomoGemTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("cloud-launch-timeout-offline-explanation")
                     } else if case .offlineRelaunchRequired = state {
-                        Text("オフラインで開くにはアプリの再起動が必要です。通信が戻った場合は、この画面からオンラインで確認し直せます。")
-                            .foregroundStyle(PomoGemTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Button("オンラインで再試行", action: onRetryOnline)
+                        Button(String(localized: "オンラインで再試行", table: "Launch"), action: onRetryOnline)
                             .buttonStyle(PomoGemPrimaryButtonStyle())
                             .disabled(!canRetryOnline)
                             .accessibilityIdentifier("cloud-offline-online-retry")
+                        Text(CloudLaunchReconnectWall.offlineRelaunchRequired.relaunchExplanation)
+                            .foregroundStyle(PomoGemTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("cloud-offline-relaunch-explanation")
                     } else if case .relaunchRequired = state {
                         if relaunchCompletesTransfer {
                             Text(StorageTransferProgressCopy.nextLaunchCompletes)
@@ -4478,7 +4723,8 @@ private struct PersistenceLaunchStatusView: View {
         case .relaunchRequired:
             "アプリを開き直してください"
         case .offlineRelaunchRequired:
-            "オフラインで開くには再起動が必要です"
+            String(localized: "通信が戻るのを待っています", table: "Launch",
+                   comment: "Launch wall title: offline after an iCloud session; a restored connection resumes automatically")
         case .cloudVerificationTimedOut:
             "iCloudの確認に時間がかかっています"
         case .remoteRecovery:
@@ -4523,7 +4769,9 @@ private struct PersistenceLaunchStatusView: View {
             "externaldrive.badge.exclamationmark"
         case .failed:
             "externaldrive.badge.exclamationmark"
-        case .relaunchRequired, .offlineRelaunchRequired, .cloudVerificationTimedOut:
+        case .offlineRelaunchRequired:
+            "wifi.slash"
+        case .relaunchRequired, .cloudVerificationTimedOut:
             "arrow.clockwise"
         case .remoteRecovery:
             "icloud.and.arrow.down"
@@ -4541,12 +4789,28 @@ private struct PersistenceLaunchStatusView: View {
 /// Renders the actual launch-status view without an account, store, or mount.
 /// Selected only by the existing explicit in-memory settings UI fixture.
 struct CloudLaunchTimeoutUITestFixtureView: View {
+    /// quality-01. Which waiting screen, and whether a timer of the closed
+    /// session is running behind it. The status is built from fixed values:
+    /// nothing reads FocusPersistence, an account or a store here.
+    enum Wall { case timedOut, offline, backgroundReturn }
+
+    var wall: Wall = .timedOut
+    var showsRunningFocus = false
     @State private var retryCalls = 0
+    @State private var focusEnd = Date.now.addingTimeInterval(12 * 60 + 34)
+
+    private var wallState: PomoGemPersistenceLaunchHost.LaunchState {
+        switch wall {
+        case .timedOut: .cloudVerificationTimedOut(CloudLaunchDeadlineError.expired.localizedDescription)
+        case .offline: .offlineRelaunchRequired(CloudOfflineSessionError.relaunchRequired.localizedDescription)
+        case .backgroundReturn: .preparing("Apple Accountを再確認しています")
+        }
+    }
 
     var body: some View {
         PersistenceLaunchStatusView(
             state: retryCalls == 0
-                ? .cloudVerificationTimedOut(CloudLaunchDeadlineError.expired.localizedDescription)
+                ? wallState
                 : .preparing("オンラインで保存領域を再確認しています"),
             onRetry: {}, onRetryOnline: {
                 guard retryCalls == 0 else { return }
@@ -4556,7 +4820,8 @@ struct CloudLaunchTimeoutUITestFixtureView: View {
             onChooseCloud: {}, onChooseLocalOnly: nil,
             onRecoverTransfer: {}, onCancelTransfer: {}, onRefreshDataset: {},
             onCancelLocalTransfer: nil, retainsTransferCopyOnCancellation: false,
-            onContinueOffline: nil)
+            onContinueOffline: nil,
+            timerStatus: showsRunningFocus ? .focusRunning(endDate: focusEnd) : nil)
             .safeAreaInset(edge: .bottom) {
                 VStack {
                     Text(verbatim: "calls=0;choice=none;starting=false")
