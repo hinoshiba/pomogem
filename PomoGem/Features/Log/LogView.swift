@@ -1038,6 +1038,20 @@ enum LogHistoryLoadPolicy {
         return archive
     }
 
+    /// The dates the range label names: those of the page on screen, which
+    /// the tiles, chart and theme bar describe, even when today has moved
+    /// into the next week or month while the new page is on its way. Only
+    /// while no page is shown, the selected period around `now`.
+    static func shownInterval(
+        _ shown: LogPeriodContent?,
+        selected period: LogView.Period,
+        now: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> DateInterval? {
+        if let shown { return shown.interval }
+        return LogPeriodPolicy.interval(for: period, now: now, calendar: calendar)
+    }
+
     /// What stays after the period page failed to read: a page of this
     /// period and epoch (a refresh that failed); otherwise this period's
     /// name over no figures, never another period's or a pre-reset page.
@@ -1236,7 +1250,10 @@ struct LogView: View {
                 }
                 .pickerStyle(.segmented)
 
-                if let interval = LogPeriodPolicy.interval(for: shownPeriod) {
+                if let interval = LogHistoryLoadPolicy.shownInterval(
+                    shownPeriodContent,
+                    selected: period
+                ) {
                     Text(LogPeriodPolicy.rangeLabel(for: interval))
                         .font(.caption)
                         .foregroundStyle(PomoGemTheme.muted)

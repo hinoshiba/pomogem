@@ -86,6 +86,7 @@ final class LogHistoryReadsTests: XCTestCase {
 
             XCTAssertEqual(content.period, period)
             XCTAssertEqual(content.epochID, epochID)
+            XCTAssertEqual(content.interval, interval, "The page names the dates it was read for")
             XCTAssertEqual(content.isPartial, page.isPartial)
             XCTAssertEqual(content.records.map(\.id), sessions.map(\.id), "\(period)")
             XCTAssertEqual(content.records.map(\.row), sessions.map(HistorySessionSummary.init), "\(period)")
@@ -330,6 +331,44 @@ final class LogHistoryReadsTests: XCTestCase {
         XCTAssertNotNil(LogHistoryLoadPolicy.shownRecentContent(recent, currentEpochID: epochID))
         XCTAssertNil(LogHistoryLoadPolicy.shownRecentContent(recent, currentEpochID: UUID()))
         XCTAssertNil(LogHistoryLoadPolicy.shownRecentContent(nil, currentEpochID: epochID))
+    }
+
+    /// The range label names the page on screen. Back from the background
+    /// after the week turned, last week's page stays until this week's
+    /// arrives: its label must say last week's dates, like its figures.
+    func testRangeLabelNamesTheDatesOfThePageOnScreen() throws {
+        let calendar = japaneseCalendar
+        let readAt = date(2026, 9, 24, 15)
+        let now = date(2026, 9, 28, 9)
+        let lastWeek = try XCTUnwrap(LogPeriodPolicy.interval(for: .week, now: readAt, calendar: calendar))
+        let thisWeek = try XCTUnwrap(LogPeriodPolicy.interval(for: .week, now: now, calendar: calendar))
+        XCTAssertNotEqual(lastWeek, thisWeek, "The fixture crosses a week boundary")
+        let page = LogPeriodContent.empty(
+            period: .week,
+            epochID: nil,
+            interval: lastWeek,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(
+            LogHistoryLoadPolicy.shownInterval(page, selected: .week, now: now, calendar: calendar),
+            lastWeek
+        )
+        XCTAssertEqual(
+            LogHistoryLoadPolicy.shownInterval(nil, selected: .week, now: now, calendar: calendar),
+            thisWeek,
+            "With nothing shown, the label names the selected period around now"
+        )
+        let thisMonth = try XCTUnwrap(LogPeriodPolicy.interval(for: .month, now: now, calendar: calendar))
+        XCTAssertEqual(
+            LogHistoryLoadPolicy.shownInterval(nil, selected: .month, now: now, calendar: calendar),
+            thisMonth
+        )
+        XCTAssertEqual(
+            LogHistoryLoadPolicy.shownInterval(page, selected: .month, now: now, calendar: calendar),
+            lastWeek,
+            "Right after a toggle the previous period's page keeps its own dates"
+        )
     }
 
     /// A failed read always ends in a final state. Most people never reset

@@ -34,6 +34,7 @@ extension AccumulationTimelineRepository {
         return LogPeriodContent(
             period: period,
             epochID: currentEpochID,
+            interval: interval,
             records: records,
             isPartial: page.isPartial,
             presentation: LogPeriodPresentation(
@@ -216,6 +217,11 @@ struct LogPeriodPresentation: Equatable, Sendable {
 struct LogPeriodContent: Equatable, Sendable {
     let period: LogView.Period
     let epochID: UUID?
+    /// The week or month the page was read for. The range label names these
+    /// dates, not today's week or month: across a week or month boundary
+    /// the page on screen still describes the one it was read for until the
+    /// new one arrives.
+    let interval: DateInterval?
     let records: [LogSessionRecord]
     /// More than `periodSessionLimit` records: the page is the newest part.
     let isPartial: Bool
@@ -232,6 +238,7 @@ struct LogPeriodContent: Equatable, Sendable {
         LogPeriodContent(
             period: period,
             epochID: epochID,
+            interval: interval,
             records: [],
             isPartial: false,
             presentation: LogPeriodPresentation(
