@@ -309,6 +309,9 @@ final class JarOrientationGravityTests: XCTestCase {
         var landings: [UUID] = []
         scene.onLanding = { landings.append($0.pebble.id) }
         for (index, drop) in [loose(905), loose(906, minutes: 90)].enumerated() {
+            // The queue spaces spawns by `dropInterval` of real time, which a
+            // fast run of simulated frames may not cover.
+            Thread.sleep(forTimeInterval: Constants.Jar.dropInterval + 0.05)
             if index == 0 { scene.dropFromAbove(drop) } else { scene.drop(drop) }
             driver.step(frames: 240) {
                 scene.setGravityReading(Pose.upsideDown.reading)
