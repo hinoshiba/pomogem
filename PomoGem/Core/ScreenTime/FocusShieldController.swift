@@ -38,6 +38,13 @@ enum FocusShieldFocusState: Equatable {
     case running(sessionID: UUID, plannedEnd: Date)
     case paused(sessionID: UUID)
 
+    var sessionID: UUID? {
+        switch self {
+        case .none: nil
+        case let .running(sessionID, _), let .paused(sessionID): sessionID
+        }
+    }
+
     init(envelope: FocusRecoveryEnvelope?, dataEpochID: UUID?) {
         guard let envelope, envelope.dataEpochID == dataEpochID,
               envelope.pendingCompletion == nil,
@@ -187,6 +194,8 @@ enum FocusShieldCopy {
                comment: "Focus screen notice line: the apps to cut down are shielded right now")
     }
 
+    /// Shown while `FocusShieldController.failsafeUnavailable` is true, which
+    /// is only during the focus whose failsafe could not be registered.
     static var failsafeUnavailable: String {
         String(localized: "制限を自動で解除する準備ができなかったため、今回の集中では制限していません。",
                table: "ScreenTime",
@@ -210,91 +219,140 @@ final class FocusShieldController: ObservableObject {
     /// A shield written by this iPhone is up: the focus screen's notice line
     /// and the settings page's escape hatch show while it is true.
     @Published private(set) var isShielding = false
-    /// The last attempt found no failsafe interval it could register, so the
-    /// focus runs unshielded. Cleared by the next successful apply.
+    /// The failsafe interval for the CURRENT focus could not be registered,
+    /// so that focus runs unshielded. False again as soon as that focus is
+    /// over (completed, abandoned, a break, another focus), the shield is no
+    /// longer wanted (switched off, no apps, too many, denied), the owner is
+    /// retired, or a later attempt for the same focus succeeds.
     @Published private(set) var failsafeUnavailable = false
 
     private let engine: FocusShieldEngine
     private let queue: DispatchQueue
+    private let clock: () -> Date
     private var lastRequest: Request?
     private var tail: Task<Void, Never>?
+    /// Operations submitted but not finished. While any is queued, the
+    /// record on disk may not show it yet, so a decision read from the disk
+    /// can be stale and must be re-made on the queue.
+    private var pendingOperations = 0
+    /// The focus (running or paused) the latest reconcile saw.
+    private var currentFocusSession: UUID?
+    /// The focus whose failsafe could not be registered.
+    private var unarmedSession: UUID? {
+        didSet {
+            let unavailable = unarmedSession != nil
+            if failsafeUnavailable != unavailable { failsafeUnavailable = unavailable }
+        }
+    }
 
     private struct Request: Equatable {
         let decision: FocusShieldDecision
         let applications: Set<ApplicationToken>
     }
 
-    init(engine: FocusShieldEngine, queue: DispatchQueue = FocusShieldAppQueue.queue) {
+    /// `clock` stands for "now" wherever no caller passed one, including
+    /// when a finished operation re-publishes `isShielding`.
+    init(engine: FocusShieldEngine, queue: DispatchQueue = FocusShieldAppQueue.queue,
+         clock: @escaping () -> Date = { Date() }) {
         self.engine = engine
         self.queue = queue
+        self.clock = clock
     }
 
     /// Cheap when nothing changed: the decision is pure and an identical
     /// request is not repeated unless `force` (every activation) asks for it.
+    ///
+    /// The decision made here from the record on disk only decides whether
+    /// to act. The queued operation makes it again from the record as it is
+    /// when it runs, after every operation queued before it, so an apply
+    /// still waiting in the queue can never outlive a later "the focus is
+    /// over" (or turn a pause of the new focus into a clear).
     func reconcile(
         configuration: ScreenTimeConfiguration,
         authorization: FocusShieldAuthorization,
         focus: FocusShieldFocusState,
-        now: Date = .now,
+        now: Date? = nil,
         force: Bool = false
     ) {
+        let now = now ?? clock()
         let record = currentRecord()
+        let enabled = configuration.shieldsDistractionDuringFocusEnabled
         let applications = configuration.distractionSelection.applicationTokens
         let decision = FocusShieldReconcilePolicy.decide(
-            enabled: configuration.shieldsDistractionDuringFocusEnabled,
+            enabled: enabled,
             applicationCount: applications.count,
             authorization: authorization,
             focus: focus,
             record: record,
             now: now
         )
+        currentFocusSession = focus.sessionID
+        let wantsShield = enabled && authorization != .denied
+            && (1...FocusShieldPolicy.maximumApplications).contains(applications.count)
+        if unarmedSession != nil, !wantsShield || unarmedSession != focus.sessionID { unarmedSession = nil }
         publishShielding(record, now: now)
         let request = Request(decision: decision, applications: applications)
         guard force || request != lastRequest else { return }
         lastRequest = request
-        switch decision {
-        case .idle:
-            return
-        case let .apply(sessionID, deadline):
-            submit { try $0.apply(sessionID: sessionID, deadline: deadline, applications: applications, now: now) }
-        case .keep:
-            submit { try $0.keep(applications: applications, now: now) }
-        case let .clear(reason):
-            submit { try $0.clear(reason: reason, now: now) }
+        // Nothing to do only when nothing of ours is still in flight.
+        if decision == .idle, pendingOperations == 0 { return }
+        let session = focus.sessionID
+        submit(session: session) { engine in
+            let record = Self.record(in: engine)
+            let decision = FocusShieldReconcilePolicy.decide(
+                enabled: enabled, applicationCount: applications.count, authorization: authorization,
+                focus: focus, record: record, now: now)
+            switch decision {
+            case .idle:
+                return .unchanged
+            case let .apply(sessionID, deadline):
+                return try engine.apply(sessionID: sessionID, deadline: deadline, applications: applications, now: now)
+            case .keep:
+                return try engine.keep(applications: applications, now: now)
+            case let .clear(reason):
+                return try engine.clear(reason: reason, now: now)
+            }
         }
     }
 
     /// 「今すぐ制限を解除」: lifts the shield for the focus it belongs to. The
     /// same session is not shielded again, even after a pause and resume.
-    func liftForCurrentFocus(now: Date = .now) {
+    func liftForCurrentFocus(now: Date? = nil) {
         guard let record = currentRecord(), record.active else { return }
+        let now = now ?? clock()
         lastRequest = nil
         isShielding = false
         let sessionID = record.sessionID
-        submit { try $0.lift(sessionID: sessionID, now: now) }
+        submit(session: nil) { try $0.lift(sessionID: sessionID, now: now) }
     }
 
     /// An owner boundary (account change, storage relaunch, a reset of the
     /// Screen Time owner) or a revoked authorization: lift whatever is up.
-    /// Reads the record first so a repeated call costs nothing.
+    /// Free when nothing is up and nothing is queued; otherwise the clear is
+    /// queued behind whatever is, and the engine re-checks the record under
+    /// its lock, so a queued apply can never shield for a retired owner.
     ///
     /// `unconditional` (switching the setting off) also empties the named
     /// store and stops the failsafe when no record says a shield is up, so
     /// turning the setting off always works as the way out, whatever state
     /// an interrupted run left behind.
-    func retire(reason: FocusShieldClearReason, now: Date = .now, unconditional: Bool = false) {
+    func retire(reason: FocusShieldClearReason, now: Date? = nil, unconditional: Bool = false) {
         lastRequest = nil
-        guard unconditional || currentRecord()?.active == true else { return }
+        currentFocusSession = nil
+        unarmedSession = nil
+        guard unconditional || pendingOperations > 0 || currentRecord()?.active == true else { return }
+        let now = now ?? clock()
         isShielding = false
-        submit { try $0.clear(reason: reason, now: now, unconditional: unconditional) }
+        submit(session: nil) { try $0.clear(reason: reason, now: now, unconditional: unconditional) }
     }
 
     /// Complete data deletion: the store, the failsafe interval and the
     /// record, whatever state they are in.
     func eraseAllData() async throws {
         lastRequest = nil
+        currentFocusSession = nil
+        unarmedSession = nil
         isShielding = false
-        failsafeUnavailable = false
         let result = await run {
             try $0.eraseAll()
             return .cleared
@@ -307,14 +365,18 @@ final class FocusShieldController: ObservableObject {
         await tail?.value
     }
 
-    private func submit(_ operation: @escaping (FocusShieldEngine) throws -> FocusShieldEngine.Outcome) {
+    private func submit(
+        session: UUID?,
+        _ operation: @escaping (FocusShieldEngine) throws -> FocusShieldEngine.Outcome
+    ) {
         let previous = tail
         let assertion = ScreenTimeBackgroundAssertion(name: Self.assertionName)
+        pendingOperations += 1
         tail = Task { @MainActor in
             await previous?.value
             let result = await perform(operation)
             assertion.end()
-            finish(result)
+            finish(result, session: session)
         }
     }
 
@@ -323,11 +385,12 @@ final class FocusShieldController: ObservableObject {
     ) async -> Result<FocusShieldEngine.Outcome, Error> {
         let previous = tail
         let assertion = ScreenTimeBackgroundAssertion(name: Self.assertionName)
+        pendingOperations += 1
         let task = Task { @MainActor () -> Result<FocusShieldEngine.Outcome, Error> in
             await previous?.value
             let result = await perform(operation)
             assertion.end()
-            finish(result)
+            finish(result, session: nil)
             return result
         }
         tail = Task { _ = await task.value }
@@ -346,14 +409,19 @@ final class FocusShieldController: ObservableObject {
         }
     }
 
-    private func finish(_ result: Result<FocusShieldEngine.Outcome, Error>) {
+    private func finish(_ result: Result<FocusShieldEngine.Outcome, Error>, session: UUID?) {
+        pendingOperations -= 1
+        // Only the focus the controller is still looking at: a result for a
+        // focus that has since ended, or arriving after a retire, says
+        // nothing about the focus on screen now.
+        let current = session != nil && session == currentFocusSession
         switch result {
         case .success(.failsafeUnavailable):
             // Not retried every three seconds; the next activation or a
             // changed timer tries again.
-            if !failsafeUnavailable { failsafeUnavailable = true }
+            if current { unarmedSession = session }
         case .success(.applied), .success(.kept):
-            if failsafeUnavailable { failsafeUnavailable = false }
+            if current, unarmedSession == session { unarmedSession = nil }
         case .success:
             break
         case let .failure(error):
@@ -363,12 +431,16 @@ final class FocusShieldController: ObservableObject {
             ScreenTimeLog.monitoring.error(
                 "focus-shield operation failed error=\(String(describing: error), privacy: .public)")
         }
-        publishShielding(currentRecord(), now: .now)
+        publishShielding(currentRecord(), now: clock())
+    }
+
+    private func currentRecord() -> FocusShieldRecord? {
+        Self.record(in: engine)
     }
 
     /// An unreadable record is treated as an active one that has expired,
     /// so the next decision clears it (and the engine removes the file).
-    private func currentRecord() -> FocusShieldRecord? {
+    nonisolated private static func record(in engine: FocusShieldEngine) -> FocusShieldRecord? {
         do {
             return try engine.records.load()
         } catch ScreenTimeError.corruptedState {

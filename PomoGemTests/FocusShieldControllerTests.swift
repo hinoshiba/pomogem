@@ -123,6 +123,10 @@ final class FocusShieldControllerTests: XCTestCase {
         XCTAssertEqual(FocusShieldAuthorization(.approved), .approved)
         XCTAssertEqual(FocusShieldAuthorization(.denied), .denied)
         XCTAssertEqual(FocusShieldAuthorization(.notDetermined), .unknown)
+        if #available(iOS 26.4, *) {
+            XCTAssertEqual(FocusShieldAuthorization(.approvedWithDataAccess), .approved,
+                           "Otherwise nobody with that status could ever start a shield")
+        }
     }
 
     // MARK: - settings model
@@ -211,6 +215,7 @@ final class FocusShieldControllerTests: XCTestCase {
         XCTAssertEqual(fixture.settings.shielded.count, 1, "An unchanged decision does no work")
 
         // Auto-pause on leaving: kept, with no DeviceActivity call.
+        fixture.clock.now = now.addingTimeInterval(600)
         fixture.controller.reconcile(configuration: configuration, authorization: .approved,
                                      focus: .paused(sessionID: session), now: now.addingTimeInterval(600))
         await fixture.controller.waitForPendingOperations()
@@ -220,6 +225,7 @@ final class FocusShieldControllerTests: XCTestCase {
 
         // Resumed: the deadline moves with the new planned end.
         let resumedEnd = end.addingTimeInterval(900)
+        fixture.clock.now = now.addingTimeInterval(1_500)
         fixture.controller.reconcile(configuration: configuration, authorization: .approved,
                                      focus: .running(sessionID: session, plannedEnd: resumedEnd),
                                      now: now.addingTimeInterval(1_500))
@@ -228,6 +234,7 @@ final class FocusShieldControllerTests: XCTestCase {
         XCTAssertEqual(try fixture.engine.records.load()?.deadline, resumedEnd.addingTimeInterval(60))
 
         // Completed: lifted, the failsafe stopped by name.
+        fixture.clock.now = resumedEnd
         fixture.controller.reconcile(configuration: configuration, authorization: .approved,
                                      focus: .none, now: resumedEnd)
         await fixture.controller.waitForPendingOperations()
@@ -269,6 +276,127 @@ final class FocusShieldControllerTests: XCTestCase {
                                      now: now.addingTimeInterval(3))
         await fixture.controller.waitForPendingOperations()
         XCTAssertEqual(try fixture.engine.records.load(), recordAfterFirst)
+    }
+
+    /// The fixed test dates lie in 2027. A finished operation publishes
+    /// `isShielding` by the controller's clock, so these tests keep passing
+    /// after those dates, and the clock — not the wall clock — decides.
+    func testAFinishedOperationPublishesByTheControllersClock() async throws {
+        let fixture = makeController()
+        let configuration = try shieldConfiguration()
+        let running = FocusShieldFocusState.running(sessionID: UUID(), plannedEnd: now.addingTimeInterval(1_500))
+        fixture.controller.reconcile(configuration: configuration, authorization: .approved, focus: running, now: now)
+        await fixture.controller.waitForPendingOperations()
+        XCTAssertTrue(fixture.controller.isShielding)
+
+        fixture.clock.now = now.addingTimeInterval(1_560) // the record's deadline
+        fixture.controller.reconcile(configuration: configuration, authorization: .approved, focus: running,
+                                     now: now, force: true)
+        await fixture.controller.waitForPendingOperations()
+        XCTAssertFalse(fixture.controller.isShielding,
+                       "Published by the injected clock; today's wall clock would still say true")
+    }
+
+    // MARK: - operations still queued
+
+    func testAFocusThatEndsWhileItsApplyIsQueuedIsNotLeftShielded() async throws {
+        let fixture = makeController()
+        let configuration = try shieldConfiguration()
+        let session = UUID()
+        fixture.controller.reconcile(configuration: configuration, authorization: .approved,
+                                     focus: .running(sessionID: session, plannedEnd: now.addingTimeInterval(1_500)),
+                                     now: now)
+        // No await: the apply has not run, so the record on disk says nothing.
+        fixture.controller.reconcile(configuration: configuration, authorization: .approved, focus: .none,
+                                     now: now.addingTimeInterval(1))
+        await fixture.controller.waitForPendingOperations()
+        XCTAssertFalse(fixture.controller.isShielding)
+        let record = try XCTUnwrap(try fixture.engine.records.load())
+        XCTAssertFalse(record.active)
+        XCTAssertEqual(record.clearedBy, FocusShieldClearReason.focusEnded.rawValue)
+        XCTAssertEqual(fixture.center.stopped, [[FocusShieldPolicy.activityName.rawValue]])
+    }
+
+    func testAPauseOfANewFocusWhoseApplyIsQueuedKeepsItsShield() async throws {
+        let fixture = makeController()
+        let configuration = try shieldConfiguration()
+        let first = UUID()
+        fixture.controller.reconcile(configuration: configuration, authorization: .approved,
+                                     focus: .running(sessionID: first, plannedEnd: now.addingTimeInterval(1_500)),
+                                     now: now)
+        await fixture.controller.waitForPendingOperations()
+        // `first` was abandoned; `next` starts while `first`'s record is up.
+        let next = UUID()
+        fixture.controller.reconcile(configuration: configuration, authorization: .approved,
+                                     focus: .running(sessionID: next, plannedEnd: now.addingTimeInterval(2_400)),
+                                     now: now.addingTimeInterval(600))
+        // Read from disk, the pause of `next` meets `first`'s record and would
+        // clear; decided again on the queue, it meets `next`'s and keeps it.
+        fixture.controller.reconcile(configuration: configuration, authorization: .approved,
+                                     focus: .paused(sessionID: next), now: now.addingTimeInterval(601))
+        await fixture.controller.waitForPendingOperations()
+        let record = try XCTUnwrap(try fixture.engine.records.load())
+        XCTAssertTrue(record.active)
+        XCTAssertEqual(record.sessionID, next)
+        XCTAssertTrue(fixture.controller.isShielding)
+    }
+
+    func testARetirementRightAfterAReconcileStillLiftsTheQueuedShield() async throws {
+        let fixture = makeController()
+        let (controller, _) = try await boundScreenTimeController(shield: fixture.controller)
+        controller.reconcileFocusShield(
+            contextKey: "owner", dataEpochID: nil,
+            focus: .running(sessionID: UUID(), plannedEnd: now.addingTimeInterval(1_500)), now: now)
+        // No await in between.
+        controller.suspendForContextRetirement()
+        await fixture.controller.waitForPendingOperations()
+        XCTAssertFalse(fixture.controller.isShielding)
+        let record = try XCTUnwrap(try fixture.engine.records.load())
+        XCTAssertFalse(record.active)
+        XCTAssertEqual(record.clearedBy, FocusShieldClearReason.ownerRetired.rawValue)
+    }
+
+    // MARK: - the failsafe notice
+
+    func testTheFailsafeNoticeBelongsOnlyToTheFocusItFailedFor() async throws {
+        let fixture = makeController(resolve: { _ in nil })
+        let configuration = try shieldConfiguration()
+        let session = UUID()
+        let running = FocusShieldFocusState.running(sessionID: session, plannedEnd: now.addingTimeInterval(1_500))
+        func reconcile(_ focus: FocusShieldFocusState, _ configuration: ScreenTimeConfiguration, at offset: TimeInterval,
+                       force: Bool = false) async {
+            fixture.controller.reconcile(configuration: configuration, authorization: .approved, focus: focus,
+                                         now: now.addingTimeInterval(offset), force: force)
+            await fixture.controller.waitForPendingOperations()
+        }
+
+        await reconcile(running, configuration, at: 0)
+        XCTAssertTrue(fixture.controller.failsafeUnavailable)
+        await reconcile(.paused(sessionID: session), configuration, at: 60)
+        XCTAssertTrue(fixture.controller.failsafeUnavailable, "Still the focus it failed for")
+        await reconcile(.none, configuration, at: 120)
+        XCTAssertFalse(fixture.controller.failsafeUnavailable, "Not on the break or at Home afterwards")
+
+        await reconcile(running, configuration, at: 130, force: true)
+        XCTAssertTrue(fixture.controller.failsafeUnavailable)
+        var off = configuration
+        off.shieldsDistractionDuringFocusEnabled = false
+        await reconcile(running, off, at: 140)
+        XCTAssertFalse(fixture.controller.failsafeUnavailable, "Switched off: nothing is meant to be shielded")
+
+        await reconcile(running, configuration, at: 150, force: true)
+        XCTAssertTrue(fixture.controller.failsafeUnavailable)
+        fixture.controller.retire(reason: .ownerRetired)
+        await fixture.controller.waitForPendingOperations()
+        XCTAssertFalse(fixture.controller.failsafeUnavailable)
+
+        // A failure that arrives after its focus already ended says nothing.
+        fixture.controller.reconcile(configuration: configuration, authorization: .approved, focus: running,
+                                     now: now.addingTimeInterval(160), force: true)
+        fixture.controller.reconcile(configuration: configuration, authorization: .approved, focus: .none,
+                                     now: now.addingTimeInterval(161))
+        await fixture.controller.waitForPendingOperations()
+        XCTAssertFalse(fixture.controller.failsafeUnavailable)
     }
 
     // MARK: - ScreenTimeController paths that must lift a shield
@@ -450,6 +578,7 @@ final class FocusShieldControllerTests: XCTestCase {
         let engine: FocusShieldEngine
         let settings: ShieldFakeSettings
         let center: ShieldFakeCenter
+        let clock: ShieldTestClock
     }
 
     /// Without an explicit resolver the framework is trusted to resolve each
@@ -457,31 +586,20 @@ final class FocusShieldControllerTests: XCTestCase {
     /// real `nextInterval` have their own tests in FocusShieldEngineTests).
     private func makeController(resolve: ((DeviceActivitySchedule) -> DateInterval?)? = nil) -> Fixture {
         let directory = makeDirectory().appendingPathComponent("ScreenTime", isDirectory: true)
+        let records = FocusShieldRecordStore(directory: directory)
         let center = ShieldFakeCenter()
-        let settings = ShieldFakeSettings(center: center)
+        let settings = ShieldFakeSettings(center: center, records: records)
+        let testNow = now
         let engine = FocusShieldEngine(
-            records: FocusShieldRecordStore(directory: directory), settings: settings, center: center,
-            resolveInterval: resolve ?? { schedule in Self.plannedInterval(schedule) }, lockTimeout: 1)
-        return Fixture(controller: FocusShieldController(engine: engine, queue: DispatchQueue(label: "test.shield")),
-                       engine: engine, settings: settings, center: center)
-    }
-
-    /// The interval a schedule built by `FocusShieldSchedule` denotes: its
-    /// time-only start in the hour before, its end next after the start.
-    nonisolated private static func plannedInterval(_ schedule: DeviceActivitySchedule) -> DateInterval? {
-        let calendar = Calendar.current
-        func resolve(_ components: DateComponents, after anchor: Date) -> Date? {
-            if components.year != nil {
-                var zoned = Calendar(identifier: .gregorian)
-                zoned.timeZone = components.timeZone ?? calendar.timeZone
-                return zoned.date(from: components)
-            }
-            return calendar.nextDate(after: anchor, matching: components, matchingPolicy: .strict)
-        }
-        let base = Date(timeIntervalSince1970: 1_800_000_000)
-        guard let start = resolve(schedule.intervalStart, after: base.addingTimeInterval(-3_601)),
-              let end = resolve(schedule.intervalEnd, after: start) else { return nil }
-        return DateInterval(start: start, end: end)
+            records: records, settings: settings, center: center,
+            resolveInterval: resolve ?? { schedule in
+                FocusShieldEngineTests.resolve(schedule, now: testNow, calendar: .current)
+            },
+            lockTimeout: 1)
+        let clock = ShieldTestClock(now)
+        let controller = FocusShieldController(engine: engine, queue: DispatchQueue(label: "test.shield"),
+                                               clock: { clock.now })
+        return Fixture(controller: controller, engine: engine, settings: settings, center: center, clock: clock)
     }
 
     private func boundScreenTimeController(
@@ -505,6 +623,13 @@ final class FocusShieldControllerTests: XCTestCase {
         try await controller.bindContext(contextKey: "owner", dataEpochID: nil)
         return (controller, store)
     }
+}
+
+/// The controller's "now" in tests, so what is published never depends on
+/// the real date.
+final class ShieldTestClock: @unchecked Sendable {
+    var now: Date
+    init(_ now: Date) { self.now = now }
 }
 
 private final class NoopMonitoring: ScreenTimeMonitoringDriving {
