@@ -34,6 +34,7 @@ struct StorageTransferExportControl: View {
         )) {
             if let exportedURL {
                 PomoGemDataExportShareSheet(fileURL: exportedURL) { _ in discard() }
+                    .systemShareSheetPresentation()
             }
         }
         Text(failure ?? StorageTransferOverwriteCopy.exportNote)

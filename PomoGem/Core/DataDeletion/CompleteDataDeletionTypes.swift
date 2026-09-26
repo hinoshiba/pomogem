@@ -1,3 +1,4 @@
+import CloudKit
 import Foundation
 import Observation
 
@@ -526,8 +527,42 @@ enum CompleteDataDeletionError: LocalizedError {
             return "データ削除はすでに実行中です。"
         case let .invalidState(reason):
             return "データ削除の再開情報が不正です: \(reason)"
-        case let .phaseFailed(phase, error):
-            return "データ削除を完了できませんでした（\(phase)）: \(error.localizedDescription)"
+        case let .phaseFailed(_, error):
+            // a11y-07. The phase is shown above this message in its own
+            // words (`userFacingTitle`); interpolating the case printed a
+            // Swift identifier such as 「establishRemoteFence」.
+            return String(
+                localized: "データ削除を完了できませんでした。\n\(Self.presentableDetail(for: error))",
+                table: "Storage",
+                comment: "Deletion failure; the argument is a curated sentence about the cause or what to do"
+            )
+        }
+    }
+
+    /// The wrapped cause in the app's own words. CloudKit and URL errors go
+    /// through `CloudAccountVerificationFailure.classify`, since CloudKit's
+    /// localized text must never be used as presentation
+    /// (CloudSyncMonitor.swift); anything unknown says what a retry does.
+    static func presentableDetail(for error: Error) -> String {
+        let retry = String(
+            localized: "再試行すると、安全な位置から続けます。",
+            table: "Storage",
+            comment: "Deletion failure detail when the cause has no curated wording"
+        )
+        switch error {
+        case let failure as CloudAccountVerificationFailure:
+            return failure.errorDescription ?? retry
+        case let cloud as CompleteDataDeletionCloudError:
+            return cloud.errorDescription ?? retry
+        case let system as CompleteDataDeletionSystemError:
+            return system.errorDescription ?? retry
+        case let deletion as CompleteDataDeletionError:
+            return deletion.errorDescription ?? retry
+        default:
+            let domain = (error as NSError).domain
+            guard domain == CKErrorDomain || domain == NSURLErrorDomain else { return retry }
+            return CloudAccountVerificationFailure.classify(error, stage: .privateDatabase)
+                .errorDescription ?? retry
         }
     }
 }

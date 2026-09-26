@@ -499,7 +499,7 @@ struct AccumulationOverviewPageScope: Equatable, Sendable {
 
     func timelineDetail(isCloudOfflineSession: Bool) -> String {
         if totalSessionCountIsCloudUnverified {
-            let status = isCloudOfflineSession ? "このiPhoneの集計を確認中です" : "iCloudを再集計中です"
+            let status = isCloudOfflineSession ? "このiPhoneの集計を確認中です" : "iCloudを確認中です"
             return "\(status)。年と月の表示には、この端末で確認できた記録だけを使います。"
         }
         return "生涯瓶は代表表示のまま、年と月を選ぶと、この端末に届いた範囲を正確に集計します。"
@@ -511,7 +511,7 @@ struct AccumulationOverviewPageScope: Equatable, Sendable {
 
     func shelfScopeLabel(isCloudOfflineSession: Bool) -> String {
         if totalSessionCountIsCloudUnverified {
-            let status = isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを再集計中"
+            let status = isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを確認中"
             guard displayedSessionCount > 0 else {
                 return "\(status)・確認済み記録なし"
             }
@@ -531,7 +531,7 @@ struct AccumulationOverviewPageScope: Equatable, Sendable {
 
     func emptyShelfMessage(isCloudOfflineSession: Bool) -> String {
         if totalSessionCountIsCloudUnverified {
-            let status = isCloudOfflineSession ? "このiPhoneの集計を確認中です" : "iCloudを再集計中です"
+            let status = isCloudOfflineSession ? "このiPhoneの集計を確認中です" : "iCloudを確認中です"
             return "\(status)。この端末で確認できた月別記録だけを表示しています。"
         }
         if totalSessionCount > 0 {
@@ -600,7 +600,7 @@ struct AccumulationOverviewView: View {
     private let calendar = Calendar.autoupdatingCurrent
 
     private var projectionVerificationTitle: String {
-        isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを再集計中"
+        isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを確認中"
     }
 
     private var projectionVerificationNotice: String {
@@ -1170,7 +1170,7 @@ struct AccumulationOverviewView: View {
 
                 if lifetimeIsCloudUnverified {
                     Label(
-                        isCloudOfflineSession ? "このiPhoneの集計を確認中です" : "iCloudの集計を再確認中です",
+                        isCloudOfflineSession ? "このiPhoneの集計を確認中です" : "iCloudを確認中です",
                         systemImage: isCloudOfflineSession ? "checklist" : "arrow.triangle.2.circlepath.icloud"
                     )
                     .font(.subheadline.weight(.semibold))
@@ -1277,7 +1277,7 @@ struct AccumulationOverviewView: View {
                 Text(lifetimeIsCloudUnverified
                     ? (isCloudOfflineSession
                         ? "このiPhoneの集計の確認が終わるまで、古い階層は表示しません。確認できた記録だけを年月の棚に表示します。"
-                        : "iCloudの再集計が終わるまで、古い階層は表示しません。この端末で確認できた記録だけを年月の棚に表示します。")
+                        : "iCloudの確認が終わるまで、古い階層は表示しません。この端末で確認できた記録だけを年月の棚に表示します。")
                     : (lifetimeIsLowerBound
                         ? "保存領域から確認できた範囲の階層です。整理が終わるまで、生涯値は減らさず「以上」で扱います。"
                         : "段の個数は保存上のまとまりです。10個そろうと次へ圧縮しますが、時間の核はグラムから独立に計算します。"))
@@ -1342,7 +1342,8 @@ struct AccumulationOverviewView: View {
     private var lifetimeStats: some View {
         OverviewStat(
             title: lifetimeIsCloudUnverified
-                ? (isCloudOfflineSession ? "集中（端末の集計を確認中）" : "集中（iCloud再集計中）")
+                // sync-03: the value below is this device's confirmed mass.
+                ? (isCloudOfflineSession ? "集中（端末の集計を確認中）" : "集中（iCloudを確認中）")
                 : (lifetimeIsLowerBound ? "集中（集計整理中）" : "集中"),
             value: AggregateProjectionPresentationPolicy.overviewLifetimeValue(
                 verifiedValue: formattedMass(lifetimeGrams),
@@ -1376,7 +1377,7 @@ struct AccumulationOverviewView: View {
 
     private var lifetimeBottleAccessibilityValue: String {
         if lifetimeIsCloudUnverified {
-            let status = isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudの集計を再確認中"
+            let status = isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを確認中"
             return "\(status)。この端末で確認済みの記録は\(lifetimePebbleCount)粒。古いまとまりは表示していません。\(pageScope.achievementAccessibilitySummary)"
         }
         return "集中\(formattedMass(lifetimeGrams))\(lifetimeIsLowerBound ? "以上" : "")、\(EffortProgressPresentation.formattedStandardUnits(grams: lifetimeGrams))、物理履歴\(lifetimePebbleCount)粒、表示中のまとまり粒\(clusters.count)個、\(pageScope.achievementAccessibilitySummary)。\(pageScope.bottleRepresentativeDisclosure(displayedRecordCount: bottleGraphicRecords.count, displayedClusterCount: bottleGraphicClusters.count, displayedAchievementCount: bottleGraphicMilestones.count))"

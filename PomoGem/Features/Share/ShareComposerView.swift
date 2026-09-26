@@ -479,6 +479,7 @@ struct ShareComposerView: View {
                     handleShareCompletion(completed: completed, error: error)
                 }
             )
+            .systemShareSheetPresentation()
         }
     }
 

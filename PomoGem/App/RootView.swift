@@ -395,6 +395,9 @@ struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.displayScale) private var displayScale
+    /// quality-01. The tab to reopen after the host remounted this account's
+    /// data (see `CloudRemountNavigationMemory`). nil outside iCloud mode.
+    @Environment(\.cloudRemountNavigation) private var remountNavigation
     @AppStorage(AccountScopedLocalState.defaultsKey(base: "onboarding.completed"))
     private var didCompleteOnboarding = false
     @AppStorage(AccountScopedLocalState.defaultsKey(base: UsagePurpose.storageKey))
@@ -458,6 +461,9 @@ struct RootView: View {
     @State private var storeChangeDebounceTask: Task<Void, Never>?
     @State private var storeChangeDebounceToken: UUID?
     @State private var deferredSourceInvalidationDuringWorker = false
+    /// sync-03 (PR 19). Where the iOS 18 remote-change history filter last
+    /// stopped; process-local and started at the first frame.
+    @State private var remoteChangeHistoryCursor: SyncRemoteChangeHistoryCursor?
     @State private var activePersistenceSafetyNotice: String?
     @Query private var preferences: [Prefs]
     @Query private var storedStudySessions: [StudySession]
@@ -497,9 +503,13 @@ struct RootView: View {
         self.unmountForStorageTransfer = unmountForStorageTransfer
         self.cloudHoldsUserRecords = cloudHoldsUserRecords
         _activePersistenceSafetyNotice = State(initialValue: persistenceSafetyNotice)
-        _aggregateProjectionPresentation = State(
-            initialValue: .initial(for: persistenceMode)
-        )
+        var initialPresentation = AggregateProjectionPresentationContext.initial(for: persistenceMode)
+#if DEBUG
+        if let fixture = CloudVerificationUITestFixture.initialPresentation {
+            initialPresentation = fixture
+        }
+#endif
+        _aggregateProjectionPresentation = State(initialValue: initialPresentation)
 
         _preferences = Query(PrefsConsumerPolicy.descriptor())
 
@@ -814,6 +824,21 @@ struct RootView: View {
 #endif
             GemTextureAtlas.shared.prewarm(PebbleNode.commonBakeRequests(scale: displayScale))
         }
+#if DEBUG
+        .task {
+            // sync-03 UI fixture only: seed the requested history, complete
+            // the forced verification later and, for a cycle, revoke it again.
+            CloudVerificationUITestFixture.seedHistoryIfRequested(context: modelContext)
+            guard let delay = CloudVerificationUITestFixture.verificationDelay else { return }
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            aggregateProjectionPresentation.markVerified()
+            guard let again = CloudVerificationUITestFixture.pendingAgainDelay else { return }
+            try? await Task.sleep(for: .seconds(again))
+            guard !Task.isCancelled else { return }
+            aggregateProjectionPresentation.invalidate()
+        }
+#endif
         .alert(
             persistenceMode == .localOnly
                 ? "保存済みの進行中タイマーがあります"
@@ -957,6 +982,7 @@ struct RootView: View {
             router.selectedTab = .settings
         }
         .onChange(of: router.selectedTab) { _, selectedTab in
+            remountNavigation?.record(selectedTab)
             guard isFirstFramePresented else { return }
             guard SyncMaintenanceLaunchPolicy.permitsForegroundDrain(
                 on: selectedTab
@@ -1033,6 +1059,9 @@ struct RootView: View {
             }
         }
         .onAppear {
+            if let restoredTab = remountNavigation?.takeRestoredTab() {
+                router.selectedTab = restoredTab
+            }
             viewTasks.activate()
             installStorageTransferOperation()
         }
@@ -1248,6 +1277,9 @@ struct RootView: View {
         try? await Task.sleep(for: .milliseconds(24))
         guard !Task.isCancelled, !isFirstFramePresented else { return }
         isFirstFramePresented = true
+        // Everything before this instant is covered by the launch verification
+        // sweep below; the history filter classifies what happens after it.
+        remoteChangeHistoryCursor = SyncRemoteChangeHistoryCursor(since: .now.addingTimeInterval(-1))
         // Home's bounded backfill may finish during the 24 ms render grace,
         // before SwiftUI delivers the router onChange callback. Consume the
         // latched request here as a race-safe catch-up.
@@ -1525,6 +1557,11 @@ struct RootView: View {
             maintenanceWorkerIsInFlight: maintenance.isWorkerInFlight,
             expectedCloudSourceStoreURL: activeCloudSourceStoreURL
         )
+        if signal.source == .persistentStoreRemoteChange,
+           classification == .invalidateSessionDependents,
+           remoteChangeHistoryIsOnlyOwnWrites() {
+            return
+        }
         switch SyncStoreChangeSchedulingPolicy.decision(
             classification: classification,
             source: signal.source,
@@ -1559,6 +1596,18 @@ struct RootView: View {
             durablyInvalidateSessionDependents()
             scheduleTrailingStoreInvalidation(at: deadline)
         }
+    }
+
+    /// sync-03 (PR 19). iOS 18+: true only when SwiftData History shows that
+    /// every change since the last classification was this app's own UI or
+    /// maintenance write, or touched no CloudKit source model. iOS 17, a
+    /// missing cursor and every history error keep the old escalation.
+    @MainActor
+    private func remoteChangeHistoryIsOnlyOwnWrites() -> Bool {
+        guard #available(iOS 18, *), var cursor = remoteChangeHistoryCursor else { return false }
+        let verdict = SyncRemoteChangeHistoryReader.classify(context: modelContext, cursor: &cursor)
+        remoteChangeHistoryCursor = cursor
+        return verdict == .ignoreOwnWrites
     }
 
     @MainActor
@@ -3108,6 +3157,8 @@ struct MainNavigationView: View {
         }) {
             PaywallView(context: router.paywallContext)
         }
+        // settings-05. An Ask to Buy approval can arrive hours later.
+        .modifier(ProApprovalNoticeModifier(router: router))
         .sheet(isPresented: $router.sharePresented) {
             // Like the covers below: a sheet does not inherit a Dynamic Type
             // size set above it, so pass the resolved one through.

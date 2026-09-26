@@ -18,6 +18,27 @@ enum ReviewRequestPolicy {
     }
 }
 
+/// settings-04. Free users otherwise never meet Pro's month label, which only
+/// shows on crystals. The fusion sheet may offer one quiet link to it — once
+/// per device, never to Pro, and not before StoreKit has said the user is
+/// free — and keeps it for as long as that one sheet stays open. It is not a
+/// modal, not repeated and not on the reward card (EngagementArchitecture).
+enum MonthLabelHintPolicy {
+    static let offeredStorageKey = "pro.month-label-hint.offered"
+
+    static func offersHint(
+        isPro: Bool,
+        entitlementsResolved: Bool,
+        alreadyOffered: Bool,
+        hintCelebrationID: UUID?,
+        celebrationID: UUID
+    ) -> Bool {
+        guard !isPro else { return false }
+        if let hintCelebrationID { return hintCelebrationID == celebrationID }
+        return entitlementsResolved && !alreadyOffered
+    }
+}
+
 /// A duration-normalized, deterministic progress projection over persisted
 /// study mass.
 ///

@@ -1,14 +1,56 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "App Storeで評価・レビューする" : {
+      "comment" : "Settings row: rate or review the app"
+    },
+    "App Storeを開きます" : {
+      "comment" : "Settings row subtitle: opens the App Store"
+    },
+    "MIT License・GitHub（Webで開く）" : {
+      "comment" : "About page link subtitle"
+    },
+    "Proは1回だけの買い切りです。記録・テーマ・iCloud同期・シェアなど、ほかの機能は無料で使えます。" : {
+      "comment" : "Settings footer under the Pro row for free users"
+    },
+    "Pro：%@" : {
+      "comment" : "Support mail line; the argument is whether Pro is owned"
+    },
+    "SIL Open Font License 1.1を読む" : {
+      "comment" : "About page button: show the typeface's licence"
+    },
+    "iCloud" : {
+      "comment" : "Support mail: records are kept in iCloud"
+    },
+    "iCloud（オフラインで利用中）" : {
+      "comment" : "Support mail: iCloud mode, used offline from this iPhone's copy"
+    },
+    "iOS：%@" : {
+      "comment" : "Support mail line; the argument is the iOS version, e.g. 26.5"
+    },
     "「視差効果を減らす」がオンのため、いまは控えめで表示しています。" : {
       "comment" : "Settings note under Effect intensity while the system Reduce Motion setting is on"
+    },
+    "「集中に戻るお知らせ」は既定でオフです。オンにすると、集中タイマー中にホーム画面や別のアプリへ移ったとき、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。" : {
+      "comment" : "Settings caption under the return-to-focus reminder switch"
     },
     "きらめきと傾けたときの星を止め、光を弱め、着地と融合を短くします" : {
       "comment" : "Effect intensity detail for Subtle"
     },
+    "このiPhoneのみ" : {
+      "comment" : "Support mail: records are kept only on this iPhone"
+    },
+    "このアプリについて" : {
+      "comment" : "About page title\nSettings row: the About page"
+    },
     "その日に集中を始めたり、時間を手動で積んだりした日は、毎日のリマインダーは届きません。7日間アプリを開かなかったときは、次に開くまでお休みします。" : {
       "comment" : "Settings caption: when the daily reminder is skipped"
+    },
+    "アプリのバージョンなどを自動で記入します" : {
+      "comment" : "Settings row subtitle: the mail draft is pre-filled with versions and settings"
+    },
+    "アプリ：ポモジェム %@" : {
+      "comment" : "Support mail line; the argument is the app version, e.g. 1.1.0 (10)"
     },
     "オンにしている通知は、このiPhoneではまだ許可されていないため届きません。" : {
       "comment" : "Settings notice under an enabled notification switch: iOS has not asked for notification permission on this device yet"
@@ -16,14 +58,50 @@
     "オンにしている通知は、このiPhoneの設定でオフになっているため届きません。" : {
       "comment" : "Settings notice under an enabled notification switch: notifications are turned off for this app in iOS"
     },
+    "オープンソース" : {
+      "comment" : "About page section header: open source"
+    },
+    "クレジット" : {
+      "comment" : "About page section header: credits"
+    },
+    "サポートページ" : {
+      "comment" : "Settings row: the support web page"
+    },
     "スクリーンタイム" : {
       "comment" : "Settings row title: Screen Time"
     },
     "スクリーンタイムの黒い石、まだ取り込んでいない勉強アプリの記録、10分に満たない途中の利用時間も消えます。アプリの選択と自動記録の設定は残ります。" : {
       "comment" : "Reset confirmation: extra paragraph shown only when Screen Time is set up on this iPhone"
     },
+    "ソースコードとライセンス" : {
+      "comment" : "About page link title"
+    },
+    "タイマーはバックグラウンドでも止まりません。画面を閉じたときの表示は、iPhoneの設定でライブアクティビティを許可している場合に出ます。" : {
+      "comment" : "Settings footer: the Live Activity switch"
+    },
+    "バージョン" : {
+      "comment" : "About page row: app version"
+    },
+    "バージョン %@・クレジット・ライセンス" : {
+      "comment" : "Settings About row subtitle; the argument is the version, e.g. 1.1.0 (10)"
+    },
+    "プレビュー" : {
+      "comment" : "Support mail: a Debug preview build that keeps nothing"
+    },
+    "ポモジェムについてのお問い合わせ" : {
+      "comment" : "Support mail subject"
+    },
+    "メールで問い合わせる" : {
+      "comment" : "Settings row: write to support by mail"
+    },
     "ロック画面などに残り時間・進捗を表示" : {
       "comment" : "Settings row subtitle: where the Live Activity timer appears"
+    },
+    "以下はアプリが自動で記入しました。記録の内容やテーマ名は含まれていません。不要な行は消してから送れます。" : {
+      "comment" : "Support mail body: explains the filled-in lines below it"
+    },
+    "保存先：%@" : {
+      "comment" : "Support mail line; the argument is where records are kept"
     },
     "先月の瓶のお知らせ" : {
       "comment" : "Settings switch title: the opt-in monthly look-back notification"
@@ -31,20 +109,38 @@
     "先月の瓶のお知らせは、毎月1日のこの時刻に届きます。前の月に記録がなければ届きません。" : {
       "comment" : "Settings caption: when the monthly look-back notification is sent"
     },
+    "利用中" : {
+      "comment" : "Support mail: Pro is owned"
+    },
+    "承認待ち" : {
+      "comment" : "Support mail: a Pro purchase awaits approval"
+    },
+    "承認待ち・承認されると自動で使えます" : {
+      "comment" : "Settings Pro row subtitle while a purchase request awaits approval"
+    },
     "控えめ" : {
       "comment" : "Effect intensity option: calmer light and shorter effects (Subtle)"
     },
     "控えめにしても、粒の重さや数、融合、カットは変わりません。「視差効果を減らす」がオンのときは、常に控えめで表示します。この設定はこのiPhoneだけに保存され、iCloudでは同期しません。" : {
       "comment" : "Settings footer explaining Effect intensity"
     },
-    "既定はオフ。集中タイマー中にホーム画面や別のアプリへ移ると、30秒後に一度通知し、戻ると取り消します。画面をロックしただけなら通知しません（パスコードを使っていないiPhoneなどでは届くことがあります）。一時停止中・休憩中・終了間際も通知しません。" : {
-      "comment" : "Settings caption under the return-to-focus reminder switch"
+    "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このiPhoneのデータはアプリの削除で、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除できます。" : {
+      "comment" : "Settings export footer in iCloud mode"
+    },
+    "書き出すファイル（JSON）には、テーマ名・成果メモ・設定、このiPhoneにあるすべての記録（リセット前の記録を含む）、タイマーの同期に使うランダムな端末IDが入ります。SNS用のシェア画像とは別のファイルです。書き出したファイルの置き場所や送り先に注意してください。このファイルを読み込んで記録を戻したり、iCloudへ移したりすることはできません。リセットしてもテーマと設定は残ります。このiPhoneのデータは、アプリを削除すると消えます。" : {
+      "comment" : "Settings export footer on a local-only iPhone"
+    },
+    "未購入" : {
+      "comment" : "Support mail: Pro is not owned"
     },
     "朱色" : {
       "comment" : "Theme colour swatch name (Vermilion)"
     },
     "標準" : {
       "comment" : "Effect intensity option: every light and motion effect (Standard)"
+    },
+    "機種：%@" : {
+      "comment" : "Support mail line; the argument is the model identifier, e.g. iPhone13,1"
     },
     "毎日のリマインダー" : {
       "comment" : "Settings switch title: the opt-in daily reminder"
@@ -82,14 +178,35 @@
     "自然なきらめきと傾けたときの星、光の広がりをすべて表示します" : {
       "comment" : "Effect intensity detail for Standard"
     },
+    "自由な集中時間・結晶の月刻印・勉強アプリ数の無制限" : {
+      "comment" : "Settings Pro row subtitle for free users: what Pro adds"
+    },
     "若草" : {
       "comment" : "Theme colour swatch name (Young leaf green)"
     },
     "菫" : {
       "comment" : "Theme colour swatch name (Violet)"
     },
+    "著作権" : {
+      "comment" : "About page row: copyright"
+    },
     "藍" : {
       "comment" : "Theme colour swatch name (Indigo)"
+    },
+    "見出し書体" : {
+      "comment" : "About page row: the heading typeface"
+    },
+    "記録の書き出しとリセット" : {
+      "comment" : "Settings section header: export and reset"
+    },
+    "記録はあなたのiCloudに保存されます。開発者が記録を受け取ることはありません。" : {
+      "comment" : "Settings privacy footer in iCloud mode"
+    },
+    "記録はこのiPhoneにだけ保存されます。開発者が記録を受け取ることはありません。" : {
+      "comment" : "Settings privacy footer when records stay on this iPhone"
+    },
+    "記録をJSONファイルに書き出す（読み込みには非対応）" : {
+      "comment" : "Settings export row subtitle: the file cannot be imported back"
     },
     "設定を開く" : {
       "comment" : "Alert button: open this app's notification settings in iOS\nButton: open this app's notification settings in iOS"
@@ -97,14 +214,26 @@
     "許可する" : {
       "comment" : "Button: show the iOS notification permission prompt"
     },
+    "購入・返金の案内など（Webで開く）" : {
+      "comment" : "Settings row subtitle: what the support web page covers"
+    },
     "赤銅" : {
       "comment" : "Theme colour swatch name (Copper)"
     },
     "通知する時刻" : {
       "comment" : "Settings time picker label for reminders"
     },
+    "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。テーマと設定は残ります。リセット前の記録はこのiPhoneの中に残り、データの書き出しに含まれることがあります。このiPhoneから完全に消すには、アプリを削除してください。この操作は取り消せません。" : {
+      "comment" : "Reset confirmation on a local-only iPhone"
+    },
+    "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。同じiCloudを使うほかのiPhoneにも、接続したときに反映されます。オフラインのiPhoneから古い記録が戻らないよう、リセット前の記録は同期のために残り、データの書き出しにも含まれます。このiPhoneから完全に消すにはアプリを削除し、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除してください。この操作は取り消せません。" : {
+      "comment" : "Reset confirmation in iCloud mode"
+    },
     "青緑" : {
       "comment" : "Theme colour swatch name (Teal)"
+    },
+    "（お問い合わせの内容をお書きください。不具合の場合は、操作の手順と起きたことを教えてください。）" : {
+      "comment" : "Support mail body: where the person writes their message"
     }
   },
   "version" : "1.0"
