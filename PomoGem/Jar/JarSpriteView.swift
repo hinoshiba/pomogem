@@ -211,8 +211,6 @@ struct JarSpriteView: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                JarAmbientStage()
-
                 let effortSnapshot = JarAccumulationPresencePresentation.effortSnapshot(
                     totalGrams: totalGrams
                 )
@@ -457,6 +455,14 @@ struct JarSpriteView: View {
             .accessibilityHidden(true)
         }
 #endif
+        // The stage light lies behind the whole jar but outside its
+        // accessibility element: its glow is wider than the stage and its
+        // floor light runs past the bottom edge, and inside the element those
+        // bounds became the jar's frame, so VoiceOver's jar reached over the
+        // theme row and a tap placed in that frame missed the gem.
+        .background {
+            JarAmbientStage()
+        }
         .onDisappear {
             scene.cancelInteractionPresentation()
             motionObserver.stop()
