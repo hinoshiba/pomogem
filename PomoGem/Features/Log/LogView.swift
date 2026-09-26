@@ -1500,7 +1500,12 @@ struct LogView: View {
                         .cornerRadius(4)
                     }
                     .chartXAxis {
-                        AxisMarks(values: .stride(by: shownPeriod == .week ? .day : .weekOfMonth)) { value in
+                        // A month is marked every seven days (1, 8, 15…).
+                        // Not `.weekOfMonth`: Swift Charts stops the app on
+                        // it (iOS 26.5: "BinningUnit+Calendar.swift:314:
+                        // Component is not supported"), as soon as 今月 has
+                        // a bar to draw.
+                        AxisMarks(values: .stride(by: .day, count: shownPeriod == .week ? 1 : 7)) { value in
                             AxisValueLabel(format: shownPeriod == .week ? .dateTime.weekday(.narrow) : .dateTime.day())
                             AxisGridLine().foregroundStyle(.clear)
                         }
