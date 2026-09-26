@@ -67,6 +67,9 @@
     "もう一度確認する" : {
 
     },
+    "アプリを開く" : {
+      "comment" : "Button on the system alarm at the end of a focus or break; opens PomoGem. Suggested English: Open App"
+    },
     "アプリを離れていたので一時停止しました" : {
       "comment" : "Paused timer notice after the person left the app during a focus. Suggested English: Paused because you left the app"
     },
@@ -127,6 +130,9 @@
     "下から音楽を選ぶと再生が始まります。" : {
 
     },
+    "休憩が終わりました" : {
+      "comment" : "Title of the system alarm when a break ends"
+    },
     "休憩のときなどに「ミュージック」アプリでApple Musicにサインインすると、再生できるようになります。" : {
 
     },
@@ -171,6 +177,9 @@
     },
     "次の曲" : {
       "comment" : "Skip to the next track in the Music app"
+    },
+    "止める" : {
+      "comment" : "Stop button on the system alarm (iOS 26.0 only). Suggested English: Stop"
     },
     "止めるまで音と強い振動をくり返します。鳴っている間は画面をつけたままにし、%@で自動的に止まります。サイレントスイッチに従います。" : {
       "comment" : "Alarm strength description; %@ is a duration such as 3分 (3 min). Suggested English: Repeats the sound and a strong vibration until you stop it. The screen stays on while it rings, and it stops by itself after %@. Follows the silent switch."
@@ -228,6 +237,9 @@
     },
     "集中時間" : {
       "comment" : "Shortcuts: the focus length parameter"
+    },
+    "集中時間が終わりました" : {
+      "comment" : "Title of the system alarm when a focus ends"
     },
     "集中用の音楽" : {
 
