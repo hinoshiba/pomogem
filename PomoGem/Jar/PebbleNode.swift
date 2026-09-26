@@ -538,6 +538,9 @@ final class PebbleNode: SKShapeNode {
     private var aggregateAuraNode: SKNode?
     private var earlyEffortAuraNode: SKSpriteNode?
     private var earlyEffortBloomNode: SKSpriteNode?
+    /// The warm pool of light the first gems rest in (round 12), in the
+    /// light rig so it stays under the gem while it rolls.
+    private var earlyEffortPoolNode: SKSpriteNode?
     /// D26 (b): the ×N count as a small engraved copper tag (one sprite).
     private var aggregateTagNode: SKSpriteNode?
     /// 1, or `quietTagScale` while another crystal is emphasised.
@@ -801,17 +804,11 @@ final class PebbleNode: SKShapeNode {
               !descriptor.isAchievement,
               !descriptor.isAggregate,
               !descriptor.isScreenTimeObstacle else {
-            earlyEffortAuraNode?.removeFromParent()
-            earlyEffortAuraNode = nil
-            earlyEffortBloomNode?.removeFromParent()
-            earlyEffortBloomNode = nil
+            removeEarlyEffortLight()
             return
         }
         guard enabled else {
-            earlyEffortAuraNode?.removeFromParent()
-            earlyEffortAuraNode = nil
-            earlyEffortBloomNode?.removeFromParent()
-            earlyEffortBloomNode = nil
+            removeEarlyEffortLight()
             return
         }
         if earlyEffortAuraNode == nil {
@@ -845,9 +842,37 @@ final class PebbleNode: SKShapeNode {
             aura.zPosition = -0.45
             addChild(aura)
             earlyEffortAuraNode = aura
+
+            // Round 12: a warm pool of light on the floor under the gem
+            // (#FFB38A, α0.35), so the first gem of an empty jar rests in
+            // light instead of alone in a dark bottle. Screen-fixed with
+            // the light rig, flat, behind the body.
+            if let rig = gemLightRigNode {
+                let pool = SKSpriteNode(
+                    texture: GemArtwork.poolTexture,
+                    size: CGSize(width: localRadius * 3.6, height: localRadius * 1.2)
+                )
+                pool.name = "pebble.earlyEffortPool"
+                pool.color = JarPalette.color(hex: "#FFB38A")
+                pool.colorBlendFactor = 1
+                pool.blendMode = .add
+                pool.position = CGPoint(x: 0, y: -localRadius * 0.72)
+                pool.zPosition = -1.1
+                rig.addChild(pool)
+                earlyEffortPoolNode = pool
+            }
             applyEarlyEffortAlpha()
         }
         configureEarlyEffortAuraMotion()
+    }
+
+    private func removeEarlyEffortLight() {
+        earlyEffortAuraNode?.removeFromParent()
+        earlyEffortAuraNode = nil
+        earlyEffortBloomNode?.removeFromParent()
+        earlyEffortBloomNode = nil
+        earlyEffortPoolNode?.removeFromParent()
+        earlyEffortPoolNode = nil
     }
 
     /// The early-effort light (§7.6): lighter with Reduce Transparency and
@@ -856,6 +881,7 @@ final class PebbleNode: SKShapeNode {
         let scale = effects.haloScale
         earlyEffortAuraNode?.alpha = (reducesTransparency ? 0.16 : 0.34) * scale
         earlyEffortBloomNode?.alpha = (reducesTransparency ? 0.12 : 0.26) * scale
+        earlyEffortPoolNode?.alpha = (reducesTransparency ? 0.16 : 0.35) * scale
     }
 
     private func configureEarlyEffortAuraMotion() {
@@ -1632,7 +1658,7 @@ final class PebbleNode: SKShapeNode {
     /// Additive light composites incorrectly into a transparent snapshot
     /// texture; while capturing, bake it as ordinary alpha-blended light.
     func setSnapshotBlending(_ capturing: Bool) {
-        let additive: [SKSpriteNode?] = [gemHaloNode, gemInnerGlowNode, dimensionalLightNode, earlyEffortAuraNode, earlyEffortBloomNode]
+        let additive: [SKSpriteNode?] = [gemHaloNode, gemInnerGlowNode, dimensionalLightNode, earlyEffortAuraNode, earlyEffortBloomNode, earlyEffortPoolNode]
         for node in additive.compactMap({ $0 }) + gemGlintNodes {
             node.blendMode = capturing ? .alpha : .add
         }

@@ -2302,15 +2302,17 @@ struct HomeView: View {
             ? offer.weeklySpokenTitle
             : "今回の記録は保存済みです"
         return HStack(spacing: 11) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 34, weight: .black))
-                .foregroundStyle(Color(hex: offer.heroColorHex(for: rareRewardMode)))
-                .frame(width: 48, height: 48)
-                .background(
-                    Color(hex: offer.heroColorHex(for: rareRewardMode)).opacity(0.12),
-                    in: Circle()
-                )
-                .accessibilityHidden(true)
+            // The earned gem itself (round 12), in the jar's own art and
+            // with its light, rather than a check mark: the reward's card
+            // shows the reward.
+            GemArtworkStone(
+                spec: GemArtworkStone.looseSpec(hex: offer.heroColorHex(for: rareRewardMode)),
+                glowHex: offer.heroColorHex(for: rareRewardMode),
+                glowOpacity: 0.5
+            )
+            .frame(width: 44, height: 44)
+            .frame(width: 48, height: 48)
+            .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(offer.dropTitle(for: rareRewardMode))
                     .font(.system(.headline, design: .rounded, weight: .black))
