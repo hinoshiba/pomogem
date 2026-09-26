@@ -197,6 +197,15 @@ require(
     == "端末の傾きや振る操作に合わせて瓶の粒を動かすために使います。値は保存・送信しません。",
     "motion purpose string differs from the reviewed on-device-only behavior",
 )
+require(
+    info.get("NSAppleMusicUsageDescription")
+    == "タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。",
+    "Apple Music purpose string differs from the reviewed Music-app playback control (Docs/FocusMusic.md)",
+)
+require(
+    "audio" not in info.get("UIBackgroundModes", []),
+    "focus music drives the Music app; the app must not declare background audio",
+)
 
 widget_info = load("PomoGemWidgets/Info.plist")
 require(widget_info.get("CFBundleDisplayName") == "ポモジェム", "widget display name differs from the current brand")

@@ -52,6 +52,9 @@ targets:
         UIUserInterfaceStyle: Dark
         NSPhotoLibraryAddUsageDescription: シェアカードを写真に保存します。
         NSMotionUsageDescription: 端末の傾きや振る操作に合わせて瓶の粒を動かすために使います。値は保存・送信しません。
+        # Focus music (Docs/FocusMusic.md): MusicKit authorization to control
+        # the Music app from the timer. No audio background mode is added.
+        NSAppleMusicUsageDescription: タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。
         ITSAppUsesNonExemptEncryption: false
         # The CloudKit container environment, expanded from the SAME build
         # setting that fills the icloud-container-environment entitlement, so

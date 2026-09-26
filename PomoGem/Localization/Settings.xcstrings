@@ -85,6 +85,9 @@
     "ポモジェムについてのお問い合わせ" : {
       "comment" : "Support mail subject"
     },
+    "ミュージックアプリで再生する集中用の音楽を選べます" : {
+      "comment" : "VoiceOver hint of the Settings focus music row: it opens the Apple Music list"
+    },
     "メールで問い合わせる" : {
       "comment" : "Settings row: write to support by mail"
     },
@@ -120,6 +123,9 @@
     },
     "未購入" : {
       "comment" : "Support mail: Pro is not owned"
+    },
+    "未選択" : {
+      "comment" : "Settings focus music row value when no music is chosen yet (English: Not selected)"
     },
     "機種：%@" : {
       "comment" : "Support mail line; the argument is the model identifier, e.g. iPhone13,1"
@@ -171,6 +177,9 @@
     },
     "集中の粒・結晶・記念石を表示と集計から外し、0から始めます。同じiCloudを使うほかのiPhoneにも、接続したときに反映されます。オフラインのiPhoneから古い記録が戻らないよう、リセット前の記録は同期のために残り、データの書き出しにも含まれます。このiPhoneから完全に消すにはアプリを削除し、iCloudのデータはiPhoneの「設定」にあるiCloudのストレージ管理から削除してください。この操作は取り消せません。" : {
       "comment" : "Reset confirmation in iCloud mode"
+    },
+    "集中用の音楽" : {
+      "comment" : "Settings row: opens the focus music (Apple Music) list; same name as the timer's music sheet"
     },
     "（お問い合わせの内容をお書きください。不具合の場合は、操作の手順と起きたことを教えてください。）" : {
       "comment" : "Support mail body: where the person writes their message"

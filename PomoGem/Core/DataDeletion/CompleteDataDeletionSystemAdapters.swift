@@ -425,6 +425,9 @@ final class SystemCompleteDataDeletionDeviceState: CompleteDataDeletionDeviceSta
         notificationCenter.removeAllDeliveredNotifications()
         try await notificationCenter.setBadgeCount(0)
         await FocusActivityManager.shared.endAll()
+        // The music keys go with the defaults domain below; the Music app's
+        // playback is the person's own and keeps going.
+        FocusMusicController.shared.resetForCompleteDataDeletion()
 
         _ = try CompleteDataDeletionArtifactCleaner.clearOwnedTemporaryArtifacts(
             temporaryDirectory: temporaryDirectory

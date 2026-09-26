@@ -75,6 +75,10 @@ struct SettingsView: View {
     private var focusReturnReminderEnabled = false
     @AppStorage(TimerOrientationPreference.defaultsKey)
     private var defaultTimerOrientationRawValue = TimerDefaultOrientation.automatic.rawValue
+    @AppStorage(FocusMusicPreferences.sourceKey)
+    private var focusMusicSourceID = ""
+    @State private var focusMusic = FocusMusicController.shared
+    @State private var isFocusMusicPresented = false
     @State private var purchase = PurchaseManager.shared
     @State private var isSubjectEditorPresented = false
     @State private var editingSubjectID: UUID?
@@ -210,6 +214,14 @@ struct SettingsView: View {
             .environment(\.dynamicTypeSize, dynamicTypeSize)
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isFocusMusicPresented) {
+            // Settings is portrait and no focus runs here, so the sheet is
+            // upright and may link to the 「設定」 app (D4.1 applies only
+            // while a focus is on screen).
+            FocusMusicSheet(controller: focusMusic, allowsLeavingApp: true)
+                .modifier(FocusMusicSheetOrientation(isUpsideDown: false))
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
         }
         .sheet(isPresented: $showDataExportShareSheet, onDismiss: {
             removePresentedDataExport()
@@ -541,7 +553,65 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("settings.keep-screen-awake")
             }
+
+            focusMusicRow
         }
+    }
+
+    /// F4 (Docs/FocusMusic.md). The same sheet as the timer's music note,
+    /// named by the chosen music. No focus runs behind Settings, so the
+    /// sheet may offer the 「設定」 app when access was denied. Showing the
+    /// row asks nothing and reads no subscription or catalog; the sheet does
+    /// that when it opens.
+    private var focusMusicRow: some View {
+        Button {
+            isFocusMusicPresented = true
+        } label: {
+            HStack(spacing: 8) {
+                SettingLabel(
+                    title: focusMusicRowTitle,
+                    subtitle: focusMusicRowValue,
+                    symbol: "music.note"
+                )
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(PomoGemTheme.muted)
+                    .accessibilityHidden(true)
+            }
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PomoGemBareButtonStyle())
+        .accessibilityLabel(Text(verbatim: focusMusicRowTitle))
+        .accessibilityValue(Text(verbatim: focusMusicRowValue))
+        .accessibilityHint(Text(
+            "ミュージックアプリで再生する集中用の音楽を選べます",
+            tableName: "Settings",
+            comment: "VoiceOver hint of the Settings focus music row: it opens the Apple Music list"
+        ))
+        .accessibilityIdentifier("settings.focus-music")
+    }
+
+    private var focusMusicRowTitle: String {
+        String(
+            localized: "集中用の音楽",
+            table: "Settings",
+            comment: "Settings row: opens the focus music (Apple Music) list; same name as the timer's music sheet"
+        )
+    }
+
+    /// The chosen music's catalog title once the sheet has read it, else our
+    /// Japanese label (`FocusMusicController.title(for:)`).
+    private var focusMusicRowValue: String {
+        if let source = FocusMusicCatalog.source(id: focusMusicSourceID) {
+            return focusMusic.title(for: source)
+        }
+        return String(
+            localized: "未選択",
+            table: "Settings",
+            comment: "Settings focus music row value when no music is chosen yet (English: Not selected)"
+        )
     }
 
     /// settings-06. The two switches that reach beyond the timer screen,

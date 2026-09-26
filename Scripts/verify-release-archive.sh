@@ -388,6 +388,14 @@ if app_plist.get("ITSAppUsesNonExemptEncryption") is not False:
     fail("app export-compliance declaration differs from the reviewed release")
 if app_plist.get("NSSupportsLiveActivities") is not True:
     fail("app must enable its reviewed account-neutral Live Activity")
+# Focus music (Docs/FocusMusic.md): MusicKit authorization terminates an app
+# without this purpose string, and the Music app plays, never this app.
+if app_plist.get("NSAppleMusicUsageDescription") != (
+    "タイマー画面から『ミュージック』アプリで集中用の音楽を再生するために使います。"
+):
+    fail("app Apple Music purpose string differs from the reviewed Music-app playback control")
+if "audio" in app_plist.get("UIBackgroundModes", []):
+    fail("app must not declare background audio; focus music plays in the Music app")
 if (
     "NSSupportsLiveActivitiesFrequentUpdates" in app_plist
     and app_plist.get("NSSupportsLiveActivitiesFrequentUpdates") is not False
