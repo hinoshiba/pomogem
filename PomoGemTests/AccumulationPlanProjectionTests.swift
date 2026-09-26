@@ -1,3 +1,4 @@
+import SpriteKit
 import XCTest
 @testable import PomoGem
 
@@ -265,5 +266,36 @@ final class AccumulationPlanProjectionTests: XCTestCase {
         XCTAssertTrue(PomodoroDuration.freePresets.compactMap(\.minutes).contains(
             AccumulationPlanProjection.Plan.suggested.minutesPerSession
         ))
+    }
+
+    // MARK: - Preview jar (jar-05)
+
+    /// The planning preview restores its jar again whenever the timeline
+    /// rests on a new month. The same gems keep the same angles, so the jar
+    /// does not visibly reshuffle.
+    @MainActor
+    func testRebuildingThePreviewJarKeepsEveryGemsAngle() {
+        let descriptors = AccumulationPlanProjection.make(
+            plan: .suggested,
+            elapsedMonths: 120
+        ).descriptors
+        let scene = JarScene(size: CGSize(width: 390, height: Constants.Jar.height))
+
+        scene.restore(pebbles: descriptors)
+        let first = Self.angles(in: scene)
+        scene.restore(pebbles: descriptors)
+
+        XCTAssertFalse(first.isEmpty)
+        XCTAssertEqual(Self.angles(in: scene), first)
+    }
+
+    @MainActor
+    private static func angles(in scene: JarScene) -> [UUID: CGFloat] {
+        var angles: [UUID: CGFloat] = [:]
+        scene.enumerateChildNodes(withName: "//*") { node, _ in
+            guard let pebble = node as? PebbleNode else { return }
+            angles[pebble.descriptor.id] = pebble.zRotation
+        }
+        return angles
     }
 }

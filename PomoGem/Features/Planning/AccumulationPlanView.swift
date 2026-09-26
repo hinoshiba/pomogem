@@ -18,10 +18,14 @@ struct AccumulationPlanView: View {
         AccumulationPlanProjection.Plan.suggested.years * 12
     )
     @State private var previewScene = JarScene()
+    @State private var sceneRefreshTask: Task<Void, Never>?
 
     /// The free timer presets the person can actually run (25/45/60/90).
     private let minuteChoices = PomodoroDuration.freePresets.compactMap(\.minutes)
     private let productSessionsPerWeekRange = 1 ... 21
+    /// jar-05: the preview jar is rebuilt once the slider or a stepper has
+    /// rested this long, not on every one-month step of a drag.
+    private static let sceneRefreshDelay: Duration = .milliseconds(120)
 
     init(start: AccumulationPlanStart = .empty) {
         self.start = start
@@ -69,9 +73,10 @@ struct AccumulationPlanView: View {
         .preferredColorScheme(.dark)
         .accessibilityIdentifier("planning.accumulation.view")
         .onAppear(perform: refreshScene)
-        .onChange(of: previewMonth) { _, _ in refreshScene() }
-        .onChange(of: sessionsPerWeek) { _, _ in refreshScene() }
-        .onChange(of: minutesPerSession) { _, _ in refreshScene() }
+        .onDisappear { sceneRefreshTask?.cancel() }
+        .onChange(of: previewMonth) { _, _ in scheduleSceneRefresh() }
+        .onChange(of: sessionsPerWeek) { _, _ in scheduleSceneRefresh() }
+        .onChange(of: minutesPerSession) { _, _ in scheduleSceneRefresh() }
         .onChange(of: years) { _, newValue in
             previewMonth = Double(newValue * 12)
         }
@@ -596,11 +601,27 @@ struct AccumulationPlanView: View {
 
     @MainActor
     private func refreshScene() {
+        sceneRefreshTask?.cancel()
+        sceneRefreshTask = nil
         // `restore` is intentionally used here rather than the live drop API:
         // it triggers no landing feedback or persistence callback. Avoid
         // mutating `soundEnabled` / `hapticsEnabled` here because JarScene's
         // default dependencies are app-wide shared instances.
         previewScene.restore(pebbles: projection.descriptors)
+    }
+
+    /// jar-05: a drag across the timeline changes `previewMonth` on every
+    /// one-month step, and each restore rebuilt every preview gem (about
+    /// 11 ms on the main thread). The numbers above follow the slider live;
+    /// the jar, below the fold during a drag, catches up once it rests.
+    @MainActor
+    private func scheduleSceneRefresh() {
+        sceneRefreshTask?.cancel()
+        sceneRefreshTask = Task { @MainActor in
+            try? await Task.sleep(for: Self.sceneRefreshDelay)
+            guard !Task.isCancelled else { return }
+            refreshScene()
+        }
     }
 }
 

@@ -728,7 +728,9 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 x: cursorX + node.radius,
                 y: min(cursorY + node.radius, interiorRect.maxY - node.radius)
             )
-            node.zRotation = CGFloat.random(in: -.pi ... .pi)
+            // jar-05: the same gem keeps the same angle on every restore, so
+            // the planning preview does not reshuffle when it is rebuilt.
+            node.zRotation = deterministicAngle(for: descriptor.id)
             node.markLanded()
             worldNode.addChild(node)
             cursorX += node.radius * 2
