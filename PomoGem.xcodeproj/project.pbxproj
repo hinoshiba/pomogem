@@ -13,6 +13,7 @@
 		0323372A629D0A491406B8DC /* FocusSystemLocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF32BC687BF8848CD2E7D231 /* FocusSystemLocalizationTests.swift */; };
 		03FAAEE0629B472CE1D32A8B /* StorageTransferAccountNamespaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A4A5EAD0BFF7E4E3075E3F2 /* StorageTransferAccountNamespaceTests.swift */; };
 		060F0EB3F272CF1318515E6F /* SoundSynth.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1B65B3483A5F46CCEB18924 /* SoundSynth.swift */; };
+		07191C1E3EDB9880D4096739 /* AlarmSoundLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 234C4A059510D0E1D3848E26 /* AlarmSoundLibraryTests.swift */; };
 		0720DDB7D513CB10C736C318 /* FortyYearDebugScenario.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200C14C0D5A5A1A1A0342749 /* FortyYearDebugScenario.swift */; };
 		07241C08F72686A7F620090E /* AchievementNotePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B87A3CE7EADB4B5A2C578A3A /* AchievementNotePolicyTests.swift */; };
 		08287C3427FF8A90467F54F9 /* SubjectNamePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C58C458F3816E6A3F1E1E80 /* SubjectNamePolicyTests.swift */; };
@@ -69,6 +70,7 @@
 		2D3364F0DE0F825E548146B7 /* HomeLocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20CEC194143F69FFEAA1FBD7 /* HomeLocalizationTests.swift */; };
 		2E9090DD08C3DD85C21D0B8F /* ScreenTimeObstacleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61A75244675655D9CCCEFA81 /* ScreenTimeObstacleTests.swift */; };
 		2F07026E823B158E70DDDF0B /* StorageTransferRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A150837BBFAB5F4A33C3FED /* StorageTransferRuntime.swift */; };
+		2F95B236FBF79D871DA24C16 /* AlarmSoundSynthesisTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7893237F298DD20D6D142A00 /* AlarmSoundSynthesisTests.swift */; };
 		30551622D7BEC6AACFEF7512 /* PendingRewardReceiptChangeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 492C911842D0EDC7D5A093AF /* PendingRewardReceiptChangeTests.swift */; };
 		3065CFF38231215168E38678 /* AccumulationPlanProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6545EB68BE25DE2F487A00 /* AccumulationPlanProjection.swift */; };
 		30D3A6CC56090746F846C5FD /* ScreenTimeTimerHoldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EADE403EA7E6C80904B80E54 /* ScreenTimeTimerHoldTests.swift */; };
@@ -198,6 +200,7 @@
 		78B9055A72C9DC3FFE5842F0 /* CustomDurationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CEE148CEBF14D1D1A0C63F0 /* CustomDurationView.swift */; };
 		78F28B907BD71D887F0CDF95 /* JarFrameProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624C92181EF2C67AD84D3051 /* JarFrameProbe.swift */; };
 		795717D40AD45DBD4E597038 /* Planning.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 6F28264310D4A9D7A573B945 /* Planning.xcstrings */; };
+		79B08CBDCD1ED01E5818E371 /* AlarmSoundLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 473E7452428555204954E1B4 /* AlarmSoundLibrary.swift */; };
 		7B86CB735F54DC1AF1A5A912 /* StringInterpolationLintTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77C0B9A0C05D63E3E3866203 /* StringInterpolationLintTests.swift */; };
 		7C2E5D1DC101CB6C3C6322B1 /* FocusMusicSystemAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5CFD7AB2B24346430CB54C6 /* FocusMusicSystemAdapters.swift */; };
 		7CB82FE804B2887172375629 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EFB20CEF01CE01A6FC6CBB9 /* Constants.swift */; };
@@ -315,6 +318,7 @@
 		B39044942B9AF04552F2C4C0 /* StorageTransferSettingsUITestFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FB16E3D6A5C3CCBA74EFC70 /* StorageTransferSettingsUITestFixture.swift */; };
 		B3E7F868F0D3C285686ACE4E /* CloudActivityHistoryMarkerCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9053735EAE9817A4E106E552 /* CloudActivityHistoryMarkerCacheTests.swift */; };
 		B424D4420E2E278162B12956 /* FocusMusicController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F87839EC3DC329E64177C80 /* FocusMusicController.swift */; };
+		B6FC505599E78B60C61F22EE /* AlarmPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6B6DA7E3B2B5FDD85C2EFE8 /* AlarmPreferences.swift */; };
 		B702AB34415F741E68E6ABDC /* ShareFlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0160025A4DC2487F2A2E24AB /* ShareFlowLayout.swift */; };
 		B815AA2A1D9EC5C421B29582 /* StorageTransferLaunchReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31BFA75745128E1254D40BC1 /* StorageTransferLaunchReader.swift */; };
 		B8330EDEA9EDF702B2C2A269 /* FocusStartEntryPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B51F474FB9DD6222F17AC34 /* FocusStartEntryPolicyTests.swift */; };
@@ -371,6 +375,7 @@
 		D8047F55883738E97AA2F354 /* AppLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13A5573A93B75183A10587E4 /* AppLinks.swift */; };
 		D9B5819276B555906901D9B1 /* CompleteDataDeletionSystemAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAB36DAA45CD3F662E33B306 /* CompleteDataDeletionSystemAdapters.swift */; };
 		DA1920C5349796A55548304A /* SyncMaintenanceWorkerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2FBF7E577EC280E22DDC78A /* SyncMaintenanceWorkerTests.swift */; };
+		DAF9A9D09FE8ED18C5347118 /* AlarmPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2CE3D9EE63886A1945A8AF /* AlarmPreferencesTests.swift */; };
 		DB0BFAAA0DE4A42003FE5E6D /* RealDeviceStorageTransferLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFDE9F0BB6142B51EBA85B6F /* RealDeviceStorageTransferLifecycleTests.swift */; };
 		DB581C5F804C40DDBCA4B0C5 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8018C65F844DB234D0AAC3E /* NotificationManager.swift */; };
 		DC702BF0089B8AB32FE1E788 /* StorageTransferRemoteRecoveryCloudKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 304682ED2010B4AFADAD2F75 /* StorageTransferRemoteRecoveryCloudKit.swift */; };
@@ -435,6 +440,7 @@
 		FCB1C8F99A85F6B47477E360 /* AccumulationTimelineRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21361A11D14FBB08C51AE057 /* AccumulationTimelineRepositoryTests.swift */; };
 		FD5E7022FA135DA440D649AA /* HomeProjectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B78F394CAE07C13C1BE00957 /* HomeProjectionTests.swift */; };
 		FD783984890C951E5D635B2F /* ScreenTimePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 809FB50FE322FC2270FD6F55 /* ScreenTimePolicy.swift */; };
+		FD9A4FF2FC72433BD88D29CA /* AlarmSoundSynthesis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EBA8A3A0E6FE1CFBF349B1F /* AlarmSoundSynthesis.swift */; };
 		FE40660D68D9C64F984F687E /* PreferredFocusPrecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACE82135E33F876E5620F28 /* PreferredFocusPrecisionTests.swift */; };
 		FF6C1EA1FF2B82541BEE93D7 /* CloudBackgroundGrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E812B2A7399F94A851843CA /* CloudBackgroundGrace.swift */; };
 		FF9F1E17BF1459420BFA5156 /* FocusMusicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C09A614A2D0EF6E336E84A43 /* FocusMusicTests.swift */; };
@@ -545,6 +551,7 @@
 		22AE75A11BD5EDDE67856C80 /* AcceptedActivityResetCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcceptedActivityResetCleanupTests.swift; sourceTree = "<group>"; };
 		22EB41E29C0DDEF66D098D39 /* Widgets.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Widgets.xcstrings; sourceTree = "<group>"; };
 		23281121BA4A32647A92F516 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		234C4A059510D0E1D3848E26 /* AlarmSoundLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmSoundLibraryTests.swift; sourceTree = "<group>"; };
 		23A59348CE223F32E2E77A9C /* CloudDataDeletionGuidanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDataDeletionGuidanceTests.swift; sourceTree = "<group>"; };
 		2408A7B34EB06AEB1260EBE9 /* PomoGemUITestScenario.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomoGemUITestScenario.swift; sourceTree = "<group>"; };
 		242F6C46DFBD7EB7FF76A689 /* FocusActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusActivityManager.swift; sourceTree = "<group>"; };
@@ -566,6 +573,7 @@
 		2DD50E345F510C6D928E8D62 /* CloudDataDeletionGuidanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDataDeletionGuidanceView.swift; sourceTree = "<group>"; };
 		2DDAE8A3E08C0FB57CB0FBE1 /* FortyYearPersistenceHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FortyYearPersistenceHarness.swift; sourceTree = "<group>"; };
 		2E3F46D9A68E7D74313DC720 /* FocusReturnReminderLockWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusReturnReminderLockWindowTests.swift; sourceTree = "<group>"; };
+		2EBA8A3A0E6FE1CFBF349B1F /* AlarmSoundSynthesis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmSoundSynthesis.swift; sourceTree = "<group>"; };
 		30006BD9CE5E801F6FEF7F54 /* ScreenTimeFocusShield.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeFocusShield.swift; sourceTree = "<group>"; };
 		301B5DB2A2FAC88DC5015AF4 /* BreakTimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreakTimerView.swift; sourceTree = "<group>"; };
 		304682ED2010B4AFADAD2F75 /* StorageTransferRemoteRecoveryCloudKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferRemoteRecoveryCloudKit.swift; sourceTree = "<group>"; };
@@ -608,6 +616,7 @@
 		44FCBAE48B1AFD7DFAB3EC5B /* LaunchLocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchLocalizationTests.swift; sourceTree = "<group>"; };
 		45B56B164A5E838876543CF2 /* StorageTransferRemoteRecoveryCloudKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferRemoteRecoveryCloudKitTests.swift; sourceTree = "<group>"; };
 		4673165732F5EFE9FD6BEE72 /* CompletionAlertUITestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionAlertUITestSupport.swift; sourceTree = "<group>"; };
+		473E7452428555204954E1B4 /* AlarmSoundLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmSoundLibrary.swift; sourceTree = "<group>"; };
 		484808620D30DF4DC69CD2E8 /* FocusPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusPersistence.swift; sourceTree = "<group>"; };
 		48EB4B5DE51DBD3D3008B8B9 /* BoundedLaunchPreparation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedLaunchPreparation.swift; sourceTree = "<group>"; };
 		492C911842D0EDC7D5A093AF /* PendingRewardReceiptChangeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingRewardReceiptChangeTests.swift; sourceTree = "<group>"; };
@@ -683,6 +692,7 @@
 		7608D5D6319C1049FCF4BB3F /* ManualEntrySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualEntrySheet.swift; sourceTree = "<group>"; };
 		7726C31466DDF0D319E74EEB /* AppEntryInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEntryInbox.swift; sourceTree = "<group>"; };
 		77C0B9A0C05D63E3E3866203 /* StringInterpolationLintTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StringInterpolationLintTests.swift; sourceTree = "<group>"; };
+		7893237F298DD20D6D142A00 /* AlarmSoundSynthesisTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmSoundSynthesisTests.swift; sourceTree = "<group>"; };
 		7A050345814C902A4AF65C03 /* CompleteDataDeletionTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompleteDataDeletionTypes.swift; sourceTree = "<group>"; };
 		7A1F2D1E6789FFD31075082A /* CloudOfflineStoreTopologyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudOfflineStoreTopologyTests.swift; sourceTree = "<group>"; };
 		7A8CBB070CBE2C504813FD08 /* HomeProjectionSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeProjectionSupport.swift; sourceTree = "<group>"; };
@@ -760,6 +770,7 @@
 		A55BD40B48DA6E4872504D29 /* SupportMailDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportMailDraftTests.swift; sourceTree = "<group>"; };
 		A55D40BDDEB56B47537EB376 /* StorageTransferLegacyCloudAdoptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferLegacyCloudAdoptionTests.swift; sourceTree = "<group>"; };
 		A5CFD7AB2B24346430CB54C6 /* FocusMusicSystemAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusMusicSystemAdapters.swift; sourceTree = "<group>"; };
+		A6B6DA7E3B2B5FDD85C2EFE8 /* AlarmPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmPreferences.swift; sourceTree = "<group>"; };
 		A6DACC9E7792C2200EE2C699 /* StorageTransferJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferJournal.swift; sourceTree = "<group>"; };
 		A78F4AF55E67F22420886C69 /* ScreenTimeSettingsUITestFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeSettingsUITestFixture.swift; sourceTree = "<group>"; };
 		A81DCEA1C2A2133E7484C8F8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -790,6 +801,7 @@
 		B851B25E6C0115D5FC82FA28 /* FocusLeaveNudgeSchedulingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusLeaveNudgeSchedulingTests.swift; sourceTree = "<group>"; };
 		B87A3CE7EADB4B5A2C578A3A /* AchievementNotePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AchievementNotePolicyTests.swift; sourceTree = "<group>"; };
 		B92FC4939B6F3BBAB093FF82 /* SoundSynthOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundSynthOutputTests.swift; sourceTree = "<group>"; };
+		BB2CE3D9EE63886A1945A8AF /* AlarmPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmPreferencesTests.swift; sourceTree = "<group>"; };
 		BB96CB40B75ED59410331FF2 /* Home.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Home.xcstrings; sourceTree = "<group>"; };
 		BC20B60AC810C395798DDEB0 /* TimerDefaultOrientationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerDefaultOrientationSettingsView.swift; sourceTree = "<group>"; };
 		BC8098012B640205A9689EB9 /* StorageTransferCloudMountControlReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferCloudMountControlReaderTests.swift; sourceTree = "<group>"; };
@@ -1223,6 +1235,16 @@
 			path = Shared;
 			sourceTree = "<group>";
 		};
+		66F7E64C5D6A4219AB299377 /* Alarm */ = {
+			isa = PBXGroup;
+			children = (
+				A6B6DA7E3B2B5FDD85C2EFE8 /* AlarmPreferences.swift */,
+				473E7452428555204954E1B4 /* AlarmSoundLibrary.swift */,
+				2EBA8A3A0E6FE1CFBF349B1F /* AlarmSoundSynthesis.swift */,
+			);
+			path = Alarm;
+			sourceTree = "<group>";
+		};
 		6D2AF319544B3A7CB5876557 /* Onboarding */ = {
 			isa = PBXGroup;
 			children = (
@@ -1269,6 +1291,7 @@
 				04ACC5184E5F617351B7ED95 /* SyncRemoteChangeHistory.swift */,
 				C0A9C1314CC1B5A18521DFEA /* UsagePurpose.swift */,
 				D818B9CBC387B5C7C74CE301 /* WidgetSnapshotStore.swift */,
+				66F7E64C5D6A4219AB299377 /* Alarm */,
 				9D602C9DA037AB0EBA899FB8 /* DataDeletion */,
 				19D4F0F658A8E55F9B2A6473 /* Localization */,
 				9B5F39354189945702AF39D8 /* Models */,
@@ -1306,6 +1329,9 @@
 				B87A3CE7EADB4B5A2C578A3A /* AchievementNotePolicyTests.swift */,
 				5C6C6F690DAE80124E03BFF0 /* ActivityResetTests.swift */,
 				5857A78DF27B0E73DE32C374 /* AggregateCardPlacementPolicyTests.swift */,
+				BB2CE3D9EE63886A1945A8AF /* AlarmPreferencesTests.swift */,
+				234C4A059510D0E1D3848E26 /* AlarmSoundLibraryTests.swift */,
+				7893237F298DD20D6D142A00 /* AlarmSoundSynthesisTests.swift */,
 				C7CA0949614CED6AA5F16278 /* AnimatedShareExporterTests.swift */,
 				5706397E816E7A2D9E23ABF0 /* AppEntryLinkTests.swift */,
 				189F9C27085367C86D86A859 /* BoundedLaunchPreparationTests.swift */,
@@ -1897,6 +1923,9 @@
 				D69E4076FAEDE140CCAAEDB7 /* AchievementNotePolicy.swift in Sources */,
 				A003B64D43B8832EE14B3A1D /* ActivityDataReset.swift in Sources */,
 				4BAC6B097ABCD8253818FD0D /* AggregateCardPlacementPolicy.swift in Sources */,
+				B6FC505599E78B60C61F22EE /* AlarmPreferences.swift in Sources */,
+				79B08CBDCD1ED01E5818E371 /* AlarmSoundLibrary.swift in Sources */,
+				FD9A4FF2FC72433BD88D29CA /* AlarmSoundSynthesis.swift in Sources */,
 				9C81622243F21976590DDAEE /* Analytics.swift in Sources */,
 				AE8D65F0021D89EBCE8A654C /* AnimatedShareExporter.swift in Sources */,
 				54595B2939B00BD845B27BFE /* AppEntryInbox.swift in Sources */,
@@ -2091,6 +2120,9 @@
 				07241C08F72686A7F620090E /* AchievementNotePolicyTests.swift in Sources */,
 				210B91AF5B3C606C22519C12 /* ActivityResetTests.swift in Sources */,
 				3891ED75802A66918D00F5F0 /* AggregateCardPlacementPolicyTests.swift in Sources */,
+				DAF9A9D09FE8ED18C5347118 /* AlarmPreferencesTests.swift in Sources */,
+				07191C1E3EDB9880D4096739 /* AlarmSoundLibraryTests.swift in Sources */,
+				2F95B236FBF79D871DA24C16 /* AlarmSoundSynthesisTests.swift in Sources */,
 				AB36821AD3DF9DF1078F2A18 /* AnimatedShareExporterTests.swift in Sources */,
 				A809D9321A4F95BD4F796BD3 /* AppEntryLinkTests.swift in Sources */,
 				24FDE33C03F4B5B936F37337 /* BoundedLaunchPreparationTests.swift in Sources */,
