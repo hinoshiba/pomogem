@@ -84,16 +84,15 @@ final class FocusLeaveSettingsUITests: XCTestCase {
         retainScreenshot(named: "Settings — leave pause on (product default)")
         try auditLeavePauseRows(named: "Settings — leave pause on")
 
-        // The series off: its permission notice goes with it.
-        XCTAssertTrue(scrollUntilHittable(nudges, attempts: 6, swipingDown: true))
-        tapSwitch(nudges)
-        XCTAssertTrue(waitForSwitch(nudges, value: "0", timeout: 4))
+        // The series off: its permission notice goes with it. The audits
+        // scrolled the List, so come back up first.
+        XCTAssertTrue(reveal(nudges, swipingDown: true))
+        XCTAssertTrue(toggle(nudges, to: "0"))
         XCTAssertFalse(element("settings.focus-leave-nudges-permission").exists)
 
         // The leave pause off: 集中に戻るお知らせ is back, exactly as before.
-        XCTAssertTrue(scrollUntilHittable(leavePause, attempts: 4, swipingDown: true))
-        tapSwitch(leavePause)
-        XCTAssertTrue(waitForSwitch(leavePause, value: "0", timeout: 4))
+        XCTAssertTrue(reveal(leavePause, swipingDown: true))
+        XCTAssertTrue(toggle(leavePause, to: "0"))
         XCTAssertTrue(waitForAbsence(nudges, timeout: 3), "The series exists only with the leave pause")
         XCTAssertTrue(waitForAbsence(nudgesFooter, timeout: 3))
         XCTAssertTrue(behavior.exists, "The footer says what happens with the switch off as well")
@@ -105,16 +104,17 @@ final class FocusLeaveSettingsUITests: XCTestCase {
         retainScreenshot(named: "Settings — leave pause off, return reminder back")
 
         // Back on: the series keeps the explicit off chosen above.
-        XCTAssertTrue(scrollUntilHittable(leavePause, attempts: 6, swipingDown: true))
-        tapSwitch(leavePause)
-        XCTAssertTrue(waitForSwitch(leavePause, value: "1", timeout: 4))
+        XCTAssertTrue(reveal(leavePause, swipingDown: true))
+        XCTAssertTrue(toggle(leavePause, to: "1"))
         XCTAssertTrue(nudges.waitForExistence(timeout: 3))
         XCTAssertEqual(nudges.value as? String, "0")
         XCTAssertTrue(waitForAbsence(returnReminder, timeout: 3))
+        XCTAssertTrue(reveal(nudges))
 
         // Turning the series on needs this iPhone's permission, like every
         // notification switch. A Simulator that already declined answers at
         // once; the switch then stays off and the alert leads to Settings.
+        settle(nudges)
         tapSwitch(nudges)
         allowNotificationPermissionIfPresented(timeout: 5)
         let permissionError = app.alerts["通知を設定できませんでした"]
@@ -209,6 +209,59 @@ final class FocusLeaveSettingsUITests: XCTestCase {
 
     private func tapSwitch(_ element: XCUIElement) {
         element.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+    }
+
+    /// Brings `element` fully into the content area below the navigation
+    /// bar; a row whose centre is hittable can still sit half under the bar,
+    /// which then takes the tap.
+    private func reveal(_ element: XCUIElement, swipingDown: Bool = false) -> Bool {
+        for _ in 0 ..< 20 {
+            if element.exists {
+                settle(element)
+                let top = app.navigationBars.allElementsBoundByIndex
+                    .filter(\.isHittable).map(\.frame.maxY).max() ?? 0
+                let bottom = app.windows.firstMatch.frame.maxY - 36
+                let frame = element.frame
+                if frame.height > 0, frame.width > 0 {
+                    if frame.minY >= top, frame.maxY <= bottom { return true }
+                    let correction = frame.minY < top
+                        ? top - frame.minY + 12 : bottom - frame.maxY - 12
+                    let distance = min(220, max(60, abs(correction))) * (correction < 0 ? -1 : 1)
+                    let start = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                    start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)))
+                    continue
+                }
+            }
+            if swipingDown {
+                app.swipeDown()
+            } else {
+                app.swipeUp()
+            }
+        }
+        return false
+    }
+
+    /// A tap while the List still decelerates after a swipe only stops the
+    /// scroll. Wait for the row to come to rest before tapping.
+    private func settle(_ element: XCUIElement) {
+        var frame = element.frame
+        for _ in 0 ..< 20 {
+            usleep(150_000)
+            let next = element.frame
+            if next == frame { return }
+            frame = next
+        }
+    }
+
+    /// Flips a switch that needs no permission. A second tap is made only
+    /// if the first one left the value unchanged (swallowed by the scroll).
+    private func toggle(_ element: XCUIElement, to value: String) -> Bool {
+        for _ in 0 ..< 2 {
+            settle(element)
+            tapSwitch(element)
+            if waitForSwitch(element, value: value, timeout: 4) { return true }
+        }
+        return false
     }
 
     private func waitForSwitch(_ element: XCUIElement, value: String, timeout: TimeInterval) -> Bool {
