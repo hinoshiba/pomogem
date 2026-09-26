@@ -28,6 +28,13 @@ enum ScreenTimeSettingsUITestFixture {
     static let learningApplicationCount = 2
     static let distractionApplicationCount = 1
     static let negativeGemCount = 3
+    /// One more than `FocusShieldPolicy.maximumApplications`.
+    static let tooManyDistractionApplicationCount = 51
+
+    /// The scenarios whose fixture bar can start a focus.
+    static var drivesFocusShield: Bool {
+        scenario == .focusShield || scenario == .focusShieldTooManyApps
+    }
 
     enum Scenario: String {
         /// The settings screen appears while the controller is still unbound;
@@ -41,6 +48,15 @@ enum ScreenTimeSettingsUITestFixture {
         /// refuses for want of a passcode, so the refusal, its fix and the
         /// Settings shortcut can be seen. The Simulator cannot refuse itself.
         case authorizationRefused = "authorization-refused"
+        /// F2: a bound, approved owner with the seeded apps and the focus
+        /// shield switched off. The fixture bar can start a focus, which
+        /// reconciles the shield through the real `FocusShieldController`
+        /// and `FocusShieldEngine` over in-memory ManagedSettings and
+        /// DeviceActivity doubles, and can make the failsafe refuse.
+        case focusShield = "focus-shield"
+        /// F2: the shield switched on with more distraction apps than a
+        /// shield can hold, so the page must say it shields nothing.
+        case focusShieldTooManyApps = "focus-shield-too-many"
     }
 
     static var scenario: Scenario? {
@@ -67,6 +83,16 @@ enum ScreenTimeSettingsUITestFixture {
         return tokens
     }
 
+    static func tooManyAppsConfiguration(themeID: UUID) -> ScreenTimeConfiguration {
+        var configuration = ScreenTimeConfiguration()
+        configuration.enabled = true
+        configuration.themeID = themeID
+        configuration.distractionSelection.applicationTokens =
+            applicationTokens(count: tooManyDistractionApplicationCount, seed: 0x33)
+        configuration.shieldsDistractionDuringFocusEnabled = true
+        return configuration
+    }
+
     static func seededConfiguration(themeID: UUID) -> ScreenTimeConfiguration {
         var configuration = ScreenTimeConfiguration()
         configuration.enabled = true
@@ -84,6 +110,15 @@ enum ScreenTimeSettingsUITestFixture {
 private final class ScreenTimeSettingsUITestFixtureCenter: ScreenTimeActivityCenterDriving {
     private let lock = NSLock()
     private var names: Set<String> = []
+    private var refuses = false
+
+    /// Makes every later `startMonitoring` throw, as a real center does when
+    /// it rejects a schedule, so the focus shield's failsafe-unavailable
+    /// path can be seen.
+    var refusesRegistration: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return refuses }
+        set { lock.lock(); defer { lock.unlock() }; refuses = newValue }
+    }
 
     var activities: [DeviceActivityName] {
         lock.lock()
@@ -104,7 +139,33 @@ private final class ScreenTimeSettingsUITestFixtureCenter: ScreenTimeActivityCen
     ) throws {
         lock.lock()
         defer { lock.unlock() }
+        if refuses { throw ScreenTimeError.unavailable }
         names.insert(activity.rawValue)
+    }
+}
+
+/// Stands in for the named ManagedSettings store: remembers how many apps
+/// the focus shield would block right now. The Simulator cannot shield.
+private final class ScreenTimeSettingsUITestFixtureShieldSettings: FocusShieldSettingsDriving {
+    private let lock = NSLock()
+    private var count = 0
+
+    var shieldedApplicationCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func shield(applications: Set<ApplicationToken>) {
+        lock.lock()
+        defer { lock.unlock() }
+        count = applications.count
+    }
+
+    func clear() {
+        lock.lock()
+        defer { lock.unlock() }
+        count = 0
     }
 }
 
@@ -147,12 +208,20 @@ private final class ScreenTimeSettingsUITestFixtureDriver: ScreenTimeMonitoringD
 }
 
 @MainActor
-final class ScreenTimeSettingsUITestFixtureModel {
+final class ScreenTimeSettingsUITestFixtureModel: ObservableObject {
     let controller: ScreenTimeController
+    /// Focus starts and ends whose shield work has fully run. The ledger row
+    /// prints it, so a test can wait for a pass to finish before it reads
+    /// the record: a pass that changes nothing publishes nothing on either
+    /// controller, and the row would otherwise still show the old ledger.
+    @Published private(set) var focusPasses = 0
     let themeID = UUID()
     private let store: ScreenTimeStore
     private let directory: URL
     private let driver: ScreenTimeSettingsUITestFixtureDriver
+    private let shieldRecords: FocusShieldRecordStore
+    private let shieldSettings: ScreenTimeSettingsUITestFixtureShieldSettings
+    private let shieldCenter: ScreenTimeSettingsUITestFixtureCenter
     private lazy var seeded = ScreenTimeSettingsUITestFixture.seededConfiguration(themeID: themeID)
 
     init(scenario: ScreenTimeSettingsUITestFixture.Scenario) {
@@ -160,7 +229,19 @@ final class ScreenTimeSettingsUITestFixtureModel {
             .appendingPathComponent("ScreenTimeSettingsUITestFixture-\(UUID().uuidString)", isDirectory: true)
         store = ScreenTimeStore(directory: directory)
         driver = ScreenTimeSettingsUITestFixtureDriver(store: store)
+        let records = FocusShieldRecordStore(directory: store.directoryURL)
+        let settings = ScreenTimeSettingsUITestFixtureShieldSettings()
+        let center = ScreenTimeSettingsUITestFixtureCenter()
+        shieldRecords = records
+        shieldSettings = settings
+        shieldCenter = center
         let refused = scenario == .authorizationRefused
+        // The real controller and engine over doubles: the record is a real
+        // file next to this temporary ledger, and nothing reaches the named
+        // ManagedSettings store or DeviceActivityCenter.
+        let focusShield = FocusShieldController(engine: FocusShieldEngine(
+            records: records, settings: settings, center: center
+        ))
         controller = ScreenTimeController(
             store: store,
             currentContextKey: { ScreenTimeSettingsUITestFixture.ownerKey },
@@ -168,7 +249,8 @@ final class ScreenTimeSettingsUITestFixtureModel {
             authorization: { refused ? .notDetermined : .approved },
             requestIndividualAuthorization: {
                 if refused { throw FamilyControlsError.authenticationMethodUnavailable }
-            }
+            },
+            focusShield: focusShield
         )
     }
 
@@ -183,9 +265,16 @@ final class ScreenTimeSettingsUITestFixtureModel {
             state.dataEpochID = nil
             state.contextIsActive = true
             state.learningAllowedBySubscription = true
-            if scenario == .lateBinding {
+            switch scenario {
+            case .lateBinding:
                 state.configuration = seeded
                 state.negativeGemCount = ScreenTimeSettingsUITestFixture.negativeGemCount
+            case .focusShield:
+                state.configuration = seeded
+            case .focusShieldTooManyApps:
+                state.configuration = ScreenTimeSettingsUITestFixture.tooManyAppsConfiguration(themeID: themeID)
+            case .firstSetup, .authorizationRefused:
+                break
             }
         }
         context.insert(Subject(
@@ -206,6 +295,39 @@ final class ScreenTimeSettingsUITestFixtureModel {
         try? FileManager.default.removeItem(at: directory)
     }
 
+    /// What the settings page's host does when a focus starts or resumes on
+    /// this iPhone: reconcile the shield for a running focus that ends in
+    /// 25 minutes. A new session each time, so a lifted one does not stay
+    /// lifted.
+    func startFocus() {
+        reconcileFocus(.running(sessionID: UUID(), plannedEnd: Date().addingTimeInterval(25 * 60)))
+    }
+
+    /// What the host does when the focus completes or is abandoned.
+    func endFocus() {
+        reconcileFocus(.none)
+    }
+
+    private func reconcileFocus(_ focus: FocusShieldFocusState) {
+        controller.focusShield.reconcile(
+            configuration: controller.configuration, authorization: .approved, focus: focus, force: true
+        )
+        Task {
+            await controller.focusShield.waitForPendingOperations()
+            focusPasses += 1
+        }
+    }
+
+    func refuseFailsafeRegistration() {
+        shieldCenter.refusesRegistration = true
+    }
+
+    private var shieldRecordSummary: String {
+        guard let record = try? shieldRecords.load() else { return "none" }
+        if record.active { return "active" }
+        return record.liftedAt == nil ? "cleared" : "lifted"
+    }
+
     /// What is actually on disk, independent of anything the screen publishes.
     /// `matchesSeed` is the assertion that matters: a save performed from a
     /// draft seeded off an unbound controller would replace the stored opaque
@@ -218,7 +340,10 @@ final class ScreenTimeSettingsUITestFixtureModel {
             "enabled=\(state.configuration.enabled ? 1 : 0)",
             "theme=\(state.configuration.themeID == themeID ? "seed" : "other")",
             "matchesSeed=\(state.configuration == seeded)",
-            "sync=\(driver.events.filter { $0 == "synchronize" }.count)"
+            "sync=\(driver.events.filter { $0 == "synchronize" }.count)",
+            "focusShield=\(state.configuration.shieldsDistractionDuringFocusEnabled ? 1 : 0)",
+            "shieldRecord=\(shieldRecordSummary)",
+            "shielded=\(shieldSettings.shieldedApplicationCount)"
         ].joined(separator: ";")
     }
 }
@@ -300,7 +425,7 @@ struct ScreenTimeSettingsUITestFixtureLaunchView: View {
 }
 
 private struct ScreenTimeSettingsUITestFixtureBar: View {
-    let model: ScreenTimeSettingsUITestFixtureModel
+    @ObservedObject var model: ScreenTimeSettingsUITestFixtureModel
     /// Observed so the row re-reads the ledger whenever the controller
     /// publishes — a bind, a save, or a refused save.
     @ObservedObject var controller: ScreenTimeController
@@ -309,20 +434,58 @@ private struct ScreenTimeSettingsUITestFixtureBar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(verbatim: "bind=\(bindState);boundToContext=\(controller.isBoundToContext);\(model.ledgerSummary)")
-                .font(.caption2)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("screen-time.fixture-ledger")
-            Button("fixture-bind") { bind() }
-                .font(.caption)
-                .disabled(bindState != "unbound")
-                .accessibilityIdentifier("screen-time.fixture-bind")
+            FixtureLedgerRow(model: model, controller: controller, shield: controller.focusShield,
+                             bindState: bindState)
+            HStack(spacing: 16) {
+                Button("fixture-bind") { bind() }
+                    .disabled(bindState != "unbound")
+                    .accessibilityIdentifier("screen-time.fixture-bind")
+                if ScreenTimeSettingsUITestFixture.drivesFocusShield {
+                    Button("fixture-start-focus") { model.startFocus() }
+                        .accessibilityIdentifier("screen-time.fixture-start-focus")
+                    Button("fixture-end-focus") { model.endFocus() }
+                        .accessibilityIdentifier("screen-time.fixture-end-focus")
+                    Button("fixture-refuse-failsafe") { model.refuseFailsafeRegistration() }
+                        .accessibilityIdentifier("screen-time.fixture-refuse-failsafe")
+                }
+            }
+            .font(.caption)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
         .background(.regularMaterial)
         // A test readout, not app UI: at AX5 it would cover half the page.
         .dynamicTypeSize(.large)
+    }
+}
+
+/// The ledger readout. Observes the focus shield as well as the Screen Time
+/// controller: a shield operation publishes only on `FocusShieldController`,
+/// and only when `isShielding` or `failsafeUnavailable` changes, which for a
+/// lift happens before the queued operation has written the record. So the
+/// row also re-reads once the shield's queue has drained after each change,
+/// and after every fixture focus start or end (`focusPasses`), which may
+/// change nothing that is published at all.
+private struct FixtureLedgerRow: View {
+    @ObservedObject var model: ScreenTimeSettingsUITestFixtureModel
+    @ObservedObject var controller: ScreenTimeController
+    @ObservedObject var shield: FocusShieldController
+    let bindState: String
+    @State private var drainedPasses = 0
+
+    var body: some View {
+        Text(verbatim: "bind=\(bindState);boundToContext=\(controller.isBoundToContext);"
+             + "\(model.ledgerSummary);isShielding=\(shield.isShielding ? 1 : 0);"
+             + "failsafeUnavailable=\(shield.failsafeUnavailable ? 1 : 0);"
+             + "lastFocusUnshielded=\(shield.lastFocusWentUnshielded ? 1 : 0);"
+             + "focusPasses=\(model.focusPasses);drained=\(drainedPasses)")
+            .font(.caption2)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("screen-time.fixture-ledger")
+            .task(id: "\(shield.isShielding)-\(shield.failsafeUnavailable)") {
+                await shield.waitForPendingOperations()
+                drainedPasses += 1
+            }
     }
 }
 #endif

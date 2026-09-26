@@ -99,10 +99,19 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
             // window in which a user who started a focus and left the app at
             // once kept the old hold.
             .onReceive(NotificationCenter.default.publisher(for: FocusPersistence.didChange)) { _ in
+                // Before the learning-hold dedupe below, which skips saves
+                // that leave the hold as it was. The shield follows the focus
+                // session, not the hold, and dedupes on its own decision.
+                reconcileFocusShield()
                 let pause = currentLearningPause()
                 guard pause != lastNotifiedLearningPause else { return }
                 lastNotifiedLearningPause = pause
                 reconcileNow(learningPause: pause)
+            }
+            // A save that switches the focus shield on or off, or changes the
+            // distraction apps, applies at once instead of on the next pass.
+            .onChange(of: controller.configuration) { _, _ in
+                reconcileFocusShield()
             }
             .onChange(of: resolvedIsPro) { _, _ in
                 // Also fires when StoreKit first answers, which is when a gate
@@ -158,6 +167,20 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
         )
     }
 
+    /// F2. Same inputs as the learning hold — the saved timer and this
+    /// activity generation — and the same rule that only a bound owner acts.
+    /// Deliberately not gated on `scenePhase`: a pause saved while PomoGem is
+    /// leaving the foreground must reach the shield, which keeps it.
+    @MainActor
+    private func reconcileFocusShield(force: Bool = false) {
+        guard isReady, isCurrentOwner else { return }
+        controller.reconcileFocusShield(
+            contextKey: contextKey, dataEpochID: dataEpochID,
+            focus: FocusShieldFocusState(envelope: FocusPersistence.load(), dataEpochID: dataEpochID),
+            force: force
+        )
+    }
+
     @MainActor
     private var canContinueRefresh: Bool {
         !Task.isCancelled && isCurrentOwner
@@ -186,6 +209,10 @@ struct ScreenTimeIntegrationModifier: ViewModifier {
             // this pass — not reconcile — is what notices it.
             await controller.invalidateAuthorizationIfRevoked()
             guard canContinueRefresh else { return }
+            // Every activation re-derives the shield from the saved timer (a
+            // relaunch, a focus that ended while PomoGem was closed, a shield
+            // the extension already lifted); the 3 s passes only act on change.
+            reconcileFocusShield(force: forceReconcile)
             try await retireDeletedLearningThemeIfNeeded()
             guard canContinueRefresh else { return }
             let learningPause = currentLearningPause()

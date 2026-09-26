@@ -8,7 +8,7 @@
 
 | Category | Descriptor | Answer | Version 1.0の根拠 |
 |---|---|---|---|
-| In-App Controls | Parental Controls | No | App独自の子ども向け監視、content filter、利用制限を提供しない。Apple Account側のAsk to BuyはApp独自機能ではない。 |
+| In-App Controls | Parental Controls | No | App独自の子ども向け監視、content filter、保護者による利用制限を提供しない。Apple Account側のAsk to BuyはApp独自機能ではない。1.1.0候補の「集中中は気が散るアプリを開けないようにする」設定は、利用者本人が自分の端末で任意にオンにし、いつでも解除できる自己管理の機能で、他者を管理しない（Family Controls individual authorization）。 |
 | In-App Controls | Age Assurance | No | Declared Age Range API、年齢推定、公的身分証等による年齢確認を行わない。 |
 | Capabilities | Unrestricted Web Access | No | 固定されたPrivacy、Support、Terms、販売条件、Apple／GitHub URLをsystem browserで開くだけで、任意URLの閲覧機能はない。 |
 | Capabilities | User-Generated Content | No | theme名、成果memo、任意tagは利用者本人の端末／private iCloud用で、App内で不特定多数へ配信しない。明示操作のsystem share sheetはApp内UGC配信機能ではない。 |

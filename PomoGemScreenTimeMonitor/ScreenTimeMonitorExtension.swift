@@ -22,6 +22,10 @@ final class ScreenTimeMonitorExtension: DeviceActivityMonitor {
 
     override func intervalDidStart(for activity: DeviceActivityName) {
         super.intervalDidStart(for: activity)
+        if FocusShieldPolicy.isFailsafeActivity(activity.rawValue) {
+            handleFocusShield(activity, phase: .start)
+            return
+        }
         // The extension deliberately does no networking, model-container work,
         // application launching, or token logging. Only the callback kind is
         // logged: activity and event names carry the run and the threshold.
@@ -34,6 +38,10 @@ final class ScreenTimeMonitorExtension: DeviceActivityMonitor {
 
     override func intervalDidEnd(for activity: DeviceActivityName) {
         super.intervalDidEnd(for: activity)
+        if FocusShieldPolicy.isFailsafeActivity(activity.rawValue) {
+            handleFocusShield(activity, phase: .end)
+            return
+        }
         log("intervalDidEnd", activity)
         try? monitoring.handleInterval(activityName: activity.rawValue, phase: .end)
     }
@@ -42,6 +50,26 @@ final class ScreenTimeMonitorExtension: DeviceActivityMonitor {
         super.eventDidReachThreshold(event, activity: activity)
         log("threshold", activity)
         try? monitoring.handleThreshold(eventName: event.rawValue, activityName: activity.rawValue)
+    }
+
+    /// The focus shield's failsafe interval. Kept apart from the gem lanes:
+    /// it clears the named ManagedSettings store when the record says the
+    /// focus is over (or says nothing readable), never looks at Family
+    /// Controls authorization, and never loads SwiftData, CloudKit or the
+    /// selections. The rule lives in `FocusShieldEngine.handleExtensionInterval`,
+    /// where the unit tests can reach it. Counted as an `other` interval in the
+    /// ledger's callback diagnostics, so a device audit can tell whether the
+    /// OS ever delivered it.
+    private func handleFocusShield(_ activity: DeviceActivityName, phase: ScreenTimeCallbackCounters.IntervalPhase) {
+        log(phase == .start ? "intervalDidStart" : "intervalDidEnd", activity)
+        let now = Date()
+        let cleared = FocusShieldEngine.live(lockTimeout: FocusShieldPolicy.extensionLockTimeout)
+            .handleExtensionInterval(phase: phase, now: now)
+        ScreenTimeLog.monitoring.notice("""
+            focus-shield interval phase=\(phase.rawValue, privacy: .public) \
+            cleared=\(cleared ? 1 : 0, privacy: .public)
+            """)
+        ScreenTimeStore().countCallback { $0.countIntervalCallback(kind: .other, phase: phase, now: now) }
     }
 
     private func log(_ callback: String, _ activity: DeviceActivityName) {
