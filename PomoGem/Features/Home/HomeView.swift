@@ -1152,22 +1152,27 @@ struct HomeView: View {
     private var jarMetricReadout: some View {
         VStack(spacing: 3) {
             Text("積み上げた集中")
-                // This HUD is decorative and excluded from VoiceOver. Keep it
-                // inside the fixed SpriteKit canvas at accessibility sizes;
-                // the jar's accessibility value carries the same information.
-                .font(.system(size: 11, weight: .bold, design: .rounded))
+                // This HUD is excluded from VoiceOver; the jar's accessibility
+                // value carries the same information. Its captions follow
+                // Dynamic Type up to the readout's xxxLarge cap below, so they
+                // grow with the user's size but stay inside the jar's canvas;
+                // at accessibility sizes the scrollable card under the jar
+                // repeats the progress in full-size text (home-04).
+                .font(.system(.caption2, design: .rounded, weight: .bold))
                 .tracking(1.1)
                 .textCase(.uppercase)
-                .foregroundStyle(Color.white.opacity(0.68))
+                .foregroundStyle(Color.white.opacity(0.74))
 
             HStack(alignment: .lastTextBaseline, spacing: 4) {
                 Text(homeMassValue)
-                    .font(.system(size: dynamicTypeSize.isAccessibilitySize ? 28 : 39, weight: .black, design: .rounded))
+                    // Never smaller for a larger text size: the 28 pt value
+                    // only makes room for the empty jar's message.
+                    .font(.system(size: dynamicTypeSize.isAccessibilitySize && isJarEmpty ? 28 : 39, weight: .black, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(.numericText())
                 Text(homeMassUnit)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.white.opacity(0.72))
+                    .font(.system(.subheadline, design: .rounded, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.76))
             }
 
             VStack(spacing: 4) {
@@ -1182,6 +1187,7 @@ struct HomeView: View {
                 }
             }
         }
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .shadow(color: .black.opacity(0.52), radius: 3, y: 1)
         .accessibilityHidden(true)
     }
@@ -1253,40 +1259,50 @@ struct HomeView: View {
         isCloudOfflineSession ? "このiPhoneの集計を確認中" : "iCloudを再集計中"
     }
 
-    private var effortProgressSnapshot: EffortProgressSnapshot {
-        EffortProgressPolicy.snapshot(totalGrams: totalGrams)
-    }
-
+    /// The small rail inside the jar. At accessibility sizes the card under
+    /// the jar shows the same progress in full-size text instead.
     private var showsPreFusionRail: Bool {
         !projectionNeedsMaintenance
-            && totalPebbles > 0
+            && !dynamicTypeSize.isAccessibilitySize
+            && hudTotals.pebbleCount > 0
             && !JarLifetimeCorePresentation.shouldShowCore(
                 totalPebbleCount: hudTotals.pebbleCount,
                 totalGrams: hudTotals.grams
             )
     }
 
+    /// Names what 「4時間10分」 leads to (walk-std-10): without a name the
+    /// target read like a daily quota. The explanation of 標準単位 and 10→1
+    /// lives in 積み上がり, not in the jar.
     private var preFusionRail: some View {
-        let state = effortProgressSnapshot
-        return VStack(spacing: 5) {
+        let state = EffortProgressPolicy.snapshot(totalGrams: hudTotals.grams)
+        return VStack(spacing: 4) {
             ProgressView(value: state.progressFraction)
                 .tint(Color(hex: lifetimeCoreColorHex))
                 .frame(width: 118)
             Text(
-                "時間 \(EffortProgressPresentation.formattedDuration(grams: state.displayedProgressGrams)) / \(EffortProgressPresentation.formattedDuration(grams: state.displayedTargetGrams))"
+                "\(EffortProgressPresentation.targetTitle(level: state.displayedTargetLevel))まで",
+                tableName: "Home",
+                comment: "Jar rail caption; the argument is 最初の時間の核 or 時間の核・N段目"
             )
-                .font(.system(size: 9, weight: .black, design: .rounded))
+                .font(.system(.caption2, design: .rounded, weight: .bold))
+                .foregroundStyle(Color.white.opacity(0.78))
+            Text(
+                "\(EffortProgressPresentation.formattedDuration(grams: state.displayedProgressGrams)) / \(EffortProgressPresentation.formattedDuration(grams: state.displayedTargetGrams))",
+                tableName: "Home",
+                comment: "Jar rail: focus time so far / time the next time core needs"
+            )
+                .font(.system(.caption2, design: .rounded, weight: .black))
                 .monospacedDigit()
-                .foregroundStyle(Color.white.opacity(0.72))
-            Text("25分 = 1.0標準単位")
-                .font(.system(size: 8, weight: .bold, design: .rounded))
-                .foregroundStyle(Color.white.opacity(0.58))
+                .foregroundStyle(Color.white.opacity(0.92))
         }
-        .padding(.horizontal, 10)
+        .lineLimit(1)
+        .minimumScaleFactor(0.85)
+        .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(PomoGemTheme.raised.opacity(0.62), in: Capsule())
+        .background(PomoGemTheme.raised.opacity(0.72), in: Capsule())
         .overlay {
-            Capsule().stroke(Color.white.opacity(0.10), lineWidth: 0.7)
+            Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.7)
         }
         .accessibilityHidden(true)
     }
@@ -1325,13 +1341,14 @@ struct HomeView: View {
         return components.joined(separator: "、")
     }
 
+    /// The documented large-text companion of the jar's fixed HUD
+    /// (EngagementArchitecture 大きい文字). It used to wait for the first
+    /// time core (2.5 kg), so the first ~10 focuses, when the rail is the only
+    /// progress on Home, had no readable version at accessibility sizes.
     private var largeTextFusionProgressState: JarLifetimeCoreState? {
         guard dynamicTypeSize.isAccessibilitySize,
               !aggregateProjectionPresentation.isCloudVerificationPending,
-              JarLifetimeCorePresentation.shouldShowCore(
-                totalPebbleCount: totalPebbles,
-                totalGrams: totalGrams
-              )
+              hudTotals.pebbleCount > 0
         else { return nil }
         return JarLifetimeCorePresentation.state(
             totalPebbleCount: hudTotals.pebbleCount,
@@ -1384,10 +1401,12 @@ struct HomeView: View {
 
     private func jarMetricPill(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11, weight: .semibold, design: .rounded))
-            .foregroundStyle(PomoGemTheme.text.opacity(0.86))
+            // Scales with the readout's Dynamic Type cap instead of a fixed
+            // 11 pt that could shrink to 8 pt.
+            .font(.system(.caption2, design: .rounded, weight: .semibold))
+            .foregroundStyle(PomoGemTheme.text.opacity(0.9))
             .lineLimit(1)
-            .minimumScaleFactor(0.72)
+            .minimumScaleFactor(0.85)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(PomoGemTheme.raised.opacity(0.72), in: Capsule())
