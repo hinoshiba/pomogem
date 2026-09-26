@@ -418,6 +418,60 @@ final class FocusLeavePolicyTests: XCTestCase {
         )
     }
 
+    /// The focus screen saves its own running state on `.inactive` and
+    /// `.background`, in no fixed order with the host's write of the absence.
+    /// `FocusPersistence.save` itself must carry the host's markers (critic
+    /// A3), not only the merge function.
+    func testTheScreenSavePathKeepsTheHostsMarkers() throws {
+        let suite = "FocusLeavePolicy.save.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = "test.focus.persisted-engine"
+        func stored() throws -> FocusRecoveryEnvelope {
+            try XCTUnwrap(FocusPersistence.loadStored(key: key, defaults: defaults))
+        }
+
+        let running = try runningEnvelope(minutes: 25)
+        let leftAt = start.addingTimeInterval(60)
+        let away = try XCTUnwrap(FocusLeaveTransition.beginningExcursion(
+            running, featureEnabled: true, at: leftAt
+        ))
+
+        // (1) The host wrote the absence first; the screen's save follows.
+        FocusPersistence.replace(away, key: key, defaults: defaults)
+        FocusPersistence.save(running, key: key, defaults: defaults)
+        XCTAssertEqual(try stored().leaveExcursion, away.leaveExcursion)
+        XCTAssertEqual(try stored().engine, running.engine)
+
+        // (2) The host paused; the screen writes the exact running state from
+        // before the person left.
+        let paused = FocusLeaveTransition.pausedForLeaving(away, decidedAt: leftAt.addingTimeInterval(20))
+        FocusPersistence.replace(paused, key: key, defaults: defaults)
+        FocusPersistence.save(running, key: key, defaults: defaults)
+        XCTAssertEqual(try stored(), paused)
+        var screenPaused = running
+        screenPaused.engine = paused.engine
+        FocusPersistence.save(screenPaused, key: key, defaults: defaults)
+        XCTAssertEqual(try stored().leavePause, paused.leavePause, "The notice survives a paused write")
+
+        // (3) A real 再開 is newer than the pause and drops the marker.
+        var resumed = screenPaused
+        try resumed.engine.resume(at: leftAt.addingTimeInterval(600))
+        FocusPersistence.save(resumed, key: key, defaults: defaults)
+        XCTAssertEqual(try stored().engine.phase, .focusing)
+        XCTAssertNil(try stored().leavePause)
+        XCTAssertNil(try stored().leaveExcursion)
+        XCTAssertEqual(try stored().engine.endDate, leftAt.addingTimeInterval(600 + 1_440))
+
+        // (4) Another session never inherits a marker.
+        FocusPersistence.replace(away, key: key, defaults: defaults)
+        let other = try runningEnvelope(minutes: 25, sessionID: UUID())
+        FocusPersistence.save(other, key: key, defaults: defaults)
+        XCTAssertEqual(try stored().engine, other.engine)
+        XCTAssertNil(try stored().leaveExcursion)
+        XCTAssertNil(try stored().leavePause)
+    }
+
     func testMarkersThatDoNotDescribeTheTimerAreDropped() throws {
         var running = try runningEnvelope(minutes: 25)
         running.leavePause = FocusLeavePauseMarker(
