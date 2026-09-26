@@ -599,6 +599,10 @@ final class RuntimeFlowAuditUITests: XCTestCase {
         }
         retainScreenshot(named: "First focus — one-time end-notification permission")
         allow.tap()
+        // UI-test processes run with F1's leave pause off (shared Simulators
+        // background many focuses), so this is the feature-off promise. The
+        // product default's copy and notice are pinned and audited by
+        // FocusLeavePauseUITests.
         let scheduled = app.staticTexts["画面を閉じてもタイマーは進み、終了時に通知します"]
         XCTAssertTrue(
             scheduled.waitForExistence(timeout: 5),
