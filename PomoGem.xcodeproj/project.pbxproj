@@ -230,6 +230,7 @@
 		87E2C61FF9D4548C21BBAAA6 /* CompleteDataDeletionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B4CF11C44B1C6941E51EF0D /* CompleteDataDeletionCoordinator.swift */; };
 		880F334852E695FA5EC9D036 /* SeedData.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5DA97C297B2465DCA37429F /* SeedData.swift */; };
 		889193469D19B1FCA4AF74A9 /* CloudStorageTransferCloudKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 126E2BF9A3F46E163EA9B93E /* CloudStorageTransferCloudKitTests.swift */; };
+		88D7E2FFFEC7813E4A75B924 /* JarGravityMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9A9ECE3BB6963E090CBDCA4 /* JarGravityMappingTests.swift */; };
 		892611B12FFCD35267D31754 /* Paywall.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = D09F35FB4BDCCDD97CC45BAF /* Paywall.xcstrings */; };
 		895787904A2743F30F33297D /* CloudRestoreWaitingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9A225F72A292960994B3F5B /* CloudRestoreWaitingView.swift */; };
 		8A28A396D48A4B30CA1B6444 /* StorageTransferAdmissionTaxonomyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 681E42884F4D17CEF31D7511 /* StorageTransferAdmissionTaxonomyTests.swift */; };
@@ -760,6 +761,7 @@
 		A81DCEA1C2A2133E7484C8F8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A823B528947C18804D72C306 /* Storage.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Storage.xcstrings; sourceTree = "<group>"; };
 		A9A225F72A292960994B3F5B /* CloudRestoreWaitingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudRestoreWaitingView.swift; sourceTree = "<group>"; };
+		A9A9ECE3BB6963E090CBDCA4 /* JarGravityMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JarGravityMappingTests.swift; sourceTree = "<group>"; };
 		A9B676F4BE55E7C08BF5B216 /* LocalizationEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationEnvironmentTests.swift; sourceTree = "<group>"; };
 		ABB57C3061FB28428BDA9919 /* SettingsLocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsLocalizationTests.swift; sourceTree = "<group>"; };
 		ABFBC083147B7D2FD341A493 /* StorageTransferConsentEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTransferConsentEvidenceTests.swift; sourceTree = "<group>"; };
@@ -1344,6 +1346,7 @@
 				B78F394CAE07C13C1BE00957 /* HomeProjectionTests.swift */,
 				4C5593DA547691E54AD22F76 /* InitialCloudHydrationTests.swift */,
 				AEC4ECC6CEC8AB10E356BF50 /* JarEffectsIntensityTests.swift */,
+				A9A9ECE3BB6963E090CBDCA4 /* JarGravityMappingTests.swift */,
 				DAACD9E9BDD673452EBB1809 /* JarIdleEnergyTests.swift */,
 				203BABC145B85C09C2BFBA55 /* JarRenderingPerformanceTests.swift */,
 				2893EB8B68390E66C8EC7887 /* LocalizationCatalogTests.swift */,
@@ -2130,6 +2133,7 @@
 				FD5E7022FA135DA440D649AA /* HomeProjectionTests.swift in Sources */,
 				36C1AA1DA487981524206086 /* InitialCloudHydrationTests.swift in Sources */,
 				8C2E59B3D501768D70741947 /* JarEffectsIntensityTests.swift in Sources */,
+				88D7E2FFFEC7813E4A75B924 /* JarGravityMappingTests.swift in Sources */,
 				12853CA9A66F2E127BA49E9C /* JarIdleEnergyTests.swift in Sources */,
 				811FFD0C06EBC6EA0B6601D7 /* JarRenderingPerformanceTests.swift in Sources */,
 				F2D87867D880A9CCBF60AE3D /* LaunchLocalizationTests.swift in Sources */,
