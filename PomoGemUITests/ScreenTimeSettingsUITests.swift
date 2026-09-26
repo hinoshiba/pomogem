@@ -54,6 +54,13 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         XCTAssertFalse(negative.isEnabled)
         XCTAssertEqual(negative.value as? String, "0アプリ選択中")
         XCTAssertTrue(reveal(text(containing: "無料でもアプリ数は無制限")))
+        // F2: without access the focus shield cannot be switched on either.
+        let shield = app.switches["screen-time.focus-shield"]
+        XCTAssertTrue(reveal(shield))
+        XCTAssertFalse(shield.isEnabled)
+        XCTAssertEqual(shield.value as? String, "0")
+        XCTAssertFalse(app.buttons["screen-time.focus-shield-lift"].exists,
+                       "No shield is up, so there is nothing to lift")
 
         let total = app.staticTexts["screen-time.negative-total"]
         XCTAssertTrue(reveal(total, upwards: false))
@@ -325,6 +332,144 @@ final class ScreenTimeSettingsUITests: XCTestCase {
         discard.tap()
         XCTAssertTrue(app.navigationBars["fixture-root"].waitForExistence(timeout: 6))
         XCTAssertTrue(ledger.label.contains("enabled=1"), "A discarded edit must not reach the ledger: \(ledger.label)")
+    }
+
+    /// F2 through the same DEBUG fixture: a bound, approved owner with apps
+    /// chosen and the focus shield off. The switch is applied by 保存 like the
+    /// rest of the page. A focus the fixture starts then reconciles the shield
+    /// through the real `FocusShieldController` and `FocusShieldEngine` over
+    /// in-memory doubles: 「今すぐ制限を解除」 appears only while a shield is
+    /// up and lifts it for that focus, and a failsafe the center refuses
+    /// shields nothing and says so. Nothing here shows that a real app is
+    /// blocked; that stays on the signed-device checklist.
+    func testTheFocusShieldSwitchSavesAndItsEscapeHatchLiftsTheShield() {
+        app.launchEnvironment["POMOGEM_UI_TEST_SCREEN_TIME"] = "focus-shield"
+        app.launch()
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 20))
+        let ledger = app.staticTexts["screen-time.fixture-ledger"]
+        XCTAssertTrue(ledger.waitForExistence(timeout: 10))
+        expectLedger(ledger, contains: "boundToContext=true", timeout: 20)
+        for expected in ["distraction=1", "enabled=1", "focusShield=0", "shieldRecord=none"] {
+            XCTAssertTrue(ledger.label.contains(expected), "ledger row was \(ledger.label)")
+        }
+
+        let toggle = app.switches["screen-time.focus-shield"]
+        XCTAssertTrue(revealAboveFixtureBar(toggle))
+        XCTAssertTrue(toggle.isEnabled)
+        XCTAssertEqual(toggle.value as? String, "0")
+        XCTAssertTrue(toggle.label.contains("集中中は気が散るアプリを開けないようにする"), toggle.label)
+        XCTAssertFalse(app.staticTexts["screen-time.focus-shield-availability"].exists,
+                       "Switched off, the page has nothing to warn about")
+        for fragment in ["休憩になるか集中が終わると解除します", "Apple Music Classical", "その時間は黒い石になりません"] {
+            XCTAssertTrue(revealAboveFixtureBar(text(containing: fragment)), "footer is missing \(fragment)")
+        }
+        attach("Screen Time — focus shield off")
+
+        // Switched off, a focus shields nothing.
+        let startFocus = app.buttons["screen-time.fixture-start-focus"]
+        XCTAssertTrue(startFocus.waitForExistence(timeout: 6))
+        startFocus.tap()
+        let lift = app.buttons["screen-time.focus-shield-lift"]
+        XCTAssertFalse(lift.waitForExistence(timeout: 3), "Nothing may be shielded while the switch is off")
+        XCTAssertTrue(ledger.label.contains("shieldRecord=none"), ledger.label)
+
+        // On, then 保存: only the save reaches the ledger.
+        XCTAssertTrue(revealAboveFixtureBar(toggle))
+        flip(toggle)
+        XCTAssertEqual(toggle.value as? String, "1")
+        XCTAssertFalse(app.staticTexts["screen-time.focus-shield-availability"].exists,
+                       "One app and access granted: the shield can work")
+        XCTAssertTrue(ledger.label.contains("focusShield=0"), "Nothing is saved before 保存: \(ledger.label)")
+        let save = app.buttons["screen-time.save"]
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+        expectLedger(ledger, contains: "focusShield=1", timeout: 20)
+        attach("Screen Time — focus shield switched on and saved")
+
+        // A focus shields the one app, and the escape hatch appears.
+        startFocus.tap()
+        expectLedger(ledger, contains: "isShielding=1", timeout: 20)
+        XCTAssertTrue(ledger.label.contains("shielded=1"), ledger.label)
+        XCTAssertTrue(ledger.label.contains("shieldRecord=active"), ledger.label)
+        XCTAssertTrue(revealAboveFixtureBar(lift))
+        XCTAssertGreaterThanOrEqual(lift.frame.height, 43.5)
+        XCTAssertTrue(lift.label.contains("今すぐ制限を解除"), lift.label)
+        let liftFooter = app.staticTexts["screen-time.focus-shield-lift-footer"]
+        XCTAssertTrue(revealAboveFixtureBar(liftFooter))
+        XCTAssertTrue(liftFooter.label.contains("この集中のあいだだけ"), liftFooter.label)
+        attach("Screen Time — focus shield up, escape hatch shown")
+
+        // 今すぐ制限を解除 lifts it at once, for this focus only.
+        let lifted = text(containing: "制限を解除しました")
+        XCTAssertTrue(revealAboveFixtureBar(lift))
+        lift.tap()
+        XCTAssertTrue(lifted.waitForExistence(timeout: 10), "The lift must be confirmed on screen")
+        expectLedger(ledger, contains: "shieldRecord=lifted", timeout: 20)
+        XCTAssertTrue(ledger.label.contains("shielded=0"), ledger.label)
+        XCTAssertTrue(ledger.label.contains("isShielding=0"), ledger.label)
+        XCTAssertTrue(ledger.label.contains("focusShield=1"), "Lifting keeps the setting on: \(ledger.label)")
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: lift)
+        XCTAssertEqual(XCTWaiter.wait(for: [gone], timeout: 8), .completed, "Nothing is left to lift")
+        attach("Screen Time — focus shield lifted")
+
+        // A failsafe the center refuses: the next focus is not shielded, and
+        // the page says why.
+        let refuse = app.buttons["screen-time.fixture-refuse-failsafe"]
+        XCTAssertTrue(refuse.waitForExistence(timeout: 6))
+        refuse.tap()
+        startFocus.tap()
+        expectLedger(ledger, contains: "failsafeUnavailable=1", timeout: 20)
+        XCTAssertTrue(ledger.label.contains("shielded=0"), ledger.label)
+        XCTAssertTrue(ledger.label.contains("isShielding=0"), ledger.label)
+        let unarmed = app.staticTexts["screen-time.focus-shield-failsafe"]
+        XCTAssertTrue(revealAboveFixtureBar(unarmed))
+        XCTAssertTrue(unarmed.label.contains("今回の集中では制限していません"), unarmed.label)
+        XCTAssertFalse(lift.exists)
+        attach("Screen Time — focus shield failsafe unavailable")
+
+        // Switching it off and saving: the notice goes with the setting.
+        XCTAssertTrue(revealAboveFixtureBar(toggle))
+        flip(toggle)
+        XCTAssertEqual(toggle.value as? String, "0")
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+        expectLedger(ledger, contains: "focusShield=0", timeout: 20)
+        expectLedger(ledger, contains: "failsafeUnavailable=0", timeout: 20)
+        XCTAssertFalse(unarmed.exists, "The notice belongs to a shield that is switched off now")
+    }
+
+    /// A shield holds at most 50 apps; with more, Apple shields none at all.
+    /// The page must say so, at the largest text size too, and a focus must
+    /// not show an escape hatch for a shield that was never written.
+    func testTooManyAppsForTheFocusShieldAreExplainedAtAccessibilitySize() {
+        app.launchEnvironment["POMOGEM_UI_TEST_AX5"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_SCREEN_TIME"] = "focus-shield-too-many"
+        app.launch()
+        XCTAssertTrue(app.navigationBars["スクリーンタイム"].waitForExistence(timeout: 20))
+        let ledger = app.staticTexts["screen-time.fixture-ledger"]
+        XCTAssertTrue(ledger.waitForExistence(timeout: 10))
+        expectLedger(ledger, contains: "boundToContext=true", timeout: 20)
+        for expected in ["distraction=51", "focusShield=1"] {
+            XCTAssertTrue(ledger.label.contains(expected), "ledger row was \(ledger.label)")
+        }
+
+        let toggle = app.switches["screen-time.focus-shield"]
+        XCTAssertTrue(revealAboveFixtureBar(toggle))
+        XCTAssertEqual(toggle.value as? String, "1")
+        XCTAssertGreaterThanOrEqual(toggle.frame.height, 43.5)
+        let warning = app.staticTexts["screen-time.focus-shield-availability"]
+        XCTAssertTrue(revealAboveFixtureBar(warning))
+        XCTAssertTrue(warning.label.contains("51個"), warning.label)
+        XCTAssertTrue(warning.label.contains("50個まで"), warning.label)
+        attach("Screen Time AX5 — too many apps for the focus shield")
+
+        let startFocus = app.buttons["screen-time.fixture-start-focus"]
+        XCTAssertTrue(startFocus.waitForExistence(timeout: 6))
+        startFocus.tap()
+        XCTAssertFalse(app.buttons["screen-time.focus-shield-lift"].waitForExistence(timeout: 3),
+                       "Nothing was shielded, so there is nothing to lift")
+        XCTAssertTrue(ledger.label.contains("shieldRecord=none"), ledger.label)
+        XCTAssertTrue(ledger.label.contains("shielded=0"), ledger.label)
     }
 
     /// screentime-10: Home's menu reaches the Screen Time page directly, next
