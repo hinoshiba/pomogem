@@ -81,6 +81,34 @@ final class FocusLeavePolicyTests: XCTestCase {
         XCTAssertNil(defaults.object(forKey: FocusLeavePolicy.nudgesEnabledDefaultsKey))
     }
 
+    /// Settings' rows write explicit values into a shared Simulator. Each
+    /// UI-test process starts from its own default instead, while an
+    /// ordinary Debug launch keeps the person's choice.
+    func testOnlyAUITestProcessStartsFromItsDefault() throws {
+        let suite = "FocusLeavePolicy.uiTest.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let ordinaryDebug = [LocalPreviewLaunchPolicy.environmentKey: "1"]
+        let uiTest = [
+            LocalPreviewLaunchPolicy.environmentKey: "1",
+            LocalPreviewLaunchPolicy.uiTestEnvironmentKey: "1"
+        ]
+
+        defaults.set(false, forKey: FocusLeavePolicy.enabledDefaultsKey)
+        defaults.set(false, forKey: FocusLeavePolicy.nudgesEnabledDefaultsKey)
+        FocusLeavePreferences.startUITestProcessFromItsDefault(
+            defaults: defaults, environment: ordinaryDebug
+        )
+        XCTAssertEqual(defaults.object(forKey: FocusLeavePolicy.enabledDefaultsKey) as? Bool, false)
+        XCTAssertEqual(defaults.object(forKey: FocusLeavePolicy.nudgesEnabledDefaultsKey) as? Bool, false)
+
+        FocusLeavePreferences.startUITestProcessFromItsDefault(
+            defaults: defaults, environment: uiTest
+        )
+        XCTAssertNil(defaults.object(forKey: FocusLeavePolicy.enabledDefaultsKey))
+        XCTAssertNil(defaults.object(forKey: FocusLeavePolicy.nudgesEnabledDefaultsKey))
+    }
+
     // MARK: - Thresholds and series
 
     func testWindowCutOffAndBoundedSeries() {

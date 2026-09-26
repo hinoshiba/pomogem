@@ -13,9 +13,10 @@ struct FocusLeaveCandidate: Equatable, Sendable {
     let completionSound: TimerCompletionSound
 }
 
-/// The live reading of the two device-local F1 switches. Settings rows are a
-/// later phase; they call `setLeavePauseEnabled` / `setNudgesEnabled` so that
-/// turning either off also withdraws a series already booked.
+/// The live reading of the two device-local F1 switches. Settings' rows
+/// (「アプリを離れたら一時停止」, 「集中が切れたらお知らせ」) call
+/// `setLeavePauseEnabled` / `setNudgesEnabled`, so turning either off also
+/// withdraws a series already booked.
 @MainActor
 enum FocusLeavePreferences {
     /// UI tests start and background many focuses on shared simulators, which
@@ -34,6 +35,25 @@ enum FocusLeavePreferences {
 #endif
         return FocusLeavePolicy.enabledByDefault
     }
+
+#if DEBUG
+    /// A UI test that flips the Settings switches writes them to the shared
+    /// Simulator's persistent domain, where an explicit value would outrank
+    /// the next test process's default (off, or on with the opt-in above).
+    /// Every UI-test process therefore starts from its own configured
+    /// default. The volatile argument domain (`-focus.leave-pause.enabled
+    /// NO`) is untouched and still wins. Ordinary Debug launches keep the
+    /// person's choice.
+    nonisolated static func startUITestProcessFromItsDefault(
+        defaults: UserDefaults = .standard,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) {
+        guard LocalPreviewLaunchPolicy.isUITestMode(environment: environment, isDebugBuild: true)
+        else { return }
+        defaults.removeObject(forKey: FocusLeavePolicy.enabledDefaultsKey)
+        defaults.removeObject(forKey: FocusLeavePolicy.nudgesEnabledDefaultsKey)
+    }
+#endif
 
     nonisolated static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
         FocusLeavePolicy.isEnabled(defaults: defaults, defaultValue: defaultValue)

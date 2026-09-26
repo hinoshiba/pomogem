@@ -362,6 +362,9 @@ struct PomoGemApp: App {
         // A return reminder belongs only to the preceding absence. Cancel it
         // before any asynchronous storage/account recovery on a cold launch.
         NotificationManager.shared.cancelFocusReturnReminder()
+#if DEBUG
+        FocusLeavePreferences.startUITestProcessFromItsDefault()
+#endif
 
         if !ReleaseExternalSurfacePolicy.supportsLiveActivities
             || !FocusActivityPreference.isEnabled()
