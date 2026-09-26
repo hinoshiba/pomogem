@@ -623,8 +623,8 @@ CとDの差は視覚的レアだけに限定し、Dでも本人はいつでも`q
 - iCloud/foreground時の全履歴MainActor走査を廃止し、有界singleton確認へ分離
 - unsigned simulatorは`CKContainer`構築前にローカル専用へ分岐し、CloudKit entitlement例外によるSettingsクラッシュを防止
 - Log／Share／Wrappedの履歴読み込みをepoch predicate・fetch limit付きの有界表示へ移行
-- 記録の「月ごとの瓶」（直近12か月）は、年月と同じ`AccumulationTimelineRepository`で12か月を1回の有界区間として正確に集計し、月ごとの12ページを読まない。`@ModelActor`は専用スレッドを持たず、SwiftDataの既定executorは待っている側のスレッドで処理を実行する（iOS 26.5で計測。SwiftUIの`.task`から直接awaitするとメインスレッドで走る）。そのためViewは必ず`AccumulationTimelineLoader`（detached taskから呼び、キャンセルを転送する）経由で読む。記録の月一覧、年月の範囲・年・月、日シートが対象で、`AccumulationTimelineRepositoryTests`がメインスレッド外で走ることと、View側がRepositoryを直接生成しないことを検査する
-- 記録の読み込みは依存するものごとに3つに分ける。今週／今月のページ（切り替えで読むのはこれだけ）、期間に依存しない最新30件・記念石・まとまり粒、月一覧。Control Center・通知センターの開閉（inactive）ではどれも再読込せず、バックグラウンドからの復帰で読み直す。最初の読み込みが終わるまでは「この期間の粒は、まだありません。」「一粒積むと、ここに記録が残ります。」などの空の文言を出さず読み込み中を示す（WrappedViewも同じ再読込規則）
+- 記録の「月ごとの瓶」（直近12か月）は、年月と同じ`AccumulationTimelineRepository`で12か月を1回の有界区間として正確に集計し、月ごとの12ページを読まない。`@ModelActor`は専用スレッドを持たず、SwiftDataの既定executorは待っている側のスレッドで処理を実行する（iOS 26.5で計測。SwiftUIの`.task`から直接awaitするとメインスレッドで走る）。そのためViewは必ず`AccumulationTimelineLoader`（detached taskから呼び、キャンセルを転送する）経由で読む。記録の今週／今月のページ・最新30件とまとまり粒・月一覧、年月の範囲・年・月、日シートが対象で、`AccumulationTimelineRepositoryTests`がメインスレッド外で走ることと、View側がRepositoryを直接生成しないことを、`LogHistoryReadsTests`が記録の値がメインで読んでいたときと同じであることと、LogViewが生涯分に比例する読み込み（セッションのページ、まとまり粒）を自分で行わないことを検査する。Repositoryが返すのは値だけで、SwiftDataのobjectはactorの外へ出さない。記念石だけは記念石の表から最大61件を読むだけで、編集・削除・元に戻す直後に同じ画面で読み直すため、メインのcontextで読む
+- 記録の読み込みは依存するものごとに3つに分ける。今週／今月のページ（切り替えで読むのはこれだけ）、期間に依存しない最新30件・記念石・まとまり粒、月一覧。Control Center・通知センターの開閉（inactive）ではどれも再読込せず、バックグラウンドからの復帰で読み直す（読み直している間は前の表示を残す）。最初の読み込みが終わるまでは「この期間の粒は、まだありません。」「一粒積むと、ここに記録が残ります。」などの空の文言を出さず読み込み中を示す（WrappedViewも同じ再読込規則）。今週／今月を切り替えた直後は、新しいページが届くまで前の期間の表示を、その期間の見出し・日付のまま残す（多くの端末では一瞬）。250msを超えたら読み込み中の表示に替え、別の期間の数字を新しい期間の名前で見せない。resetより前に読んだページは表示しない
 - 共有カードの代表表示上限、非表示内訳開示、金／虹・記念石種別のcaption/VoiceOver表現
 - 実12-frame GIFの生成、system share sheetへの受け渡し、cancel復帰、所有一時ファイル削除をDEBUG実UIで検証。ハッシュタグは既定候補を個別に外せ、任意タグを追加できる。同じ確定snapshotをプレビュー、静止画、全GIF frame、共有本文へ渡し、共有時だけ既定タグへ戻さない
 - GIF説明文のコピー、成功通知、閉じるをVoiceOverでそれぞれ独立操作にし、system pasteboardまで実UIで検証
@@ -667,7 +667,7 @@ CとDの差は視覚的レアだけに限定し、Dでも本人はいつでも`q
    - 将来のoperations raw epoch／receiptを現行11-model shipping exportへ含める方法を設計する。利用者copy取得方法または適用法令・Apple要件上の扱いを確定できなければrare台帳を有効化しない
 
 2. 10→1の物理整理animationも回数由来なので、時間価値が同一でも短時間分割の方が多く見られる。主CTAや共有では質量を優先し、短い完走を反復させる文言を置かず、28日試験で時間帯・総時間を統制して分割率を監査する
-3. Overviewのon-demand正確集計と同じepoch／UUID規則をLog／Share／Wrappedへ広げ、永続化summary + ページングへ発展させる（記録の月別合計はメインスレッド外の区間集計へ移行済み。今週／今月のページと最新30件は有界のままメインスレッドで読み、最新30件は今週／今月の切り替えでは読み直さない）
+3. Overviewのon-demand正確集計と同じepoch／UUID規則をLog／Share／Wrappedへ広げ、永続化summary + ページングへ発展させる（記録の月別合計はメインスレッド外の区間集計へ、今週／今月のページ・最新30件・まとまり粒はメインスレッド外の同じ有界読み込みへ移行済み。最新30件は今週／今月の切り替えでは読み直さない。ページングと永続化summaryは未着手）
 4. 実装済みの有界ModelActor maintenanceを、署名済み2台、長時間offline、process kill、production CloudKitでsmall-store oracleと同値検証する
 5. 現在の年月ブラウザは選択期間を全件batch集計するため正確だが、毎回の再走査を避ける月・年summaryを保存し、CloudKit後着行で差分更新する
 6. 中断tombstoneのオフラインoutboxと設定revision。現状は保存失敗時にタイマーを安全に継続し、outboxはオフラインでも終了意図を即時受理するためのUX改善とする
