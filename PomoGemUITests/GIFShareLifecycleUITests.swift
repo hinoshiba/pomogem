@@ -409,7 +409,13 @@ final class GIFShareLifecycleUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(summary))
         XCTAssertTrue(summary.label.hasSuffix("・記念石は自己申告・タグ2個"), summary.label)
         attachScreenshot(named: "AX5 Share — two-part scope summary")
-        include.tap()
+        // The summary check scrolled on. At AX5 on a 4.7-inch iPhone the
+        // inline button had scrolled off the top by then and the tap missed
+        // it. Bring it back, clear of the navigation bar and the pinned
+        // share bar, first.
+        let primaryShare = app.descendants(matching: .any)["share.primary-action"]
+        XCTAssertTrue(scrollUntilHittable(include, avoiding: primaryShare))
+        tapUntilGone(include, "Including self-reported time must retire the inline button")
         XCTAssertTrue(waitForNonExistence(notice, timeout: 8))
         app.navigationBars["カードにする"].buttons["閉じる"].tap()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
