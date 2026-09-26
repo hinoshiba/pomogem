@@ -226,6 +226,61 @@ final class DecimalFusionEndToEndUITests: XCTestCase {
         add(overviewAttachment)
     }
 
+    /// settings-04. A free user's first fusion offers one quiet link to Pro's
+    /// month label, below every celebration action. Tapping it closes the
+    /// sheet first; the paywall then opens on its own, leading with the
+    /// month-label row. The "offered once" flag is pinned to NO through the
+    /// argument domain so the link is deterministic on a reused Simulator.
+    func testFreeFusionOffersAQuietMonthLabelLinkThatOpensThePaywallAfterTheSheet() throws {
+        app.terminate()
+        app.launchArguments += ["-pro.month-label-hint.offered", "NO"]
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+        selectDemoDuration()
+
+        for _ in 1 ... 9 {
+            completeDemoFocusAndDismissBreak()
+        }
+        startDemoFocus()
+        stopCompletionAlertIfPresented(in: app)
+        let dismissBreak = app.buttons["休憩の提案を閉じる"]
+        XCTAssertTrue(dismissBreak.waitForExistence(timeout: 28))
+        dismissBreak.tap()
+
+        let celebrationTitle = app.staticTexts["10粒を、ひとつに整理した"]
+        XCTAssertTrue(celebrationTitle.waitForExistence(timeout: 10))
+        let hint = app.buttons["fusion.celebration.month-label-hint"]
+        XCTAssertTrue(hint.waitForExistence(timeout: 4))
+        XCTAssertTrue(hint.label.contains("Proなら、この結晶に"), hint.label)
+        let rest = app.buttons["ここで休む"]
+        XCTAssertTrue(rest.exists)
+        for _ in 0 ..< 4 where !hint.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(hint.isHittable)
+        XCTAssertGreaterThan(hint.frame.minY, rest.frame.minY, "The link sits below every celebration action")
+        let hintAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        hintAttachment.name = "First ×10 crystal — free user's month-label link"
+        hintAttachment.lifetime = .keepAlways
+        add(hintAttachment)
+
+        hint.tap()
+        let close = app.buttons["paywall.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 8), "The paywall opens once the fusion sheet has closed")
+        XCTAssertFalse(celebrationTitle.exists)
+        let monthRow = app.descendants(matching: .any)["paywall.feature.monthLabel"].firstMatch
+        let timerRow = app.descendants(matching: .any)["paywall.feature.customDuration"].firstMatch
+        XCTAssertTrue(monthRow.waitForExistence(timeout: 4))
+        XCTAssertLessThan(monthRow.frame.minY, timerRow.frame.minY, "The month label leads when it was the reason")
+        let paywallAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        paywallAttachment.name = "Paywall — opened from the fusion sheet's month-label link"
+        paywallAttachment.lifetime = .keepAlways
+        add(paywallAttachment)
+
+        close.tap()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
+    }
+
     private func selectDemoDuration() {
         app.buttons["home.duration-picker"].tap()
         let demoDuration = app.buttons["12秒、DEMO"]

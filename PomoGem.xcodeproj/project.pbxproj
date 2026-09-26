@@ -149,6 +149,7 @@
 		6D8A6D5B721ED019712521CA /* ScreenTimeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9855214B03B999942916D121 /* ScreenTimeStore.swift */; };
 		6DB27B8627152EADDF1D401B /* ShareSelectionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7CE14A73EB70521D21A0343 /* ShareSelectionModel.swift */; };
 		6DC8A707D016321E545299C1 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = DB114802A2545CF0370C215D /* InfoPlist.xcstrings */; };
+		6E4C972B91515760DCE3012A /* SettingsPaywallUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3768698395095A9B47B215C4 /* SettingsPaywallUITests.swift */; };
 		703B60B0CEEF21AB82E85EA6 /* PomodoroEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A06D837D8B5741939DD3A4A /* PomodoroEngineTests.swift */; };
 		729A9DC32833D190C3788565 /* UsagePurpose.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A9C1314CC1B5A18521DFEA /* UsagePurpose.swift */; };
 		7366125AB929F93B1DAE9461 /* StorageTransferPartialDestinationRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C49C1800BB44F23D164299 /* StorageTransferPartialDestinationRecoveryTests.swift */; };
@@ -485,6 +486,7 @@
 		3501F761CF49E2795B6348BB /* Launch.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Launch.xcstrings; sourceTree = "<group>"; };
 		35D30256BB6F92C8BF9486BF /* ScreenTimeControllerPublishingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeControllerPublishingTests.swift; sourceTree = "<group>"; };
 		36D725F8C91299D814A75F92 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		3768698395095A9B47B215C4 /* SettingsPaywallUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPaywallUITests.swift; sourceTree = "<group>"; };
 		37C94826242029C7168F438B /* PersistenceStoreTopologyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceStoreTopologyTests.swift; sourceTree = "<group>"; };
 		37D8A39D7590751605852BB0 /* AccumulationOverviewLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccumulationOverviewLoader.swift; sourceTree = "<group>"; };
 		3829BEEEE6E394C43D37A09B /* PersistenceSessionLifetimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceSessionLifetimeTests.swift; sourceTree = "<group>"; };
@@ -994,6 +996,7 @@
 				D63C72D98EEA33AEBE1AD0DE /* RealDeviceScreenTimeUITests.swift */,
 				C4EF78A2F31B9E452F76E31F /* RuntimeFlowAuditUITests.swift */,
 				2BE03AD68663BB94BACCC1F3 /* ScreenTimeSettingsUITests.swift */,
+				3768698395095A9B47B215C4 /* SettingsPaywallUITests.swift */,
 				0E5666021E6F2E37B8F719E5 /* StorageTransferOverwriteLaunchUITests.swift */,
 				20620DDC627F3DE782B244FB /* StorageTransferSettingsUITests.swift */,
 				B3A447FDE838FF146B199E1D /* TimerOrientationUITests.swift */,
@@ -1945,6 +1948,7 @@
 				A960F4B33DB60D215185237E /* RealDeviceScreenTimeUITests.swift in Sources */,
 				827A5E1202E74FB391153A04 /* RuntimeFlowAuditUITests.swift in Sources */,
 				4C264F1E309CC8241E2C4385 /* ScreenTimeSettingsUITests.swift in Sources */,
+				6E4C972B91515760DCE3012A /* SettingsPaywallUITests.swift in Sources */,
 				E8CEDC6F17CF9CA6BC84D581 /* StorageTransferOverwriteLaunchUITests.swift in Sources */,
 				26DBEC67AFB5B2EFFC695091 /* StorageTransferSettingsUITests.swift in Sources */,
 				333DF582943D92E70B48938A /* TimerOrientationUITests.swift in Sources */,
