@@ -46,9 +46,14 @@ extension AccumulationTimelineRepository {
 
     /// The newest thirty records and, when the jar's aggregates may be
     /// summarized, the newest aggregate roots and legacy layers.
+    ///
+    /// `aggregateCacheStamp` is the verified projection stamp when the read
+    /// starts (`AggregateProjectionPresentationContext.verifiedCacheStamp`),
+    /// nil while iCloud verification is pending. The archive carries it, so
+    /// 記録 shows it only while that verification is still the current one.
     func logRecentContent(
         currentEpochID: UUID?,
-        includesAggregates: Bool
+        aggregateCacheStamp: AggregateProjectionCacheStamp?
     ) throws -> LogRecentContent {
         let recentPage = try BoundedHistoryPolicy.resolvedSessionPage(
             context: modelContext,
@@ -57,7 +62,7 @@ extension AccumulationTimelineRepository {
             logicalLimit: BoundedHistoryPolicy.recentSessionLimit
         )
         let records = recentPage.sessions.map(LogSessionRecord.init)
-        guard includesAggregates else {
+        guard let aggregateCacheStamp else {
             return LogRecentContent(
                 epochID: currentEpochID,
                 records: records,
@@ -89,7 +94,8 @@ extension AccumulationTimelineRepository {
                 legacyLayers: strata
                     .filter { !aggregateIDs.contains($0.id) }
                     .map(LogLegacyLayer.init),
-                isPartial: aggregateRaw.count > BoundedHistoryPolicy.aggregateRootLimit
+                isPartial: aggregateRaw.count > BoundedHistoryPolicy.aggregateRootLimit,
+                cacheStamp: aggregateCacheStamp
             )
         )
     }
@@ -263,8 +269,19 @@ struct LogAggregateArchive: Equatable, Sendable {
     let legacyLayers: [LogLegacyLayer]
     /// More than `aggregateRootLimit` roots: the archive lists the newest.
     let isPartial: Bool
+    /// The verified projection the archive was read under; nil when it was
+    /// not read (iCloud verification pending). Aggregates are projections:
+    /// after a verification is invalidated, an archive read before it is
+    /// never shown again, even once the next verification succeeds (see
+    /// `LogHistoryLoadPolicy.shownAggregateArchive`).
+    let cacheStamp: AggregateProjectionCacheStamp?
 
-    static let empty = LogAggregateArchive(roots: [], legacyLayers: [], isPartial: false)
+    static let empty = LogAggregateArchive(
+        roots: [],
+        legacyLayers: [],
+        isPartial: false,
+        cacheStamp: nil
+    )
 }
 
 /// Everything 記録 shows that does not depend on 今週／今月.

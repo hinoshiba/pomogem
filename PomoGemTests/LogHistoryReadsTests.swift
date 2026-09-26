@@ -228,10 +228,11 @@ final class LogHistoryReadsTests: XCTestCase {
         ))
         try context.save()
 
+        let stamp = AggregateProjectionPresentationContext.localVerified.verifiedCacheStamp
         let content = try await AccumulationTimelineLoader.read(from: container) { repository in
             try await repository.logRecentContent(
                 currentEpochID: epochID,
-                includesAggregates: true
+                aggregateCacheStamp: stamp
             )
         }
 
@@ -258,6 +259,8 @@ final class LogHistoryReadsTests: XCTestCase {
         XCTAssertEqual(Set(content.aggregates.roots.map(\.id)), [parentID, freeRootID])
         XCTAssertEqual(content.aggregates.roots.first { $0.id == parentID }?.pebbleCount, 100)
         XCTAssertFalse(content.aggregates.isPartial)
+        XCTAssertEqual(content.aggregates.cacheStamp, stamp, "The archive carries the verification it was read under")
+        XCTAssertFalse(content.isUnavailable)
         XCTAssertEqual(
             content.aggregates.legacyLayers.map(\.id),
             [legacyID],
@@ -275,10 +278,12 @@ final class LogHistoryReadsTests: XCTestCase {
         XCTAssertEqual(item.measuredPebbleCount + item.manualPebbleCount, 10)
         XCTAssertEqual(item.manualPebbleCount, [35, 42].count)
 
+        // While iCloud verification is pending there is no verified stamp,
+        // and the aggregates are not read.
         let withoutAggregates = try await AccumulationTimelineLoader.read(from: container) { repository in
             try await repository.logRecentContent(
                 currentEpochID: epochID,
-                includesAggregates: false
+                aggregateCacheStamp: nil
             )
         }
         XCTAssertEqual(withoutAggregates.records, content.records)
@@ -401,6 +406,72 @@ final class LogHistoryReadsTests: XCTestCase {
                 "Never the other period's page under this period's name"
             )
         }
+    }
+
+    /// まとまり粒 are projections. An archive read under one verification is
+    /// never shown after that verification was invalidated, even once the
+    /// next one succeeds and before a read under it arrives, whether the
+    /// reads in between were cancelled or failed.
+    func testArchiveReadBeforeAVerificationIsInvalidatedIsNeverShownAgain() {
+        let epochID: UUID? = nil
+        var projection = AggregateProjectionPresentationContext(
+            usesCloudPersistence: true,
+            isVerified: true,
+            cacheNamespace: UUID()
+        )
+        func content(stamp: AggregateProjectionCacheStamp?) -> LogRecentContent {
+            LogRecentContent(
+                epochID: epochID,
+                records: [],
+                aggregates: LogAggregateArchive(
+                    roots: [],
+                    legacyLayers: [],
+                    isPartial: true,
+                    cacheStamp: stamp
+                )
+            )
+        }
+        func shows(_ content: LogRecentContent?) -> Bool {
+            LogHistoryLoadPolicy.shownAggregateArchive(
+                content,
+                currentEpochID: epochID,
+                projection: projection
+            ) != nil
+        }
+
+        // Verified: content A, with its aggregates.
+        let contentA = content(stamp: projection.verifiedCacheStamp)
+        XCTAssertTrue(shows(contentA))
+        XCTAssertFalse(shows(nil))
+
+        // Pending: A's aggregates are hidden at once, before any read.
+        projection.invalidate()
+        XCTAssertFalse(shows(contentA))
+        // A read during the pending phase reads no aggregates.
+        let pendingRead = content(stamp: projection.verifiedCacheStamp)
+        XCTAssertNil(pendingRead.aggregates.cacheStamp)
+        XCTAssertFalse(shows(pendingRead))
+
+        // Verified again: neither A nor the pending read comes back.
+        projection.markVerified()
+        XCTAssertFalse(shows(contentA), "A pre-invalidation archive stays hidden after re-verification")
+        XCTAssertFalse(shows(pendingRead))
+        // A failed refresh keeps A's records, but not its aggregates.
+        let afterFailure = LogHistoryLoadPolicy.recentContentAfterFailedRead(contentA, currentEpochID: epochID)
+        XCTAssertEqual(afterFailure, contentA)
+        XCTAssertFalse(shows(afterFailure))
+        // Only a read under the new verification shows.
+        XCTAssertTrue(shows(content(stamp: projection.verifiedCacheStamp)))
+
+        // Without iCloud nothing is ever pending, and the archive stays.
+        var local = AggregateProjectionPresentationContext.localVerified
+        let localContent = content(stamp: local.verifiedCacheStamp)
+        local.invalidate()
+        XCTAssertTrue(LogHistoryLoadPolicy.shownAggregateArchive(
+            localContent,
+            currentEpochID: epochID,
+            projection: local
+        ) != nil)
     }
 
     /// Lifetime-sized reads block the main thread. 記録 itself may read only

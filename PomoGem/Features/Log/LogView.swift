@@ -1020,6 +1020,24 @@ enum LogHistoryLoadPolicy {
         return content
     }
 
+    /// The まとまり粒 archive to draw, if any: only one read under the
+    /// verification that is current now. The newest records do not depend
+    /// on verification and stay; the archive does, like every cache derived
+    /// from aggregate projections (`AggregateProjectionCacheStamp`). After
+    /// verified → pending → verified, an archive read before the pending
+    /// phase stays hidden until a read under the new verification arrives,
+    /// even if the reads in between were cancelled or failed.
+    static func shownAggregateArchive(
+        _ content: LogRecentContent?,
+        currentEpochID: UUID?,
+        projection: AggregateProjectionPresentationContext
+    ) -> LogAggregateArchive? {
+        guard let archive = shownRecentContent(content, currentEpochID: currentEpochID)?.aggregates,
+              projection.acceptsVerifiedAggregateCache(archive.cacheStamp)
+        else { return nil }
+        return archive
+    }
+
     /// What stays after the period page failed to read: a page of this
     /// period and epoch (a refresh that failed); otherwise this period's
     /// name over no figures, never another period's or a pre-reset page.
@@ -1784,7 +1802,7 @@ struct LogView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    if shownRecentContent?.aggregates.isPartial == true {
+                    if shownAggregateArchive?.isPartial == true {
                         Text("ここでは最新\(BoundedHistoryPolicy.aggregateRootLimit)個を表示しています。生涯の質量は瓶の俯瞰画面で確認できます。")
                             .font(.caption)
                             .foregroundStyle(PomoGemTheme.muted)
@@ -1805,9 +1823,7 @@ struct LogView: View {
     /// Only roots are shown (see `logRecentContent`). A legacy layer lists
     /// the records on screen that it holds.
     private var aggregateArchiveItems: [LogAggregateArchiveItem] {
-        guard aggregateProjectionPresentation.allowsAggregateSummaries,
-              let archive = shownRecentContent?.aggregates
-        else { return [] }
+        guard let archive = shownAggregateArchive else { return [] }
         let legacy = archive.legacyLayers.map { layer in
             LogAggregateArchiveItem(
                 legacy: layer,
@@ -1818,6 +1834,14 @@ struct LogView: View {
             if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString > rhs.id.uuidString }
             return lhs.createdAt > rhs.createdAt
         }
+    }
+
+    private var shownAggregateArchive: LogAggregateArchive? {
+        LogHistoryLoadPolicy.shownAggregateArchive(
+            recentContent,
+            currentEpochID: currentEpochID,
+            projection: aggregateProjectionPresentation
+        )
     }
 
     /// The period page and the newest thirty, each record once.
@@ -1974,14 +1998,16 @@ struct LogView: View {
         guard LogHistoryLoadPolicy.isVisible(scenePhase) else { return }
         loadAchievementsBeforeLifetimeReads()
         let epochID = currentEpochID
-        let includesAggregates = aggregateProjectionPresentation.allowsAggregateSummaries
+        // Nil while iCloud verification is pending: the aggregates are then
+        // not read, and whatever is read is tied to this verification.
+        let aggregateCacheStamp = aggregateProjectionPresentation.verifiedCacheStamp
         do {
             let container = modelContext.container
             let content = try await readQueue.run {
                 try await AccumulationTimelineLoader.read(from: container) { repository in
                     try await repository.logRecentContent(
                         currentEpochID: epochID,
-                        includesAggregates: includesAggregates
+                        aggregateCacheStamp: aggregateCacheStamp
                     )
                 }
             }
