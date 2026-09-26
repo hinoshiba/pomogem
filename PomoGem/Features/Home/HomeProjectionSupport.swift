@@ -1004,6 +1004,30 @@ enum HomeProjectionPolicy {
         )
     }
 
+    /// What the jar's own readout counts (dev-D7). A completed focus is
+    /// saved the moment its timer ends, but its gem waits behind the
+    /// completion card and only then falls into the jar. Counting it at once
+    /// showed +250 g and one more gem over a jar that had not received it,
+    /// while the card said 「閉じると、一粒が瓶に落ちます」. Sessions whose gem
+    /// has not landed yet join the readout when it lands. Every other total
+    /// (menu, widget, share, export, sync) keeps `totals` and counts the
+    /// saved session immediately.
+    static func landedTotals(
+        roots: [AggregatePebble],
+        looseSessions: [StudySession],
+        unlandedSessionIDs: Set<UUID>
+    ) -> Totals {
+        guard !unlandedSessionIDs.isEmpty,
+              looseSessions.contains(where: { unlandedSessionIDs.contains($0.id) })
+        else {
+            return totals(roots: roots, looseSessions: looseSessions)
+        }
+        return totals(
+            roots: roots,
+            looseSessions: looseSessions.filter { !unlandedSessionIDs.contains($0.id) }
+        )
+    }
+
     /// Corrupt or future-scale rows must not turn a bounded Home projection
     /// into an integer-overflow crash. Saturation is honest here: callers
     /// already distinguish partial/lower-bound projections from exact totals.

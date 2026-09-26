@@ -349,6 +349,28 @@ struct HomeView: View {
     private var totalPebbles: Int {
         projectionTotals.pebbleCount
     }
+    /// Saved timer completions whose gem has not landed in the jar yet: it
+    /// waits behind the completion card (`awaitingAcknowledgement`) or is
+    /// still falling (`awaitingLanding`).
+    private var unlandedRewardSessionIDs: Set<UUID> {
+        _ = pendingRewardReceiptRevision
+        var ids = Set(PendingRewardReceiptStore.load().filter(\.requiresDrop).map(\.id))
+        if let marker = UserDefaults.standard.string(forKey: FocusPersistence.localCompletionIDKey),
+           let id = UUID(uuidString: marker) {
+            ids.insert(id)
+        }
+        return ids
+    }
+    /// The jar's readout, core and large-text card count a completed focus
+    /// when its gem lands, not when the alarm stops (dev-D7,
+    /// `HomeProjectionPolicy.landedTotals`).
+    private var hudTotals: HomeProjectionPolicy.Totals {
+        HomeProjectionPolicy.landedTotals(
+            roots: acceptedAggregateRoots,
+            looseSessions: looseSessions,
+            unlandedSessionIDs: unlandedRewardSessionIDs
+        )
+    }
     private var activeAggregateRoots: [AggregatePebble] {
         acceptedAggregateRoots
     }
@@ -928,12 +950,14 @@ struct HomeView: View {
         ZStack {
             JarSpriteView(
                 scene: scene,
-                totalGrams: totalGrams,
-                pebbleCount: looseSessions.count,
+                // dev-D7: the jar's core, light and VoiceOver count a gem when
+                // it lands, like the readout above.
+                totalGrams: hudTotals.grams,
+                pebbleCount: max(0, looseSessions.count - (totalPebbles - hudTotals.pebbleCount)),
                 achievementCount: uniqueAchievementCount,
                 aggregateCount: activeAggregateRoots.count,
                 legacyAggregateCount: activeLegacyStratumVisuals.count,
-                representedPebbleCount: totalPebbles,
+                representedPebbleCount: hudTotals.pebbleCount,
                 goldPebbleCount: visibleGoldPebbleCount,
                 prismPebbleCount: visiblePrismPebbleCount,
                 accentHex: selectedSubject?.colorHex ?? Constants.Color.amberLamp,
@@ -1164,10 +1188,11 @@ struct HomeView: View {
 
     private var homeMassValue: String {
         let verifiedValue: String
-        if totalGrams < 1_000 {
-            verifiedValue = totalGrams.formatted()
+        let grams = hudTotals.grams
+        if grams < 1_000 {
+            verifiedValue = grams.formatted()
         } else {
-            verifiedValue = (Double(totalGrams) / 1_000).formatted(
+            verifiedValue = (Double(grams) / 1_000).formatted(
                 .number.precision(.fractionLength(1 ... 2))
             )
         }
@@ -1178,7 +1203,7 @@ struct HomeView: View {
     }
 
     private var homeMassUnit: String {
-        let unit = totalGrams < 1_000 ? "g" : "kg"
+        let unit = hudTotals.grams < 1_000 ? "g" : "kg"
         return AggregateProjectionPresentationPolicy.homeMassUnit(
             verifiedUnit: unit,
             hasLocalLowerBound: localProjectionNeedsMaintenance,
@@ -1189,7 +1214,7 @@ struct HomeView: View {
     private var jarMetricSummary: String {
         let milestones = uniqueAchievementCount > 0 ? " ・ 記念石 \(achievementCountLabel)" : ""
         return AggregateProjectionPresentationPolicy.homeCountSummary(
-            count: totalPebbles,
+            count: hudTotals.pebbleCount,
             milestoneSuffix: milestones,
             hasLocalLowerBound: localProjectionNeedsMaintenance,
             context: aggregateProjectionPresentation
@@ -1236,8 +1261,8 @@ struct HomeView: View {
         !projectionNeedsMaintenance
             && totalPebbles > 0
             && !JarLifetimeCorePresentation.shouldShowCore(
-                totalPebbleCount: totalPebbles,
-                totalGrams: totalGrams
+                totalPebbleCount: hudTotals.pebbleCount,
+                totalGrams: hudTotals.grams
             )
     }
 
@@ -1267,18 +1292,19 @@ struct HomeView: View {
     }
 
     private var fusionAccessibilityDescription: String? {
+        let totals = hudTotals
         guard !aggregateProjectionPresentation.isCloudVerificationPending,
-              totalPebbles > 0 || localProjectionNeedsMaintenance
+              totals.pebbleCount > 0 || localProjectionNeedsMaintenance
         else { return nil }
         guard let state = JarLifetimeCorePresentation.state(
-            totalPebbleCount: totalPebbles,
-            totalGrams: totalGrams,
+            totalPebbleCount: totals.pebbleCount,
+            totalGrams: totals.grams,
             projectionIsLowerBound: localProjectionNeedsMaintenance
         ) else { return nil }
         var components = [state.progressLabel, state.nextFusionLabel]
             .compactMap { $0 }
         if let physicalState = JarLifetimeCorePresentation.state(
-            totalPebbleCount: totalPebbles,
+            totalPebbleCount: totals.pebbleCount,
             projectionIsLowerBound: localProjectionNeedsMaintenance
         ) {
             let physical = [physicalState.progressLabel, physicalState.nextFusionLabel]
@@ -1298,8 +1324,8 @@ struct HomeView: View {
               )
         else { return nil }
         return JarLifetimeCorePresentation.state(
-            totalPebbleCount: totalPebbles,
-            totalGrams: totalGrams,
+            totalPebbleCount: hudTotals.pebbleCount,
+            totalGrams: hudTotals.grams,
             projectionIsLowerBound: localProjectionNeedsMaintenance
         )
     }
