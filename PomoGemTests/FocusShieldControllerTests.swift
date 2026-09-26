@@ -2,6 +2,7 @@ import DeviceActivity
 import FamilyControls
 import Foundation
 import ManagedSettings
+import SwiftUI
 import XCTest
 @testable import PomoGem
 
@@ -510,4 +511,142 @@ private final class NoopMonitoring: ScreenTimeMonitoringDriving {
     func stop() {}
     func invalidateAuthorizationIfNeeded() throws {}
     func synchronize(now: Date) throws -> Bool { false }
+}
+
+/// The wiring: the saved timer reaches the shield through the Screen Time
+/// host (`ScreenTimeIntegrationModifier`), the same choke point as the
+/// learning lane's hold, with the framework replaced by fakes.
+@MainActor
+final class FocusShieldIntegrationTests: XCTestCase {
+    private struct Host: View {
+        let controller: ScreenTimeController
+        let contextKey: String
+        let dataEpochID: UUID?
+
+        var body: some View {
+            Color.clear
+                .modifier(ScreenTimeIntegrationModifier(
+                    isReady: true, timerPresented: false,
+                    contextKey: contextKey, dataEpochID: dataEpochID,
+                    controller: controller
+                ))
+                .environment(\.scenePhase, .active)
+        }
+    }
+
+    private var directories: [URL] = []
+
+    override func setUp() {
+        super.setUp()
+        FocusPersistence.clear()
+    }
+
+    override func tearDown() {
+        FocusPersistence.clear()
+        for directory in directories { try? FileManager.default.removeItem(at: directory) }
+        directories.removeAll()
+        super.tearDown()
+    }
+
+    func testTheSavedTimerShieldsKeepsThroughAPauseMovesOnResumeAndLiftsWhenCleared() async throws {
+        let owner = AccountScopedLocalState.defaultsKey(base: "screen-time-owner")
+        let epoch = UUID()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        directories.append(directory)
+        let store = ScreenTimeStore(directory: directory)
+        let apps = Set(try (0..<3).map { index in
+            try JSONDecoder().decode(ApplicationToken.self,
+                                     from: JSONEncoder().encode(["data": Data([0x81, UInt8(index)])]))
+        })
+        try store.update { state in
+            state.contextKey = owner
+            state.dataEpochID = epoch
+            state.contextIsActive = true
+            state.configuration.distractionSelection.applicationTokens = apps
+            state.configuration.shieldsDistractionDuringFocusEnabled = true
+        }
+        let center = ShieldFakeCenter()
+        let settings = ShieldFakeSettings(center: center)
+        let engine = FocusShieldEngine(
+            records: FocusShieldRecordStore(directory: store.directoryURL), settings: settings, center: center,
+            resolveInterval: { schedule in
+                // What `nextInterval` answers for the time-of-day form.
+                let calendar = Calendar.current
+                guard let start = calendar.nextDate(after: Date().addingTimeInterval(-3_600),
+                                                    matching: schedule.intervalStart, matchingPolicy: .strict),
+                      let end = calendar.nextDate(after: start, matching: schedule.intervalEnd,
+                                                  matchingPolicy: .strict) else { return nil }
+                return DateInterval(start: start, end: end)
+            },
+            lockTimeout: 1)
+        let shield = FocusShieldController(engine: engine, queue: DispatchQueue(label: "test.shield.host"))
+        let controller = ScreenTimeController(
+            store: store, currentContextKey: { owner }, monitoring: NoopMonitoring(),
+            authorization: { .approved },
+            diagnosticsMirror: ScreenTimeDiagnosticsMirror(directory: directory.appendingPathComponent("mirror")),
+            noticeDefaults: UserDefaults(suiteName: UUID().uuidString)!,
+            focusShield: shield)
+
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = UIHostingController(rootView: Host(
+            controller: controller, contextKey: owner, dataEpochID: epoch))
+        window.isHidden = false
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        try await waitUntil("the host binds the owner") { controller.isBound(contextKey: owner, dataEpochID: epoch) }
+        try await controller.waitForPendingOperations()
+        XCTAssertTrue(settings.shielded.isEmpty, "No focus, no shield")
+
+        var timer = PomodoroEngine(selectedDuration: .twentyFiveMinutes)
+        try timer.startFocus(isPro: false, now: Date())
+        save(timer, epoch: epoch)
+        try await waitUntil("a started focus is shielded") { shield.isShielding }
+        try await controller.waitForPendingOperations()
+        XCTAssertEqual(settings.shielded, [apps])
+        XCTAssertEqual(center.started.count, 1)
+        let firstDeadline = try XCTUnwrap(engine.records.load()?.deadline)
+        XCTAssertEqual(firstDeadline, try XCTUnwrap(timer.endDate).addingTimeInterval(FocusShieldPolicy.deadlineGrace))
+
+        try timer.pause(at: Date())
+        save(timer, epoch: epoch)
+        try await Task.sleep(for: .milliseconds(300))
+        try await controller.waitForPendingOperations()
+        XCTAssertTrue(shield.isShielding, "A paused focus keeps its shield")
+        XCTAssertEqual(center.started.count, 1, "and needs no DeviceActivity call")
+        XCTAssertEqual(try engine.records.load()?.deadline, firstDeadline)
+
+        try await Task.sleep(for: .milliseconds(1_100))
+        try timer.resume(at: Date())
+        save(timer, epoch: epoch)
+        try await Task.sleep(for: .milliseconds(300))
+        try await controller.waitForPendingOperations()
+        XCTAssertEqual(center.started.count, 2, "A resume moves the deadline and re-registers the failsafe")
+        XCTAssertGreaterThan(try XCTUnwrap(engine.records.load()?.deadline), firstDeadline)
+
+        FocusPersistence.clear()
+        try await waitUntil("a cleared timer lifts the shield") { !shield.isShielding }
+        try await controller.waitForPendingOperations()
+        XCTAssertEqual(settings.clearCount, 1)
+        XCTAssertEqual(center.stopped, [[FocusShieldPolicy.activityName.rawValue]])
+        XCTAssertEqual(try engine.records.load()?.clearedBy, FocusShieldClearReason.focusEnded.rawValue)
+    }
+
+    private func save(_ engine: PomodoroEngine, epoch: UUID) {
+        FocusPersistence.save(FocusRecoveryEnvelope(engine: engine, subject: nil, clockAnchor: nil,
+                                                    pendingCompletion: nil, savedAt: Date(), dataEpochID: epoch))
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 10, _ description: String, _ condition: () throws -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if try condition() { return }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTFail("Timed out waiting: \(description)")
+    }
 }
