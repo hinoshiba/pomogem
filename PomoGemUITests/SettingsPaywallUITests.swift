@@ -236,6 +236,18 @@ final class SettingsPaywallUITests: XCTestCase {
         launchAndOpenSettings()
         attach("\(prefix) — top")
 
+        // F4. The 集中 card's music row keeps its 44 pt target and its name;
+        // at AX5 the sheet it opens stays closable and scrolls to its end.
+        let music = app.buttons["settings.focus-music"]
+        XCTAssertTrue(reveal(music))
+        XCTAssertGreaterThanOrEqual(music.frame.height, 43.5)
+        XCTAssertEqual(music.label, "集中用の音楽")
+        XCTAssertFalse((music.value as? String ?? "").isEmpty, "The row names the chosen music or 未選択")
+        attach("\(prefix) — focus music row")
+        if accessibility5 {
+            checkFocusMusicSheetAtAccessibilitySize(from: music)
+        }
+
         let liveActivity = app.switches["settings.live-activity"]
         XCTAssertTrue(reveal(liveActivity))
         let returnReminder = app.switches["settings.focus-return-reminder"]
@@ -290,6 +302,51 @@ final class SettingsPaywallUITests: XCTestCase {
         XCTAssertTrue(close.waitForExistence(timeout: 6))
         close.tap()
         XCTAssertTrue(app.navigationBars["このアプリについて"].waitForExistence(timeout: 6))
+    }
+
+    /// Settings hands its Dynamic Type size to the music sheet, which opens
+    /// at the medium detent. Nothing in the sheet is tapped except 閉じる:
+    /// the access button would show the MusicKit prompt and a list row
+    /// would start playback.
+    private func checkFocusMusicSheetAtAccessibilitySize(from row: XCUIElement) {
+        row.tap()
+        let close = app.buttons["focus-music.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 8))
+        XCTAssertTrue(close.isHittable)
+        let bar = app.navigationBars["集中用の音楽"]
+        XCTAssertTrue(bar.exists)
+        // iOS 26 draws a sheet at its medium detent slightly scaled down: the
+        // bar, laid out at the window's width, shows about 96% of it. The
+        // 44 pt target is compared in that scale here, and at full size once
+        // the sheet has grown to its large detent below.
+        let window = app.windows.firstMatch.frame
+        let mediumScale = min(1, settledFrame(of: bar).width / window.width)
+        XCTAssertGreaterThanOrEqual(settledFrame(of: close).height, 43.5 * mediumScale)
+        XCTAssertTrue(element("focus-music.source.pl.cf8514b686374fadbe6807a6339dfd89").waitForExistence(timeout: 4))
+        attach("Settings AX5 — focus music sheet, medium detent")
+
+        let autoplay = element("focus-music.autoplay")
+        XCTAssertTrue(autoplay.waitForExistence(timeout: 4))
+        let sheetScroll = app.scrollViews
+            .containing(NSPredicate(format: "identifier == %@", "focus-music.autoplay"))
+            .firstMatch
+        let bottom = window.maxY - 20
+        for _ in 0..<10 {
+            if autoplay.isHittable, autoplay.frame.maxY <= bottom { break }
+            sheetScroll.swipeUp(velocity: .slow)
+        }
+        XCTAssertTrue(autoplay.isHittable, "The sheet scrolls to its last row at AX5")
+        XCTAssertLessThanOrEqual(autoplay.frame.maxY, bottom)
+        XCTAssertTrue(close.isHittable, "閉じる stays reachable after scrolling")
+        // Scrolling up from the medium detent grows the sheet first.
+        XCTAssertEqual(settledFrame(of: bar).width, window.width, accuracy: 0.5, "The sheet reached its large detent")
+        XCTAssertGreaterThanOrEqual(settledFrame(of: close).height, 43.5)
+        attach("Settings AX5 — focus music sheet, scrolled to the end")
+
+        close.tap()
+        XCTAssertTrue(waitForAbsence(close, timeout: 6))
+        XCTAssertTrue(app.navigationBars["設定"].waitForExistence(timeout: 6))
+        XCTAssertTrue(row.exists)
     }
 
     private func launchAndOpenSettings() {
