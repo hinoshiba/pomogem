@@ -2564,30 +2564,6 @@ private struct AchievementEditorSheet: View {
                     .foregroundStyle(PomoGemTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                    if let errorMessage {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption)
-                            .foregroundStyle(Color.red.opacity(0.9))
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("achievement.editor.error")
-                    }
-
-                    // Right above the button it disables, as in 「成果を積む」.
-                    AchievementNoteLimitMessage(text: note)
-
-                    Button {
-                        save()
-                    } label: {
-                        if isCommitting {
-                            ProgressView().tint(PomoGemTheme.background)
-                        } else {
-                            Label("変更を保存", systemImage: "checkmark.circle.fill")
-                        }
-                    }
-                    .buttonStyle(PomoGemPrimaryButtonStyle())
-                    .disabled(selectedSubjectID == nil || isCommitting || AchievementNotePolicy.isTooLong(note))
-                    .accessibilityIdentifier("achievement.editor.save")
-
                     Button(role: .destructive) {
                         confirmsDeletion = true
                     } label: {
@@ -2601,6 +2577,12 @@ private struct AchievementEditorSheet: View {
             }
             .scrollDismissesKeyboard(.immediately)
             .scrollBounceBehavior(.basedOnSize)
+            // As in 「成果を積む」: 変更を保存 stays pinned above the home
+            // indicator, and above the keyboard while the memo is typed. On a
+            // 4.7-inch iPhone the keyboard used to cover it.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                saveBar
+            }
             .background(NightBackground())
             .navigationTitle("成果を編集")
             .navigationBarTitleDisplayMode(.inline)
@@ -2621,6 +2603,42 @@ private struct AchievementEditorSheet: View {
             } message: {
                 Text("記録・瓶・共有から非表示になります。質量は変わりません。削除直後は記録画面で元に戻せます。")
             }
+        }
+    }
+
+    /// The error, the memo-length reason and 変更を保存, pinned like the save
+    /// bar of 「成果を積む」 (AchievementEntrySheet).
+    private var saveBar: some View {
+        VStack(spacing: 8) {
+            // Right above the button it disables, as in 「成果を積む」.
+            AchievementNoteLimitMessage(text: note)
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.red.opacity(0.9))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("achievement.editor.error")
+            }
+            Button {
+                save()
+            } label: {
+                if isCommitting {
+                    ProgressView().tint(PomoGemTheme.background)
+                } else {
+                    Label("変更を保存", systemImage: "checkmark.circle.fill")
+                }
+            }
+            .buttonStyle(PomoGemPrimaryButtonStyle())
+            .disabled(selectedSubjectID == nil || isCommitting || AchievementNotePolicy.isTooLong(note))
+            .accessibilityIdentifier("achievement.editor.save")
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+            Divider().overlay(PomoGemTheme.glassEdge.opacity(0.16))
         }
     }
 
