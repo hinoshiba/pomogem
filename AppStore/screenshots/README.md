@@ -39,6 +39,23 @@ procedure below before the 1.1.0 submission and update this file, the checksums
 and `ASSET_LICENSES.md`. The images in this folder remain an exact record of the
 1.1.0 (10) capture until then.
 
+The frame for image 05 needs an owner decision before that recapture:
+
+- The privacy promise is now the footer of 「サポートとプライバシー」, near the end of
+  Settings. The List cannot scroll past its last row, so the Simulator frame that
+  shows the footer also shows the card above it: 「データを書き出す」, the red
+  「表示中の記録をリセット」 row and the export disclosure. No iCloud row is visible.
+- The iCloud section can't be the frame in the Simulator. That section shows the
+  Simulator's own diagnostics (「iCloudは実機で確認できます」), and this set must not
+  contain them.
+- The options:
+  - capture 05 on a physical iPhone, framed on the iCloud section (the export
+    card still sits between that section and the privacy footer);
+  - keep the Simulator frame as it is;
+  - use a different screen for 05.
+
+  Record the choice here when you recapture.
+
 ## Japanese iPhone set
 
 The App Store listing order is:
