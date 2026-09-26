@@ -20,11 +20,7 @@ final class EngagementOverviewUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
-        let staleDismiss = app.buttons["reward.dismiss"]
-        if staleDismiss.waitForExistence(timeout: 2), staleDismiss.isHittable {
-            staleDismiss.tap()
-            XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
-        }
+        assertNoRewardCardFromAnEarlierTest(in: app)
         app.buttons["home.duration-picker"].tap()
 
         let demoDuration = app.buttons["12秒、DEMO"]
@@ -463,12 +459,9 @@ final class EngagementOverviewUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 12))
 
-        // UserDefaults outlives the dedicated SwiftData fixture. A receipt
-        // left by an interrupted earlier test must not contaminate this case.
-        let staleDismiss = app.buttons["休憩の提案を閉じる"]
-        if staleDismiss.waitForExistence(timeout: 1), staleDismiss.isHittable {
-            staleDismiss.tap()
-        }
+        // UserDefaults outlives the dedicated SwiftData fixture. The clean
+        // launch above dropped every receipt an earlier test left there.
+        assertNoRewardCardFromAnEarlierTest(in: app)
 
         app.buttons["home.duration-picker"].tap()
         let demoDuration = app.buttons["12秒、DEMO"]
@@ -543,6 +536,58 @@ final class EngagementOverviewUITests: XCTestCase {
                 timeout: 8
             ),
             "Acknowledging the receipt must not delete or duplicate the study record"
+        )
+        app.terminate()
+    }
+
+    /// The other side of the test above. A local preview opens a new, empty
+    /// in-memory store on every launch, so the previous process's receipt
+    /// names a pebble this store never had. Shown again, its card would drop
+    /// a gem that can never land, and the start button would stay disabled
+    /// for every later test on the simulator.
+    func testAnInMemoryRelaunchDoesNotInheritTheEarlierStoresReceipt() {
+        let app = XCUIApplication()
+        app.launchEnvironment["POMOGEM_LOCAL_PREVIEW"] = "1"
+        app.launchEnvironment["POMOGEM_UI_TEST_MODE"] = "1"
+        PomoGemUITestLanguage.configureJapanese(app)
+        app.launch()
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 12))
+        assertNoRewardCardFromAnEarlierTest(in: app)
+
+        app.buttons["home.duration-picker"].tap()
+        let demoDuration = app.buttons["12秒、DEMO"]
+        XCTAssertTrue(demoDuration.waitForExistence(timeout: 4))
+        demoDuration.tap()
+        let demoLauncher = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "12秒集中する")
+        ).firstMatch
+        XCTAssertTrue(demoLauncher.waitForExistence(timeout: 5))
+        demoLauncher.tap()
+        stopCompletionAlertIfPresented(in: app)
+        let bridge = app.descendants(matching: .any)["reward.bridge"]
+        XCTAssertTrue(
+            bridge.waitForExistence(timeout: 25),
+            "The premise: the completion is saved and its card is waiting"
+        )
+
+        // End the process with the card still up, as an interrupted test does.
+        app.terminate()
+        app.launch()
+
+        XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 12))
+        XCTAssertFalse(
+            bridge.waitForExistence(timeout: 3),
+            "A new in-memory store must not show the replaced store's completion card"
+        )
+        XCTAssertTrue(
+            waitForProbeValue(in: app, containing: ["count=0;"], timeout: 5),
+            "The new store starts empty, so the jar has no gem to wait for"
+        )
+        let launcher = app.buttons["home.focus-launcher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            launcher.isEnabled,
+            "No stale receipt may keep the start button disabled"
         )
         app.terminate()
     }
@@ -727,6 +772,17 @@ final class EngagementOverviewUITests: XCTestCase {
         element.label
             .replacingOccurrences(of: ",", with: "")
             .replacingOccurrences(of: "，", with: "")
+    }
+
+    /// The app drops the reward receipts an earlier test's store left in
+    /// UserDefaults whenever it opens a new or cleaned store
+    /// (`UITestLocalStateIsolation`). Tapping such a card away used to leave
+    /// a gem that could never land, and the start button stayed disabled.
+    private func assertNoRewardCardFromAnEarlierTest(in app: XCUIApplication) {
+        XCTAssertFalse(
+            app.descendants(matching: .any)["reward.bridge"].waitForExistence(timeout: 1),
+            "A new store must not show another test's completion card"
+        )
     }
 
     private func rewardReceiptApp(

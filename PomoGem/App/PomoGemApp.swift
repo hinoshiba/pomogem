@@ -1011,6 +1011,12 @@ private struct PomoGemPersistenceLaunchHost: View {
                 environment: ProcessInfo.processInfo.environment
             ) {
                 let schema = PersistenceStoreTopology.shippingSchema
+                // A store this launch creates or wipes starts empty, so any
+                // receipt in UserDefaults still names another store's rows.
+                if fixtureRequest.action != .normal
+                    || !FileManager.default.fileExists(atPath: fixtureRequest.storeURL.path) {
+                    UITestLocalStateIsolation.forgetStateDerivedFromPreviousStores()
+                }
                 let configuration = try FortyYearPersistentUITestFixture.makeConfiguration(
                     schema: schema,
                     request: fixtureRequest
@@ -1031,6 +1037,13 @@ private struct PomoGemPersistenceLaunchHost: View {
             let mode = LocalPreviewLaunchPolicy.persistenceModeForCurrentProcess
             guard mode == .cloudKit else {
                 AccountScopedLocalState.useUnscopedLocalMode()
+#if DEBUG
+                // Every preview launch (UI test or not) opens a new, empty
+                // in-memory store.
+                if mode == .inMemoryPreview {
+                    UITestLocalStateIsolation.forgetStateDerivedFromPreviousStores()
+                }
+#endif
                 session = try makeLocalSession(mode: mode)
                 return
             }

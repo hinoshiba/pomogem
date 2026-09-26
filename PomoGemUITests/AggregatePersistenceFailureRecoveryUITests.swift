@@ -28,7 +28,7 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         activeApp = app
         app.launch()
         XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 12))
-        dismissStaleRewardReceiptsIfNeeded(in: app)
+        assertNoRewardCardFromAnEarlierTest(in: app)
         selectDemoDuration(in: app)
 
         for expectedCount in 1 ... 9 {
@@ -264,19 +264,15 @@ final class AggregatePersistenceFailureRecoveryUITests: XCTestCase {
         return true
     }
 
-    private func dismissStaleRewardReceiptsIfNeeded(in app: XCUIApplication) {
-        for _ in 0 ..< 4 {
-            let bridge = app.descendants(matching: .any)["reward.bridge"]
-            guard bridge.waitForExistence(timeout: 1) else { return }
-            let dismiss = app.buttons["休憩の提案を閉じる"]
-            XCTAssertTrue(dismiss.waitForExistence(timeout: 2))
-            dismiss.tap()
-            XCTAssertTrue(waitForNonExistence(bridge, timeout: 2))
-            app.terminate()
-            app.launch()
-            XCTAssertTrue(waitForHittable(app.buttons["メニュー"], timeout: 12))
-        }
-        XCTAssertFalse(app.descendants(matching: .any)["reward.bridge"].exists)
+    /// The app drops the reward receipts an earlier test's store left in
+    /// UserDefaults whenever it opens a new or cleaned store
+    /// (`UITestLocalStateIsolation`). Draining them here used to acknowledge
+    /// a gem that could never land, which left the start button disabled.
+    private func assertNoRewardCardFromAnEarlierTest(in app: XCUIApplication) {
+        XCTAssertFalse(
+            app.descendants(matching: .any)["reward.bridge"].waitForExistence(timeout: 1),
+            "A new store must not show another test's completion card"
+        )
     }
 
     private func waitForJarProbe(

@@ -44,7 +44,7 @@ final class JarInteractionUITests: XCTestCase {
         PomoGemUITestLanguage.configureJapanese(app)
         app.launch()
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
-        dismissStaleRewardReceiptsIfNeeded(in: app)
+        assertNoRewardCardFromAnEarlierTest(in: app)
 
         XCTAssertTrue(app.otherElements["瓶"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["瓶"].exists, "An empty jar must not expose a dead button")
@@ -149,41 +149,15 @@ final class JarInteractionUITests: XCTestCase {
         return true
     }
 
-    private func dismissStaleRewardReceiptsIfNeeded(in app: XCUIApplication) {
-        for _ in 0..<4 {
-            let bridge = app.descendants(matching: .any)["reward.bridge"]
-            guard bridge.waitForExistence(timeout: 1) else { return }
-            let dismiss = app.buttons["休憩の提案を閉じる"]
-            XCTAssertTrue(dismiss.waitForExistence(timeout: 3))
-            dismiss.tap()
-            XCTAssertTrue(waitForNonExistence(bridge, timeout: 3))
-            // Do not interrupt the new fall before its receipt is retired.
-            let launcher = app.buttons["home.focus-launcher"]
-            let ready = XCTNSPredicateExpectation(
-                predicate: NSPredicate { object, _ in
-                    guard let element = object as? XCUIElement else { return false }
-                    return element.exists && element.isEnabled
-                },
-                object: launcher
-            )
-            XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 8), .completed)
-            app.terminate()
-            app.launch()
-            XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 12))
-        }
-        XCTAssertFalse(app.descendants(matching: .any)["reward.bridge"].exists)
-    }
-
-    private func waitForNonExistence(
-        _ element: XCUIElement,
-        timeout: TimeInterval
-    ) -> Bool {
-        let predicate = NSPredicate { object, _ in
-            guard let element = object as? XCUIElement else { return false }
-            return !element.exists
-        }
-        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
-        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    /// The app drops the reward receipts an earlier test's store left in
+    /// UserDefaults whenever it opens a new or cleaned store
+    /// (`UITestLocalStateIsolation`). Draining them here used to acknowledge
+    /// a gem that could never land, which left the start button disabled.
+    private func assertNoRewardCardFromAnEarlierTest(in app: XCUIApplication) {
+        XCTAssertFalse(
+            app.descendants(matching: .any)["reward.bridge"].waitForExistence(timeout: 1),
+            "A new store must not show another test's completion card"
+        )
     }
 
     private func waitForVisibleBounce(

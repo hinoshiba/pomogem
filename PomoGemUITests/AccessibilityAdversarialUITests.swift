@@ -340,11 +340,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
     /// On a 4.7-inch iPhone at AX5 the repeating alarm's only Stop control
     /// used to start below the screen. It must be visible without scrolling.
     func testAX5CompletionAlarmStopIsOnScreenWithoutScrolling() throws {
-        let staleDismiss = app.buttons["reward.dismiss"]
-        if staleDismiss.waitForExistence(timeout: 2), staleDismiss.isHittable {
-            staleDismiss.tap()
-            XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
-        }
+        assertNoRewardCardFromAnEarlierTest()
         startAX5DemoFocus()
         let timer = app.descendants(matching: .any)["focus.timer-display"].firstMatch
         XCTAssertTrue(timer.waitForExistence(timeout: 8))
@@ -436,6 +432,17 @@ final class AccessibilityAdversarialUITests: XCTestCase {
         XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 8))
     }
 
+    /// The in-memory store starts empty, and the app drops the reward
+    /// receipts an earlier test's store left in UserDefaults
+    /// (`UITestLocalStateIsolation`). Tapping such a card away used to leave
+    /// a gem that could never land, and the start button stayed disabled.
+    private func assertNoRewardCardFromAnEarlierTest() {
+        XCTAssertFalse(
+            app.descendants(matching: .any)["reward.bridge"].waitForExistence(timeout: 1),
+            "A new in-memory store must not show another test's completion card"
+        )
+    }
+
     private func waitForEnabled(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
         let enabled = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == true AND enabled == true"),
@@ -475,14 +482,7 @@ final class AccessibilityAdversarialUITests: XCTestCase {
     }
 
     func testAX5RewardBridgeKeepsActionsBeforeUnclippedProgress() throws {
-        // A durable receipt can outlive the in-memory SwiftData fixture when a
-        // prior UI-test process is interrupted. Acknowledge it before earning
-        // the one completion under test.
-        let staleDismiss = app.buttons["reward.dismiss"]
-        if staleDismiss.waitForExistence(timeout: 2), staleDismiss.isHittable {
-            staleDismiss.tap()
-            XCTAssertTrue(app.buttons["メニュー"].waitForExistence(timeout: 4))
-        }
+        assertNoRewardCardFromAnEarlierTest()
 
         let durationPicker = app.buttons["home.duration-picker"]
         XCTAssertTrue(scrollUntilFullyVisibleInContent(durationPicker, attempts: 12))
