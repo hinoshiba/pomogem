@@ -142,7 +142,9 @@ final class RawStoneWidgetTests: XCTestCase {
         XCTAssertTrue(homeWidget.contains(".widgetURL(StartFocusLink.url)"))
         XCTAssertTrue(homeWidget.contains(".supportedFamilies([.systemSmall, .systemMedium])"))
 
-        for shared in ["RawStoneArtwork.swift", "StartFocusLink.swift"] {
+        // main's duration formatting (Docs/Localization.md) is compiled
+        // into the widget too, so it is held to the same boundary.
+        for shared in ["RawStoneArtwork.swift", "StartFocusLink.swift", "LocalizedDuration.swift"] {
             let source = try String(contentsOf: projectRoot.appendingPathComponent("Shared/\(shared)"), encoding: .utf8)
             for forbidden in ["UserDefaults", "FileManager", "import UIKit", "import SpriteKit", "import SwiftData", "CloudKit"] {
                 XCTAssertFalse(source.contains(forbidden), "\(shared) stays free of \(forbidden)")
@@ -159,6 +161,7 @@ final class RawStoneWidgetTests: XCTestCase {
             .map { $0.trimmingCharacters(in: .whitespaces) }
         XCTAssertEqual(sharedSources, [
             "- path: Shared/FocusActivityAttributes.swift",
+            "- path: Shared/LocalizedDuration.swift",
             "- path: Shared/RawStoneArtwork.swift",
             "- path: Shared/StartFocusLink.swift"
         ])
