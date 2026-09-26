@@ -1,8 +1,22 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "Proなら、この%@に「%@」と刻めます" : {
+      "comment" : "Fusion sheet link for free users; arguments: the crystal's name (結晶…), the month it was made (2026年9月)",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Proなら、この%1$@に「%2$@」と刻めます"
+          }
+        }
+      }
+    },
     "アプリの時間を積む" : {
       "comment" : "Home menu row: open the Screen Time settings"
+    },
+    "ポモジェムProの説明を開きます" : {
+      "comment" : "VoiceOver hint on the fusion sheet's Pro month-label link"
     },
     "勉強アプリ10分ごとに1粒" : {
       "comment" : "Home menu row detail: every 10 minutes in the chosen study apps adds one pebble"
