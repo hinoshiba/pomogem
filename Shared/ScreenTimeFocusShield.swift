@@ -64,6 +64,12 @@ enum FocusShieldPolicy {
         plannedEnd.addingTimeInterval(deadlineGrace)
     }
 
+    /// The instant the extension clears from: the planned end at the last
+    /// running state.
+    static func plannedEnd(forDeadline deadline: Date) -> Date {
+        deadline.addingTimeInterval(-extensionClearMargin)
+    }
+
     static func isFailsafeActivity(_ rawName: String) -> Bool {
         rawName == activityName.rawValue
     }
@@ -72,9 +78,21 @@ enum FocusShieldPolicy {
     /// clears (a stuck shield is worse than a lost one), and so does an
     /// inactive one. It never reads Family Controls authorization: inside the
     /// extension that reads `.notDetermined` on a real device.
+    ///
+    /// Both callbacks apply it to the record as it is when they run, so a
+    /// stale callback — from an interval a resume has since replaced, or one
+    /// delivered for an earlier focus — never lifts a live shield whose
+    /// planned end is still ahead. The one exception is deliberate: while a
+    /// resume is moving the deadline, the record briefly names the new
+    /// deadline before `startMonitoring` has accepted it (`failsafeDeadline`
+    /// still names the old one). The earlier of the two decides, so the
+    /// interval that is actually registered can always clear the shield it
+    /// was registered for, even if the app dies in that gap.
     static func extensionShouldClear(_ record: FocusShieldRecord?, now: Date) -> Bool {
         guard let record, record.isValid else { return true }
-        return !record.active || now >= record.deadline.addingTimeInterval(-extensionClearMargin)
+        guard record.active else { return true }
+        let deadline = min(record.deadline, record.failsafeDeadline ?? record.deadline)
+        return now >= plannedEnd(forDeadline: deadline)
     }
 }
 
@@ -117,9 +135,15 @@ struct FocusShieldRecord: Codable, Equatable {
     /// A `FocusShieldClearReason` raw value, kept as a string so a value
     /// from a newer build still decodes.
     var clearedBy: String?
+    /// The deadline the registered failsafe interval was built for, written
+    /// only after `startMonitoring` accepted it and reset whenever the shield
+    /// comes down. Whether the interval still has to be registered is decided
+    /// from this, not from `DeviceActivityCenter.activities`, which keeps
+    /// listing a name whose non-repeating interval has already ended.
+    var failsafeDeadline: Date?
 
     var isValid: Bool {
-        [deadline, appliedAt, liftedAt, clearedAt].allSatisfy {
+        [deadline, appliedAt, liftedAt, clearedAt, failsafeDeadline].allSatisfy {
             $0?.timeIntervalSince1970.isFinite != false
         }
     }
@@ -433,7 +457,7 @@ final class FocusShieldEngine: @unchecked Sendable {
     }
 
     /// Shields `applications` for `sessionID` until `deadline`, registering
-    /// the failsafe only when the deadline moved or the interval is missing.
+    /// the failsafe unless the record says this very deadline already has one.
     func apply(sessionID: UUID, deadline: Date, applications: Set<ApplicationToken>, now: Date) throws -> Outcome {
         // The controller never asks for these; they are refused here too so
         // no caller can write a shield that ends in the past or shields
@@ -449,7 +473,8 @@ final class FocusShieldEngine: @unchecked Sendable {
                 if old?.sessionID == sessionID, old?.liftedAt != nil { return old }
                 let continuing = old?.active == true && old?.sessionID == sessionID
                 record = FocusShieldRecord(active: true, sessionID: sessionID, deadline: deadline,
-                                           appliedAt: continuing ? old!.appliedAt : now)
+                                           appliedAt: continuing ? old!.appliedAt : now,
+                                           failsafeDeadline: continuing ? old?.failsafeDeadline : nil)
                 return old
             }
         } catch ScreenTimeError.corruptedState {
@@ -457,10 +482,14 @@ final class FocusShieldEngine: @unchecked Sendable {
             return try apply(sessionID: sessionID, deadline: deadline, applications: applications, now: now)
         }
         if previous?.sessionID == sessionID, previous?.liftedAt != nil { return .unchanged }
-        let sameDeadline = previous?.active == true && previous?.sessionID == sessionID
-            && previous?.deadline == deadline
+        // Only a registration this record confirmed for this deadline counts:
+        // a name still listed by `activities` may belong to an interval that
+        // has already ended (an earlier focus, or a run that died between
+        // writing the record and registering).
+        let armed = previous?.active == true && previous?.sessionID == sessionID
+            && previous?.failsafeDeadline == deadline
         var registered = false
-        if !sameDeadline || !center.activities.contains(FocusShieldPolicy.activityName) {
+        if !armed || !center.activities.contains(FocusShieldPolicy.activityName) {
             do {
                 let form = try FocusShieldSchedule.register(
                     center: center, deadline: deadline, now: now,
@@ -476,8 +505,10 @@ final class FocusShieldEngine: @unchecked Sendable {
             }
         }
         let shielded = try records.update(timeout: lockTimeout) { record -> Bool in
-            guard let current = record, current.active, current.sessionID == sessionID,
+            guard var current = record, current.active, current.sessionID == sessionID,
                   current.deadline == deadline else { return false }
+            current.failsafeDeadline = deadline
+            record = current
             settings.shield(applications: applications)
             return true
         }
@@ -490,7 +521,8 @@ final class FocusShieldEngine: @unchecked Sendable {
     }
 
     /// A paused focus: the shield stays with the deadline it already has.
-    /// Registers nothing unless the failsafe interval has disappeared.
+    /// Registers nothing unless the record has no confirmed failsafe for
+    /// that deadline or the interval has disappeared.
     func keep(applications: Set<ApplicationToken>, now: Date) throws -> Outcome {
         let record: FocusShieldRecord?
         do { record = try records.load() } catch ScreenTimeError.corruptedState {
@@ -501,7 +533,7 @@ final class FocusShieldEngine: @unchecked Sendable {
         if let refusal = Self.refusal(deadline: record.deadline, applications: applications, now: now) {
             return try clear(reason: refusal, now: now)
         }
-        if !center.activities.contains(FocusShieldPolicy.activityName) {
+        if record.failsafeDeadline != record.deadline || !center.activities.contains(FocusShieldPolicy.activityName) {
             do {
                 try FocusShieldSchedule.register(center: center, deadline: record.deadline, now: now,
                                                  calendar: calendar(), resolveInterval: resolveInterval)
@@ -510,11 +542,15 @@ final class FocusShieldEngine: @unchecked Sendable {
                 return .failsafeUnavailable
             }
         }
-        try records.update(timeout: lockTimeout) { current in
-            guard current == record else { return }
+        let kept = try records.update(timeout: lockTimeout) { current -> Bool in
+            guard var same = current, same.active, same.sessionID == record.sessionID,
+                  same.deadline == record.deadline else { return false }
+            same.failsafeDeadline = record.deadline
+            current = same
             settings.shield(applications: applications)
+            return true
         }
-        return .kept
+        return kept ? .kept : .unchanged
     }
 
     /// Removes an active shield. `unconditional` also clears the store and
@@ -530,6 +566,7 @@ final class FocusShieldEngine: @unchecked Sendable {
                     active.active = false
                     active.clearedAt = now
                     active.clearedBy = reason.rawValue
+                    active.failsafeDeadline = nil
                     record = active
                 }
                 return true
@@ -550,6 +587,7 @@ final class FocusShieldEngine: @unchecked Sendable {
             guard var active = record, active.active, active.sessionID == sessionID else { return false }
             settings.clear()
             active.active = false
+            active.failsafeDeadline = nil
             active.liftedAt = now
             active.clearedAt = now
             active.clearedBy = FocusShieldClearReason.liftedByUser.rawValue
@@ -624,6 +662,7 @@ final class FocusShieldEngine: @unchecked Sendable {
                     active.active = false
                     active.clearedAt = now
                     active.clearedBy = reason.rawValue
+                    active.failsafeDeadline = nil
                     record = active
                 }
                 return true

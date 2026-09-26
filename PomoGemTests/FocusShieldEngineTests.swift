@@ -184,11 +184,12 @@ final class FocusShieldEngineTests: XCTestCase {
         XCTAssertEqual(try fixture.engine.apply(sessionID: session, deadline: deadline, applications: apps, now: now),
                        .applied(registered: true))
         let record = try XCTUnwrap(try fixture.engine.records.load())
-        XCTAssertEqual(record, FocusShieldRecord(active: true, sessionID: session, deadline: deadline, appliedAt: now))
+        XCTAssertEqual(record, FocusShieldRecord(active: true, sessionID: session, deadline: deadline, appliedAt: now,
+                                                 failsafeDeadline: deadline))
         XCTAssertEqual(fixture.center.started.map(\.name), [FocusShieldPolicy.activityName.rawValue])
         XCTAssertEqual(fixture.settings.shielded, [apps])
-        XCTAssertEqual(fixture.settings.events, ["registered-before-shield"],
-                       "The shield is written only after its kill-proof end exists")
+        XCTAssertEqual(fixture.settings.events, ["shield failsafe=armed record=active"],
+                       "The shield is written only after its record and its kill-proof end exist")
 
         // The same focus again (a background save, a 3 s pass): no new registration.
         XCTAssertEqual(try fixture.engine.apply(sessionID: session, deadline: deadline, applications: apps,
@@ -200,11 +201,43 @@ final class FocusShieldEngineTests: XCTestCase {
         let later = deadline.addingTimeInterval(300)
         XCTAssertEqual(try fixture.engine.apply(sessionID: session, deadline: later, applications: apps,
                                                 now: now.addingTimeInterval(600)), .applied(registered: true))
-        XCTAssertEqual(fixture.center.started.map(\.name), Array(repeating: FocusShieldPolicy.activityName.rawValue, count: 2))
+        XCTAssertEqual(fixture.center.started.map(\.name),
+                       Array(repeating: FocusShieldPolicy.activityName.rawValue, count: 2))
         XCTAssertEqual(try fixture.engine.records.load()?.deadline, later)
+        XCTAssertEqual(try fixture.engine.records.load()?.failsafeDeadline, later)
     }
 
-    func testClearLiftsTheShieldMarksTheRecordAndStopsOnlyTheFailsafeByName() throws {
+    /// `DeviceActivityCenter.activities` keeps listing a name whose interval
+    /// has ended. A record written just before a crash (active, but with no
+    /// confirmed failsafe for its deadline) must not be trusted because of it.
+    func testAListedNameIsNotTakenForAFailsafeTheRecordNeverConfirmed() throws {
+        let fixture = makeEngine()
+        let session = UUID()
+        let deadline = now.addingTimeInterval(1_560)
+        let apps = try tokens(2)
+        fixture.center.installed = [FocusShieldPolicy.activityName.rawValue] // an earlier focus's, long over
+        try fixture.engine.records.update(timeout: 1) {
+            $0 = FocusShieldRecord(active: true, sessionID: session, deadline: deadline, appliedAt: now)
+        }
+        XCTAssertEqual(try fixture.engine.apply(sessionID: session, deadline: deadline, applications: apps,
+                                                now: now.addingTimeInterval(5)), .applied(registered: true),
+                       "The relaunch re-registers instead of shielding behind an ended interval")
+        XCTAssertEqual(fixture.center.started.count, 1)
+
+        // The same gap under a pause: keep repairs it too.
+        let paused = makeEngine()
+        paused.center.installed = [FocusShieldPolicy.activityName.rawValue]
+        try paused.engine.records.update(timeout: 1) {
+            $0 = FocusShieldRecord(active: true, sessionID: session, deadline: deadline, appliedAt: now,
+                                   failsafeDeadline: deadline.addingTimeInterval(-300))
+        }
+        XCTAssertEqual(try paused.engine.keep(applications: apps, now: now.addingTimeInterval(5)), .kept)
+        XCTAssertEqual(paused.center.started.count, 1)
+        XCTAssertEqual(try paused.engine.records.load()?.failsafeDeadline, deadline)
+        XCTAssertEqual(paused.settings.events, ["shield failsafe=armed record=active"])
+    }
+
+    func testClearLiftsTheShieldMarksTheRecordAndOnlyThenStopsTheFailsafeByName() throws {
         let fixture = makeEngine()
         fixture.center.installed = ["pomogem.screen-time.scheduler.\(UUID().uuidString)"]
         let session = UUID()
@@ -212,8 +245,11 @@ final class FocusShieldEngineTests: XCTestCase {
                                      applications: try tokens(2), now: now)
         XCTAssertEqual(try fixture.engine.clear(reason: .focusEnded, now: now.addingTimeInterval(60)), .cleared)
         XCTAssertEqual(fixture.settings.clearCount, 1)
+        XCTAssertEqual(fixture.settings.events.last, "clear failsafe=armed record=active",
+                       "The store is emptied while the record and the failsafe still stand, so dying here leaves a way out")
         let record = try XCTUnwrap(try fixture.engine.records.load())
         XCTAssertFalse(record.active)
+        XCTAssertNil(record.failsafeDeadline)
         XCTAssertEqual(record.clearedBy, FocusShieldClearReason.focusEnded.rawValue)
         XCTAssertEqual(fixture.center.stopped, [[FocusShieldPolicy.activityName.rawValue]],
                        "Never stopMonitoring([]): that stops the gem lanes too")
@@ -223,6 +259,27 @@ final class FocusShieldEngineTests: XCTestCase {
         XCTAssertEqual(try fixture.engine.clear(reason: .focusEnded, now: now.addingTimeInterval(61)), .unchanged)
         XCTAssertEqual(fixture.settings.clearCount, 1)
         XCTAssertEqual(fixture.center.stopped.count, 1)
+    }
+
+    /// The monitor extension can hold the record lock longer than the app
+    /// waits. The clear must then fail before stopping anything, so the
+    /// failsafe survives to end the shield it guards.
+    func testAClearThatCannotTakeTheLockLeavesTheShieldItsFailsafe() throws {
+        let fixture = makeEngine()
+        let session = UUID()
+        _ = try fixture.engine.apply(sessionID: session, deadline: now.addingTimeInterval(1_560),
+                                     applications: try tokens(1), now: now)
+        let descriptor = try holdLock(in: fixture.directory)
+        defer {
+            flock(descriptor, LOCK_UN)
+            close(descriptor)
+        }
+        XCTAssertThrowsError(try fixture.engine.clear(reason: .focusEnded, now: now.addingTimeInterval(60)))
+        XCTAssertThrowsError(try fixture.engine.lift(sessionID: session, now: now.addingTimeInterval(60)))
+        XCTAssertTrue(fixture.center.installed.contains(FocusShieldPolicy.activityName.rawValue))
+        XCTAssertTrue(fixture.center.stopped.isEmpty)
+        XCTAssertEqual(fixture.settings.clearCount, 0)
+        XCTAssertEqual(try fixture.engine.records.load()?.active, true)
     }
 
     func testAFailsafeThatCannotBeRegisteredMeansNoShieldAtAll() throws {
@@ -242,6 +299,8 @@ final class FocusShieldEngineTests: XCTestCase {
         let apps = try tokens(2)
         _ = try fixture.engine.apply(sessionID: session, deadline: deadline, applications: apps, now: now)
         XCTAssertEqual(try fixture.engine.lift(sessionID: session, now: now.addingTimeInterval(10)), .cleared)
+        XCTAssertEqual(fixture.settings.events.last, "clear failsafe=armed record=active")
+        XCTAssertEqual(fixture.center.stopped, [[FocusShieldPolicy.activityName.rawValue]])
         XCTAssertEqual(try fixture.engine.records.load()?.liftedAt, now.addingTimeInterval(10))
         XCTAssertEqual(try fixture.engine.apply(sessionID: session, deadline: deadline.addingTimeInterval(60),
                                                 applications: apps, now: now.addingTimeInterval(20)), .unchanged,
@@ -286,6 +345,18 @@ final class FocusShieldEngineTests: XCTestCase {
                        .applied(registered: true), "Apply recovers and starts over")
     }
 
+    func testARecordFromBeforeTheFailsafeDeadlineFieldStillDecodes() throws {
+        let fixture = makeEngine()
+        try FileManager.default.createDirectory(at: fixture.directory, withIntermediateDirectories: true)
+        let old = FocusShieldRecord(active: true, sessionID: UUID(), deadline: now.addingTimeInterval(1_560),
+                                    appliedAt: now)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(old)) as? [String: Any])
+        json.removeValue(forKey: "failsafeDeadline")
+        try JSONSerialization.data(withJSONObject: json)
+            .write(to: fixture.directory.appendingPathComponent("focus-shield.json"))
+        XCTAssertEqual(try fixture.engine.records.load(), old)
+    }
+
     // MARK: - removal paths 2 and 3
 
     func testTheExtensionClearsAtThePlannedEndAndNeverBefore() throws {
@@ -305,6 +376,29 @@ final class FocusShieldEngineTests: XCTestCase {
         XCTAssertFalse(record.active)
         XCTAssertEqual(record.clearedBy, FocusShieldClearReason.extensionEnd.rawValue)
         XCTAssertTrue(fixture.center.stopped.isEmpty, "The extension never stops monitoring")
+    }
+
+    func testTheExtensionRuleIsThePlannedEndExactly() {
+        let deadline = now.addingTimeInterval(1_560)
+        var record = FocusShieldRecord(active: true, sessionID: UUID(), deadline: deadline, appliedAt: now,
+                                       failsafeDeadline: deadline)
+        XCTAssertEqual(FocusShieldPolicy.extensionClearMargin, FocusShieldPolicy.deadlineGrace,
+                       "The extension clears at the planned end, not before and not a minute late")
+        XCTAssertTrue(FocusShieldPolicy.extensionShouldClear(record, now: deadline.addingTimeInterval(-60)))
+        XCTAssertFalse(FocusShieldPolicy.extensionShouldClear(record, now: deadline.addingTimeInterval(-60.001)))
+        XCTAssertTrue(FocusShieldPolicy.extensionShouldClear(nil, now: now), "No record: clear")
+        record.active = false
+        XCTAssertTrue(FocusShieldPolicy.extensionShouldClear(record, now: now), "Inactive: clear")
+
+        // A resume moved the deadline and registered the new interval: the
+        // superseded interval's callback never lifts the resumed focus.
+        var resumed = FocusShieldRecord(active: true, sessionID: UUID(), deadline: deadline.addingTimeInterval(600),
+                                        appliedAt: now, failsafeDeadline: deadline.addingTimeInterval(600))
+        XCTAssertFalse(FocusShieldPolicy.extensionShouldClear(resumed, now: deadline.addingTimeInterval(-60)))
+        // Died between writing the new deadline and registering it: the old
+        // interval is still the one registered, and it must still clear.
+        resumed.failsafeDeadline = deadline
+        XCTAssertTrue(FocusShieldPolicy.extensionShouldClear(resumed, now: deadline.addingTimeInterval(-60)))
     }
 
     func testTheExtensionClearsForAnInactiveMissingOrUnreadableRecord() throws {
@@ -439,6 +533,33 @@ final class FocusShieldEngineTests: XCTestCase {
         return keys
     }
 
+    /// What each form means to a framework that reads it correctly: dated
+    /// components are that instant in their own time zone; a time of day is
+    /// its next occurrence after now, and the end its next one after the start.
+    static func resolve(_ schedule: DeviceActivitySchedule, now: Date, calendar: Calendar) -> DateInterval? {
+        func instant(_ components: DateComponents, after anchor: Date) -> Date? {
+            if components.year != nil {
+                var zoned = Calendar(identifier: .gregorian)
+                zoned.timeZone = components.timeZone ?? calendar.timeZone
+                return zoned.date(from: components)
+            }
+            return calendar.nextDate(after: anchor, matching: components, matchingPolicy: .strict,
+                                     repeatedTimePolicy: .first)
+        }
+        guard let start = instant(schedule.intervalStart, after: now),
+              let end = instant(schedule.intervalEnd, after: start), end > start else { return nil }
+        return DateInterval(start: start, end: end)
+    }
+
+    private func holdLock(in directory: URL) throws -> Int32 {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let descriptor = open(directory.appendingPathComponent("focus-shield.lock").path, O_CREAT | O_RDWR,
+                              S_IRUSR | S_IWUSR)
+        XCTAssertGreaterThanOrEqual(descriptor, 0)
+        XCTAssertEqual(flock(descriptor, LOCK_EX), 0)
+        return descriptor
+    }
+
     private func exactResolver(deadline: Date) -> (DeviceActivitySchedule) -> DateInterval? {
         { schedule in
             FocusShieldSchedule.plans(deadline: deadline, now: self.now, calendar: self.tokyo)
@@ -467,35 +588,14 @@ final class FocusShieldEngineTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         directories.append(directory)
         let center = ShieldFakeCenter()
-        let settings = ShieldFakeSettings(center: center)
+        let settings = ShieldFakeSettings(center: center, records: FocusShieldRecordStore(directory: directory))
         let calendar = tokyo
-        let resolver = resolve ?? { schedule in
-            // Resolve the way the plan was built: find any plan with this
-            // schedule for any deadline the test used, by decoding components.
-            let start = Self.date(schedule.intervalStart, calendar: calendar, near: nil)
-            let end = Self.date(schedule.intervalEnd, calendar: calendar, near: start)
-            guard let start, let end else { return nil }
-            return DateInterval(start: start, end: end)
-        }
+        let testNow = now
+        let resolver = resolve ?? { schedule in Self.resolve(schedule, now: testNow, calendar: calendar) }
         let engine = FocusShieldEngine(
             records: FocusShieldRecordStore(directory: directory), settings: settings, center: center,
             calendar: { calendar }, resolveInterval: resolver, lockTimeout: 1)
         return Fixture(directory: directory, engine: engine, settings: settings, center: center)
-    }
-
-    /// Full components resolve directly; a time-only start resolves to its
-    /// first occurrence in the hour before the test's clock, and a time-only
-    /// end to its first occurrence after the start.
-    private static func date(_ components: DateComponents, calendar: Calendar, near: Date?) -> Date? {
-        if components.year != nil {
-            var calendar = calendar
-            if let zone = components.timeZone { calendar.timeZone = zone }
-            return calendar.date(from: components)
-        }
-        let anchor = near ?? Date(timeIntervalSince1970: 1_800_000_000).addingTimeInterval(-3_600)
-        guard let next = calendar.nextDate(after: anchor.addingTimeInterval(-1), matching: components,
-                                           matchingPolicy: .strict) else { return nil }
-        return next
     }
 }
 
@@ -503,22 +603,46 @@ final class FocusShieldEngineTests: XCTestCase {
 
 final class ShieldFakeSettings: FocusShieldSettingsDriving {
     private weak var center: ShieldFakeCenter?
+    private let records: FocusShieldRecordStore?
     private(set) var shielded: [Set<ApplicationToken>] = []
     private(set) var clearCount = 0
-    /// Ordering evidence: whether the failsafe existed when the shield was written.
+    /// Ordering evidence for every write to the store: whether the failsafe
+    /// was registered and what the record on disk said at that moment
+    /// ("shield failsafe=armed record=active").
     private(set) var events: [String] = []
 
-    init(center: ShieldFakeCenter? = nil) { self.center = center }
+    init(center: ShieldFakeCenter? = nil, records: FocusShieldRecordStore? = nil) {
+        self.center = center
+        self.records = records
+    }
 
     func shield(applications: Set<ApplicationToken>) {
         shielded.append(applications)
-        if let center {
-            events.append(center.installed.contains(FocusShieldPolicy.activityName.rawValue)
-                          ? "registered-before-shield" : "shield-without-failsafe")
-        }
+        events.append("shield \(evidence)")
     }
 
-    func clear() { clearCount += 1 }
+    func clear() {
+        clearCount += 1
+        events.append("clear \(evidence)")
+    }
+
+    private var evidence: String {
+        let failsafe = center.map {
+            $0.installed.contains(FocusShieldPolicy.activityName.rawValue) ? "armed" : "none"
+        } ?? "?"
+        // An unlocked read: the engine calls in while it holds the lock, and
+        // every write replaces the file atomically.
+        let record: String
+        if let records {
+            switch try? records.load() {
+            case .some(let current): record = current.active ? "active" : "inactive"
+            case .none: record = "none"
+            }
+        } else {
+            record = "?"
+        }
+        return "failsafe=\(failsafe) record=\(record)"
+    }
 }
 
 final class ShieldFakeCenter: ScreenTimeActivityCenterDriving {
