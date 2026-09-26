@@ -42,6 +42,19 @@ enum FocusLeavePolicy {
         return defaultValue || FocusReturnReminderPolicy.isEnabled(defaults: defaults)
     }
 
+    /// Whether the series is on because the person chose it: an explicit ON,
+    /// or, with no explicit value, the older 集中に戻るお知らせ they opted
+    /// into. The product default alone is not a choice, so Settings raises no
+    /// permission notice (with its call to action) under a switch nobody
+    /// turned on; like every other notification row, the notice belongs to
+    /// an intent the person expressed. Always implies `nudgesAreEnabled`.
+    static func nudgesWereChosen(defaults: UserDefaults = .standard) -> Bool {
+        if let explicit = explicitSwitch(nudgesEnabledDefaultsKey, in: defaults) {
+            return explicit
+        }
+        return FocusReturnReminderPolicy.isEnabled(defaults: defaults)
+    }
+
     /// Any value stored for `key` is an explicit choice. A launch argument
     /// (`-focus.leave-pause.enabled NO`) reaches the argument domain as the
     /// string "NO", which `as? Bool` does not read; `bool(forKey:)` reads

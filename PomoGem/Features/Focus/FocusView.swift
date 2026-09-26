@@ -1241,9 +1241,9 @@ struct FocusView: View {
         case .pausesWhenLeavingButNotWhenLocked:
             Label {
                 Text(
-                    "画面ロック中は進みます。ほかのアプリに移ると一時停止します。",
+                    "画面ロック中も通常は進みます。ほかのアプリに移ると一時停止します。",
                     tableName: "Focus",
-                    comment: "Running focus with a passcode: locking keeps the timer running, switching apps pauses it. Suggested English: Keeps running while locked. Switching apps pauses it."
+                    comment: "Running focus with a passcode: locking usually keeps the timer running (a lock right after an unlock can still pause it, so keep the hedge), switching apps pauses it. Suggested English: Usually keeps running while locked. Switching apps pauses it."
                 )
             } icon: {
                 Image(systemName: "bell.badge.fill")
@@ -1269,9 +1269,9 @@ struct FocusView: View {
         case .pausesWhenLeavingButNotWhenLocked:
             Label {
                 Text(
-                    "画面ロック中も進みます。終了通知は端末の設定から",
+                    "画面ロック中も通常は進みます。終了通知は端末の設定から",
                     tableName: "Focus",
-                    comment: "Button opening iOS Settings when end notifications are denied; the timer keeps running while locked. Suggested English: Keeps running while locked. Turn on end alerts in Settings"
+                    comment: "Button opening iOS Settings when end notifications are denied; the timer usually keeps running while locked (keep the hedge). Suggested English: Usually keeps running while locked. Turn on end alerts in Settings"
                 )
             } icon: {
                 Image(systemName: "bell.slash")
@@ -1297,9 +1297,9 @@ struct FocusView: View {
         case .pausesWhenLeavingButNotWhenLocked:
             Label {
                 Text(
-                    "画面ロック中も進みます。終了通知を許可",
+                    "画面ロック中も通常は進みます。終了通知を許可",
                     tableName: "Focus",
-                    comment: "Button asking for notification permission; the timer keeps running while locked. Suggested English: Keeps running while locked. Allow end alerts"
+                    comment: "Button asking for notification permission; the timer usually keeps running while locked (keep the hedge). Suggested English: Usually keeps running while locked. Allow end alerts"
                 )
             } icon: {
                 Image(systemName: "bell")

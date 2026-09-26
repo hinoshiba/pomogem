@@ -14,11 +14,11 @@ final class FocusLeavePauseUITests: XCTestCase {
     /// Every running-row wording the leave pause can show (with and without a
     /// passcode; end alerts allowed, not asked yet, or denied).
     private let leavePauseRunningCopy = [
-        "画面ロック中は進みます。ほかのアプリに移ると一時停止します。",
+        "画面ロック中も通常は進みます。ほかのアプリに移ると一時停止します。",
         "画面を消したり、ほかのアプリに移ると一時停止します。",
-        "画面ロック中も進みます。終了通知を許可",
+        "画面ロック中も通常は進みます。終了通知を許可",
         "終了通知を許可",
-        "画面ロック中も進みます。終了通知は端末の設定から",
+        "画面ロック中も通常は進みます。終了通知は端末の設定から",
         "終了通知は端末の設定から"
     ]
     private let leavePausedNotice = "アプリを離れていたので一時停止しました"

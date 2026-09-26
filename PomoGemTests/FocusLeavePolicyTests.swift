@@ -43,6 +43,58 @@ final class FocusLeavePolicyTests: XCTestCase {
         XCTAssertFalse(FocusLeavePolicy.nudgesAreEnabled(defaults: defaults, defaultValue: false))
     }
 
+    /// Settings raises the permission notice only under a series the person
+    /// chose, never under the product default alone.
+    func testOnlyAnExpressedIntentCountsAsChoosingTheSeries() throws {
+        let suite = "FocusLeavePolicy.chosen.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        // The default is on, but nobody chose it.
+        XCTAssertTrue(FocusLeavePolicy.nudgesAreEnabled(defaults: defaults))
+        XCTAssertFalse(FocusLeavePolicy.nudgesWereChosen(defaults: defaults))
+
+        // The older 集中に戻るお知らせ opt-in is an expressed intent.
+        defaults.set(true, forKey: FocusReturnReminderPolicy.enabledDefaultsKey)
+        XCTAssertTrue(FocusLeavePolicy.nudgesWereChosen(defaults: defaults))
+        XCTAssertTrue(FocusLeavePolicy.nudgesAreEnabled(defaults: defaults, defaultValue: false))
+
+        // An explicit value always decides, both ways.
+        defaults.set(false, forKey: FocusLeavePolicy.nudgesEnabledDefaultsKey)
+        XCTAssertFalse(FocusLeavePolicy.nudgesWereChosen(defaults: defaults))
+        XCTAssertFalse(FocusLeavePolicy.nudgesAreEnabled(defaults: defaults))
+        defaults.removeObject(forKey: FocusReturnReminderPolicy.enabledDefaultsKey)
+        defaults.set(true, forKey: FocusLeavePolicy.nudgesEnabledDefaultsKey)
+        XCTAssertTrue(FocusLeavePolicy.nudgesWereChosen(defaults: defaults))
+        XCTAssertTrue(FocusLeavePolicy.nudgesAreEnabled(defaults: defaults, defaultValue: false))
+
+        // A launch-argument string is an explicit choice too.
+        defaults.set("YES", forKey: FocusLeavePolicy.nudgesEnabledDefaultsKey)
+        XCTAssertTrue(FocusLeavePolicy.nudgesWereChosen(defaults: defaults))
+        defaults.set("NO", forKey: FocusLeavePolicy.nudgesEnabledDefaultsKey)
+        XCTAssertFalse(FocusLeavePolicy.nudgesWereChosen(defaults: defaults))
+
+        // Chosen always implies enabled, whatever the default.
+        for returnReminder in [false, true] {
+            for explicit in [nil, false, true] as [Bool?] {
+                for defaultValue in [false, true] {
+                    defaults.set(returnReminder, forKey: FocusReturnReminderPolicy.enabledDefaultsKey)
+                    if let explicit {
+                        defaults.set(explicit, forKey: FocusLeavePolicy.nudgesEnabledDefaultsKey)
+                    } else {
+                        defaults.removeObject(forKey: FocusLeavePolicy.nudgesEnabledDefaultsKey)
+                    }
+                    if FocusLeavePolicy.nudgesWereChosen(defaults: defaults) {
+                        XCTAssertTrue(
+                            FocusLeavePolicy.nudgesAreEnabled(defaults: defaults, defaultValue: defaultValue),
+                            "reminder \(returnReminder), explicit \(String(describing: explicit)), default \(defaultValue)"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     /// `-focus.leave-pause.enabled NO` on the command line reaches the
     /// argument domain as the string "NO", not a Bool. It is still an
     /// explicit choice (RealDeviceCoreLoopUITests relies on it).

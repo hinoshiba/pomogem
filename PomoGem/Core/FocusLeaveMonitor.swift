@@ -63,6 +63,10 @@ enum FocusLeavePreferences {
         FocusLeavePolicy.nudgesAreEnabled(defaults: defaults, defaultValue: defaultValue)
     }
 
+    nonisolated static func nudgesWereChosen(defaults: UserDefaults = .standard) -> Bool {
+        FocusLeavePolicy.nudgesWereChosen(defaults: defaults)
+    }
+
     static func setLeavePauseEnabled(
         _ enabled: Bool,
         defaults: UserDefaults = .standard,
