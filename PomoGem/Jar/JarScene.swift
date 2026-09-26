@@ -436,6 +436,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     private(set) var settledReading: JarGravityMapping.Reading = .flat
     /// The gravity the resting pile settled under.
     private var settledGravityVector = Constants.Jar.gravityVector
+    /// F3: the reading the awake pile has had the chance to follow — the
+    /// settled one when the jar woke, or the one a turn (re)opened the
+    /// interaction window for. A turn past `needsResettle` from it while
+    /// the jar is awake opens the window again from that moment, so
+    /// neither the idle settle nor the hard stop can freeze a pile that
+    /// has not yet followed the phone.
+    private var followedReading: JarGravityMapping.Reading = .flat
     /// The gravity the bodies rest under: the settled one while the jar
     /// rests (a stopped motion observer resets the live gravity without
     /// moving the frozen pile), the live one while it is awake. Share
@@ -1443,7 +1450,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         ))
 #endif
         let overflow = studyDescriptors.dropFirst(Constants.Jar.maxPhysicsBodies)
-        let now = ProcessInfo.processInfo.systemUptime
+        let now = interactionClock()
         for descriptor in overflow {
             mutedLandingIDs.insert(descriptor.id)
             dropQueue.append(
@@ -1796,7 +1803,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         let pebbles = gesturePebbles
         guard strength > 0, !isBakeInProgress, !pebbles.isEmpty else { return false }
 
-        let now = ProcessInfo.processInfo.systemUptime
+        let now = interactionClock()
         guard now - lastShakeUptime >= Constants.Jar.deviceShakeCooldown else { return false }
         lastShakeUptime = now
 
@@ -1882,7 +1889,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     @discardableResult
     func bouncePebbles(at proposedPoint: CGPoint? = nil) -> Bool {
         lastAcceptedTapSelection = nil
-        let now = ProcessInfo.processInfo.systemUptime
+        let now = interactionClock()
         let pebbles = gesturePebbles
         guard !isBakeInProgress, !pebbles.isEmpty else { return false }
 
@@ -2401,7 +2408,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// under, turning the jar's gravity with it
     /// (`JarGravityMapping.needsResettle`), wakes through one bounded
     /// interaction window (settle 3 s, hard stop 5 s), so the pile
-    /// re-settles under the new gravity. The wake does not depend on Reduce
+    /// re-settles under the new gravity. An awake jar whose phone turns
+    /// from the pose its pile has been following opens the window again
+    /// from that moment (`followTurn`), so a turn late in a window never
+    /// freezes the pile in mid-flight. The wake does not depend on Reduce
     /// Motion: the gems keep the same physics either way.
     func setGravityReading(
         _ sensed: JarGravityMapping.Reading,
@@ -2425,8 +2435,24 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             appliedLightHorizontal = light
             applyOpticalTilt(horizontal: light, uptime: tiltClock())
         }
-        if isIdlePaused, JarGravityMapping.needsResettle(from: settledReading, to: next) {
-            beginInteractionMotionWindow(uptime: ProcessInfo.processInfo.systemUptime)
+        followTurn(to: next)
+    }
+
+    /// F3: re-settles the pile for a turn of the phone. A resting pile
+    /// wakes when the reading turned from the pose it settled under; an
+    /// awake one opens its interaction window again when the reading turned
+    /// from the pose it has been following (bounded: once per such turn,
+    /// and each window still settles after 3 s and stops after 5 s).
+    private func followTurn(to reading: JarGravityMapping.Reading) {
+        if isIdlePaused {
+            guard JarGravityMapping.needsResettle(from: settledReading, to: reading) else { return }
+            beginInteractionMotionWindow(uptime: interactionClock())
+            followedReading = reading
+        } else if JarGravityMapping.needsResettle(from: followedReading, to: reading) {
+            followedReading = reading
+            // Only the deadlines move: the tapped gem's flight damping and
+            // the idle observation stay as they are.
+            interactionMotionWindow = JarInteractionMotionWindow(openedAt: interactionClock())
         }
     }
 
@@ -2448,7 +2474,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // opts into waking below.
         if wakesSimulation {
             continueInteractionMotionWindow(
-                uptime: ProcessInfo.processInfo.systemUptime
+                uptime: interactionClock()
             )
         } else if interactionMotionWindow != nil, isPaused {
             resumeSimulation()
@@ -2465,6 +2491,10 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         physicsWorld.gravity = Constants.Jar.gravityVector
         // A resting jar returns its light exactly to the level position.
         updateOpticalTilt(horizontal: appliedLightHorizontal)
+        // An awake pile follows the default gravity like a turn to it; a
+        // resting one stays frozen in its settled pose (share support and
+        // the next wake judge by that pose), and nothing wakes it here.
+        if !isIdlePaused { followTurn(to: .flat) }
     }
 
     /// Idle tilt (Docs/GemExperienceDesign.md §7.13). While the jar rests,
@@ -2481,6 +2511,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     /// Clock of the idle tilt gate and of the render loop's redraw and
     /// motion holds (tests inject one).
     var tiltClock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    /// Clock of the interaction window (its settle and hard stop), the
+    /// shake and tap cooldowns and the drop queue: monotonic uptime.
+    /// Tests that drive SpriteKit's frames themselves inject the frames'
+    /// own time, so a window closes after the same simulated time whatever
+    /// the machine's load.
+    var interactionClock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     private var lastIdleTiltUptime: TimeInterval = -.greatestFiniteMagnitude
     /// Light changes made while idle — each one is a frame SpriteKit draws
     /// for a paused jar (tests and the Debug frame probe).
@@ -2542,6 +2578,8 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
             onIdlePauseChanged?(false)
             // Samples the idle gate held back are caught up at once.
             updateOpticalTilt(horizontal: appliedLightHorizontal)
+            // F3: the woken pile starts from the pose it settled under.
+            followedReading = settledReading
         }
         resetIdleObservation()
         // Landing, fusion, tap, shake, content changes: the render loop and
@@ -2683,7 +2721,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         }
         updateIdlePause(
             currentTime: currentTime,
-            uptime: ProcessInfo.processInfo.systemUptime
+            uptime: interactionClock()
         )
     }
 
@@ -3749,7 +3787,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
                 descriptor: descriptor,
                 horizontalUnit: origin == .sceneTop ? 0 : CGFloat.random(in: -1 ... 1),
                 origin: origin,
-                readyUptime: ProcessInfo.processInfo.systemUptime + delay,
+                readyUptime: interactionClock() + delay,
                 needsSpecialAnticipation: shouldShowSpecialAnticipation(for: descriptor)
             )
         )
@@ -3774,7 +3812,7 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
 
     private func processDropQueue() {
         guard !isBakeInProgress, !dropQueue.isEmpty else { return }
-        let now = ProcessInfo.processInfo.systemUptime
+        let now = interactionClock()
         guard dropQueue[0].readyUptime <= now,
               now - lastSpawnUptime >= Constants.Jar.dropInterval else { return }
 
@@ -5341,6 +5379,12 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
     ) {
         updateIdlePause(currentTime: currentTime, uptime: uptime)
     }
+
+    /// When the open interaction window stops the physics at the latest
+    /// (`interactionClock` time), or nil without one.
+    var interactionHardStopForTesting: TimeInterval? {
+        interactionMotionWindow?.hardStopAt
+    }
 #endif
 
     /// Whether any live body is still easing to a new jar scale.
@@ -5389,9 +5433,13 @@ final class JarScene: SKScene, SKPhysicsContactDelegate, ObservableObject {
         // stays awake for the 0.5 s transition and settles anew after it.
         if enforcePileClearances() { return }
         // F3: the pose this pile settled under. A turn away from it wakes
-        // the jar again (`setGravityReading`, `JarIdleTiltFilter`).
+        // the jar again (`setGravityReading`, `JarIdleTiltFilter`). Any
+        // turn the pile has not followed yet reopened the interaction
+        // window (`followTurn`), so neither stop comes before the pile has
+        // had its settle time under this pose.
         settledReading = appliedReading ?? .flat
         settledGravityVector = appliedGravityVector
+        followedReading = settledReading
         if !isIdlePaused {
             isIdlePaused = true
             onIdlePauseChanged?(true)
